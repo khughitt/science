@@ -2650,10 +2650,10 @@ Otherwise skip this commit.
 
 ## Phase H.4 — Pilot smoke test runbook (Task 19)
 
-### Task 19: Pilot — promote `dataset:gse131651-shah2019-nsd2` with bio mixins
+### Task 19: Pilot — promote `dataset:ccle-proteomics-nusinow-2020` with `bio.table`
 
 **Files:**
-- Modify: `multiple-myeloma/doc/datasets/data-gse131651-shah2019-nsd2.md` (rename id to lowercase + add bio fields). Path resolves under `~/d/cancer/cancer-types/multiple-myeloma/`.
+- Modify: `multiple-myeloma/doc/datasets/data-ccle-proteomics.md` (add dataset promotion fields + `bio.table` fields). Path resolves under `~/d/cancer/cancer-types/multiple-myeloma/`.
 - Document: append to `docs/plans/2026-05-19-commons-bio-extensions-plan.md` (this file) a "Pilot outcome" section.
 
 This task is a **runbook**, not unit testing. The point is to take one real MM dataset through the end-to-end promote-with-mixin flow and validate the result by inspection.
@@ -2661,57 +2661,103 @@ This task is a **runbook**, not unit testing. The point is to take one real MM d
 - [ ] **Step 1: Inspect the existing project entity**
 
 ```bash
-sed -n '1,40p' ~/d/cancer/cancer-types/multiple-myeloma/doc/datasets/data-gse131651-shah2019-nsd2.md
+sed -n '1,80p' ~/d/cancer/cancer-types/multiple-myeloma/doc/datasets/data-ccle-proteomics.md
 ```
 
-The current id is `dataset:GSE131651` (uppercase). The dataset slug
-regex (`commons/promote.py:198`) requires lowercase
-(`^[a-z0-9][a-z0-9-]{1,63}$`), and discovery derives the dataset slug
-from the frontmatter `id` (Phase G's `slug_from_id=True`). So the
-pilot's first step is to rename the id to lowercase. The most
-descriptive lowercase slug that matches the filename stem is
-`gse131651-shah2019-nsd2`.
+The current id is already lowercase
+(`dataset:ccle-proteomics-nusinow-2020`), which satisfies the dataset slug
+regex (`commons/promote.py:198`) and Phase G's `slug_from_id=True` discovery
+behavior. CCLE proteomics is a better pilot than `GSE131651` because its local
+datapackage lists only resources that are present, and the Parquet metadata
+provides concrete table dimensions:
 
-- [ ] **Step 2: Rename the id and add bio frontmatter fields**
+- local datapackage: `data/external/ccle_proteomics/2020-01/datapackage.json`
+- primary table resource: `mm-proteomics-long.parquet`
+- primary table shape: 76,530 records x 9 columns
+- companion cell-line metadata resource: `mm-cell-lines.parquet`
 
-Hand-edit `~/d/cancer/cancer-types/multiple-myeloma/doc/datasets/data-gse131651-shah2019-nsd2.md`:
+- [ ] **Step 2: Add dataset-promotion and bio frontmatter fields**
 
-First, change the `id:` line:
+Hand-edit `~/d/cancer/cancer-types/multiple-myeloma/doc/datasets/data-ccle-proteomics.md`.
+Keep the existing `id: "dataset:ccle-proteomics-nusinow-2020"` line, then add
+(or amend, if already present) the required dataset-promotion fields under the
+existing YAML frontmatter:
 
 ```yaml
-# Before:
-id: "dataset:GSE131651"
-# After:
-id: "dataset:gse131651-shah2019-nsd2"
+origin: "external"
+tier: "use-now"
+datapackage: "data/external/ccle_proteomics/2020-01/datapackage.json"
+update_cadence: "static"
+accessions:
+  - "Nusinow2020"
+access:
+  level: "public"
+  availability: "available"
+  verified: true
+  verification_method: "retrieved"
+  last_reviewed: "2026-05-19"
+  verified_by: "codex"
+  source_url: "https://gygi.hms.harvard.edu/publications/ccle.html"
+  credentials_required: ""
 ```
 
-Then add (or amend, if already present) under the existing YAML frontmatter:
+Then add (or amend) the `bio.table` extension fields:
 
 ```yaml
-# bio.matrix fields:
-n_rows: <count of genes/probes>
-n_cols: <count of samples>
-value_dtype: "int32"          # or float32 — set by what the data file actually contains
-feature_axis: "rows"
-
-# bio.rnaseq fields:
-species: ["Homo sapiens"]
-assay: "bulk-rnaseq"          # confirm against the GEO record
-reference_genome: "GRCh38"    # confirm against the GEO record
+n_records: 76530
+columns:
+  - name: "Protein_Id"
+    dtype: "string"
+    kind: "protein_identifier"
+  - name: "Gene_Symbol"
+    dtype: "string"
+    kind: "gene_symbol"
+  - name: "Description"
+    dtype: "string"
+    kind: "protein_description"
+  - name: "Group_ID"
+    dtype: "integer"
+    kind: "protein_group"
+  - name: "Uniprot"
+    dtype: "string"
+    kind: "uniprot_name"
+  - name: "Uniprot_Acc"
+    dtype: "string"
+    kind: "uniprot_accession"
+  - name: "abundance"
+    dtype: "float"
+    kind: "protein_abundance"
+  - name: "ccle_code"
+    dtype: "string"
+    kind: "cell_line_identifier"
+  - name: "tenplex"
+    dtype: "string"
+    kind: "batch"
 ```
 
-Concrete counts (`n_rows`, `n_cols`) should come from inspecting the dataset; if the data isn't readily available, use the metadata-reported sample count and gene count.
+Concrete counts and column names come from the Parquet metadata for
+`mm-proteomics-long.parquet`.
 
-- [ ] **Step 3: Run the promote with mixins**
+- [ ] **Step 3: Commit the project prep edit**
+
+Commit the frontmatter edit before running `--apply`. `apply_promote` checks
+the target project overlay files are clean before it rewrites them, so an
+uncommitted prep edit will make the apply fail.
+
+```bash
+cd ~/d/cancer/cancer-types/multiple-myeloma
+git add doc/datasets/data-ccle-proteomics.md
+git commit -m "docs(datasets): add commons bio table metadata for ccle proteomics"
+```
+
+- [ ] **Step 4: Dry-run the promote with mixins**
 
 ```bash
 cd ~/d/science
 uv run science commons promote dataset \
     --from multiple-myeloma \
-    --slug gse131651-shah2019-nsd2 \
-    --mixin bio.matrix \
-    --mixin bio.rnaseq \
-    --apply
+    --slug ccle-proteomics-nusinow-2020 \
+    --mixin bio.table
 ```
 
 (`--from` takes the registered project id from `science.yaml` —
@@ -2720,40 +2766,87 @@ Pass the id, not a path.)
 
 Expected output:
 - `Plan: 1 canonical entities, ...`
+- `artifact: datasets/ccle-proteomics-nusinow-2020/entity.md`
+- `artifact: datasets/ccle-proteomics-nusinow-2020/datapackage.yaml`
+- resource hashes/byte counts for `mm-proteomics-long` and `mm-cell-lines`
+- `data.yaml override: ccle-proteomics-nusinow-2020: ...`
+- `dropped fields: ...` reviewed and accepted.
+- `overlay rewrite: multiple-myeloma: .../doc/datasets/data-ccle-proteomics.md`
+- `Re-run with --apply to execute.`
+
+If the dry-run output shows unexpected dropped fields, resource paths, or an
+unexpected overlay target, stop and inspect before applying.
+
+- [ ] **Step 5: Apply the promote**
+
+```bash
+cd ~/d/science
+uv run science commons promote dataset \
+    --from multiple-myeloma \
+    --slug ccle-proteomics-nusinow-2020 \
+    --mixin bio.table \
+    --apply
+```
+
+Expected output:
+- `Plan: 1 canonical entities, ...`
 - A commit on the commons repo recording the dataset promote.
-- An audit log file under `~/d/science-shared/.migrations/`.
+- A dataset tag in the commons repo, e.g. `dataset/ccle-proteomics-nusinow-2020/<version>`.
+- A data override update for `ccle-proteomics-nusinow-2020`.
+- An uncommitted project overlay rewrite in `~/d/cancer/cancer-types/multiple-myeloma`.
+- An audit log file under `~/d/science-commons/.migrations/`.
 
-- [ ] **Step 4: Verify the canonical entity**
+- [ ] **Step 6: Verify the canonical entity**
 
 ```bash
-cat ~/d/science-shared/datasets/gse131651-shah2019-nsd2/entity.md | head -25
+sed -n '1,140p' ~/d/science-commons/datasets/ccle-proteomics-nusinow-2020/entity.md
+rg -n "schema_profile|n_records|Protein_Id|Gene_Symbol|abundance|ccle_code|tenplex" \
+    ~/d/science-commons/datasets/ccle-proteomics-nusinow-2020/entity.md
 ```
 
 Verify:
-- `schema_profile: science-entity-base/1.0+dataset/1.0+bio.matrix/1.0+bio.rnaseq/1.0`
-- `n_rows`, `n_cols`, `value_dtype`, `feature_axis` present.
-- `species` is an array.
-- `assay: bulk-rnaseq`.
+- `schema_profile: science-entity-base/1.0+dataset/1.0+bio.table/1.0`
+- `n_records: 76530` present.
+- `columns` includes `Protein_Id`, `Gene_Symbol`, `abundance`, `ccle_code`, and
+  `tenplex`.
 
-- [ ] **Step 5: Verify the audit log**
+- [ ] **Step 7: Verify the audit log**
 
 ```bash
-ls ~/d/science-shared/.migrations/ | tail -3
-cat ~/d/science-shared/.migrations/<latest>.yaml | grep -A2 mixin_extensions
+ls ~/d/science-commons/.migrations/ | tail -3
+cat ~/d/science-commons/.migrations/<latest>.yaml | grep -A2 mixin_extensions
 ```
 
 Verify:
-- `mixin_extensions: [bio.matrix/1.0, bio.rnaseq/1.0]`
+- `mixin_extensions` contains `bio.table/1.0`
 
-- [ ] **Step 6: Verify `science commons show` round-trips**
+- [ ] **Step 8: Verify `science commons show` round-trips**
 
 ```bash
-uv run science commons show dataset:gse131651-shah2019-nsd2
+uv run science commons show dataset:ccle-proteomics-nusinow-2020
+uv run science commons show dataset:ccle-proteomics-nusinow-2020 --project multiple-myeloma
 ```
 
-Expected: no validation errors; the show output includes the composed schema_profile and all bio fields.
+Expected: no validation errors for either command. The canonical show output
+includes the composed schema_profile and all bio fields; the project-scoped
+show confirms the rewritten multiple-myeloma overlay also round-trips before it
+is committed.
 
-- [ ] **Step 7: Append pilot outcome to this plan**
+- [ ] **Step 9: Review and commit the project overlay rewrite**
+
+Promotion rewrites the source project note into an overlay and leaves that
+change uncommitted in the project repo. Review and commit it separately from
+the commons commit:
+
+```bash
+cd ~/d/cancer/cancer-types/multiple-myeloma
+git diff -- doc/datasets/data-ccle-proteomics.md
+git status --short
+git add doc/datasets/data-ccle-proteomics.md
+git commit -m "docs(datasets): convert ccle proteomics note to commons overlay"
+```
+
+- [ ] **Step 10: Append pilot outcome to this plan**
 
 Append a short section at the end of `docs/plans/2026-05-19-commons-bio-extensions-plan.md`:
 
@@ -2761,26 +2854,26 @@ Append a short section at the end of `docs/plans/2026-05-19-commons-bio-extensio
 ## Pilot outcome (Task 19)
 
 **Date run:** YYYY-MM-DD
-**Dataset:** dataset:gse131651-shah2019-nsd2 (Shah 2019 — NSD2 KO bulk RNA-seq)
-**Mixins applied:** bio.matrix/1.0 + bio.rnaseq/1.0
+**Dataset:** dataset:ccle-proteomics-nusinow-2020 (CCLE Proteomics, Nusinow 2020)
+**Mixins applied:** bio.table/1.0
 
-- canonical schema_profile: science-entity-base/1.0+dataset/1.0+bio.matrix/1.0+bio.rnaseq/1.0
-- audit log: ~/d/science-shared/.migrations/<filename>.yaml
+- canonical schema_profile: science-entity-base/1.0+dataset/1.0+bio.table/1.0
+- audit log: ~/d/science-commons/.migrations/<filename>.yaml
 - commons commit: <SHA>
 
 Notes / surprises: <any issues encountered, hand-fixes applied,
 follow-ons to file>.
 ```
 
-- [ ] **Step 8: Commit the pilot outcome (NOT the commons repo)**
+- [ ] **Step 11: Commit the pilot outcome (NOT the commons repo)**
 
 ```bash
 cd ~/d/science
 git add docs/plans/2026-05-19-commons-bio-extensions-plan.md
-git commit -m "docs(phase-h): record pilot outcome for dataset:gse131651-shah2019-nsd2"
+git commit -m "docs(phase-h): record pilot outcome for dataset:ccle-proteomics-nusinow-2020"
 ```
 
-The commons-repo commit from the promote itself happens in `~/d/science-shared/`, which is a separate repo and is not pushed to GitHub.
+The commons-repo commit from the promote itself happens in `~/d/science-commons/`, which is a separate repo and is not pushed to GitHub.
 
 ---
 
