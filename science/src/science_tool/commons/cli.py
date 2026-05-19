@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 import yaml
@@ -36,11 +36,15 @@ from science_tool.commons.promote import (
     apply_promote,
     discover_candidates,
     plan_promote,
+    _validate_mixin_stacking,
 )
 from science_tool.commons.query import CommonsQuery
 from science_tool.commons.registry import RegistryBuilder
 from science_tool.commons.resolver import resolve
 from science_tool.commons.validator import CommonsValidator
+
+if TYPE_CHECKING:
+    from science_model.entity_schema.profile import ProfileComponent
 
 
 @click.group("commons")
@@ -396,6 +400,96 @@ def promote_group() -> None:
     """Promote per-project entities into the shared commons store."""
 
 
+def _parse_version_tuple(version: str) -> tuple[int, ...]:
+    """Parse 'N.N' or 'N.N.N' into a tuple of ints, for numeric comparison.
+
+    Rejects anything that isn't dot-separated non-negative integers.
+    Raises PromoteMixinResolutionError on a bad shape.
+    """
+    from science_tool.commons.errors import PromoteMixinResolutionError
+
+    parts = version.split(".")
+    try:
+        nums = tuple(int(p) for p in parts)
+    except ValueError as exc:
+        raise PromoteMixinResolutionError(
+            f"version {version!r}: expected dot-separated integers (e.g. '1.0')."
+        ) from exc
+    if not nums or any(n < 0 for n in nums):
+        raise PromoteMixinResolutionError(
+            f"version {version!r}: expected dot-separated non-negative integers."
+        )
+    return nums
+
+
+def _resolve_mixin_arg(raw: str) -> "ProfileComponent":
+    """Parse one --mixin argument into a ProfileComponent.
+
+    Accepts either:
+      - Explicit: 'bio.matrix/1.0' -> ProfileComponent('bio.matrix', '1.0')
+      - Sugar: 'bio.matrix' -> resolved to the highest installed version
+        by scanning extension-bio-matrix-*.json under the schemas package.
+
+    The name MUST start with 'bio.' and have a non-empty suffix; this
+    prevents --mixin from being abused to stack base or type-mixin
+    schemas (e.g. dataset/1.0). The version MUST be a dot-separated
+    integer tuple.
+
+    Raises PromoteMixinResolutionError on malformed input or a sugar
+    form with no installed schema.
+    """
+    from importlib import resources
+
+    from science_model.entity_schema.profile import ProfileComponent
+    from science_tool.commons.errors import PromoteMixinResolutionError
+
+    raw = raw.strip()
+    if not raw:
+        raise PromoteMixinResolutionError("--mixin '': empty argument")
+
+    if "/" in raw:
+        name, _, version = raw.partition("/")
+        if not name or not version:
+            raise PromoteMixinResolutionError(
+                f"--mixin {raw!r}: expected '<name>/<version>' "
+                "(e.g. 'bio.matrix/1.0')."
+            )
+    else:
+        name, version = raw, None
+
+    if not name.startswith("bio.") or len(name) <= len("bio."):
+        raise PromoteMixinResolutionError(
+            f"--mixin {raw!r}: name must start with 'bio.' and have a "
+            "non-empty suffix (e.g. 'bio.matrix'). Use --mixin only for "
+            "bio extensions; base and type mixins are auto-included."
+        )
+
+    if version is not None:
+        _parse_version_tuple(version)
+        return ProfileComponent(name=name, version=version)
+
+    flat = name.replace(".", "-")
+    prefix = f"extension-{flat}-"
+    candidates: list[tuple[tuple[int, ...], str]] = []
+    for r in resources.files("science_model.schemas").iterdir():
+        rname = r.name
+        if rname.startswith(prefix) and rname.endswith(".json"):
+            version_str = rname[len(prefix) : -len(".json")]
+            try:
+                nums = _parse_version_tuple(version_str)
+            except PromoteMixinResolutionError:
+                continue  # ignore weirdly-named files on disk
+            candidates.append((nums, version_str))
+    if not candidates:
+        raise PromoteMixinResolutionError(
+            f"--mixin {raw!r}: no installed extension-{flat}-*.json schema. "
+            "Known bio extensions: bio.matrix, bio.table, bio.rnaseq, "
+            "bio.scrna, bio.cna."
+        )
+    highest_version = max(candidates)[1]
+    return ProfileComponent(name=name, version=highest_version)
+
+
 def _promote_from_options(kind: PromoteKindConfig) -> list[click.Parameter]:
     return [
         click.Argument(["entity_id"], required=False, default=None),
@@ -481,6 +575,18 @@ def promote_theme_cmd(
             required=True,
             help="Dataset slug to promote (required in v1; batch deferred to v1.1).",
         ),
+        click.Option(
+            ["--mixin", "mixin_args"],
+            multiple=True,
+            default=(),
+            help=(
+                "Bio extension to apply to the promoted dataset; repeatable. "
+                "Use explicit form (bio.matrix/1.0) or sugar form (bio.rnaseq). "
+                "At most one structural extension (bio.matrix or bio.table) and "
+                "one domain extension (bio.rnaseq, bio.scrna, or bio.cna) may be "
+                "stacked; choose extensions that match the dataset modality."
+            ),
+        ),
     ],
 )
 def promote_dataset_cmd(
@@ -489,16 +595,25 @@ def promote_dataset_cmd(
     apply_flag: bool,
     limit: int | None,
     slug: str,
+    mixin_args: tuple[str, ...],
 ) -> None:
     """Promote one dataset entity into the commons store."""
     if entity_id is not None:
         raise click.UsageError("dataset promotion uses --slug; do not pass a positional <entity_id>")
+
+    try:
+        mixin_extensions = tuple(_resolve_mixin_arg(m) for m in mixin_args)
+        _validate_mixin_stacking(mixin_extensions)
+    except CommonsError as exc:
+        raise click.ClickException(str(exc)) from exc
+
     _promote_kind_cmd(
         kind=PROMOTE_KIND_DATASET,
         entity_id=f"dataset:{slug}",
         from_=from_,
         apply_=apply_flag,
         limit=limit,
+        mixin_extensions=mixin_extensions,
     )
 
 
@@ -509,6 +624,7 @@ def _promote_kind_cmd(
     from_: tuple[str, ...],
     apply_: bool,
     limit: int | None,
+    mixin_extensions: tuple["ProfileComponent", ...] = (),
 ) -> None:
     """Shared implementation for `commons promote <kind>` commands."""
     root = resolve_commons_root()
@@ -571,6 +687,7 @@ def _promote_kind_cmd(
             commons_root=root,
             kind=kind,
             from_order=list(from_),
+            mixin_extensions=mixin_extensions,
         )
     except CommonsError as exc:
         raise click.ClickException(str(exc)) from exc
