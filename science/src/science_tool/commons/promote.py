@@ -255,6 +255,23 @@ def _validate_mixin_stacking(
         )
 
 
+def _active_profile(
+    kind: PromoteKindConfig,
+    extensions: tuple["ProfileComponent", ...],
+) -> "ProfileString":
+    """Build the per-call ProfileString from a kind's default plus extensions.
+
+    Used by plan_promote to drive merge policy, body sections, and
+    canonical rendering through `read_merge_policy(active_profile)` etc.,
+    instead of `kind.default_profile` which omits the Phase H extensions.
+    """
+    return ProfileString(
+        base=kind.default_profile.base,
+        mixin=kind.default_profile.mixin,
+        extensions=tuple(extensions),
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Public dataclasses                                                          #
 # --------------------------------------------------------------------------- #
