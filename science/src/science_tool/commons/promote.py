@@ -42,6 +42,7 @@ from science_tool.commons.datapackage import (
 )
 from science_tool.commons.config import check_override_conflict, resolve_project_by_id
 from science_tool.commons.errors import (
+    CommonsError,
     PromoteCandidateError,
     PromoteConflictAbort,
     PromoteInputError,
@@ -327,6 +328,7 @@ class PromoteResult:
             "discover",
             "plan",
             "write_commons",
+            "side_channel",
             "rewrite_projects",
             "audit",
         ]
@@ -342,6 +344,7 @@ class PromoteResult:
     # that were never modified (design §6.3 step 7 failure variant).
     projects_touched: list[str]
     kind: PromoteKindConfig
+    side_channel_results: dict[str, SideChannelResult] = field(default_factory=dict)
 
 
 # --------------------------------------------------------------------------- #
@@ -948,6 +951,7 @@ def _write_failure_audit_log(
         "discover",
         "plan",
         "write_commons",
+        "side_channel",
         "rewrite_projects",
         "audit",
     ],
@@ -1038,6 +1042,7 @@ def apply_promote(
     commons_commit: str | None = None
     tags_created: list[str] = []
     projects_touched: list[str] = []
+    side_channel_results: dict[str, SideChannelResult] = {}
     current_stage: str = "preflight"
 
     if not plan.decisions:
@@ -1174,6 +1179,36 @@ def apply_promote(
                     detail=(f"tag {tag!r} failed after commit (rolled back {rolled_back_commit}): {exc.stderr or exc}"),
                 ) from exc
 
+        # ---------- Step 5.4: side-channel writes ----------
+        if plan.kind.side_channel_apply is not None:
+            current_stage = "side_channel"
+            try:
+                for decision in plan.decisions:
+                    side_channel_results[decision.slug] = plan.kind.side_channel_apply(
+                        SideChannelContext(
+                            decision=decision,
+                            plan=plan,
+                            commons_root=commons_root_resolved,
+                            op_id=op_id,
+                        )
+                    )
+            except (OSError, CommonsError) as exc:
+                from science_tool.commons.config import restore_data_override_from_backup
+
+                detail = f"side-channel apply failed: {exc}"
+                try:
+                    restore_data_override_from_backup(op_id=op_id)
+                except (OSError, CommonsError) as restore_exc:
+                    detail += f"; data override restore failed: {restore_exc}"
+                _rollback_step5(commons_root_resolved, tags_created, written_canonical_paths)
+                rolled_back_commit = commons_commit
+                commons_commit = None
+                tags_created.clear()
+                raise PromoteWriteError(
+                    stage="side_channel",
+                    detail=f"{detail} (rolled back {rolled_back_commit})",
+                ) from exc
+
         # ---------- Step 6: rewrite projects ----------
         current_stage = "rewrite_projects"
         written_rewrites: list[OverlayRewrite] = []
@@ -1221,6 +1256,7 @@ def apply_promote(
             failure_detail=None,
             projects_touched=projects_touched,
             kind=plan.kind,
+            side_channel_results=side_channel_results,
         )
         try:
             audit_path = _write_audit_log(result, commons_root, invocation=invocation)
@@ -1249,6 +1285,7 @@ def apply_promote(
             failure_detail=None,
             projects_touched=result.projects_touched,
             kind=result.kind,
+            side_channel_results=result.side_channel_results,
         )
 
     except (PromoteInputError, PromoteWriteError, PromoteCandidateError) as exc:
