@@ -409,13 +409,14 @@ threads the resolved extensions through the pipeline:
 
 ```python
 def plan_promote(
-    kind: PromoteKindConfig,
-    discovery: PromoteDiscovery,
+    discovery: DiscoveryResult,
     *,
+    commons_root: Path,
+    kind: PromoteKindConfig,
+    resolve_conflict: Callable[[FieldConflict], Any] | None = None,
     from_order: list[str] | None = None,
-    resolve_conflict: ConflictResolver | None = None,
     mixin_extensions: tuple[ProfileComponent, ...] = (),   # NEW
-) -> ...:
+) -> PromotePlan:
     active_profile = _active_profile(kind, mixin_extensions)
     merge_policy = read_merge_policy(active_profile)        # CHANGED
     body_sections = read_canonical_body_sections(active_profile)  # CHANGED
@@ -474,9 +475,21 @@ Other bad-mixin paths reuse existing errors:
 
 - **Explicit-form unknown extension** (`--mixin bio.bogus/1.0`):
   parses syntactically; the missing file surfaces as
-  `SchemaNotFoundError` when `EntityValidator()._compose` calls the
-  loader. Propagates up as a CLI-level error before any writes (Phase
-  G's atomic semantics still hold).
+  `SchemaNotFoundError` (subclass of `FileNotFoundError`, not
+  `CommonsError`) when `EntityValidator()._compose` calls the loader.
+  Today `_validate_artifact` (`commons/promote.py:783-797`) only
+  catches `EntityValidationError`, and the CLI only wraps
+  `CommonsError` from `plan_promote` (`commons/cli.py:568`), so an
+  unwrapped `SchemaNotFoundError` would escape Click's normal error
+  path. Phase H adds a `SchemaNotFoundError` catch in
+  `_validate_artifact` (alongside the existing `EntityValidationError`
+  catch in the `"entity-mixin"` branch) that re-raises as
+  `PromoteMixinResolutionError` with an operator-friendly message
+  ("schema_profile references an unknown extension: bio.bogus/1.0").
+  This routes both sugar-form and explicit-form unknown extensions to
+  the same error class — consistent UX, no operator surprises, and
+  Phase G's atomic semantics still hold (the error fires before any
+  write).
 - **Sugar-form unknown extension** (`--mixin bio.bogus`): caught at
   CLI parse time as `PromoteMixinResolutionError` (above), well before
   the validator runs.
@@ -631,7 +644,9 @@ In `science/tests/test_commons_promote_dataset.py`:
   - `--mixin bio.bogus` (sugar form) → `PromoteMixinResolutionError`
     at CLI parse time (no `extension-bio-bogus-*.json` installed).
   - `--mixin bio.bogus/1.0` (explicit form) → `SchemaNotFoundError`
-    surfaced during validator composition.
+    surfaced during validator composition is caught in
+    `_validate_artifact` and re-raised as `PromoteMixinResolutionError`
+    (same class as sugar-form, consistent UX).
   - `--mixin bio.matrix` on `promote paper` → Click `UsageError`
     ("no such option: --mixin"). No custom error path; `--mixin` is
     only registered on the dataset command.
@@ -752,6 +767,11 @@ Modified:
   - `read_merge_policy(active_profile)` / `read_canonical_body_sections(active_profile)` substitutions (`:439-440`)
   - `_render_canonical(..., active_profile)` substitution (`:2291`)
   - `_validate_mixin_stacking(extensions)` guard
+  - `_validate_artifact` catches `SchemaNotFoundError` in the
+    `"entity-mixin"` branch (`:783-797`) and re-raises as
+    `PromoteMixinResolutionError`, so unknown extensions cited in an
+    explicit `--mixin name/version` surface through the standard
+    Click error path
   - Audit-shape extension: emit `mixin_extensions:` field when non-empty
 - `science/src/science_tool/commons/errors.py`:
   - `PromoteMixinStackingError(PromoteInputError)` — new
@@ -776,6 +796,6 @@ No changes:
 - A dataset promoted with `--mixin bio.matrix --mixin bio.rnaseq` round-trips through `science commons show` without validation errors and carries the four-segment `schema_profile` in canonical.
 - A dataset promoted with `--mixin bio.matrix --mixin bio.table` aborts with `PromoteMixinStackingError` (two structural) and writes nothing.
 - A dataset promoted with `--mixin bio.rnaseq --mixin bio.cna` aborts with `PromoteMixinStackingError` (two domain) and writes nothing.
-- A dataset promoted with `--mixin bio.bogus` aborts at CLI parse time with `PromoteMixinResolutionError`; the explicit form `--mixin bio.bogus/1.0` aborts during validator composition with `SchemaNotFoundError`. Neither writes anything.
+- A dataset promoted with `--mixin bio.bogus` (sugar) or `--mixin bio.bogus/1.0` (explicit) both abort with `PromoteMixinResolutionError`; neither writes anything. Sugar form fails at CLI parse time; explicit form fails during validator composition and is caught/rewrapped in `_validate_artifact`.
 - Phase G's atomic-transaction semantics for paper / topic / theme / bare dataset promotes are unchanged (regression coverage in existing Phase G tests passes unmodified).
 - The MM pilot (GSE131651) lands cleanly per the §8.5 runbook.
