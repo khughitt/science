@@ -26,6 +26,7 @@ from science_tool.commons.overlay import (
 )
 from science_tool.commons.promote import (
     DiscoveryResult,
+    PROMOTE_KIND_DATASET,
     PROMOTE_KIND_PAPER,
     PROMOTE_KIND_THEME,
     PROMOTE_KIND_TOPIC,
@@ -463,6 +464,34 @@ def promote_theme_cmd(
     _promote_kind_cmd(
         kind=PROMOTE_KIND_THEME,
         entity_id=entity_id,
+        from_=from_,
+        apply_=apply_flag,
+        limit=limit,
+    )
+
+
+@promote_group.command(
+    "dataset",
+    params=_promote_from_options(PROMOTE_KIND_DATASET)
+    + [
+        click.Option(
+            ["--slug"],
+            required=True,
+            help="Dataset slug to promote (required in v1; batch deferred to v1.1).",
+        ),
+    ],
+)
+def promote_dataset_cmd(
+    entity_id: str | None,
+    from_: tuple[str, ...],
+    apply_flag: bool,
+    limit: int | None,
+    slug: str,
+) -> None:
+    """Promote one dataset entity into the commons store."""
+    _promote_kind_cmd(
+        kind=PROMOTE_KIND_DATASET,
+        entity_id=f"dataset:{slug}",
         from_=from_,
         apply_=apply_flag,
         limit=limit,
