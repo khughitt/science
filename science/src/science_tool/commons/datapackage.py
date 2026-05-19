@@ -13,10 +13,15 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-from science_tool.commons.errors import CommonsDatapackageError, DataLogicalPathError
+from science_tool.commons.errors import (
+    CommonsDatapackageError,
+    CommonsError,
+    DataLogicalPathError,
+)
 
 _SHA256_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 _DRIVE_LETTER = re.compile(r"^[A-Za-z]:")
+_PROJECT_ONLY_DATAPACKAGE_KEYS = frozenset({"conformsTo", "mm30", "derivedFrom"})
 
 
 def validate_logical_path(logical_path: str) -> str:
@@ -89,6 +94,99 @@ def stream_sha256_and_bytes(path: Path) -> tuple[str, int]:
             h.update(chunk)
             n += len(chunk)
     return f"sha256:{h.hexdigest()}", n
+
+
+def render_canonical_datapackage_yaml(
+    *,
+    project_doc: dict,
+    canonical_slug: str,
+    per_resource: dict[str, tuple[str, int]],
+) -> str:
+    """Render a canonical commons datapackage.yaml from a project descriptor."""
+    if not isinstance(project_doc, dict):
+        raise CommonsError("project datapackage document must be a mapping")
+
+    out = {"name": canonical_slug}
+    for key, value in project_doc.items():
+        if key in _PROJECT_ONLY_DATAPACKAGE_KEYS or key in {"name", "resources"}:
+            continue
+        out[key] = value
+
+    resources = []
+    for index, resource in enumerate(project_doc.get("resources", [])):
+        if not isinstance(resource, dict):
+            raise CommonsError(f"resources[{index}] is not a mapping")
+        rendered_resource = dict(resource)
+        resource_key = rendered_resource.get("name") or rendered_resource.get("path")
+        if resource_key in per_resource:
+            resource_hash, resource_bytes = per_resource[resource_key]
+            rendered_resource["hash"] = resource_hash
+            rendered_resource["bytes"] = resource_bytes
+        resources.append(rendered_resource)
+    out["resources"] = resources
+
+    return yaml.safe_dump(out, sort_keys=False, allow_unicode=True)
+
+
+def parse_canonical_datapackage_yaml(yaml_text: str) -> dict:
+    """Parse and validate a canonical commons datapackage.yaml document."""
+    try:
+        raw = yaml.safe_load(yaml_text)
+    except yaml.YAMLError as exc:
+        raise CommonsError(f"malformed canonical datapackage YAML: {exc}") from exc
+
+    if not isinstance(raw, dict):
+        raise CommonsError("canonical datapackage top level is not a mapping")
+    if not isinstance(raw.get("name"), str):
+        raise CommonsError("canonical datapackage has a missing or non-string 'name'")
+
+    raw_resources = raw.get("resources")
+    if not isinstance(raw_resources, list) or not raw_resources:
+        raise CommonsError("canonical datapackage has a missing or empty 'resources' list")
+
+    seen_paths: set[str] = set()
+    for index, entry in enumerate(raw_resources):
+        if not isinstance(entry, dict):
+            raise CommonsError(f"resources[{index}] is not a mapping")
+
+        raw_path = entry.get("path")
+        if not isinstance(raw_path, str):
+            raise CommonsError(
+                f"resources[{index}] has a missing or non-string 'path'"
+            )
+        try:
+            logical_path = validate_logical_path(raw_path)
+        except DataLogicalPathError as exc:
+            raise CommonsError(
+                f"resources[{index}] has an invalid path: {exc.reason}"
+            ) from exc
+        if logical_path in seen_paths:
+            raise CommonsError(f"duplicate resource path {logical_path!r}")
+        seen_paths.add(logical_path)
+
+        raw_hash = entry.get("hash")
+        if not isinstance(raw_hash, str):
+            raise CommonsError(
+                f"resources[{index}] ({logical_path}) has a missing or non-string 'hash'"
+            )
+        try:
+            parse_resource_hash(raw_hash)
+        except ValueError as exc:
+            raise CommonsError(
+                f"resources[{index}] ({logical_path}) has an invalid hash: {exc}"
+            ) from exc
+
+        raw_bytes = entry.get("bytes")
+        if (
+            not isinstance(raw_bytes, int)
+            or isinstance(raw_bytes, bool)
+            or raw_bytes < 0
+        ):
+            raise CommonsError(
+                f"resources[{index}] ({logical_path}) has a missing or invalid 'bytes'"
+            )
+
+    return raw
 
 
 @dataclass(frozen=True, slots=True)
