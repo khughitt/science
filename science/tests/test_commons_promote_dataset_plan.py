@@ -401,3 +401,25 @@ def test_dataset_canonical_entity_body_is_preserved(tmp_path, monkeypatch):
     body = _canonical_entity_body(d)
 
     assert "Project-only body content goes here" in body
+
+
+def test_render_dataset_recipe_stub_content():
+    from science_tool.commons.promote import _render_dataset_recipe_stub
+
+    text = _render_dataset_recipe_stub(
+        slug="fixture-ds",
+        source_hint="Nusinow 2020 CCLE proteomics",
+    )
+
+    assert "Recipe back-fill needed" in text
+    assert "Nusinow 2020" in text
+    assert "<source>" not in text
+
+
+def test_render_dataset_recipe_stub_handles_missing_source_hint():
+    from science_tool.commons.promote import _render_dataset_recipe_stub
+
+    text = _render_dataset_recipe_stub(slug="fixture-ds", source_hint=None)
+
+    assert "Recipe back-fill needed" in text
+    assert "unspecified" in text.lower()

@@ -1808,6 +1808,16 @@ def _render_body(sections: dict[str, str]) -> str:
     return "\n".join(parts)
 
 
+def _render_dataset_recipe_stub(*, slug: str, source_hint: str | None) -> str:
+    src_line = f"Acquisition: {source_hint}." if source_hint else "Acquisition: unspecified."
+    return (
+        "# Recipe back-fill needed\n\n"
+        f"{src_line}\n\n"
+        "Promote stubbed this README because no project recipe was detected. "
+        "Replace with the acquisition or preprocessing workflow.\n"
+    )
+
+
 def _render_canonical(
     decision: PromoteDecision,
     *,
