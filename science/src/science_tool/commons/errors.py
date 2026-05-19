@@ -155,9 +155,10 @@ class OverlayMergeError(CommonsError):
 class PromoteInputError(CommonsError):
     """Bad input to `science commons promote`.
 
-    Raised for: missing/unregistered/null-id `--from` slug; commons store missing;
-    required positional argument absent; dirty target file at preflight; commons
-    repo dirty at preflight; repo mid-merge/rebase/cherry-pick/bisect.
+    Raised for cases including: missing/unregistered/null-id `--from` slug;
+    commons store missing; required positional argument absent; dirty target
+    file at preflight; commons repo dirty at preflight; repo
+    mid-merge/rebase/cherry-pick/bisect.
     """
 
 
