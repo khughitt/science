@@ -246,12 +246,12 @@ def _validate_mixin_stacking(
     if len(structural) > 1:
         raise PromoteMixinStackingError(
             f"--mixin: at most one structural bio extension allowed "
-            f"(got {structural})."
+            f"(got {', '.join(structural)})."
         )
     if len(domain) > 1:
         raise PromoteMixinStackingError(
             f"--mixin: at most one domain bio extension allowed "
-            f"(got {domain})."
+            f"(got {', '.join(domain)})."
         )
 
 
