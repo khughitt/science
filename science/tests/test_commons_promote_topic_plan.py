@@ -42,8 +42,9 @@ def test_topic_plan_single_instance_no_prompt(tmp_path, monkeypatch) -> None:
 
     by_slug = {d.slug: d for d in plan.decisions}
     assert "single-instance" in by_slug
-    assert "id: topic:single-instance" in by_slug["single-instance"].canonical_content
-    assert "type: topic" in by_slug["single-instance"].canonical_content
+    canonical_content = by_slug["single-instance"].canonical_artifacts[0].content
+    assert "id: topic:single-instance" in canonical_content
+    assert "type: topic" in canonical_content
 
 
 def test_topic_plan_shared_no_conflict_unifies_canonical(tmp_path, monkeypatch) -> None:
@@ -61,7 +62,7 @@ def test_topic_plan_shared_no_conflict_unifies_canonical(tmp_path, monkeypatch) 
     by_slug = {d.slug: d for d in plan.decisions}
     d = by_slug["shared-no-conflict"]
     assert len(d.overlays) == 2
-    assert "## Relevance to This Project" not in d.canonical_content
+    assert "## Relevance to This Project" not in d.canonical_artifacts[0].content
     for slug in ("proj-alpha", "proj-beta"):
         assert "Relevance to This Project" in d.overlays[slug].after_content
 
@@ -90,7 +91,7 @@ def test_topic_plan_conflict_uses_prompt_resolve(tmp_path, monkeypatch) -> None:
     )
     assert ("shared-conflict", "title") in captured
     by_slug = {d.slug: d for d in plan.decisions}
-    assert "Title from alpha" in by_slug["shared-conflict"].canonical_content
+    assert "Title from alpha" in by_slug["shared-conflict"].canonical_artifacts[0].content
 
 
 def test_topic_plan_aborts_on_user_abort(tmp_path, monkeypatch) -> None:

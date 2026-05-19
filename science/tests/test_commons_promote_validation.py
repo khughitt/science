@@ -114,3 +114,105 @@ def test_plan_promote_wraps_overlay_validation_failure(tmp_path, monkeypatch) ->
     assert err.target_kind == "overlay"
     assert err.project_id == "proj_overlay"
     assert "overlay rejected for test" in err.schema_message
+
+
+def test_plan_validation_dispatches_by_artifact_validator(tmp_path, monkeypatch):
+    """An artifact with validator='plain' is skipped; 'entity-mixin' runs EntityValidator()."""
+    from pathlib import Path
+
+    from science_tool.commons.promote import (
+        CanonicalArtifact,
+        _validate_artifact,
+    )
+
+    plain = CanonicalArtifact(
+        path=Path("datasets/x/recipe/README.md"),
+        content="# Recipe back-fill needed\n",
+        validator="plain",
+    )
+    # Should NOT raise:
+    _validate_artifact(plain, decision_slug="x", project_id=None)
+
+    # Minimal mixin artifact: still missing required dataset-mixin fields
+    # (origin/tier/access), so the science_model EntityValidator will reject it.
+    mixin = CanonicalArtifact(
+        path=Path("datasets/x/entity.md"),
+        content=(
+            "---\n"
+            "schema_profile: science-entity-base/1.0+dataset/1.0\n"
+            "id: dataset:x\n"
+            "type: dataset\n"
+            "title: x\n"
+            "version: 1.0.0\n"
+            "created: '2026-05-18'\n"
+            "updated: '2026-05-18'\n"
+            "---\n"
+        ),
+        validator="entity-mixin",
+    )
+    import pytest
+
+    from science_tool.commons.errors import PromoteValidationError
+
+    with pytest.raises(PromoteValidationError) as excinfo:
+        _validate_artifact(mixin, decision_slug="x", project_id=None)
+    err = excinfo.value
+    assert err.decision_slug == "x"
+    assert err.target_kind == "canonical"
+    assert err.project_id is None
+    assert err.schema_message
+    assert str(err)
+
+
+def test_plan_validation_wraps_missing_datapackage_parser(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from science_tool.commons import datapackage
+    from science_tool.commons.errors import PromoteValidationError
+    from science_tool.commons.promote import (
+        CanonicalArtifact,
+        _validate_artifact,
+    )
+
+    artifact = CanonicalArtifact(
+        path=Path("datasets/x/datapackage.yaml"),
+        content="resources: []\n",
+        validator="frictionless-datapackage",
+    )
+
+    monkeypatch.delattr(datapackage, "parse_canonical_datapackage_yaml", raising=False)
+
+    with pytest.raises(PromoteValidationError) as excinfo:
+        _validate_artifact(artifact, decision_slug="x", project_id="proj")
+
+    err = excinfo.value
+    assert err.decision_slug == "x"
+    assert err.target_kind == "canonical"
+    assert err.project_id == "proj"
+    assert "parse_canonical_datapackage_yaml" in err.schema_message
+
+
+def test_plan_validation_does_not_wrap_datapackage_module_import_failure(monkeypatch):
+    from pathlib import Path
+
+    import science_tool.commons.promote as promote
+    from science_tool.commons.promote import (
+        CanonicalArtifact,
+        _validate_artifact,
+    )
+
+    artifact = CanonicalArtifact(
+        path=Path("datasets/x/datapackage.yaml"),
+        content="resources: []\n",
+        validator="frictionless-datapackage",
+    )
+
+    def fail_datapackage_import(name: str):
+        if name == "science_tool.commons.datapackage":
+            raise ImportError("datapackage dependency exploded")
+        raise AssertionError(f"unexpected import: {name}")
+
+    monkeypatch.setattr(promote, "import_module", fail_datapackage_import)
+
+    with pytest.raises(ImportError, match="datapackage dependency exploded"):
+        _validate_artifact(artifact, decision_slug="x", project_id="proj")

@@ -51,6 +51,8 @@ def test_public_api_exports() -> None:
         "OverlayMergeError",
         # Phase D2
         "build_commons_inventory",
+        # Phase G
+        "PromoteOverrideConflictError",
     }
     assert expected.issubset(set(pkg.__all__))
     for name in expected:

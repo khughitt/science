@@ -49,6 +49,32 @@ def test_result_carries_kind() -> None:
     assert r.kind is PROMOTE_KIND_PAPER
 
 
+def test_repo_is_idle_checks_linked_worktree_gitdir(tmp_path) -> None:
+    from science_tool.commons.promote import _repo_is_idle
+
+    main = tmp_path / "main"
+    linked = tmp_path / "linked"
+    main.mkdir()
+    _init_repo(main)
+    (main / "README.md").write_text("init\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(main), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(main), "commit", "-q", "-m", "init"], check=True)
+    subprocess.run(
+        ["git", "-C", str(main), "worktree", "add", "-q", "-b", "linked-test", str(linked)],
+        check=True,
+    )
+
+    git_dir = subprocess.run(
+        ["git", "-C", str(linked), "rev-parse", "--git-dir"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    (linked / git_dir / "MERGE_HEAD").write_text("staged merge\n", encoding="utf-8")
+
+    assert _repo_is_idle(linked) is False
+
+
 def test_write_audit_log_writes_yaml_with_expected_shape(tmp_path) -> None:
     from science_tool.commons.promote import (
         PROMOTE_KIND_PAPER,
@@ -286,6 +312,258 @@ def test_apply_promote_happy_path_writes_commits_tags_rewrites(tmp_path, monkeyp
     assert result.audit_log_path.exists()
     log_data = yaml.safe_load(result.audit_log_path.read_text(encoding="utf-8"))
     assert log_data["status"] == "ok"
+
+
+def test_audit_log_records_canonical_paths_per_decision(tmp_path, monkeypatch) -> None:
+    """Each decision contributes one canonical_paths entry, list-form."""
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    _init_commons(tmp_path / "commons")
+    proj = _build_project(
+        tmp_path,
+        "proj-a",
+        {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\nyear: 2025\n---\n\n## Key Findings\n\nfoo\n"},
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: {"proj-a": proj}[slug],
+    )
+
+    discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
+    plan = plan_promote(
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
+    )
+
+    result = apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
+
+    assert result.audit_log_path is not None
+    log = yaml.safe_load(result.audit_log_path.read_text(encoding="utf-8"))
+    assert "decisions" in log
+    assert log["decisions"] == [
+        {
+            "slug": "Adams2025",
+            "canonical_version": "1.0.0",
+            "canonical_paths": ["papers/Adams2025.md"],
+        }
+    ]
+    assert not Path(log["decisions"][0]["canonical_paths"][0]).is_absolute()
+
+
+def test_apply_promote_rejects_absolute_canonical_artifact_path(tmp_path) -> None:
+    from science_tool.commons.errors import PromoteInputError
+    from science_tool.commons.promote import (
+        CanonicalArtifact,
+        PROMOTE_KIND_PAPER,
+        PromoteDecision,
+        PromotePlan,
+        apply_promote,
+    )
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    outside = tmp_path / "outside.md"
+    plan = PromotePlan(
+        decisions=[
+            PromoteDecision(
+                slug="unsafe",
+                canonical_artifacts=[
+                    CanonicalArtifact(
+                        path=outside,
+                        content="unsafe\n",
+                        validator="plain",
+                    )
+                ],
+                canonical_version="1.0.0",
+                overlays={},
+                resolved_conflicts=(),
+            )
+        ],
+        failed_candidates=[],
+        kind=PROMOTE_KIND_PAPER,
+    )
+
+    with pytest.raises(PromoteInputError, match="canonical artifact path"):
+        apply_promote(plan, commons_root=commons, invocation="...")
+
+    assert not outside.exists()
+    logs = list((commons / ".migrations").glob("*.yaml"))
+    assert len(logs) == 1
+    log = yaml.safe_load(logs[0].read_text(encoding="utf-8"))
+    assert log["status"] == "failed"
+    assert log["decisions"] == [
+        {
+            "slug": "unsafe",
+            "canonical_version": "1.0.0",
+            "canonical_paths": [],
+        }
+    ]
+    assert str(outside) not in logs[0].read_text(encoding="utf-8")
+
+
+def test_apply_promote_rejects_parent_traversal_canonical_artifact_path(tmp_path) -> None:
+    from science_tool.commons.errors import PromoteInputError
+    from science_tool.commons.promote import (
+        CanonicalArtifact,
+        PROMOTE_KIND_PAPER,
+        PromoteDecision,
+        PromotePlan,
+        apply_promote,
+    )
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    outside = tmp_path / "escape.md"
+    plan = PromotePlan(
+        decisions=[
+            PromoteDecision(
+                slug="unsafe",
+                canonical_artifacts=[
+                    CanonicalArtifact(
+                        path=Path("../escape.md"),
+                        content="unsafe\n",
+                        validator="plain",
+                    )
+                ],
+                canonical_version="1.0.0",
+                overlays={},
+                resolved_conflicts=(),
+            )
+        ],
+        failed_candidates=[],
+        kind=PROMOTE_KIND_PAPER,
+    )
+
+    with pytest.raises(PromoteInputError, match="canonical artifact path"):
+        apply_promote(plan, commons_root=commons, invocation="...")
+
+    assert not outside.exists()
+    logs = list((commons / ".migrations").glob("*.yaml"))
+    assert len(logs) == 1
+    log = yaml.safe_load(logs[0].read_text(encoding="utf-8"))
+    assert log["status"] == "failed"
+    assert log["decisions"] == [
+        {
+            "slug": "unsafe",
+            "canonical_version": "1.0.0",
+            "canonical_paths": [],
+        }
+    ]
+
+
+def test_apply_promote_failure_audit_omits_symlink_escape_canonical_artifact_path(tmp_path) -> None:
+    import os
+
+    from science_tool.commons.errors import PromoteInputError
+    from science_tool.commons.promote import (
+        CanonicalArtifact,
+        PROMOTE_KIND_PAPER,
+        PromoteDecision,
+        PromotePlan,
+        apply_promote,
+    )
+
+    commons = tmp_path / "commons"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    _init_commons(commons)
+    os.symlink(outside, commons / "escape_link", target_is_directory=True)
+    subprocess.run(["git", "-C", str(commons), "add", "escape_link"], check=True)
+    subprocess.run(["git", "-C", str(commons), "commit", "-q", "-m", "add symlink"], check=True)
+    plan = PromotePlan(
+        decisions=[
+            PromoteDecision(
+                slug="unsafe",
+                canonical_artifacts=[
+                    CanonicalArtifact(
+                        path=Path("escape_link/out.md"),
+                        content="unsafe\n",
+                        validator="plain",
+                    )
+                ],
+                canonical_version="1.0.0",
+                overlays={},
+                resolved_conflicts=(),
+            )
+        ],
+        failed_candidates=[],
+        kind=PROMOTE_KIND_PAPER,
+    )
+
+    with pytest.raises(PromoteInputError, match="escapes commons root"):
+        apply_promote(plan, commons_root=commons, invocation="...")
+
+    assert not (outside / "out.md").exists()
+    logs = list((commons / ".migrations").glob("*.yaml"))
+    assert len(logs) == 1
+    log = yaml.safe_load(logs[0].read_text(encoding="utf-8"))
+    assert log["status"] == "failed"
+    assert log["decisions"] == [
+        {
+            "slug": "unsafe",
+            "canonical_version": "1.0.0",
+            "canonical_paths": [],
+        }
+    ]
+
+
+def test_apply_promote_writes_and_stages_multiple_canonical_artifacts(tmp_path) -> None:
+    from science_tool.commons.promote import (
+        CanonicalArtifact,
+        PROMOTE_KIND_PAPER,
+        PromoteDecision,
+        PromotePlan,
+        apply_promote,
+    )
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    plan = PromotePlan(
+        decisions=[
+            PromoteDecision(
+                slug="multi",
+                canonical_artifacts=[
+                    CanonicalArtifact(
+                        path=Path("papers/multi.md"),
+                        content="primary\n",
+                        validator="plain",
+                    ),
+                    CanonicalArtifact(
+                        path=Path("papers/multi/extra.md"),
+                        content="extra\n",
+                        validator="plain",
+                    ),
+                ],
+                canonical_version="1.0.0",
+                overlays={},
+                resolved_conflicts=(),
+            )
+        ],
+        failed_candidates=[],
+        kind=PROMOTE_KIND_PAPER,
+    )
+
+    result = apply_promote(plan, commons_root=commons, invocation="...")
+
+    assert result.status == "ok"
+    assert (commons / "papers" / "multi.md").read_text(encoding="utf-8") == "primary\n"
+    assert (commons / "papers" / "multi" / "extra.md").read_text(encoding="utf-8") == "extra\n"
+    committed = subprocess.run(
+        ["git", "-C", str(commons), "show", "--name-only", "--format=", "HEAD~1"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    assert "papers/multi.md" in committed
+    assert "papers/multi/extra.md" in committed
 
 
 def test_apply_promote_preflight_rejects_dirty_commons(tmp_path, monkeypatch) -> None:
@@ -678,6 +956,13 @@ def test_apply_promote_failure_before_commit_unlinks_first_promote_canonical(
         apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
 
     assert not (tmp_path / "commons" / "papers" / "Adams2025.md").exists()
+    status = subprocess.run(
+        ["git", "-C", str(tmp_path / "commons"), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert "papers/Adams2025.md" not in status
 
 
 def test_apply_promote_path_limited_commit_does_not_pick_up_post_preflight_race(
@@ -792,6 +1077,75 @@ def test_apply_promote_project_rollback_preserves_dirty_non_target(tmp_path, mon
         second_overlay.path.chmod(0o644)
 
     assert (proj / "other.txt").read_text(encoding="utf-8") == "dirty WIP\n"
+
+
+def test_apply_promote_reports_project_rollback_checkout_failure(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """If project rollback itself fails, the PromoteWriteError detail must say
+    so instead of silently swallowing the failed checkout."""
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    _init_commons(tmp_path / "commons")
+    proj = _build_project(
+        tmp_path,
+        "proj-a",
+        {
+            "Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n",
+            "Bravo2024.md": "---\nid: paper:Bravo2024\ntitle: B\n---\n",
+        },
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+    discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
+    plan = plan_promote(
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
+    )
+    first_overlay = plan.decisions[0].overlays["proj-a"]
+    second_overlay = plan.decisions[1].overlays["proj-a"]
+    real_run = subprocess.run
+
+    def sabotage_run(*args, **kwargs):
+        cmd = args[0] if args else kwargs.get("args")
+        if (
+            isinstance(cmd, list)
+            and len(cmd) >= 7
+            and cmd[0] == "git"
+            and cmd[3:6] == ["checkout", "HEAD", "--"]
+            and cmd[-1] == str(first_overlay.path.relative_to(proj))
+        ):
+            if kwargs.get("check"):
+                raise subprocess.CalledProcessError(
+                    1,
+                    cmd,
+                    stderr="sim rollback fail",
+                )
+            return subprocess.CompletedProcess(cmd, 1, stderr="sim rollback fail")
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", sabotage_run)
+    second_overlay.path.chmod(0o444)
+    try:
+        with pytest.raises(PromoteWriteError) as exc_info:
+            apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
+    finally:
+        second_overlay.path.chmod(0o644)
+
+    assert "overlay write failed" in str(exc_info.value)
+    assert "project rewrite restore failed" in str(exc_info.value)
 
 
 def test_apply_promote_preflight_failure_audit_omits_projects_touched(
@@ -974,17 +1328,26 @@ def test_apply_promote_step7_audit_failure_does_not_crash_after_landed_writes(
 
     monkeypatch.setattr(promote_module, "_git", sabotaged_git)
 
-    with pytest.raises(PromoteWriteError, match="audit log write/commit failed"):
+    with pytest.raises(PromoteWriteError, match="audit log write/commit failed") as exc_info:
         apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
+
+    assert exc_info.value.stage == "audit"
+    assert hasattr(exc_info.value, "failure_audit_yaml")
+    payload = exc_info.value.failure_audit_yaml
+    assert payload
+    parsed = yaml.safe_load(payload)
+    assert parsed["status"] == "ok"
+    assert parsed["commons_commit"]
+    assert "paper/Adams2025/1.0.0" in parsed["commons_tags"]
+    assert "failure_stage" not in parsed
 
     assert (tmp_path / "commons" / "papers" / "Adams2025.md").exists()
     overlay_text = (proj / "doc" / "papers" / "Adams2025.md").read_text(encoding="utf-8")
     assert "overlay_of: paper:Adams2025" in overlay_text
     logs = list((tmp_path / "commons" / ".migrations").glob("*.yaml"))
-    assert logs, "failure audit log should have been written"
+    assert logs, "success audit log should have been written before commit failed"
     data = yaml.safe_load(logs[0].read_text(encoding="utf-8"))
-    assert data["status"] == "failed"
-    assert data["failure_stage"] == "audit"
+    assert data == parsed
 
 
 def test_apply_promote_step6_partial_rename_records_slug_in_projects_touched(
@@ -1153,7 +1516,7 @@ def test_apply_commons_path_uses_kind_commons_subdir(tmp_path, monkeypatch) -> N
     """commons_root / "papers" / ... was hardcoded. After de-hardcoding,
     kind.commons_subdir is used. Drive plan_promote with a real minimal
     candidate so the decision-building loop runs, then assert the resulting
-    PromoteDecision.canonical_path is under kind.commons_subdir."""
+    PromoteDecision canonical artifact is under kind.commons_subdir."""
     from science_tool.commons.promote import (
         PROMOTE_KIND_TOPIC,
         discover_candidates,
@@ -1177,7 +1540,7 @@ def test_apply_commons_path_uses_kind_commons_subdir(tmp_path, monkeypatch) -> N
     plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_TOPIC)
 
     assert len(plan.decisions) == 1
-    canonical_path = plan.decisions[0].canonical_path
+    canonical_path = commons / plan.decisions[0].canonical_artifacts[0].path
     # The path MUST live under commons/topics/, not commons/papers/.
     assert canonical_path.parent.name == "topics"
     assert str(canonical_path).startswith(str(commons / "topics"))
@@ -1307,14 +1670,20 @@ def test_apply_tags_use_kind_kind_prefix(tmp_path, monkeypatch) -> None:
     indirectly by inspecting the planned tag prefix logic via a tiny stub
     PromotePlan with a single decision."""
     from science_tool.commons.promote import (
+        CanonicalArtifact,
         PROMOTE_KIND_TOPIC,
         PromoteDecision,
     )
 
     d = PromoteDecision(
         slug="hypothesis",
-        canonical_path=tmp_path / "topics" / "hypothesis.md",
-        canonical_content="---\nid: topic:hypothesis\n---\n",
+        canonical_artifacts=[
+            CanonicalArtifact(
+                path=Path("topics/hypothesis.md"),
+                content="---\nid: topic:hypothesis\n---\n",
+                validator="entity-mixin",
+            )
+        ],
         canonical_version="1.0.0",
         overlays={},
         resolved_conflicts=(),

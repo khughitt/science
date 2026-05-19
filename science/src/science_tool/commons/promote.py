@@ -12,13 +12,16 @@ This module owns:
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import re
 import secrets
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from enum import Enum
+from importlib import import_module
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping
 
@@ -31,12 +34,19 @@ from science_model.entity_schema import (
     default_profile_for_kind,
     read_canonical_body_sections,
     read_merge_policy,
+    read_overlay_merge_policy,
 )
-from science_tool.commons.config import resolve_project_by_id
+from science_tool.commons.datapackage import (
+    render_canonical_datapackage_yaml,
+    stream_sha256_and_bytes,
+)
+from science_tool.commons.config import check_override_conflict, resolve_project_by_id
 from science_tool.commons.errors import (
+    CommonsError,
     PromoteCandidateError,
     PromoteConflictAbort,
     PromoteInputError,
+    PromoteResourceMissingError,
     PromoteValidationError,
     PromoteWriteError,
 )
@@ -49,15 +59,66 @@ class EligibilityVerdict(Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class SideChannelContext:
+    decision: PromoteDecision
+    plan: PromotePlan
+    commons_root: Path
+    op_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class SideChannelResult:
+    artifact_paths: list[Path]
+    backup_paths: list[Path]
+
+
+def _dataset_side_channel_apply(ctx: SideChannelContext) -> SideChannelResult:
+    from science_tool.commons.config import (
+        _data_yaml_path,
+        _upsert_data_override,
+        check_override_conflict,
+    )
+
+    extras = ctx.plan.dataset_audit_extras.get(ctx.decision.slug)
+    if extras is None or "override_path" not in extras:
+        raise PromoteCandidateError(
+            "dataset side-channel apply requires override_path audit extra",
+            slug=ctx.decision.slug,
+        )
+    override_path = extras["override_path"]
+    if not isinstance(override_path, str | os.PathLike):
+        raise PromoteCandidateError(
+            "dataset side-channel apply requires string override_path audit extra",
+            slug=ctx.decision.slug,
+        )
+    override_path = Path(override_path)
+    check_override_conflict(slug=ctx.decision.slug, planned_path=override_path)
+    _upsert_data_override(
+        slug=ctx.decision.slug,
+        absolute_path=override_path,
+        op_id=ctx.op_id,
+        allow_existing_backup=True,
+    )
+    yaml_path = _data_yaml_path()
+    backup_path = yaml_path.parent / f"data.yaml.bak.{ctx.op_id}"
+    absent_sentinel_path = yaml_path.parent / f"data.yaml.bak.{ctx.op_id}.absent"
+    actual_backup = backup_path if backup_path.exists() else absent_sentinel_path
+    return SideChannelResult(
+        artifact_paths=[yaml_path],
+        backup_paths=[actual_backup],
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class PromoteKindConfig:
     """Per-kind configuration for the promote pipeline.
 
-    One instance per kind ("paper", "topic", "theme"). Pure data plus an
+    One instance per kind ("paper", "topic", "theme", "dataset"). Pure data plus an
     optional eligibility-filter callable; threaded through discovery /
     plan / apply via the `kind` parameter or `PromotePlan.kind`.
     """
 
-    kind: Literal["paper", "topic", "theme"]
+    kind: Literal["paper", "topic", "theme", "dataset"]
     source_subdirs: tuple[str, ...]
     overlay_dest_subdir: str
     commons_subdir: str
@@ -67,6 +128,9 @@ class PromoteKindConfig:
     mixin_schema_id: str
     default_profile: "ProfileString"
     eligibility_filter: Callable[[Mapping[str, Any]], "EligibilityVerdict"] | None
+    filename_prefix: str = ""
+    slug_from_id: bool = False
+    side_channel_apply: Callable[[SideChannelContext], SideChannelResult] | None = None
 
 
 PROMOTE_KIND_PAPER = PromoteKindConfig(
@@ -125,6 +189,23 @@ PROMOTE_KIND_THEME = PromoteKindConfig(
 )
 
 
+PROMOTE_KIND_DATASET = PromoteKindConfig(
+    kind="dataset",
+    source_subdirs=("doc/datasets",),
+    overlay_dest_subdir="doc/datasets",
+    commons_subdir="datasets",
+    id_prefix="dataset:",
+    slug_regex=re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$"),
+    slug_match="exact",
+    mixin_schema_id="https://schemas.science/mixin-dataset-1.0.json",
+    default_profile=default_profile_for_kind("dataset"),
+    eligibility_filter=None,
+    side_channel_apply=_dataset_side_channel_apply,
+    filename_prefix="data-",
+    slug_from_id=True,
+)
+
+
 # --------------------------------------------------------------------------- #
 # Public dataclasses                                                          #
 # --------------------------------------------------------------------------- #
@@ -147,6 +228,8 @@ class PromoteCandidate:
     project_only_fields: dict[str, Any]
     canonical_body: dict[str, str]
     project_only_body: dict[str, Any]
+    datapackage_source_path: Path | None = None
+    datapackage_doc: dict[str, Any] | None = None
     # `project_only_body` is `dict[str, Any]` (not `[str, str]`) so the
     # discovery phase can stash the raw `(frontmatter, body)` pair under
     # sentinel keys `__raw_frontmatter__` / `__raw_body__` for `plan_promote`
@@ -157,7 +240,7 @@ class PromoteCandidate:
 @dataclass(frozen=True, slots=True)
 class FieldConflict:
     slug: str
-    kind: Literal["paper", "topic", "theme"]
+    kind: Literal["paper", "topic", "theme", "dataset"]
     field: str
     candidates: dict[str, Any]  # project_slug → value
 
@@ -183,10 +266,25 @@ class OverlayRewrite:
 
 
 @dataclass(frozen=True, slots=True)
+class CanonicalArtifact:
+    """One file under <commons_root>/<commons_subdir>/<slug>/.
+
+    `path` is stored relative to the commons root (e.g.
+    `datasets/foo/entity.md`). Apply resolves it against `commons_root` once
+    at write time and records the absolute resolved path in the per-op
+    rollback context so existing helpers (`_restore_paths_to_head`,
+    `_rollback_step5`) keep their absolute-path signatures.
+    """
+
+    path: Path
+    content: str
+    validator: Literal["entity-mixin", "frictionless-datapackage", "plain"]
+
+
+@dataclass(frozen=True, slots=True)
 class PromoteDecision:
     slug: str
-    canonical_path: Path  # absolute `<commons>/papers/<slug>.md`
-    canonical_content: str  # rendered canonical file (markdown + frontmatter)
+    canonical_artifacts: list[CanonicalArtifact]  # one or more commons-relative files
     canonical_version: str  # "1.0.0" etc.
     overlays: dict[str, OverlayRewrite]  # project_slug → rewrite plan
     resolved_conflicts: tuple[ConflictResolution, ...]
@@ -212,6 +310,7 @@ class PromotePlan:
     decisions: list[PromoteDecision]
     failed_candidates: list[FailedCandidate]
     kind: PromoteKindConfig
+    dataset_audit_extras: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,6 +331,7 @@ class PromoteResult:
             "discover",
             "plan",
             "write_commons",
+            "side_channel",
             "rewrite_projects",
             "audit",
         ]
@@ -247,6 +347,8 @@ class PromoteResult:
     # that were never modified (design §6.3 step 7 failure variant).
     projects_touched: list[str]
     kind: PromoteKindConfig
+    side_channel_results: dict[str, SideChannelResult] = field(default_factory=dict)
+    plan_audit_extras: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 # --------------------------------------------------------------------------- #
@@ -326,7 +428,7 @@ def plan_promote(
       2. Pick canonical slug case via `_pick_canonical_bibkey_case`.
       3. Merge canonical fields → `(merged_fields, conflicts)`.
       4. Resolve each conflict via `resolve_conflict`.
-      5. Build PromoteDecision (canonical_content rendered, overlays planned).
+      5. Build PromoteDecision (canonical artifacts rendered, overlays planned).
 
     `from_order` defaults to the discovery's project_slug encounter order.
     `resolve_conflict` defaults to `prompt_resolve`.
@@ -336,6 +438,7 @@ def plan_promote(
 
     merge_policy = read_merge_policy(kind.default_profile)
     body_sections = read_canonical_body_sections(kind.default_profile)
+    overlay_field_keys = set(read_overlay_merge_policy())
 
     if from_order is None:
         from_order = []
@@ -348,11 +451,13 @@ def plan_promote(
 
     decisions: list[PromoteDecision] = []
     soft_failures: list[FailedCandidate] = list(discovery.failed_candidates)
+    dataset_audit_extras: dict[str, dict[str, Any]] = {}
 
     for slug_norm in sorted(discovery.candidates_by_slug):
         raw_group = discovery.candidates_by_slug[slug_norm]
 
         classified: list[PromoteCandidate] = []
+        dataset_dropped_by_project: dict[str, list[str]] = {}
         for c in raw_group:
             raw_fm = c.project_only_body.get(_RAW_FRONTMATTER_KEY)
             raw_body = c.project_only_body.get(_RAW_BODY_KEY, "")
@@ -373,6 +478,13 @@ def plan_promote(
                 merge_policy,
                 body_sections,
             )
+            if kind.kind == "dataset":
+                proj_f = {k: v for k, v in proj_f.items() if k in overlay_field_keys}
+                dataset_dropped_by_project[c.project_slug] = _dataset_dropped_fields(
+                    raw_fm,
+                    canonical_fields=can_f,
+                    project_only_fields=proj_f,
+                )
             classified.append(
                 PromoteCandidate(
                     slug=c.slug,
@@ -384,6 +496,8 @@ def plan_promote(
                     project_only_fields=proj_f,
                     canonical_body=can_b,
                     project_only_body=proj_b,
+                    datapackage_source_path=c.datapackage_source_path,
+                    datapackage_doc=c.datapackage_doc,
                 )
             )
 
@@ -397,7 +511,7 @@ def plan_promote(
         # directory and is NOT the source file itself, the group is un-promotable.
         for c in classified:
             source_path = c.overlay_source_path
-            target_path = c.project_root / kind.overlay_dest_subdir / f"{canonical_case}.md"
+            target_path = _overlay_target_path(c, kind=kind, canonical_case=canonical_case)
             if source_path.name != target_path.name and target_path.exists():
                 raise PromoteInputError(
                     f"case-rename collision in {c.project_slug}: cannot rename "
@@ -408,6 +522,30 @@ def plan_promote(
                     f"overlay target collision in {c.project_slug}: cannot flatten "
                     f"{source_path} → {target_path}; target already exists"
                 )
+
+        dataset_primary: PromoteCandidate | None = None
+        dataset_primary_per_resource: dict[str, tuple[str, int]] | None = None
+        if kind.kind == "dataset":
+            dataset_primary = _primary_candidate_for_plan(classified, from_order)
+            dataset_primary_per_resource = _dataset_per_resource(dataset_primary)
+            if (
+                dataset_primary.datapackage_doc is None
+                or dataset_primary.datapackage_source_path is None
+            ):
+                raise PromoteCandidateError(
+                    "dataset planning requires discovery datapackage metadata",
+                    slug=canonical_case,
+                )
+            _validate_dataset_group_datapackages(
+                canonical_slug=canonical_case,
+                primary=dataset_primary,
+                candidates=classified,
+                primary_per_resource=dataset_primary_per_resource,
+            )
+            check_override_conflict(
+                slug=canonical_case,
+                planned_path=dataset_primary.datapackage_source_path.parent,
+            )
 
         merged, conflicts = _merge_canonical_fields(classified, merge_policy, kind=kind.kind)
 
@@ -429,11 +567,14 @@ def plan_promote(
             )
             merged[conflict.field] = resolved_value
 
-        canonical_path = commons_root / kind.commons_subdir / f"{canonical_case}.md"
+        if kind.kind == "dataset":
+            canonical_artifact_path = Path(kind.commons_subdir) / canonical_case / "entity.md"
+        else:
+            canonical_artifact_path = Path(kind.commons_subdir) / f"{canonical_case}.md"
         overlays: dict[str, OverlayRewrite] = {}
         for c in classified:
             source_path = c.overlay_source_path
-            target_path = c.project_root / kind.overlay_dest_subdir / f"{canonical_case}.md"
+            target_path = _overlay_target_path(c, kind=kind, canonical_case=canonical_case)
             rename_from = source_path if source_path.name != target_path.name else None
             unlinked_source = source_path if source_path.parent != target_path.parent else None
             if rename_from is not None and target_path.exists():
@@ -446,16 +587,29 @@ def plan_promote(
                     f"overlay target collision in {c.project_slug}: cannot flatten "
                     f"{source_path} → {target_path}; target already exists"
                 )
+            project_only_fields = c.project_only_fields
+            if kind.kind == "dataset":
+                project_only_fields = dict(c.project_only_fields)
+                if c.datapackage_source_path is not None:
+                    project_only_fields["source"] = _project_relative_posix(
+                        c.project_root,
+                        c.datapackage_source_path,
+                    )
             rendered_overlay = _render_overlay(
                 PromoteDecision(
                     slug=canonical_case,
-                    canonical_path=canonical_path,
-                    canonical_content="",
+                    canonical_artifacts=[
+                        CanonicalArtifact(
+                            path=canonical_artifact_path,
+                            content="",
+                            validator="entity-mixin",
+                        )
+                    ],
                     canonical_version="1.0.0",
                     overlays={},
                     resolved_conflicts=(),
                 ),
-                project_only_fields=c.project_only_fields,
+                project_only_fields=project_only_fields,
                 project_only_body=c.project_only_body,
                 kind=kind,
             )
@@ -471,30 +625,102 @@ def plan_promote(
 
         canonical_decision = PromoteDecision(
             slug=canonical_case,
-            canonical_path=canonical_path,
-            canonical_content="",
+            canonical_artifacts=[
+                CanonicalArtifact(
+                    path=canonical_artifact_path,
+                    content="",
+                    validator="entity-mixin",
+                )
+            ],
             canonical_version="1.0.0",
             overlays=overlays,
             resolved_conflicts=tuple(resolved_conflicts),
         )
+        primary = dataset_primary if dataset_primary is not None else classified[0]
         # NOTE: design §4.1.1 says `created` / `updated` should reflect the
         # apply timestamp, not the plan timestamp. We render here with
         # plan-day dates so the dry-run summary can show concrete content;
         # apply_promote (Task 16) re-renders with the actual write-time
         # timestamp before committing. The pre-render is informational only.
+        canonical_body = primary.canonical_body
+        if kind.kind == "dataset":
+            canonical_body = {**primary.project_only_body, **primary.canonical_body}
         canonical_content = _render_canonical(
             canonical_decision,
             canonical_fields=merged,
-            canonical_body=classified[0].canonical_body,
+            canonical_body=canonical_body,
             created=date.today(),
             updated=date.today(),
             kind=kind,
         )
+        if kind.kind == "dataset":
+            canonical_content = _rewrite_rendered_frontmatter(
+                canonical_content,
+                {"datapackage": "datapackage.yaml"},
+            )
+            if dataset_primary_per_resource is None:
+                raise PromoteCandidateError(
+                    "dataset planning requires discovery datapackage metadata",
+                    slug=canonical_case,
+                )
+            per_resource = dataset_primary_per_resource
+            if primary.datapackage_doc is None or primary.datapackage_source_path is None:
+                raise PromoteCandidateError(
+                    "dataset planning requires discovery datapackage metadata",
+                    slug=canonical_case,
+                )
+            datapackage_content = render_canonical_datapackage_yaml(
+                project_doc=primary.datapackage_doc,
+                canonical_slug=canonical_case,
+                per_resource=per_resource,
+            )
+            source_hint = _dataset_recipe_source_hint(merged)
+            recipe_content = _render_dataset_recipe_stub(
+                slug=canonical_case,
+                source_hint=source_hint,
+            )
+            canonical_artifacts = [
+                CanonicalArtifact(
+                    path=canonical_artifact_path,
+                    content=canonical_content,
+                    validator="entity-mixin",
+                ),
+                CanonicalArtifact(
+                    path=Path(kind.commons_subdir) / canonical_case / "datapackage.yaml",
+                    content=datapackage_content,
+                    validator="frictionless-datapackage",
+                ),
+                CanonicalArtifact(
+                    path=Path(kind.commons_subdir) / canonical_case / "recipe" / "README.md",
+                    content=recipe_content,
+                    validator="plain",
+                ),
+            ]
+            dropped_fields = sorted(
+                {
+                    field
+                    for dropped in dataset_dropped_by_project.values()
+                    for field in dropped
+                }
+            )
+            dataset_audit_extras[canonical_case] = {
+                "per_resource": per_resource,
+                "dropped_fields": dropped_fields,
+                "recipe_stubbed": True,
+                "override_path": str(primary.datapackage_source_path.parent),
+            }
+        else:
+            canonical_artifacts = [
+                CanonicalArtifact(
+                    path=canonical_artifact_path,
+                    content=canonical_content,
+                    validator="entity-mixin",
+                )
+            ]
         decisions.append(
             PromoteDecision(
                 slug=canonical_case,
-                canonical_path=canonical_path,
-                canonical_content=canonical_content,
+                canonical_artifacts=canonical_artifacts,
                 canonical_version="1.0.0",
                 overlays=overlays,
                 resolved_conflicts=tuple(resolved_conflicts),
@@ -502,7 +728,12 @@ def plan_promote(
         )
 
     _validate_plan(decisions)
-    return PromotePlan(decisions=decisions, failed_candidates=soft_failures, kind=kind)
+    return PromotePlan(
+        decisions=decisions,
+        failed_candidates=soft_failures,
+        kind=kind,
+        dataset_audit_extras=dataset_audit_extras,
+    )
 
 
 def _validate_plan(decisions: list[PromoteDecision]) -> None:
@@ -519,18 +750,14 @@ def _validate_plan(decisions: list[PromoteDecision]) -> None:
     """
     from science_model.entity_schema import EntityValidationError, EntityValidator
 
-    validator = EntityValidator()
     for d in decisions:
-        canonical_fm = _parse_frontmatter_only(d.canonical_content)
-        try:
-            validator.validate(canonical_fm)
-        except EntityValidationError as exc:
-            raise PromoteValidationError(
+        for artifact in d.canonical_artifacts:
+            _validate_artifact(
+                artifact,
                 decision_slug=d.slug,
-                target_kind="canonical",
                 project_id=None,
-                schema_message=str(exc),
-            ) from exc
+            )
+        validator = EntityValidator()
         for project_slug, overlay in d.overlays.items():
             overlay_fm = _parse_frontmatter_only(overlay.after_content)
             try:
@@ -542,6 +769,55 @@ def _validate_plan(decisions: list[PromoteDecision]) -> None:
                     project_id=project_slug,
                     schema_message=str(exc),
                 ) from exc
+
+
+def _validate_artifact(
+    artifact: CanonicalArtifact,
+    *,
+    decision_slug: str,
+    project_id: str | None,
+) -> None:
+    """Plan-time validation dispatch by artifact.validator."""
+    if artifact.validator == "plain":
+        return
+    if artifact.validator == "entity-mixin":
+        from science_model.entity_schema import EntityValidator
+        from science_model.entity_schema.validator import EntityValidationError
+
+        fm = _parse_frontmatter_only(artifact.content)
+        try:
+            EntityValidator().validate(fm)
+        except EntityValidationError as exc:
+            raise PromoteValidationError(
+                decision_slug=decision_slug,
+                target_kind="canonical",
+                project_id=project_id,
+                schema_message=str(exc),
+            ) from exc
+        return
+    if artifact.validator == "frictionless-datapackage":
+        datapackage = import_module("science_tool.commons.datapackage")
+        try:
+            parse_canonical_datapackage_yaml = datapackage.parse_canonical_datapackage_yaml
+        except AttributeError as exc:
+            raise PromoteValidationError(
+                decision_slug=decision_slug,
+                target_kind="canonical",
+                project_id=project_id,
+                schema_message=str(exc),
+            ) from exc
+
+        try:
+            parse_canonical_datapackage_yaml(artifact.content)
+        except Exception as exc:
+            raise PromoteValidationError(
+                decision_slug=decision_slug,
+                target_kind="canonical",
+                project_id=project_id,
+                schema_message=str(exc),
+            ) from exc
+        return
+    raise AssertionError(f"unknown artifact validator: {artifact.validator!r}")
 
 
 def _commons_is_clean(commons_root: Path, kind: PromoteKindConfig) -> tuple[bool, list[str]]:
@@ -644,7 +920,8 @@ def _restore_project_rewrites_to_head(
             if existed:
                 subprocess.run(
                     ["git", "-C", str(project_root), "checkout", "HEAD", "--", str(rel)],
-                    check=False,
+                    check=True,
+                    capture_output=True,
                 )
             else:
                 path.unlink(missing_ok=True)
@@ -652,7 +929,18 @@ def _restore_project_rewrites_to_head(
 
 def _repo_is_idle(root: Path) -> bool:
     """True if the repo is NOT mid-merge/rebase/cherry-pick/bisect."""
-    git_dir = root / ".git"
+    try:
+        git_dir_result = _git(root, "rev-parse", "--git-dir", check=False)
+    except OSError:
+        return False
+    if git_dir_result.returncode != 0:
+        return False
+    git_dir_raw = git_dir_result.stdout.strip()
+    if not git_dir_raw:
+        return False
+    git_dir = Path(git_dir_raw)
+    if not git_dir.is_absolute():
+        git_dir = root / git_dir
     sentinels = [
         "MERGE_HEAD",
         "REBASE_HEAD",
@@ -673,12 +961,14 @@ def _write_failure_audit_log(
     tags_created: list[str],
     plan: PromotePlan,
     projects_touched: list[str],
+    side_channel_results: dict[str, SideChannelResult] | None = None,
     failure_stage: Literal[
         "preflight",
         "validate",
         "discover",
         "plan",
         "write_commons",
+        "side_channel",
         "rewrite_projects",
         "audit",
     ],
@@ -706,6 +996,8 @@ def _write_failure_audit_log(
         failure_detail=failure_detail,
         projects_touched=projects_touched,
         kind=plan.kind,
+        side_channel_results=side_channel_results or {},
+        plan_audit_extras=plan.dataset_audit_extras,
     )
     yaml_text = _render_audit_log_yaml(result, commons_root, invocation=invocation)
     try:
@@ -729,7 +1021,34 @@ def _restore_paths_to_head(commons_root: Path, paths: list[Path]) -> None:
         if existed:
             _git(commons_root, "checkout", "HEAD", "--", str(rel))
         else:
+            _git(commons_root, "rm", "--cached", "--ignore-unmatch", "--", str(rel), check=False)
             path.unlink(missing_ok=True)
+
+
+def _resolve_canonical_artifact_path(commons_root: Path, artifact_path: Path) -> Path:
+    if artifact_path.is_absolute() or ".." in artifact_path.parts:
+        raise PromoteInputError(f"canonical artifact path must be commons-relative: {artifact_path}")
+
+    commons_root_resolved = commons_root.resolve()
+    resolved = (commons_root_resolved / artifact_path).resolve(strict=False)
+    if not resolved.is_relative_to(commons_root_resolved):
+        raise PromoteInputError(f"canonical artifact path escapes commons root: {artifact_path}")
+    return resolved
+
+
+def _audit_failure_detail(failure_detail: str, plan: PromotePlan) -> str:
+    detail = failure_detail
+    for decision in plan.decisions:
+        for artifact in decision.canonical_artifacts:
+            if artifact.path.is_absolute() or ".." in artifact.path.parts:
+                detail = detail.replace(str(artifact.path), "<invalid canonical artifact path>")
+    return detail
+
+
+def _restore_side_channel_backups(op_id: str) -> None:
+    from science_tool.commons.config import restore_data_override_from_backup
+
+    restore_data_override_from_backup(op_id=op_id)
 
 
 def apply_promote(
@@ -749,6 +1068,7 @@ def apply_promote(
     commons_commit: str | None = None
     tags_created: list[str] = []
     projects_touched: list[str] = []
+    side_channel_results: dict[str, SideChannelResult] = {}
     current_stage: str = "preflight"
 
     if not plan.decisions:
@@ -767,12 +1087,14 @@ def apply_promote(
             failure_detail=None,
             projects_touched=[],
             kind=plan.kind,
+            plan_audit_extras=plan.dataset_audit_extras,
         )
 
     try:
         # ---------- Step 0: preflight ----------
         if not commons_root.exists():
             raise PromoteInputError(f"commons store missing at {commons_root}; run `science commons init`")
+        commons_root_resolved = commons_root.resolve()
         if not _repo_is_idle(commons_root):
             raise PromoteInputError(f"commons repo is mid-merge/rebase: {commons_root}")
         clean, dirty = _commons_is_clean(commons_root, plan.kind)
@@ -822,20 +1144,29 @@ def apply_promote(
         # to PromoteWriteError so the outer except writes a failure audit log
         # (design §6.4 "Before step 5" recovery path).
         written_canonical_paths: list[Path] = []
+        canonical_writes: list[tuple[Path, str]] = []
+        for decision in plan.decisions:
+            for artifact in decision.canonical_artifacts:
+                canonical_writes.append(
+                    (
+                        _resolve_canonical_artifact_path(commons_root_resolved, artifact.path),
+                        artifact.content,
+                    )
+                )
         try:
-            for decision in plan.decisions:
-                decision.canonical_path.parent.mkdir(parents=True, exist_ok=True)
-                decision.canonical_path.write_text(decision.canonical_content, encoding="utf-8")
-                written_canonical_paths.append(decision.canonical_path)
+            for abs_path, content in canonical_writes:
+                abs_path.parent.mkdir(parents=True, exist_ok=True)
+                abs_path.write_text(content, encoding="utf-8")
+                written_canonical_paths.append(abs_path)
         except OSError as exc:
-            _restore_paths_to_head(commons_root, written_canonical_paths)
+            _restore_paths_to_head(commons_root_resolved, written_canonical_paths)
             raise PromoteWriteError(
                 stage="write_commons",
                 detail=f"commons canonical write failed: {exc}",
             ) from exc
 
         # ---------- Step 5.2: commit (path-limited) ----------
-        rel_paths = [str(p.relative_to(commons_root)) for p in written_canonical_paths]
+        rel_paths = [str(p.relative_to(commons_root_resolved)) for p in written_canonical_paths]
         try:
             _git(commons_root, "add", "--", *rel_paths)
             _git(
@@ -847,7 +1178,7 @@ def apply_promote(
                 *rel_paths,
             )
         except subprocess.CalledProcessError as exc:
-            _restore_paths_to_head(commons_root, written_canonical_paths)
+            _restore_paths_to_head(commons_root_resolved, written_canonical_paths)
             raise PromoteWriteError(
                 stage="write_commons",
                 detail=f"commons commit failed: {exc.stderr or exc}",
@@ -866,13 +1197,41 @@ def apply_promote(
                 _git(commons_root, "tag", tag, commons_commit)
                 tags_created.append(tag)
             except subprocess.CalledProcessError as exc:
-                _rollback_step5(commons_root, tags_created, written_canonical_paths)
+                _rollback_step5(commons_root_resolved, tags_created, written_canonical_paths)
                 rolled_back_commit = commons_commit
                 commons_commit = None
                 tags_created.clear()
                 raise PromoteWriteError(
                     stage="write_commons",
                     detail=(f"tag {tag!r} failed after commit (rolled back {rolled_back_commit}): {exc.stderr or exc}"),
+                ) from exc
+
+        # ---------- Step 5.4: side-channel writes ----------
+        if plan.kind.side_channel_apply is not None:
+            current_stage = "side_channel"
+            try:
+                for decision in plan.decisions:
+                    side_channel_results[decision.slug] = plan.kind.side_channel_apply(
+                        SideChannelContext(
+                            decision=decision,
+                            plan=plan,
+                            commons_root=commons_root_resolved,
+                            op_id=op_id,
+                        )
+                    )
+            except (OSError, CommonsError) as exc:
+                detail = f"side-channel apply failed: {exc}"
+                try:
+                    _restore_side_channel_backups(op_id)
+                except (OSError, CommonsError) as restore_exc:
+                    detail += f"; data override restore failed: {restore_exc}"
+                _rollback_step5(commons_root_resolved, tags_created, written_canonical_paths)
+                rolled_back_commit = commons_commit
+                commons_commit = None
+                tags_created.clear()
+                raise PromoteWriteError(
+                    stage="side_channel",
+                    detail=f"{detail} (rolled back {rolled_back_commit})",
                 ) from exc
 
         # ---------- Step 6: rewrite projects ----------
@@ -897,10 +1256,27 @@ def apply_promote(
             rewrites_to_restore = list(written_rewrites)
             if current_rewrite is not None and current_rewrite not in rewrites_to_restore:
                 rewrites_to_restore.append(current_rewrite)
-            _restore_project_rewrites_to_head(rewrites_to_restore, plan.kind)
+            detail = f"overlay write failed: {exc}"
+            try:
+                _restore_project_rewrites_to_head(rewrites_to_restore, plan.kind)
+            except (OSError, subprocess.CalledProcessError) as restore_exc:
+                detail += f"; project rewrite restore failed: {restore_exc}"
+            if side_channel_results:
+                try:
+                    _restore_side_channel_backups(op_id)
+                except (OSError, CommonsError) as restore_exc:
+                    detail += f"; data override restore failed: {restore_exc}"
+                try:
+                    _rollback_step5(commons_root_resolved, tags_created, written_canonical_paths)
+                    rolled_back_commit = commons_commit
+                    commons_commit = None
+                    tags_created.clear()
+                    detail += f" (rolled back {rolled_back_commit})"
+                except (OSError, subprocess.CalledProcessError) as rollback_exc:
+                    detail += f"; commons rollback failed: {rollback_exc}"
             raise PromoteWriteError(
                 stage="rewrite_projects",
-                detail=f"overlay write failed: {exc}",
+                detail=detail,
                 commons_commit=commons_commit,
                 projects_touched=projects_touched,
             ) from exc
@@ -922,19 +1298,41 @@ def apply_promote(
             failure_detail=None,
             projects_touched=projects_touched,
             kind=plan.kind,
+            side_channel_results=side_channel_results,
+            plan_audit_extras=plan.dataset_audit_extras,
         )
         try:
             audit_path = _write_audit_log(result, commons_root, invocation=invocation)
+        except (OSError, CommonsError) as exc:
+            audit_exc = PromoteWriteError(
+                stage="audit",
+                detail=f"audit log write failed: {exc}",
+                commons_commit=commons_commit,
+                projects_touched=projects_touched,
+            )
+            audit_exc.failure_audit_yaml = _render_audit_log_yaml(  # type: ignore[attr-defined]
+                result,
+                commons_root,
+                invocation=invocation,
+            )
+            raise audit_exc from exc
+        try:
             audit_rel = str(audit_path.relative_to(commons_root))
             _git(commons_root, "add", "--", audit_rel)
             _git(commons_root, "commit", "-m", f"audit: op {op_id}", "--", audit_rel)
         except (OSError, subprocess.CalledProcessError) as exc:
-            raise PromoteWriteError(
+            audit_exc = PromoteWriteError(
                 stage="audit",
                 detail=f"audit log write/commit failed: {exc}",
                 commons_commit=commons_commit,
                 projects_touched=projects_touched,
-            ) from exc
+            )
+            audit_exc.failure_audit_yaml = _render_audit_log_yaml(  # type: ignore[attr-defined]
+                result,
+                commons_root,
+                invocation=invocation,
+            )
+            raise audit_exc from exc
 
         return PromoteResult(
             op_id=result.op_id,
@@ -950,9 +1348,13 @@ def apply_promote(
             failure_detail=None,
             projects_touched=result.projects_touched,
             kind=result.kind,
+            side_channel_results=result.side_channel_results,
+            plan_audit_extras=result.plan_audit_extras,
         )
 
     except (PromoteInputError, PromoteWriteError, PromoteCandidateError) as exc:
+        if getattr(exc, "stage", None) == "audit" and hasattr(exc, "failure_audit_yaml"):
+            raise
         stage = getattr(exc, "stage", None) or current_stage
         audit_path, audit_yaml = _write_failure_audit_log(
             op_id=op_id,
@@ -962,8 +1364,9 @@ def apply_promote(
             tags_created=tags_created,
             plan=plan,
             projects_touched=projects_touched,
+            side_channel_results=side_channel_results,
             failure_stage=stage,
-            failure_detail=str(exc),
+            failure_detail=_audit_failure_detail(str(exc), plan),
             invocation=invocation,
         )
         if audit_path is None:
@@ -991,6 +1394,8 @@ def _normalize_slug_for_match(raw: str, kind: PromoteKindConfig) -> str:
     discovery rather than slipping through with silent normalisation).
     """
     stripped = raw.removesuffix(".md").strip()
+    if kind.filename_prefix and stripped.startswith(kind.filename_prefix):
+        stripped = stripped[len(kind.filename_prefix) :]
     if not stripped:
         raise PromoteCandidateError(f"slug {raw!r} is empty after strip")
     if not kind.slug_regex.match(stripped):
@@ -1072,6 +1477,84 @@ def _parse_frontmatter_only(rendered: str) -> dict:
     return parsed
 
 
+def _project_relative_path(project_root: Path, value: str, *, field: str) -> Path:
+    rel_path = Path(value)
+    if rel_path.is_absolute():
+        raise PromoteCandidateError(f"{field} path {value!r} must be project-relative")
+    root_abs = project_root.resolve()
+    abs_path = (root_abs / rel_path).resolve(strict=False)
+    try:
+        abs_path.relative_to(root_abs)
+    except ValueError as exc:
+        raise PromoteCandidateError(f"{field} path {value!r} escapes project root") from exc
+    return abs_path
+
+
+def _datapackage_relative_path(datapackage_dir: Path, value: str, *, field: str) -> Path:
+    rel_path = Path(value)
+    if rel_path.is_absolute():
+        raise PromoteCandidateError(f"{field} path {value!r} must be relative to the datapackage")
+    package_dir_abs = datapackage_dir.resolve()
+    abs_path = (package_dir_abs / rel_path).resolve(strict=False)
+    try:
+        abs_path.relative_to(package_dir_abs)
+    except ValueError as exc:
+        raise PromoteCandidateError(f"{field} path {value!r} escapes the datapackage directory") from exc
+    return abs_path
+
+
+def _load_project_datapackage(project_root: Path, datapackage_value: Any) -> tuple[Path, dict[str, Any]]:
+    if not isinstance(datapackage_value, str) or not datapackage_value.strip():
+        raise PromoteCandidateError("dataset candidate requires a non-empty string datapackage field")
+
+    dp_abs = _project_relative_path(project_root, datapackage_value, field="datapackage")
+    if not dp_abs.is_file():
+        raise PromoteCandidateError(f"datapackage file does not exist: {datapackage_value}")
+
+    try:
+        dp_raw = dp_abs.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise PromoteCandidateError(f"datapackage file is unreadable: {exc}") from exc
+    try:
+        dp_doc = json.loads(dp_raw)
+    except json.JSONDecodeError as exc:
+        raise PromoteCandidateError(f"datapackage JSON parse error: {exc}") from exc
+    if not isinstance(dp_doc, dict):
+        raise PromoteCandidateError("datapackage JSON top-level value must be an object")
+    resources = dp_doc.get("resources")
+    if not isinstance(resources, list):
+        raise PromoteCandidateError("datapackage JSON requires resources to be a list")
+    return dp_abs, dp_doc
+
+
+def _resource_name(resource: Mapping[str, Any], resource_path: str) -> str:
+    name = resource.get("name")
+    if isinstance(name, str) and name:
+        return name
+    return resource_path
+
+
+def _validate_datapackage_resources(slug: str, dp_abs: Path, dp_doc: dict[str, Any]) -> None:
+    resources = dp_doc["resources"]
+    for idx, resource in enumerate(resources):
+        if not isinstance(resource, dict):
+            raise PromoteCandidateError(f"datapackage resources[{idx}] must be an object")
+        resource_path = resource.get("path")
+        if not isinstance(resource_path, str) or not resource_path.strip():
+            raise PromoteCandidateError(f"datapackage resources[{idx}].path must be a non-empty string")
+        resource_abs = _datapackage_relative_path(
+            dp_abs.parent,
+            resource_path,
+            field=f"datapackage resources[{idx}].path",
+        )
+        if not resource_abs.is_file():
+            raise PromoteResourceMissingError(
+                slug=slug,
+                resource_name=_resource_name(resource, resource_path),
+                resource_path=Path(resource_path),
+            )
+
+
 def _scan_project(
     project_root: Path,
     project_slug: str,
@@ -1095,6 +1578,8 @@ def _scan_project(
         if not directory.exists():
             continue
         for source_path in sorted(directory.glob("*.md")):
+            if kind.filename_prefix and not source_path.stem.startswith(kind.filename_prefix):
+                continue
             try:
                 fm, body = _parse_entity_file(source_path)
             except PromoteCandidateError as exc:
@@ -1141,20 +1626,6 @@ def _scan_project(
                     )
                     continue
 
-            try:
-                slug_normalized = _normalize_slug_for_match(source_path.stem, kind)
-            except PromoteCandidateError as exc:
-                failures.append(
-                    FailedCandidate(
-                        slug=None,
-                        project_slug=project_slug,
-                        source_path=source_path,
-                        error_class="PromoteCandidateError",
-                        error_message=str(exc),
-                    )
-                )
-                continue
-
             # Id check. The classifier may have matched purely on explicit
             # `kind:` / `type:`, while the file also carries a contradictory
             # `id:`. In that case, report failure.
@@ -1170,6 +1641,20 @@ def _scan_project(
                     )
                 )
                 continue
+            if kind.slug_from_id and "id" not in fm:
+                failures.append(
+                    FailedCandidate(
+                        slug=None,
+                        project_slug=project_slug,
+                        source_path=source_path,
+                        error_class="PromoteCandidateError",
+                        error_message=(f"id is required for kind {kind.kind!r} because slug is derived from id"),
+                    )
+                )
+                continue
+            source_case_slug = source_path.stem
+            slug_normalized: str | None = None
+            id_slug_normalized: str | None = None
             if isinstance(id_val, str):
                 if not id_val.startswith(kind.id_prefix):
                     failures.append(
@@ -1200,7 +1685,25 @@ def _scan_project(
                         )
                     )
                     continue
-                if id_slug_normalized != slug_normalized:
+                if kind.slug_from_id:
+                    slug_normalized = id_slug_normalized
+                    source_case_slug = id_slug_normalized
+
+            if slug_normalized is None:
+                try:
+                    slug_normalized = _normalize_slug_for_match(source_path.stem, kind)
+                except PromoteCandidateError as exc:
+                    failures.append(
+                        FailedCandidate(
+                            slug=None,
+                            project_slug=project_slug,
+                            source_path=source_path,
+                            error_class="PromoteCandidateError",
+                            error_message=str(exc),
+                        )
+                    )
+                    continue
+                if id_slug_normalized is not None and id_slug_normalized != slug_normalized:
                     failures.append(
                         FailedCandidate(
                             slug=None,
@@ -1233,13 +1736,72 @@ def _scan_project(
                 # from a half-resolved same-project corpus.
                 candidates[:] = [c for c in candidates if c.slug_normalized != slug_normalized]
                 continue
+
+            datapackage_source_path: Path | None = None
+            datapackage_doc: dict[str, Any] | None = None
+            if kind.kind == "dataset":
+                missing_fields = [
+                    field
+                    for field in ("origin", "tier")
+                    if field not in fm or fm[field] in (None, "")
+                ]
+                origin = fm.get("origin")
+                if origin == "external" and ("access" not in fm or fm["access"] in (None, "")):
+                    missing_fields.append("access")
+                if origin == "derived" and ("derivation" not in fm or fm["derivation"] in (None, "")):
+                    missing_fields.append("derivation")
+                if missing_fields:
+                    for field in missing_fields:
+                        failures.append(
+                            FailedCandidate(
+                                slug=source_case_slug,
+                                project_slug=project_slug,
+                                source_path=source_path,
+                                error_class="PromoteCandidateError",
+                                error_message=f"dataset candidate {source_case_slug!r} missing required field {field!r}",
+                            )
+                        )
+                    continue
+
+                try:
+                    datapackage_source_path, datapackage_doc = _load_project_datapackage(
+                        project_root,
+                        fm.get("datapackage"),
+                    )
+                    _validate_datapackage_resources(
+                        source_case_slug,
+                        datapackage_source_path,
+                        datapackage_doc,
+                    )
+                except PromoteResourceMissingError as exc:
+                    failures.append(
+                        FailedCandidate(
+                            slug=source_case_slug,
+                            project_slug=project_slug,
+                            source_path=source_path,
+                            error_class="PromoteResourceMissingError",
+                            error_message=str(exc),
+                        )
+                    )
+                    continue
+                except PromoteCandidateError as exc:
+                    failures.append(
+                        FailedCandidate(
+                            slug=source_case_slug,
+                            project_slug=project_slug,
+                            source_path=source_path,
+                            error_class="PromoteCandidateError",
+                            error_message=str(exc),
+                        )
+                    )
+                    continue
+
             seen.setdefault(slug_normalized, (sub, source_path))
 
             # canonical_fields / project_only_fields / body splits are filled
             # in later by `_classify_entity` (Task 11). For now we stash raw
             # frontmatter + body so discovery is independent of merge-policy
             # lookup.
-            source_case_slug = source_path.stem
             candidates.append(
                 PromoteCandidate(
                     slug=source_case_slug,
@@ -1254,6 +1816,8 @@ def _scan_project(
                         _RAW_FRONTMATTER_KEY: fm,
                         _RAW_BODY_KEY: body,
                     },
+                    datapackage_source_path=datapackage_source_path,
+                    datapackage_doc=datapackage_doc,
                 )
             )
 
@@ -1370,6 +1934,189 @@ def _classify_entity(
     return canonical, project_only, canonical_body, project_only_body
 
 
+def _dataset_dropped_fields(
+    raw_frontmatter: dict,
+    *,
+    canonical_fields: dict,
+    project_only_fields: dict,
+) -> list[str]:
+    """Return project frontmatter keys that landed in neither bucket.
+
+    These are keys not recognized by base, dataset mixin, or overlay-1.1 schemas;
+    promote drops them silently from output but records them in the audit log.
+
+    Convention: keys starting with `_` are intentional metadata/sentinels and not reported.
+    """
+    routed = set(canonical_fields) | set(project_only_fields)
+    internal = _GENERATED_BY_PROMOTE_KEYS | _PROMOTE_DERIVED_IDENTITY_KEYS | _OVERLAY_ONLY_KEYS
+    return sorted(
+        k for k in raw_frontmatter if k not in routed and k not in internal and not k.startswith("_")
+    )
+
+
+def _primary_candidate_for_plan(
+    candidates: list[PromoteCandidate],
+    from_order: list[str],
+) -> PromoteCandidate:
+    order = {slug: idx for idx, slug in enumerate(from_order)}
+    return sorted(
+        candidates,
+        key=lambda c: (order.get(c.project_slug, len(order)), c.project_slug),
+    )[0]
+
+
+def _project_relative_posix(project_root: Path, path: Path) -> str:
+    root_abs = project_root.resolve(strict=False)
+    path_abs = path.resolve(strict=False)
+    try:
+        return path_abs.relative_to(root_abs).as_posix()
+    except ValueError as exc:
+        raise PromoteCandidateError(f"path {path} escapes project root {project_root}") from exc
+
+
+def _overlay_target_path(
+    candidate: PromoteCandidate,
+    *,
+    kind: PromoteKindConfig,
+    canonical_case: str,
+) -> Path:
+    filename = f"{canonical_case}.md"
+    if kind.kind == "dataset":
+        filename = f"{kind.filename_prefix}{canonical_case}.md"
+    return candidate.project_root / kind.overlay_dest_subdir / filename
+
+
+def _dataset_per_resource(candidate: PromoteCandidate) -> dict[str, tuple[str, int]]:
+    if candidate.datapackage_source_path is None or candidate.datapackage_doc is None:
+        raise PromoteCandidateError(
+            "dataset planning requires discovery datapackage metadata",
+            slug=candidate.slug,
+        )
+
+    per_resource: dict[str, tuple[str, int]] = {}
+    dp_parent = candidate.datapackage_source_path.parent
+    resources = candidate.datapackage_doc.get("resources")
+    if not isinstance(resources, list):
+        raise PromoteCandidateError(
+            "dataset datapackage resources must be a list",
+            slug=candidate.slug,
+        )
+    for idx, resource in enumerate(resources):
+        if not isinstance(resource, Mapping):
+            raise PromoteCandidateError(
+                f"datapackage resources[{idx}] must be an object",
+                slug=candidate.slug,
+            )
+        resource_path = resource.get("path")
+        if not isinstance(resource_path, str) or not resource_path.strip():
+            raise PromoteCandidateError(
+                f"datapackage resources[{idx}].path must be a non-empty string",
+                slug=candidate.slug,
+            )
+        resource_abs = _datapackage_relative_path(
+            dp_parent,
+            resource_path,
+            field=f"datapackage resources[{idx}].path",
+        )
+        try:
+            per_resource[_resource_name(resource, resource_path)] = stream_sha256_and_bytes(
+                resource_abs
+            )
+        except OSError as exc:
+            raise PromoteCandidateError(
+                f"cannot read datapackage resources[{idx}] bytes: {exc}",
+                slug=candidate.slug,
+                path=resource_abs,
+            ) from exc
+    return per_resource
+
+
+def _validate_dataset_group_datapackages(
+    *,
+    canonical_slug: str,
+    primary: PromoteCandidate,
+    candidates: list[PromoteCandidate],
+    primary_per_resource: dict[str, tuple[str, int]],
+) -> None:
+    if len(candidates) <= 1:
+        return
+    if primary.datapackage_doc is None:
+        raise PromoteCandidateError(
+            "dataset planning requires discovery datapackage metadata",
+            slug=canonical_slug,
+        )
+    primary_content = render_canonical_datapackage_yaml(
+        project_doc=primary.datapackage_doc,
+        canonical_slug=canonical_slug,
+        per_resource=primary_per_resource,
+    )
+    for candidate in candidates:
+        if candidate is primary:
+            continue
+        candidate_per_resource = _dataset_per_resource(candidate)
+        if candidate_per_resource != primary_per_resource:
+            raise PromoteCandidateError(
+                f"dataset {canonical_slug!r} project {candidate.project_slug!r} "
+                f"has divergent resource hashes/bytes from primary project "
+                f"{primary.project_slug!r}",
+                slug=canonical_slug,
+                path=candidate.datapackage_source_path,
+            )
+        if candidate.datapackage_doc is None:
+            raise PromoteCandidateError(
+                "dataset planning requires discovery datapackage metadata",
+                slug=canonical_slug,
+                path=candidate.datapackage_source_path,
+            )
+        candidate_content = render_canonical_datapackage_yaml(
+            project_doc=candidate.datapackage_doc,
+            canonical_slug=canonical_slug,
+            per_resource=candidate_per_resource,
+        )
+        if candidate_content != primary_content:
+            raise PromoteCandidateError(
+                f"dataset {canonical_slug!r} project {candidate.project_slug!r} "
+                f"has divergent canonical datapackage content from primary "
+                f"project {primary.project_slug!r}",
+                slug=canonical_slug,
+                path=candidate.datapackage_source_path,
+            )
+
+
+def _rewrite_rendered_frontmatter(rendered: str, updates: Mapping[str, Any]) -> str:
+    if not rendered.startswith("---\n"):
+        raise PromoteCandidateError("rendered content has no opening --- fence", slug=None)
+    rest = rendered[len("---\n") :]
+    fm_raw, sep, body = rest.partition("\n---\n")
+    if not sep:
+        raise PromoteCandidateError("rendered content has no closing --- fence", slug=None)
+    parsed = yaml.safe_load(fm_raw) or {}
+    if not isinstance(parsed, dict):
+        raise PromoteCandidateError(
+            f"frontmatter is not a mapping: {type(parsed).__name__}",
+            slug=None,
+        )
+    parsed.update(updates)
+    return f"---\n{_render_frontmatter(parsed)}---\n{body}"
+
+
+def _dataset_recipe_source_hint(canonical_fields: Mapping[str, Any]) -> str | None:
+    sources = canonical_fields.get("sources")
+    if isinstance(sources, list) and sources:
+        return str(sources[0])
+    if isinstance(sources, str) and sources.strip():
+        return sources
+    source = canonical_fields.get("source")
+    if isinstance(source, str) and source.strip():
+        return source
+    access = canonical_fields.get("access")
+    if isinstance(access, Mapping):
+        source_url = access.get("source_url")
+        if isinstance(source_url, str) and source_url.strip():
+            return source_url
+    return None
+
+
 # --------------------------------------------------------------------------- #
 # Multi-instance merge helpers (Task 12)                                       #
 # --------------------------------------------------------------------------- #
@@ -1379,7 +2126,7 @@ def _merge_canonical_fields(
     candidates: list[PromoteCandidate],
     merge_policy: dict[str, MergePolicy],
     *,
-    kind: Literal["paper", "topic", "theme"],
+    kind: Literal["paper", "topic", "theme", "dataset"],
 ) -> tuple[dict, list[FieldConflict]]:
     """Merge canonical_fields across N candidates of the same slug.
 
@@ -1516,6 +2263,16 @@ def _render_body(sections: dict[str, str]) -> str:
     return "\n".join(parts)
 
 
+def _render_dataset_recipe_stub(*, slug: str, source_hint: str | None) -> str:
+    src_line = f"Acquisition: {source_hint}." if source_hint else "Acquisition: unspecified."
+    return (
+        "# Recipe back-fill needed\n\n"
+        f"{src_line}\n\n"
+        "Promote stubbed this README because no project recipe was detected. "
+        "Replace with the acquisition or preprocessing workflow.\n"
+    )
+
+
 def _render_canonical(
     decision: PromoteDecision,
     *,
@@ -1636,6 +2393,17 @@ def _build_project_rollback_command(
     return f"git -C {project_root} checkout HEAD -- {' '.join(paths_sorted)}"
 
 
+def _audit_canonical_paths(decision: PromoteDecision, commons_root: Path) -> list[str]:
+    paths: list[str] = []
+    for artifact in decision.canonical_artifacts:
+        try:
+            _resolve_canonical_artifact_path(commons_root, artifact.path)
+        except PromoteInputError:
+            continue
+        paths.append(str(artifact.path))
+    return paths
+
+
 def _render_audit_log_yaml(
     result: PromoteResult,
     commons_root: Path,
@@ -1678,6 +2446,7 @@ def _render_audit_log_yaml(
         "commons_commit": result.commons_commit,
         "commons_tags": result.tags_created,
         "projects_touched": projects_touched,
+        "decisions": [_audit_decision_entry(d, result, commons_root) for d in result.decisions],
         "conflict_resolutions": [
             {
                 "slug": cr.slug,
@@ -1716,6 +2485,51 @@ def _render_audit_log_yaml(
         log["failure_detail"] = result.failure_detail
 
     return yaml.safe_dump(log, sort_keys=False, allow_unicode=True)
+
+
+def _audit_decision_entry(
+    decision: PromoteDecision,
+    result: PromoteResult,
+    commons_root: Path,
+) -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "slug": decision.slug,
+        "canonical_version": decision.canonical_version,
+        "canonical_paths": _audit_canonical_paths(decision, commons_root),
+    }
+    if result.kind.kind != "dataset":
+        return entry
+
+    extras = result.plan_audit_extras.get(decision.slug, {})
+    if not isinstance(extras, Mapping):
+        extras = {}
+    per_resource = extras.get("per_resource", {})
+    if not isinstance(per_resource, Mapping):
+        per_resource = {}
+    entry["per_resource_hashes"] = {
+        str(name): {"hash": str(value[0]), "bytes": value[1]}
+        for name, value in per_resource.items()
+        if (
+            isinstance(value, tuple | list)
+            and len(value) == 2
+            and isinstance(value[0], str)
+            and isinstance(value[1], int)
+        )
+    }
+    entry["recipe_stubbed"] = extras.get("recipe_stubbed") is True
+    dropped_fields = extras.get("dropped_fields", [])
+    if not isinstance(dropped_fields, list | tuple | set):
+        dropped_fields = []
+    entry["dropped_fields"] = [str(field) for field in dropped_fields]
+
+    side_channel = result.side_channel_results.get(decision.slug)
+    if side_channel is not None:
+        if side_channel.artifact_paths:
+            entry["override_file"] = str(side_channel.artifact_paths[0])
+        if side_channel.backup_paths:
+            entry["override_backup"] = str(side_channel.backup_paths[0])
+
+    return entry
 
 
 def _write_audit_log(
@@ -1770,4 +2584,5 @@ def _rollback_step5(
         if exists_at_head:
             _git(commons_root, "checkout", "HEAD", "--", str(rel))
         else:
+            _git(commons_root, "rm", "--cached", "--ignore-unmatch", "--", str(rel), check=False)
             canonical_path.unlink(missing_ok=True)

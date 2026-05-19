@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
 from pathlib import Path
 
 import yaml
 from pydantic import BaseModel
 
-from science_tool.commons.errors import CommonsError, ProjectNotRegisteredError
+from science_tool.commons.errors import (
+    CommonsError,
+    ProjectNotRegisteredError,
+    PromoteOverrideConflictError,
+)
 
 
 class CommonsSettings(BaseModel):
@@ -64,6 +70,13 @@ def resolve_commons_data_root() -> Path:
     return Path("/data/science-commons")
 
 
+def _data_yaml_path() -> Path:
+    """Return the per-machine data override config path."""
+    from science_tool.registry.config import get_science_config_dir
+
+    return get_science_config_dir() / "data.yaml"
+
+
 def load_data_overrides() -> dict[str, Path]:
     """Load the per-machine data-override map from `~/.config/science/data.yaml`.
 
@@ -72,43 +85,167 @@ def load_data_overrides() -> dict[str, Path]:
     not a mapping, or maps a string slug to anything other than an absolute-path
     string.
     """
-    from science_tool.registry.config import get_science_config_dir
+    overrides_path = _data_yaml_path()
+    return {
+        slug: Path(value).expanduser()
+        for slug, value in _load_data_yaml_mapping(overrides_path).items()
+    }
 
-    overrides_path = get_science_config_dir() / "data.yaml"
-    if not overrides_path.is_file():
+
+def _load_data_yaml_mapping(yaml_path: Path) -> dict[str, str]:
+    if not yaml_path.exists():
         return {}
-
+    if not yaml_path.is_file():
+        raise CommonsError(f"{yaml_path}: expected a file")
     try:
-        text = overrides_path.read_text(encoding="utf-8")
+        text = yaml_path.read_text(encoding="utf-8")
     except OSError as exc:
-        raise CommonsError(f"{overrides_path}: cannot read data overrides: {exc}") from exc
-
+        raise CommonsError(f"{yaml_path}: cannot read data overrides: {exc}") from exc
+    if not text.strip():
+        return {}
     try:
+        node = yaml.compose(text)
+        if isinstance(node, yaml.MappingNode):
+            seen_keys: set[str] = set()
+            for key_node, _ in node.value:
+                if not isinstance(key_node, yaml.ScalarNode):
+                    raise CommonsError(
+                        f"{yaml_path}: data override keys must be strings"
+                    )
+                key = key_node.value
+                if key in seen_keys:
+                    raise CommonsError(f"{yaml_path}: duplicate key {key!r}")
+                seen_keys.add(key)
         raw = yaml.safe_load(text)
     except yaml.YAMLError as exc:
-        raise CommonsError(f"{overrides_path}: malformed YAML: {exc}") from exc
+        raise CommonsError(f"{yaml_path}: malformed YAML: {exc}") from exc
     if raw is None:
         return {}
     if not isinstance(raw, dict):
-        raise CommonsError(
-            f"{overrides_path}: expected a mapping of slug -> absolute path"
-        )
+        raise CommonsError(f"{yaml_path}: expected a mapping of slug -> absolute path")
 
-    result: dict[str, Path] = {}
+    result: dict[str, str] = {}
     for slug, value in raw.items():
         if not isinstance(slug, str) or not isinstance(value, str):
             raise CommonsError(
-                f"{overrides_path}: entry {slug!r} -> {value!r} must be "
+                f"{yaml_path}: entry {slug!r} -> {value!r} must be "
                 f"a string slug mapped to a string path"
             )
         path = Path(value).expanduser()
         if not path.is_absolute():
             raise CommonsError(
-                f"{overrides_path}: override for {slug!r} must be an absolute "
+                f"{yaml_path}: override for {slug!r} must be an absolute "
                 f"path, got {value!r}"
             )
-        result[slug] = path
+        result[slug] = value
     return result
+
+
+def upsert_data_override(*, slug: str, absolute_path: Path, op_id: str) -> Path:
+    """Atomically upsert a per-machine dataset data override."""
+    return _upsert_data_override(
+        slug=slug,
+        absolute_path=absolute_path,
+        op_id=op_id,
+        allow_existing_backup=False,
+    )
+
+
+def _upsert_data_override(
+    *,
+    slug: str,
+    absolute_path: Path,
+    op_id: str,
+    allow_existing_backup: bool,
+) -> Path:
+    """Implementation shared by one-shot and same-operation batch upserts."""
+    if not absolute_path.is_absolute():
+        raise CommonsError(f"data override path must be absolute, got {absolute_path}")
+
+    yaml_path = _data_yaml_path()
+    yaml_path.parent.mkdir(parents=True, exist_ok=True)
+    backup_path = yaml_path.parent / f"data.yaml.bak.{op_id}"
+    absent_sentinel_path = yaml_path.parent / f"data.yaml.bak.{op_id}.absent"
+    backup_exists = backup_path.exists()
+    sentinel_exists = absent_sentinel_path.exists()
+    if backup_exists and sentinel_exists:
+        raise CommonsError(
+            f"ambiguous data override backup state for op_id {op_id!r}"
+        )
+    if (backup_exists or sentinel_exists) and not allow_existing_backup:
+        raise CommonsError(
+            f"data override backup already exists for op_id {op_id!r}"
+        )
+
+    existing = _load_data_yaml_mapping(yaml_path)
+
+    if not (backup_exists or sentinel_exists):
+        if yaml_path.is_file():
+            shutil.copyfile(yaml_path, backup_path)
+        else:
+            absent_sentinel_path.write_text("", encoding="utf-8")
+
+    existing[slug] = str(absolute_path)
+
+    temp_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=yaml_path.parent,
+            prefix="data.yaml.",
+            suffix=".tmp",
+            delete=False,
+        ) as temp_file:
+            temp_name = temp_file.name
+            yaml.safe_dump(existing, temp_file, sort_keys=True)
+        os.replace(temp_name, yaml_path)
+    finally:
+        if temp_name is not None:
+            temp_path = Path(temp_name)
+            if temp_path.exists():
+                temp_path.unlink()
+
+    return backup_path
+
+
+def check_override_conflict(*, slug: str, planned_path: Path) -> None:
+    """Raise if `data.yaml` already maps `slug` to a different path."""
+    existing = _load_data_yaml_mapping(_data_yaml_path()).get(slug)
+    if existing is None:
+        return
+    existing_path = Path(existing).expanduser()
+    if existing_path.resolve(strict=False) != planned_path.expanduser().resolve(
+        strict=False
+    ):
+        raise PromoteOverrideConflictError(
+            slug=slug,
+            existing_path=existing_path,
+            planned_path=planned_path,
+        )
+
+
+def restore_data_override_from_backup(*, op_id: str) -> None:
+    """Restore `data.yaml` from the backup written for `op_id`."""
+    yaml_path = _data_yaml_path()
+    backup_path = yaml_path.parent / f"data.yaml.bak.{op_id}"
+    absent_sentinel_path = yaml_path.parent / f"data.yaml.bak.{op_id}.absent"
+
+    if backup_path.is_file() and absent_sentinel_path.is_file():
+        raise CommonsError(
+            f"ambiguous data override backup state for op_id {op_id!r}"
+        )
+    if absent_sentinel_path.is_file():
+        if yaml_path.exists():
+            if not yaml_path.is_file():
+                raise CommonsError(f"{yaml_path}: expected a file")
+            yaml_path.unlink()
+        absent_sentinel_path.unlink()
+        return
+
+    if not backup_path.is_file():
+        raise CommonsError(f"backup not found: {backup_path}")
+    os.replace(backup_path, yaml_path)
 
 
 def resolve_project_root(name: str) -> Path:
