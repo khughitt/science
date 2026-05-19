@@ -1236,7 +1236,8 @@ git commit -m "feat(commons): add _active_profile helper for kind + mixin compos
 
 **Files:**
 - Modify: `science/src/science_tool/commons/promote.py:2276-2313` (signature + body)
-- Modify: `science/src/science_tool/commons/promote.py:648` (only call site — update kwargs)
+- Modify: `science/src/science_tool/commons/promote.py:648` (production call site — update kwargs)
+- Modify: `science/tests/test_commons_promote_plan.py:227, 263, 298, ~338` (four direct test call sites — pass `active_profile=PROMOTE_KIND_*.default_profile`)
 
 - [ ] **Step 1: Read both sites first**
 
@@ -1313,24 +1314,54 @@ canonical_content = _render_canonical(
 
 For now (this task) we pass `kind.default_profile` so behavior is byte-identical to pre-Task-11. Task 12 replaces this argument with the locally-computed `active_profile` derived from `mixin_extensions`.
 
-- [ ] **Step 3: Run all existing promote tests**
+- [ ] **Step 3: Update the four direct `_render_canonical` test call sites**
+
+`test_commons_promote_plan.py` calls `_render_canonical` directly at four locations (around lines 227, 263, 298, and one more in the topic-test ~338). Each call constructs a `PromoteDecision` then invokes `_render_canonical(decision, canonical_fields=..., canonical_body=..., created=..., updated=..., kind=PROMOTE_KIND_PAPER)` (or `_TOPIC` / `_THEME`).
+
+Make `active_profile` explicit at each site. The minimal patch per call adds:
+
+```python
+rendered = _render_canonical(
+    decision,
+    canonical_fields=...,
+    canonical_body=...,
+    created=...,
+    updated=...,
+    kind=PROMOTE_KIND_PAPER,
+    active_profile=PROMOTE_KIND_PAPER.default_profile,   # NEW
+)
+```
+
+Do the same for the topic and theme test call sites — `active_profile=PROMOTE_KIND_TOPIC.default_profile` / `PROMOTE_KIND_THEME.default_profile`. No assertion changes.
+
+To be safe against future additions to that test file, run grep first:
+
+```bash
+grep -n "_render_canonical" science/tests/test_commons_promote_plan.py
+```
+
+Update every call line.
+
+- [ ] **Step 4: Run all existing promote tests**
 
 Run: `uv run pytest science/tests/ -k promote -q`
 
-Expected: All pass. Phase G behavior is preserved because `kind.default_profile.render()` produces the same string `_render_canonical` was emitting before.
+Expected: All pass. Phase G behavior is preserved because each call now explicitly threads the same `kind.default_profile` that the function previously read from `kind` directly.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/commons/promote.py
+git add science/src/science_tool/commons/promote.py \
+        science/tests/test_commons_promote_plan.py
 git commit -m "refactor(commons): _render_canonical requires active_profile
 
-The single existing caller now passes kind.default_profile explicitly,
-preserving Phase G behavior byte-identically. Task 12 swaps the
-argument to the locally-computed active_profile (kind.default_profile
-+ mixin_extensions) so the emitted schema_profile carries any --mixin
-segments. No compatibility shim — the new invariant (active_profile
-is always supplied) is explicit at every call site."
+The production caller and four direct test call sites now pass
+kind.default_profile explicitly, preserving Phase G behavior
+byte-identically. Task 12 swaps the production-side argument to the
+locally-computed active_profile (kind.default_profile + mixin_extensions)
+so the emitted schema_profile carries any --mixin segments. No
+compatibility shim — the new invariant (active_profile is always
+supplied) is explicit at every call site."
 ```
 
 ---
@@ -1884,6 +1915,28 @@ sed -n '475,505p' science/src/science_tool/commons/cli.py
 Add a private helper at module scope in `cli.py` (near the top of the promote section, around line 395):
 
 ```python
+def _parse_version_tuple(version: str) -> tuple[int, ...]:
+    """Parse 'N.N' or 'N.N.N' into a tuple of ints, for numeric comparison.
+
+    Rejects anything that isn't dot-separated non-negative integers.
+    Raises PromoteMixinResolutionError on a bad shape.
+    """
+    from science_tool.commons.errors import PromoteMixinResolutionError
+
+    parts = version.split(".")
+    try:
+        nums = tuple(int(p) for p in parts)
+    except ValueError as exc:
+        raise PromoteMixinResolutionError(
+            f"version {version!r}: expected dot-separated integers (e.g. '1.0')."
+        ) from exc
+    if not nums or any(n < 0 for n in nums):
+        raise PromoteMixinResolutionError(
+            f"version {version!r}: expected dot-separated non-negative integers."
+        )
+    return nums
+
+
 def _resolve_mixin_arg(raw: str) -> "ProfileComponent":
     """Parse one --mixin argument into a ProfileComponent.
 
@@ -1892,8 +1945,13 @@ def _resolve_mixin_arg(raw: str) -> "ProfileComponent":
       - Sugar: 'bio.matrix' → resolved to the highest installed version
         by scanning extension-bio-matrix-*.json under the schemas package.
 
-    Raises PromoteMixinResolutionError on malformed input or missing
-    extension for sugar form.
+    The name MUST start with 'bio.' and have a non-empty suffix; this
+    prevents --mixin from being abused to stack base or type-mixin
+    schemas (e.g. dataset/1.0). The version MUST be a dot-separated
+    integer tuple.
+
+    Raises PromoteMixinResolutionError on malformed input or a sugar
+    form with no installed schema.
     """
     from importlib import resources
 
@@ -1901,38 +1959,55 @@ def _resolve_mixin_arg(raw: str) -> "ProfileComponent":
     from science_tool.commons.errors import PromoteMixinResolutionError
 
     raw = raw.strip()
-    if not raw or raw.startswith("/") or raw.endswith("/"):
-        raise PromoteMixinResolutionError(f"--mixin {raw!r}: malformed argument")
+    if not raw:
+        raise PromoteMixinResolutionError("--mixin '': empty argument")
 
     if "/" in raw:
-        name, version = raw.split("/", 1)
+        name, _, version = raw.partition("/")
         if not name or not version:
             raise PromoteMixinResolutionError(
-                f"--mixin {raw!r}: expected '<name>/<version>'"
+                f"--mixin {raw!r}: expected '<name>/<version>' "
+                "(e.g. 'bio.matrix/1.0')."
             )
+    else:
+        name, version = raw, None
+
+    # Name must be a bio extension. This guard exists so --mixin cannot
+    # stack base/type-mixin schemas (e.g. dataset/1.0) by mistake.
+    if not name.startswith("bio.") or len(name) <= len("bio."):
+        raise PromoteMixinResolutionError(
+            f"--mixin {raw!r}: name must start with 'bio.' and have a "
+            "non-empty suffix (e.g. 'bio.matrix'). Use --mixin only for "
+            "bio extensions; base and type mixins are auto-included."
+        )
+
+    if version is not None:
+        # Explicit form — validate version shape and return verbatim.
+        _parse_version_tuple(version)
         return ProfileComponent(name=name, version=version)
 
-    # Sugar: enumerate extension files for this name.
-    name = raw
+    # Sugar form — enumerate installed schemas and pick the numerically
+    # highest version.
     flat = name.replace(".", "-")
     prefix = f"extension-{flat}-"
-    candidates: list[str] = []
+    candidates: list[tuple[tuple[int, ...], str]] = []
     for r in resources.files("science_model.schemas").iterdir():
         rname = r.name
         if rname.startswith(prefix) and rname.endswith(".json"):
-            version = rname[len(prefix):-len(".json")]
-            candidates.append(version)
+            version_str = rname[len(prefix):-len(".json")]
+            try:
+                nums = _parse_version_tuple(version_str)
+            except PromoteMixinResolutionError:
+                continue  # ignore weirdly-named files on disk
+            candidates.append((nums, version_str))
     if not candidates:
         raise PromoteMixinResolutionError(
             f"--mixin {raw!r}: no installed extension-{flat}-*.json schema. "
             "Known bio extensions: bio.matrix, bio.table, bio.rnaseq, "
             "bio.scrna, bio.cna."
         )
-    # Lexicographic max works for two-segment N.N versioning; if a
-    # future schema bumps to a different versioning scheme, this picker
-    # gets revisited.
-    highest = max(candidates)
-    return ProfileComponent(name=name, version=highest)
+    highest_version = max(candidates)[1]  # tuple ordering → numeric, not lexicographic
+    return ProfileComponent(name=name, version=highest_version)
 ```
 
 - [ ] **Step 3: Update the `promote dataset` command params and handler**
@@ -2152,22 +2227,55 @@ Body content.
     return proj
 
 
+def _init_repo(root: Path) -> None:
+    """Init a git repo and set a local user identity (matches the canonical
+    apply-test pattern in test_commons_promote_dataset_apply.py:15-26)."""
+    subprocess.run(["git", "init", "-q", str(root)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(root), "config", "user.email", "test@x"],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(root), "config", "user.name", "test"],
+        check=True, capture_output=True,
+    )
+
+
 def _setup_proj_and_commons(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[Path, Path]:
-    """Build proj tree, init commons, monkeypatch the project resolver, set
-    the SCIENCE_COMMONS_ROOT env var. Returns (proj_root, commons_root)."""
-    from science_tool.commons.bootstrap import init_commons
+    """Build proj tree + commons layout with everything apply_promote needs:
 
+    - proj is a committed git repo (discovery walks `git ls-files`).
+    - commons has the layout (datasets/, .migrations/), git user identity
+      set, and an initial empty commit so apply_promote sees a clean repo.
+    - SCIENCE_COMMONS_ROOT points at the commons dir.
+    - XDG_CONFIG_HOME isolates the per-machine `data.yaml` override
+      (dataset apply writes `<XDG_CONFIG_HOME>/science/data.yaml`).
+    - resolve_project_by_id is monkeypatched to return the proj dir.
+
+    Mirrors the canonical apply-test fixture in
+    `test_commons_promote_dataset_apply.py:29-57`.
+    """
     proj = _make_project_tree(tmp_path)
-    commons = tmp_path / "commons"
-    init_commons(commons)
 
+    commons = tmp_path / "commons"
+    commons.mkdir()
+    (commons / ".migrations").mkdir()
+    (commons / "datasets").mkdir()
+    _init_repo(commons)
+    subprocess.run(
+        ["git", "-C", str(commons), "commit", "--allow-empty", "-q", "-m", "init"],
+        check=True, capture_output=True,
+    )
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.delenv("SCIENCE_CONFIG_DIR", raising=False)
     monkeypatch.setattr(
         "science_tool.commons.promote.resolve_project_by_id",
         lambda _slug: proj,
     )
-    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
     return proj, commons
 
 
@@ -2290,6 +2398,72 @@ def test_explicit_form_unknown_mixin_rejected(
     )
     assert result.exit_code != 0
     assert "bio.bogus" in result.output
+
+
+def test_resolver_rejects_non_bio_name() -> None:
+    """--mixin dataset/1.0 must be rejected — only bio.* extensions stack."""
+    from science_tool.commons.cli import _resolve_mixin_arg
+    from science_tool.commons.errors import PromoteMixinResolutionError
+
+    with pytest.raises(PromoteMixinResolutionError, match="bio."):
+        _resolve_mixin_arg("dataset/1.0")
+
+
+def test_resolver_rejects_bio_with_empty_suffix() -> None:
+    """--mixin bio./1.0 must be rejected — bio. needs a non-empty suffix."""
+    from science_tool.commons.cli import _resolve_mixin_arg
+    from science_tool.commons.errors import PromoteMixinResolutionError
+
+    with pytest.raises(PromoteMixinResolutionError, match="non-empty"):
+        _resolve_mixin_arg("bio./1.0")
+
+
+def test_resolver_rejects_leading_slash() -> None:
+    from science_tool.commons.cli import _resolve_mixin_arg
+    from science_tool.commons.errors import PromoteMixinResolutionError
+
+    with pytest.raises(PromoteMixinResolutionError):
+        _resolve_mixin_arg("/1.0")
+
+
+def test_resolver_rejects_non_numeric_version() -> None:
+    from science_tool.commons.cli import _resolve_mixin_arg
+    from science_tool.commons.errors import PromoteMixinResolutionError
+
+    with pytest.raises(PromoteMixinResolutionError, match="integer"):
+        _resolve_mixin_arg("bio.matrix/abc")
+
+
+def test_resolver_picks_numeric_highest_not_lexicographic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If extension-bio-matrix-1.10.json and extension-bio-matrix-1.9.json
+    coexist, sugar `bio.matrix` must resolve to 1.10 (numeric max), not 1.9
+    (lexicographic max). Simulate by patching the schemas package's
+    resource iterator."""
+    from types import SimpleNamespace
+
+    from science_tool.commons.cli import _resolve_mixin_arg
+
+    fake_resources = [
+        SimpleNamespace(name="extension-bio-matrix-1.9.json"),
+        SimpleNamespace(name="extension-bio-matrix-1.10.json"),
+        SimpleNamespace(name="extension-bio-matrix-2.0.json"),
+        SimpleNamespace(name="other-file.json"),  # filtered out
+    ]
+
+    class _FakeRoot:
+        def iterdir(self):
+            return iter(fake_resources)
+
+    monkeypatch.setattr(
+        "importlib.resources.files",
+        lambda pkg: _FakeRoot(),
+    )
+
+    resolved = _resolve_mixin_arg("bio.matrix")
+    assert resolved.name == "bio.matrix"
+    assert resolved.version == "2.0"
 
 
 def test_mixin_on_paper_kind_yields_usage_error(
