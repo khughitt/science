@@ -719,6 +719,7 @@ def plan_promote(
             created=date.today(),
             updated=date.today(),
             kind=kind,
+            active_profile=kind.default_profile,
         )
         if kind.kind == "dataset":
             canonical_content = _rewrite_rendered_frontmatter(
@@ -2348,14 +2349,18 @@ def _render_canonical(
     created: date,
     updated: date,
     kind: PromoteKindConfig,
+    active_profile: "ProfileString",
 ) -> str:
     """Render the commons-side <commons_subdir>/<slug>.md content.
 
-    Emits schema_profile from kind.default_profile, id from kind.id_prefix,
-    type from kind.kind. For paper kind only, also emits a `bibkey:` field
-    (preserved from Phase E; not in topic/theme mixins).
+    Emits schema_profile from `active_profile` (which equals
+    `kind.default_profile` for bare promotes, or `kind.default_profile`
+    augmented with `--mixin` extensions for Phase H bio promotes). id
+    from kind.id_prefix, type from kind.kind. For paper kind only, also
+    emits a `bibkey:` field (preserved from Phase E; not in topic/theme
+    mixins).
     """
-    profile_str = kind.default_profile.render()
+    profile_str = active_profile.render()
     head: dict = {
         "schema_profile": profile_str,
         "id": f"{kind.id_prefix}{decision.slug}",

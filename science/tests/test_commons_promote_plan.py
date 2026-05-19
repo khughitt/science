@@ -231,6 +231,7 @@ def test_render_canonical_includes_base_required_fields() -> None:
         created=date(2026, 5, 15),
         updated=date(2026, 5, 15),
         kind=PROMOTE_KIND_PAPER,
+        active_profile=PROMOTE_KIND_PAPER.default_profile,
     )
     assert "schema_profile: science-entity-base/1.0+paper/2.0" in rendered
     assert 'version: "1.0.0"' in rendered
@@ -267,6 +268,7 @@ def test_render_canonical_dates_are_quoted_strings() -> None:
         created=date(2026, 5, 15),
         updated=date(2026, 5, 15),
         kind=PROMOTE_KIND_PAPER,
+        active_profile=PROMOTE_KIND_PAPER.default_profile,
     )
     fm_block = rendered.split("---", 2)[1]
     fm = yaml.safe_load(fm_block)
@@ -302,6 +304,7 @@ def test_render_canonical_paper_emits_bibkey_field() -> None:
         created=date(2026, 1, 1),
         updated=date(2026, 1, 1),
         kind=PROMOTE_KIND_PAPER,
+        active_profile=PROMOTE_KIND_PAPER.default_profile,
     )
     assert "id: paper:Adams2025" in rendered
     assert "type: paper" in rendered
@@ -337,6 +340,7 @@ def test_render_canonical_topic_omits_bibkey_field() -> None:
         created=date(2026, 1, 1),
         updated=date(2026, 1, 1),
         kind=PROMOTE_KIND_TOPIC,
+        active_profile=PROMOTE_KIND_TOPIC.default_profile,
     )
     assert f"schema_profile: {PROMOTE_KIND_TOPIC.default_profile.render()}" in rendered
     assert "id: topic:hypothesis" in rendered
