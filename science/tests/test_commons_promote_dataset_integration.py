@@ -11,50 +11,40 @@ import subprocess
 import yaml as pyyaml
 
 
+def _init_repo(root: Path) -> None:
+    subprocess.run(["git", "init", "-q", str(root)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(root), "config", "user.email", "test@x"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(root), "config", "user.name", "test"],
+        check=True,
+        capture_output=True,
+    )
+
+
 def test_promote_dataset_end_to_end(tmp_path, monkeypatch):
     src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
     proj = tmp_path / "proj-dataset"
     shutil.copytree(src, proj)
-    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    _init_repo(proj)
     subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
     subprocess.run(
-        [
-            "git",
-            "-C",
-            str(proj),
-            "-c",
-            "user.email=t@t",
-            "-c",
-            "user.name=t",
-            "commit",
-            "-q",
-            "-m",
-            "init",
-        ],
+        ["git", "-C", str(proj), "commit", "-q", "-m", "init"],
         check=True,
     )
 
     commons = tmp_path / "commons"
     commons.mkdir()
-    subprocess.run(["git", "init", "-q", str(commons)], check=True)
+    _init_repo(commons)
     (commons / "datasets").mkdir()
     (commons / ".migrations").mkdir()
     (commons / ".gitkeep").write_text("", encoding="utf-8")
     subprocess.run(["git", "-C", str(commons), "add", "."], check=True)
     subprocess.run(
-        [
-            "git",
-            "-C",
-            str(commons),
-            "-c",
-            "user.email=t@t",
-            "-c",
-            "user.name=t",
-            "commit",
-            "-q",
-            "-m",
-            "init",
-        ],
+        ["git", "-C", str(commons), "commit", "-q", "-m", "init"],
         check=True,
     )
 
@@ -62,7 +52,7 @@ def test_promote_dataset_end_to_end(tmp_path, monkeypatch):
     monkeypatch.delenv("SCIENCE_CONFIG_DIR", raising=False)
     monkeypatch.setattr(
         "science_tool.commons.promote.resolve_project_by_id",
-        lambda slug: proj,
+        lambda slug: {"proj-dataset": proj}[slug],
     )
 
     from science_tool.commons.promote import (
@@ -95,13 +85,13 @@ def test_promote_dataset_end_to_end(tmp_path, monkeypatch):
 
     assert (commons / "datasets/fixture-ds/recipe/README.md").is_file()
 
-    log = subprocess.run(
-        ["git", "-C", str(commons), "log", "--oneline"],
+    commit_count = subprocess.run(
+        ["git", "-C", str(commons), "rev-list", "--count", "HEAD"],
         capture_output=True,
         text=True,
         check=True,
-    ).stdout.strip().splitlines()
-    assert len(log) == 3
+    ).stdout.strip()
+    assert commit_count == "3"
 
     tags = subprocess.run(
         ["git", "-C", str(commons), "tag", "-l"],
@@ -113,6 +103,7 @@ def test_promote_dataset_end_to_end(tmp_path, monkeypatch):
 
     overlay = (proj / "doc/datasets/data-fixture-ds.md").read_text(encoding="utf-8")
     assert "overlay_of: dataset:fixture-ds" in overlay
+    assert overlay.startswith("---\n")
     overlay_frontmatter = pyyaml.safe_load(overlay.split("---", 2)[1])
     assert overlay_frontmatter["pin_version"] == "1.0.0"
 
