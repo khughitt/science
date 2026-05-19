@@ -214,6 +214,28 @@ _STRUCTURAL_BIO_EXTENSIONS = frozenset({"bio.matrix", "bio.table"})
 _DOMAIN_BIO_EXTENSIONS = frozenset({"bio.rnaseq", "bio.scrna", "bio.cna"})
 
 
+def _canonical_mixin_extensions(
+    extensions: tuple["ProfileComponent", ...],
+) -> tuple["ProfileComponent", ...]:
+    """Return extensions in deterministic profile order.
+
+    Canonical profiles render base -> kind mixin -> structural bio extension
+    -> domain bio extension. Unknown explicit-form bio extensions are preserved
+    after known extensions so plan_promote can still raise the loader-backed
+    resolution error with the unknown component present in the rendered profile.
+    """
+
+    def sort_key(indexed: tuple[int, "ProfileComponent"]) -> tuple[int, int]:
+        index, component = indexed
+        if component.name in _STRUCTURAL_BIO_EXTENSIONS:
+            return (0, index)
+        if component.name in _DOMAIN_BIO_EXTENSIONS:
+            return (1, index)
+        return (2, index)
+
+    return tuple(component for _, component in sorted(enumerate(extensions), key=sort_key))
+
+
 def _validate_mixin_stacking(
     extensions: tuple["ProfileComponent", ...],
 ) -> None:
@@ -271,7 +293,7 @@ def _active_profile(
     return ProfileString(
         base=kind.default_profile.base,
         mixin=kind.default_profile.mixin,
-        extensions=tuple(extensions),
+        extensions=_canonical_mixin_extensions(extensions),
     )
 
 
@@ -513,6 +535,7 @@ def plan_promote(
     # tests or future code paths must not bypass the <=1-structural /
     # <=1-domain invariant.
     _validate_mixin_stacking(mixin_extensions)
+    mixin_extensions = _canonical_mixin_extensions(mixin_extensions)
 
     active_profile = _active_profile(kind, mixin_extensions)
     try:

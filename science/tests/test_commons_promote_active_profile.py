@@ -117,6 +117,22 @@ def test_dataset_with_matrix_and_rnaseq() -> None:
     assert rendered.startswith("science-entity-base/1.0+dataset/1.0")
 
 
+def test_dataset_extensions_render_structural_before_domain() -> None:
+    """Equivalent invocations should not produce order-dependent profiles."""
+    extensions = (
+        ProfileComponent(name="bio.rnaseq", version="1.0"),
+        ProfileComponent(name="bio.matrix", version="1.0"),
+    )
+
+    profile = _active_profile(PROMOTE_KIND_DATASET, extensions)
+
+    assert profile.extensions == (
+        ProfileComponent(name="bio.matrix", version="1.0"),
+        ProfileComponent(name="bio.rnaseq", version="1.0"),
+    )
+    assert profile.render().endswith("+bio.matrix/1.0+bio.rnaseq/1.0")
+
+
 def test_returned_profile_is_a_new_object() -> None:
     """Doesn't mutate the PromoteKindConfig's frozen default_profile."""
     extensions = (ProfileComponent(name="bio.matrix", version="1.0"),)

@@ -206,6 +206,29 @@ def test_two_domain_mixins_rejected(
     assert "domain" in result.output.lower()
 
 
+def test_reversed_mixin_order_renders_canonical_profile_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _invoke_with(
+        ["--mixin", "bio.rnaseq", "--mixin", "bio.matrix", "--apply"],
+        tmp_path,
+        monkeypatch,
+    )
+
+    assert result.exit_code == 0, result.output
+    entity = (
+        tmp_path / "commons" / "datasets" / "mockrna" / "entity.md"
+    ).read_text(encoding="utf-8")
+    assert (
+        "schema_profile: "
+        "science-entity-base/1.0+dataset/1.0+bio.matrix/1.0+bio.rnaseq/1.0"
+        in entity
+    )
+    audit_log = next((tmp_path / "commons" / ".migrations").glob("*.yaml"))
+    audit = audit_log.read_text(encoding="utf-8")
+    assert audit.index("- bio.matrix/1.0") < audit.index("- bio.rnaseq/1.0")
+
+
 def test_sugar_form_unknown_mixin_rejected(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
