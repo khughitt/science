@@ -46,6 +46,12 @@ def test_missing_n_records_fails(base_table_entity: dict) -> None:
         EntityValidator().validate(fm)
 
 
+def test_n_records_must_be_positive_int(base_table_entity: dict) -> None:
+    base_table_entity["n_records"] = 0
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate(base_table_entity)
+
+
 def test_missing_columns_fails(base_table_entity: dict) -> None:
     fm = {k: v for k, v in base_table_entity.items() if k != "columns"}
     with pytest.raises(EntityValidationError, match="columns"):
