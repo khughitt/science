@@ -317,13 +317,19 @@ def _canonical_entity_frontmatter(decision):
     return yaml.safe_load(fm_raw) or {}
 
 
+def _canonical_entity_body(decision):
+    content = _canonical_entity_content(decision)
+    _, _, body = content.split("---\n", 2)
+    return body
+
+
 @pytest.mark.xfail(reason="lands in Task 16")
 def test_dataset_canonical_entity_emits_required_base_fields(tmp_path, monkeypatch):
     d, _, _ = _plan_one(tmp_path, monkeypatch)
 
     fm = _canonical_entity_frontmatter(d)
 
-    assert fm["schema_profile"] == "base/1.0+dataset/1.0"
+    assert fm["schema_profile"] == "science-entity-base/1.0+dataset/1.0"
     assert fm["id"] == "dataset:fixture-ds"
     assert fm["type"] == "dataset"
     assert fm["title"] == "Fixture dataset"
@@ -354,9 +360,6 @@ def test_dataset_canonical_entity_preserves_tier_verbatim(tmp_path, monkeypatch)
 def test_dataset_canonical_entity_body_is_preserved(tmp_path, monkeypatch):
     d, _, _ = _plan_one(tmp_path, monkeypatch)
 
-    content = _canonical_entity_content(d)
+    body = _canonical_entity_body(d)
 
-    assert (
-        "Project-only body content goes here" in content
-        or "Fixture dataset" in content
-    )
+    assert "Project-only body content goes here" in body
