@@ -242,6 +242,44 @@ def test_dataset_side_channel_apply_allows_multiple_decisions_per_op(
     assert absent_backup.is_file()
 
 
+def test_dataset_side_channel_apply_rejects_malformed_override_path(tmp_path) -> None:
+    import pytest
+
+    from science_tool.commons.errors import PromoteCandidateError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        PromoteDecision,
+        PromotePlan,
+        SideChannelContext,
+    )
+
+    decision = PromoteDecision(
+        slug="fixture-ds",
+        canonical_artifacts=[],
+        canonical_version="1.0.0",
+        overlays={},
+        resolved_conflicts=(),
+    )
+    plan = PromotePlan(
+        decisions=[decision],
+        failed_candidates=[],
+        kind=PROMOTE_KIND_DATASET,
+        dataset_audit_extras={"fixture-ds": {"override_path": None}},
+    )
+    side_channel_apply = PROMOTE_KIND_DATASET.side_channel_apply
+    assert side_channel_apply is not None
+
+    with pytest.raises(PromoteCandidateError, match="string override_path"):
+        side_channel_apply(
+            SideChannelContext(
+                decision=decision,
+                plan=plan,
+                commons_root=tmp_path / "commons",
+                op_id="opBAD",
+            )
+        )
+
+
 def test_eligibility_verdict_enum_values() -> None:
     from science_tool.commons.promote import EligibilityVerdict
 

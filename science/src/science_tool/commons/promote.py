@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import secrets
 import subprocess
@@ -83,6 +84,11 @@ def _dataset_side_channel_apply(ctx: SideChannelContext) -> SideChannelResult:
             slug=ctx.decision.slug,
         )
     override_path = extras["override_path"]
+    if not isinstance(override_path, str | os.PathLike):
+        raise PromoteCandidateError(
+            "dataset side-channel apply requires string override_path audit extra",
+            slug=ctx.decision.slug,
+        )
     _upsert_data_override(
         slug=ctx.decision.slug,
         absolute_path=Path(override_path),
