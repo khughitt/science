@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/extension-bio-table-1.0.json",
+  "title": "science entity bio.table extension",
+  "type": "object",
+  "required": ["n_records", "columns"],
+  "properties": {
+    "n_records": {"type": "integer", "minimum": 1},
+    "columns": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "dtype", "kind"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "dtype": {
+            "enum": ["string", "integer", "float", "boolean", "date", "datetime", "categorical"]
+          },
+          "kind": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}
