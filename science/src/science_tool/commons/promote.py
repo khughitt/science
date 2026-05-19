@@ -17,7 +17,7 @@ import logging
 import re
 import secrets
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from enum import Enum
 from importlib import import_module
@@ -33,6 +33,11 @@ from science_model.entity_schema import (
     default_profile_for_kind,
     read_canonical_body_sections,
     read_merge_policy,
+    read_overlay_merge_policy,
+)
+from science_tool.commons.datapackage import (
+    render_canonical_datapackage_yaml,
+    stream_sha256_and_bytes,
 )
 from science_tool.commons.config import resolve_project_by_id
 from science_tool.commons.errors import (
@@ -250,6 +255,7 @@ class PromotePlan:
     decisions: list[PromoteDecision]
     failed_candidates: list[FailedCandidate]
     kind: PromoteKindConfig
+    dataset_audit_extras: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -374,6 +380,7 @@ def plan_promote(
 
     merge_policy = read_merge_policy(kind.default_profile)
     body_sections = read_canonical_body_sections(kind.default_profile)
+    overlay_field_keys = set(read_overlay_merge_policy())
 
     if from_order is None:
         from_order = []
@@ -386,11 +393,13 @@ def plan_promote(
 
     decisions: list[PromoteDecision] = []
     soft_failures: list[FailedCandidate] = list(discovery.failed_candidates)
+    dataset_audit_extras: dict[str, dict[str, Any]] = {}
 
     for slug_norm in sorted(discovery.candidates_by_slug):
         raw_group = discovery.candidates_by_slug[slug_norm]
 
         classified: list[PromoteCandidate] = []
+        dataset_dropped_by_project: dict[str, list[str]] = {}
         for c in raw_group:
             raw_fm = c.project_only_body.get(_RAW_FRONTMATTER_KEY)
             raw_body = c.project_only_body.get(_RAW_BODY_KEY, "")
@@ -411,6 +420,13 @@ def plan_promote(
                 merge_policy,
                 body_sections,
             )
+            if kind.kind == "dataset":
+                proj_f = {k: v for k, v in proj_f.items() if k in overlay_field_keys}
+                dataset_dropped_by_project[c.project_slug] = _dataset_dropped_fields(
+                    raw_fm,
+                    canonical_fields=can_f,
+                    project_only_fields=proj_f,
+                )
             classified.append(
                 PromoteCandidate(
                     slug=c.slug,
@@ -469,8 +485,10 @@ def plan_promote(
             )
             merged[conflict.field] = resolved_value
 
-        canonical_path = commons_root / kind.commons_subdir / f"{canonical_case}.md"
-        canonical_artifact_path = canonical_path.relative_to(commons_root)
+        if kind.kind == "dataset":
+            canonical_artifact_path = Path(kind.commons_subdir) / canonical_case / "entity.md"
+        else:
+            canonical_artifact_path = Path(kind.commons_subdir) / f"{canonical_case}.md"
         overlays: dict[str, OverlayRewrite] = {}
         for c in classified:
             source_path = c.overlay_source_path
@@ -487,6 +505,14 @@ def plan_promote(
                     f"overlay target collision in {c.project_slug}: cannot flatten "
                     f"{source_path} → {target_path}; target already exists"
                 )
+            project_only_fields = c.project_only_fields
+            if kind.kind == "dataset":
+                project_only_fields = dict(c.project_only_fields)
+                if c.datapackage_source_path is not None:
+                    project_only_fields["source"] = _project_relative_posix(
+                        c.project_root,
+                        c.datapackage_source_path,
+                    )
             rendered_overlay = _render_overlay(
                 PromoteDecision(
                     slug=canonical_case,
@@ -501,7 +527,7 @@ def plan_promote(
                     overlays={},
                     resolved_conflicts=(),
                 ),
-                project_only_fields=c.project_only_fields,
+                project_only_fields=project_only_fields,
                 project_only_body=c.project_only_body,
                 kind=kind,
             )
@@ -528,29 +554,90 @@ def plan_promote(
             overlays=overlays,
             resolved_conflicts=tuple(resolved_conflicts),
         )
+        primary = (
+            _primary_candidate_for_plan(classified, from_order)
+            if kind.kind == "dataset"
+            else classified[0]
+        )
         # NOTE: design §4.1.1 says `created` / `updated` should reflect the
         # apply timestamp, not the plan timestamp. We render here with
         # plan-day dates so the dry-run summary can show concrete content;
         # apply_promote (Task 16) re-renders with the actual write-time
         # timestamp before committing. The pre-render is informational only.
+        canonical_body = primary.canonical_body
+        if kind.kind == "dataset":
+            canonical_body = {**primary.project_only_body, **primary.canonical_body}
         canonical_content = _render_canonical(
             canonical_decision,
             canonical_fields=merged,
-            canonical_body=classified[0].canonical_body,
+            canonical_body=canonical_body,
             created=date.today(),
             updated=date.today(),
             kind=kind,
         )
+        if kind.kind == "dataset":
+            canonical_content = _rewrite_rendered_frontmatter(
+                canonical_content,
+                {"datapackage": "datapackage.yaml"},
+            )
+            per_resource = _dataset_per_resource(primary)
+            if primary.datapackage_doc is None or primary.datapackage_source_path is None:
+                raise PromoteCandidateError(
+                    "dataset planning requires discovery datapackage metadata",
+                    slug=canonical_case,
+                )
+            datapackage_content = render_canonical_datapackage_yaml(
+                project_doc=primary.datapackage_doc,
+                canonical_slug=canonical_case,
+                per_resource=per_resource,
+            )
+            source_hint = _dataset_recipe_source_hint(merged)
+            recipe_content = _render_dataset_recipe_stub(
+                slug=canonical_case,
+                source_hint=source_hint,
+            )
+            canonical_artifacts = [
+                CanonicalArtifact(
+                    path=canonical_artifact_path,
+                    content=canonical_content,
+                    validator="entity-mixin",
+                ),
+                CanonicalArtifact(
+                    path=Path(kind.commons_subdir) / canonical_case / "datapackage.yaml",
+                    content=datapackage_content,
+                    validator="frictionless-datapackage",
+                ),
+                CanonicalArtifact(
+                    path=Path(kind.commons_subdir) / canonical_case / "recipe" / "README.md",
+                    content=recipe_content,
+                    validator="plain",
+                ),
+            ]
+            dropped_fields = sorted(
+                {
+                    field
+                    for dropped in dataset_dropped_by_project.values()
+                    for field in dropped
+                }
+            )
+            dataset_audit_extras[canonical_case] = {
+                "per_resource": per_resource,
+                "dropped_fields": dropped_fields,
+                "recipe_stubbed": True,
+                "override_path": str(primary.datapackage_source_path.parent),
+            }
+        else:
+            canonical_artifacts = [
+                CanonicalArtifact(
+                    path=canonical_artifact_path,
+                    content=canonical_content,
+                    validator="entity-mixin",
+                )
+            ]
         decisions.append(
             PromoteDecision(
                 slug=canonical_case,
-                canonical_artifacts=[
-                    CanonicalArtifact(
-                        path=canonical_artifact_path,
-                        content=canonical_content,
-                        validator="entity-mixin",
-                    )
-                ],
+                canonical_artifacts=canonical_artifacts,
                 canonical_version="1.0.0",
                 overlays=overlays,
                 resolved_conflicts=tuple(resolved_conflicts),
@@ -558,7 +645,12 @@ def plan_promote(
         )
 
     _validate_plan(decisions)
-    return PromotePlan(decisions=decisions, failed_candidates=soft_failures, kind=kind)
+    return PromotePlan(
+        decisions=decisions,
+        failed_candidates=soft_failures,
+        kind=kind,
+        dataset_audit_extras=dataset_audit_extras,
+    )
 
 
 def _validate_plan(decisions: list[PromoteDecision]) -> None:
@@ -1680,6 +1772,93 @@ def _dataset_dropped_fields(
     return sorted(
         k for k in raw_frontmatter if k not in routed and k not in internal and not k.startswith("_")
     )
+
+
+def _primary_candidate_for_plan(
+    candidates: list[PromoteCandidate],
+    from_order: list[str],
+) -> PromoteCandidate:
+    order = {slug: idx for idx, slug in enumerate(from_order)}
+    return sorted(
+        candidates,
+        key=lambda c: (order.get(c.project_slug, len(order)), c.project_slug),
+    )[0]
+
+
+def _project_relative_posix(project_root: Path, path: Path) -> str:
+    return path.relative_to(project_root).as_posix()
+
+
+def _dataset_per_resource(candidate: PromoteCandidate) -> dict[str, tuple[str, int]]:
+    if candidate.datapackage_source_path is None or candidate.datapackage_doc is None:
+        raise PromoteCandidateError(
+            "dataset planning requires discovery datapackage metadata",
+            slug=candidate.slug,
+        )
+
+    per_resource: dict[str, tuple[str, int]] = {}
+    dp_parent = candidate.datapackage_source_path.parent
+    resources = candidate.datapackage_doc.get("resources")
+    if not isinstance(resources, list):
+        raise PromoteCandidateError(
+            "dataset datapackage resources must be a list",
+            slug=candidate.slug,
+        )
+    for idx, resource in enumerate(resources):
+        if not isinstance(resource, Mapping):
+            raise PromoteCandidateError(
+                f"datapackage resources[{idx}] must be an object",
+                slug=candidate.slug,
+            )
+        resource_path = resource.get("path")
+        if not isinstance(resource_path, str) or not resource_path.strip():
+            raise PromoteCandidateError(
+                f"datapackage resources[{idx}].path must be a non-empty string",
+                slug=candidate.slug,
+            )
+        resource_abs = _datapackage_relative_path(
+            dp_parent,
+            resource_path,
+            field=f"datapackage resources[{idx}].path",
+        )
+        per_resource[_resource_name(resource, resource_path)] = stream_sha256_and_bytes(
+            resource_abs
+        )
+    return per_resource
+
+
+def _rewrite_rendered_frontmatter(rendered: str, updates: Mapping[str, Any]) -> str:
+    if not rendered.startswith("---\n"):
+        raise PromoteCandidateError("rendered content has no opening --- fence", slug=None)
+    rest = rendered[len("---\n") :]
+    fm_raw, sep, body = rest.partition("\n---\n")
+    if not sep:
+        raise PromoteCandidateError("rendered content has no closing --- fence", slug=None)
+    parsed = yaml.safe_load(fm_raw) or {}
+    if not isinstance(parsed, dict):
+        raise PromoteCandidateError(
+            f"frontmatter is not a mapping: {type(parsed).__name__}",
+            slug=None,
+        )
+    parsed.update(updates)
+    return f"---\n{_render_frontmatter(parsed)}---\n{body}"
+
+
+def _dataset_recipe_source_hint(canonical_fields: Mapping[str, Any]) -> str | None:
+    sources = canonical_fields.get("sources")
+    if isinstance(sources, list) and sources:
+        return str(sources[0])
+    if isinstance(sources, str) and sources.strip():
+        return sources
+    source = canonical_fields.get("source")
+    if isinstance(source, str) and source.strip():
+        return source
+    access = canonical_fields.get("access")
+    if isinstance(access, Mapping):
+        source_url = access.get("source_url")
+        if isinstance(source_url, str) and source_url.strip():
+            return source_url
+    return None
 
 
 # --------------------------------------------------------------------------- #

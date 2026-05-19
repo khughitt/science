@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import pytest
-
 FIXTURES = Path(__file__).parent / "fixtures" / "promote_dataset"
 
 
@@ -345,11 +343,83 @@ def _canonical_entity_body(decision):
     return body
 
 
-@pytest.mark.xfail(
-    reason="lands in Task 16",
-    strict=True,
-    raises=DatasetCanonicalEntityNotWired,
-)
+def test_plan_promote_dataset_produces_three_artifacts(tmp_path, monkeypatch):
+    import shutil
+    import subprocess
+
+    src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
+    proj = tmp_path / "proj-dataset"
+    shutil.copytree(src, proj)
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(proj),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "init",
+        ],
+        check=True,
+    )
+    commons = tmp_path / "commons"
+    commons.mkdir()
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda s: proj,
+    )
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        discover_candidates,
+        plan_promote,
+    )
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
+
+    assert len(plan.decisions) == 1
+    artifacts = {a.path: a for a in plan.decisions[0].canonical_artifacts}
+    assert {
+        Path("datasets/fixture-ds/entity.md"),
+        Path("datasets/fixture-ds/datapackage.yaml"),
+        Path("datasets/fixture-ds/recipe/README.md"),
+    } == set(artifacts)
+    assert artifacts[Path("datasets/fixture-ds/entity.md")].validator == "entity-mixin"
+    assert (
+        artifacts[Path("datasets/fixture-ds/datapackage.yaml")].validator
+        == "frictionless-datapackage"
+    )
+    assert artifacts[Path("datasets/fixture-ds/recipe/README.md")].validator == "plain"
+    assert "tier: evaluate-next" in artifacts[Path("datasets/fixture-ds/entity.md")].content
+    datapackage_content = artifacts[Path("datasets/fixture-ds/datapackage.yaml")].content
+    assert (
+        "sha256:a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"
+        in datapackage_content
+    )
+    assert "bytes: 12" in datapackage_content
+    import yaml
+
+    overlay = plan.decisions[0].overlays["proj-dataset"]
+    overlay_fm = yaml.safe_load(overlay.after_content.split("---\n", 2)[1])
+    assert overlay_fm["overlay_of"] == "dataset:fixture-ds"
+    assert overlay_fm["source"] == "data/fixture-ds/datapackage.json"
+    assert "ontologies" not in overlay_fm
+    extras = plan.dataset_audit_extras["fixture-ds"]
+    assert extras["per_resource"]["r1"] == (
+        "sha256:a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
+        12,
+    )
+    assert extras["dropped_fields"] == ["ontologies"]
+    assert extras["recipe_stubbed"] is True
+    assert extras["override_path"].endswith("data/fixture-ds")
+
+
 def test_dataset_canonical_entity_emits_required_base_fields(tmp_path, monkeypatch):
     d, _, _ = _plan_one(tmp_path, monkeypatch)
 
@@ -364,11 +434,6 @@ def test_dataset_canonical_entity_emits_required_base_fields(tmp_path, monkeypat
     assert "updated" in fm
 
 
-@pytest.mark.xfail(
-    reason="lands in Task 16",
-    strict=True,
-    raises=DatasetCanonicalEntityNotWired,
-)
 def test_dataset_canonical_entity_datapackage_points_at_sibling(tmp_path, monkeypatch):
     d, _, _ = _plan_one(tmp_path, monkeypatch)
 
@@ -377,11 +442,6 @@ def test_dataset_canonical_entity_datapackage_points_at_sibling(tmp_path, monkey
     assert fm["datapackage"] == "datapackage.yaml"
 
 
-@pytest.mark.xfail(
-    reason="lands in Task 16",
-    strict=True,
-    raises=DatasetCanonicalEntityNotWired,
-)
 def test_dataset_canonical_entity_preserves_tier_verbatim(tmp_path, monkeypatch):
     d, _, _ = _plan_one(tmp_path, monkeypatch)
 
@@ -390,11 +450,6 @@ def test_dataset_canonical_entity_preserves_tier_verbatim(tmp_path, monkeypatch)
     assert "tier: evaluate-next" in content
 
 
-@pytest.mark.xfail(
-    reason="lands in Task 16",
-    strict=True,
-    raises=DatasetCanonicalEntityNotWired,
-)
 def test_dataset_canonical_entity_body_is_preserved(tmp_path, monkeypatch):
     d, _, _ = _plan_one(tmp_path, monkeypatch)
 
