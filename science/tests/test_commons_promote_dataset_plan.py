@@ -307,6 +307,56 @@ def _plan_one(tmp_path, monkeypatch):
     return plan.decisions[0], plan, commons
 
 
+def _copy_dataset_projects(tmp_path, monkeypatch):
+    import shutil
+    import subprocess
+
+    src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
+    projects = {}
+    for project_slug in ("proj-a", "proj-b"):
+        proj = tmp_path / project_slug
+        shutil.copytree(src, proj)
+        subprocess.run(["git", "init", "-q", str(proj)], check=True)
+        subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(proj),
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "commit",
+                "-q",
+                "-m",
+                "init",
+            ],
+            check=True,
+        )
+        projects[project_slug] = proj
+
+    commons = tmp_path / "commons"
+    commons.mkdir()
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda s: projects[s],
+    )
+    return projects, commons
+
+
+def _plan_dataset_projects(project_slugs, commons):
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        discover_candidates,
+        plan_promote,
+    )
+
+    discovery = discover_candidates(project_slugs, PROMOTE_KIND_DATASET)
+    assert discovery.failed_candidates == []
+    return plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
+
+
 class DatasetCanonicalEntityNotWired(Exception):
     pass
 
@@ -418,6 +468,50 @@ def test_plan_promote_dataset_produces_three_artifacts(tmp_path, monkeypatch):
     assert extras["dropped_fields"] == ["ontologies"]
     assert extras["recipe_stubbed"] is True
     assert extras["override_path"].endswith("data/fixture-ds")
+
+
+def test_plan_promote_dataset_rejects_multi_project_resource_byte_mismatch(
+    tmp_path, monkeypatch
+):
+    import pytest
+
+    from science_tool.commons.errors import PromoteCandidateError
+
+    projects, commons = _copy_dataset_projects(tmp_path, monkeypatch)
+    (projects["proj-b"] / "data" / "fixture-ds" / "r1.txt").write_text(
+        "different bytes\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        PromoteCandidateError,
+        match="fixture-ds.*proj-b.*resource",
+    ):
+        _plan_dataset_projects(["proj-a", "proj-b"], commons)
+
+
+def test_plan_promote_dataset_rejects_multi_project_datapackage_field_mismatch(
+    tmp_path, monkeypatch
+):
+    import json
+    import pytest
+
+    from science_tool.commons.errors import PromoteCandidateError
+
+    projects, commons = _copy_dataset_projects(tmp_path, monkeypatch)
+    datapackage_path = projects["proj-b"] / "data" / "fixture-ds" / "datapackage.json"
+    datapackage_doc = json.loads(datapackage_path.read_text(encoding="utf-8"))
+    datapackage_doc["description"] = "Different canonical metadata"
+    datapackage_path.write_text(
+        json.dumps(datapackage_doc, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        PromoteCandidateError,
+        match="fixture-ds.*proj-b.*datapackage",
+    ):
+        _plan_dataset_projects(["proj-a", "proj-b"], commons)
 
 
 def test_dataset_canonical_entity_emits_required_base_fields(tmp_path, monkeypatch):

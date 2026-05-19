@@ -465,6 +465,26 @@ def plan_promote(
                     f"{source_path} → {target_path}; target already exists"
                 )
 
+        dataset_primary: PromoteCandidate | None = None
+        dataset_primary_per_resource: dict[str, tuple[str, int]] | None = None
+        if kind.kind == "dataset":
+            dataset_primary = _primary_candidate_for_plan(classified, from_order)
+            dataset_primary_per_resource = _dataset_per_resource(dataset_primary)
+            if (
+                dataset_primary.datapackage_doc is None
+                or dataset_primary.datapackage_source_path is None
+            ):
+                raise PromoteCandidateError(
+                    "dataset planning requires discovery datapackage metadata",
+                    slug=canonical_case,
+                )
+            _validate_dataset_group_datapackages(
+                canonical_slug=canonical_case,
+                primary=dataset_primary,
+                candidates=classified,
+                primary_per_resource=dataset_primary_per_resource,
+            )
+
         merged, conflicts = _merge_canonical_fields(classified, merge_policy, kind=kind.kind)
 
         resolved_conflicts: list[ConflictResolution] = []
@@ -554,11 +574,7 @@ def plan_promote(
             overlays=overlays,
             resolved_conflicts=tuple(resolved_conflicts),
         )
-        primary = (
-            _primary_candidate_for_plan(classified, from_order)
-            if kind.kind == "dataset"
-            else classified[0]
-        )
+        primary = dataset_primary if dataset_primary is not None else classified[0]
         # NOTE: design §4.1.1 says `created` / `updated` should reflect the
         # apply timestamp, not the plan timestamp. We render here with
         # plan-day dates so the dry-run summary can show concrete content;
@@ -580,7 +596,12 @@ def plan_promote(
                 canonical_content,
                 {"datapackage": "datapackage.yaml"},
             )
-            per_resource = _dataset_per_resource(primary)
+            if dataset_primary_per_resource is None:
+                raise PromoteCandidateError(
+                    "dataset planning requires discovery datapackage metadata",
+                    slug=canonical_case,
+                )
+            per_resource = dataset_primary_per_resource
             if primary.datapackage_doc is None or primary.datapackage_source_path is None:
                 raise PromoteCandidateError(
                     "dataset planning requires discovery datapackage metadata",
@@ -1825,6 +1846,58 @@ def _dataset_per_resource(candidate: PromoteCandidate) -> dict[str, tuple[str, i
             resource_abs
         )
     return per_resource
+
+
+def _validate_dataset_group_datapackages(
+    *,
+    canonical_slug: str,
+    primary: PromoteCandidate,
+    candidates: list[PromoteCandidate],
+    primary_per_resource: dict[str, tuple[str, int]],
+) -> None:
+    if len(candidates) <= 1:
+        return
+    if primary.datapackage_doc is None:
+        raise PromoteCandidateError(
+            "dataset planning requires discovery datapackage metadata",
+            slug=canonical_slug,
+        )
+    primary_content = render_canonical_datapackage_yaml(
+        project_doc=primary.datapackage_doc,
+        canonical_slug=canonical_slug,
+        per_resource=primary_per_resource,
+    )
+    for candidate in candidates:
+        if candidate is primary:
+            continue
+        candidate_per_resource = _dataset_per_resource(candidate)
+        if candidate_per_resource != primary_per_resource:
+            raise PromoteCandidateError(
+                f"dataset {canonical_slug!r} project {candidate.project_slug!r} "
+                f"has divergent resource hashes/bytes from primary project "
+                f"{primary.project_slug!r}",
+                slug=canonical_slug,
+                path=candidate.datapackage_source_path,
+            )
+        if candidate.datapackage_doc is None:
+            raise PromoteCandidateError(
+                "dataset planning requires discovery datapackage metadata",
+                slug=canonical_slug,
+                path=candidate.datapackage_source_path,
+            )
+        candidate_content = render_canonical_datapackage_yaml(
+            project_doc=candidate.datapackage_doc,
+            canonical_slug=canonical_slug,
+            per_resource=candidate_per_resource,
+        )
+        if candidate_content != primary_content:
+            raise PromoteCandidateError(
+                f"dataset {canonical_slug!r} project {candidate.project_slug!r} "
+                f"has divergent canonical datapackage content from primary "
+                f"project {primary.project_slug!r}",
+                slug=canonical_slug,
+                path=candidate.datapackage_source_path,
+            )
 
 
 def _rewrite_rendered_frontmatter(rendered: str, updates: Mapping[str, Any]) -> str:
