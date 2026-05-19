@@ -159,6 +159,45 @@ def test_cli_promote_dataset_dry_run_override_conflict_is_click_error(tmp_path, 
     assert r.exception is None or isinstance(r.exception, SystemExit)
 
 
+def test_cli_promote_dataset_dry_run_resource_read_failure_is_click_error(
+    tmp_path, monkeypatch
+):
+    proj, commons = _setup(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.setattr(
+        "science_tool.commons.config.resolve_project_by_id",
+        lambda s: proj,
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda s: proj,
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.stream_sha256_and_bytes",
+        lambda path: (_ for _ in ()).throw(OSError("simulated read failure")),
+    )
+    from science_tool.commons.cli import commons_group
+
+    r = CliRunner().invoke(
+        commons_group,
+        [
+            "promote",
+            "dataset",
+            "--from",
+            "proj-dataset",
+            "--slug",
+            "fixture-ds",
+        ],
+    )
+    output = f"{r.output}\n{r.stderr or ''}"
+    assert r.exit_code != 0
+    assert "traceback" not in output.lower()
+    assert "cannot read" in output
+    assert "simulated read failure" in output
+    assert r.exception is None or isinstance(r.exception, SystemExit)
+
+
 def test_cli_promote_dataset_apply_writes_artifacts(tmp_path, monkeypatch):
     proj, commons = _setup(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))

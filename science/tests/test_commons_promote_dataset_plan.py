@@ -561,6 +561,57 @@ def test_plan_dataset_raises_override_conflict(tmp_path, monkeypatch):
     assert exc_info.value.slug == "fixture-ds"
 
 
+def test_plan_dataset_wraps_resource_read_failure(tmp_path, monkeypatch):
+    import shutil
+    import subprocess
+
+    import pytest
+
+    from science_tool.commons.errors import PromoteCandidateError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        discover_candidates,
+        plan_promote,
+    )
+
+    src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
+    proj = tmp_path / "proj-dataset"
+    shutil.copytree(src, proj)
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(proj),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "init",
+        ],
+        check=True,
+    )
+    commons = tmp_path / "commons"
+    commons.mkdir()
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda s: proj,
+    )
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    assert discovery.failed_candidates == []
+    (proj / "data" / "fixture-ds" / "r1.txt").unlink()
+
+    with pytest.raises(PromoteCandidateError, match="cannot read.*bytes") as exc_info:
+        plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
+
+    assert exc_info.value.slug == "fixture-ds"
+
+
 def test_plan_promote_dataset_rejects_multi_project_resource_byte_mismatch(
     tmp_path, monkeypatch
 ):

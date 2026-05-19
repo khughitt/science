@@ -2018,9 +2018,16 @@ def _dataset_per_resource(candidate: PromoteCandidate) -> dict[str, tuple[str, i
             resource_path,
             field=f"datapackage resources[{idx}].path",
         )
-        per_resource[_resource_name(resource, resource_path)] = stream_sha256_and_bytes(
-            resource_abs
-        )
+        try:
+            per_resource[_resource_name(resource, resource_path)] = stream_sha256_and_bytes(
+                resource_abs
+            )
+        except OSError as exc:
+            raise PromoteCandidateError(
+                f"cannot read datapackage resources[{idx}] bytes: {exc}",
+                slug=candidate.slug,
+                path=resource_abs,
+            ) from exc
     return per_resource
 
 
