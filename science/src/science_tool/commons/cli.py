@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import click
+import yaml
 
 from science_tool.commons.adapter import CommonsEntityAdapter, CommonsEntityRecord
 from science_tool.commons.bootstrap import init_commons
@@ -13,9 +15,7 @@ from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import (
     CommonsError,
     CommonsRootNotFoundError,
-    PromoteConflictAbort,
     PromoteInputError,
-    PromoteValidationError,
     PromoteWriteError,
 )
 from science_tool.commons.inventory import build_commons_inventory
@@ -30,7 +30,9 @@ from science_tool.commons.promote import (
     PROMOTE_KIND_PAPER,
     PROMOTE_KIND_THEME,
     PROMOTE_KIND_TOPIC,
+    PromoteDecision,
     PromoteKindConfig,
+    PromotePlan,
     apply_promote,
     discover_candidates,
     plan_promote,
@@ -570,7 +572,7 @@ def _promote_kind_cmd(
             kind=kind,
             from_order=list(from_),
         )
-    except (PromoteInputError, PromoteConflictAbort, PromoteValidationError) as exc:
+    except CommonsError as exc:
         raise click.ClickException(str(exc)) from exc
 
     click.echo(
@@ -586,6 +588,8 @@ def _promote_kind_cmd(
             if rename_from is None:
                 continue
             click.echo(f"    rename in {slug}: {rename_from.name} → {ov.path.name}")
+        if kind.kind == "dataset":
+            _echo_dataset_plan_details(plan, d)
 
     if not apply_:
         click.echo("Re-run with --apply to execute.")
@@ -606,6 +610,52 @@ def _promote_kind_cmd(
         f"Applied op {result.op_id}: commit {result.commons_commit}, "
         f"{len(result.tags_created)} tags, audit log at {result.audit_log_path}"
     )
+
+
+def _echo_dataset_plan_details(plan: PromotePlan, decision: PromoteDecision) -> None:
+    extras = plan.dataset_audit_extras.get(decision.slug, {})
+    for artifact in decision.canonical_artifacts:
+        click.echo(f"    artifact: {artifact.path}")
+
+    per_resource = extras.get("per_resource", {})
+    if isinstance(per_resource, dict) and per_resource:
+        click.echo("    resources:")
+        for name, hash_and_bytes in sorted(per_resource.items()):
+            if (
+                isinstance(hash_and_bytes, tuple)
+                and len(hash_and_bytes) == 2
+                and isinstance(hash_and_bytes[0], str)
+            ):
+                digest, byte_count = hash_and_bytes
+                click.echo(f"      - {name}: {digest}, bytes: {byte_count}")
+
+    override_path = extras.get("override_path")
+    if override_path is not None:
+        click.echo(f"    data.yaml override: {decision.slug}: {override_path}")
+
+    dropped_fields = extras.get("dropped_fields", [])
+    if isinstance(dropped_fields, list | tuple | set) and dropped_fields:
+        click.echo("    dropped fields: " + ", ".join(str(field) for field in dropped_fields))
+    else:
+        click.echo("    dropped fields: (none)")
+
+    for project_slug, overlay in sorted(decision.overlays.items()):
+        click.echo(f"    overlay rewrite: {project_slug}: {overlay.path}")
+        overlay_fm = _rendered_frontmatter(overlay.after_content)
+        source = overlay_fm.get("source")
+        if isinstance(source, str):
+            click.echo(f"      source: {source}")
+
+
+def _rendered_frontmatter(rendered: str) -> dict[str, Any]:
+    if not rendered.startswith("---\n"):
+        return {}
+    try:
+        frontmatter = rendered.split("---\n", 2)[1]
+    except IndexError:
+        return {}
+    parsed = yaml.safe_load(frontmatter)
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def _invocation() -> str:

@@ -108,7 +108,55 @@ def test_cli_promote_dataset_dry_run_completes(tmp_path, monkeypatch):
     )
     assert r.exit_code == 0, r.output
     assert "fixture-ds" in r.output
+    assert "datasets/fixture-ds/entity.md" in r.output
+    assert "datasets/fixture-ds/datapackage.yaml" in r.output
+    assert "datasets/fixture-ds/recipe/README.md" in r.output
+    assert "sha256:" in r.output
+    assert "bytes: 12" in r.output
+    assert "data.yaml" in r.output
+    assert str(proj / "data" / "fixture-ds") in r.output
+    assert "doc/datasets/data-fixture-ds.md" in r.output
+    assert "source: data/fixture-ds/datapackage.json" in r.output
+    assert "1 overlay rewrites" in r.output
+    assert "dropped fields" in r.output.lower()
+    assert "ontologies" in r.output
     assert not (commons / "datasets/fixture-ds").exists()
+
+
+def test_cli_promote_dataset_dry_run_override_conflict_is_click_error(tmp_path, monkeypatch):
+    proj, commons = _setup(tmp_path)
+    config_dir = tmp_path / "science-config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "data.yaml").write_text("fixture-ds: /wrong/path\n", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(config_dir))
+    monkeypatch.setattr(
+        "science_tool.commons.config.resolve_project_by_id",
+        lambda s: proj,
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda s: proj,
+    )
+    from science_tool.commons.cli import commons_group
+
+    r = CliRunner().invoke(
+        commons_group,
+        [
+            "promote",
+            "dataset",
+            "--from",
+            "proj-dataset",
+            "--slug",
+            "fixture-ds",
+        ],
+    )
+    output = f"{r.output}\n{r.stderr or ''}"
+    assert r.exit_code != 0
+    assert "traceback" not in output.lower()
+    assert "override conflicts" in output
+    assert "fixture-ds" in output
+    assert r.exception is None or isinstance(r.exception, SystemExit)
 
 
 def test_cli_promote_dataset_apply_writes_artifacts(tmp_path, monkeypatch):

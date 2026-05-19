@@ -405,6 +405,46 @@ def test_rollback_override_failure(
     _assert_rolled_back(commons, data_yaml, before)
 
 
+def test_apply_promote_rechecks_stale_dataset_override_conflict(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    _proj, commons = _setup(tmp_path, monkeypatch)
+    data_yaml = tmp_path / ".config" / "science" / "data.yaml"
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(
+        discovery,
+        commons_root=commons,
+        kind=PROMOTE_KIND_DATASET,
+        from_order=["proj-dataset"],
+    )
+
+    data_yaml.parent.mkdir(parents=True, exist_ok=True)
+    data_yaml.write_text("fixture-ds: /conflicting/path\n", encoding="utf-8")
+    before = _snapshot_state(commons, data_yaml)
+
+    with pytest.raises(PromoteWriteError, match="side-channel.*override conflicts") as exc_info:
+        apply_promote(
+            plan,
+            commons_root=commons,
+            invocation="science commons promote dataset --from proj-dataset --apply",
+        )
+
+    assert exc_info.value.stage == "side_channel"
+    _assert_rolled_back(commons, data_yaml, before)
+    status = _git_stdout(commons, "status", "--porcelain")
+    assert "datasets/fixture-ds" not in status
+
+
 def test_audit_failure_leaves_migration_landed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

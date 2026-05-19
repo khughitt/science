@@ -49,6 +49,32 @@ def test_result_carries_kind() -> None:
     assert r.kind is PROMOTE_KIND_PAPER
 
 
+def test_repo_is_idle_checks_linked_worktree_gitdir(tmp_path) -> None:
+    from science_tool.commons.promote import _repo_is_idle
+
+    main = tmp_path / "main"
+    linked = tmp_path / "linked"
+    main.mkdir()
+    _init_repo(main)
+    (main / "README.md").write_text("init\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(main), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(main), "commit", "-q", "-m", "init"], check=True)
+    subprocess.run(
+        ["git", "-C", str(main), "worktree", "add", "-q", "-b", "linked-test", str(linked)],
+        check=True,
+    )
+
+    git_dir = subprocess.run(
+        ["git", "-C", str(linked), "rev-parse", "--git-dir"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    (linked / git_dir / "MERGE_HEAD").write_text("staged merge\n", encoding="utf-8")
+
+    assert _repo_is_idle(linked) is False
+
+
 def test_write_audit_log_writes_yaml_with_expected_shape(tmp_path) -> None:
     from science_tool.commons.promote import (
         PROMOTE_KIND_PAPER,

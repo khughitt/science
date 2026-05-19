@@ -76,6 +76,7 @@ def _dataset_side_channel_apply(ctx: SideChannelContext) -> SideChannelResult:
     from science_tool.commons.config import (
         _data_yaml_path,
         _upsert_data_override,
+        check_override_conflict,
     )
 
     extras = ctx.plan.dataset_audit_extras.get(ctx.decision.slug)
@@ -90,9 +91,11 @@ def _dataset_side_channel_apply(ctx: SideChannelContext) -> SideChannelResult:
             "dataset side-channel apply requires string override_path audit extra",
             slug=ctx.decision.slug,
         )
+    override_path = Path(override_path)
+    check_override_conflict(slug=ctx.decision.slug, planned_path=override_path)
     _upsert_data_override(
         slug=ctx.decision.slug,
-        absolute_path=Path(override_path),
+        absolute_path=override_path,
         op_id=ctx.op_id,
         allow_existing_backup=True,
     )
@@ -926,7 +929,18 @@ def _restore_project_rewrites_to_head(
 
 def _repo_is_idle(root: Path) -> bool:
     """True if the repo is NOT mid-merge/rebase/cherry-pick/bisect."""
-    git_dir = root / ".git"
+    try:
+        git_dir_result = _git(root, "rev-parse", "--git-dir", check=False)
+    except OSError:
+        return False
+    if git_dir_result.returncode != 0:
+        return False
+    git_dir_raw = git_dir_result.stdout.strip()
+    if not git_dir_raw:
+        return False
+    git_dir = Path(git_dir_raw)
+    if not git_dir.is_absolute():
+        git_dir = root / git_dir
     sentinels = [
         "MERGE_HEAD",
         "REBASE_HEAD",
@@ -1952,7 +1966,12 @@ def _primary_candidate_for_plan(
 
 
 def _project_relative_posix(project_root: Path, path: Path) -> str:
-    return path.relative_to(project_root).as_posix()
+    root_abs = project_root.resolve(strict=False)
+    path_abs = path.resolve(strict=False)
+    try:
+        return path_abs.relative_to(root_abs).as_posix()
+    except ValueError as exc:
+        raise PromoteCandidateError(f"path {path} escapes project root {project_root}") from exc
 
 
 def _overlay_target_path(

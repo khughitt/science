@@ -472,6 +472,42 @@ def test_plan_promote_dataset_produces_three_artifacts(tmp_path, monkeypatch):
     assert extras["override_path"].endswith("data/fixture-ds")
 
 
+def test_plan_promote_dataset_accepts_symlinked_project_root(tmp_path, monkeypatch):
+    import shutil
+    import yaml
+
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        discover_candidates,
+        plan_promote,
+    )
+
+    src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
+    real_proj = tmp_path / "real-proj-dataset"
+    shutil.copytree(src, real_proj)
+    symlink_proj = tmp_path / "proj-dataset-link"
+    symlink_proj.symlink_to(real_proj, target_is_directory=True)
+    commons = tmp_path / "commons"
+    commons.mkdir()
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda s: symlink_proj,
+    )
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(
+        discovery,
+        commons_root=commons,
+        kind=PROMOTE_KIND_DATASET,
+        from_order=["proj-dataset"],
+    )
+
+    overlay = plan.decisions[0].overlays["proj-dataset"]
+    overlay_fm = yaml.safe_load(overlay.after_content.split("---\n", 2)[1])
+    assert overlay_fm["source"] == "data/fixture-ds/datapackage.json"
+
+
 def test_plan_dataset_raises_override_conflict(tmp_path, monkeypatch):
     import shutil
     import subprocess
