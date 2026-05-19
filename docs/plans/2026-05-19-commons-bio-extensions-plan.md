@@ -2824,7 +2824,7 @@ Verify:
 
 ```bash
 uv run science commons show dataset:ccle-proteomics-nusinow-2020
-uv run science commons show dataset:ccle-proteomics-nusinow-2020 --project multiple-myeloma
+uv run science commons show dataset:ccle-proteomics-nusinow-2020 --project mm30
 ```
 
 Expected: no validation errors for either command. The canonical show output
@@ -2874,6 +2874,31 @@ git commit -m "docs(phase-h): record pilot outcome for dataset:ccle-proteomics-n
 ```
 
 The commons-repo commit from the promote itself happens in `~/d/science-commons/`, which is a separate repo and is not pushed to GitHub.
+
+---
+
+## Pilot outcome (Task 19)
+
+**Date run:** 2026-05-19
+**Dataset:** dataset:ccle-proteomics-nusinow-2020 (CCLE Proteomics, Nusinow 2020)
+**Mixins applied:** bio.table/1.0
+
+- canonical schema_profile: science-entity-base/1.0+dataset/1.0+bio.table/1.0
+- audit log: ~/d/science-commons/.migrations/20260519T180321Z-30595d22.yaml
+- commons promote commit: 67a6a85
+- commons audit commit: b271b60
+- commons tag: dataset/ccle-proteomics-nusinow-2020/1.0.0
+- project prep commit: 13885d6
+- project overlay commit: 1f7c70b
+
+Notes / surprises:
+- The first `--apply` attempt failed because the sandbox could not write to
+  `~/d/science-commons`; rerunning with escalation succeeded.
+- `science commons show` initially required `science commons index rebuild`
+  because `registry.sqlite` was absent in `~/d/science-commons`.
+- `science commons show --project` takes the registered project name (`mm30`),
+  not the project id (`multiple-myeloma`).
+- Dry-run dropped only legacy project-note fields `datasets` and `ontologies`.
 
 ---
 
