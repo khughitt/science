@@ -1252,6 +1252,14 @@ def apply_promote(
                     _restore_side_channel_backups(op_id)
                 except (OSError, CommonsError) as restore_exc:
                     detail += f"; data override restore failed: {restore_exc}"
+                try:
+                    _rollback_step5(commons_root_resolved, tags_created, written_canonical_paths)
+                    rolled_back_commit = commons_commit
+                    commons_commit = None
+                    tags_created.clear()
+                    detail += f" (rolled back {rolled_back_commit})"
+                except (OSError, subprocess.CalledProcessError) as rollback_exc:
+                    detail += f"; commons rollback failed: {rollback_exc}"
             raise PromoteWriteError(
                 stage="rewrite_projects",
                 detail=detail,
@@ -1281,10 +1289,24 @@ def apply_promote(
         )
         try:
             audit_path = _write_audit_log(result, commons_root, invocation=invocation)
+        except (OSError, CommonsError) as exc:
+            audit_exc = PromoteWriteError(
+                stage="audit",
+                detail=f"audit log write failed: {exc}",
+                commons_commit=commons_commit,
+                projects_touched=projects_touched,
+            )
+            audit_exc.failure_audit_yaml = _render_audit_log_yaml(  # type: ignore[attr-defined]
+                result,
+                commons_root,
+                invocation=invocation,
+            )
+            raise audit_exc from exc
+        try:
             audit_rel = str(audit_path.relative_to(commons_root))
             _git(commons_root, "add", "--", audit_rel)
             _git(commons_root, "commit", "-m", f"audit: op {op_id}", "--", audit_rel)
-        except (OSError, subprocess.CalledProcessError) as exc:
+        except subprocess.CalledProcessError as exc:
             raise PromoteWriteError(
                 stage="audit",
                 detail=f"audit log write/commit failed: {exc}",
@@ -1311,6 +1333,8 @@ def apply_promote(
         )
 
     except (PromoteInputError, PromoteWriteError, PromoteCandidateError) as exc:
+        if getattr(exc, "stage", None) == "audit" and hasattr(exc, "failure_audit_yaml"):
+            raise
         stage = getattr(exc, "stage", None) or current_stage
         audit_path, audit_yaml = _write_failure_audit_log(
             op_id=op_id,

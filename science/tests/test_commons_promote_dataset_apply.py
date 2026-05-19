@@ -66,6 +66,29 @@ def _git_stdout(root: Path, *args: str) -> str:
     ).stdout.strip()
 
 
+def _snapshot_state(commons: Path, data_yaml: Path) -> dict[str, Any]:
+    """Capture pre-apply state for byte-identity rollback assertions."""
+    artifact_paths = [
+        commons / "datasets" / "fixture-ds" / "entity.md",
+        commons / "datasets" / "fixture-ds" / "datapackage.yaml",
+        commons / "datasets" / "fixture-ds" / "recipe" / "README.md",
+    ]
+    return {
+        "head": _git_stdout(commons, "rev-parse", "HEAD"),
+        "tags": _git_stdout(commons, "tag", "-l"),
+        "artifacts": {
+            str(path.relative_to(commons)): path.read_bytes() if path.is_file() else None
+            for path in artifact_paths
+        },
+        "data_yaml": data_yaml.read_bytes() if data_yaml.is_file() else None,
+    }
+
+
+def _assert_rolled_back(commons: Path, data_yaml: Path, before: dict[str, Any]) -> None:
+    after = _snapshot_state(commons, data_yaml)
+    assert after == before
+
+
 def test_dataset_apply_writes_three_artifacts_commit_tag_override_overlay(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -203,7 +226,7 @@ def test_dataset_apply_audit_log_tolerates_malformed_optional_extras(
     assert decision["dropped_fields"] == []
 
 
-def test_dataset_apply_overlay_failure_restores_side_channel(
+def test_rollback_overlay_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -216,9 +239,8 @@ def test_dataset_apply_overlay_failure_restores_side_channel(
     )
 
     proj, commons = _setup(tmp_path, monkeypatch)
-    before_head = _git_stdout(commons, "rev-parse", "HEAD")
     data_yaml = tmp_path / ".config" / "science" / "data.yaml"
-    assert not data_yaml.exists()
+    before = _snapshot_state(commons, data_yaml)
 
     discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
     plan = plan_promote(
@@ -244,16 +266,186 @@ def test_dataset_apply_overlay_failure_restores_side_channel(
             invocation="science commons promote dataset --from proj-dataset --apply",
         )
 
-    assert not data_yaml.exists()
+    _assert_rolled_back(commons, data_yaml, before)
     assert not list((tmp_path / ".config" / "science").glob("data.yaml.bak.*"))
-    assert _git_stdout(commons, "rev-parse", "HEAD") != before_head
-    assert _git_stdout(commons, "tag", "-l") == "dataset/fixture-ds/1.0.0"
+    assert "overlay_of: dataset:fixture-ds" not in target_overlay.read_text(encoding="utf-8")
     logs = list((commons / ".migrations").glob("*.yaml"))
     assert len(logs) == 1
     log = yaml.safe_load(logs[0].read_text(encoding="utf-8"))
     [decision] = [entry for entry in log["decisions"] if entry["slug"] == "fixture-ds"]
     assert decision["override_file"].endswith("data.yaml")
     assert decision["override_backup"].endswith(f"data.yaml.bak.{log['op_id']}.absent")
+
+
+def test_rollback_artifact_write_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    _proj, commons = _setup(tmp_path, monkeypatch)
+    data_yaml = tmp_path / ".config" / "science" / "data.yaml"
+    before = _snapshot_state(commons, data_yaml)
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
+    target = commons / "datasets" / "fixture-ds" / "datapackage.yaml"
+    real_write_text = Path.write_text
+
+    def sabotage(self: Path, *args: Any, **kwargs: Any) -> int:
+        if self == target:
+            raise OSError("sim artifact write fail")
+        return real_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", sabotage)
+
+    with pytest.raises(PromoteWriteError, match="write_commons|canonical write"):
+        apply_promote(plan, commons_root=commons, invocation="test")
+
+    _assert_rolled_back(commons, data_yaml, before)
+
+
+def test_rollback_commit_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        _git,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    _proj, commons = _setup(tmp_path, monkeypatch)
+    data_yaml = tmp_path / ".config" / "science" / "data.yaml"
+    before = _snapshot_state(commons, data_yaml)
+    real_git = _git
+
+    def sabotage(commons_root: Path, *args: str, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        if args[:1] == ("commit",):
+            raise subprocess.CalledProcessError(1, args, stderr=b"sim commit fail")
+        return real_git(commons_root, *args, **kwargs)
+
+    monkeypatch.setattr("science_tool.commons.promote._git", sabotage)
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
+
+    with pytest.raises(PromoteWriteError, match="commit"):
+        apply_promote(plan, commons_root=commons, invocation="test")
+
+    _assert_rolled_back(commons, data_yaml, before)
+
+
+def test_rollback_tag_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        _git,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    _proj, commons = _setup(tmp_path, monkeypatch)
+    data_yaml = tmp_path / ".config" / "science" / "data.yaml"
+    before = _snapshot_state(commons, data_yaml)
+    real_git = _git
+
+    def sabotage(commons_root: Path, *args: str, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        if args[:1] == ("tag",) and len(args) > 1 and "dataset/" in args[1]:
+            raise subprocess.CalledProcessError(1, args, stderr=b"sim tag fail")
+        return real_git(commons_root, *args, **kwargs)
+
+    monkeypatch.setattr("science_tool.commons.promote._git", sabotage)
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
+
+    with pytest.raises(PromoteWriteError, match="tag"):
+        apply_promote(plan, commons_root=commons, invocation="test")
+
+    _assert_rolled_back(commons, data_yaml, before)
+
+
+def test_rollback_override_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    _proj, commons = _setup(tmp_path, monkeypatch)
+    data_yaml = tmp_path / ".config" / "science" / "data.yaml"
+    before = _snapshot_state(commons, data_yaml)
+
+    def sabotage(**kwargs: Any) -> NoReturn:
+        raise OSError("sim override fail")
+
+    monkeypatch.setattr("science_tool.commons.config._upsert_data_override", sabotage)
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
+
+    with pytest.raises(PromoteWriteError, match="side.channel|override"):
+        apply_promote(plan, commons_root=commons, invocation="test")
+
+    _assert_rolled_back(commons, data_yaml, before)
+
+
+def test_audit_failure_leaves_migration_landed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    _proj, commons = _setup(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "science_tool.commons.promote._write_audit_log",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("sim audit fail")),
+    )
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
+
+    with pytest.raises(PromoteWriteError, match="audit") as exc_info:
+        apply_promote(plan, commons_root=commons, invocation="test")
+
+    assert (commons / "datasets" / "fixture-ds" / "entity.md").is_file()
+    assert "dataset/fixture-ds/1.0.0" in _git_stdout(commons, "tag", "-l")
+    assert hasattr(exc_info.value, "failure_audit_yaml")
+    payload = exc_info.value.failure_audit_yaml
+    assert payload
+
+    parsed = yaml.safe_load(payload)
+    assert parsed["status"] == "ok"
+    assert parsed["op_id"]
+    assert parsed["commons_commit"]
+    assert "dataset/fixture-ds/1.0.0" in parsed["commons_tags"]
+    assert "failure_stage" not in parsed
+
+    migrations = commons / ".migrations"
+    migrations.mkdir(exist_ok=True)
+    target = migrations / f"manual-{parsed['op_id']}.yaml"
+    target.write_text(payload, encoding="utf-8")
+    assert yaml.safe_load(target.read_text(encoding="utf-8")) == parsed
 
 
 def test_dataset_apply_side_channel_failure_unstages_commons_paths(
