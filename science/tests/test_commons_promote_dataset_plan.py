@@ -309,6 +309,10 @@ def _plan_one(tmp_path, monkeypatch):
     return plan.decisions[0], plan, commons
 
 
+class DatasetCanonicalEntityNotWired(Exception):
+    pass
+
+
 def _canonical_entity_content(decision):
     expected_path = Path("datasets/fixture-ds/entity.md")
     entity = next(
@@ -319,10 +323,11 @@ def _canonical_entity_content(decision):
         ),
         None,
     )
-    assert entity is not None, (
-        f"missing canonical entity artifact at {expected_path}; got "
-        f"{[a.path for a in decision.canonical_artifacts]}"
-    )
+    if entity is None:
+        raise DatasetCanonicalEntityNotWired(
+            f"missing canonical entity artifact at {expected_path}; got "
+            f"{[a.path for a in decision.canonical_artifacts]}"
+        )
     return entity.content
 
 
@@ -340,7 +345,11 @@ def _canonical_entity_body(decision):
     return body
 
 
-@pytest.mark.xfail(reason="lands in Task 16", strict=True)
+@pytest.mark.xfail(
+    reason="lands in Task 16",
+    strict=True,
+    raises=DatasetCanonicalEntityNotWired,
+)
 def test_dataset_canonical_entity_emits_required_base_fields(tmp_path, monkeypatch):
     d, _, _ = _plan_one(tmp_path, monkeypatch)
 
@@ -355,7 +364,11 @@ def test_dataset_canonical_entity_emits_required_base_fields(tmp_path, monkeypat
     assert "updated" in fm
 
 
-@pytest.mark.xfail(reason="lands in Task 16", strict=True)
+@pytest.mark.xfail(
+    reason="lands in Task 16",
+    strict=True,
+    raises=DatasetCanonicalEntityNotWired,
+)
 def test_dataset_canonical_entity_datapackage_points_at_sibling(tmp_path, monkeypatch):
     d, _, _ = _plan_one(tmp_path, monkeypatch)
 
@@ -364,7 +377,11 @@ def test_dataset_canonical_entity_datapackage_points_at_sibling(tmp_path, monkey
     assert fm["datapackage"] == "datapackage.yaml"
 
 
-@pytest.mark.xfail(reason="lands in Task 16", strict=True)
+@pytest.mark.xfail(
+    reason="lands in Task 16",
+    strict=True,
+    raises=DatasetCanonicalEntityNotWired,
+)
 def test_dataset_canonical_entity_preserves_tier_verbatim(tmp_path, monkeypatch):
     d, _, _ = _plan_one(tmp_path, monkeypatch)
 
@@ -373,7 +390,11 @@ def test_dataset_canonical_entity_preserves_tier_verbatim(tmp_path, monkeypatch)
     assert "tier: evaluate-next" in content
 
 
-@pytest.mark.xfail(reason="lands in Task 16", strict=True)
+@pytest.mark.xfail(
+    reason="lands in Task 16",
+    strict=True,
+    raises=DatasetCanonicalEntityNotWired,
+)
 def test_dataset_canonical_entity_body_is_preserved(tmp_path, monkeypatch):
     d, _, _ = _plan_one(tmp_path, monkeypatch)
 
