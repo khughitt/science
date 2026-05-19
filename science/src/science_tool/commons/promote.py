@@ -524,7 +524,8 @@ def plan_promote(
         # profile component immediately. Rewrap as PromoteMixinResolutionError
         # so the CLI's standard CommonsError -> ClickException path catches it.
         raise PromoteMixinResolutionError(
-            f"schema_profile references an unknown extension: {exc}"
+            "schema_profile "
+            f"{active_profile.render()} references an unknown extension: {exc}"
         ) from exc
     overlay_field_keys = set(read_overlay_merge_policy())
 
@@ -882,7 +883,8 @@ def _validate_artifact(
             # CLI's standard CommonsError -> ClickException path catches it,
             # matching the plan_promote active-profile setup path.
             raise PromoteMixinResolutionError(
-                f"schema_profile references an unknown extension: {exc}"
+                "schema_profile "
+                f"{fm.get('schema_profile')} references an unknown extension: {exc}"
             ) from exc
         except EntityValidationError as exc:
             raise PromoteValidationError(
