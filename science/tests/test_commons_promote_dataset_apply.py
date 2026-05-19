@@ -448,6 +448,49 @@ def test_audit_failure_leaves_migration_landed(
     assert yaml.safe_load(target.read_text(encoding="utf-8")) == parsed
 
 
+def test_audit_failure_commit_leaves_migration_landed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        _git,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    _proj, commons = _setup(tmp_path, monkeypatch)
+    real_git = _git
+
+    def sabotage(commons_root: Path, *args: str, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        if args[:1] == ("commit",) and any(arg.startswith(".migrations/") for arg in args):
+            raise subprocess.CalledProcessError(1, args, stderr=b"sim audit commit fail")
+        return real_git(commons_root, *args, **kwargs)
+
+    monkeypatch.setattr("science_tool.commons.promote._git", sabotage)
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
+
+    with pytest.raises(PromoteWriteError, match="audit") as exc_info:
+        apply_promote(plan, commons_root=commons, invocation="test")
+
+    assert exc_info.value.stage == "audit"
+    assert (commons / "datasets" / "fixture-ds" / "entity.md").is_file()
+    assert "dataset/fixture-ds/1.0.0" in _git_stdout(commons, "tag", "-l")
+    assert hasattr(exc_info.value, "failure_audit_yaml")
+    payload = exc_info.value.failure_audit_yaml
+    assert payload
+
+    parsed = yaml.safe_load(payload)
+    assert parsed["status"] == "ok"
+    assert parsed["op_id"]
+    assert parsed["commons_commit"]
+    assert "dataset/fixture-ds/1.0.0" in parsed["commons_tags"]
+    assert "failure_stage" not in parsed
+
+
 def test_dataset_apply_side_channel_failure_unstages_commons_paths(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

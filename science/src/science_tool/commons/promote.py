@@ -1307,12 +1307,18 @@ def apply_promote(
             _git(commons_root, "add", "--", audit_rel)
             _git(commons_root, "commit", "-m", f"audit: op {op_id}", "--", audit_rel)
         except subprocess.CalledProcessError as exc:
-            raise PromoteWriteError(
+            audit_exc = PromoteWriteError(
                 stage="audit",
                 detail=f"audit log write/commit failed: {exc}",
                 commons_commit=commons_commit,
                 projects_touched=projects_touched,
-            ) from exc
+            )
+            audit_exc.failure_audit_yaml = _render_audit_log_yaml(  # type: ignore[attr-defined]
+                result,
+                commons_root,
+                invocation=invocation,
+            )
+            raise audit_exc from exc
 
         return PromoteResult(
             op_id=result.op_id,

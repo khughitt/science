@@ -1302,17 +1302,26 @@ def test_apply_promote_step7_audit_failure_does_not_crash_after_landed_writes(
 
     monkeypatch.setattr(promote_module, "_git", sabotaged_git)
 
-    with pytest.raises(PromoteWriteError, match="audit log write/commit failed"):
+    with pytest.raises(PromoteWriteError, match="audit log write/commit failed") as exc_info:
         apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
+
+    assert exc_info.value.stage == "audit"
+    assert hasattr(exc_info.value, "failure_audit_yaml")
+    payload = exc_info.value.failure_audit_yaml
+    assert payload
+    parsed = yaml.safe_load(payload)
+    assert parsed["status"] == "ok"
+    assert parsed["commons_commit"]
+    assert "paper/Adams2025/1.0.0" in parsed["commons_tags"]
+    assert "failure_stage" not in parsed
 
     assert (tmp_path / "commons" / "papers" / "Adams2025.md").exists()
     overlay_text = (proj / "doc" / "papers" / "Adams2025.md").read_text(encoding="utf-8")
     assert "overlay_of: paper:Adams2025" in overlay_text
     logs = list((tmp_path / "commons" / ".migrations").glob("*.yaml"))
-    assert logs, "failure audit log should have been written"
+    assert logs, "success audit log should have been written before commit failed"
     data = yaml.safe_load(logs[0].read_text(encoding="utf-8"))
-    assert data["status"] == "failed"
-    assert data["failure_stage"] == "audit"
+    assert data == parsed
 
 
 def test_apply_promote_step6_partial_rename_records_slug_in_projects_touched(
