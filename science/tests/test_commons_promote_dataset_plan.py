@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 FIXTURES = Path(__file__).parent / "fixtures" / "promote_dataset"
 
 
@@ -254,3 +256,107 @@ resources:
 """
     with pytest.raises(CommonsError, match="hash"):
         parse_canonical_datapackage_yaml(yaml_text)
+
+
+def _plan_one(tmp_path, monkeypatch):
+    """Helper: discover + plan the fixture project. Returns the single decision."""
+    import shutil
+    import subprocess
+
+    src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
+    proj = tmp_path / "proj-dataset"
+    shutil.copytree(src, proj)
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(proj),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "init",
+        ],
+        check=True,
+    )
+    commons = tmp_path / "commons"
+    commons.mkdir()
+    subprocess.run(["git", "init", "-q", str(commons)], check=True)
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda s: proj,
+    )
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        discover_candidates,
+        plan_promote,
+    )
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
+    return plan.decisions[0], plan, commons
+
+
+def _canonical_entity_content(decision):
+    entity = next(
+        a for a in decision.canonical_artifacts if a.path.name == "entity.md"
+    )
+    return entity.content
+
+
+def _canonical_entity_frontmatter(decision):
+    import yaml
+
+    content = _canonical_entity_content(decision)
+    _, fm_raw, _ = content.split("---\n", 2)
+    return yaml.safe_load(fm_raw) or {}
+
+
+@pytest.mark.xfail(reason="lands in Task 16")
+def test_dataset_canonical_entity_emits_required_base_fields(tmp_path, monkeypatch):
+    d, _, _ = _plan_one(tmp_path, monkeypatch)
+
+    fm = _canonical_entity_frontmatter(d)
+
+    assert fm["schema_profile"] == "base/1.0+dataset/1.0"
+    assert fm["id"] == "dataset:fixture-ds"
+    assert fm["type"] == "dataset"
+    assert fm["title"] == "Fixture dataset"
+    assert fm["version"] == "1.0.0"
+    assert "created" in fm
+    assert "updated" in fm
+
+
+@pytest.mark.xfail(reason="lands in Task 16")
+def test_dataset_canonical_entity_datapackage_points_at_sibling(tmp_path, monkeypatch):
+    d, _, _ = _plan_one(tmp_path, monkeypatch)
+
+    fm = _canonical_entity_frontmatter(d)
+
+    assert fm["datapackage"] == "datapackage.yaml"
+
+
+@pytest.mark.xfail(reason="lands in Task 16")
+def test_dataset_canonical_entity_preserves_tier_verbatim(tmp_path, monkeypatch):
+    d, _, _ = _plan_one(tmp_path, monkeypatch)
+
+    content = _canonical_entity_content(d)
+
+    assert "tier: evaluate-next" in content
+
+
+@pytest.mark.xfail(reason="lands in Task 16")
+def test_dataset_canonical_entity_body_is_preserved(tmp_path, monkeypatch):
+    d, _, _ = _plan_one(tmp_path, monkeypatch)
+
+    content = _canonical_entity_content(d)
+
+    assert (
+        "Project-only body content goes here" in content
+        or "Fixture dataset" in content
+    )
