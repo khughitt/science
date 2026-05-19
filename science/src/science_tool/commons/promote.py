@@ -39,7 +39,7 @@ from science_tool.commons.datapackage import (
     render_canonical_datapackage_yaml,
     stream_sha256_and_bytes,
 )
-from science_tool.commons.config import resolve_project_by_id
+from science_tool.commons.config import check_override_conflict, resolve_project_by_id
 from science_tool.commons.errors import (
     PromoteCandidateError,
     PromoteConflictAbort,
@@ -483,6 +483,10 @@ def plan_promote(
                 primary=dataset_primary,
                 candidates=classified,
                 primary_per_resource=dataset_primary_per_resource,
+            )
+            check_override_conflict(
+                slug=canonical_case,
+                planned_path=dataset_primary.datapackage_source_path.parent,
             )
 
         merged, conflicts = _merge_canonical_fields(classified, merge_policy, kind=kind.kind)

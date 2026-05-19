@@ -470,6 +470,59 @@ def test_plan_promote_dataset_produces_three_artifacts(tmp_path, monkeypatch):
     assert extras["override_path"].endswith("data/fixture-ds")
 
 
+def test_plan_dataset_raises_override_conflict(tmp_path, monkeypatch):
+    import shutil
+    import subprocess
+
+    import pytest
+
+    from science_tool.commons.errors import PromoteOverrideConflictError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        discover_candidates,
+        plan_promote,
+    )
+
+    src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
+    proj = tmp_path / "proj-dataset"
+    shutil.copytree(src, proj)
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(proj),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "init",
+        ],
+        check=True,
+    )
+    commons = tmp_path / "commons"
+    commons.mkdir()
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "data.yaml").write_text("fixture-ds: /wrong/path\n", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda s: proj,
+    )
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    assert discovery.failed_candidates == []
+    with pytest.raises(PromoteOverrideConflictError) as exc_info:
+        plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
+
+    assert exc_info.value.slug == "fixture-ds"
+
+
 def test_plan_promote_dataset_rejects_multi_project_resource_byte_mismatch(
     tmp_path, monkeypatch
 ):
