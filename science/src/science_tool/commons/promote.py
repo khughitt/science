@@ -36,6 +36,7 @@ from science_model.entity_schema import (
     read_merge_policy,
     read_overlay_merge_policy,
 )
+from science_model.entity_schema.profile import ProfileComponent
 from science_tool.commons.datapackage import (
     render_canonical_datapackage_yaml,
     stream_sha256_and_bytes,
@@ -204,6 +205,54 @@ PROMOTE_KIND_DATASET = PromoteKindConfig(
     filename_prefix="data-",
     slug_from_id=True,
 )
+
+
+# Bio extension classification used by `_validate_mixin_stacking`.
+_STRUCTURAL_BIO_EXTENSIONS = frozenset({"bio.matrix", "bio.table"})
+_DOMAIN_BIO_EXTENSIONS = frozenset({"bio.rnaseq", "bio.scrna", "bio.cna"})
+
+
+def _validate_mixin_stacking(
+    extensions: tuple["ProfileComponent", ...],
+) -> None:
+    """Enforce Phase H stacking rules on a resolved `--mixin` tuple.
+
+    Rules:
+      - At most one structural mixin (bio.matrix xor bio.table).
+      - At most one domain mixin (bio.rnaseq xor bio.scrna xor bio.cna).
+
+    Unknown bio.* names (e.g. `--mixin bio.bogus/1.0` in explicit form)
+    are NOT rejected here. They sail through to `plan_promote`'s
+    `read_merge_policy(active_profile)` call, where the loader raises
+    `SchemaNotFoundError`; the plan_promote-side try/except (Task 12)
+    catches that and rewraps as `PromoteMixinResolutionError`.
+    `_validate_artifact` (Task 13) also catches the same exception as
+    belt-and-suspenders for the rare case where canonical content
+    already cites a missing extension. Sugar form (`--mixin
+    bio.bogus`) is caught earlier still -- by `_resolve_mixin_arg` in
+    cli.py before plan_promote runs.
+    """
+    from science_tool.commons.errors import PromoteMixinStackingError
+
+    structural: list[str] = []
+    domain: list[str] = []
+    for ext in extensions:
+        if ext.name in _STRUCTURAL_BIO_EXTENSIONS:
+            structural.append(ext.name)
+        elif ext.name in _DOMAIN_BIO_EXTENSIONS:
+            domain.append(ext.name)
+        # else: unknown bio.* extension -- pass through; plan_promote's
+        # active-profile setup will fail loud via SchemaNotFoundError.
+    if len(structural) > 1:
+        raise PromoteMixinStackingError(
+            f"--mixin: at most one structural bio extension allowed "
+            f"(got {structural})."
+        )
+    if len(domain) > 1:
+        raise PromoteMixinStackingError(
+            f"--mixin: at most one domain bio extension allowed "
+            f"(got {domain})."
+        )
 
 
 # --------------------------------------------------------------------------- #
