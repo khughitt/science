@@ -1662,6 +1662,23 @@ def _classify_entity(
     return canonical, project_only, canonical_body, project_only_body
 
 
+def _dataset_dropped_fields(
+    raw_frontmatter: dict,
+    *,
+    canonical_fields: dict,
+    project_only_fields: dict,
+) -> list[str]:
+    """Return project frontmatter keys that landed in neither bucket.
+
+    These are keys not recognized by base, dataset mixin, or overlay-1.1 schemas;
+    promote drops them silently from output but records them in the audit log.
+
+    Convention: keys starting with `_` are intentional metadata/sentinels and not reported.
+    """
+    routed = set(canonical_fields) | set(project_only_fields)
+    return sorted(k for k in raw_frontmatter if k not in routed and not k.startswith("_"))
+
+
 # --------------------------------------------------------------------------- #
 # Multi-instance merge helpers (Task 12)                                       #
 # --------------------------------------------------------------------------- #

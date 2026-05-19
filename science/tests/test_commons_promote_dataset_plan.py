@@ -423,3 +423,40 @@ def test_render_dataset_recipe_stub_handles_missing_source_hint():
 
     assert "Recipe back-fill needed" in text
     assert "unspecified" in text.lower()
+
+
+def test_dataset_dropped_fields_records_unrouted_keys():
+    """Project keys not in canonical or overlay buckets are recorded as dropped."""
+    from science_tool.commons.promote import _dataset_dropped_fields
+
+    raw_fm = {
+        "id": "dataset:x",
+        "type": "dataset",
+        "title": "T",
+        "datapackage": "data/x/datapackage.json",
+        "origin": "external",
+        "tier": "track",
+        "access": {"level": "public", "verified": True},
+        "tags": ["a"],
+        "ontologies": ["bio"],
+        "datasets": ["dataset:y"],
+        "pin_version": "1.0.0",
+        "relevance": "high",
+    }
+    canonical_fields = {
+        "id": "dataset:x",
+        "type": "dataset",
+        "title": "T",
+        "datapackage": "data/x/datapackage.json",
+        "origin": "external",
+        "tier": "track",
+        "access": {"level": "public", "verified": True},
+        "tags": ["a"],
+    }
+    project_only_fields = {"pin_version": "1.0.0", "relevance": "high"}
+    dropped = _dataset_dropped_fields(
+        raw_fm,
+        canonical_fields=canonical_fields,
+        project_only_fields=project_only_fields,
+    )
+    assert set(dropped) == {"ontologies", "datasets"}
