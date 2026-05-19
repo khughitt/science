@@ -173,6 +173,57 @@ def test_render_canonical_datapackage_rejects_conflicting_metadata_aliases():
         )
 
 
+def test_render_canonical_datapackage_rejects_cross_resource_alias_collision():
+    from science_tool.commons.datapackage import render_canonical_datapackage_yaml
+    from science_tool.commons.errors import CommonsError
+    import pytest
+
+    project_doc = {
+        "name": "project-ds",
+        "resources": [
+            {"name": "r1", "path": "r2.txt"},
+            {"name": "r2.txt", "path": "r3.txt"},
+        ],
+    }
+
+    with pytest.raises(CommonsError, match="ambiguous resource alias"):
+        render_canonical_datapackage_yaml(
+            project_doc=project_doc,
+            canonical_slug="fixture-ds",
+            per_resource={
+                "r2.txt": ("sha256:" + "a" * 64, 12),
+                "r3.txt": ("sha256:" + "b" * 64, 13),
+            },
+        )
+
+
+def test_render_canonical_datapackage_rejects_missing_or_empty_resources():
+    from science_tool.commons.datapackage import render_canonical_datapackage_yaml
+    from science_tool.commons.errors import CommonsError
+    import pytest
+
+    for project_doc in ({"name": "project-ds"}, {"name": "project-ds", "resources": []}):
+        with pytest.raises(CommonsError, match="resources"):
+            render_canonical_datapackage_yaml(
+                project_doc=project_doc,
+                canonical_slug="fixture-ds",
+                per_resource={},
+            )
+
+
+def test_render_canonical_datapackage_rejects_non_list_resources():
+    from science_tool.commons.datapackage import render_canonical_datapackage_yaml
+    from science_tool.commons.errors import CommonsError
+    import pytest
+
+    with pytest.raises(CommonsError, match="resources"):
+        render_canonical_datapackage_yaml(
+            project_doc={"name": "project-ds", "resources": {"path": "r1.txt"}},
+            canonical_slug="fixture-ds",
+            per_resource={},
+        )
+
+
 def test_parse_canonical_datapackage_yaml_round_trip():
     from science_tool.commons.datapackage import parse_canonical_datapackage_yaml
 

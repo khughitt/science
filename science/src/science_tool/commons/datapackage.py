@@ -113,8 +113,13 @@ def render_canonical_datapackage_yaml(
             continue
         out[key] = value
 
+    raw_resources = project_doc.get("resources")
+    if not isinstance(raw_resources, list) or not raw_resources:
+        raise CommonsError("project datapackage has a missing or empty 'resources' list")
+    _validate_resource_aliases(raw_resources)
+
     resources = []
-    for index, resource in enumerate(project_doc.get("resources", [])):
+    for index, resource in enumerate(raw_resources):
         if not isinstance(resource, dict):
             raise CommonsError(f"resources[{index}] is not a mapping")
         rendered_resource = {
@@ -135,19 +140,41 @@ def render_canonical_datapackage_yaml(
     return yaml.safe_dump(out, sort_keys=False, allow_unicode=True)
 
 
+def _validate_resource_aliases(resources: list) -> None:
+    aliases: dict[str, int] = {}
+    for index, resource in enumerate(resources):
+        if not isinstance(resource, dict):
+            raise CommonsError(f"resources[{index}] is not a mapping")
+        for alias in _resource_aliases(resource):
+            previous_index = aliases.get(alias)
+            if previous_index is not None and previous_index != index:
+                raise CommonsError(
+                    f"ambiguous resource alias {alias!r} used by "
+                    f"resources[{previous_index}] and resources[{index}]"
+                )
+            aliases[alias] = index
+
+
+def _resource_aliases(resource: dict) -> set[str]:
+    aliases = set()
+    for field in ("name", "path"):
+        value = resource.get(field)
+        if isinstance(value, str):
+            aliases.add(value)
+    return aliases
+
+
 def _metadata_for_resource(
     *,
     resource: dict,
     resource_index: int,
     per_resource: dict[str, tuple[str, int]],
 ) -> tuple[str, int]:
-    keys = []
-    for field in ("name", "path"):
-        value = resource.get(field)
-        if isinstance(value, str):
-            keys.append(value)
-
-    matches = {key: per_resource[key] for key in keys if key in per_resource}
+    matches = {
+        key: per_resource[key]
+        for key in _resource_aliases(resource)
+        if key in per_resource
+    }
     if not matches:
         raise CommonsError(
             f"resources[{resource_index}] is missing computed hash/bytes metadata"
