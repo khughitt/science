@@ -276,6 +276,46 @@ def test_render_canonical_dates_are_quoted_strings() -> None:
     assert fm["created"] == "2026-05-15"
 
 
+def test_render_canonical_uses_active_profile() -> None:
+    from science_model.entity_schema.profile import ProfileComponent
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        PromoteDecision,
+        _active_profile,
+        _render_canonical,
+    )
+
+    extended_profile = _active_profile(
+        PROMOTE_KIND_DATASET,
+        (ProfileComponent(name="bio.matrix", version="1.0"),),
+    )
+    decision = PromoteDecision(
+        slug="matrix-set",
+        canonical_artifacts=[
+            CanonicalArtifact(
+                path=Path("datasets/matrix-set/entity.md"),
+                content="",
+                validator="entity-mixin",
+            )
+        ],
+        canonical_version="1.0.0",
+        overlays={},
+        resolved_conflicts=(),
+    )
+
+    rendered = _render_canonical(
+        decision,
+        canonical_fields={"title": "Matrix set"},
+        canonical_body={},
+        created=date(2026, 5, 15),
+        updated=date(2026, 5, 15),
+        kind=PROMOTE_KIND_DATASET,
+        active_profile=extended_profile,
+    )
+
+    assert "schema_profile: science-entity-base/1.0+dataset/1.0+bio.matrix/1.0" in rendered
+
+
 def test_render_canonical_paper_emits_bibkey_field() -> None:
     """Paper canonicals still emit bibkey: <slug> in frontmatter."""
     from science_tool.commons.promote import (

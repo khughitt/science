@@ -705,10 +705,8 @@ def plan_promote(
         )
         primary = dataset_primary if dataset_primary is not None else classified[0]
         # NOTE: design §4.1.1 says `created` / `updated` should reflect the
-        # apply timestamp, not the plan timestamp. We render here with
-        # plan-day dates so the dry-run summary can show concrete content;
-        # apply_promote (Task 16) re-renders with the actual write-time
-        # timestamp before committing. The pre-render is informational only.
+        # apply timestamp, but apply_promote currently writes this rendered
+        # artifact content directly.
         canonical_body = primary.canonical_body
         if kind.kind == "dataset":
             canonical_body = {**primary.project_only_body, **primary.canonical_body}
