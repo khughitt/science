@@ -244,6 +244,25 @@ class PromoteConflictAbort(CommonsError):
     """
 
 
+class PromoteOverrideConflictError(CommonsError):
+    """A planned dataset override conflicts with an existing target path."""
+
+    def __init__(
+        self,
+        *,
+        slug: str,
+        existing_path: Path,
+        planned_path: Path,
+    ) -> None:
+        super().__init__(
+            f"dataset {slug!r} override conflicts: "
+            f"existing path {existing_path} differs from planned path {planned_path}"
+        )
+        self.slug = slug
+        self.existing_path = existing_path
+        self.planned_path = planned_path
+
+
 class PromoteWriteError(CommonsError):
     """IO / git failure during apply steps 4–7.
 
