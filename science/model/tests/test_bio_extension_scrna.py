@@ -65,6 +65,12 @@ def test_assay_enum_rejects_unknown(base_scrna_entity: dict) -> None:
         EntityValidator().validate(base_scrna_entity)
 
 
+def test_missing_species_fails(base_scrna_entity: dict) -> None:
+    fm = {k: v for k, v in base_scrna_entity.items() if k != "species"}
+    with pytest.raises(EntityValidationError, match="species"):
+        EntityValidator().validate(fm)
+
+
 def test_missing_assay_fails(base_scrna_entity: dict) -> None:
     fm = {k: v for k, v in base_scrna_entity.items() if k != "assay"}
     with pytest.raises(EntityValidationError, match="assay"):
