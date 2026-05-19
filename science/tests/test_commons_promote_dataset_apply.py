@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -56,6 +57,15 @@ def _setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]
     return proj, commons
 
 
+def _git_stdout(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(root), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
 def test_dataset_apply_writes_three_artifacts_commit_tag_override_overlay(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -97,7 +107,54 @@ def test_dataset_apply_writes_three_artifacts_commit_tag_override_overlay(
     assert len(backup_markers) == 1
     assert backup_markers[0].name.endswith(".absent")
 
-    overlay = proj / "doc" / "datasets" / "fixture-ds.md"
+    overlay = proj / "doc" / "datasets" / "data-fixture-ds.md"
     overlay_text = overlay.read_text(encoding="utf-8")
     assert "overlay_of: dataset:fixture-ds" in overlay_text
     assert "pin_version" in overlay_text
+
+
+def test_dataset_apply_overlay_failure_restores_side_channel(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    proj, commons = _setup(tmp_path, monkeypatch)
+    before_head = _git_stdout(commons, "rev-parse", "HEAD")
+    data_yaml = tmp_path / ".config" / "science" / "data.yaml"
+    assert not data_yaml.exists()
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(
+        discovery,
+        commons_root=commons,
+        kind=PROMOTE_KIND_DATASET,
+        from_order=["proj-dataset"],
+    )
+    target_overlay = proj / "doc" / "datasets" / "data-fixture-ds.md"
+    real_write_text = Path.write_text
+
+    def sabotage(self: Path, *args: Any, **kwargs: Any) -> int:
+        if self == target_overlay:
+            raise OSError("sim overlay fail")
+        return real_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", sabotage)
+
+    with pytest.raises(PromoteWriteError, match="overlay write failed"):
+        apply_promote(
+            plan,
+            commons_root=commons,
+            invocation="science commons promote dataset --from proj-dataset --apply",
+        )
+
+    assert not data_yaml.exists()
+    assert not list((tmp_path / ".config" / "science").glob("data.yaml.bak.*"))
+    assert _git_stdout(commons, "rev-parse", "HEAD") != before_head
+    assert _git_stdout(commons, "tag", "-l") == "dataset/fixture-ds/1.0.0"

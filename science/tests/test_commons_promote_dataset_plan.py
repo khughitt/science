@@ -456,6 +456,8 @@ def test_plan_promote_dataset_produces_three_artifacts(tmp_path, monkeypatch):
     import yaml
 
     overlay = plan.decisions[0].overlays["proj-dataset"]
+    assert overlay.path.name == "data-fixture-ds.md"
+    assert overlay.rename_from is None
     overlay_fm = yaml.safe_load(overlay.after_content.split("---\n", 2)[1])
     assert overlay_fm["overlay_of"] == "dataset:fixture-ds"
     assert overlay_fm["source"] == "data/fixture-ds/datapackage.json"

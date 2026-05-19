@@ -507,7 +507,7 @@ def plan_promote(
         # directory and is NOT the source file itself, the group is un-promotable.
         for c in classified:
             source_path = c.overlay_source_path
-            target_path = c.project_root / kind.overlay_dest_subdir / f"{canonical_case}.md"
+            target_path = _overlay_target_path(c, kind=kind, canonical_case=canonical_case)
             if source_path.name != target_path.name and target_path.exists():
                 raise PromoteInputError(
                     f"case-rename collision in {c.project_slug}: cannot rename "
@@ -570,7 +570,7 @@ def plan_promote(
         overlays: dict[str, OverlayRewrite] = {}
         for c in classified:
             source_path = c.overlay_source_path
-            target_path = c.project_root / kind.overlay_dest_subdir / f"{canonical_case}.md"
+            target_path = _overlay_target_path(c, kind=kind, canonical_case=canonical_case)
             rename_from = source_path if source_path.name != target_path.name else None
             unlinked_source = source_path if source_path.parent != target_path.parent else None
             if rename_from is not None and target_path.exists():
@@ -1025,6 +1025,12 @@ def _audit_failure_detail(failure_detail: str, plan: PromotePlan) -> str:
     return detail
 
 
+def _restore_side_channel_backups(op_id: str) -> None:
+    from science_tool.commons.config import restore_data_override_from_backup
+
+    restore_data_override_from_backup(op_id=op_id)
+
+
 def apply_promote(
     plan: PromotePlan,
     commons_root: Path,
@@ -1193,11 +1199,9 @@ def apply_promote(
                         )
                     )
             except (OSError, CommonsError) as exc:
-                from science_tool.commons.config import restore_data_override_from_backup
-
                 detail = f"side-channel apply failed: {exc}"
                 try:
-                    restore_data_override_from_backup(op_id=op_id)
+                    _restore_side_channel_backups(op_id)
                 except (OSError, CommonsError) as restore_exc:
                     detail += f"; data override restore failed: {restore_exc}"
                 _rollback_step5(commons_root_resolved, tags_created, written_canonical_paths)
@@ -1232,9 +1236,15 @@ def apply_promote(
             if current_rewrite is not None and current_rewrite not in rewrites_to_restore:
                 rewrites_to_restore.append(current_rewrite)
             _restore_project_rewrites_to_head(rewrites_to_restore, plan.kind)
+            detail = f"overlay write failed: {exc}"
+            if side_channel_results:
+                try:
+                    _restore_side_channel_backups(op_id)
+                except (OSError, CommonsError) as restore_exc:
+                    detail += f"; data override restore failed: {restore_exc}"
             raise PromoteWriteError(
                 stage="rewrite_projects",
-                detail=f"overlay write failed: {exc}",
+                detail=detail,
                 commons_commit=commons_commit,
                 projects_touched=projects_touched,
             ) from exc
@@ -1900,6 +1910,18 @@ def _primary_candidate_for_plan(
 
 def _project_relative_posix(project_root: Path, path: Path) -> str:
     return path.relative_to(project_root).as_posix()
+
+
+def _overlay_target_path(
+    candidate: PromoteCandidate,
+    *,
+    kind: PromoteKindConfig,
+    canonical_case: str,
+) -> Path:
+    filename = f"{canonical_case}.md"
+    if kind.kind == "dataset":
+        filename = f"{kind.filename_prefix}{canonical_case}.md"
+    return candidate.project_root / kind.overlay_dest_subdir / filename
 
 
 def _dataset_per_resource(candidate: PromoteCandidate) -> dict[str, tuple[str, int]]:
