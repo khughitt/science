@@ -1415,10 +1415,26 @@ Inside the body, replace lines 439–440:
 merge_policy = read_merge_policy(kind.default_profile)
 body_sections = read_canonical_body_sections(kind.default_profile)
 # After:
+from science_model.entity_schema.loader import SchemaNotFoundError
+from science_tool.commons.errors import PromoteMixinResolutionError
+
 active_profile = _active_profile(kind, mixin_extensions)
-merge_policy = read_merge_policy(active_profile)
-body_sections = read_canonical_body_sections(active_profile)
+try:
+    merge_policy = read_merge_policy(active_profile)
+    body_sections = read_canonical_body_sections(active_profile)
+except SchemaNotFoundError as exc:
+    # An unknown bio.* extension cited by --mixin (explicit form, e.g.
+    # bio.bogus/1.0) surfaces here — read_merge_policy walks every
+    # profile component immediately (merge.py:26). Rewrap as
+    # PromoteMixinResolutionError so the CLI's standard CommonsError
+    # → ClickException path catches it. (Sugar form is caught earlier
+    # by _resolve_mixin_arg; this branch handles explicit form.)
+    raise PromoteMixinResolutionError(
+        f"schema_profile references an unknown extension: {exc}"
+    ) from exc
 ```
+
+The same `SchemaNotFoundError` could in principle surface again later in `_validate_artifact` (Task 13), but only on a bare promote whose canonical content somehow already cites a missing extension — a programming error, not a CLI input error. The Task 13 catch stays in place as belt-and-suspenders.
 
 - [ ] **Step 3: Pass `active_profile` to `_render_canonical`**
 
@@ -1575,6 +1591,43 @@ def test_plan_promote_with_mixin_extensions_emits_extended_schema_profile(
     assert "value_dtype: int32" in canonical.content
     assert "feature_axis: rows" in canonical.content
     assert "Homo sapiens" in canonical.content
+
+
+def test_plan_promote_with_unknown_explicit_mixin_raises_resolution_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit-form unknown extension (--mixin bio.bogus/1.0) reaches
+    plan_promote, where read_merge_policy(active_profile) immediately
+    tries to load the missing schema. The SchemaNotFoundError raised by
+    the loader must be caught and rewrapped as
+    PromoteMixinResolutionError so the CLI surfaces a consistent error
+    for both sugar and explicit forms."""
+    from science_tool.commons.bootstrap import init_commons
+    from science_tool.commons.errors import PromoteMixinResolutionError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        discover_candidates,
+        plan_promote,
+    )
+
+    proj = _project_tree_with_rnaseq(tmp_path)
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda _slug: proj,
+    )
+
+    commons = tmp_path / "commons"
+    init_commons(commons)
+
+    discovery = discover_candidates(["proj-rnaseq"], PROMOTE_KIND_DATASET)
+
+    with pytest.raises(PromoteMixinResolutionError, match="bio.bogus"):
+        plan_promote(
+            discovery,
+            commons_root=commons,
+            kind=PROMOTE_KIND_DATASET,
+            mixin_extensions=(ProfileComponent(name="bio.bogus", version="1.0"),),
+        )
 ```
 
 - [ ] **Step 5: Run to verify it passes**
@@ -2440,7 +2493,9 @@ def test_resolver_picks_numeric_highest_not_lexicographic(
     """If extension-bio-matrix-1.10.json and extension-bio-matrix-1.9.json
     coexist, sugar `bio.matrix` must resolve to 1.10 (numeric max), not 1.9
     (lexicographic max). Simulate by patching the schemas package's
-    resource iterator."""
+    resource iterator. We deliberately include ONLY 1.9 and 1.10 so the
+    test fails under a lexicographic implementation — adding 2.0 to the
+    set would mask the bug because 2.0 wins under both orderings."""
     from types import SimpleNamespace
 
     from science_tool.commons.cli import _resolve_mixin_arg
@@ -2448,7 +2503,6 @@ def test_resolver_picks_numeric_highest_not_lexicographic(
     fake_resources = [
         SimpleNamespace(name="extension-bio-matrix-1.9.json"),
         SimpleNamespace(name="extension-bio-matrix-1.10.json"),
-        SimpleNamespace(name="extension-bio-matrix-2.0.json"),
         SimpleNamespace(name="other-file.json"),  # filtered out
     ]
 
@@ -2463,7 +2517,7 @@ def test_resolver_picks_numeric_highest_not_lexicographic(
 
     resolved = _resolve_mixin_arg("bio.matrix")
     assert resolved.name == "bio.matrix"
-    assert resolved.version == "2.0"
+    assert resolved.version == "1.10"   # numeric max; lexicographic would give "1.9"
 
 
 def test_mixin_on_paper_kind_yields_usage_error(
@@ -2490,7 +2544,21 @@ def test_mixin_on_paper_kind_yields_usage_error(
 - [ ] **Step 2: Run to verify they pass**
 
 Run: `uv run pytest science/tests/test_commons_promote_dataset_mixin.py -v`
-Expected: all (1 happy-path + 5 failure-case) tests pass.
+Expected: 11 passed. Breakdown:
+- 1 happy-path (from Task 16: `test_promote_dataset_with_matrix_and_rnaseq_succeeds`)
+- 4 stacking-rule / unknown-extension CLI cases
+  (`test_two_structural_mixins_rejected`,
+  `test_two_domain_mixins_rejected`,
+  `test_sugar_form_unknown_mixin_rejected`,
+  `test_explicit_form_unknown_mixin_rejected`)
+- 5 `_resolve_mixin_arg` edge-case unit tests
+  (`test_resolver_rejects_non_bio_name`,
+  `test_resolver_rejects_bio_with_empty_suffix`,
+  `test_resolver_rejects_leading_slash`,
+  `test_resolver_rejects_non_numeric_version`,
+  `test_resolver_picks_numeric_highest_not_lexicographic`)
+- 1 wrong-kind UsageError
+  (`test_mixin_on_paper_kind_yields_usage_error`)
 
 - [ ] **Step 3: Commit**
 
