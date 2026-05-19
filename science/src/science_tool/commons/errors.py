@@ -163,21 +163,24 @@ class PromoteInputError(CommonsError):
 
 class PromoteMixinStackingError(PromoteInputError):
     """`--mixin` flag violated the stacking rule (more than one structural
-    mixin, or more than one domain mixin). Raised both in the CLI parse path
-    and in plan_promote itself so direct Python callers cannot bypass the rule.
+    mixin, or more than one domain mixin).
+
+    Intended for Phase H paths in both the CLI parse path and plan_promote so
+    direct Python callers cannot bypass the rule.
     """
 
 
 class PromoteMixinResolutionError(PromoteInputError):
     """`--mixin` could not be resolved to an installed bio extension schema.
 
-    Raised for two paths, unified for operator UX:
+    Intended for Phase H resolution paths, unified for operator UX:
     - Sugar form (`--mixin bio.bogus`): no `extension-bio-bogus-*.json` on disk.
     - Explicit form (`--mixin bio.bogus/1.0`): SchemaNotFoundError surfaces
       during `plan_promote`'s `read_merge_policy(active_profile)` setup and
-      is caught + rewrapped there. `_validate_artifact` also catches the same
-      exception as a belt-and-suspenders guard for already-rendered canonical
-      content that cites a missing extension.
+      is caught + rewrapped there.
+    - `_validate_artifact` can use the same exception path as a
+      belt-and-suspenders guard for already-rendered canonical content that
+      cites a missing extension.
     """
 
 

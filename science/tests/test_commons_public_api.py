@@ -53,6 +53,9 @@ def test_public_api_exports() -> None:
         "build_commons_inventory",
         # Phase G
         "PromoteOverrideConflictError",
+        # Phase H
+        "PromoteMixinResolutionError",
+        "PromoteMixinStackingError",
     }
     assert expected.issubset(set(pkg.__all__))
     for name in expected:
