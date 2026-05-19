@@ -108,6 +108,10 @@ def _load_data_yaml_mapping(yaml_path: Path) -> dict[str, str]:
         if isinstance(node, yaml.MappingNode):
             seen_keys: set[str] = set()
             for key_node, _ in node.value:
+                if not isinstance(key_node, yaml.ScalarNode):
+                    raise CommonsError(
+                        f"{yaml_path}: data override keys must be strings"
+                    )
                 key = key_node.value
                 if key in seen_keys:
                     raise CommonsError(f"{yaml_path}: duplicate key {key!r}")

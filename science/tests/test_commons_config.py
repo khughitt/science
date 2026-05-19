@@ -184,6 +184,18 @@ def test_load_data_overrides_rejects_duplicate_keys(
         load_data_overrides()
 
 
+def test_load_data_overrides_rejects_complex_keys(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "data.yaml").write_text("? [a, b]\n: /x\n", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    with pytest.raises(CommonsError, match="keys must be strings"):
+        load_data_overrides()
+
+
 def test_load_data_overrides_rejects_malformed_yaml(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
