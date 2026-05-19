@@ -1053,6 +1053,75 @@ def test_apply_promote_project_rollback_preserves_dirty_non_target(tmp_path, mon
     assert (proj / "other.txt").read_text(encoding="utf-8") == "dirty WIP\n"
 
 
+def test_apply_promote_reports_project_rollback_checkout_failure(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """If project rollback itself fails, the PromoteWriteError detail must say
+    so instead of silently swallowing the failed checkout."""
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    _init_commons(tmp_path / "commons")
+    proj = _build_project(
+        tmp_path,
+        "proj-a",
+        {
+            "Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n",
+            "Bravo2024.md": "---\nid: paper:Bravo2024\ntitle: B\n---\n",
+        },
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+    discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
+    plan = plan_promote(
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
+    )
+    first_overlay = plan.decisions[0].overlays["proj-a"]
+    second_overlay = plan.decisions[1].overlays["proj-a"]
+    real_run = subprocess.run
+
+    def sabotage_run(*args, **kwargs):
+        cmd = args[0] if args else kwargs.get("args")
+        if (
+            isinstance(cmd, list)
+            and len(cmd) >= 7
+            and cmd[0] == "git"
+            and cmd[3:6] == ["checkout", "HEAD", "--"]
+            and cmd[-1] == str(first_overlay.path.relative_to(proj))
+        ):
+            if kwargs.get("check"):
+                raise subprocess.CalledProcessError(
+                    1,
+                    cmd,
+                    stderr="sim rollback fail",
+                )
+            return subprocess.CompletedProcess(cmd, 1, stderr="sim rollback fail")
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", sabotage_run)
+    second_overlay.path.chmod(0o444)
+    try:
+        with pytest.raises(PromoteWriteError) as exc_info:
+            apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
+    finally:
+        second_overlay.path.chmod(0o644)
+
+    assert "overlay write failed" in str(exc_info.value)
+    assert "project rewrite restore failed" in str(exc_info.value)
+
+
 def test_apply_promote_preflight_failure_audit_omits_projects_touched(
     tmp_path,
     monkeypatch,

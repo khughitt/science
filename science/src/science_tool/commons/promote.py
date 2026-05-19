@@ -916,7 +916,8 @@ def _restore_project_rewrites_to_head(
             if existed:
                 subprocess.run(
                     ["git", "-C", str(project_root), "checkout", "HEAD", "--", str(rel)],
-                    check=False,
+                    check=True,
+                    capture_output=True,
                 )
             else:
                 path.unlink(missing_ok=True)
