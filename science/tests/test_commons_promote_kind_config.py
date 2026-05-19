@@ -118,6 +118,62 @@ def test_dataset_side_channel_apply_writes_data_yaml_and_reports_absent_backup(
     assert absent_backup.is_file()
 
 
+def test_dataset_side_channel_apply_reports_existing_file_backup(
+    tmp_path, monkeypatch
+) -> None:
+    import yaml
+
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        PromoteDecision,
+        PromotePlan,
+        SideChannelContext,
+    )
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    existing_content = "other: /data/other\n"
+    (cfg_dir / "data.yaml").write_text(existing_content, encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    override_path = tmp_path / "bulk" / "fixture-ds"
+    decision = PromoteDecision(
+        slug="fixture-ds",
+        canonical_artifacts=[],
+        canonical_version="1.0.0",
+        overlays={},
+        resolved_conflicts=(),
+    )
+    plan = PromotePlan(
+        decisions=[decision],
+        failed_candidates=[],
+        kind=PROMOTE_KIND_DATASET,
+        dataset_audit_extras={
+            "fixture-ds": {"override_path": str(override_path)},
+        },
+    )
+    side_channel_apply = PROMOTE_KIND_DATASET.side_channel_apply
+    assert side_channel_apply is not None
+
+    result = side_channel_apply(
+        SideChannelContext(
+            decision=decision,
+            plan=plan,
+            commons_root=tmp_path / "commons",
+            op_id="opBACKUP",
+        )
+    )
+
+    yaml_path = cfg_dir / "data.yaml"
+    backup_path = cfg_dir / "data.yaml.bak.opBACKUP"
+    assert result.artifact_paths == [yaml_path]
+    assert result.backup_paths == [backup_path]
+    assert backup_path.read_text(encoding="utf-8") == existing_content
+    assert yaml.safe_load(yaml_path.read_text(encoding="utf-8")) == {
+        "fixture-ds": str(override_path),
+        "other": "/data/other",
+    }
+
+
 def test_eligibility_verdict_enum_values() -> None:
     from science_tool.commons.promote import EligibilityVerdict
 
@@ -262,7 +318,7 @@ def test_canonical_artifact_is_frozen_and_holds_three_fields() -> None:
     import pytest
 
     with pytest.raises(dataclasses.FrozenInstanceError):
-        art.content = "mutated"
+        setattr(art, "content", "mutated")
 
 
 def test_canonical_artifact_validator_literal_rejects_unknown() -> None:

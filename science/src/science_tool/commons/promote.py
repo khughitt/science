@@ -40,7 +40,6 @@ from science_tool.commons.datapackage import (
     stream_sha256_and_bytes,
 )
 from science_tool.commons.config import check_override_conflict, resolve_project_by_id
-from science_tool.commons.config import _data_yaml_path, upsert_data_override
 from science_tool.commons.errors import (
     PromoteCandidateError,
     PromoteConflictAbort,
@@ -72,7 +71,18 @@ class SideChannelResult:
 
 
 def _dataset_side_channel_apply(ctx: SideChannelContext) -> SideChannelResult:
-    override_path = ctx.plan.dataset_audit_extras[ctx.decision.slug]["override_path"]
+    from science_tool.commons.config import (
+        _data_yaml_path,
+        upsert_data_override,
+    )
+
+    extras = ctx.plan.dataset_audit_extras.get(ctx.decision.slug)
+    if extras is None or "override_path" not in extras:
+        raise PromoteCandidateError(
+            "dataset side-channel apply requires override_path audit extra",
+            slug=ctx.decision.slug,
+        )
+    override_path = extras["override_path"]
     upsert_data_override(
         slug=ctx.decision.slug,
         absolute_path=Path(override_path),
@@ -107,9 +117,9 @@ class PromoteKindConfig:
     mixin_schema_id: str
     default_profile: "ProfileString"
     eligibility_filter: Callable[[Mapping[str, Any]], "EligibilityVerdict"] | None
-    side_channel_apply: Callable[[SideChannelContext], SideChannelResult] | None = None
     filename_prefix: str = ""
     slug_from_id: bool = False
+    side_channel_apply: Callable[[SideChannelContext], SideChannelResult] | None = None
 
 
 PROMOTE_KIND_PAPER = PromoteKindConfig(
