@@ -1235,8 +1235,11 @@ def apply_promote(
             rewrites_to_restore = list(written_rewrites)
             if current_rewrite is not None and current_rewrite not in rewrites_to_restore:
                 rewrites_to_restore.append(current_rewrite)
-            _restore_project_rewrites_to_head(rewrites_to_restore, plan.kind)
             detail = f"overlay write failed: {exc}"
+            try:
+                _restore_project_rewrites_to_head(rewrites_to_restore, plan.kind)
+            except (OSError, subprocess.CalledProcessError) as restore_exc:
+                detail += f"; project rewrite restore failed: {restore_exc}"
             if side_channel_results:
                 try:
                     _restore_side_channel_backups(op_id)
@@ -2477,4 +2480,5 @@ def _rollback_step5(
         if exists_at_head:
             _git(commons_root, "checkout", "HEAD", "--", str(rel))
         else:
+            _git(commons_root, "rm", "--cached", "--ignore-unmatch", "--", str(rel), check=False)
             canonical_path.unlink(missing_ok=True)

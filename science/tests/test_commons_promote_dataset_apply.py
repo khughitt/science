@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import pytest
 import yaml
@@ -158,3 +158,49 @@ def test_dataset_apply_overlay_failure_restores_side_channel(
     assert not list((tmp_path / ".config" / "science").glob("data.yaml.bak.*"))
     assert _git_stdout(commons, "rev-parse", "HEAD") != before_head
     assert _git_stdout(commons, "tag", "-l") == "dataset/fixture-ds/1.0.0"
+
+
+def test_dataset_apply_side_channel_failure_unstages_commons_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.commons.errors import PromoteWriteError
+    from dataclasses import replace
+
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        SideChannelContext,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    proj, commons = _setup(tmp_path, monkeypatch)
+    before_head = _git_stdout(commons, "rev-parse", "HEAD")
+    data_yaml = tmp_path / ".config" / "science" / "data.yaml"
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(
+        discovery,
+        commons_root=commons,
+        kind=PROMOTE_KIND_DATASET,
+        from_order=["proj-dataset"],
+    )
+
+    def fail_side_channel(ctx: SideChannelContext) -> NoReturn:
+        raise OSError(f"sim side-channel fail for {ctx.decision.slug}")
+
+    plan = replace(plan, kind=replace(plan.kind, side_channel_apply=fail_side_channel))
+
+    with pytest.raises(PromoteWriteError, match="side-channel apply failed"):
+        apply_promote(
+            plan,
+            commons_root=commons,
+            invocation="science commons promote dataset --from proj-dataset --apply",
+        )
+
+    assert not data_yaml.exists()
+    assert _git_stdout(commons, "rev-parse", "HEAD") == before_head
+    assert _git_stdout(commons, "tag", "-l") == ""
+    status = _git_stdout(commons, "status", "--porcelain")
+    assert "datasets/fixture-ds" not in status
