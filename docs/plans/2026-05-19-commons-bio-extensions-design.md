@@ -138,11 +138,10 @@ before overlay validation runs.
 
 ### 3.4 Composition > inheritance
 
-Mixins do not inherit. Each JSON Schema declares only its own fields
-with Composition is `allOf` at validate
-time. A dataset's typed surface is the structural union of all stacked
-schemas. Adding a future mixin (e.g. `bio.proteomics`) requires no
-changes to the existing five.
+Mixins do not inherit. Each JSON Schema declares only its own fields.
+Composition is `allOf` at validate time. A dataset's typed surface is
+the structural union of all stacked schemas. Adding a future mixin
+(e.g. `bio.proteomics`) requires no changes to the existing five.
 
 ---
 
@@ -151,7 +150,7 @@ changes to the existing five.
 All five files live in `science/model/src/science_model/schemas/`.
 
 **Note on `additionalProperties`.** None of the bio mixins set
-top-level This matches the existing
+top-level `additionalProperties: false`. This matches the existing
 `mixin-dataset-1.0.json` / `mixin-paper-1.0.json` / `mixin-topic-1.0.json`
 / `mixin-theme-1.0.json` pattern. The reason is that the validator
 composes the profile components with plain `{"allOf": parts}`
@@ -329,11 +328,16 @@ subcommand.
 ### 6.1 Option shape
 
 ```
-science commons promote dataset [<entity_id>] \
+science commons promote dataset \
     --from <project>           # required, repeatable (existing)
+    --slug <slug>              # required (existing, v1 single-target)
     --mixin <spec>             # NEW; repeatable
     [--apply] [--limit N] …    # unchanged; dry-run is default
 ```
+
+The dataset command currently rejects a positional `<entity_id>` and
+requires `--slug` (`commons/cli.py:475-502`). Phase H keeps that
+shape; `--mixin` is added alongside `--slug`.
 
 `<spec>` accepts two forms:
 
@@ -386,27 +390,21 @@ In the CLI handler:
    propagates up as a CLI-level error (no writes occur — atomic
    semantics from Phase G).
 
-### 6.3 PromoteKindConfig and pipeline plumbing
+### 6.3 Pipeline plumbing
 
-Phase G's `PromoteKindConfig` dataclass gains one field, defaulted so
-paper / topic / theme are unaffected:
+No new field is added to `PromoteKindConfig`. Kind acceptance is
+expressed structurally: `--mixin` is registered as a Click option only
+on `promote dataset` (in `_promote_from_options` it stays absent;
+`promote dataset` adds it inline alongside `--slug`). Paper / topic /
+theme commands get Click's standard "no such option" error without
+needing any plan-side validation.
 
-```python
-@dataclass(frozen=True, slots=True)
-class PromoteKindConfig:
-    # ... existing fields ...
-    accepts_mixin_extensions: bool = False   # NEW; True only for dataset in v1
-```
-
-The dataset kind config sets `accepts_mixin_extensions=True`. Other
-kinds reject `--mixin` at CLI-parse time with `PromoteValidationError`.
-
-This flag is **not** enough on its own. Phase G's pipeline currently
-reads merge policy and renders canonical from `kind.default_profile`
-in two places (`commons/promote.py:439`, `:2291`); adding only the
-acceptance flag would leave bio fields routed to overlay (then
-silently dropped by the dataset filter at `:481`) and would leave the
-emitted `schema_profile` missing the `+bio.*` segments. Phase H
+Phase G's pipeline currently reads merge policy and renders canonical
+from `kind.default_profile` in two places (`commons/promote.py:439`,
+`:2291`). Without further changes, bio fields would not be in the
+merge policy (they would be routed to overlay and then silently
+dropped by the dataset filter at `:481`) and the emitted
+`schema_profile` would still lack the `+bio.*` segments. Phase H
 threads the resolved extensions through the pipeline:
 
 ```python
@@ -444,8 +442,10 @@ paper/topic/theme/bare-dataset).
   --mixin TEXT     Bio-domain mixin to stack onto schema_profile,
                    e.g. "bio.matrix/1.0" or "bio.rnaseq". Repeatable.
                    At most one structural mixin (bio.matrix or
-                   bio.table); domain mixins (bio.rnaseq, bio.scrna,
-                   bio.cna) may be combined.
+                   bio.table) AND at most one domain mixin
+                   (bio.rnaseq, bio.scrna, or bio.cna). A dataset has
+                   one bio modality; multi-modality resources are
+                   represented as multiple datasets.
 
   Example (bulk RNA-seq counts matrix):
     --mixin bio.matrix --mixin bio.rnaseq
@@ -453,13 +453,19 @@ paper/topic/theme/bare-dataset).
 
 ### 6.5 New error classes
 
-Two new errors, both subclasses of the existing
-`PromoteValidationError`:
+Two new errors, both subclasses of `PromoteInputError`
+(`commons/errors.py:155`). `PromoteInputError` is the existing
+catch-all base for bad input to `science commons promote` and is a
+better fit than `PromoteValidationError`, which is schema-validation
+specific and requires constructor args (`decision_slug`,
+`target_kind`, `project_id`, `schema_message`) that don't apply to
+CLI-input errors.
 
-- `PromoteMixinStackingError` — raised by `_validate_mixin_stacking`
-  when the ≤1 structural / ≤1 domain rule is violated.
-- `PromoteMixinResolutionError` — raised by the CLI sugar resolver
-  when `--mixin bio.bogus` cannot find any matching
+- `PromoteMixinStackingError(message: str)` — raised by
+  `_validate_mixin_stacking` when the ≤1 structural / ≤1 domain rule
+  is violated.
+- `PromoteMixinResolutionError(message: str)` — raised by the CLI
+  sugar resolver when `--mixin bio.bogus` cannot find any matching
   `extension-bio-bogus-*.json`. Wraps the underlying
   `SchemaNotFoundError` with a CLI-friendly message that lists
   known bio extensions.
@@ -476,9 +482,10 @@ Other bad-mixin paths reuse existing errors:
   the validator runs.
 - Missing required field in stacked schema → `EntityValidationError`
   (from the composed `allOf`).
-- Wrong kind for `--mixin` (e.g. `promote paper --mixin bio.rnaseq`)
-  → `PromoteValidationError` with kind-incompatibility message,
-  raised at CLI parse time.
+- Wrong kind for `--mixin` (e.g. `promote paper --mixin bio.rnaseq`):
+  `--mixin` is registered only on `promote dataset`, so Click emits
+  its standard `UsageError` ("no such option: --mixin") on paper /
+  topic / theme. No custom error needed.
 
 ---
 
@@ -488,14 +495,15 @@ Other bad-mixin paths reuse existing errors:
 project-side data-*.md  (bio fields in frontmatter)
         │
         ▼
-science commons promote dataset <entity_id> --from <proj> \
+science commons promote dataset --from <proj> --slug <s> \
                                 --mixin bio.matrix --mixin bio.rnaseq [--apply]
         │
         ▼
 CLI handler (cli.py):
-  • Sugar resolve → ProfileComponent tuple                ← Phase H
-  • Kind acceptance check (PromoteKindConfig.accepts_mixin_extensions)
-  • _validate_mixin_stacking(tuple)                       ← Phase H
+  • --mixin only registered on `promote dataset`; other kinds get
+    Click's "No such option" UsageError automatically               ← Phase H
+  • Sugar resolve → ProfileComponent tuple                          ← Phase H
+  • _validate_mixin_stacking(tuple)                                 ← Phase H
   • active_profile = ProfileString(base, dataset, extensions)
   • plan_promote(kind, discovery, mixin_extensions=...)
         │
@@ -599,8 +607,9 @@ In `science/tests/test_commons_promote_dataset.py`:
   bio.rnaseq frontmatter (n_rows, n_cols, value_dtype, feature_axis,
   species, assay) plus required dataset-mixin fields.
 - Invocation: `CliRunner().invoke(commons_group,
-  ["promote", "dataset", "dataset:mockrna",
+  ["promote", "dataset",
    "--from", "proj-rnaseq",
+   "--slug", "mockrna",
    "--mixin", "bio.matrix", "--mixin", "bio.rnaseq",
    "--apply"])`.
 - Assertions:
@@ -623,8 +632,9 @@ In `science/tests/test_commons_promote_dataset.py`:
     at CLI parse time (no `extension-bio-bogus-*.json` installed).
   - `--mixin bio.bogus/1.0` (explicit form) → `SchemaNotFoundError`
     surfaced during validator composition.
-  - `--mixin bio.matrix` on `promote paper` → `PromoteValidationError`
-    (kind doesn't accept extensions).
+  - `--mixin bio.matrix` on `promote paper` → Click `UsageError`
+    ("no such option: --mixin"). No custom error path; `--mixin` is
+    only registered on the dataset command.
 
 ### 8.5 Pilot smoke test (runbook, not unit test)
 
@@ -636,8 +646,8 @@ Steps:
 1. Hand-edit `data-gse131651-shah2019-nsd2.md` frontmatter to add the
    required bio.matrix + bio.rnaseq fields (n_rows, n_cols, value_dtype,
    feature_axis, species, assay).
-2. Run `science commons promote dataset dataset:GSE131651
-   --from multiple-myeloma
+2. Run `science commons promote dataset
+   --from multiple-myeloma --slug GSE131651
    --mixin bio.matrix --mixin bio.rnaseq --apply`.
 3. Verify the canonical `entity.md` carries the four-segment
    `schema_profile`.
@@ -666,10 +676,14 @@ Phase H decomposes into four sub-phases. Each is a single PR.
   and `SchemaNotFoundError` propagation. Confirms the existing
   infrastructure handles the bio extensions end-to-end. No production
   code changes.
-- **H.3 — Promote integration.** Add `accepts_mixin_extensions` to
-  `PromoteKindConfig`; plumb `--mixin` through CLI, sugar resolution,
-  stacking-rule guard, and canonical-render. Set the dataset kind's
-  flag. Add `PromoteMixinStackingError`. Cover §8.3 and §8.4 tests.
+- **H.3 — Promote integration.** Register `--mixin` inline on
+  `promote dataset` (not in `_promote_from_options`); add sugar
+  resolution, `_validate_mixin_stacking` guard, and
+  `_active_profile` plumbing through `plan_promote`,
+  `read_merge_policy`, `read_canonical_body_sections`, and
+  `_render_canonical`. Add `PromoteMixinStackingError` and
+  `PromoteMixinResolutionError` (both subclassing `PromoteInputError`).
+  Cover §8.3 and §8.4 tests.
 - **H.4 — Pilot smoke test.** Hand-edit one MM dataset's project-side
   frontmatter; re-promote with bio mixins; verify. Document outcome in
   the Phase H plan's pilot section.
@@ -733,18 +747,21 @@ Modified:
 - `science/tests/fixtures/commons/valid/datasets/rnaseq-example/entity.md` (species → array; add minimal bio.matrix fields if the fixture is repurposed to exercise stacked profile, otherwise just species)
 - `science/tests/test_commons_adapter.py` (adjust assertions if they read the species field)
 - `science/src/science_tool/commons/promote.py`:
-  - `PromoteKindConfig.accepts_mixin_extensions: bool` (new field)
   - `_active_profile(kind, extensions)` helper
   - `plan_promote(..., mixin_extensions=())` parameter
   - `read_merge_policy(active_profile)` / `read_canonical_body_sections(active_profile)` substitutions (`:439-440`)
   - `_render_canonical(..., active_profile)` substitution (`:2291`)
   - `_validate_mixin_stacking(extensions)` guard
-  - `PromoteMixinStackingError`, `PromoteMixinResolutionError` (new error classes)
   - Audit-shape extension: emit `mixin_extensions:` field when non-empty
+- `science/src/science_tool/commons/errors.py`:
+  - `PromoteMixinStackingError(PromoteInputError)` — new
+  - `PromoteMixinResolutionError(PromoteInputError)` — new
 - `science/src/science_tool/commons/cli.py`:
-  - `--mixin` Click option (repeatable) on `promote dataset`
+  - `--mixin` Click option (repeatable) inline on `promote dataset`
+    (alongside the existing required `--slug`). Not added to
+    `_promote_from_options`, so paper/topic/theme automatically get
+    Click's "no such option" error.
   - Sugar resolver (highest installed version)
-  - Kind-acceptance check (rejects `--mixin` on paper/topic/theme)
   - Pass `mixin_extensions=` into `plan_promote`
 - `science/tests/test_commons_promote_dataset.py` (stacking-rule, integration, failure-case tests; pilot smoke test as a separate runbook in §8.5)
 
