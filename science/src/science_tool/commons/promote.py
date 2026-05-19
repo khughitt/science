@@ -947,6 +947,7 @@ def _write_failure_audit_log(
     tags_created: list[str],
     plan: PromotePlan,
     projects_touched: list[str],
+    side_channel_results: dict[str, SideChannelResult] | None = None,
     failure_stage: Literal[
         "preflight",
         "validate",
@@ -981,6 +982,7 @@ def _write_failure_audit_log(
         failure_detail=failure_detail,
         projects_touched=projects_touched,
         kind=plan.kind,
+        side_channel_results=side_channel_results or {},
         plan_audit_extras=plan.dataset_audit_extras,
     )
     yaml_text = _render_audit_log_yaml(result, commons_root, invocation=invocation)
@@ -1318,6 +1320,7 @@ def apply_promote(
             tags_created=tags_created,
             plan=plan,
             projects_touched=projects_touched,
+            side_channel_results=side_channel_results,
             failure_stage=stage,
             failure_detail=_audit_failure_detail(str(exc), plan),
             invocation=invocation,
@@ -2442,13 +2445,21 @@ def _audit_decision_entry(
         return entry
 
     extras = result.plan_audit_extras.get(decision.slug, {})
+    if not isinstance(extras, Mapping):
+        extras = {}
     per_resource = extras.get("per_resource", {})
+    if not isinstance(per_resource, Mapping):
+        per_resource = {}
     entry["per_resource_hashes"] = {
-        name: {"hash": resource_hash, "bytes": resource_bytes}
-        for name, (resource_hash, resource_bytes) in per_resource.items()
+        str(name): {"hash": str(value[0]), "bytes": value[1]}
+        for name, value in per_resource.items()
+        if isinstance(value, tuple | list) and len(value) == 2
     }
     entry["recipe_stubbed"] = extras.get("recipe_stubbed", False)
-    entry["dropped_fields"] = list(extras.get("dropped_fields", []))
+    dropped_fields = extras.get("dropped_fields", [])
+    if not isinstance(dropped_fields, list | tuple | set):
+        dropped_fields = []
+    entry["dropped_fields"] = [str(field) for field in dropped_fields]
 
     side_channel = result.side_channel_results.get(decision.slug)
     if side_channel is not None:

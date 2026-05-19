@@ -150,7 +150,56 @@ def test_dataset_apply_audit_log_records_extras(
     assert "ontologies" in decision["dropped_fields"]
     assert decision["override_file"].endswith("data.yaml")
     op_id = log["op_id"]
-    assert decision["override_backup"].endswith((f"data.yaml.bak.{op_id}", ".absent"))
+    assert (
+        decision["override_backup"].endswith(f"data.yaml.bak.{op_id}")
+        or decision["override_backup"].endswith(f"data.yaml.bak.{op_id}.absent")
+    )
+
+
+def test_dataset_apply_audit_log_tolerates_malformed_optional_extras(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dataclasses import replace
+
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    proj, commons = _setup(tmp_path, monkeypatch)
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(
+        discovery,
+        commons_root=commons,
+        kind=PROMOTE_KIND_DATASET,
+        from_order=["proj-dataset"],
+    )
+    plan = replace(
+        plan,
+        dataset_audit_extras={
+            "fixture-ds": {
+                "override_path": str(proj / "data" / "fixture-ds"),
+                "per_resource": {"r1": None},
+                "dropped_fields": "not-a-list",
+                "recipe_stubbed": True,
+            }
+        },
+    )
+
+    result = apply_promote(
+        plan,
+        commons_root=commons,
+        invocation="science commons promote dataset --from proj-dataset --apply",
+    )
+
+    assert result.audit_log_path is not None
+    log = yaml.safe_load(result.audit_log_path.read_text(encoding="utf-8"))
+    [decision] = [entry for entry in log["decisions"] if entry["slug"] == "fixture-ds"]
+    assert decision["per_resource_hashes"] == {}
+    assert decision["dropped_fields"] == []
 
 
 def test_dataset_apply_overlay_failure_restores_side_channel(
@@ -198,6 +247,12 @@ def test_dataset_apply_overlay_failure_restores_side_channel(
     assert not list((tmp_path / ".config" / "science").glob("data.yaml.bak.*"))
     assert _git_stdout(commons, "rev-parse", "HEAD") != before_head
     assert _git_stdout(commons, "tag", "-l") == "dataset/fixture-ds/1.0.0"
+    logs = list((commons / ".migrations").glob("*.yaml"))
+    assert len(logs) == 1
+    log = yaml.safe_load(logs[0].read_text(encoding="utf-8"))
+    [decision] = [entry for entry in log["decisions"] if entry["slug"] == "fixture-ds"]
+    assert decision["override_file"].endswith("data.yaml")
+    assert decision["override_backup"].endswith(f"data.yaml.bak.{log['op_id']}.absent")
 
 
 def test_dataset_apply_side_channel_failure_unstages_commons_paths(
