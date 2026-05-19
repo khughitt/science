@@ -173,7 +173,7 @@ Write `science/model/src/science_model/schemas/extension-bio-matrix-1.0.json`:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest science/model/tests/test_bio_extension_matrix.py -v`
-Expected: 9 passed.
+Expected: 10 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -1052,12 +1052,14 @@ def test_three_with_two_domain_rejected() -> None:
         )
 
 
-def test_unknown_bio_extension_treated_as_unclassified_and_rejected() -> None:
-    """A bio.* name we don't recognize as structural-or-domain should fail
-    the rule (the loader will also fail later, but the rule guard is the
-    earlier line of defense)."""
-    with pytest.raises(PromoteMixinStackingError, match="unknown"):
-        _validate_mixin_stacking((_c("bio.weird"),))
+def test_unknown_bio_extension_passes_stacking_check() -> None:
+    """Unknown bio.* names are NOT rejected at the stacking-rule layer.
+    Sugar form is caught earlier by _resolve_mixin_arg in cli.py;
+    explicit form (e.g. --mixin bio.bogus/1.0) is expected to parse
+    syntactically, pass stacking, and fail at validator composition
+    (where SchemaNotFoundError is caught and rewrapped by
+    _validate_artifact as PromoteMixinResolutionError — see Task 13)."""
+    _validate_mixin_stacking((_c("bio.weird"),))  # no exception
 ```
 
 - [ ] **Step 2: Run to verify they fail**
@@ -1083,9 +1085,13 @@ def _validate_mixin_stacking(
     Rules:
       - At most one structural mixin (bio.matrix xor bio.table).
       - At most one domain mixin (bio.rnaseq xor bio.scrna xor bio.cna).
-      - Unknown bio.* names are rejected here (they would also fail later
-        when the loader cannot find the schema file, but failing early at
-        the rule-guard layer gives a clearer operator message).
+
+    Unknown bio.* names (e.g. `--mixin bio.bogus/1.0` in explicit form)
+    are NOT rejected here. They sail through to validator composition
+    where the loader raises `SchemaNotFoundError`, which
+    `_validate_artifact` (Task 13) catches and rewraps as
+    `PromoteMixinResolutionError`. Sugar form (`--mixin bio.bogus`) is
+    caught earlier by `_resolve_mixin_arg` in cli.py.
     """
     from science_tool.commons.errors import PromoteMixinStackingError
 
@@ -1096,12 +1102,8 @@ def _validate_mixin_stacking(
             structural.append(ext.name)
         elif ext.name in _DOMAIN_BIO_EXTENSIONS:
             domain.append(ext.name)
-        else:
-            raise PromoteMixinStackingError(
-                f"--mixin {ext.name}/{ext.version}: unknown bio extension. "
-                f"Known structural: {sorted(_STRUCTURAL_BIO_EXTENSIONS)}; "
-                f"known domain: {sorted(_DOMAIN_BIO_EXTENSIONS)}."
-            )
+        # else: unknown bio.* extension — silently sails through;
+        # validator composition will fail loud via SchemaNotFoundError.
     if len(structural) > 1:
         raise PromoteMixinStackingError(
             f"--mixin: at most one structural bio extension allowed "
@@ -1119,7 +1121,7 @@ def _validate_mixin_stacking(
 - [ ] **Step 4: Run to verify they pass**
 
 Run: `uv run pytest science/tests/test_commons_promote_mixin_stacking.py -v`
-Expected: 8 passed.
+Expected: 8 passed (the "unknown extension passes stacking" test is now an assertion of no exception, not a `pytest.raises` block).
 
 - [ ] **Step 5: Commit**
 
@@ -1243,7 +1245,9 @@ sed -n '640,660p' science/src/science_tool/commons/promote.py
 sed -n '2276,2314p' science/src/science_tool/commons/promote.py
 ```
 
-- [ ] **Step 2: Update `_render_canonical` signature and body**
+- [ ] **Step 2: Update `_render_canonical` signature, body, AND the only call site (atomic edit)**
+
+There is exactly one caller (line ~648 in `plan_promote`). This task changes the signature **and** that one call site in a single edit, so the parameter is required, not defaulted. (Per repo guideline: explicit > defensive; no compatibility layer.)
 
 Replace the existing definition (`commons/promote.py:2276-2313`) with:
 
@@ -1256,18 +1260,18 @@ def _render_canonical(
     created: date,
     updated: date,
     kind: PromoteKindConfig,
-    active_profile: "ProfileString | None" = None,
+    active_profile: "ProfileString",
 ) -> str:
     """Render the commons-side <commons_subdir>/<slug>.md content.
 
-    Emits schema_profile from `active_profile` (Phase H — includes any
-    `--mixin` extensions) or from `kind.default_profile` when no
-    explicit active_profile is passed (backward-compatible for callers
-    that don't yet pass it). id from kind.id_prefix, type from kind.kind.
-    For paper kind only, also emits a `bibkey:` field (preserved from
-    Phase E; not in topic/theme mixins).
+    Emits schema_profile from `active_profile` (which equals
+    `kind.default_profile` for bare promotes, or `kind.default_profile`
+    augmented with `--mixin` extensions for Phase H bio promotes). id
+    from kind.id_prefix, type from kind.kind. For paper kind only, also
+    emits a `bibkey:` field (preserved from Phase E; not in topic/theme
+    mixins).
     """
-    profile_str = (active_profile or kind.default_profile).render()
+    profile_str = active_profile.render()
     head: dict = {
         "schema_profile": profile_str,
         "id": f"{kind.id_prefix}{decision.slug}",
@@ -1292,27 +1296,41 @@ def _render_canonical(
     return f"---\n{fm}---\n{body}"
 ```
 
-- [ ] **Step 3: Verify the call site still type-checks**
+Then update the **single** caller (around line 648):
 
-The call at line 648 doesn't yet pass `active_profile`, so it falls back to `kind.default_profile`. That's fine for now — Task 12 wires it through.
+```python
+canonical_content = _render_canonical(
+    canonical_decision,
+    canonical_fields=merged,
+    canonical_body=canonical_body,
+    created=date.today(),
+    updated=date.today(),
+    kind=kind,
+    active_profile=kind.default_profile,   # NEW; Task 12 replaces this with
+                                            #      the computed active_profile.
+)
+```
 
-Run: `uv run pytest science/tests/test_commons_promote_paper.py science/tests/test_commons_promote_topic.py science/tests/test_commons_promote_theme.py science/tests/test_commons_promote_dataset.py -q`
+For now (this task) we pass `kind.default_profile` so behavior is byte-identical to pre-Task-11. Task 12 replaces this argument with the locally-computed `active_profile` derived from `mixin_extensions`.
 
-(Use whichever test files exist in `science/tests/` for promote — adjust the list if names differ. The point is: all existing promote tests must still pass because Phase G's default behavior is unchanged.)
+- [ ] **Step 3: Run all existing promote tests**
 
-Expected: All pass.
+Run: `uv run pytest science/tests/ -k promote -q`
+
+Expected: All pass. Phase G behavior is preserved because `kind.default_profile.render()` produces the same string `_render_canonical` was emitting before.
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add science/src/science_tool/commons/promote.py
-git commit -m "refactor(commons): _render_canonical accepts active_profile
+git commit -m "refactor(commons): _render_canonical requires active_profile
 
-Adds active_profile (ProfileString | None) keyword arg. When None,
-behavior is identical to before — schema_profile comes from
-kind.default_profile. Callers that pass a non-None active_profile
-(Phase H) get the extension-augmented schema_profile in the rendered
-entity. Backward-compatible for paper/topic/theme/bare-dataset."
+The single existing caller now passes kind.default_profile explicitly,
+preserving Phase G behavior byte-identically. Task 12 swaps the
+argument to the locally-computed active_profile (kind.default_profile
++ mixin_extensions) so the emitted schema_profile carries any --mixin
+segments. No compatibility shim — the new invariant (active_profile
+is always supplied) is explicit at every call site."
 ```
 
 ---
@@ -1389,96 +1407,128 @@ canonical_content = _render_canonical(
 
 - [ ] **Step 4: Append an integration test**
 
+The test mirrors the canonical pattern from
+`science/tests/test_commons_promote_dataset_discovery.py:14-36`: build a
+project tree, init it as a git repo, monkeypatch
+`science_tool.commons.promote.resolve_project_by_id` to return the temp
+project root. The datapackage is JSON (not YAML — the loader uses
+`json.loads`, `promote.py:1519`). Every resource path declared in the
+datapackage must exist on disk, otherwise discovery raises
+`PromoteResourceMissingError` (`promote.py:1550`).
+
 Add to `science/tests/test_commons_promote_active_profile.py`:
 
 ```python
-import re
+import json
+import subprocess
 from pathlib import Path
 
 import pytest
 
-# Reuse the existing dataset promote fixture pattern; the assumption is
-# there's a helper or fixture in science/tests/test_commons_promote_dataset.py
-# that builds a minimal project tree with a data-*.md file. If not,
-# create the fixture inline as below.
+from science_model.entity_schema.profile import ProfileComponent
 
 
-def _project_tree_with_rnaseq(tmp_path: Path) -> dict:
-    """Build a minimal source project + commons-root pair with one
-    data-mockrna.md dataset that carries bio.matrix + bio.rnaseq fields
-    in its frontmatter."""
-    proj = tmp_path / "proj"
-    (proj / "doc" / "datasets" / "mockrna").mkdir(parents=True)
+def _project_tree_with_rnaseq(tmp_path: Path) -> Path:
+    """Build a minimal source project with one data-mockrna.md dataset
+    carrying bio.matrix + bio.rnaseq fields in its frontmatter, plus a
+    JSON datapackage and the resource file the datapackage references."""
+    proj = tmp_path / "proj-rnaseq"
+    (proj / "doc" / "datasets").mkdir(parents=True)
+    (proj / "data" / "mockrna").mkdir(parents=True)
+
     (proj / "doc" / "datasets" / "data-mockrna.md").write_text(
         """---
-id: "dataset:mockrna"
-type: "dataset"
-title: "Mock RNA-seq dataset"
-datapackage: "mockrna/datapackage.yaml"
-origin: "external"
-tier: "use-now"
+id: dataset:mockrna
+type: dataset
+title: Mock RNA-seq dataset
+description: Synthetic fixture for Phase H integration tests.
+datapackage: data/mockrna/datapackage.json
+origin: external
+tier: use-now
 access:
-  level: "public"
+  level: public
   verified: true
+created: "2026-05-19"
+updated: "2026-05-19"
 species: ["Homo sapiens"]
-assay: "bulk-rnaseq"
+assay: bulk-rnaseq
 n_rows: 20530
 n_cols: 100
-value_dtype: "int32"
-feature_axis: "rows"
+value_dtype: int32
+feature_axis: rows
 ---
+
 # Mock RNA-seq
 
 Body content.
 """,
         encoding="utf-8",
     )
-    (proj / "doc" / "datasets" / "mockrna" / "datapackage.yaml").write_text(
-        """name: mockrna
-profile: data-package
-resources:
-  - name: counts
-    path: counts.tsv
-    hash: sha256:0000000000000000000000000000000000000000000000000000000000000000
-    bytes: 0
-""",
+
+    (proj / "data" / "mockrna" / "datapackage.json").write_text(
+        json.dumps(
+            {
+                "name": "mockrna",
+                "resources": [
+                    {
+                        "name": "counts",
+                        "path": "counts.tsv",
+                        "format": "tsv",
+                        "mediatype": "text/tab-separated-values",
+                    }
+                ],
+            },
+            indent=2,
+        ),
         encoding="utf-8",
     )
-    commons = tmp_path / "commons"
-    return {"proj": proj, "commons": commons}
+    (proj / "data" / "mockrna" / "counts.tsv").write_text("gene\ts1\n", encoding="utf-8")
+
+    # Discovery walks `git ls-files` (per Phase F/G), so the project must
+    # be a committed git repo (mirrors test_commons_promote_dataset_discovery.py).
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git", "-C", str(proj),
+            "-c", "user.email=t@t",
+            "-c", "user.name=t",
+            "commit", "-q", "-m", "init",
+        ],
+        check=True,
+    )
+    return proj
 
 
 def test_plan_promote_with_mixin_extensions_emits_extended_schema_profile(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """End-to-end: invoking plan_promote with non-empty mixin_extensions
     routes bio fields to canonical (via merge_policy from the active
     profile) and emits the full schema_profile in the rendered entity."""
-    from science_model.entity_schema.profile import ProfileComponent
     from science_tool.commons.bootstrap import init_commons
     from science_tool.commons.promote import (
         PROMOTE_KIND_DATASET,
-        DiscoveryResult,
+        discover_candidates,
         plan_promote,
     )
-    from science_tool.commons.promote_discovery import (  # adjust if module path differs
-        discover_candidates,
+
+    proj = _project_tree_with_rnaseq(tmp_path)
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda _slug: proj,
     )
 
-    paths = _project_tree_with_rnaseq(tmp_path)
-    init_commons(paths["commons"])
+    commons = tmp_path / "commons"
+    init_commons(commons)
 
-    # Discover the single candidate. The exact discover-API surface is
-    # already used by test_commons_promote_dataset.py — if the import
-    # above doesn't match, copy the discovery call from that test file.
-    discovery: DiscoveryResult = discover_candidates(
-        from_projects=[paths["proj"]],
-        kind=PROMOTE_KIND_DATASET,
-    )
+    discovery = discover_candidates(["proj-rnaseq"], PROMOTE_KIND_DATASET)
+    assert "mockrna" in discovery.candidates_by_slug
+    assert discovery.failed_candidates == []
 
     plan = plan_promote(
         discovery,
-        commons_root=paths["commons"],
+        commons_root=commons,
         kind=PROMOTE_KIND_DATASET,
         mixin_extensions=(
             ProfileComponent(name="bio.matrix", version="1.0"),
@@ -1490,13 +1540,11 @@ def test_plan_promote_with_mixin_extensions_emits_extended_schema_profile(
     canonical = plan.decisions[0].canonical_artifacts[0]
     assert "+bio.matrix/1.0+bio.rnaseq/1.0" in canonical.content
     # Bio fields routed to canonical, not overlay:
-    assert re.search(r"^species:\s*\n\s*-\s*Homo sapiens", canonical.content, re.M) or \
-           "species:\n  - Homo sapiens" in canonical.content
     assert "assay: bulk-rnaseq" in canonical.content
     assert "value_dtype: int32" in canonical.content
+    assert "feature_axis: rows" in canonical.content
+    assert "Homo sapiens" in canonical.content
 ```
-
-Note: if the discovery API import doesn't match (the actual module/function names may differ between Phase F/G iterations), look at the existing `science/tests/test_commons_promote_dataset.py` for the canonical invocation pattern and copy it. The exact discovery shape is not what this test verifies — it verifies the active-profile threading.
 
 - [ ] **Step 5: Run to verify it passes**
 
@@ -1715,6 +1763,7 @@ def _empty_result(mixin_extensions: tuple[ProfileComponent, ...] = ()) -> Promot
         audit_log_path=None,
         status="ok",
         failure_stage=None,
+        failure_detail=None,
         projects_touched=[],
         kind=PROMOTE_KIND_DATASET,
         mixin_extensions=mixin_extensions,
@@ -2011,12 +2060,22 @@ attempted."
 
 - [ ] **Step 1: Write the integration test**
 
+The fixture pattern mirrors `science/tests/test_commons_promote_dataset_discovery.py:14-36`. Key requirements that the in-tree implementation enforces and that must be reproduced:
+
+- Project is a committed git repo (discovery walks `git ls-files`).
+- Datapackage is **JSON** (`promote.py:1519`), named `datapackage.json`.
+- Every resource path declared in the datapackage must exist on disk (`promote.py:1550` raises `PromoteResourceMissingError` if not).
+- `--from <slug>` resolves through `science_tool.commons.promote.resolve_project_by_id` (`promote.py:371`); tests monkeypatch this to return the temp directory.
+- Commons root env var is **`SCIENCE_COMMONS_ROOT`**, not `COMMONS_ROOT` (`config.py:35`).
+
 Create `science/tests/test_commons_promote_dataset_mixin.py`:
 
 ```python
 """End-to-end CLI tests for `science commons promote dataset --mixin`."""
 from __future__ import annotations
 
+import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -2026,87 +2085,116 @@ from science_tool.commons.cli import commons_group
 
 
 def _make_project_tree(tmp_path: Path) -> Path:
-    """Build a minimal project source tree with one bulk RNA-seq dataset."""
+    """Build a minimal project source tree with one bulk RNA-seq dataset,
+    committed to git so discovery's `git ls-files` finds it."""
     proj = tmp_path / "proj-rnaseq"
-    (proj / "doc" / "datasets" / "mockrna").mkdir(parents=True)
+    (proj / "doc" / "datasets").mkdir(parents=True)
+    (proj / "data" / "mockrna").mkdir(parents=True)
+
     (proj / "doc" / "datasets" / "data-mockrna.md").write_text(
         """---
-id: "dataset:mockrna"
-type: "dataset"
-title: "Mock RNA-seq dataset"
-datapackage: "mockrna/datapackage.yaml"
-origin: "external"
-tier: "use-now"
+id: dataset:mockrna
+type: dataset
+title: Mock RNA-seq dataset
+description: Synthetic fixture for Phase H CLI tests.
+datapackage: data/mockrna/datapackage.json
+origin: external
+tier: use-now
 access:
-  level: "public"
+  level: public
   verified: true
+created: "2026-05-19"
+updated: "2026-05-19"
 species: ["Homo sapiens"]
-assay: "bulk-rnaseq"
+assay: bulk-rnaseq
 n_rows: 20530
 n_cols: 100
-value_dtype: "int32"
-feature_axis: "rows"
+value_dtype: int32
+feature_axis: rows
 ---
+
 # Mock RNA-seq
 
 Body content.
 """,
         encoding="utf-8",
     )
-    (proj / "doc" / "datasets" / "mockrna" / "datapackage.yaml").write_text(
-        "name: mockrna\n"
-        "profile: data-package\n"
-        "resources:\n"
-        "  - name: counts\n"
-        "    path: counts.tsv\n"
-        "    hash: sha256:0000000000000000000000000000000000000000000000000000000000000000\n"
-        "    bytes: 0\n",
+    (proj / "data" / "mockrna" / "datapackage.json").write_text(
+        json.dumps(
+            {
+                "name": "mockrna",
+                "resources": [
+                    {
+                        "name": "counts",
+                        "path": "counts.tsv",
+                        "format": "tsv",
+                        "mediatype": "text/tab-separated-values",
+                    }
+                ],
+            },
+            indent=2,
+        ),
         encoding="utf-8",
+    )
+    (proj / "data" / "mockrna" / "counts.tsv").write_text("gene\ts1\n", encoding="utf-8")
+
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git", "-C", str(proj),
+            "-c", "user.email=t@t",
+            "-c", "user.name=t",
+            "commit", "-q", "-m", "init",
+        ],
+        check=True,
     )
     return proj
 
 
-def _make_commons(tmp_path: Path) -> Path:
+def _setup_proj_and_commons(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> tuple[Path, Path]:
+    """Build proj tree, init commons, monkeypatch the project resolver, set
+    the SCIENCE_COMMONS_ROOT env var. Returns (proj_root, commons_root)."""
     from science_tool.commons.bootstrap import init_commons
 
-    root = tmp_path / "commons"
-    init_commons(root)
-    return root
-
-
-def test_promote_dataset_with_matrix_and_rnaseq_succeeds(tmp_path: Path) -> None:
-    """Promote a bulk-rnaseq dataset with --mixin bio.matrix --mixin bio.rnaseq.
-    Canonical entity.md must carry the four-segment schema_profile and the
-    bio fields in canonical (not overlay)."""
     proj = _make_project_tree(tmp_path)
-    commons = _make_commons(tmp_path)
+    commons = tmp_path / "commons"
+    init_commons(commons)
 
-    # The CLI reads the project registry to resolve --from <project>.
-    # If a registration step is required by the current promote pipeline,
-    # invoke it here. (Check the patterns in
-    # science/tests/test_commons_promote_dataset.py for the canonical
-    # setup — copy the registration step verbatim.)
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda _slug: proj,
+    )
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
+    return proj, commons
+
+
+def test_promote_dataset_with_matrix_and_rnaseq_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Promote a bulk-rnaseq dataset with --mixin bio.matrix --mixin bio.rnaseq.
+    Canonical entity.md carries the four-segment schema_profile and the bio
+    fields in canonical (not overlay)."""
+    _proj, commons = _setup_proj_and_commons(tmp_path, monkeypatch)
 
     result = CliRunner().invoke(
         commons_group,
         [
-            "promote",
-            "dataset",
-            "--from",
-            str(proj),
-            "--slug",
-            "mockrna",
-            "--mixin",
-            "bio.matrix",
-            "--mixin",
-            "bio.rnaseq",
+            "promote", "dataset",
+            "--from", "proj-rnaseq",
+            "--slug", "mockrna",
+            "--mixin", "bio.matrix",
+            "--mixin", "bio.rnaseq",
             "--apply",
         ],
-        env={"COMMONS_ROOT": str(commons)},
     )
     assert result.exit_code == 0, result.output
 
-    entity = (commons / "datasets" / "mockrna" / "entity.md").read_text()
+    entity_path = commons / "datasets" / "mockrna" / "entity.md"
+    assert entity_path.is_file(), f"expected canonical entity.md at {entity_path}"
+    entity = entity_path.read_text()
     assert (
         "schema_profile: "
         "science-entity-base/1.0+dataset/1.0+bio.matrix/1.0+bio.rnaseq/1.0"
@@ -2116,10 +2204,8 @@ def test_promote_dataset_with_matrix_and_rnaseq_succeeds(tmp_path: Path) -> None
     assert "value_dtype: int32" in entity
     assert "assay: bulk-rnaseq" in entity
     assert "feature_axis: rows" in entity
-    assert "- Homo sapiens" in entity
+    assert "Homo sapiens" in entity
 ```
-
-Note: depending on exactly how the current dataset promote tests set up the project-registry side, the test above may need a `science commons register-project` invocation before the promote call. Look at `science/tests/test_commons_promote_dataset.py` for the established fixture pattern and mirror it. The point of this test is to exercise the **--mixin** end-to-end; copying the surrounding test scaffolding from the canonical example is the right move.
 
 - [ ] **Step 2: Run to verify it passes**
 
@@ -2145,21 +2231,25 @@ git commit -m "test(commons-cli): promote dataset --mixin bio.matrix bio.rnaseq 
 Append to `science/tests/test_commons_promote_dataset_mixin.py`:
 
 ```python
-def _invoke_with(args: list[str], tmp_path: Path) -> "CliRunner":
-    """Build proj + commons then invoke commons_group with the given mixin
-    args. Returns the CliRunner result."""
-    proj = _make_project_tree(tmp_path)
-    commons = _make_commons(tmp_path)
+def _invoke_with(
+    args: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    """Set up proj + commons (with monkeypatched project resolver +
+    SCIENCE_COMMONS_ROOT env var), then invoke commons_group with the
+    given extra args."""
+    _setup_proj_and_commons(tmp_path, monkeypatch)
     return CliRunner().invoke(
         commons_group,
-        ["promote", "dataset", "--from", str(proj), "--slug", "mockrna", *args],
-        env={"COMMONS_ROOT": str(commons)},
+        ["promote", "dataset", "--from", "proj-rnaseq", "--slug", "mockrna", *args],
     )
 
 
-def test_two_structural_mixins_rejected(tmp_path: Path) -> None:
+def test_two_structural_mixins_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
     result = _invoke_with(
-        ["--mixin", "bio.matrix", "--mixin", "bio.table", "--apply"], tmp_path
+        ["--mixin", "bio.matrix", "--mixin", "bio.table", "--apply"],
+        tmp_path, monkeypatch,
     )
     assert result.exit_code != 0
     assert "structural" in result.output.lower()
@@ -2167,45 +2257,59 @@ def test_two_structural_mixins_rejected(tmp_path: Path) -> None:
     assert not (tmp_path / "commons" / "datasets" / "mockrna" / "entity.md").exists()
 
 
-def test_two_domain_mixins_rejected(tmp_path: Path) -> None:
+def test_two_domain_mixins_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
     result = _invoke_with(
-        ["--mixin", "bio.rnaseq", "--mixin", "bio.cna", "--apply"], tmp_path
+        ["--mixin", "bio.rnaseq", "--mixin", "bio.cna", "--apply"],
+        tmp_path, monkeypatch,
     )
     assert result.exit_code != 0
     assert "domain" in result.output.lower()
 
 
-def test_sugar_form_unknown_mixin_rejected(tmp_path: Path) -> None:
-    result = _invoke_with(["--mixin", "bio.bogus", "--apply"], tmp_path)
+def test_sugar_form_unknown_mixin_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _invoke_with(
+        ["--mixin", "bio.bogus", "--apply"], tmp_path, monkeypatch,
+    )
     assert result.exit_code != 0
     assert "bio.bogus" in result.output
 
 
-def test_explicit_form_unknown_mixin_rejected(tmp_path: Path) -> None:
-    """Explicit form parses syntactically; the missing schema surfaces
-    during validator composition and is rewrapped by _validate_artifact
-    as PromoteMixinResolutionError."""
-    result = _invoke_with(["--mixin", "bio.bogus/1.0", "--apply"], tmp_path)
+def test_explicit_form_unknown_mixin_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit form (bio.bogus/1.0) parses syntactically and passes the
+    stacking-rule guard; the missing schema surfaces during validator
+    composition and is rewrapped by _validate_artifact as
+    PromoteMixinResolutionError."""
+    result = _invoke_with(
+        ["--mixin", "bio.bogus/1.0", "--apply"], tmp_path, monkeypatch,
+    )
     assert result.exit_code != 0
     assert "bio.bogus" in result.output
 
 
-def test_mixin_on_paper_kind_yields_usage_error(tmp_path: Path) -> None:
+def test_mixin_on_paper_kind_yields_usage_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """`promote paper --mixin ...` must fail with Click's `No such option`
     error — --mixin is not registered on the paper command."""
+    # Same setup so the paper command can attempt discovery (it should
+    # fail earlier with Click's option-parse error, but using the same
+    # fixture avoids accidentally exercising a different failure mode).
+    _setup_proj_and_commons(tmp_path, monkeypatch)
     result = CliRunner().invoke(
         commons_group,
         [
-            "promote",
-            "paper",
-            "--from",
-            str(tmp_path),
-            "--mixin",
-            "bio.rnaseq",
+            "promote", "paper",
+            "--from", "proj-rnaseq",
+            "--mixin", "bio.rnaseq",
         ],
     )
     assert result.exit_code != 0
-    # Click's error text for an unknown option:
     assert "no such option" in result.output.lower() or "--mixin" in result.output
 ```
 
@@ -2299,12 +2403,16 @@ Concrete counts (`n_rows`, `n_cols`) should come from inspecting the dataset; if
 ```bash
 cd /mnt/ssd/Dropbox/science
 uv run science commons promote dataset \
-    --from ~/d/cancer/cancer-types/multiple-myeloma \
+    --from multiple-myeloma \
     --slug GSE131651 \
     --mixin bio.matrix \
     --mixin bio.rnaseq \
     --apply
 ```
+
+(`--from` takes the registered project id from `science.yaml` —
+`multiple-myeloma` per `~/d/cancer/cancer-types/multiple-myeloma/science.yaml`.
+Pass the id, not a path.)
 
 Expected output:
 - `Plan: 1 canonical entities, ...`
