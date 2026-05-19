@@ -872,6 +872,15 @@ def _validate_artifact(
         fm = _parse_frontmatter_only(artifact.content)
         try:
             EntityValidator().validate(fm)
+        except SchemaNotFoundError as exc:
+            # Explicit-form unknown bio extension (--mixin bio.bogus/1.0)
+            # can surface here when already-rendered canonical content cites a
+            # missing extension. Rewrap as PromoteMixinResolutionError so the
+            # CLI's standard CommonsError -> ClickException path catches it,
+            # matching the plan_promote active-profile setup path.
+            raise PromoteMixinResolutionError(
+                f"schema_profile references an unknown extension: {exc}"
+            ) from exc
         except EntityValidationError as exc:
             raise PromoteValidationError(
                 decision_slug=decision_slug,
