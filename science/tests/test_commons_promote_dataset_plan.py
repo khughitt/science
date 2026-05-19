@@ -66,8 +66,15 @@ def test_streaming_sha256_uses_1MiB_chunks(monkeypatch):
 
 
 def test_render_canonical_datapackage_strips_project_fields_and_injects_hashes():
-    from science_tool.commons.datapackage import render_canonical_datapackage_yaml
+    from science_tool.commons.datapackage import (
+        parse_canonical_datapackage_yaml,
+        render_canonical_datapackage_yaml,
+    )
 
+    valid_hash = (
+        "sha256:"
+        "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"
+    )
     project_doc = {
         "name": "mm30-external-ccle-proteomics-2020-01",
         "conformsTo": "mm30",
@@ -81,22 +88,89 @@ def test_render_canonical_datapackage_strips_project_fields_and_injects_hashes()
             }
         ],
     }
-    hashes = {"r1": ("sha256:abc123", 42)}
+    hashes = {"r1": (valid_hash, 42)}
     yaml_text = render_canonical_datapackage_yaml(
         project_doc=project_doc,
         canonical_slug="fixture-ds",
         per_resource=hashes,
     )
-    import yaml as pyyaml
 
-    parsed = pyyaml.safe_load(yaml_text)
+    parsed = parse_canonical_datapackage_yaml(yaml_text)
     assert parsed["name"] == "fixture-ds"
     assert "conformsTo" not in parsed
     assert "mm30" not in parsed
     r = parsed["resources"][0]
-    assert r["hash"] == "sha256:abc123"
+    assert r["hash"] == valid_hash
     assert r["bytes"] == 42
     assert r["schema"] == {"fields": []}
+
+
+def test_render_canonical_datapackage_uses_path_metadata_alias():
+    from science_tool.commons.datapackage import parse_canonical_datapackage_yaml
+    from science_tool.commons.datapackage import render_canonical_datapackage_yaml
+
+    valid_hash = (
+        "sha256:"
+        "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"
+    )
+    yaml_text = render_canonical_datapackage_yaml(
+        project_doc={
+            "name": "project-ds",
+            "resources": [{"name": "r1", "path": "r1.txt"}],
+        },
+        canonical_slug="fixture-ds",
+        per_resource={"r1.txt": (valid_hash, 12)},
+    )
+
+    parsed = parse_canonical_datapackage_yaml(yaml_text)
+    assert parsed["resources"][0]["hash"] == valid_hash
+    assert parsed["resources"][0]["bytes"] == 12
+
+
+def test_render_canonical_datapackage_rejects_missing_computed_metadata():
+    from science_tool.commons.datapackage import render_canonical_datapackage_yaml
+    from science_tool.commons.errors import CommonsError
+    import pytest
+
+    project_doc = {
+        "name": "project-ds",
+        "resources": [
+            {
+                "name": "r1",
+                "path": "r1.txt",
+                "hash": "sha256:" + "f" * 64,
+                "bytes": 999,
+            }
+        ],
+    }
+
+    with pytest.raises(CommonsError, match="metadata"):
+        render_canonical_datapackage_yaml(
+            project_doc=project_doc,
+            canonical_slug="fixture-ds",
+            per_resource={},
+        )
+
+
+def test_render_canonical_datapackage_rejects_conflicting_metadata_aliases():
+    from science_tool.commons.datapackage import render_canonical_datapackage_yaml
+    from science_tool.commons.errors import CommonsError
+    import pytest
+
+    project_doc = {
+        "name": "project-ds",
+        "resources": [{"name": "r1", "path": "r1.txt"}],
+    }
+
+    with pytest.raises(CommonsError, match="conflicting"):
+        render_canonical_datapackage_yaml(
+            project_doc=project_doc,
+            canonical_slug="fixture-ds",
+            per_resource={
+                "r1": ("sha256:" + "a" * 64, 12),
+                "r1.txt": ("sha256:" + "b" * 64, 12),
+            },
+        )
 
 
 def test_parse_canonical_datapackage_yaml_round_trip():

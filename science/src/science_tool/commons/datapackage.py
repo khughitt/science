@@ -22,6 +22,7 @@ from science_tool.commons.errors import (
 _SHA256_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 _DRIVE_LETTER = re.compile(r"^[A-Za-z]:")
 _PROJECT_ONLY_DATAPACKAGE_KEYS = frozenset({"conformsTo", "mm30", "derivedFrom"})
+_RESOURCE_COMPUTED_KEYS = frozenset({"hash", "bytes"})
 
 
 def validate_logical_path(logical_path: str) -> str:
@@ -116,16 +117,49 @@ def render_canonical_datapackage_yaml(
     for index, resource in enumerate(project_doc.get("resources", [])):
         if not isinstance(resource, dict):
             raise CommonsError(f"resources[{index}] is not a mapping")
-        rendered_resource = dict(resource)
-        resource_key = rendered_resource.get("name") or rendered_resource.get("path")
-        if resource_key in per_resource:
-            resource_hash, resource_bytes = per_resource[resource_key]
-            rendered_resource["hash"] = resource_hash
-            rendered_resource["bytes"] = resource_bytes
+        rendered_resource = {
+            key: value
+            for key, value in resource.items()
+            if key not in _RESOURCE_COMPUTED_KEYS
+        }
+        resource_hash, resource_bytes = _metadata_for_resource(
+            resource=rendered_resource,
+            resource_index=index,
+            per_resource=per_resource,
+        )
+        rendered_resource["hash"] = resource_hash
+        rendered_resource["bytes"] = resource_bytes
         resources.append(rendered_resource)
     out["resources"] = resources
 
     return yaml.safe_dump(out, sort_keys=False, allow_unicode=True)
+
+
+def _metadata_for_resource(
+    *,
+    resource: dict,
+    resource_index: int,
+    per_resource: dict[str, tuple[str, int]],
+) -> tuple[str, int]:
+    keys = []
+    for field in ("name", "path"):
+        value = resource.get(field)
+        if isinstance(value, str):
+            keys.append(value)
+
+    matches = {key: per_resource[key] for key in keys if key in per_resource}
+    if not matches:
+        raise CommonsError(
+            f"resources[{resource_index}] is missing computed hash/bytes metadata"
+        )
+
+    metadata_values = set(matches.values())
+    if len(metadata_values) > 1:
+        raise CommonsError(
+            f"resources[{resource_index}] has conflicting computed metadata aliases"
+        )
+
+    return next(iter(metadata_values))
 
 
 def parse_canonical_datapackage_yaml(yaml_text: str) -> dict:
