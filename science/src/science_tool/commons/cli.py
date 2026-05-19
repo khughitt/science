@@ -489,6 +489,8 @@ def promote_dataset_cmd(
     slug: str,
 ) -> None:
     """Promote one dataset entity into the commons store."""
+    if entity_id is not None:
+        raise click.UsageError("dataset promotion uses --slug; do not pass a positional <entity_id>")
     _promote_kind_cmd(
         kind=PROMOTE_KIND_DATASET,
         entity_id=f"dataset:{slug}",

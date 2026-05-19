@@ -48,6 +48,37 @@ def test_cli_promote_dataset_requires_slug(tmp_path, monkeypatch):
     assert "slug" in r.output.lower() or "slug" in (r.stderr or "").lower()
 
 
+def test_cli_promote_dataset_rejects_positional_entity_id(tmp_path, monkeypatch):
+    proj, commons = _setup(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.setattr(
+        "science_tool.commons.config.resolve_project_by_id",
+        lambda s: proj,
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda s: proj,
+    )
+    from science_tool.commons.cli import commons_group
+
+    r = CliRunner().invoke(
+        commons_group,
+        [
+            "promote",
+            "dataset",
+            "dataset:other",
+            "--from",
+            "proj-dataset",
+            "--slug",
+            "fixture-ds",
+        ],
+    )
+    output = f"{r.output}\n{r.stderr or ''}".lower()
+    assert r.exit_code != 0
+    assert "--slug" in output or "positional" in output or "entity_id" in output
+
+
 def test_cli_promote_dataset_dry_run_completes(tmp_path, monkeypatch):
     proj, commons = _setup(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
