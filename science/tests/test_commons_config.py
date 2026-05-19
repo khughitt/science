@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from textwrap import dedent
+from typing import Any
 
 import pytest
 import yaml
@@ -190,7 +191,7 @@ def test_load_data_overrides_wraps_read_error(
 
     original_read_text = Path.read_text
 
-    def fail_for_data_yaml(self: Path, *args: object, **kwargs: object) -> str:
+    def fail_for_data_yaml(self: Path, *args: Any, **kwargs: Any) -> str:
         if self == data_yaml:
             raise OSError("permission denied")
         return original_read_text(self, *args, **kwargs)
@@ -330,6 +331,99 @@ def test_upsert_data_override_rejects_relative_path(
             absolute_path=Path("relative/path"),
             op_id="opREL",
         )
+
+
+def test_upsert_data_override_rejects_existing_non_mapping_yaml(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "data.yaml").write_text("- not\n- mapping\n", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    with pytest.raises(CommonsError, match="mapping"):
+        upsert_data_override(
+            slug="x",
+            absolute_path=tmp_path / "fakedata",
+            op_id="opBADMAP",
+        )
+    assert not (cfg_dir / "data.yaml.bak.opBADMAP").exists()
+
+
+def test_upsert_data_override_rejects_existing_non_string_entry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "data.yaml").write_text("x: 123\n", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    with pytest.raises(CommonsError, match="string slug"):
+        upsert_data_override(
+            slug="y",
+            absolute_path=tmp_path / "fakedata",
+            op_id="opBADVALUE",
+        )
+
+
+def test_upsert_data_override_rejects_existing_relative_entry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "data.yaml").write_text("x: relative/path\n", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    with pytest.raises(CommonsError, match="absolute"):
+        upsert_data_override(
+            slug="y",
+            absolute_path=tmp_path / "fakedata",
+            op_id="opBADREL",
+        )
+
+
+def test_check_override_conflict_expands_existing_user_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    home = tmp_path / "home"
+    cfg_dir.mkdir()
+    home.mkdir()
+    (cfg_dir / "data.yaml").write_text("x: ~/data/x\n", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setenv("HOME", str(home))
+
+    check_override_conflict(slug="x", planned_path=home / "data" / "x")
+
+
+def test_upsert_data_override_rejects_reused_op_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "data.yaml").write_text("x: /existing/path\n", encoding="utf-8")
+    (cfg_dir / "data.yaml.bak.opREUSE").write_text("before\n", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    with pytest.raises(CommonsError, match="backup already exists"):
+        upsert_data_override(
+            slug="y",
+            absolute_path=tmp_path / "fakedata",
+            op_id="opREUSE",
+        )
+
+
+def test_restore_data_override_from_backup_rejects_ambiguous_state(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "data.yaml.bak.opAMB").write_text("before\n", encoding="utf-8")
+    (cfg_dir / "data.yaml.bak.opAMB.absent").write_text("", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    with pytest.raises(CommonsError, match="ambiguous"):
+        restore_data_override_from_backup(op_id="opAMB")
 
 
 def test_resolve_project_root_returns_registered_path(
