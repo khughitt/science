@@ -401,7 +401,7 @@ def promote_group() -> None:
 
 
 def _parse_version_tuple(version: str) -> tuple[int, ...]:
-    """Parse 'N.N' or 'N.N.N' into a tuple of ints, for numeric comparison.
+    """Parse a dot-separated integer version into a tuple of ints.
 
     Rejects anything that isn't dot-separated non-negative integers.
     Raises PromoteMixinResolutionError on a bad shape.
