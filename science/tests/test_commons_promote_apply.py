@@ -930,6 +930,13 @@ def test_apply_promote_failure_before_commit_unlinks_first_promote_canonical(
         apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
 
     assert not (tmp_path / "commons" / "papers" / "Adams2025.md").exists()
+    status = subprocess.run(
+        ["git", "-C", str(tmp_path / "commons"), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert "papers/Adams2025.md" not in status
 
 
 def test_apply_promote_path_limited_commit_does_not_pick_up_post_preflight_race(

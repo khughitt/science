@@ -1002,6 +1002,7 @@ def _restore_paths_to_head(commons_root: Path, paths: list[Path]) -> None:
         if existed:
             _git(commons_root, "checkout", "HEAD", "--", str(rel))
         else:
+            _git(commons_root, "rm", "--cached", "--ignore-unmatch", "--", str(rel), check=False)
             path.unlink(missing_ok=True)
 
 

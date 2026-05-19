@@ -204,3 +204,44 @@ def test_dataset_apply_side_channel_failure_unstages_commons_paths(
     assert _git_stdout(commons, "tag", "-l") == ""
     status = _git_stdout(commons, "status", "--porcelain")
     assert "datasets/fixture-ds" not in status
+
+
+def test_dataset_apply_side_channel_candidate_error_rolls_back_commons(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dataclasses import replace
+
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    _proj, commons = _setup(tmp_path, monkeypatch)
+    before_head = _git_stdout(commons, "rev-parse", "HEAD")
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(
+        discovery,
+        commons_root=commons,
+        kind=PROMOTE_KIND_DATASET,
+        from_order=["proj-dataset"],
+    )
+    plan = replace(
+        plan,
+        dataset_audit_extras={"fixture-ds": {"override_path": None}},
+    )
+
+    with pytest.raises(PromoteWriteError, match="side-channel apply failed"):
+        apply_promote(
+            plan,
+            commons_root=commons,
+            invocation="science commons promote dataset --from proj-dataset --apply",
+        )
+
+    assert _git_stdout(commons, "rev-parse", "HEAD") == before_head
+    assert _git_stdout(commons, "tag", "-l") == ""
+    status = _git_stdout(commons, "status", "--porcelain")
+    assert "datasets/fixture-ds" not in status
