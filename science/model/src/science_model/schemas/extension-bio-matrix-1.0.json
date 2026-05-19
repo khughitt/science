@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/extension-bio-matrix-1.0.json",
+  "title": "science entity bio.matrix extension",
+  "type": "object",
+  "required": ["n_rows", "n_cols", "value_dtype", "feature_axis"],
+  "properties": {
+    "n_rows": {"type": "integer", "minimum": 1},
+    "n_cols": {"type": "integer", "minimum": 1},
+    "value_dtype": {
+      "enum": ["float32", "float64", "int32", "int64", "uint8", "uint16", "uint32", "bool"]
+    },
+    "feature_axis": {"enum": ["rows", "cols"]},
+    "row_kind": {"type": "string", "minLength": 1},
+    "col_kind": {"type": "string", "minLength": 1}
+  }
+}
