@@ -266,6 +266,13 @@ def _plan_one(tmp_path, monkeypatch):
     src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
     proj = tmp_path / "proj-dataset"
     shutil.copytree(src, proj)
+    entity_source = proj / "doc" / "datasets" / "data-fixture-ds.md"
+    entity_source.write_text(
+        entity_source.read_text(encoding="utf-8").replace(
+            "ontologies:\n  - test-ontology\n", ""
+        ),
+        encoding="utf-8",
+    )
     subprocess.run(["git", "init", "-q", str(proj)], check=True)
     subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
     subprocess.run(
@@ -303,8 +310,18 @@ def _plan_one(tmp_path, monkeypatch):
 
 
 def _canonical_entity_content(decision):
+    expected_path = Path("datasets/fixture-ds/entity.md")
     entity = next(
-        a for a in decision.canonical_artifacts if a.path.name == "entity.md"
+        (
+            a
+            for a in decision.canonical_artifacts
+            if a.path == expected_path
+        ),
+        None,
+    )
+    assert entity is not None, (
+        f"missing canonical entity artifact at {expected_path}; got "
+        f"{[a.path for a in decision.canonical_artifacts]}"
     )
     return entity.content
 
@@ -323,7 +340,7 @@ def _canonical_entity_body(decision):
     return body
 
 
-@pytest.mark.xfail(reason="lands in Task 16")
+@pytest.mark.xfail(reason="lands in Task 16", strict=True)
 def test_dataset_canonical_entity_emits_required_base_fields(tmp_path, monkeypatch):
     d, _, _ = _plan_one(tmp_path, monkeypatch)
 
@@ -338,7 +355,7 @@ def test_dataset_canonical_entity_emits_required_base_fields(tmp_path, monkeypat
     assert "updated" in fm
 
 
-@pytest.mark.xfail(reason="lands in Task 16")
+@pytest.mark.xfail(reason="lands in Task 16", strict=True)
 def test_dataset_canonical_entity_datapackage_points_at_sibling(tmp_path, monkeypatch):
     d, _, _ = _plan_one(tmp_path, monkeypatch)
 
@@ -347,7 +364,7 @@ def test_dataset_canonical_entity_datapackage_points_at_sibling(tmp_path, monkey
     assert fm["datapackage"] == "datapackage.yaml"
 
 
-@pytest.mark.xfail(reason="lands in Task 16")
+@pytest.mark.xfail(reason="lands in Task 16", strict=True)
 def test_dataset_canonical_entity_preserves_tier_verbatim(tmp_path, monkeypatch):
     d, _, _ = _plan_one(tmp_path, monkeypatch)
 
@@ -356,7 +373,7 @@ def test_dataset_canonical_entity_preserves_tier_verbatim(tmp_path, monkeypatch)
     assert "tier: evaluate-next" in content
 
 
-@pytest.mark.xfail(reason="lands in Task 16")
+@pytest.mark.xfail(reason="lands in Task 16", strict=True)
 def test_dataset_canonical_entity_body_is_preserved(tmp_path, monkeypatch):
     d, _, _ = _plan_one(tmp_path, monkeypatch)
 
