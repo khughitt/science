@@ -19,7 +19,7 @@
 Before starting, run these to confirm baseline state:
 
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git status                         # working tree clean
 git rev-parse HEAD                 # note SHA for rollback if needed
 uv run pytest science/model/tests/ science/tests/ -q   # baseline green
@@ -1087,11 +1087,15 @@ def _validate_mixin_stacking(
       - At most one domain mixin (bio.rnaseq xor bio.scrna xor bio.cna).
 
     Unknown bio.* names (e.g. `--mixin bio.bogus/1.0` in explicit form)
-    are NOT rejected here. They sail through to validator composition
-    where the loader raises `SchemaNotFoundError`, which
-    `_validate_artifact` (Task 13) catches and rewraps as
-    `PromoteMixinResolutionError`. Sugar form (`--mixin bio.bogus`) is
-    caught earlier by `_resolve_mixin_arg` in cli.py.
+    are NOT rejected here. They sail through to `plan_promote`'s
+    `read_merge_policy(active_profile)` call, where the loader raises
+    `SchemaNotFoundError`; the plan_promote-side try/except (Task 12)
+    catches that and rewraps as `PromoteMixinResolutionError`.
+    `_validate_artifact` (Task 13) also catches the same exception as
+    belt-and-suspenders for the rare case where canonical content
+    already cites a missing extension. Sugar form (`--mixin
+    bio.bogus`) is caught earlier still — by `_resolve_mixin_arg` in
+    cli.py before plan_promote runs.
     """
     from science_tool.commons.errors import PromoteMixinStackingError
 
@@ -1418,6 +1422,12 @@ body_sections = read_canonical_body_sections(kind.default_profile)
 from science_model.entity_schema.loader import SchemaNotFoundError
 from science_tool.commons.errors import PromoteMixinResolutionError
 
+# Stacking-rule guard is enforced HERE too, not just in cli.py, because
+# plan_promote is also a public-ish Python API: direct callers from
+# tests or future code paths must not bypass the ≤1-structural /
+# ≤1-domain invariant.
+_validate_mixin_stacking(mixin_extensions)
+
 active_profile = _active_profile(kind, mixin_extensions)
 try:
     merge_policy = read_merge_policy(active_profile)
@@ -1591,6 +1601,43 @@ def test_plan_promote_with_mixin_extensions_emits_extended_schema_profile(
     assert "value_dtype: int32" in canonical.content
     assert "feature_axis: rows" in canonical.content
     assert "Homo sapiens" in canonical.content
+
+
+def test_plan_promote_enforces_stacking_for_direct_callers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """plan_promote is callable directly (not just through the CLI), so the
+    stacking-rule guard must fire there too. Direct call with two
+    structural mixins raises PromoteMixinStackingError before any I/O."""
+    from science_tool.commons.bootstrap import init_commons
+    from science_tool.commons.errors import PromoteMixinStackingError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        discover_candidates,
+        plan_promote,
+    )
+
+    proj = _project_tree_with_rnaseq(tmp_path)
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda _slug: proj,
+    )
+
+    commons = tmp_path / "commons"
+    init_commons(commons)
+
+    discovery = discover_candidates(["proj-rnaseq"], PROMOTE_KIND_DATASET)
+
+    with pytest.raises(PromoteMixinStackingError, match="structural"):
+        plan_promote(
+            discovery,
+            commons_root=commons,
+            kind=PROMOTE_KIND_DATASET,
+            mixin_extensions=(
+                ProfileComponent(name="bio.matrix", version="1.0"),
+                ProfileComponent(name="bio.table", version="1.0"),
+            ),
+        )
 
 
 def test_plan_promote_with_unknown_explicit_mixin_raises_resolution_error(
@@ -2443,9 +2490,9 @@ def test_explicit_form_unknown_mixin_rejected(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Explicit form (bio.bogus/1.0) parses syntactically and passes the
-    stacking-rule guard; the missing schema surfaces during validator
-    composition and is rewrapped by _validate_artifact as
-    PromoteMixinResolutionError."""
+    stacking-rule guard; the missing schema surfaces in plan_promote's
+    read_merge_policy(active_profile) call and is rewrapped there
+    (Task 12's try/except) as PromoteMixinResolutionError."""
     result = _invoke_with(
         ["--mixin", "bio.bogus/1.0", "--apply"], tmp_path, monkeypatch,
     )
@@ -2603,10 +2650,10 @@ Otherwise skip this commit.
 
 ## Phase H.4 — Pilot smoke test runbook (Task 19)
 
-### Task 19: Pilot — promote `dataset:GSE131651` with bio mixins
+### Task 19: Pilot — promote `dataset:gse131651-shah2019-nsd2` with bio mixins
 
 **Files:**
-- Modify: `multiple-myeloma/doc/datasets/data-gse131651-shah2019-nsd2.md` (hand-edit frontmatter to add bio fields). Path resolves under `~/d/cancer/cancer-types/multiple-myeloma/`.
+- Modify: `multiple-myeloma/doc/datasets/data-gse131651-shah2019-nsd2.md` (rename id to lowercase + add bio fields). Path resolves under `~/d/cancer/cancer-types/multiple-myeloma/`.
 - Document: append to `docs/plans/2026-05-19-commons-bio-extensions-plan.md` (this file) a "Pilot outcome" section.
 
 This task is a **runbook**, not unit testing. The point is to take one real MM dataset through the end-to-end promote-with-mixin flow and validate the result by inspection.
@@ -2617,13 +2664,28 @@ This task is a **runbook**, not unit testing. The point is to take one real MM d
 sed -n '1,40p' ~/d/cancer/cancer-types/multiple-myeloma/doc/datasets/data-gse131651-shah2019-nsd2.md
 ```
 
-Note the existing frontmatter — id slug, accessions, modality references in the body.
+The current id is `dataset:GSE131651` (uppercase). The dataset slug
+regex (`commons/promote.py:198`) requires lowercase
+(`^[a-z0-9][a-z0-9-]{1,63}$`), and discovery derives the dataset slug
+from the frontmatter `id` (Phase G's `slug_from_id=True`). So the
+pilot's first step is to rename the id to lowercase. The most
+descriptive lowercase slug that matches the filename stem is
+`gse131651-shah2019-nsd2`.
 
-- [ ] **Step 2: Add bio frontmatter fields to the project-side entity**
+- [ ] **Step 2: Rename the id and add bio frontmatter fields**
 
 Hand-edit `~/d/cancer/cancer-types/multiple-myeloma/doc/datasets/data-gse131651-shah2019-nsd2.md`:
 
-Add (or amend, if already present) under the existing YAML frontmatter:
+First, change the `id:` line:
+
+```yaml
+# Before:
+id: "dataset:GSE131651"
+# After:
+id: "dataset:gse131651-shah2019-nsd2"
+```
+
+Then add (or amend, if already present) under the existing YAML frontmatter:
 
 ```yaml
 # bio.matrix fields:
@@ -2643,10 +2705,10 @@ Concrete counts (`n_rows`, `n_cols`) should come from inspecting the dataset; if
 - [ ] **Step 3: Run the promote with mixins**
 
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 uv run science commons promote dataset \
     --from multiple-myeloma \
-    --slug GSE131651 \
+    --slug gse131651-shah2019-nsd2 \
     --mixin bio.matrix \
     --mixin bio.rnaseq \
     --apply
@@ -2664,7 +2726,7 @@ Expected output:
 - [ ] **Step 4: Verify the canonical entity**
 
 ```bash
-cat ~/d/science-shared/datasets/GSE131651/entity.md | head -25
+cat ~/d/science-shared/datasets/gse131651-shah2019-nsd2/entity.md | head -25
 ```
 
 Verify:
@@ -2686,7 +2748,7 @@ Verify:
 - [ ] **Step 6: Verify `science commons show` round-trips**
 
 ```bash
-uv run science commons show dataset:GSE131651
+uv run science commons show dataset:gse131651-shah2019-nsd2
 ```
 
 Expected: no validation errors; the show output includes the composed schema_profile and all bio fields.
@@ -2699,7 +2761,7 @@ Append a short section at the end of `docs/plans/2026-05-19-commons-bio-extensio
 ## Pilot outcome (Task 19)
 
 **Date run:** YYYY-MM-DD
-**Dataset:** dataset:GSE131651 (Shah 2019 — NSD2 KO bulk RNA-seq)
+**Dataset:** dataset:gse131651-shah2019-nsd2 (Shah 2019 — NSD2 KO bulk RNA-seq)
 **Mixins applied:** bio.matrix/1.0 + bio.rnaseq/1.0
 
 - canonical schema_profile: science-entity-base/1.0+dataset/1.0+bio.matrix/1.0+bio.rnaseq/1.0
@@ -2713,9 +2775,9 @@ follow-ons to file>.
 - [ ] **Step 8: Commit the pilot outcome (NOT the commons repo)**
 
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add docs/plans/2026-05-19-commons-bio-extensions-plan.md
-git commit -m "docs(phase-h): record pilot outcome for dataset:GSE131651"
+git commit -m "docs(phase-h): record pilot outcome for dataset:gse131651-shah2019-nsd2"
 ```
 
 The commons-repo commit from the promote itself happens in `~/d/science-shared/`, which is a separate repo and is not pushed to GitHub.
