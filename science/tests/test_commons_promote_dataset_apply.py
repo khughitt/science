@@ -113,6 +113,46 @@ def test_dataset_apply_writes_three_artifacts_commit_tag_override_overlay(
     assert "pin_version" in overlay_text
 
 
+def test_dataset_apply_audit_log_records_extras(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    _proj, commons = _setup(tmp_path, monkeypatch)
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(
+        discovery,
+        commons_root=commons,
+        kind=PROMOTE_KIND_DATASET,
+        from_order=["proj-dataset"],
+    )
+    result = apply_promote(
+        plan,
+        commons_root=commons,
+        invocation="science commons promote dataset --from proj-dataset --apply",
+    )
+
+    assert result.audit_log_path is not None
+    log = yaml.safe_load(result.audit_log_path.read_text(encoding="utf-8"))
+    [decision] = [entry for entry in log["decisions"] if entry["slug"] == "fixture-ds"]
+
+    r1 = decision["per_resource_hashes"]["r1"]
+    assert r1["hash"].startswith("sha256:")
+    assert r1["bytes"] == 12
+    assert decision["recipe_stubbed"] is True
+    assert "ontologies" in decision["dropped_fields"]
+    assert decision["override_file"].endswith("data.yaml")
+    op_id = log["op_id"]
+    assert decision["override_backup"].endswith((f"data.yaml.bak.{op_id}", ".absent"))
+
+
 def test_dataset_apply_overlay_failure_restores_side_channel(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -345,6 +345,7 @@ class PromoteResult:
     projects_touched: list[str]
     kind: PromoteKindConfig
     side_channel_results: dict[str, SideChannelResult] = field(default_factory=dict)
+    plan_audit_extras: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 # --------------------------------------------------------------------------- #
@@ -980,6 +981,7 @@ def _write_failure_audit_log(
         failure_detail=failure_detail,
         projects_touched=projects_touched,
         kind=plan.kind,
+        plan_audit_extras=plan.dataset_audit_extras,
     )
     yaml_text = _render_audit_log_yaml(result, commons_root, invocation=invocation)
     try:
@@ -1069,6 +1071,7 @@ def apply_promote(
             failure_detail=None,
             projects_touched=[],
             kind=plan.kind,
+            plan_audit_extras=plan.dataset_audit_extras,
         )
 
     try:
@@ -1272,6 +1275,7 @@ def apply_promote(
             projects_touched=projects_touched,
             kind=plan.kind,
             side_channel_results=side_channel_results,
+            plan_audit_extras=plan.dataset_audit_extras,
         )
         try:
             audit_path = _write_audit_log(result, commons_root, invocation=invocation)
@@ -1301,6 +1305,7 @@ def apply_promote(
             projects_touched=result.projects_touched,
             kind=result.kind,
             side_channel_results=result.side_channel_results,
+            plan_audit_extras=result.plan_audit_extras,
         )
 
     except (PromoteInputError, PromoteWriteError, PromoteCandidateError) as exc:
@@ -2382,14 +2387,7 @@ def _render_audit_log_yaml(
         "commons_commit": result.commons_commit,
         "commons_tags": result.tags_created,
         "projects_touched": projects_touched,
-        "decisions": [
-            {
-                "slug": d.slug,
-                "canonical_version": d.canonical_version,
-                "canonical_paths": _audit_canonical_paths(d, commons_root),
-            }
-            for d in result.decisions
-        ],
+        "decisions": [_audit_decision_entry(d, result, commons_root) for d in result.decisions],
         "conflict_resolutions": [
             {
                 "slug": cr.slug,
@@ -2428,6 +2426,38 @@ def _render_audit_log_yaml(
         log["failure_detail"] = result.failure_detail
 
     return yaml.safe_dump(log, sort_keys=False, allow_unicode=True)
+
+
+def _audit_decision_entry(
+    decision: PromoteDecision,
+    result: PromoteResult,
+    commons_root: Path,
+) -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "slug": decision.slug,
+        "canonical_version": decision.canonical_version,
+        "canonical_paths": _audit_canonical_paths(decision, commons_root),
+    }
+    if result.kind.kind != "dataset":
+        return entry
+
+    extras = result.plan_audit_extras.get(decision.slug, {})
+    per_resource = extras.get("per_resource", {})
+    entry["per_resource_hashes"] = {
+        name: {"hash": resource_hash, "bytes": resource_bytes}
+        for name, (resource_hash, resource_bytes) in per_resource.items()
+    }
+    entry["recipe_stubbed"] = extras.get("recipe_stubbed", False)
+    entry["dropped_fields"] = list(extras.get("dropped_fields", []))
+
+    side_channel = result.side_channel_results.get(decision.slug)
+    if side_channel is not None:
+        if side_channel.artifact_paths:
+            entry["override_file"] = str(side_channel.artifact_paths[0])
+        if side_channel.backup_paths:
+            entry["override_backup"] = str(side_channel.backup_paths[0])
+
+    return entry
 
 
 def _write_audit_log(
