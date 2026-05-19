@@ -9,12 +9,15 @@ import yaml
 
 from science_tool.commons.config import (
     CommonsSettings,
+    check_override_conflict,
     load_data_overrides,
     resolve_commons_data_root,
     resolve_commons_root,
     resolve_project_by_id,
+    restore_data_override_from_backup,
+    upsert_data_override,
 )
-from science_tool.commons.errors import CommonsError
+from science_tool.commons.errors import CommonsError, PromoteOverrideConflictError
 from science_tool.registry.config import GlobalConfig, load_global_config, save_global_config
 
 
@@ -208,6 +211,125 @@ def test_load_data_overrides_rejects_non_string_value(
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
     with pytest.raises(CommonsError):
         load_data_overrides()
+
+
+def test_upsert_data_override_creates_file_when_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    backup_path = upsert_data_override(
+        slug="x",
+        absolute_path=tmp_path / "fakedata",
+        op_id="op123",
+    )
+
+    yaml_path = cfg_dir / "data.yaml"
+    assert backup_path == cfg_dir / "data.yaml.bak.op123"
+    assert yaml_path.is_file()
+    assert yaml.safe_load(yaml_path.read_text(encoding="utf-8")) == {
+        "x": str(tmp_path / "fakedata")
+    }
+    assert (cfg_dir / "data.yaml.bak.op123.absent").is_file()
+    assert not backup_path.exists()
+
+
+def test_restore_data_override_removes_file_when_absent_sentinel_present(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    upsert_data_override(
+        slug="x",
+        absolute_path=tmp_path / "fakedata",
+        op_id="opABS",
+    )
+    assert (cfg_dir / "data.yaml").is_file()
+
+    restore_data_override_from_backup(op_id="opABS")
+
+    assert not (cfg_dir / "data.yaml").exists()
+    assert not (cfg_dir / "data.yaml.bak.opABS.absent").exists()
+
+
+def test_upsert_data_override_preserves_existing_entries_and_exact_backup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    yaml_path = cfg_dir / "data.yaml"
+    previous_content = "other: /other/path\n"
+    yaml_path.write_text(previous_content, encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    upsert_data_override(slug="x", absolute_path=tmp_path / "newdata", op_id="op999")
+
+    assert yaml.safe_load(yaml_path.read_text(encoding="utf-8")) == {
+        "other": "/other/path",
+        "x": str(tmp_path / "newdata"),
+    }
+    assert (cfg_dir / "data.yaml.bak.op999").read_bytes() == previous_content.encode()
+
+
+def test_check_override_conflict_raises_on_mismatch_and_allows_same_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "data.yaml").write_text("x: /existing/path\n", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    with pytest.raises(PromoteOverrideConflictError) as exc_info:
+        check_override_conflict(slug="x", planned_path=tmp_path / "different")
+
+    assert exc_info.value.slug == "x"
+    assert exc_info.value.existing_path == Path("/existing/path")
+    assert exc_info.value.planned_path == tmp_path / "different"
+    check_override_conflict(slug="x", planned_path=Path("/existing/path"))
+
+
+def test_restore_data_override_from_normal_backup_restores_exact_content(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    yaml_path = cfg_dir / "data.yaml"
+    bak_path = cfg_dir / "data.yaml.bak.opABC"
+    before_content = b"before: state\n# exact\n"
+    bak_path.write_bytes(before_content)
+    yaml_path.write_text("after: state\n", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    restore_data_override_from_backup(op_id="opABC")
+
+    assert yaml_path.read_bytes() == before_content
+    assert not bak_path.exists()
+
+
+def test_restore_data_override_from_backup_rejects_missing_backup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    with pytest.raises(CommonsError, match="backup not found"):
+        restore_data_override_from_backup(op_id="missing")
+
+
+def test_upsert_data_override_rejects_relative_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
+
+    with pytest.raises(CommonsError, match="absolute"):
+        upsert_data_override(
+            slug="x",
+            absolute_path=Path("relative/path"),
+            op_id="opREL",
+        )
 
 
 def test_resolve_project_root_returns_registered_path(
