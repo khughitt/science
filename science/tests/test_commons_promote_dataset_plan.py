@@ -432,6 +432,8 @@ def test_dataset_dropped_fields_records_unrouted_keys():
     raw_fm = {
         "id": "dataset:x",
         "type": "dataset",
+        "schema_profile": "science-entity-base/1.0+dataset/1.0",
+        "version": "1.0.0",
         "title": "T",
         "datapackage": "data/x/datapackage.json",
         "origin": "external",
@@ -440,12 +442,13 @@ def test_dataset_dropped_fields_records_unrouted_keys():
         "tags": ["a"],
         "ontologies": ["bio"],
         "datasets": ["dataset:y"],
+        "overlay_of": "dataset:x",
         "pin_version": "1.0.0",
+        "pin_effective_version": "1.0.0",
         "relevance": "high",
+        "_sentinel": True,
     }
     canonical_fields = {
-        "id": "dataset:x",
-        "type": "dataset",
         "title": "T",
         "datapackage": "data/x/datapackage.json",
         "origin": "external",
@@ -453,10 +456,10 @@ def test_dataset_dropped_fields_records_unrouted_keys():
         "access": {"level": "public", "verified": True},
         "tags": ["a"],
     }
-    project_only_fields = {"pin_version": "1.0.0", "relevance": "high"}
+    project_only_fields = {"relevance": "high"}
     dropped = _dataset_dropped_fields(
         raw_fm,
         canonical_fields=canonical_fields,
         project_only_fields=project_only_fields,
     )
-    assert set(dropped) == {"ontologies", "datasets"}
+    assert dropped == ["datasets", "ontologies"]

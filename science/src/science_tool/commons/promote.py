@@ -1676,7 +1676,10 @@ def _dataset_dropped_fields(
     Convention: keys starting with `_` are intentional metadata/sentinels and not reported.
     """
     routed = set(canonical_fields) | set(project_only_fields)
-    return sorted(k for k in raw_frontmatter if k not in routed and not k.startswith("_"))
+    internal = _GENERATED_BY_PROMOTE_KEYS | _PROMOTE_DERIVED_IDENTITY_KEYS | _OVERLAY_ONLY_KEYS
+    return sorted(
+        k for k in raw_frontmatter if k not in routed and k not in internal and not k.startswith("_")
+    )
 
 
 # --------------------------------------------------------------------------- #
