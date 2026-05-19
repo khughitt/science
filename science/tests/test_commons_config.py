@@ -318,6 +318,25 @@ def test_check_override_conflict_raises_on_mismatch_and_allows_same_path(
     check_override_conflict(slug="x", planned_path=Path("/existing/path"))
 
 
+def test_check_override_conflict_allows_equivalent_resolved_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    real_data = tmp_path / "real-project" / "data" / "fixture-ds"
+    linked_project = tmp_path / "linked-project"
+    cfg_dir.mkdir()
+    real_data.mkdir(parents=True)
+    linked_project.symlink_to(tmp_path / "real-project", target_is_directory=True)
+    linked_data = linked_project / "data" / "fixture-ds"
+    (cfg_dir / "data.yaml").write_text(
+        f"x: {linked_data}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    check_override_conflict(slug="x", planned_path=real_data)
+
+
 def test_restore_data_override_from_normal_backup_restores_exact_content(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

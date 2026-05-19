@@ -192,7 +192,9 @@ def check_override_conflict(*, slug: str, planned_path: Path) -> None:
     if existing is None:
         return
     existing_path = Path(existing).expanduser()
-    if existing_path != planned_path:
+    if existing_path.resolve(strict=False) != planned_path.expanduser().resolve(
+        strict=False
+    ):
         raise PromoteOverrideConflictError(
             slug=slug,
             existing_path=existing_path,
