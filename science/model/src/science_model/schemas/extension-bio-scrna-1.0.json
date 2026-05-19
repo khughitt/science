@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/extension-bio-scrna-1.0.json",
+  "title": "science entity bio.scrna extension",
+  "type": "object",
+  "required": ["species", "assay"],
+  "properties": {
+    "species": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "assay": {
+      "enum": [
+        "10x-chromium-3prime",
+        "10x-chromium-5prime",
+        "drop-seq",
+        "mars-seq",
+        "smart-seq2",
+        "smart-seq3",
+        "perturb-seq",
+        "split-seq",
+        "indrops"
+      ]
+    },
+    "tissue": {"type": "string", "minLength": 1},
+    "library_prep": {"type": "string", "minLength": 1},
+    "reference_genome": {"type": "string", "minLength": 1},
+    "preprocessing_version": {"type": "string", "minLength": 1}
+  }
+}
