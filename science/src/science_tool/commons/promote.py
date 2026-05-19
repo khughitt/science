@@ -6,7 +6,7 @@ per docs/plans/2026-05-15-commons-promote-papers-design.md §6.3.
 This module owns:
 - Dataclasses for the public surface (PromoteCandidate, PromotePlan, …).
 - `discover_candidates(project_slugs, kind) -> DiscoveryResult`.
-- `plan_promote(discovery, *, commons_root, kind, from_order, resolve_conflict) -> PromotePlan` (Task 14).
+- `plan_promote(discovery, *, commons_root, kind, from_order, resolve_conflict, mixin_extensions) -> PromotePlan`.
 - `apply_promote(plan, commons_root, *, invocation) -> PromoteResult` (Tasks 16–17).
 """
 
@@ -36,6 +36,7 @@ from science_model.entity_schema import (
     read_merge_policy,
     read_overlay_merge_policy,
 )
+from science_model.entity_schema.loader import SchemaNotFoundError
 from science_model.entity_schema.profile import ProfileComponent
 from science_tool.commons.datapackage import (
     render_canonical_datapackage_yaml,
@@ -47,6 +48,7 @@ from science_tool.commons.errors import (
     PromoteCandidateError,
     PromoteConflictAbort,
     PromoteInputError,
+    PromoteMixinResolutionError,
     PromoteResourceMissingError,
     PromoteValidationError,
     PromoteWriteError,
@@ -486,6 +488,7 @@ def plan_promote(
     kind: PromoteKindConfig,
     resolve_conflict: Callable[[FieldConflict], Any] | None = None,
     from_order: list[str] | None = None,
+    mixin_extensions: tuple["ProfileComponent", ...] = (),
 ) -> PromotePlan:
     """Build a PromotePlan from a DiscoveryResult.
 
@@ -503,8 +506,24 @@ def plan_promote(
     if resolve_conflict is None:
         resolve_conflict = prompt_resolve
 
-    merge_policy = read_merge_policy(kind.default_profile)
-    body_sections = read_canonical_body_sections(kind.default_profile)
+    # Stacking-rule guard is enforced HERE too, not just in cli.py, because
+    # plan_promote is also a public-ish Python API: direct callers from
+    # tests or future code paths must not bypass the <=1-structural /
+    # <=1-domain invariant.
+    _validate_mixin_stacking(mixin_extensions)
+
+    active_profile = _active_profile(kind, mixin_extensions)
+    try:
+        merge_policy = read_merge_policy(active_profile)
+        body_sections = read_canonical_body_sections(active_profile)
+    except SchemaNotFoundError as exc:
+        # An unknown bio.* extension cited by --mixin (explicit form, e.g.
+        # bio.bogus/1.0) surfaces here -- read_merge_policy walks every
+        # profile component immediately. Rewrap as PromoteMixinResolutionError
+        # so the CLI's standard CommonsError -> ClickException path catches it.
+        raise PromoteMixinResolutionError(
+            f"schema_profile references an unknown extension: {exc}"
+        ) from exc
     overlay_field_keys = set(read_overlay_merge_policy())
 
     if from_order is None:
@@ -717,7 +736,7 @@ def plan_promote(
             created=date.today(),
             updated=date.today(),
             kind=kind,
-            active_profile=kind.default_profile,
+            active_profile=active_profile,
         )
         if kind.kind == "dataset":
             canonical_content = _rewrite_rendered_frontmatter(
