@@ -21,9 +21,8 @@ def base_rnaseq_entity() -> dict:
         "origin": "external",
         "tier": "use-now",
         "access": {"level": "public", "verified": True},
-        "species": "Homo sapiens",
+        "species": ["Homo sapiens"],
         "assay": "bulk-rnaseq",
-        "n_samples": 1080,
     }
 
 
@@ -42,6 +41,12 @@ def test_rnaseq_extension_composes_with_base_and_dataset(base_rnaseq_entity: dic
 
 def test_rnaseq_rejects_missing_species(base_rnaseq_entity: dict) -> None:
     entity = {k: v for k, v in base_rnaseq_entity.items() if k != "species"}
+    with pytest.raises(EntityValidationError, match="species"):
+        EntityValidator().validate(entity)
+
+
+def test_rnaseq_rejects_scalar_species(base_rnaseq_entity: dict) -> None:
+    entity = base_rnaseq_entity | {"species": "Homo sapiens"}
     with pytest.raises(EntityValidationError, match="species"):
         EntityValidator().validate(entity)
 

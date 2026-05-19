@@ -14,7 +14,7 @@ access:
   level: "public"
   verified: true
   source_url: "https://example.org/rnaseq"
-species: "Homo sapiens"
+species: ["Homo sapiens"]
 assay: "bulk-rnaseq"
 ontology_terms: ["UBERON:0000178"]
 tags: ["rnaseq", "bulk"]

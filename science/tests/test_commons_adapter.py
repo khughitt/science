@@ -132,7 +132,7 @@ def test_scan_populates_frontmatter_and_schema_profile(tmp_path: Path) -> None:
 
     rnaseq = by_id["dataset:rnaseq-example"]
     assert rnaseq.schema_profile.endswith("+bio.rnaseq/1.0")
-    assert rnaseq.frontmatter["species"] == "Homo sapiens"
+    assert rnaseq.frontmatter["species"] == ["Homo sapiens"]
 
 
 def test_scan_yields_error_for_bad_bibkey(tmp_path: Path) -> None:
