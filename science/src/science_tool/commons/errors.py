@@ -177,7 +177,7 @@ class PromoteMixinResolutionError(PromoteInputError):
     - Sugar form (`--mixin bio.bogus`): no `extension-bio-bogus-*.json` on disk.
     - Explicit form (`--mixin bio.bogus/1.0`): SchemaNotFoundError surfaces
       during `plan_promote`'s `read_merge_policy(active_profile)` setup and
-      is caught + rewrapped there.
+      is intended to be caught + rewrapped there by the Phase H plan_promote path.
     - `_validate_artifact` can use the same exception path as a
       belt-and-suspenders guard for already-rendered canonical content that
       cites a missing extension.
