@@ -1306,7 +1306,7 @@ def apply_promote(
             audit_rel = str(audit_path.relative_to(commons_root))
             _git(commons_root, "add", "--", audit_rel)
             _git(commons_root, "commit", "-m", f"audit: op {op_id}", "--", audit_rel)
-        except subprocess.CalledProcessError as exc:
+        except (OSError, subprocess.CalledProcessError) as exc:
             audit_exc = PromoteWriteError(
                 stage="audit",
                 detail=f"audit log write/commit failed: {exc}",
