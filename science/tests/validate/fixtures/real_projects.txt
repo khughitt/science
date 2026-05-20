@@ -1,0 +1,3 @@
+# Downstream projects covered by the canonical-body semantic parity gate.
+~/d/health/meta
+~/d/cancer/mechanisms/evolution
