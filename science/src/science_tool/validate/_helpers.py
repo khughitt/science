@@ -8,6 +8,8 @@ import yaml
 
 from science_tool.bibliography import bibliography_key_from_reference, load_bib_keys
 
+_SAFE_PAPER_SLUG_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+
 if TYPE_CHECKING:
     from science_tool.validate.context import ValidateContext
 
@@ -36,12 +38,12 @@ def resolve_reference(ctx: ValidateContext, ref: str) -> Path | None:
     if task_path is not None:
         return task_path
 
+    if ref.count(":") >= 2:
+        return None
+
     frontmatter_path = _resolve_frontmatter_reference(ctx, ref)
     if frontmatter_path is not None:
         return frontmatter_path
-
-    if ref.count(":") >= 2:
-        return None
 
     paper_slug = _paper_slug(ref)
     if paper_slug is None:
@@ -70,7 +72,7 @@ def _resolve_task_reference(ctx: ValidateContext, ref: str) -> Path | None:
     if task_id is None:
         return None
 
-    heading_re = re.compile(rf"^## \[{re.escape(task_id)}\](?:\s|$)", re.MULTILINE)
+    heading_re = re.compile(rf"^##\s+\[{re.escape(task_id)}\](?:\s|$)", re.MULTILINE)
     for path in _task_files(ctx.project_root):
         if heading_re.search(ctx.read_text_cached(path)):
             return path
@@ -90,7 +92,7 @@ def _task_id(ref: str) -> str | None:
         candidate = ref[len("task:") :]
     else:
         candidate = ref
-    if re.fullmatch(r"t\d{3}", candidate) is None:
+    if re.fullmatch(r"t\d{3,}", candidate) is None:
         return None
     return candidate
 
@@ -117,4 +119,6 @@ def _paper_slug(ref: str) -> str | None:
     if not ref.startswith("paper:"):
         return None
     slug = ref[len("paper:") :]
+    if _SAFE_PAPER_SLUG_RE.fullmatch(slug) is None:
+        return None
     return slug or None

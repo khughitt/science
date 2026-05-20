@@ -72,6 +72,19 @@ def test_resolve_reference_falls_back_to_doc_paper_slug(tmp_path: Path) -> None:
     assert resolve_reference(ctx, "paper:Foo2024") == paper_path
 
 
+def test_resolve_reference_rejects_unsafe_paper_fallback_slugs(tmp_path: Path) -> None:
+    ctx = _project(tmp_path)
+    escape_path = tmp_path / "doc" / "some-doc.md"
+    nested_path = tmp_path / "doc" / "papers" / "subdir" / "name.md"
+    escape_path.parent.mkdir(parents=True)
+    nested_path.parent.mkdir(parents=True)
+    escape_path.write_text("# Escape\n", encoding="utf-8")
+    nested_path.write_text("# Nested\n", encoding="utf-8")
+
+    assert resolve_reference(ctx, "paper:../some-doc") is None
+    assert resolve_reference(ctx, "paper:subdir/name") is None
+
+
 def test_resolve_reference_resolves_cite_key_to_bibliography(tmp_path: Path) -> None:
     ctx = _project(tmp_path)
     bib_path = tmp_path / "papers" / "references.bib"
@@ -94,6 +107,25 @@ def test_resolve_reference_resolves_task_id_and_bare_task_id(tmp_path: Path) -> 
     assert resolve_reference(ctx, "task:t012") == active_path
     assert resolve_reference(ctx, "t099") == done_path
     assert resolve_reference(ctx, "task:t404") is None
+
+
+def test_resolve_reference_resolves_long_task_ids_with_flexible_heading_whitespace(tmp_path: Path) -> None:
+    ctx = _project(tmp_path)
+    active_path = tmp_path / "tasks" / "active.md"
+    active_path.parent.mkdir(parents=True)
+    active_path.write_text("# Active\n\n##   [t1000] Long task\n", encoding="utf-8")
+
+    assert resolve_reference(ctx, "task:t1000") == active_path
+    assert resolve_reference(ctx, "t1000") == active_path
+
+
+def test_resolve_reference_does_not_treat_three_part_refs_as_local_frontmatter_ids(tmp_path: Path) -> None:
+    ctx = _project(tmp_path)
+    path = tmp_path / "doc" / "questions" / "q01.md"
+    path.parent.mkdir(parents=True)
+    path.write_text("---\nid: peer:question:q01\n---\nQuestion\n", encoding="utf-8")
+
+    assert resolve_reference(ctx, "peer:question:q01") is None
 
 
 def test_section_banner_formats_checking_line() -> None:
