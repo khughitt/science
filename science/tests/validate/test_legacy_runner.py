@@ -52,3 +52,34 @@ def test_run_legacy_sidecar_strips_ansi_from_sidecar_messages(tmp_path: Path) ->
     assert results[0].severity is Severity.WARN
     assert results[0].path is None
     assert results[0].message == "ANSI warning"
+
+
+def test_run_legacy_sidecar_preserves_stdout_results_when_hook_exits_nonzero(tmp_path: Path) -> None:
+    stderr_prefix = "legacy failure details: "
+    stderr_tail = "x" * 2100
+    long_stderr = f"{stderr_prefix}{stderr_tail}"
+    tmp_path.joinpath("validate.local.sh").write_text(
+        "\n".join(
+            [
+                "failing_warning() {",
+                '  warn "stdout warning"',
+                f"  printf '%s' {long_stderr!r} >&2",
+                "  exit 23",
+                "}",
+                "register_validation_hook extra_checks failing_warning",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    results, log_lines = run_legacy_sidecar(tmp_path)
+
+    assert log_lines == []
+    assert len(results) == 2
+    assert results[0].severity is Severity.WARN
+    assert results[0].message == "stdout warning"
+    assert results[1].severity is Severity.ERROR
+    assert results[1].message.startswith("legacy sidecar exited with code 23: legacy failure details: ")
+    assert results[1].message.endswith("...")
+    assert long_stderr not in results[1].message
