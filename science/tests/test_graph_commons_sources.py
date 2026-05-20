@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,15 +9,29 @@ from typing import cast
 import pytest
 from science_model.entities import DatasetEntity, Entity, EntityScope, ThemeEntity
 from science_model.source_contracts import BindingSource
+from science_model.source_ref import SourceRef
 
+from science_tool.commons.adapter import CommonsEntityAdapter
+from science_tool.commons.errors import CommonsRootNotFoundError, OverlayValidationError
 from science_tool.commons.overlay import MergedEntity
+from science_tool.commons.registry import RegistryBuilder
 from science_tool.graph.commons_sources import (
     _OVERLAY_ONLY_FIELDS,
+    _load_commons_referenced_entities,
     _materialize_commons_entity,
     collect_referenced_commons_ids,
 )
 from science_tool.graph.entity_registry import EntityRegistry
 from science_tool.graph.sources import SourceRelation
+
+_COMMONS_FIXTURE = Path(__file__).parent / "fixtures" / "commons" / "valid"
+
+
+def _build_commons(tmp_path: Path) -> Path:
+    commons_root = tmp_path / "commons"
+    shutil.copytree(_COMMONS_FIXTURE, commons_root)
+    RegistryBuilder(commons_root, CommonsEntityAdapter(commons_root)).rebuild()
+    return commons_root
 
 
 def _entity(
@@ -52,6 +67,25 @@ def _collect(
         project_entities=cast(list[Entity], entities or []),
         project_relations=relations or [],
         project_bindings=bindings or [],
+    )
+
+
+def _load_commons(
+    project_root: Path,
+    *,
+    project_entities: list[Entity] | None = None,
+    identity_table: dict[str, SourceRef] | None = None,
+) -> tuple[list[tuple[Entity, SourceRef]], dict[str, str]]:
+    return _load_commons_referenced_entities(
+        project_root=project_root,
+        project_slug="demo",
+        project_entities=project_entities or [],
+        project_relations=[],
+        project_bindings=[],
+        identity_table=identity_table or {},
+        registry=EntityRegistry.with_core_types(),
+        active_kinds=frozenset({"dataset", "paper", "theme", "topic"}),
+        ontology_catalogs=[],
     )
 
 
@@ -345,3 +379,135 @@ def test_translate_drops_overlay_only_fields() -> None:
 
     for field_name in _OVERLAY_ONLY_FIELDS:
         assert not hasattr(entity, field_name)
+
+
+def test_orchestrator_loads_referenced_topic_from_commons_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+
+    loaded, overlay_paths = _load_commons(
+        project_root,
+        project_entities=[_entity("topic:local", related=["topic:single-cell-foundation-models"])],
+    )
+
+    assert overlay_paths == {}
+    assert len(loaded) == 1
+    entity, ref = loaded[0]
+    assert entity.canonical_id == "topic:single-cell-foundation-models"
+    assert entity.scope == EntityScope.SHARED
+    assert ref.adapter_name == "commons-merged"
+    assert ref.path == "commons://topics/single-cell-foundation-models.md"
+
+
+def test_orchestrator_skips_referenced_missing_canonical(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+
+    loaded, overlay_paths = _load_commons(
+        project_root,
+        project_entities=[_entity("topic:local", related=["topic:does-not-exist"])],
+    )
+
+    assert loaded == []
+    assert overlay_paths == {}
+
+
+def test_orchestrator_raises_overlay_validation_error_on_orphan_overlay(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = tmp_path / "project"
+    overlay_path = project_root / "doc" / "topics" / "orphan.md"
+    overlay_path.parent.mkdir(parents=True)
+    overlay_path.write_text(
+        """---
+id: "topic:orphan"
+overlay_of: "topic:orphan"
+relevance: "no canonical counterpart"
+---
+
+## Project Notes
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(OverlayValidationError) as excinfo:
+        _load_commons(project_root)
+
+    assert excinfo.value.overlay_path == overlay_path
+    assert excinfo.value.canonical_id == "topic:orphan"
+
+
+def test_orchestrator_loads_overlay_without_explicit_reference(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = tmp_path / "project"
+    overlay_path = project_root / "doc" / "topics" / "single-cell-foundation-models.md"
+    overlay_path.parent.mkdir(parents=True)
+    overlay_path.write_text(
+        """---
+id: "topic:single-cell-foundation-models"
+overlay_of: "topic:single-cell-foundation-models"
+relevance: "central to this project"
+project_tags: ["project-anchor"]
+---
+
+## Project Notes
+""",
+        encoding="utf-8",
+    )
+
+    loaded, overlay_paths = _load_commons(project_root)
+
+    assert [entity.canonical_id for entity, _ref in loaded] == ["topic:single-cell-foundation-models"]
+    assert overlay_paths == {
+        "topic:single-cell-foundation-models": str(overlay_path),
+    }
+
+
+def test_orchestrator_no_overlays_and_no_refs_is_noop_with_missing_commons_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+
+    loaded, overlay_paths = _load_commons(project_root)
+
+    assert loaded == []
+    assert overlay_paths == {}
+
+
+def test_orchestrator_raises_missing_commons_root_when_overlays_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    missing_root = tmp_path / "missing-commons"
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(missing_root))
+    project_root = tmp_path / "project"
+    overlay_path = project_root / "doc" / "topics" / "single-cell-foundation-models.md"
+    overlay_path.parent.mkdir(parents=True)
+    overlay_path.write_text(
+        """---
+id: "topic:single-cell-foundation-models"
+overlay_of: "topic:single-cell-foundation-models"
+relevance: "central to this project"
+---
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CommonsRootNotFoundError) as excinfo:
+        _load_commons(project_root)
+
+    assert excinfo.value.root == missing_root
