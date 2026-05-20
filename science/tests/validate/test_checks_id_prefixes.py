@@ -4,6 +4,8 @@ from collections.abc import Iterable
 import importlib
 from pathlib import Path
 
+import pytest
+
 from science_tool.validate import Result, Severity, ValidateContext
 from science_tool.validate.checks import CANONICAL_CHECKS, clear_checks_for_tests
 
@@ -88,6 +90,17 @@ def test_skips_templates_path(tmp_path: Path) -> None:
     assert _messages(check_id_prefixes(_ctx(tmp_path))) == ["  all type/id prefixes conform"]
 
 
+def test_templates_ancestor_outside_project_does_not_skip_project_files(tmp_path: Path) -> None:
+    from science_tool.validate.checks.id_prefixes import check_id_prefixes
+
+    project_root = tmp_path / "templates" / "project"
+    _write(project_root / "doc" / "reports" / "a.md", "---\ntype: report\nid: doc:a\n---\n")
+
+    assert _messages(check_id_prefixes(_ctx(project_root)), Severity.WARN) == [
+        "id-prefix mismatch: doc/reports/a.md: type=report but id=doc:a (expected prefix 'report:')"
+    ]
+
+
 def test_ignores_missing_frontmatter_missing_fields_and_unknown_type(tmp_path: Path) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
@@ -116,6 +129,17 @@ def test_skip_environment_emits_no_results(tmp_path: Path, monkeypatch) -> None:
     _write(tmp_path / "doc" / "a.md", "---\ntype: report\nid: doc:a\n---\n")
 
     assert list(check_id_prefixes(_ctx(tmp_path))) == []
+
+
+def test_read_encoding_errors_propagate(tmp_path: Path) -> None:
+    from science_tool.validate.checks.id_prefixes import check_id_prefixes
+
+    path = tmp_path / "doc" / "bad.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"---\ntype: report\nid: report:\xff\n---\n")
+
+    with pytest.raises(UnicodeDecodeError):
+        list(check_id_prefixes(_ctx(tmp_path)))
 
 
 def test_loader_registry_includes_id_prefixes_after_tasks_at_order_19() -> None:

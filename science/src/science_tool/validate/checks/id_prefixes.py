@@ -129,6 +129,10 @@ def _display_path(project_root: Path, path: Path) -> str:
         return path.as_posix()
 
 
+def _project_relative_parts(project_root: Path, path: Path) -> tuple[str, ...]:
+    return path.relative_to(project_root).parts
+
+
 def _extract_field(text: str, name: str) -> str | None:
     match = re.search(rf"^{name}:\s*{QUOTE}([^\"'\n]+){QUOTE}\s*$", text, re.MULTILINE)
     return match.group(1).strip() if match else None
@@ -144,7 +148,7 @@ def check_id_prefixes(ctx: ValidateContext) -> Iterator[Result]:
         if not root.is_dir():
             continue
         for path in sorted(root.rglob("*.md")):
-            if "templates" in path.parts:
+            if "templates" in _project_relative_parts(ctx.project_root, path):
                 continue
             content = ctx.read_text_cached(path)
             frontmatter = FRONTMATTER.match(content)
