@@ -62,6 +62,7 @@ def _load_canonical_checks() -> None:
         "id_prefixes",
         "cross_references",
         "prose_lints",
+        "annotations",
     ):
         importlib.import_module(f"{__name__}.{module_name}")
 
