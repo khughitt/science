@@ -103,6 +103,7 @@ from science_tool.prose_lint_cli import prose_group
 from science_tool.refs_cli import refs_group
 from science_tool.research_package.cli import research_package_group
 from science_tool.styles import COLOR_POLICY_CHOICES, resolve_color_policy, set_color_policy
+from science_tool.validate.cli import validate_cmd
 from science_tool.verdict.cli import verdict_group
 from science_tool.skills_lint import skills_group
 from science_tool.commons import commons_group
@@ -214,6 +215,7 @@ main.add_command(skills_group)
 main.add_command(peers_group)
 main.add_command(wander_command)
 main.add_command(commons_group)
+main.add_command(validate_cmd)
 
 
 @main.group("entities")
