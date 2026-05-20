@@ -107,14 +107,28 @@ def test_isolated_copy_excludes_sidecars_and_is_independent(
 
 def test_sidecar_env_var_disables_python_sidecar_import(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _write_minimal_project(tmp_path)
+    tmp_path.joinpath("validate_local.py").write_text(
+        "\n".join(
+            [
+                "from science_tool.validate import Result, Severity, hook",
+                "",
+                '@hook("extra_checks")',
+                "def extra(ctx):",
+                '    return [Result(Severity.WARN, None, None, "sidecar imported", "local.extra", None)]',
+            ]
+        ),
+        encoding="utf-8",
+    )
     _ensure_canonical_checks()
     monkeypatch.delenv("SCIENCE_VALIDATE_DISABLE_SIDECAR", raising=False)
 
-    with pytest.raises(NotImplementedError, match="Python sidecar discovery is not implemented until Task 8"):
-        run(tmp_path, strict=False, verbose=False, enable_python_sidecar=True)
+    enabled_result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=True)
+
+    assert "sidecar imported" in [item.message for item in enabled_result.results]
 
     monkeypatch.setenv("SCIENCE_VALIDATE_DISABLE_SIDECAR", "1")
 
     result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=True)
 
     assert result.results
+    assert "sidecar imported" not in [item.message for item in result.results]
