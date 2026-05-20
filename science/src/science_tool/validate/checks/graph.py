@@ -217,11 +217,7 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
         slug = inquiry.get("slug")
         if not slug:
             continue
-        try:
-            inquiry_rows = validate_inquiry(graph_path, slug)
-        except ValueError:
-            yield _result(Severity.ERROR, f"inquiry '{slug}' validation produced unparseable output")
-            continue
+        inquiry_rows = validate_inquiry(graph_path, slug)
 
         for row in inquiry_rows:
             status = row.get("status")

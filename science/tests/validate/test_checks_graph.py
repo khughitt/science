@@ -232,6 +232,27 @@ def test_inquiry_validation_maps_statuses_and_verbose_passes(monkeypatch: pytest
     assert "inquiry 'demo': shape — ok" in _messages(verbose_results, Severity.INFO)
 
 
+def test_inquiry_value_error_propagates(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from science_tool.validate.checks import graph
+
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir()
+    graph_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
+    monkeypatch.setattr(graph, "validate_graph", lambda _path: ([], False))
+    monkeypatch.setattr(graph, "diff_graph_inputs", lambda **_kwargs: [])
+    monkeypatch.setattr(graph, "list_inquiries", lambda _path: [{"slug": "demo"}])
+
+    def raise_value_error(_path: Path, _slug: str) -> list[dict[str, str]]:
+        raise ValueError("inquiry graph is malformed")
+
+    monkeypatch.setattr(graph, "validate_inquiry", raise_value_error)
+
+    with pytest.raises(ValueError, match="inquiry graph is malformed"):
+        list(graph.check_graph(_ctx(tmp_path)))
+
+
 def test_registry_loads_graph_after_notes_at_order_17() -> None:
     from science_tool.validate.checks import CANONICAL_CHECKS, clear_checks_for_tests
     import science_tool.validate.checks.graph as graph
