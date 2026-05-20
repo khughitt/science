@@ -162,3 +162,82 @@ def test_bash_extra_checks_hook_runs_after_canonical_checks(tmp_path: Path) -> N
     messages = [item.message for item in result.results]
 
     assert messages.index("CANONICAL-FIRED") < messages.index("POST-FIRED")
+
+
+def test_integrated_bash_sidecar_sources_top_level_once_per_legacy_phase(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path)
+    _register_canonical_result()
+    project.joinpath("validate.local.sh").write_text(
+        "\n".join(
+            [
+                'printf "sourced\\n" >> source-count.txt',
+                "legacy_pre() {",
+                '  warn "PRE-FIRED"',
+                "}",
+                "legacy_extra() {",
+                '  warn "EXTRA-FIRED"',
+                "}",
+                "register_validation_hook pre_validation legacy_pre",
+                "register_validation_hook extra_checks legacy_extra",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run(project, strict=False, verbose=False, enable_python_sidecar=True)
+
+    assert project.joinpath("source-count.txt").read_text(encoding="utf-8").splitlines() == [
+        "sourced",
+        "sourced",
+    ]
+    assert [item.message for item in result.results] == [
+        "validate.local.sh is deprecated; migrate validation hooks to validate_local.py",
+        "PRE-FIRED",
+        "CANONICAL-FIRED",
+        "EXTRA-FIRED",
+    ]
+
+
+def test_integrated_bash_pre_failure_records_error_and_continues(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path)
+    _register_canonical_result()
+    project.joinpath("validate.local.sh").write_text(
+        "\n".join(
+            [
+                "legacy_pre() {",
+                '  warn "PRE-FIRED"',
+                '  printf "pre failed" >&2',
+                "  exit 23",
+                "}",
+                "legacy_extra() {",
+                '  warn "EXTRA-FIRED"',
+                "}",
+                "register_validation_hook pre_validation legacy_pre",
+                "register_validation_hook extra_checks legacy_extra",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run(project, strict=False, verbose=False, enable_python_sidecar=True)
+
+    assert [item.message for item in result.results] == [
+        "validate.local.sh is deprecated; migrate validation hooks to validate_local.py",
+        "PRE-FIRED",
+        "legacy sidecar exited with code 23: pre failed",
+        "CANONICAL-FIRED",
+        "EXTRA-FIRED",
+    ]
+    assert [item.severity for item in result.results] == [
+        Severity.WARN,
+        Severity.WARN,
+        Severity.ERROR,
+        Severity.ERROR,
+        Severity.WARN,
+    ]

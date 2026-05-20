@@ -97,6 +97,8 @@ def run(
             python_sidecar_state = _install_python_sidecar(ctx)
             python_sidecar_imported = True
         if legacy_sidecar_selected:
+            # Legacy bash sidecars run once per phase in separate subprocesses.
+            # Their failures become Results so Python canonical checks continue.
             legacy_results, _log_lines = run_legacy_sidecar(
                 ctx.project_root,
                 phase="pre_validation",
