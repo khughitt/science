@@ -461,8 +461,16 @@ class ThemeEntity(ProjectEntity):
         "translational",
         "evidence-quality",
         "organizational",
+        "conceptual",
+        "empirical",
+        "domain",
     ] = "methodological"
-    theme_scope: Literal["project", "federation", "child"] = "project"
+    theme_scope: Literal[
+        "project",
+        "federation",
+        "child",
+        "cross-project",
+    ] = "project"
     summary: str = ""
 
 
