@@ -24,6 +24,7 @@ class HeaderKind(str, Enum):
 
 class ExtensionKind(str, Enum):
     SOURCED_SIDECAR = "sourced_sidecar"
+    PYTHON_SIDECAR = "python_sidecar"
     MERGED_SIDECAR = "merged_sidecar"
     GENERATED_EFFECTIVE_FILE = "generated_effective_file"
     NONE = "none"
@@ -159,7 +160,11 @@ class Artifact(BaseModel):
         c = self.consumer
         ek = self.extension_protocol.kind
         valid_pairs: dict[Consumer, set[ExtensionKind]] = {
-            Consumer.DIRECT_EXECUTE: {ExtensionKind.SOURCED_SIDECAR, ExtensionKind.NONE},
+            Consumer.DIRECT_EXECUTE: {
+                ExtensionKind.SOURCED_SIDECAR,
+                ExtensionKind.PYTHON_SIDECAR,
+                ExtensionKind.NONE,
+            },
             Consumer.SCIENCE_LOADER: {ExtensionKind.MERGED_SIDECAR, ExtensionKind.NONE},
             Consumer.NATIVE_TOOL: {ExtensionKind.GENERATED_EFFECTIVE_FILE, ExtensionKind.NONE},
         }
