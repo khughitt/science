@@ -1,0 +1,337 @@
+{
+  "summary": {
+    "errors": 4,
+    "warnings": 2,
+    "infos": 35
+  },
+  "results": [
+    {
+      "severity": "info",
+      "path": "pyproject.toml",
+      "line": null,
+      "message": "pyproject.toml present",
+      "rule": "tooling",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "pyproject.toml",
+      "line": null,
+      "message": "  science reference present",
+      "rule": "tooling",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": ".env",
+      "line": null,
+      "message": ".env defines SCIENCE_TOOL_PATH",
+      "rule": "tooling",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "science.yaml",
+      "line": null,
+      "message": "science.yaml exists",
+      "rule": "manifest",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "science.yaml",
+      "line": null,
+      "message": "  name: present",
+      "rule": "manifest",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "science.yaml",
+      "line": null,
+      "message": "  created: present",
+      "rule": "manifest",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "science.yaml",
+      "line": null,
+      "message": "  last_modified: present",
+      "rule": "manifest",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "science.yaml",
+      "line": null,
+      "message": "  status: present",
+      "rule": "manifest",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "science.yaml",
+      "line": null,
+      "message": "  summary: present",
+      "rule": "manifest",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "science.yaml",
+      "line": null,
+      "message": "  profile: present",
+      "rule": "manifest",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "science.yaml",
+      "line": null,
+      "message": "  layout_version: present",
+      "rule": "manifest",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "science.yaml",
+      "line": null,
+      "message": "knowledge_profiles configured",
+      "rule": "manifest",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "specs",
+      "line": null,
+      "message": "specs/ exists",
+      "rule": "directory_structure",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "doc",
+      "line": null,
+      "message": "doc/ exists",
+      "rule": "directory_structure",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "knowledge",
+      "line": null,
+      "message": "knowledge/ exists",
+      "rule": "directory_structure",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "tasks",
+      "line": null,
+      "message": "tasks/ exists",
+      "rule": "directory_structure",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "code",
+      "line": null,
+      "message": "code/ exists",
+      "rule": "directory_structure",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "papers",
+      "line": null,
+      "message": "papers/ exists",
+      "rule": "directory_structure",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "data",
+      "line": null,
+      "message": "data/ exists",
+      "rule": "directory_structure",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "models",
+      "line": null,
+      "message": "models/ exists",
+      "rule": "directory_structure",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "results",
+      "line": null,
+      "message": "results/ exists",
+      "rule": "directory_structure",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "CLAUDE.md",
+      "line": null,
+      "message": "CLAUDE.md exists",
+      "rule": "directory_structure",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "AGENTS.md",
+      "line": null,
+      "message": "AGENTS.md exists",
+      "rule": "directory_structure",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "RESEARCH_PLAN.md",
+      "line": null,
+      "message": "RESEARCH_PLAN.md exists",
+      "rule": "directory_structure",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "doc/background/topics/validation.md",
+      "line": null,
+      "message": "Checking doc/background/topics/validation.md...",
+      "rule": "document_structure",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "doc/background/papers/example-paper.md",
+      "line": null,
+      "message": "Checking doc/background/papers/example-paper.md...",
+      "rule": "document_structure",
+      "task": null
+    },
+    {
+      "severity": "warn",
+      "path": null,
+      "line": null,
+      "message": "1 broken refs: namespace",
+      "rule": "references",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "doc/background/papers",
+      "line": null,
+      "message": "Paper summary structure is checked in doc/background/papers/",
+      "rule": "papers",
+      "task": null
+    },
+    {
+      "severity": "warn",
+      "path": null,
+      "line": null,
+      "message": "1 [UNVERIFIED] marker(s) found in documents",
+      "rule": "unresolved_markers",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": null,
+      "line": null,
+      "message": "No next-steps analysis found (doc/meta/next-steps-*.md)",
+      "rule": "gap_analysis",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": "RESEARCH_PLAN.md",
+      "line": null,
+      "message": "RESEARCH_PLAN.md exists",
+      "rule": "research_plan",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": null,
+      "line": null,
+      "message": "peer check: declared peers valid",
+      "rule": "graph",
+      "task": null
+    },
+    {
+      "severity": "error",
+      "path": null,
+      "line": null,
+      "message": "graph audit: unresolved_reference \u2014 task:t001 related -> question:q00 (tasks/active.md references an unknown canonical entity)",
+      "rule": "graph",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": null,
+      "line": null,
+      "message": "tasks/active.md exists",
+      "rule": "tasks",
+      "task": null
+    },
+    {
+      "severity": "error",
+      "path": null,
+      "line": null,
+      "message": "task t001 missing required field: aspects",
+      "rule": "tasks",
+      "task": null
+    },
+    {
+      "severity": "error",
+      "path": null,
+      "line": null,
+      "message": "task t099 missing required field: aspects",
+      "rule": "tasks",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": null,
+      "line": null,
+      "message": "  2 task(s) validated",
+      "rule": "tasks",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": null,
+      "line": null,
+      "message": "  all type/id prefixes conform",
+      "rule": "id-prefixes",
+      "task": null
+    },
+    {
+      "severity": "error",
+      "path": null,
+      "line": null,
+      "message": "Unknown project namespace 'unknown-project' in ref 'unknown-project:question:q01'. Add it to science.yaml peers: or use a local ref.",
+      "rule": "cross-references",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": null,
+      "line": null,
+      "message": "10 prose lint issue(s): frontmatter-inline-gap (use --strict to promote)",
+      "rule": "prose_lints",
+      "task": null
+    },
+    {
+      "severity": "info",
+      "path": null,
+      "line": null,
+      "message": "no annotation sidecars (*.anno.trig) in this project",
+      "rule": "annotations",
+      "task": null
+    }
+  ]
+}

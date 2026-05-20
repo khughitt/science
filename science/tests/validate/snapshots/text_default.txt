@@ -1,0 +1,85 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Science Project Validation
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Checking tooling scaffold...
+
+Checking project manifest...
+
+Checking directory structure...
+
+Checking research scope...
+
+Checking document structure...
+
+Checking hypotheses...
+
+Checking reference integrity...
+
+Checking paper summaries...
+
+Checking for unresolved markers...
+
+Checking research gap analysis...
+
+Checking research plan conventions...
+
+Checking discussion documents...
+
+Checking notes...
+
+Checking knowledge graph...
+
+Checking task queue...
+
+Checking per-type id-prefix conformance...
+
+Checking frontmatter cross-references...
+
+Checking prose quality lints...
+
+Checking annotation drift...
+INFO pyproject.toml [tooling] pyproject.toml present
+INFO pyproject.toml [tooling]   science reference present
+INFO .env [tooling] .env defines SCIENCE_TOOL_PATH
+INFO science.yaml [manifest] science.yaml exists
+INFO science.yaml [manifest]   name: present
+INFO science.yaml [manifest]   created: present
+INFO science.yaml [manifest]   last_modified: present
+INFO science.yaml [manifest]   status: present
+INFO science.yaml [manifest]   summary: present
+INFO science.yaml [manifest]   profile: present
+INFO science.yaml [manifest]   layout_version: present
+INFO science.yaml [manifest] knowledge_profiles configured
+INFO specs [directory_structure] specs/ exists
+INFO doc [directory_structure] doc/ exists
+INFO knowledge [directory_structure] knowledge/ exists
+INFO tasks [directory_structure] tasks/ exists
+INFO code [directory_structure] code/ exists
+INFO papers [directory_structure] papers/ exists
+INFO data [directory_structure] data/ exists
+INFO models [directory_structure] models/ exists
+INFO results [directory_structure] results/ exists
+INFO CLAUDE.md [directory_structure] CLAUDE.md exists
+INFO AGENTS.md [directory_structure] AGENTS.md exists
+INFO RESEARCH_PLAN.md [directory_structure] RESEARCH_PLAN.md exists
+INFO doc/background/topics/validation.md [document_structure] Checking doc/background/topics/validation.md...
+INFO doc/background/papers/example-paper.md [document_structure] Checking doc/background/papers/example-paper.md...
+WARN 1 broken refs: namespace [references]
+INFO doc/background/papers [papers] Paper summary structure is checked in doc/background/papers/
+WARN 1 [UNVERIFIED] marker(s) found in documents [unresolved_markers]
+INFO No next-steps analysis found (doc/meta/next-steps-*.md) [gap_analysis]
+INFO RESEARCH_PLAN.md [research_plan] RESEARCH_PLAN.md exists
+INFO peer check: declared peers valid [graph]
+ERROR graph audit: unresolved_reference — task:t001 related -> question:q00 (tasks/active.md references an unknown canonical entity) [graph]
+INFO tasks/active.md exists [tasks]
+ERROR task t001 missing required field: aspects [tasks]
+ERROR task t099 missing required field: aspects [tasks]
+INFO   2 task(s) validated [tasks]
+INFO   all type/id prefixes conform [id-prefixes]
+ERROR Unknown project namespace 'unknown-project' in ref 'unknown-project:question:q01'. Add it to science.yaml peers: or use a local ref. [cross-references]
+INFO 10 prose lint issue(s): frontmatter-inline-gap (use --strict to promote) [prose_lints]
+INFO no annotation sidecars (*.anno.trig) in this project [annotations]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FAILED: 4 error(s), 2 warning(s)

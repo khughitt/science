@@ -24,8 +24,11 @@ requires = ["hatchling>=1.24"]
 build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
-addopts = "-q"
+addopts = "-q -m 'not snapshot'"
 testpaths = ["tests"]
+markers = [
+  "snapshot: formatter snapshots are reviewer-gating and run explicitly with -m snapshot",
+]
 
 [tool.ruff]
 line-length = 120
