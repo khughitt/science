@@ -9,6 +9,7 @@ import sys
 from types import ModuleType
 from typing import TYPE_CHECKING, Literal, cast
 
+from science_tool.validate._legacy.runner import run_legacy_sidecar
 from science_tool.validate.checks import CANONICAL_CHECKS
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -23,6 +24,7 @@ HookFn = Callable[[ValidateContext], Iterable[Result]]
 _HOOK_NAMES = ("pre_validation", "extra_checks", "post_validation")
 _HOOKS: dict[str, list[HookFn]] = {name: [] for name in _HOOK_NAMES}
 _MISSING_MODULE = object()
+_LEGACY_SIDECAR_DEPRECATION_RULE = "validate.sidecar.legacy_deprecated"
 
 
 @dataclass(frozen=True)
@@ -77,27 +79,45 @@ def run(
     ctx = ValidateContext.from_project_root(project_root, strict=strict, verbose=verbose)
     results: list[Result] = []
     run_result: RunResult | None = None
-    python_sidecar_enabled = enable_python_sidecar and os.environ.get("SCIENCE_VALIDATE_DISABLE_SIDECAR") != "1"
+    sidecar_enabled = enable_python_sidecar and os.environ.get("SCIENCE_VALIDATE_DISABLE_SIDECAR") != "1"
     python_sidecar_path = ctx.project_root / "validate_local.py"
+    legacy_sidecar_path = ctx.project_root / "validate.local.sh"
     python_sidecar_exists = python_sidecar_path.is_file()
-    should_cleanup_python_sidecar_hooks = python_sidecar_enabled
+    legacy_sidecar_exists = legacy_sidecar_path.is_file()
+    legacy_sidecar_selected = sidecar_enabled and legacy_sidecar_exists and not python_sidecar_exists
+    should_cleanup_python_sidecar_hooks = sidecar_enabled
     python_sidecar_state: _PythonSidecarState | None = None
     python_sidecar_imported = False
     try:
-        if python_sidecar_enabled:
+        if sidecar_enabled:
             _clear_hooks()
-        if python_sidecar_enabled and python_sidecar_exists:
+        if sidecar_enabled and legacy_sidecar_exists:
+            results.append(_legacy_sidecar_deprecation_result(python_sidecar_exists))
+        if sidecar_enabled and python_sidecar_exists:
             python_sidecar_state = _install_python_sidecar(ctx)
             python_sidecar_imported = True
+        if legacy_sidecar_selected:
+            legacy_results, _log_lines = run_legacy_sidecar(
+                ctx.project_root,
+                phase="pre_validation",
+                count_post_validation=False,
+            )
+            results.extend(legacy_results)
         results.extend(_dispatch_hooks("pre_validation", ctx))
         for entry in CANONICAL_CHECKS:
             results.extend(entry.fn(ctx))
         results.extend(_dispatch_hooks("extra_checks", ctx))
+        if legacy_sidecar_selected:
+            legacy_results, _log_lines = run_legacy_sidecar(
+                ctx.project_root,
+                phase="extra_checks",
+            )
+            results.extend(legacy_results)
         run_result = _tally(results)
         return run_result
     finally:
         try:
-            if not python_sidecar_enabled or python_sidecar_imported:
+            if not sidecar_enabled or python_sidecar_imported:
                 _dispatch_hooks("post_validation", ctx)
         finally:
             if python_sidecar_state is not None:
@@ -120,6 +140,14 @@ def _tally(results: list[Result]) -> RunResult:
         warnings=sum(1 for result in results if result.severity is Severity.WARN),
         infos=sum(1 for result in results if result.severity is Severity.INFO),
     )
+
+
+def _legacy_sidecar_deprecation_result(python_sidecar_exists: bool) -> Result:
+    if python_sidecar_exists:
+        message = "validate.local.sh is deprecated and ignored because validate_local.py takes precedence"
+    else:
+        message = "validate.local.sh is deprecated; migrate validation hooks to validate_local.py"
+    return Result(Severity.WARN, None, None, message, _LEGACY_SIDECAR_DEPRECATION_RULE, None)
 
 
 def _install_python_sidecar(ctx: ValidateContext) -> _PythonSidecarState:

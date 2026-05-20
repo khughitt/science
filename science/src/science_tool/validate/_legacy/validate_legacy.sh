@@ -31,7 +31,17 @@ fi
 # Trap post_validation hooks so they fire on every exit path
 # (success, failure, signal). Set AFTER sidecar source so any hooks
 # the sidecar registered are visible.
-trap 'dispatch_hook post_validation' EXIT
+dispatch_post_validation_trap() {
+  if [[ "${SCIENCE_LEGACY_COUNT_POST_VALIDATION:-1}" = "0" ]]; then
+    local exit_status=$?
+    (dispatch_hook post_validation >/dev/null) || true
+    return "$exit_status"
+  else
+    dispatch_hook post_validation
+  fi
+}
+
+trap 'dispatch_post_validation_trap' EXIT
 
 # === canonical body ===
 # validate.sh — Structural validation for Science research projects
@@ -139,8 +149,22 @@ info() {
 }
 
 if [ "${SCIENCE_LEGACY_SIDECAR_ONLY:-}" = "1" ]; then
-    dispatch_hook "pre_validation"
-    dispatch_hook "extra_checks"
+    case "${SCIENCE_LEGACY_DISPATCH_PHASE:-both}" in
+        pre_validation)
+            dispatch_hook "pre_validation"
+            ;;
+        extra_checks)
+            dispatch_hook "extra_checks"
+            ;;
+        both)
+            dispatch_hook "pre_validation"
+            dispatch_hook "extra_checks"
+            ;;
+        *)
+            printf "ERROR: Unknown SCIENCE_LEGACY_DISPATCH_PHASE: %s\n" "${SCIENCE_LEGACY_DISPATCH_PHASE}" >&2
+            exit 2
+            ;;
+    esac
     exit 0
 fi
 

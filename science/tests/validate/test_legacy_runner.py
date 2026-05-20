@@ -83,3 +83,134 @@ def test_run_legacy_sidecar_preserves_stdout_results_when_hook_exits_nonzero(tmp
     assert results[1].message.startswith("legacy sidecar exited with code 23: legacy failure details: ")
     assert results[1].message.endswith("...")
     assert long_stderr not in results[1].message
+
+
+def test_run_legacy_sidecar_pre_validation_phase_omits_extra_checks_and_post_output(
+    tmp_path: Path,
+) -> None:
+    tmp_path.joinpath("validate.local.sh").write_text(
+        "\n".join(
+            [
+                "legacy_pre() {",
+                '  warn "PRE-FIRED"',
+                "}",
+                "legacy_extra() {",
+                '  warn "EXTRA-FIRED"',
+                "}",
+                "legacy_post() {",
+                '  printf "yes" > post-ran.txt',
+                '  warn "POST-FIRED"',
+                "}",
+                "register_validation_hook pre_validation legacy_pre",
+                "register_validation_hook extra_checks legacy_extra",
+                "register_validation_hook post_validation legacy_post",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    results, log_lines = run_legacy_sidecar(
+        tmp_path,
+        phase="pre_validation",
+        count_post_validation=False,
+    )
+
+    assert log_lines == []
+    assert tmp_path.joinpath("post-ran.txt").read_text(encoding="utf-8") == "yes"
+    assert [result.message for result in results] == ["PRE-FIRED"]
+
+
+def test_run_legacy_sidecar_pre_validation_phase_omits_post_exit_error(
+    tmp_path: Path,
+) -> None:
+    tmp_path.joinpath("validate.local.sh").write_text(
+        "\n".join(
+            [
+                "legacy_pre() {",
+                '  warn "PRE-FIRED"',
+                "}",
+                "legacy_post() {",
+                '  printf "yes" > post-ran.txt',
+                '  warn "POST-FIRED"',
+                "  exit 23",
+                "}",
+                "register_validation_hook pre_validation legacy_pre",
+                "register_validation_hook post_validation legacy_post",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    results, log_lines = run_legacy_sidecar(
+        tmp_path,
+        phase="pre_validation",
+        count_post_validation=False,
+    )
+
+    assert log_lines == []
+    assert tmp_path.joinpath("post-ran.txt").read_text(encoding="utf-8") == "yes"
+    assert [result.message for result in results] == ["PRE-FIRED"]
+
+
+def test_run_legacy_sidecar_extra_checks_phase_counts_post_output(tmp_path: Path) -> None:
+    tmp_path.joinpath("validate.local.sh").write_text(
+        "\n".join(
+            [
+                "legacy_pre() {",
+                '  warn "PRE-FIRED"',
+                "}",
+                "legacy_extra() {",
+                '  warn "EXTRA-FIRED"',
+                "}",
+                "legacy_post() {",
+                '  warn "POST-FIRED"',
+                "}",
+                "register_validation_hook pre_validation legacy_pre",
+                "register_validation_hook extra_checks legacy_extra",
+                "register_validation_hook post_validation legacy_post",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    results, log_lines = run_legacy_sidecar(tmp_path, phase="extra_checks")
+
+    assert log_lines == []
+    assert [result.message for result in results] == ["EXTRA-FIRED", "POST-FIRED"]
+
+
+def test_run_legacy_sidecar_default_dispatches_both_phases_and_post_output(
+    tmp_path: Path,
+) -> None:
+    tmp_path.joinpath("validate.local.sh").write_text(
+        "\n".join(
+            [
+                "legacy_pre() {",
+                '  warn "PRE-FIRED"',
+                "}",
+                "legacy_extra() {",
+                '  warn "EXTRA-FIRED"',
+                "}",
+                "legacy_post() {",
+                '  warn "POST-FIRED"',
+                "}",
+                "register_validation_hook pre_validation legacy_pre",
+                "register_validation_hook extra_checks legacy_extra",
+                "register_validation_hook post_validation legacy_post",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    results, log_lines = run_legacy_sidecar(tmp_path)
+
+    assert log_lines == []
+    assert [result.message for result in results] == [
+        "PRE-FIRED",
+        "EXTRA-FIRED",
+        "POST-FIRED",
+    ]
