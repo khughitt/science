@@ -715,3 +715,35 @@ Write a baseline-of-harm note for current topology pain points, then apply the i
 - created: 2026-05-17
 
 Write a concise project brief for ~/d/bio/meta as the first manually promoted biological meta-model project. The brief must explicitly settle the health/meta vs bio/meta boundary: bio/meta as substrate model for multiscale dynamics, observability, reachability, and time/space; health/meta as applied health lens for homeostasis, disease, intervention, and family coordination.
+
+## [t059] Reconcile theme_kind enum sources across template, schema, and active profiles
+- priority: P2
+- status: proposed
+- aspects: [software-development]
+- created: 2026-05-18
+
+Three sources currently define the theme_kind enum and they do not agree. (1) templates/theme.md defaults to 'methodological' with no enum documentation; (2) schemas/mixin-theme-2.0.json declares enum: methodological | conceptual | empirical | domain; (3) some active profiles (e.g., the cancer/mechanisms/evolution project's resolved profile) accept methodological | biological | translational | evidence-quality | organizational instead. Pick a source of truth and propagate, or formally document that active profiles may extend/replace the upstream enum (with a discovery path: science-tool entity sections theme should show the effective enum). Deliverable: (a) reconciliation decision in core/decisions.md, (b) updated schema if the upstream enum changes, (c) updated profile schemas if they should align with the upstream, (d) documentation pointer if extension is the intended pattern. Surfaced 2026-05-18 while creating themes for cancer/mechanisms/evolution: agent picked theme_kind=conceptual (upstream-correct) which failed validation against the active profile that requires biological/translational/etc. Templates were updated inline 2026-05-18 (added enum comments to templates/theme.md and science/model/src/science_model/templates/theme.md) to mitigate the immediate discoverability problem; this task is the structural fix.
+
+## [t060] Extend science-tool entity sections to show frontmatter constraints
+- priority: P2
+- status: proposed
+- aspects: [software-development]
+- created: 2026-05-18
+
+Currently 'science-tool entity sections <kind>' (and its alias 'science entity sections <kind>') lists only the body sections required by a template — it does NOT show frontmatter field requirements or enum constraints. This is the CLI surface that should answer 'how do I create a valid <kind>?', so the absence of frontmatter info forces agents/users to either hand-inspect schema files or guess and validate by trial-and-error. Deliverable: extend the command output to include a Frontmatter section listing each required/optional field, its type, and (for enums) the accepted values. The accepted values must come from the effective schema (post-profile-resolution), not just the upstream mixin schema, so the output reflects what will actually validate in the current project. Originally surfaced 2026-05-18 while creating themes for cancer/mechanisms/evolution: the agent ran 'science-tool entity sections theme' looking for theme_kind enum, got only body sections, fell back to inspecting mixin-theme-2.0.json, which had a different enum than the active profile actually accepted. Sibling: t059 (reconcile theme_kind enums); together they close the discoverability gap.
+
+## [t061] Add /science:add-theme skill / slash command
+- priority: P3
+- status: proposed
+- aspects: [software-development]
+- created: 2026-05-18
+
+Add a /science:add-theme skill analogous to /science:add-hypothesis so that themes are discoverable from the slash-command list and agents have a guided path to creating them. The skill should wrap 'science-tool entity create theme' with interactive scaffolding: ask for theme_kind (using the effective profile's enum), theme_scope, and the initial related entities; produce a draft with the canonical body sections pre-populated with hint comments; and optionally cross-link to related federation-scope themes when appropriate. Originally surfaced 2026-05-18 while creating themes for cancer/mechanisms/evolution: the agent searched the available skills list, found /science:add-hypothesis but no /science:add-theme, and fell back to inventing an ad-hoc theme format. The fallback was eventually rejected by schema validation but it cost the user a multi-turn correction cycle. Depends on: t060 (entity sections CLI should expose theme_kind enum) so the interactive prompt can pull from the effective schema.
+
+## [t062] Improve schema-validation error messages with discovery hints
+- priority: P3
+- status: proposed
+- aspects: [software-development]
+- created: 2026-05-18
+
+When 'science tasks list' or other inventory commands hit a schema-validation failure, the error currently shows only the failing field and the accepted-values list (e.g., 'theme_kind: Input should be methodological, biological, translational, evidence-quality or organizational'). Extend the error to include actionable next steps: (a) suggest 'science-tool entity sections <kind>' for the full effective-schema view (once t060 lands, this will include frontmatter constraints), (b) suggest 'science-tool entity create <kind> "Title"' as the preferred path for new entities, (c) cite the source schema file path so users can inspect it directly. Originally surfaced 2026-05-18 while creating themes for cancer/mechanisms/evolution: the schema-validation error correctly listed the accepted theme_kind values but offered no path forward — the agent only discovered 'science-tool entity create theme' existed by probing the CLI separately. Pairs with t060 (frontmatter constraints in entity sections) and t061 (add-theme skill); together they close the create-a-valid-entity discoverability gap from three angles. Low engineering cost relative to t060/t061; mostly a string-formatting change at the validation error sites.

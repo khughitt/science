@@ -959,8 +959,8 @@ Append to `science/src/science_tool/commons/errors.py` (after `PromoteInputError
 ```python
 class PromoteMixinStackingError(PromoteInputError):
     """`--mixin` flag violated the stacking rule (more than one structural
-    mixin, or more than one domain mixin). Raised at CLI parse time, before
-    plan_promote runs.
+    mixin, or more than one domain mixin). Raised both in the CLI parse path
+    and in plan_promote itself so direct Python callers cannot bypass the rule.
     """
 
 
@@ -970,8 +970,10 @@ class PromoteMixinResolutionError(PromoteInputError):
     Raised for two paths, unified for operator UX:
     - Sugar form (`--mixin bio.bogus`): no `extension-bio-bogus-*.json` on disk.
     - Explicit form (`--mixin bio.bogus/1.0`): SchemaNotFoundError surfaces
-      during `EntityValidator._compose` and is caught + rewrapped by
-      `_validate_artifact` (commons/promote.py:783-797).
+      during `plan_promote`'s `read_merge_policy(active_profile)` setup and
+      is caught + rewrapped there. `_validate_artifact` also catches the same
+      exception as a belt-and-suspenders guard for already-rendered canonical
+      content that cites a missing extension.
     """
 ```
 
@@ -1056,9 +1058,9 @@ def test_unknown_bio_extension_passes_stacking_check() -> None:
     """Unknown bio.* names are NOT rejected at the stacking-rule layer.
     Sugar form is caught earlier by _resolve_mixin_arg in cli.py;
     explicit form (e.g. --mixin bio.bogus/1.0) is expected to parse
-    syntactically, pass stacking, and fail at validator composition
-    (where SchemaNotFoundError is caught and rewrapped by
-    _validate_artifact as PromoteMixinResolutionError — see Task 13)."""
+    syntactically, pass stacking, and fail in plan_promote's
+    read_merge_policy(active_profile) setup (where SchemaNotFoundError is
+    caught and rewrapped as PromoteMixinResolutionError — see Task 12)."""
     _validate_mixin_stacking((_c("bio.weird"),))  # no exception
 ```
 
@@ -1106,8 +1108,8 @@ def _validate_mixin_stacking(
             structural.append(ext.name)
         elif ext.name in _DOMAIN_BIO_EXTENSIONS:
             domain.append(ext.name)
-        # else: unknown bio.* extension — silently sails through;
-        # validator composition will fail loud via SchemaNotFoundError.
+        # else: unknown bio.* extension — pass through; plan_promote's
+        # active-profile setup will fail loud via SchemaNotFoundError.
     if len(structural) > 1:
         raise PromoteMixinStackingError(
             f"--mixin: at most one structural bio extension allowed "
@@ -2928,7 +2930,7 @@ Notes / surprises:
 
 **Type / signature consistency:**
 - `_active_profile(kind, extensions) -> ProfileString` — defined Task 10; used in Tasks 11, 12.
-- `_validate_mixin_stacking(extensions) -> None` — defined Task 9; used in Task 15.
+- `_validate_mixin_stacking(extensions) -> None` — defined Task 9; used in Tasks 12 and 15.
 - `mixin_extensions: tuple[ProfileComponent, ...]` — name + type consistent across Tasks 11, 14, 15.
 - `PromoteMixinStackingError` / `PromoteMixinResolutionError` — defined Task 8 as subclasses of `PromoteInputError`; used in Tasks 9, 13, 15.
 - `_render_canonical(..., active_profile=)` — Task 11 adds the kwarg; Task 12 passes it.

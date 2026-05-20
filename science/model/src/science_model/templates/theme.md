@@ -3,8 +3,8 @@ id: "theme:{{slug}}"
 type: "theme"
 title: "{{title}}"
 status: "{{status}}"
-theme_kind: "methodological"
-theme_scope: "project"
+theme_kind: "methodological"  # methodological | conceptual | empirical | domain. Active profiles may extend or replace this enum — check the project's resolved schema (or `science-tool entity sections theme` once it surfaces frontmatter constraints) for accepted values. Canonical enum lives in schemas/mixin-theme-2.0.json.
+theme_scope: "project"  # project | cross-project. `project` for themes local to a single Science project; `cross-project` for themes organized at the federation/meta level.
 related: []
 source_refs: []
 evidence_refs: []
