@@ -58,15 +58,15 @@ def test_no_sidecars_emits_exact_info_message(tmp_path: Path) -> None:
 
 
 def test_broken_and_parse_errors_emit_warn_messages(tmp_path: Path, monkeypatch) -> None:
-    from science_tool.validate.checks import annotations
+    import science_tool.validate.checks.annotations as annotations_check
 
     monkeypatch.setattr(
-        annotations,
+        annotations_check,
         "verify_path",
         lambda root: FakeReport(sidecars=2, annotations=5, broken=3, parse_errors=1),
     )
 
-    results = list(annotations.check_annotations(_ctx(tmp_path)))
+    results = list(annotations_check.check_annotations(_ctx(tmp_path)))
 
     assert _summary(results) == [
         (
@@ -79,29 +79,29 @@ def test_broken_and_parse_errors_emit_warn_messages(tmp_path: Path, monkeypatch)
 
 
 def test_non_strict_suppresses_strict_annotation_warnings(tmp_path: Path, monkeypatch) -> None:
-    from science_tool.validate.checks import annotations
+    import science_tool.validate.checks.annotations as annotations_check
 
     monkeypatch.setattr(
-        annotations,
+        annotations_check,
         "verify_path",
         lambda root: FakeReport(sidecars=1, annotations=3, degraded=1, fuzzy=1, source_missing=1),
     )
 
-    results = list(annotations.check_annotations(_ctx(tmp_path)))
+    results = list(annotations_check.check_annotations(_ctx(tmp_path)))
 
     assert results == []
 
 
 def test_strict_emits_degraded_fuzzy_and_source_missing_warns(tmp_path: Path, monkeypatch) -> None:
-    from science_tool.validate.checks import annotations
+    import science_tool.validate.checks.annotations as annotations_check
 
     monkeypatch.setattr(
-        annotations,
+        annotations_check,
         "verify_path",
         lambda root: FakeReport(sidecars=1, annotations=3, degraded=1, fuzzy=2, source_missing=3),
     )
 
-    results = list(annotations.check_annotations(_ctx(tmp_path, strict=True)))
+    results = list(annotations_check.check_annotations(_ctx(tmp_path, strict=True)))
 
     assert _summary(results) == [
         (Severity.WARN, "1 annotation(s) with degraded selectors (anchors no longer match)", "annotations"),
@@ -111,15 +111,15 @@ def test_strict_emits_degraded_fuzzy_and_source_missing_warns(tmp_path: Path, mo
 
 
 def test_clean_sidecars_emit_exact_info_message(tmp_path: Path, monkeypatch) -> None:
-    from science_tool.validate.checks import annotations
+    import science_tool.validate.checks.annotations as annotations_check
 
     monkeypatch.setattr(
-        annotations,
+        annotations_check,
         "verify_path",
         lambda root: FakeReport(sidecars=2, annotations=7),
     )
 
-    results = list(annotations.check_annotations(_ctx(tmp_path)))
+    results = list(annotations_check.check_annotations(_ctx(tmp_path)))
 
     assert _summary(results) == [
         (Severity.INFO, "7 annotation(s) across 2 sidecar(s); all selectors clean", "annotations")
@@ -127,14 +127,14 @@ def test_clean_sidecars_emit_exact_info_message(tmp_path: Path, monkeypatch) -> 
 
 
 def test_registration_includes_annotations_after_prose_lints() -> None:
-    import science_tool.validate.checks.annotations as annotations
+    import science_tool.validate.checks.annotations as annotations_check
     import science_tool.validate.checks.prose_lints as prose_lints
 
     original_entries = list(CANONICAL_CHECKS)
     try:
         clear_checks_for_tests()
         importlib.reload(prose_lints)
-        importlib.reload(annotations)
+        importlib.reload(annotations_check)
 
         ordered = [(entry.section, entry.order, entry.fn.__module__) for entry in CANONICAL_CHECKS]
 
