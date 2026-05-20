@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+import importlib
+from pathlib import Path
+
+import pytest
+
+from science_tool.validate import Severity
+from science_tool.validate.checks import CANONICAL_CHECKS
+from science_tool.validate.runner import run
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
+COMBINED_PROJECT = FIXTURES / "_combined"
+CHECK_MODULES = (
+    "tooling",
+    "manifest",
+    "directory_structure",
+    "research_scope",
+    "document_structure",
+    "hypotheses",
+    "references",
+    "papers",
+    "unresolved_markers",
+    "gap_analysis",
+    "research_plan",
+    "discussions",
+    "prereg",
+    "hypothesis_comparisons",
+    "bias_audits",
+    "notes",
+    "graph",
+    "tasks",
+    "id_prefixes",
+    "cross_references",
+    "prose_lints",
+    "annotations",
+)
+
+
+def _ensure_canonical_checks() -> None:
+    if CANONICAL_CHECKS:
+        return
+    for module_name in CHECK_MODULES:
+        importlib.reload(importlib.import_module(f"science_tool.validate.checks.{module_name}"))
+
+
+def _write_minimal_project(root: Path) -> None:
+    root.joinpath("science.yaml").write_text(
+        "\n".join(
+            [
+                "id: sidecar-env-test",
+                "name: Sidecar env test",
+                "created: 2026-05-20",
+                "last_modified: 2026-05-20",
+                "status: active",
+                "summary: Minimal project for sidecar env behavior.",
+                "profile: research",
+                "layout_version: 1",
+                "knowledge_profiles:",
+                "  local: local",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_combined_fixture_emits_intended_warn_and_error() -> None:
+    _ensure_canonical_checks()
+
+    result = run(COMBINED_PROJECT, strict=False, verbose=False)
+    messages = [item.message for item in result.results]
+
+    assert result.warnings >= 1
+    assert result.errors >= 1
+    assert "1 [UNVERIFIED] marker(s) found in documents" in messages
+    assert (
+        "Unknown project namespace 'unknown-project' in ref 'unknown-project:question:q01'. "
+        "Add it to science.yaml peers: or use a local ref."
+    ) in messages
+    assert any(item.severity is Severity.WARN for item in result.results)
+    assert any(item.severity is Severity.ERROR for item in result.results)
+
+
+def test_isolated_copy_excludes_sidecars_and_is_independent(
+    isolated_copy: Callable[[Path], Path],
+) -> None:
+    copied = isolated_copy(COMBINED_PROJECT)
+
+    assert copied != COMBINED_PROJECT
+    assert copied.joinpath("science.yaml").is_file()
+    assert copied.joinpath("doc", "overview.md").is_file()
+    assert not copied.joinpath("validate.local.sh").exists()
+    assert not copied.joinpath("validate_local.py").exists()
+
+    copied_manifest = copied / "science.yaml"
+    original_manifest = COMBINED_PROJECT / "science.yaml"
+    original_text = original_manifest.read_text(encoding="utf-8")
+    copied_manifest.write_text("name: mutated-copy\n", encoding="utf-8")
+
+    assert original_manifest.read_text(encoding="utf-8") == original_text
+
+
+def test_sidecar_env_var_disables_python_sidecar_import(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_minimal_project(tmp_path)
+    _ensure_canonical_checks()
+
+    with pytest.raises(NotImplementedError, match="Python sidecar discovery is not implemented until Task 8"):
+        run(tmp_path, strict=False, verbose=False, enable_python_sidecar=True)
+
+    monkeypatch.setenv("SCIENCE_VALIDATE_DISABLE_SIDECAR", "1")
+
+    result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=True)
+
+    assert result.results

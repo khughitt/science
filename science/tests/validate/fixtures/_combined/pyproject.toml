@@ -1,0 +1,7 @@
+[project]
+name = "validate-parity-combined"
+version = "0.1.0"
+description = "Synthetic science validate parity fixture."
+
+[tool.science]
+fixture = true

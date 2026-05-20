@@ -1,0 +1,15 @@
+id: parity-combined
+name: Validate parity combined fixture
+created: 2026-05-20
+last_modified: 2026-05-20
+status: active
+summary: Synthetic project for validate parity corpus tests.
+profile: research
+layout_version: 1
+knowledge_profiles:
+  local: local
+  curated: []
+ontologies: []
+peers:
+  - id: known-peer
+    path: ../known-peer

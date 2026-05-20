@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -52,7 +53,7 @@ def run(
     results: list[Result] = []
     run_result: RunResult | None = None
     try:
-        if enable_python_sidecar:
+        if enable_python_sidecar and os.environ.get("SCIENCE_VALIDATE_DISABLE_SIDECAR") != "1":
             _import_python_sidecars(ctx)
         results.extend(_dispatch_hooks("pre_validation", ctx))
         for entry in CANONICAL_CHECKS:
