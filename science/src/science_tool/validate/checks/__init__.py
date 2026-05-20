@@ -54,6 +54,7 @@ def _load_canonical_checks() -> None:
         "prereg",
         "hypothesis_comparisons",
         "bias_audits",
+        "notes",
     ):
         importlib.import_module(f"{__name__}.{module_name}")
 
