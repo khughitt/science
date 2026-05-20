@@ -197,7 +197,13 @@ def materialization_audit(project_root: Path) -> tuple[list[dict[str, str]], boo
     return audit_rows, has_failures
 
 
-def _add_entity(*, entity: Entity, knowledge, provenance) -> None:
+def _add_entity(
+    *,
+    entity: Entity,
+    knowledge,
+    provenance,
+    overlay_paths: dict[str, str] | None = None,
+) -> None:
     uri = _entity_uri(entity.canonical_id)
     knowledge.add((uri, RDF.type, SCI_NS[_kind_class_name(entity.kind)]))
     knowledge.add((uri, SCHEMA_NS.identifier, Literal(entity.canonical_id)))
@@ -220,6 +226,12 @@ def _add_entity(*, entity: Entity, knowledge, provenance) -> None:
     _add_reasoning_metadata(uri=uri, provenance=provenance, entity=entity)
     provenance.add((source_uri, RDF.type, PROV.Entity))
     provenance.add((source_uri, SCHEMA_NS.identifier, Literal(entity.file_path)))
+    if overlay_paths is not None and entity.canonical_id in overlay_paths:
+        overlay_path = overlay_paths[entity.canonical_id]
+        overlay_uri = _source_uri(overlay_path)
+        provenance.add((uri, PROV.wasDerivedFrom, overlay_uri))
+        provenance.add((overlay_uri, RDF.type, PROV.Entity))
+        provenance.add((overlay_uri, SCHEMA_NS.identifier, Literal(overlay_path)))
 
 
 def _add_relations(

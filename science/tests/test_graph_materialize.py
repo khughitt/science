@@ -218,6 +218,68 @@ def test_materialize_emits_scope_triple_for_project_entity(tmp_path: Path) -> No
     assert 'sci:scope "project"' in text
 
 
+def test_add_entity_emits_two_provenance_triples_when_overlay_path_present() -> None:
+    from rdflib import Graph
+    from rdflib.namespace import PROV
+    from science_model.entities import Entity
+    from science_tool.graph.materialize import _add_entity, _entity_uri
+
+    entity = Entity.model_validate(
+        {
+            "id": "topic:demo",
+            "kind": "topic",
+            "type": "topic",
+            "title": "Demo",
+            "project": "demo",
+            "ontology_terms": [],
+            "related": [],
+            "source_refs": [],
+            "content_preview": "",
+            "file_path": "/abs/path/canonical.md",
+        }
+    )
+    knowledge = Graph()
+    provenance = Graph()
+    overlay_paths = {"topic:demo": "/abs/path/overlay.md"}
+    _add_entity(
+        entity=entity,
+        knowledge=knowledge,
+        provenance=provenance,
+        overlay_paths=overlay_paths,
+    )
+    entity_uri = _entity_uri("topic:demo")
+    derived_from_entity = list(provenance.objects(entity_uri, PROV.wasDerivedFrom))
+    assert len(derived_from_entity) == 2
+
+
+def test_add_entity_emits_one_provenance_triple_without_overlay() -> None:
+    from rdflib import Graph
+    from rdflib.namespace import PROV
+    from science_model.entities import Entity
+    from science_tool.graph.materialize import _add_entity, _entity_uri
+
+    entity = Entity.model_validate(
+        {
+            "id": "topic:demo",
+            "kind": "topic",
+            "type": "topic",
+            "title": "Demo",
+            "project": "demo",
+            "ontology_terms": [],
+            "related": [],
+            "source_refs": [],
+            "content_preview": "",
+            "file_path": "/abs/path/canonical.md",
+        }
+    )
+    knowledge = Graph()
+    provenance = Graph()
+    _add_entity(entity=entity, knowledge=knowledge, provenance=provenance)
+    entity_uri = _entity_uri("topic:demo")
+    derived_from_entity = list(provenance.objects(entity_uri, PROV.wasDerivedFrom))
+    assert len(derived_from_entity) == 1
+
+
 def test_materialize_graph_writes_bridge_layer_for_external_terms(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
@@ -331,10 +393,7 @@ def test_bibliography_source_refs_do_not_materialize_provenance_edges(tmp_path: 
     dataset.parse(trig_path, format="trig")
     provenance = dataset.graph(PROJECT_NS["graph/provenance"])
 
-    targets = {
-        str(target)
-        for target in provenance.objects(PROJECT_NS["question/q01-demo"], PROV.wasDerivedFrom)
-    }
+    targets = {str(target) for target in provenance.objects(PROJECT_NS["question/q01-demo"], PROV.wasDerivedFrom)}
     assert str(PROJECT_NS["hypothesis/h01-demo"]) not in targets
     assert all("cite" not in target.lower() for target in targets)
 
