@@ -18,6 +18,7 @@ from science_model.entities import (
     Entity,
     EntityClass,
     MechanismEntity,
+    PaperEntity,
     ProjectEntity,
     ResearchPackageEntity,
     StructuralChainEntity,
@@ -108,6 +109,7 @@ class EntityRegistry:
         )
         r.register_core_kind("mechanism", MechanismEntity, entity_class=_CORE_KIND_CLASSES["mechanism"])
         r.register_core_kind("theme", ThemeEntity, entity_class=_CORE_KIND_CLASSES["theme"])
+        r.register_core_kind("paper", PaperEntity, entity_class=_CORE_KIND_CLASSES["paper"])
         r.register_core_kind(
             "structural-chain",
             StructuralChainEntity,
@@ -143,7 +145,6 @@ class EntityRegistry:
             "data-package",
             "finding",
             "story",
-            "paper",
             "search",
             "report",
             "validation-report",

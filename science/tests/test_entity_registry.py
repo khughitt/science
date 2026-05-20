@@ -9,6 +9,7 @@ from science_model.entities import (
     DomainEntity,
     EntityClass,
     MechanismEntity,
+    PaperEntity,
     ProjectEntity,
     TaskEntity,
 )
@@ -26,10 +27,11 @@ def test_with_core_types_registers_all_core_kinds() -> None:
     assert registry.resolve("dataset") is DatasetEntity
     assert registry.resolve("workflow-run").__name__ == "WorkflowRunEntity"
     assert registry.resolve("research-package").__name__ == "ResearchPackageEntity"
+    assert registry.resolve("paper") is PaperEntity
 
 
 def test_generic_kinds_default_to_project_entity() -> None:
-    """Kinds without a dedicated typed entity (concept, hypothesis, topic, question, paper…)
+    """Kinds without a dedicated typed entity (concept, hypothesis, topic, question...)
     are registered against ProjectEntity so generic tooling still works."""
     registry = EntityRegistry.with_core_types()
     assert registry.resolve("concept") is ProjectEntity

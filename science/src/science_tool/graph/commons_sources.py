@@ -9,11 +9,29 @@ loaded project graph sources without performing I/O or commons access.
 from __future__ import annotations
 
 from science_model.entities import Entity
+from science_model.ontologies.schema import OntologyCatalog
 from science_model.source_contracts import BindingSource
 
-from science_tool.graph.sources import SourceRelation, is_external_reference, is_metadata_reference
+from science_tool.commons.overlay import MergedEntity
+from science_tool.graph.entity_registry import EntityRegistry
+from science_tool.graph.sources import (
+    SourceRelation,
+    _enrich_raw,
+    _normalize_kind,
+    is_external_reference,
+    is_metadata_reference,
+)
 
 _COMMONS_TYPES = frozenset({"dataset", "paper", "topic", "theme"})
+_OVERLAY_ONLY_FIELDS = (
+    "relevance",
+    "hypothesis_links",
+    "task_links",
+    "question_links",
+    "project_tags",
+    "project_notes",
+    "source",
+)
 _AUDITED_LIST_FIELDS = (
     "related",
     "commits_to",
@@ -52,6 +70,41 @@ def collect_referenced_commons_ids(
             _maybe_add(found, raw)
 
     return found
+
+
+def _materialize_commons_entity(
+    merged: MergedEntity,
+    *,
+    registry: EntityRegistry,
+    project_slug: str,
+    active_kinds: frozenset[str],
+    ontology_catalogs: list[OntologyCatalog],
+) -> Entity:
+    fm = dict(merged.merged_frontmatter)
+    kind = _normalize_kind(fm["type"])
+    schema = registry.resolve(kind)
+    raw: dict[str, object] = dict(fm)
+    raw["kind"] = kind
+    raw["canonical_id"] = fm["id"]
+    if "description" in fm and "summary" not in fm:
+        raw["summary"] = fm["description"]
+    if kind == "paper" and "journal" in fm and not raw.get("venue"):
+        raw["venue"] = fm["journal"]
+    raw["scope"] = "shared"
+    raw["profile"] = "shared"
+    raw["file_path"] = str(merged.canonical.body_path)
+    for overlay_only in _OVERLAY_ONLY_FIELDS:
+        raw.pop(overlay_only, None)
+    raw.pop("schema_profile", None)
+    _enrich_raw(
+        raw,
+        kind=kind,
+        project_slug=project_slug,
+        local_profile="shared",
+        active_kinds=active_kinds,
+        ontology_catalogs=ontology_catalogs,
+    )
+    return schema.model_validate(raw)
 
 
 def _maybe_add(found: set[str], raw: object) -> None:

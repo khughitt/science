@@ -474,6 +474,22 @@ class ThemeEntity(ProjectEntity):
     summary: str = ""
 
 
+class PaperEntity(ProjectEntity):
+    """Paper — typed entity carrying commons paper mixin fields."""
+
+    bibkey: str = ""
+    authors: list[str] = Field(default_factory=list)
+    year: int | None = Field(default=None, ge=1800, le=2200)
+    venue: str = ""
+    doi: str = ""
+    pmid: str = ""
+    url: str = ""
+    datasets: list[str] = Field(default_factory=list)
+    key_findings: list[str] = Field(default_factory=list)
+    methods_summary: str = ""
+    limitations: list[str] = Field(default_factory=list)
+
+
 class TaskEntity(ProjectEntity):
     """Task — typed entity for research tasks.
 
@@ -502,6 +518,9 @@ class DatasetEntity(ProjectEntity):
     Invariant #7 (origin=external → access required) and #8 (origin=derived →
     derivation required) are enforced on this typed subclass.
     """
+
+    tier: str = ""
+    update_cadence: str = ""
 
     @model_validator(mode="after")
     def _enforce_dataset_invariants(self) -> "DatasetEntity":

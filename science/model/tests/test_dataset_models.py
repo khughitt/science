@@ -163,6 +163,19 @@ def test_entity_derived_origin_with_derivation_block() -> None:
     assert e.access is None
 
 
+def test_dataset_entity_preserves_dataset_mixin_metadata() -> None:
+    ds = DatasetEntity(
+        **_entity_kwargs(),
+        origin="external",
+        access=_ext_access(),
+        tier="use-now",
+        update_cadence="static",
+    )
+
+    assert ds.tier == "use-now"
+    assert ds.update_cadence == "static"
+
+
 # Model-level invariants — fail at construction time, not only at JSON Schema check.
 
 
