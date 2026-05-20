@@ -40,7 +40,14 @@ def clear_checks_for_tests() -> None:
 
 
 def _load_canonical_checks() -> None:
-    for module_name in ("tooling", "manifest", "directory_structure"):
+    for module_name in (
+        "tooling",
+        "manifest",
+        "directory_structure",
+        "research_scope",
+        "document_structure",
+        "hypotheses",
+    ):
         importlib.import_module(f"{__name__}.{module_name}")
 
 
