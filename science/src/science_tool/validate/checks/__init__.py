@@ -47,6 +47,11 @@ def _load_canonical_checks() -> None:
         "research_scope",
         "document_structure",
         "hypotheses",
+        "research_plan",
+        "discussions",
+        "prereg",
+        "hypothesis_comparisons",
+        "bias_audits",
     ):
         importlib.import_module(f"{__name__}.{module_name}")
 
