@@ -57,6 +57,7 @@ def _load_canonical_checks() -> None:
         "hypothesis_comparisons",
         "bias_audits",
         "notes",
+        "graph",
     ):
         importlib.import_module(f"{__name__}.{module_name}")
 
