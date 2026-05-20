@@ -208,6 +208,16 @@ def test_materialize_graph_includes_task_nodes_and_canonical_links(tmp_path: Pat
     assert (task_uri, SCI.tests, question_uri) in knowledge
 
 
+def test_materialize_emits_scope_triple_for_project_entity(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+
+    trig_path = materialize_graph(project)
+
+    text = trig_path.read_text(encoding="utf-8")
+    assert 'sci:scope "project"' in text
+
+
 def test_materialize_graph_writes_bridge_layer_for_external_terms(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)

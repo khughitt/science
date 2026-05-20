@@ -11,6 +11,7 @@ from urllib.parse import quote
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
 from science_model.entities import Entity, EntityClass
+from science_model.identity import EntityScope
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.profiles import CORE_PROFILE
 from science_model.profiles.schema import RelationKind
@@ -205,6 +206,8 @@ def _add_entity(*, entity: Entity, knowledge, provenance) -> None:
     if isinstance(summary, str) and summary.strip():
         knowledge.add((uri, SCHEMA_NS.description, Literal(summary)))
     knowledge.add((uri, SCI_NS.profile, Literal(entity.profile)))
+    scope_value = "cross-project" if entity.scope is EntityScope.SHARED else "project"
+    knowledge.add((uri, SCI_NS.scope, Literal(scope_value)))
     if entity.domain:
         knowledge.add((uri, SCI_NS.domain, Literal(entity.domain)))
     if entity.status:
