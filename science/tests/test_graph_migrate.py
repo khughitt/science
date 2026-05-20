@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import yaml
 from click.testing import CliRunner
 
+from science_tool.commons.adapter import CommonsEntityAdapter
+from science_tool.commons.registry import RegistryBuilder
 from science_tool.cli import main
-from science_tool.graph.migrate import audit_project_graph, migrate_project_ids, write_local_sources
+from science_tool.graph.migrate import (
+    audit_project_graph,
+    audit_project_sources,
+    migrate_project_ids,
+    write_local_sources,
+)
+from science_tool.graph.sources import load_project_sources
 
 
 def test_audit_project_graph_reports_unresolved_related_refs(tmp_path: Path) -> None:
@@ -919,3 +928,83 @@ def test_graph_migrate_command_uses_configured_local_profile_paths(tmp_path: Pat
     assert result.exit_code == 0
     assert entities_path.exists()
     assert report_path.exists()
+
+
+def test_audit_unresolved_topic_includes_commons_hint(tmp_path: Path, monkeypatch) -> None:
+    fixture_root = Path(__file__).parent / "fixtures" / "commons" / "valid"
+    commons_root = tmp_path / "commons"
+    shutil.copytree(fixture_root, commons_root)
+    RegistryBuilder(commons_root, CommonsEntityAdapter(commons_root)).rebuild()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("", encoding="utf-8")
+    hypothesis_path = project / "doc" / "hypotheses" / "h1.md"
+    hypothesis_path.parent.mkdir(parents=True)
+    hypothesis_path.write_text(
+        """---
+id: "hypothesis:h1"
+type: "hypothesis"
+title: "H1"
+related: ["topic:does-not-exist"]
+source_refs: []
+created: "2026-03-12"
+updated: "2026-03-12"
+---
+
+Body.
+""",
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(project)
+    rows, _ = audit_project_sources(sources)
+
+    bad = next(row for row in rows if row["target"] == "topic:does-not-exist")
+    assert bad["check"] == "unresolved_reference"
+    assert "topics/does-not-exist.md" in bad["details"]
+    assert "science commons promote" in bad["details"]
+
+
+def test_audit_unresolved_dataset_includes_dataset_commons_hint(tmp_path: Path, monkeypatch) -> None:
+    fixture_root = Path(__file__).parent / "fixtures" / "commons" / "valid"
+    commons_root = tmp_path / "commons"
+    shutil.copytree(fixture_root, commons_root)
+    RegistryBuilder(commons_root, CommonsEntityAdapter(commons_root)).rebuild()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("", encoding="utf-8")
+    hypothesis_path = project / "doc" / "hypotheses" / "h1.md"
+    hypothesis_path.parent.mkdir(parents=True)
+    hypothesis_path.write_text(
+        """---
+id: "hypothesis:h1"
+type: "hypothesis"
+title: "H1"
+related: ["dataset:does-not-exist"]
+source_refs: []
+created: "2026-03-12"
+updated: "2026-03-12"
+---
+
+Body.
+""",
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(project)
+    rows, _ = audit_project_sources(sources)
+
+    bad = next(row for row in rows if row["target"] == "dataset:does-not-exist")
+    assert bad["check"] == "unresolved_reference"
+    assert "datasets/does-not-exist/entity.md" in bad["details"]
+    assert "science commons promote dataset --slug does-not-exist --from <project>" in bad["details"]

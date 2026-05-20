@@ -104,6 +104,27 @@ _MECHANISTIC_RE = re.compile(
     r"\b(mechanistic|activates?|inhibits?|suppresses?|cascade|pathway|through)\b",
     re.IGNORECASE,
 )
+_COMMONS_TYPE_TO_DIR = {"dataset": "datasets", "paper": "papers", "topic": "topics", "theme": "themes"}
+
+
+def _commons_hint_for(target: str) -> str:
+    if ":" not in target:
+        return ""
+    type_part, slug = target.split(":", 1)
+    type_dir = _COMMONS_TYPE_TO_DIR.get(type_part)
+    if type_dir is None:
+        return ""
+    if type_part == "dataset":
+        canonical_path = f"~/d/science-commons/datasets/{slug}/entity.md"
+        promote_command = f"science commons promote dataset --slug {slug} --from <project>"
+    else:
+        canonical_path = f"~/d/science-commons/{type_dir}/{slug}.md"
+        promote_command = f"science commons promote {type_part} --from <project>"
+    return (
+        f" (no local entity, no commons canonical at {canonical_path} -- "
+        f"run `{promote_command}` if {target} "
+        f"should be promoted, or check the ref's spelling)"
+    )
 
 
 def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool]:
@@ -548,7 +569,7 @@ def _audit_binding_endpoint(
                 "source": f"{binding.model} -> {binding.parameter}",
                 "field": field_name,
                 "target": raw_target,
-                "details": f"{binding.source_path} references an unknown canonical entity",
+                "details": f"{binding.source_path} references an unknown canonical entity{_commons_hint_for(raw_target)}",
             }
         ]
 
@@ -586,7 +607,7 @@ def _audit_relation_endpoint(
                 "source": f"{relation.subject} {relation.predicate} {relation.object}",
                 "field": field_name,
                 "target": raw_target,
-                "details": f"{relation.source_path} references an unknown canonical entity",
+                "details": f"{relation.source_path} references an unknown canonical entity{_commons_hint_for(raw_target)}",
             }
         ]
 
@@ -641,7 +662,7 @@ def _audit_reference(
                 "source": entity.canonical_id,
                 "field": field_name,
                 "target": raw_target,
-                "details": f"{entity.file_path} references an unknown canonical entity",
+                "details": f"{entity.file_path} references an unknown canonical entity{_commons_hint_for(raw_target)}",
             }
         ]
 
