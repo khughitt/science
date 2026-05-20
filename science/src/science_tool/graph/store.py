@@ -291,6 +291,7 @@ GRAPH_EXPORT_EDGE_METADATA_PREDICATES: frozenset[URIRef] = frozenset(
         SCI_NS.backedByClaim,
         SCI_NS.validatedBy,
         SCI_NS.projectStatus,
+        SCI_NS.scope,
         SCI_NS.confidence,
         SCI_NS.evidenceType,
         SCI_NS.evidenceStrength,
