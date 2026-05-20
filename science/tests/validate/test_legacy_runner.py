@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from science_tool.validate import Severity
 from science_tool.validate._legacy.runner import run_legacy_sidecar
 
@@ -219,6 +221,114 @@ def test_run_legacy_sidecar_extra_checks_phase_counts_post_output(tmp_path: Path
 def test_run_legacy_sidecar_default_dispatches_both_phases_and_post_output(
     tmp_path: Path,
 ) -> None:
+    tmp_path.joinpath("validate.local.sh").write_text(
+        "\n".join(
+            [
+                "legacy_pre() {",
+                '  warn "PRE-FIRED"',
+                "}",
+                "legacy_extra() {",
+                '  warn "EXTRA-FIRED"',
+                "}",
+                "legacy_post() {",
+                '  warn "POST-FIRED"',
+                "}",
+                "register_validation_hook pre_validation legacy_pre",
+                "register_validation_hook extra_checks legacy_extra",
+                "register_validation_hook post_validation legacy_post",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    results, log_lines = run_legacy_sidecar(tmp_path)
+
+    assert log_lines == []
+    assert [result.message for result in results] == [
+        "PRE-FIRED",
+        "EXTRA-FIRED",
+        "POST-FIRED",
+    ]
+
+
+def test_run_legacy_sidecar_default_ignores_ambient_dispatch_phase(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SCIENCE_LEGACY_DISPATCH_PHASE", "pre_validation")
+    tmp_path.joinpath("validate.local.sh").write_text(
+        "\n".join(
+            [
+                "legacy_pre() {",
+                '  warn "PRE-FIRED"',
+                "}",
+                "legacy_extra() {",
+                '  warn "EXTRA-FIRED"',
+                "}",
+                "legacy_post() {",
+                '  warn "POST-FIRED"',
+                "}",
+                "register_validation_hook pre_validation legacy_pre",
+                "register_validation_hook extra_checks legacy_extra",
+                "register_validation_hook post_validation legacy_post",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    results, log_lines = run_legacy_sidecar(tmp_path)
+
+    assert log_lines == []
+    assert [result.message for result in results] == [
+        "PRE-FIRED",
+        "EXTRA-FIRED",
+        "POST-FIRED",
+    ]
+
+
+def test_run_legacy_sidecar_extra_checks_counts_post_despite_ambient_count_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SCIENCE_LEGACY_COUNT_POST_VALIDATION", "0")
+    tmp_path.joinpath("validate.local.sh").write_text(
+        "\n".join(
+            [
+                "legacy_extra() {",
+                '  warn "EXTRA-FIRED"',
+                "}",
+                "legacy_post() {",
+                '  warn "POST-FIRED"',
+                "}",
+                "register_validation_hook extra_checks legacy_extra",
+                "register_validation_hook post_validation legacy_post",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    results, log_lines = run_legacy_sidecar(tmp_path, phase="extra_checks")
+
+    assert log_lines == []
+    assert [result.message for result in results] == ["EXTRA-FIRED", "POST-FIRED"]
+
+
+def test_run_legacy_sidecar_default_ignores_project_env_control_overrides(
+    tmp_path: Path,
+) -> None:
+    tmp_path.joinpath(".env").write_text(
+        "\n".join(
+            [
+                "SCIENCE_LEGACY_DISPATCH_PHASE=pre_validation",
+                "SCIENCE_LEGACY_COUNT_POST_VALIDATION=0",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
     tmp_path.joinpath("validate.local.sh").write_text(
         "\n".join(
             [

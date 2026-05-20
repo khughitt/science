@@ -23,6 +23,9 @@ dispatch_hook() {
   done
 }
 
+SCIENCE_LEGACY_EFFECTIVE_DISPATCH_PHASE="${SCIENCE_LEGACY_DISPATCH_PHASE:-both}"
+SCIENCE_LEGACY_EFFECTIVE_COUNT_POST_VALIDATION="${SCIENCE_LEGACY_COUNT_POST_VALIDATION:-1}"
+
 if [[ -f "validate.local.sh" ]]; then
   # shellcheck source=/dev/null
   source "validate.local.sh"
@@ -32,7 +35,7 @@ fi
 # (success, failure, signal). Set AFTER sidecar source so any hooks
 # the sidecar registered are visible.
 dispatch_post_validation_trap() {
-  if [[ "${SCIENCE_LEGACY_COUNT_POST_VALIDATION:-1}" = "0" ]]; then
+  if [[ "${SCIENCE_LEGACY_EFFECTIVE_COUNT_POST_VALIDATION}" = "0" ]]; then
     local exit_status=$?
     (dispatch_hook post_validation >/dev/null 2>/dev/null) || true
     return "$exit_status"
@@ -149,7 +152,7 @@ info() {
 }
 
 if [ "${SCIENCE_LEGACY_SIDECAR_ONLY:-}" = "1" ]; then
-    case "${SCIENCE_LEGACY_DISPATCH_PHASE:-both}" in
+    case "${SCIENCE_LEGACY_EFFECTIVE_DISPATCH_PHASE}" in
         pre_validation)
             dispatch_hook "pre_validation"
             ;;
@@ -161,7 +164,7 @@ if [ "${SCIENCE_LEGACY_SIDECAR_ONLY:-}" = "1" ]; then
             dispatch_hook "extra_checks"
             ;;
         *)
-            printf "ERROR: Unknown SCIENCE_LEGACY_DISPATCH_PHASE: %s\n" "${SCIENCE_LEGACY_DISPATCH_PHASE}" >&2
+            printf "ERROR: Unknown SCIENCE_LEGACY_DISPATCH_PHASE: %s\n" "${SCIENCE_LEGACY_EFFECTIVE_DISPATCH_PHASE}" >&2
             exit 2
             ;;
     esac

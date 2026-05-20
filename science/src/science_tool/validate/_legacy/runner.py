@@ -23,12 +23,10 @@ def run_legacy_sidecar(
     env = {
         **os.environ,
         "SCIENCE_LEGACY_SIDECAR_ONLY": "1",
+        "SCIENCE_LEGACY_DISPATCH_PHASE": phase or "both",
+        "SCIENCE_LEGACY_COUNT_POST_VALIDATION": "1" if count_post_validation else "0",
         "SCIENCE_VALIDATE_NO_COLOR": "1",
     }
-    if phase is not None:
-        env["SCIENCE_LEGACY_DISPATCH_PHASE"] = phase
-    if not count_post_validation:
-        env["SCIENCE_LEGACY_COUNT_POST_VALIDATION"] = "0"
     with resources.as_file(script) as script_path:
         completed = subprocess.run(
             ["bash", str(script_path)],
