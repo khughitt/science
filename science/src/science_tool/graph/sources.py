@@ -133,6 +133,7 @@ class ProjectSources(BaseModel):
     ontology_catalogs: list[OntologyCatalog] = Field(default_factory=list)
     registry: EntityRegistry
     markdown_documents: list[MarkdownSourceDocument] = Field(default_factory=list)
+    commons_overlay_paths: dict[str, str] = Field(default_factory=dict)
     freshness_enabled: bool = True
 
 
