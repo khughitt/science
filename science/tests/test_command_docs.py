@@ -317,6 +317,44 @@ def test_project_bootstrap_docs_ignore_managed_artifact_update_backups(path: str
     assert "*.pre-update*.bak" in text
 
 
+def test_validate_cli_reference_documents_phase_one_contract() -> None:
+    reference = _read("docs/conventions/validate.md")
+    readme = _read("README.md")
+    conventions_index = _read("docs/conventions/README.md")
+
+    expected_reference_strings = (
+        "# `science validate`",
+        "## Synopsis",
+        "science validate [--verbose] [--strict] [--experimental-python-sidecar]",
+        "## Flags",
+        "--format text|json",
+        "--project-root PATH",
+        "## Exit Codes",
+        "Warnings alone do not fail the command",
+        "## Severity Model",
+        "`--strict` enables strict advisory warnings; it does not promote `warn` results to `error`.",
+        "## JSON Output Schema",
+        '"summary": {"errors": 0, "warnings": 1, "infos": 0}',
+        '"severity": "warn"',
+        '"path": "doc/example.md"',
+        '"line": 12',
+        '"message": "example warning"',
+        '"rule": "example.rule"',
+        '"task": "task:t001"',
+        "## Environment Variables",
+        "NO_COLOR",
+        "SCIENCE_VALIDATE_DISABLE_SIDECAR=1",
+        "## Discovery",
+        "`validate.sh` remains the managed bash canonical validator during Phase 1.",
+        "`validate_local.py` is imported only when `--experimental-python-sidecar` is passed.",
+    )
+    for expected in expected_reference_strings:
+        assert expected in reference
+
+    assert "[`science validate`](docs/conventions/validate.md)" in readme
+    assert "[`validate.md`](validate.md)" in conventions_index
+
+
 @pytest.mark.parametrize(
     ("path", "legacy_strings"),
     [

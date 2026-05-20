@@ -7,5 +7,6 @@ Bar for entries: each doc should describe a pattern observed in two or more down
 ## Index
 
 - [`code-task-backlinks.md`](code-task-backlinks.md) — sanctioned patterns for linking code/notebooks back to tasks, questions, hypotheses, and interpretations.
+- [`validate.md`](validate.md) — `science validate` CLI reference, including Phase 1 sidecar and output contracts.
 
 New entries (datapackage extension, status-enum schema, multi-axis profile axis labels) will be appended as their design passes complete.
