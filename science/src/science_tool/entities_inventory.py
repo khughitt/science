@@ -52,29 +52,24 @@ def build_inventory(project_root: Path, schema_version: Literal["1"]) -> Invento
 
 
 @overload
-def build_inventory(
-    project_root: Path, schema_version: Literal["2"] = "2"
-) -> inventory_v2.InventoryPayload: ...
+def build_inventory(project_root: Path, schema_version: Literal["2"] = "2") -> inventory_v2.InventoryPayload: ...
 
 
 @overload
-def build_inventory(
-    project_root: Path, schema_version: str
-) -> InventoryPayload | inventory_v2.InventoryPayload: ...
+def build_inventory(project_root: Path, schema_version: str) -> InventoryPayload | inventory_v2.InventoryPayload: ...
 
 
-def build_inventory(
-    project_root: Path, schema_version: str = "2"
-) -> InventoryPayload | inventory_v2.InventoryPayload:
+def build_inventory(project_root: Path, schema_version: str = "2") -> InventoryPayload | inventory_v2.InventoryPayload:
     if schema_version not in ("1", "2"):
-        raise ValueError(
-            f"unsupported schema_version {schema_version!r}; expected '1' or '2'"
-        )
+        raise ValueError(f"unsupported schema_version {schema_version!r}; expected '1' or '2'")
     project_root = project_root.resolve()
-    sources = load_project_sources(project_root)
+    sources = load_project_sources(project_root, include_commons=False)
     dag_records = load_dag_inventory_records(project_root)
     project_metadata = _read_project_metadata(project_root)
-    warnings: list[InventoryWarning] = [*collect_identity_warnings(project_root, sources=sources), *dag_records.warnings]
+    warnings: list[InventoryWarning] = [
+        *collect_identity_warnings(project_root, sources=sources),
+        *dag_records.warnings,
+    ]
 
     entities: list[InventoryEntity] = []
     aliases: list[InventoryAlias] = []
@@ -135,9 +130,7 @@ def build_inventory(
 
     project_entities = [entity for entity in entities if entity.scope == "project"]
     project_entity_ids = {entity.id for entity in project_entities}
-    project_aliases = [
-        alias for alias in sorted_aliases if alias.canonical_id in project_entity_ids
-    ]
+    project_aliases = [alias for alias in sorted_aliases if alias.canonical_id in project_entity_ids]
     overlays = _scan_overlays(project_root, project_metadata.id, warnings)
     payload_v2 = inventory_v2.InventoryPayload(
         generated_at=generated_at,
@@ -246,9 +239,7 @@ def _optional_str(value: Any) -> str | None:
     return str(value) if value is not None else None
 
 
-_SKIP_OVERLAY_FIELDS = frozenset(
-    {"id", "overlay_of", "pin_version", "pin_effective_version"}
-)
+_SKIP_OVERLAY_FIELDS = frozenset({"id", "overlay_of", "pin_version", "pin_effective_version"})
 
 
 def _scan_overlays(
@@ -286,9 +277,7 @@ def _scan_overlays(
             inventory_v2.InventoryOverlay(
                 overlay_of=item.canonical_id,
                 project_id=project_id,
-                source=InventorySourceLocation(
-                    adapter="commons-overlay", path=str(item.overlay_path)
-                ),
+                source=InventorySourceLocation(adapter="commons-overlay", path=str(item.overlay_path)),
                 pin_version=item.pin_version,
                 pin_effective_version=item.pin_effective_version,
                 project_only_fields=project_only,

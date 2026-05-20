@@ -37,7 +37,9 @@
     "origin": "external",
     "blocked_by": [],
     "evidence_role": null,
-    "rival_model_packet": null
+    "rival_model_packet": null,
+    "tier": "",
+    "update_cadence": ""
   },
   {
     "canonical_id": "hypothesis:h01",
@@ -121,7 +123,17 @@
     "origin": null,
     "blocked_by": [],
     "evidence_role": null,
-    "rival_model_packet": null
+    "rival_model_packet": null,
+    "bibkey": "",
+    "authors": [],
+    "year": null,
+    "venue": "",
+    "doi": "",
+    "pmid": "",
+    "url": "",
+    "key_findings": [],
+    "methods_summary": "",
+    "limitations": []
   },
   {
     "canonical_id": "spec:research-question",

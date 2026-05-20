@@ -1,0 +1,5 @@
+name: local
+imports: []
+entity_kinds: []
+relation_kinds: []
+strictness: core

@@ -152,7 +152,7 @@ def test_build_inventory_fails_when_entity_source_adapter_mapping_is_missing(tmp
     )
     sources = load_project_sources(project)
 
-    def fake_load_project_sources(_project_root):
+    def fake_load_project_sources(_project_root, **_kwargs):
         return sources.model_copy(update={"entity_source_adapters": {}})
 
     monkeypatch.setattr(entities_inventory, "load_project_sources", fake_load_project_sources)
@@ -211,7 +211,11 @@ def test_build_inventory_promotes_targets_without_duplicating_them_in_data(tmp_p
         manual_aliases={},
         ontology_catalogs=[],
     )
-    monkeypatch.setattr(entities_inventory, "load_project_sources", lambda _project_root: sources)
+    monkeypatch.setattr(
+        entities_inventory,
+        "load_project_sources",
+        lambda _project_root, **_kwargs: sources,
+    )
 
     inventory = build_inventory(project, schema_version="1")
 
@@ -252,13 +256,7 @@ def test_build_inventory_v2_excludes_project_authored_shared_entities_and_aliase
         encoding="utf-8",
     )
     (project / "doc" / "shared.md").write_text(
-        "---\n"
-        "kind: method\n"
-        "id: method:shared\n"
-        "title: Shared method\n"
-        "scope: shared\n"
-        "aliases: [shared-method]\n"
-        "---\n",
+        "---\nkind: method\nid: method:shared\ntitle: Shared method\nscope: shared\naliases: [shared-method]\n---\n",
         encoding="utf-8",
     )
 
@@ -310,11 +308,7 @@ def test_build_inventory_v2_overlay_validation_error_becomes_warning(tmp_path) -
     (project / "doc" / "papers").mkdir(parents=True)
     (project / "science.yaml").write_text("id: broken-overlay\n", encoding="utf-8")
     (project / "doc" / "papers" / "Adams2025.md").write_text(
-        "---\n"
-        'id: "paper:Wrong2025"\n'
-        'overlay_of: "paper:Wrong2025"\n'
-        'relevance: "mismatch"\n'
-        "---\n\n## Notes\n",
+        '---\nid: "paper:Wrong2025"\noverlay_of: "paper:Wrong2025"\nrelevance: "mismatch"\n---\n\n## Notes\n',
         encoding="utf-8",
     )
 
@@ -334,12 +328,7 @@ def test_build_inventory_v2_treats_project_paper_as_entity_not_overlay(tmp_path)
     (project / "science.yaml").write_text("id: project-paper\n", encoding="utf-8")
     paper_path = project / "doc" / "papers" / "Adams2025.md"
     paper_path.write_text(
-        "---\n"
-        "kind: paper\n"
-        "id: paper:Adams2025\n"
-        "title: Adams 2025\n"
-        "---\n\n"
-        "Project-authored paper note.\n",
+        "---\nkind: paper\nid: paper:Adams2025\ntitle: Adams 2025\n---\n\nProject-authored paper note.\n",
         encoding="utf-8",
     )
 
@@ -369,16 +358,12 @@ def test_build_inventory_defaults_to_v2(tmp_path) -> None:
     assert inventory.schema_version == "2"
 
 
-def test_build_inventory_rejects_unknown_schema_version_before_loading(
-    tmp_path, monkeypatch
-) -> None:
+def test_build_inventory_rejects_unknown_schema_version_before_loading(tmp_path, monkeypatch) -> None:
     project = tmp_path / "project"
     project.mkdir()
 
     def _fail(_project_root):
-        raise AssertionError(
-            "load_project_sources must not run for a bad schema_version"
-        )
+        raise AssertionError("load_project_sources must not run for a bad schema_version")
 
     monkeypatch.setattr(entities_inventory, "load_project_sources", _fail)
 

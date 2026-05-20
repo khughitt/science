@@ -152,7 +152,12 @@ def _resolve_entity_class(declared: str | None, default: EntityClass) -> EntityC
         )
 
 
-def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] | None = None) -> ProjectSources:
+def load_project_sources(
+    project_root: Path,
+    markdown_overrides: dict[str, str] | None = None,
+    *,
+    include_commons: bool = True,
+) -> ProjectSources:
     """Load all project entities through the unified registry + adapters flow."""
     project_root = project_root.resolve()
     config = _read_project_config(project_root)
@@ -336,28 +341,30 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
     bindings = _load_binding_sources(project_root, local_profile=local_profile, typed_record_cache=typed_record_cache)
     bindings.sort(key=lambda binding: (binding.model, binding.parameter, binding.source_path))
 
-    from science_tool.graph.commons_sources import _load_commons_referenced_entities
+    commons_overlay_paths: dict[str, str] = {}
+    if include_commons:
+        from science_tool.graph.commons_sources import _load_commons_referenced_entities
 
-    commons_loaded, commons_overlay_paths = _load_commons_referenced_entities(
-        project_root=project_root,
-        project_slug=project_slug,
-        project_entities=entities,
-        project_relations=relations,
-        project_bindings=bindings,
-        identity_table=identity_table,
-        registry=registry,
-        active_kinds=active_kinds,
-        ontology_catalogs=ontology_catalogs,
-    )
-    for entity, ref in commons_loaded:
-        existing = identity_table.get(entity.canonical_id)
-        if existing is not None:
-            raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
-        identity_table[entity.canonical_id] = ref
-        entities.append(entity)
-        entity_source_adapters[entity.canonical_id] = ref.adapter_name
+        commons_loaded, commons_overlay_paths = _load_commons_referenced_entities(
+            project_root=project_root,
+            project_slug=project_slug,
+            project_entities=entities,
+            project_relations=relations,
+            project_bindings=bindings,
+            identity_table=identity_table,
+            registry=registry,
+            active_kinds=active_kinds,
+            ontology_catalogs=ontology_catalogs,
+        )
+        for entity, ref in commons_loaded:
+            existing = identity_table.get(entity.canonical_id)
+            if existing is not None:
+                raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
+            identity_table[entity.canonical_id] = ref
+            entities.append(entity)
+            entity_source_adapters[entity.canonical_id] = ref.adapter_name
 
-    entities.sort(key=lambda e: e.canonical_id)
+        entities.sort(key=lambda e: e.canonical_id)
 
     return ProjectSources(
         project_name=str(config["name"]),
