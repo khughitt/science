@@ -149,6 +149,7 @@ fi
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import Any
 
 from science_tool.graph.materialize import materialization_audit
 from science_tool.graph.store import diff_graph_inputs, list_inquiries, validate_graph, validate_inquiry
@@ -172,12 +173,11 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
         yield _result(Severity.INFO, "graph audit: all canonical references resolved")
     else:
         for row in audit_rows:
-            severity = Severity.ERROR if row.get("status") == "fail" else Severity.WARN
+            status = _status(row, context="graph audit", accepted={"fail", "warn"})
+            severity = Severity.ERROR if status == "fail" else Severity.WARN
             yield _result(
                 severity,
-                "graph audit: "
-                f"{row.get('check', '')} — {row.get('source', '')} {row.get('field', '')} "
-                f"-> {row.get('target', '')} ({row.get('details', '')})",
+                f"graph audit: {row['check']} — {row['source']} {row['field']} -> {row['target']} ({row['details']})",
             )
 
     graph_path = ctx.project_root / "knowledge" / "graph.trig"
@@ -185,10 +185,17 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
         return
 
     rows, _has_failures = validate_graph(graph_path)
+    parseable_failed = False
     for row in rows:
-        status = row.get("status")
+        status = _status(row, context="graph validate", accepted={"fail", "warn", "pass"})
+        check = row["check"]
+        if check == "parseable_trig" and status == "fail":
+            parseable_failed = True
         severity = Severity.ERROR if status == "fail" else Severity.WARN if status == "warn" else Severity.INFO
-        yield _result(severity, f"graph validate: {row.get('check', '')} — {row.get('details', '')}")
+        yield _result(severity, f"graph validate: {check} — {row['details']}")
+
+    if parseable_failed:
+        return
 
     try:
         diff_rows = diff_graph_inputs(graph_path=graph_path, mode="hybrid")
@@ -198,13 +205,15 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
         yield _result(Severity.INFO, "graph diff: no revision metadata (expected for new graphs)")
     else:
         if diff_rows:
+            for row in diff_rows:
+                _status(row, context="graph diff", accepted={"stale"})
             yield _result(
                 Severity.WARN,
                 f"graph has {len(diff_rows)} stale input file(s) — run /science:update-graph",
             )
             if ctx.verbose:
                 for row in diff_rows:
-                    yield _result(Severity.INFO, f"  {row.get('path', '')} ({row.get('reason', '')})")
+                    yield _result(Severity.INFO, f"  {row['path']} ({row['reason']})")
         else:
             yield _result(Severity.INFO, "graph-prose sync: all inputs up to date")
 
@@ -214,14 +223,14 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
 
     yield _result(Severity.INFO, f"Checking inquiries ({len(inquiries)})...")
     for inquiry in inquiries:
-        slug = inquiry.get("slug")
+        slug = inquiry["slug"]
         if not slug:
             continue
         inquiry_rows = validate_inquiry(graph_path, slug)
 
         for row in inquiry_rows:
-            status = row.get("status")
-            message = f"inquiry '{slug}': {row.get('check', '')} — {row.get('message', '')}"
+            status = _status(row, context="inquiry validate", accepted={"fail", "warn", "pass"})
+            message = f"inquiry '{slug}': {row['check']} — {row['message']}"
             if status == "fail":
                 yield _result(Severity.ERROR, message)
             elif status == "warn":
@@ -254,6 +263,15 @@ def _peer_results(ctx: ValidateContext, issues: list[PeerIssue]) -> Iterator[Res
 def _peer_count(ctx: ValidateContext) -> int:
     peers = ctx.manifest.get("peers")
     return len(peers) if isinstance(peers, list) else 0
+
+
+def _status(row: dict[str, Any], *, context: str, accepted: set[str]) -> str:
+    status = row["status"]
+    if not isinstance(status, str):
+        raise TypeError(f"{context} returned non-string status: {status!r}")
+    if status not in accepted:
+        raise ValueError(f"{context} returned unknown status: {status}")
+    return status
 
 
 def _is_missing_revision_metadata_exception(exc: Exception) -> bool:

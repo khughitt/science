@@ -175,6 +175,85 @@ def test_graph_validate_rows_map_statuses(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert "graph validate: parseable — ok" in _messages(results, Severity.INFO)
 
 
+def test_parseable_trig_failure_stops_graph_followups(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from science_tool.validate.checks import graph
+
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir()
+    graph_path.write_text("not trig", encoding="utf-8")
+    monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
+    monkeypatch.setattr(
+        graph,
+        "validate_graph",
+        lambda _path: (
+            [
+                {
+                    "check": "parseable_trig",
+                    "status": "fail",
+                    "details": "failed to parse graph.trig",
+                }
+            ],
+            True,
+        ),
+    )
+
+    def fail_call(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("graph follow-up API should not be called after parse failure")
+
+    monkeypatch.setattr(graph, "diff_graph_inputs", fail_call)
+    monkeypatch.setattr(graph, "list_inquiries", fail_call)
+    monkeypatch.setattr(graph, "validate_inquiry", fail_call)
+
+    results = list(graph.check_graph(_ctx(tmp_path)))
+
+    assert "graph validate: parseable_trig — failed to parse graph.trig" in _messages(results, Severity.ERROR)
+
+
+def test_graph_audit_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from science_tool.validate.checks import graph
+
+    monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
+    monkeypatch.setattr(
+        graph,
+        "materialization_audit",
+        lambda _root: (
+            [
+                {
+                    "check": "broken_ref",
+                    "status": "mystery",
+                    "source": "doc/a.md",
+                    "field": "related",
+                    "target": "paper:x",
+                    "details": "missing",
+                }
+            ],
+            False,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="graph audit returned unknown status: mystery"):
+        list(graph.check_graph(_ctx(tmp_path)))
+
+
+def test_graph_validate_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from science_tool.validate.checks import graph
+
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir()
+    graph_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
+    monkeypatch.setattr(
+        graph,
+        "validate_graph",
+        lambda _path: ([{"check": "parseable", "status": "mystery", "details": "ok"}], False),
+    )
+
+    with pytest.raises(ValueError, match="graph validate returned unknown status: mystery"):
+        list(graph.check_graph(_ctx(tmp_path)))
+
+
 def test_diff_rows_emit_stale_warning_and_verbose_details(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from science_tool.validate.checks import graph
 
@@ -188,8 +267,8 @@ def test_diff_rows_emit_stale_warning_and_verbose_details(monkeypatch: pytest.Mo
         graph,
         "diff_graph_inputs",
         lambda **_kwargs: [
-            {"path": "doc/a.md", "reason": "hash_changed"},
-            {"path": "notes/b.md", "reason": "new_file"},
+            {"path": "doc/a.md", "status": "stale", "reason": "hash_changed"},
+            {"path": "notes/b.md", "status": "stale", "reason": "new_file"},
         ],
     )
     monkeypatch.setattr(graph, "list_inquiries", lambda _path: [])
@@ -199,6 +278,23 @@ def test_diff_rows_emit_stale_warning_and_verbose_details(monkeypatch: pytest.Mo
     assert "graph has 2 stale input file(s) — run /science:update-graph" in _messages(results, Severity.WARN)
     assert "  doc/a.md (hash_changed)" in _messages(results, Severity.INFO)
     assert "  notes/b.md (new_file)" in _messages(results, Severity.INFO)
+
+
+def test_diff_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from science_tool.validate.checks import graph
+
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir()
+    graph_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
+    monkeypatch.setattr(graph, "validate_graph", lambda _path: ([], False))
+    monkeypatch.setattr(
+        graph, "diff_graph_inputs", lambda **_kwargs: [{"path": "doc/a.md", "status": "fresh", "reason": "ok"}]
+    )
+
+    with pytest.raises(ValueError, match="graph diff returned unknown status: fresh"):
+        list(graph.check_graph(_ctx(tmp_path)))
 
 
 def test_inquiry_validation_maps_statuses_and_verbose_passes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -250,6 +346,25 @@ def test_inquiry_value_error_propagates(monkeypatch: pytest.MonkeyPatch, tmp_pat
     monkeypatch.setattr(graph, "validate_inquiry", raise_value_error)
 
     with pytest.raises(ValueError, match="inquiry graph is malformed"):
+        list(graph.check_graph(_ctx(tmp_path)))
+
+
+def test_inquiry_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from science_tool.validate.checks import graph
+
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir()
+    graph_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
+    monkeypatch.setattr(graph, "validate_graph", lambda _path: ([], False))
+    monkeypatch.setattr(graph, "diff_graph_inputs", lambda **_kwargs: [])
+    monkeypatch.setattr(graph, "list_inquiries", lambda _path: [{"slug": "demo"}])
+    monkeypatch.setattr(
+        graph, "validate_inquiry", lambda _path, _slug: [{"check": "shape", "status": "mystery", "message": "ok"}]
+    )
+
+    with pytest.raises(ValueError, match="inquiry validate returned unknown status: mystery"):
         list(graph.check_graph(_ctx(tmp_path)))
 
 
