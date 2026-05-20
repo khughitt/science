@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -36,3 +37,11 @@ class Check:
 
 def clear_checks_for_tests() -> None:
     CANONICAL_CHECKS.clear()
+
+
+def _load_canonical_checks() -> None:
+    for module_name in ("tooling", "manifest", "directory_structure"):
+        importlib.import_module(f"{__name__}.{module_name}")
+
+
+_load_canonical_checks()
