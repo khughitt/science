@@ -22,7 +22,7 @@ from science_tool.graph.commons_sources import (
     collect_referenced_commons_ids,
 )
 from science_tool.graph.entity_registry import EntityRegistry
-from science_tool.graph.sources import SourceRelation
+from science_tool.graph.sources import SourceRelation, load_project_sources
 
 _COMMONS_FIXTURE = Path(__file__).parent / "fixtures" / "commons" / "valid"
 
@@ -511,3 +511,64 @@ relevance: "central to this project"
         _load_commons(project_root)
 
     assert excinfo.value.root == missing_root
+
+
+def test_load_project_sources_pulls_commons_referenced_topic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    (project_root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    manifest_path = project_root / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("", encoding="utf-8")
+    hypothesis_path = project_root / "doc" / "hypotheses" / "h1.md"
+    hypothesis_path.parent.mkdir(parents=True)
+    hypothesis_path.write_text(
+        """---
+id: "hypothesis:h1"
+type: "hypothesis"
+title: "H1"
+related: ["topic:single-cell-foundation-models"]
+---
+""",
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(project_root)
+
+    entity_ids = [entity.canonical_id for entity in sources.entities]
+    assert "hypothesis:h1" in entity_ids
+    assert "topic:single-cell-foundation-models" in entity_ids
+    assert entity_ids == sorted(entity_ids)
+    assert sources.commons_overlay_paths == {}
+
+
+def test_load_project_sources_populates_overlay_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    (project_root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    manifest_path = project_root / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("", encoding="utf-8")
+    overlay_path = project_root / "doc" / "topics" / "single-cell-foundation-models.md"
+    overlay_path.parent.mkdir(parents=True)
+    overlay_path.write_text(
+        """---
+id: "topic:single-cell-foundation-models"
+overlay_of: "topic:single-cell-foundation-models"
+relevance: "central to this project"
+---
+""",
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(project_root)
+
+    assert sources.commons_overlay_paths == {
+        "topic:single-cell-foundation-models": str(overlay_path),
+    }

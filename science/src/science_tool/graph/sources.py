@@ -336,6 +336,29 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
     bindings = _load_binding_sources(project_root, local_profile=local_profile, typed_record_cache=typed_record_cache)
     bindings.sort(key=lambda binding: (binding.model, binding.parameter, binding.source_path))
 
+    from science_tool.graph.commons_sources import _load_commons_referenced_entities
+
+    commons_loaded, commons_overlay_paths = _load_commons_referenced_entities(
+        project_root=project_root,
+        project_slug=project_slug,
+        project_entities=entities,
+        project_relations=relations,
+        project_bindings=bindings,
+        identity_table=identity_table,
+        registry=registry,
+        active_kinds=active_kinds,
+        ontology_catalogs=ontology_catalogs,
+    )
+    for entity, ref in commons_loaded:
+        existing = identity_table.get(entity.canonical_id)
+        if existing is not None:
+            raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
+        identity_table[entity.canonical_id] = ref
+        entities.append(entity)
+        entity_source_adapters[entity.canonical_id] = ref.adapter_name
+
+    entities.sort(key=lambda e: e.canonical_id)
+
     return ProjectSources(
         project_name=str(config["name"]),
         project_root=str(project_root),
@@ -348,6 +371,7 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
         ontology_catalogs=ontology_catalogs,
         registry=registry,
         markdown_documents=markdown_documents,
+        commons_overlay_paths=commons_overlay_paths,
         freshness_enabled=freshness_enabled,
     )
 
