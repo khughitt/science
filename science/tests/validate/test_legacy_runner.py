@@ -154,6 +154,40 @@ def test_run_legacy_sidecar_pre_validation_phase_omits_post_exit_error(
     assert [result.message for result in results] == ["PRE-FIRED"]
 
 
+def test_run_legacy_sidecar_pre_validation_phase_omits_post_stderr_from_pre_failure(
+    tmp_path: Path,
+) -> None:
+    tmp_path.joinpath("validate.local.sh").write_text(
+        "\n".join(
+            [
+                "legacy_pre() {",
+                '  printf "pre-stderr" >&2',
+                "  exit 23",
+                "}",
+                "legacy_post() {",
+                '  printf "post-stderr" >&2',
+                "}",
+                "register_validation_hook pre_validation legacy_pre",
+                "register_validation_hook post_validation legacy_post",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    results, log_lines = run_legacy_sidecar(
+        tmp_path,
+        phase="pre_validation",
+        count_post_validation=False,
+    )
+
+    assert log_lines == []
+    assert len(results) == 1
+    assert results[0].severity is Severity.ERROR
+    assert results[0].message == "legacy sidecar exited with code 23: pre-stderr"
+    assert "post-stderr" not in results[0].message
+
+
 def test_run_legacy_sidecar_extra_checks_phase_counts_post_output(tmp_path: Path) -> None:
     tmp_path.joinpath("validate.local.sh").write_text(
         "\n".join(

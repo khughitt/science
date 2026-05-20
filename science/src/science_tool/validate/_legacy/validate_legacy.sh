@@ -34,7 +34,7 @@ fi
 dispatch_post_validation_trap() {
   if [[ "${SCIENCE_LEGACY_COUNT_POST_VALIDATION:-1}" = "0" ]]; then
     local exit_status=$?
-    (dispatch_hook post_validation >/dev/null) || true
+    (dispatch_hook post_validation >/dev/null 2>/dev/null) || true
     return "$exit_status"
   else
     dispatch_hook post_validation
