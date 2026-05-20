@@ -14,6 +14,7 @@ from science_model.entities import (
     DatasetEntity,
     Entity,
     EntityType,
+    PaperEntity,
     ProjectEntity,
     ResearchPackageEntity,
     TaskEntity,
@@ -66,6 +67,24 @@ def test_dataset_entity_accepts_valid_external_origin() -> None:
         access=AccessBlock(level="public", verified=False),
     )
     assert ds.origin == "external"
+
+
+def test_paper_entity_coerces_scalar_author_to_list() -> None:
+    paper = PaperEntity(
+        **_minimal(EntityType.PAPER, "paper:Ang2024"),
+        authors="Ang et al.",
+    )
+
+    assert paper.authors == ["Ang et al."]
+
+
+def test_paper_entity_normalizes_null_identifier_strings_to_defaults() -> None:
+    paper = PaperEntity(
+        **_minimal(EntityType.PAPER, "paper:Kurowska2024"),
+        pmid=None,
+    )
+
+    assert paper.pmid == ""
 
 
 def test_workflow_run_entity_extends_project_entity() -> None:

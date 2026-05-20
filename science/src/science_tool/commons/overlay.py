@@ -43,6 +43,7 @@ _TYPE_TO_DIR = {
     "topic": "topics",
     "theme": "themes",
 }
+_DATASET_OVERLAY_FILENAME_PREFIX = "data-"
 
 
 def _read_markdown_body(path: Path) -> str:
@@ -90,6 +91,8 @@ class OverlayAdapter:
         """
         type_dir, slug = self._split_id(canonical_id)
         overlay_path = self._project_root / "doc" / type_dir / f"{slug}.md"
+        if not overlay_path.is_file() and type_dir == "datasets":
+            overlay_path = self._project_root / "doc" / type_dir / f"{_DATASET_OVERLAY_FILENAME_PREFIX}{slug}.md"
         if not overlay_path.is_file():
             return None
         return self._build(canonical_id, overlay_path)
@@ -111,7 +114,11 @@ class OverlayAdapter:
                 frontmatter, _ = parse_frontmatter(child)
                 if "overlay_of" not in frontmatter:
                     continue
-                canonical_id = f"{type_name}:{child.stem}"
+                canonical_id = _overlay_canonical_id_from_filename(
+                    type_name,
+                    child.stem,
+                    declared=frontmatter.get("overlay_of"),
+                )
                 try:
                     yield self._build(canonical_id, child)
                 except OverlayValidationError as exc:
@@ -122,9 +129,7 @@ class OverlayAdapter:
             raise OverlayValidationError(
                 self._project_root,
                 canonical_id=None,
-                cause=ValueError(
-                    f"canonical id {canonical_id!r} is not in '<type>:<slug>' form"
-                ),
+                cause=ValueError(f"canonical id {canonical_id!r} is not in '<type>:<slug>' form"),
             )
         type_name, slug = canonical_id.split(":", 1)
         type_dir = _TYPE_TO_DIR.get(type_name)
@@ -144,17 +149,13 @@ class OverlayAdapter:
             raise OverlayValidationError(
                 self._project_root,
                 canonical_id=canonical_id,
-                cause=ValueError(
-                    f"canonical id {canonical_id!r} has an invalid ':' in slug"
-                ),
+                cause=ValueError(f"canonical id {canonical_id!r} has an invalid ':' in slug"),
             )
         if "/" in slug or "\\" in slug:
             raise OverlayValidationError(
                 self._project_root,
                 canonical_id=canonical_id,
-                cause=ValueError(
-                    f"canonical id {canonical_id!r} has a path separator in slug"
-                ),
+                cause=ValueError(f"canonical id {canonical_id!r} has a path separator in slug"),
             )
         return type_dir, slug
 
@@ -163,20 +164,15 @@ class OverlayAdapter:
         try:
             frontmatter, _ = parse_frontmatter(overlay_path)
             if not frontmatter:
-                raise EntityValidationError(
-                    f"{overlay_path} has no parseable frontmatter"
-                )
+                raise EntityValidationError(f"{overlay_path} has no parseable frontmatter")
             self._validator.validate_overlay(frontmatter)
             declared = frontmatter.get("overlay_of")
             if declared != canonical_id:
                 raise EntityValidationError(
-                    f"overlay_of {declared!r} does not match path-derived "
-                    f"canonical id {canonical_id!r}"
+                    f"overlay_of {declared!r} does not match path-derived canonical id {canonical_id!r}"
                 )
         except EntityValidationError as exc:
-            raise OverlayValidationError(
-                overlay_path, canonical_id=canonical_id, cause=exc
-            ) from exc
+            raise OverlayValidationError(overlay_path, canonical_id=canonical_id, cause=exc) from exc
 
         return OverlayRecord(
             canonical_id=canonical_id,
@@ -192,9 +188,17 @@ class OverlayAdapter:
         )
 
 
-_SKIP_OVERLAY_FIELDS = frozenset(
-    {"id", "overlay_of", "pin_version", "pin_effective_version"}
-)
+def _overlay_canonical_id_from_filename(type_name: str, stem: str, *, declared: object) -> str:
+    canonical_id = f"{type_name}:{stem}"
+    if type_name != "dataset" or not stem.startswith(_DATASET_OVERLAY_FILENAME_PREFIX):
+        return canonical_id
+    promoted_id = f"{type_name}:{stem[len(_DATASET_OVERLAY_FILENAME_PREFIX) :]}"
+    if declared == promoted_id:
+        return promoted_id
+    return canonical_id
+
+
+_SKIP_OVERLAY_FIELDS = frozenset({"id", "overlay_of", "pin_version", "pin_effective_version"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -252,9 +256,7 @@ def merge_entity(
             continue
         policy = merge_policy.get(field) or overlay_policy.get(field)
         if policy is None:
-            raise OverlayMergeError(
-                field=field, canonical_id=canonical.canonical_id
-            )
+            raise OverlayMergeError(field=field, canonical_id=canonical.canonical_id)
         if policy is MergePolicy.APPEND:
             base = canonical.frontmatter.get(field, [])
             merged[field] = _dedup(list(base) + list(value))
@@ -263,9 +265,7 @@ def merge_entity(
             merged[field] = value
             field_sources[field] = "overlay"
         else:  # REPLACE / FORBIDDEN — unreachable for a validated overlay
-            raise OverlayMergeError(
-                field=field, canonical_id=canonical.canonical_id
-            )
+            raise OverlayMergeError(field=field, canonical_id=canonical.canonical_id)
 
     if overlay.body.strip():
         merged_body = canonical_body + "\n\n" + overlay.body

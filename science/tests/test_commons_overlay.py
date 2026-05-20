@@ -1,4 +1,5 @@
 """Tests for science_tool.commons.overlay."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,13 +15,7 @@ def test_read_markdown_body_returns_text_after_frontmatter(tmp_path: Path) -> No
 
     md = tmp_path / "doc.md"
     md.write_text(
-        "---\n"
-        "id: \"paper:X\"\n"
-        "---\n"
-        "\n"
-        "# Heading\n"
-        "\n"
-        "Body text.\n",
+        '---\nid: "paper:X"\n---\n\n# Heading\n\nBody text.\n',
         encoding="utf-8",
     )
     body = _read_markdown_body(md)
@@ -58,6 +53,24 @@ def test_overlay_adapter_load_miss_returns_none() -> None:
 
     root = _OVERLAYS / "proj-alpha"
     assert OverlayAdapter(root, "proj-alpha").load("paper:NoSuchPaper") is None
+
+
+def test_overlay_adapter_load_finds_promoted_dataset_overlay_filename(tmp_path: Path) -> None:
+    from science_tool.commons.overlay import OverlayAdapter, OverlayRecord
+
+    overlay_path = tmp_path / "doc" / "datasets" / "data-fixture-ds.md"
+    overlay_path.parent.mkdir(parents=True)
+    overlay_path.write_text(
+        "---\nid: dataset:fixture-ds\noverlay_of: dataset:fixture-ds\n---\n",
+        encoding="utf-8",
+    )
+
+    rec = OverlayAdapter(tmp_path, "project").load("dataset:fixture-ds")
+
+    assert isinstance(rec, OverlayRecord)
+    assert rec.canonical_id == "dataset:fixture-ds"
+    assert rec.slug == "fixture-ds"
+    assert rec.overlay_path == overlay_path
 
 
 def test_overlay_adapter_load_schema_failure_raises_with_cause() -> None:
@@ -103,6 +116,44 @@ def test_overlay_adapter_scan_yields_records() -> None:
     assert ids == ["dataset:cath-domains", "paper:Adams2025"]
 
 
+def test_overlay_adapter_scan_strips_promoted_dataset_filename_prefix(tmp_path: Path) -> None:
+    from science_tool.commons.overlay import OverlayAdapter, OverlayRecord
+
+    overlay_path = tmp_path / "doc" / "datasets" / "data-fixture-ds.md"
+    overlay_path.parent.mkdir(parents=True)
+    overlay_path.write_text(
+        "---\nid: dataset:fixture-ds\noverlay_of: dataset:fixture-ds\n---\n",
+        encoding="utf-8",
+    )
+
+    records = list(OverlayAdapter(tmp_path, "project").scan())
+
+    assert len(records) == 1
+    rec = records[0]
+    assert isinstance(rec, OverlayRecord)
+    assert rec.canonical_id == "dataset:fixture-ds"
+    assert rec.slug == "fixture-ds"
+
+
+def test_overlay_adapter_scan_preserves_dataset_slug_that_starts_with_data(tmp_path: Path) -> None:
+    from science_tool.commons.overlay import OverlayAdapter, OverlayRecord
+
+    overlay_path = tmp_path / "doc" / "datasets" / "data-quality.md"
+    overlay_path.parent.mkdir(parents=True)
+    overlay_path.write_text(
+        "---\nid: dataset:data-quality\noverlay_of: dataset:data-quality\n---\n",
+        encoding="utf-8",
+    )
+
+    records = list(OverlayAdapter(tmp_path, "project").scan())
+
+    assert len(records) == 1
+    rec = records[0]
+    assert isinstance(rec, OverlayRecord)
+    assert rec.canonical_id == "dataset:data-quality"
+    assert rec.slug == "data-quality"
+
+
 def test_overlay_adapter_scan_skips_project_paper_without_overlay_of(
     tmp_path: Path,
 ) -> None:
@@ -111,12 +162,7 @@ def test_overlay_adapter_scan_skips_project_paper_without_overlay_of(
     paper = tmp_path / "doc" / "papers" / "Adams2025.md"
     paper.parent.mkdir(parents=True)
     paper.write_text(
-        "---\n"
-        "kind: paper\n"
-        "id: paper:Adams2025\n"
-        "title: Adams 2025\n"
-        "---\n\n"
-        "Project-authored paper note.\n",
+        "---\nkind: paper\nid: paper:Adams2025\ntitle: Adams 2025\n---\n\nProject-authored paper note.\n",
         encoding="utf-8",
     )
 
@@ -181,9 +227,9 @@ def test_merge_entity_append_field_dedups_and_orders(tmp_path: Path) -> None:
     from science_tool.commons.overlay import OverlayAdapter, merge_entity
 
     record = _canonical_record(tmp_path)  # tags == ["evaluation", "homology"]
-    overlay = OverlayAdapter(
-        _OVERLAYS / "proj-alpha", "proj-alpha"
-    ).load("paper:Adams2025")  # tags == ["overlay-added"]
+    overlay = OverlayAdapter(_OVERLAYS / "proj-alpha", "proj-alpha").load(
+        "paper:Adams2025"
+    )  # tags == ["overlay-added"]
     merged = merge_entity(record, overlay, _merge_policy_for(record))
     assert merged.merged_frontmatter["tags"] == [
         "evaluation",
@@ -197,9 +243,7 @@ def test_merge_entity_project_only_field_copied_from_overlay(tmp_path: Path) -> 
     from science_tool.commons.overlay import OverlayAdapter, merge_entity
 
     record = _canonical_record(tmp_path)
-    overlay = OverlayAdapter(
-        _OVERLAYS / "proj-alpha", "proj-alpha"
-    ).load("paper:Adams2025")
+    overlay = OverlayAdapter(_OVERLAYS / "proj-alpha", "proj-alpha").load("paper:Adams2025")
     merged = merge_entity(record, overlay, _merge_policy_for(record))
     assert merged.merged_frontmatter["hypothesis_links"] == ["H2", "H4"]
     assert merged.merged_frontmatter["relevance"].startswith("H2")
@@ -211,15 +255,11 @@ def test_merge_entity_body_appends_overlay_sections(tmp_path: Path) -> None:
     from science_tool.commons.overlay import OverlayAdapter, merge_entity
 
     record = _canonical_record(tmp_path)
-    overlay = OverlayAdapter(
-        _OVERLAYS / "proj-alpha", "proj-alpha"
-    ).load("paper:Adams2025")
+    overlay = OverlayAdapter(_OVERLAYS / "proj-alpha", "proj-alpha").load("paper:Adams2025")
     merged = merge_entity(record, overlay, _merge_policy_for(record))
     assert "representative paper" in merged.merged_body
     assert "Project-Specific Notes" in merged.merged_body
-    assert merged.merged_body.index("representative paper") < merged.merged_body.index(
-        "Project-Specific Notes"
-    )
+    assert merged.merged_body.index("representative paper") < merged.merged_body.index("Project-Specific Notes")
 
 
 def test_merge_entity_rejects_forbidden_overlay_field(tmp_path: Path) -> None:
@@ -280,9 +320,7 @@ def test_merge_entity_rejects_unknown_overlay_field(tmp_path: Path) -> None:
         merge_entity(record, bad, _merge_policy_for(record))
 
 
-def _seed_commons_and_config(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, projects: dict[str, Path]
-) -> Path:
+def _seed_commons_and_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, projects: dict[str, Path]) -> Path:
     """Copy the commons fixture, build its registry, and write a config.yaml
     registering `projects` (name -> root path). Returns the commons root."""
     import shutil
@@ -300,14 +338,7 @@ def _seed_commons_and_config(
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
     (cfg_dir / "config.yaml").write_text(
-        yaml.dump(
-            {
-                "projects": [
-                    {"path": str(p), "name": n, "registered": "2026-05-14"}
-                    for n, p in projects.items()
-                ]
-            }
-        ),
+        yaml.dump({"projects": [{"path": str(p), "name": n, "registered": "2026-05-14"} for n, p in projects.items()]}),
         encoding="utf-8",
     )
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
@@ -316,9 +347,7 @@ def _seed_commons_and_config(
     return commons_root
 
 
-def test_resolve_entity_no_project_is_canonical_only(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_resolve_entity_no_project_is_canonical_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.commons.overlay import resolve_entity
 
     _seed_commons_and_config(tmp_path, monkeypatch, projects={})
@@ -327,36 +356,26 @@ def test_resolve_entity_no_project_is_canonical_only(
     assert merged.merged_frontmatter["title"].startswith("A representative")
 
 
-def test_resolve_entity_with_overlay_merges(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_resolve_entity_with_overlay_merges(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.commons.overlay import resolve_entity
 
-    _seed_commons_and_config(
-        tmp_path, monkeypatch, projects={"proj-alpha": _OVERLAYS / "proj-alpha"}
-    )
+    _seed_commons_and_config(tmp_path, monkeypatch, projects={"proj-alpha": _OVERLAYS / "proj-alpha"})
     merged = resolve_entity("paper:Adams2025", project="proj-alpha")
     assert merged.overlay is not None
     assert merged.merged_frontmatter["hypothesis_links"] == ["H2", "H4"]
     assert "overlay-added" in merged.merged_frontmatter["tags"]
 
 
-def test_resolve_entity_project_without_overlay_for_id(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_resolve_entity_project_without_overlay_for_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.commons.overlay import resolve_entity
 
-    _seed_commons_and_config(
-        tmp_path, monkeypatch, projects={"proj-alpha": _OVERLAYS / "proj-alpha"}
-    )
+    _seed_commons_and_config(tmp_path, monkeypatch, projects={"proj-alpha": _OVERLAYS / "proj-alpha"})
     # proj-alpha has no overlay for the theme — canonical-only, not an error.
     merged = resolve_entity("theme:research-hygiene", project="proj-alpha")
     assert merged.overlay is None
 
 
-def test_resolve_entity_unknown_project_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_resolve_entity_unknown_project_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.commons.errors import ProjectNotRegisteredError
     from science_tool.commons.overlay import resolve_entity
 
@@ -365,22 +384,16 @@ def test_resolve_entity_unknown_project_raises(
         resolve_entity("paper:Adams2025", project="ghost")
 
 
-def test_resolve_entity_registered_project_missing_dir_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_resolve_entity_registered_project_missing_dir_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.commons.errors import ProjectDirectoryMissingError
     from science_tool.commons.overlay import resolve_entity
 
-    _seed_commons_and_config(
-        tmp_path, monkeypatch, projects={"gone": tmp_path / "does-not-exist"}
-    )
+    _seed_commons_and_config(tmp_path, monkeypatch, projects={"gone": tmp_path / "does-not-exist"})
     with pytest.raises(ProjectDirectoryMissingError):
         resolve_entity("paper:Adams2025", project="gone")
 
 
-def test_resolve_entity_unknown_id_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_resolve_entity_unknown_id_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.commons.errors import CommonsEntityError
     from science_tool.commons.overlay import resolve_entity
 
@@ -389,14 +402,10 @@ def test_resolve_entity_unknown_id_raises(
         resolve_entity("paper:NoSuchPaper")
 
 
-def test_validate_project_overlays_clean_project(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_validate_project_overlays_clean_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.commons.overlay import validate_project_overlays
 
-    _seed_commons_and_config(
-        tmp_path, monkeypatch, projects={"proj-alpha": _OVERLAYS / "proj-alpha"}
-    )
+    _seed_commons_and_config(tmp_path, monkeypatch, projects={"proj-alpha": _OVERLAYS / "proj-alpha"})
     report = validate_project_overlays("proj-alpha")
     assert report.checked == 2
     assert report.errors == []
@@ -407,9 +416,7 @@ def test_validate_project_overlays_reports_schema_and_dangling_errors(
 ) -> None:
     from science_tool.commons.overlay import validate_project_overlays
 
-    _seed_commons_and_config(
-        tmp_path, monkeypatch, projects={"proj-broken": _OVERLAYS / "proj-broken"}
-    )
+    _seed_commons_and_config(tmp_path, monkeypatch, projects={"proj-broken": _OVERLAYS / "proj-broken"})
     report = validate_project_overlays("proj-broken")
     # one schema failure (papers/Adams2025.md) + one dangling overlay_of
     # (topics/nonexistent-topic.md).
@@ -419,14 +426,10 @@ def test_validate_project_overlays_reports_schema_and_dangling_errors(
     assert failed_ids == ["paper:Adams2025", "topic:nonexistent-topic"]
 
 
-def test_validate_project_overlays_missing_dir_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_validate_project_overlays_missing_dir_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.commons.errors import ProjectDirectoryMissingError
     from science_tool.commons.overlay import validate_project_overlays
 
-    _seed_commons_and_config(
-        tmp_path, monkeypatch, projects={"gone": tmp_path / "does-not-exist"}
-    )
+    _seed_commons_and_config(tmp_path, monkeypatch, projects={"gone": tmp_path / "does-not-exist"})
     with pytest.raises(ProjectDirectoryMissingError):
         validate_project_overlays("gone")

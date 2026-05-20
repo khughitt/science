@@ -476,6 +476,39 @@ project_tags: ["project-anchor"]
     }
 
 
+def test_orchestrator_skips_overlay_when_project_identity_already_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = tmp_path / "project"
+    overlay_path = project_root / "doc" / "topics" / "single-cell-foundation-models.md"
+    overlay_path.parent.mkdir(parents=True)
+    overlay_path.write_text(
+        """---
+id: "topic:single-cell-foundation-models"
+overlay_of: "topic:single-cell-foundation-models"
+relevance: "central to this project"
+---
+""",
+        encoding="utf-8",
+    )
+
+    loaded, overlay_paths = _load_commons(
+        project_root,
+        identity_table={
+            "topic:single-cell-foundation-models": SourceRef(
+                adapter_name="aggregate",
+                path="knowledge/sources/local/entities.yaml:1",
+            )
+        },
+    )
+
+    assert loaded == []
+    assert overlay_paths == {}
+
+
 def test_orchestrator_no_overlays_and_no_refs_is_noop_with_missing_commons_root(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

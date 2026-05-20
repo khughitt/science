@@ -7,7 +7,7 @@ from enum import StrEnum
 
 from typing import Any, Literal, Protocol
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from science_model.identity import EntityScope, ExternalId
 from science_model.packages.schema import AccessBlock, DerivationBlock
@@ -488,6 +488,20 @@ class PaperEntity(ProjectEntity):
     key_findings: list[str] = Field(default_factory=list)
     methods_summary: str = ""
     limitations: list[str] = Field(default_factory=list)
+
+    @field_validator("authors", mode="before")
+    @classmethod
+    def _coerce_scalar_authors(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [value]
+        return value
+
+    @field_validator("bibkey", "venue", "doi", "pmid", "url", "methods_summary", mode="before")
+    @classmethod
+    def _coerce_nullable_strings(cls, value: object) -> object:
+        if value is None:
+            return ""
+        return value
 
 
 class TaskEntity(ProjectEntity):

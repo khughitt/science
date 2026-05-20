@@ -86,7 +86,7 @@ def _load_commons_referenced_entities(
     )
     referenced_ids.difference_update(identity_table)
 
-    needed_ids = referenced_ids | set(overlays)
+    needed_ids = referenced_ids | (set(overlays) - set(identity_table))
     if not needed_ids:
         return [], {}
 
