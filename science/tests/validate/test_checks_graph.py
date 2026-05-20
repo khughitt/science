@@ -313,6 +313,8 @@ def test_inquiry_validation_maps_statuses_and_verbose_passes(monkeypatch: pytest
         "validate_inquiry",
         lambda _path, _slug: [
             {"check": "shape", "status": "pass", "message": "ok"},
+            {"check": "causal_optional", "status": "skip", "message": "not causal"},
+            {"check": "causal_note", "status": "info", "message": "informational"},
             {"check": "scope", "status": "warn", "message": "loose"},
             {"check": "boundary", "status": "fail", "message": "broken"},
         ],
@@ -324,8 +326,12 @@ def test_inquiry_validation_maps_statuses_and_verbose_passes(monkeypatch: pytest
     assert "inquiry 'demo': boundary — broken" in _messages(non_verbose_results, Severity.ERROR)
     assert "inquiry 'demo': scope — loose" in _messages(non_verbose_results, Severity.WARN)
     assert "inquiry 'demo': shape — ok" not in _messages(non_verbose_results, Severity.INFO)
+    assert "inquiry 'demo': causal_optional — not causal" not in _messages(non_verbose_results, Severity.INFO)
+    assert "inquiry 'demo': causal_note — informational" not in _messages(non_verbose_results, Severity.INFO)
     assert "Checking inquiries (1)..." in _messages(verbose_results, Severity.INFO)
     assert "inquiry 'demo': shape — ok" in _messages(verbose_results, Severity.INFO)
+    assert "inquiry 'demo': causal_optional — not causal" in _messages(verbose_results, Severity.INFO)
+    assert "inquiry 'demo': causal_note — informational" in _messages(verbose_results, Severity.INFO)
 
 
 def test_inquiry_value_error_propagates(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

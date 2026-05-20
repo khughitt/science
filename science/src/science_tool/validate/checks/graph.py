@@ -229,7 +229,7 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
         inquiry_rows = validate_inquiry(graph_path, slug)
 
         for row in inquiry_rows:
-            status = _status(row, context="inquiry validate", accepted={"fail", "warn", "pass"})
+            status = _status(row, context="inquiry validate", accepted={"fail", "warn", "pass", "skip", "info"})
             message = f"inquiry '{slug}': {row['check']} — {row['message']}"
             if status == "fail":
                 yield _result(Severity.ERROR, message)
