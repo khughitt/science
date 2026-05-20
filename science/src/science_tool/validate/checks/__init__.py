@@ -60,6 +60,7 @@ def _load_canonical_checks() -> None:
         "graph",
         "tasks",
         "id_prefixes",
+        "cross_references",
     ):
         importlib.import_module(f"{__name__}.{module_name}")
 
