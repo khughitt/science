@@ -8,6 +8,7 @@ import click
 from rich.text import Text
 
 from science_tool.styles import ERROR_STYLE, SUCCESS_STYLE, WARNING_STYLE, get_console
+from science_tool.validate._helpers import section_banner
 from science_tool.validate.checks import CANONICAL_CHECKS
 from science_tool.validate.context import ValidateContextError
 from science_tool.validate.result import Result, Severity
@@ -78,7 +79,7 @@ def _emit_text(result: RunResult) -> None:
 
     for section in _section_names():
         console.print()
-        console.print(f"Checking {section}")
+        console.print(section_banner(section))
 
     for item in result.results:
         console.print(_format_result(item))
