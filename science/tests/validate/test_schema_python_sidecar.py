@@ -41,6 +41,15 @@ def test_direct_execute_accepts_python_sidecar_round_trip() -> None:
     round_tripped = Artifact.model_validate(art.model_dump(mode="json"))
 
     assert round_tripped.extension_protocol.kind is ExtensionKind.PYTHON_SIDECAR
+    assert round_tripped.extension_protocol.sidecar_path == "validate_local.py"
+
+
+def test_python_sidecar_requires_sidecar_path() -> None:
+    art_dict = _artifact_dict()
+    art_dict["extension_protocol"] = {"kind": "python_sidecar"}
+
+    with pytest.raises(ValidationError, match="python_sidecar.*sidecar_path"):
+        Artifact.model_validate(art_dict)
 
 
 def test_science_loader_rejects_python_sidecar() -> None:

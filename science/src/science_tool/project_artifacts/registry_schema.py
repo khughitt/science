@@ -68,7 +68,10 @@ class ExtensionProtocol(BaseModel):
 
     @model_validator(mode="after")
     def _check_kind_specific(self) -> "ExtensionProtocol":
-        if self.kind in (ExtensionKind.SOURCED_SIDECAR, ExtensionKind.MERGED_SIDECAR) and not self.sidecar_path:
+        if (
+            self.kind in (ExtensionKind.SOURCED_SIDECAR, ExtensionKind.PYTHON_SIDECAR, ExtensionKind.MERGED_SIDECAR)
+            and not self.sidecar_path
+        ):
             raise ValueError(f"extension_protocol kind {self.kind.value} requires sidecar_path")
         if self.kind is ExtensionKind.NONE and not self.rationale:
             raise ValueError("extension_protocol kind none requires rationale")
