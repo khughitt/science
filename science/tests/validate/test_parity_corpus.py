@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from science_tool.validate import Severity
-from science_tool.validate.checks import CANONICAL_CHECKS
+from science_tool.validate.checks import clear_checks_for_tests
 from science_tool.validate.runner import run
 
 
@@ -40,8 +40,7 @@ CHECK_MODULES = (
 
 
 def _ensure_canonical_checks() -> None:
-    if CANONICAL_CHECKS:
-        return
+    clear_checks_for_tests()
     for module_name in CHECK_MODULES:
         importlib.reload(importlib.import_module(f"science_tool.validate.checks.{module_name}"))
 
@@ -87,9 +86,13 @@ def test_isolated_copy_excludes_sidecars_and_is_independent(
     isolated_copy: Callable[[Path], Path],
 ) -> None:
     copied = isolated_copy(COMBINED_PROJECT)
+    second_copy = isolated_copy(COMBINED_PROJECT)
 
     assert copied != COMBINED_PROJECT
+    assert second_copy != COMBINED_PROJECT
+    assert second_copy != copied
     assert copied.joinpath("science.yaml").is_file()
+    assert second_copy.joinpath("science.yaml").is_file()
     assert copied.joinpath("doc", "overview.md").is_file()
     assert not copied.joinpath("validate.local.sh").exists()
     assert not copied.joinpath("validate_local.py").exists()
@@ -105,6 +108,7 @@ def test_isolated_copy_excludes_sidecars_and_is_independent(
 def test_sidecar_env_var_disables_python_sidecar_import(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _write_minimal_project(tmp_path)
     _ensure_canonical_checks()
+    monkeypatch.delenv("SCIENCE_VALIDATE_DISABLE_SIDECAR", raising=False)
 
     with pytest.raises(NotImplementedError, match="Python sidecar discovery is not implemented until Task 8"):
         run(tmp_path, strict=False, verbose=False, enable_python_sidecar=True)
