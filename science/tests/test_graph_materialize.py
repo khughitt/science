@@ -218,6 +218,75 @@ def test_materialize_emits_scope_triple_for_project_entity(tmp_path: Path) -> No
     assert 'sci:scope "project"' in text
 
 
+def test_materialize_with_commons_topic_emits_scope_and_dual_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+
+    from science_tool.commons.adapter import CommonsEntityAdapter
+    from science_tool.commons.registry import RegistryBuilder
+    from science_tool.graph.materialize import _entity_uri
+    from science_tool.graph.store import SCI_NS
+
+    fixture_root = Path(__file__).parent / "fixtures" / "commons" / "valid"
+    commons_root = tmp_path / "commons"
+    shutil.copytree(fixture_root, commons_root)
+    RegistryBuilder(commons_root, CommonsEntityAdapter(commons_root)).rebuild()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("", encoding="utf-8")
+    hypothesis_path = project / "doc" / "hypotheses" / "h1.md"
+    hypothesis_path.parent.mkdir(parents=True)
+    hypothesis_path.write_text(
+        """---
+id: "hypothesis:h1"
+type: "hypothesis"
+title: "H1"
+related: ["topic:single-cell-foundation-models"]
+---
+""",
+        encoding="utf-8",
+    )
+    overlay_path = project / "doc" / "topics" / "single-cell-foundation-models.md"
+    overlay_path.parent.mkdir(parents=True)
+    overlay_path.write_text(
+        """---
+id: "topic:single-cell-foundation-models"
+overlay_of: "topic:single-cell-foundation-models"
+relevance: "central to this project"
+---
+
+## Project Notes
+""",
+        encoding="utf-8",
+    )
+
+    trig_path = materialize_graph(project)
+
+    ds = Dataset()
+    ds.parse(source=str(trig_path), format="trig")
+    entity_uri = _entity_uri("topic:single-cell-foundation-models")
+    scopes = [obj for _, _, obj, _ in ds.quads((entity_uri, SCI_NS.scope, None, None))]
+    derived = {obj for _, _, obj, _ in ds.quads((entity_uri, PROV.wasDerivedFrom, None, None))}
+    derived_source_identifiers = {
+        str(identifier)
+        for source in derived
+        for _, _, identifier, _ in ds.quads((source, SCHEMA.identifier, None, None))
+    }
+
+    assert any(str(scope) == "cross-project" for scope in scopes)
+    assert derived_source_identifiers == {
+        str(commons_root / "topics" / "single-cell-foundation-models.md"),
+        str(overlay_path),
+    }
+
+
 def test_add_entity_emits_two_provenance_triples_when_overlay_path_present() -> None:
     from rdflib import Graph
     from rdflib.namespace import PROV

@@ -79,7 +79,12 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     ext_prefixes = _EXTERNAL_PREFIXES | external_prefixes(sources.ontology_catalogs)
 
     for entity in sources.entities:
-        _add_entity(entity=entity, knowledge=knowledge, provenance=provenance)
+        _add_entity(
+            entity=entity,
+            knowledge=knowledge,
+            provenance=provenance,
+            overlay_paths=sources.commons_overlay_paths,
+        )
 
     for entity in sources.entities:
         _add_relations(
