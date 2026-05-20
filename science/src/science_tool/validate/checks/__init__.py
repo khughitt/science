@@ -47,6 +47,7 @@ def _load_canonical_checks() -> None:
         "research_scope",
         "document_structure",
         "hypotheses",
+        "references",
         "papers",
         "unresolved_markers",
         "gap_analysis",
