@@ -59,6 +59,7 @@ def _load_canonical_checks() -> None:
         "notes",
         "graph",
         "tasks",
+        "id_prefixes",
     ):
         importlib.import_module(f"{__name__}.{module_name}")
 
