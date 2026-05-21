@@ -325,7 +325,7 @@ def test_validate_cli_reference_documents_shim_contract() -> None:
     expected_reference_strings = (
         "# `science validate`",
         "## Synopsis",
-        "science validate [--verbose] [--strict] [--format text|json] [--project-root PATH]",
+        "science validate [--verbose] [--strict] [--format text|json] [--fail-on TIER] [--project-root PATH]",
         "## Flags",
         "--format text|json",
         "--project-root PATH",
