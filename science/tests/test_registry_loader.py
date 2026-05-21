@@ -50,3 +50,13 @@ def test_package_default_registry_is_loadable() -> None:
     reg = default_registry()
     # may be empty or populated, but it parses
     assert reg is not None
+
+
+def test_packaged_validate_sh_uses_python_sidecar_extension_protocol() -> None:
+    from science_tool.project_artifacts import default_registry
+
+    reg = default_registry()
+    validate_artifacts = [artifact for artifact in reg.artifacts if artifact.name == "validate.sh"]
+
+    assert len(validate_artifacts) == 1
+    assert validate_artifacts[0].extension_protocol.kind.value == "python_sidecar"
