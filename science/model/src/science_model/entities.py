@@ -614,3 +614,17 @@ class ResearchPackageEntity(ProjectEntity):
     """Research package — placeholder typed entity for package composition."""
 
     pass
+
+
+class CodeFileEntity(ProjectEntity):
+    """A source-code file registered as a first-class entity.
+
+    Operational: carries no continuous belief. `updated` is set by the
+    CodeAdapter to the file's last content-changing commit date so code
+    edits feed freshness once provenance edges exist (Plan C). `task_ids`
+    are stored here rather than in `related` so an unresolved task id
+    cannot hard-fail graph materialization (validated in Plan B).
+    """
+
+    decision_bearing: bool = False
+    task_ids: list[str] = Field(default_factory=list)

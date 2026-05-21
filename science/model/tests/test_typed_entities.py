@@ -119,3 +119,20 @@ def test_generic_entity_with_kind_dataset_does_not_own_dataset_invariants() -> N
         origin="external",
     )
     assert entity.origin == "external"
+
+
+def test_code_file_entity_defaults_and_fields() -> None:
+    from science_model.entities import CodeFileEntity
+
+    cf = CodeFileEntity(**_minimal(EntityType.CODE_FILE, "code-file:stages/run.py"))
+    assert isinstance(cf, ProjectEntity)
+    assert cf.decision_bearing is False
+    assert cf.task_ids == []
+
+    cf2 = CodeFileEntity(
+        **_minimal(EntityType.CODE_FILE, "code-file:stages/run.py"),
+        decision_bearing=True,
+        task_ids=["t491"],
+    )
+    assert cf2.decision_bearing is True
+    assert cf2.task_ids == ["t491"]
