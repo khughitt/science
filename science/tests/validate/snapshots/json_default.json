@@ -1,10 +1,18 @@
 {
   "summary": {
-    "errors": 4,
+    "errors": 5,
     "warnings": 2,
     "infos": 35
   },
   "results": [
+    {
+      "severity": "error",
+      "path": null,
+      "line": null,
+      "message": "validate.local.sh is no longer supported; migrate it using docs/migration/2026-05-19-validate-local-sh-porting-guide.md",
+      "rule": "validate.sidecar.legacy_removed",
+      "task": null
+    },
     {
       "severity": "info",
       "path": "pyproject.toml",

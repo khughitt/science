@@ -124,6 +124,31 @@ def test_validate_imports_local_hook_by_default(tmp_path: Path) -> None:
     }
 
 
+def test_validate_json_redirects_sidecar_stdout_to_stderr(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    project.joinpath("validate_local.py").write_text(
+        "\n".join(
+            [
+                "from science_tool.validate import Result, Severity, hook",
+                "",
+                'print("sidecar import chatter")',
+                "",
+                '@hook("extra_checks")',
+                "def extra(ctx):",
+                '    print("sidecar hook chatter")',
+                '    return [Result(Severity.WARN, None, None, "cli sidecar warning", "local.extra", None)]',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(main, ["validate", "--format", "json", "--project-root", str(project)])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["summary"] == {"errors": 0, "warnings": 1, "infos": 0}
+    assert result.stderr == "sidecar import chatter\nsidecar hook chatter\n"
+
+
 def test_validate_disable_sidecar_env_skips_python_and_bash_sidecars(tmp_path: Path) -> None:
     project = _project(tmp_path)
     project.joinpath("validate_local.py").write_text(

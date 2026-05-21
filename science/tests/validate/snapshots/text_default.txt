@@ -39,6 +39,7 @@ Checking frontmatter cross-references...
 Checking prose quality lints...
 
 Checking annotation drift...
+ERROR validate.local.sh is no longer supported; migrate it using docs/migration/2026-05-19-validate-local-sh-porting-guide.md [validate.sidecar.legacy_removed]
 INFO pyproject.toml [tooling] pyproject.toml present
 INFO pyproject.toml [tooling]   science reference present
 INFO .env [tooling] .env defines SCIENCE_TOOL_PATH
@@ -82,4 +83,4 @@ INFO 10 prose lint issue(s): frontmatter-inline-gap (use --strict to promote) [p
 INFO no annotation sidecars (*.anno.trig) in this project [annotations]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FAILED: 4 error(s), 2 warning(s)
+FAILED: 5 error(s), 2 warning(s)

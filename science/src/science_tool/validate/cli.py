@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import redirect_stdout
+from io import StringIO
 import json
 from pathlib import Path
 from typing import Any
@@ -46,14 +48,20 @@ def validate_cmd(
     project_root: Path,
 ) -> None:
     """Validate a Science project."""
+    captured_stdout = StringIO()
     try:
-        result = run(
-            project_root,
-            strict=strict,
-            verbose=verbose,
-        )
+        with redirect_stdout(captured_stdout):
+            result = run(
+                project_root,
+                strict=strict,
+                verbose=verbose,
+            )
     except ValidateContextError as exc:
         raise click.ClickException(str(exc)) from exc
+
+    sidecar_stdout = captured_stdout.getvalue()
+    if sidecar_stdout:
+        click.echo(sidecar_stdout, nl=False, err=True)
 
     if output_format == "json":
         click.echo(json.dumps(_json_payload(result), indent=2))
