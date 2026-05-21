@@ -15,7 +15,6 @@ from test_parity_canonical_body import (
     DiagnosticItem,
     REAL_PROJECTS_CONFIG,
     _assert_semantic_parity,
-    _extract_bash_diagnostic_items,
     _load_project_paths,
     _resolved_project_paths,
     _run_bash_validate,
@@ -278,9 +277,12 @@ def _assert_sidecar_semantic_parity(
     bash_project = copy_project(source_project)
     python_project = copy_project(source_project)
 
-    bash_items = _extract_bash_diagnostic_items(_run_bash_validate(bash_project, tmp_path))
+    bash_items = _extract_cli_diagnostic_items(
+        _legacy_sidecar_results(json.loads(_run_bash_validate(bash_project, tmp_path, "--format", "json"))),
+        bash_project,
+    )
     python_items = _extract_cli_diagnostic_items(
-        _without_legacy_deprecation_results(_run_cli_validate(python_project)),
+        _legacy_sidecar_results(_run_cli_validate(python_project)),
         python_project,
     )
 
@@ -314,6 +316,13 @@ def _without_legacy_deprecation_results(payload: dict[str, Any]) -> dict[str, An
     return {
         **payload,
         "results": [item for item in payload["results"] if item.get("rule") != _LEGACY_SIDECAR_DEPRECATION_RULE],
+    }
+
+
+def _legacy_sidecar_results(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **payload,
+        "results": [item for item in payload["results"] if item.get("rule") is None],
     }
 
 

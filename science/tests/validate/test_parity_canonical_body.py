@@ -154,7 +154,7 @@ def _format_items(items: list[DiagnosticItem]) -> list[str]:
     return [f"  {item!r}" for item in items]
 
 
-def _run_bash_validate(project_root: Path, tmp_path: Path) -> str:
+def _run_bash_validate(project_root: Path, tmp_path: Path, *args: str) -> str:
     copied_venv = project_root / ".venv"
     if copied_venv.exists():
         shutil.rmtree(copied_venv)
@@ -165,6 +165,7 @@ def _run_bash_validate(project_root: Path, tmp_path: Path) -> str:
     if uv_executable is None:
         raise AssertionError("uv executable not found on PATH before validate.sh isolation")
     _write_python3_stub(bin_dir)
+    _write_uv_stub(bin_dir, Path(uv_executable).resolve(strict=True))
     _write_science_stub(bin_dir, Path(uv_executable).resolve(strict=True))
 
     env = os.environ.copy()
@@ -174,7 +175,7 @@ def _run_bash_validate(project_root: Path, tmp_path: Path) -> str:
     env.pop("SCIENCE_TOOL_PATH", None)
 
     completed = subprocess.run(
-        ["/usr/bin/bash", str(VALIDATE_SH)],
+        ["/usr/bin/bash", str(VALIDATE_SH), *args],
         cwd=project_root,
         env=env,
         text=True,
@@ -195,6 +196,25 @@ def _write_python3_stub(bin_dir: Path) -> None:
             [
                 "#!/bin/sh",
                 f'exec "{sys.executable}" "$@"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+
+
+def _write_uv_stub(bin_dir: Path, uv_executable: Path) -> None:
+    stub = bin_dir / "uv"
+    stub.write_text(
+        "\n".join(
+            [
+                "#!/bin/sh",
+                'if [ "$1" = "run" ]; then',
+                "  shift",
+                f'  exec "{uv_executable}" run --frozen --project "{REPO_ROOT}" "$@"',
+                "fi",
+                f'exec "{uv_executable}" "$@"',
                 "",
             ]
         ),
@@ -383,6 +403,26 @@ def test_science_stub_uses_resolved_uv_executable_path(tmp_path: Path) -> None:
         [
             "#!/bin/sh",
             f'exec "{uv_path}" run --frozen --project "{REPO_ROOT}" science "$@"',
+            "",
+        ]
+    )
+
+
+def test_uv_stub_routes_validate_shim_to_this_checkout(tmp_path: Path) -> None:
+    uv_path = tmp_path / "tools" / "uv"
+    uv_path.parent.mkdir()
+
+    _write_uv_stub(tmp_path, uv_path)
+
+    stub = tmp_path / "uv"
+    assert stub.read_text(encoding="utf-8") == "\n".join(
+        [
+            "#!/bin/sh",
+            'if [ "$1" = "run" ]; then',
+            "  shift",
+            f'  exec "{uv_path}" run --frozen --project "{REPO_ROOT}" "$@"',
+            "fi",
+            f'exec "{uv_path}" "$@"',
             "",
         ]
     )

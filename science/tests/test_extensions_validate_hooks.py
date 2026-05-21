@@ -1,56 +1,46 @@
-"""Hook contract: register_validation_hook + dispatch in canonical."""
+"""Packaged validate.sh does not run legacy sidecars directly."""
 
-import shutil
+import os
 import subprocess
+from importlib import resources
 from pathlib import Path
 
 
-def _copy_fixture_to(tmp: Path) -> Path:
-    src = Path(__file__).parent / "_fixtures" / "validate_hooks_canonical.sh"
-    dst = tmp / "validate.sh"
-    shutil.copy(src, dst)
-    dst.chmod(0o755)
-    return dst
+def _canonical_path() -> Path:
+    files = resources.files("science_tool.project_artifacts")
+    with resources.as_file(files / "data" / "validate.sh") as p:
+        return Path(p)
 
 
-def test_no_sidecar_runs_canonical_only(tmp_path: Path) -> None:
-    canonical = _copy_fixture_to(tmp_path)
-    result = subprocess.run([str(canonical)], cwd=tmp_path, capture_output=True, text=True, check=True)
-    out = result.stdout.strip().splitlines()
-    assert out == ["BEGIN", "MIDDLE", "END"]
-
-
-def test_sidecar_hook_runs_at_named_point(tmp_path: Path) -> None:
-    _copy_fixture_to(tmp_path)
+def test_validate_sh_leaves_sidecar_handling_to_cli(tmp_path: Path) -> None:
+    marker = tmp_path / "sidecar-sourced.txt"
+    arg_log = tmp_path / "uv-args.txt"
     (tmp_path / "validate.local.sh").write_text(
-        "my_hook() { echo 'INTERPOSED'; }\nregister_validation_hook before_pre_registration_check my_hook\n",
+        f'printf "sourced\\n" > "{marker}"\n',
         encoding="utf-8",
     )
-    result = subprocess.run(
-        [str(tmp_path / "validate.sh")],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    out = result.stdout.strip().splitlines()
-    assert out == ["BEGIN", "INTERPOSED", "MIDDLE", "END"]
 
-
-def test_multiple_hooks_dispatch_in_registration_order(tmp_path: Path) -> None:
-    _copy_fixture_to(tmp_path)
-    (tmp_path / "validate.local.sh").write_text(
-        "h1() { echo 'A'; }\nh2() { echo 'B'; }\n"
-        "register_validation_hook final_summary h1\n"
-        "register_validation_hook final_summary h2\n",
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    uv = bin_dir / "uv"
+    uv.write_text(
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$UV_ARG_LOG"\n',
         encoding="utf-8",
     )
+    uv.chmod(0o755)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    env["UV_ARG_LOG"] = str(arg_log)
     result = subprocess.run(
-        [str(tmp_path / "validate.sh")],
+        ["bash", str(_canonical_path())],
         cwd=tmp_path,
+        env=env,
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
     )
-    out = result.stdout.strip().splitlines()
-    assert out == ["BEGIN", "MIDDLE", "END", "A", "B"]
+
+    assert result.returncode == 0
+    assert not marker.exists()
+    assert arg_log.read_text(encoding="utf-8").splitlines() == ["run", "science", "validate"]
