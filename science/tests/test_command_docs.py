@@ -317,7 +317,7 @@ def test_project_bootstrap_docs_ignore_managed_artifact_update_backups(path: str
     assert "*.pre-update*.bak" in text
 
 
-def test_validate_cli_reference_documents_phase_one_contract() -> None:
+def test_validate_cli_reference_documents_shim_contract() -> None:
     reference = _read("docs/conventions/validate.md")
     readme = _read("README.md")
     conventions_index = _read("docs/conventions/README.md")
@@ -346,9 +346,9 @@ def test_validate_cli_reference_documents_phase_one_contract() -> None:
         "SCIENCE_VALIDATE_DISABLE_SIDECAR=1",
         "For `science validate`, disables both Python sidecar discovery and deprecated legacy `validate.local.sh` discovery.",
         "## Discovery",
-        "`validate.sh` remains the managed bash canonical validator during Phase 1.",
+        "`validate.sh` is the managed project artifact shim that delegates to `science validate`.",
         "`validate_local.py` is imported by default when it exists in the project root.",
-        "The managed bash `validate.sh` artifact has its own frozen behavior and is not covered by this environment variable.",
+        "Because `validate.sh` delegates to `science validate`, this environment variable affects validation reached through the shim as well.",
     )
     for expected in expected_reference_strings:
         assert expected in reference

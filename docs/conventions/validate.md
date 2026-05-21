@@ -1,9 +1,8 @@
 # `science validate`
 
-`science validate` is the additive Python CLI validator for a Science project.
-During Phase 1, the managed bash `validate.sh` remains the canonical validator
-for project validation; use this command when you need structured output,
-Python sidecar hooks, or a project-root-selectable CLI entrypoint.
+`science validate` is the canonical CLI validator for a Science project. The
+managed `validate.sh` project artifact is now a small shell shim that delegates
+to this command.
 
 ## Synopsis
 
@@ -104,11 +103,12 @@ CLI styling layer.
 
 ## Discovery
 
-`validate.sh` remains the managed bash canonical validator during Phase 1.
-`science validate` is additive and should not be treated as a replacement for
-the managed script until the migration plan says otherwise.
+`validate.sh` is the managed project artifact shim that delegates to `science validate`.
+Use `science validate` directly when you need structured output or a
+project-root-selectable CLI entrypoint; use `validate.sh` when a project or tool
+expects the managed artifact path.
 
 `validate_local.py` is imported by default when it exists in the project root.
 If `SCIENCE_VALIDATE_DISABLE_SIDECAR` is set to `1`, `science validate` skips Python sidecar discovery and deprecated legacy `validate.local.sh` discovery, including legacy sidecar deprecation warnings.
-The managed bash `validate.sh` artifact has its own frozen behavior and is not covered by this environment variable.
+Because `validate.sh` delegates to `science validate`, this environment variable affects validation reached through the shim as well.
 Python sidecars register hooks with `science_tool.validate.hook()` for `pre_validation`, `extra_checks`, or `post_validation`.
