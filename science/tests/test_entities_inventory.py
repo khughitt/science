@@ -279,10 +279,8 @@ def test_build_inventory_v2_scans_project_overlays(tmp_path) -> None:
         "---\n"
         'id: "paper:Adams2025"\n'
         'overlay_of: "paper:Adams2025"\n'
-        'relevance: "H2 — supports the homology-split argument"\n'
-        'hypothesis_links: ["H2", "H4"]\n'
-        'project_tags: ["high-priority"]\n'
-        'tags: ["overlay-added"]\n'
+        'status: "active"\n'
+        'ontology_terms: ["overlay-added"]\n'
         "---\n\n## Project-Specific Notes\n\nText.\n",
         encoding="utf-8",
     )
@@ -294,13 +292,53 @@ def test_build_inventory_v2_scans_project_overlays(tmp_path) -> None:
     assert overlay.overlay_of == "paper:Adams2025"
     assert overlay.project_id == "overlay-project"
     assert overlay.source.adapter == "commons-overlay"
-    assert overlay.append_fields == {"tags": ["overlay-added"]}
-    assert overlay.project_only_fields == {
-        "relevance": "H2 — supports the homology-split argument",
-        "hypothesis_links": ["H2", "H4"],
-        "project_tags": ["high-priority"],
-    }
+    assert overlay.append_fields == {"ontology_terms": ["overlay-added"]}
+    assert overlay.project_only_fields == {"status": "active"}
     assert overlay.body_sections == ["\n## Project-Specific Notes\n\nText.\n"]
+
+
+def test_build_inventory_v2_rejects_overlay_fields_not_mergeable_by_dashboard(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc" / "topics").mkdir(parents=True)
+    (project / "science.yaml").write_text("id: overlay-project\n", encoding="utf-8")
+    (project / "doc" / "topics" / "invalid-fields.md").write_text(
+        "---\n"
+        'id: "topic:invalid-fields"\n'
+        'overlay_of: "topic:invalid-fields"\n'
+        'tags: ["dashboard-cannot-merge-this"]\n'
+        'source: "dashboard-cannot-merge-this"\n'
+        "---\n\n## Project-Specific Notes\n\nText.\n",
+        encoding="utf-8",
+    )
+
+    inventory = build_inventory(project, schema_version="2")
+
+    assert inventory.overlays == []
+    overlay_warnings = [w for w in inventory.warnings if w.code == "overlay-invalid"]
+    assert len(overlay_warnings) == 1
+    assert "not mergeable by dashboard inventory_v2 consumers" in overlay_warnings[0].message
+    assert "source" in overlay_warnings[0].message
+    assert "tags" in overlay_warnings[0].message
+
+
+def test_build_inventory_v2_allows_dataset_datapackage_overlay(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc" / "datasets").mkdir(parents=True)
+    (project / "science.yaml").write_text("id: overlay-project\n", encoding="utf-8")
+    (project / "doc" / "datasets" / "data-ccle-proteomics.md").write_text(
+        "---\n"
+        'id: "dataset:ccle-proteomics"\n'
+        'overlay_of: "dataset:ccle-proteomics"\n'
+        'datapackage: "data/external/ccle/datapackage.json"\n'
+        "---\n\n## Project-Specific Notes\n\nText.\n",
+        encoding="utf-8",
+    )
+
+    inventory = build_inventory(project, schema_version="2")
+
+    assert len(inventory.overlays) == 1
+    assert inventory.overlays[0].project_only_fields == {"datapackage": "data/external/ccle/datapackage.json"}
+    assert [w for w in inventory.warnings if w.code == "overlay-invalid"] == []
 
 
 def test_build_inventory_v2_overlay_validation_error_becomes_warning(tmp_path) -> None:
