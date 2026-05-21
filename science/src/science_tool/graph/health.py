@@ -395,10 +395,27 @@ def collect_validation_findings(project_root: Path) -> list[ValidationFinding]:
 
     run_result = validate_runner.run(project_root, strict=False, verbose=False)
     return [
-        cast(ValidationFinding, result.to_dict())
+        {
+            "severity": _validation_health_severity(result.severity),
+            "path": str(result.path) if result.path is not None else None,
+            "line": result.line,
+            "message": result.message,
+            "rule": result.rule,
+            "task": result.task,
+        }
         for result in run_result.results
         if result.severity is not Severity.INFO
     ]
+
+
+def _validation_health_severity(severity: object) -> str:
+    from science_tool.validate.result import Severity
+
+    if severity is Severity.WARN:
+        return "warning"
+    if severity is Severity.ERROR:
+        return "error"
+    raise ValueError(f"unsupported validation severity: {severity!r}")
 
 
 class CoverageMetric(TypedDict):

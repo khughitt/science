@@ -463,7 +463,7 @@ class TestBuildHealthReport:
                 "task": "task:t001",
             },
             {
-                "severity": "warn",
+                "severity": "warning",
                 "path": "doc/q.md",
                 "line": None,
                 "message": "doc warning",
@@ -848,7 +848,7 @@ class TestHealthCLI:
         report = json.loads(result.output)
         assert report["validation"] == [
             {
-                "severity": "warn",
+                "severity": "warning",
                 "path": "science.yaml",
                 "line": 2,
                 "message": "strictness warning",
