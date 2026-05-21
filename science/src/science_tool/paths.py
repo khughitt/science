@@ -45,6 +45,7 @@ class ProjectPaths:
     code_roots: tuple[Path, ...] = ()
     app_roots: tuple[Path, ...] = ()
     code_excludes: tuple[str, ...] = ()
+    hardcoded_path_patterns: tuple[str, ...] = ()
 
 
 def _load_manifest(project_root: Path) -> dict:
@@ -120,4 +121,5 @@ def resolve_paths(project_root: Path) -> ProjectPaths:
         code_roots=tuple(project_root / name for name in code_root_names),
         app_roots=tuple(project_root / name for name in app_root_names),
         code_excludes=tuple(_str_list(data, "code_excludes")),
+        hardcoded_path_patterns=tuple(_str_list(data, "hardcoded_path_patterns")),
     )
