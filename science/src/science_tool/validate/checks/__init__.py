@@ -44,6 +44,7 @@ def _load_canonical_checks() -> None:
         "tooling",
         "manifest",
         "directory_structure",
+        "code_files",
         "research_scope",
         "document_structure",
         "hypotheses",

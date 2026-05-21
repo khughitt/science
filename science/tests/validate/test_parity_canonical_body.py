@@ -28,10 +28,12 @@ FIXTURES = Path(__file__).parent / "fixtures"
 COMBINED_PROJECT = FIXTURES / "_combined"
 REAL_PROJECTS_CONFIG = FIXTURES / "real_projects.txt"
 VALIDATE_SH = REPO_ROOT / "src" / "science_tool" / "project_artifacts" / "data" / "validate.sh"
+# This tuple must mirror the full canonical check set; validate.sh is a CLI shim.
 CHECK_MODULES = (
     "tooling",
     "manifest",
     "directory_structure",
+    "code_files",
     "research_scope",
     "document_structure",
     "hypotheses",
