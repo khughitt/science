@@ -3749,6 +3749,7 @@ def health_command(
         table.add_column("Severity", style="bold")
         table.add_column("Path", overflow="fold")
         table.add_column("Rule")
+        table.add_column("Task")
         table.add_column("Message", overflow="fold")
         for row in validation:
             path = row.get("path") or ""
@@ -3759,6 +3760,7 @@ def health_command(
                 row.get("severity", ""),
                 path,
                 row.get("rule") or "",
+                row.get("task") or "",
                 row.get("message", ""),
             )
         console.print(table)

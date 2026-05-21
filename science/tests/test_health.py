@@ -427,10 +427,11 @@ class TestBuildHealthReport:
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
 
-        def fake_run(project_root: Path, *, strict: bool, verbose: bool) -> RunResult:
+        def fake_run(project_root: Path, *, strict: bool, verbose: bool, enable_python_sidecar: bool) -> RunResult:
             assert project_root == tmp_path.resolve()
             assert strict is False
             assert verbose is False
+            assert enable_python_sidecar is False
             return RunResult(
                 results=[
                     Result(
@@ -472,6 +473,26 @@ class TestBuildHealthReport:
             },
         ]
         assert report["total_issues"] == 2
+
+    def test_build_health_report_validate_check_disables_legacy_sidecar_subprocess(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from science_tool.graph.health import build_health_report
+        import subprocess
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+        sidecar = tmp_path / "validate.local.sh"
+        sidecar.write_text("#!/usr/bin/env bash\necho sidecar >&2\n", encoding="utf-8")
+        sidecar.chmod(0o755)
+
+        def fail_subprocess_run(*_args: object, **_kwargs: object) -> object:
+            raise AssertionError("science health validation must not run legacy sidecar subprocesses")
+
+        monkeypatch.setattr(subprocess, "run", fail_subprocess_run)
+
+        report = build_health_report(tmp_path, checks={"validate"})
+
+        assert all("sidecar" not in finding["message"] for finding in report["validation"])
 
     def test_build_health_report_can_skip_named_checks(self, tmp_path: Path) -> None:
         from science_tool.graph.health import build_health_report
@@ -819,8 +840,9 @@ class TestHealthCLI:
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
         calls: list[Path] = []
 
-        def fake_run(project_root: Path, *, strict: bool, verbose: bool) -> RunResult:
+        def fake_run(project_root: Path, *, strict: bool, verbose: bool, enable_python_sidecar: bool) -> RunResult:
             calls.append(project_root)
+            assert enable_python_sidecar is False
             return RunResult(
                 results=[
                     Result(Severity.WARN, Path("science.yaml"), 2, "strictness warning", "manifest", None),
@@ -869,10 +891,18 @@ class TestHealthCLI:
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
 
-        def fake_run(project_root: Path, *, strict: bool, verbose: bool) -> RunResult:
+        def fake_run(project_root: Path, *, strict: bool, verbose: bool, enable_python_sidecar: bool) -> RunResult:
+            assert enable_python_sidecar is False
             return RunResult(
                 results=[
-                    Result(Severity.ERROR, Path("science.yaml"), 1, "manifest is broken", "manifest", None),
+                    Result(
+                        Severity.ERROR,
+                        Path("science.yaml"),
+                        1,
+                        "manifest is broken",
+                        "manifest",
+                        "task:t042",
+                    ),
                 ],
                 errors=1,
                 warnings=0,
@@ -889,6 +919,7 @@ class TestHealthCLI:
         assert "science.yaml" in result.output
         assert "manifest" in result.output
         assert "manifest is broken" in result.output
+        assert "task:t042" in result.output
 
     def test_json_output_rejects_unknown_health_check(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
