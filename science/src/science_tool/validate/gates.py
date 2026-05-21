@@ -5,10 +5,6 @@ explicitly via `code_gate:` in science.yaml, or ad hoc via `--fail-on`. The
 ladder is cumulative: a tier gates its own rules plus every lower tier's. The
 gate operates purely on `Result.rule` at the exit-code layer, leaving the
 `Result` dataclass and the JSON output contract untouched.
-
-Tier 2 (`decision-bearing-orphans`) and the hygiene-tier `code.hardcoded-path`
-rule are populated by Plan B2; their tier names ship now so the grammar is
-stable.
 """
 
 from __future__ import annotations
@@ -31,10 +27,14 @@ GATE_TIERS: tuple[str, ...] = (
 _TIER_RULES: dict[str, frozenset[str]] = {
     "report": frozenset(),
     "ghost-files": frozenset({"code.ghost", "code.malformed-block"}),
-    "decision-bearing-orphans": frozenset(),  # Plan B2: code.orphaned-executable
+    "decision-bearing-orphans": frozenset({"code.orphaned-executable"}),
     "hygiene": frozenset(
-        {"code.metadata-gap", "code.unresolved-task", "code.uncommitted"}
-        # Plan B2 adds: code.hardcoded-path
+        {
+            "code.metadata-gap",
+            "code.unresolved-task",
+            "code.uncommitted",
+            "code.hardcoded-path",
+        }
     ),
 }
 

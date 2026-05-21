@@ -34,10 +34,25 @@ def test_ghost_files_tier_gates_ghost_and_malformed() -> None:
     )
 
 
+def test_decision_bearing_orphans_tier_gates_orphan_and_lower() -> None:
+    rules = cumulative_rules("decision-bearing-orphans")
+    assert "code.orphaned-executable" in rules
+    assert {"code.ghost", "code.malformed-block"} <= rules  # cumulative
+    assert "code.metadata-gap" not in rules  # hygiene is higher
+
+
+def test_hygiene_tier_includes_hardcoded_path_and_orphan() -> None:
+    rules = cumulative_rules("hygiene")
+    assert "code.hardcoded-path" in rules
+    assert "code.orphaned-executable" in rules  # cumulative from lower tier
+
+
 def test_hygiene_tier_is_cumulative() -> None:
     rules = cumulative_rules("hygiene")
     assert {"code.ghost", "code.malformed-block"} <= rules  # includes lower tiers
     assert {"code.metadata-gap", "code.unresolved-task", "code.uncommitted"} <= rules
+    assert "code.hardcoded-path" in rules
+    assert "code.orphaned-executable" in rules
 
 
 def test_gated_findings_filters_by_cumulative_rules() -> None:
