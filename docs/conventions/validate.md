@@ -24,7 +24,7 @@ science validate --project-root ~/d/example-project
 | Flag | Meaning |
 |---|---|
 | `--verbose` | Enables verbose context for checks that support it. |
-| `--strict` | Enables strict advisory checks. Strict mode may add warnings, but warnings still do not fail the command. |
+| `--strict` | Enables strict advisory checks. Strict mode may add warnings, but warnings still do not fail the command (unless their rule is gated by `--fail-on`/`code_gate`). |
 | `--format text|json` | Selects terminal text output or machine-readable JSON output. Default: `text`. |
 | `--fail-on TIER` | Exit `1` when any finding gated at `TIER` (or a lower tier) is present. Tiers (cumulative): `report` (default, never blocks), `ghost-files`, `decision-bearing-orphans`, `hygiene`. Overrides `code_gate` in `science.yaml`. |
 | `--project-root PATH` | Validates the selected Science project root instead of the current working directory. |
