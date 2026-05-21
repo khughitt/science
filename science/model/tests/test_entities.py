@@ -348,3 +348,8 @@ def test_mechanism_entity_rejects_missing_propositions() -> None:
 def test_mechanism_entity_rejects_empty_summary() -> None:
     with pytest.raises(ValidationError, match="non-empty summary"):
         MechanismEntity.model_validate({**VALID_MECHANISM_RAW, "summary": "  "})
+
+
+def test_code_file_entity_type_exists() -> None:
+    assert EntityType.CODE_FILE.value == "code-file"
+    assert core_entity_type_for_kind("code-file") is EntityType.CODE_FILE
