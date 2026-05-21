@@ -264,6 +264,21 @@ def _scan_overlays(
                 )
             )
             continue
+        invalid_fields = _dashboard_merge_incompatible_fields(item.frontmatter)
+        if invalid_fields:
+            warnings.append(
+                InventoryWarning(
+                    code="overlay-invalid",
+                    severity="error",
+                    message=(
+                        "Overlay fields are not mergeable by dashboard inventory_v2 consumers: "
+                        + ", ".join(invalid_fields)
+                    ),
+                    path=str(item.overlay_path),
+                    canonical_id=item.canonical_id,
+                )
+            )
+            continue
         project_only: dict[str, Any] = {}
         append: dict[str, Any] = {}
         for field, value in item.frontmatter.items():
@@ -286,3 +301,11 @@ def _scan_overlays(
             )
         )
     return sorted(overlays, key=lambda o: (o.overlay_of, o.project_id))
+
+
+def _dashboard_merge_incompatible_fields(frontmatter: dict[str, Any]) -> list[str]:
+    return sorted(
+        field
+        for field in frontmatter
+        if field not in _SKIP_OVERLAY_FIELDS and (field in {"project", "scope"} or field not in Entity.model_fields)
+    )
