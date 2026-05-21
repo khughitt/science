@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib.util
+import subprocess
 from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import Mock
@@ -7,7 +9,6 @@ from unittest.mock import Mock
 import pytest
 
 from science_tool.validate import Check, Result, Severity, ValidateContext
-from science_tool.validate._legacy import runner as legacy_runner
 from science_tool.validate.checks import clear_checks_for_tests
 from science_tool.validate.runner import clear_hooks_for_tests, run
 
@@ -29,6 +30,10 @@ def _project(root: Path) -> Path:
     return root
 
 
+def test_legacy_validate_package_is_absent() -> None:
+    assert importlib.util.find_spec("science_tool.validate._legacy") is None
+
+
 def test_legacy_validate_local_sh_emits_error_without_subprocess(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -47,7 +52,7 @@ def test_legacy_validate_local_sh_emits_error_without_subprocess(
         encoding="utf-8",
     )
     subprocess_run = Mock()
-    monkeypatch.setattr(legacy_runner.subprocess, "run", subprocess_run)
+    monkeypatch.setattr(subprocess, "run", subprocess_run)
 
     result = run(project, strict=False, verbose=False, enable_python_sidecar=True)
 
