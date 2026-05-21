@@ -74,7 +74,7 @@ def run(
     *,
     strict: bool,
     verbose: bool,
-    enable_python_sidecar: bool = False,
+    enable_python_sidecar: bool = True,
 ) -> RunResult:
     ctx = ValidateContext.from_project_root(project_root, strict=strict, verbose=verbose)
     results: list[Result] = []

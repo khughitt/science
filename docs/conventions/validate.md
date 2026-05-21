@@ -3,12 +3,12 @@
 `science validate` is the additive Python CLI validator for a Science project.
 During Phase 1, the managed bash `validate.sh` remains the canonical validator
 for project validation; use this command when you need structured output,
-Python-sidecar experimentation, or a project-root-selectable CLI entrypoint.
+Python sidecar hooks, or a project-root-selectable CLI entrypoint.
 
 ## Synopsis
 
 ```bash
-science validate [--verbose] [--strict] [--experimental-python-sidecar] [--format text|json] [--project-root PATH]
+science validate [--verbose] [--strict] [--format text|json] [--project-root PATH]
 ```
 
 Run from a project root:
@@ -26,7 +26,6 @@ science validate --project-root ~/d/example-project
 |---|---|
 | `--verbose` | Enables verbose context for checks that support it. |
 | `--strict` | Enables strict advisory checks. Strict mode may add warnings, but warnings still do not fail the command. |
-| `--experimental-python-sidecar` | Imports `validate_local.py` from the project root and runs registered Python validation hooks. |
 | `--format text|json` | Selects terminal text output or machine-readable JSON output. Default: `text`. |
 | `--project-root PATH` | Validates the selected Science project root instead of the current working directory. |
 
@@ -98,7 +97,7 @@ Each result is the serialized `Result.to_dict()` shape:
 | Variable | Meaning |
 |---|---|
 | `NO_COLOR` | Disables terminal color output through the shared Science CLI color policy. |
-| `SCIENCE_VALIDATE_DISABLE_SIDECAR=1` | Skips `validate_local.py` discovery even when `--experimental-python-sidecar` is passed. |
+| `SCIENCE_VALIDATE_DISABLE_SIDECAR=1` | Skips `validate_local.py` discovery. |
 
 `FORCE_COLOR` and the root `--color` option are handled by the shared Science
 CLI styling layer.
@@ -109,4 +108,6 @@ CLI styling layer.
 `science validate` is additive and should not be treated as a replacement for
 the managed script until the migration plan says otherwise.
 
-`validate_local.py` is imported only when `--experimental-python-sidecar` is passed. If `SCIENCE_VALIDATE_DISABLE_SIDECAR` is set to `1`, the import is skipped even with that flag. Python sidecars register hooks with `science_tool.validate.hook()` for `pre_validation`, `extra_checks`, or `post_validation`.
+`validate_local.py` is imported by default when it exists in the project root.
+If `SCIENCE_VALIDATE_DISABLE_SIDECAR` is set to `1`, Python sidecar discovery is skipped.
+Python sidecars register hooks with `science_tool.validate.hook()` for `pre_validation`, `extra_checks`, or `post_validation`.

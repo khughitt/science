@@ -22,12 +22,6 @@ BANNER = "━━━━━━━━━━━━━━━━━━━━━━━�
 @click.option("--verbose", is_flag=True, default=False, help="Show verbose validation details.")
 @click.option("--strict", is_flag=True, default=False, help="Enable strict validation checks.")
 @click.option(
-    "--experimental-python-sidecar",
-    is_flag=True,
-    default=False,
-    help="Import validate_local.py hooks from the project root.",
-)
-@click.option(
     "--format",
     "output_format",
     type=click.Choice(["text", "json"]),
@@ -48,7 +42,6 @@ def validate_cmd(
     ctx: click.Context,
     verbose: bool,
     strict: bool,
-    experimental_python_sidecar: bool,
     output_format: str,
     project_root: Path,
 ) -> None:
@@ -58,7 +51,6 @@ def validate_cmd(
             project_root,
             strict=strict,
             verbose=verbose,
-            enable_python_sidecar=experimental_python_sidecar,
         )
     except ValidateContextError as exc:
         raise click.ClickException(str(exc)) from exc

@@ -325,7 +325,7 @@ def test_validate_cli_reference_documents_phase_one_contract() -> None:
     expected_reference_strings = (
         "# `science validate`",
         "## Synopsis",
-        "science validate [--verbose] [--strict] [--experimental-python-sidecar]",
+        "science validate [--verbose] [--strict] [--format text|json] [--project-root PATH]",
         "## Flags",
         "--format text|json",
         "--project-root PATH",
@@ -346,7 +346,7 @@ def test_validate_cli_reference_documents_phase_one_contract() -> None:
         "SCIENCE_VALIDATE_DISABLE_SIDECAR=1",
         "## Discovery",
         "`validate.sh` remains the managed bash canonical validator during Phase 1.",
-        "`validate_local.py` is imported only when `--experimental-python-sidecar` is passed.",
+        "`validate_local.py` is imported by default when it exists in the project root.",
     )
     for expected in expected_reference_strings:
         assert expected in reference

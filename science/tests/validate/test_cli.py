@@ -38,7 +38,7 @@ def test_validate_help_is_registered() -> None:
 
     assert result.exit_code == 0, result.output
     assert "--strict" in result.output
-    assert "--experimental-python-sidecar" in result.output
+    assert "--experimental-python-sidecar" not in result.output
     assert "--format [text|json]" in result.output
     assert "--project-root PATH" in result.output
 
@@ -91,7 +91,7 @@ def test_validate_json_emits_results_and_warns_do_not_fail(tmp_path: Path) -> No
     ]
 
 
-def test_validate_experimental_python_sidecar_flag_imports_local_hook(tmp_path: Path) -> None:
+def test_validate_imports_local_hook_by_default(tmp_path: Path) -> None:
     project = _project(tmp_path)
     project.joinpath("validate_local.py").write_text(
         "\n".join(
@@ -106,16 +106,10 @@ def test_validate_experimental_python_sidecar_flag_imports_local_hook(tmp_path: 
         encoding="utf-8",
     )
 
-    disabled = CliRunner().invoke(main, ["validate", "--format", "json", "--project-root", str(project)])
-    enabled = CliRunner().invoke(
-        main,
-        ["validate", "--experimental-python-sidecar", "--format", "json", "--project-root", str(project)],
-    )
+    result = CliRunner().invoke(main, ["validate", "--format", "json", "--project-root", str(project)])
 
-    assert disabled.exit_code == 0, disabled.output
-    assert enabled.exit_code == 0, enabled.output
-    assert json.loads(disabled.output)["summary"] == {"errors": 0, "warnings": 0, "infos": 0}
-    assert json.loads(enabled.output) == {
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == {
         "summary": {"errors": 0, "warnings": 1, "infos": 0},
         "results": [
             {
@@ -128,6 +122,13 @@ def test_validate_experimental_python_sidecar_flag_imports_local_hook(tmp_path: 
             }
         ],
     }
+
+
+def test_validate_rejects_removed_experimental_python_sidecar_flag() -> None:
+    result = CliRunner().invoke(main, ["validate", "--experimental-python-sidecar"])
+
+    assert result.exit_code != 0
+    assert "No such option: --experimental-python-sidecar" in result.output
 
 
 def test_validate_exits_nonzero_when_errors_exist(tmp_path: Path) -> None:

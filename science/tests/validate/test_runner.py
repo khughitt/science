@@ -44,7 +44,7 @@ def test_hook_decorator_registers_and_dispatches_in_order(tmp_path: Path) -> Non
 
     assert _HOOKS["extra_checks"] == [first, second]
 
-    result = run(_project(tmp_path), strict=False, verbose=False)
+    result = run(_project(tmp_path), strict=False, verbose=False, enable_python_sidecar=False)
 
     assert fired == ["first", "second"]
     assert result.results == []
@@ -77,7 +77,7 @@ def test_run_pipeline_dispatches_hooks_checks_and_tallies(tmp_path: Path) -> Non
         fired.append("post")
         return []
 
-    result = run(_project(tmp_path), strict=True, verbose=True)
+    result = run(_project(tmp_path), strict=True, verbose=True, enable_python_sidecar=False)
 
     assert fired == ["pre", "check", "extra", "post"]
     assert result.errors == 1
@@ -100,7 +100,7 @@ def test_post_validation_runs_when_extra_checks_raises(tmp_path: Path) -> None:
         return []
 
     with pytest.raises(RuntimeError, match="boom"):
-        run(_project(tmp_path), strict=False, verbose=False)
+        run(_project(tmp_path), strict=False, verbose=False, enable_python_sidecar=False)
 
     assert fired == ["extra", "post"]
 
@@ -136,6 +136,28 @@ def test_python_sidecar_imports_project_validate_local_when_enabled(tmp_path: Pa
     assert enabled_result.warnings == 1
     assert project.joinpath("post-ran.txt").read_text(encoding="utf-8") == "yes"
     assert sys.path == sys_path_before
+    assert all(not hooks for hooks in _HOOKS.values())
+
+
+def test_python_sidecar_imports_project_validate_local_by_default(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    project.joinpath("validate_local.py").write_text(
+        "\n".join(
+            [
+                "from science_tool.validate import Result, Severity, hook",
+                "",
+                '@hook("extra_checks")',
+                "def extra(ctx):",
+                '    return [Result(Severity.WARN, None, None, "default sidecar warning", "local.extra", None)]',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run(project, strict=False, verbose=False)
+
+    assert [item.message for item in result.results] == ["default sidecar warning"]
+    assert result.warnings == 1
     assert all(not hooks for hooks in _HOOKS.values())
 
 
@@ -463,6 +485,6 @@ def test_post_validation_runs_when_canonical_check_raises(tmp_path: Path) -> Non
         return []
 
     with pytest.raises(RuntimeError, match="canonical boom"):
-        run(_project(tmp_path), strict=False, verbose=False)
+        run(_project(tmp_path), strict=False, verbose=False, enable_python_sidecar=False)
 
     assert fired == ["check", "post"]
