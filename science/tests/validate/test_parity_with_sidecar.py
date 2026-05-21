@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import json
+import os
 from pathlib import Path
 import shutil
 from typing import Any
@@ -23,10 +24,7 @@ from test_parity_canonical_body import (
 
 
 CopyProject = Callable[[Path], Path]
-_LEGACY_SIDECAR_DEPRECATION_MESSAGES = {
-    "validate.local.sh is deprecated; migrate validation hooks to validate_local.py",
-    "validate.local.sh is deprecated and ignored because validate_local.py takes precedence",
-}
+_LEGACY_SIDECAR_DEPRECATION_RULE = "validate.sidecar.legacy_deprecated"
 
 
 @pytest.fixture
@@ -195,6 +193,64 @@ def test_cli_diagnostic_extractor_filters_info_and_normalizes_paths(tmp_path: Pa
     ]
 
 
+def test_cli_validate_uses_bash_parity_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = _synthetic_project(tmp_path / "sources", severity="warn")
+    project.joinpath("validate.local.sh").write_text(
+        "\n".join(
+            [
+                "legacy_extra() {",
+                '  if [ "${SCIENCE_VALIDATE_SKIP_DOTENV:-}" != "1" ]; then',
+                '    warn "dotenv was not skipped"',
+                "  fi",
+                '  if [ -n "${SCIENCE_TOOL:-}" ] || [ -n "${SCIENCE_TOOL_PATH:-}" ]; then',
+                '    warn "tool path leaked into sidecar"',
+                "  fi",
+                "}",
+                "register_validation_hook extra_checks legacy_extra",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_TOOL", "ambient-science")
+    monkeypatch.setenv("SCIENCE_TOOL_PATH", "ambient-science-path")
+
+    payload = _without_legacy_deprecation_results(_run_cli_validate(project))
+    messages = {item[3] for item in _extract_cli_diagnostic_items(payload, project)}
+
+    assert "dotenv was not skipped" not in messages
+    assert "tool path leaked into sidecar" not in messages
+
+
+def test_legacy_deprecation_filter_uses_raw_cli_rule_not_message(tmp_path: Path) -> None:
+    message = "validate.local.sh is deprecated; migrate validation hooks to validate_local.py"
+    payload = {
+        "results": [
+            {
+                "severity": "warn",
+                "path": None,
+                "line": None,
+                "message": message,
+                "rule": "validate.sidecar.legacy_deprecated",
+            },
+            {
+                "severity": "warn",
+                "path": None,
+                "line": None,
+                "message": message,
+                "rule": "local.same_text",
+            },
+        ]
+    }
+
+    assert _extract_cli_diagnostic_items(_without_legacy_deprecation_results(payload), tmp_path) == [
+        ("warn", None, None, message),
+    ]
+
+
 def _assert_sidecar_semantic_parity(
     source_project: Path,
     *,
@@ -206,8 +262,9 @@ def _assert_sidecar_semantic_parity(
     python_project = copy_project(source_project)
 
     bash_items = _extract_bash_diagnostic_items(_run_bash_validate(bash_project, tmp_path))
-    python_items = _without_python_only_sidecar_notices(
-        _extract_cli_diagnostic_items(_run_cli_validate(python_project), python_project)
+    python_items = _extract_cli_diagnostic_items(
+        _without_legacy_deprecation_results(_run_cli_validate(python_project)),
+        python_project,
     )
 
     _assert_semantic_parity(bash_items, python_items, label=label)
@@ -217,10 +274,27 @@ def _run_cli_validate(project_root: Path) -> dict[str, Any]:
     result = CliRunner().invoke(
         main,
         ["validate", "--format", "json", "--project-root", str(project_root)],
+        env=_cli_validate_env(),
     )
     if result.exit_code not in {0, 1}:
         raise AssertionError(f"science validate exited {result.exit_code}\n{result.output}")
     return dict(json.loads(result.output))
+
+
+def _cli_validate_env() -> dict[str, str | None]:
+    return {
+        "PATH": os.pathsep.join(["/bin", "/usr/sbin", "/sbin"]),
+        "SCIENCE_VALIDATE_SKIP_DOTENV": "1",
+        "SCIENCE_TOOL": None,
+        "SCIENCE_TOOL_PATH": None,
+    }
+
+
+def _without_legacy_deprecation_results(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **payload,
+        "results": [item for item in payload["results"] if item.get("rule") != _LEGACY_SIDECAR_DEPRECATION_RULE],
+    }
 
 
 def _extract_cli_diagnostic_items(payload: dict[str, Any], project_root: Path) -> list[DiagnosticItem]:
@@ -249,12 +323,3 @@ def _normalize_cli_path(path: str | None, project_root: Path) -> str | None:
         except ValueError:
             return result_path.as_posix()
     return result_path.as_posix()
-
-
-def _without_python_only_sidecar_notices(items: list[DiagnosticItem]) -> list[DiagnosticItem]:
-    # The Python runner reports legacy-sidecar migration notices as Results; bash validate.sh has no equivalent.
-    return [
-        item
-        for item in items
-        if not (item[0] == "warn" and item[1] is None and item[3] in _LEGACY_SIDECAR_DEPRECATION_MESSAGES)
-    ]
