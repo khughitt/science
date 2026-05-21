@@ -39,7 +39,10 @@ class ValidateContext:
         if not isinstance(manifest_data, dict):
             raise ValidateContextError(f"science.yaml must contain a YAML mapping: {manifest_path}")
 
-        paths = resolve_paths(root)
+        try:
+            paths = resolve_paths(root)
+        except ValueError as exc:
+            raise ValidateContextError(str(exc)) from exc
         doc_dir = paths.doc_dir
         return cls(
             project_root=root,

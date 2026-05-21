@@ -4,6 +4,8 @@ from collections.abc import Iterable
 import importlib
 from pathlib import Path
 
+import pytest
+
 from science_tool.validate import Result, Severity, ValidateContext
 from science_tool.validate.checks import CANONICAL_CHECKS, clear_checks_for_tests
 
@@ -744,3 +746,19 @@ def test_hypotheses_ignores_malformed_frontmatter_in_hypothesis_file(tmp_path: P
     results = list(check_hypotheses(ctx))
 
     assert "Checking specs/hypotheses/h1.md..." in _messages(results)
+
+
+def test_context_rejects_absolute_code_root(tmp_path: Path) -> None:
+    from science_tool.validate.context import ValidateContext, ValidateContextError
+
+    _write_manifest(tmp_path, extra="code_roots:\n  - /etc")
+    with pytest.raises(ValidateContextError, match="relative paths inside the project"):
+        ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
+
+
+def test_context_rejects_non_list_code_roots(tmp_path: Path) -> None:
+    from science_tool.validate.context import ValidateContext, ValidateContextError
+
+    _write_manifest(tmp_path, extra="code_roots: code")
+    with pytest.raises(ValidateContextError, match="must be a list of strings"):
+        ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
