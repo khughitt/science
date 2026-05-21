@@ -17,3 +17,9 @@ CODE_FILE_STATUSES: frozenset[str] = frozenset(
         "retired",
     }
 )
+
+# Statuses exempt from Tier-2 (decision-bearing-orphans) gating. `exploratory`
+# is the pressure-release valve (umbrella design §6: exempt from
+# workflow-ownership gating but never from registration); `retired` code is no
+# longer expected to be workflow-reachable.
+ORPHAN_GATING_EXEMPT_STATUSES: frozenset[str] = frozenset({"exploratory", "retired"})
