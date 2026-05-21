@@ -290,6 +290,15 @@ class EntityIdentityFinding(TypedDict):
     canonical_id: str | None
 
 
+class ValidationFinding(TypedDict):
+    severity: str
+    path: str | None
+    line: int | None
+    message: str
+    rule: str | None
+    task: str | None
+
+
 class HealthReport(TypedDict):
     unresolved_refs: list[UnresolvedRef]
     unregistered_ref_kinds: list[UnregisteredRefKind]
@@ -305,6 +314,7 @@ class HealthReport(TypedDict):
     archive_lag: TaskArchiveLag
     managed_artifacts: list[dict]
     tooling_scaffold: list[ToolingScaffoldFinding]
+    validation: list[ValidationFinding]
     total_issues: int
     _meta: NotRequired["HealthMeta"]
 
@@ -376,6 +386,18 @@ def _collect_entity_identity(context: HealthContext) -> list[EntityIdentityFindi
     return [
         _entity_identity_finding(warning)
         for warning in collect_identity_warnings(context.project_root, sources=sources)
+    ]
+
+
+def collect_validation_findings(project_root: Path) -> list[ValidationFinding]:
+    from science_tool.validate import runner as validate_runner
+    from science_tool.validate.result import Severity
+
+    run_result = validate_runner.run(project_root, strict=False, verbose=False)
+    return [
+        cast(ValidationFinding, result.to_dict())
+        for result in run_result.results
+        if result.severity is not Severity.INFO
     ]
 
 
@@ -465,6 +487,7 @@ def _empty_check_results(project_root: Path) -> dict[str, object]:
         "archive_lag": {"done_in_active": 0, "retired_in_active": 0, "missing_completed": 0},
         "managed_artifacts": [],
         "tooling_scaffold": [],
+        "validate": [],
         "unresolved_refs": [],
         "unregistered_ref_kinds": [],
         "lingering_tags": [],
@@ -554,6 +577,7 @@ def build_health_report(
     dataset_anomalies = cast("list[dict]", check_results["dataset_anomalies"])
     legacy_task_type = cast("list[LegacyTaskTypeFinding]", check_results["legacy_task_type"])
     invalid_entity_aspects = cast("list[InvalidEntityAspectsFinding]", check_results["invalid_entity_aspects"])
+    validation = cast("list[ValidationFinding]", check_results["validate"])
 
     layered_claim_issue_count = len(migration_issues) + len(rival_model_gaps)
     coverage_gaps = 0
@@ -587,6 +611,7 @@ def build_health_report(
         + (1 if archive_lag_total else 0)
         + sum(1 for f in managed_artifacts if f["counts_as_issue"])
         + len(tooling_scaffold)
+        + len(validation)
     )
 
     report: HealthReport = {
@@ -609,6 +634,7 @@ def build_health_report(
         "archive_lag": cast("TaskArchiveLag", archive_lag),
         "managed_artifacts": cast("list[dict]", managed_artifacts),
         "tooling_scaffold": tooling_scaffold,
+        "validation": validation,
         "total_issues": total_issues,
     }
     if collect_timings:
@@ -1577,6 +1603,12 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
         description="Check pyproject and environment scaffold for science tooling.",
         requires_sources=False,
         run=lambda context: collect_tooling_scaffold_findings(context.project_root),
+    ),
+    HealthCheck(
+        name="validate",
+        description="Run canonical project validation and surface warnings/errors.",
+        requires_sources=False,
+        run=lambda context: collect_validation_findings(context.project_root),
     ),
     HealthCheck(
         name="agent_context",

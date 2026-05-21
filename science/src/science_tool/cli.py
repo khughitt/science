@@ -3585,6 +3585,7 @@ def health_command(
     agent_context = report.get("agent_context") or []
     unregistered_ref_kinds = report.get("unregistered_ref_kinds") or []
     entity_identity = report.get("entity_identity") or []
+    validation = report.get("validation") or []
 
     total_issues = (
         len(report["unresolved_refs"])
@@ -3600,6 +3601,7 @@ def health_command(
         + managed_artifacts_issue_count
         + len(tooling_scaffold)
         + len(agent_context)
+        + len(validation)
     )
     if total_issues == 0:
         click.echo("Project is clean — no issues found.")
@@ -3739,6 +3741,25 @@ def health_command(
                 row.get("path") or "",
                 row.get("canonical_id") or "",
                 row["message"],
+            )
+        console.print(table)
+
+    if validation:
+        table = Table(title=f"Validation ({len(validation)})")
+        table.add_column("Severity", style="bold")
+        table.add_column("Path", overflow="fold")
+        table.add_column("Rule")
+        table.add_column("Message", overflow="fold")
+        for row in validation:
+            path = row.get("path") or ""
+            line = row.get("line")
+            if line is not None:
+                path = f"{path}:{line}" if path else str(line)
+            table.add_row(
+                row.get("severity", ""),
+                path,
+                row.get("rule") or "",
+                row.get("message", ""),
             )
         console.print(table)
 

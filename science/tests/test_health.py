@@ -417,6 +417,62 @@ class TestBuildHealthReport:
             }
         ]
 
+    def test_build_health_report_validate_check_surfaces_runner_findings(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from science_tool.graph.health import build_health_report
+        from science_tool.validate.result import Result, Severity
+        from science_tool.validate.runner import RunResult
+        import science_tool.validate.runner as validate_runner
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+
+        def fake_run(project_root: Path, *, strict: bool, verbose: bool) -> RunResult:
+            assert project_root == tmp_path.resolve()
+            assert strict is False
+            assert verbose is False
+            return RunResult(
+                results=[
+                    Result(
+                        Severity.ERROR,
+                        Path("science.yaml"),
+                        1,
+                        "manifest is broken",
+                        "manifest",
+                        "task:t001",
+                    ),
+                    Result(Severity.WARN, Path("doc/q.md"), None, "doc warning", "document_structure", None),
+                    Result(Severity.INFO, None, None, "advisory", "notes", None),
+                ],
+                errors=1,
+                warnings=1,
+                infos=1,
+            )
+
+        monkeypatch.setattr(validate_runner, "run", fake_run)
+
+        report = build_health_report(tmp_path, checks={"validate"})
+
+        assert report["validation"] == [
+            {
+                "severity": "error",
+                "path": "science.yaml",
+                "line": 1,
+                "message": "manifest is broken",
+                "rule": "manifest",
+                "task": "task:t001",
+            },
+            {
+                "severity": "warn",
+                "path": "doc/q.md",
+                "line": None,
+                "message": "doc warning",
+                "rule": "document_structure",
+                "task": None,
+            },
+        ]
+        assert report["total_issues"] == 2
+
     def test_build_health_report_can_skip_named_checks(self, tmp_path: Path) -> None:
         from science_tool.graph.health import build_health_report
 
@@ -750,6 +806,90 @@ class TestHealthCLI:
             "unregistered_ref_kinds",
         ]
 
+    def test_json_output_validate_check_uses_runner_without_subprocess(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from click.testing import CliRunner
+        from science_tool.cli import main
+        from science_tool.validate.result import Result, Severity
+        from science_tool.validate.runner import RunResult
+        import science_tool.validate.runner as validate_runner
+        import subprocess
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+        calls: list[Path] = []
+
+        def fake_run(project_root: Path, *, strict: bool, verbose: bool) -> RunResult:
+            calls.append(project_root)
+            return RunResult(
+                results=[
+                    Result(Severity.WARN, Path("science.yaml"), 2, "strictness warning", "manifest", None),
+                    Result(Severity.INFO, None, None, "info only", "notes", None),
+                ],
+                errors=0,
+                warnings=1,
+                infos=1,
+            )
+
+        def fail_subprocess_run(*_args: object, **_kwargs: object) -> object:
+            raise AssertionError("science health --check validate must not call subprocess.run")
+
+        monkeypatch.setattr(validate_runner, "run", fake_run)
+        monkeypatch.setattr(subprocess, "run", fail_subprocess_run)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["health", "--project-root", str(tmp_path), "--format", "json", "--check", "validate"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert calls == [tmp_path.resolve()]
+        report = json.loads(result.output)
+        assert report["validation"] == [
+            {
+                "severity": "warn",
+                "path": "science.yaml",
+                "line": 2,
+                "message": "strictness warning",
+                "rule": "manifest",
+                "task": None,
+            }
+        ]
+        assert report["total_issues"] == 1
+
+    def test_table_output_validate_check_includes_validation_section(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from click.testing import CliRunner
+        from science_tool.cli import main
+        from science_tool.validate.result import Result, Severity
+        from science_tool.validate.runner import RunResult
+        import science_tool.validate.runner as validate_runner
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+
+        def fake_run(project_root: Path, *, strict: bool, verbose: bool) -> RunResult:
+            return RunResult(
+                results=[
+                    Result(Severity.ERROR, Path("science.yaml"), 1, "manifest is broken", "manifest", None),
+                ],
+                errors=1,
+                warnings=0,
+                infos=0,
+            )
+
+        monkeypatch.setattr(validate_runner, "run", fake_run)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["health", "--project-root", str(tmp_path), "--check", "validate"])
+
+        assert result.exit_code == 0, result.output
+        assert "Validation" in result.output
+        assert "science.yaml" in result.output
+        assert "manifest" in result.output
+        assert "manifest is broken" in result.output
+
     def test_json_output_rejects_unknown_health_check(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
         from science_tool.cli import main
@@ -868,7 +1008,7 @@ class TestHealthCLI:
         target.write_bytes(canonical_path("validate.sh").read_bytes())
         target.chmod(0o755)
         runner = CliRunner()
-        result = runner.invoke(main, ["health", "--project-root", str(tmp_path)])
+        result = runner.invoke(main, ["health", "--project-root", str(tmp_path), "--skip", "validate"])
 
         assert result.exit_code == 0
         assert "no issues" in result.output.lower() or "clean" in result.output.lower()
@@ -1411,7 +1551,7 @@ def test_health_cli_includes_dataset_section(tmp_path: Path) -> None:
     )
     from science_tool.graph.health import build_health_report
 
-    result = build_health_report(tmp_path)
+    result = build_health_report(tmp_path, skip_checks={"validate"})
     assert "dataset_anomalies" in result
     codes = {i["code"] for i in result["dataset_anomalies"]}
     assert "dataset_consumed_but_unverified" in codes
