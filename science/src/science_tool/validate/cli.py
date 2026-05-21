@@ -13,6 +13,7 @@ from science_tool.styles import ERROR_STYLE, SUCCESS_STYLE, WARNING_STYLE, get_c
 from science_tool.validate._helpers import section_banner
 from science_tool.validate.checks import CANONICAL_CHECKS
 from science_tool.validate.context import ValidateContextError
+from science_tool.validate.gates import GATE_TIERS
 from science_tool.validate.result import Result, Severity
 from science_tool.validate.runner import RunResult, run
 
@@ -23,6 +24,14 @@ BANNER = "━━━━━━━━━━━━━━━━━━━━━━━�
 @click.command(name="validate")
 @click.option("--verbose", is_flag=True, default=False, help="Show verbose validation details.")
 @click.option("--strict", is_flag=True, default=False, help="Enable strict validation checks.")
+@click.option(
+    "--fail-on",
+    "fail_on",
+    type=click.Choice(list(GATE_TIERS)),
+    default=None,
+    help="Exit nonzero when a finding gated at this tier (or below) is present. "
+    "Overrides science.yaml code_gate. Default: report (never blocks).",
+)
 @click.option(
     "--format",
     "output_format",
@@ -44,6 +53,7 @@ def validate_cmd(
     ctx: click.Context,
     verbose: bool,
     strict: bool,
+    fail_on: str | None,
     output_format: str,
     project_root: Path,
 ) -> None:
@@ -55,6 +65,7 @@ def validate_cmd(
                 project_root,
                 strict=strict,
                 verbose=verbose,
+                fail_on=fail_on,
             )
     except ValidateContextError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -68,7 +79,7 @@ def validate_cmd(
     else:
         _emit_text(result)
 
-    if result.errors:
+    if result.errors or result.gated:
         ctx.exit(1)
 
 
@@ -138,14 +149,21 @@ def _location(result: Result) -> str | None:
 
 
 def _format_summary(result: RunResult) -> Text:
-    status = "PASSED: all checks clean"
-    style = SUCCESS_STYLE
     if result.errors:
         status = f"FAILED: {result.errors} error(s), {result.warnings} warning(s)"
+        style = ERROR_STYLE
+    elif result.gated:
+        status = (
+            f"FAILED: {len(result.gated)} finding(s) gated at tier "
+            f"'{result.gate_tier}', {result.warnings} warning(s)"
+        )
         style = ERROR_STYLE
     elif result.warnings:
         status = f"PASSED with {result.warnings} warning(s)"
         style = WARNING_STYLE
+    else:
+        status = "PASSED: all checks clean"
+        style = SUCCESS_STYLE
 
     text = Text(style=style)
     text.append(status)

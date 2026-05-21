@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import importlib.util
 import os
 from pathlib import Path
@@ -10,7 +10,8 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Literal, cast
 
 from science_tool.validate.checks import CANONICAL_CHECKS
-from science_tool.validate.context import ValidateContext
+from science_tool.validate.context import ValidateContext, ValidateContextError
+from science_tool.validate.gates import gated_findings, resolve_gate_tier
 from science_tool.validate.result import Result, Severity
 
 if TYPE_CHECKING:
@@ -33,6 +34,8 @@ class RunResult:
     errors: int
     warnings: int
     infos: int
+    gate_tier: str = "report"
+    gated: tuple[Result, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -74,6 +77,7 @@ def run(
     *,
     strict: bool,
     verbose: bool,
+    fail_on: str | None = None,
     enable_python_sidecar: bool = True,
 ) -> RunResult:
     ctx = ValidateContext.from_project_root(project_root, strict=strict, verbose=verbose)
@@ -102,6 +106,11 @@ def run(
         if sidecar_enabled:
             results.extend(_dispatch_hooks("extra_checks", ctx))
         run_result = _tally(results)
+        try:
+            tier = resolve_gate_tier(fail_on, ctx.manifest)
+        except ValueError as exc:
+            raise ValidateContextError(str(exc)) from exc
+        run_result = replace(run_result, gate_tier=tier, gated=tuple(gated_findings(results, tier)))
         return run_result
     finally:
         try:

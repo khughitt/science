@@ -274,3 +274,67 @@ def test_validate_missing_science_yaml_reports_click_error(tmp_path: Path) -> No
 
     assert result.exit_code != 0
     assert "science.yaml not found" in result.output
+
+
+def test_fail_on_ghost_files_exits_nonzero(tmp_path: Path) -> None:
+    @Check(section="demo", order=10)
+    def demo_check(ctx: ValidateContext) -> list[Result]:
+        return [Result(Severity.WARN, Path("code/x.py"), None, "ghost", "code.ghost", None)]
+
+    result = CliRunner().invoke(
+        main,
+        ["validate", "--fail-on", "ghost-files", "--project-root", str(_project(tmp_path))],
+    )
+    assert result.exit_code == 1, result.output
+    assert "gated at tier 'ghost-files'" in result.output
+
+
+def test_fail_on_does_not_change_json_payload(tmp_path: Path) -> None:
+    @Check(section="demo", order=10)
+    def demo_check(ctx: ValidateContext) -> list[Result]:
+        return [Result(Severity.WARN, Path("code/x.py"), None, "ghost", "code.ghost", None)]
+
+    result = CliRunner().invoke(
+        main,
+        ["validate", "--fail-on", "ghost-files", "--format", "json", "--project-root", str(_project(tmp_path))],
+    )
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert set(payload.keys()) == {"summary", "results"}
+    assert payload["summary"] == {"errors": 0, "warnings": 1, "infos": 0}
+
+
+def test_default_gate_is_report_and_does_not_fail_on_ghost(tmp_path: Path) -> None:
+    @Check(section="demo", order=10)
+    def demo_check(ctx: ValidateContext) -> list[Result]:
+        return [Result(Severity.WARN, Path("code/x.py"), None, "ghost", "code.ghost", None)]
+
+    result = CliRunner().invoke(main, ["validate", "--project-root", str(_project(tmp_path))])
+    assert result.exit_code == 0, result.output
+
+
+def test_code_gate_in_manifest_is_honored(tmp_path: Path) -> None:
+    project = tmp_path
+    (project / "science.yaml").write_text("name: demo\ncode_gate: ghost-files\n", encoding="utf-8")
+
+    @Check(section="demo", order=10)
+    def demo_check(ctx: ValidateContext) -> list[Result]:
+        return [Result(Severity.WARN, Path("code/x.py"), None, "ghost", "code.ghost", None)]
+
+    result = CliRunner().invoke(main, ["validate", "--project-root", str(project)])
+    assert result.exit_code == 1, result.output
+
+
+def test_unknown_code_gate_in_manifest_is_clean_error(tmp_path: Path) -> None:
+    project = tmp_path
+    (project / "science.yaml").write_text("name: demo\ncode_gate: bogus\n", encoding="utf-8")
+
+    result = CliRunner().invoke(main, ["validate", "--project-root", str(project)])
+    assert result.exit_code != 0
+    assert "unknown code gate tier" in result.output
+
+
+def test_fail_on_rejects_unknown_tier_value() -> None:
+    result = CliRunner().invoke(main, ["validate", "--fail-on", "bogus"])
+    assert result.exit_code != 0
+    assert "Invalid value for '--fail-on'" in result.output
