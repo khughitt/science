@@ -27,7 +27,7 @@ def _project(root: Path) -> Path:
     return root
 
 
-def test_hook_decorator_registers_and_dispatches_in_order(tmp_path: Path) -> None:
+def test_hook_decorator_registers_without_disabled_sidecar_dispatch(tmp_path: Path) -> None:
     fired: list[str] = []
 
     @hook("extra_checks")
@@ -46,11 +46,35 @@ def test_hook_decorator_registers_and_dispatches_in_order(tmp_path: Path) -> Non
 
     result = run(_project(tmp_path), strict=False, verbose=False, enable_python_sidecar=False)
 
-    assert fired == ["first", "second"]
+    assert fired == []
     assert result.results == []
 
 
-def test_run_pipeline_dispatches_hooks_checks_and_tallies(tmp_path: Path) -> None:
+def test_disabled_sidecar_run_skips_registered_hooks(tmp_path: Path) -> None:
+    fired: list[str] = []
+
+    @hook("pre_validation")
+    def pre(ctx: ValidateContext) -> list[Result]:
+        fired.append("pre")
+        return [Result(Severity.ERROR, None, None, "pre should not run", "pre", None)]
+
+    @hook("extra_checks")
+    def extra(ctx: ValidateContext) -> list[Result]:
+        fired.append("extra")
+        return [Result(Severity.ERROR, None, None, "extra should not run", "extra", None)]
+
+    @hook("post_validation")
+    def post(ctx: ValidateContext) -> list[Result]:
+        fired.append("post")
+        raise RuntimeError("post should not run")
+
+    result = run(_project(tmp_path), strict=False, verbose=False, enable_python_sidecar=False)
+
+    assert fired == []
+    assert result.results == []
+
+
+def test_disabled_sidecar_run_dispatches_canonical_checks_and_tallies(tmp_path: Path) -> None:
     fired: list[str] = []
 
     @hook("pre_validation")
@@ -79,14 +103,14 @@ def test_run_pipeline_dispatches_hooks_checks_and_tallies(tmp_path: Path) -> Non
 
     result = run(_project(tmp_path), strict=True, verbose=True, enable_python_sidecar=False)
 
-    assert fired == ["pre", "check", "extra", "post"]
+    assert fired == ["check"]
     assert result.errors == 1
-    assert result.warnings == 2
-    assert result.infos == 2
-    assert [item.message for item in result.results] == ["pre", "bad", "warn", "info", "extra"]
+    assert result.warnings == 1
+    assert result.infos == 1
+    assert [item.message for item in result.results] == ["bad", "warn", "info"]
 
 
-def test_post_validation_runs_when_extra_checks_raises(tmp_path: Path) -> None:
+def test_disabled_sidecar_run_skips_extra_checks_that_would_raise(tmp_path: Path) -> None:
     fired: list[str] = []
 
     @hook("extra_checks")
@@ -99,10 +123,10 @@ def test_post_validation_runs_when_extra_checks_raises(tmp_path: Path) -> None:
         fired.append("post")
         return []
 
-    with pytest.raises(RuntimeError, match="boom"):
-        run(_project(tmp_path), strict=False, verbose=False, enable_python_sidecar=False)
+    result = run(_project(tmp_path), strict=False, verbose=False, enable_python_sidecar=False)
 
-    assert fired == ["extra", "post"]
+    assert fired == []
+    assert result.results == []
 
 
 def test_python_sidecar_imports_project_validate_local_when_enabled(tmp_path: Path) -> None:
@@ -471,7 +495,7 @@ def test_python_sidecar_mode_without_validate_local_clears_existing_hooks(tmp_pa
     assert all(not hooks for hooks in _HOOKS.values())
 
 
-def test_post_validation_runs_when_canonical_check_raises(tmp_path: Path) -> None:
+def test_disabled_sidecar_run_skips_post_validation_when_canonical_check_raises(tmp_path: Path) -> None:
     fired: list[str] = []
 
     @Check(section="canonical", order=10)
@@ -487,4 +511,4 @@ def test_post_validation_runs_when_canonical_check_raises(tmp_path: Path) -> Non
     with pytest.raises(RuntimeError, match="canonical boom"):
         run(_project(tmp_path), strict=False, verbose=False, enable_python_sidecar=False)
 
-    assert fired == ["check", "post"]
+    assert fired == ["check"]

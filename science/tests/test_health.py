@@ -494,6 +494,26 @@ class TestBuildHealthReport:
 
         assert all("sidecar" not in finding["message"] for finding in report["validation"])
 
+    def test_build_health_report_validate_check_skips_registered_post_hooks(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+        from science_tool.validate import ValidateContext, hook
+        from science_tool.validate.runner import clear_hooks_for_tests
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+        fired: list[str] = []
+
+        @hook("post_validation")
+        def post(ctx: ValidateContext) -> list[object]:
+            fired.append("post")
+            raise RuntimeError("health should not run validation hooks")
+
+        try:
+            build_health_report(tmp_path, checks={"validate"})
+        finally:
+            clear_hooks_for_tests()
+
+        assert fired == []
+
     def test_build_health_report_can_skip_named_checks(self, tmp_path: Path) -> None:
         from science_tool.graph.health import build_health_report
 

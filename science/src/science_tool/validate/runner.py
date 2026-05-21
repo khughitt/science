@@ -105,10 +105,12 @@ def run(
                 count_post_validation=False,
             )
             results.extend(legacy_results)
-        results.extend(_dispatch_hooks("pre_validation", ctx))
+        if sidecar_enabled:
+            results.extend(_dispatch_hooks("pre_validation", ctx))
         for entry in CANONICAL_CHECKS:
             results.extend(entry.fn(ctx))
-        results.extend(_dispatch_hooks("extra_checks", ctx))
+        if sidecar_enabled:
+            results.extend(_dispatch_hooks("extra_checks", ctx))
         if legacy_sidecar_selected:
             legacy_results, _log_lines = run_legacy_sidecar(
                 ctx.project_root,
@@ -119,7 +121,7 @@ def run(
         return run_result
     finally:
         try:
-            if not sidecar_enabled or python_sidecar_imported:
+            if python_sidecar_imported:
                 _dispatch_hooks("post_validation", ctx)
         finally:
             if python_sidecar_state is not None:
