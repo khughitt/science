@@ -49,7 +49,7 @@ The program's job is therefore to **reconcile two proven prototypes into one opi
 
 These constrain all three sub-specs and are settled by this umbrella.
 
-1. **Binding — co-located in the code file.** The authored source of truth for an artifact's entity metadata is a block at the top of the file (generalizing MM30's `MM30_SCRIPT_METADATA`). Walking the tree directly yields ghost detection: a file with no valid block *is* the violation. Graph entities are materialized from these blocks.
+1. **Binding — co-located in the code file.** The authored source of truth for an artifact's entity metadata is a block at the top of the file (generalizing MM30's `MM30_SCRIPT_METADATA`). Walking the tree directly yields ghost detection: a code artifact with no valid block *is* the violation (bounded by decision 10). Graph entities are materialized from these blocks.
 2. **Topology — explicit roots in `science.yaml`.** A declaration (e.g. `code_roots` / `app_roots`) makes topology data rather than inference, resolving the legacy-profile inconsistency.
 3. **Enforcement — staged, default-on, non-gating first.** A `--fail-on` ladder (§6) that defaults to report-only on adoption; projects advance the gate explicitly.
 4. **Schema layer — pydantic first-class entity model.** Code entities extend `EntityType` like the existing workflow kinds, *not* the JSON-schema mixin/commons layer (which is the dataset/paper/topic/theme promotion path).
@@ -57,12 +57,14 @@ These constrain all three sub-specs and are settled by this umbrella.
 6. **Sequencing — foundation-first.** A and B ship as one spec (the schema is meaningless without the walk and vice versa); C is designed afterward on a model already proven by the migrations.
 7. **Lifecycle — status-driven, not directory-driven.** Stage lives in a `status` field, not a dedicated directory.
 8. **Dataset logical role — emergent, not declared.** input/intermediate/result is derived from `origin` + `consumed_by` + DAG position, never an enum.
+9. **Change propagation — content-derived signal + explicit closure contract.** For a code edit to actually reach a downstream finding, two things must hold, and the umbrella locks both. (a) Code entities derive their freshness signal from *content* (git blob/commit hash), **not** from the metadata block's dates or file mtime — otherwise a body-only edit with unchanged metadata is invisible. (b) The provenance predicates (`implements` / `executes` / `produces` / `consumed_by`) are materialized as real graph edges, with an **explicit contract** for which of them derive `bears_on` and how `OPERATIONAL` nodes are traversed in closure — because today only a fixed set of epistemic edges plus `prov:wasDerivedFrom` derive `bears_on`, and `consumed_by` / `produces` are frontmatter-only. (a) constrains A's model; (b) is C's headline deliverable.
+10. **Code-artifact boundary & exclusions.** "No ghosts" means *no unclassified code artifacts*, not "every file." An exclusion mechanism (leaning `science.yaml` excludes, optionally a `.scienceignore`; exact form deferred to A) removes generated, vendored, asset, and config files; recognized non-artifact classes (tests, package markers) are *classified* rather than required to carry full metadata blocks. What counts as a block-bearing "code artifact" is defined in A.
 
 ---
 
 ## 4. Conceptual model
 
-**Principle:** every file under a declared code root is a registered science entity. No ghosts. A code artifact's identity, purpose, lifecycle, and bindings to the rest of the graph are declared in its co-located metadata block; validation walks the roots, and a file without a valid block is the violation.
+**Principle:** every *code artifact* under a declared code root is a registered science entity — "no ghosts" means no *unclassified* artifacts (decision 10 fixes the boundary and exclusions). A code artifact's identity, purpose, lifecycle, and bindings to the rest of the graph are declared in its co-located metadata block; validation walks the roots, and an in-scope artifact with no valid block is the violation.
 
 **Code entities are OPERATIONAL conduits of provenance.** Like the existing workflow kinds, they carry no continuous belief. Their value is sitting on the paths that propagate belief and uncertainty to epistemic entities. The target chain, once resolved:
 
@@ -72,7 +74,13 @@ workflow-run --executes--> workflow --produces--> dataset (derived)
 dataset --consumed_by--> ... --> finding / proposition   (bears_on)
 ```
 
-**The epistemic half already works.** Once that chain resolves, science's existing `bears_on`/freshness engine does the rest: edit a code file → its workflow-step → its run → the dataset it produced → any finding that bears on that dataset flips to `needs-review`. The missing piece is rigorously wiring `code → run → dataset` as resolved edges instead of free text — which is precisely what the adapter (C) exists to do.
+**What's reused vs. what's new.** The freshness *machinery* — `bears_on` transitive closure and the `needs-review` > `stale` > `fresh` precedence — is reused unchanged. But "resolve the chain and the rest is automatic" would be false today: freshness derives `bears_on` only from a fixed set of epistemic edges plus `prov:wasDerivedFrom`, and it keys change off entity dates. Making `edit code file → downstream finding flips to needs-review` actually work therefore requires three new things, not just resolved edges:
+
+1. **Materializing the provenance predicates** above as real graph edges (`consumed_by` / `produces` are frontmatter-only today).
+2. An explicit **propagation contract** — which of those predicates derive `bears_on`, and how `OPERATIONAL` nodes are traversed in closure (decision 9b, owned by C).
+3. A **content-derived change signal** on code entities, so a body-only edit is visible at all (decision 9a, owned by A).
+
+Wiring the real DAG into resolved edges is necessary but not sufficient; the adapter (C) owns (1) and (2), the model (A) owns (3).
 
 **Reconciling the three sources:**
 
@@ -102,10 +110,11 @@ Exact type names (e.g. `code-file` vs `script`), the relation vocabulary additio
 - The tree-walk `@Check` integrated into the existing validation runner.
 - Classification (workflow-owned / orphaned / library / test / package-marker), generalizing MM30's auditor and its Snakemake path-indirection parsing.
 - Ghost detection; hardcoded-path and metadata-gap detection.
-- The staged `--fail-on` ladder wired into the runner.
+- The staged `--fail-on` ladder — which requires a **validation-API change**, since `validate` today has only `--strict`, `Result.severity`, and exit-nonzero-on-error. Either a gate config maps findings → severity, or the runner/CLI grows a first-class gate dimension (choice deferred to B; a gate dimension is the cleaner option, since severity describes a finding's nature while the tier describes project-maturity policy).
 
 ### Spec 2 = C (workflow adapter / backend)
 
+- The **propagation contract** (decision 9b): which provenance predicates (`implements` / `executes` / `produces` / `consumed_by` / `prov:wasDerivedFrom`) are materialized as graph edges, which of them derive `bears_on`, and how `OPERATIONAL` nodes participate in closure.
 - A backend protocol (Snakemake first) that extracts the real DAG.
 - Materialization of `workflow-run --executes--> workflow --produces--> dataset` and `code-file --implements--> workflow-step` as resolved edges.
 - The uncertainty-propagation wiring that lights up once the chain resolves.
@@ -128,6 +137,8 @@ Exact type names (e.g. `code-file` vs `script`), the relation vocabulary additio
 
 The default entry point is **Tier 0 (report)**, so adopting the system never breaks an existing project on day one; greenfield projects can opt straight to Tier 1, and every project advances the ladder explicitly in `science.yaml`. **Fail-closed:** an un-annotated executable is *treated as* decision-bearing — its output could feed a claim, finding, report, figure, or task closure — until a human downgrades it.
 
+*The ladder is not expressible in `validate` today (only `--strict`, `Result.severity`, exit-nonzero), so the gate dimension is itself a Spec 1/B deliverable — see §5.*
+
 ### Lifecycle vocabulary
 
 Generalizing MM30's `status`: `exploratory`, `workflow-owned`, `library`, `retired`.
@@ -148,9 +159,9 @@ A single unresolved reference currently hard-fails the *entire* `graph materiali
 
 **MM30.** Map `MM30_SCRIPT_METADATA` → the science block (near 1:1, mostly mechanical); delete `script_workflow_audit.py` in favor of the science check; triage the 172 orphans / 393 gaps using the lifecycle vocabulary; retire the `legacy_dirs_allowlist` entry for `scripts/` by declaring it a code root (or migrating to `code/`). MM30's in-flight remediation plan becomes a *consumer* of the science feature rather than bespoke work.
 
-**natural-systems.** Replace `export_kg_model_sources.py`'s code-entity emission with co-located blocks materialized by science; register the 54 unregistered one-off scripts (`exploratory`, or migrate into a workflow); the `analysis → workflow → data_package` chain becomes the standard shape.
+**natural-systems.** Two-stage, because the exporter does more than emit code entities. *With Spec 1 (A+B):* replace `export_kg_model_sources.py`'s **code-entity block authoring** with co-located blocks materialized by science, and register the 54 unregistered one-off scripts (`exploratory`, or migrate into a workflow). *With Spec 2 (C):* retire the exporter's `workflow` / `data_package` / `web_route` materialization — that is the adapter's job — at which point the `analysis → workflow → data_package` chain becomes the standard shape. The exporter cannot be fully deleted until C ships.
 
-The design is complete only when both projects migrate cleanly and delete their parallel machinery.
+**Acceptance is therefore split:** A+B is done when both projects delete their bespoke **metadata-block + auditor** machinery and migrate cleanly; full deletion of NS's exporter (its workflow/data-package/web-route materialization) belongs to C.
 
 ---
 
