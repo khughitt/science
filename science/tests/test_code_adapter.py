@@ -26,14 +26,6 @@ def test_discover_finds_code_files_and_applies_excludes(tmp_path: Path) -> None:
     assert "code/vendor/lib.py" not in paths   # excluded
 
 
-def test_local_id_uses_most_specific_overlapping_root(tmp_path: Path) -> None:
-    # Declaration order must not change the id when one root nests under another.
-    a = CodeAdapter(code_roots=(tmp_path / "code", tmp_path / "code" / "stages"), repo_root=tmp_path)
-    b = CodeAdapter(code_roots=(tmp_path / "code" / "stages", tmp_path / "code"), repo_root=tmp_path)
-    assert a._local_id("code/stages/run.py") == "run.py"
-    assert b._local_id("code/stages/run.py") == "run.py"
-
-
 def test_load_raw_blockless_file_returns_no_kind(tmp_path: Path) -> None:
     (tmp_path / "code").mkdir()
     f = tmp_path / "code" / "x.py"

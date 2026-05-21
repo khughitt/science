@@ -65,7 +65,13 @@ def _str_list(data: dict, key: str) -> list[str]:
 
 
 def _normalize_root_names(data: dict, key: str) -> list[str]:
-    """Validate root entries are non-empty, relative, project-contained, de-duplicated."""
+    """Validate root entries are non-empty, relative, project-contained, non-nested, de-duplicated.
+
+    Nested roots (one entry an ancestor of another, e.g. ``code`` and
+    ``code/stages``) are rejected: they would make the same file discoverable
+    under two roots, yielding a duplicate ``code-file`` id and a hard collision
+    at graph-build time. Failing early here with a clear message is preferable.
+    """
     normalized: list[str] = []
     for name in _str_list(data, key):
         if not name.strip():
@@ -73,8 +79,13 @@ def _normalize_root_names(data: dict, key: str) -> list[str]:
         candidate = Path(name)
         if candidate.is_absolute() or ".." in candidate.parts:
             raise ValueError(f"science.yaml {key} entries must be relative paths inside the project: {name!r}")
-        if name not in normalized:
-            normalized.append(name)
+        if name in normalized:
+            continue
+        for other in normalized:
+            shorter, longer = sorted((candidate.parts, Path(other).parts), key=len)
+            if longer[: len(shorter)] == shorter:
+                raise ValueError(f"science.yaml {key} entries must not be nested: {name!r} overlaps {other!r}")
+        normalized.append(name)
     return normalized
 
 
