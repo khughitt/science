@@ -5,11 +5,12 @@ This guide covers porting project-local validation hooks from the deprecated
 by `science validate`.
 
 The managed `validate.sh` artifact is now a small shim that delegates to
-`science validate`. Phase 2 still supports `validate.local.sh` temporarily so
-downstream projects can migrate without a lockstep release. Treat
-`validate_local.py` as the target shape for new work. When both
-`validate_local.py` and `validate.local.sh` exist in a project, the Python
-sidecar wins and the bash sidecar is ignored.
+`science validate`. `validate.local.sh` is no longer executed by managed
+validation; its presence is reported as an error so projects finish the
+migration explicitly. Treat `validate_local.py` as the sidecar shape for new
+work. When both `validate_local.py` and `validate.local.sh` exist in a project,
+the Python sidecar can still run, but the stale bash sidecar still produces the
+removal error until `validate.local.sh` is deleted or renamed.
 
 For migration context, see the
 [validate CLI migration design](../plans/2026-05-19-validate-cli-migration-design.md)
@@ -191,16 +192,19 @@ objects. Use `post_validation` for cleanup or other side effects. Do not rely on
 returned WARN, ERROR, or INFO results being included in `science validate`
 output unless the runner behavior changes.
 
-### Sidecar Precedence and Legacy Bash
+### Stale Bash Sidecars
 
-Phase 2 keeps `validate.local.sh` support only as a temporary migration bridge.
-If `validate_local.py` is present, `science validate` imports that Python
-sidecar and ignores `validate.local.sh`.
+Current `science validate` does not source or execute `validate.local.sh`.
+If the file exists, validation reports an error pointing back to this guide.
+That error is independent of `validate_local.py`: a port is not complete until
+the stale bash sidecar is removed or renamed.
 
-When legacy bash is selected, it runs through the frozen legacy runner in a
-subprocess. That subprocess path does not share Python-side counters, hook
-state, or accumulated result objects. During a port, replace bash helper calls
-and counter mutations with returned `Result` objects from Python hooks.
+Set `SCIENCE_VALIDATE_DISABLE_SIDECAR=1` only when you intentionally need to
+skip project-local sidecar discovery during troubleshooting or tests. Do not
+use it as a migration strategy; it skips `validate_local.py` too.
+
+During a port, replace bash helper calls and counter mutations with returned
+`Result` objects from Python hooks.
 
 ### Environment Variables
 
@@ -297,7 +301,7 @@ project task id in `task` when the check enforces a documented task.
 4. Replace shell path state with `ValidateContext` fields and helpers.
 5. Compare warnings/errors against the old `validate.local.sh` behavior before
    adding `validate_local.py`, or temporarily move/disable one sidecar at a
-   time. Once `validate_local.py` exists, `science validate` ignores
-   `validate.local.sh`.
+   time.
 6. Remove `validate.local.sh` once the Python sidecar is producing the intended
-   results.
+   results. Leaving it in place keeps `science validate` in the Phase 3 removal
+   error state.

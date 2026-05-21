@@ -32,6 +32,7 @@ def _project(root: Path) -> Path:
 
 def test_legacy_validate_package_is_absent() -> None:
     assert importlib.util.find_spec("science_tool.validate._legacy") is None
+    assert importlib.util.find_spec("science_tool.validate.legacy_parser") is None
 
 
 def test_legacy_validate_local_sh_emits_error_without_subprocess(
