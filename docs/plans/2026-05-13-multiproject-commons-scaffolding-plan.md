@@ -2,6 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status as of 2026-05-21:** Implemented and merged. The `science_tool.commons` package now includes the Phase B scaffolding (`config`, `bootstrap`, `adapter`, `registry`, `query`, `validator`, CLI wiring) plus later phases: data resolver, overlay merge, `inventory_v2` export, promote flows for papers/topics/themes/datasets, dataset resource handling, and bio-extension-aware dataset promotion.
+
+**Remaining work from this plan:** None in Phase B. The remaining larger-program work is downstream consumption and hardening: dashboard pivot completion, real-project rollout canaries, and eventual retirement of older compatibility surfaces once dashboard no longer needs them.
+
 **Goal:** Stand up `~/d/science-commons/` as a queryable, validatable, CLI-accessible store for shared entities (datasets, papers, topics, themes) with a SQLite index and the `science commons {init, index rebuild, show, find, validate}` command surface. No inventory integration, no overlays, no data resolver — those are Phases C/D/E.
 
 **Architecture:** New subpackage `science_tool.commons` with focused modules (errors, config, bootstrap, adapter, registry, query, validator, cli). The adapter walks `~/d/science-commons/` and yields `CommonsEntityRecord`s holding validated schema frontmatter (no `Entity` materialization in Phase B). The registry is a regenerable SQLite index with three tables; queries warn-but-don't-mutate on staleness. CLI is Click, registered into the existing `science_tool.cli.main` group.

@@ -2,6 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to execute this plan.
 
+**Status as of 2026-05-21:** Partially superseded by later commons work. The Science-side inventory contract and builder path from this plan landed, then evolved to `inventory_v2` in `docs/plans/2026-05-14-commons-inventory-v2-plan.md`. Dashboard-side consumption also landed in `~/d/dashboard` and was later extended by the dashboard `inventory_v2` pivot design (`~/d/dashboard/docs/specs/2026-05-14-dashboard-inventory-v2-pivot-design.md`).
+
+**Remaining work:** Do not restart this `inventory_v1` plan. Use the focused Phase I dashboard hardening plan in `docs/plans/2026-05-21-dashboard-inventory-v2-hardening-plan.md` for the current work: finish the dashboard commons/inventory-v2 pivot, verify the in-flight Half C changes, run live canaries, and then plan removal of stale compatibility surfaces.
+
 **Goal:** Move science project entity discovery, identity validation, DAG finding candidates, workflow-run records, and migration reporting into `~/d/science/`, then update the dashboard to consume the Science inventory contract instead of scanning project files directly.
 
 **Architecture:** Add a versioned `science_model.contracts.inventory_v1` payload as the shared contract. `science-tool` builds and validates that payload from existing storage adapters, new workflow-run and DAG inventory helpers, identity health checks, aliases, graph addresses, warnings, and watch paths. The dashboard imports `science_tool.entities_inventory.build_inventory` directly, validates the returned payload with the imported contract, converts it into the existing dashboard project state, caches dashboard rebuilds by `content_hash` and `audit_hash`, and watches only Science-declared paths.

@@ -477,15 +477,18 @@ The default migration **does not move bulk data files**. It moves metadata and u
 
 Each phase is a separate implementation plan / PR series.
 
-- **A. Schema layer.** JSON Schema files + Python validator + base test fixtures + profile-string parser. Foundational; blocks everything.
-- **B. Shared store scaffolding.** Directory creation, `registry.sqlite` builder, `science index rebuild`, `science show`, `science find`, `science validate`. Glue into existing `science_tool` CLI.
-- **C. Data resolver.** `$SCIENCE_DATA_ROOT` configuration, hash verification, `science data resolve` / `fetch`. v1 skips CAS object store; just per-dataset directories.
-- **D. Overlay merge layer.** Read-time merge per schema annotations; project-aware `science show`; Python API surface. Introduce `inventory_v2` (shared entities via `scope: "cross-project"` in `entities[]`, plus new top-level `overlays[]`).
-- **E. Migration: papers.** `science promote paper:<bibkey>` + dedup flow. Roll out on one or two projects (suggest: protein-landscape, cancer/cancer-types/multiple-myeloma).
-- **F. Migration: topics, themes.** Same flow; topics first as they're typically thinner.
-- **G. Migration: datasets.** Hash computation on existing data, descriptor relocation, symlink cleanup. Per-dataset, manually verified.
-- **H. Bio extensions.** RNA-seq / scRNA-seq / CNA mixin schemas; applied to existing datasets that match.
-- **I. Dashboard pivot.** Out of scope for this spec; sequenced after E–G land and the 2026-05-12 inventory plan is complete.
+**Status as of 2026-05-21:** Phases A-H have landed in `~/d/science`. Phase I is the active downstream focus.
+
+- **A. Schema layer — landed.** JSON Schema files + Python validator + base test fixtures + profile-string parser.
+- **B. Shared store scaffolding — landed.** Directory creation, `registry.sqlite` builder, `science commons index rebuild`, `science commons show`, `science commons find`, `science commons validate`, and CLI wiring.
+- **C. Data resolver — landed.** `$SCIENCE_DATA_ROOT` configuration, hash verification, and `science commons data resolve` / `fetch` v1 behavior.
+- **D. Overlay merge layer + inventory_v2 — landed.** Read-time merge per schema annotations, project-aware commons show, Python API surface, standalone commons inventory, and project `overlays[]` export.
+- **E. Migration: papers — landed.** `science commons promote paper` dedup and migration flow with pilot docs.
+- **F. Migration: topics, themes — landed.** Topic/theme promote flow with pilot docs.
+- **G. Migration: datasets — landed.** Dataset promote flow, descriptor relocation, resource validation, and pilot docs.
+- **H. Bio extensions — landed.** `bio.matrix`, `bio.table`, `bio.rnaseq`, `bio.scrna`, and `bio.cna` mixins plus `science commons promote dataset --mixin`.
+- **Graph integration — landed as a follow-on.** `science graph build` loads referenced commons entities and overlays into project graphs.
+- **I. Dashboard pivot — next.** Dashboard has already started consuming `inventory_v2` and commons overlays in `~/d/dashboard`; remaining work is completion, verification, and rollout hardening.
 
 ---
 

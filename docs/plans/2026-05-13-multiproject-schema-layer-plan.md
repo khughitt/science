@@ -2,6 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status as of 2026-05-21:** Implemented and merged. The `science_model.entity_schema` package, base/type-mixin schemas, overlay schemas, merge-policy reader, Pydantic wrapper, public API, and real-fixture tests exist in `science/model/`. Later phases extended this foundation with `inventory_v2`, paper/topic/theme/dataset promotion schemas, graph integration, and Phase H bio extensions (`bio.matrix`, `bio.table`, `bio.rnaseq`, `bio.scrna`, `bio.cna`).
+
+**Remaining work from this plan:** None. Treat this file as historical execution detail for Phase A. Follow-on schema work should use new focused plans rather than reopening these tasks; likely candidates are vocabulary harmonization between `science_model.entities` and schema mixins, eventual removal of `inventory_v1`, and any new domain extension families.
+
 **Goal:** Build the JSON Schema definitions, profile-string composition validator, merge-policy reader, and optional Pydantic wrapper that the shared-entity-store and overlay layers will depend on.
 
 **Architecture:** New `science_model.entity_schema` Python module + new JSON Schema files in the existing `science_model/schemas/` package resource directory. Validator composes base + mixin + optional extensions at runtime via JSON Schema `allOf`. No store directory or resolver work in this phase — that's Phase B/C.
