@@ -57,6 +57,77 @@ def test_port_validate_sidecar_writes_draft_with_hook_skeletons(tmp_path: Path) 
     assert "validate_local.py.draft" in result.output
 
 
+def test_port_validate_sidecar_handles_quoted_registration_tokens(tmp_path: Path) -> None:
+    tmp_path.joinpath("validate.local.sh").write_text(
+        """
+t034_payload_check() {
+  python scripts/check_t034_payload.py
+}
+
+register_validation_hook "extra_checks" "t034_payload_check"
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "project",
+            "artifacts",
+            "port-validate-sidecar",
+            "--project-root",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    draft = tmp_path / "validate_local.py.draft"
+    text = draft.read_text(encoding="utf-8")
+    compile(text, str(draft), "exec")
+    assert '@hook("extra_checks")' in text
+    assert '""extra_checks""' not in text
+    assert "def t034_payload_check(ctx):" in text
+    assert "python scripts/check_t034_payload.py" in text
+
+
+def test_port_validate_sidecar_sanitizes_python_keyword_function_names(tmp_path: Path) -> None:
+    tmp_path.joinpath("validate.local.sh").write_text(
+        """
+class() {
+  echo keyword body
+}
+
+async() {
+  echo async body
+}
+
+register_validation_hook extra_checks class
+register_validation_hook post_validation async
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "project",
+            "artifacts",
+            "port-validate-sidecar",
+            "--project-root",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    draft = tmp_path / "validate_local.py.draft"
+    text = draft.read_text(encoding="utf-8")
+    compile(text, str(draft), "exec")
+    assert "def class_(ctx):" in text
+    assert "def async_(ctx):" in text
+    assert "def class(ctx):" not in text
+    assert "def async(ctx):" not in text
+
+
 def test_port_validate_sidecar_refuses_existing_validate_local_without_force(tmp_path: Path) -> None:
     _write_legacy_sidecar(tmp_path)
     tmp_path.joinpath("validate_local.py").write_text("# existing\n", encoding="utf-8")
@@ -75,6 +146,27 @@ def test_port_validate_sidecar_refuses_existing_validate_local_without_force(tmp
     assert result.exit_code != 0
     assert "validate_local.py already exists" in result.output
     assert not tmp_path.joinpath("validate_local.py.draft").exists()
+
+
+def test_port_validate_sidecar_refuses_existing_draft_without_force(tmp_path: Path) -> None:
+    _write_legacy_sidecar(tmp_path)
+    draft = tmp_path / "validate_local.py.draft"
+    draft.write_text("# hand edited draft\n", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "project",
+            "artifacts",
+            "port-validate-sidecar",
+            "--project-root",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "validate_local.py.draft already exists" in result.output
+    assert draft.read_text(encoding="utf-8") == "# hand edited draft\n"
 
 
 def test_port_validate_sidecar_force_overwrites_validate_local(tmp_path: Path) -> None:

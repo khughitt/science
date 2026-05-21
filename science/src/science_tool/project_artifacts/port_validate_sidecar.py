@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+import keyword
 from pathlib import Path
 import re
+import shlex
 
 
 class PortValidateSidecarError(Exception):
@@ -19,10 +22,6 @@ class HookRegistration:
     bash_body: str
 
 
-_REGISTRATION_RE = re.compile(
-    r"^\s*register_validation_hook\s+(?P<hook>\S+)\s+(?P<fn>\S+)(?:\s+#.*)?$",
-    re.MULTILINE,
-)
 _FUNCTION_START_RE = re.compile(r"^\s*(?:function\s+)?(?P<fn>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\(\s*\))?\s*\{\s*$")
 _VALID_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _INVALID_IDENTIFIER_CHAR_RE = re.compile(r"\W+")
@@ -39,6 +38,8 @@ def port_validate_sidecar(project_root: Path, *, force: bool = False) -> Path:
         raise PortValidateSidecarError(f"validate.local.sh not found at {legacy_path}")
     if target_path.exists() and not force:
         raise PortValidateSidecarError("validate_local.py already exists; pass --force to overwrite it")
+    if draft_path.exists() and not force:
+        raise PortValidateSidecarError("validate_local.py.draft already exists; remove it or pass --force")
 
     text = legacy_path.read_text(encoding="utf-8")
     registrations = extract_registrations(text)
@@ -55,9 +56,7 @@ def extract_registrations(text: str) -> list[HookRegistration]:
     function_bodies = _extract_function_bodies(text)
     seen_python_names: set[str] = set()
     registrations: list[HookRegistration] = []
-    for match in _REGISTRATION_RE.finditer(text):
-        hook_name = match.group("hook")
-        bash_function = match.group("fn")
+    for hook_name, bash_function in _iter_registration_tokens(text):
         python_function = _unique_name(_sanitize_identifier(bash_function), seen_python_names)
         registrations.append(
             HookRegistration(
@@ -67,6 +66,22 @@ def extract_registrations(text: str) -> list[HookRegistration]:
                 bash_body=function_bodies.get(bash_function, ""),
             )
         )
+    return registrations
+
+
+def _iter_registration_tokens(text: str) -> list[tuple[str, str]]:
+    registrations: list[tuple[str, str]] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("register_validation_hook"):
+            continue
+        try:
+            tokens = shlex.split(stripped, comments=True, posix=True)
+        except ValueError:
+            continue
+        if len(tokens) < 3 or tokens[0] != "register_validation_hook":
+            continue
+        registrations.append((tokens[1], tokens[2]))
     return registrations
 
 
@@ -113,7 +128,7 @@ def _render_hook(registration: HookRegistration) -> str:
     indented_body = "\n".join(f"    {line}" if line else "" for line in _triple_quote_safe(body).splitlines())
     return "\n".join(
         [
-            f'@hook("{registration.hook_name}")',
+            f"@hook({json.dumps(registration.hook_name)})",
             f"def {registration.python_function}(ctx):",
             '    """TODO: port legacy bash validation hook.',
             "",
@@ -135,6 +150,8 @@ def _sanitize_identifier(name: str) -> str:
         sanitized = "validation_hook"
     if sanitized[0].isdigit():
         sanitized = f"hook_{sanitized}"
+    if keyword.iskeyword(sanitized):
+        sanitized = f"{sanitized}_"
     if not _VALID_IDENTIFIER_RE.match(sanitized):
         raise AssertionError(f"invalid sanitized identifier: {sanitized}")
     return sanitized
