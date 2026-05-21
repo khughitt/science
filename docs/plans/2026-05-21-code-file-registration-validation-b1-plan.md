@@ -32,7 +32,7 @@
 - `science/src/science_tool/validate/cli.py` — add `--fail-on`, exit on gated findings, and a gate-aware text summary line.
 - `science/tests/validate/test_formatter_snapshots.py` + `science/tests/validate/snapshots/text_default.txt` — add `code_files` to the pinned canonical tuple and regenerate the text snapshot (gains the code-files section banner; the JSON snapshot is unchanged).
 - `science/tests/validate/test_parity_corpus.py` — add `code_files` to the pinned tuple (Python-only; silent on the code-less fixture).
-- `science/tests/validate/test_parity_canonical_body.py` — record (in a comment) that `code_files` is intentionally excluded from bash-vs-Python parity.
+- `science/tests/validate/test_parity_canonical_body.py` — add `code_files` to the pinned tuple. `validate.sh` is now a CLI shim (`exec uv run science validate`), so the "bash" side runs the full canonical set; the tuple must mirror it or parity diverges.
 - `docs/conventions/validate.md` — update Synopsis/Flags/Exit Codes/Severity Model (gated warnings can now fail) and add the code-files / `--fail-on` ladder section.
 
 Each file has one responsibility: `lifecycle.py` names statuses, `gates.py` is the gate policy, `code_files.py` walks and reports, the runner/CLI wire the gate to the exit code.
@@ -525,7 +525,23 @@ def check_code_files(ctx: ValidateContext) -> Iterator[Result]:
     )
     refs = adapter.discover(ctx.project_root)
     for ref in refs:
-        text = (ctx.project_root / ref.path).read_text(errors="replace")
+        abs_path = ctx.project_root / ref.path
+        try:
+            text = abs_path.read_text(errors="replace")
+        except OSError as exc:
+            # Discovered but now unreadable (deleted/renamed between discovery
+            # and read, or a permission/IO error). `validate` runs every check
+            # in one pass with no per-check exception guard, so a raw OSError
+            # here would abort the whole run. Surface it as a finding rather
+            # than crashing or silently dropping the file (ungated: not in any
+            # gate tier).
+            yield _result(
+                Severity.WARN,
+                ref.path,
+                f"Could not read code file {ref.path}: {exc}",
+                "code.unreadable",
+            )
+            continue
         metadata = parse_code_metadata(text)
         if not metadata.present:
             yield _result(
@@ -570,14 +586,7 @@ Three test modules pin a **hand-copied** mirror of the canonical module list and
 
 - `science/tests/validate/test_parity_corpus.py` (CHECK_MODULES ~line 16) — Python-only (no bash comparison; its `_combined` assertions use `>= 1` and specific messages). Safe to keep in sync; add `"code_files"` the same way. It stays silent on `_combined`.
 
-- `science/tests/validate/test_parity_canonical_body.py` (CHECK_MODULES ~line 31) — **DO NOT add `code_files` here.** This test runs the legacy bash `validate.sh` (`subprocess.run(["/usr/bin/bash", str(VALIDATE_SH), …])`) and asserts **exact** WARN/ERROR equality between bash and Python on real projects. `code_files` is net-new with no bash counterpart; adding it would make Python emit `code.*` findings the bash side cannot, breaking semantic parity on any real project with unregistered code. Add a comment recording the intentional exclusion, immediately above the tuple:
-
-```python
-# code_files is intentionally NOT listed here: it is a net-new check with no
-# counterpart in the legacy bash validate.sh, so including it would break the
-# exact bash-vs-Python semantic parity this test asserts.
-CHECK_MODULES = (
-```
+- `science/tests/validate/test_parity_canonical_body.py` (CHECK_MODULES ~line 31) — **add `code_files`** to the tuple (right after `"directory_structure"`). This test runs `validate.sh` (`subprocess.run(["/usr/bin/bash", str(VALIDATE_SH), …])`) and asserts **exact** WARN/ERROR equality between that and the Python `run()` over the reloaded tuple. Post the validate-CLI migration, `VALIDATE_SH` (`project_artifacts/data/validate.sh`) is a **shim** — `exec uv run science validate "$@"` — so the "bash" side runs the *full* canonical Python set, including `code_files`. The reloaded tuple must therefore mirror the canonical set exactly, or the two sides diverge (the shim emits `code.ghost` for real projects with unregistered code while the restricted Python side would not). Replace any stale "no bash counterpart" assumption — there is no legacy bash implementation anymore.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1102,6 +1111,7 @@ Add a new `## Code-file registration & the `--fail-on` gate ladder` section. Cov
   - `code.metadata-gap` — a valid block whose `status` is missing or not one of `exploratory`, `workflow-owned`, `library`, `retired`, or whose `task_ids` is present but not a list.
   - `code.unresolved-task` — a `task_ids` entry that resolves to no task in `tasks/`.
   - `code.uncommitted` — a valid block whose file has no committed content date (untracked/never committed), so commit-only freshness would not see it.
+  - `code.unreadable` — a discovered file that could not be read (deleted/renamed mid-run, or a permission/IO error). Ungated (not in any tier); it surfaces an anomaly without ever blocking.
 - Every code-file finding is WARN — `validate` is **report-only by default**; only an active gate makes them fail.
 - The `--fail-on` ladder and the `code_gate:` `science.yaml` field: the ordered, cumulative tiers `report` → `ghost-files` → `decision-bearing-orphans` → `hygiene`; `--fail-on` overrides `code_gate`.
 - A forward note: `decision-bearing-orphans` and `code.hardcoded-path` (the orphan and hardcoded-path detectors) arrive in Plan B2; their tier names ship now so the grammar is stable.
@@ -1113,7 +1123,7 @@ Use `~/d/` (not absolute) for any in-repo path references, per repo doc conventi
 Run: `cd science && uv run pytest -q`
 Expected: PASS. The new `code_files` check is canonical (Task 4), so it runs wherever the **full runner / full registry** runs. The pinned-tuple tests were already reconciled in Task 4 Step 3b; this run confirms nothing else regressed:
 - `tests/validate/test_validate_cli.py` and the order-assertion tests (`test_checks_papers_gap_analysis.py`, `test_checks_research_documents.py`, `test_checks_prose_lints.py`, …) clear the registry and reload only a **subset**, so `code_files` (at `order=6`) neither runs nor shifts their relative-position assertions.
-- `tests/validate/test_parity_canonical_body.py` excludes `code_files` (Task 4 Step 3b), so bash-vs-Python parity stays exact.
+- `tests/validate/test_parity_canonical_body.py` includes `code_files` in its tuple (Task 4 Step 3b) so it mirrors the canonical set the `validate.sh` shim runs; parity over real projects stays exact because both sides run identical code.
 - Watch any remaining test that runs `run(...)` against a fixture **containing real `.py`/`.R`/`.sh`/`.smk` files with no `# science:code` block** — it would gain `code.ghost` (WARN) findings. Remediate by giving the fixture no code root or updating expected counts; do **not** weaken the check. All findings are WARN, so no exit flips to 1 on the default report tier.
 - `tests/validate/test_checks_basic.py` calls individual check functions directly (not the runner), so `code_files` does not run there unless explicitly invoked.
 
