@@ -344,14 +344,18 @@ def test_validate_cli_reference_documents_phase_one_contract() -> None:
         "## Environment Variables",
         "NO_COLOR",
         "SCIENCE_VALIDATE_DISABLE_SIDECAR=1",
+        "For `science validate`, disables both Python sidecar discovery and deprecated legacy `validate.local.sh` discovery.",
         "## Discovery",
         "`validate.sh` remains the managed bash canonical validator during Phase 1.",
         "`validate_local.py` is imported by default when it exists in the project root.",
+        "The managed bash `validate.sh` artifact has its own frozen behavior and is not covered by this environment variable.",
     )
     for expected in expected_reference_strings:
         assert expected in reference
 
     assert "[`science validate`](docs/conventions/validate.md)" in readme
+    assert "Python sidecar hooks" in readme
+    assert "experimental Python sidecars" not in readme
     assert "[`validate.md`](validate.md)" in conventions_index
 
 

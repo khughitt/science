@@ -379,7 +379,7 @@ research-topic → add-hypothesis → pre-register → search-literature → res
 → [run analysis] → interpret-results → update-graph → sync → next-steps
 ```
 
-Each command reads existing project state and builds on it. All artifacts are version-controlled and cross-linked. During the current validation migration, projects continue to use the managed `bash validate.sh` path as canonical validation, while [`science validate`](docs/conventions/validate.md) provides the additive Python CLI path for structured output and experimental Python sidecars.
+Each command reads existing project state and builds on it. All artifacts are version-controlled and cross-linked. During the current validation migration, projects continue to use the managed `bash validate.sh` path as canonical validation, while [`science validate`](docs/conventions/validate.md) provides the additive Python CLI path for structured output and Python sidecar hooks.
 
 For knowledge-graph projects, `knowledge/graph.trig` is generated from canonical upstream sources in `specs/`, `doc/`, `tasks/`, and `knowledge/sources/`. If the graph is wrong, fix the source artifact and re-materialize; do not patch the TriG file directly.
 

@@ -97,7 +97,7 @@ Each result is the serialized `Result.to_dict()` shape:
 | Variable | Meaning |
 |---|---|
 | `NO_COLOR` | Disables terminal color output through the shared Science CLI color policy. |
-| `SCIENCE_VALIDATE_DISABLE_SIDECAR=1` | Skips `validate_local.py` discovery. |
+| `SCIENCE_VALIDATE_DISABLE_SIDECAR=1` | For `science validate`, disables both Python sidecar discovery and deprecated legacy `validate.local.sh` discovery. |
 
 `FORCE_COLOR` and the root `--color` option are handled by the shared Science
 CLI styling layer.
@@ -109,5 +109,6 @@ CLI styling layer.
 the managed script until the migration plan says otherwise.
 
 `validate_local.py` is imported by default when it exists in the project root.
-If `SCIENCE_VALIDATE_DISABLE_SIDECAR` is set to `1`, Python sidecar discovery is skipped.
+If `SCIENCE_VALIDATE_DISABLE_SIDECAR` is set to `1`, `science validate` skips Python sidecar discovery and deprecated legacy `validate.local.sh` discovery, including legacy sidecar deprecation warnings.
+The managed bash `validate.sh` artifact has its own frozen behavior and is not covered by this environment variable.
 Python sidecars register hooks with `science_tool.validate.hook()` for `pre_validation`, `extra_checks`, or `post_validation`.
