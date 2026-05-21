@@ -7,7 +7,9 @@ by `science validate`.
 The managed `validate.sh` artifact is now a small shim that delegates to
 `science validate`. Phase 2 still supports `validate.local.sh` temporarily so
 downstream projects can migrate without a lockstep release. Treat
-`validate_local.py` as the target shape for new work.
+`validate_local.py` as the target shape for new work. When both
+`validate_local.py` and `validate.local.sh` exist in a project, the Python
+sidecar wins and the bash sidecar is ignored.
 
 For migration context, see the
 [validate CLI migration design](../plans/2026-05-19-validate-cli-migration-design.md)
@@ -183,6 +185,23 @@ Valid hook names are `pre_validation`, `extra_checks`, and `post_validation`.
 Hook functions receive a `ValidateContext` and return an iterable of `Result`
 objects.
 
+`post_validation` has one current caveat: the runner dispatches Python
+`post_validation` hooks in a `finally` block and discards returned `Result`
+objects. Use `post_validation` for cleanup or other side effects. Do not rely on
+returned WARN, ERROR, or INFO results being included in `science validate`
+output unless the runner behavior changes.
+
+### Sidecar Precedence and Legacy Bash
+
+Phase 2 keeps `validate.local.sh` support only as a temporary migration bridge.
+If `validate_local.py` is present, `science validate` imports that Python
+sidecar and ignores `validate.local.sh`.
+
+When legacy bash is selected, it runs through the frozen legacy runner in a
+subprocess. That subprocess path does not share Python-side counters, hook
+state, or accumulated result objects. During a port, replace bash helper calls
+and counter mutations with returned `Result` objects from Python hooks.
+
 ### Environment Variables
 
 Most old sidecars used environment variables because bash had no shared context.
@@ -276,7 +295,9 @@ project task id in `task` when the check enforces a documented task.
 3. Replace heredoc Python and `WARN:` / `INFO:` line protocols with direct
    `Result(...)` returns.
 4. Replace shell path state with `ValidateContext` fields and helpers.
-5. Run `science validate` and compare the warnings/errors against the old
-   `validate.local.sh` behavior.
+5. Compare warnings/errors against the old `validate.local.sh` behavior before
+   adding `validate_local.py`, or temporarily move/disable one sidecar at a
+   time. Once `validate_local.py` exists, `science validate` ignores
+   `validate.local.sh`.
 6. Remove `validate.local.sh` once the Python sidecar is producing the intended
    results.
