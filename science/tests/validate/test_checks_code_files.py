@@ -1,3 +1,5 @@
+import os
+import subprocess
 from pathlib import Path
 
 from science_tool.validate.checks.code_files import check_code_files
@@ -31,6 +33,19 @@ def _by_rule(results: list[Result]) -> dict[str, list[Result]]:
     for r in results:
         out.setdefault(r.rule or "", []).append(r)
     return out
+
+
+def _git(repo: Path, *args: str, env: dict | None = None) -> None:
+    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True, env=env)
+
+
+def _commit_all(repo: Path) -> None:
+    _git(repo, "init")
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "Tester")
+    _git(repo, "add", "-A")
+    env = {**os.environ, "GIT_COMMITTER_DATE": "2026-04-01T00:00:00", "GIT_AUTHOR_DATE": "2026-04-01T00:00:00"}
+    _git(repo, "commit", "-m", "init", env=env)
 
 
 def test_no_code_dir_is_silent(tmp_path: Path) -> None:
@@ -107,3 +122,92 @@ def test_unreadable_file_is_reported_not_crashing(tmp_path: Path, monkeypatch) -
     assert by_rule["code.unreadable"][0].severity is Severity.WARN
     assert "code/x.py" in by_rule["code.unreadable"][0].message
     assert "code.ghost" not in by_rule  # the unreadable file did not also become a ghost
+
+
+def test_missing_status_is_metadata_gap(tmp_path: Path) -> None:
+    (tmp_path / "code").mkdir()
+    (tmp_path / "code" / "x.py").write_text(
+        "# science:code\n# task_ids: []\n# science:end\nprint(1)\n", encoding="utf-8"
+    )
+    ctx = _ctx(tmp_path)
+    _commit_all(tmp_path)
+    by_rule = _by_rule(list(check_code_files(ctx)))
+    assert len(by_rule["code.metadata-gap"]) == 1
+    assert "missing required `status`" in by_rule["code.metadata-gap"][0].message
+
+
+def test_invalid_status_is_metadata_gap(tmp_path: Path) -> None:
+    (tmp_path / "code").mkdir()
+    (tmp_path / "code" / "x.py").write_text(
+        "# science:code\n# status: bogus\n# science:end\nprint(1)\n", encoding="utf-8"
+    )
+    ctx = _ctx(tmp_path)
+    _commit_all(tmp_path)
+    by_rule = _by_rule(list(check_code_files(ctx)))
+    assert len(by_rule["code.metadata-gap"]) == 1
+    assert "'bogus'" in by_rule["code.metadata-gap"][0].message
+
+
+def test_non_list_task_ids_is_metadata_gap(tmp_path: Path) -> None:
+    # `task_ids: t999` parses to a scalar string, not a list — must not be
+    # silently ignored.
+    (tmp_path / "code").mkdir()
+    (tmp_path / "code" / "x.py").write_text(
+        "# science:code\n# status: workflow-owned\n# task_ids: t999\n# science:end\nprint(1)\n",
+        encoding="utf-8",
+    )
+    ctx = _ctx(tmp_path)
+    _commit_all(tmp_path)
+    by_rule = _by_rule(list(check_code_files(ctx)))
+    assert len(by_rule["code.metadata-gap"]) == 1
+    assert "task_ids" in by_rule["code.metadata-gap"][0].message
+    assert "code.unresolved-task" not in by_rule
+
+
+def test_unknown_task_id_is_unresolved(tmp_path: Path) -> None:
+    (tmp_path / "code").mkdir()
+    (tmp_path / "code" / "x.py").write_text(
+        "# science:code\n# status: workflow-owned\n# task_ids: [t999]\n# science:end\nprint(1)\n",
+        encoding="utf-8",
+    )
+    ctx = _ctx(tmp_path)
+    _commit_all(tmp_path)
+    by_rule = _by_rule(list(check_code_files(ctx)))
+    assert len(by_rule["code.unresolved-task"]) == 1
+    assert "t999" in by_rule["code.unresolved-task"][0].message
+
+
+def test_resolved_task_id_is_silent(tmp_path: Path) -> None:
+    (tmp_path / "code").mkdir()
+    (tmp_path / "tasks").mkdir()
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t491] Real task\n- created: 2026-01-01\n", encoding="utf-8"
+    )
+    (tmp_path / "code" / "x.py").write_text(
+        "# science:code\n# status: workflow-owned\n# task_ids: [t491]\n# science:end\nprint(1)\n",
+        encoding="utf-8",
+    )
+    ctx = _ctx(tmp_path)
+    _commit_all(tmp_path)
+    assert "code.unresolved-task" not in _by_rule(list(check_code_files(ctx)))
+
+
+def test_uncommitted_valid_block_is_flagged(tmp_path: Path) -> None:
+    # No git repo at all -> last_content_change_date returns None.
+    (tmp_path / "code").mkdir()
+    (tmp_path / "code" / "x.py").write_text(
+        "# science:code\n# status: workflow-owned\n# science:end\nprint(1)\n", encoding="utf-8"
+    )
+    ctx = _ctx(tmp_path)
+    by_rule = _by_rule(list(check_code_files(ctx)))
+    assert len(by_rule["code.uncommitted"]) == 1
+
+
+def test_committed_valid_block_has_no_uncommitted_finding(tmp_path: Path) -> None:
+    (tmp_path / "code").mkdir()
+    (tmp_path / "code" / "x.py").write_text(
+        "# science:code\n# status: workflow-owned\n# science:end\nprint(1)\n", encoding="utf-8"
+    )
+    ctx = _ctx(tmp_path)
+    _commit_all(tmp_path)
+    assert "code.uncommitted" not in _by_rule(list(check_code_files(ctx)))
