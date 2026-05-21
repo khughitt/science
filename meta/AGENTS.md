@@ -22,7 +22,7 @@ The tool lives at `../science/` — `.env` points `SCIENCE_TOOL_PATH` there.
 ## Validation
 
 ```bash
-bash validate.sh --verbose
+uv run --frozen science validate --verbose
 ```
 
 ## Conventions
