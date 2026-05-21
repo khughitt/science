@@ -14,6 +14,7 @@ from pathlib import Path
 
 from science_tool.code.classification import classify_code_file
 from science_tool.code.git import last_content_change_date
+from science_tool.code.hardcoded_paths import find_hardcoded_paths
 from science_tool.code.lifecycle import CODE_FILE_STATUSES, ORPHAN_GATING_EXEMPT_STATUSES
 from science_tool.code.metadata import parse_code_metadata
 from science_tool.code.workflow_refs import find_workflow_references
@@ -25,8 +26,8 @@ from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
 
-def _result(severity: Severity, rel_path: str, message: str, rule: str) -> Result:
-    return Result(severity, Path(rel_path), None, message, rule, None)
+def _result(severity: Severity, rel_path: str, message: str, rule: str, *, line: int | None = None) -> Result:
+    return Result(severity, Path(rel_path), line, message, rule, None)
 
 
 def _is_workflow_file(rel_path: str) -> bool:
@@ -55,6 +56,7 @@ def check_code_files(ctx: ValidateContext) -> Iterator[Result]:
     workflow_refs = find_workflow_references(
         workflow_files, project_root=ctx.project_root, code_root_names=code_root_names
     )
+    hardcoded_prefixes = paths.hardcoded_path_patterns
     for ref in refs:
         abs_path = ctx.project_root / ref.path
         try:
@@ -73,6 +75,14 @@ def check_code_files(ctx: ValidateContext) -> Iterator[Result]:
                 "code.unreadable",
             )
             continue
+        for finding in find_hardcoded_paths(text, extra_prefixes=hardcoded_prefixes):
+            yield _result(
+                Severity.WARN,
+                ref.path,
+                f"Hardcoded path {finding.pattern!r} at line {finding.line_number}: {finding.line}",
+                "code.hardcoded-path",
+                line=finding.line_number,
+            )
         metadata = parse_code_metadata(text)
         if not metadata.present:
             yield _result(

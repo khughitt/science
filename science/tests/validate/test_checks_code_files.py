@@ -275,3 +275,48 @@ def test_library_valid_block_is_not_orphan(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     _commit_all(tmp_path)
     assert "code.orphaned-executable" not in _by_rule(list(check_code_files(ctx)))
+
+
+def test_hardcoded_path_in_valid_file_is_flagged(tmp_path: Path) -> None:
+    (tmp_path / "code").mkdir()
+    (tmp_path / "code" / "x.py").write_text(
+        '# science:code\n# status: library\n# science:end\nP = "/home/keith/files/x.tsv"\n',
+        encoding="utf-8",
+    )
+    ctx = _ctx(tmp_path)
+    _commit_all(tmp_path)
+    by_rule = _by_rule(list(check_code_files(ctx)))
+    assert len(by_rule["code.hardcoded-path"]) == 1
+    assert by_rule["code.hardcoded-path"][0].line == 4
+
+
+def test_extra_hardcoded_pattern_from_manifest_is_flagged(tmp_path: Path) -> None:
+    (tmp_path / "code").mkdir()
+    (tmp_path / "code" / "x.py").write_text(
+        '# science:code\n# status: library\n# science:end\nP = "scratch/special/x"\n',
+        encoding="utf-8",
+    )
+    ctx = _ctx(tmp_path, extra="hardcoded_path_patterns:\n  - scratch/special/")
+    _commit_all(tmp_path)
+    by_rule = _by_rule(list(check_code_files(ctx)))
+    assert len(by_rule["code.hardcoded-path"]) == 1
+
+
+def test_hardcoded_path_in_ghost_file_is_flagged(tmp_path: Path) -> None:
+    (tmp_path / "code").mkdir()
+    (tmp_path / "code" / "x.py").write_text('P = "/home/keith/x"\n', encoding="utf-8")
+    ctx = _ctx(tmp_path)
+    by_rule = _by_rule(list(check_code_files(ctx)))
+    assert "code.ghost" in by_rule
+    assert "code.hardcoded-path" in by_rule
+
+
+def test_clean_file_has_no_hardcoded_finding(tmp_path: Path) -> None:
+    (tmp_path / "code").mkdir()
+    (tmp_path / "code" / "x.py").write_text(
+        '# science:code\n# status: library\n# science:end\nP = "data/in.tsv"\n',
+        encoding="utf-8",
+    )
+    ctx = _ctx(tmp_path)
+    _commit_all(tmp_path)
+    assert "code.hardcoded-path" not in _by_rule(list(check_code_files(ctx)))
