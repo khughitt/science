@@ -44,6 +44,31 @@ def list_cmd(check: bool, project_root: str) -> None:
             click.echo(f"{art.name}\t{art.version}")
 
 
+@artifacts_group.command("port-validate-sidecar")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=str),
+    default=".",
+    help="Project root containing validate.local.sh.",
+)
+@click.option("--force", is_flag=True, help="Write/overwrite validate_local.py instead of a draft.")
+def port_validate_sidecar_cmd(project_root: str, force: bool) -> None:
+    """Best-effort skeleton generator for validate.local.sh."""
+    from pathlib import Path
+
+    from science_tool.project_artifacts.port_validate_sidecar import (
+        PortValidateSidecarError,
+        port_validate_sidecar,
+    )
+
+    try:
+        output_path = port_validate_sidecar(Path(project_root), force=force)
+    except PortValidateSidecarError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo(f"wrote {output_path}")
+
+
 @artifacts_group.command("check")
 @click.argument("name")
 @click.option(
