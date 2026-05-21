@@ -21,7 +21,7 @@
 **Tool layer (`science/`):**
 - `src/science_tool/graph/entity_registry.py` — classify `code-file` as `OPERATIONAL` and register `CodeFileEntity`.
 - `src/science_tool/paths.py` — read `code_roots`/`app_roots`/`code_excludes`; surface them on `ProjectPaths`.
-- `src/science_tool/validate/checks/manifest.py` — shape-validate the new manifest fields.
+- `src/science_tool/validate/context.py` — convert a malformed-root `ValueError` from `resolve_paths` into a clean `ValidateContextError` (so `validate` reports, not crashes).
 - `src/science_tool/validate/checks/directory_structure.py` — suppress legacy-root warnings for declared roots.
 - `src/science_tool/code/__init__.py` *(new package)*
 - `src/science_tool/code/metadata.py` *(new)* — the `# science:code` block parser.
@@ -363,7 +363,7 @@ def test_duplicate_roots_deduplicated(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd science && uv run pytest tests/test_paths.py -k "code_roots or code_app_roots" -q`
+Run: `cd science && uv run pytest tests/test_paths.py -q` (run the whole file so every new guardrail test executes)
 Expected: FAIL — `AttributeError: 'ProjectPaths' object has no attribute 'code_roots'`.
 
 - [ ] **Step 3: Implement the topology fields**
@@ -464,83 +464,61 @@ git commit -m "feat(paths): resolve code_roots/app_roots/code_excludes from scie
 
 ---
 
-## Task 6: Shape-validate the new manifest fields
+## Task 6: Surface malformed roots as a clean context error
 
 **Files:**
-- Modify: `science/src/science_tool/validate/checks/manifest.py` (after the `ontologies` check, ~line 48)
+- Modify: `science/src/science_tool/validate/context.py` (`from_project_root`, line 42)
 - Test: `science/tests/validate/test_checks_basic.py`
 
-- [ ] **Step 1: Write the failing test**
+`resolve_paths` now raises `ValueError` on malformed roots (Task 5). But `ValidateContext.from_project_root` calls `resolve_paths` *before any check runs*, and the runner does not wrap canonical checks in try/except — so an unconverted `ValueError` crashes `science validate`, and `check_manifest` never runs. Convert it to `ValidateContextError`, which the CLI already renders as a clean error (`cli.py`). This is the right single chokepoint: it supersedes a manifest-check validator (which would be unreachable here), and it also fixes the pre-existing latent crash on an invalid `profile`.
 
-Add to `science/tests/validate/test_checks_basic.py` (using its existing `_ctx`/`_messages` helpers):
+- [ ] **Step 1: Write the failing tests**
+
+Add to `science/tests/validate/test_checks_basic.py` (it defines `_write_manifest`; ensure `import pytest` is present at the top — add it if absent):
 
 ```python
-def test_manifest_rejects_non_list_code_roots(tmp_path: Path) -> None:
-    from science_tool.validate.checks.manifest import check_manifest
+def test_context_rejects_absolute_code_root(tmp_path: Path) -> None:
+    from science_tool.validate.context import ValidateContext, ValidateContextError
 
-    ctx = _ctx(tmp_path, extra_manifest="code_roots: code")
-    messages = _messages(check_manifest(ctx))
-    assert "science.yaml code_roots must be a list of strings" in messages
-
-
-def test_manifest_accepts_list_code_roots(tmp_path: Path) -> None:
-    from science_tool.validate.checks.manifest import check_manifest
-
-    ctx = _ctx(tmp_path, extra_manifest="code_roots:\n  - code\n  - scripts")
-    messages = _messages(check_manifest(ctx))
-    assert not any("code_roots must be a list" in m for m in messages)
+    _write_manifest(tmp_path, extra="code_roots:\n  - /etc")
+    with pytest.raises(ValidateContextError, match="relative paths inside the project"):
+        ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
 
 
-def test_manifest_rejects_absolute_or_escaping_root(tmp_path: Path) -> None:
-    from science_tool.validate.checks.manifest import check_manifest
+def test_context_rejects_non_list_code_roots(tmp_path: Path) -> None:
+    from science_tool.validate.context import ValidateContext, ValidateContextError
 
-    ctx = _ctx(tmp_path, extra_manifest="code_roots:\n  - /etc")
-    messages = _messages(check_manifest(ctx))
-    assert any("must be relative paths inside the project" in m for m in messages)
+    _write_manifest(tmp_path, extra="code_roots: code")
+    with pytest.raises(ValidateContextError, match="must be a list of strings"):
+        ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd science && uv run pytest tests/validate/test_checks_basic.py -k code_roots -q`
-Expected: FAIL — the rejection message is not emitted.
+Run: `cd science && uv run pytest tests/validate/test_checks_basic.py -k context_rejects -q`
+Expected: FAIL — `resolve_paths` raises a bare `ValueError`, so `pytest.raises(ValidateContextError)` does not catch it and the test errors.
 
-- [ ] **Step 3: Implement the shape check**
+- [ ] **Step 3: Implement the conversion**
 
-In `check_manifest`, immediately after the `ontologies` block (after line 48, before the final `yield _result(Severity.INFO, "knowledge_profiles configured")`):
+In `context.py`, wrap the `resolve_paths` call in `from_project_root` (replacing the bare `paths = resolve_paths(root)` at line 42):
 
 ```python
-    for field_name in ("code_roots", "app_roots", "code_excludes"):
-        value = ctx.manifest.get(field_name)
-        if value is None:
-            continue
-        if not (isinstance(value, list) and all(isinstance(item, str) for item in value)):
-            yield _result(Severity.ERROR, f"science.yaml {field_name} must be a list of strings")
-            return
-
-    for field_name in ("code_roots", "app_roots"):
-        for entry in ctx.manifest.get(field_name) or []:
-            if not entry.strip():
-                yield _result(Severity.ERROR, f"science.yaml {field_name} entries must be non-empty")
-                return
-            entry_path = Path(entry)
-            if entry_path.is_absolute() or ".." in entry_path.parts:
-                yield _result(
-                    Severity.ERROR,
-                    f"science.yaml {field_name} entries must be relative paths inside the project: {entry!r}",
-                )
-                return
+        try:
+            paths = resolve_paths(root)
+        except ValueError as exc:
+            raise ValidateContextError(str(exc)) from exc
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd science && uv run pytest tests/validate/test_checks_basic.py -k code_roots -q`
+Run: `cd science && uv run pytest tests/validate/test_checks_basic.py -k context_rejects -q`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/validate/checks/manifest.py science/tests/validate/test_checks_basic.py
-git commit -m "feat(validate): shape-validate code_roots/app_roots/code_excludes"
+git add science/src/science_tool/validate/context.py science/tests/validate/test_checks_basic.py
+git commit -m "fix(validate): surface malformed code/app roots as a clean context error"
 ```
 
 ---
@@ -585,7 +563,7 @@ def test_missing_declared_code_root_is_error(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run tests to verify the first fails**
 
-Run: `cd science && uv run pytest tests/validate/test_checks_basic.py -k legacy -q`
+Run: `cd science && uv run pytest tests/validate/test_checks_basic.py -k "legacy or declared_code_root" -q`
 Expected: `test_declared_code_root_not_flagged_as_legacy` FAILS (the warning is still emitted); the second passes.
 
 - [ ] **Step 3: Implement the suppression**
@@ -634,7 +612,7 @@ def _check_declared_roots_exist(ctx: ValidateContext) -> Iterator[Result]:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd science && uv run pytest tests/validate/test_checks_basic.py -k legacy -q`
+Run: `cd science && uv run pytest tests/validate/test_checks_basic.py -k "legacy or declared_code_root" -q`
 Expected: PASS (both).
 
 - [ ] **Step 5: Commit**
@@ -705,6 +683,24 @@ def test_non_mapping_block_is_invalid() -> None:
     assert result.present is True
     assert result.fields is None
     assert result.error is not None
+
+
+def test_sentinel_substring_in_code_is_not_a_block() -> None:
+    result = parse_code_metadata('msg = "science:code"\nx = 1\n')
+    assert result.present is False
+
+
+def test_end_marker_before_start_is_ignored() -> None:
+    text = 'note = "science:end"\n# science:code\n# status: library\n# science:end\n'
+    result = parse_code_metadata(text)
+    assert result.valid is True
+    assert result.fields == {"status": "library"}
+
+
+def test_double_hash_comment_delimiters() -> None:
+    result = parse_code_metadata("## science:code\n## status: library\n## science:end\n")
+    assert result.valid is True
+    assert result.fields == {"status": "library"}
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -763,25 +759,30 @@ def _strip_comment(line: str) -> str:
 def parse_code_metadata(text: str) -> CodeMetadata:
     """Parse the `# science:code … # science:end` block into a CodeMetadata.
 
-    The body is parsed as YAML after stripping a leading run of `#` and one
-    space per line, so values get proper types (lists, bools). Works for any
-    `#`-comment language in scope (Python, R, shell, Snakemake); non-`#`
-    languages are out of scope while app_roots is unscanned.
+    Delimiters are matched only after stripping the `#` comment prefix and must
+    equal `science:code` / `science:end` exactly, so a sentinel inside a string
+    or code (e.g. `print("science:code")`) never triggers parsing, and an
+    earlier `science:end` cannot terminate before a real start. The body is
+    parsed as YAML (after stripping a leading run of `#` and one space per line)
+    so values get proper types (lists, bools). Works for any `#`-comment
+    language in scope (Python, R, shell, Snakemake); non-`#` languages are out
+    of scope while app_roots is unscanned.
     """
-    if _START not in text:
-        return CodeMetadata(present=False, fields=None, error=None)
-    body_lines: list[str] = []
-    inside = False
+    started = False
     terminated = False
+    body_lines: list[str] = []
     for raw_line in text.splitlines():
-        if _END in raw_line:
+        marker = _strip_comment(raw_line).strip()
+        if not started:
+            if marker == _START:
+                started = True
+            continue
+        if marker == _END:
             terminated = True
             break
-        if _START in raw_line:
-            inside = True
-            continue
-        if inside:
-            body_lines.append(_strip_comment(raw_line))
+        body_lines.append(_strip_comment(raw_line))
+    if not started:
+        return CodeMetadata(present=False, fields=None, error=None)
     if not terminated:
         return CodeMetadata(present=True, fields=None, error="unterminated science:code block (missing science:end)")
     try:
