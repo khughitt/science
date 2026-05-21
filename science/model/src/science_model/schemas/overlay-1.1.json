@@ -44,7 +44,6 @@
       "items": {"type": "string"},
       "science:merge": "append"
     },
-    "datapackage": {"type": "string"},
     "status": {"type": "string"},
     "source": {"type": "string"},
     "related": {"type": "array", "items": {"type": "string"}},
