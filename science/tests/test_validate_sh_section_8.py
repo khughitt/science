@@ -1,10 +1,8 @@
-"""validate.sh Section 8 + managed-artifact registry bump."""
+"""validate.sh shim + managed-artifact registry bump."""
 
 from __future__ import annotations
 
 import hashlib
-import subprocess
-import tempfile
 from pathlib import Path
 
 import yaml
@@ -21,19 +19,15 @@ def _body_hash(path: Path) -> str:
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
-def test_section_8_passes_ignore_lifted() -> None:
+def test_validate_sh_is_cli_shim() -> None:
     text = VALIDATE_SH.read_text(encoding="utf-8")
-    section_idx = text.find("8. Unresolved annotation markers")
-    assert section_idx >= 0
-    section_end = text.find("# ─── 9.", section_idx)
-    section = text[section_idx:section_end]
-    assert "--ignore-lifted" in section
+    assert text.splitlines(keepends=True)[4:] == ['exec uv run science validate "$@"\n']
 
 
 def test_registry_version_bumped() -> None:
     data = yaml.safe_load(REGISTRY_YAML.read_text(encoding="utf-8"))
     validate = next(a for a in data["artifacts"] if a["name"] == "validate.sh")
-    assert validate["version"] == "2026.05.12.1"
+    assert validate["version"] == "2026.05.21.1"
 
 
 def test_registry_current_hash_matches_validate_body() -> None:
@@ -67,15 +61,5 @@ def test_registry_changelog_entry_for_2026_05_12_1() -> None:
     assert "2026.05.12.1" in validate["changelog"]
 
 
-def test_section_8_runs_against_empty_dir() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        result = subprocess.run(
-            ["bash", str(VALIDATE_SH)],
-            cwd=tmp,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode in (0, 1)
-        # Section 8 always echoes this header banner; confirms the script ran past it.
-        assert "unresolved markers" in result.stdout.lower()
+def test_validate_sh_no_longer_contains_section_8_body() -> None:
+    assert "unresolved markers" not in VALIDATE_SH.read_text(encoding="utf-8").lower()
