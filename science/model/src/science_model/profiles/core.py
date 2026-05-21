@@ -136,6 +136,12 @@ CORE_PROFILE = ProfileManifest(
             layer="layer/core",
             description="Verdict over a structural-chain. Carries verdict+bayes_factor_evidence with enforced consistency.",
         ),
+        EntityKind(
+            name="code-file",
+            canonical_prefix="code-file",
+            layer="layer/core",
+            description="Source-code file implementing workflow steps and methods.",
+        ),
     ],
     relation_kinds=[
         RelationKind(
@@ -353,6 +359,22 @@ CORE_PROFILE = ProfileManifest(
                 "prov:wasDerivedFrom triples by the freshness engine; may also "
                 "be hand-authored for cases the auto-rules miss."
             ),
+        ),
+        RelationKind(
+            name="implements",
+            predicate="sci:implements",
+            source_kinds=["code-file"],
+            target_kinds=["workflow-step", "method"],
+            layer="layer/core",
+            description="A code file implements a workflow step or method.",
+        ),
+        RelationKind(
+            name="defines",
+            predicate="sci:defines",
+            source_kinds=["code-file"],
+            target_kinds=["workflow"],
+            layer="layer/core",
+            description="A code file defines a workflow.",
         ),
     ],
 )

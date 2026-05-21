@@ -303,3 +303,23 @@ def test_load_profile_manifest_missing(tmp_path: object) -> None:
     assert isinstance(tmp_path, Path)
     profile = load_profile_manifest(tmp_path / "missing.yaml")
     assert profile is None
+
+
+def test_code_file_kind_declared() -> None:
+    kind = next(k for k in CORE_PROFILE.entity_kinds if k.name == "code-file")
+    assert kind.canonical_prefix == "code-file"
+    assert kind.layer == "layer/core"
+
+
+def test_implements_relation_targets_step_and_method() -> None:
+    rel = next(r for r in CORE_PROFILE.relation_kinds if r.name == "implements")
+    assert rel.source_kinds == ["code-file"]
+    assert rel.target_kinds == ["workflow-step", "method"]
+    assert rel.predicate == "sci:implements"
+
+
+def test_defines_relation_targets_workflow() -> None:
+    rel = next(r for r in CORE_PROFILE.relation_kinds if r.name == "defines")
+    assert rel.source_kinds == ["code-file"]
+    assert rel.target_kinds == ["workflow"]
+    assert rel.predicate == "sci:defines"
