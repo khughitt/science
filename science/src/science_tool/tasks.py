@@ -283,6 +283,25 @@ def _task_search_paths(tasks_dir: Path) -> list[Path]:
     return paths
 
 
+def known_task_ids(tasks_dir: Path) -> set[str]:
+    """Every valid task id (tNNN) declared as a header in active.md and done/*.md.
+
+    A header-only scan (not full parse): a field-level problem in one task block
+    must not crash callers that only need the set of declared ids. `_HEADER_RE`
+    matches only valid tNNN headers and exposes the id as group 1; check_tasks
+    owns reporting malformed task blocks.
+    """
+    ids: set[str] = set()
+    for path in _task_search_paths(tasks_dir):
+        if not path.is_file():
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            match = _HEADER_RE.match(line)
+            if match:
+                ids.add(match.group(1))
+    return ids
+
+
 def _find_matches(tasks_dir: Path, task_id: str) -> list[TaskLocation]:
     matches: list[TaskLocation] = []
     for path in _task_search_paths(tasks_dir):
