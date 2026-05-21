@@ -880,6 +880,30 @@ class TestHealthCLI:
         ]
         assert report["total_issues"] == 1
 
+    def test_json_output_validate_check_reports_context_errors(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+        from science_tool.cli import main
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["health", "--project-root", str(tmp_path), "--format", "json", "--check", "validate"],
+        )
+
+        assert result.exit_code == 0, result.output
+        report = json.loads(result.output)
+        assert report["validation"] == [
+            {
+                "severity": "error",
+                "path": None,
+                "line": None,
+                "message": f"science.yaml not found at {tmp_path.resolve() / 'science.yaml'}",
+                "rule": "validate.context",
+                "task": None,
+            }
+        ]
+        assert report["total_issues"] == 1
+
     def test_table_output_validate_check_includes_validation_section(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

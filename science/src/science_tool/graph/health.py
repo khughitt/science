@@ -390,10 +390,23 @@ def _collect_entity_identity(context: HealthContext) -> list[EntityIdentityFindi
 
 
 def collect_validation_findings(project_root: Path) -> list[ValidationFinding]:
+    from science_tool.validate.context import ValidateContextError
     from science_tool.validate import runner as validate_runner
     from science_tool.validate.result import Severity
 
-    run_result = validate_runner.run(project_root, strict=False, verbose=False, enable_python_sidecar=False)
+    try:
+        run_result = validate_runner.run(project_root, strict=False, verbose=False, enable_python_sidecar=False)
+    except ValidateContextError as exc:
+        return [
+            {
+                "severity": "error",
+                "path": None,
+                "line": None,
+                "message": str(exc),
+                "rule": "validate.context",
+                "task": None,
+            }
+        ]
     return [
         {
             "severity": _validation_health_severity(result.severity),
