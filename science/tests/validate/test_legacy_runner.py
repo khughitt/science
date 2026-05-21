@@ -56,6 +56,30 @@ def test_run_legacy_sidecar_strips_ansi_from_sidecar_messages(tmp_path: Path) ->
     assert results[0].message == "ANSI warning"
 
 
+def test_run_legacy_sidecar_disable_env_skips_local_sidecar(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SCIENCE_VALIDATE_DISABLE_SIDECAR", "1")
+    tmp_path.joinpath("validate.local.sh").write_text(
+        "\n".join(
+            [
+                "legacy_warning() {",
+                '  warn "SHOULD-NOT-FIRE"',
+                "}",
+                "register_validation_hook pre_validation legacy_warning",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    results, log_lines = run_legacy_sidecar(tmp_path)
+
+    assert log_lines == []
+    assert results == []
+
+
 def test_run_legacy_sidecar_preserves_stdout_results_when_hook_exits_nonzero(tmp_path: Path) -> None:
     stderr_prefix = "legacy failure details: "
     stderr_tail = "x" * 2100

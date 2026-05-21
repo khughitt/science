@@ -26,7 +26,7 @@ dispatch_hook() {
 SCIENCE_LEGACY_EFFECTIVE_DISPATCH_PHASE="${SCIENCE_LEGACY_DISPATCH_PHASE:-both}"
 SCIENCE_LEGACY_EFFECTIVE_COUNT_POST_VALIDATION="${SCIENCE_LEGACY_COUNT_POST_VALIDATION:-1}"
 
-if [[ -f "validate.local.sh" ]]; then
+if [[ "${SCIENCE_VALIDATE_DISABLE_SIDECAR:-}" != "1" && -f "validate.local.sh" ]]; then
   # shellcheck source=/dev/null
   source "validate.local.sh"
 fi

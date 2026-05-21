@@ -124,6 +124,46 @@ def test_validate_imports_local_hook_by_default(tmp_path: Path) -> None:
     }
 
 
+def test_validate_disable_sidecar_env_skips_python_and_bash_sidecars(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    project.joinpath("validate_local.py").write_text(
+        "\n".join(
+            [
+                "from science_tool.validate import Result, Severity, hook",
+                "",
+                '@hook("extra_checks")',
+                "def extra(ctx):",
+                '    return [Result(Severity.WARN, None, None, "python sidecar warning", "local.extra", None)]',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    project.joinpath("validate.local.sh").write_text(
+        "\n".join(
+            [
+                "legacy_warning() {",
+                '  warn "bash sidecar warning"',
+                "}",
+                "register_validation_hook extra_checks legacy_warning",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        main,
+        ["validate", "--format", "json", "--project-root", str(project)],
+        env={"SCIENCE_VALIDATE_DISABLE_SIDECAR": "1"},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == {
+        "summary": {"errors": 0, "warnings": 0, "infos": 0},
+        "results": [],
+    }
+
+
 def test_validate_rejects_removed_experimental_python_sidecar_flag() -> None:
     result = CliRunner().invoke(main, ["validate", "--experimental-python-sidecar"])
 

@@ -82,8 +82,8 @@ def run(
     sidecar_enabled = enable_python_sidecar and os.environ.get("SCIENCE_VALIDATE_DISABLE_SIDECAR") != "1"
     python_sidecar_path = ctx.project_root / "validate_local.py"
     legacy_sidecar_path = ctx.project_root / "validate.local.sh"
-    python_sidecar_exists = python_sidecar_path.is_file()
-    legacy_sidecar_exists = legacy_sidecar_path.is_file()
+    python_sidecar_exists = sidecar_enabled and python_sidecar_path.is_file()
+    legacy_sidecar_exists = sidecar_enabled and legacy_sidecar_path.is_file()
     legacy_sidecar_selected = sidecar_enabled and legacy_sidecar_exists and not python_sidecar_exists
     should_cleanup_python_sidecar_hooks = sidecar_enabled
     python_sidecar_state: _PythonSidecarState | None = None
