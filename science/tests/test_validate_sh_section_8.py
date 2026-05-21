@@ -42,23 +42,48 @@ def test_registry_previous_hashes_grow() -> None:
     validate = next(a for a in data["artifacts"] if a["name"] == "validate.sh")
     prev = validate["previous_hashes"]
     assert any(
-        entry.get("version") == "2026.05.11.2"
-        and entry.get("hash") == "86dedcc6beebd74d4427b9202a1f083ef6de89b0eedbd06ae205db4b688087a4"
+        entry.get("version") == "2026.05.12.1"
+        and entry.get("hash") == "ec986621008863cffd749c59e5478722ca7d6f3ea75b497a4d49b801639e0be1"
         for entry in prev
     )
 
 
-def test_registry_migration_entry_for_2026_05_12_1() -> None:
+def test_registry_migration_entry_for_shim_transition() -> None:
     data = yaml.safe_load(REGISTRY_YAML.read_text(encoding="utf-8"))
     validate = next(a for a in data["artifacts"] if a["name"] == "validate.sh")
     migrations = validate["migrations"]
-    assert any(m.get("from") == "2026.05.11.2" and m.get("to") == "2026.05.12.1" for m in migrations)
+    migration = next(
+        (m for m in migrations if m.get("from") == "2026.05.12.1" and m.get("to") == "2026.05.21.1"),
+        None,
+    )
+    assert migration is not None
+    assert migration["kind"] == "byte_replace"
+    assert migration["steps"] == []
+    assert (
+        migration["summary"] == "Migrate from in-project canonical body to packaged shim; project-local checks move to "
+        "validate_local.py per docs/migration/2026-05-19-validate-local-sh-porting-guide.md."
+    )
 
 
-def test_registry_changelog_entry_for_2026_05_12_1() -> None:
+def test_registry_changelog_entry_for_shim_transition() -> None:
     data = yaml.safe_load(REGISTRY_YAML.read_text(encoding="utf-8"))
     validate = next(a for a in data["artifacts"] if a["name"] == "validate.sh")
-    assert "2026.05.12.1" in validate["changelog"]
+    assert validate["changelog"]["2026.05.21.1"] == (
+        "Replace in-project canonical validate.sh body with packaged shim; project-local checks move "
+        "to validate_local.py per docs/migration/2026-05-19-validate-local-sh-porting-guide.md."
+    )
+
+
+def test_registry_extension_protocol_uses_python_sidecar() -> None:
+    data = yaml.safe_load(REGISTRY_YAML.read_text(encoding="utf-8"))
+    validate = next(a for a in data["artifacts"] if a["name"] == "validate.sh")
+    protocol = validate["extension_protocol"]
+
+    assert protocol["kind"] == "python_sidecar"
+    assert protocol["sidecar_path"] == "validate_local.py"
+    assert "hook_namespace" not in protocol
+    assert "import" in protocol["contract"].lower()
+    assert "@hook" in protocol["contract"]
 
 
 def test_validate_sh_no_longer_contains_section_8_body() -> None:

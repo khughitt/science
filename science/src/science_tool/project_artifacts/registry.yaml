@@ -14,17 +14,15 @@ artifacts:
       kind: shebang_comment
       comment_prefix: '#'
     extension_protocol:
-      kind: sourced_sidecar
-      sidecar_path: validate.local.sh
-      hook_namespace: SCIENCE_VALIDATE_HOOKS
+      kind: python_sidecar
+      sidecar_path: validate_local.py
       contract: |
-        Sidecar registers hooks via `register_validation_hook <hook> <fn>`.
-        Canonical sources sidecar BEFORE validation runs, then dispatches at:
-          - pre_validation: after helpers + banner, before section 1.
-          - extra_checks: after all canonical sections, before the summary.
-          - post_validation: at process exit (trap EXIT), regardless of pass/fail.
-        Hooks see all helpers and globals (PROFILE, ERRORS, WARNINGS).
-        See docs/superpowers/specs/2026-04-27-validate-hook-points.md.
+        The packaged validate.sh shim executes `uv run science validate "$@"`.
+        The Python validator imports project-local `validate_local.py` when present.
+        Project checks register by decorating functions with `@hook(...)`; supported
+        hook points are dispatched from the Python runner before, during, and after
+        canonical validation.
+        See docs/migration/2026-05-19-validate-local-sh-porting-guide.md.
     mutation_policy:
       requires_clean_worktree: true
       commit_default: true
@@ -32,6 +30,8 @@ artifacts:
     version: '2026.05.21.1'
     current_hash: c12f881185d8359f3dbc1e4c3b166ce55475c22471a7c9739e088a07aab0618f
     previous_hashes:
+      - version: '2026.05.12.1'
+        hash: ec986621008863cffd749c59e5478722ca7d6f3ea75b497a4d49b801639e0be1
       - version: '2026.05.11.2'
         hash: 86dedcc6beebd74d4427b9202a1f083ef6de89b0eedbd06ae205db4b688087a4
       - version: '2026.05.11.1'
@@ -186,6 +186,11 @@ artifacts:
         kind: byte_replace
         summary: 'Add agent-context drift checks for CLAUDE.md, AGENTS.md, and core/overview.md size.'
         steps: []
+      - from: '2026.05.12.1'
+        to: '2026.05.21.1'
+        kind: byte_replace
+        summary: 'Migrate from in-project canonical body to packaged shim; project-local checks move to validate_local.py per docs/migration/2026-05-19-validate-local-sh-porting-guide.md.'
+        steps: []
     changelog:
       '2026.04.26': Initial managed artifact (port of scripts/validate.sh + hook infrastructure).
       '2026.04.26.1': 'Audit-surfaced six-fix batch (Plan #7 of conventions audit).'
@@ -209,3 +214,4 @@ artifacts:
       '2026.05.11.1': 'Section 19 (Annotation drift): invokes `science annotate verify --format json --summary-only` and reports broken / degraded / fuzzy / source-missing / parse-error counts. Broken and parse-errors warn unconditionally; the rest promote under --strict (via `strict_warn`).'
       '2026.05.11.2': 'Section 8 markers scan now passes --ignore-lifted to dedupe inline tokens against lifted sidecar rows (P3.2).'
       '2026.05.12.1': 'Add agent-context drift checks: CLAUDE.md must stay minimal, @core/* includes warn, AGENTS.md digest markers are checked, and core/overview.md has a 150-line / 1200-word budget.'
+      '2026.05.21.1': 'Replace in-project canonical validate.sh body with packaged shim; project-local checks move to validate_local.py per docs/migration/2026-05-19-validate-local-sh-porting-guide.md.'
