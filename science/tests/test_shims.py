@@ -1,4 +1,10 @@
-"""meta/validate.sh and scripts/validate.sh are byte-identical 5-line shims."""
+"""validate.sh entry points.
+
+scripts/validate.sh is a 5-line path-convenience shim. meta/validate.sh is the
+materialized `validate.sh` managed artifact (byte-identical to the canonical
+artifact the tool ships), since the science-meta project consumes the migrated
+`science validate` CLI directly.
+"""
 
 import subprocess
 from pathlib import Path
@@ -7,6 +13,12 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# The canonical, fully-rendered validate.sh artifact the tool materializes into
+# consuming projects. meta/validate.sh must match it byte-for-byte; comparing
+# against the shipped source (rather than a hard-coded copy) stays correct when
+# the managed version/sha header is regenerated, and catches materialization drift.
+CANONICAL_ARTIFACT = REPO_ROOT / "science" / "src" / "science_tool" / "project_artifacts" / "data" / "validate.sh"
 
 EXPECTED_SHIM = (
     "#!/usr/bin/env bash\n"
@@ -17,15 +29,20 @@ EXPECTED_SHIM = (
 )
 
 
-@pytest.mark.parametrize("path", ["meta/validate.sh", "scripts/validate.sh"])
-def test_shim_is_exact(path: str) -> None:
-    p = REPO_ROOT / path
-    assert p.exists(), f"{path} should be the shim, not absent"
+def test_scripts_validate_is_shim() -> None:
+    p = REPO_ROOT / "scripts" / "validate.sh"
+    assert p.exists(), "scripts/validate.sh should be the shim, not absent"
     assert p.read_text(encoding="utf-8") == EXPECTED_SHIM
 
 
+def test_meta_validate_matches_materialized_artifact() -> None:
+    p = REPO_ROOT / "meta" / "validate.sh"
+    assert p.exists(), "meta/validate.sh should be the materialized artifact, not absent"
+    assert p.read_text(encoding="utf-8") == CANONICAL_ARTIFACT.read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize("path", ["meta/validate.sh", "scripts/validate.sh"])
-def test_shim_is_executable(path: str) -> None:
+def test_validate_sh_is_executable(path: str) -> None:
     p = REPO_ROOT / path
     assert p.stat().st_mode & 0o111, f"{path} must be executable"
 
@@ -60,8 +77,8 @@ def _write_minimal_software_project(root: Path) -> None:
     (root / "tasks" / "active.md").write_text("# x\n", encoding="utf-8")
 
 
-def test_meta_shim_smoke_runs(tmp_path: Path) -> None:
-    """Smoke: invoking meta/validate.sh exits with same status as direct canonical run."""
+def test_meta_validate_smoke_runs(tmp_path: Path) -> None:
+    """Smoke: invoking meta/validate.sh exits 0 on a minimal valid project."""
     _write_minimal_software_project(tmp_path)
 
     result = subprocess.run(
@@ -71,4 +88,4 @@ def test_meta_shim_smoke_runs(tmp_path: Path) -> None:
         text=True,
         check=False,
     )
-    assert result.returncode == 0, f"meta shim exec failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    assert result.returncode == 0, f"meta validate exec failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
