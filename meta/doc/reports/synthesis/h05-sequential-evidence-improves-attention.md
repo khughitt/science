@@ -1,5 +1,6 @@
 ---
 type: synthesis
+title: "Sequential evidence improves attention"
 report_kind: hypothesis-synthesis
 id: synthesis:h05-sequential-evidence-improves-attention
 hypothesis: hypothesis:h05-sequential-evidence-improves-attention

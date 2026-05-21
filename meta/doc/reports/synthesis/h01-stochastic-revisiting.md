@@ -1,5 +1,6 @@
 ---
 type: synthesis
+title: "Stochastic revisiting"
 report_kind: hypothesis-synthesis
 id: synthesis:h01-stochastic-revisiting
 hypothesis: hypothesis:h01-stochastic-revisiting

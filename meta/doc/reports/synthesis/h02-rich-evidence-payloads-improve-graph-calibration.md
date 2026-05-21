@@ -1,5 +1,6 @@
 ---
 type: synthesis
+title: "Rich evidence payloads improve graph calibration"
 report_kind: hypothesis-synthesis
 id: synthesis:h02-rich-evidence-payloads-improve-graph-calibration
 hypothesis: hypothesis:h02-rich-evidence-payloads-improve-graph-calibration

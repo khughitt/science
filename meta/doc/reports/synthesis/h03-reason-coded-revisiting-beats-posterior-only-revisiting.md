@@ -1,5 +1,6 @@
 ---
 type: synthesis
+title: "Reason-coded revisiting beats posterior-only revisiting"
 report_kind: hypothesis-synthesis
 id: synthesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting
 hypothesis: hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting

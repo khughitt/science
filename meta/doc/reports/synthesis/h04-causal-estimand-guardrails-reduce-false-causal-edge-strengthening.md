@@ -1,5 +1,6 @@
 ---
 type: synthesis
+title: "Causal estimand guardrails reduce false causal edge strengthening"
 report_kind: hypothesis-synthesis
 id: synthesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening
 hypothesis: hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening

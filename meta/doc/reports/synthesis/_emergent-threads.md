@@ -1,6 +1,7 @@
 ---
 id: "synthesis:emergent-threads"
 type: "synthesis"
+title: "Emergent threads - science meta"
 report_kind: "emergent-threads"
 generated_at: "2026-05-06T03:57:33Z"
 source_commit: "591956fe223318a92c9b36ba01afefcfb1246b10"
