@@ -3,14 +3,15 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Callable, Sequence
 import importlib
+import json
 import os
-import re
 import shutil
 import subprocess
 import sys
 import tomllib
 import warnings
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -52,33 +53,19 @@ CHECK_MODULES = (
     "annotations",
 )
 
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-_BASH_RESULT_RE = re.compile(r"^(?P<severity>WARN|ERROR):\s*(?P<message>.+)$")
-_PATH_TOKEN_RE = re.compile(r"^(?P<path>(?:\.?/)?(?:[\w.-]+/)*[\w.-]+\.[A-Za-z0-9]+)(?::(?P<line>\d+))?\b")
-
 # validate.sh has no stable explicit rule IDs, and Python Result.rule is section-level
 # (for example, "manifest" or "graph"). Phase 1 semantic parity therefore uses the
 # diagnostic message text as the diagnostic key so message-level regressions stay visible.
 
 
-def _extract_bash_diagnostic_items(stdout: str) -> list[DiagnosticItem]:
+def _extract_bash_diagnostic_items(stdout: str, project_root: Path) -> list[DiagnosticItem]:
+    payload: dict[str, Any] = json.loads(stdout)
     items: list[DiagnosticItem] = []
-    for raw_line in stdout.splitlines():
-        line = _ANSI_RE.sub("", raw_line).strip()
-        match = _BASH_RESULT_RE.match(line)
-        if not match:
+    for item in payload["results"]:
+        if item["severity"] == "info":
             continue
-
-        message = match.group("message")
-        path: str | None = None
-        line_number: int | None = None
-        path_match = _PATH_TOKEN_RE.match(message)
-        if path_match:
-            path = path_match.group("path").removeprefix("./")
-            raw_line_number = path_match.group("line")
-            line_number = int(raw_line_number) if raw_line_number is not None else None
-
-        items.append((match.group("severity").lower(), path, line_number, message))
+        path = _normalize_result_path(Path(item["path"]) if item["path"] is not None else None, project_root)
+        items.append((item["severity"], path, item["line"], item["message"]))
     return _sort_diagnostic_items(items)
 
 
@@ -285,19 +272,37 @@ def _warn_if_sidecars_present(project_root: Path, *, label: str) -> None:
         )
 
 
-def test_bash_diagnostic_extractor_keeps_only_warn_and_error_lines() -> None:
-    stdout = "\n".join(
-        [
-            "\033[33mWARN: doc/a.md missing section: ## Summary\033[0m",
-            "  advisory chatter",
-            "\033[31mERROR: task t001 missing required field: aspects\033[0m",
-            "\033[31mFAILED: 1 error(s), 1 warning(s)\033[0m",
-        ]
+def test_bash_diagnostic_extractor_reads_shim_json_payload(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    stdout = json.dumps(
+        {
+            "results": [
+                {
+                    "severity": "info",
+                    "path": None,
+                    "line": None,
+                    "message": "advisory chatter",
+                },
+                {
+                    "severity": "warn",
+                    "path": str(project_root / "doc" / "a.md"),
+                    "line": 7,
+                    "message": "doc/a.md missing section",
+                },
+                {
+                    "severity": "error",
+                    "path": "tasks/active.md",
+                    "line": None,
+                    "message": "task t001 missing field",
+                },
+            ]
+        }
     )
 
-    assert _extract_bash_diagnostic_items(stdout) == [
-        ("error", None, None, "task t001 missing required field: aspects"),
-        ("warn", "doc/a.md", None, "doc/a.md missing section: ## Summary"),
+    assert _extract_bash_diagnostic_items(stdout, project_root) == [
+        ("error", "tasks/active.md", None, "task t001 missing field"),
+        ("warn", "doc/a.md", 7, "doc/a.md missing section"),
     ]
 
 
@@ -443,7 +448,10 @@ def test_combined_fixture_matches_bash_validate_semantics(
     bash_project = isolated_copy(COMBINED_PROJECT)
     python_project = isolated_copy(COMBINED_PROJECT)
 
-    bash_items = _extract_bash_diagnostic_items(_run_bash_validate(bash_project, tmp_path))
+    bash_items = _extract_bash_diagnostic_items(
+        _run_bash_validate(bash_project, tmp_path, "--format", "json"),
+        bash_project,
+    )
     python_items = _extract_python_diagnostic_items(_run_python_validate(python_project), python_project)
 
     _assert_semantic_parity(bash_items, python_items, label="combined fixture")
@@ -464,7 +472,10 @@ def test_real_downstream_projects_match_bash_validate_semantics(
         _warn_if_sidecars_present(bash_project, label=f"{project_path} bash copy")
         _warn_if_sidecars_present(python_project, label=f"{project_path} python copy")
 
-        bash_items = _extract_bash_diagnostic_items(_run_bash_validate(bash_project, tmp_path))
+        bash_items = _extract_bash_diagnostic_items(
+            _run_bash_validate(bash_project, tmp_path, "--format", "json"),
+            bash_project,
+        )
         python_items = _extract_python_diagnostic_items(_run_python_validate(python_project), python_project)
 
         try:
