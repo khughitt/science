@@ -92,3 +92,11 @@ def test_register_core_kind_requires_entity_class():
     # Calling without entity_class should raise TypeError (missing required kwarg).
     with pytest.raises(TypeError):
         r.register_core_kind("foo", MyEntity)  # type: ignore[call-arg]
+
+
+def test_code_file_is_operational_and_resolves_to_subclass() -> None:
+    from science_model.entities import CodeFileEntity
+
+    r = EntityRegistry.with_core_types()
+    assert r.kind_class("code-file") == EntityClass.OPERATIONAL
+    assert r.resolve("code-file") is CodeFileEntity

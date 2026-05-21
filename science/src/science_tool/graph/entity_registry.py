@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from science_model.entities import (
     ChainAuditEntity,
+    CodeFileEntity,
     DatasetEntity,
     Entity,
     EntityClass,
@@ -55,6 +56,7 @@ _CORE_KIND_CLASSES: dict[str, EntityClass] = {
     # Generic project kinds (alphabetized)
     "article": EntityClass.REFERENCE,
     "assumption": EntityClass.EPISTEMIC,
+    "code-file": EntityClass.OPERATIONAL,
     "concept": EntityClass.REFERENCE,
     "curation-sweep": EntityClass.OPERATIONAL,
     "data-package": EntityClass.OPERATIONAL,
@@ -120,6 +122,7 @@ class EntityRegistry:
             ChainAuditEntity,
             entity_class=_CORE_KIND_CLASSES["chain-audit"],
         )
+        r.register_core_kind("code-file", CodeFileEntity, entity_class=_CORE_KIND_CLASSES["code-file"])
         # Generic project kinds → ProjectEntity.
         for kind in (
             "concept",
