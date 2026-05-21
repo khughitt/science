@@ -68,10 +68,11 @@ def test_registry_migration_entry_for_shim_transition() -> None:
 def test_registry_changelog_entry_for_shim_transition() -> None:
     data = yaml.safe_load(REGISTRY_YAML.read_text(encoding="utf-8"))
     validate = next(a for a in data["artifacts"] if a["name"] == "validate.sh")
-    assert validate["changelog"]["2026.05.21.1"] == (
-        "Replace in-project canonical validate.sh body with packaged shim; project-local checks move "
-        "to validate_local.py per docs/migration/2026-05-19-validate-local-sh-porting-guide.md."
-    )
+    entry = validate["changelog"]["2026.05.21.1"]
+
+    assert "packaged shim" in entry
+    assert "validate_local.py" in entry
+    assert "docs/migration/2026-05-19-validate-local-sh-porting-guide.md" not in entry
 
 
 def test_registry_extension_protocol_uses_python_sidecar() -> None:
@@ -84,6 +85,9 @@ def test_registry_extension_protocol_uses_python_sidecar() -> None:
     assert "hook_namespace" not in protocol
     assert "import" in protocol["contract"].lower()
     assert "@hook" in protocol["contract"]
+    assert "docs/migration/2026-05-19-validate-local-sh-porting-guide.md" not in protocol["contract"]
+    for hook_point in ("pre_validation", "extra_checks", "post_validation"):
+        assert hook_point in protocol["contract"]
 
 
 def test_validate_sh_no_longer_contains_section_8_body() -> None:

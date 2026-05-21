@@ -20,9 +20,8 @@ artifacts:
         The packaged validate.sh shim executes `uv run science validate "$@"`.
         The Python validator imports project-local `validate_local.py` when present.
         Project checks register by decorating functions with `@hook(...)`; supported
-        hook points are dispatched from the Python runner before, during, and after
-        canonical validation.
-        See docs/migration/2026-05-19-validate-local-sh-porting-guide.md.
+        hook points are `pre_validation`, `extra_checks`, and `post_validation`.
+        Hooks run inside the Python validation process around canonical validation.
     mutation_policy:
       requires_clean_worktree: true
       commit_default: true
@@ -214,4 +213,4 @@ artifacts:
       '2026.05.11.1': 'Section 19 (Annotation drift): invokes `science annotate verify --format json --summary-only` and reports broken / degraded / fuzzy / source-missing / parse-error counts. Broken and parse-errors warn unconditionally; the rest promote under --strict (via `strict_warn`).'
       '2026.05.11.2': 'Section 8 markers scan now passes --ignore-lifted to dedupe inline tokens against lifted sidecar rows (P3.2).'
       '2026.05.12.1': 'Add agent-context drift checks: CLAUDE.md must stay minimal, @core/* includes warn, AGENTS.md digest markers are checked, and core/overview.md has a 150-line / 1200-word budget.'
-      '2026.05.21.1': 'Replace in-project canonical validate.sh body with packaged shim; project-local checks move to validate_local.py per docs/migration/2026-05-19-validate-local-sh-porting-guide.md.'
+      '2026.05.21.1': 'Replace in-project canonical validate.sh body with packaged shim; project-local checks move to validate_local.py.'
