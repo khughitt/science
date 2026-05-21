@@ -775,6 +775,19 @@ def test_missing_declared_code_root_is_error(tmp_path: Path) -> None:
     assert any("Declared code_roots directory missing: scripst/" in m for m in messages)
 
 
+def test_multicomponent_declared_root_does_not_suppress_top_level_legacy(tmp_path: Path) -> None:
+    from science_tool.validate.checks.directory_structure import check_directory_structure
+
+    # A declared root of `src/scripts` must not suppress the legacy warning for an
+    # unrelated top-level `scripts/` (the declared root is matched by full relative
+    # path, not basename).
+    ctx = _ctx(tmp_path, profile="research", extra_manifest="code_roots:\n  - src/scripts")
+    (tmp_path / "src" / "scripts").mkdir(parents=True)
+    (tmp_path / "scripts").mkdir()
+    messages = _messages(check_directory_structure(ctx))
+    assert any("Legacy top-level execution root detected: scripts" in m for m in messages)
+
+
 def test_context_rejects_absolute_code_root(tmp_path: Path) -> None:
     from science_tool.validate.context import ValidateContext, ValidateContextError
 

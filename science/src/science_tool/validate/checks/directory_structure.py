@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
-from science_tool.paths import resolve_paths
+from science_tool.paths import ProjectPaths, resolve_paths
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -54,8 +54,8 @@ def check_directory_structure(ctx: ValidateContext) -> Iterator[Result]:
     yield from _check_overview(ctx)
     yield from _check_research_plan(ctx, profile)
     yield from _check_duplicate_docs(ctx)
-    yield from _check_declared_roots_exist(ctx)
-    yield from _check_legacy_roots(ctx, profile, paths.code_dir.name)
+    yield from _check_declared_roots_exist(ctx, paths)
+    yield from _check_legacy_roots(ctx, profile, paths)
 
 
 def _check_claude(ctx: ValidateContext) -> Iterator[Result]:
@@ -143,8 +143,7 @@ def _check_duplicate_docs(ctx: ValidateContext) -> Iterator[Result]:
         )
 
 
-def _check_declared_roots_exist(ctx: ValidateContext) -> Iterator[Result]:
-    paths = resolve_paths(ctx.project_root)
+def _check_declared_roots_exist(ctx: ValidateContext, paths: ProjectPaths) -> Iterator[Result]:
     for label, roots in (("code_roots", paths.code_roots), ("app_roots", paths.app_roots)):
         for root in roots:
             if root == paths.code_dir:
@@ -154,12 +153,12 @@ def _check_declared_roots_exist(ctx: ValidateContext) -> Iterator[Result]:
                 yield _result(Severity.ERROR, rel, f"Declared {label} directory missing: {rel}/")
 
 
-def _check_legacy_roots(ctx: ValidateContext, profile: str, code_dir_name: str) -> Iterator[Result]:
+def _check_legacy_roots(ctx: ValidateContext, profile: str, paths: ProjectPaths) -> Iterator[Result]:
+    code_dir_name = paths.code_dir.name
     if profile == "research":
-        paths = resolve_paths(ctx.project_root)
-        declared_root_names = {p.name for p in (*paths.code_roots, *paths.app_roots)}
+        declared_roots = {p.relative_to(ctx.project_root).as_posix() for p in (*paths.code_roots, *paths.app_roots)}
         for dirname in ("scripts", "notebooks", "workflow"):
-            if dirname in declared_root_names:
+            if dirname in declared_roots:
                 continue
             if (ctx.project_root / dirname).is_dir():
                 yield _result(

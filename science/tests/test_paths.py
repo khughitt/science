@@ -76,6 +76,12 @@ def test_absolute_or_escaping_roots_rejected(tmp_path: Path) -> None:
         resolve_paths(tmp_path)
 
 
+def test_parent_escaping_root_rejected(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text("name: t\ncode_roots:\n  - ../sibling\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="relative paths inside the project"):
+        resolve_paths(tmp_path)
+
+
 def test_empty_root_rejected(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text("name: t\ncode_roots:\n  - ''\n", encoding="utf-8")
     with pytest.raises(ValueError, match="non-empty"):
