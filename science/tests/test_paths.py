@@ -38,3 +38,50 @@ def test_invalid_profile_fails_fast(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text("name: test\nstatus: active\nprofile: hybrid\n", encoding="utf-8")
     with pytest.raises(ValueError, match="Unsupported project profile"):
         resolve_paths(tmp_path)
+
+
+def test_code_roots_default_to_profile_code_dir(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text("name: t\nprofile: research\n", encoding="utf-8")
+    paths = resolve_paths(tmp_path)
+    assert paths.code_roots == (tmp_path / "code",)
+    assert paths.app_roots == ()
+    assert paths.code_excludes == ()
+    assert paths.code_dir == tmp_path / "code"
+
+
+def test_declared_code_app_roots_and_excludes(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text(
+        "name: t\nprofile: research\n"
+        "code_roots:\n  - code\n  - scripts\n"
+        "app_roots:\n  - app\n"
+        "code_excludes:\n  - '**/vendor/**'\n",
+        encoding="utf-8",
+    )
+    paths = resolve_paths(tmp_path)
+    assert paths.code_roots == (tmp_path / "code", tmp_path / "scripts")
+    assert paths.app_roots == (tmp_path / "app",)
+    assert paths.code_excludes == ("**/vendor/**",)
+    assert paths.code_dir == tmp_path / "code"  # first declared root is canonical
+
+
+def test_code_roots_must_be_list_of_strings(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text("name: t\ncode_roots: code\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="code_roots must be a list of strings"):
+        resolve_paths(tmp_path)
+
+
+def test_absolute_or_escaping_roots_rejected(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text("name: t\ncode_roots:\n  - /etc\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="relative paths inside the project"):
+        resolve_paths(tmp_path)
+
+
+def test_empty_root_rejected(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text("name: t\ncode_roots:\n  - ''\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="non-empty"):
+        resolve_paths(tmp_path)
+
+
+def test_duplicate_roots_deduplicated(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text("name: t\ncode_roots:\n  - code\n  - code\n", encoding="utf-8")
+    assert resolve_paths(tmp_path).code_roots == (tmp_path / "code",)

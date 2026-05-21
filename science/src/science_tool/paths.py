@@ -42,16 +42,43 @@ class ProjectPaths:
     tasks_dir: Path
     templates_dir: Path
     prompts_dir: Path
+    code_roots: tuple[Path, ...] = ()
+    app_roots: tuple[Path, ...] = ()
+    code_excludes: tuple[str, ...] = ()
 
 
-def _resolve_profile(project_root: Path) -> ProjectProfile:
+def _load_manifest(project_root: Path) -> dict:
     yaml_path = project_root / "science.yaml"
     if not yaml_path.is_file():
-        return "research"
-
+        return {}
     with open(yaml_path, encoding="utf-8") as handle:
-        data = yaml.safe_load(handle) or {}
+        return yaml.safe_load(handle) or {}
 
+
+def _str_list(data: dict, key: str) -> list[str]:
+    value = data.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError(f"science.yaml {key} must be a list of strings")
+    return value
+
+
+def _normalize_root_names(data: dict, key: str) -> list[str]:
+    """Validate root entries are non-empty, relative, project-contained, de-duplicated."""
+    normalized: list[str] = []
+    for name in _str_list(data, key):
+        if not name.strip():
+            raise ValueError(f"science.yaml {key} entries must be non-empty relative paths")
+        candidate = Path(name)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            raise ValueError(f"science.yaml {key} entries must be relative paths inside the project: {name!r}")
+        if name not in normalized:
+            normalized.append(name)
+    return normalized
+
+
+def _resolve_profile(data: dict) -> ProjectProfile:
     raw_profile = data.get("profile") or "research"
     if raw_profile not in _CODE_DIR_BY_PROFILE:
         raise ValueError(f"Unsupported project profile: {raw_profile!r}")
@@ -59,14 +86,18 @@ def _resolve_profile(project_root: Path) -> ProjectProfile:
 
 
 def resolve_paths(project_root: Path) -> ProjectPaths:
-    """Resolve canonical paths from the project's declared profile."""
+    """Resolve canonical paths and declared code/app roots from science.yaml."""
 
-    profile = _resolve_profile(project_root)
+    data = _load_manifest(project_root)
+    profile = _resolve_profile(data)
+    declared_code = _normalize_root_names(data, "code_roots")
+    code_root_names = declared_code or [_CODE_DIR_BY_PROFILE[profile]]
+    app_root_names = _normalize_root_names(data, "app_roots")
     return ProjectPaths(
         root=project_root,
         profile=profile,
         doc_dir=project_root / _COMMON_DEFAULTS["doc_dir"],
-        code_dir=project_root / _CODE_DIR_BY_PROFILE[profile],
+        code_dir=project_root / code_root_names[0],
         data_dir=project_root / _COMMON_DEFAULTS["data_dir"],
         models_dir=project_root / _COMMON_DEFAULTS["models_dir"],
         specs_dir=project_root / _COMMON_DEFAULTS["specs_dir"],
@@ -75,4 +106,7 @@ def resolve_paths(project_root: Path) -> ProjectPaths:
         tasks_dir=project_root / _COMMON_DEFAULTS["tasks_dir"],
         templates_dir=project_root / _COMMON_DEFAULTS["templates_dir"],
         prompts_dir=project_root / _COMMON_DEFAULTS["prompts_dir"],
+        code_roots=tuple(project_root / name for name in code_root_names),
+        app_roots=tuple(project_root / name for name in app_root_names),
+        code_excludes=tuple(_str_list(data, "code_excludes")),
     )
