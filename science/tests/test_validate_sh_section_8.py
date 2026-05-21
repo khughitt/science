@@ -72,7 +72,33 @@ def test_registry_changelog_entry_for_shim_transition() -> None:
 
     assert "packaged shim" in entry
     assert "validate_local.py" in entry
-    assert "docs/migration/2026-05-19-validate-local-sh-porting-guide.md" not in entry
+
+
+def test_registry_changelog_has_validate_cli_migration_release_notes() -> None:
+    data = yaml.safe_load(REGISTRY_YAML.read_text(encoding="utf-8"))
+    validate = next(a for a in data["artifacts"] if a["name"] == "validate.sh")
+    changelog = validate["changelog"]
+    design = "docs/superpowers/specs/2026-05-19-validate-cli-migration-design.md"
+    porting_guide = "docs/migration/2026-05-19-validate-local-sh-porting-guide.md"
+
+    phase_1 = changelog["2026.05.19.1"]
+    assert "Phase 1" in phase_1
+    assert "science validate" in phase_1
+    assert "canonical parity" in phase_1
+    assert design in phase_1
+
+    phase_2 = changelog["2026.05.20.1"]
+    assert "Phase 2" in phase_2
+    assert "validate_local.py" in phase_2
+    assert "validate.sh shim" in phase_2
+    assert porting_guide in phase_2
+    assert design in phase_2
+
+    phase_3 = changelog["2026.05.21.1"]
+    assert "Phase 3" in phase_3
+    assert "validate.local.sh" in phase_3
+    assert "hard error" in phase_3
+    assert porting_guide in phase_3
 
 
 def test_registry_extension_protocol_uses_python_sidecar() -> None:
