@@ -9,6 +9,8 @@ from science_tool.validate import Check, Result, Severity, ValidateContext
 from science_tool.validate.checks import clear_checks_for_tests
 from science_tool.validate.runner import clear_hooks_for_tests, run
 
+PORTING_GUIDE = "docs/migration/2026-05-19-validate-local-sh-porting-guide.md"
+
 
 @pytest.fixture(autouse=True)
 def clean_registries() -> Generator[None]:
@@ -81,7 +83,7 @@ def test_python_sidecar_takes_python_path_without_deprecation(tmp_path: Path) ->
     assert [item.rule for item in result.results] == ["canonical", "py"]
 
 
-def test_bash_sidecar_runs_legacy_phases_with_single_deprecation_first(
+def test_bash_sidecar_emits_hard_error_without_running_legacy_hooks(
     tmp_path: Path,
 ) -> None:
     project = _project(tmp_path)
@@ -91,16 +93,15 @@ def test_bash_sidecar_runs_legacy_phases_with_single_deprecation_first(
     result = run(project, strict=False, verbose=False, enable_python_sidecar=True)
 
     assert [item.message for item in result.results] == [
-        "validate.local.sh is deprecated; migrate validation hooks to validate_local.py",
+        f"validate.local.sh is no longer supported; migrate it using {PORTING_GUIDE}",
         "CANONICAL-FIRED",
-        "SH-FIRED",
     ]
-    assert result.results[0].severity is Severity.WARN
-    assert result.results[0].rule == "validate.sidecar.legacy_deprecated"
-    assert result.warnings == 2
+    assert result.results[0].severity is Severity.ERROR
+    assert result.results[0].rule == "validate.sidecar.legacy_removed"
+    assert result.errors == 2
 
 
-def test_python_sidecar_takes_precedence_over_stale_bash_sidecar(
+def test_stale_bash_sidecar_errors_even_when_python_sidecar_exists(
     tmp_path: Path,
 ) -> None:
     project = _project(tmp_path)
@@ -111,16 +112,16 @@ def test_python_sidecar_takes_precedence_over_stale_bash_sidecar(
     result = run(project, strict=False, verbose=False, enable_python_sidecar=True)
 
     assert [item.message for item in result.results] == [
-        "validate.local.sh is deprecated and ignored because validate_local.py takes precedence",
+        f"validate.local.sh is no longer supported; migrate it using {PORTING_GUIDE}",
         "CANONICAL-FIRED",
         "PY-FIRED",
     ]
-    assert result.results[0].severity is Severity.WARN
-    assert result.results[0].rule == "validate.sidecar.legacy_deprecated"
-    assert result.warnings == 2
+    assert result.results[0].severity is Severity.ERROR
+    assert result.results[0].rule == "validate.sidecar.legacy_removed"
+    assert result.errors == 2
 
 
-def test_bash_pre_validation_hook_runs_before_canonical_checks(tmp_path: Path) -> None:
+def test_bash_pre_validation_hook_does_not_run(tmp_path: Path) -> None:
     project = _project(tmp_path)
     _register_canonical_result()
     project.joinpath("validate.local.sh").write_text(
@@ -137,12 +138,14 @@ def test_bash_pre_validation_hook_runs_before_canonical_checks(tmp_path: Path) -
     )
 
     result = run(project, strict=False, verbose=False, enable_python_sidecar=True)
-    messages = [item.message for item in result.results]
 
-    assert messages.index("PRE-FIRED") < messages.index("CANONICAL-FIRED")
+    assert [item.message for item in result.results] == [
+        f"validate.local.sh is no longer supported; migrate it using {PORTING_GUIDE}",
+        "CANONICAL-FIRED",
+    ]
 
 
-def test_bash_extra_checks_hook_runs_after_canonical_checks(tmp_path: Path) -> None:
+def test_bash_extra_checks_hook_does_not_run(tmp_path: Path) -> None:
     project = _project(tmp_path)
     _register_canonical_result()
     project.joinpath("validate.local.sh").write_text(
@@ -159,12 +162,14 @@ def test_bash_extra_checks_hook_runs_after_canonical_checks(tmp_path: Path) -> N
     )
 
     result = run(project, strict=False, verbose=False, enable_python_sidecar=True)
-    messages = [item.message for item in result.results]
 
-    assert messages.index("CANONICAL-FIRED") < messages.index("POST-FIRED")
+    assert [item.message for item in result.results] == [
+        f"validate.local.sh is no longer supported; migrate it using {PORTING_GUIDE}",
+        "CANONICAL-FIRED",
+    ]
 
 
-def test_integrated_bash_sidecar_sources_top_level_once_per_legacy_phase(
+def test_integrated_bash_sidecar_is_never_sourced(
     tmp_path: Path,
 ) -> None:
     project = _project(tmp_path)
@@ -189,19 +194,14 @@ def test_integrated_bash_sidecar_sources_top_level_once_per_legacy_phase(
 
     result = run(project, strict=False, verbose=False, enable_python_sidecar=True)
 
-    assert project.joinpath("source-count.txt").read_text(encoding="utf-8").splitlines() == [
-        "sourced",
-        "sourced",
-    ]
+    assert not project.joinpath("source-count.txt").exists()
     assert [item.message for item in result.results] == [
-        "validate.local.sh is deprecated; migrate validation hooks to validate_local.py",
-        "PRE-FIRED",
+        f"validate.local.sh is no longer supported; migrate it using {PORTING_GUIDE}",
         "CANONICAL-FIRED",
-        "EXTRA-FIRED",
     ]
 
 
-def test_integrated_bash_pre_failure_records_error_and_continues(
+def test_integrated_bash_pre_failure_is_not_executed_and_canonical_checks_continue(
     tmp_path: Path,
 ) -> None:
     project = _project(tmp_path)
@@ -228,16 +228,10 @@ def test_integrated_bash_pre_failure_records_error_and_continues(
     result = run(project, strict=False, verbose=False, enable_python_sidecar=True)
 
     assert [item.message for item in result.results] == [
-        "validate.local.sh is deprecated; migrate validation hooks to validate_local.py",
-        "PRE-FIRED",
-        "legacy sidecar exited with code 23: pre failed",
+        f"validate.local.sh is no longer supported; migrate it using {PORTING_GUIDE}",
         "CANONICAL-FIRED",
-        "EXTRA-FIRED",
     ]
     assert [item.severity for item in result.results] == [
-        Severity.WARN,
-        Severity.WARN,
         Severity.ERROR,
         Severity.ERROR,
-        Severity.WARN,
     ]

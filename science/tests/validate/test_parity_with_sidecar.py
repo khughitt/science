@@ -14,7 +14,6 @@ from science_tool.cli import main
 from test_parity_canonical_body import (
     DiagnosticItem,
     REAL_PROJECTS_CONFIG,
-    _assert_semantic_parity,
     _load_project_paths,
     _resolved_project_paths,
     _run_bash_validate,
@@ -23,7 +22,9 @@ from test_parity_canonical_body import (
 
 
 CopyProject = Callable[[Path], Path]
-_LEGACY_SIDECAR_DEPRECATION_RULE = "validate.sidecar.legacy_deprecated"
+_LEGACY_SIDECAR_REMOVED_RULE = "validate.sidecar.legacy_removed"
+_PORTING_GUIDE = "docs/migration/2026-05-19-validate-local-sh-porting-guide.md"
+_REMOVED_MESSAGE = f"validate.local.sh is no longer supported; migrate it using {_PORTING_GUIDE}"
 
 
 @pytest.fixture
@@ -121,22 +122,27 @@ def _synthetic_project(root: Path, *, severity: str) -> Path:
 
 
 @pytest.mark.parametrize("severity", ["warn", "error"])
-def test_synthetic_legacy_sidecars_match_bash_validate_semantics(
+def test_synthetic_legacy_sidecars_report_phase3_hard_error(
     sidecar_included_copy: CopyProject,
     tmp_path: Path,
     severity: str,
 ) -> None:
     source_project = _synthetic_project(tmp_path / "sources", severity=severity)
+    bash_project = sidecar_included_copy(source_project)
+    python_project = sidecar_included_copy(source_project)
 
-    _assert_sidecar_semantic_parity(
-        source_project,
-        copy_project=sidecar_included_copy,
-        tmp_path=tmp_path,
-        label=source_project.name,
-    )
+    bash_payload = json.loads(_run_bash_validate(bash_project, tmp_path, "--format", "json"))
+    python_payload = _run_cli_validate(python_project)
+
+    assert _phase3_legacy_removed_items(bash_payload) == [
+        ("error", None, None, _REMOVED_MESSAGE),
+    ]
+    assert _phase3_legacy_removed_items(python_payload) == [
+        ("error", None, None, _REMOVED_MESSAGE),
+    ]
 
 
-def test_real_downstream_projects_with_sidecars_match_bash_validate_semantics(
+def test_real_downstream_projects_with_sidecars_report_phase3_hard_error(
     sidecar_included_copy: CopyProject,
     tmp_path: Path,
 ) -> None:
@@ -146,15 +152,20 @@ def test_real_downstream_projects_with_sidecars_match_bash_validate_semantics(
 
     failures: list[str] = []
     for project_path in project_paths:
-        try:
-            _assert_sidecar_semantic_parity(
-                project_path,
-                copy_project=sidecar_included_copy,
-                tmp_path=tmp_path,
-                label=str(project_path),
-            )
-        except AssertionError as exc:
-            failures.append(str(exc))
+        if not project_path.joinpath("validate.local.sh").exists():
+            continue
+        bash_project = sidecar_included_copy(project_path)
+        python_project = sidecar_included_copy(project_path)
+
+        bash_items = _phase3_legacy_removed_items(
+            json.loads(_run_bash_validate(bash_project, tmp_path, "--format", "json"))
+        )
+        python_items = _phase3_legacy_removed_items(_run_cli_validate(python_project))
+        expected_items = [("error", None, None, _REMOVED_MESSAGE)]
+        if bash_items != expected_items:
+            failures.append(f"{project_path} bash hard-error items: {bash_items!r}")
+        if python_items != expected_items:
+            failures.append(f"{project_path} python hard-error items: {python_items!r}")
 
     if failures:
         raise AssertionError("\n\n".join(failures))
@@ -192,7 +203,7 @@ def test_cli_diagnostic_extractor_filters_info_and_normalizes_paths(tmp_path: Pa
     ]
 
 
-def test_cli_validate_uses_bash_parity_environment(
+def test_cli_validate_does_not_execute_legacy_sidecar_environment_checks(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -217,43 +228,45 @@ def test_cli_validate_uses_bash_parity_environment(
     monkeypatch.setenv("SCIENCE_TOOL", "ambient-science")
     monkeypatch.setenv("SCIENCE_TOOL_PATH", "ambient-science-path")
 
-    payload = _without_legacy_deprecation_results(_run_cli_validate(project))
+    payload = _run_cli_validate(project)
     messages = {item[3] for item in _extract_cli_diagnostic_items(payload, project)}
 
+    assert _phase3_legacy_removed_items(payload) == [("error", None, None, _REMOVED_MESSAGE)]
     assert "dotenv was not skipped" not in messages
     assert "tool path leaked into sidecar" not in messages
 
 
-def test_cli_validate_forces_sidecars_on_for_parity(
+def test_cli_validate_hard_errors_despite_ambient_disable_sidecar_env_for_parity_harness(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project = _synthetic_project(tmp_path / "sources", severity="warn")
     monkeypatch.setenv("SCIENCE_VALIDATE_DISABLE_SIDECAR", "1")
 
-    payload = _without_legacy_deprecation_results(_run_cli_validate(project))
+    payload = _run_cli_validate(project)
 
+    assert _phase3_legacy_removed_items(payload) == [("error", None, None, _REMOVED_MESSAGE)]
     assert (
         "warn",
         None,
         None,
         "synthetic warn from validate.local.sh",
-    ) in _extract_cli_diagnostic_items(payload, project)
+    ) not in _extract_cli_diagnostic_items(payload, project)
 
 
-def test_legacy_deprecation_filter_uses_raw_cli_rule_not_message(tmp_path: Path) -> None:
-    message = "validate.local.sh is deprecated; migrate validation hooks to validate_local.py"
+def test_legacy_removed_filter_uses_raw_cli_rule_not_message(tmp_path: Path) -> None:
+    message = _REMOVED_MESSAGE
     payload = {
         "results": [
             {
-                "severity": "warn",
+                "severity": "error",
                 "path": None,
                 "line": None,
                 "message": message,
-                "rule": "validate.sidecar.legacy_deprecated",
+                "rule": "validate.sidecar.legacy_removed",
             },
             {
-                "severity": "warn",
+                "severity": "error",
                 "path": None,
                 "line": None,
                 "message": message,
@@ -262,31 +275,9 @@ def test_legacy_deprecation_filter_uses_raw_cli_rule_not_message(tmp_path: Path)
         ]
     }
 
-    assert _extract_cli_diagnostic_items(_without_legacy_deprecation_results(payload), tmp_path) == [
-        ("warn", None, None, message),
+    assert _extract_cli_diagnostic_items(_without_legacy_removed_results(payload), tmp_path) == [
+        ("error", None, None, message),
     ]
-
-
-def _assert_sidecar_semantic_parity(
-    source_project: Path,
-    *,
-    copy_project: CopyProject,
-    tmp_path: Path,
-    label: str,
-) -> None:
-    bash_project = copy_project(source_project)
-    python_project = copy_project(source_project)
-
-    bash_items = _extract_cli_diagnostic_items(
-        _legacy_sidecar_results(json.loads(_run_bash_validate(bash_project, tmp_path, "--format", "json"))),
-        bash_project,
-    )
-    python_items = _extract_cli_diagnostic_items(
-        _legacy_sidecar_results(_run_cli_validate(python_project)),
-        python_project,
-    )
-
-    _assert_semantic_parity(bash_items, python_items, label=label)
 
 
 def _run_cli_validate(project_root: Path) -> dict[str, Any]:
@@ -312,18 +303,21 @@ def _cli_validate_env() -> dict[str, str | None]:
     }
 
 
-def _without_legacy_deprecation_results(payload: dict[str, Any]) -> dict[str, Any]:
+def _without_legacy_removed_results(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         **payload,
-        "results": [item for item in payload["results"] if item.get("rule") != _LEGACY_SIDECAR_DEPRECATION_RULE],
+        "results": [item for item in payload["results"] if item.get("rule") != _LEGACY_SIDECAR_REMOVED_RULE],
     }
 
 
-def _legacy_sidecar_results(payload: dict[str, Any]) -> dict[str, Any]:
-    return {
-        **payload,
-        "results": [item for item in payload["results"] if item.get("rule") is None],
-    }
+def _phase3_legacy_removed_items(payload: dict[str, Any]) -> list[DiagnosticItem]:
+    return _extract_cli_diagnostic_items(
+        {
+            **payload,
+            "results": [item for item in payload["results"] if item.get("rule") == _LEGACY_SIDECAR_REMOVED_RULE],
+        },
+        Path(),
+    )
 
 
 def _extract_cli_diagnostic_items(payload: dict[str, Any], project_root: Path) -> list[DiagnosticItem]:
