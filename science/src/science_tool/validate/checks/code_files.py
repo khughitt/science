@@ -12,9 +12,11 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+from science_tool.code.classification import classify_code_file
 from science_tool.code.git import last_content_change_date
-from science_tool.code.lifecycle import CODE_FILE_STATUSES
+from science_tool.code.lifecycle import CODE_FILE_STATUSES, ORPHAN_GATING_EXEMPT_STATUSES
 from science_tool.code.metadata import parse_code_metadata
+from science_tool.code.workflow_refs import find_workflow_references
 from science_tool.graph.storage_adapters.code import CodeAdapter
 from science_tool.paths import resolve_paths
 from science_tool.tasks import known_task_ids
@@ -25,6 +27,11 @@ from science_tool.validate.result import Result, Severity
 
 def _result(severity: Severity, rel_path: str, message: str, rule: str) -> Result:
     return Result(severity, Path(rel_path), None, message, rule, None)
+
+
+def _is_workflow_file(rel_path: str) -> bool:
+    name = Path(rel_path).name
+    return name == "Snakefile" or name.endswith(".smk")
 
 
 @Check(section="code files...", order=6)
@@ -39,6 +46,15 @@ def check_code_files(ctx: ValidateContext) -> Iterator[Result]:
     if not refs:
         return
     task_ids = known_task_ids(paths.tasks_dir)
+    code_root_names = tuple(
+        root.relative_to(ctx.project_root).as_posix() for root in paths.code_roots
+    )
+    workflow_files = [
+        ctx.project_root / ref.path for ref in refs if _is_workflow_file(ref.path)
+    ]
+    workflow_refs = find_workflow_references(
+        workflow_files, project_root=ctx.project_root, code_root_names=code_root_names
+    )
     for ref in refs:
         abs_path = ctx.project_root / ref.path
         try:
@@ -74,7 +90,7 @@ def check_code_files(ctx: ValidateContext) -> Iterator[Result]:
                 "code.malformed-block",
             )
             continue
-        yield from _check_valid_block(ctx, ref.path, metadata.fields, task_ids)
+        yield from _check_valid_block(ctx, ref.path, metadata.fields, task_ids, text, workflow_refs)
 
 
 def _check_valid_block(
@@ -82,6 +98,8 @@ def _check_valid_block(
     rel_path: str,
     fields: dict[str, object],
     task_ids: set[str],
+    text: str,
+    workflow_refs: dict[str, list[str]],
 ) -> Iterator[Result]:
     status = str(fields.get("status") or "")
     if status not in CODE_FILE_STATUSES:
@@ -123,4 +141,26 @@ def _check_valid_block(
                 f"(untracked or never committed); freshness will not see it: {rel_path}"
             ),
             "code.uncommitted",
+        )
+
+    raw_decision_bearing = fields.get("decision_bearing")
+    declared_decision_bearing = (
+        raw_decision_bearing if isinstance(raw_decision_bearing, bool) else None
+    )
+    classification = classify_code_file(
+        rel_path,
+        text,
+        declared_decision_bearing=declared_decision_bearing,
+        workflow_referenced=rel_path in workflow_refs,
+    )
+    if (
+        classification.classification == "orphaned-executable"
+        and classification.effective_decision_bearing
+        and status not in ORPHAN_GATING_EXEMPT_STATUSES
+    ):
+        yield _result(
+            Severity.WARN,
+            rel_path,
+            f"Decision-bearing executable not referenced by any workflow (orphaned): {rel_path}",
+            "code.orphaned-executable",
         )

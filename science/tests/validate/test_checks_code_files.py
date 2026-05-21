@@ -211,3 +211,67 @@ def test_committed_valid_block_has_no_uncommitted_finding(tmp_path: Path) -> Non
     ctx = _ctx(tmp_path)
     _commit_all(tmp_path)
     assert "code.uncommitted" not in _by_rule(list(check_code_files(ctx)))
+
+
+def test_orphaned_executable_is_flagged(tmp_path: Path) -> None:
+    (tmp_path / "code").mkdir()
+    (tmp_path / "code" / "run.py").write_text(
+        '# science:code\n# status: workflow-owned\n# science:end\n'
+        'if __name__ == "__main__":\n    pass\n',
+        encoding="utf-8",
+    )
+    ctx = _ctx(tmp_path)
+    _commit_all(tmp_path)
+    by_rule = _by_rule(list(check_code_files(ctx)))
+    assert len(by_rule["code.orphaned-executable"]) == 1
+    assert by_rule["code.orphaned-executable"][0].severity is Severity.WARN
+
+
+def test_workflow_referenced_executable_is_not_orphan(tmp_path: Path) -> None:
+    (tmp_path / "code" / "workflows").mkdir(parents=True)
+    (tmp_path / "code" / "run.py").write_text(
+        '# science:code\n# status: workflow-owned\n# science:end\n'
+        'if __name__ == "__main__":\n    pass\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "code" / "workflows" / "main.smk").write_text(
+        'rule r:\n    script:\n        "../run.py"\n', encoding="utf-8"
+    )
+    ctx = _ctx(tmp_path)
+    _commit_all(tmp_path)
+    assert "code.orphaned-executable" not in _by_rule(list(check_code_files(ctx)))
+
+
+def test_exploratory_executable_is_exempt_from_orphan(tmp_path: Path) -> None:
+    (tmp_path / "code").mkdir()
+    (tmp_path / "code" / "run.py").write_text(
+        '# science:code\n# status: exploratory\n# science:end\n'
+        'if __name__ == "__main__":\n    pass\n',
+        encoding="utf-8",
+    )
+    ctx = _ctx(tmp_path)
+    _commit_all(tmp_path)
+    assert "code.orphaned-executable" not in _by_rule(list(check_code_files(ctx)))
+
+
+def test_declared_non_decision_bearing_executable_is_not_orphan(tmp_path: Path) -> None:
+    (tmp_path / "code").mkdir()
+    (tmp_path / "code" / "run.py").write_text(
+        '# science:code\n# status: workflow-owned\n# decision_bearing: false\n# science:end\n'
+        'if __name__ == "__main__":\n    pass\n',
+        encoding="utf-8",
+    )
+    ctx = _ctx(tmp_path)
+    _commit_all(tmp_path)
+    assert "code.orphaned-executable" not in _by_rule(list(check_code_files(ctx)))
+
+
+def test_library_valid_block_is_not_orphan(tmp_path: Path) -> None:
+    (tmp_path / "code").mkdir()
+    (tmp_path / "code" / "lib.py").write_text(
+        '# science:code\n# status: library\n# science:end\ndef f():\n    return 1\n',
+        encoding="utf-8",
+    )
+    ctx = _ctx(tmp_path)
+    _commit_all(tmp_path)
+    assert "code.orphaned-executable" not in _by_rule(list(check_code_files(ctx)))
