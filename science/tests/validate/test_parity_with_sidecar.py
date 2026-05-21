@@ -1,21 +1,24 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import json
 from pathlib import Path
 import shutil
+from typing import Any
 
+from click.testing import CliRunner
 import pytest
 
+from science_tool.cli import main
 from test_parity_canonical_body import (
     DiagnosticItem,
     REAL_PROJECTS_CONFIG,
     _assert_semantic_parity,
     _extract_bash_diagnostic_items,
-    _extract_python_diagnostic_items,
     _load_project_paths,
     _resolved_project_paths,
     _run_bash_validate,
-    _run_python_validate,
+    _sort_diagnostic_items,
 )
 
 
@@ -160,6 +163,38 @@ def test_real_downstream_projects_with_sidecars_match_bash_validate_semantics(
         raise AssertionError("\n\n".join(failures))
 
 
+def test_cli_diagnostic_extractor_filters_info_and_normalizes_paths(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    payload = {
+        "results": [
+            {
+                "severity": "info",
+                "path": None,
+                "line": None,
+                "message": "advisory chatter",
+            },
+            {
+                "severity": "warn",
+                "path": str(project_root / "doc" / "a.md"),
+                "line": 7,
+                "message": "doc/a.md missing section",
+            },
+            {
+                "severity": "error",
+                "path": "tasks/active.md",
+                "line": None,
+                "message": "task t001 missing field",
+            },
+        ]
+    }
+
+    assert _extract_cli_diagnostic_items(payload, project_root) == [
+        ("error", "tasks/active.md", None, "task t001 missing field"),
+        ("warn", "doc/a.md", 7, "doc/a.md missing section"),
+    ]
+
+
 def _assert_sidecar_semantic_parity(
     source_project: Path,
     *,
@@ -172,10 +207,48 @@ def _assert_sidecar_semantic_parity(
 
     bash_items = _extract_bash_diagnostic_items(_run_bash_validate(bash_project, tmp_path))
     python_items = _without_python_only_sidecar_notices(
-        _extract_python_diagnostic_items(_run_python_validate(python_project), python_project)
+        _extract_cli_diagnostic_items(_run_cli_validate(python_project), python_project)
     )
 
     _assert_semantic_parity(bash_items, python_items, label=label)
+
+
+def _run_cli_validate(project_root: Path) -> dict[str, Any]:
+    result = CliRunner().invoke(
+        main,
+        ["validate", "--format", "json", "--project-root", str(project_root)],
+    )
+    if result.exit_code not in {0, 1}:
+        raise AssertionError(f"science validate exited {result.exit_code}\n{result.output}")
+    return dict(json.loads(result.output))
+
+
+def _extract_cli_diagnostic_items(payload: dict[str, Any], project_root: Path) -> list[DiagnosticItem]:
+    items: list[DiagnosticItem] = []
+    for item in payload["results"]:
+        if item["severity"] == "info":
+            continue
+        items.append(
+            (
+                item["severity"],
+                _normalize_cli_path(item["path"], project_root),
+                item["line"],
+                item["message"],
+            )
+        )
+    return _sort_diagnostic_items(items)
+
+
+def _normalize_cli_path(path: str | None, project_root: Path) -> str | None:
+    if path is None:
+        return None
+    result_path = Path(path)
+    if result_path.is_absolute():
+        try:
+            return result_path.relative_to(project_root).as_posix()
+        except ValueError:
+            return result_path.as_posix()
+    return result_path.as_posix()
 
 
 def _without_python_only_sidecar_notices(items: list[DiagnosticItem]) -> list[DiagnosticItem]:
