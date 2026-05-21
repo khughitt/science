@@ -225,6 +225,23 @@ def test_cli_validate_uses_bash_parity_environment(
     assert "tool path leaked into sidecar" not in messages
 
 
+def test_cli_validate_forces_sidecars_on_for_parity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = _synthetic_project(tmp_path / "sources", severity="warn")
+    monkeypatch.setenv("SCIENCE_VALIDATE_DISABLE_SIDECAR", "1")
+
+    payload = _without_legacy_deprecation_results(_run_cli_validate(project))
+
+    assert (
+        "warn",
+        None,
+        None,
+        "synthetic warn from validate.local.sh",
+    ) in _extract_cli_diagnostic_items(payload, project)
+
+
 def test_legacy_deprecation_filter_uses_raw_cli_rule_not_message(tmp_path: Path) -> None:
     message = "validate.local.sh is deprecated; migrate validation hooks to validate_local.py"
     payload = {
@@ -278,12 +295,15 @@ def _run_cli_validate(project_root: Path) -> dict[str, Any]:
     )
     if result.exit_code not in {0, 1}:
         raise AssertionError(f"science validate exited {result.exit_code}\n{result.output}")
+    if result.exception is not None and not isinstance(result.exception, SystemExit):
+        raise AssertionError(f"science validate raised {result.exception!r}\n{result.output}") from result.exception
     return dict(json.loads(result.output))
 
 
 def _cli_validate_env() -> dict[str, str | None]:
     return {
         "PATH": os.pathsep.join(["/bin", "/usr/sbin", "/sbin"]),
+        "SCIENCE_VALIDATE_DISABLE_SIDECAR": None,
         "SCIENCE_VALIDATE_SKIP_DOTENV": "1",
         "SCIENCE_TOOL": None,
         "SCIENCE_TOOL_PATH": None,
