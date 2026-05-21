@@ -72,10 +72,18 @@ class CodeAdapter(StorageAdapter):
         return path.suffix in _CODE_SUFFIXES or path.name == "Snakefile"
 
     def _local_id(self, rel_path: str) -> str:
-        for root in self._code_roots:
-            root_rel = root.relative_to(self._repo_root).as_posix()
+        # Longest-prefix match: if one declared root is nested under another
+        # (e.g. `code` and `code/stages`), strip against the most specific one so
+        # the id is deterministic regardless of declaration order.
+        roots_by_specificity = sorted(
+            (root.relative_to(self._repo_root).as_posix() for root in self._code_roots),
+            key=len,
+            reverse=True,
+        )
+        for root_rel in roots_by_specificity:
             if rel_path == root_rel:
                 return Path(rel_path).name
             if rel_path.startswith(root_rel + "/"):
                 return rel_path[len(root_rel) + 1 :]
+        # Fallback: path is outside all declared roots; use it as-is.
         return rel_path

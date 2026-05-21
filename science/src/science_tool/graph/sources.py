@@ -38,9 +38,9 @@ from science_tool.graph.entity_registry import EntityKindNotRegisteredError, Ent
 from science_tool.graph.errors import EntityIdentityCollisionError
 from science_tool.graph.storage_adapters.aggregate import AggregateAdapter
 from science_tool.graph.storage_adapters.base import StorageAdapter
+from science_tool.graph.storage_adapters.code import CodeAdapter
 from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
-from science_tool.graph.storage_adapters.code import CodeAdapter
 from science_tool.graph.storage_adapters.task import TaskAdapter
 from science_tool.graph.storage_adapters.workflow_run import WorkflowRunAdapter
 from science_tool.paths import resolve_paths
@@ -300,8 +300,6 @@ def load_project_sources(
 
     # Legacy model/parameter loaders from knowledge/sources/<local>/{models,parameters}.yaml.
     # Produce ProjectEntity records through the registry so they join the same pipeline.
-    paths = resolve_paths(project_root)
-    del paths  # unused; kept to document intent
     typed_record_cache: _TypedRecordCache = {}
     for entity, ref in _load_legacy_records(
         project_root,
