@@ -244,7 +244,15 @@ class Entity(BaseModel):
         # Closed list of clearly-non-epistemic core kinds. Avoids registry
         # coupling at the science-model layer while still rejecting the
         # high-confidence cases.
-        non_epistemic = {"task", "dataset", "workflow-run", "data-package", "paper", "experiment", "code-file"}
+        non_epistemic = {
+            "task",
+            "dataset",
+            "workflow-run",
+            "data-package",
+            "paper",
+            "experiment",
+            "code-file",
+        }
         if self.review_state is not None and self.kind in non_epistemic:
             raise ValueError(f"review_state is not allowed on kind {self.kind!r} (non-epistemic by design)")
         return self
