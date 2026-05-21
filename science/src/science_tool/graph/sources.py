@@ -40,6 +40,7 @@ from science_tool.graph.storage_adapters.aggregate import AggregateAdapter
 from science_tool.graph.storage_adapters.base import StorageAdapter
 from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
+from science_tool.graph.storage_adapters.code import CodeAdapter
 from science_tool.graph.storage_adapters.task import TaskAdapter
 from science_tool.graph.storage_adapters.workflow_run import WorkflowRunAdapter
 from science_tool.paths import resolve_paths
@@ -204,12 +205,18 @@ def load_project_sources(
                 entity_class=_resolve_entity_class(entity_kind.entity_class, EntityClass.OPERATIONAL),
             )
 
+    project_paths = resolve_paths(project_root)
     adapters: list[StorageAdapter] = [
         MarkdownAdapter(virtual_files=markdown_overrides),
         AggregateAdapter(local_profile=local_profile),
         DatapackageAdapter(),
         WorkflowRunAdapter(),
         TaskAdapter(),
+        CodeAdapter(
+            code_roots=project_paths.code_roots,
+            repo_root=project_root,
+            excludes=project_paths.code_excludes,
+        ),
     ]
 
     project_slug = project_root.name
