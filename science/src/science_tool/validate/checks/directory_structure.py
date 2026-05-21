@@ -54,6 +54,7 @@ def check_directory_structure(ctx: ValidateContext) -> Iterator[Result]:
     yield from _check_overview(ctx)
     yield from _check_research_plan(ctx, profile)
     yield from _check_duplicate_docs(ctx)
+    yield from _check_declared_roots_exist(ctx)
     yield from _check_legacy_roots(ctx, profile, paths.code_dir.name)
 
 
@@ -142,9 +143,24 @@ def _check_duplicate_docs(ctx: ValidateContext) -> Iterator[Result]:
         )
 
 
+def _check_declared_roots_exist(ctx: ValidateContext) -> Iterator[Result]:
+    paths = resolve_paths(ctx.project_root)
+    for label, roots in (("code_roots", paths.code_roots), ("app_roots", paths.app_roots)):
+        for root in roots:
+            if root == paths.code_dir:
+                continue
+            if not root.is_dir():
+                rel = root.relative_to(ctx.project_root).as_posix()
+                yield _result(Severity.ERROR, rel, f"Declared {label} directory missing: {rel}/")
+
+
 def _check_legacy_roots(ctx: ValidateContext, profile: str, code_dir_name: str) -> Iterator[Result]:
     if profile == "research":
+        paths = resolve_paths(ctx.project_root)
+        declared_root_names = {p.name for p in (*paths.code_roots, *paths.app_roots)}
         for dirname in ("scripts", "notebooks", "workflow"):
+            if dirname in declared_root_names:
+                continue
             if (ctx.project_root / dirname).is_dir():
                 yield _result(
                     Severity.WARN,

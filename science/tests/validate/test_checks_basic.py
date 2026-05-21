@@ -748,6 +748,33 @@ def test_hypotheses_ignores_malformed_frontmatter_in_hypothesis_file(tmp_path: P
     assert "Checking specs/hypotheses/h1.md..." in _messages(results)
 
 
+def test_declared_code_root_not_flagged_as_legacy(tmp_path: Path) -> None:
+    from science_tool.validate.checks.directory_structure import check_directory_structure
+
+    ctx = _ctx(tmp_path, profile="research", extra_manifest="code_roots:\n  - code\n  - scripts")
+    (tmp_path / "scripts").mkdir()
+    messages = _messages(check_directory_structure(ctx))
+    assert not any("Legacy top-level execution root detected: scripts" in m for m in messages)
+
+
+def test_undeclared_scripts_still_flagged_as_legacy(tmp_path: Path) -> None:
+    from science_tool.validate.checks.directory_structure import check_directory_structure
+
+    ctx = _ctx(tmp_path, profile="research")
+    (tmp_path / "scripts").mkdir()
+    messages = _messages(check_directory_structure(ctx))
+    assert any("Legacy top-level execution root detected: scripts" in m for m in messages)
+
+
+def test_missing_declared_code_root_is_error(tmp_path: Path) -> None:
+    from science_tool.validate.checks.directory_structure import check_directory_structure
+
+    ctx = _ctx(tmp_path, profile="research", extra_manifest="code_roots:\n  - code\n  - scripst")
+    (tmp_path / "code").mkdir()
+    messages = _messages(check_directory_structure(ctx))
+    assert any("Declared code_roots directory missing: scripst/" in m for m in messages)
+
+
 def test_context_rejects_absolute_code_root(tmp_path: Path) -> None:
     from science_tool.validate.context import ValidateContext, ValidateContextError
 
