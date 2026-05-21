@@ -4,7 +4,7 @@
 
 **Goal:** Make source-code files under declared roots first-class `code-file` entities carrying a content-derived `updated` date, declare `code_roots`/`app_roots`/`code_excludes` in `science.yaml`, and add the `implements`/`defines` relation vocabulary.
 
-**Architecture:** Add a `code-file` kind across the three synced touch points the registry requires (the `EntityType` enum, the core profile manifest, and the `EntityRegistry`), backed by a small `CodeFileEntity` subclass. Topology is read in the single `paths.py` chokepoint. A new `CodeAdapter` storage adapter discovers code files, parses a co-located `# science:code … # science:end` block, derives the entity id/title from the path, and sets `updated` to the file's last content-changing git commit date — which the freshness engine consumes with **zero engine changes** (it reads `entity.updated`, a `date`). This plan does **not** create `bears_on` edges, so code edits do not yet propagate to findings — that is Plan C. Plan A's freshness deliverable is solely that the entity carries the correct content-derived `updated`. Task ids are stored as a `CodeFileEntity` field (not in `related`) so a typo cannot hard-fail `graph materialize`; validating them is a Plan B concern.
+**Architecture:** Add a `code-file` kind across the three synced touch points the registry requires (the `EntityType` enum, the core profile manifest, and the `EntityRegistry`), backed by a small `CodeFileEntity` subclass. Topology is read in the single `paths.py` chokepoint. A new `CodeAdapter` storage adapter discovers code files, parses a co-located `# science:code … # science:end` block, derives the entity id/title from the path, and sets `updated` to the file's last content-changing git commit date — which the freshness engine consumes with **zero engine changes** (it reads `entity.updated`, a `date`). This plan does **not** create `bears_on` edges, so code edits do not yet propagate to findings — that is Plan C. Plan A's freshness deliverable is solely that the entity carries the correct content-derived `updated`. Task ids are stored as a `CodeFileEntity` field (not in `related`) so a typo cannot hard-fail `graph materialize`; validating them is a Plan B concern. `updated` uses **commit-only semantics**: it is the date of the last commit that touched the file, so uncommitted working-tree edits are not reflected until committed (the graph reflects committed state); a blocked-but-uncommitted file yields `updated=None`, which Plan B flags rather than letting it silently drop from freshness. **`app_roots` is topology-only here** — declared so the research/non-research boundary is known (exempting `app/` from legacy-root warnings and getting it existence-validated), but it is *not* scanned and its files do not become entities. The metadata-block parser returns a three-state result (absent / valid / invalid-with-error), parsing the body as YAML after stripping `#` prefixes, so Plan B can tell a ghost from a malformed block; non-`#` comment languages are out of scope while `app_roots` is unscanned.
 
 **Tech Stack:** Python 3.12+, pydantic v2, two `uv` packages — `science-model` (in `science/model/`, tests in `science/model/tests/`) and `science_tool` (in `science/`, tests in `science/tests/`). Entities flow `StorageAdapter.discover() → load_raw() (raw dict) → registry.resolve(kind).model_validate(raw)`; records returning no `kind` are silently skipped (`sources.py:238-243`). `git` CLI is available. Run model tests with `cd science/model && uv run pytest …`; tool tests with `cd science && uv run pytest …`.
 
@@ -342,6 +342,23 @@ def test_code_roots_must_be_list_of_strings(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text("name: t\ncode_roots: code\n", encoding="utf-8")
     with pytest.raises(ValueError, match="code_roots must be a list of strings"):
         resolve_paths(tmp_path)
+
+
+def test_absolute_or_escaping_roots_rejected(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text("name: t\ncode_roots:\n  - /etc\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="relative paths inside the project"):
+        resolve_paths(tmp_path)
+
+
+def test_empty_root_rejected(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text("name: t\ncode_roots:\n  - ''\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="non-empty"):
+        resolve_paths(tmp_path)
+
+
+def test_duplicate_roots_deduplicated(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text("name: t\ncode_roots:\n  - code\n  - code\n", encoding="utf-8")
+    assert resolve_paths(tmp_path).code_roots == (tmp_path / "code",)
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -377,6 +394,20 @@ def _str_list(data: dict, key: str) -> list[str]:
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise ValueError(f"science.yaml {key} must be a list of strings")
     return value
+
+
+def _normalize_root_names(data: dict, key: str) -> list[str]:
+    """Validate root entries are non-empty, relative, project-contained, de-duplicated."""
+    normalized: list[str] = []
+    for name in _str_list(data, key):
+        if not name.strip():
+            raise ValueError(f"science.yaml {key} entries must be non-empty relative paths")
+        candidate = Path(name)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            raise ValueError(f"science.yaml {key} entries must be relative paths inside the project: {name!r}")
+        if name not in normalized:
+            normalized.append(name)
+    return normalized
 ```
 
 Change `_resolve_profile` to take parsed data instead of re-reading the file:
@@ -397,9 +428,9 @@ def resolve_paths(project_root: Path) -> ProjectPaths:
 
     data = _load_manifest(project_root)
     profile = _resolve_profile(data)
-    declared_code = _str_list(data, "code_roots")
+    declared_code = _normalize_root_names(data, "code_roots")
     code_root_names = declared_code or [_CODE_DIR_BY_PROFILE[profile]]
-    app_root_names = _str_list(data, "app_roots")
+    app_root_names = _normalize_root_names(data, "app_roots")
     return ProjectPaths(
         root=project_root,
         profile=profile,
@@ -458,6 +489,14 @@ def test_manifest_accepts_list_code_roots(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path, extra_manifest="code_roots:\n  - code\n  - scripts")
     messages = _messages(check_manifest(ctx))
     assert not any("code_roots must be a list" in m for m in messages)
+
+
+def test_manifest_rejects_absolute_or_escaping_root(tmp_path: Path) -> None:
+    from science_tool.validate.checks.manifest import check_manifest
+
+    ctx = _ctx(tmp_path, extra_manifest="code_roots:\n  - /etc")
+    messages = _messages(check_manifest(ctx))
+    assert any("must be relative paths inside the project" in m for m in messages)
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -472,9 +511,24 @@ In `check_manifest`, immediately after the `ontologies` block (after line 48, be
 ```python
     for field_name in ("code_roots", "app_roots", "code_excludes"):
         value = ctx.manifest.get(field_name)
-        if value is not None and not (isinstance(value, list) and all(isinstance(item, str) for item in value)):
+        if value is None:
+            continue
+        if not (isinstance(value, list) and all(isinstance(item, str) for item in value)):
             yield _result(Severity.ERROR, f"science.yaml {field_name} must be a list of strings")
             return
+
+    for field_name in ("code_roots", "app_roots"):
+        for entry in ctx.manifest.get(field_name) or []:
+            if not entry.strip():
+                yield _result(Severity.ERROR, f"science.yaml {field_name} entries must be non-empty")
+                return
+            entry_path = Path(entry)
+            if entry_path.is_absolute() or ".." in entry_path.parts:
+                yield _result(
+                    Severity.ERROR,
+                    f"science.yaml {field_name} entries must be relative paths inside the project: {entry!r}",
+                )
+                return
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -518,6 +572,15 @@ def test_undeclared_scripts_still_flagged_as_legacy(tmp_path: Path) -> None:
     (tmp_path / "scripts").mkdir()
     messages = _messages(check_directory_structure(ctx))
     assert any("Legacy top-level execution root detected: scripts" in m for m in messages)
+
+
+def test_missing_declared_code_root_is_error(tmp_path: Path) -> None:
+    from science_tool.validate.checks.directory_structure import check_directory_structure
+
+    ctx = _ctx(tmp_path, profile="research", extra_manifest="code_roots:\n  - code\n  - scripst")
+    (tmp_path / "code").mkdir()
+    messages = _messages(check_directory_structure(ctx))
+    assert any("Declared code_roots directory missing: scripst/" in m for m in messages)
 ```
 
 - [ ] **Step 2: Run tests to verify the first fails**
@@ -549,6 +612,26 @@ In the research-profile legacy loop, skip declared names:
                 )
 ```
 
+Also add a **declared-roots existence** check so a typo'd root is a hard error rather than silent absence (no entities, no failure). In `check_directory_structure`, after the existing required-dirs loop, add:
+
+```python
+    yield from _check_declared_roots_exist(ctx)
+```
+
+and define the helper (the canonical code dir is skipped because the required-dirs loop already reports it):
+
+```python
+def _check_declared_roots_exist(ctx: ValidateContext) -> Iterator[Result]:
+    paths = resolve_paths(ctx.project_root)
+    for label, roots in (("code_roots", paths.code_roots), ("app_roots", paths.app_roots)):
+        for root in roots:
+            if root == paths.code_dir:
+                continue
+            if not root.is_dir():
+                rel = root.relative_to(ctx.project_root).as_posix()
+                yield _result(Severity.ERROR, rel, f"Declared {label} directory missing: {rel}/")
+```
+
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run pytest tests/validate/test_checks_basic.py -k legacy -q`
@@ -578,11 +661,14 @@ Create `science/tests/test_code_metadata.py`:
 from science_tool.code.metadata import parse_code_metadata
 
 
-def test_returns_none_without_block() -> None:
-    assert parse_code_metadata("print('hi')\n") is None
+def test_absent_when_no_block() -> None:
+    result = parse_code_metadata("print('hi')\n")
+    assert result.present is False
+    assert result.fields is None
+    assert result.valid is False
 
 
-def test_extracts_fields_and_coerces_values() -> None:
+def test_parses_valid_block_with_yaml_types() -> None:
     text = (
         "# science:code\n"
         "# task_ids: [t491, t528]\n"
@@ -591,20 +677,34 @@ def test_extracts_fields_and_coerces_values() -> None:
         "# science:end\n"
         "print(1)\n"
     )
-    assert parse_code_metadata(text) == {
+    result = parse_code_metadata(text)
+    assert result.valid is True
+    assert result.fields == {
         "task_ids": ["t491", "t528"],
         "decision_bearing": True,
         "status": "workflow-owned",
     }
 
 
-def test_works_for_r_and_shell_hash_comments() -> None:
-    text = "## science:code\n## status: library\n## science:end\n"
-    assert parse_code_metadata(text) == {"status": "library"}
+def test_empty_block_is_valid_empty_mapping() -> None:
+    result = parse_code_metadata("# science:code\n# science:end\n")
+    assert result.valid is True
+    assert result.fields == {}
 
 
-def test_empty_block_returns_empty_dict() -> None:
-    assert parse_code_metadata("# science:code\n# science:end\n") == {}
+def test_unterminated_block_is_invalid_with_error() -> None:
+    result = parse_code_metadata("# science:code\n# status: library\n")
+    assert result.present is True
+    assert result.fields is None
+    assert "unterminated" in (result.error or "")
+
+
+def test_non_mapping_block_is_invalid() -> None:
+    text = "# science:code\n# - just\n# - a list\n# science:end\n"
+    result = parse_code_metadata(text)
+    assert result.present is True
+    assert result.fields is None
+    assert result.error is not None
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -627,53 +727,72 @@ Create `science/src/science_tool/code/metadata.py`:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
+
+import yaml
 
 _START = "science:code"
 _END = "science:end"
 
 
-def parse_code_metadata(text: str) -> dict[str, Any] | None:
-    """Return the parsed metadata dict, or None when no block is present.
+@dataclass(frozen=True)
+class CodeMetadata:
+    """Three-state result of parsing a code file's metadata block.
 
-    The block is delimited by a line containing `science:code` and a line
-    containing `science:end`. Between them, `# key: value` lines are parsed;
-    a leading run of `#` and surrounding whitespace is stripped. Works for
-    any `#`-comment language (Python, R, shell, Snakemake).
+    - absent: `present is False` (no block at all) — a ghost in Plan B.
+    - invalid: `present is True` and `fields is None` with `error` set
+      (unterminated, non-mapping, or malformed YAML) — a malformed block in Plan B.
+    - valid: `present is True` and `fields` is the parsed mapping.
+    """
+
+    present: bool
+    fields: dict[str, Any] | None
+    error: str | None
+
+    @property
+    def valid(self) -> bool:
+        return self.present and self.fields is not None and self.error is None
+
+
+def _strip_comment(line: str) -> str:
+    body = line.lstrip().lstrip("#")
+    return body[1:] if body.startswith(" ") else body
+
+
+def parse_code_metadata(text: str) -> CodeMetadata:
+    """Parse the `# science:code … # science:end` block into a CodeMetadata.
+
+    The body is parsed as YAML after stripping a leading run of `#` and one
+    space per line, so values get proper types (lists, bools). Works for any
+    `#`-comment language in scope (Python, R, shell, Snakemake); non-`#`
+    languages are out of scope while app_roots is unscanned.
     """
     if _START not in text:
-        return None
+        return CodeMetadata(present=False, fields=None, error=None)
+    body_lines: list[str] = []
     inside = False
-    metadata: dict[str, Any] = {}
+    terminated = False
     for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if _END in line:
-            return metadata
-        if _START in line:
+        if _END in raw_line:
+            terminated = True
+            break
+        if _START in raw_line:
             inside = True
             continue
-        if not inside:
-            continue
-        line = line.lstrip("#").strip()
-        if ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        metadata[key.strip()] = _coerce(value.strip())
-    return metadata
-
-
-def _coerce(value: str) -> Any:
-    lowered = value.lower()
-    if lowered == "true":
-        return True
-    if lowered == "false":
-        return False
-    if value.startswith("[") and value.endswith("]"):
-        body = value[1:-1].strip()
-        if not body:
-            return []
-        return [part.strip().strip("\"'") for part in body.split(",")]
-    return value.strip("\"'")
+        if inside:
+            body_lines.append(_strip_comment(raw_line))
+    if not terminated:
+        return CodeMetadata(present=True, fields=None, error="unterminated science:code block (missing science:end)")
+    try:
+        loaded = yaml.safe_load("\n".join(body_lines)) if body_lines else {}
+    except yaml.YAMLError as exc:
+        return CodeMetadata(present=True, fields=None, error=f"invalid YAML in science:code block: {exc}")
+    if loaded is None:
+        loaded = {}
+    if not isinstance(loaded, dict):
+        return CodeMetadata(present=True, fields=None, error="science:code block must be a mapping of fields")
+    return CodeMetadata(present=True, fields={str(k): v for k, v in loaded.items()}, error=None)
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -752,8 +871,11 @@ from pathlib import Path
 def last_content_change_date(rel_path: str, *, repo_root: Path) -> date | None:
     """Date of the last commit that changed `rel_path` (committer date).
 
-    Returns None when the file is untracked, has no commits, or git is
-    unavailable — callers leave `updated` unset in that case.
+    Commit-only semantics: uncommitted working-tree edits are NOT reflected
+    until committed (the graph reflects committed state). Returns None when
+    the file is untracked, has no commits, or git is unavailable; rather than
+    letting such a registered file silently vanish from freshness, Plan B
+    validates that every registered code-file has a committed content date.
     """
     try:
         completed = subprocess.run(
@@ -862,6 +984,23 @@ def test_load_raw_builds_code_file_record(tmp_path: Path) -> None:
     assert raw["decision_bearing"] is True
     assert raw["task_ids"] == ["t491"]
     assert raw["file_path"] == "code/stages/run.py"
+
+
+def test_load_raw_invalid_block_returns_no_kind(tmp_path: Path) -> None:
+    import os
+
+    from science_model.source_ref import SourceRef
+
+    (tmp_path / "code").mkdir()
+    # unterminated block -> invalid -> skipped (Plan B diagnoses the malformed block)
+    (tmp_path / "code" / "x.py").write_text("# science:code\n# status: library\nprint(1)\n", encoding="utf-8")
+    prev = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        raw = _adapter(tmp_path).load_raw(SourceRef(adapter_name="code-file", path="code/x.py"))
+    finally:
+        os.chdir(prev)
+    assert "kind" not in raw
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -923,18 +1062,21 @@ class CodeAdapter(StorageAdapter):
         path = Path(ref.path)
         abs_path = path if path.is_absolute() else Path.cwd() / path
         metadata = parse_code_metadata(abs_path.read_text(errors="replace"))
-        if metadata is None:
-            return {"file_path": ref.path}  # no kind -> skipped by loader (ghost)
+        if not metadata.valid:
+            # absent OR invalid block -> no kind -> skipped by the loader.
+            # Plan B distinguishes the two (ghost vs malformed) via metadata.error.
+            return {"file_path": ref.path}
+        fields = metadata.fields or {}
         local_id = self._local_id(ref.path)
         canonical_id = f"code-file:{local_id}"
-        raw_task_ids = metadata.get("task_ids")
+        raw_task_ids = fields.get("task_ids")
         return {
             "id": canonical_id,
             "canonical_id": canonical_id,
             "kind": "code-file",
             "title": local_id,
-            "status": str(metadata.get("status") or ""),
-            "decision_bearing": bool(metadata.get("decision_bearing", False)),
+            "status": str(fields.get("status") or ""),
+            "decision_bearing": bool(fields.get("decision_bearing", False)),
             "task_ids": [str(t) for t in raw_task_ids] if isinstance(raw_task_ids, list) else [],
             "updated": last_content_change_date(ref.path, repo_root=self._repo_root),
             "content_preview": "",
@@ -1084,7 +1226,7 @@ git commit -m "feat(graph): register CodeAdapter in load_project_sources"
 
 **Files:**
 - Test: both packages
-- Modify: `science/docs/plans/2026-05-21-code-file-entity-model-and-topology-plan.md` (mark complete) — optional
+- Modify: `docs/plans/2026-05-21-code-file-entity-model-and-topology-plan.md` (mark complete) — optional
 
 - [ ] **Step 1: Run the model suite**
 
@@ -1107,9 +1249,10 @@ git commit -m "test: green full suite for code-file entity model + topology (Pla
 
 ## What Plan A deliberately leaves to Plan B
 
-- Ghost detection (a tree-walk `@Check` flagging in-scope files with no block), classification (workflow-owned / orphaned / library / test / package-marker), the ported Snakemake reference parser (cross-file symbol table, rule-block splitting, wildcard glob), hardcoded-path and metadata-gap detection.
+- Ghost vs. malformed-block detection: a tree-walk `@Check` using the parser's three states — a file with `present is False` is a ghost; `present is True, fields is None` is a malformed block reported with its `error`. Plus classification (workflow-owned / orphaned / library / test / package-marker), the ported Snakemake reference parser (cross-file symbol table, rule-block splitting, wildcard glob), and hardcoded-path / metadata-gap detection.
 - The staged `--fail-on` gate ladder at the CLI exit layer (keyed on `Result.rule`, leaving the `Result` dataclass and JSON schema untouched).
 - Validating `code-file.task_ids` resolve to real tasks (a gateable Result, per the fragility firewall).
+- Validating that every registered code-file has a committed content date — flagging files with a block but `updated is None` (untracked / never committed), so commit-only semantics never silently drop a source from freshness.
 
 Plan A treats a Snakefile as a code-file and establishes the `defines`/`implements` relation *vocabulary*, but creates no edges; it also leaves the existing `workflow`/`workflow-step`/`workflow-run` kinds unchanged (they need no new fields to serve as relation targets).
 
