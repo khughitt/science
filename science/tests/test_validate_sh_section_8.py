@@ -78,7 +78,7 @@ def test_registry_changelog_has_validate_cli_migration_release_notes() -> None:
     data = yaml.safe_load(REGISTRY_YAML.read_text(encoding="utf-8"))
     validate = next(a for a in data["artifacts"] if a["name"] == "validate.sh")
     changelog = validate["changelog"]
-    design = "docs/superpowers/specs/2026-05-19-validate-cli-migration-design.md"
+    design = "docs/plans/2026-05-19-validate-cli-migration-design.md"
     porting_guide = "docs/migration/2026-05-19-validate-local-sh-porting-guide.md"
 
     phase_1 = changelog["2026.05.19.1"]
