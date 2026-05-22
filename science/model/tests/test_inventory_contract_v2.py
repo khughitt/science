@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from pydantic import ValidationError
@@ -81,7 +82,7 @@ def test_inventory_overlay_rejects_unknown_fields() -> None:
             overlay_of="paper:Adams2025",
             project_id="proj-alpha",
             source=_source(),
-            mystery="value",
+            **cast(dict[str, Any], {"mystery": "value"}),
         )
 
 
@@ -118,7 +119,7 @@ def test_inventory_payload_v2_rejects_schema_version_1() -> None:
         InventoryPayload(
             generated_at="2026-05-14T10:00:00Z",
             project_id="commons",
-            schema_version="1",
+            schema_version=cast(Any, "1"),
         )
 
 
@@ -129,7 +130,7 @@ def test_inventory_payload_v2_rejects_unknown_fields() -> None:
         InventoryPayload(
             generated_at="2026-05-14T10:00:00Z",
             project_id="commons",
-            mystery="value",
+            **cast(dict[str, Any], {"mystery": "value"}),
         )
 
 
