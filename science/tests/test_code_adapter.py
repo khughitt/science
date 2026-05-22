@@ -69,6 +69,27 @@ def test_load_raw_builds_code_file_record(tmp_path: Path) -> None:
     assert raw["file_path"] == "code/stages/run.py"
 
 
+def test_load_raw_decision_bearing_none_when_absent(tmp_path: Path) -> None:
+    import os
+
+    from science_model.source_ref import SourceRef
+
+    (tmp_path / "code").mkdir()
+    f = tmp_path / "code" / "run.py"
+    f.write_text(
+        '# science:code\n# status: workflow-owned\n# science:end\nif __name__ == "__main__":\n    pass\n',
+        encoding="utf-8",
+    )
+    prev = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        raw = _adapter(tmp_path).load_raw(SourceRef(adapter_name="code-file", path="code/run.py"))
+    finally:
+        os.chdir(prev)
+    assert raw["decision_bearing"] is None        # absent in block -> None (fail-closed default applied later)
+    assert raw["executable"] is True              # has __main__ entrypoint
+
+
 def test_load_raw_invalid_block_returns_no_kind(tmp_path: Path) -> None:
     import os
 

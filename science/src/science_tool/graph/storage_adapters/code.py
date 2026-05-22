@@ -6,6 +6,7 @@ from typing import Any
 
 from science_model.source_ref import SourceRef
 
+from science_tool.code.classification import is_executable
 from science_tool.code.git import last_content_change_date
 from science_tool.code.metadata import parse_code_metadata
 from science_tool.graph.storage_adapters.base import StorageAdapter
@@ -46,7 +47,8 @@ class CodeAdapter(StorageAdapter):
     def load_raw(self, ref: SourceRef) -> dict[str, Any]:
         path = Path(ref.path)
         abs_path = path if path.is_absolute() else Path.cwd() / path
-        metadata = parse_code_metadata(abs_path.read_text(errors="replace"))
+        text = abs_path.read_text(errors="replace")
+        metadata = parse_code_metadata(text)
         if not metadata.valid:
             # absent OR invalid block -> no kind -> skipped by the loader.
             # Plan B distinguishes the two (ghost vs malformed) via metadata.error.
@@ -55,13 +57,15 @@ class CodeAdapter(StorageAdapter):
         local_id = self._local_id(ref.path)
         canonical_id = f"code-file:{local_id}"
         raw_task_ids = fields.get("task_ids")
+        declared = fields.get("decision_bearing")
         return {
             "id": canonical_id,
             "canonical_id": canonical_id,
             "kind": "code-file",
             "title": local_id,
             "status": str(fields.get("status") or ""),
-            "decision_bearing": bool(fields.get("decision_bearing", False)),
+            "decision_bearing": declared if isinstance(declared, bool) else None,
+            "executable": is_executable(ref.path, text),
             "task_ids": [str(t) for t in raw_task_ids] if isinstance(raw_task_ids, list) else [],
             "updated": last_content_change_date(ref.path, repo_root=self._repo_root),
             "content_preview": "",

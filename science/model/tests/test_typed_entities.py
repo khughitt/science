@@ -126,7 +126,8 @@ def test_code_file_entity_defaults_and_fields() -> None:
 
     cf = CodeFileEntity(**_minimal(EntityType.CODE_FILE, "code-file:stages/run.py"))
     assert isinstance(cf, ProjectEntity)
-    assert cf.decision_bearing is False
+    assert cf.decision_bearing is None
+    assert cf.executable is False
     assert cf.task_ids == []
 
     cf2 = CodeFileEntity(
