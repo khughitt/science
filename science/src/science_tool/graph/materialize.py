@@ -20,12 +20,14 @@ from science_model.relations import relation_allows_kinds
 
 from science_tool.addressing import is_address, parse_address
 from science_tool.bibliography import is_bibliography_reference
+from science_tool.code.lifecycle import ORPHAN_GATING_EXEMPT_STATUSES
 from science_tool.graph.freshness import (
     EntityFreshnessInfo,
     close_bears_on,
     derive_bears_on_from_audits,
     derive_bears_on_from_chain_links,
     derive_bears_on_from_pre_registrations,
+    derive_bears_on_from_produced_by_code,
     derive_bears_on_from_provenance,
     derive_bears_on_from_typed_edges,
     derive_freshness,
@@ -98,6 +100,8 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
             ext_prefixes=ext_prefixes,
         )
 
+    _add_produced_by_edges(sources, entity_index=entity_index, knowledge=knowledge)
+
     kind_class = _classify_entities(sources)
     pre_registration_targets = _pre_registration_commitment_targets(
         sources,
@@ -132,6 +136,7 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
         dataset,
         kind_class=kind_class,
         pre_registration_targets=pre_registration_targets,
+        eligible_code_files=_eligible_code_files(sources),
     )
     if sources.freshness_enabled:
         entity_meta = _build_entity_meta(sources, kind_class)
@@ -506,6 +511,47 @@ def _pre_registration_commitment_targets(
             resolved_targets.append(_entity_uri(target.canonical_id))
         targets_by_pre_registration[_entity_uri(entity.canonical_id)] = resolved_targets
     return targets_by_pre_registration
+
+
+def _add_produced_by_edges(
+    sources: ProjectSources,
+    *,
+    entity_index: dict[str, Entity],
+    knowledge,
+) -> None:
+    """Materialize `sci:producedBy` from datasets' code-only `produced_by` field.
+
+    Lenient: a ref that does not resolve to a registered code-file entity is
+    skipped (surfaced by the `code.produced-by-unresolved` validate check),
+    never a hard-fail — preserving the fragility firewall. Not routed through
+    `audit_project_sources`.
+    """
+    for entity in sources.entities:
+        if entity.kind not in ("dataset", "data-package"):
+            continue  # produced_by is a data-artifact field (relation source kinds)
+        for ref in getattr(entity, "produced_by", []) or []:
+            target = entity_index.get(ref)
+            if target is None or target.kind != "code-file":
+                continue
+            knowledge.add(
+                (_entity_uri(entity.canonical_id), SCI_NS.producedBy, _entity_uri(target.canonical_id))
+            )
+
+
+def _eligible_code_files(sources: ProjectSources) -> set[URIRef]:
+    """Code-file URIs whose edits propagate freshness: decision-bearing, fail-closed
+    (un-annotated executable counts), exempting exploratory/retired."""
+    eligible: set[URIRef] = set()
+    for entity in sources.entities:
+        if entity.kind != "code-file":
+            continue
+        if (entity.status or "") in ORPHAN_GATING_EXEMPT_STATUSES:
+            continue
+        declared = getattr(entity, "decision_bearing", None)
+        effective = declared if declared is not None else getattr(entity, "executable", False)
+        if effective:
+            eligible.add(_entity_uri(entity.canonical_id))
+    return eligible
 
 
 def _link_external_term(
@@ -899,8 +945,9 @@ def _derive_bears_on_layer(
     *,
     kind_class: dict[str, EntityClass],
     pre_registration_targets: dict[URIRef, list[URIRef]],
+    eligible_code_files: set[URIRef],
 ) -> None:
-    """Derive sci:bearsOn triples (typed-edge + provenance + closure).
+    """Derive sci:bearsOn triples (typed-edge + provenance + produced_by + closure).
 
     Always runs regardless of freshness.enabled — bears_on edges are
     independently useful for dependency queries and are not part of freshness.
@@ -914,6 +961,7 @@ def _derive_bears_on_layer(
         kind_class=kind_class,
     )
     derive_bears_on_from_provenance(dataset, kind_class=kind_class)
+    derive_bears_on_from_produced_by_code(dataset, eligible_code_files=eligible_code_files)
     close_bears_on(dataset, kind_class=kind_class)
 
 
