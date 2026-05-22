@@ -1682,6 +1682,23 @@ def apply_promote(
         )
         if audit_path is None:
             exc.failure_audit_yaml = audit_yaml  # type: ignore[attr-defined]
+        else:
+            # Commit the failure audit log path-limited so the working tree is left
+            # clean — an uncommitted .migrations/ file would block the next apply's
+            # preflight (_commons_is_clean) and self-perpetuate. Symmetric with the
+            # success path. No extra rollback here: each per-stage handler already
+            # restored the commons tree, and a durable Step-6 paper commit is kept by
+            # design (t063 §6).
+            try:
+                audit_rel = str(audit_path.relative_to(commons_root))
+                _git(commons_root, "add", "--", audit_rel)
+                _git(commons_root, "commit", "-m", f"audit: failed op {op_id}", "--", audit_rel)
+            except (OSError, subprocess.CalledProcessError) as commit_exc:
+                # Never replace the original failure with a git error. Surface the YAML
+                # and re-raise the ORIGINAL exc (the .migrations file may remain if git
+                # itself is broken — degraded, same as before this fix).
+                logger.error("failure-audit commit failed for op %s: %s", op_id, commit_exc)
+                exc.failure_audit_yaml = audit_yaml  # type: ignore[attr-defined]
         raise
 
 

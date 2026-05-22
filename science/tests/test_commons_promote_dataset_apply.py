@@ -84,9 +84,30 @@ def _snapshot_state(commons: Path, data_yaml: Path) -> dict[str, Any]:
     }
 
 
+def _assert_head_unchanged_or_audit_commit(commons: Path, before_head: str) -> None:
+    """HEAD after a failed apply is either unchanged (audit log unwritable / git
+    broken) or exactly one commit ahead — the failure-audit log commit the outer
+    handler now makes path-limited so the working tree is left clean and the next
+    apply's preflight is not blocked (t063 fb-003). In the advanced case the new
+    commit must be the audit commit and the working tree must be clean."""
+    after_head = _git_stdout(commons, "rev-parse", "HEAD")
+    if after_head == before_head:
+        return
+    parent = _git_stdout(commons, "rev-parse", "HEAD~1")
+    assert parent == before_head, "HEAD advanced by more than the audit commit"
+    subject = _git_stdout(commons, "log", "-1", "--format=%s")
+    assert subject.startswith("audit: failed op"), f"unexpected commit on rollback: {subject}"
+    porcelain = _git_stdout(commons, "status", "--porcelain")
+    assert porcelain == "", f"working tree not clean after rollback: {porcelain}"
+
+
 def _assert_rolled_back(commons: Path, data_yaml: Path, before: dict[str, Any]) -> None:
     after = _snapshot_state(commons, data_yaml)
-    assert after == before
+    # The dataset operation itself must be fully rolled back: artifacts, tags,
+    # and the data.yaml override are byte-identical to the pre-apply state.
+    for field in ("tags", "artifacts", "data_yaml"):
+        assert after[field] == before[field], f"{field} not rolled back"
+    _assert_head_unchanged_or_audit_commit(commons, before["head"])
 
 
 def test_dataset_apply_writes_three_artifacts_commit_tag_override_overlay(
@@ -613,7 +634,7 @@ def test_dataset_apply_side_channel_failure_unstages_commons_paths(
         )
 
     assert not data_yaml.exists()
-    assert _git_stdout(commons, "rev-parse", "HEAD") == before_head
+    _assert_head_unchanged_or_audit_commit(commons, before_head)
     assert _git_stdout(commons, "tag", "-l") == ""
     status = _git_stdout(commons, "status", "--porcelain")
     assert "datasets/fixture-ds" not in status
@@ -654,7 +675,7 @@ def test_dataset_apply_side_channel_candidate_error_rolls_back_commons(
             invocation="science commons promote dataset --from proj-dataset --apply",
         )
 
-    assert _git_stdout(commons, "rev-parse", "HEAD") == before_head
+    _assert_head_unchanged_or_audit_commit(commons, before_head)
     assert _git_stdout(commons, "tag", "-l") == ""
     status = _git_stdout(commons, "status", "--porcelain")
     assert "datasets/fixture-ds" not in status

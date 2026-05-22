@@ -1659,12 +1659,15 @@ def test_apply_promote_step6_partial_rename_records_slug_in_projects_touched(
     assert "proj-b" in data["projects_touched"]
 
 
-def test_apply_promote_failure_writes_best_effort_uncommitted_audit_log(
+def test_apply_promote_failure_commits_audit_log_path_limited(
     tmp_path,
     monkeypatch,
 ) -> None:
-    """Design §6.3 step 7 (failure variant): every failure writes a best-effort
-    audit log under .migrations/. The log is NOT committed."""
+    """Design §6.3 step 7 (failure variant) + t063 §6 (fb-003): every failure
+    writes an audit log under .migrations/ AND commits it path-limited, so the
+    working tree is left clean and the next apply's preflight is not blocked by
+    an orphan .migrations/ file. A pre-existing staged dirty file is left alone
+    by the path-limited commit (it still blocks preflight, as intended)."""
     from science_tool.commons.errors import PromoteInputError
     from science_tool.commons.promote import (
         PROMOTE_KIND_PAPER,
@@ -1706,13 +1709,176 @@ def test_apply_promote_failure_writes_best_effort_uncommitted_audit_log(
     assert "commons repo is not clean" in data["failure_detail"]
     assert data["commons_commit"] is None
     assert data["commons_tags"] == []
-    status = subprocess.run(
+    # The audit log is now committed (tracked, clean) — not an orphan.
+    migrations_status = subprocess.run(
         ["git", "-C", str(tmp_path / "commons"), "status", "--porcelain", "--", ".migrations/"],
         capture_output=True,
         text=True,
         check=True,
     ).stdout
-    assert "??" in status and ".migrations/" in status
+    assert migrations_status.strip() == ""
+    # The path-limited commit must not have swept up the pre-existing staged file.
+    dirty_status = subprocess.run(
+        ["git", "-C", str(tmp_path / "commons"), "status", "--porcelain", "--", "dirty.txt"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert "dirty.txt" in dirty_status
+
+
+def test_apply_promote_failure_leaves_clean_tree_and_unblocks_retry(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """t063 §6 (fb-003): a non-audit-stage failure that reaches
+    _write_failure_audit_log must leave the commons working tree clean per
+    _commons_is_clean (the .migrations audit log is committed, not orphaned),
+    so a fresh apply of a valid plan is not blocked by a dirty-commons
+    preflight. The original failure type still propagates."""
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        _commons_is_clean,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    proj = _build_project(
+        tmp_path,
+        "proj-a",
+        {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+    discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
+    plan = plan_promote(
+        discovery,
+        commons_root=commons,
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
+    )
+
+    # Force a Step-6 (rewrite_projects, post-commit) overlay write failure by
+    # making the source overlay target read-only. This reaches the outer
+    # failure handler at a non-audit stage with a written audit_path.
+    target = proj / "doc" / "papers" / "Adams2025.md"
+    target.chmod(0o444)
+    try:
+        with pytest.raises(PromoteWriteError, match="overlay write"):
+            apply_promote(plan, commons_root=commons, invocation="...")
+    finally:
+        target.chmod(0o644)
+
+    # The commons working tree is clean: the audit log was committed, not left
+    # as an untracked .migrations/ file.
+    clean, dirty = _commons_is_clean(commons, PROMOTE_KIND_PAPER)
+    assert clean, f"commons not clean after failure: {dirty}"
+    logs = list((commons / ".migrations").glob("*.yaml"))
+    assert len(logs) == 1
+    # The audit log is tracked (committed), not untracked.
+    tracked = subprocess.run(
+        ["git", "-C", str(commons), "ls-files", "--", ".migrations/"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert ".migrations/" in tracked
+
+    # A fresh apply of a valid plan is no longer blocked by a dirty-commons
+    # preflight: it gets past the clean check and completes.
+    proj2 = _build_project(
+        tmp_path,
+        "proj-b",
+        {"Brown2025.md": "---\nid: paper:Brown2025\ntitle: B\n---\n"},
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj2,
+    )
+    discovery2 = discover_candidates(["proj-b"], PROMOTE_KIND_PAPER)
+    plan2 = plan_promote(
+        discovery2,
+        commons_root=commons,
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-b"],
+    )
+    result2 = apply_promote(plan2, commons_root=commons, invocation="...")
+    assert result2.status == "ok"
+
+
+def test_apply_promote_failed_audit_commit_does_not_mask_original_error(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """t063 §6 (fb-003): if the failure-audit `git commit` itself raises, the
+    ORIGINAL failure (a PromoteWriteError) must propagate — not a git error —
+    and failure_audit_yaml must be attached to it. Only the failure-audit
+    commit is sabotaged; the earlier promote commit must still succeed."""
+    import science_tool.commons.promote as promote_module
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    proj = _build_project(
+        tmp_path,
+        "proj-a",
+        {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+    discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
+    plan = plan_promote(
+        discovery,
+        commons_root=commons,
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
+    )
+
+    # Original failure: Step-6 overlay write fails (read-only target).
+    target = proj / "doc" / "papers" / "Adams2025.md"
+    target.chmod(0o444)
+
+    real_git = promote_module._git
+
+    def sabotaged_git(commons_root, *args, **kwargs):
+        # Only sabotage the failure-audit commit, identified by its message.
+        # The earlier promote commit ("promote: ...") must still succeed so we
+        # exercise the post-commit failure path with a real audit_path.
+        if args[:1] == ("commit",) and any("audit: failed op" in a for a in args):
+            raise subprocess.CalledProcessError(1, ["git", *args], stderr="sim audit commit fail")
+        return real_git(commons_root, *args, **kwargs)
+
+    monkeypatch.setattr(promote_module, "_git", sabotaged_git)
+
+    try:
+        with pytest.raises(PromoteWriteError, match="overlay write") as exc_info:
+            apply_promote(plan, commons_root=commons, invocation="...")
+    finally:
+        target.chmod(0o644)
+
+    # The propagated exception is the ORIGINAL PromoteWriteError, not a git error.
+    assert not isinstance(exc_info.value, subprocess.CalledProcessError)
+    # And the failure-audit YAML is attached so stderr surfacing still works.
+    yaml_text = getattr(exc_info.value, "failure_audit_yaml", None)
+    assert yaml_text is not None
+    assert "status: failed" in yaml_text
 
 
 def test_apply_promote_failure_audit_records_post_commit_failure_stage(
