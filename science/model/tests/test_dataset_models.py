@@ -243,3 +243,10 @@ def test_derived_with_empty_produced_by_rejects() -> None:
     # Empty list is not a provenance path; with no derivation this must fail.
     with pytest.raises(ValueError, match="derivation or produced_by"):
         DatasetEntity(**_entity_kwargs(), origin="derived", produced_by=[])
+
+
+def test_code_provenance_derived_readiness_is_ready() -> None:
+    ds = DatasetEntity(**_entity_kwargs(), origin="derived", produced_by=["code-file:stages/run.py"])
+    r = ds.readiness()  # no resolver needed for code provenance
+    assert r.ready is True
+    assert r.state == "derived-via-code"

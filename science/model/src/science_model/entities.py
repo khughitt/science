@@ -619,14 +619,16 @@ class DatasetEntity(ProjectEntity):
         return Readiness(ready=False, state=f"{access.level}, unverified")
 
     def _derived_readiness(self, resolver: ReadinessResolverProtocol | None) -> Readiness:
+        if self.derivation is None:
+            if self.produced_by:
+                return Readiness(ready=True, state="derived-via-code")
+            return Readiness(ready=False, state="missing-provenance")
         if resolver is None:
             return Readiness(
                 ready=False,
                 state="unknown",
                 detail="derived dataset readiness requires resolver context",
             )
-        if self.derivation is None:
-            return Readiness(ready=False, state="missing-derivation-block")
         return resolver.resolve_ref(self.derivation.workflow_run)
 
 
