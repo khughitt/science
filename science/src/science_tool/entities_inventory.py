@@ -2,20 +2,18 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, Literal, overload
+from typing import Any, Literal
 
 import yaml
 from science_model import Entity
 from science_model.contracts import inventory_v2
-from science_model.contracts.inventory_v1 import (
+from science_model.contracts.inventory_v2 import (
     InventoryAlias,
     InventoryEntity,
-    InventoryPayload,
     InventoryProjectMetadata,
     InventoryWarning,
     InventoryReference,
     InventorySourceLocation,
-    finalize_inventory_payload,
 )
 from science_model.entity_schema import MergePolicy, read_overlay_merge_policy
 
@@ -47,21 +45,9 @@ PROMOTED_ENTITY_DATA_FIELDS = {
 }
 
 
-@overload
-def build_inventory(project_root: Path, schema_version: Literal["1"]) -> InventoryPayload: ...
-
-
-@overload
-def build_inventory(project_root: Path, schema_version: Literal["2"] = "2") -> inventory_v2.InventoryPayload: ...
-
-
-@overload
-def build_inventory(project_root: Path, schema_version: str) -> InventoryPayload | inventory_v2.InventoryPayload: ...
-
-
-def build_inventory(project_root: Path, schema_version: str = "2") -> InventoryPayload | inventory_v2.InventoryPayload:
-    if schema_version not in ("1", "2"):
-        raise ValueError(f"unsupported schema_version {schema_version!r}; expected '1' or '2'")
+def build_inventory(project_root: Path, schema_version: str = "2") -> inventory_v2.InventoryPayload:
+    if schema_version != "2":
+        raise ValueError(f"unsupported schema_version {schema_version!r}; expected '2'")
     project_root = project_root.resolve()
     sources = load_project_sources(project_root, include_commons=False)
     dag_records = load_dag_inventory_records(project_root)
@@ -112,21 +98,6 @@ def build_inventory(project_root: Path, schema_version: str = "2") -> InventoryP
     generated_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     sorted_aliases = sorted(aliases, key=lambda item: item.alias)
     watch_paths = _watch_paths(project_root)
-
-    if schema_version == "1":
-        payload = InventoryPayload(
-            generated_at=generated_at,
-            project_id=project_metadata.id,
-            project_path=project_root.as_posix(),
-            project=project_metadata,
-            entities=entities,
-            aliases=sorted_aliases,
-            graph_addresses=dag_records.graph_addresses,
-            finding_candidates=dag_records.finding_candidates,
-            warnings=warnings,
-            watch_paths=watch_paths,
-        )
-        return finalize_inventory_payload(payload)
 
     project_entities = [entity for entity in entities if entity.scope == "project"]
     project_entity_ids = {entity.id for entity in project_entities}

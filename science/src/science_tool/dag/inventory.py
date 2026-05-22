@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from science_model.contracts.inventory_v1 import (
+from science_model.contracts.inventory_common import (
     InventoryFindingCandidate,
     InventoryGraphAddress,
     InventorySourceLocation,

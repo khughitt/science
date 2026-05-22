@@ -227,20 +227,13 @@ def entities_group() -> None:
 @click.option("--project", "project_path", type=click.Path(path_type=Path), default=Path.cwd())
 @click.option("--format", "output_format", type=click.Choice(["json"]), default="json")
 @click.option("--output", type=click.Path(path_type=Path), default=None)
-@click.option(
-    "--schema-version",
-    type=click.Choice(["1", "2"]),
-    default="2",
-    help="Inventory contract version to emit (default: 2).",
-)
 def entities_inventory_command(
     project_path: Path,
     output_format: str,
     output: Path | None,
-    schema_version: str,
 ) -> None:
     """Emit the versioned Science entity inventory for a project."""
-    inventory = build_inventory(project_path, schema_version=schema_version)
+    inventory = build_inventory(project_path)
     rendered = inventory.model_dump_json(indent=2) + "\n"
     if output is None:
         click.echo(rendered, nl=False)

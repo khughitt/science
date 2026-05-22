@@ -8,7 +8,6 @@ from click.testing import CliRunner
 import yaml
 
 from _fixtures.entity_helpers import seed_project, write_markdown_entity
-from science_model.contracts.inventory_v1 import InventoryPayload
 from science_model.contracts.inventory_v2 import InventoryPayload as InventoryPayloadV2
 from science_model.entities import EntityClass
 from science_model.profiles.schema import ProfileManifest
@@ -299,7 +298,7 @@ def test_entities_inventory_cli_writes_contract_json_to_output_file(tmp_path) ->
     assert payload.entities[0].id == "finding:f001"
 
 
-def test_entities_inventory_cli_schema_version_1_emits_v1(tmp_path) -> None:
+def test_entities_inventory_cli_rejects_schema_version_option(tmp_path) -> None:
     project = tmp_path / "project"
     (project / "doc").mkdir(parents=True)
     (project / "science.yaml").write_text("id: v1-cli-project\n", encoding="utf-8")
@@ -323,10 +322,8 @@ def test_entities_inventory_cli_schema_version_1_emits_v1(tmp_path) -> None:
         ],
     )
 
-    assert result.exit_code == 0, result.output
-    payload = InventoryPayload.model_validate_json(result.output)
-    assert payload.schema_version == "1"
-    assert payload.project_id == "v1-cli-project"
+    assert result.exit_code != 0
+    assert "No such option: --schema-version" in result.output
 
 
 def test_entities_audit_identifiers_cli_outputs_json(tmp_path) -> None:

@@ -16,7 +16,7 @@ from typing import Callable, NotRequired, TypeVar, TypedDict, cast
 
 import yaml as _yaml
 
-from science_model.contracts.inventory_v1 import InventoryWarning
+from science_model.contracts.inventory_common import InventoryWarning
 from science_model.entities import Entity
 from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.entity_identity import collect_identity_warnings

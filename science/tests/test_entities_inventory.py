@@ -4,7 +4,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from science_model.contracts.inventory_v1 import InventoryPayload
+from science_model.contracts.inventory_v2 import InventoryPayload
 from science_tool import entities_inventory
 from science_tool.entities_inventory import build_inventory
 from science_tool.graph.sources import load_project_sources
@@ -48,10 +48,11 @@ edges:
         encoding="utf-8",
     )
 
-    inventory = build_inventory(project, schema_version="1")
+    inventory = build_inventory(project)
 
     InventoryPayload.model_validate(json.loads(inventory.model_dump_json()))
-    assert inventory.schema_version == "1"
+    assert isinstance(inventory, InventoryPayload)
+    assert inventory.schema_version == "2"
     assert inventory.project_id == "test-project"
     assert inventory.project is not None
     assert inventory.project.last_activity is not None
@@ -76,7 +77,7 @@ path: registry/projects/configured-project
         encoding="utf-8",
     )
 
-    inventory = build_inventory(project, schema_version="1")
+    inventory = build_inventory(project)
 
     assert inventory.project_id == "configured-project"
     assert inventory.project is not None
@@ -98,7 +99,7 @@ last_modified: 2026-03-02
         encoding="utf-8",
     )
 
-    inventory = build_inventory(project, schema_version="1")
+    inventory = build_inventory(project)
 
     assert inventory.project is not None
     assert inventory.project.created == "2026-03-01"
@@ -109,7 +110,7 @@ def test_build_inventory_metadata_without_science_yaml_uses_project_root_name(tm
     project = tmp_path / "project-slug"
     project.mkdir()
 
-    inventory = build_inventory(project, schema_version="1")
+    inventory = build_inventory(project)
 
     assert inventory.project_id == "project-slug"
     assert inventory.project is not None
@@ -133,7 +134,7 @@ def test_build_inventory_preserves_task_dsl_type_in_data(tmp_path) -> None:
         encoding="utf-8",
     )
 
-    inventory = build_inventory(project, schema_version="1")
+    inventory = build_inventory(project)
 
     task = next(entity for entity in inventory.entities if entity.id == "task:t001")
     assert task.data["task_type"] == "research"
@@ -158,7 +159,7 @@ def test_build_inventory_fails_when_entity_source_adapter_mapping_is_missing(tmp
     monkeypatch.setattr(entities_inventory, "load_project_sources", fake_load_project_sources)
 
     with pytest.raises(ValueError, match="finding:f001.*source adapter"):
-        build_inventory(project, schema_version="1")
+        build_inventory(project)
 
 
 def test_build_inventory_promotes_targets_without_duplicating_them_in_data(tmp_path, monkeypatch) -> None:
@@ -217,17 +218,13 @@ def test_build_inventory_promotes_targets_without_duplicating_them_in_data(tmp_p
         lambda _project_root, **_kwargs: sources,
     )
 
-    inventory = build_inventory(project, schema_version="1")
+    inventory = build_inventory(project)
 
     assert inventory.entities[0].targets == ["dag-edge:h1:e001"]
     assert inventory.entities[0].data == {"content_preview": "Finding preview."}
 
 
-def test_build_inventory_v2_returns_v2_payload_with_empty_overlays(tmp_path) -> None:
-    from science_model.contracts.inventory_v2 import (
-        InventoryPayload as InventoryPayloadV2,
-    )
-
+def test_build_inventory_schema_version_2_returns_v2_payload_with_empty_overlays(tmp_path) -> None:
     project = tmp_path / "project"
     (project / "doc").mkdir(parents=True)
     (project / "science.yaml").write_text("id: v2-project\n", encoding="utf-8")
@@ -238,7 +235,7 @@ def test_build_inventory_v2_returns_v2_payload_with_empty_overlays(tmp_path) -> 
 
     inventory = build_inventory(project, schema_version="2")
 
-    assert isinstance(inventory, InventoryPayloadV2)
+    assert isinstance(inventory, InventoryPayload)
     assert inventory.schema_version == "2"
     assert inventory.project_id == "v2-project"
     assert inventory.overlays == []
@@ -259,10 +256,6 @@ def test_build_inventory_v2_excludes_project_authored_shared_entities_and_aliase
         "---\nkind: method\nid: method:shared\ntitle: Shared method\nscope: shared\naliases: [shared-method]\n---\n",
         encoding="utf-8",
     )
-
-    inventory_v1 = build_inventory(project, schema_version="1")
-    shared_v1 = next(entity for entity in inventory_v1.entities if entity.id == "method:shared")
-    assert shared_v1.scope == "cross-project"
 
     inventory_v2 = build_inventory(project, schema_version="2")
 
@@ -376,14 +369,14 @@ def test_build_inventory_defaults_to_v2(tmp_path) -> None:
     assert inventory.schema_version == "2"
 
 
-def test_build_inventory_rejects_unknown_schema_version_before_loading(tmp_path, monkeypatch) -> None:
+def test_build_inventory_rejects_schema_version_1_before_loading(tmp_path, monkeypatch) -> None:
     project = tmp_path / "project"
     project.mkdir()
 
-    def _fail(_project_root):
+    def _fail(_project_root, **_kwargs):
         raise AssertionError("load_project_sources must not run for a bad schema_version")
 
     monkeypatch.setattr(entities_inventory, "load_project_sources", _fail)
 
-    with pytest.raises(ValueError, match="schema_version"):
-        build_inventory(project, schema_version="3")
+    with pytest.raises(ValueError, match=r"unsupported schema_version '1'; expected '2'"):
+        build_inventory(project, schema_version="1")
