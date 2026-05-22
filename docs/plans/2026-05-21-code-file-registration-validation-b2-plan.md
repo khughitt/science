@@ -483,11 +483,7 @@ ORPHAN_GATING_EXEMPT_STATUSES: frozenset[str] = frozenset({"exploratory", "retir
 Create `science/tests/code/test_classification.py`:
 
 ```python
-from science_tool.code.classification import (
-    CodeClassification,
-    classify_code_file,
-    is_executable,
-)
+from science_tool.code.classification import classify_code_file, is_executable
 
 
 def test_r_and_sh_are_always_executable() -> None:
@@ -1154,7 +1150,7 @@ Add to `science/tests/validate/test_checks_code_files.py`:
 def test_hardcoded_path_in_valid_file_is_flagged(tmp_path: Path) -> None:
     (tmp_path / "code").mkdir()
     (tmp_path / "code" / "x.py").write_text(
-        '# science:code\n# status: library\n# science:end\nP = "/home/keith/data/x.tsv"\n',
+        '# science:code\n# status: library\n# science:end\nP = "/home/keith/files/x.tsv"\n',
         encoding="utf-8",
     )
     ctx = _ctx(tmp_path)
