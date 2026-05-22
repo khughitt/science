@@ -272,6 +272,8 @@ def resolve_project_by_id(project_id: str) -> Path:
 
     - id is null on a matching entry → CommonsError("id is null") — caller (promote)
       maps this to "this registration has no id; assign one or deregister"
+    - more than one entry shares the id → CommonsError("ambiguous") — project ids
+      must be unique; silently picking the first would promote the wrong corpus
     - no entry matches the given id → CommonsError("no registered project with id")
     - all good → return the path (expanded `~`).
 
@@ -282,9 +284,16 @@ def resolve_project_by_id(project_id: str) -> Path:
     from science_tool.registry.config import load_global_config
 
     cfg = load_global_config()
-    for project in cfg.projects:
-        if project.id == project_id:
-            return Path(project.path).expanduser()
+    matches = [project for project in cfg.projects if project.id == project_id]
+    if len(matches) > 1:
+        paths = ", ".join(str(project.path) for project in matches)
+        raise CommonsError(
+            f"project id {project_id!r} is ambiguous: {len(matches)} registered "
+            f"projects share it ({paths}). Project ids must be unique — "
+            "disambiguate them in ~/.config/science/config.yaml before promoting."
+        )
+    if matches:
+        return Path(matches[0].path).expanduser()
     # No match by id; check whether any registration uses the same name and
     # has a null id, which is the legacy-registration failure mode we want
     # to diagnose specifically.

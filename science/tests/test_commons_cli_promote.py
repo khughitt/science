@@ -62,6 +62,39 @@ def test_promote_paper_bulk_dry_run_summary(tmp_path, monkeypatch, runner) -> No
     assert not (tmp_path / "commons" / "papers" / "Adams2025.md").exists()
 
 
+def test_promote_paper_limit_zero_reports_full_count_and_stops(tmp_path, monkeypatch, runner) -> None:
+    """`--limit 0` is a discovery-only summary: it must report the FULL discovered
+    count (not 0) and stop before planning/applying."""
+    from science_tool.commons.cli import commons_group
+
+    _init_commons(tmp_path / "commons")
+    alpha = _bare_project_from_fixture(tmp_path, "proj-alpha", "proj-alpha")
+    beta = _bare_project_from_fixture(tmp_path, "proj-beta", "proj-beta")
+
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: {"proj-alpha": alpha, "proj-beta": beta}[slug],
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.cli.resolve_commons_root",
+        lambda: tmp_path / "commons",
+    )
+
+    result = runner.invoke(
+        commons_group,
+        ["promote", "paper", "--from", "proj-alpha", "--from", "proj-beta", "--limit", "0"],
+    )
+    assert result.exit_code == 0, result.output
+    # Regression: the old code truncated candidates to empty before counting,
+    # so this said "Discovered 0 paper candidates". It must now report the real count.
+    assert "Discovered 0 paper candidates" not in result.output
+    assert "single-instance" in result.output
+    assert "Discovery-only" in result.output
+    # Stopped before planning and writing.
+    assert "Plan:" not in result.output
+    assert not (tmp_path / "commons" / "papers" / "Adams2025.md").exists()
+
+
 def test_promote_paper_apply_writes_and_tags(tmp_path, monkeypatch, runner) -> None:
     from science_tool.commons.cli import commons_group
 

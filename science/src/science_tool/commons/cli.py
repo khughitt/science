@@ -653,8 +653,14 @@ def _promote_kind_cmd(
             failed_candidates=discovery.failed_candidates,
         )
 
-    if limit is not None and limit >= 0:
-        sorted_keys = sorted(discovery.candidates_by_slug)[:limit] if limit > 0 else []
+    # `--limit 0` is a discovery-only summary (per command help): report the
+    # FULL discovered count, then stop before planning (which can prompt on
+    # conflicts). `--limit N` (N>0) caps the bulk set to the first N slug
+    # groups. The count below must be taken from the un-truncated discovery for
+    # the limit==0 case, so the summary is accurate rather than always "0".
+    discovery_only = limit == 0
+    if limit is not None and limit > 0:
+        sorted_keys = sorted(discovery.candidates_by_slug)[:limit]
         truncated = {k: discovery.candidates_by_slug[k] for k in sorted_keys}
         discovery = DiscoveryResult(
             candidates_by_slug=truncated,
@@ -676,6 +682,10 @@ def _promote_kind_cmd(
             click.echo(f"    - {f.source_path}: {f.error_message}")
         if len(discovery.failed_candidates) > 5:
             click.echo(f"    … and {len(discovery.failed_candidates) - 5} more")
+
+    if discovery_only:
+        click.echo("Discovery-only summary (--limit 0); re-run without --limit 0 to plan and promote.")
+        return
 
     if not discovery.candidates_by_slug:
         click.echo("Nothing to promote.")

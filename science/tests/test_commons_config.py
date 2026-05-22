@@ -629,3 +629,29 @@ def test_resolve_project_by_id_rejects_null_id(tmp_path: Path, monkeypatch: pyte
     monkeypatch.setenv("HOME", str(tmp_path))
     with pytest.raises(CommonsError, match="id: null"):
         resolve_project_by_id("legacy-project")
+
+
+def test_resolve_project_by_id_rejects_ambiguous_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Multiple projects sharing one id must fail loudly, not silently pick the first."""
+    cfg_dir = _write_config(
+        tmp_path,
+        """
+        projects:
+          - path: ~/d/cancer/meta
+            name: cancer-meta
+            id: meta
+            role: meta
+            parent: null
+            registered: "2026-01-01"
+          - path: ~/d/health/meta
+            name: health-meta
+            id: meta
+            role: meta
+            parent: null
+            registered: "2026-01-01"
+        """,
+    )
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    with pytest.raises(CommonsError, match="ambiguous"):
+        resolve_project_by_id("meta")
