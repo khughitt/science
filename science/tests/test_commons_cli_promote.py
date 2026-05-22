@@ -186,6 +186,40 @@ def test_promote_paper_single_entity_form(tmp_path, monkeypatch, runner) -> None
     assert "Adams2025" in result.output
 
 
+def test_promote_paper_apply_reindexes_registry(tmp_path, monkeypatch, runner) -> None:
+    """After --apply, the CLI must rebuild registry.sqlite so it is not stale (t063 fb-002)."""
+    from science_tool.commons.adapter import CommonsEntityAdapter
+    from science_tool.commons.cli import commons_group
+    from science_tool.commons.registry import RegistryBuilder
+
+    commons_root = tmp_path / "commons"
+    _init_commons(commons_root)
+    alpha = _bare_project_from_fixture(tmp_path, "proj-alpha", "proj-alpha")
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: alpha,
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.cli.resolve_commons_root",
+        lambda: commons_root,
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.prompt_resolve",
+        lambda conflict: sorted(conflict.candidates.items())[0][1],
+    )
+
+    result = runner.invoke(
+        commons_group,
+        ["promote", "paper", "--from", "proj-alpha", "--apply"],
+    )
+    assert result.exit_code == 0, result.output
+    # CLI must emit the reindex line.
+    assert "Reindexed commons registry:" in result.output
+    # Registry must not be stale immediately after the CLI apply.
+    builder = RegistryBuilder(commons_root, CommonsEntityAdapter(commons_root))
+    assert not builder.is_stale(), "registry.sqlite should be fresh after CLI --apply"
+
+
 def test_promote_paper_plan_time_collision_exits_nonzero_cleanly(
     tmp_path, monkeypatch, runner,
 ) -> None:

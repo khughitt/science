@@ -737,6 +737,11 @@ def _promote_kind_cmd(
         f"Applied op {result.op_id}: commit {result.commons_commit}, "
         f"{len(result.tags_created)} tags, audit log at {result.audit_log_path}"
     )
+    # t063 fb-002: rebuild registry.sqlite after a successful apply so the next
+    # overlay→commons resolution is not stale. registry.sqlite is gitignored, so
+    # this never dirties the working tree.
+    rebuild_report = RegistryBuilder(root, CommonsEntityAdapter(root)).rebuild()
+    click.echo(f"Reindexed commons registry: {rebuild_report.entities_indexed} entities.")
 
 
 def _echo_dataset_plan_details(plan: PromotePlan, decision: PromoteDecision) -> None:
