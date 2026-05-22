@@ -10,7 +10,6 @@ The commons inventory is an `InventoryPayload` with `project_id="commons"`
 has `entities` of `scope="project"` only and may carry a non-empty `overlays`.
 """
 
-# ruff: noqa: F401, F822
 from __future__ import annotations
 
 import hashlib

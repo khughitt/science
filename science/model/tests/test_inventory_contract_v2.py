@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import ast
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -16,9 +19,16 @@ def _source() -> InventorySourceLocation:
 def test_inventory_v2_contract_does_not_import_inventory_v1() -> None:
     import science_model.contracts.inventory_v2 as inventory_v2
 
-    assert "science_model.contracts.inventory_v1" not in {
-        value.__module__ for value in inventory_v2.__dict__.values() if hasattr(value, "__module__")
-    }
+    source = inventory_v2.__file__
+    assert source is not None
+    tree = ast.parse(Path(source).read_text(), filename=source)
+
+    v1_imports = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module == "science_model.contracts.inventory_v1"
+    ]
+    assert v1_imports == []
 
 
 def test_inventory_overlay_accepts_minimal_fields() -> None:
