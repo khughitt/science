@@ -337,6 +337,34 @@ class FieldConflict:
 
 
 @dataclass(frozen=True, slots=True)
+class ExistingCanonicalConflict:
+    """A divergence between a source value and an already-committed commons entity.
+
+    Distinct from FieldConflict (which models which contributing project's value wins).
+    The source value here may be a merge across several projects, so no source_project.
+    """
+
+    slug: str
+    kind: Literal["paper", "topic", "theme", "dataset"]
+    field: str
+    source_value: Any
+    existing_value: Any
+    existing_version: str
+
+
+class _KeepExisting:
+    """Sentinel: resolve an ExistingCanonicalConflict by keeping the committed entity."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover - trivial
+        return "KEEP_EXISTING"
+
+
+KEEP_EXISTING = _KeepExisting()
+
+
+@dataclass(frozen=True, slots=True)
 class ConflictResolution:
     slug: str
     field: str
@@ -379,6 +407,8 @@ class PromoteDecision:
     canonical_version: str  # "1.0.0" etc.
     overlays: dict[str, OverlayRewrite]  # project_slug → rewrite plan
     resolved_conflicts: tuple[ConflictResolution, ...]
+    mode: Literal["mint", "overlay_existing"] = "mint"
+    existing_version: str | None = None  # set when mode == "overlay_existing"
 
 
 @dataclass(frozen=True, slots=True)
