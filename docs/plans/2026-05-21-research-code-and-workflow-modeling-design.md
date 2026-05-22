@@ -16,13 +16,13 @@ The concrete failure this addresses: a finding's reasoning is only as trustworth
 **Program scope:** three coupled sub-specs, sequenced foundation-first.
 
 - **Spec 1 (A + B)** — code-entity model & topology, plus registration & validation.
-- **Spec 2 (C)** — the workflow adapter/backend that binds the real DAG to the graph.
+- **Spec 2 (C)** — the artifact-level **provenance propagation contract**: a first-class `produced_by` edge from a data artifact to the decision-bearing code that produced it, deriving `bears_on` so a code change reaches downstream findings. Engine-agnostic; workflow-DAG binding is demoted to a deferred, optional accelerant (§5).
 
 **Non-goals (program level):**
 
 - Rewriting science's epistemic engine. `bears_on`, freshness, `evidence_payload`, and typed relations already exist and are reused as-is.
 - Commons promotion of *reusable cross-project workflows*. A workflow that multiple projects share could someday get a promotion path via the JSON-schema mixin layer; that is a deferred, separate question.
-- Workflow backends beyond Snakemake in v1. The adapter is designed for extensibility, but only Snakemake ships first.
+- Workflow-DAG extraction in Spec 2 v1. The epistemic propagation contract is engine-agnostic and authored at the artifact. Binding a workflow engine's DAG (Snakemake first) is demoted to a deferred, optional adapter that *populates* the `produced_by` edge for engine-managed artifacts — the propagation guarantee never depends on it (§5).
 - Fixing the unresolved-reference hard-fail brittleness in `graph materialize`. Related and worth doing, but out of scope here (see §9).
 
 ---
@@ -57,7 +57,7 @@ These constrain all three sub-specs and are settled by this umbrella.
 6. **Sequencing — foundation-first.** A and B ship as one spec (the schema is meaningless without the walk and vice versa); C is designed afterward on a model already proven by the migrations.
 7. **Lifecycle — status-driven, not directory-driven.** Stage lives in a `status` field, not a dedicated directory.
 8. **Dataset logical role — emergent, not declared.** input/intermediate/result is derived from `origin` + `consumed_by` + DAG position, never an enum.
-9. **Change propagation — content-derived signal + explicit closure contract.** For a code edit to actually reach a downstream finding, two things must hold, and the umbrella locks both. (a) Code entities derive their freshness signal from *content*, **not** from the metadata block's dates or file mtime — otherwise a body-only edit with unchanged metadata is invisible. A bare hash cannot plug into the existing date/order-based freshness comparison, so A must pick one of two concrete plumbings: derive an `updated_at` from the **last commit that changed the file's content** (reuses the comparison unchanged — preferred), or extend the freshness model with a **reviewed-content-hash baseline** (compare the current blob hash against the hash at last review — more robust to commit-date noise, but a freshness-engine change). Final choice deferred to A. (b) The provenance predicates (`implements` / `executes` / `produces` / `consumed_by`) are materialized as real graph edges, with an **explicit contract** for which of them derive `bears_on` and how `OPERATIONAL` nodes are traversed in closure — because today only a fixed set of epistemic edges plus `prov:wasDerivedFrom` derive `bears_on`, and `consumed_by` / `produces` are frontmatter-only. (a) constrains A's model; (b) is C's headline deliverable.
+9. **Change propagation — content-derived signal + explicit closure contract.** For a code edit to actually reach a downstream finding, two things must hold, and the umbrella locks both. (a) Code entities derive their freshness signal from *content*, **not** from the metadata block's dates or file mtime — otherwise a body-only edit with unchanged metadata is invisible. A bare hash cannot plug into the existing date/order-based freshness comparison, so A must pick one of two concrete plumbings: derive an `updated_at` from the **last commit that changed the file's content** (reuses the comparison unchanged — preferred), or extend the freshness model with a **reviewed-content-hash baseline** (compare the current blob hash against the hash at last review — more robust to commit-date noise, but a freshness-engine change). Final choice deferred to A. (b) The minimal provenance edge that closes the loop is `produced_by` (**data artifact → the decision-bearing code that produced it**), authored at the artifact and materialized so it derives `bears_on` (decision-bearing, fail-closed) — because today only a fixed set of epistemic edges plus `prov:wasDerivedFrom` derive `bears_on`, and a code→data link does not exist at all. The propagation is engine-agnostic: a code edit reaches a finding via `code-file → data artifact → finding`, with no workflow/run nodes required on the path. The richer workflow predicates (`implements` / `executes` / `feeds_into`) and `OPERATIONAL`-node traversal are *not* required for the guarantee and are deferred to the optional workflow adapter (§5). (a) constrains A's model; (b) is C's headline deliverable.
 10. **Code-artifact boundary & exclusions.** "No ghosts" means *no unclassified code artifacts*, not "every file." An exclusion mechanism (leaning `science.yaml` excludes, optionally a `.scienceignore`; exact form deferred to A) removes generated, vendored, asset, and config files; recognized non-artifact classes (tests, package markers) are *classified* rather than required to carry full metadata blocks. What counts as a block-bearing "code artifact" is defined in A.
 
 ---
@@ -66,21 +66,20 @@ These constrain all three sub-specs and are settled by this umbrella.
 
 **Principle:** every *code artifact* under a declared code root is a registered science entity — "no ghosts" means no *unclassified* artifacts (decision 10 fixes the boundary and exclusions). A code artifact's identity, purpose, lifecycle, and bindings to the rest of the graph are declared in its co-located metadata block; validation walks the roots, and an in-scope artifact with no valid block is the violation.
 
-**Code entities are OPERATIONAL conduits of provenance.** Like the existing workflow kinds, they carry no continuous belief. Their value is sitting on the paths that propagate belief and uncertainty to epistemic entities. The target chain, once resolved:
+**Code entities are OPERATIONAL conduits of provenance.** Like the existing workflow kinds, they carry no continuous belief. Their value is sitting on the paths that propagate belief and uncertainty to epistemic entities. The **minimal, engine-agnostic chain** that closes the loop is short:
 
 ```
-code-file --implements--> workflow-step --(part of)--> workflow
-workflow-run --executes--> workflow --produces--> dataset (derived)
-dataset --consumed_by--> ... --> finding / proposition   (bears_on)
+code-file <--produced_by-- data artifact --grounds / cited-by--> finding / proposition   (bears_on)
 ```
 
-**What's reused vs. what's new.** The freshness *machinery* — `bears_on` transitive closure and the `needs-review` > `stale` > `fresh` precedence — is reused unchanged. But "resolve the chain and the rest is automatic" would be false today: freshness derives `bears_on` only from a fixed set of epistemic edges plus `prov:wasDerivedFrom`, and it keys change off entity dates. Making `edit code file → downstream finding flips to needs-review` actually work therefore requires three new things, not just resolved edges:
+The data artifact declares the decision-bearing code that produced it (`produced_by`, authored at the artifact); the finding already declares the data it rests on (`grounded_by` / `source_refs`). No workflow, workflow-step, or workflow-run node is required on the propagation path. A fuller orchestration model — `code-file --implements--> workflow-step --(part of)--> workflow`, `workflow-run --executes--> workflow` — is an *optional elaboration* a project may add, and the deferred workflow adapter can auto-populate `produced_by` from a real DAG; but it is never a precondition for propagation.
 
-1. **Materializing the provenance predicates** above as real graph edges (`consumed_by` / `produces` are frontmatter-only today).
-2. An explicit **propagation contract** — which of those predicates derive `bears_on`, and how `OPERATIONAL` nodes are traversed in closure (decision 9b, owned by C).
-3. A **content-derived change signal** on code entities, so a body-only edit is visible at all (decision 9a, owned by A).
+**Why disentangle from the DAG.** Both prototypes author `code → data` provenance *at the artifact* (MM30's `datapackage.provenance.tool`, NS's `analysis → data_package`) and use the workflow only for orchestration. Reconstructing that fact by parsing an execution-DAG is lossy, brittle, and — fatally — invisible to the decision-bearing code that lives *outside* any pipeline, which is the exact gap this program exists to close. So the epistemic layer owns the `produced_by` edge directly; the workflow DAG is a separate, optional accelerant.
 
-Wiring the real DAG into resolved edges is necessary but not sufficient; the adapter (C) owns (1) and (2), the model (A) owns (3).
+**What's reused vs. what's new.** The freshness *machinery* — `bears_on` transitive closure and the `needs-review` > `stale` > `fresh` precedence — is reused unchanged, as is the data→finding side. Making `edit code file → downstream finding flips to needs-review` work requires only:
+
+1. A **content-derived change signal** on code entities, so a body-only edit is visible at all (decision 9a, owned by A — *shipped*: `code-file.updated` = last content-changing commit).
+2. The **`produced_by` (data → code) edge** materialized so it derives `bears_on`, decision-bearing and fail-closed (decision 9b, owned by C). The data→finding hop already derives `bears_on` today.
 
 **Reconciling the three sources:**
 
@@ -112,15 +111,16 @@ Exact type names (e.g. `code-file` vs `script`), the relation vocabulary additio
 - Ghost detection; hardcoded-path and metadata-gap detection.
 - The staged `--fail-on` ladder — which requires a **validation-API change**, since `validate` today has only `--strict`, `Result.severity`, and exit-nonzero-on-error. Either a gate config maps findings → severity, or the runner/CLI grows a first-class gate dimension (choice deferred to B; a gate dimension is the cleaner option, since severity describes a finding's nature while the tier describes project-maturity policy).
 
-### Spec 2 = C (workflow adapter / backend)
+### Spec 2 = C (artifact-level provenance propagation contract)
 
-- The **propagation contract** (decision 9b): which provenance predicates (`implements` / `executes` / `produces` / `consumed_by` / `prov:wasDerivedFrom`) are materialized as graph edges, which of them derive `bears_on`, and how `OPERATIONAL` nodes participate in closure.
-- A backend protocol (Snakemake first) that extracts the real DAG.
-- Materialization of `workflow-run --executes--> workflow --produces--> dataset` and `code-file --implements--> workflow-step` as resolved edges.
-- The uncertainty-propagation wiring that lights up once the chain resolves.
-- Second-backend extensibility (interface only; no second backend in v1).
+- The **`produced_by` edge** (decision 9b): a data artifact (a `dataset`) declares the decision-bearing `code-file`(s) that produced it, authored at the artifact. This is the one new graph edge C adds.
+- A **deriver** that turns `produced_by` into `bears_on` (`code-file bears_on dataset`), filtered to propagation-eligible (decision-bearing, fail-closed) code files and exempting `exploratory` / `retired`.
+- The **uncertainty-propagation wiring that lights up** once that edge exists: reusing the shipped content-derived `code-file.updated` (9a) and the existing data→finding `bears_on` derivers, so `edit code file → downstream finding flips to needs-review` works engine-agnostically.
+- **Acceptance on fixtures**, then on a migrated MM30 artifact (the t214 derived dataset + the script in its provenance).
 
-**Dependency:** C is designed only after A's model has survived the MM30 + NS migrations (§7).
+**Deferred from Spec 2 (optional, later):** a *workflow-DAG adapter* (Snakemake first, behind a backend protocol) that **auto-populates** `produced_by` for engine-managed artifacts, plus richer workflow/workflow-step/workflow-run materialization. The epistemic guarantee does not depend on it.
+
+**Dependency:** C builds on A's shipped model (`code-file`, `code-file.updated`) and the existing data→finding derivers; no DAG extraction is on the critical path.
 
 ---
 
@@ -159,9 +159,9 @@ A single unresolved reference currently hard-fails the *entire* `graph materiali
 
 **MM30.** Map `MM30_SCRIPT_METADATA` → the science block (near 1:1, mostly mechanical); delete `script_workflow_audit.py` in favor of the science check; triage the 172 orphans / 393 gaps using the lifecycle vocabulary; retire the `legacy_dirs_allowlist` entry for `scripts/` by declaring it a code root (or migrating to `code/`). MM30's in-flight remediation plan becomes a *consumer* of the science feature rather than bespoke work.
 
-**natural-systems.** Two-stage, because the exporter does more than emit code entities. *With Spec 1 (A+B):* replace `export_kg_model_sources.py`'s **code-entity block authoring** with co-located blocks materialized by science, and register the 54 unregistered one-off scripts (`exploratory`, or migrate into a workflow). *With Spec 2 (C):* retire the exporter's `workflow` / `data_package` / `web_route` materialization — that is the adapter's job — at which point the `analysis → workflow → data_package` chain becomes the standard shape. The exporter cannot be fully deleted until C ships.
+**natural-systems.** Two-stage, because the exporter does more than emit code entities. *With Spec 1 (A+B):* replace `export_kg_model_sources.py`'s **code-entity block authoring** with co-located blocks materialized by science, and register the 54 unregistered one-off scripts (`exploratory`, or migrate into a workflow). *With Spec 2 (C):* author `produced_by` on NS's `data_package` entities (the code→data edge C derives `bears_on` from), retiring the exporter's hand-rolled `analysis → workflow → data_package` provenance materialization; NS-specific concerns (`web_route`, the morphism edges) remain project-local and are out of scope. The exporter's provenance materialization can be deleted once NS authors `produced_by` and C ships; the optional workflow-DAG adapter (later) can further auto-populate it.
 
-**Acceptance is therefore split:** A+B is done when both projects delete their bespoke **metadata-block + auditor** machinery and migrate cleanly; full deletion of NS's exporter (its workflow/data-package/web-route materialization) belongs to C.
+**Acceptance is therefore split:** A+B is done when both projects delete their bespoke **metadata-block + auditor** machinery and migrate cleanly. C is done when a migrated data artifact's `produced_by` edge propagates a code edit to a downstream finding — exercised on MM30 (the t214 derived dataset); NS's exporter-provenance retirement follows the same edge.
 
 ---
 
@@ -169,7 +169,7 @@ A single unresolved reference currently hard-fails the *entire* `graph materiali
 
 - **A:** exact entity type names and full field lists; the relation-vocabulary additions; the Snakefile-as-both-code-file-and-workflow model; the precise `science.yaml` roots grammar.
 - **B:** validator classification heuristics; the port of MM30's Snakemake path-indirection parsing; merge-preserving triage tables (machine-owned vs reviewer-owned columns).
-- **C:** the backend protocol interface; DAG-extraction mechanics; the exact uncertainty-propagation wiring; second-backend extensibility.
+- **C:** the `produced_by` edge's authoring surface (frontmatter field vs structured relation) and exact schema; the `bears_on` deriver and its eligibility filter; the MM30 artifact migration that exercises it. The workflow-DAG adapter (backend protocol, DAG-extraction mechanics, second-backend extensibility) is deferred *past* C, not part of it.
 
 ---
 
