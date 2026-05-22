@@ -302,10 +302,10 @@ CORE_PROFILE = ProfileManifest(
         RelationKind(
             name="produced_by",
             predicate="sci:producedBy",
-            source_kinds=["data-package"],
-            target_kinds=["workflow-run"],
+            source_kinds=["data-package", "dataset"],
+            target_kinds=["workflow-run", "code-file"],
             layer="layer/core",
-            description="A data package was produced by a specific workflow run.",
+            description="A data artifact was produced by a workflow run or by code.",
         ),
         RelationKind(
             name="has_link",
