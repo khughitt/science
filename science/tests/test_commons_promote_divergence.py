@@ -6,8 +6,6 @@ the already-committed commons canonical entity to decide equal / subset / diverg
 
 from __future__ import annotations
 
-import pytest
-
 from science_tool.commons.promote import _canonical_fields_equal_or_subset
 
 

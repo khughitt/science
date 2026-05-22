@@ -14,6 +14,7 @@ import pytest
 
 from science_tool.commons.promote import (
     KEEP_EXISTING,
+    KEEP_EXISTING as _ke2,
     CanonicalArtifact,
     ExistingCanonicalConflict,
     PromoteDecision,
@@ -144,7 +145,7 @@ class TestExistingCanonicalConflict:
 
 class TestKeepExistingSentinel:
     def test_is_singleton(self):
-        assert KEEP_EXISTING is KEEP_EXISTING
+        assert _ke2 is KEEP_EXISTING
 
     def test_repr(self):
         assert repr(KEEP_EXISTING) == "KEEP_EXISTING"

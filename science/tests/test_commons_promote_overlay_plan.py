@@ -76,7 +76,7 @@ _CANONICAL_FOO = (
 )
 
 
-def _plan_for(tmp_path, monkeypatch, commons: Path, projects: dict[str, Path], from_order, resolve_conflict=None):
+def _plan_for(monkeypatch, commons: Path, projects: dict[str, Path], from_order, resolve_conflict=None):
     from science_tool.commons.promote import (
         PROMOTE_KIND_PAPER,
         discover_candidates,
@@ -92,7 +92,7 @@ def _plan_for(tmp_path, monkeypatch, commons: Path, projects: dict[str, Path], f
         discovery,
         commons_root=commons,
         kind=PROMOTE_KIND_PAPER,
-        resolve_conflict=resolve_conflict if resolve_conflict is not None else (lambda c: None),
+        resolve_conflict=resolve_conflict if resolve_conflict is not None else (lambda _c: None),
         from_order=from_order,
     )
 
@@ -113,7 +113,7 @@ def test_overlay_when_identical(tmp_path, monkeypatch) -> None:
         "proj-b",
         {"Foo.md": "---\nid: paper:Foo\ntitle: A study of foo\nyear: 2025\n---\n\n## Key Findings\n\nfoo is real\n"},
     )
-    plan = _plan_for(tmp_path, monkeypatch, commons, {"proj-b": proj}, ["proj-b"])
+    plan = _plan_for(monkeypatch, commons, {"proj-b": proj}, ["proj-b"])
 
     d = _decision_for(plan, "Foo")
     assert d.mode == "overlay_existing"
@@ -135,7 +135,7 @@ def test_case_insensitive_match_uses_committed_case(tmp_path, monkeypatch) -> No
         "proj-b",
         {"foo.md": "---\nid: paper:foo\ntitle: A study of foo\nyear: 2025\n---\n\n## Key Findings\n\nfoo is real\n"},
     )
-    plan = _plan_for(tmp_path, monkeypatch, commons, {"proj-b": proj}, ["proj-b"])
+    plan = _plan_for(monkeypatch, commons, {"proj-b": proj}, ["proj-b"])
 
     d = _decision_for(plan, "Foo")
     assert d.mode == "overlay_existing"
@@ -154,7 +154,7 @@ def test_mint_unchanged_when_no_existing_tag(tmp_path, monkeypatch) -> None:
         "proj-a",
         {"Bar.md": "---\nid: paper:Bar\ntitle: B\nyear: 2025\n---\n\n## Key Findings\n\nbar\n"},
     )
-    plan = _plan_for(tmp_path, monkeypatch, commons, {"proj-a": proj}, ["proj-a"])
+    plan = _plan_for(monkeypatch, commons, {"proj-a": proj}, ["proj-a"])
 
     d = _decision_for(plan, "Bar")
     assert d.mode == "mint"
@@ -184,7 +184,7 @@ def test_divergent_keep_existing_records_resolution(tmp_path, monkeypatch) -> No
         assert isinstance(conflict, ExistingCanonicalConflict)
         return KEEP_EXISTING
 
-    plan = _plan_for(tmp_path, monkeypatch, commons, {"proj-b": proj}, ["proj-b"], resolve_conflict=resolve)
+    plan = _plan_for(monkeypatch, commons, {"proj-b": proj}, ["proj-b"], resolve_conflict=resolve)
 
     d = _decision_for(plan, "Foo")
     assert d.mode == "overlay_existing"
@@ -210,11 +210,11 @@ def test_divergent_abort_propagates(tmp_path, monkeypatch) -> None:
         {"Foo.md": "---\nid: paper:Foo\ntitle: A study of foo\nyear: 2025\ndoi: 10.1/xyz\n---\n\n## Key Findings\n\nfoo is real\n"},
     )
 
-    def resolve(conflict):
+    def resolve(_conflict):
         raise PromoteConflictAbort("user aborted")
 
     with pytest.raises(PromoteConflictAbort):
-        _plan_for(tmp_path, monkeypatch, commons, {"proj-b": proj}, ["proj-b"], resolve_conflict=resolve)
+        _plan_for(monkeypatch, commons, {"proj-b": proj}, ["proj-b"], resolve_conflict=resolve)
 
 
 def test_prompt_resolve_keep_existing(monkeypatch) -> None:
@@ -234,7 +234,7 @@ def test_prompt_resolve_keep_existing(monkeypatch) -> None:
         existing_value=None,
         existing_version="1.0.0",
     )
-    monkeypatch.setattr(click, "prompt", lambda *a, **k: "k")
+    monkeypatch.setattr(click, "prompt", lambda *_a, **_k: "k")
     assert prompt_resolve(conflict) is KEEP_EXISTING
 
 
@@ -252,6 +252,6 @@ def test_prompt_resolve_abort(monkeypatch) -> None:
         existing_value=None,
         existing_version="1.0.0",
     )
-    monkeypatch.setattr(click, "prompt", lambda *a, **k: "a")
+    monkeypatch.setattr(click, "prompt", lambda *_a, **_k: "a")
     with pytest.raises(PromoteConflictAbort):
         prompt_resolve(conflict)

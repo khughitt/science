@@ -357,7 +357,7 @@ class _KeepExisting:
 
     __slots__ = ()
 
-    def __repr__(self) -> str:  # pragma: no cover - trivial
+    def __repr__(self) -> str:
         return "KEEP_EXISTING"
 
 
@@ -775,9 +775,8 @@ def plan_promote(
             )
             src_fields = merged
             src_body = classified[0].canonical_body
-            _IDENTITY = {"id", "type", "bibkey"}
-            src_fields_wo_identity = {k: v for k, v in src_fields.items() if k not in _IDENTITY}
-            ex_fields_wo_identity = {k: v for k, v in ex_fields.items() if k not in _IDENTITY}
+            src_fields_wo_identity = {k: v for k, v in src_fields.items() if k not in _PROMOTE_DERIVED_IDENTITY_KEYS}
+            ex_fields_wo_identity = {k: v for k, v in ex_fields.items() if k not in _PROMOTE_DERIVED_IDENTITY_KEYS}
             verdict, diverging = _canonical_fields_equal_or_subset(
                 src_fields_wo_identity, src_body, ex_fields_wo_identity, ex_body
             )
@@ -876,6 +875,22 @@ def plan_promote(
                 unlinked_source=unlinked_source,
             )
 
+        if overlay_mode == "overlay_existing":
+            # The canonical already lives in the commons at `existing_version`;
+            # nothing to write. Overlays (built above) still pin to it. t063 §4.
+            decisions.append(
+                PromoteDecision(
+                    slug=canonical_case,
+                    canonical_artifacts=[],
+                    canonical_version=canonical_version,
+                    overlays=overlays,
+                    resolved_conflicts=tuple(resolved_conflicts),
+                    mode=overlay_mode,
+                    existing_version=existing_version if existing else None,
+                )
+            )
+            continue
+
         canonical_decision = PromoteDecision(
             slug=canonical_case,
             canonical_artifacts=[
@@ -889,22 +904,6 @@ def plan_promote(
             overlays=overlays,
             resolved_conflicts=tuple(resolved_conflicts),
         )
-        if overlay_mode == "overlay_existing":
-            # The canonical already lives in the commons at `existing_version`;
-            # nothing to write. Overlays (built above) still pin to it. t063 §4.
-            canonical_artifacts: list[CanonicalArtifact] = []
-            decisions.append(
-                PromoteDecision(
-                    slug=canonical_case,
-                    canonical_artifacts=canonical_artifacts,
-                    canonical_version=canonical_version,
-                    overlays=overlays,
-                    resolved_conflicts=tuple(resolved_conflicts),
-                    mode=overlay_mode,
-                    existing_version=existing_version if existing else None,
-                )
-            )
-            continue
 
         primary = dataset_primary if dataset_primary is not None else classified[0]
         # NOTE: design §4.1.1 says `created` / `updated` should reflect the
@@ -3004,6 +3003,8 @@ def _canonical_fields_equal_or_subset(
     Body sections (headings as keys, text as values) are treated uniformly
     as "fields": heading keys are merged into the same comparison namespace as
     frontmatter keys, and body text is compared as a stripped string.
+    Frontmatter keys (snake_case) and body-section headings (Title Case) share
+    one comparison namespace and do not collide by schema convention.
     """
 
     def _is_present(value: Any) -> bool:
@@ -3018,11 +3019,12 @@ def _canonical_fields_equal_or_subset(
     def _values_equal(key: str, src_val: Any, ex_val: Any) -> bool:
         """Return True if the two present values are considered equal."""
         if type(src_val) is not type(ex_val):
-            # Allow list vs list only; mismatched types diverge.
+            # Differing types diverge; a list-subclass-vs-list pair falls through to the list compare below.
             if not (isinstance(src_val, list) and isinstance(ex_val, list)):
                 return False
         if isinstance(src_val, list) and isinstance(ex_val, list):
             # Order-insensitive multiset compare after element strip.
+            # Elements are expected to be strings; str() coercion tolerates YAML round-trip quirks.
             return sorted(str(e).strip() for e in src_val) == sorted(
                 str(e).strip() for e in ex_val
             )
@@ -3079,6 +3081,9 @@ def _rollback_step5(
     for tag in tags_attempted:
         _git(commons_root, "tag", "-d", tag, check=False)
 
+    # Invariant: a promote commit exists at HEAD (≥1 mint decision was committed,
+    # or a dataset side-channel failure occurred after the commit), so this reset
+    # never runs without a promote commit to undo.
     _git(commons_root, "reset", "--soft", "HEAD~1")
 
     for canonical_path in canonical_paths:
