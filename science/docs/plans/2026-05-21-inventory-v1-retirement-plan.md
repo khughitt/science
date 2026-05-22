@@ -219,12 +219,12 @@ uv run --frozen pyright
 rg -n 'inventory_v1|--schema-version 1|schema_version: Literal\["1"\]' src model/src/science_model/contracts/inventory_v2.py ~/d/dashboard/backend ~/d/dashboard/tests 2>/dev/null
 ```
 
-Expected:
+Final results:
 
-- pytest exits 0.
-- ruff exits 0.
-- pyright exits 0.
-- runtime gate prints no matches and exits 1.
+- Focused pytest passed.
+- Runtime gate printed no matches and exited 1.
+- Full ruff failed with unrelated baseline lint issues; the first was `model/tests/test_entity_schema_profile.py:9` unused `ProfileString`.
+- Full pyright failed with unrelated baseline errors; the first was `model/tests/test_entity_schema_profile.py:30`. Task-related inventory v2 pyright errors were fixed.
 
 - [x] **Step 3: Commit plan and final test adjustments**
 
