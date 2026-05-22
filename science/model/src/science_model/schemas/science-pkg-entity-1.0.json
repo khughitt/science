@@ -39,13 +39,13 @@
       "if": {"properties": {"origin": {"const": "external"}}},
       "then": {
         "required": ["access"],
-        "not": {"required": ["derivation"]}
+        "not": {"anyOf": [{"required": ["derivation"]}, {"required": ["produced_by"]}]}
       }
     },
     {
       "if": {"properties": {"origin": {"const": "derived"}}},
       "then": {
-        "required": ["derivation"],
+        "anyOf": [{"required": ["derivation"]}, {"required": ["produced_by"]}],
         "not": {"anyOf": [{"required": ["access"]}, {"required": ["accessions"]}, {"required": ["local_path"]}]}
       }
     }

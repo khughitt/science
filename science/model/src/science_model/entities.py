@@ -545,7 +545,7 @@ class DatasetEntity(ProjectEntity):
     """Dataset — typed entity with rev 2.2 invariants (origin/access/derivation).
 
     Invariant #7 (origin=external → access required) and #8 (origin=derived →
-    derivation required) are enforced on this typed subclass.
+    derivation and/or code produced_by required) are enforced on this typed subclass.
     """
 
     tier: str = ""
@@ -553,7 +553,17 @@ class DatasetEntity(ProjectEntity):
 
     @model_validator(mode="after")
     def _enforce_dataset_invariants(self) -> "DatasetEntity":
-        """Invariants #7/#8: origin ⟺ which top-level block applies."""
+        """Invariants #7/#8: origin ⟺ which provenance applies.
+
+        (produced_by is constrained to code-file refs and to dataset/data-package
+        kinds by the base Entity validator added in Task 2; here we only enforce
+        the origin-specific rules.)
+
+        external: access required; no derivation, no produced_by (raw input
+        cannot claim code produced it).
+        derived: at least one provenance path — a derivation block and/or
+        non-empty code-only produced_by; no access/accessions/local_path.
+        """
         if self.origin is None:
             return self
         if self.origin == "external":
@@ -561,9 +571,11 @@ class DatasetEntity(ProjectEntity):
                 raise ValueError(f"{self.id}: origin=external requires an access block (invariant #7)")
             if self.derivation is not None:
                 raise ValueError(f"{self.id}: origin=external must not carry a derivation block (invariant #7)")
+            if self.produced_by:
+                raise ValueError(f"{self.id}: origin=external must not carry produced_by (invariant #7)")
         elif self.origin == "derived":
-            if self.derivation is None:
-                raise ValueError(f"{self.id}: origin=derived requires a derivation block (invariant #8)")
+            if self.derivation is None and not self.produced_by:
+                raise ValueError(f"{self.id}: origin=derived requires a derivation or produced_by block (invariant #8)")
             if self.access is not None:
                 raise ValueError(f"{self.id}: origin=derived must not carry an access block (invariant #8)")
             if self.accessions:

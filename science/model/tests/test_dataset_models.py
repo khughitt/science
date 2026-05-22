@@ -207,11 +207,6 @@ def test_entity_invariant_external_missing_access_rejects() -> None:
         DatasetEntity(**_entity_kwargs(), origin="external", access=None)
 
 
-def test_entity_invariant_derived_missing_derivation_rejects() -> None:
-    with pytest.raises(ValueError, match="derivation"):
-        DatasetEntity(**_entity_kwargs(), origin="derived", derivation=None)
-
-
 def test_entity_invariant_does_not_apply_to_non_dataset_types() -> None:
     """The origin/access/derivation invariant applies only to type=dataset."""
     e = Entity(
@@ -227,3 +222,24 @@ def test_entity_invariant_does_not_apply_to_non_dataset_types() -> None:
         file_path="doc/hypotheses/h1.md",
     )
     assert e.origin is None  # no constraint
+
+
+def test_derived_with_produced_by_no_derivation_is_valid() -> None:
+    ds = DatasetEntity(**_entity_kwargs(), origin="derived", produced_by=["code-file:stages/run.py"])
+    assert ds.produced_by == ["code-file:stages/run.py"]
+
+
+def test_derived_with_neither_derivation_nor_produced_by_rejects() -> None:
+    with pytest.raises(ValueError, match="derivation or produced_by"):
+        DatasetEntity(**_entity_kwargs(), origin="derived")
+
+
+def test_external_with_produced_by_rejects() -> None:
+    with pytest.raises(ValueError, match="produced_by"):
+        DatasetEntity(**_entity_kwargs(), origin="external", access=_ext_access(), produced_by=["code-file:x.py"])
+
+
+def test_derived_with_empty_produced_by_rejects() -> None:
+    # Empty list is not a provenance path; with no derivation this must fail.
+    with pytest.raises(ValueError, match="derivation or produced_by"):
+        DatasetEntity(**_entity_kwargs(), origin="derived", produced_by=[])

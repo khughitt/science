@@ -175,3 +175,27 @@ def test_produced_by_workflow_run_ref_rejected(entity_schema: dict) -> None:
     entity["produced_by"] = ["workflow-run:wf-r1"]
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(entity, entity_schema)
+
+
+def test_derived_with_produced_by_no_derivation_validates(entity_schema: dict) -> None:
+    # The relaxed `origin: derived` branch (anyOf) accepts code provenance alone.
+    entity = _valid_derived_entity()
+    entity.pop("derivation")
+    entity["produced_by"] = ["code-file:stages/run.py"]
+    jsonschema.validate(entity, entity_schema)
+
+
+def test_external_with_produced_by_rejected(entity_schema: dict) -> None:
+    entity = _valid_external_entity()
+    entity["produced_by"] = ["code-file:x.py"]
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(entity, entity_schema)
+
+
+def test_produced_by_empty_list_rejected(entity_schema: dict) -> None:
+    # minItems:1 rejects []; with no derivation the derived branch also fails.
+    entity = _valid_derived_entity()
+    entity.pop("derivation")
+    entity["produced_by"] = []
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(entity, entity_schema)
