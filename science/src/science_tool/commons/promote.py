@@ -1414,6 +1414,13 @@ def apply_promote(
         # ---------- Step 5.1: tag preflight ----------
         current_stage = "write_commons"
         for decision in plan.decisions:
+            # overlay_existing decisions intentionally reuse an already-present
+            # tag (the existing canonical version); checking it would falsely
+            # abort. Only mint decisions get a fresh tag, so the clash guard
+            # below applies to them alone — a mint decision whose tag exists is
+            # a genuine internal inconsistency and must fail loud (t063 §4).
+            if decision.mode != "mint":
+                continue
             tag = f"{plan.kind.kind}/{decision.slug}/{decision.canonical_version}"
             existing = _git(commons_root, "rev-parse", "--verify", "--quiet", tag, check=False)
             if existing.returncode == 0:
@@ -1429,7 +1436,11 @@ def apply_promote(
         # (design §6.4 "Before step 5" recovery path).
         written_canonical_paths: list[Path] = []
         canonical_writes: list[tuple[Path, str]] = []
-        for decision in plan.decisions:
+        # Only mint decisions contribute canonical files. overlay_existing
+        # decisions carry canonical_artifacts == [] (their canonical already
+        # lives in the commons), so iterating mint-only makes the intent
+        # explicit and keeps an all-overlay batch from committing anything.
+        for decision in (d for d in plan.decisions if d.mode == "mint"):
             for artifact in decision.canonical_artifacts:
                 canonical_writes.append(
                     (
@@ -1450,32 +1461,46 @@ def apply_promote(
             ) from exc
 
         # ---------- Step 5.2: commit (path-limited) ----------
+        # When every decision is overlay_existing, no canonical files were
+        # written, so there is no promote-owned commit to make: leave
+        # commons_commit = None (NOT current HEAD). The audit renderer turns a
+        # non-None commons_commit into `git revert <commit>` rollback guidance;
+        # recording HEAD here would point that guidance at an unrelated commit
+        # (t063 §4).
         rel_paths = [str(p.relative_to(commons_root_resolved)) for p in written_canonical_paths]
-        try:
-            _git(commons_root, "add", "--", *rel_paths)
-            _git(
-                commons_root,
-                "commit",
-                "-m",
-                f"promote: {len(plan.decisions)} {plan.kind.commons_subdir} via op {op_id}",
-                "--",
-                *rel_paths,
-            )
-        except subprocess.CalledProcessError as exc:
-            _restore_paths_to_head(commons_root_resolved, written_canonical_paths)
-            raise PromoteWriteError(
-                stage="write_commons",
-                detail=f"commons commit failed: {exc.stderr or exc}",
-            ) from exc
+        commons_commit = None
+        if rel_paths:
+            try:
+                _git(commons_root, "add", "--", *rel_paths)
+                _git(
+                    commons_root,
+                    "commit",
+                    "-m",
+                    f"promote: {len(plan.decisions)} {plan.kind.commons_subdir} via op {op_id}",
+                    "--",
+                    *rel_paths,
+                )
+            except subprocess.CalledProcessError as exc:
+                _restore_paths_to_head(commons_root_resolved, written_canonical_paths)
+                raise PromoteWriteError(
+                    stage="write_commons",
+                    detail=f"commons commit failed: {exc.stderr or exc}",
+                ) from exc
 
-        commons_commit = _git(commons_root, "rev-parse", "--short", "HEAD").stdout.strip()
-        # rev-parse on HEAD after a successful commit is always a non-empty
-        # SHA; narrowing here lets the type-checker see commons_commit as `str`
-        # for the rest of the function.
-        assert commons_commit, "rev-parse HEAD returned empty after commit"
+            commons_commit = _git(commons_root, "rev-parse", "--short", "HEAD").stdout.strip()
+            # rev-parse on HEAD after a successful commit is always a non-empty
+            # SHA; narrowing here lets the type-checker see commons_commit as a
+            # real value for the tag step (which is gated on it being non-None).
+            assert commons_commit, "rev-parse HEAD returned empty after commit"
 
         # ---------- Step 5.3: tag (path-limited per-tag) ----------
-        for decision in sorted(plan.decisions, key=lambda d: d.slug):
+        # Tag mint decisions only — overlay_existing reuses an existing tag.
+        # commons_commit is non-None whenever there is >=1 mint decision (it was
+        # set in 5.2 when canonical files were committed); the guard documents
+        # that invariant and keeps the type-checker happy for `git tag <commit>`.
+        mint_decisions = [d for d in plan.decisions if d.mode == "mint"]
+        for decision in sorted(mint_decisions, key=lambda d: d.slug):
+            assert commons_commit is not None, "mint decision present but no commons commit"
             tag = f"{plan.kind.kind}/{decision.slug}/{decision.canonical_version}"
             try:
                 _git(commons_root, "tag", tag, commons_commit)

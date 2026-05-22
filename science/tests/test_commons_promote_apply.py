@@ -902,6 +902,204 @@ def test_apply_promote_tag_preflight_rejects_existing_tag_for_mint(tmp_path) -> 
         apply_promote(plan, commons_root=commons, invocation="...")
 
 
+def _commit_canonical_and_tag(commons: Path, slug: str, version: str = "1.0.0") -> None:
+    """Commit a canonical paper file + version tag into the commons, mirroring
+    the consistent state a promoted entity leaves behind (t063 overlay tests)."""
+    (commons / "papers" / f"{slug}.md").write_text(
+        f"---\nid: paper:{slug}\ntype: paper\nbibkey: {slug}\n"
+        f"schema_profile: science-entity-base/1.0+paper/2.0\nversion: {version}\n"
+        f"title: A\ntags: []\n---\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(commons), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(commons), "commit", "-q", "-m", f"add {slug}"], check=True)
+    subprocess.run(["git", "-C", str(commons), "tag", f"paper/{slug}/{version}"], check=True)
+
+
+def _git_out(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(root), *args],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def test_apply_promote_all_overlay_existing_writes_no_commit_no_tag(tmp_path, monkeypatch) -> None:
+    """An all-overlay_existing batch mints nothing: no commons commit, no new
+    tag, commons_commit is None, only the source overlay is rewritten and pinned
+    to the existing version. Re-running stays idempotent (t063 §4)."""
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    _commit_canonical_and_tag(commons, "Foo")
+
+    proj = _build_project(
+        tmp_path,
+        "proj-a",
+        {"Foo.md": "---\nid: paper:Foo\ntitle: A\n---\n"},
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+
+    tags_before = _git_out(commons, "tag", "--list")
+    canonical_blob_before = _git_out(commons, "rev-parse", "HEAD:papers/Foo.md")
+
+    discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
+    plan = plan_promote(
+        discovery,
+        commons_root=commons,
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
+    )
+    assert [d.mode for d in plan.decisions] == ["overlay_existing"]
+
+    result = apply_promote(plan, commons_root=commons, invocation="science commons promote paper --from proj-a --apply")
+
+    assert result.status == "ok"
+    assert result.commons_commit is None
+    assert result.tags_created == []
+    # No new tag in the commons (the existing one is intentionally reused).
+    assert _git_out(commons, "tag", "--list") == tags_before
+    # No new *canonical* commit: the committed canonical blob is byte-unchanged.
+    # (The only new HEAD commit is the separate audit-log commit, which touches
+    # .migrations/ exclusively — it is never recorded as commons_commit.)
+    assert _git_out(commons, "rev-parse", "HEAD:papers/Foo.md") == canonical_blob_before
+    last_files = _git_out(commons, "show", "--stat", "--format=", "--name-only", "HEAD").splitlines()
+    assert all(f.startswith(".migrations/") for f in last_files if f), last_files
+    # The source summary is rewritten as an overlay pinned to the existing version.
+    overlay_text = (proj / "doc" / "papers" / "Foo.md").read_text(encoding="utf-8")
+    assert "overlay_of: paper:Foo" in overlay_text
+    assert 'pin_version: "1.0.0"' in overlay_text
+
+    # Idempotent re-run: commit the overlay, re-discover + plan + apply again.
+    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(proj), "commit", "-q", "-m", "promote"], check=True)
+    tags_before2 = _git_out(commons, "tag", "--list")
+    canonical_blob_before2 = _git_out(commons, "rev-parse", "HEAD:papers/Foo.md")
+    discovery2 = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
+    plan2 = plan_promote(
+        discovery2,
+        commons_root=commons,
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
+    )
+    result2 = apply_promote(plan2, commons_root=commons, invocation="re-run")
+    assert result2.status == "ok"
+    assert result2.commons_commit is None
+    assert result2.tags_created == []
+    assert _git_out(commons, "tag", "--list") == tags_before2
+    assert _git_out(commons, "rev-parse", "HEAD:papers/Foo.md") == canonical_blob_before2
+
+
+def test_apply_promote_all_overlay_existing_audit_log_has_no_revert_guidance(tmp_path, monkeypatch) -> None:
+    """An all-overlay apply leaves commons_commit None, so the rendered audit log
+    emits no `git revert` rollback guidance for the commons (t063 §4)."""
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    _commit_canonical_and_tag(commons, "Foo")
+
+    proj = _build_project(
+        tmp_path,
+        "proj-a",
+        {"Foo.md": "---\nid: paper:Foo\ntitle: A\n---\n"},
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+
+    discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
+    plan = plan_promote(
+        discovery,
+        commons_root=commons,
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
+    )
+    result = apply_promote(plan, commons_root=commons, invocation="...")
+
+    assert result.commons_commit is None
+    assert result.audit_log_path is not None
+    log = yaml.safe_load(result.audit_log_path.read_text(encoding="utf-8"))
+    assert log["commons_commit"] is None
+    assert log["rollback"]["commons"] is None
+
+
+def test_apply_promote_mixed_batch_mints_new_overlays_existing(tmp_path, monkeypatch) -> None:
+    """A batch with one net-new paper (mint) + one already-committed paper
+    (overlay_existing): only the new one is minted+tagged, the existing one is
+    overlaid, both source summaries are rewritten, commons_commit is the mint
+    commit (t063 §4)."""
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    _commit_canonical_and_tag(commons, "Foo")
+
+    proj = _build_project(
+        tmp_path,
+        "proj-a",
+        {
+            "Foo.md": "---\nid: paper:Foo\ntitle: A\n---\n",
+            "Bar2025.md": "---\nid: paper:Bar2025\ntitle: B\nyear: 2025\n---\n\n## Key Findings\n\nbar\n",
+        },
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+
+    discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
+    plan = plan_promote(
+        discovery,
+        commons_root=commons,
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
+    )
+    modes = {d.slug: d.mode for d in plan.decisions}
+    assert modes == {"Foo": "overlay_existing", "Bar2025": "mint"}
+
+    result = apply_promote(plan, commons_root=commons, invocation="...")
+
+    assert result.status == "ok"
+    # Only the net-new paper is tagged.
+    assert result.tags_created == ["paper/Bar2025/1.0.0"]
+    assert result.commons_commit is not None
+    # The new canonical was committed; the existing one is untouched in-place.
+    assert (commons / "papers" / "Bar2025.md").exists()
+    # Both source summaries are rewritten as overlays.
+    foo_overlay = (proj / "doc" / "papers" / "Foo.md").read_text(encoding="utf-8")
+    bar_overlay = (proj / "doc" / "papers" / "Bar2025.md").read_text(encoding="utf-8")
+    assert "overlay_of: paper:Foo" in foo_overlay
+    assert 'pin_version: "1.0.0"' in foo_overlay
+    assert "overlay_of: paper:Bar2025" in bar_overlay
+    assert 'pin_version: "1.0.0"' in bar_overlay
+
+
 def test_apply_promote_step4_os_error_converts_to_promote_write_error(
     tmp_path,
     monkeypatch,
