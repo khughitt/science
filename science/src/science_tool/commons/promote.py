@@ -2788,6 +2788,105 @@ def _write_audit_log(
     return path
 
 
+def _canonical_fields_equal_or_subset(
+    source_fields: Mapping[str, Any],
+    source_body: Mapping[str, str],
+    existing_fields: Mapping[str, Any],
+    existing_body: Mapping[str, str],
+) -> tuple[Literal["equal", "subset", "divergent"], list[str]]:
+    """Compare a source-derived canonical entity against the committed commons entity.
+
+    Returns a 2-tuple ``(verdict, diverging_fields)`` where *verdict* is one of:
+
+    - ``"equal"``     — every source-present field matches the existing entity;
+                        source-present keys == existing-present keys.
+    - ``"subset"``    — every source-present field matches, but existing has ≥1
+                        present field/section that the source does not.
+    - ``"divergent"`` — ≥1 source-present field either is absent in the existing
+                        entity or has a differing value after normalization.
+                        ``diverging_fields`` is the sorted list of those keys.
+
+    Both ``"equal"`` and ``"subset"`` mean it is safe to overlay against the
+    existing entity without conflict.  ``"divergent"`` means the caller must
+    raise / route a conflict.
+
+    **Caller contract:** strip identity/case fields (``id``, ``type``,
+    ``bibkey``) before calling — this function compares whatever it is given
+    and does **not** special-case those keys.
+
+    Normalization rules
+    -------------------
+    *Presence*: a value is *present* iff it is not ``None`` and not an empty
+    ``str``/``list``.
+
+    *Value comparison* (only when both sides are present):
+
+    - ``list`` vs ``list``: order-insensitive multiset compare after
+      ``str.strip()`` on each element.
+    - ``str`` vs ``str``: compare after ``.strip()``.  For the field key
+      ``"title"`` only, additionally apply ``.casefold()`` (case-insensitive).
+      All other string fields are case-sensitive (after strip).
+    - anything else: direct ``==``.
+    - Mismatched types → diverges.
+
+    Body sections (headings as keys, text as values) are treated uniformly
+    as "fields": heading keys are merged into the same comparison namespace as
+    frontmatter keys, and body text is compared as a stripped string.
+    """
+
+    def _is_present(value: Any) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, str) and not value.strip():
+            return False
+        if isinstance(value, list) and len(value) == 0:
+            return False
+        return True
+
+    def _values_equal(key: str, src_val: Any, ex_val: Any) -> bool:
+        """Return True if the two present values are considered equal."""
+        if type(src_val) is not type(ex_val):
+            # Allow list vs list only; mismatched types diverge.
+            if not (isinstance(src_val, list) and isinstance(ex_val, list)):
+                return src_val == ex_val
+        if isinstance(src_val, list) and isinstance(ex_val, list):
+            # Order-insensitive multiset compare after element strip.
+            return sorted(str(e).strip() for e in src_val) == sorted(
+                str(e).strip() for e in ex_val
+            )
+        if isinstance(src_val, str) and isinstance(ex_val, str):
+            src_stripped = src_val.strip()
+            ex_stripped = ex_val.strip()
+            if key == "title":
+                return src_stripped.casefold() == ex_stripped.casefold()
+            return src_stripped == ex_stripped
+        return src_val == ex_val
+
+    # Merge frontmatter and body into flat dicts (body keys are heading strings).
+    all_source: dict[str, Any] = {**source_fields, **source_body}
+    all_existing: dict[str, Any] = {**existing_fields, **existing_body}
+
+    source_present = {k for k, v in all_source.items() if _is_present(v)}
+    existing_present = {k for k, v in all_existing.items() if _is_present(v)}
+
+    diverging: list[str] = []
+    for key in source_present:
+        if key not in existing_present:
+            # Source has a value; existing does not → diverges.
+            diverging.append(key)
+        else:
+            if not _values_equal(key, all_source[key], all_existing[key]):
+                diverging.append(key)
+
+    diverging.sort()
+
+    if diverging:
+        return ("divergent", diverging)
+    if source_present < existing_present:
+        return ("subset", [])
+    return ("equal", [])
+
+
 def _rollback_step5(
     commons_root: Path,
     tags_attempted: list[str],
