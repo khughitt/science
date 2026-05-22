@@ -2,7 +2,20 @@
 
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
+
 import pytest
+
+
+def _init_commons_repo(root: Path) -> Path:
+    """Init `root` as an empty git repo so plan_promote's existing-canonical
+    lookup (git tag --list) has a repo to query. No tags → mint path."""
+    root.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.email", "test@x"], check=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.name", "test"], check=True)
+    return root
 
 
 def test_promote_validation_error_exists_and_carries_fields() -> None:
@@ -58,8 +71,7 @@ def test_plan_promote_validates_canonical_against_kind_profile(tmp_path, monkeyp
         "---\nid: paper:Adams2025\ntitle: A\nyear: 99\n---\n",
         encoding="utf-8",
     )
-    commons = tmp_path / "commons"
-    commons.mkdir()
+    commons = _init_commons_repo(tmp_path / "commons")
 
     monkeypatch.setattr(
         "science_tool.commons.promote.resolve_project_by_id",
@@ -91,8 +103,7 @@ def test_plan_promote_wraps_overlay_validation_failure(tmp_path, monkeypatch) ->
         "---\nid: paper:Adams2025\ntitle: A\nyear: 2025\ntags: [local]\n---\n",
         encoding="utf-8",
     )
-    commons = tmp_path / "commons"
-    commons.mkdir()
+    commons = _init_commons_repo(tmp_path / "commons")
 
     monkeypatch.setattr(
         "science_tool.commons.promote.resolve_project_by_id",

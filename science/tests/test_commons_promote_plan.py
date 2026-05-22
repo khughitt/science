@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from datetime import date, datetime
 from pathlib import Path
 
@@ -22,6 +23,17 @@ from science_tool.commons.promote import (
 _PAPER_PROFILE = default_profile_for_kind("paper")
 _PAPER_POLICY = read_merge_policy(_PAPER_PROFILE)
 _PAPER_SECTIONS = read_canonical_body_sections(_PAPER_PROFILE)
+
+
+def _init_commons_repo(root: Path) -> Path:
+    """Init `root` as an empty git repo so plan_promote's existing-canonical
+    lookup (which reads `git tag --list`) has a valid repo to query. No tags →
+    every slug routes to the mint path, exercising the pre-t063 behavior."""
+    root.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.email", "test@x"], check=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.name", "test"], check=True)
+    return root
 
 
 def _merge_cand(slug: str, fields: dict) -> PromoteCandidate:
@@ -499,7 +511,7 @@ def test_plan_promote_groups_by_bibkey_and_carries_failures(tmp_path) -> None:
 
     plan = plan_promote(
         discovery,
-        commons_root=tmp_path,
+        commons_root=_init_commons_repo(tmp_path),
         kind=PROMOTE_KIND_PAPER,
         resolve_conflict=lambda c: None,
     )
@@ -550,7 +562,7 @@ def test_plan_promote_invokes_resolver_on_conflict(tmp_path) -> None:
 
     plan = plan_promote(
         discovery,
-        commons_root=tmp_path,
+        commons_root=_init_commons_repo(tmp_path),
         kind=PROMOTE_KIND_PAPER,
         resolve_conflict=picker,
     )
@@ -589,7 +601,7 @@ def test_plan_promote_case_collision_picks_first_from_order(tmp_path) -> None:
     )
     plan = plan_promote(
         discovery,
-        commons_root=tmp_path,
+        commons_root=_init_commons_repo(tmp_path),
         kind=PROMOTE_KIND_PAPER,
         resolve_conflict=lambda c: None,
         from_order=["A", "B"],

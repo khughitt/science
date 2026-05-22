@@ -815,17 +815,27 @@ def test_apply_promote_rename_collision_aborts(tmp_path, monkeypatch) -> None:
         )
 
 
-def test_apply_promote_tag_preflight_rejects_existing_tag(tmp_path, monkeypatch) -> None:
-    from science_tool.commons.errors import PromoteWriteError
+def test_plan_routes_existing_tag_to_overlay_existing(tmp_path, monkeypatch) -> None:
+    """A slug already tagged in the commons is resolved at plan time to
+    overlay_existing (t063 §3) — no longer an apply-time tag-clash abort."""
     from science_tool.commons.promote import (
         PROMOTE_KIND_PAPER,
-        apply_promote,
         discover_candidates,
         plan_promote,
     )
 
-    _init_commons(tmp_path / "commons")
-    subprocess.run(["git", "-C", str(tmp_path / "commons"), "tag", "paper/Adams2025/1.0.0"], check=True)
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    # A real committed canonical + tag (the consistent state a tag implies).
+    (commons / "papers" / "Adams2025.md").write_text(
+        "---\nid: paper:Adams2025\ntype: paper\nbibkey: Adams2025\n"
+        "schema_profile: science-entity-base/1.0+paper/2.0\nversion: 1.0.0\n"
+        "title: A\ntags: []\n---\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(commons), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(commons), "commit", "-q", "-m", "add Adams2025"], check=True)
+    subprocess.run(["git", "-C", str(commons), "tag", "paper/Adams2025/1.0.0"], check=True)
 
     proj = _build_project(
         tmp_path,
@@ -839,13 +849,57 @@ def test_apply_promote_tag_preflight_rejects_existing_tag(tmp_path, monkeypatch)
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
     plan = plan_promote(
         discovery,
-        commons_root=tmp_path / "commons",
+        commons_root=commons,
         kind=PROMOTE_KIND_PAPER,
         resolve_conflict=lambda c: None,
         from_order=["proj-a"],
     )
+    decision = next(d for d in plan.decisions if d.slug == "Adams2025")
+    assert decision.mode == "overlay_existing"
+    assert decision.canonical_artifacts == []
+    assert decision.canonical_version == "1.0.0"
+
+
+def test_apply_promote_tag_preflight_rejects_existing_tag_for_mint(tmp_path) -> None:
+    """Defensive guard: a hand-constructed *mint* decision whose tag already
+    exists must still fail loud at apply time (t063 §4) — planning normally
+    routes such a slug to overlay_existing, so this only fires on internal
+    inconsistency."""
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        CanonicalArtifact,
+        PROMOTE_KIND_PAPER,
+        PromoteDecision,
+        PromotePlan,
+        apply_promote,
+    )
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    subprocess.run(["git", "-C", str(commons), "tag", "paper/Adams2025/1.0.0"], check=True)
+
+    plan = PromotePlan(
+        decisions=[
+            PromoteDecision(
+                slug="Adams2025",
+                canonical_artifacts=[
+                    CanonicalArtifact(
+                        path=Path("papers/Adams2025.md"),
+                        content="---\nid: paper:Adams2025\n---\n",
+                        validator="plain",
+                    )
+                ],
+                canonical_version="1.0.0",
+                overlays={},
+                resolved_conflicts=(),
+                mode="mint",
+            )
+        ],
+        failed_candidates=[],
+        kind=PROMOTE_KIND_PAPER,
+    )
     with pytest.raises(PromoteWriteError, match="tag"):
-        apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
+        apply_promote(plan, commons_root=commons, invocation="...")
 
 
 def test_apply_promote_step4_os_error_converts_to_promote_write_error(

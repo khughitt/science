@@ -500,12 +500,46 @@ def discover_candidates(
     return DiscoveryResult(candidates_by_slug=grouped, failed_candidates=failures)
 
 
-def prompt_resolve(conflict: FieldConflict) -> Any:
+def prompt_resolve(conflict: FieldConflict | ExistingCanonicalConflict) -> Any:
     """Interactive terminal prompt — the default `resolve_conflict` callback.
 
     UI mirrors design §7.1. Returns the resolved value (a candidate value, a
     user-entered manual value, or raises `PromoteConflictAbort` on 'a' / Ctrl-C).
+
+    For an `ExistingCanonicalConflict` (source-vs-committed divergence) the only
+    non-abort outcome is keep-existing: returns the `KEEP_EXISTING` sentinel on
+    'k', raises `PromoteConflictAbort` on 'a' / Ctrl-C. No candidate enumeration
+    and no manual-entry branch (design §3a).
     """
+    if isinstance(conflict, ExistingCanonicalConflict):
+        click.echo(
+            f"\nExisting canonical {conflict.kind}:{conflict.slug} "
+            f"(version {conflict.existing_version}) diverges on "
+            f'field "{conflict.field}":'
+        )
+        click.echo(f"  source : {conflict.source_value!r}")
+        click.echo(f"  existing: {conflict.existing_value!r}")
+        click.echo("  [k] keep existing (overlay)")
+        click.echo("  [a] abort batch")
+        while True:
+            try:
+                choice = click.prompt(
+                    "Choose [k/a]",
+                    type=str,
+                    show_default=False,
+                ).strip()
+            except (click.Abort, KeyboardInterrupt) as exc:
+                raise PromoteConflictAbort(
+                    "user aborted at existing-canonical conflict prompt"
+                ) from exc
+            if choice.lower() == "k":
+                return KEEP_EXISTING
+            if choice.lower() == "a":
+                raise PromoteConflictAbort(
+                    "user chose 'abort batch' at existing-canonical conflict prompt"
+                )
+            click.echo("invalid selection")
+
     click.echo(f'\nConflict for {conflict.kind}:{conflict.slug}, field "{conflict.field}":')
     ordered = sorted(conflict.candidates.items())
     for idx, (slug, value) in enumerate(ordered, start=1):
@@ -540,7 +574,7 @@ def plan_promote(
     *,
     commons_root: Path,
     kind: PromoteKindConfig,
-    resolve_conflict: Callable[[FieldConflict], Any] | None = None,
+    resolve_conflict: Callable[[FieldConflict | ExistingCanonicalConflict], Any] | None = None,
     from_order: list[str] | None = None,
     mixin_extensions: tuple["ProfileComponent", ...] = (),
 ) -> PromotePlan:
@@ -648,6 +682,25 @@ def plan_promote(
 
         canonical_case = _pick_canonical_bibkey_case(classified, from_order)
 
+        # Detect an already-promoted canonical (paper only, t063). When present,
+        # the committed case overrides the source-derived case so the
+        # collision pre-check and overlay-target computation below use it, and
+        # the decision becomes an overlay against the existing version rather
+        # than minting a duplicate. May raise PromoteInputError on multi-case
+        # commons corruption — let it propagate.
+        existing = (
+            _existing_canonical_for_slug(commons_root, kind, slug_norm)
+            if kind.kind == "paper"
+            else None
+        )
+        if existing is not None:
+            committed_case, existing_version = existing
+            canonical_case = committed_case
+        canonical_version = existing_version if existing else "1.0.0"
+        overlay_mode: Literal["mint", "overlay_existing"] = (
+            "overlay_existing" if existing else "mint"
+        )
+
         # Pre-check for case-rename collisions before any conflict prompts
         # (design §4.1.3): if the rename target already exists in the project
         # directory and is NOT the source file itself, the group is un-promotable.
@@ -709,6 +762,64 @@ def plan_promote(
             )
             merged[conflict.field] = resolved_value
 
+        # Divergence gate (paper, overlay_existing): compare the merged
+        # source-derived canonical against the committed canonical. Equal/subset
+        # → safe to overlay; divergent → route each diverging field through the
+        # resolve_conflict channel (keep-existing or abort). t063 §3 / §3a.
+        if existing is not None:
+            existing_fm, existing_body_text = _parse_entity_file(
+                commons_root / kind.commons_subdir / f"{canonical_case}.md"
+            )
+            ex_fields, _, ex_body, _ = _classify_entity(
+                existing_fm, existing_body_text, merge_policy, body_sections
+            )
+            src_fields = merged
+            src_body = classified[0].canonical_body
+            _IDENTITY = {"id", "type", "bibkey"}
+            src_fields_wo_identity = {k: v for k, v in src_fields.items() if k not in _IDENTITY}
+            ex_fields_wo_identity = {k: v for k, v in ex_fields.items() if k not in _IDENTITY}
+            verdict, diverging = _canonical_fields_equal_or_subset(
+                src_fields_wo_identity, src_body, ex_fields_wo_identity, ex_body
+            )
+            if verdict == "divergent":
+                # Body sections and frontmatter share one comparison namespace;
+                # look each diverging key up wherever it lives.
+                merged_src = {**src_fields_wo_identity, **src_body}
+                merged_ex = {**ex_fields_wo_identity, **ex_body}
+                for diverging_field in diverging:
+                    source_value = merged_src.get(diverging_field)
+                    existing_value = merged_ex.get(diverging_field)
+                    conflict = ExistingCanonicalConflict(
+                        slug=canonical_case,
+                        kind=kind.kind,
+                        field=diverging_field,
+                        source_value=source_value,
+                        existing_value=existing_value,
+                        existing_version=existing_version,
+                    )
+                    resolution = resolve_conflict(conflict)
+                    if resolution is not KEEP_EXISTING:
+                        # The callback's only non-abort outcome is KEEP_EXISTING;
+                        # an abort raises PromoteConflictAbort (propagates). Any
+                        # other return is a programming error.
+                        raise PromoteInputError(
+                            "resolve_conflict returned an unexpected value for an "
+                            f"ExistingCanonicalConflict ({resolution!r}); expected "
+                            "KEEP_EXISTING or a PromoteConflictAbort"
+                        )
+                    resolved_conflicts.append(
+                        ConflictResolution(
+                            slug=canonical_case,
+                            field=diverging_field,
+                            candidates={
+                                "<commons-existing>": existing_value,
+                                "<source-merged>": source_value,
+                            },
+                            resolved_to=existing_value,
+                            source_project=None,
+                        )
+                    )
+
         if kind.kind == "dataset":
             canonical_artifact_path = Path(kind.commons_subdir) / canonical_case / "entity.md"
         else:
@@ -747,7 +858,7 @@ def plan_promote(
                             validator="entity-mixin",
                         )
                     ],
-                    canonical_version="1.0.0",
+                    canonical_version=canonical_version,
                     overlays={},
                     resolved_conflicts=(),
                 ),
@@ -760,7 +871,7 @@ def plan_promote(
                 path=target_path,
                 before_sha="",
                 after_content=rendered_overlay,
-                pin_version="1.0.0",
+                pin_version=canonical_version,
                 rename_from=rename_from,
                 unlinked_source=unlinked_source,
             )
@@ -774,10 +885,27 @@ def plan_promote(
                     validator="entity-mixin",
                 )
             ],
-            canonical_version="1.0.0",
+            canonical_version=canonical_version,
             overlays=overlays,
             resolved_conflicts=tuple(resolved_conflicts),
         )
+        if overlay_mode == "overlay_existing":
+            # The canonical already lives in the commons at `existing_version`;
+            # nothing to write. Overlays (built above) still pin to it. t063 §4.
+            canonical_artifacts: list[CanonicalArtifact] = []
+            decisions.append(
+                PromoteDecision(
+                    slug=canonical_case,
+                    canonical_artifacts=canonical_artifacts,
+                    canonical_version=canonical_version,
+                    overlays=overlays,
+                    resolved_conflicts=tuple(resolved_conflicts),
+                    mode=overlay_mode,
+                    existing_version=existing_version if existing else None,
+                )
+            )
+            continue
+
         primary = dataset_primary if dataset_primary is not None else classified[0]
         # NOTE: design §4.1.1 says `created` / `updated` should reflect the
         # apply timestamp, but apply_promote currently writes this rendered
@@ -862,9 +990,11 @@ def plan_promote(
             PromoteDecision(
                 slug=canonical_case,
                 canonical_artifacts=canonical_artifacts,
-                canonical_version="1.0.0",
+                canonical_version=canonical_version,
                 overlays=overlays,
                 resolved_conflicts=tuple(resolved_conflicts),
+                mode=overlay_mode,
+                existing_version=existing_version if existing else None,
             )
         )
 
