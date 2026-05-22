@@ -278,6 +278,7 @@ class Entity(BaseModel):
     datapackage: str = ""
     local_path: str = ""
     consumed_by: list[str] = Field(default_factory=list)
+    produced_by: list[str] = Field(default_factory=list)
     parent_dataset: str = ""
     siblings: list[str] = Field(default_factory=list)
 
@@ -302,6 +303,17 @@ class Entity(BaseModel):
             raise ValueError("replaced_by must not equal the entity canonical_id")
         if len({xref.curie for xref in self.xrefs}) != len(self.xrefs):
             raise ValueError("xrefs must not contain duplicate external ids")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_produced_by(self) -> "Entity":
+        if not self.produced_by:
+            return self
+        if self.kind not in ("dataset", "data-package"):
+            raise ValueError(f"produced_by is only allowed on dataset/data-package entities, not {self.kind!r}")
+        for ref in self.produced_by:
+            if not ref.startswith("code-file:"):
+                raise ValueError(f"produced_by entries must be code-file:<id> references, got {ref!r}")
         return self
 
 

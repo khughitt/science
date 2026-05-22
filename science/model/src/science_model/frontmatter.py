@@ -346,6 +346,7 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         "datapackage": fm.get("datapackage", ""),
         "local_path": fm.get("local_path", ""),
         "consumed_by": list(fm.get("consumed_by") or []),
+        "produced_by": list(fm.get("produced_by") or []),
         "parent_dataset": fm.get("parent_dataset", ""),
         "siblings": list(fm.get("siblings") or []),
     }
