@@ -160,3 +160,18 @@ def test_invariant_8_derived_with_accessions_rejects(entity_schema: dict) -> Non
 def test_derived_entity_minimal_valid(entity_schema: dict) -> None:
     """A minimal valid origin: derived entity (with required derivation block) passes validation."""
     jsonschema.validate(_valid_derived_entity(), entity_schema)
+
+
+def test_produced_by_code_ref_validates(entity_schema: dict) -> None:
+    # Task 3 only adds the produced_by property; the derived branch still
+    # requires `derivation` until Task 4. Keep derivation present here.
+    entity = _valid_derived_entity()
+    entity["produced_by"] = ["code-file:stages/run.py"]
+    jsonschema.validate(entity, entity_schema)
+
+
+def test_produced_by_workflow_run_ref_rejected(entity_schema: dict) -> None:
+    entity = _valid_derived_entity()
+    entity["produced_by"] = ["workflow-run:wf-r1"]
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(entity, entity_schema)

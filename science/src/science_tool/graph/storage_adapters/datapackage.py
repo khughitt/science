@@ -27,6 +27,7 @@ _ENTITY_FIELDS = (
     "datapackage",
     "local_path",
     "consumed_by",
+    "produced_by",
     "parent_dataset",
     "siblings",
     "ontology_terms",

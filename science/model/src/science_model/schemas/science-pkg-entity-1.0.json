@@ -29,6 +29,7 @@
     "derivation": {"$ref": "#/$defs/derivation"},
     "source_refs": {"type": "array", "items": {"type": "string"}},
     "related": {"type": "array", "items": {"type": "string"}},
+    "produced_by": {"type": "array", "items": {"type": "string", "pattern": "^code-file:"}, "minItems": 1},
     "created": {"type": "string"},
     "updated": {"type": "string"}
   },
