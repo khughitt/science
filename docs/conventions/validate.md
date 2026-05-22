@@ -66,6 +66,7 @@ The code-files check walks every `code_roots` declaration resolved from `science
 | `code.unreadable` | A discovered file that could not be read (deleted or renamed mid-run, or a permission/IO error). This rule is ungated; it surfaces an anomaly without ever blocking a run. |
 | `code.orphaned-executable` | A registered, decision-bearing executable code file (an `.R`/`.sh`, or a `.py` with a `__main__`/`@click.command`/`argparse`/`snakemake` entry point) that no workflow statically references. Fail-closed: an executable with no `decision_bearing: false` is treated as decision-bearing. `exploratory` and `retired` files are exempt. |
 | `code.hardcoded-path` | A code file containing an absolute filesystem path literal under a common root (`/home`, `/Users`, `/mnt`, `/data`, `/opt`, `/srv`, `/proj`, or a Windows drive), or a project-declared `hardcoded_path_patterns` prefix. |
+| `code.produced-by-unresolved` | A `dataset`'s `produced_by` references a code-file id that is not a registered code-file entity. |
 
 ### The `--fail-on` gate ladder
 
@@ -76,7 +77,7 @@ The gate ladder uses four ordered, cumulative tiers. Each tier includes all rule
 | `report` | _(default)_ No rules are gated; `validate` is always report-only. |
 | `ghost-files` | `code.ghost` + `code.malformed-block` |
 | `decision-bearing-orphans` | `code.ghost` + `code.malformed-block` + `code.orphaned-executable` |
-| `hygiene` | All `code.*` rules except `code.unreadable`. |
+| `hygiene` | All `code.*` rules except `code.unreadable` (includes `code.produced-by-unresolved`). |
 
 Set the active tier with `--fail-on TIER` on the command line, or with `code_gate: TIER` in `science.yaml`. The `--fail-on` flag overrides `code_gate`. Supplying an unknown tier name is a clean error.
 
@@ -104,6 +105,43 @@ hardcoded_path_patterns:
   - /data/proj/mm30/
   - /scratch/
 ```
+
+### Code provenance (`produced_by`)
+
+A `dataset` declares the decision-bearing code that produced it via a **code-only**
+`produced_by: [code-file:<local-id>]` field authored at the artifact
+(`datapackage.yaml`). This is distinct from a `derivation` block — a derived
+dataset may use `produced_by` **instead of** a `derivation` block (no
+`workflow_run` is required); an external dataset must not carry `produced_by`.
+
+`produced_by` materializes a `code-file bears_on dataset` provenance edge
+(decision-bearing, fail-closed; `exploratory` and `retired` code files are
+exempt). A code edit therefore propagates to any downstream finding that cites
+the dataset via `source_refs` / `evidence_refs`.
+
+**Authoring ids.** Drop any `::function` suffix and the declared code-root
+prefix from the tool path to arrive at the canonical code-file id. For example,
+a tool registered as `scripts/sig/build.py::fn` with a code root of `scripts/`
+yields the id `code-file:sig/build.py`. The helper
+`science_tool.code.provenance.code_file_id_from_tool_path`
+implements this normalization for migration tooling.
+
+```yaml
+# data/derived/.../datapackage.yaml
+profiles: [science-pkg-entity-1.0]
+id: dataset:my-result
+type: dataset
+title: My result
+status: active
+origin: derived
+tier: use-now
+produced_by:
+  - code-file:signatures/build_my_result.py
+```
+
+The `code.produced-by-unresolved` rule (hygiene tier) fires when a
+`produced_by` entry references a code-file id that has no registered
+code-file entity in the project.
 
 ## JSON Output Schema
 
