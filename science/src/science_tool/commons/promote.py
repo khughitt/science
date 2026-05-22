@@ -1531,6 +1531,64 @@ def _normalize_slug_for_match(raw: str, kind: PromoteKindConfig) -> str:
     return stripped
 
 
+def _semver_key(version: str) -> tuple[int, int, int]:
+    """Parse a strict ``MAJOR.MINOR.PATCH`` version string into a sortable tuple.
+
+    Used by `_existing_canonical_for_slug` so ``max(..., key=_semver_key)`` and
+    ``>`` comparisons order versions numerically (1.10.0 > 1.9.0).
+
+    Raises `PromoteInputError` on malformed input — fail loud, never coerce.
+    """
+    parts = version.split(".")
+    if len(parts) != 3:
+        raise PromoteInputError(
+            f"malformed semver tag version {version!r}: expected MAJOR.MINOR.PATCH"
+        )
+    try:
+        major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2])
+    except ValueError:
+        raise PromoteInputError(
+            f"malformed semver tag version {version!r}: components must be integers"
+        )
+    return (major, minor, patch)
+
+
+def _existing_canonical_for_slug(
+    commons_root: Path,
+    kind: PromoteKindConfig,
+    slug_normalized: str,
+) -> tuple[str, str] | None:
+    """Return ``(committed_canonical_case, latest_version)`` for a slug already
+    promoted to the commons, matched case-insensitively for paper; or ``None``.
+
+    Reads git tags (``<kind>/<slug>/<version>``) rather than the registry to
+    avoid staleness. When the same normalized slug is committed under more than
+    one distinct case (pre-existing commons corruption), raises
+    `PromoteInputError` rather than arbitrarily picking one — fail early.
+    """
+    out = _git(commons_root, "tag", "--list", f"{kind.kind}/*").stdout
+    by_case: dict[str, str] = {}  # committed_case -> latest version seen
+    for line in (ln.strip() for ln in out.splitlines()):
+        if not line:
+            continue
+        _, _, rest = line.partition("/")          # drop "<kind>/"
+        case_slug, _, version = rest.rpartition("/")
+        if _normalize_slug_for_match(case_slug, kind) != slug_normalized:
+            continue
+        cur = by_case.get(case_slug)
+        if cur is None or _semver_key(version) > _semver_key(cur):
+            by_case[case_slug] = version
+    if not by_case:
+        return None
+    if len(by_case) > 1:
+        raise PromoteInputError(
+            f"commons integrity: {kind.kind} slug {slug_normalized!r} is committed "
+            f"under multiple cases {sorted(by_case)}; resolve before promoting"
+        )
+    (case_slug, version), = by_case.items()
+    return (case_slug, version)
+
+
 def _classify_file_kind(
     frontmatter: dict,
     kind: PromoteKindConfig,
