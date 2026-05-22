@@ -10,9 +10,15 @@ from science_model.contracts.inventory_v2 import (
 
 
 def _source() -> InventorySourceLocation:
-    return InventorySourceLocation(
-        adapter="commons-overlay", path="doc/papers/Adams2025.md"
-    )
+    return InventorySourceLocation(adapter="commons-overlay", path="doc/papers/Adams2025.md")
+
+
+def test_inventory_v2_contract_does_not_import_inventory_v1() -> None:
+    import science_model.contracts.inventory_v2 as inventory_v2
+
+    assert "science_model.contracts.inventory_v1" not in {
+        value.__module__ for value in inventory_v2.__dict__.values() if hasattr(value, "__module__")
+    }
 
 
 def test_inventory_overlay_accepts_minimal_fields() -> None:
@@ -46,23 +52,17 @@ def test_inventory_overlay_carries_split_fields_and_body() -> None:
 
 def test_inventory_overlay_rejects_overlay_of_without_separator() -> None:
     with pytest.raises(ValidationError, match="canonical"):
-        InventoryOverlay(
-            overlay_of="Adams2025", project_id="proj-alpha", source=_source()
-        )
+        InventoryOverlay(overlay_of="Adams2025", project_id="proj-alpha", source=_source())
 
 
 def test_inventory_overlay_rejects_overlay_of_empty_kind() -> None:
     with pytest.raises(ValidationError, match="canonical"):
-        InventoryOverlay(
-            overlay_of=":Adams2025", project_id="proj-alpha", source=_source()
-        )
+        InventoryOverlay(overlay_of=":Adams2025", project_id="proj-alpha", source=_source())
 
 
 def test_inventory_overlay_rejects_overlay_of_empty_local_id() -> None:
     with pytest.raises(ValidationError, match="canonical"):
-        InventoryOverlay(
-            overlay_of="paper:", project_id="proj-alpha", source=_source()
-        )
+        InventoryOverlay(overlay_of="paper:", project_id="proj-alpha", source=_source())
 
 
 def test_inventory_overlay_rejects_unknown_fields() -> None:
@@ -95,9 +95,7 @@ def test_inventory_overlay_rejects_non_json_field_values() -> None:
 def test_inventory_payload_v2_defaults_schema_version_and_overlays() -> None:
     from science_model.contracts.inventory_v2 import InventoryPayload
 
-    payload = InventoryPayload(
-        generated_at="2026-05-14T10:00:00Z", project_id="commons"
-    )
+    payload = InventoryPayload(generated_at="2026-05-14T10:00:00Z", project_id="commons")
     assert payload.schema_version == "2"
     assert payload.overlays == []
     assert payload.entities == []
@@ -210,13 +208,7 @@ def test_v2_content_hash_changes_when_overlay_field_changes() -> None:
         ],
     )
     changed = base.model_copy(
-        update={
-            "overlays": [
-                base.overlays[0].model_copy(
-                    update={"project_only_fields": {"relevance": "H9"}}
-                )
-            ]
-        }
+        update={"overlays": [base.overlays[0].model_copy(update={"project_only_fields": {"relevance": "H9"}})]}
     )
     assert compute_content_hash(base) != compute_content_hash(changed)
 
@@ -251,9 +243,7 @@ def test_v2_finalize_populates_stable_hashes() -> None:
         finalize_inventory_payload,
     )
 
-    payload = InventoryPayload(
-        generated_at="2026-05-14T10:00:00Z", project_id="commons"
-    )
+    payload = InventoryPayload(generated_at="2026-05-14T10:00:00Z", project_id="commons")
     finalized = finalize_inventory_payload(payload)
     assert finalized.content_hash == compute_content_hash(payload)
     assert finalized.audit_hash == compute_audit_hash(payload)

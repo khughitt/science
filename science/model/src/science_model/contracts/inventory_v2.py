@@ -1,9 +1,8 @@
-"""inventory_v2: sibling export contract to inventory_v1.
+"""inventory_v2 inventory export contract.
 
 Adds a top-level `overlays[]` list (the project-overlay projection) and pins
-`schema_version` to "2". All v1 models except `InventoryPayload` are reused
-verbatim; the `_`-prefixed v1 helpers are imported here on purpose, so a future
-v1 rename fails this module's tests loudly.
+`schema_version` to "2". Version-neutral inventory models and helpers are
+shared through `inventory_common`; `InventoryPayload` remains version-specific.
 
 The commons inventory is an `InventoryPayload` with `project_id="commons"`
 (a fixed sentinel - the commons store is not a project), `project=None`,
@@ -19,7 +18,7 @@ from typing import Any, Final, Literal
 
 from pydantic import Field, field_validator
 
-from science_model.contracts.inventory_v1 import (
+from science_model.contracts.inventory_common import (
     InventoryAlias,
     InventoryEntity,
     InventoryFindingCandidate,
@@ -72,18 +71,13 @@ class InventoryOverlay(_InventoryContractModel):
     def overlay_of_has_separator(cls, value: str) -> str:
         kind, separator, local_id = value.partition(":")
         if not separator or not kind or not local_id:
-            msg = (
-                "Inventory overlay overlay_of must be canonical "
-                f"'<kind>:<local-id>', got {value!r}."
-            )
+            msg = f"Inventory overlay overlay_of must be canonical '<kind>:<local-id>', got {value!r}."
             raise ValueError(msg)
         return value
 
     @field_validator("project_only_fields", "append_fields")
     @classmethod
-    def merge_fields_are_json_serializable(
-        cls, value: dict[str, Any]
-    ) -> dict[str, Any]:
+    def merge_fields_are_json_serializable(cls, value: dict[str, Any]) -> dict[str, Any]:
         _validate_json_value(value, "merge_fields")
         return value
 
@@ -124,17 +118,12 @@ def _payload_for_content_hash(payload: InventoryPayload) -> dict[str, Any]:
         key=lambda item: _sort_key_with_canonical_tie_breaker(item, ("address",)),
     )
     data["finding_candidates"] = sorted(
-        (
-            _normalize_finding_candidate_for_content_hash(item)
-            for item in data.get("finding_candidates", [])
-        ),
+        (_normalize_finding_candidate_for_content_hash(item) for item in data.get("finding_candidates", [])),
         key=lambda item: _sort_key_with_canonical_tie_breaker(item, ("candidate_id",)),
     )
     data["overlays"] = sorted(
         data.get("overlays", []),
-        key=lambda item: _sort_key_with_canonical_tie_breaker(
-            item, ("overlay_of", "project_id")
-        ),
+        key=lambda item: _sort_key_with_canonical_tie_breaker(item, ("overlay_of", "project_id")),
     )
     data["watch_paths"] = sorted(data.get("watch_paths", []))
     return data
@@ -157,29 +146,21 @@ def _payload_for_audit_hash(payload: InventoryPayload) -> dict[str, Any]:
         data["project"] = _normalize_project_for_content_hash(data["project"])
     data["warnings"] = sorted(
         data.get("warnings", []),
-        key=lambda item: _sort_key_with_canonical_tie_breaker(
-            item, ("severity", "code", "path", "canonical_id")
-        ),
+        key=lambda item: _sort_key_with_canonical_tie_breaker(item, ("severity", "code", "path", "canonical_id")),
     )
     data["watch_paths"] = sorted(data.get("watch_paths", []))
     return data
 
 
 def compute_content_hash(payload: InventoryPayload) -> str:
-    return hashlib.sha256(
-        canonical_json_bytes(_payload_for_content_hash(payload))
-    ).hexdigest()
+    return hashlib.sha256(canonical_json_bytes(_payload_for_content_hash(payload))).hexdigest()
 
 
 def compute_audit_hash(payload: InventoryPayload) -> str:
-    return hashlib.sha256(
-        canonical_json_bytes(_payload_for_audit_hash(payload))
-    ).hexdigest()
+    return hashlib.sha256(canonical_json_bytes(_payload_for_audit_hash(payload))).hexdigest()
 
 
 def finalize_inventory_payload(payload: InventoryPayload) -> InventoryPayload:
     content_hash = compute_content_hash(payload)
     audit_hash = compute_audit_hash(payload)
-    return payload.model_copy(
-        update={"content_hash": content_hash, "audit_hash": audit_hash}
-    )
+    return payload.model_copy(update={"content_hash": content_hash, "audit_hash": audit_hash})
