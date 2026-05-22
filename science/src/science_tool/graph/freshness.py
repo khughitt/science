@@ -10,6 +10,7 @@ Public surface:
     derive_bears_on_from_audits(dataset)
     derive_bears_on_from_pre_registrations(dataset, *, pre_registration_targets, kind_class)
     derive_bears_on_from_provenance(dataset, *, kind_class)
+    derive_bears_on_from_produced_by_code(dataset, *, eligible_code_files)
     close_bears_on(dataset, *, kind_class)
     derive_freshness(dataset, *, entities, today)
 """
@@ -202,6 +203,29 @@ def derive_bears_on_from_provenance(
         if kind_class.get(str(s)) == EntityClass.EPISTEMIC:
             knowledge.add((o, SCI_NS.bearsOn, s))
             _emit_bears_on_edge(knowledge, o, s, 1)
+
+
+def derive_bears_on_from_produced_by_code(
+    dataset: Dataset,
+    *,
+    eligible_code_files: set[URIRef],
+) -> None:
+    """Emit `bears_on` from `sci:producedBy` code edges (Plan C).
+
+    Rule: `?dataset sci:producedBy ?code_file` -> `?code_file bears_on ?dataset`,
+    only when `?code_file` is propagation-eligible (decision-bearing, fail-closed;
+    set built by the materializer). Operational data artifacts are valid direct
+    bears_on conduit targets; `close_bears_on` walks through them to epistemic
+    findings.
+    """
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    for dataset_uri, _, code_uri in knowledge.triples((None, SCI_NS.producedBy, None)):
+        if not isinstance(dataset_uri, URIRef) or not isinstance(code_uri, URIRef):
+            continue
+        if code_uri not in eligible_code_files:
+            continue
+        knowledge.add((code_uri, SCI_NS.bearsOn, dataset_uri))
+        _emit_bears_on_edge(knowledge, code_uri, dataset_uri, 1)
 
 
 def close_bears_on(
