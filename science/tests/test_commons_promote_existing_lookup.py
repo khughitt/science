@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from science_tool.commons.errors import PromoteInputError
+
 
 # --------------------------------------------------------------------------- #
 # Shared fixtures / helpers                                                    #
@@ -62,14 +64,14 @@ def test_semver_key_major_ordering() -> None:
 def test_semver_key_raises_on_malformed() -> None:
     from science_tool.commons.promote import _semver_key
 
-    with pytest.raises(Exception):
+    with pytest.raises(PromoteInputError):
         _semver_key("not-a-version")
 
 
 def test_semver_key_raises_on_two_parts() -> None:
     from science_tool.commons.promote import _semver_key
 
-    with pytest.raises(Exception):
+    with pytest.raises(PromoteInputError):
         _semver_key("1.0")
 
 
@@ -152,3 +154,28 @@ def test_existing_canonical_returns_committed_case_not_query_case(tmp_path) -> N
     committed_case, version = result
     assert committed_case == "SmithJones2019"
     assert version == "1.0.0"
+
+
+def test_existing_canonical_skips_malformed_tags(tmp_path) -> None:
+    """Malformed tags (missing slug or version segment) are silently skipped.
+
+    A two-segment tag like ``paper/Foo2020`` has no version component; after
+    ``rest.rpartition("/")`` the slug is empty. Previously this caused
+    ``_normalize_slug_for_match`` to raise ``PromoteCandidateError``, violating
+    the function's contract. The fix guards with ``if not case_slug or not version``.
+
+    Case 1: only a malformed tag present → returns None (no valid match).
+    Case 2: malformed tag + a well-formed tag → valid match is returned.
+    """
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, _existing_canonical_for_slug
+
+    # Case 1: only the malformed two-segment tag — must return None, not raise.
+    _init_commons(tmp_path)
+    _add_tag(tmp_path, "paper/Foo2020")  # missing version segment
+    result = _existing_canonical_for_slug(tmp_path, PROMOTE_KIND_PAPER, "foo2020")
+    assert result is None
+
+    # Case 2: malformed tag coexists with a valid tag — valid match returned.
+    _add_tag(tmp_path, "paper/Bar2021/1.0.0")
+    result2 = _existing_canonical_for_slug(tmp_path, PROMOTE_KIND_PAPER, "bar2021")
+    assert result2 == ("Bar2021", "1.0.0")

@@ -1573,8 +1573,13 @@ def _existing_canonical_for_slug(
             continue
         _, _, rest = line.partition("/")          # drop "<kind>/"
         case_slug, _, version = rest.rpartition("/")
-        if _normalize_slug_for_match(case_slug, kind) != slug_normalized:
-            continue
+        if not case_slug or not version:
+            continue  # malformed tag: missing slug or version segment — not a promoted entity
+        try:
+            if _normalize_slug_for_match(case_slug, kind) != slug_normalized:
+                continue
+        except PromoteCandidateError:
+            continue  # tag slug isn't a valid entity slug — not ours, skip
         cur = by_case.get(case_slug)
         if cur is None or _semver_key(version) > _semver_key(cur):
             by_case[case_slug] = version
