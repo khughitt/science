@@ -64,6 +64,8 @@ The code-files check walks every `code_roots` declaration resolved from `science
 | `code.unresolved-task` | A `task_ids` entry that resolves to no task in `tasks/`. |
 | `code.uncommitted` | A valid block whose file has no committed content date (untracked or never committed), so commit-based freshness checks would not see it. |
 | `code.unreadable` | A discovered file that could not be read (deleted or renamed mid-run, or a permission/IO error). This rule is ungated; it surfaces an anomaly without ever blocking a run. |
+| `code.orphaned-executable` | A registered, decision-bearing executable code file (an `.R`/`.sh`, or a `.py` with a `__main__`/`@click.command`/`argparse`/`snakemake` entry point) that no workflow statically references. Fail-closed: an executable with no `decision_bearing: false` is treated as decision-bearing. `exploratory` and `retired` files are exempt. |
+| `code.hardcoded-path` | A code file containing an absolute filesystem path literal under a common root (`/home`, `/Users`, `/mnt`, `/data`, `/opt`, `/srv`, `/proj`, or a Windows drive), or a project-declared `hardcoded_path_patterns` prefix. |
 
 ### The `--fail-on` gate ladder
 
@@ -72,11 +74,36 @@ The gate ladder uses four ordered, cumulative tiers. Each tier includes all rule
 | Tier | Rules included |
 |---|---|
 | `report` | _(default)_ No rules are gated; `validate` is always report-only. |
-| `ghost-files` | `code.ghost` |
-| `decision-bearing-orphans` | `code.ghost` + rules for files whose metadata ties them to decisions but with no committed record (arriving in a follow-up; the tier name ships now so the grammar is stable). |
+| `ghost-files` | `code.ghost` + `code.malformed-block` |
+| `decision-bearing-orphans` | `code.ghost` + `code.malformed-block` + `code.orphaned-executable` |
 | `hygiene` | All `code.*` rules except `code.unreadable`. |
 
 Set the active tier with `--fail-on TIER` on the command line, or with `code_gate: TIER` in `science.yaml`. The `--fail-on` flag overrides `code_gate`. Supplying an unknown tier name is a clean error.
+
+### Classification & the static workflow-reference scan
+
+To decide whether an executable is orphaned, the check first runs a static scan
+over the Snakemake files it discovers under `code_roots` (`.smk` files and
+`Snakefile`). The scan resolves `script:`/`shell:` references to project-relative
+code paths, covering literal paths, `{SYMBOL}`-indirected paths,
+`str(SYMBOL / "x.py")` path expressions, `python -m <code-root>.<module>`
+invocations, and `{wildcards.*}` directory globbing. A file is then classified
+structurally: `workflow-definition` (`.smk`/`Snakefile`), `package-marker`
+(`__init__.py`), `test` (under `tests/` or `test_*`), `workflow-owned-executable`
+(executable and referenced), `orphaned-executable` (executable and unreferenced),
+or `library`. Classification is independent of the declared `status`; the orphan
+finding then applies the `exploratory`/`retired` exemption. This scan is static —
+distinct from the materialized provenance edges that arrive with the workflow
+adapter (Spec 2 / Plan C).
+
+Projects extend the hardcoded-path detector with site-specific prefixes:
+
+```yaml
+# science.yaml
+hardcoded_path_patterns:
+  - /data/proj/mm30/
+  - /scratch/
+```
 
 ## JSON Output Schema
 
