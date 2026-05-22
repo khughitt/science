@@ -2848,7 +2848,7 @@ def _canonical_fields_equal_or_subset(
         if type(src_val) is not type(ex_val):
             # Allow list vs list only; mismatched types diverge.
             if not (isinstance(src_val, list) and isinstance(ex_val, list)):
-                return src_val == ex_val
+                return False
         if isinstance(src_val, list) and isinstance(ex_val, list):
             # Order-insensitive multiset compare after element strip.
             return sorted(str(e).strip() for e in src_val) == sorted(

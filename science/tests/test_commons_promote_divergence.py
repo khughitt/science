@@ -209,3 +209,17 @@ class TestDivergent:
         src_body = {"Abstract": ""}
         ex_body = {"Abstract": "Some abstract."}
         assert _cmp({}, src_body, {}, ex_body) == ("subset", [])
+
+    def test_list_duplicate_count_diverges(self):
+        """Same membership set but different duplicate counts → divergent (multiset differs)."""
+        src = {"authors": ["a", "a", "b"]}
+        ex = {"authors": ["a", "b", "b"]}
+        result = _cmp(src, {}, ex, {})
+        assert result == ("divergent", ["authors"])
+
+    def test_type_mismatch_int_vs_bool_diverges(self):
+        """Source int vs existing bool → incompatible types diverge, not equal."""
+        src = {"flag": 1}
+        ex = {"flag": True}
+        result = _cmp(src, {}, ex, {})
+        assert result == ("divergent", ["flag"])
