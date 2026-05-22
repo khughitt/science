@@ -21,6 +21,8 @@
     "venue": {"type": "string"},
     "doi": {"type": "string"},
     "pmid": {"type": "string"},
+    "pmcid": {"type": "string"},
+    "arxiv": {"type": "string"},
     "url": {"type": "string"},
     "datasets": {
       "type": "array",
