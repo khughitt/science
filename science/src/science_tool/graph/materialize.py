@@ -548,6 +548,10 @@ def _eligible_code_files(sources: ProjectSources) -> set[URIRef]:
         if (entity.status or "") in ORPHAN_GATING_EXEMPT_STATUSES:
             continue
         declared = getattr(entity, "decision_bearing", None)
+        # Fail-closed: an un-annotated *executable* propagates. This is intentionally
+        # broader than classify_code_file()'s orphan rule (which keys off the narrower
+        # "orphaned-executable" classification) — propagation should err toward
+        # over-including, the orphan gate toward not over-flagging.
         effective = declared if declared is not None else getattr(entity, "executable", False)
         if effective:
             eligible.add(_entity_uri(entity.canonical_id))

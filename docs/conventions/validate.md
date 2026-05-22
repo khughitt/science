@@ -66,7 +66,7 @@ The code-files check walks every `code_roots` declaration resolved from `science
 | `code.unreadable` | A discovered file that could not be read (deleted or renamed mid-run, or a permission/IO error). This rule is ungated; it surfaces an anomaly without ever blocking a run. |
 | `code.orphaned-executable` | A registered, decision-bearing executable code file (an `.R`/`.sh`, or a `.py` with a `__main__`/`@click.command`/`argparse`/`snakemake` entry point) that no workflow statically references. Fail-closed: an executable with no `decision_bearing: false` is treated as decision-bearing. `exploratory` and `retired` files are exempt. |
 | `code.hardcoded-path` | A code file containing an absolute filesystem path literal under a common root (`/home`, `/Users`, `/mnt`, `/data`, `/opt`, `/srv`, `/proj`, or a Windows drive), or a project-declared `hardcoded_path_patterns` prefix. |
-| `code.produced-by-unresolved` | A `dataset`'s `produced_by` references a code-file id that is not a registered code-file entity. |
+| `code.produced-by-unresolved` | A `dataset` or `data-package` `produced_by` references a code-file id that is not a registered code-file entity. |
 
 ### The `--fail-on` gate ladder
 
