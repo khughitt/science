@@ -77,3 +77,8 @@ def test_resolve_falls_back_to_manifest_then_default() -> None:
 def test_resolve_rejects_unknown_tier() -> None:
     with pytest.raises(ValueError, match="unknown code gate tier"):
         resolve_gate_tier(None, {"code_gate": "bogus"})
+
+
+def test_produced_by_unresolved_gated_at_hygiene() -> None:
+    assert "code.produced-by-unresolved" in cumulative_rules("hygiene")
+    assert "code.produced-by-unresolved" not in cumulative_rules("decision-bearing-orphans")

@@ -18,6 +18,7 @@ from science_tool.code.hardcoded_paths import find_hardcoded_paths
 from science_tool.code.lifecycle import CODE_FILE_STATUSES, ORPHAN_GATING_EXEMPT_STATUSES
 from science_tool.code.metadata import parse_code_metadata
 from science_tool.code.workflow_refs import find_workflow_references
+from science_tool.graph.sources import load_project_sources
 from science_tool.graph.storage_adapters.code import CodeAdapter
 from science_tool.paths import resolve_paths
 from science_tool.tasks import known_task_ids
@@ -174,3 +175,21 @@ def _check_valid_block(
             f"Decision-bearing executable not referenced by any workflow (orphaned): {rel_path}",
             "code.orphaned-executable",
         )
+
+
+@Check(section="code provenance", order=7)
+def check_produced_by_unresolved(ctx: ValidateContext) -> Iterator[Result]:
+    """Flag a dataset's produced_by ref that does not resolve to a registered code-file."""
+    sources = load_project_sources(ctx.project_root, include_commons=False)
+    code_ids = {e.canonical_id for e in sources.entities if e.kind == "code-file"}
+    for entity in sources.entities:
+        if entity.kind not in ("dataset", "data-package"):
+            continue
+        for ref in getattr(entity, "produced_by", []) or []:
+            if ref not in code_ids:
+                yield _result(
+                    Severity.WARN,
+                    entity.file_path,
+                    f"produced_by references unregistered code-file {ref!r}",
+                    "code.produced-by-unresolved",
+                )

@@ -34,6 +34,7 @@ _TIER_RULES: dict[str, frozenset[str]] = {
             "code.unresolved-task",
             "code.uncommitted",
             "code.hardcoded-path",
+            "code.produced-by-unresolved",
         }
     ),
 }
