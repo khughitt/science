@@ -40,7 +40,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from science_tool.project_config import DEFAULT_ANCHOR_PATTERNS, load_project_config
-from science_tool.prose_lint import scan_root
+from science_tool.prose_lint import CHECKS, build_short_form_resolver, scan_root
 from science_tool.validate.checks import Check
 from science_tool.validate.result import Result, Severity
 
@@ -67,12 +67,20 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
             selected = config.prose_lint.enabled_checks
             short_form_ids_deny = config.prose_lint.short_form_ids_deny
 
+    effective_checks = selected if selected is not None else list(CHECKS)
+    resolver = (
+        build_short_form_resolver(ctx.project_root)
+        if "short-form-ids" in effective_checks
+        else None
+    )
+
     lint_result = scan_root(
         ctx.project_root,
         checks=selected,
         strict=ctx.strict,
         anchor_patterns=anchor_patterns,
         short_form_ids_deny=short_form_ids_deny,
+        resolver=resolver,
     )
 
     severity_by_check: dict[str, str] = {}

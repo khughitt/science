@@ -9,6 +9,7 @@ See `docs/conventions/prose-lints.md` for the lint catalog and severity rules.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,8 @@ from science_tool.markdown_utils import (
     parse_frontmatter,
     strip_inline_code,
 )
+
+logger = logging.getLogger(__name__)
 
 CHECKS: tuple[str, ...] = (
     "bare-author-year",
@@ -154,8 +157,14 @@ def detect_short_form_ids(
     *,
     strict: bool = False,
     deny: list[str] | None = None,
+    resolver: dict[str, str] | None = None,
 ) -> list[LintIssue]:
-    """Detect bare `Q1` / `t088` style refs that should be `question:q01-…` etc."""
+    """Detect bare `Q1` / `t088` style refs that should be `question:q01-…` etc.
+
+    `resolver` maps known aliases (and canonical ids) to canonical ids; a token
+    that resolves through it is an authored reference to a real entity, not a
+    style violation, so it is skipped — aligning this check with entity_identity.
+    """
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
@@ -183,6 +192,8 @@ def detect_short_form_ids(
                 continue
             short = match.group(0)
             if deny and short in deny:
+                continue
+            if resolver and (short in resolver or short.lower() in resolver):
                 continue
             kind = _SHORT_FORM_KIND_MAP[match.group(1)]
             issues.append(
@@ -347,6 +358,26 @@ def _collect_markdown_files(root: Path) -> list[Path]:
     return sorted(files)
 
 
+def build_short_form_resolver(root: Path) -> dict[str, str] | None:
+    """Build an alias → canonical-id map for resolver-aware short-form-ids.
+
+    A bare short form (e.g. ``h006``) that resolves through this map is an
+    authored reference to a real entity, not a style violation. Returns ``None``
+    and logs a warning if project sources can't be loaded — short-form-ids then
+    falls back to deny-list-only behavior rather than failing the lint.
+    """
+    try:
+        from science_tool.graph.sources import build_alias_map, load_project_sources
+
+        sources = load_project_sources(root.resolve())
+    except Exception as exc:  # noqa: BLE001 - a lint must not hard-fail on graph-load issues
+        logger.warning(
+            "short-form-ids resolver unavailable (%s); falling back to deny-list only", exc
+        )
+        return None
+    return build_alias_map(sources.entities, sources.manual_aliases)
+
+
 def scan_root(
     root: Path,
     *,
@@ -354,8 +385,14 @@ def scan_root(
     strict: bool = False,
     anchor_patterns: list[str] | None = None,
     short_form_ids_deny: list[str] | None = None,
+    resolver: dict[str, str] | None = None,
 ) -> dict:
-    """Scan a project tree and return ``{"counts": {check: N}, "hits": [...]}``."""
+    """Scan a project tree and return ``{"counts": {check: N}, "hits": [...]}``.
+
+    `resolver` (alias → canonical-id map) is forwarded to the short-form-ids
+    detector so references that resolve to real entities are not flagged. Build
+    it with `build_short_form_resolver(root)`.
+    """
     selected = checks or list(CHECKS)
     unknown = [c for c in selected if c not in _DETECTORS]
     if unknown:
@@ -368,7 +405,7 @@ def scan_root(
             if check == "numeric-anchor":
                 hits.extend(detector(path, strict=strict, anchor_patterns=anchor_patterns))
             elif check == "short-form-ids":
-                hits.extend(detector(path, strict=strict, deny=short_form_ids_deny))
+                hits.extend(detector(path, strict=strict, deny=short_form_ids_deny, resolver=resolver))
             else:
                 hits.extend(detector(path, strict=strict))
     counts: dict[str, int] = {}

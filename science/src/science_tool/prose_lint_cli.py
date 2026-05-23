@@ -10,7 +10,7 @@ from pathlib import Path
 import click
 
 from science_tool.project_config import DEFAULT_ANCHOR_PATTERNS, load_project_config
-from science_tool.prose_lint import CHECKS, scan_root
+from science_tool.prose_lint import CHECKS, build_short_form_resolver, scan_root
 
 
 @click.group("prose")
@@ -45,12 +45,18 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
     if selected is None and enabled_from_config:
         selected = enabled_from_config
 
+    effective_checks = selected if selected is not None else list(CHECKS)
+    resolver = (
+        build_short_form_resolver(root) if "short-form-ids" in effective_checks else None
+    )
+
     result = scan_root(
         root,
         checks=selected,
         strict=strict,
         anchor_patterns=anchor_patterns,
         short_form_ids_deny=short_form_ids_deny,
+        resolver=resolver,
     )
 
     if fmt == "json":

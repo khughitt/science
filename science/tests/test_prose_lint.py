@@ -143,6 +143,47 @@ class TestShortFormIds:
         assert "h007" in issues[0].message
 
 
+class TestShortFormIdsResolver:
+    def test_resolver_skips_resolvable_token(self, tmp_path):
+        # A bare short-form that resolves to a real entity is an authored
+        # reference, not a style violation — align with entity_identity.
+        path = _write(tmp_path, "As discussed in h006, the regime ladder holds.\n")
+        resolver = {"h006": "hypothesis:h006-regime-sequence"}
+        assert detect_short_form_ids(path, resolver=resolver) == []
+
+    def test_resolver_does_not_skip_unresolvable_token(self, tmp_path):
+        # T1 (a stage/threat label) is not a registered entity -> still flagged.
+        path = _write(tmp_path, "The T1 stage shows progression.\n")
+        resolver = {"h006": "hypothesis:h006-regime-sequence"}
+        issues = detect_short_form_ids(path, resolver=resolver)
+        assert len(issues) == 1
+        assert "T1" in issues[0].message
+
+    def test_resolver_match_is_case_insensitive(self, tmp_path):
+        path = _write(tmp_path, "See T007 for the cohort plan.\n")
+        resolver = {"t007": "analysis-plan:t007-cohort"}
+        assert detect_short_form_ids(path, resolver=resolver) == []
+
+    def test_resolver_none_preserves_flagging(self, tmp_path):
+        path = _write(tmp_path, "As discussed in h006, the ladder holds.\n")
+        issues = detect_short_form_ids(path)
+        assert len(issues) == 1
+        assert "h006" in issues[0].message
+
+    def test_scan_root_threads_resolver(self, tmp_path):
+        (tmp_path / "doc").mkdir()
+        (tmp_path / "doc" / "a.md").write_text(
+            "See h006 (resolves) and bare t999 (does not).\n"
+        )
+        result = scan_root(
+            tmp_path,
+            checks=["short-form-ids"],
+            resolver={"h006": "hypothesis:h006-regime-sequence"},
+        )
+        # h006 resolves and is skipped; t999 has no entity and is still flagged.
+        assert result["counts"].get("short-form-ids", 0) == 1
+
+
 class TestFrontmatterInlineGap:
     def test_flags_unmentioned_related_entry(self, tmp_path):
         path = _write(
