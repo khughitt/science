@@ -14,20 +14,21 @@ inference.
 For analysis-readiness planning, start at [`../../INDEX.md`](../../INDEX.md) or
 run `science-plan-analysis`.
 
-## Two layers, two QA mindsets
+## Layers and QA mindsets
 
 | Layer | Leaf | Dominant failure modes |
 |---|---|---|
 | Mutation calls (input QA) | [`somatic-mutation-qa.md`](./somatic-mutation-qa.md) | callable territory, panel/exome mixing, NaN-vs-zero collapse, hypermutator dominance, sample-ID drift |
 | Signatures and selection (analysis QA) | [`mutational-signatures-and-selection.md`](./mutational-signatures-and-selection.md) | opportunity-model omission, COSMIC version drift, length-confounded driver ranks, circular validation |
+| CN / SV / amplicon calls (input + derived QA) | [`copy-number-sv-qa.md`](./copy-number-sv-qa.md) | ploidy/purity conditioning, AA/AC version drift, FFPE fragmentation, per-cell binning, AA→AC non-independence |
 
 Always complete `somatic-mutation-qa.md` before treating signature or selection
 results as verdict-bearing.
 
 ## Anticipated growth
 
-Future leaves likely under this hub: copy-number QA, structural-variant QA,
-fusion-transcript QA, methylation/EPIC-array QA. When adding a new leaf,
+Future leaves likely under this hub: fusion-transcript QA,
+methylation/EPIC-array QA. When adding a new leaf,
 follow the frontmatter and companion-skills conventions established for
 the existing two leaves.
 

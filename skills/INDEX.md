@@ -25,6 +25,7 @@ progressive disclosure.
 - `data-genomics`: `skills/data/genomics/SKILL.md`
 - `data-genomics-somatic-mutation-qa`: `skills/data/genomics/somatic-mutation-qa.md`
 - `data-genomics-mutational-signatures-and-selection`: `skills/data/genomics/mutational-signatures-and-selection.md`
+- `data-genomics-copy-number-sv-qa`: `skills/data/genomics/copy-number-sv-qa.md`
 - `data-functional-genomics-qa`: `skills/data/functional-genomics-qa.md`
 - `data-protein-sequence-structure-qa`: `skills/data/protein-sequence-structure-qa.md`
 - `data-embeddings-manifold-qa`: `skills/data/embeddings-manifold-qa.md`
