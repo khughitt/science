@@ -13,8 +13,12 @@ from science_model.identity import EntityScope, ExternalId
 from science_model.packages.schema import AccessBlock, DerivationBlock
 from science_model.reasoning import (
     ClaimLayer,
+    DisputeScope,
     EvidenceRole,
+    EvidenceStance,
+    EvidenceStrength,
     IdentificationStrength,
+    IndependenceTag,
     MeasurementModel,
     ProxyDirectness,
     RivalModelPacket,
@@ -94,6 +98,7 @@ class EntityType(StrEnum):
     SPEC = "spec"
     CANONICAL_PARAMETER = "canonical_parameter"
     CODE_FILE = "code-file"
+    EVIDENCE_LINE = "evidence-line"
     UNKNOWN = "unknown"
 
 
@@ -663,3 +668,29 @@ class CodeFileEntity(ProjectEntity):
     decision_bearing: bool | None = None
     executable: bool = False
     task_ids: list[str] = Field(default_factory=list)
+
+
+class EvidenceLineEntity(ProjectEntity):
+    """A first-class evidence-line entity linking a source to a target claim.
+
+    ``stance`` and ``target`` are required. All other evidence-metadata fields
+    are optional.
+
+    Independence metadata (``independence``, ``shared_*``) records whether
+    multiple evidence lines draw on the same underlying data source; this is
+    used by the freshness/belief engine to avoid double-counting.
+
+    Note: ``independence_group`` and ``measurement_model`` are inherited from
+    Entity; ``evidence_role`` is inherited from ProjectEntity.
+    """
+
+    stance: EvidenceStance
+    target: str
+    source: str | None = None
+    strength: EvidenceStrength | None = None
+    independence: IndependenceTag | None = None
+    dispute_scope: DisputeScope | None = None
+    shared_dataset: str | None = None
+    shared_lab: str | None = None
+    shared_platform: str | None = None
+    shared_cohort: str | None = None

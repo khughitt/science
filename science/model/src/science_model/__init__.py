@@ -9,6 +9,7 @@ from science_model.entities import (
     Entity,
     EntityType,
     EntityUpdate,
+    EvidenceLineEntity,
     MechanismEntity,
     StructuralChainEntity,
 )
@@ -68,6 +69,7 @@ __all__ = [
     "EntityValidationError",
     "EntityValidator",
     "EvidenceIndependence",
+    "EvidenceLineEntity",
     "EvidenceRole",
     "EvidenceStance",
     "EvidenceStrength",
