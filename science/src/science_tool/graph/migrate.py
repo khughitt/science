@@ -155,6 +155,21 @@ def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool
     for binding in sources.bindings:
         rows.extend(_audit_binding(binding, resolver, ext_prefixes=ext_prefixes))
 
+    # Surface entities dropped during load (unknown kind, failed schema validation)
+    # as warn rows so they are visible to graph audit / validate instead of only
+    # being logged. status=warn keeps them from flipping the build to failed.
+    for skipped in sources.skipped_entities:
+        rows.append(
+            {
+                "check": skipped.reason,
+                "status": "warn",
+                "source": skipped.path,
+                "field": "kind",
+                "target": skipped.kind,
+                "details": skipped.details,
+            }
+        )
+
     rows.sort(key=lambda row: (row["source"], row["target"]))
     has_failures = any(row["status"] == "fail" for row in rows)
     return rows, has_failures

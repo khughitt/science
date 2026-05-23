@@ -118,6 +118,20 @@ class AliasCollisionError(ValueError):
         super().__init__(f"Alias '{alias}' maps to both {first_canonical_id} and {second_canonical_id}")
 
 
+class SkippedEntity(BaseModel):
+    """An entity dropped during load.
+
+    Surfaced by ``audit_project_sources`` as a warn row so that an entity being
+    silently excluded from the graph (unknown kind, failed schema validation) is
+    visible to ``science graph audit`` / validate rather than only logged.
+    """
+
+    path: str
+    kind: str
+    reason: str  # "unknown_entity_kind" | "entity_schema_validation_failed"
+    details: str
+
+
 class ProjectSources(BaseModel):
     """Structured source bundle used to materialize a project graph."""
 
@@ -134,6 +148,7 @@ class ProjectSources(BaseModel):
     ontology_catalogs: list[OntologyCatalog] = Field(default_factory=list)
     registry: EntityRegistry
     markdown_documents: list[MarkdownSourceDocument] = Field(default_factory=list)
+    skipped_entities: list[SkippedEntity] = Field(default_factory=list)
     commons_overlay_paths: dict[str, str] = Field(default_factory=dict)
     freshness_enabled: bool = True
 
@@ -224,6 +239,7 @@ def load_project_sources(
     entities: list[Entity] = []
     entity_source_adapters: dict[str, str] = {}
     markdown_documents: list[MarkdownSourceDocument] = []
+    skipped_entities: list[SkippedEntity] = []
 
     # cwd for relative-path resolution in adapters. The StorageAdapter.load_raw()
     # contract resolves ref.path against cwd; we chdir into project_root rather
@@ -266,6 +282,14 @@ def load_project_sources(
                         ref.path,
                         kind,
                     )
+                    skipped_entities.append(
+                        SkippedEntity(
+                            path=str(ref.path),
+                            kind=kind,
+                            reason="unknown_entity_kind",
+                            details="not registered in core or active profiles",
+                        )
+                    )
                     continue
                 try:
                     entity = schema.model_validate(raw)
@@ -278,6 +302,14 @@ def load_project_sources(
                                 ref.path,
                                 details,
                             )
+                            skipped_entities.append(
+                                SkippedEntity(
+                                    path=str(ref.path),
+                                    kind=kind,
+                                    reason="entity_schema_validation_failed",
+                                    details=f"missing identity fields ({details})",
+                                )
+                            )
                             continue
                         raise ValueError(
                             f"schema validation failed for registered entity kind {kind!r} at {ref.path}: {details}"
@@ -287,6 +319,14 @@ def load_project_sources(
                         ref.path,
                         kind,
                         details,
+                    )
+                    skipped_entities.append(
+                        SkippedEntity(
+                            path=str(ref.path),
+                            kind=kind,
+                            reason="entity_schema_validation_failed",
+                            details=details,
+                        )
                     )
                     continue
                 existing = identity_table.get(entity.canonical_id)
@@ -383,6 +423,7 @@ def load_project_sources(
         ontology_catalogs=ontology_catalogs,
         registry=registry,
         markdown_documents=markdown_documents,
+        skipped_entities=skipped_entities,
         commons_overlay_paths=commons_overlay_paths,
         freshness_enabled=freshness_enabled,
     )

@@ -15,6 +15,7 @@ from rdflib.namespace import RDF, SKOS, XSD
 
 from science_tool.cli import main
 from science_tool.graph.materialize import materialize_graph
+from science_tool.graph.sources import load_project_sources
 from science_tool.graph.store import add_hypothesis, diff_graph_inputs
 
 PROJECT_NS = Namespace("http://example.org/project/")
@@ -1377,6 +1378,65 @@ def test_graph_audit_reports_ambiguous_aliases(tmp_path: Path) -> None:
     assert result.exit_code == 1
     payload = json.loads(result.output)
     assert any(row["check"] == "ambiguous_alias" and row["target"] == "H01" for row in payload["rows"])
+
+
+def _write_skip_project(project: Path) -> None:
+    (project / "science.yaml").write_text(
+        "name: skip-demo\nknowledge_profiles: {local: local}\n", encoding="utf-8"
+    )
+    (project / "doc").mkdir(parents=True)
+    (project / "doc" / "audit-note.md").write_text(
+        "---\n"
+        'id: "audit:a01-some-review"\n'
+        'type: "audit"\n'
+        'title: "A review doc"\n'
+        "---\n"
+        "# Some review\n",
+        encoding="utf-8",
+    )
+
+
+def test_load_project_sources_records_unknown_kind_skip(tmp_path: Path) -> None:
+    _write_skip_project(tmp_path)
+    sources = load_project_sources(tmp_path)
+    skips = [s for s in sources.skipped_entities if s.reason == "unknown_entity_kind"]
+    assert len(skips) == 1
+    assert "audit-note.md" in skips[0].path
+    assert skips[0].kind == "audit"
+
+
+def test_load_project_sources_records_schema_validation_skip(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text(
+        "name: skip-demo\nknowledge_profiles: {local: local}\n", encoding="utf-8"
+    )
+    (tmp_path / "specs" / "hypotheses").mkdir(parents=True)
+    # A core-kind doc missing only its identity (no id) is skipped silently today.
+    (tmp_path / "specs" / "hypotheses" / "broken.md").write_text(
+        "---\n"
+        'type: "hypothesis"\n'
+        'title: "Missing id"\n'
+        'status: "active"\n'
+        "---\n"
+        "# Broken\n",
+        encoding="utf-8",
+    )
+    sources = load_project_sources(tmp_path)
+    assert any(
+        s.reason == "entity_schema_validation_failed" and "broken.md" in s.path
+        for s in sources.skipped_entities
+    )
+
+
+def test_graph_audit_surfaces_unknown_entity_kind(tmp_path: Path) -> None:
+    _write_skip_project(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(main, ["graph", "audit", "--project-root", str(tmp_path), "--format", "json"])
+    payload = json.loads(result.output)
+    unknown_rows = [row for row in payload["rows"] if row["check"] == "unknown_entity_kind"]
+    assert any("audit-note.md" in row["source"] for row in unknown_rows)
+    # Surfaced as a warning, not a hard failure, so the build still passes.
+    assert all(row["status"] != "fail" for row in unknown_rows)
+    assert result.exit_code == 0
 
 
 def test_graph_build_materializes_project_graph(tmp_path: Path) -> None:
