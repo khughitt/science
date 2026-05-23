@@ -113,27 +113,7 @@ def _sort_export_layers(layer_graphs: dict[str, Graph]) -> list[str]:
 
 from .identity import (_entity_kind_from_uri, canonical_id_from_entity_uri, _slug, _graph_uri, _derive_relation_claim_text, _relation_claim_label, _edge_claims, _edge_statement_uri, _resolve_term, _resolve_center_entity, _about_tokens, shorten_uri, _short_name)
 from .notebooks import (_uv_lock, _NOTEBOOKS_PYPROJECT, _copy_viz_notebook)
-
-
-def init_graph_file(graph_path: Path) -> None:
-    if graph_path.exists():
-        raise click.ClickException(f"Graph file already exists: {graph_path}")
-
-    graph_path.parent.mkdir(parents=True, exist_ok=True)
-    graph_path.write_text(INITIAL_GRAPH_TEMPLATE, encoding="utf-8")
-
-    project_root = _project_root_from_graph_path(graph_path)
-    _copy_viz_notebook(project_root / "code" / "notebooks")
-
-
-def read_graph_stats(graph_path: Path) -> dict[str, int]:
-    dataset = _load_dataset(graph_path)
-
-    stats: dict[str, int] = {}
-    for layer in GRAPH_LAYERS:
-        stats[layer] = len(dataset.graph(_graph_uri(layer)))
-
-    return stats
+from .dataset import (init_graph_file, read_graph_stats, _load_dataset, _save_dataset, save_graph_dataset)
 
 
 def add_concept(
@@ -3935,27 +3915,6 @@ def _attach_edge_claims(
 
         context_graph.add((statement_uri, SCI_NS.backedByClaim, claim_uri))
 
-
-def _load_dataset(graph_path: Path) -> Dataset:
-    if not graph_path.exists():
-        raise click.ClickException(f"Graph file not found: {graph_path}")
-
-    dataset = Dataset()
-    dataset.parse(source=str(graph_path), format="trig")
-    return dataset
-
-
-def _save_dataset(dataset: Dataset, graph_path: Path) -> None:
-    save_graph_dataset(dataset, graph_path)
-
-
-def save_graph_dataset(dataset: Dataset, graph_path: Path) -> None:
-    """Persist a graph dataset with revision metadata refreshed."""
-    save_canonical_graph_dataset(
-        dataset,
-        graph_path,
-        preferred_graph_order=[PROJECT_NS[layer] for layer in GRAPH_LAYERS],
-    )
 
 
 
