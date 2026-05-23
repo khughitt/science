@@ -17,7 +17,7 @@ Phase 0 (`2026-05-22-evidence-line-entity-phase0-plan.md`) is **not implemented 
 - **Graph routing (verified):** entity `rdf:type` and `cito:supports`/`cito:disputes` edges live in the **`knowledge`** graph; per-line reasoning metadata lives in the **`provenance`** graph, written by `_add_reasoning_metadata` keyed by the line URI (materialize.py:236, 771-783). Phase 1 reads accordingly.
 - **Per-line predicates Phase 0 must materialize to provenance under the line URI:** the already-emitted `sci:evidenceRole`, `sci:independenceGroup`, `sci:proxyDirectness`, `sci:measurementModel` (materialize.py:775-792), **plus** Phase-0-new `sci:evidenceStrength`, `sci:evidenceIndependence`, `sci:disputeScope`, `sci:sharedDataset`/`sci:sharedLab`/`sci:sharedPlatform`/`sci:sharedCohort`, and `sci:evidenceType`.
 - **Evidence-type vocabulary (verified):** canonical values carry the `_evidence` suffix — `literature_evidence`, `empirical_data_evidence`, `benchmark_evidence`, etc. (cli.py:1646-1649; `proposition.md` template; materialized via `SCI_NS.evidenceType` to provenance, store.py:656). The aggregator normalizes by stripping the suffix.
-- **Model facts (verified — do NOT re-add):** `ProxyDirectness` (reasoning.py:39) and `proxy_directness` (entities.py:268) already exist on the generic model. There is no separate `EvidenceLineEntity` to build here; `evidence-line` is a kind whose per-line fields ride the reasoning-metadata machinery.
+- **Model facts (verified — do NOT re-add):** `ProxyDirectness` (reasoning.py:39) and `proxy_directness` (entities.py:268) already exist on the generic model. All reasoning fields except `evidence_role` are on **base `Entity`** (entities.py:266-271: `claim_layer`, `identification_strength`, `proxy_directness`, `supports_scope`, `independence_group`, `measurement_model`); **`evidence_role` is `ProjectEntity`-only** (entities.py:362) and `_add_reasoning_metadata` emits it via `getattr`, so it reaches the graph **only when the entity is a `ProjectEntity` subclass**. Therefore Phase 0 must construct the `evidence-line` kind as a `ProjectEntity`-class entity (via typed dispatch) so `sci:evidenceRole` (and the other ProjectEntity reasoning fields) materialize. Phase 1 builds no entity class.
 - **The evidence-line rdf:type class URI** (e.g. `SCI_NS.EvidenceLine`) is whatever Phase 0's materializer mints — confirm it in Task 3 Step 2 and set the module constant to match.
 
 **Branch:** continue on `evidence-line-belief-design` after Phase 0 lands (or `evidence-belief-phase1` off it). **All commits local; do NOT push.** A subagent in a worktree MUST `cd` to the worktree path and verify the branch before committing.
@@ -30,35 +30,37 @@ Phase 0 (`2026-05-22-evidence-line-entity-phase0-plan.md`) is **not implemented 
 
 ---
 
-### Task 1: Parse reasoning metadata from frontmatter → entity_kwargs (current-tree gap)
+### Task 1: Parse base-`Entity` reasoning metadata from frontmatter (current-tree gap)
 
-`_add_reasoning_metadata` (materialize.py:771) *emits* `evidence_role`/`independence_group`/`proxy_directness`/`measurement_model` to provenance from entity attributes, but `entity_kwargs` (frontmatter.py:312-352) **never parses these fields**, so they are `None` on every authored entity and never reach the graph. Aggregation reads them — fix the parse. (No new entity class, no new enum: `proxy_directness`/`ProxyDirectness` already exist.)
+`_add_reasoning_metadata` (materialize.py:771) *emits* the reasoning fields to provenance via `getattr`, but `entity_kwargs` (frontmatter.py:312-352) **never parses them**, so they are `None` on every authored entity and never reach the graph. The aggregator reads them — fix the parse for the fields that live on **base `Entity`** (entities.py:266-271): `claim_layer`, `identification_strength`, `proxy_directness`, `supports_scope`, `independence_group`, `measurement_model`. (No new entity class, no new enum.)
+
+**`evidence_role` is excluded from this task on purpose:** it is `ProjectEntity`-only (entities.py:362), and `parse_entity_file` returns base `Entity` for propositions (frontmatter.py:360), so it cannot attach to a base-`Entity` entity. The aggregator reads `evidence_role` from **evidence-line** entities, which Phase 0 constructs as a `ProjectEntity`-class kind with typed dispatch that parses and materializes `sci:evidenceRole`. That parsing is a Phase 0 deliverable; Phase 1 verifies it round-trips (Task 3 collector test + Task 11 e2e).
 
 **Files:**
 - Modify: `science/model/src/science_model/frontmatter.py:312-352` (`entity_kwargs`)
 - Test: `science/model/tests/test_frontmatter.py`, `science/tests/test_reasoning_metadata_materialize.py`
 
-- [ ] **Step 1: Confirm the gap** — `rg -n "claim_layer|evidence_role|independence_group|proxy_directness" science/model/src/science_model/frontmatter.py`. Expect no hits in the `entity_kwargs` block. Also confirm these are real fields on the entity model (`rg -n "evidence_role|independence_group|proxy_directness|measurement_model" science/model/src/science_model/entities.py science/model/src/science_model/reasoning.py`).
-- [ ] **Step 2: Failing test** — author a temp markdown with `evidence_role`, `independence_group`, `proxy_directness` in frontmatter; `parse_entity_file` it; assert the returned entity has those attributes set (not `None`). Run → FAIL.
+- [ ] **Step 1: Confirm the gap + field locations** — `rg -n "claim_layer|independence_group|proxy_directness|measurement_model" science/model/src/science_model/frontmatter.py` (expect no hits in the `entity_kwargs` block). Confirm the six fields are on base `Entity` and `evidence_role` is on `ProjectEntity`: `rg -n "class Entity\b|class ProjectEntity\b|claim_layer|independence_group|proxy_directness|measurement_model|evidence_role" science/model/src/science_model/entities.py`.
+- [ ] **Step 2: Failing test** — author a temp markdown (base-`Entity` kind) with `independence_group` + `proxy_directness`; `parse_entity_file` it; assert those attributes are set (not `None`). **Do not assert `evidence_role`** — that needs the ProjectEntity path. Run → FAIL.
 
 ```python
-def test_reasoning_fields_parse_from_frontmatter(tmp_path):
+def test_base_entity_reasoning_fields_parse_from_frontmatter(tmp_path):
     from science_model.frontmatter import parse_entity_file
     p = tmp_path / "doc" / "propositions" / "p.md"
     p.parent.mkdir(parents=True)
     (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
     p.write_text(
         "---\nid: proposition:p\ntype: proposition\n"
-        "evidence_role: direct_test\nindependence_group: g1\nproxy_directness: indirect\n---\n# P\n",
+        "independence_group: g1\nproxy_directness: indirect\nclaim_layer: mechanism\n---\n# P\n",
         encoding="utf-8",
     )
     ent = parse_entity_file(p)
-    assert ent.evidence_role == "direct_test"
     assert ent.independence_group == "g1"
     assert str(ent.proxy_directness) == "indirect"
+    assert str(ent.claim_layer) == "mechanism"
 ```
 
-- [ ] **Step 3: Parse the fields** — add to the `entity_kwargs` dict (frontmatter.py:312-352), mirroring the existing `fm.get(...)` style and coercing enums where the field is typed:
+- [ ] **Step 3: Parse the fields** — add to the `entity_kwargs` dict (frontmatter.py:312-352), mirroring the existing `fm.get(...)` style (pydantic v2 coerces `StrEnum` fields from their string value):
 
 ```python
         "claim_layer": fm.get("claim_layer"),
@@ -66,16 +68,15 @@ def test_reasoning_fields_parse_from_frontmatter(tmp_path):
         "proxy_directness": fm.get("proxy_directness"),
         "supports_scope": fm.get("supports_scope"),
         "independence_group": fm.get("independence_group"),
-        "evidence_role": fm.get("evidence_role"),
         "measurement_model": fm.get("measurement_model"),
 ```
 
-If pydantic rejects raw strings for typed enum fields (`proxy_directness: ProxyDirectness`), pass the string through — pydantic v2 coerces `StrEnum` from its value. If a field is absent on the base `Entity` (only on `ProjectEntity`), guard with the existing typed-subclass dispatch rather than the base `entity_kwargs`.
-- [ ] **Step 4: Materialization round-trip test** — in `test_reasoning_metadata_materialize.py` (idiom: `test_chain_materialize.py`), author the proposition, `materialize_graph(tmp_path)`, parse `.trig`, and assert the **provenance** graph contains `(proposition:p, sci:evidenceRole, "direct_test")` and `(proposition:p, sci:proxyDirectness, "indirect")`.
+Note `evidence_role` is intentionally NOT added here (ProjectEntity-only). If a future need arises to carry `evidence_role` on propositions, that is a separate model decision (move it to `Entity`, or add typed proposition dispatch) — out of scope for Phase 1.
+- [ ] **Step 4: Materialization round-trip test** — in `test_reasoning_metadata_materialize.py` (idiom: `test_chain_materialize.py`), author the proposition, `materialize_graph(tmp_path)`, parse `.trig`, assert the **provenance** graph contains `(proposition:p, sci:independenceGroup, "g1")` and `(proposition:p, sci:proxyDirectness, "indirect")`.
 - [ ] **Step 5:** `cd science/model && uv run pytest` and `cd science && uv run pytest tests/test_reasoning_metadata_materialize.py -v` green.
-- [ ] **Step 6:** Commit `fix(model): parse reasoning metadata fields from frontmatter into entity_kwargs`.
+- [ ] **Step 6:** Commit `fix(model): parse base-Entity reasoning metadata from frontmatter into entity_kwargs`.
 
-> **Phase-0 boundary:** `strength`, `independence`, `dispute_scope`, and the `shared_*` observability fields are NOT on the generic model and are NOT added here — Phase 0 introduces them on the evidence-line kind and materializes `sci:evidenceStrength`/`sci:evidenceIndependence`/`sci:disputeScope`/`sci:shared*` to provenance. Phase 1 only consumes them (Task 3).
+> **Phase-0 boundary:** `evidence_role` (ProjectEntity), plus `strength`, `independence`, `dispute_scope`, and the `shared_*` observability fields (not on the generic model at all), are introduced and materialized by Phase 0 on the evidence-line kind (`sci:evidenceRole`/`sci:evidenceStrength`/`sci:evidenceIndependence`/`sci:disputeScope`/`sci:shared*`). Phase 1 only consumes them (Task 3).
 
 ---
 
@@ -194,7 +195,7 @@ def test_collects_line_metadata_from_provenance():
     provenance.add((LINE, SCI_NS.evidenceRole, Literal("model_criticism")))
     provenance.add((LINE, SCI_NS.disputeScope, Literal("generalization")))
     provenance.add((LINE, SCI_NS.evidenceType, Literal("empirical_data_evidence")))
-    units = collect_evidence_units(knowledge, provenance, CLAIM)
+    units = collect_evidence_units(knowledge, provenance, [CLAIM])
     assert len(units) == 1
     u = units[0]
     assert u.stance == "disputes" and u.strength == "strong" and u.independence == "independent"
@@ -268,19 +269,32 @@ def _read_unit(provenance: Graph, line: URIRef, stance: str) -> EvidenceUnit:
     )
 
 
-def collect_evidence_units(knowledge: Graph, provenance: Graph, claim_uri: URIRef) -> list[EvidenceUnit]:
+def collect_evidence_units(
+    knowledge: Graph, provenance: Graph, targets: "Iterable[URIRef]"
+) -> list[EvidenceUnit]:
     """Counted units are ONLY cito edges whose subject is an evidence-line (design §Prerequisite).
 
     Edge + rdf:type are read from `knowledge`; per-line metadata from `provenance`.
+    `targets` is the expanded target set — a hypothesis must be expanded to itself plus its
+    linked claims via store's `_evidence_targets_for_uri` (store.py:3498) so hypothesis belief
+    sees proposition-level evidence (matches `_collect_evidence_signals`). Lines are de-duped by
+    URI so a line bearing on multiple targets counts once.
     """
     units: list[EvidenceUnit] = []
-    for predicate, stance in ((CITO_NS.supports, "supports"), (CITO_NS.disputes, "disputes")):
-        for subject, _, _ in knowledge.triples((None, predicate, claim_uri)):
-            if (subject, RDF.type, EVIDENCE_LINE_CLASS) not in knowledge:
-                continue
-            units.append(_read_unit(provenance, subject, stance))
+    seen: set[str] = set()
+    for target in targets:
+        for predicate, stance in ((CITO_NS.supports, "supports"), (CITO_NS.disputes, "disputes")):
+            for subject, _, _ in knowledge.triples((None, predicate, target)):
+                if (subject, RDF.type, EVIDENCE_LINE_CLASS) not in knowledge:
+                    continue
+                if str(subject) in seen:
+                    continue
+                seen.add(str(subject))
+                units.append(_read_unit(provenance, subject, stance))
     return units
 ```
+
+`Iterable` import: add `from collections.abc import Iterable` to `belief.py`. Callers pass `_evidence_targets_for_uri(knowledge, uri)` (store.py and the QA check), keeping target expansion in `store.py` and `belief.py` free of a circular import.
 
 - [ ] **Step 4:** `cd science && uv run pytest tests/test_belief_collect.py -v` green.
 - [ ] **Step 5:** Commit `feat(graph): collect per-line evidence units (knowledge edge + provenance metadata)`.
@@ -488,11 +502,12 @@ def test_scoped_or_criticism_or_weak_is_not_decisive():
     assert is_decisive_refutation(_d(evidence_role="model_criticism")) is False
     assert is_decisive_refutation(_d(strength="moderate")) is False
     assert is_decisive_refutation(_d(independence="shared-source")) is False
+    assert is_decisive_refutation(_d(proxy_directness="indirect")) is False  # ungated proxy (rule 5)
 ```
 
 Run → FAIL.
 
-- [ ] **Step 2: Implement** (append to `belief.py`):
+- [ ] **Step 2: Implement** (append to `belief.py`, after Task 5's helpers):
 
 ```python
 from .belief_weights import INDEPENDENT, SCOPE_WHOLE_CLAIM
@@ -502,16 +517,20 @@ def is_decisive_refutation(u: "EvidenceUnit") -> bool:
     """Rule 3: ONLY an independent strong direct_test whole_claim dispute caps belief.
 
     whole_claim is the default when scope is unset; model_criticism and scoped disputes
-    (generalization/mechanism/boundary) set `contested` but never eliminate.
+    (generalization/mechanism/boundary) set `contested` but never eliminate. The proxy gate
+    (rule 5) applies symmetrically: an ungated indirect/derived proxy direct-test cannot be
+    decisive either (`is_qualifying_direct_test` already encodes role + proxy gate).
     """
     return (
         u.stance == "disputes"
         and u.independence == INDEPENDENT
         and u.strength == "strong"
-        and u.evidence_role == ROLE_DIRECT_TEST
+        and is_qualifying_direct_test(u)
         and (u.dispute_scope or SCOPE_WHOLE_CLAIM) == SCOPE_WHOLE_CLAIM
     )
 ```
+
+Because this now calls `is_qualifying_direct_test`, define `is_decisive_refutation` **after** Task 5's helpers in `belief.py` (or move the helper above it). Add a test asserting an `indirect` proxy dispute with no `measurement_model` is **not** decisive.
 
 - [ ] **Step 3:** `cd science && uv run pytest tests/test_belief_refutation.py -v` green.
 - [ ] **Step 4:** Commit `feat(graph): scoped refutation precedence (rule 3)`.
@@ -630,17 +649,17 @@ def aggregate_belief(units: list["EvidenceUnit"]) -> BeliefResult:
     diagnostics = [u for u in reduced.kept if is_diagnostic(u)]
 
     n_support = len(support)
-    # A support unit in a contested group is not clean corroboration (stance-aware-collapse decision).
-    clean_direct_test = any(
-        is_qualifying_direct_test(u) and (u.independence_group not in cg) for u in support
-    )
+    # A support unit in a contested group is not clean corroboration (stance-aware-collapse
+    # decision): well_supported needs >=2 *clean* units, one of which is a qualifying direct test.
+    clean_support = [u for u in support if u.independence_group not in cg]
+    clean_direct_test = any(is_qualifying_direct_test(u) for u in clean_support)
     decisive = any(is_decisive_refutation(u) for u in dispute)
 
     if n_support == 0:
         magnitude = BeliefMagnitude.SPECULATIVE
     elif n_support == 1:
         magnitude = BeliefMagnitude.FRAGILE
-    elif clean_direct_test:
+    elif clean_direct_test and len(clean_support) >= 2:
         magnitude = BeliefMagnitude.WELL_SUPPORTED
     else:
         magnitude = BeliefMagnitude.SUPPORTED
@@ -697,24 +716,28 @@ def test_claim_summary_reports_fragile_contested(tmp_path):
     claim = URIRef("http://example.org/science/entity/proposition/p")  # match the minted URI
     data = _claim_summary_data(knowledge, provenance, claim)
     assert data is not None
-    assert data["belief_state"] == "fragile"
+    assert data["belief_state"] == "fragile"          # machine field: magnitude only
     assert data["contested"] is True
+    assert data["belief_display"] == "fragile (contested)"  # human headline
 ```
 
 Run → FAIL.
 
-- [ ] **Step 2: Add `contested` to the shape** — add `contested: bool` to the `ClaimSummaryData` TypedDict and include it in the dict returned by `_claim_summary_data` (alongside `"belief_state"` at store.py:3738). In `_format_claim_summary_row` (3759), render it: `"contested": "yes" if bool(summary["contested"]) else "no"` (matching the `"yes"/"no"` convention used for `has_empirical_data` at 3771). Keep `"belief_state"` carrying the **magnitude string only**.
-- [ ] **Step 3: Replace the rollup** — in `_claim_summary_data`, replace line 3655 (`belief_state = _belief_state(...)`) with:
+- [ ] **Step 2: Add `contested` + `belief_display` to the shape** — add `contested: bool` and `belief_display: str` to the `ClaimSummaryData` TypedDict and to the dict returned by `_claim_summary_data` (alongside `"belief_state"` at store.py:3738). `belief_state` keeps the **magnitude string only** (machine field); `belief_display` is the human headline (`"fragile (contested)"` when contested, else just the magnitude). In `_format_claim_summary_row` (3759): render `"contested": "yes" if bool(summary["contested"]) else "no"` (matching `has_empirical_data` at 3771) and pass `"belief_display"` through as a string. The human-facing `science status` / dashboard belief column uses `belief_display`; structured/JSON consumers read `belief_state` + `contested` separately. This resolves the display contract: machine fields stay split, the headline composes them.
+- [ ] **Step 3: Replace the rollup** — in `_claim_summary_data`, replace line 3655 (`belief_state = _belief_state(...)`) with (note the **target expansion** so a hypothesis aggregates its linked claims' evidence, matching `_collect_evidence_signals` at 3520):
 
 ```python
 from .belief import aggregate_belief, collect_evidence_units
 
-belief = aggregate_belief(collect_evidence_units(knowledge, provenance, uri))
+belief = aggregate_belief(
+    collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(knowledge, uri))
+)
 belief_state = belief.magnitude.value
 contested = belief.contested
+belief_display = belief.display()
 ```
 
-Thread `contested` into the returned dict. Keep the existing `support_count`/`dispute_count`/`source_count` columns (still computed by `_collect_evidence_signals`) — they are independent count columns, not the belief. Update the `signals` block (3683-3684) so the `"contested"` signal derives from `belief.contested` rather than `dispute_count > 0`. Delete `_belief_state` and its references.
+`_evidence_targets_for_uri` already lives in `store.py` (3498) — no new import. Thread `contested` and `belief_display` into the returned dict. Keep the existing `support_count`/`dispute_count`/`source_count` columns (still computed by `_collect_evidence_signals`) — they are independent count columns, not the belief. Update the `signals` block (3683-3684) so the `"contested"` signal derives from `belief.contested` rather than `dispute_count > 0`. Delete `_belief_state` and its references.
 - [ ] **Step 4: Sweep callers/tests** — `rg -n "_belief_state|belief_state|\"contested\"|'contested'" science/src science/tests`. Any test asserting the old semantics (e.g. `belief_state == "contested"` as a magnitude value) must move that assertion to the new `contested` field; the magnitude is now orthogonal (`speculative`/`fragile`/`supported`/`well_supported` only).
 - [ ] **Step 5:** `cd science && uv run pytest tests/test_belief_store_integration.py -v` then full `cd science && uv run pytest` green.
 - [ ] **Step 6:** Commit `refactor(graph): derive belief_state via independence-aware aggregation; add contested flag`.
@@ -746,7 +769,7 @@ from science_tool.graph.belief import (
     BeliefMagnitude,
 )
 from science_tool.graph.io import SCHEMA_NS, SCI_NS
-from science_tool.graph.store import _graph_uri  # canonical graph-name helper
+from science_tool.graph.store import _evidence_targets_for_uri, _graph_uri
 from ..result import Result, Severity
 from . import Check
 
@@ -812,14 +835,14 @@ def check_belief_authoring(ctx):
     if knowledge is None:
         return
     for claim in _claims(knowledge):
-        units = collect_evidence_units(knowledge, provenance, claim)
+        units = collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(knowledge, claim))
         belief = aggregate_belief(units)
         n_support_groups = len({u.independence_group or u.line_uri for u in belief.support_units})
         authored = _authored_magnitude(ctx, provenance, claim)
         decisive = any(is_decisive_refutation(u) for u in belief.dispute_units)
 
-        # #6 evidence.proxy-ungated (line-level, always reachable)
-        for u in belief.support_units:
+        # #6 evidence.proxy-ungated (line-level, both stances — rule 5 is symmetric)
+        for u in (*belief.support_units, *belief.dispute_units):
             if is_proxy_gated(u) and u.evidence_role == "direct_test":
                 yield Result(Severity.WARN, None, None,
                              f"{u.line_uri}: indirect/derived proxy as direct_test without a measurement_model",
@@ -929,7 +952,7 @@ model_criticism, not a direct-test refutation.
 ```
 
 - [ ] **Step 3: Build + validate** — in `~/d/cancer/mechanisms/evolution/`: `science graph build` then `science validate`. Expect both lines materialize as `cito:` edges (knowledge) with metadata in provenance; structural QA passes; **no** `belief.refutation-masked` ERROR (the dispute is `model_criticism`/`generalization`).
-- [ ] **Step 4: Confirm belief** — `science status` reports `proposition:h012-plasticity-burst-precedes-sweep` as `fragile (contested)` — one clean support unit + one diagnostic dispute. Verify it is **not** capped-as-refuted. If it shows otherwise, STOP and debug the authored metadata or aggregation before committing.
+- [ ] **Step 4: Confirm belief** — `science status` shows `proposition:h012-plasticity-burst-precedes-sweep` with `belief_display = "fragile (contested)"` (machine fields: `belief_state = fragile`, `contested = yes`) — one clean support unit + one diagnostic (`model_criticism`) dispute, **not** capped-as-refuted (`capped_by_refutation` False). If it shows otherwise, STOP and debug the authored metadata or aggregation before committing.
 - [ ] **Step 5:** Commit in the cancer-evolution repo: `feat(evidence): author h012 Yang2022/Simeonov2021 evidence-lines`. (Separate repo; do NOT push.)
 
 ---
@@ -950,7 +973,7 @@ model_criticism, not a direct-test refutation.
 ## Exit criteria (Phase 1 done)
 
 - `belief_state` is derived by `aggregate_belief` from per-line evidence-line units — read with the cito edge/type from `knowledge` and metadata from `provenance` — independence-collapsed **stance-aware**, quality-classified, proxy-gated, with scoped refutation precedence. `_belief_state` is gone.
-- Belief is an **ordinal magnitude** (`speculative`/`fragile`/`supported`/`well_supported`) plus an **orthogonal `contested`** flag (rendered `"yes"/"no"` in the summary row). A decisive (independent strong direct_test whole_claim) dispute caps magnitude to `fragile`; `model_criticism`/scoped disputes set `contested` without capping; opposite-stance evidence in one independence_group never cancels.
+- Belief is an **ordinal magnitude** (`speculative`/`fragile`/`supported`/`well_supported`) plus an **orthogonal `contested`** flag; machine consumers read them split, the human headline `belief_display` composes them (`"fragile (contested)"`). A decisive (independent strong, non-proxy-gated direct_test, whole_claim) dispute caps magnitude to `fragile`; `model_criticism`/scoped/ungated-proxy disputes set `contested` without capping; opposite-stance evidence in one independence_group never cancels and bars that unit from clean corroboration. Hypothesis belief expands to its linked claims' evidence.
 - The four belief QA checks compare **authored vs. computed** (reachable, not tautological), are tier-gated as specified, and pass/flag correctly.
 - The cancer-evolution pilot resolves `proposition:h012-plasticity-burst-precedes-sweep` to `fragile (contested)`, not eliminated.
 - Both test suites green. No numeric scalar, leave-one-out, golden, snapshots, edge-status, posteriors, or `core/decisions.md` opt-in touched.
@@ -960,4 +983,3 @@ model_criticism, not a direct-test refutation.
 - **Phase 2** — `belief_weight` `(support_mass, dispute_mass)` pair + net, leave-one-out (#7), golden byte-reproducibility (#8), append-only belief snapshots with input-hash sets; numeric weights opt-in via `core/decisions.md`. Fills `attention.py:250-251`.
 - **Phase 3** — land `sci:edgeStatus`/`sci:Posterior` from YAML into the graph; aggregation sets `eliminated` via rule 3.
 - **Phase 4** — calibration backtest (#10) + optional pgmpy CPDs.
-```
