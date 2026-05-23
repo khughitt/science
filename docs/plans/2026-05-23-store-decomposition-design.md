@@ -33,7 +33,7 @@ graph/store/
   5.  notebooks.py         # ← constants            (viz-notebook scaffolding)
   6.  dataset.py           # ← constants, identity, notebooks, io
   7.  evidence_signals.py  # ← constants, types, identity, dataset
-  8.  mutations.py         # ← foundation (1–6)      (largest, ~1000 ln; all graph writes)
+  8.  mutations.py         # ← evidence_signals + foundation   (largest, ~1000 ln; all graph writes; add_proposition uses _json_literal)
   9.  export.py            # ← evidence_signals + foundation
   10. inquiry.py           # ← graphutil + foundation
   11. snapshot.py          # ← dataset, io

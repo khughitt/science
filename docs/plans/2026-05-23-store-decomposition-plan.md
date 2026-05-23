@@ -30,10 +30,13 @@
 For a target submodule `M` with a named symbol list `S` (functions/classes/constants):
 
 1. **Create `science/src/science_tool/graph/store/M.py`.** Start it with `from __future__ import annotations`, then the imports the moved code actually references (a subset of the original `store.py` top-of-file imports — e.g. `from pathlib import Path`, `from rdflib import ...`, `from science_tool.graph.io import ...`), plus `from .<earlier_module> import (...)` for any sibling symbols `S` depends on (siblings are always *earlier* in the dependency order — never later). **Move the definitions in `S` verbatim** from `store/__init__.py` into `M.py` (no body changes, except the one documented edit in Task 6).
+   - **The per-task "Imports" list is a starting FLOOR, not exhaustive.** The authoritative rule: `M.py` must import *every* free name its moved bodies reference — external libs, `science_model.*`, `science_tool.graph.io`/`.belief`/`.export_types`, and earlier siblings. Step 3 makes any omission fail loudly and immediately.
 2. **Edit `science/src/science_tool/graph/store/__init__.py`:** delete the moved definitions; add a re-export line `from .M import (<every name in S that any external importer or sibling needs>)`. Include underscore names explicitly (they don't come via `import *`). Remove any now-unused top-of-file import from `__init__.py`.
-3. **Run the guard + full suite:**
-   `cd science && uv run pytest tests/test_store_package_structure.py -q` (must pass), then `cd science && uv run pytest -q` (must pass, zero failures).
-   - A `NameError`/`ImportError` means a needed import or re-export was missed — fix and rerun. The suite + guards are the proof the move is clean.
+3. **Verify, fail-fast first:**
+   - **Module import smoke (catches missing imports in `M.py` itself):** `cd science && uv run python -c "import science_tool.graph.store.M"` — must exit 0. A `NameError`/`ImportError` here names the exact missing import; add it and rerun until clean.
+   - **Guards:** `cd science && uv run pytest tests/test_store_package_structure.py -q` — must pass.
+   - **Full suite:** `cd science && uv run pytest -q` — must pass, zero failures.
+   - The smoke check + guards + suite together are the proof the move is clean.
 4. **Commit** with explicit paths:
    `git add science/src/science_tool/graph/store/M.py science/src/science_tool/graph/store/__init__.py && git commit -m "refactor(store): extract <M> submodule"`
 
@@ -55,6 +58,7 @@ Expected: `store-decomposition`
 
 ```bash
 cd <worktree>
+mkdir -p science/src/science_tool/graph/store   # git mv does NOT create the destination dir
 git mv science/src/science_tool/graph/store.py science/src/science_tool/graph/store/__init__.py
 ```
 
@@ -162,6 +166,10 @@ def _sibling_imports(tree: ast.AST) -> set[str]:
             mod = node.module or ""
             if node.level >= 1 and mod in CANONICAL_ORDER:          # from .sibling import x
                 sibs.add(mod)
+            if node.level >= 1 and mod == "":                        # from . import sibling
+                for alias in node.names:
+                    if alias.name in CANONICAL_ORDER:
+                        sibs.add(alias.name)
             if mod.startswith("science_tool.graph.store."):          # from ...store.sibling import x
                 sibs.add(mod.split(".")[-1])
             if mod == "science_tool.graph.store":                    # from ...store import sibling
@@ -223,7 +231,7 @@ git commit -m "test(store): guard the submodule dependency order"
 - [ ] **Step 1: Extract `constants.py`**
 
 Move these definitions (design doc §1) verbatim: `DEFAULT_GRAPH_PATH`, `VALID_INQUIRY_TYPES`, `GRAPH_LAYERS`, `GRAPH_EXPORT_SCHEMA_VERSION`, `GRAPH_EXPORT_VISIBLE_LAYERS`, `GRAPH_EXPORT_EDGE_METADATA_PREDICATES`, `CURIE_PREFIXES`, `PROJECT_ENTITY_PREFIXES`, `PROJECT_ENTITY_PREFIX_KINDS`, `_RELATION_KIND_BY_PREDICATE`, `STRUCTURED_PROPOSITION_PREDICATES`, `EVIDENCE_STANCE_PREDICATES`, `INITIAL_GRAPH_TEMPLATE`, `PREDICATE_REGISTRY`.
-`constants.py` imports: `from pathlib import Path`, `from rdflib import Namespace, URIRef`, `from rdflib.namespace import PROV, RDF, SKOS, XSD` (only those actually referenced by the constants), `from science_model.profiles.schema import RelationKind`, and the namespace re-exports `from science_tool.graph.io import BIOLINK_NS, CITO_NS, DCTERMS_NS, PROJECT_NS, REVISION_URI, SCHEMA_NS, SCI_NS, SCIC_NS`.
+`constants.py` imports: `from pathlib import Path`, `from rdflib import Namespace, URIRef`, `from rdflib.namespace import PROV, RDF, SKOS, XSD` (only those actually referenced by the constants), `from science_model.profiles.schema import RelationKind`, `from science_model.profiles import CORE_PROFILE` (required — `_RELATION_KIND_BY_PREDICATE` iterates `CORE_PROFILE.relation_kinds`, store.py:432), and the namespace re-exports `from science_tool.graph.io import BIOLINK_NS, CITO_NS, DCTERMS_NS, PROJECT_NS, REVISION_URI, SCHEMA_NS, SCI_NS, SCIC_NS`.
 In `__init__.py` add: `from .constants import (DEFAULT_GRAPH_PATH, VALID_INQUIRY_TYPES, GRAPH_LAYERS, GRAPH_EXPORT_SCHEMA_VERSION, GRAPH_EXPORT_VISIBLE_LAYERS, GRAPH_EXPORT_EDGE_METADATA_PREDICATES, CURIE_PREFIXES, PROJECT_ENTITY_PREFIXES, PROJECT_ENTITY_PREFIX_KINDS, _RELATION_KIND_BY_PREDICATE, STRUCTURED_PROPOSITION_PREDICATES, EVIDENCE_STANCE_PREDICATES, INITIAL_GRAPH_TEMPLATE, PREDICATE_REGISTRY, BIOLINK_NS, CITO_NS, DCTERMS_NS, PROJECT_NS, REVISION_URI, SCHEMA_NS, SCI_NS, SCIC_NS)`.
 
 - [ ] **Step 2: Extract `types.py`**
@@ -368,7 +376,7 @@ Imports for `evidence_signals.py`: `from rdflib import Literal, URIRef`, `import
 **Files:** Create `store/mutations.py`; Modify `store/__init__.py`.
 
 Symbols (design doc §8): `add_concept`, `add_article`, `add_proposition`, `add_observation`, `add_evidence_edge`, `add_finding`, `add_interpretation`, `add_discussion`, `add_falsification`, `add_mechanism`, `add_story`, `add_paper_entity`, `add_hypothesis`, `add_question`, `add_edge`, `add_inquiry`, `add_inquiry_node`, `add_inquiry_edge`, `add_assumption`, `add_transformation`, `add_data_package`, `set_boundary_role`, `set_param_metadata`, `migrate_addresses_direction`, `_warn_on_relation_direction_mismatch`, `_attach_edge_claims`.
-Imports for `mutations.py`: `import click`, `from pathlib import Path`, `from rdflib import Dataset, Graph, Literal, URIRef`, `from rdflib.namespace import RDF, SKOS, XSD`, `from science_model...` as referenced (e.g. `relation_allows_kinds`, `RelationKind`), `from .constants import (...)`, `from .identity import (...)`, `from .dataset import _load_dataset, _save_dataset, save_graph_dataset` as referenced. Depends only on foundation (earlier).
+Imports for `mutations.py`: `import click`, `from pathlib import Path`, `from rdflib import Dataset, Graph, Literal, URIRef`, `from rdflib.namespace import RDF, SKOS, XSD`, `from science_model.relations import relation_allows_kinds`, `from science_model.profiles.schema import RelationKind`, `from science_model.reasoning import MeasurementModel, RivalModelPacket` (passed to `_json_literal` at store.py:704/712), `from .constants import (...)`, `from .identity import (...)`, `from .dataset import _load_dataset, _save_dataset, save_graph_dataset` as referenced, and **`from .evidence_signals import _json_literal`** (used by `add_proposition`). Depends on **evidence_signals + foundation** — evidence_signals is module 7, earlier than mutations (8), so this is a legal downward edge.
 `__init__.py` re-export: `from .mutations import (add_concept, add_article, add_proposition, add_observation, add_evidence_edge, add_finding, add_interpretation, add_discussion, add_falsification, add_mechanism, add_story, add_paper_entity, add_hypothesis, add_question, add_edge, add_inquiry, add_inquiry_node, add_inquiry_edge, add_assumption, add_transformation, add_data_package, set_boundary_role, set_param_metadata, migrate_addresses_direction, _warn_on_relation_direction_mismatch, _attach_edge_claims)`.
 
 - [ ] Step 1: Create `mutations.py`, move the 26 symbols verbatim, wire imports.
@@ -385,7 +393,7 @@ Imports for `mutations.py`: `import click`, `from pathlib import Path`, `from rd
 **Files:** Create `store/export.py`; Modify `store/__init__.py`.
 
 Symbols (design doc §9): `_export_graph_layers`, `_canonical_export_layer_id`, `_export_layer_graph_map`, `_sort_export_layers`, `export_graph_payload`.
-Imports for `export.py`: `from rdflib import Dataset, Graph, URIRef`, `from science_tool.graph.export_types import (GraphExportEdge, GraphExportLayer, GraphExportNode, GraphExportOverlays, GraphExportPayload, GraphExportScope, build_graph_export_edge_id, build_graph_export_node_id)`, `from .constants import (...)`, `from .identity import (...)`, `from .dataset import _load_dataset`, `from .evidence_signals import (_collect_evidence_signals, _source_strings, _apply_phase1_metadata_to_bundle, _apply_evidence_semantics_to_bundle, _load_proposition_phase1_metadata, _load_proposition_evidence_semantics, _load_proposition_pre_registrations, _load_proposition_interaction_terms, _load_proposition_bridge_hypotheses, _load_proposition_falsifications)` as referenced, and `from .types import (...)`. Depends on evidence_signals + foundation (earlier).
+Imports for `export.py`: `from rdflib import Dataset, Graph, URIRef`, `from science_tool.graph.export_types import (GraphExportEdge, GraphExportLayer, GraphExportNode, GraphExportOverlays, GraphExportPayload, GraphExportScope, build_graph_export_edge_id, build_graph_export_node_id)`, `from science_tool.graph.io import project_root_from_graph_path as _project_root_from_graph_path` (required — used at store.py:1744), `from .constants import (...)`, `from .identity import (...)`, `from .dataset import _load_dataset`, `from .evidence_signals import (_collect_evidence_signals, _source_strings, _apply_phase1_metadata_to_bundle, _apply_evidence_semantics_to_bundle, _load_proposition_phase1_metadata, _load_proposition_evidence_semantics, _load_proposition_pre_registrations, _load_proposition_interaction_terms, _load_proposition_bridge_hypotheses, _load_proposition_falsifications)` as referenced, and `from .types import (...)`. Depends on evidence_signals + foundation (earlier).
 `__init__.py` re-export: `from .export import export_graph_payload` (the 4 `_export_*` helpers are internal-only; re-export only if any importer/test needs them — completeness guard will tell).
 
 - [ ] Step 1: Create `export.py`, move the 5 symbols verbatim, wire imports.
@@ -422,7 +430,7 @@ Snapshot symbols (design doc §11): `import_snapshot`, `stamp_revision`.
 `snapshot.py` imports: `from pathlib import Path`, `from rdflib import Dataset`, `from science_tool.graph.io import build_input_manifest as _build_input_manifest, read_revision_manifest as _read_revision_manifest` (as referenced), `from .dataset import _load_dataset, _save_dataset`, `from .identity import _slug`. Depends on dataset/io (earlier).
 
 Validation symbols (design doc §12): `query_predicates`, `validate_graph`, `diff_graph_inputs`.
-`validation.py` imports: `from pathlib import Path`, `from rdflib import Dataset, URIRef`, `from .constants import PREDICATE_REGISTRY`, `from .identity import (...)`, `from .dataset import _load_dataset`, `from .graphutil import _has_cycle` (`validate_graph` calls it). Depends on graphutil + foundation (earlier).
+`validation.py` imports: `from pathlib import Path`, `from rdflib import Dataset, URIRef`, `from science_tool.graph.io import read_revision_manifest as _read_revision_manifest, build_input_manifest as _build_input_manifest` (required — `diff_graph_inputs` uses both, store.py:3113), `from .constants import PREDICATE_REGISTRY`, `from .identity import (...)`, `from .dataset import _load_dataset`, `from .graphutil import _has_cycle` (`validate_graph` calls it). Depends on graphutil + foundation (earlier).
 
 `__init__.py` re-exports: `from .snapshot import (import_snapshot, stamp_revision)` and `from .validation import (query_predicates, validate_graph, diff_graph_inputs)`.
 
@@ -458,7 +466,7 @@ Imports for `queries.py`: `from rdflib import Dataset, Graph, URIRef`, `from .co
 **Files:** Create `store/summary.py`; Modify `store/__init__.py`.
 
 Symbols (design doc §14): `_summary_targets`, `_claim_summary_data`, `_format_claim_summary_row`, `_claim_summaries`, `query_dashboard_summary`, `_hypotheses_for_claim`, `_claim_summary_adjacency`, `_neighborhood_summary_data_rows`, `_format_neighborhood_summary_row`, `query_neighborhood_summary`, `_question_claims`, `_inquiry_claims`, `_rollup_claim_group`, `_question_summary_data`, `_format_question_summary_row`, `query_question_summary`, `_inquiry_summary_data`, `_format_inquiry_summary_row`, `query_inquiry_summary`, `_project_summary_data`, `_format_project_summary_row`, `query_project_summary`, `query_coverage`, `query_gaps`, `query_uncertainty`.
-Imports for `summary.py`: `from rdflib import Dataset, Graph, URIRef`, `from science_tool.graph.belief import aggregate_belief, collect_evidence_units` (used by `_claim_summary_data`), `from .constants import (...)`, `from .types import (ClaimSummaryData, NeighborhoodSummaryData, QuestionSummaryData, InquirySummaryData, ProjectSummaryData, ...)`, `from .identity import (...)`, `from .dataset import _load_dataset`, `from .evidence_signals import (_collect_evidence_signals, _evidence_targets_for_uri, _collect_evidence_types, ...)` as referenced. Depends on evidence_signals + foundation; does NOT import `queries`.
+Imports for `summary.py`: `from rdflib import Dataset, Graph, URIRef`, `from science_tool.graph.belief import aggregate_belief, collect_evidence_units` (used by `_claim_summary_data`), `from science_tool.graph.io import project_root_from_graph_path as _project_root_from_graph_path` (required — used by `query_project_summary` at store.py:4243), `from .constants import (...)`, `from .types import (ClaimSummaryData, NeighborhoodSummaryData, QuestionSummaryData, InquirySummaryData, ProjectSummaryData, ...)`, `from .identity import (...)`, `from .dataset import _load_dataset`, `from .evidence_signals import (_collect_evidence_signals, _evidence_targets_for_uri, _collect_evidence_types, ...)` as referenced. Depends on evidence_signals + foundation; does NOT import `queries`.
 `__init__.py` re-export: `from .summary import (query_dashboard_summary, query_neighborhood_summary, query_question_summary, query_inquiry_summary, query_project_summary, query_coverage, query_gaps, query_uncertainty, _claim_summary_data)` (`_claim_summary_data` is imported by tests; other `_` helpers re-export only if the guard flags them).
 
 - [ ] Step 1: Create `summary.py`, move the 25 symbols verbatim, wire imports.
