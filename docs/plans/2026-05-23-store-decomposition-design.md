@@ -1,6 +1,6 @@
 # store.py Decomposition — Design
 
-**Status:** Approved design (2026-05-23), revised after review (rev b). Next: implementation plan via writing-plans, then subagent-driven-development.
+**Status:** Implemented (2026-05-23).
 
 **Goal:** Break the 4,773-line `science/src/science_tool/graph/store.py` monolith into a `store/` package of focused, single-responsibility submodules — a behavior-preserving code-move — before starting evidence-aggregation Phase 2.
 
