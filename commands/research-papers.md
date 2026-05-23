@@ -112,7 +112,13 @@ Follow `.ai/templates/paper.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/pap
 
 ## After Writing
 
-1. Add/update the BibTeX entry in `papers/references.bib` (create file with header if missing).
+1. Add the BibTeX entry to `papers/references.bib` via `science bib add` — **never** Edit/Write the file directly:
+   ```bash
+   uv run science bib add --project-root . <<'EOF'
+   @article{<citekey>, title={...}, author={...}, year={...}, ... }
+   EOF
+   ```
+   This does a single locked append: it creates the file with a header if missing, is idempotent by key (re-running is a safe no-op; pass `--replace` to overwrite), and serializes concurrent writes from parallel subagents. A direct Edit instead hits "file modified since read" errors under Dropbox sync and races other subagents in a batch.
 2. Link relevance to existing hypotheses in `specs/hypotheses/`.
 3. Add new questions via `science question reserve`. **Do not** create files under `doc/questions/` directly — parallel subagents racing on the next q-number cause silent collisions. The CLI uses `O_CREAT|O_EXCL` to atomically claim the next slot, even with multiple subagents writing concurrently.
    Read `.ai/templates/question.md` first; if not found, read
