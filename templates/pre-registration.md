@@ -93,6 +93,7 @@ for anything the schema can't capture.
 
 ```yaml
 - parameter: "<name of the quantity, with units if relevant>"
+  scope: <confirmatory | exploratory | sensitivity>   # optional; see "Block scope" below
   expected:
     central: "<best single guess, with sign>"      # null for `acknowledged`
     range:   "<plausible range, e.g., [+0.05, +1.0]>"  # null for `acknowledged`
@@ -116,7 +117,47 @@ for anything the schema can't capture.
     # e.g. "anchors §3 success threshold at central ± 30%"
     # `acknowledged` blocks: "no gate; surfaces a known unknown"
     # `hint`-tier expectations: informational / soft gate only
+  gate_limitations:   # optional; see "Gate limitations" below
+    # Foreseen limits on the gate's *resolving power* — rival models the gate
+    # cannot exclude within a stated result region, known before data. Distinct
+    # from `unknowns:` (which is about the parameter value).
+    - alternative: "<the rival model/reading the gate cannot rule out>"
+      region: "<observed-value region where the gate cannot discriminate>"
+      verdict_if_unresolved: "<[?] inconclusive | [⌀] non-adjudicating>"
 ```
+
+### Block scope
+
+`scope:` is **optional** and declares each expectation's evidential role:
+
+- `confirmatory` — pre-registered; gates a hypothesis verdict.
+- `exploratory` — hypothesis-generating; carries no confirmatory weight.
+- `sensitivity` — robustness check on a confirmatory block (e.g., re-running
+  the gate under an alternative prior or covariate set).
+
+Forward-compatible: omitting it leaves all current behavior unchanged and the
+`## Exploratory vs. Confirmatory` section remains authoritative. When present,
+it lets that section be derived per-block rather than restated, makes the
+confirmatory-test count machine-readable, and enables one-rule lints (e.g.
+"hint-tier confirmatory blocks must cite a soft gate").
+
+### Gate limitations
+
+`gate_limitations:` is **optional** and records foreseen limits on the gate's
+*resolving power*: rival models the gate cannot exclude within a stated result
+region, known before data. This is **not** the same as `unknowns:` — `unknowns:`
+captures uncertainty in the parameter *value*, whereas a gate limitation can
+hold even when the value is estimated perfectly: the gate still cannot
+adjudicate between two mechanisms that both produce a result in that region.
+
+Each entry names the rival reading, the result region where the gate cannot
+discriminate, and the verdict the result carries there. That verdict is `[?]`
+**inconclusive** (the design cannot discriminate) — or `[⌀]` **non-adjudicating**
+when the test layer *does* resolve but the rollup is deliberately closed without
+a direction. (Both tokens are from the canonical verdict vocabulary in
+`templates/interpretation.md`; see `## Decision Criteria`.) Recording this up
+front stops a result in the non-discriminating region from being read post-hoc
+as a confirmation of either model.
 
 Worked examples:
 
@@ -159,6 +200,34 @@ Worked examples:
     - "expected magnitude of cross-patient variation in φ_p (1.5× vs 10× vs 50×?)"
     - "whether φ_p variation is dominated by biology (cell-cycle composition, malignancy stage) or technical capture"
   gate_use: "No gate. Recorded as a known unknown so PPC-adequacy interpretation does not silently assume shared dispersion. Machine-readable for later tooling that extracts uncertainty nodes."
+```
+
+```yaml
+# Gate-limitation example — the gate cannot adjudicate a rival model in part
+# of its output range. `scope:` and `gate_limitations:` shown together.
+- parameter: "R² for per-patient phase_score ~ stage + cytogenetic_subtype"
+  scope: confirmatory
+  expected:
+    central: "0.45"
+    range:   "[0.30, 0.60]"
+    direction: positive
+  evidence_tier: hint
+  provenance:
+    - source: "t640 variance decomposition (own analysis)"
+      calibration_source: prior_own_analysis
+      estimate: "R² ≈ 0.4 on a single cohort"
+      ref: "task:t640"
+      notes: "One cohort only; soft gate, wide band."
+  unknowns:
+    - "whether the R² band generalizes beyond the single cohort it was estimated on"
+  gate_use: "Soft gate. R² in the captured band is read as 'cytogenetic subtype explains phase-score variance'; the registered band is reported regardless of result."
+  gate_limitations:
+    - alternative: "cell-cycle composition is a strong downstream mediator of cytogenetic subtype (not an orthogonal axis)"
+      region: "R² in the captured band [0.30, 0.60] when mediation is strong"
+      verdict_if_unresolved: "[?] inconclusive"
+      # A captured-band R² is consistent with BOTH 'orthogonal axis' and
+      # 'strong mediator'; the variance decomposition cannot separate them.
+      # Resolving it requires the mediation pilot in ## Pilot Calibration.
 ```
 
 The β example would *not* clear a `calibrated` tier — only two own-analyses
@@ -274,7 +343,20 @@ expectation has wider acceptance bands authored *before* data arrives. If
 that wider gate fails, the analysis either accepts the failure under the
 registered terms or invokes the amendment procedure — and the recalibrated
 gate cannot support a confirmatory claim for the same analysis (it becomes
-path-B / exploratory for that threshold). -->
+path-B / exploratory for that threshold).
+
+**Verdict vocabulary — name the outcome, don't invent labels.** When
+`interpret-results` reads this analysis it emits one of the five canonical
+polarity tokens defined in `templates/interpretation.md` (with respect to the
+*predicted* direction): `[+]` supports · `[-]` refutes · `[~]` mixed/null ·
+`[?]` inconclusive · `[⌀]` non-adjudicating. A `hint`-tier soft gate whose
+result lands in its wider acceptance band is a `[?]` **inconclusive** verdict —
+not a passing confirmation, not a failure, and not an ad-hoc label like
+"REGISTERED-INCONCLUSIVE". Author each criterion so its inconclusive band maps
+to `[?]` explicitly, and reserve `[⌀]` for a gate that resolves at the test
+layer but is deliberately closed without a direction (e.g. a `gate_limitations:`
+entry on the relevant Expectations block). This is the downstream machinery you
+are authoring against. -->
 
 ## Null Result Plan
 
@@ -316,7 +398,13 @@ Omit if metric choice is straightforward and unchanged. -->
 ## Exploratory vs. Confirmatory
 
 <!-- Which analyses are pre-registered (confirmatory) and which are explicitly exploratory?
-Mark each planned analysis as one or the other. Exploratory analyses are fine — but they need different evidential weight. -->
+Mark each planned analysis as one or the other. Exploratory analyses are fine — but they need different evidential weight.
+
+If your Expectations blocks declare per-block `scope:` (confirmatory |
+exploratory | sensitivity), this section can simply point at those declarations
+instead of restating them — the per-block field is the single source of truth
+and avoids the two drifting apart. Use prose here only for planned analyses
+that have no Expectations block (e.g. purely qualitative exploratory passes). -->
 
 ## Total Comparison Count
 
