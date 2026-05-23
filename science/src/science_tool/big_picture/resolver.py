@@ -3,7 +3,11 @@
 Resolves many-to-many associations using a fallback chain:
 1. Direct: question frontmatter declares `hypothesis: <id>` or list of ids
 2. Inverse: hypothesis frontmatter's `related:` lists the question
-3. Transitive: interpretation frontmatter's `related:` contains both q and h
+3. Back-inverse: question frontmatter's `related:` lists the hypothesis
+4. Transitive: interpretation frontmatter's `related:` contains both q and h
+
+Inverse and back-inverse are scored identically: an authored `related:` edge is
+the same bidirectional intent regardless of which side hosts it.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ from science_model.aspects import (
 )
 from science_tool.big_picture.frontmatter import read_frontmatter
 
-Confidence = Literal["direct", "inverse", "transitive"]
+Confidence = Literal["direct", "inverse", "back-inverse", "transitive"]
 
 
 @dataclass(frozen=True)
@@ -59,6 +63,13 @@ def resolve_questions(project_root: Path) -> dict[str, ResolverOutput]:
         for ref in _as_list(hfm.get("related")):
             if ref in results and hid not in results[ref]:
                 results[ref][hid] = HypothesisMatch(hid, "inverse", 0.8)
+
+    # Back-inverse: question.related lists the hypothesis (edge hosted on the
+    # question side). Scored like inverse — same authored bidirectional intent.
+    for qid, qfm in questions.items():
+        for ref in _as_list(qfm.get("related")):
+            if ref in hypotheses and ref not in results[qid]:
+                results[qid][ref] = HypothesisMatch(ref, "back-inverse", 0.8)
 
     # Transitive: interpretation lists both a question and a hypothesis.
     interpretations = _load_entities(project_root / "doc" / "interpretations")
@@ -122,4 +133,4 @@ def _finalize(matches: dict[str, HypothesisMatch]) -> ResolverOutput:
 
 
 def _conf_rank(c: Confidence) -> int:
-    return {"direct": 0, "inverse": 1, "transitive": 2}[c]
+    return {"direct": 0, "inverse": 1, "back-inverse": 1, "transitive": 2}[c]

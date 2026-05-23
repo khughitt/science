@@ -30,6 +30,18 @@ def test_transitive_match() -> None:
     assert match.confidence == "transitive"
 
 
+def test_back_inverse_match() -> None:
+    # A question whose own `related:` names a hypothesis resolves to it, even
+    # though the hypothesis side hosts no reciprocal edge (authored intent is
+    # symmetric; which side hosts the edge is stylistic).
+    result = resolve_questions(FIXTURE)
+    q07 = result["question:q07-back-inverse-to-h2"]
+    assert q07.primary_hypothesis == "hypothesis:h2-beta"
+    match = next(m for m in q07.hypotheses if m.id == "hypothesis:h2-beta")
+    assert match.confidence == "back-inverse"
+    assert match.score == 0.8
+
+
 def test_cross_cutting_many_to_many() -> None:
     result = resolve_questions(FIXTURE)
     q04 = result["question:q04-cross-cutting"]
