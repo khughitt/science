@@ -5,11 +5,14 @@ The Task model is defined in science-model and re-exported here for convenience.
 
 from __future__ import annotations
 
+import fcntl
 import re
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from typing import Iterator
 
 from science_model.tasks import Task, TaskCreate, TaskStatus, TaskUpdate
 
@@ -222,6 +225,25 @@ def _strict_task_ids_in_text(text: str) -> list[str]:
     return ids
 
 
+@contextmanager
+def _task_allocation_lock(tasks_dir: Path) -> Iterator[None]:
+    """Serialize ID allocation + active.md writes across concurrent processes.
+
+    Without this, parallel `science tasks add` invocations each read the same max
+    ID and the same active.md, producing duplicate IDs and lost writes. An
+    exclusive advisory lock on a sentinel file makes the read-allocate-write
+    sequence atomic; the lock auto-releases if a holder crashes.
+    """
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = tasks_dir / ".tasks.lock"
+    with open(lock_path, "w") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
 def next_task_id(tasks_dir: Path) -> str:
     """Determine the next task ID by scanning active.md and done/ directory."""
     max_num = 0
@@ -409,23 +431,24 @@ def add_task(
     from science_tool.tasks_blockers import validate_blocker_refs  # noqa: PLC0415
 
     validated_blockers = validate_blocker_refs(project_root, blocked_by, force=force) if blocked_by else []
-    task_id = next_task_id(tasks_dir)
-    task = Task(
-        id=task_id,
-        title=title,
-        type=task_type,
-        aspects=aspects or [],
-        priority=priority,
-        status="proposed",
-        created=date.today(),
-        related=related or [],
-        blocked_by=validated_blockers,
-        group=group,
-        description=description,
-    )
-    tasks = _read_active(tasks_dir)
-    tasks.append(task)
-    _write_active(tasks_dir, tasks)
+    with _task_allocation_lock(tasks_dir):
+        task_id = next_task_id(tasks_dir)
+        task = Task(
+            id=task_id,
+            title=title,
+            type=task_type,
+            aspects=aspects or [],
+            priority=priority,
+            status="proposed",
+            created=date.today(),
+            related=related or [],
+            blocked_by=validated_blockers,
+            group=group,
+            description=description,
+        )
+        tasks = _read_active(tasks_dir)
+        tasks.append(task)
+        _write_active(tasks_dir, tasks)
     return task
 
 

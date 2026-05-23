@@ -33,6 +33,30 @@ def _write(path: Path, content: str) -> Path:
     return path
 
 
+def _concurrent_add_worker(args: tuple[Path, Path, int]) -> str:
+    # Module-level so ProcessPoolExecutor can pickle it.
+    project_root, tasks_dir, i = args
+    from science_tool.tasks import add_task as _add
+
+    return _add(project_root, tasks_dir, f"Concurrent task {i}", "P2").id
+
+
+def test_concurrent_add_task_allocates_unique_ids(tmp_path: Path) -> None:
+    import concurrent.futures
+
+    from science_tool.tasks import known_task_ids
+
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    (tasks_dir / "active.md").write_text("")
+    n = 8
+    args = [(tmp_path, tasks_dir, i) for i in range(n)]
+    with concurrent.futures.ProcessPoolExecutor(max_workers=n) as ex:
+        ids = list(ex.map(_concurrent_add_worker, args))
+    assert len(set(ids)) == n, f"duplicate task ids allocated: {sorted(ids)}"
+    assert len(known_task_ids(tasks_dir)) == n, "concurrent writes lost tasks from active.md"
+
+
 SINGLE_TASK = """\
 ## [t001] Reproduce DNABERT-2 baseline
 - type: dev
