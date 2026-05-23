@@ -1,16 +1,22 @@
+import science_model.reasoning as reasoning_module
 from pydantic import BaseModel, ValidationError
 
 from science_model import Entity, EntityType
 from science_model.reasoning import (
     ClaimLayer,
-    EvidenceLineMetadata,
     EvidenceRole,
     IdentificationStrength,
     MeasurementModel,
+    PropositionMetadata,
     ProxyDirectness,
     RivalModelPacket,
     SupportScope,
 )
+
+
+def test_proposition_metadata_exists_and_evidence_line_metadata_does_not() -> None:
+    assert hasattr(reasoning_module, "PropositionMetadata")
+    assert not hasattr(reasoning_module, "EvidenceLineMetadata")
 
 
 def test_claim_layer_accepts_valid_values() -> None:
@@ -34,7 +40,7 @@ def test_claim_layer_rejects_invalid_values() -> None:
 
 def test_reasoning_enums_reject_invalid_values() -> None:
     for model, field, value in [
-        (EvidenceLineMetadata, "evidence_role", "not-a-role"),
+        (PropositionMetadata, "evidence_role", "not-a-role"),
         (MeasurementModel, "observed_entity", ""),
         (RivalModelPacket, "packet_id", ""),
     ]:
@@ -100,7 +106,7 @@ def test_measurement_model_and_rival_model_packet_validate() -> None:
         discriminating_predictions=["model:a predicts X"],
         adjudication_rule="Prefer the simplest model that explains all observables.",
     )
-    metadata = EvidenceLineMetadata(
+    metadata = PropositionMetadata(
         claim_layer=ClaimLayer.MECHANISTIC_NARRATIVE,
         identification_strength=IdentificationStrength.INTERVENTIONAL,
         proxy_directness=ProxyDirectness.INDIRECT,

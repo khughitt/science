@@ -87,8 +87,8 @@ class RivalModelPacket(BaseModel):
     adjudication_rule: str | None = None
 
 
-class EvidenceLineMetadata(BaseModel):
-    """Authored reasoning metadata for an evidence line or proposition."""
+class PropositionMetadata(BaseModel):
+    """Authored reasoning metadata for a proposition."""
 
     claim_layer: ClaimLayer | None = None
     identification_strength: IdentificationStrength | None = None
