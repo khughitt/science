@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from enum import StrEnum
 
 from rdflib import Graph, RDF, URIRef
 from rdflib.namespace import PROV
@@ -173,4 +174,83 @@ def is_decisive_refutation(u: EvidenceUnit) -> bool:
         and u.strength == "strong"
         and is_qualifying_direct_test(u)
         and (u.dispute_scope or SCOPE_WHOLE_CLAIM) == SCOPE_WHOLE_CLAIM
+    )
+
+
+class BeliefMagnitude(StrEnum):
+    SPECULATIVE = "speculative"
+    FRAGILE = "fragile"
+    SUPPORTED = "supported"
+    WELL_SUPPORTED = "well_supported"
+
+
+_MAG_ORDER = [
+    BeliefMagnitude.SPECULATIVE,
+    BeliefMagnitude.FRAGILE,
+    BeliefMagnitude.SUPPORTED,
+    BeliefMagnitude.WELL_SUPPORTED,
+]
+
+
+@dataclass
+class BeliefResult:
+    magnitude: BeliefMagnitude
+    contested: bool
+    capped_by_refutation: bool
+    support_units: list[EvidenceUnit]
+    dispute_units: list[EvidenceUnit]
+    diagnostics: list[EvidenceUnit]
+    contested_groups: set[str]
+    excluded: list[EvidenceUnit]
+    flagged_ungrouped: list[EvidenceUnit]
+
+    def display(self) -> str:
+        return f"{self.magnitude.value} (contested)" if self.contested else self.magnitude.value
+
+
+def aggregate_belief(units: list[EvidenceUnit]) -> BeliefResult:
+    reduced = reduce_units(units)
+    cg = reduced.contested_groups
+
+    support = [u for u in reduced.kept if u.stance == "supports" and not is_diagnostic(u)]
+    dispute = [u for u in reduced.kept if u.stance == "disputes" and not is_diagnostic(u)]
+    diagnostics = [u for u in reduced.kept if is_diagnostic(u)]
+
+    n_support = len(support)
+    # A support unit in a contested group is not clean corroboration (stance-aware-collapse
+    # decision): well_supported needs >=2 *clean* units, one of which is a qualifying direct test.
+    clean_support = [u for u in support if u.independence_group not in cg]
+    clean_direct_test = any(is_qualifying_direct_test(u) for u in clean_support)
+    decisive = any(is_decisive_refutation(u) for u in dispute)
+
+    if n_support == 0:
+        magnitude = BeliefMagnitude.SPECULATIVE
+    elif n_support == 1:
+        magnitude = BeliefMagnitude.FRAGILE
+    elif clean_direct_test and len(clean_support) >= 2:
+        magnitude = BeliefMagnitude.WELL_SUPPORTED
+    else:
+        magnitude = BeliefMagnitude.SUPPORTED
+
+    capped = False
+    if decisive and _MAG_ORDER.index(magnitude) > _MAG_ORDER.index(BeliefMagnitude.FRAGILE):
+        magnitude = BeliefMagnitude.FRAGILE
+        capped = True
+
+    contested = (
+        bool(dispute)
+        or any(u.stance == "disputes" for u in diagnostics)
+        or bool(cg)
+    )
+
+    return BeliefResult(
+        magnitude=magnitude,
+        contested=contested,
+        capped_by_refutation=capped,
+        support_units=support,
+        dispute_units=dispute,
+        diagnostics=diagnostics,
+        contested_groups=cg,
+        excluded=reduced.excluded_circular,
+        flagged_ungrouped=reduced.flagged_ungrouped,
     )
