@@ -10,12 +10,12 @@ from urllib.parse import quote
 
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
-from science_model.entities import Entity, EntityClass
+from science_model.entities import Entity, EntityClass, EvidenceLineEntity
 from science_model.identity import EntityScope
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.profiles import CORE_PROFILE
 from science_model.profiles.schema import RelationKind
-from science_model.reasoning import MeasurementModel, RivalModelPacket
+from science_model.reasoning import EvidenceStance, MeasurementModel, RivalModelPacket
 from science_model.relations import relation_allows_kinds
 
 from science_tool.addressing import is_address, parse_address
@@ -44,6 +44,7 @@ from science_tool.graph.sources import (
     is_metadata_reference,
     load_project_sources,
 )
+from science_tool.graph.io import CITO_NS
 from science_tool.graph.store import (
     CURIE_PREFIXES,
     DEFAULT_GRAPH_PATH,
@@ -234,6 +235,8 @@ def _add_entity(
     if entity.confidence is not None:
         provenance.add((uri, SCI_NS.confidence, Literal(str(entity.confidence), datatype=XSD.decimal)))
     _add_reasoning_metadata(uri=uri, provenance=provenance, entity=entity)
+    if isinstance(entity, EvidenceLineEntity):
+        _add_evidence_line_metadata(uri=uri, provenance=provenance, entity=entity)
     provenance.add((source_uri, RDF.type, PROV.Entity))
     provenance.add((source_uri, SCHEMA_NS.identifier, Literal(entity.file_path)))
     if overlay_paths is not None and entity.canonical_id in overlay_paths:
@@ -273,6 +276,17 @@ def _add_relations(
             entity_index=entity_index,
             resolver=resolver,
             knowledge=knowledge,
+        )
+
+    if isinstance(entity, EvidenceLineEntity):
+        _add_evidence_line_relations(
+            line_uri=entity_uri,
+            entity=entity,
+            entity_index=entity_index,
+            resolver=resolver,
+            knowledge=knowledge,
+            provenance=provenance,
+            ext_prefixes=ext_prefixes,
         )
 
     for raw_target in sorted(getattr(entity, "participants", []) or []):
@@ -476,6 +490,61 @@ def _add_chain_audit_relations(
 def _chain_sequence_uri(canonical_id: str, index: int) -> URIRef:
     kind, slug = canonical_id.split(":", 1)
     return URIRef(PROJECT_NS[f"{kind}/{slug.lower()}/link-sequence/{index}"])
+
+
+def _add_evidence_line_relations(
+    *,
+    line_uri: URIRef,
+    entity: EvidenceLineEntity,
+    entity_index: dict[str, Entity],
+    resolver: ReferenceResolver,
+    knowledge,
+    provenance,
+    ext_prefixes: frozenset[str],
+) -> None:
+    """Emit cito:supports/disputes edge (→ knowledge) and prov:wasDerivedFrom source (→ provenance)."""
+    resolution = resolver.resolve(entity.target, allow_cross_kind_fallback=True)
+    if resolution.status == "resolved" and resolution.canonical_id is not None:
+        target_entity = entity_index.get(resolution.canonical_id)
+        if target_entity is not None:
+            predicate = CITO_NS.supports if entity.stance == EvidenceStance.SUPPORTS else CITO_NS.disputes
+            knowledge.add((line_uri, predicate, _entity_uri(target_entity.canonical_id)))
+
+    raw_source = entity.source
+    if raw_source is not None:
+        if is_bibliography_reference(raw_source):
+            pass  # bibliography refs are not resolved to entity URIs
+        elif is_external_reference(raw_source, known_prefixes=ext_prefixes):
+            pass  # external refs skipped for provenance (not project entities)
+        elif is_metadata_reference(raw_source):
+            pass  # meta: refs skipped
+        else:
+            resolution = resolver.resolve(raw_source, allow_cross_kind_fallback=True)
+            if resolution.status == "resolved" and resolution.canonical_id is not None:
+                source_entity = entity_index.get(resolution.canonical_id)
+                if source_entity is not None:
+                    provenance.add((line_uri, PROV.wasDerivedFrom, _entity_uri(source_entity.canonical_id)))
+
+
+def _add_evidence_line_metadata(*, uri: URIRef, provenance, entity: EvidenceLineEntity) -> None:
+    """Emit evidence-line-only provenance metadata.
+
+    Does NOT re-emit evidence_role, independence_group, or measurement_model — those
+    are already handled by _add_reasoning_metadata.
+    """
+    scalar_predicates: dict[str, object] = {
+        "strength": SCI_NS.evidenceStrength,
+        "independence": SCI_NS.evidenceIndependence,
+        "dispute_scope": SCI_NS.disputeScope,
+        "shared_dataset": SCI_NS.sharedDataset,
+        "shared_lab": SCI_NS.sharedLab,
+        "shared_platform": SCI_NS.sharedPlatform,
+        "shared_cohort": SCI_NS.sharedCohort,
+    }
+    for field, predicate in scalar_predicates.items():
+        value = getattr(entity, field, None)
+        if value is not None:
+            provenance.add((uri, predicate, Literal(str(value))))
 
 
 def _pre_registration_commitment_targets(
