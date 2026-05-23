@@ -1447,6 +1447,33 @@ def test_verified_with_local_path_no_flag(tmp_path: Path) -> None:
     assert not any(i["code"] == "dataset_verified_but_unstageable" for i in issues)
 
 
+def test_verified_unstageable_suppressed_for_track_tier(tmp_path: Path) -> None:
+    # tier: track / evaluate-next are not-yet-staged triage tiers, where
+    # "verified" means "confirmed reachable", not "staged" — must not warn.
+    _write_dataset(
+        tmp_path,
+        "trk",
+        origin="external",
+        body='tier: "track"\n'
+        'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}',
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    assert not any(i["code"] == "dataset_verified_but_unstageable" for i in issues)
+
+
+def test_verified_unstageable_still_flags_use_now_tier(tmp_path: Path) -> None:
+    # use-now is a staging-intent tier; verified-but-unstageable is still a real issue.
+    _write_dataset(
+        tmp_path,
+        "un",
+        origin="external",
+        body='tier: "use-now"\n'
+        'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}',
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_verified_but_unstageable" for i in issues)
+
+
 # ---------------------------------------------------------------------------
 # Task 6.7: dataset_research_package_asymmetric (#11)
 # ---------------------------------------------------------------------------

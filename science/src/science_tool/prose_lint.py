@@ -58,6 +58,22 @@ _BARE_AUTHOR_YEAR_RE = re.compile(
 )
 # Anchor: `[@key]` immediately following or preceding the match (within 30 chars)
 _NEARBY_BIBTEX_RE = re.compile(r"\[@[A-Za-z][A-Za-z0-9_-]*\]")
+# An adjacent `[[WikiLink]]` (the project's citation convention) also anchors a
+# mention, mirroring `[@key]`.
+_NEARBY_WIKILINK_RE = re.compile(r"\[\[[^\]\n]+\]\]")
+# Calendar words that match the <Capitalized> <Year> shape but are dates
+# ("May 2026", "Summer 2024"), not author-year citations.
+_DATE_WORDS: frozenset[str] = frozenset(
+    {
+        "january", "february", "march", "april", "may", "june", "july",
+        "august", "september", "october", "november", "december",
+        "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept",
+        "oct", "nov", "dec",
+        "spring", "summer", "fall", "autumn", "winter",
+        "monday", "tuesday", "wednesday", "thursday", "friday",
+        "saturday", "sunday",
+    }
+)
 
 # Short-form prefix → canonical kind mapping. Lowercase letter prefixes pulled
 # from refs._LOCAL_ENTITY_KINDS first letters where a unique mapping exists;
@@ -80,6 +96,14 @@ _CANONICAL_PREFIX_RE = re.compile(r"\b(question|hypothesis|task|discussion|inter
 # Task-list heading shape: `## [t088] Title`. Don't flag the bracketed ID
 # inside such a header — it IS the canonical form for that file convention.
 _TASK_HEADING_RE = re.compile(r"^\s*##+\s*\[[a-zA-Z]\d+\]")
+# `[[h006-regime-sequence]]` wiki-links are the toolchain's linking convention;
+# their inner text (e.g. `h006`) is a resolvable reference, not a bare short form.
+_WIKILINK_SPAN_RE = re.compile(r"\[\[[^\]\n]*\]\]")
+
+
+def _mask_wikilinks(line: str) -> str:
+    """Blank out `[[...]]` spans, preserving column offsets for other matches."""
+    return _WIKILINK_SPAN_RE.sub(lambda m: " " * len(m.group(0)), line)
 
 
 def detect_bare_author_year(path: Path, *, strict: bool = False) -> list[LintIssue]:
@@ -104,9 +128,12 @@ def detect_bare_author_year(path: Path, *, strict: bool = False) -> list[LintIss
         line = strip_inline_code(raw_line)
         for match in _BARE_AUTHOR_YEAR_RE.finditer(line):
             mention = f"{match.group(1)} {match.group(2)}"
+            if match.group(1).split()[0].lower() in _DATE_WORDS:
+                continue
             window_start = max(0, match.start() - 30)
             window_end = min(len(line), match.end() + 30)
-            if _NEARBY_BIBTEX_RE.search(line[window_start:window_end]):
+            window = line[window_start:window_end]
+            if _NEARBY_BIBTEX_RE.search(window) or _NEARBY_WIKILINK_RE.search(window):
                 continue
             issues.append(
                 LintIssue(
@@ -148,7 +175,7 @@ def detect_short_form_ids(
             continue
         if _TASK_HEADING_RE.match(raw_line):
             continue
-        line = strip_inline_code(raw_line)
+        line = _mask_wikilinks(strip_inline_code(raw_line))
         for match in _SHORT_FORM_RE.finditer(line):
             # Skip if preceded by `<kind>:` — already canonical.
             preceding = line[max(0, match.start() - 20) : match.start()]

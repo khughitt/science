@@ -38,3 +38,43 @@ def test_windows_drive_is_flagged() -> None:
 def test_default_prefixes_are_absolute_roots() -> None:
     assert "/home/" in DEFAULT_HARDCODED_PREFIXES
     assert all(p.startswith("/") for p in DEFAULT_HARDCODED_PREFIXES)
+
+
+def test_no_flag_url_path_segment() -> None:
+    # A `/data/` segment inside a URL literal is not a local hardcoded path.
+    findings = find_hardcoded_paths(
+        'URL = "https://raw.githubusercontent.com/o/r/main/data/TrialPatientData.xlsx"\n'
+    )
+    assert findings == []
+
+
+def test_no_flag_relative_path_segment() -> None:
+    # A relative path is the correct, portable form, not an absolute literal.
+    findings = find_hardcoded_paths(
+        'p = "../../../data/processed/t007-cohort/treatment_status.tsv"\n'
+    )
+    assert findings == []
+
+
+def test_no_flag_in_comment_line() -> None:
+    findings = find_hardcoded_paths(
+        "# build /mnt/ssd/Dropbox/cancer/meta as the staging root\n"
+    )
+    assert findings == []
+
+
+def test_no_flag_inside_docstring() -> None:
+    text = (
+        "def f():\n"
+        '    """Build the cohort.\n'
+        "\n"
+        "    Writes to /mnt/ssd/Dropbox/cancer/meta during staging.\n"
+        '    """\n'
+        "    return 1\n"
+    )
+    assert find_hardcoded_paths(text) == []
+
+
+def test_still_flags_genuine_absolute_literal() -> None:
+    findings = find_hardcoded_paths('OUT = "/mnt/ssd/Dropbox/x.tsv"\n')
+    assert any(f.pattern == "/mnt/" for f in findings)

@@ -63,6 +63,26 @@ class TestBareAuthorYear:
             "bare author-year mention 'Gilpin 2021' has no adjacent [@key]",
         }
 
+    def test_no_flag_month_year(self, tmp_path):
+        path = _write(tmp_path, "We began the analysis in May 2026 and wrapped up later.\n")
+        assert detect_bare_author_year(path) == []
+
+    def test_no_flag_season_year(self, tmp_path):
+        path = _write(tmp_path, "Samples were collected in Summer 2024 across sites.\n")
+        assert detect_bare_author_year(path) == []
+
+    def test_no_flag_when_wikilink_anchored(self, tmp_path):
+        # [[AuthorYear]] wiki-links are the project citation convention and should
+        # satisfy the citation requirement just like an adjacent [@key].
+        path = _write(tmp_path, "As Kinker 2020 ([[Kinker2020]]) showed, the signal holds.\n")
+        assert detect_bare_author_year(path) == []
+
+    def test_still_flags_real_author_with_no_anchor(self, tmp_path):
+        path = _write(tmp_path, "The framing follows Brunton 2022 in spirit.\n")
+        issues = detect_bare_author_year(path)
+        assert len(issues) == 1
+        assert "Brunton 2022" in issues[0].message
+
 
 class TestShortFormIds:
     def test_flags_bare_q_number(self, tmp_path):
@@ -109,6 +129,18 @@ class TestShortFormIds:
         # "X1" is a generic identifier, not a known short form.
         path = _write(tmp_path, "Variable X1 holds the result.\n")
         assert detect_short_form_ids(path) == []
+
+    def test_no_flag_inside_wikilink(self, tmp_path):
+        # `[[h006-regime-sequence]]` is a resolvable wiki-link, the linking
+        # convention the toolchain encourages; its inner `h006` must not flag.
+        path = _write(tmp_path, "See [[h006-regime-sequence]] for the regime ladder.\n")
+        assert detect_short_form_ids(path) == []
+
+    def test_flags_bare_outside_but_not_inside_wikilink(self, tmp_path):
+        path = _write(tmp_path, "See [[h006-regime-sequence]] but compare bare h007 here.\n")
+        issues = detect_short_form_ids(path)
+        assert len(issues) == 1
+        assert "h007" in issues[0].message
 
 
 class TestFrontmatterInlineGap:

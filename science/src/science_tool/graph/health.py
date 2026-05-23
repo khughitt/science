@@ -1344,7 +1344,11 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
                 datapackage = fm.get("datapackage", "")
                 local_path = fm.get("local_path", "")
                 stageable_path = datapackage or local_path
-                if (verified or exception_mode) and not stageable_path:
+                # evaluate-next / track are not-yet-staged triage tiers, where a
+                # verified dataset means "confirmed reachable", not "staged" — so
+                # absence of datapackage/local_path is expected, not an anomaly.
+                not_yet_staged = (fm.get("tier") or "").strip() in ("evaluate-next", "track")
+                if (verified or exception_mode) and not stageable_path and not not_yet_staged:
                     issues.append(
                         {
                             "code": "dataset_verified_but_unstageable",
