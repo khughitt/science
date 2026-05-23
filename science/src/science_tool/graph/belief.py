@@ -9,7 +9,7 @@ from rdflib.namespace import PROV
 
 from .belief_weights import (
     CIRCULAR, DIAGNOSTIC_ROLES, EVIDENCE_ROLE_RANK, EVIDENCE_TYPE_RANK,
-    GATED_PROXY, ROLE_DIRECT_TEST, SHARED_SOURCE,
+    GATED_PROXY, INDEPENDENT, ROLE_DIRECT_TEST, SCOPE_WHOLE_CLAIM, SHARED_SOURCE,
     STRENGTH_RANK, normalize_evidence_type,
 )
 from .io import CITO_NS, SCI_NS
@@ -157,3 +157,20 @@ def is_proxy_gated(u: EvidenceUnit) -> bool:
 
 def is_qualifying_direct_test(u: EvidenceUnit) -> bool:
     return u.evidence_role == ROLE_DIRECT_TEST and not is_proxy_gated(u)
+
+
+def is_decisive_refutation(u: EvidenceUnit) -> bool:
+    """Rule 3: ONLY an independent strong direct_test whole_claim dispute caps belief.
+
+    whole_claim is the default when scope is unset; model_criticism and scoped disputes
+    (generalization/mechanism/boundary) set `contested` but never eliminate. The proxy gate
+    (rule 5) applies symmetrically: an ungated indirect/derived proxy direct-test cannot be
+    decisive either (`is_qualifying_direct_test` already encodes role + proxy gate).
+    """
+    return (
+        u.stance == "disputes"
+        and u.independence == INDEPENDENT
+        and u.strength == "strong"
+        and is_qualifying_direct_test(u)
+        and (u.dispute_scope or SCOPE_WHOLE_CLAIM) == SCOPE_WHOLE_CLAIM
+    )
