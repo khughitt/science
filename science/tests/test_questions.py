@@ -10,7 +10,7 @@ import yaml
 from click.testing import CliRunner
 
 from science_tool.cli import main
-from science_tool.questions import Reservation, reserve_question, slugify
+from science_tool.questions import _MAX_SLUG_LENGTH, Reservation, reserve_question, slugify
 
 
 # --- slugify ------------------------------------------------------------------
@@ -37,6 +37,14 @@ class TestSlugify:
         # If the cap lands on a hyphen, drop it.
         result = slugify("abcdefghij-extra", max_length=11)
         assert result == "abcdefghij"
+
+    def test_truncation_backs_up_to_word_boundary(self) -> None:
+        # Slug is 53 chars; a hard 50-char cap lands inside the final token
+        # ("...-dysregulation-express"). Back up to the token boundary instead.
+        result = slugify("convergence reduction versus dysregulation expression")
+        assert result == "convergence-reduction-versus-dysregulation"
+        assert len(result) <= _MAX_SLUG_LENGTH
+        assert not result.endswith("-")
 
     def test_rejects_empty(self) -> None:
         with pytest.raises(ValueError):

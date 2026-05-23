@@ -67,6 +67,21 @@ def test_derive_slug_truncation_boundary_is_stable() -> None:
     assert derive_slug(("a" * 71) + " b") == "a" * 71
 
 
+def test_derive_slug_truncates_on_word_boundary_not_mid_word() -> None:
+    # Slug is 74 chars; a hard 72-char cut lands inside the final token
+    # ("...-myeloma-subclon"). Truncation must back up to the token boundary.
+    slug = derive_slug("Convergence reduction versus dysregulation expression in myeloma subclones")
+    assert slug == "convergence-reduction-versus-dysregulation-expression-in-myeloma"
+    assert len(slug) <= 72
+    assert not slug.endswith("-")
+
+
+def test_derive_slug_single_long_token_falls_back_to_hard_cap() -> None:
+    # No interior boundary to back up to: a single token longer than the cap
+    # is hard-cut (cannot be split on a word boundary).
+    assert derive_slug("a" * 100) == "a" * 72
+
+
 def test_validate_slug_rejects_bad_override() -> None:
     with pytest.raises(EntityCommandError, match="Invalid slug"):
         validate_slug("Bad_Slug")
