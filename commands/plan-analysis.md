@@ -20,6 +20,21 @@ Use `/science:plan-pipeline` after this command when execution orchestration is
 non-trivial. Use `/science:pre-register` after this command when the plan is
 `ready` or `ready-with-caveats` and confirmatory criteria should be locked.
 
+## When a Pre-Registration Already Exists
+
+The default order is plan → pre-register, but the two can arrive reversed: a
+pre-registration may already be committed — and possibly amended after a bias
+audit — before this command runs. When that is the case, the plan's job
+inverts. The verdict surface is already locked, so do **not** re-derive decision
+criteria or thresholds; relitigating a committed criterion set here invites
+HARKing. Instead, focus the plan on the *implementation* gates the pre-reg did
+not enumerate: data access and provenance, common-time-axis / unit conversions,
+numerical-precision audits, and leakage checks. If you believe a locked
+criterion is actually wrong, treat it as an amendment question rather than a
+planning decision — load `statistics-prereg-amendment-vs-fresh` to decide
+whether the change warrants a formal amendment or a fresh pre-registration, and
+route it there instead of silently re-planning around it.
+
 ## Setup
 
 1. Read `science.yaml`.

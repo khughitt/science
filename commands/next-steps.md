@@ -142,6 +142,10 @@ For each match, surface the task in a short `### Status Drift` table:
 |---|---|---|---|
 | t075 | proposed | results/2026-04-09-t075/datapackage.json | mark `done` and write interpretation |
 
+**Also scan recent completions, not just `active.md`.** Work shipped in the current month lives in `tasks/done/<YYYY-MM>.md`, not `active.md` — and the analysis window usually overlaps the current month. Scan `tasks/done/<current-month>.md` (and `<previous-month>.md` when the window crosses a month boundary) for tasks completed inside the window. Without this, recently-shipped work is invisible: a run can wrongly conclude "no movement" or a "stalled program" when tasks in fact completed during the window. A completion found here is *positive* signal — surface it as progress, not drift.
+
+**Cross-check the prior `next-steps` doc.** Read the previous `doc/meta/next-steps-*.md` and check each recommendation it made against subsequent commits and `tasks/done/` entries. A recommendation that has since shipped is a "recommendation shipped" win to record — the cross-check detects positive follow-through, not only stalls.
+
 This detection is mandatory — a `next-steps` run that does not perform it must say so explicitly. Drift between code and task status is one of the most consistent failure modes; finding it once during analysis avoids re-litigating the same recommendations across sessions.
 
 ### 3d. Strategic Decision Point (if applicable)

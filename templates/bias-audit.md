@@ -102,6 +102,12 @@ MED severity + INFEASIBLE → acknowledge as limitation.
 - **Independent evidence sources:** <!-- benchmarks, datasets, or literature outside the shared corpus that could disconfirm any artifact -->
 - **Verdict:** <!-- Mark HIGH-severity if no independent evidence source exists: the audit can ratify but not falsify by construction. Mitigations: introduce an out-of-corpus benchmark, split into single-artifact passes, or downgrade the audit verdict from "validated" to "internally consistent". -->
 
+### Author Independence (Self-Audit Check)
+
+- **Rating:** not detected / possible / likely / not applicable
+- **Audit author = artifact author?:** <!-- did the agent running this audit author or substantively edit any artifact under audit (e.g. drafted then audited the same pre-registration)? -->
+- **Verdict:** <!-- If yes, register as "self-audit (internally consistent)" rather than "audited", and recommend an independent pass (different agent, cooling-off period, or out-of-corpus reviewer) before treating the verdict as externally validated. -->
+
 ## Summary
 
 - **Overall threat level:** low / moderate / elevated / high
