@@ -7,6 +7,10 @@ from dataclasses import dataclass
 from rdflib import Graph, RDF, URIRef
 from rdflib.namespace import PROV
 
+from .belief_weights import (
+    CIRCULAR, EVIDENCE_ROLE_RANK, EVIDENCE_TYPE_RANK, SHARED_SOURCE,
+    STRENGTH_RANK, normalize_evidence_type,
+)
 from .io import CITO_NS, SCI_NS
 
 EVIDENCE_LINE_CLASS = SCI_NS.EvidenceLine  # rdf:type minted by materialize.py _kind_class_name("evidence-line")
@@ -84,3 +88,57 @@ def collect_evidence_units(
                 seen.add(str(subject))
                 units.append(_read_unit(provenance, subject, stance))
     return units
+
+
+def quality_key(u: EvidenceUnit) -> tuple[int, int, int]:
+    return (
+        EVIDENCE_TYPE_RANK.get(normalize_evidence_type(u.evidence_type), 0),
+        EVIDENCE_ROLE_RANK.get(u.evidence_role or "", 0),
+        STRENGTH_RANK.get(u.strength or "", 0),
+    )
+
+
+@dataclass
+class ReducedUnits:
+    kept: list[EvidenceUnit]            # per (group, stance) winner + each ungrouped line
+    collapsed: list[EvidenceUnit]       # per (group, stance) losers dropped (any independence type)
+    excluded_circular: list[EvidenceUnit]
+    flagged_ungrouped: list[EvidenceUnit]
+    contested_groups: set[str]          # real groups holding BOTH a support and a dispute winner
+
+
+def reduce_units(units: list[EvidenceUnit]) -> ReducedUnits:
+    excluded_circular: list[EvidenceUnit] = []
+    flagged_ungrouped: list[EvidenceUnit] = []
+    collapsed: list[EvidenceUnit] = []
+    winners: dict[tuple[str, str], EvidenceUnit] = {}      # (group_or_line_token, stance) -> winner
+    real_groups_by_stance: dict[str, set[str]] = {"supports": set(), "disputes": set()}
+
+    for u in units:
+        if u.independence in (SHARED_SOURCE, CIRCULAR) and not u.independence_group:
+            flagged_ungrouped.append(u)                    # "collapse to what?" undefined (QA #2b)
+            continue
+        if u.independence == CIRCULAR:
+            excluded_circular.append(u)
+            continue
+        if u.independence_group:
+            key = (u.independence_group, u.stance)
+            real_groups_by_stance[u.stance].add(u.independence_group)
+        else:
+            key = (f"__line__:{u.line_uri}", u.stance)      # ungrouped lines never merge
+        if key not in winners:
+            winners[key] = u
+        elif quality_key(u) > quality_key(winners[key]):
+            collapsed.append(winners[key])
+            winners[key] = u
+        else:
+            collapsed.append(u)
+
+    contested_groups = real_groups_by_stance["supports"] & real_groups_by_stance["disputes"]
+    return ReducedUnits(
+        kept=list(winners.values()),
+        collapsed=collapsed,
+        excluded_circular=excluded_circular,
+        flagged_ungrouped=flagged_ungrouped,
+        contested_groups=contested_groups,
+    )
