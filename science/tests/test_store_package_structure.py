@@ -78,6 +78,25 @@ def _imports_materialize(tree: ast.AST) -> bool:
     return False
 
 
+def test_copy_viz_notebook_import_root_is_src(tmp_path, monkeypatch):
+    import science_tool
+    from science_tool.graph.store import notebooks
+
+    # _uv_lock shells out to `uv lock`; stub it. viz.py (under test) is written before it runs.
+    monkeypatch.setattr(notebooks, "_uv_lock", lambda directory: None)
+
+    expected_root = Path(science_tool.__file__).resolve().parent.parent  # .../science/src
+    buggy_root = expected_root / "science_tool"                          # what parents[2] would wrongly yield
+
+    notebooks_dir = tmp_path / "notebooks"
+    notebooks._copy_viz_notebook(notebooks_dir)
+    content = (notebooks_dir / "viz.py").read_text(encoding="utf-8")
+
+    assert "__SCIENCE_TOOL_IMPORT_ROOT__" not in content
+    assert buggy_root.as_posix() not in content, "import root must be src/, not src/science_tool"
+    assert expected_root.as_posix() in content
+
+
 def test_no_upward_or_materialize_imports():
     for index, module_name in enumerate(CANONICAL_ORDER):
         path = STORE_DIR / f"{module_name}.py"
