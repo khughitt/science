@@ -140,6 +140,7 @@ Behavior-preserving move ⇒ **no test edits** (the single allowed exception is 
   `python -c "from science_tool.graph.store import _collect_evidence_signals, _load_dataset, _resolve_term, _graph_uri, _claim_summary_data, _edge_claims, _resolve_center_entity; print('ok')"`
 - Mechanical re-export completeness check (grep/AST of all `from science_tool.graph.store import` sites vs. the names `store/__init__.py` exposes).
 - New regression test asserting `_copy_viz_notebook` writes an import root ending in `/src`.
+- Dependency-order guard test (see exit criterion 5): AST-parses each submodule and asserts no import of a later-ordered sibling and no import of `graph.materialize`.
 
 ## Migration mechanics
 
@@ -154,5 +155,5 @@ Behavior-preserving move ⇒ **no test edits** (the single allowed exception is 
 2. No submodule exceeds its single responsibility; `mutations.py` (~1,000 lines) is the largest and is acceptable (cohesive: all graph writes).
 3. Both test suites pass; the only test change is the *added* notebooks import-root regression test (no existing test edited).
 4. No source importer outside `store/` changed (verified by `git diff --stat` touching only `graph/store*` and the one new test).
-5. The dependency order holds (no module imports a later one; no import of `graph.materialize`), confirmed by an import of the package succeeding and by inspection.
+5. The dependency order holds, enforced by a **mechanical guard test** (not inspection): the canonical order is encoded as a list; the test AST-parses each `store/` submodule and asserts (a) it imports no sibling that appears *later* in the order, and (b) it imports nothing from `graph.materialize`. This test ships with the refactor and fails if a future edit reintroduces an upward edge.
 6. The mechanical re-export completeness check passes (every `graph.store` import site across src+tests resolves).
