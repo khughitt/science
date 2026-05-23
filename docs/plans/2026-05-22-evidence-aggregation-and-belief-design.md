@@ -1,7 +1,7 @@
 # Independence-Aware Evidence Aggregation, Derived Belief, and Evidence QA
 
 **Date**: 2026-05-22
-**Status**: Draft
+**Status**: Phase 1 implemented (2026-05-23); Phase 2 next
 **Revision**: 2026-05-22c — representation fork settled: a first-class `evidence-line`
 entity is the **single canonical shape** for all counted evidence; the alternative
 "lightweight annotated relation" path is rejected (a dual shape breeds silent mismatch).
@@ -324,9 +324,41 @@ in another is **legitimate divergence, not drift** — surfaced, not reconciled.
   observability fields + optional `measurement_model` + source ref; materializer emits the
   line node, its cito edge, and its metadata durably; compact nested-block authoring
   shortcut. Ship structural QA #1, #2, #2b, #9 (no aggregation yet).
+  **IMPLEMENTED** (Phase 0 done; pushed to `origin/main`.)
 - **Phase 1 — pilot + independence-aware aggregation → `belief_state`.** Re-author the
   cancer-evolution h012↔Simeonov2021 line durably as an independent strong `model_criticism`
   / generalization-scoped dispute; implement §2/§3; add QA #3, #4, #5, #6.
+  **IMPLEMENTED 2026-05-23.** Resolved decisions:
+  - *(a) Ordinal rank table fixed.* `evidence_type` rank: `empirical_data` > `benchmark` /
+    `simulation` > `literature` > `expert_judgment`; `evidence_role` rank: `direct_test` >
+    `proxy_support` > `background_constraint`; `strength` rank: `strong` > `moderate` >
+    `weak`. Values live in `belief_weights.py` (config-driven, conservative defaults).
+    `evidence_type` values normalised via `_evidence` suffix removal so authoring
+    `empirical_data` and `empirical_data_evidence` are equivalent.
+  - *(b) `_evidence` suffix normalisation.* `normalize_evidence_type` strips a trailing
+    `_evidence` suffix before rank lookup, making authored values resilient to the
+    `empirical_data` / `empirical_data_evidence` naming inconsistency.
+  - *(c) Decisive-refutation cap behavior.* An **independent, strong, non-proxy-gated
+    `direct_test` dispute with `dispute_scope = whole_claim`** caps magnitude to `fragile`
+    regardless of how much supporting evidence exists. A `model_criticism` or scoped dispute
+    (`generalization` / `mechanism` / `boundary`) sets `contested` but never caps. This is
+    the Simeonov2021 case: encoded as `model_criticism + generalization`, it cannot eliminate
+    h012.
+  - *(d) Stance-aware collapse.* If an `independence_group` contains both a support and a
+    dispute winner after per-stance collapse, **both winners are kept** (no cross-stance
+    elimination), the group is added to `contested_groups`, and its support winner is **barred
+    from clean corroboration** — i.e. it cannot count toward the `≥2 clean independent
+    direct_test` threshold for `well_supported`.
+  - *(e) Belief representation.* Belief is an **ordinal magnitude**
+    (`speculative < fragile < supported < well_supported`) plus an **orthogonal `contested`
+    flag** that is set independently of magnitude. The human headline is `belief_display`
+    (e.g. `well_supported (contested)`). Magnitude and contestation are derived; never
+    hand-set.
+  Phase 1 open-for-Phase-2:
+  - Diminishing-returns curve shape and per-unit weight tuning (currently a saturating
+    count with fixed ordinal rank defaults).
+  - Whether `negative_control` / `model_criticism` rows ever feed the magnitude or stay
+    purely diagnostic (currently diagnostic-only, setting `contested` but not counted).
 - **Phase 2 — derived scalar + sensitivity.** `belief_weight` (pair + net), leave-one-out
   (#7), golden reproducibility (#8), append-only snapshots.
 - **Phase 3 — graph-resident `sci:edgeStatus` / `sci:Posterior`** (land the deferred
