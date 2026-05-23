@@ -4,6 +4,9 @@ type: "paper"
 title: "{{Title}}"
 status: "active"
 ontology_terms: []
+# datasets: strings only — a quoted free-text name ("TCGA-BRCA cohort") or a
+# "dataset:<slug>" ref to a registered dataset entity. Do NOT use mapping items
+# like {name:, label:, type:}; they fail the paper schema and abort validate.
 datasets: []
 source_refs:
   - "cite:{{bibtex_key}}"
