@@ -35,6 +35,9 @@ _TIER_RULES: dict[str, frozenset[str]] = {
             "code.uncommitted",
             "code.hardcoded-path",
             "code.produced-by-unresolved",
+            "belief.refutation-masked",
+            "belief.single-source-ceiling",
+            "evidence.proxy-ungated",
         }
     ),
 }

@@ -53,6 +53,7 @@ CHECK_MODULES = (
     "cross_references",
     "prose_lints",
     "annotations",
+    "evidence_lines",
 )
 
 # validate.sh has no stable explicit rule IDs, and Python Result.rule is section-level
