@@ -694,3 +694,4 @@ class EvidenceLineEntity(ProjectEntity):
     shared_lab: str | None = None
     shared_platform: str | None = None
     shared_cohort: str | None = None
+    evidence_type: str | None = None

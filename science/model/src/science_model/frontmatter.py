@@ -378,5 +378,6 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
             shared_platform=fm.get("shared_platform"),
             shared_cohort=fm.get("shared_cohort"),
             evidence_role=fm.get("evidence_role"),  # optional; pydantic coerces or None
+            evidence_type=fm.get("evidence_type"),
         )
     return Entity(**entity_kwargs)

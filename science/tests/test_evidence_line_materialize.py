@@ -254,3 +254,51 @@ target: proposition:p
     assert (line_uri, CITO_NS.disputes, target_uri) not in knowledge, (
         "cito:disputes must not be emitted when stance is supports"
     )
+
+
+def test_evidence_line_evidence_type_in_provenance(tmp_path: Path) -> None:
+    """evidence_type: empirical_data_evidence → sci:evidenceType Literal in provenance."""
+    _write(tmp_path, "science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
+    _write(
+        tmp_path,
+        "doc/propositions/p.md",
+        """---
+id: proposition:p
+kind: proposition
+title: "Proposition P"
+project: test
+ontology_terms: []
+related: []
+source_refs: []
+created: 2026-05-01
+updated: 2026-05-01
+---
+""",
+    )
+    _write(
+        tmp_path,
+        "doc/evidence-lines/et.md",
+        """---
+id: evidence-line:et
+kind: evidence-line
+title: "ET supports P"
+project: test
+ontology_terms: []
+related: []
+source_refs: []
+created: 2026-05-01
+updated: 2026-05-01
+stance: supports
+target: proposition:p
+evidence_type: empirical_data_evidence
+---
+""",
+    )
+    dataset = _load_dataset(tmp_path)
+    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+
+    line_uri = URIRef(PROJECT_NS["evidence-line/et"])
+    values = {str(o) for _, _, o in provenance.triples((line_uri, SCI_NS.evidenceType, None))}
+    assert "empirical_data_evidence" in values, (
+        f"Expected sci:evidenceType 'empirical_data_evidence', got {values}"
+    )

@@ -540,6 +540,7 @@ def _add_evidence_line_metadata(*, uri: URIRef, provenance, entity: EvidenceLine
         "shared_lab": SCI_NS.sharedLab,
         "shared_platform": SCI_NS.sharedPlatform,
         "shared_cohort": SCI_NS.sharedCohort,
+        "evidence_type": SCI_NS.evidenceType,
     }
     for field, predicate in scalar_predicates.items():
         value = getattr(entity, field, None)
