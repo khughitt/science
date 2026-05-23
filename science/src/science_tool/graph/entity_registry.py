@@ -18,6 +18,7 @@ from science_model.entities import (
     DatasetEntity,
     Entity,
     EntityClass,
+    EvidenceLineEntity,
     MechanismEntity,
     PaperEntity,
     ProjectEntity,
@@ -53,6 +54,7 @@ _CORE_KIND_CLASSES: dict[str, EntityClass] = {
     "theme": EntityClass.EPISTEMIC,
     "structural-chain": EntityClass.EPISTEMIC,
     "chain-audit": EntityClass.EPISTEMIC,
+    "evidence-line": EntityClass.EPISTEMIC,
     # Generic project kinds (alphabetized)
     "article": EntityClass.REFERENCE,
     "assumption": EntityClass.EPISTEMIC,
@@ -123,6 +125,11 @@ class EntityRegistry:
             entity_class=_CORE_KIND_CLASSES["chain-audit"],
         )
         r.register_core_kind("code-file", CodeFileEntity, entity_class=_CORE_KIND_CLASSES["code-file"])
+        r.register_core_kind(
+            "evidence-line",
+            EvidenceLineEntity,
+            entity_class=_CORE_KIND_CLASSES["evidence-line"],
+        )
         # Generic project kinds → ProjectEntity.
         for kind in (
             "concept",

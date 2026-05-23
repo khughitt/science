@@ -8,6 +8,7 @@ from science_model.entities import (
     DatasetEntity,
     DomainEntity,
     EntityClass,
+    EvidenceLineEntity,
     MechanismEntity,
     PaperEntity,
     ProjectEntity,
@@ -136,6 +137,13 @@ def test_resolve_round_trip_extension() -> None:
     registry = EntityRegistry.with_core_types()
     registry.register_extension_kind("natural-system:model", CustomModelEntity)
     assert registry.resolve("natural-system:model") is CustomModelEntity
+
+
+def test_evidence_line_kind_resolves_to_typed_entity() -> None:
+    """evidence-line must be registered as a typed EPISTEMIC entity in the core registry."""
+    registry = EntityRegistry.with_core_types()
+    assert registry.resolve("evidence-line") is EvidenceLineEntity
+    assert registry.kind_class("evidence-line") == EntityClass.EPISTEMIC
 
 
 def test_registered_class_must_subclass_entity() -> None:

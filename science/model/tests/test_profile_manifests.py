@@ -225,13 +225,13 @@ def test_core_profile_has_new_entity_kinds() -> None:
 
 def test_supports_uses_observation_and_proposition() -> None:
     supports = next(r for r in CORE_PROFILE.relation_kinds if r.name == "supports")
-    assert set(supports.source_kinds) == {"observation", "proposition"}
+    assert {"observation", "proposition"} <= set(supports.source_kinds)
     assert set(supports.target_kinds) == {"proposition", "hypothesis"}
 
 
 def test_disputes_uses_observation_and_proposition() -> None:
     disputes = next(r for r in CORE_PROFILE.relation_kinds if r.name == "disputes")
-    assert set(disputes.source_kinds) == {"observation", "proposition"}
+    assert {"observation", "proposition"} <= set(disputes.source_kinds)
     assert set(disputes.target_kinds) == {"proposition", "hypothesis"}
 
 
@@ -323,3 +323,25 @@ def test_defines_relation_targets_workflow() -> None:
     assert rel.source_kinds == ["code-file"]
     assert rel.target_kinds == ["workflow"]
     assert rel.predicate == "sci:defines"
+
+
+def test_evidence_line_kind_declared() -> None:
+    kind = next(k for k in CORE_PROFILE.entity_kinds if k.name == "evidence-line")
+    assert kind.canonical_prefix == "evidence-line"
+    assert kind.layer == "layer/core"
+    assert kind.entity_class == "epistemic"
+
+
+def test_supports_accepts_evidence_line_as_source() -> None:
+    supports = next(r for r in CORE_PROFILE.relation_kinds if r.name == "supports")
+    assert "evidence-line" in supports.source_kinds
+
+
+def test_disputes_accepts_evidence_line_as_source() -> None:
+    disputes = next(r for r in CORE_PROFILE.relation_kinds if r.name == "disputes")
+    assert "evidence-line" in disputes.source_kinds
+
+
+def test_bears_on_targets_evidence_line() -> None:
+    bears_on = next(r for r in CORE_PROFILE.relation_kinds if r.name == "bears_on")
+    assert "evidence-line" in bears_on.target_kinds

@@ -198,6 +198,7 @@ _DIR_TO_KIND: dict[str, str] = {
     "observations": "observation",
     "inquiries": "inquiry",
     "propositions": "proposition",
+    "evidence-lines": "evidence-line",
     "plans": "plan",
     "models": "model",
     "reports": "report",

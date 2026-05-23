@@ -31,6 +31,7 @@ def test_bears_on_targets_match_target_kinds_exactly() -> None:
         "assumption",
         "chain-audit",
         "discussion",
+        "evidence-line",
         "finding",
         "hypothesis",
         "interpretation",

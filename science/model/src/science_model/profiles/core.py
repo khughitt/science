@@ -142,6 +142,13 @@ CORE_PROFILE = ProfileManifest(
             layer="layer/core",
             description="Source-code file implementing workflow steps and methods.",
         ),
+        EntityKind(
+            name="evidence-line",
+            canonical_prefix="evidence-line",
+            layer="layer/core",
+            description="A single, independence-tagged line of evidence that supports or disputes a proposition.",
+            entity_class="epistemic",
+        ),
     ],
     relation_kinds=[
         RelationKind(
@@ -163,7 +170,7 @@ CORE_PROFILE = ProfileManifest(
         RelationKind(
             name="supports",
             predicate="cito:supports",
-            source_kinds=["observation", "proposition"],
+            source_kinds=["observation", "proposition", "evidence-line"],
             target_kinds=["proposition", "hypothesis"],
             layer="layer/core",
             description="An observation or proposition provides support for a proposition or hypothesis.",
@@ -171,7 +178,7 @@ CORE_PROFILE = ProfileManifest(
         RelationKind(
             name="disputes",
             predicate="cito:disputes",
-            source_kinds=["observation", "proposition"],
+            source_kinds=["observation", "proposition", "evidence-line"],
             target_kinds=["proposition", "hypothesis"],
             layer="layer/core",
             description="An observation or proposition disputes a proposition or hypothesis.",
@@ -338,6 +345,7 @@ CORE_PROFILE = ProfileManifest(
                 "assumption",
                 "chain-audit",
                 "discussion",
+                "evidence-line",
                 "finding",
                 "hypothesis",
                 "interpretation",
