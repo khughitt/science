@@ -31,6 +31,7 @@ class EntityPathPolicy:
 
 
 _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
+    "evidence-line": EntityPathPolicy(root=Path("doc/evidence-lines"), filename="local-part"),
     "question": EntityPathPolicy(root=Path("doc/questions"), filename="local-part"),
     "hypothesis": EntityPathPolicy(root=Path("specs/hypotheses"), filename="local-part"),
     "discussion": EntityPathPolicy(root=Path("doc/discussions"), filename="date-local-part"),
@@ -43,6 +44,7 @@ _LOCAL_PART_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _ID_PREFIX_RE = re.compile(r"^(?P<prefix>[a-z]?)(?P<number>\d+)-", re.IGNORECASE)
 _NOTES_HEADING_RE = re.compile(r"^##\s+Notes\s*$")
 _DEFAULT_STATUS: dict[str, str] = {
+    "evidence-line": "draft",
     "question": "active",
     "hypothesis": "proposed",
     "discussion": "active",
@@ -51,6 +53,7 @@ _DEFAULT_STATUS: dict[str, str] = {
     "proposition": "draft",
 }
 _STATUS_VALUES: dict[str, frozenset[str]] = {
+    "evidence-line": frozenset({"draft", "active", "retired"}),
     "question": frozenset({"active", "partially-answered", "answered", "deferred", "retired"}),
     "hypothesis": frozenset(
         {

@@ -251,6 +251,7 @@ LOCAL_KINDS = {
     "data-package",
     "dataset",
     "discussion",
+    "evidence-line",
     "experiment",
     "finding",
     "hypothesis",

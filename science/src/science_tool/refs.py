@@ -81,6 +81,7 @@ _LOCAL_ENTITY_KINDS = frozenset(
         "data-package",
         "dataset",
         "discussion",
+        "evidence-line",
         "experiment",
         "finding",
         "hypothesis",

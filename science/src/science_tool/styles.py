@@ -59,6 +59,7 @@ ENTITY_KIND_STYLES: dict[str, tuple[str, str]] = {
     "spec": ("bold bright_yellow", "bright_yellow"),
     "topic": ("bold white", "white"),
     "meta": ("bold dim", "dim"),
+    "evidence-line": ("bold bright_yellow", "bright_yellow"),
     "proposition": ("bold green", "green"),
     "observation": ("bold bright_green", "bright_green"),
     "finding": ("bold bright_green", "bright_green"),
