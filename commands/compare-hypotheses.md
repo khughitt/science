@@ -12,6 +12,14 @@ The goal is not merely to pick a winner. The goal is to identify:
 - where uncertainty is concentrated
 - what evidence would actually shift belief
 
+**Upstream pre-reg stress test.** When an analysis's verdict turns on a single
+dataset, run this command on the pre-registration's flagged alternative as a
+standard step in the pre-register → bias-audit → compare-hypotheses chain.
+Forcing that alternative into a *parallel* proposition bundle — rather than
+leaving it a footnote in the pre-reg or bias audit — surfaces the specific
+discriminating tests that would adjudicate it, which the upstream documents
+rarely expose on their own.
+
 If no arguments are provided, scan `specs/hypotheses/` and propose a high-value pair.
 
 ## Setup
