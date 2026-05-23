@@ -665,7 +665,7 @@ def quality_dashboard(
 
             if _support_count == "1" and _dispute_count == "0":
                 _weak_support_items.append(f"- `{_text}` - supports {_support_count}, disputes {_dispute_count}")
-            if _row["belief_state"] == "contested":
+            if "contested" in _signals:
                 _contested_items.append(
                     f"- `{_text}` - supports {_support_count}, disputes {_dispute_count}, sources {_source_count}"
                 )

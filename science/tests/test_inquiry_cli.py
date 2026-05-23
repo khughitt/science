@@ -414,7 +414,9 @@ class TestInquirySummary:
         assert row["text"] == "Summary Test Inquiry Text"
         assert row["claim_count"] == "2"
         assert row["backed_claim_count"] == "2"
-        assert row["contested_claim_count"] == "1"
+        # Legacy bare-cito evidence is not an evidence-line entity, so the contested signal
+        # (now driven by belief aggregation) no longer fires; the dispute remains in count columns.
+        assert row["contested_claim_count"] == "0"
         assert row["single_source_claim_count"] == "2"
         assert row["no_empirical_claim_count"] == "1"
         assert float(row["avg_risk_score"]) > 0.0

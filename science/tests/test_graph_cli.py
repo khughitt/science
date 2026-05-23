@@ -2520,14 +2520,20 @@ def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -
         assert mixed_row["support_count"] == "2"
         assert mixed_row["dispute_count"] == "0"
         assert mixed_row["has_empirical_data"] == "yes"
-        assert mixed_row["belief_state"] in {"supported", "well_supported"}
+        # Evidence here is legacy bare-cito (`graph add evidence`), not evidence-line entities,
+        # so belief aggregation counts zero units => speculative / not contested.
+        assert mixed_row["belief_state"] == "speculative"
+        assert mixed_row["contested"] == "no"
         assert mixed_row["evidence_types"] == "empirical_data_evidence; literature_evidence"
 
         contested_row = next(row for row in payload["rows"] if row["text"] == "Contested literature-only claim")
         assert contested_row["support_count"] == "1"
         assert contested_row["dispute_count"] == "1"
         assert contested_row["has_empirical_data"] == "no"
-        assert contested_row["belief_state"] == "contested"
+        # Bare-cito dispute is not an evidence-line unit, so belief is speculative and not contested;
+        # the dispute still shows up in the count columns (dispute_count == "1").
+        assert contested_row["belief_state"] == "speculative"
+        assert contested_row["contested"] == "no"
         assert contested_row["evidence_types"] == "literature_evidence; negative_result"
 
 
@@ -2759,286 +2765,209 @@ def test_graph_dashboard_summary_counts_benchmark_evidence_as_empirical_presence
 def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> None:
     runner = CliRunner()
 
+    # Phase 1: belief (and therefore the `contested` signal) is derived ONLY from
+    # evidence-line ENTITY cito edges materialized from `doc/evidence-lines/*.md`, not
+    # from bare cito edges authored by `graph add evidence`. So the contested cluster's
+    # contestedness must be authored as real evidence-line markdown and materialized via
+    # `graph build`. The cross-cluster adjacency (`cito:discusses` -> shared hypothesis)
+    # is NOT emitted by materialize, so we add those two edges directly to the built
+    # graph.trig AFTER `graph build` (a later build would wipe them, but we run none).
+    def _write(rel: str, body: str) -> None:
+        path = Path(rel)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8")
+
+    def _proposition(pid: str, title: str) -> str:
+        return (
+            "---\n"
+            f"id: proposition:{pid}\n"
+            "kind: proposition\n"
+            f'title: "{title}"\n'
+            "project: test\n"
+            "ontology_terms: []\n"
+            "related: []\n"
+            "source_refs: []\n"
+            "created: 2026-05-01\n"
+            "updated: 2026-05-01\n"
+            "---\n"
+        )
+
+    def _evidence_line(eid: str, title: str, *, stance: str, target: str, extra: str) -> str:
+        return (
+            "---\n"
+            f"id: evidence-line:{eid}\n"
+            "kind: evidence-line\n"
+            f'title: "{title}"\n'
+            "project: test\n"
+            "ontology_terms: []\n"
+            "related: []\n"
+            "source_refs: []\n"
+            "created: 2026-05-01\n"
+            "updated: 2026-05-01\n"
+            f"stance: {stance}\n"
+            f"target: proposition:{target}\n"
+            f"{extra}"
+            "---\n"
+        )
+
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        _write("science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
 
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "hypothesis",
-                    "Hcluster",
-                    "--text",
-                    "Local cluster of uncertain claims",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Contested local claim A",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                    "--id",
-                    "cluster_a",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Literature support for contested local claim A",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                    "--evidence-type",
-                    "literature_evidence",
-                    "--id",
-                    "cluster_a_support",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/cluster_a_support",
-                    "proposition/cluster_a",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Negative result for contested local claim A",
-                    "--source",
-                    "paper:doi_10_2222_b",
-                    "--evidence-type",
-                    "negative_result",
-                    "--id",
-                    "cluster_a_dispute",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/cluster_a_dispute",
-                    "proposition/cluster_a",
-                    "--stance",
-                    "disputes",
-                ],
-            ).exit_code
-            == 0
+        _write(
+            "doc/hypotheses/hcluster.md",
+            "---\n"
+            "id: hypothesis:hcluster\n"
+            "kind: hypothesis\n"
+            'title: "Local cluster of uncertain claims"\n'
+            "project: test\n"
+            "ontology_terms: []\n"
+            "related: []\n"
+            "source_refs: []\n"
+            "created: 2026-05-01\n"
+            "updated: 2026-05-01\n"
+            "---\n",
         )
 
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Fragile local claim B",
-                    "--source",
-                    "paper:doi_10_3333_c",
-                    "--id",
-                    "cluster_b",
-                ],
-            ).exit_code
-            == 0
+        # CONTESTED cluster: one clean independent direct-test support PLUS one diagnostic
+        # dispute (model_criticism + scoped). A diagnostic/scoped dispute sets contested
+        # WITHOUT capping or eliminating belief -> "fragile (contested)". This is the
+        # cleanest "contested but not refuted" shape (mirrors test_belief_store_integration).
+        _write("doc/propositions/cluster_a.md", _proposition("cluster_a", "Contested local claim A"))
+        _write(
+            "doc/evidence-lines/cluster-a-support.md",
+            _evidence_line(
+                "cluster-a-support",
+                "Literature support for contested local claim A",
+                stance="supports",
+                target="cluster_a",
+                extra=(
+                    "evidence_role: direct_test\n"
+                    "strength: strong\n"
+                    "independence: independent\n"
+                    "independence_group: g-cluster-a-support\n"
+                    "evidence_type: literature_evidence\n"
+                ),
+            ),
         )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Single-source support for fragile local claim B",
-                    "--source",
-                    "paper:doi_10_3333_c",
-                    "--evidence-type",
-                    "literature_evidence",
-                    "--id",
-                    "cluster_b_support",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/cluster_b_support",
-                    "proposition/cluster_b",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
+        _write(
+            "doc/evidence-lines/cluster-a-dispute.md",
+            _evidence_line(
+                "cluster-a-dispute",
+                "Negative result for contested local claim A",
+                stance="disputes",
+                target="cluster_a",
+                extra=(
+                    "evidence_role: model_criticism\n"
+                    "dispute_scope: generalization\n"
+                    "evidence_type: negative_result\n"
+                ),
+            ),
         )
 
-        # Link cluster_a and cluster_b to hypothesis/hcluster so they share a neighborhood
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "edge",
-                    "proposition/cluster_a",
-                    "cito:discusses",
-                    "hypothesis/hcluster",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "edge",
-                    "proposition/cluster_b",
-                    "cito:discusses",
-                    "hypothesis/hcluster",
-                ],
-            ).exit_code
-            == 0
+        # FRAGILE (NOT contested) contrast cluster: a single supporting evidence-line, no
+        # dispute. Shares hypothesis:hcluster with cluster_a so the contested claim's
+        # neighborhood is "connected" rather than isolated.
+        _write("doc/propositions/cluster_b.md", _proposition("cluster_b", "Fragile local claim B"))
+        _write(
+            "doc/evidence-lines/cluster-b-support.md",
+            _evidence_line(
+                "cluster-b-support",
+                "Single-source support for fragile local claim B",
+                stance="supports",
+                target="cluster_b",
+                extra=(
+                    "evidence_role: proxy_support\n"
+                    "strength: moderate\n"
+                    "independence: independent\n"
+                    "independence_group: g-cluster-b-support\n"
+                    "evidence_type: literature_evidence\n"
+                ),
+            ),
         )
 
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Isolated well-supported claim",
-                    "--source",
-                    "paper:doi_10_4444_d",
-                    "--id",
-                    "isolated_good",
-                ],
-            ).exit_code
-            == 0
+        # ISOLATED, well-supported, non-contested claim: two independent empirical
+        # direct-test supports, no hypothesis link -> isolated neighborhood, risk 0.
+        _write("doc/propositions/isolated_good.md", _proposition("isolated_good", "Isolated well-supported claim"))
+        _write(
+            "doc/evidence-lines/isolated-support-1.md",
+            _evidence_line(
+                "isolated-support-1",
+                "Empirical support one for isolated claim",
+                stance="supports",
+                target="isolated_good",
+                extra=(
+                    "evidence_role: direct_test\n"
+                    "strength: strong\n"
+                    "independence: independent\n"
+                    "independence_group: g-isolated-1\n"
+                    "evidence_type: empirical_data_evidence\n"
+                ),
+            ),
         )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Empirical support one for isolated claim",
-                    "--source",
-                    "paper:doi_10_4444_d",
-                    "--evidence-type",
-                    "empirical_data_evidence",
-                    "--id",
-                    "isolated_support_1",
-                ],
-            ).exit_code
-            == 0
+        _write(
+            "doc/evidence-lines/isolated-support-2.md",
+            _evidence_line(
+                "isolated-support-2",
+                "Empirical support two for isolated claim",
+                stance="supports",
+                target="isolated_good",
+                extra=(
+                    "evidence_role: direct_test\n"
+                    "strength: strong\n"
+                    "independence: independent\n"
+                    "independence_group: g-isolated-2\n"
+                    "evidence_type: empirical_data_evidence\n"
+                ),
+            ),
         )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/isolated_support_1",
-                    "proposition/isolated_good",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "proposition",
-                    "Empirical support two for isolated claim",
-                    "--source",
-                    "paper:doi_10_5555_e",
-                    "--evidence-type",
-                    "empirical_data_evidence",
-                    "--id",
-                    "isolated_support_2",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "evidence",
-                    "proposition/isolated_support_2",
-                    "proposition/isolated_good",
-                    "--stance",
-                    "supports",
-                ],
-            ).exit_code
-            == 0
-        )
+
+        # Materialize the evidence-line entities into knowledge/graph.trig so belief
+        # aggregation can see them (neighborhood-summary reads the built graph artifact).
+        assert runner.invoke(main, ["graph", "build"]).exit_code == 0
+
+        # Add the cross-cluster adjacency edges directly to the built graph (materialize
+        # does not emit cito:discusses). No further `graph build` runs, so these persist.
+        for proposition_id in ("cluster_a", "cluster_b"):
+            assert (
+                runner.invoke(
+                    main,
+                    [
+                        "graph",
+                        "add",
+                        "edge",
+                        f"proposition/{proposition_id}",
+                        "cito:discusses",
+                        "hypothesis/hcluster",
+                    ],
+                ).exit_code
+                == 0
+            )
 
         result = runner.invoke(main, ["graph", "neighborhood-summary", "--format", "json"])
         assert result.exit_code == 0
         payload = json.loads(result.output)
 
-        contested_row = next(row for row in payload["rows"] if row["text"] == "Contested local claim A")
-        isolated_row = next(row for row in payload["rows"] if row["text"] == "Isolated well-supported claim")
+        # Materialized claims carry their title on `label` (skos:prefLabel); `text` falls
+        # back to the short URI name, so match on `label` here.
+        contested_row = next(row for row in payload["rows"] if row["label"] == "Contested local claim A")
+        isolated_row = next(row for row in payload["rows"] if row["label"] == "Isolated well-supported claim")
 
         assert contested_row["neighbor_claim_count"] == "1"
+        # cluster_a is genuinely contested: a supporting evidence-line plus a diagnostic
+        # (model_criticism / scoped) disputing evidence-line yield belief
+        # "fragile (contested)". cluster_b, the shared neighbor, is fragile-but-NOT-contested,
+        # so the neighborhood's contested_count is exactly 1 (the contested claim itself).
         assert contested_row["contested_count"] == "1"
+        # cluster_b is single-source (one support, one source); cluster_a draws on two
+        # sources so it does not add to this count.
         assert contested_row["single_source_count"] == "1"
         assert contested_row["no_empirical_count"] == "2"
         assert contested_row["structural_fragility"] == "connected"
 
         assert isolated_row["neighbor_claim_count"] == "0"
         assert isolated_row["structural_fragility"] == "isolated"
+        # The contested cluster outranks the isolated claim, and the contested term
+        # (0.75 * contested_count) genuinely contributes to that gap.
         assert float(contested_row["neighborhood_risk"]) > float(isolated_row["neighborhood_risk"])
 
 
@@ -3293,7 +3222,9 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
         assert row["question"] == "http://example.org/project/question/q1"
         assert row["claim_count"] == "2"
         assert row["neighborhood_count"] == "2"
-        assert row["contested_claim_count"] == "1"
+        # Legacy bare-cito evidence is not an evidence-line entity, so the contested signal
+        # (now driven by belief aggregation) no longer fires; the dispute remains in count columns.
+        assert row["contested_claim_count"] == "0"
         assert row["single_source_claim_count"] == "1"
         assert row["no_empirical_claim_count"] == "1"
         assert float(row["avg_risk_score"]) > 0.0

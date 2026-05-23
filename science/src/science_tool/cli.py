@@ -1339,7 +1339,7 @@ def graph_dashboard_summary(top: int, output_format: str, graph_path: Path) -> N
         columns=[
             ("claim", "Claim"),
             ("text", "Text"),
-            ("belief_state", "Belief State"),
+            ("belief_display", "Belief State"),
             ("signals", "Signals"),
             ("support_count", "Supports"),
             ("dispute_count", "Disputes"),

@@ -44,6 +44,7 @@ from science_tool.graph.io import (
     read_revision_manifest as _read_revision_manifest,
     save_canonical_graph_dataset,
 )
+from science_tool.graph.belief import aggregate_belief, collect_evidence_units
 from science_tool.graph.sources import is_metadata_reference
 
 DEFAULT_GRAPH_PATH = Path("knowledge/graph.trig")
@@ -77,6 +78,8 @@ class ClaimSummaryData(TypedDict):
     label: str
     text: str
     belief_state: str
+    contested: bool
+    belief_display: str
     support_count: int
     dispute_count: int
     source_count: int
@@ -3611,22 +3614,6 @@ def _collect_evidence_types(knowledge, provenance, target_uri: URIRef) -> set[st
     return evidence_types
 
 
-def _belief_state(
-    support_count: int,
-    dispute_count: int,
-    source_count: int,
-) -> str:
-    if dispute_count > 0:
-        return "contested"
-    if support_count == 0:
-        return "speculative"
-    if source_count <= 1:
-        return "fragile"
-    if support_count >= 2 and source_count >= 2:
-        return "well_supported"
-    return "supported"
-
-
 def _summary_targets(knowledge, *, include_hypotheses: bool) -> list[URIRef]:
     entity_types = [SCI_NS.Proposition]
     if include_hypotheses:
@@ -3652,7 +3639,12 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
     has_empirical_data = any(
         evidence_type in {"empirical_data_evidence", "benchmark_evidence"} for evidence_type in evidence_types
     )
-    belief_state = _belief_state(support_count=support_count, dispute_count=dispute_count, source_count=source_count)
+    belief = aggregate_belief(
+        collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(knowledge, uri))
+    )
+    belief_state = belief.magnitude.value
+    contested = belief.contested
+    belief_display = belief.display()
     evidence_semantics = _load_proposition_evidence_semantics(provenance, uri)
     statistical_support = evidence_semantics.get("statistical_support", "")
     mechanistic_support = evidence_semantics.get("mechanistic_support", "")
@@ -3680,7 +3672,7 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
     signals: list[str] = []
     risk_score = 0.0
     total_evidence = support_count + dispute_count
-    if dispute_count > 0:
+    if contested:
         signals.append("contested")
         risk_score += 3.0
     if support_count > 0 and source_count <= 1:
@@ -3736,6 +3728,8 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
         "label": label,
         "text": text,
         "belief_state": belief_state,
+        "contested": contested,
+        "belief_display": belief_display,
         "support_count": support_count,
         "dispute_count": dispute_count,
         "source_count": source_count,
@@ -3764,6 +3758,8 @@ def _format_claim_summary_row(summary: ClaimSummaryData) -> dict[str, str]:
         "label": str(summary["label"]),
         "text": str(summary["text"]),
         "belief_state": str(summary["belief_state"]),
+        "contested": "yes" if bool(summary["contested"]) else "no",
+        "belief_display": str(summary["belief_display"]),
         "support_count": str(summary["support_count"]),
         "dispute_count": str(summary["dispute_count"]),
         "source_count": str(summary["source_count"]),
