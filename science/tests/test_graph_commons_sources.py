@@ -605,3 +605,40 @@ relevance: "central to this project"
     assert sources.commons_overlay_paths == {
         "topic:single-cell-foundation-models": str(overlay_path),
     }
+
+
+def test_pin_not_enforced_warning_is_aggregated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Multiple pinned overlays produce ONE summary warning, not one per entity.
+
+    Regression for fb-2026-05-22-007: a project pinning hundreds of commons
+    overlays emitted hundreds of identical warning lines, drowning the signal
+    (and machine-output consumers that capture combined streams).
+    """
+    import logging
+
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = tmp_path / "project"
+    for canonical_id, subdir, slug in (
+        ("paper:Adams2025", "papers", "Adams2025"),
+        ("topic:single-cell-foundation-models", "topics", "single-cell-foundation-models"),
+    ):
+        overlay_path = project_root / "doc" / subdir / f"{slug}.md"
+        overlay_path.parent.mkdir(parents=True, exist_ok=True)
+        overlay_path.write_text(
+            f'---\nid: "{canonical_id}"\noverlay_of: "{canonical_id}"\npin_version: "1.0.0"\n---\n\n## Notes\n',
+            encoding="utf-8",
+        )
+
+    with caplog.at_level(logging.WARNING, logger="science_tool.graph.commons_sources"):
+        _load_commons(project_root)
+
+    pin_records = [r for r in caplog.records if "pinning is not enforced" in r.getMessage()]
+    assert len(pin_records) == 1, f"expected one aggregated warning, got {len(pin_records)}: {[r.getMessage() for r in pin_records]}"
+    message = pin_records[0].getMessage()
+    assert "2" in message  # names the count of affected entities
+    assert "paper:Adams2025" in message
+    assert "topic:single-cell-foundation-models" in message

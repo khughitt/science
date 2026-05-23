@@ -25,6 +25,7 @@ progressive disclosure.
 - `data-genomics`: `skills/data/genomics/SKILL.md`
 - `data-genomics-somatic-mutation-qa`: `skills/data/genomics/somatic-mutation-qa.md`
 - `data-genomics-mutational-signatures-and-selection`: `skills/data/genomics/mutational-signatures-and-selection.md`
+- `data-genomics-copy-number-sv-qa`: `skills/data/genomics/copy-number-sv-qa.md`
 - `data-functional-genomics-qa`: `skills/data/functional-genomics-qa.md`
 - `data-protein-sequence-structure-qa`: `skills/data/protein-sequence-structure-qa.md`
 - `data-embeddings-manifold-qa`: `skills/data/embeddings-manifold-qa.md`
@@ -47,6 +48,9 @@ progressive disclosure.
 - `statistics-survival-and-hierarchical-models`: `skills/statistics/survival-and-hierarchical-models.md`
 - `statistics-compositional-data`: `skills/statistics/compositional-data.md`
 - `statistics-prereg-amendment-vs-fresh`: `skills/statistics/prereg-amendment-vs-fresh.md`
+- `statistics-prereg-defensive-instrumentation`: `skills/statistics/prereg-defensive-instrumentation.md`
+- `statistics-likelihood-model-comparison`: `skills/statistics/likelihood-model-comparison.md`
+- `statistics-population-genetics-likelihood`: `skills/statistics/population-genetics-likelihood.md`
 
 ## Curation and Evidence
 

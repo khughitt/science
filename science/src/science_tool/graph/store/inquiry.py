@@ -5,7 +5,7 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
-from rdflib import URIRef
+from rdflib import Dataset, Graph, URIRef
 from rdflib.namespace import PROV, RDF, SKOS
 
 from .constants import DCTERMS_NS, PROJECT_NS, SCI_NS, SCIC_NS
@@ -15,125 +15,144 @@ from .identity import _edge_claims, _graph_uri, _resolve_term, _slug, shorten_ur
 from .types import InquiryEdge, InquiryInfo
 
 
+def _inquiry_property(dataset: Dataset, subject: URIRef, *predicates: URIRef) -> str:
+    """First object for `subject` under the first matching predicate, across all
+    graphs, as a string. Predicates are tried in order so callers can express a
+    fallback (e.g. interactive `sci:inquiryStatus` then materialized
+    `sci:projectStatus`)."""
+    for predicate in predicates:
+        for graph in dataset.graphs():
+            obj = next(graph.objects(subject, predicate), None)
+            if obj is not None:
+                return str(obj)
+    return ""
+
+
+def _discover_inquiries(dataset: Dataset) -> dict[str, tuple[URIRef, Graph]]:
+    """Map slug -> (inquiry_uri, home_graph) for every `sci:Inquiry` in the dataset.
+
+    Two layouts coexist. Interactive `inquiry init`/`add-edge` write a dedicated
+    per-inquiry named graph whose identifier equals the inquiry URI. The canonical
+    `materialize_graph` build instead emits each inquiry as an entity inside the
+    shared `graph/knowledge` layer. Both are discovered here by scanning every
+    graph for the type triple; when both exist for one slug, the dedicated graph
+    wins because it also carries the boundary/edge subgraph.
+    """
+    inquiry_prefix = str(PROJECT_NS) + "inquiry/"
+    found: dict[str, tuple[URIRef, Graph]] = {}
+    for graph in dataset.graphs():
+        for subject in graph.subjects(RDF.type, SCI_NS.Inquiry):
+            if not isinstance(subject, URIRef):
+                continue
+            uri_str = str(subject)
+            if not uri_str.startswith(inquiry_prefix):
+                continue
+            slug = uri_str[len(inquiry_prefix) :]
+            if slug not in found or str(graph.identifier) == uri_str:
+                found[slug] = (subject, graph)
+    return found
+
+
 def list_inquiries(graph_path: Path) -> list[dict[str, str]]:
     """List all inquiries in the dataset, returning a list of summary dicts."""
     dataset = _load_dataset(graph_path)
-    inquiry_prefix = str(PROJECT_NS) + "inquiry/"
     results: list[dict[str, str]] = []
-
-    for ctx in dataset.graphs():
-        graph_id = str(ctx.identifier)
-        if not graph_id.startswith(inquiry_prefix):
-            continue
-
-        slug = graph_id[len(inquiry_prefix) :]
-        inquiry_uri = URIRef(graph_id)
-
-        # Only include actual inquiry graphs (must have Inquiry type)
-        if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in ctx:
-            continue
-
-        label = ""
-        status = ""
-        target = ""
-        created = ""
-
-        for obj in ctx.objects(inquiry_uri, SKOS.prefLabel):
-            label = str(obj)
-        for obj in ctx.objects(inquiry_uri, SCI_NS.inquiryStatus):
-            status = str(obj)
-        for obj in ctx.objects(inquiry_uri, SCI_NS.target):
-            target = str(obj)
-        for obj in ctx.objects(inquiry_uri, DCTERMS_NS.created):
-            created = str(obj)
-
-        inquiry_type = ""
-        for obj in ctx.objects(inquiry_uri, SCI_NS.inquiryType):
-            inquiry_type = str(obj)
-        if not inquiry_type:
-            inquiry_type = "general"
-
+    for slug, (inquiry_uri, _home) in _discover_inquiries(dataset).items():
         results.append(
             {
                 "slug": slug,
-                "label": label,
-                "inquiry_type": inquiry_type,
-                "status": status,
-                "target": target,
-                "created": created,
+                "label": _inquiry_property(dataset, inquiry_uri, SKOS.prefLabel),
+                "inquiry_type": _inquiry_property(dataset, inquiry_uri, SCI_NS.inquiryType) or "general",
+                "status": _inquiry_property(dataset, inquiry_uri, SCI_NS.inquiryStatus, SCI_NS.projectStatus),
+                "target": _inquiry_property(dataset, inquiry_uri, SCI_NS.target),
+                "created": _inquiry_property(dataset, inquiry_uri, DCTERMS_NS.created),
             }
         )
-
     return results
 
 
 def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
     """Get detailed information about a specific inquiry, including boundaries and edges."""
-    safe_slug = _slug(slug)
-    inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
-
     dataset = _load_dataset(graph_path)
-    inquiry_graph = dataset.graph(inquiry_uri)
+    inquiries = _discover_inquiries(dataset)
 
-    if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in inquiry_graph:
-        raise ValueError(f"Inquiry 'inquiry/{safe_slug}' does not exist")
+    requested = slug
+    for prefix in ("inquiry/", "inquiry:"):
+        if requested.startswith(prefix):
+            requested = requested[len(prefix) :]
 
-    # Read metadata
-    label = str(next(inquiry_graph.objects(inquiry_uri, SKOS.prefLabel), ""))
-    status = str(next(inquiry_graph.objects(inquiry_uri, SCI_NS.inquiryStatus), ""))
-    inquiry_type = str(next(inquiry_graph.objects(inquiry_uri, SCI_NS.inquiryType), "general"))
-    target = str(next(inquiry_graph.objects(inquiry_uri, SCI_NS.target), ""))
-    created = str(next(inquiry_graph.objects(inquiry_uri, DCTERMS_NS.created), ""))
-    description = str(next(inquiry_graph.objects(inquiry_uri, SKOS.note), ""))
+    match = inquiries.get(requested)
+    if match is None:
+        # Tolerate slug-normalization drift between stored hyphenated slugs and
+        # the legacy underscore form `_slug` produces.
+        normalized = _slug(requested)
+        match = next((value for cand, value in inquiries.items() if _slug(cand) == normalized), None)
+    if match is None:
+        raise ValueError(f"Inquiry 'inquiry/{requested}' does not exist")
 
-    # Read treatment/outcome (causal inquiries)
-    treatment = next(inquiry_graph.objects(inquiry_uri, SCI_NS.treatment), None)
-    outcome = next(inquiry_graph.objects(inquiry_uri, SCI_NS.outcome), None)
+    inquiry_uri, home_graph = match
+    actual_slug = str(inquiry_uri)[len(str(PROJECT_NS) + "inquiry/") :]
 
-    # Collect boundary nodes
+    label = _inquiry_property(dataset, inquiry_uri, SKOS.prefLabel)
+    status = _inquiry_property(dataset, inquiry_uri, SCI_NS.inquiryStatus, SCI_NS.projectStatus)
+    inquiry_type = _inquiry_property(dataset, inquiry_uri, SCI_NS.inquiryType) or "general"
+    target = _inquiry_property(dataset, inquiry_uri, SCI_NS.target)
+    created = _inquiry_property(dataset, inquiry_uri, DCTERMS_NS.created)
+    description = _inquiry_property(dataset, inquiry_uri, SKOS.note)
+
+    treatment = next((o for g in dataset.graphs() for o in g.objects(inquiry_uri, SCI_NS.treatment)), None)
+    outcome = next((o for g in dataset.graphs() for o in g.objects(inquiry_uri, SCI_NS.outcome)), None)
+    related = sorted({str(o) for g in dataset.graphs() for o in g.objects(inquiry_uri, SKOS.related)})
+
+    # The boundary/edge subgraph only exists in a dedicated per-inquiry named
+    # graph. A materialized inquiry's home graph is the shared `graph/knowledge`
+    # layer, so scanning it for "edges" would pull in every entity's triples;
+    # treat that case as an empty subgraph.
     boundary_in: list[str] = []
     boundary_out: list[str] = []
-    for s, _p, o in inquiry_graph.triples((None, SCI_NS.boundaryRole, None)):
-        if o == SCI_NS.BoundaryIn:
-            boundary_in.append(str(s))
-        elif o == SCI_NS.BoundaryOut:
-            boundary_out.append(str(s))
-
-    # Collect edges (excluding metadata predicates)
-    metadata_predicates = {
-        RDF.type,
-        RDF.subject,
-        RDF.predicate,
-        RDF.object,
-        SKOS.prefLabel,
-        SKOS.note,
-        SCI_NS.inquiryStatus,
-        SCI_NS.inquiryType,
-        SCI_NS.target,
-        SCI_NS.boundaryRole,
-        SCI_NS.treatment,
-        SCI_NS.outcome,
-        SCI_NS.tool,
-        SCI_NS.paramValue,
-        SCI_NS.paramSource,
-        SCI_NS.paramNote,
-        SCI_NS.paramRef,
-        SCI_NS.backedByClaim,
-        SCI_NS.validatedBy,
-        DCTERMS_NS.created,
-    }
     edges: list[InquiryEdge] = []
-    for s, p, o in inquiry_graph:
-        if p not in metadata_predicates:
-            edge_info: InquiryEdge = {"subject": str(s), "predicate": str(p), "object": str(o)}
-            if isinstance(s, URIRef) and isinstance(p, URIRef) and isinstance(o, URIRef):
-                claim_uris = _edge_claims(inquiry_graph, s, p, o)
-                if claim_uris:
-                    edge_info["claims"] = [str(uri) for uri in claim_uris]
-            edges.append(edge_info)
+    if str(home_graph.identifier) == str(inquiry_uri):
+        for s, _p, o in home_graph.triples((None, SCI_NS.boundaryRole, None)):
+            if o == SCI_NS.BoundaryIn:
+                boundary_in.append(str(s))
+            elif o == SCI_NS.BoundaryOut:
+                boundary_out.append(str(s))
+
+        metadata_predicates = {
+            RDF.type,
+            RDF.subject,
+            RDF.predicate,
+            RDF.object,
+            SKOS.prefLabel,
+            SKOS.note,
+            SKOS.related,
+            SCI_NS.inquiryStatus,
+            SCI_NS.inquiryType,
+            SCI_NS.projectStatus,
+            SCI_NS.target,
+            SCI_NS.boundaryRole,
+            SCI_NS.treatment,
+            SCI_NS.outcome,
+            SCI_NS.tool,
+            SCI_NS.paramValue,
+            SCI_NS.paramSource,
+            SCI_NS.paramNote,
+            SCI_NS.paramRef,
+            SCI_NS.backedByClaim,
+            SCI_NS.validatedBy,
+            DCTERMS_NS.created,
+        }
+        for s, p, o in home_graph:
+            if p not in metadata_predicates:
+                edge_info: InquiryEdge = {"subject": str(s), "predicate": str(p), "object": str(o)}
+                if isinstance(s, URIRef) and isinstance(p, URIRef) and isinstance(o, URIRef):
+                    claim_uris = _edge_claims(home_graph, s, p, o)
+                    if claim_uris:
+                        edge_info["claims"] = [str(uri) for uri in claim_uris]
+                edges.append(edge_info)
 
     return {
-        "slug": safe_slug,
+        "slug": actual_slug,
         "label": label,
         "status": status,
         "inquiry_type": inquiry_type,
@@ -142,6 +161,7 @@ def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
         "description": description,
         "treatment": str(treatment) if treatment else None,
         "outcome": str(outcome) if outcome else None,
+        "related": related,
         "boundary_in": boundary_in,
         "boundary_out": boundary_out,
         "edges": edges,

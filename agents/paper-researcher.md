@@ -50,6 +50,18 @@ Direct `WebFetch` is permitted only for:
 
 Everything else goes through `paper-fetch`.
 
+## Adding the BibTeX entry — use `science bib add`
+
+The "After Writing" step adds your paper's BibTeX entry to `papers/references.bib`. **Always** do this via:
+
+```bash
+uv run science bib add --project-root . <<'EOF'
+@article{<citekey>, title={...}, author={...}, year={...}, ... }
+EOF
+```
+
+This takes an exclusive file lock and does a single atomic append. **Never** add the entry by reading `references.bib` and editing/writing it back** — even when an orchestrator dispatched you in a batch.** Direct edits hit "file modified since read" errors when Dropbox syncs the file mid-edit, and parallel subagents racing on the same shared file silently clobber each other's appends. `science bib add` is concurrency-safe (it serializes writers and is idempotent by key), so you stay autonomous: just call it. This overrides any built-in habit of hand-editing the bibliography.
+
 ## Creating new questions — use `science question reserve`
 
 When the "After Writing" step calls for adding new questions to `doc/questions/`, **always** create them via:
@@ -81,7 +93,7 @@ When done, return a concise message (≤150 words) to the orchestrator containin
 
 1. The generated citekey (e.g. `Smith2024`).
 2. The path to the written summary (`doc/papers/<citekey>.md`).
-3. Whether `papers/references.bib` was created or updated.
+3. The `science bib add` outcome for `papers/references.bib` (`added`, `exists`, or `replaced`).
 4. Whether new questions were added under `doc/questions/` (and their filenames).
 5. Any `[UNVERIFIED]` fields worth the orchestrator's attention.
 6. Provenance: `LLM knowledge`, `web search`, `PDF`, or a combination — matching the `Source:` frontmatter you wrote.

@@ -97,6 +97,7 @@ def _load_commons_referenced_entities(
     query = CommonsQuery(commons_root)
     loaded: list[tuple[Entity, SourceRef]] = []
     overlay_paths: dict[str, str] = {}
+    pinned_unenforced: list[str] = []
     for canonical_id in sorted(needed_ids):
         overlay = overlays.get(canonical_id)
         try:
@@ -111,11 +112,7 @@ def _load_commons_referenced_entities(
             continue
 
         if overlay is not None and (overlay.pin_version or overlay.pin_effective_version):
-            logger.warning(
-                "commons overlay pinning is not enforced for %s at %s",
-                canonical_id,
-                overlay.overlay_path,
-            )
+            pinned_unenforced.append(canonical_id)
 
         policy = read_merge_policy(parse_profile(record.schema_profile))
         merged = merge_entity(record, overlay, policy)
@@ -133,6 +130,16 @@ def _load_commons_referenced_entities(
         loaded.append((entity, ref))
         if overlay is not None:
             overlay_paths[canonical_id] = str(overlay.overlay_path)
+
+    if pinned_unenforced:
+        # One aggregated line, not one per entity: a project that pins hundreds
+        # of overlays would otherwise bury its own diagnostics in repetition.
+        logger.warning(
+            "commons overlay pinning is not enforced (pins are parsed but not yet acted on) for %d entit%s: %s",
+            len(pinned_unenforced),
+            "y" if len(pinned_unenforced) == 1 else "ies",
+            ", ".join(pinned_unenforced),
+        )
 
     return loaded, overlay_paths
 

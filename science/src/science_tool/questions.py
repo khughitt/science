@@ -22,6 +22,8 @@ from pathlib import Path
 
 import yaml
 
+from science_tool.entities import truncate_slug_on_word_boundary
+
 _QUESTION_FILE_RE = re.compile(r"^q(?P<num>\d+)-")
 _DEFAULT_PADDING = 2
 _MAX_SLUG_LENGTH = 50
@@ -81,9 +83,7 @@ def slugify(text: str, *, max_length: int = _MAX_SLUG_LENGTH) -> str:
     cleaned = re.sub(r"[^a-z0-9]+", "-", text.strip().lower()).strip("-")
     if not cleaned:
         raise ValueError(f"slug {text!r} produced empty result after normalization")
-    if len(cleaned) > max_length:
-        cleaned = cleaned[:max_length].rstrip("-")
-    return cleaned
+    return truncate_slug_on_word_boundary(cleaned, max_length)
 
 
 def _scan_existing(questions_dir: Path) -> tuple[int, int]:

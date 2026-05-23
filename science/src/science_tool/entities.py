@@ -109,10 +109,28 @@ def resolve_path_policy(kind: str) -> EntityPathPolicy:
         raise EntityCommandError(f"Unsupported source-authored entity kind: {kind}") from exc
 
 
+def truncate_slug_on_word_boundary(slug: str, max_length: int) -> str:
+    """Cap a kebab-case slug at ``max_length`` without cutting mid-word.
+
+    A plain ``slug[:max_length]`` can leave a partial trailing token
+    (e.g. ``"...-dysregulation-express"``). When the cap falls inside a token,
+    back up to the previous hyphen so the slug ends on a whole word. Fall back
+    to a hard cut only when there is no interior boundary to back up to — a
+    single token longer than ``max_length`` cannot be split.
+    """
+    if len(slug) <= max_length:
+        return slug
+    if slug[max_length] != "-":
+        boundary = slug.rfind("-", 0, max_length)
+        if boundary >= 2:
+            return slug[:boundary]
+    return slug[:max_length].rstrip("-")
+
+
 def derive_slug(title: str) -> str:
     ascii_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode("ascii")
     slug = re.sub(r"[^a-z0-9]+", "-", ascii_title.lower()).strip("-")
-    slug = slug[:72].rstrip("-")
+    slug = truncate_slug_on_word_boundary(slug, 72)
     if len(slug) < 2:
         raise EntityCommandError("Title cannot derive a stable slug; requires --slug")
     return validate_slug(slug)

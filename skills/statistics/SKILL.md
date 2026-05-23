@@ -25,6 +25,8 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
 | [`prereg-defensive-instrumentation.md`](./prereg-defensive-instrumentation.md) | Pre-registering a multi-candidate test that needs universe locks, snapshot freezes, familywise nulls, leakage hedges, suspicious-result tripwires, or locked decision tables |
 | [`survival-and-hierarchical-models.md`](./survival-and-hierarchical-models.md) | Cox / Weibull / mixed-effects / Bayesian hierarchical models |
 | [`compositional-data.md`](./compositional-data.md) | Proportions, fractions, deconvolution outputs, microbiome relative abundance |
+| [`likelihood-model-comparison.md`](./likelihood-model-comparison.md) | Comparing parametric models by likelihood — AIC/BIC/LRT, nested vs non-nested, numerical precision, bootstrap selection stability |
+| [`population-genetics-likelihood.md`](./population-genetics-likelihood.md) | Wright-Fisher / Moran / binomial-segregation likelihoods; selection vs neutral null |
 
 ## Principles
 
@@ -82,6 +84,18 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
    outputs require denominator, zero-handling, and log-ratio decisions before
    ordinary regression or correlation. See
    [`compositional-data`](./compositional-data.md).
+
+9. **Make likelihood comparisons well-posed before reading them.** Same data,
+   same response scale, identified parameters, and a converged optimizer come
+   before AIC/BIC/LRT; non-nested models need a common scale or a Jacobian
+   correction. See
+   [`likelihood-model-comparison`](./likelihood-model-comparison.md).
+
+10. **Give drift a fair chance before crediting selection.** Population-genetics
+    likelihoods (Wright-Fisher, Moran, binomial-segregation) must estimate their
+    variance/noise scale and confirm drift and selection are separable on the
+    data; a single-cohort selection signal is cohort-scoped. See
+    [`population-genetics-likelihood`](./population-genetics-likelihood.md).
 
 ## When to invoke
 

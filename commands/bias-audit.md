@@ -110,6 +110,12 @@ For each artifact under audit, answer:
 
 If the answer to the third question is **no**, mark this as a HIGH-severity finding regardless of the other bias categories: the audit cannot generate disconfirming evidence by construction. Recommended mitigations: (a) introduce an out-of-corpus benchmark; (b) split the multi-artifact audit into single-artifact passes with independent evidence; (c) explicitly downgrade the audit's verdict from "validated" to "internally consistent."
 
+**Author independence (self-audit check):**
+
+Independence has an author-side analogue to the corpus check above. If the agent running this audit also authored or substantively edited the artifact under audit — e.g. drafting a pre-registration and then auditing it in the same session — the audit's independence is compromised by construction: the same reasoning that produced the artifact is unlikely to falsify it. The corpus check catches the *data*-side version of this; this catches the *author*-side version.
+
+Check explicitly: did this agent author or substantively edit any artifact under audit? If yes, register the verdict as **"self-audit (internally consistent)"** rather than **"audited"**, and recommend an independent pass — a different agent, a cooling-off period, or an out-of-corpus reviewer — before the artifact's verdict is treated as externally validated. Like the corpus closure check, this downgrades the claim rather than ratifying it; it is a registered surface, not just a process-bias note.
+
 ### 4. Synthesize
 
 - Rate each bias: not detected / possible / likely
