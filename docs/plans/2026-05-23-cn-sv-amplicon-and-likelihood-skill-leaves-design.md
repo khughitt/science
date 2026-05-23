@@ -11,6 +11,17 @@ SKILL hubs, and the `plan-analysis` leaf-selection rubric.
 is documentation/methodology content. `test_command_docs` and the skills linter
 must stay green.
 
+**Prerequisite fix (the linter is already red at HEAD):**
+`uv run --frozen science skills lint --root ../skills` currently fails for
+reasons unrelated to the new leaves — `statistics/prereg-defensive-instrumentation.md`
+uses `## Companion Leaves` instead of the required `## Companion Skills`, and is
+missing from `skills/INDEX.md`. Because the verification gate is "linter green,"
+this must be fixed first: rename the heading to the canonical `## Companion
+Skills` (a pure schema correction — the section already contains only companion
+links) and add the missing INDEX entry. Fixing the doc to match the canonical
+schema, rather than loosening the linter, follows the project's standing
+organize-over-workaround principle.
+
 **Non-goals:** No new validator logic, no template changes, no changes to the
 `plan-analysis` workflow beyond rubric rows + one pressure scenario. No
 authoring of unrequested leaves (e.g. fusion-transcript QA, methylation QA
@@ -131,16 +142,30 @@ Artifacts → Companion Skills.
   generations; segregation variance vs selection.
 - **Deferral:** comparison metrics + numerical precision defer to leaf 2 (loaded
   as companion).
-- **Halt-On:** N_e or generation count unknown; neutral and selection models not
-  identifiable on the available data (this is literally t002's documented
-  Lee2026-local limitation — promotion requires independent non-Lee2026
-  replication).
+- **Halt-On:** the transition variance scale / time axis (e.g. a per-generation
+  σ₀² or a cell-cycle / common-time-axis re-expression) is *neither* identified
+  from data *nor* pre-registered as an estimated / profiled / sensitivity
+  parameter. This deliberately does **not** require a known N_e or generation
+  count: t002's M2 model estimates σ₀² (and M2N fixes γ=0 while still estimating
+  σ₀²) on a per-cell-generation axis, so that analysis is *ready*, not blocked.
+  Halt only when the variance/time axis is left genuinely free and unstated.
+- **Verdict scope (analysis rule, not a halt):** a selection signal fit on a
+  single cohort is scoped to that cohort — drift and selection are confounded at
+  low N_e / few generations, so a single-cohort fit cannot rule out
+  cohort-specific drift. Cross-cohort promotion requires independent replication.
+  This is exactly t002's documented Lee2026-local limitation: the analysis may
+  run and report a within-GBM0510 verdict, but promotion to `partially-supported`
+  requires independent non-Lee2026 replication.
 - **Companion skills:** `statistics-likelihood-model-comparison` (the machinery);
   `data-genomics-copy-number-sv-qa` (the input CN calls);
   `statistics-power-floor-acknowledgement`; `statistics-sensitivity-arbitration`.
 
 ## Wiring changes
 
+- **Prerequisite — `skills/statistics/prereg-defensive-instrumentation.md`:**
+  rename `## Companion Leaves` → `## Companion Skills` and add its INDEX entry
+  (under "Statistics", next to `statistics-prereg-amendment-vs-fresh`). This
+  greens the linter before the new leaves land.
 - **`skills/INDEX.md`:** add the genomics leaf under "Data Modalities" and the two
   statistics leaves under "Statistics".
 - **`skills/data/genomics/SKILL.md`:** add the new leaf to the "Two layers" table
@@ -169,7 +194,10 @@ filed the gaps (the standing "verify against the real project" rule):
    particular that leaf 3's identifiability halt-on names the same Lee2026-local
    limitation the pre-registration records.
 2. `test_command_docs` (validates command/skill doc structure) and the skills
-   linter must stay green after the INDEX/SKILL/rubric edits.
+   linter must be green after the edits. Because the linter is red at HEAD for an
+   unrelated reason (see Prerequisite fix), the gate is: the prerequisite fix
+   plus the three new leaves leave `science skills lint` reporting **zero**
+   errors — not merely "no new errors."
 3. Spot-check that every companion-skill link resolves to an existing path.
 
 ## Feedback closure
