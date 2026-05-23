@@ -63,6 +63,38 @@ class EvidenceRole(StrEnum):
     MODEL_CRITICISM = "model_criticism"
 
 
+class EvidenceStance(StrEnum):
+    """Whether an evidence line supports or disputes a claim."""
+
+    SUPPORTS = "supports"
+    DISPUTES = "disputes"
+
+
+class EvidenceStrength(StrEnum):
+    """Qualitative strength of an evidence line (matches ``graph add evidence --strength``)."""
+
+    STRONG = "strong"
+    MODERATE = "moderate"
+    WEAK = "weak"
+
+
+class IndependenceTag(StrEnum):
+    """Evidence-line independence category (matches ``graph add evidence --independence``)."""
+
+    INDEPENDENT = "independent"
+    SHARED_SOURCE = "shared-source"
+    CIRCULAR = "circular"
+
+
+class DisputeScope(StrEnum):
+    """Scope of a disputing evidence line — which aspect of the claim it targets."""
+
+    WHOLE_CLAIM = "whole_claim"
+    GENERALIZATION = "generalization"
+    MECHANISM = "mechanism"
+    BOUNDARY = "boundary"
+
+
 class MeasurementModel(BaseModel):
     """A proxy-mediated mapping between an observed entity and a latent construct."""
 

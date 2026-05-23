@@ -4,14 +4,36 @@ from pydantic import BaseModel, ValidationError
 from science_model import Entity, EntityType
 from science_model.reasoning import (
     ClaimLayer,
+    DisputeScope,
     EvidenceRole,
+    EvidenceStance,
+    EvidenceStrength,
     IdentificationStrength,
+    IndependenceTag,
     MeasurementModel,
     PropositionMetadata,
     ProxyDirectness,
     RivalModelPacket,
     SupportScope,
 )
+
+
+def test_evidence_line_enums_round_trip() -> None:
+    assert EvidenceStance("supports") == EvidenceStance.SUPPORTS
+    assert EvidenceStance("disputes") == EvidenceStance.DISPUTES
+
+    assert EvidenceStrength("strong") == EvidenceStrength.STRONG
+    assert EvidenceStrength("moderate") == EvidenceStrength.MODERATE
+    assert EvidenceStrength("weak") == EvidenceStrength.WEAK
+
+    assert IndependenceTag("independent") == IndependenceTag.INDEPENDENT
+    assert IndependenceTag("shared-source") == IndependenceTag.SHARED_SOURCE
+    assert IndependenceTag("circular") == IndependenceTag.CIRCULAR
+
+    assert DisputeScope("whole_claim") == DisputeScope.WHOLE_CLAIM
+    assert DisputeScope("generalization") == DisputeScope.GENERALIZATION
+    assert DisputeScope("mechanism") == DisputeScope.MECHANISM
+    assert DisputeScope("boundary") == DisputeScope.BOUNDARY
 
 
 def test_proposition_metadata_exists_and_evidence_line_metadata_does_not() -> None:
