@@ -190,7 +190,7 @@ discipline of writing the verdict-mapping table before seeing the
 data made the null a defensible, hypothesis-updating outcome rather
 than a disappointing one.
 
-## Companion Leaves
+## Companion Skills
 
 - [`prereg-amendment-vs-fresh`](./prereg-amendment-vs-fresh.md) — when
   a tripwire fires or universe drift is discovered, this decides
