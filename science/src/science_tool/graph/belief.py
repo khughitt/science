@@ -8,7 +8,8 @@ from rdflib import Graph, RDF, URIRef
 from rdflib.namespace import PROV
 
 from .belief_weights import (
-    CIRCULAR, EVIDENCE_ROLE_RANK, EVIDENCE_TYPE_RANK, SHARED_SOURCE,
+    CIRCULAR, DIAGNOSTIC_ROLES, EVIDENCE_ROLE_RANK, EVIDENCE_TYPE_RANK,
+    GATED_PROXY, ROLE_DIRECT_TEST, SHARED_SOURCE,
     STRENGTH_RANK, normalize_evidence_type,
 )
 from .io import CITO_NS, SCI_NS
@@ -142,3 +143,17 @@ def reduce_units(units: list[EvidenceUnit]) -> ReducedUnits:
         flagged_ungrouped=flagged_ungrouped,
         contested_groups=contested_groups,
     )
+
+
+def is_diagnostic(u: EvidenceUnit) -> bool:
+    """negative_control / model_criticism: separate ledger rows, never FOR/AGAINST mass."""
+    return (u.evidence_role or "") in DIAGNOSTIC_ROLES
+
+
+def is_proxy_gated(u: EvidenceUnit) -> bool:
+    """Rule 5: indirect/derived proxy with no measurement_model cannot contribute at full weight."""
+    return (u.proxy_directness or "") in GATED_PROXY and not u.has_measurement_model
+
+
+def is_qualifying_direct_test(u: EvidenceUnit) -> bool:
+    return u.evidence_role == ROLE_DIRECT_TEST and not is_proxy_gated(u)
