@@ -7,6 +7,9 @@ from pathlib import Path
 import pytest
 import yaml
 
+from science_model.entities import EvidenceLineEntity
+from science_model.frontmatter import parse_entity_file
+from science_model.reasoning import EvidenceStance
 from science_model.templates import EntityTemplateError, Renderer
 
 
@@ -177,3 +180,73 @@ def test_root_and_packaged_migrated_templates_match(kind: str) -> None:
     root_template = Path(__file__).parents[3] / "templates" / f"{kind}.md"
     packaged_template = Path(__file__).parents[1] / "src" / "science_model" / "templates" / f"{kind}.md"
     assert packaged_template.read_text(encoding="utf-8") == root_template.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# evidence-line template
+# ---------------------------------------------------------------------------
+
+
+def _evidence_line_fields() -> dict[str, object]:
+    return _fields("evidence-line")
+
+
+def test_evidence_line_template_renders() -> None:
+    """evidence-line is in MIGRATED_KINDS and the packaged template renders without error."""
+    from science_model.templates import MIGRATED_KINDS
+
+    assert "evidence-line" in MIGRATED_KINDS
+    text = Renderer(today=date(2026, 5, 3)).render("evidence-line", fields=_evidence_line_fields())
+    frontmatter = _frontmatter(text)
+    assert frontmatter["id"] == "evidence-line:2026-05-03-example"
+    assert frontmatter["type"] == "evidence-line"
+    assert frontmatter["stance"] == "supports"
+    assert frontmatter["target"] not in ("", None)
+    assert "_template" not in frontmatter
+    assert "{{title}}" not in text
+    assert "## What this line shows" in text
+    assert "## Why it is independent" in text
+    assert "## Caveats / scope" in text
+
+
+def test_evidence_line_template_measurement_model_optional() -> None:
+    """Measurement Model section is optional (excluded by default)."""
+    text = Renderer(today=date(2026, 5, 3)).render("evidence-line", fields=_evidence_line_fields())
+    assert "## Measurement Model" not in text
+
+
+def test_evidence_line_template_measurement_model_included_on_request() -> None:
+    text = Renderer(today=date(2026, 5, 3)).render(
+        "evidence-line",
+        fields=_evidence_line_fields(),
+        with_keys=["measurement-model"],
+    )
+    assert "## Measurement Model" in text
+
+
+def test_evidence_line_template_sections_declared() -> None:
+    """Renderer.sections() returns exactly the four declared sections."""
+    sections = Renderer(today=date(2026, 5, 3)).sections("evidence-line")
+    keys = [s.key for s in sections]
+    required = {s.key for s in sections if s.required}
+    optional = {s.key for s in sections if not s.required}
+    assert "what-this-line-shows" in keys
+    assert "why-it-is-independent" in keys
+    assert "caveats-scope" in keys
+    assert "measurement-model" in keys
+    assert required == {"what-this-line-shows", "why-it-is-independent", "caveats-scope"}
+    assert optional == {"measurement-model"}
+
+
+def test_evidence_line_template_round_trip(tmp_path: Path) -> None:
+    """Rendering the template and parsing the file yields a valid EvidenceLineEntity."""
+    text = Renderer(today=date(2026, 5, 3)).render("evidence-line", fields=_evidence_line_fields())
+    (tmp_path / "science.yaml").write_text("slug: test-project\n", encoding="utf-8")
+    ev_dir = tmp_path / "doc" / "evidence-lines"
+    ev_dir.mkdir(parents=True)
+    ev_file = ev_dir / "2026-05-03-example.md"
+    ev_file.write_text(text, encoding="utf-8")
+    entity = parse_entity_file(ev_file, "test-project")
+    assert isinstance(entity, EvidenceLineEntity)
+    assert entity.stance == EvidenceStance.SUPPORTS
+    assert entity.target == "proposition:CHANGEME"
