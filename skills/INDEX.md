@@ -50,6 +50,7 @@ progressive disclosure.
 - `statistics-prereg-amendment-vs-fresh`: `skills/statistics/prereg-amendment-vs-fresh.md`
 - `statistics-prereg-defensive-instrumentation`: `skills/statistics/prereg-defensive-instrumentation.md`
 - `statistics-likelihood-model-comparison`: `skills/statistics/likelihood-model-comparison.md`
+- `statistics-population-genetics-likelihood`: `skills/statistics/population-genetics-likelihood.md`
 
 ## Curation and Evidence
 
