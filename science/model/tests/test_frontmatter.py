@@ -427,7 +427,7 @@ def test_parse_entity_file_evidence_line_missing_stance_raises(tmp_path: Path) -
         encoding="utf-8",
     )
     with pytest.raises(ValidationError):
-        parse_entity_file(md, project_slug="demo")
+        parse_entity_file(md, project_slug="demo")  # missing target
 
 
 def test_parse_entity_file_evidence_line_missing_target_raises(tmp_path: Path) -> None:
@@ -448,3 +448,19 @@ def test_parse_entity_file_evidence_line_missing_target_raises(tmp_path: Path) -
     )
     with pytest.raises(ValidationError):
         parse_entity_file(md, project_slug="demo")
+
+
+def test_base_entity_reasoning_fields_parse_from_frontmatter(tmp_path):
+    from science_model.frontmatter import parse_entity_file
+    p = tmp_path / "doc" / "propositions" / "p.md"
+    p.parent.mkdir(parents=True)
+    (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    p.write_text(
+        "---\nid: proposition:p\ntype: proposition\n"
+        "independence_group: g1\nproxy_directness: indirect\nclaim_layer: mechanistic_narrative\n---\n# P\n",
+        encoding="utf-8",
+    )
+    ent = parse_entity_file(p, project_slug="demo")
+    assert ent.independence_group == "g1"
+    assert str(ent.proxy_directness) == "indirect"
+    assert str(ent.claim_layer) == "mechanistic_narrative"

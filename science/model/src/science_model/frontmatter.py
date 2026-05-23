@@ -350,6 +350,12 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         "produced_by": list(fm.get("produced_by") or []),
         "parent_dataset": fm.get("parent_dataset", ""),
         "siblings": list(fm.get("siblings") or []),
+        "claim_layer": fm.get("claim_layer"),
+        "identification_strength": fm.get("identification_strength"),
+        "proxy_directness": fm.get("proxy_directness"),
+        "supports_scope": fm.get("supports_scope"),
+        "independence_group": fm.get("independence_group"),
+        "measurement_model": fm.get("measurement_model"),
     }
     if kind == EntityType.MECHANISM.value:
         return MechanismEntity(
@@ -371,7 +377,6 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
             shared_lab=fm.get("shared_lab"),
             shared_platform=fm.get("shared_platform"),
             shared_cohort=fm.get("shared_cohort"),
-            independence_group=fm.get("independence_group"),
             evidence_role=fm.get("evidence_role"),  # optional; pydantic coerces or None
         )
     return Entity(**entity_kwargs)
