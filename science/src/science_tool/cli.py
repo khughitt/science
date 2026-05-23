@@ -2340,6 +2340,11 @@ def inquiry_show(slug: str, output_format: str, graph_path: Path) -> None:
         click.echo(f"  Created: {info['created']}")
         if info.get("description"):
             click.echo(f"  Description: {info['description']}")
+        related = info.get("related") or []
+        if related:
+            click.echo(f"  Related: {len(related)} entit{'y' if len(related) == 1 else 'ies'}")
+            for n in related:
+                click.echo(f"    - {shorten_uri(n)}")
         click.echo(f"  Boundary In: {len(info['boundary_in'])} node(s)")
         for n in info["boundary_in"]:
             click.echo(f"    - {shorten_uri(n)}")

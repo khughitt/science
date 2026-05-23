@@ -13,6 +13,7 @@ from science_tool.graph.store import (
     SCI_NS,
     _graph_uri,
     _load_dataset,
+    _save_dataset,
     add_assumption,
     add_concept,
     add_inquiry,
@@ -282,6 +283,73 @@ class TestInquiryQueries:
     def test_get_inquiry_nonexistent_raises(self, graph_path: Path) -> None:
         with pytest.raises(ValueError, match="does not exist"):
             get_inquiry(graph_path, "nonexistent")
+
+
+def _add_materialized_inquiry(
+    graph_path: Path,
+    slug: str,
+    label: str,
+    *,
+    status: str = "draft",
+    related: tuple[str, ...] = (),
+) -> URIRef:
+    """Mimic `materialize_graph`: emit an inquiry as an entity inside the shared
+    ``graph/knowledge`` layer (hyphen-preserving slug, ``sci:projectStatus``),
+    rather than a dedicated per-inquiry named graph."""
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    uri = URIRef(PROJECT_NS[f"inquiry/{slug}"])
+    knowledge.add((uri, RDF.type, SCI_NS.Inquiry))
+    knowledge.add((uri, SKOS.prefLabel, Literal(label)))
+    knowledge.add((uri, SCI_NS.projectStatus, Literal(status)))
+    for rel in related:
+        knowledge.add((uri, SKOS.related, URIRef(PROJECT_NS[rel])))
+    _save_dataset(dataset, graph_path)
+    return uri
+
+
+class TestMaterializedInquiryQueries:
+    """Inquiries built by `materialize_graph` live as entities in the shared
+    ``graph/knowledge`` layer, not per-inquiry named graphs. The read commands
+    must find them (fb-2026-05-12-001)."""
+
+    def test_list_inquiries_finds_materialized_entity(self, graph_path: Path) -> None:
+        _add_materialized_inquiry(graph_path, "h-3d-genome-substrate", "3D genome substrate")
+        result = list_inquiries(graph_path)
+        slugs = {r["slug"] for r in result}
+        assert "h-3d-genome-substrate" in slugs
+
+    def test_list_inquiries_materialized_status_from_project_status(self, graph_path: Path) -> None:
+        _add_materialized_inquiry(graph_path, "h1-h2-bridge", "Bridge", status="draft")
+        entry = next(r for r in list_inquiries(graph_path) if r["slug"] == "h1-h2-bridge")
+        assert entry["label"] == "Bridge"
+        assert entry["status"] == "draft"
+
+    def test_get_inquiry_materialized_hyphenated_slug(self, graph_path: Path) -> None:
+        _add_materialized_inquiry(
+            graph_path,
+            "h-3d-genome-substrate",
+            "3D genome substrate",
+            status="draft",
+            related=("hypothesis/h01",),
+        )
+        result = get_inquiry(graph_path, "h-3d-genome-substrate")
+        assert result["label"] == "3D genome substrate"
+        assert result["status"] == "draft"
+        # No per-inquiry subgraph exists in the materialized layout.
+        assert result["boundary_in"] == []
+        assert result["boundary_out"] == []
+        assert result["edges"] == []
+        # The rich `skos:related` list is the materialized inquiry's content.
+        assert str(PROJECT_NS["hypothesis/h01"]) in result["related"]
+
+    def test_get_inquiry_materialized_does_not_leak_knowledge_edges(self, graph_path: Path) -> None:
+        """Reading a materialized inquiry must not treat every triple in the
+        shared knowledge graph as one of its edges."""
+        add_concept(graph_path, "unrelated_concept", concept_type=None, ontology_id=None)
+        _add_materialized_inquiry(graph_path, "h-3d-genome-substrate", "3D genome substrate")
+        result = get_inquiry(graph_path, "h-3d-genome-substrate")
+        assert result["edges"] == []
 
 
 class TestInquiryValidation:

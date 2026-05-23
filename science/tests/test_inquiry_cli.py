@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
-from rdflib import URIRef
-from rdflib.namespace import RDF
+from rdflib import Literal, URIRef
+from rdflib.namespace import RDF, SKOS
 
 from science_tool.cli import main
-from science_tool.graph.store import PROJECT_NS, SCI_NS, _load_dataset
+from science_tool.graph.store import PROJECT_NS, SCI_NS, _graph_uri, _load_dataset, _save_dataset
 
 
 @pytest.fixture
@@ -212,6 +212,25 @@ class TestInquiryShow:
         result = runner.invoke(main, ["inquiry", "show", "test", "--path", p, "--format", "json"])
         assert result.exit_code == 0
         assert "Test" in result.output
+
+    def test_show_materialized_hyphenated_slug(self, runner: CliRunner, graph_path: Path) -> None:
+        """A materialized inquiry (entity in graph/knowledge, hyphenated slug) is
+        readable through `inquiry show`, with its related list rendered
+        (fb-2026-05-12-001)."""
+        dataset = _load_dataset(graph_path)
+        knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+        uri = URIRef(PROJECT_NS["inquiry/h-3d-genome-substrate"])
+        knowledge.add((uri, RDF.type, SCI_NS.Inquiry))
+        knowledge.add((uri, SKOS.prefLabel, Literal("3D genome substrate")))
+        knowledge.add((uri, SCI_NS.projectStatus, Literal("draft")))
+        knowledge.add((uri, SKOS.related, URIRef(PROJECT_NS["hypothesis/h01"])))
+        _save_dataset(dataset, graph_path)
+
+        result = runner.invoke(main, ["inquiry", "show", "h-3d-genome-substrate", "--path", str(graph_path)])
+        assert result.exit_code == 0, result.output
+        assert "3D genome substrate" in result.output
+        assert "draft" in result.output
+        assert "Related: 1 entity" in result.output
 
 
 class TestInquirySummary:
