@@ -64,6 +64,7 @@ def _load_canonical_checks() -> None:
         "cross_references",
         "prose_lints",
         "annotations",
+        "evidence_lines",
     ):
         importlib.import_module(f"{__name__}.{module_name}")
 
