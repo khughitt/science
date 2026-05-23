@@ -1,10 +1,13 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
-from science_model.entities import EntityType, MechanismEntity
+from science_model.entities import EntityType, EvidenceLineEntity, MechanismEntity
 from science_model.identity import EntityScope, ExternalId
 from science_model.frontmatter import parse_entity_file, parse_frontmatter
+from science_model.reasoning import EvidenceStance, EvidenceStrength, IndependenceTag, DisputeScope
+from science_model.reasoning import EvidenceRole
 
 
 def test_parse_frontmatter_basic(tmp_path: Path):
@@ -358,3 +361,90 @@ def test_parse_entity_file_infers_mechanism_from_parent_directory(tmp_path: Path
     assert entity.id == "mechanism:test-mechanism"
     assert entity.file_path == "doc/mechanisms/test-mechanism.md"
     assert entity.participants == ["protein:PHF19", "concept:prc2-complex"]
+
+
+def test_parse_entity_file_evidence_line_full(tmp_path: Path) -> None:
+    """A fully-authored evidence-line markdown round-trips into EvidenceLineEntity."""
+    (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    el_dir = tmp_path / "doc" / "evidence-lines"
+    el_dir.mkdir(parents=True)
+    md = el_dir / "e1.md"
+    md.write_text(
+        "---\n"
+        'id: "evidence-line:e1"\n'
+        'kind: "evidence-line"\n'
+        'title: "E1 disputes P1"\n'
+        'stance: "disputes"\n'
+        'target: "proposition:p1"\n'
+        'source: "paper:Smith2020"\n'
+        'strength: "strong"\n'
+        'independence: "independent"\n'
+        'independence_group: "g1"\n'
+        'evidence_role: "model_criticism"\n'
+        'dispute_scope: "generalization"\n'
+        'shared_dataset: "ds:X"\n'
+        'shared_lab: "lab-alpha"\n'
+        'shared_platform: "platform-Y"\n'
+        'shared_cohort: "cohort-Z"\n'
+        "---\n"
+        "body text\n",
+        encoding="utf-8",
+    )
+    entity = parse_entity_file(md, project_slug="demo")
+    assert entity is not None
+    assert isinstance(entity, EvidenceLineEntity)
+    assert entity.kind == "evidence-line"
+    assert entity.type == EntityType.EVIDENCE_LINE
+    assert entity.id == "evidence-line:e1"
+    assert entity.stance == EvidenceStance.DISPUTES
+    assert entity.target == "proposition:p1"
+    assert entity.source == "paper:Smith2020"
+    assert entity.strength == EvidenceStrength.STRONG
+    assert entity.independence == IndependenceTag.INDEPENDENT
+    assert entity.independence_group == "g1"
+    assert entity.evidence_role == EvidenceRole.MODEL_CRITICISM
+    assert entity.dispute_scope == DisputeScope.GENERALIZATION
+    assert entity.shared_dataset == "ds:X"
+    assert entity.shared_lab == "lab-alpha"
+    assert entity.shared_platform == "platform-Y"
+    assert entity.shared_cohort == "cohort-Z"
+
+
+def test_parse_entity_file_evidence_line_missing_stance_raises(tmp_path: Path) -> None:
+    """Missing stance must raise ValidationError — no silent default allowed."""
+    (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    el_dir = tmp_path / "doc" / "evidence-lines"
+    el_dir.mkdir(parents=True)
+    md = el_dir / "e2.md"
+    md.write_text(
+        "---\n"
+        'id: "evidence-line:e2"\n'
+        'kind: "evidence-line"\n'
+        'title: "E2 missing stance"\n'
+        'target: "proposition:p1"\n'
+        "---\n"
+        "body\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError):
+        parse_entity_file(md, project_slug="demo")
+
+
+def test_parse_entity_file_evidence_line_missing_target_raises(tmp_path: Path) -> None:
+    """Missing target must raise ValidationError — no silent empty-string allowed."""
+    (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    el_dir = tmp_path / "doc" / "evidence-lines"
+    el_dir.mkdir(parents=True)
+    md = el_dir / "e3.md"
+    md.write_text(
+        "---\n"
+        'id: "evidence-line:e3"\n'
+        'kind: "evidence-line"\n'
+        'title: "E3 missing target"\n'
+        'stance: "supports"\n'
+        "---\n"
+        "body\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError):
+        parse_entity_file(md, project_slug="demo")

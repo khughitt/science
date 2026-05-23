@@ -8,7 +8,7 @@ from typing import Literal, cast
 
 import yaml
 
-from science_model.entities import Entity, EntityType, EpistemicReviewState, MechanismEntity, core_entity_type_for_kind
+from science_model.entities import Entity, EntityType, EpistemicReviewState, EvidenceLineEntity, MechanismEntity, core_entity_type_for_kind
 from science_model.identity import EntityScope, ExternalId
 from science_model.packages.schema import AccessBlock, AccessException, DerivationBlock
 from science_model.sync import SyncSource
@@ -357,5 +357,21 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
             participants=list(fm.get("participants") or []),
             propositions=list(fm.get("propositions") or []),
             summary=str(fm.get("summary") or ""),
+        )
+    if kind == EntityType.EVIDENCE_LINE.value:
+        return EvidenceLineEntity(
+            **entity_kwargs,
+            stance=fm.get("stance"),          # required; pydantic raises if missing/invalid
+            target=fm.get("target"),          # required; pydantic raises if missing
+            source=fm.get("source"),
+            strength=fm.get("strength"),      # optional; pydantic coerces or None
+            independence=fm.get("independence"),
+            dispute_scope=fm.get("dispute_scope"),
+            shared_dataset=fm.get("shared_dataset"),
+            shared_lab=fm.get("shared_lab"),
+            shared_platform=fm.get("shared_platform"),
+            shared_cohort=fm.get("shared_cohort"),
+            independence_group=fm.get("independence_group"),
+            evidence_role=fm.get("evidence_role"),  # optional; pydantic coerces or None
         )
     return Entity(**entity_kwargs)
