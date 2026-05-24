@@ -862,7 +862,10 @@ def query_uncertainty(
             signals: list[str] = []
             risk_score = 0.0
 
-            if support_count > 0 and dispute_count > 0:
+            belief = aggregate_belief(
+                collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(knowledge, uri))
+            )
+            if belief.contested:
                 signals.append("contested")
                 risk_score += 3.0
 
