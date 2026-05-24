@@ -1,8 +1,17 @@
 # Evidence Aggregation Phase 2: Derived Scalar, Sensitivity, Snapshots
 
 **Date**: 2026-05-24
-**Status**: Design approved (rev b); ready for implementation plan
-**Revision**: rev b (2026-05-24) — six review findings folded in:
+**Status**: Design approved (rev c); ready for implementation plan
+**Revision**: rev c (2026-05-24) — four review tweaks on rev b:
+(1) `evidence.unscored-line` only flags **massable** (non-diagnostic) units —
+`model_criticism`/`negative_control` are recognized-but-non-massed, never flagged.
+(2) snapshots carry `scalar_enabled` in the record + idempotency/golden key, so a same-day
+opt-in toggle appends a new row instead of colliding.
+(3) revision summary fixed: diagnostic-only contest is **caveated**, not suppressed.
+(4) diagnostic-caveat logic keys off the integer `massed_dispute_score == 0`, not float band
+equality (`BeliefScalar` now carries `massed_support_score`/`massed_dispute_score`).
+
+rev b (2026-05-24) — six review findings folded in:
 (1) `stable` was degenerate — a single multiplicative δ cannot flip the sign of a fixed
 signed score sum, so the old sign-sweep tested nothing; replaced with an **adversarial
 independent sweep** of the support/dispute sides (band extremes are closed-form at the
@@ -10,7 +19,8 @@ envelope corners, so the grid is gone).
 (2) diagnostic contestation is now explicit in `BeliefScalar` and the bands are renamed
 `massed_*`.
 (3) a **display contract** keeps the scalar from contradicting the ordinal headline
-(net suppressed under single-unit / refutation ceilings and under diagnostic-only contest).
+(net suppressed under single-unit / refutation ceilings and when not robust; **caveated**
+under diagnostic-only contest).
 (4) snapshot determinism is per-**record**, with idempotent append.
 (5) the JSON example matches the h012 math.
 (6) unscored evidence lines fail loud via a new QA warning.
@@ -91,10 +101,13 @@ CONFIG_VERSION = "belief-logodds-v1"   # part of the golden #8 input set; bump o
 only cardinal commitment, and they are swept (adversarially), not chosen as a point.
 
 **Unscored lines fail loud (finding 6).** A value missing from a rank table yields step 0
-(graceful zero contribution for *computation*), **but** a line whose `evidence_type`,
-`evidence_role`, or `strength` is absent or unrecognized — i.e. it cannot be scored — is
-flagged by a new QA check `evidence.unscored-line` (WARN / hygiene; §5). Computation degrades
-gracefully; authored metadata gaps are surfaced, not silently swallowed.
+(graceful zero contribution for *computation*), **but** a **massable** (non-diagnostic)
+support/dispute line whose `evidence_type`, `evidence_role`, or `strength` is absent or
+unrecognized — i.e. it cannot be scored — is flagged by a new QA check `evidence.unscored-line`
+(WARN / hygiene; §5). Diagnostic roles (`model_criticism` / `negative_control`) are
+deliberately absent from `EVIDENCE_ROLE_RANK` — they are *recognized but non-massed*, so they
+are **never** flagged by this check. Computation degrades gracefully; authored metadata gaps
+are surfaced, not silently swallowed.
 
 ### 2. Scalar engine (`graph/belief_scalar.py`, new)
 
@@ -137,6 +150,8 @@ Result type (frozen):
 ```python
 @dataclass(frozen=True)
 class BeliefScalar:
+    massed_support_score: int                  # S = Σ unit_score(support_units); integer, exact
+    massed_dispute_score: int                  # D = Σ unit_score(dispute_units)
     massed_support_band: tuple[float, float]   # (min, max) over the envelope; scale sensitivity
     massed_dispute_band: tuple[float, float]
     net_band: tuple[float, float]              # adversarial cross-sweep corners
@@ -149,7 +164,7 @@ class BeliefScalar:
 strictly the same sign (the worst-case relative weighting preserves the direction). A band
 that straddles or touches 0 ⇒ `net_robust = False`. `contested`/`diagnostic_dispute_count`
 make diagnostic contestation explicit in the scalar itself (finding 2), so a
-diagnostically-contested claim (`massed_dispute_band == (0,0)` but `contested = True`) is no
+diagnostically-contested claim (`massed_dispute_score == 0` but `contested = True`) is no
 longer indistinguishable from an uncontested one.
 
 All band values are rounded to 6 decimals (finding 4: byte-stable records).
@@ -177,7 +192,7 @@ When `belief_scalar_enabled` is True, a caller renders:
      `magnitude == fragile` (single-unit ceiling) or `capped_by_refutation` — annotated
      `single-unit ceiling applies` / `refutation cap applies`. (h012: `fragile`, net hidden.)
    - **Suppress net** when `net_robust` is False (adversarial weighting flips the sign).
-   - **Caveat** `contested (diagnostic)` when `contested and massed_dispute_band == (0,0)`
+   - **Caveat** `contested (diagnostic)` when `contested and massed_dispute_score == 0`
      (contestation is real but unmassed — finding 2).
    - Otherwise show `net_band`.
 
@@ -196,9 +211,10 @@ is not applied to the stored record):
 
 ```json
 {"as_of":"2026-05-24","claim":"prop:h012","belief_state":"fragile","contested":true,
- "diagnostic_dispute_count":1,
- "massed_support_band":[0.78448,0.998178],"massed_dispute_band":[0.0,0.0],
- "net_band":[0.78448,0.998178],"net_robust":true,
+ "diagnostic_dispute_count":1,"scalar_enabled":true,
+ "massed_support_score":7,"massed_dispute_score":0,
+ "massed_support_band":[0.784480,0.998178],"massed_dispute_band":[0.0,0.0],
+ "net_band":[0.784480,0.998178],"net_robust":true,
  "input_hashes":["sha256:..","sha256:.."],"config_version":"belief-logodds-v1"}
 ```
 
@@ -207,8 +223,9 @@ diagnostic), so `net_band = massed_support_band = [tanh(1.05), tanh(3.5)] = [0.7
 `net_robust=true`. The headline is still `fragile (contested)` and the **display** hides net
 under the single-unit ceiling — finding 5 alignment.)
 
-- `belief_state` + `contested` + `diagnostic_dispute_count` always present (framework-wide).
-  The bands + `net_robust` are present iff `belief-scalar` is enabled, else `null`.
+- `belief_state` + `contested` + `diagnostic_dispute_count` + `scalar_enabled` always present
+  (framework-wide). The scores, bands, and `net_robust` are present iff `scalar_enabled` is
+  True (i.e. `belief-scalar` active), else `null`.
 - `input_hashes` = sorted, de-duplicated content-hashes of the **contributing evidence-line
   entities** (the units `collect_evidence_units` returns). `config_version` is its own field.
   Together they are the golden #8 input set.
@@ -217,24 +234,30 @@ under the single-unit ceiling — finding 5 alignment.)
 record**, not the whole file — a claim's serialized row is byte-identical given identical
 inputs+config (sorted/deduped hashes, 6-decimal float rounding, fixed JSON key order, one
 record per claim sorted by claim URI). The append is **idempotent per
-`(as_of, claim, input_hashes, config_version)`**: a no-op re-run on the same day with
-unchanged inputs adds **no** rows (skip when an identical-key record already exists for that
-`as_of`). Real changes append new rows ⇒ the trajectory stays auditable and append-only.
-`science belief snapshot` recomputes every claim and appends only the non-duplicate rows.
+`(as_of, claim, input_hashes, config_version, scalar_enabled)`**: a no-op re-run on the same
+day with unchanged inputs and unchanged opt-in adds **no** rows (skip when an identical-key
+record already exists for that `as_of`). Toggling `belief-scalar` in `core/decisions.md`
+changes `scalar_enabled`, so a same-day toggle correctly appends a new row rather than
+colliding with the prior one (finding 2). Real changes append new rows ⇒ the trajectory stays
+auditable and append-only. `science belief snapshot` recomputes every claim and appends only
+the non-duplicate rows.
 
 ### 5. QA checks (`validate/checks/evidence_lines.py`, joining #1–#6)
 
-- **`evidence.unscored-line` (finding 6, WARN / hygiene).** An evidence-line whose
-  `evidence_type` / `evidence_role` / `strength` is absent or unrecognized (so `unit_score`
-  cannot place it) — keeps zero-contribution compute but surfaces the authored-metadata gap.
+- **`evidence.unscored-line` (finding 6, WARN / hygiene).** A **massable** (non-diagnostic)
+  support/dispute evidence-line whose `evidence_type` / `evidence_role` / `strength` is absent
+  or unrecognized (so `unit_score` cannot place it) — keeps zero-contribution compute but
+  surfaces the authored-metadata gap. Diagnostic lines (`model_criticism` / `negative_control`,
+  intentionally outside `EVIDENCE_ROLE_RANK`) are recognized-but-non-massed and never flagged.
 - **`belief.fragile-single-line` (#7, leave-one-out, WARN / hygiene).** For each kept
   independent unit, recompute `aggregate_belief` on the unit list minus that one line; if the
   resulting `belief_state` magnitude **or** `contested` flips, flag the claim. Operates on the
   **ordinal** state (matches the design wording; unaffected by the scalar). Direct encoding of
   "one dataset shouldn't swing the conclusion".
 - **`belief.nonreproducible` (#8, golden, ERROR).** For each claim with a stored snapshot
-  whose `input_hashes` + `config_version` equal the current ones (the **latest** matching row),
-  recompute belief and compare to that row's `belief_state`/`contested` (and bands if present).
+  whose `input_hashes` + `config_version` + `scalar_enabled` equal the current ones (the
+  **latest** matching row), recompute belief and compare to that row's
+  `belief_state`/`contested` (and scores/bands if present).
   Equal inputs with differing output ⇒ nondeterminism/bug ⇒ ERROR. Differing inputs ⇒
   legitimate change ⇒ not flagged (staleness, not irreproducibility).
 
@@ -271,17 +294,19 @@ split mirrors the existing `belief.py`/`belief_weights.py` split.
   high/high vs low/low distinguished by the massed pair; determinism + 6-decimal rounding.
 - **Display contract**: net suppressed when `magnitude==fragile` or `capped_by_refutation`;
   net suppressed when `net_robust` False; `contested (diagnostic)` caveat when
-  `contested and massed_dispute_band==(0,0)`; `attention.belief_weight` is `None` when opt-in
+  `contested and massed_dispute_score==0`; `attention.belief_weight` is `None` when opt-in
   off, dict with `net=null` when suppressed, full dict otherwise.
 - **Snapshots**: append preserves prior rows; idempotent no-op re-run adds no rows; a changed
-  input appends exactly one new row; `read_snapshots` round-trips; per-record byte-identity on
-  unchanged inputs; bands `null` when opt-in off; `input_hashes` sorted/deduped.
+  input appends exactly one new row; **a same-day `belief-scalar` toggle appends a new row**
+  (distinct `scalar_enabled` key); `read_snapshots` round-trips; per-record byte-identity on
+  unchanged inputs; scores/bands `null` when opt-in off; `input_hashes` sorted/deduped.
 - **#7**: a 2-unit claim where dropping one unit flips magnitude is flagged; a robust
   multi-unit claim is not.
 - **#8**: matching hashes + changed output ⇒ ERROR; changed hashes ⇒ silent; compares the
   latest matching row.
-- **`evidence.unscored-line`**: a line with an unrecognized `evidence_type` warns; a fully
-  specified line does not.
+- **`evidence.unscored-line`**: a massable line with an unrecognized `evidence_type` warns; a
+  fully specified line does not; a diagnostic (`model_criticism`) line does **not** warn even
+  though its role is outside the rank table.
 - **`query_uncertainty`**: contested signal now equals `_claim_summary_data`'s for the same
   claim (parity test), including a claim contested only via a diagnostic/contested-group.
 
@@ -316,7 +341,8 @@ flagged but not massed, and the high support mass is visibly *not* overall confi
 2. The display contract holds: net is suppressed under the single-unit/refutation ceilings and
    under `net_robust=False`, and caveated under diagnostic-only contest.
 3. `science belief snapshot` appends per-claim records to `knowledge/belief-snapshots.jsonl`;
-   a no-op re-run adds no rows; records are byte-identical on unchanged inputs.
+   a no-op re-run adds no rows; a same-day `belief-scalar` toggle appends a new row (distinct
+   `scalar_enabled` key); records are byte-identical on unchanged inputs.
 4. `attention.belief_weight` surfaces the scalar only when `belief-scalar` is active, honoring
    the display contract; `None` otherwise.
 5. `evidence.unscored-line`, `belief.fragile-single-line`, and `belief.nonreproducible` ship
