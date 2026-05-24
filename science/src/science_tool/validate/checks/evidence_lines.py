@@ -389,7 +389,9 @@ def check_belief_fragile_single_line(ctx: ValidateContext) -> Iterator[Result]:
         kept_uris = {u.line_uri for u in (*base.support_units, *base.dispute_units, *base.diagnostics)}
         if len(kept_uris) < 2:
             continue
-        for drop in kept_uris:
+        # Sort so the reported line is deterministic across processes (set iteration order is
+        # PYTHONHASHSEED-dependent); when several lines each flip the state, always report the same.
+        for drop in sorted(kept_uris):
             reduced = aggregate_belief([u for u in units if u.line_uri != drop])
             if reduced.magnitude != base.magnitude or reduced.contested != base.contested:
                 yield Result(
