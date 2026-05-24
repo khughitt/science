@@ -2028,17 +2028,11 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
 
         # collect_evidence_units requires rdf:type EvidenceLine; CLI creates Propositions.
         # Patch the knowledge graph so the evidence propositions carry the correct type.
-        from rdflib.namespace import URIRef as _URIRef
-        _ev_ids = ["ev1", "ev2", "ev3", "ev4", "ev5", "ev6"]
         _ds = Dataset()
         _ds.parse(source="knowledge/graph.trig", format="trig")
-        _k = _ds.graph(_URIRef("http://example.org/project/graph/knowledge"))
-        for _eid in _ev_ids:
-            _k.add((
-                _URIRef(f"http://example.org/project/proposition/{_eid}"),
-                RDF.type,
-                _URIRef("http://example.org/science/vocab/EvidenceLine"),
-            ))
+        _k = _ds.graph(PROJECT_NS["graph/knowledge"])
+        for _eid in ("ev1", "ev2", "ev3", "ev4", "ev5", "ev6"):
+            _k.add((PROJECT_NS[f"proposition/{_eid}"], RDF.type, SCI.EvidenceLine))
         _ds.serialize(destination="knowledge/graph.trig", format="trig")
 
         result = runner.invoke(main, ["graph", "uncertainty", "--format", "json"])
