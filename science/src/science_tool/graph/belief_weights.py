@@ -41,3 +41,20 @@ def normalize_evidence_type(value: str | None) -> str:
     if not value:
         return ""
     return value[: -len(_EVIDENCE_SUFFIX)] if value.endswith(_EVIDENCE_SUFFIX) else value
+
+
+PROXY_STEP_PENALTY = 2          # gated proxy counts two ordinal steps lower (logic, not a cliff)
+DELTA_ENVELOPE = (0.3, 1.0)     # log-odds per ordinal step; OR ~1.35..2.72; SWEPT, not chosen
+CONFIG_VERSION = "belief-logodds-v1"   # part of the golden #8 input set; bump on any change here
+
+
+def type_steps(evidence_type: str | None) -> int:
+    return max(0, EVIDENCE_TYPE_RANK.get(normalize_evidence_type(evidence_type), 0) - 1)
+
+
+def role_steps(evidence_role: str | None) -> int:
+    return max(0, EVIDENCE_ROLE_RANK.get(evidence_role or "", 0) - 1)
+
+
+def strength_steps(strength: str | None) -> int:
+    return max(0, STRENGTH_RANK.get(strength or "", 0) - 1)
