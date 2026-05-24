@@ -398,3 +398,35 @@ def test_strength_implausible_moderate_background_constraint_is_clean(tmp_path: 
     results = list(check_evidence_strength_implausible(_ctx(tmp_path)))
 
     assert results == []
+
+
+# ---------------------------------------------------------------------------
+# Rule: evidence.unscored-line
+# ---------------------------------------------------------------------------
+
+def test_unscored_line_warns_for_unrecognized_type(tmp_path: Path):
+    from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
+
+    _write(tmp_path, "doc/evidence-lines/el01.md",
+           "---\nstance: supports\ntarget: proposition:p1\n"
+           "evidence_type: made_up\nevidence_role: direct_test\nstrength: strong\n---\n")
+    results = list(check_evidence_unscored_line(_ctx(tmp_path)))
+    assert len(results) == 1 and results[0].severity is Severity.WARN
+
+
+def test_unscored_line_clean_for_fully_specified(tmp_path: Path):
+    from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
+
+    _write(tmp_path, "doc/evidence-lines/el01.md",
+           "---\nstance: supports\ntarget: proposition:p1\n"
+           "evidence_type: empirical_data\nevidence_role: direct_test\nstrength: strong\n---\n")
+    assert list(check_evidence_unscored_line(_ctx(tmp_path))) == []
+
+
+def test_unscored_line_skips_diagnostic_roles(tmp_path: Path):
+    from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
+
+    # model_criticism is recognized-but-non-massed: outside EVIDENCE_ROLE_RANK, never flagged.
+    _write(tmp_path, "doc/evidence-lines/el01.md",
+           "---\nstance: disputes\ntarget: proposition:p1\nevidence_role: model_criticism\n---\n")
+    assert list(check_evidence_unscored_line(_ctx(tmp_path))) == []

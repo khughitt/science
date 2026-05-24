@@ -22,6 +22,13 @@ from science_tool.graph.belief import (
     is_decisive_refutation,
     is_proxy_gated,
 )
+from science_tool.graph.belief_weights import (
+    DIAGNOSTIC_ROLES,
+    EVIDENCE_ROLE_RANK,
+    EVIDENCE_TYPE_RANK,
+    STRENGTH_RANK,
+    normalize_evidence_type,
+)
 from science_tool.graph.io import SCHEMA_NS, SCI_NS
 from science_tool.graph.store import _evidence_targets_for_uri, _graph_uri
 from science_tool.validate.checks import Check
@@ -356,5 +363,43 @@ def check_belief_authoring(ctx: ValidateContext) -> Iterator[Result]:
                 line=None,
                 message=f"authored '{mag}' exceeds computed '{belief.magnitude.value}'",
                 rule="belief.inflated",
+                task=None,
+            )
+
+
+# ---------------------------------------------------------------------------
+# Check 6: evidence.unscored-line (WARN)
+#   A massable (non-diagnostic) support/dispute line that cannot be scored
+#   because one or more of evidence_type, evidence_role, or strength is
+#   missing or unrecognized. Diagnostic roles (model_criticism /
+#   negative_control) are recognized-but-non-massed and never flagged.
+# ---------------------------------------------------------------------------
+
+@Check(section="evidence lines", order=28)
+def check_evidence_unscored_line(ctx: ValidateContext) -> Iterator[Result]:
+    """A massable (non-diagnostic) support/dispute line that cannot be scored — surfaces an
+    authored-metadata gap. Diagnostic roles (model_criticism/negative_control) are
+    recognized-but-non-massed and never flagged."""
+    for path, fm in _ev_lines(ctx):
+        stance = fm.get("stance")
+        if stance not in ("supports", "disputes"):
+            continue
+        role = fm.get("evidence_role") or ""
+        if role in DIAGNOSTIC_ROLES:
+            continue
+        missing: list[str] = []
+        if normalize_evidence_type(fm.get("evidence_type")) not in EVIDENCE_TYPE_RANK:
+            missing.append("evidence_type")
+        if role not in EVIDENCE_ROLE_RANK:
+            missing.append("evidence_role")
+        if (fm.get("strength") or "") not in STRENGTH_RANK:
+            missing.append("strength")
+        if missing:
+            yield Result(
+                severity=Severity.WARN,
+                path=path,
+                line=None,
+                message=f"evidence-line cannot be scored (missing/unrecognized: {', '.join(missing)})",
+                rule="evidence.unscored-line",
                 task=None,
             )
