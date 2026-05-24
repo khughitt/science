@@ -1,7 +1,7 @@
 # Evidence Aggregation Phase 2: Derived Scalar, Sensitivity, Snapshots
 
 **Date**: 2026-05-24
-**Status**: Design approved (rev c); ready for implementation plan
+**Status**: Implemented (2026-05-24)
 **Revision**: rev c (2026-05-24) — four review tweaks on rev b:
 (1) `evidence.unscored-line` only flags **massable** (non-diagnostic) units —
 `model_criticism`/`negative_control` are recognized-but-non-massed, never flagged.
