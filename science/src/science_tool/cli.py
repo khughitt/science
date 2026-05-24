@@ -27,6 +27,7 @@ from science_tool.entities import (
 from science_tool.entities_inventory import build_inventory
 from science_tool.entity_migrations import audit_identifiers, migrate_identifiers
 from science_tool.entity_kinds import register_local_kind
+from science_tool.graph import belief_snapshot
 from science_tool.graph.materialize import materialization_audit, materialize_graph
 from science_tool.graph.cross_impact import query_cross_impact
 from science_tool.graph.migrate import (
@@ -2159,6 +2160,30 @@ def add_paper_cmd(
     """Add a paper — a composition of stories for communication."""
     uri = add_paper_entity(graph_path, title, list(stories), status, abstract, paper_id)
     click.echo(f"Added paper: {uri}")
+
+
+@main.group("belief")
+def belief_group() -> None:
+    """Derived belief scalar and append-only snapshots."""
+
+
+@belief_group.command("snapshot")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True,
+    type=click.Path(path_type=Path),
+)
+@click.option("--as-of", "as_of", default=None, help="Snapshot date YYYY-MM-DD (default: today).")
+def belief_snapshot_cmd(graph_path: Path, as_of: str | None) -> None:
+    """Append per-claim belief snapshots to knowledge/belief-snapshots.jsonl."""
+    from datetime import date
+
+    from .graph.io import project_root_from_graph_path
+
+    as_of_value = as_of or date.today().isoformat()
+    records = belief_snapshot.make_snapshots(graph_path, as_of=as_of_value)
+    out_path = project_root_from_graph_path(graph_path) / "knowledge" / "belief-snapshots.jsonl"
+    added = belief_snapshot.append_snapshots(out_path, records)
+    click.echo(f"belief snapshot {as_of_value}: {len(records)} claims, {added} new rows -> {out_path}")
 
 
 @main.group()
