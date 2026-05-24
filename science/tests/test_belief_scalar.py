@@ -63,3 +63,29 @@ def test_diagnostic_dispute_excluded_from_mass_but_counted():
     assert s.diagnostic_dispute_count == 1
     assert s.contested is True
     assert isinstance(s, BeliefScalar)
+
+
+def _decisions(root, body):
+    (root / "core").mkdir(parents=True, exist_ok=True)
+    (root / "core" / "decisions.md").write_text(body, encoding="utf-8")
+
+
+def test_belief_scalar_enabled_true_when_active_flag(tmp_path):
+    from science_tool.graph.belief_scalar import belief_scalar_enabled
+    _decisions(tmp_path, "# Decisions\n\n## D-014: Enable scalar\n"
+                         "- **Status:** active\n- **Feature flag:** belief-scalar\n")
+    assert belief_scalar_enabled(tmp_path) is True
+
+
+def test_belief_scalar_enabled_false_when_superseded(tmp_path):
+    from science_tool.graph.belief_scalar import belief_scalar_enabled
+    _decisions(tmp_path, "# Decisions\n\n## D-014: Enable scalar\n"
+                         "- **Status:** superseded\n- **Feature flag:** belief-scalar\n")
+    assert belief_scalar_enabled(tmp_path) is False
+
+
+def test_belief_scalar_enabled_false_when_no_flag(tmp_path):
+    from science_tool.graph.belief_scalar import belief_scalar_enabled
+    _decisions(tmp_path, "# Decisions\n\n## D-001: Other\n- **Status:** active\n- **Decision:** x\n")
+    assert belief_scalar_enabled(tmp_path) is False
+    assert belief_scalar_enabled(tmp_path / "no-project") is False

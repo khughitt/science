@@ -3,11 +3,19 @@ aggregate_belief already produced; never re-derives independence."""
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
+from pathlib import Path
+
+from science_tool.curate.agents_md import active_decision_sections
 
 from .belief import BeliefResult, EvidenceUnit, is_proxy_gated
 from .belief_weights import (
     DELTA_ENVELOPE, PROXY_STEP_PENALTY, role_steps, strength_steps, type_steps,
+)
+
+_FEATURE_FLAG_BELIEF_SCALAR = re.compile(
+    r"^-\s+\*\*Feature flag:\*\*\s*belief-scalar\s*$", re.MULTILINE
 )
 
 
@@ -51,4 +59,13 @@ def belief_scalar(result: BeliefResult) -> BeliefScalar:
         net_robust=net_robust,
         contested=result.contested,
         diagnostic_dispute_count=diag_disputes,
+    )
+
+
+def belief_scalar_enabled(project_root: Path) -> bool:
+    """True iff core/decisions.md has an ACTIVE decision carrying the belief-scalar flag."""
+    decisions = project_root / "core" / "decisions.md"
+    return any(
+        _FEATURE_FLAG_BELIEF_SCALAR.search(body)
+        for _id, body in active_decision_sections(decisions)
     )

@@ -18,23 +18,22 @@ _DECISION_HEADING = re.compile(r"^##\s+(D-\d+)\b", re.MULTILINE)
 _STATUS_LINE = re.compile(r"^-\s+\*\*Status:\*\*\s*(.+?)\s*$", re.MULTILINE)
 
 
-def parse_active_decision_ids(decisions_md: Path) -> list[str]:
-    """Return the IDs of decisions whose Status line is exactly `active`.
-
-    Skips entries that are superseded, abandoned, or missing a Status line.
-    """
+def active_decision_sections(decisions_md: Path) -> list[tuple[str, str]]:
+    """(decision_id, section_body) for sections whose Status line is exactly `active`."""
     if not decisions_md.is_file():
         return []
     text = decisions_md.read_text(encoding="utf-8")
-    sections = _split_decision_sections(text)
-    active: list[str] = []
-    for decision_id, body in sections:
+    out: list[tuple[str, str]] = []
+    for decision_id, body in _split_decision_sections(text):
         match = _STATUS_LINE.search(body)
-        if match is None:
-            continue
-        if match.group(1).strip().lower() == "active":
-            active.append(decision_id)
-    return active
+        if match is not None and match.group(1).strip().lower() == "active":
+            out.append((decision_id, body))
+    return out
+
+
+def parse_active_decision_ids(decisions_md: Path) -> list[str]:
+    """Return the IDs of decisions whose Status line is exactly `active`."""
+    return [decision_id for decision_id, _ in active_decision_sections(decisions_md)]
 
 
 def _split_decision_sections(text: str) -> list[tuple[str, str]]:
