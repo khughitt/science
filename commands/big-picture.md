@@ -112,7 +112,7 @@ The prompt passed to each sub-agent includes:
 - Hypothesis ID and `hypothesis_path`.
 - The bundle (inlined in the prompt as structured text — the sub-agent does not have access to your in-memory bundle directly).
 - Target output path: `doc/reports/synthesis/<hyp-id>.md`.
-- Frontmatter: emit `type: synthesis` + `report_kind: hypothesis-synthesis` + `id: synthesis:<hyp-id>` + `hypothesis: hypothesis:<hyp-id>` + `generated_at` + `source_commit` + `provenance_coverage`. Do *not* emit `synthesized_from:` (the rollup carries that). See `agents/hypothesis-synthesizer.md` for the full output spec.
+- Frontmatter: emit `type: synthesis` + `title: "Synthesis: <hyp-id>"` + `report_kind: hypothesis-synthesis` + `id: synthesis:<hyp-id>` + `hypothesis: hypothesis:<hyp-id>` + `generated_at` + `source_commit` + `provenance_coverage`. Do *not* emit `synthesized_from:` (the rollup carries that). `title` is required because projects may register `synthesis` as a profile kind. See `agents/hypothesis-synthesizer.md` for the full output spec.
 - `generated_at` and `source_commit` values.
 - `provenance_coverage` value.
 - If `--since <date>` is set: pass it through AND the `--output <path>` target. Tell the sub-agent to include `since: <date>` in its frontmatter.
@@ -132,7 +132,7 @@ The prompt includes:
 - Project root path.
 - Full resolver output (JSON from Phase 1).
 - Target output path: `doc/reports/synthesis/_emergent-threads.md`.
-- Frontmatter: emit `type: synthesis` + `report_kind: emergent-threads` + `id: synthesis:emergent-threads` + `generated_at` + `source_commit` + `orphan_question_count` + `orphan_interpretation_count` + `orphan_ids: [...]`. Do *not* emit `synthesized_from:` — emergent-threads is graph-derived, not file-derived.
+- Frontmatter: emit `type: synthesis` + `title: "Emergent threads - <project name>"` + `report_kind: emergent-threads` + `id: synthesis:emergent-threads` + `generated_at` + `source_commit` + `orphan_question_count` + `orphan_interpretation_count` + `orphan_ids: [...]`. Do *not* emit `synthesized_from:` — emergent-threads is graph-derived, not file-derived.
 - `generated_at` and `source_commit` values.
 
 **Important**: if `--hypothesis <id>` is set, skip the emergent-threads dispatch (it's a whole-project artifact).
@@ -157,6 +157,7 @@ The block-list form (one field per line) is canonical — see Plan #4 follow-on 
 ---
 id: "synthesis:rollup"
 type: "synthesis"
+title: "Project synthesis - <project name>"
 report_kind: "synthesis-rollup"
 generated_at: "<ISO-8601>"
 source_commit: "<SHA>"

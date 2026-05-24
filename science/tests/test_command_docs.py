@@ -526,6 +526,23 @@ def test_bias_audit_templates_emit_report_not_task() -> None:
         assert 'type: "task"' not in text
 
 
+def test_big_picture_synthesis_frontmatter_includes_profile_required_title() -> None:
+    command = _read("commands/big-picture.md")
+    assert (
+        "Frontmatter: emit `type: synthesis` + `title: \"Synthesis: <hyp-id>\"` + "
+        "`report_kind: hypothesis-synthesis`"
+    ) in command
+    assert (
+        "Frontmatter: emit `type: synthesis` + `title: \"Emergent threads - <project name>\"` + "
+        "`report_kind: emergent-threads`"
+    ) in command
+    assert 'title: "Project synthesis - <project name>"' in command
+
+    for path in ("templates/synthesis.md", "science/model/src/science_model/templates/synthesis.md"):
+        text = _read(path)
+        assert 'title: "{{Short Title}}"' in text
+
+
 def test_bias_audit_commit_step_is_conditional() -> None:
     text = _read("commands/bias-audit.md")
     assert "Only commit if the user explicitly requested a commit or the session has commit approval." in text

@@ -1,6 +1,7 @@
 ---
 id: "synthesis:{{slug}}"           # synthesis:<hyp-id> | synthesis:rollup | synthesis:emergent-threads
 type: "synthesis"
+title: "{{Short Title}}"
 report_kind: "{{kind}}"            # hypothesis-synthesis | synthesis-rollup | emergent-threads
 generated_at: "{{ISO 8601}}"
 source_commit: "{{40-char sha}}"
