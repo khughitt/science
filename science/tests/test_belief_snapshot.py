@@ -1,7 +1,6 @@
 from pathlib import Path
 
 from rdflib import Dataset, Literal, RDF, URIRef
-from rdflib.namespace import PROV
 
 from science_tool.graph.belief_snapshot import (
     append_snapshots, read_snapshots, snapshot_records,
