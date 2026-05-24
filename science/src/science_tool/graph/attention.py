@@ -11,8 +11,10 @@ from typing import Any, Iterable, Mapping, Sequence
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import SKOS
 
-from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
-from science_tool.graph.store import canonical_id_from_entity_uri
+from science_tool.graph.belief import aggregate_belief, collect_evidence_units
+from science_tool.graph.belief_scalar import belief_scalar, belief_scalar_enabled, format_belief_weight
+from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, project_root_from_graph_path
+from science_tool.graph.store import _evidence_targets_for_uri, _graph_uri, canonical_id_from_entity_uri
 
 DEFAULT_EPSILON = 0.05
 NEEDS_REVIEW_MULTIPLIER = 3.0
@@ -235,10 +237,26 @@ def query_attention_sample(
         sample = reason_aware_sample_candidates(candidates, limit=limit, seed=seed)
     else:
         sample = weighted_sample_without_replacement(candidates, limit=limit, seed=seed)
-    return [format_attention_candidate(candidate) for candidate in sample]
+
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    provenance = dataset.graph(_graph_uri("graph/provenance"))
+    enabled = belief_scalar_enabled(project_root_from_graph_path(graph_path))
+
+    def _belief_weight(candidate: AttentionCandidate) -> dict[str, Any] | None:
+        if not enabled:
+            return None
+        units = collect_evidence_units(
+            knowledge, provenance, _evidence_targets_for_uri(knowledge, URIRef(candidate.uri))
+        )
+        result = aggregate_belief(units)
+        return format_belief_weight(result, belief_scalar(result))
+
+    return [format_attention_candidate(c, belief_weight=_belief_weight(c)) for c in sample]
 
 
-def format_attention_candidate(candidate: AttentionCandidate) -> dict[str, Any]:
+def format_attention_candidate(
+    candidate: AttentionCandidate, belief_weight: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Format a candidate for CLI table / JSON output."""
     components = candidate.components
     return {
@@ -247,7 +265,7 @@ def format_attention_candidate(candidate: AttentionCandidate) -> dict[str, Any]:
         "label": candidate.label,
         "freshness_state": candidate.freshness_state,
         "attention_weight": f"{candidate.weight:.4f}",
-        "belief_weight": None,
+        "belief_weight": belief_weight,
         "influence_weight": None,
         "incoming_bears_on": str(int(components["incoming_bears_on"])),
         "days_since_last_review": f"{components['days_since_last_review']:.0f}",

@@ -330,6 +330,16 @@ def test_graph_attention_sample_cli_reason_aware_json_uses_bounded_review_route(
     assert len(rows) == 5
 
 
+def test_format_attention_candidate_belief_weight_defaults_none():
+    import inspect
+
+    from science_tool.graph.attention import format_attention_candidate
+
+    sig = inspect.signature(format_attention_candidate)
+    assert "belief_weight" in sig.parameters
+    assert sig.parameters["belief_weight"].default is None
+
+
 def test_graph_attention_sample_cli_table_does_not_print_raw_reason_dicts(tmp_path: Path) -> None:
     graph_path = tmp_path / "knowledge" / "graph.trig"
     graph_path.parent.mkdir()

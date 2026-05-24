@@ -89,3 +89,34 @@ def test_belief_scalar_enabled_false_when_no_flag(tmp_path):
     _decisions(tmp_path, "# Decisions\n\n## D-001: Other\n- **Status:** active\n- **Decision:** x\n")
     assert belief_scalar_enabled(tmp_path) is False
     assert belief_scalar_enabled(tmp_path / "no-project") is False
+
+
+def test_format_belief_weight_suppresses_net_for_fragile():
+    from science_tool.graph.belief_scalar import belief_scalar, format_belief_weight
+    r = aggregate_belief([_u(line_uri="a", independence_group="g1")])   # single -> fragile
+    bw = format_belief_weight(r, belief_scalar(r))
+    assert bw["net"] is None
+    assert "single-unit ceiling applies" in bw["notes"]
+    assert bw["massed_support"] == list(belief_scalar(r).massed_support_band)
+
+
+def test_format_belief_weight_shows_net_when_robust_and_supported():
+    from science_tool.graph.belief_scalar import belief_scalar, format_belief_weight
+    r = aggregate_belief([_u(line_uri="a", independence_group="g1"),
+                          _u(line_uri="b", independence_group="g2")])   # well_supported
+    s = belief_scalar(r)
+    bw = format_belief_weight(r, s)
+    assert bw["net"] == list(s.net_band)
+    assert bw["notes"] == []
+
+
+def test_format_belief_weight_diagnostic_caveat():
+    from science_tool.graph.belief_scalar import belief_scalar, format_belief_weight
+    r = aggregate_belief([
+        _u(line_uri="a", independence_group="g1"),
+        _u(line_uri="b", independence_group="g2"),
+        _u(stance="disputes", line_uri="c", independence_group="g3",
+           evidence_role="model_criticism", dispute_scope="generalization"),
+    ])
+    bw = format_belief_weight(r, belief_scalar(r))
+    assert "contested (diagnostic)" in bw["notes"]
