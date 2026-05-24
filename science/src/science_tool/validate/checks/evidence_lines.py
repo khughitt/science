@@ -397,8 +397,8 @@ def check_belief_fragile_single_line(ctx: ValidateContext) -> Iterator[Result]:
                     path=None,
                     line=None,
                     message=(
-                        f"{claim}: belief_state flips ({base.magnitude.value} -> "
-                        f"{reduced.magnitude.value}) when dropping a single line ({drop})"
+                        f"{claim}: belief_state flips ({base.display()} -> "
+                        f"{reduced.display()}) when dropping a single line ({drop})"
                     ),
                     rule="belief.fragile-single-line",
                     task=None,
