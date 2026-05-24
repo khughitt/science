@@ -1002,6 +1002,8 @@ def check_evidence_unscored_line(ctx: ValidateContext) -> Iterator[Result]:
                 path=path,
                 line=None,
                 message=f"evidence-line cannot be scored (missing/unrecognized: {', '.join(missing)})",
+                rule="evidence.unscored-line",
+                task=None,
             )
 ```
 
@@ -1076,9 +1078,31 @@ def _write_two_support_graph(root: Path) -> None:
     ds.serialize(destination=str(root / "knowledge" / "graph.trig"), format="trig")
 
 
+def _write_support_plus_diagnostic_graph(root: Path) -> None:
+    ds = Dataset()
+    k = ds.graph(_graph_uri("graph/knowledge"))
+    p = ds.graph(_graph_uri("graph/provenance"))
+    prop = URIRef("https://example.org/prop/p2")
+    k.add((prop, RDF.type, SCI_NS.Proposition))
+    _line(p, k, URIRef("https://example.org/el/sup"), prop, group="g1")
+    _line(p, k, URIRef("https://example.org/el/crit"), prop, group="g2",
+          stance="disputes", role="model_criticism")
+    (root / "knowledge").mkdir(parents=True, exist_ok=True)
+    ds.serialize(destination=str(root / "knowledge" / "graph.trig"), format="trig")
+
+
 def test_fragile_single_line_flags_when_drop_flips(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import check_belief_fragile_single_line
     _write_two_support_graph(tmp_path)
+    results = list(check_belief_fragile_single_line(_ctx(tmp_path)))
+    assert any(r.severity is Severity.WARN for r in results)
+
+
+def test_fragile_single_line_flags_diagnostic_only_contestation(tmp_path: Path):
+    # h012 shape: one support + one model_criticism dispute. Dropping the diagnostic flips
+    # contested True->False; dropping the support flips magnitude. Either way it is fragile.
+    from science_tool.validate.checks.evidence_lines import check_belief_fragile_single_line
+    _write_support_plus_diagnostic_graph(tmp_path)
     results = list(check_belief_fragile_single_line(_ctx(tmp_path)))
     assert any(r.severity is Severity.WARN for r in results)
 ```
@@ -1103,7 +1127,10 @@ def check_belief_fragile_single_line(ctx: ValidateContext) -> Iterator[Result]:
         if len(units) < 2:
             continue
         base = aggregate_belief(units)
-        kept_uris = {u.line_uri for u in (*base.support_units, *base.dispute_units)}
+        # Include diagnostics: a claim can be contested solely via a diagnostic dispute
+        # (e.g. h012/Simeonov), and dropping that line flips contested — exactly the fragility
+        # this check exists to surface.
+        kept_uris = {u.line_uri for u in (*base.support_units, *base.dispute_units, *base.diagnostics)}
         for drop in kept_uris:
             reduced = aggregate_belief([u for u in units if u.line_uri != drop])
             if reduced.magnitude != base.magnitude or reduced.contested != base.contested:
@@ -1115,6 +1142,8 @@ def check_belief_fragile_single_line(ctx: ValidateContext) -> Iterator[Result]:
                         f"{claim}: belief_state flips ({base.magnitude.value} -> "
                         f"{reduced.magnitude.value}) when dropping a single line ({drop})"
                     ),
+                    rule="belief.fragile-single-line",
+                    task=None,
                 )
                 break
 ```
@@ -1174,6 +1203,29 @@ def test_nonreproducible_silent_when_inputs_changed(tmp_path: Path):
     stale = rows[0] | {"belief_state": "speculative", "input_hashes": ["sha256:stale"]}
     snap.write_text(json.dumps(stale) + "\n", encoding="utf-8")
     assert list(check_belief_nonreproducible(ctx)) == []
+
+
+def test_nonreproducible_errors_on_corrupted_scalar_band(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_two_support_graph(tmp_path)
+    # Enable the scalar so bands are recorded and compared (#3: scalar fields are golden too).
+    (tmp_path / "core").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "core" / "decisions.md").write_text(
+        "# Decisions\n\n## D-1: on\n- **Status:** active\n- **Feature flag:** belief-scalar\n",
+        encoding="utf-8",
+    )
+    ctx = _ctx(tmp_path)
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    # Same belief_state/contested/inputs, corrupted band -> must still ERROR when scalar enabled.
+    corrupted = rows[0] | {"net_band": [0.0, 0.0]}
+    snap.write_text(json.dumps(corrupted) + "\n", encoding="utf-8")
+    results = list(check_belief_nonreproducible(ctx))
+    assert any(r.severity is Severity.ERROR for r in results)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1184,6 +1236,12 @@ Expected: FAIL (`check_belief_nonreproducible` undefined).
 - [ ] **Step 3: Write minimal implementation** — add to `validate/checks/evidence_lines.py`. Reuse the snapshot machinery so the recompute and the stored rows share one code path (DRY):
 
 ```python
+_GOLDEN_SCALAR_FIELDS = (
+    "massed_support_score", "massed_dispute_score",
+    "massed_support_band", "massed_dispute_band", "net_band", "net_robust",
+)
+
+
 @Check(section="evidence lines", order=30)
 def check_belief_nonreproducible(ctx: ValidateContext) -> Iterator[Result]:
     """#8 golden: equal inputs (input_hashes + config_version + scalar_enabled) must reproduce
@@ -1194,36 +1252,38 @@ def check_belief_nonreproducible(ctx: ValidateContext) -> Iterator[Result]:
     snap_file = ctx.project_root / "knowledge" / "belief-snapshots.jsonl"
     if not graph_file.exists() or not snap_file.exists():
         return
-    current = {r["claim"]: r for r in make_snapshots(graph_file, as_of="recompute")}
-    # latest stored row per (claim) wins
-    stored: dict[str, dict] = {}
-    for row in read_snapshots(snap_file):
-        stored[row["claim"]] = row
-    for claim, now in current.items():
-        prior = stored.get(claim)
-        if prior is None:
+    stored = read_snapshots(snap_file)
+    for now in make_snapshots(graph_file, as_of="recompute"):
+        # All stored rows for this claim whose input set matches the current one, then the
+        # LATEST among them (file order == append order). Latest-matching, not latest-per-claim.
+        matches = [
+            r for r in stored
+            if r["claim"] == now["claim"]
+            and sorted(r["input_hashes"]) == sorted(now["input_hashes"])
+            and r["config_version"] == now["config_version"]
+            and r["scalar_enabled"] == now["scalar_enabled"]
+        ]
+        if not matches:
             continue
-        same_inputs = (
-            sorted(prior["input_hashes"]) == sorted(now["input_hashes"])
-            and prior["config_version"] == now["config_version"]
-            and prior["scalar_enabled"] == now["scalar_enabled"]
-        )
-        if not same_inputs:
-            continue
-        if prior["belief_state"] != now["belief_state"] or prior["contested"] != now["contested"]:
+        prior = matches[-1]
+        diffs = [f for f in ("belief_state", "contested") if prior.get(f) != now.get(f)]
+        if now["scalar_enabled"]:
+            diffs += [f for f in _GOLDEN_SCALAR_FIELDS if prior.get(f) != now.get(f)]
+        if diffs:
             yield Result(
                 severity=Severity.ERROR,
                 path=snap_file,
                 line=None,
                 message=(
-                    f"{claim}: belief not reproducible — stored {prior['belief_state']}"
-                    f"/contested={prior['contested']} but recomputed {now['belief_state']}"
-                    f"/contested={now['contested']} from identical inputs"
+                    f"{now['claim']}: belief not reproducible from identical inputs "
+                    f"(differing fields: {', '.join(diffs)})"
                 ),
+                rule="belief.nonreproducible",
+                task=None,
             )
 ```
 
-(Note: `make_snapshots(... as_of="recompute")` — the `as_of` is irrelevant to the comparison, which keys on `input_hashes`/`config_version`/`scalar_enabled`.)
+(Note: `make_snapshots(... as_of="recompute")` — `as_of` is irrelevant to the comparison, which keys on `input_hashes`/`config_version`/`scalar_enabled`. Band fields compare as JSON lists on both sides, so equal bands match exactly.)
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1277,4 +1337,3 @@ git commit -m "docs(plans): mark Phase 2 design implemented"
 
 - **Pilot (manual, out of this plan).** The cancer-evolution repo (`~/d/cancer/mechanisms/evolution`, a separate git repo) is where the design's pilot lives. After this branch lands, the human can add a `## D-NNN` decision there with `- **Feature flag:** belief-scalar`, run `science belief snapshot`, and confirm `science graph validate` stays clean and h012 shows `fragile (contested)` with the net hidden. Subagents must NOT touch that external repo.
 - **Spec numeric note.** The rev-c design's h012 example shows `net_band ≈ [0.7818, 0.9982]` (`tanh(1.05)`, `tanh(3.5)`). Tests compute expected values via `math.tanh` rather than hardcoding, so they stay correct regardless of how many digits the prose carries.
-```
