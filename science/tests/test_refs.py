@@ -58,6 +58,21 @@ def test_broken_hypothesis_ref() -> None:
         assert hyp_issues[0].ref_value == "H03"
 
 
+def test_cell_line_token_not_flagged_as_hypothesis_ref() -> None:
+    """Three-or-more-digit ``H<n>`` tokens are cell-line/clone names (e.g. NCI-H929),
+    not hypothesis references, and must not be reported as broken hypothesis refs."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "# Test\nThe NCI-H929 and H1975 cell lines were profiled.\n"
+        )
+        issues = check_refs(root)
+        hyp_issues = [i for i in issues if i.ref_type == "hypothesis"]
+        assert hyp_issues == []
+
+
 def test_hypothesis_ref_in_own_file_ignored() -> None:
     """H01 referenced inside h01-test.md should not be flagged."""
     runner = CliRunner()

@@ -37,7 +37,11 @@ class RefIssue:
 
 
 # Patterns
-_HYPOTHESIS_RE = re.compile(r"\bH(\d{2,})\b")
+# Legacy bare hypothesis aliases are zero-padded two-digit forms (H01..H06, up to
+# H99). Restrict to exactly two digits so three-or-more-digit "H<n>" tokens — which
+# are cell-line / clone names (e.g. NCI-H929) rather than hypothesis references — are
+# not mis-flagged as broken hypothesis refs.
+_HYPOTHESIS_RE = re.compile(r"\bH(\d{2})\b")
 _CITATION_RE = re.compile(r"\[@([^\]]+)\]")
 _LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 _BIBLIOGRAPHY_CITATION_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]*[0-9][A-Za-z0-9_.-]*$")
