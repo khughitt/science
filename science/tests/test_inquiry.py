@@ -351,6 +351,15 @@ class TestMaterializedInquiryQueries:
         result = get_inquiry(graph_path, "h-3d-genome-substrate")
         assert result["edges"] == []
 
+    def test_validate_inquiry_materialized_hyphenated_slug(self, graph_path: Path) -> None:
+        _add_materialized_inquiry(graph_path, "h-3d-genome-substrate", "3D genome substrate")
+
+        results = validate_inquiry(graph_path, "h-3d-genome-substrate")
+
+        statuses = {r["check"]: r["status"] for r in results}
+        assert statuses["boundary_reachability"] == "pass"
+        assert statuses["target_exists"] == "warn"
+
 
 class TestInquiryValidation:
     def test_valid_inquiry_passes(self, graph_path: Path) -> None:

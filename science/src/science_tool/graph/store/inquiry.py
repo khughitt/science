@@ -447,17 +447,29 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
     Each result has keys: check (str), status ("pass"/"fail"/"warn"), message (str),
     and optionally details (list).
     """
-    safe_slug = _slug(slug)
-    inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
-
     dataset = _load_dataset(graph_path)
-    inquiry_graph = dataset.graph(inquiry_uri)
+    inquiries = _discover_inquiries(dataset)
 
-    if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in inquiry_graph:
-        raise ValueError(f"Inquiry 'inquiry/{safe_slug}' does not exist")
+    requested = slug
+    for prefix in ("inquiry/", "inquiry:"):
+        if requested.startswith(prefix):
+            requested = requested[len(prefix) :]
 
-    status = str(next(inquiry_graph.objects(inquiry_uri, SCI_NS.inquiryStatus), "sketch"))
-    target = next(inquiry_graph.objects(inquiry_uri, SCI_NS.target), None)
+    match = inquiries.get(requested)
+    if match is None:
+        normalized = _slug(requested)
+        match = next((value for cand, value in inquiries.items() if _slug(cand) == normalized), None)
+    if match is None:
+        raise ValueError(f"Inquiry 'inquiry/{requested}' does not exist")
+
+    inquiry_uri, home_graph = match
+    # Materialized inquiries live in the shared knowledge graph. Their metadata
+    # should validate, but the shared graph must not be treated as their private
+    # boundary/edge subgraph.
+    inquiry_graph = home_graph if str(home_graph.identifier) == str(inquiry_uri) else Graph()
+
+    status = _inquiry_property(dataset, inquiry_uri, SCI_NS.inquiryStatus, SCI_NS.projectStatus) or "sketch"
+    target = next((o for graph in dataset.graphs() for o in graph.objects(inquiry_uri, SCI_NS.target)), None)
 
     # Collect boundary nodes
     boundary_in: set[URIRef] = set()
@@ -632,7 +644,7 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
         )
 
     # === Causal-specific checks (only for type=causal) ===
-    inquiry_type = str(next(inquiry_graph.objects(inquiry_uri, SCI_NS.inquiryType), "general"))
+    inquiry_type = _inquiry_property(dataset, inquiry_uri, SCI_NS.inquiryType) or "general"
     if inquiry_type == "causal":
         causal_graph = dataset.graph(_graph_uri("graph/causal"))
 
@@ -700,8 +712,8 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
             )
 
         # identifiability + adjustment_sets — requires pgmpy (optional)
-        treatment_uri = next(inquiry_graph.objects(inquiry_uri, SCI_NS.treatment), None)
-        outcome_uri = next(inquiry_graph.objects(inquiry_uri, SCI_NS.outcome), None)
+        treatment_uri = next((o for graph in dataset.graphs() for o in graph.objects(inquiry_uri, SCI_NS.treatment)), None)
+        outcome_uri = next((o for graph in dataset.graphs() for o in graph.objects(inquiry_uri, SCI_NS.outcome)), None)
 
         if not treatment_uri or not outcome_uri:
             results.append(
