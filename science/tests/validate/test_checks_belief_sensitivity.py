@@ -94,3 +94,98 @@ def test_fragile_single_line_skips_single_kept_unit_plus_excluded_circular(tmp_p
     from science_tool.validate.checks.evidence_lines import check_belief_fragile_single_line
     _write_one_support_plus_excluded_circular_graph(tmp_path)
     assert list(check_belief_fragile_single_line(_ctx(tmp_path))) == []
+
+
+def test_nonreproducible_errors_when_stored_belief_mismatches(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_two_support_graph(tmp_path)
+    ctx = _ctx(tmp_path)
+    # Snapshot the current (correct) belief, then corrupt the stored belief_state.
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    corrupted = rows[0] | {"belief_state": "speculative"}      # same input_hashes, wrong output
+    snap.write_text(json.dumps(corrupted) + "\n", encoding="utf-8")
+
+    results = list(check_belief_nonreproducible(ctx))
+    assert any(r.severity is Severity.ERROR for r in results)
+
+
+def test_nonreproducible_silent_when_inputs_changed(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_two_support_graph(tmp_path)
+    ctx = _ctx(tmp_path)
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    # Different input_hashes -> legitimate change, not flagged, even if belief differs.
+    stale = rows[0] | {"belief_state": "speculative", "input_hashes": ["sha256:stale"]}
+    snap.write_text(json.dumps(stale) + "\n", encoding="utf-8")
+    assert list(check_belief_nonreproducible(ctx)) == []
+
+
+def test_nonreproducible_errors_on_corrupted_scalar_band(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_two_support_graph(tmp_path)
+    # Enable the scalar so bands are recorded and compared (#3: scalar fields are golden too).
+    (tmp_path / "core").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "core" / "decisions.md").write_text(
+        "# Decisions\n\n## D-1: on\n- **Status:** active\n- **Feature flag:** belief-scalar\n",
+        encoding="utf-8",
+    )
+    ctx = _ctx(tmp_path)
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    # Same belief_state/contested/inputs, corrupted band -> must still ERROR when scalar enabled.
+    corrupted = rows[0] | {"net_band": [0.0, 0.0]}
+    snap.write_text(json.dumps(corrupted) + "\n", encoding="utf-8")
+    results = list(check_belief_nonreproducible(ctx))
+    assert any(r.severity is Severity.ERROR for r in results)
+
+
+def test_nonreproducible_errors_on_corrupted_diagnostic_count(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_support_plus_diagnostic_graph(tmp_path)
+    ctx = _ctx(tmp_path)
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    corrupted = rows[0] | {"diagnostic_dispute_count": 0}
+    snap.write_text(json.dumps(corrupted) + "\n", encoding="utf-8")
+    results = list(check_belief_nonreproducible(ctx))
+    assert any(r.severity is Severity.ERROR for r in results)
+
+
+def test_nonreproducible_uses_latest_matching_row_not_latest_per_claim(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_two_support_graph(tmp_path)
+    ctx = _ctx(tmp_path)
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    matching_corrupted = rows[0] | {"belief_state": "speculative"}
+    stale_later = rows[0] | {"input_hashes": ["sha256:stale"], "belief_state": "speculative"}
+    # Old latest-per-claim logic would inspect only the stale later row and skip. Correct
+    # latest-matching logic still finds the earlier row with current inputs and errors.
+    snap.write_text(
+        json.dumps(matching_corrupted) + "\n" + json.dumps(stale_later) + "\n",
+        encoding="utf-8",
+    )
+    results = list(check_belief_nonreproducible(ctx))
+    assert any(r.severity is Severity.ERROR for r in results)

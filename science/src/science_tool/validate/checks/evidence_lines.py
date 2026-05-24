@@ -407,6 +407,62 @@ def check_belief_fragile_single_line(ctx: ValidateContext) -> Iterator[Result]:
 
 
 # ---------------------------------------------------------------------------
+# Check 8: belief.nonreproducible (ERROR) — golden snapshot comparison
+#   Equal inputs (input_hashes + config_version + scalar_enabled) must reproduce
+#   the stored belief. Differing inputs are a legitimate change, not flagged.
+# ---------------------------------------------------------------------------
+
+_GOLDEN_SCALAR_FIELDS = (
+    "massed_support_score", "massed_dispute_score",
+    "massed_support_band", "massed_dispute_band", "net_band", "net_robust",
+)
+
+
+@Check(section="evidence lines", order=30)
+def check_belief_nonreproducible(ctx: ValidateContext) -> Iterator[Result]:
+    """#8 golden: equal inputs (input_hashes + config_version + scalar_enabled) must reproduce
+    the stored belief. Differing inputs are legitimate change, not flagged."""
+    from science_tool.graph.belief_snapshot import make_snapshots, read_snapshots
+
+    graph_file = ctx.project_root / "knowledge" / "graph.trig"
+    snap_file = ctx.project_root / "knowledge" / "belief-snapshots.jsonl"
+    if not graph_file.exists() or not snap_file.exists():
+        return
+    stored = read_snapshots(snap_file)
+    for now in make_snapshots(graph_file, as_of="recompute"):
+        # All stored rows for this claim whose input set matches the current one, then the
+        # LATEST among them (file order == append order). Latest-matching, not latest-per-claim.
+        matches = [
+            r for r in stored
+            if r["claim"] == now["claim"]
+            and sorted(r["input_hashes"]) == sorted(now["input_hashes"])
+            and r["config_version"] == now["config_version"]
+            and r["scalar_enabled"] == now["scalar_enabled"]
+        ]
+        if not matches:
+            continue
+        prior = matches[-1]
+        diffs = [
+            f for f in ("belief_state", "contested", "diagnostic_dispute_count")
+            if prior.get(f) != now.get(f)
+        ]
+        if now["scalar_enabled"]:
+            diffs += [f for f in _GOLDEN_SCALAR_FIELDS if prior.get(f) != now.get(f)]
+        if diffs:
+            yield Result(
+                severity=Severity.ERROR,
+                path=snap_file,
+                line=None,
+                message=(
+                    f"{now['claim']}: belief not reproducible from identical inputs "
+                    f"(differing fields: {', '.join(diffs)})"
+                ),
+                rule="belief.nonreproducible",
+                task=None,
+            )
+
+
+# ---------------------------------------------------------------------------
 # Check 6: evidence.unscored-line (WARN)
 #   A massable (non-diagnostic) support/dispute line that cannot be scored
 #   because one or more of evidence_type, evidence_role, or strength is
