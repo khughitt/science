@@ -1,0 +1,65 @@
+import math
+
+from science_tool.graph.belief import EvidenceUnit, aggregate_belief
+from science_tool.graph.belief_scalar import BeliefScalar, belief_scalar, unit_score
+
+
+def _u(stance="supports", **kw):
+    base = dict(line_uri="x", stance=stance, strength="strong", independence="independent",
+                independence_group="g", evidence_role="direct_test",
+                evidence_type="empirical_data_evidence", dispute_scope=None,
+                proxy_directness=None, has_measurement_model=False, source=None,
+                observability_keys=())
+    base.update(kw)
+    return EvidenceUnit(**base)
+
+
+def _r6(x):
+    return round(x, 6)
+
+
+def test_unit_score_is_sum_of_steps():
+    assert unit_score(_u()) == 7                      # 3 (empirical) + 2 (direct) + 2 (strong)
+    assert unit_score(_u(evidence_role="background_constraint", strength="weak",
+                         evidence_type="literature")) == 1   # 1 + 0 + 0
+
+
+def test_proxy_gate_lowers_score_by_two():
+    gated = _u(proxy_directness="indirect", has_measurement_model=False)  # is_proxy_gated -> True
+    assert unit_score(gated) == 5                     # 7 - 2
+
+
+def test_single_support_band_matches_tanh():
+    r = aggregate_belief([_u(line_uri="a", independence_group="g1")])     # S=7, D=0
+    s = belief_scalar(r)
+    assert s.massed_support_score == 7 and s.massed_dispute_score == 0
+    assert s.massed_support_band == (_r6(math.tanh(0.5 * 0.3 * 7)), _r6(math.tanh(0.5 * 1.0 * 7)))
+    assert s.net_band == s.massed_support_band         # D=0 -> net == support
+    assert s.net_robust is True
+
+
+def test_balanced_evidence_is_not_net_robust():
+    # Comparable support and dispute mass -> the adversarial corners straddle 0.
+    r = aggregate_belief([
+        _u(line_uri="a", independence_group="g1", evidence_role="proxy_support"),
+        _u(line_uri="b", independence_group="g2", evidence_role="proxy_support"),
+        _u(stance="disputes", line_uri="d", independence_group="g3",
+           dispute_scope="mechanism", strength="moderate"),
+    ])
+    s = belief_scalar(r)
+    assert s.net_band[0] < 0 < s.net_band[1]
+    assert s.net_robust is False
+
+
+def test_diagnostic_dispute_excluded_from_mass_but_counted():
+    # model_criticism dispute is diagnostic: D=0, but contested + diagnostic_dispute_count=1
+    r = aggregate_belief([
+        _u(line_uri="yang", independence_group="g1"),
+        _u(stance="disputes", line_uri="simeonov", independence_group="g2",
+           evidence_role="model_criticism", dispute_scope="generalization"),
+    ])
+    s = belief_scalar(r)
+    assert s.massed_dispute_score == 0
+    assert s.diagnostic_dispute_count == 1
+    assert s.contested is True
+    assert isinstance(s, BeliefScalar)
