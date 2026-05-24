@@ -5,7 +5,7 @@ from itertools import combinations
 from pathlib import Path
 from typing import cast
 
-from rdflib import Dataset, Graph, URIRef
+from rdflib import URIRef
 from rdflib.namespace import PROV, RDF, SKOS
 
 from science_tool.graph.belief import aggregate_belief, collect_evidence_units
@@ -14,7 +14,6 @@ from science_tool.graph.io import project_root_from_graph_path as _project_root_
 from .constants import CITO_NS, PROJECT_NS, SCHEMA_NS, SCI_NS, SCIC_NS
 from .types import (
     ClaimSummaryData,
-    EvidenceSignalSummary,
     InquirySummaryData,
     NeighborhoodSummaryData,
     ProjectSummaryData,
@@ -32,7 +31,6 @@ from .evidence_signals import (
     _load_proposition_falsifications,
     _load_proposition_interaction_terms,
     _load_proposition_pre_registrations,
-    _source_strings,
 )
 
 
@@ -794,7 +792,10 @@ def query_gaps(
             dispute_count = int(evidence_summary["dispute_count"])
             total_evidence = support_count + dispute_count
             source_count = int(evidence_summary["source_count"])
-            if support_count > 0 and dispute_count > 0:
+            belief = aggregate_belief(
+                collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(knowledge, uri))
+            )
+            if belief.contested:
                 issues.append("evidential_fragility(contested)")
             if total_evidence > 0 and source_count <= 1:
                 issues.append("evidential_fragility(single_source)")
