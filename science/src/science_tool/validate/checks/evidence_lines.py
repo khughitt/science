@@ -368,6 +368,45 @@ def check_belief_authoring(ctx: ValidateContext) -> Iterator[Result]:
 
 
 # ---------------------------------------------------------------------------
+# Check 7: belief.fragile-single-line (WARN) — leave-one-out sensitivity
+#   If dropping any single kept independent unit flips the ordinal belief_state
+#   (magnitude or contested), the claim's conclusion is not robust.
+# ---------------------------------------------------------------------------
+
+@Check(section="evidence lines", order=29)
+def check_belief_fragile_single_line(ctx: ValidateContext) -> Iterator[Result]:
+    """#7 leave-one-out: if dropping any single kept independent unit flips the ordinal
+    belief_state (magnitude or contested), the claim's conclusion is not robust."""
+    knowledge, provenance = _load_belief_graphs(ctx)
+    if knowledge is None:
+        return
+    for claim in _claims(knowledge):
+        units = collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(knowledge, claim))
+        base = aggregate_belief(units)
+        # Include diagnostics: a claim can be contested solely via a diagnostic dispute
+        # (e.g. h012/Simeonov), and dropping that line flips contested — exactly the fragility
+        # this check exists to surface.
+        kept_uris = {u.line_uri for u in (*base.support_units, *base.dispute_units, *base.diagnostics)}
+        if len(kept_uris) < 2:
+            continue
+        for drop in kept_uris:
+            reduced = aggregate_belief([u for u in units if u.line_uri != drop])
+            if reduced.magnitude != base.magnitude or reduced.contested != base.contested:
+                yield Result(
+                    severity=Severity.WARN,
+                    path=None,
+                    line=None,
+                    message=(
+                        f"{claim}: belief_state flips ({base.magnitude.value} -> "
+                        f"{reduced.magnitude.value}) when dropping a single line ({drop})"
+                    ),
+                    rule="belief.fragile-single-line",
+                    task=None,
+                )
+                break
+
+
+# ---------------------------------------------------------------------------
 # Check 6: evidence.unscored-line (WARN)
 #   A massable (non-diagnostic) support/dispute line that cannot be scored
 #   because one or more of evidence_type, evidence_role, or strength is
