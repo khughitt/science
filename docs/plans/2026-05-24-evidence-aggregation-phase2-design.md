@@ -213,13 +213,13 @@ is not applied to the stored record):
 {"as_of":"2026-05-24","claim":"prop:h012","belief_state":"fragile","contested":true,
  "diagnostic_dispute_count":1,"scalar_enabled":true,
  "massed_support_score":7,"massed_dispute_score":0,
- "massed_support_band":[0.784480,0.998178],"massed_dispute_band":[0.0,0.0],
- "net_band":[0.784480,0.998178],"net_robust":true,
+ "massed_support_band":[0.781807,0.998178],"massed_dispute_band":[0.0,0.0],
+ "net_band":[0.781807,0.998178],"net_robust":true,
  "input_hashes":["sha256:..","sha256:.."],"config_version":"belief-logodds-v1"}
 ```
 
 (h012: `S=7` (strong·empirical·direct_test), `D=0` (Simeonov is `model_criticism` ⇒
-diagnostic), so `net_band = massed_support_band = [tanh(1.05), tanh(3.5)] = [0.784, 0.998]`,
+diagnostic), so `net_band = massed_support_band = [tanh(1.05), tanh(3.5)] = [0.7818, 0.9982]`,
 `net_robust=true`. The headline is still `fragile (contested)` and the **display** hides net
 under the single-unit ceiling — finding 5 alignment.)
 
@@ -316,7 +316,7 @@ One support line (Yang2022: strong · empirical_data · direct_test ⇒ `s=7`) a
 line (Simeonov2021: strong · empirical_data · `model_criticism` · generalization). Simeonov
 is **diagnostic** ⇒ excluded from `dispute_units` ⇒ `D=0`, but counted as
 `diagnostic_dispute_count=1` and sets `contested=True`. Over the envelope:
-`massed_support_band = net_band = [tanh(½·0.3·7), tanh(½·1.0·7)] = [0.784, 0.998]`,
+`massed_support_band = net_band = [tanh(½·0.3·7), tanh(½·1.0·7)] = [0.7818, 0.9982]`,
 `net_robust=True`. Magnitude stays `fragile` (single support unit). Headline:
 `fragile (contested)`. **Display:** the single-unit ceiling binds, so the net number is
 **hidden**; the surfaced scalar is the massed pair `support≈[0.78,1.0] / dispute=0` with a
