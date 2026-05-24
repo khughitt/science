@@ -84,6 +84,21 @@ Use `science-plan-pipeline` after this command when execution orchestration is
 non-trivial. Use `science-pre-register` after this command when the plan is
 `ready` or `ready-with-caveats` and confirmatory criteria should be locked.
 
+## When a Pre-Registration Already Exists
+
+The default order is plan → pre-register, but the two can arrive reversed: a
+pre-registration may already be committed — and possibly amended after a bias
+audit — before this command runs. When that is the case, the plan's job
+inverts. The verdict surface is already locked, so do **not** re-derive decision
+criteria or thresholds; relitigating a committed criterion set here invites
+HARKing. Instead, focus the plan on the *implementation* gates the pre-reg did
+not enumerate: data access and provenance, common-time-axis / unit conversions,
+numerical-precision audits, and leakage checks. If you believe a locked
+criterion is actually wrong, treat it as an amendment question rather than a
+planning decision — load `statistics-prereg-amendment-vs-fresh` to decide
+whether the change warrants a formal amendment or a fresh pre-registration, and
+route it there instead of silently re-planning around it.
+
 ## Setup
 
 1. Read `science.yaml`.
@@ -106,6 +121,8 @@ reason.
 | Microarray, probe IDs, Affymetrix/Agilent/Illumina | `data-expression`, `data-expression-microarray-qa`, `statistics-bias-vs-variance-decomposition` |
 | Targeted-panel mutation frequency, cBioPortal, GENIE, MAF | `data-genomics-somatic-mutation-qa`, `statistics-power-floor-acknowledgement`, `statistics-bias-vs-variance-decomposition` |
 | SBS signatures, TMB, dN/dS, dNdScv, driver ranking | `data-genomics-somatic-mutation-qa`, `data-genomics-mutational-signatures-and-selection`, `statistics-power-floor-acknowledgement`, `statistics-sensitivity-arbitration` |
+| CN segments, scWGS/DLP+ per-cell CN, SV/breakpoints, AmpliconArchitect/AmpliconClassifier, ecDNA | `data-genomics-copy-number-sv-qa`, `statistics-power-floor-acknowledgement`, `statistics-sensitivity-arbitration` |
+| Likelihood model fit, AIC/BIC/LRT, Wright-Fisher/Moran/binomial-segregation, selection-vs-neutral | `statistics-likelihood-model-comparison`, `statistics-population-genetics-likelihood`, `statistics-sensitivity-arbitration` |
 | CRISPR/RNAi, DepMap, LINCS/L1000, drug response | `data-functional-genomics-qa`, `statistics-bias-vs-variance-decomposition`, `statistics-sensitivity-arbitration` |
 | Survival, Cox, Weibull, censored outcomes across cohorts | `statistics-survival-and-hierarchical-models`, `statistics-power-floor-acknowledgement`, `statistics-sensitivity-arbitration` |
 | Fractions/proportions constrained to sum to one | `statistics-compositional-data`, `statistics-bias-vs-variance-decomposition` |
@@ -175,6 +192,7 @@ Use these as spot checks when applying the command:
 2. **cBioPortal targeted-panel mutation frequency or dN/dS analysis** - include `data-genomics-somatic-mutation-qa`, `data-genomics-mutational-signatures-and-selection` for dN/dS/TMB/driver ranking, `statistics-power-floor-acknowledgement`, `statistics-bias-vs-variance-decomposition`, and `statistics-sensitivity-arbitration`.
 3. **Natural-systems annotation/curation agreement analysis** - include `research-annotation-curation-qa`, `research-methodology`, `scientific-writing`, plus `statistics-bias-vs-variance-decomposition` and `statistics-power-floor-acknowledgement` when agreement statistics are verdict-bearing.
 4. **Protein-landscape heldout benchmark or embedding-manifold analysis** - include `data-protein-sequence-structure-qa`, `data-embeddings-manifold-qa`, `statistics-bias-vs-variance-decomposition`, `statistics-power-floor-acknowledgement`, and `statistics-sensitivity-arbitration`.
+5. **ecDNA selection-vs-neutral on per-cell scWGS (e.g. Bafna-style binomial segregation on DLP+)** - include `data-genomics-copy-number-sv-qa` for the per-cell CN calls, `statistics-population-genetics-likelihood` for the WF/Moran/segregation likelihoods, `statistics-likelihood-model-comparison` for the AIC/BIC/LRT comparison, plus `statistics-power-floor-acknowledgement` and `statistics-sensitivity-arbitration`. A single-cohort selection signal is cohort-scoped pending independent replication.
 
 ## Process Reflection
 
