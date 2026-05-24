@@ -2175,8 +2175,6 @@ def belief_group() -> None:
 @click.option("--as-of", "as_of", default=None, help="Snapshot date YYYY-MM-DD (default: today).")
 def belief_snapshot_cmd(graph_path: Path, as_of: str | None) -> None:
     """Append per-claim belief snapshots to knowledge/belief-snapshots.jsonl."""
-    from datetime import date
-
     from .graph.io import project_root_from_graph_path
 
     as_of_value = as_of or date.today().isoformat()
