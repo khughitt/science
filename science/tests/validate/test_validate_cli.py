@@ -40,6 +40,7 @@ def test_validate_help_is_registered() -> None:
     assert "--strict" in result.output
     assert "--experimental-python-sidecar" not in result.output
     assert "--format [text|json]" in result.output
+    assert "--profile [full|commit]" in result.output
     assert "--project-root PATH" in result.output
 
 
@@ -89,6 +90,29 @@ def test_validate_json_emits_results_and_warns_do_not_fail(tmp_path: Path) -> No
             "task": None,
         },
     ]
+
+
+def test_validate_commit_profile_skips_graph_backed_checks(tmp_path: Path) -> None:
+    @Check(section="knowledge graph...", order=17)
+    def check_graph(ctx: ValidateContext) -> list[Result]:
+        return [Result(Severity.INFO, None, None, "graph ran", "graph", None)]
+
+    @Check(section="task queue...", order=18)
+    def check_tasks(ctx: ValidateContext) -> list[Result]:
+        return [Result(Severity.INFO, None, None, "tasks ran", "tasks", None)]
+
+    @Check(section="evidence lines", order=27)
+    def check_belief_authoring(ctx: ValidateContext) -> list[Result]:
+        return [Result(Severity.INFO, None, None, "belief ran", "belief", None)]
+
+    result = CliRunner().invoke(
+        main,
+        ["validate", "--profile", "commit", "--format", "json", "--project-root", str(_project(tmp_path))],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert [item["message"] for item in payload["results"]] == ["tasks ran"]
 
 
 def test_validate_imports_local_hook_by_default(tmp_path: Path) -> None:

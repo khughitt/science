@@ -9,15 +9,17 @@ import sys
 from types import ModuleType
 from typing import TYPE_CHECKING, Literal, cast
 
-from science_tool.validate.checks import CANONICAL_CHECKS
+from science_tool.validate.checks import CANONICAL_CHECKS, CheckEntry
 from science_tool.validate.context import ValidateContext, ValidateContextError
 from science_tool.validate.gates import gated_findings, resolve_gate_tier
 from science_tool.validate.result import Result, Severity
 
 if TYPE_CHECKING:
     HookName = Literal["pre_validation", "extra_checks", "post_validation"]
+    ValidationProfile = Literal["full", "commit"]
 else:
     HookName = str
+    ValidationProfile = str
 
 
 HookFn = Callable[[ValidateContext], Iterable[Result]]
@@ -26,6 +28,9 @@ _HOOKS: dict[str, list[HookFn]] = {name: [] for name in _HOOK_NAMES}
 _MISSING_MODULE = object()
 _LEGACY_SIDECAR_REMOVED_RULE = "validate.sidecar.legacy_removed"
 _LEGACY_SIDECAR_PORTING_GUIDE = "docs/migration/2026-05-19-validate-local-sh-porting-guide.md"
+VALIDATE_PROFILES = ("full", "commit")
+_COMMIT_EXCLUDED_SECTIONS = {"knowledge graph..."}
+_COMMIT_EXCLUDED_FUNCTIONS = {"check_belief_authoring"}
 
 
 @dataclass(frozen=True)
@@ -36,6 +41,7 @@ class RunResult:
     infos: int
     gate_tier: str = "report"
     gated: tuple[Result, ...] = ()
+    sections: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -78,8 +84,10 @@ def run(
     strict: bool,
     verbose: bool,
     fail_on: str | None = None,
+    profile: ValidationProfile = "full",
     enable_python_sidecar: bool = True,
 ) -> RunResult:
+    checks = _checks_for_profile(profile)
     ctx = ValidateContext.from_project_root(project_root, strict=strict, verbose=verbose)
     results: list[Result] = []
     run_result: RunResult | None = None
@@ -101,11 +109,11 @@ def run(
             python_sidecar_imported = True
         if sidecar_enabled:
             results.extend(_dispatch_hooks("pre_validation", ctx))
-        for entry in CANONICAL_CHECKS:
+        for entry in checks:
             results.extend(entry.fn(ctx))
         if sidecar_enabled:
             results.extend(_dispatch_hooks("extra_checks", ctx))
-        run_result = _tally(results)
+        run_result = _tally(results, checks)
         try:
             tier = resolve_gate_tier(fail_on, ctx.manifest)
         except ValueError as exc:
@@ -130,12 +138,25 @@ def _dispatch_hooks(name: str, ctx: ValidateContext) -> list[Result]:
     return results
 
 
-def _tally(results: list[Result]) -> RunResult:
+def _checks_for_profile(profile: ValidationProfile) -> list[CheckEntry]:
+    if profile == "full":
+        return list(CANONICAL_CHECKS)
+    if profile == "commit":
+        return [entry for entry in CANONICAL_CHECKS if not _commit_profile_excludes(entry)]
+    raise ValueError(f"unknown validation profile: {profile}")
+
+
+def _commit_profile_excludes(entry: CheckEntry) -> bool:
+    return entry.section in _COMMIT_EXCLUDED_SECTIONS or entry.fn.__name__ in _COMMIT_EXCLUDED_FUNCTIONS
+
+
+def _tally(results: list[Result], checks: list[CheckEntry]) -> RunResult:
     return RunResult(
         results=results,
         errors=sum(1 for result in results if result.severity is Severity.ERROR),
         warnings=sum(1 for result in results if result.severity is Severity.WARN),
         infos=sum(1 for result in results if result.severity is Severity.INFO),
+        sections=tuple(dict.fromkeys(entry.section for entry in checks)),
     )
 
 

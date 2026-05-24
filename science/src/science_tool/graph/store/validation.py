@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
-from rdflib import Dataset, URIRef
+from rdflib import Dataset
 from rdflib.namespace import PROV, RDF, SKOS
 
 from science_tool.graph.io import (
@@ -22,20 +22,16 @@ def query_predicates() -> list[dict[str, str]]:
 
 
 def validate_graph(graph_path: Path) -> tuple[list[dict[str, str]], bool]:
-    rows: list[dict[str, str]] = []
-
     try:
         dataset = _load_dataset(graph_path)
     except Exception as exc:  # noqa: BLE001
-        rows.append(
-            {
-                "check": "parseable_trig",
-                "status": "fail",
-                "details": f"failed to parse graph.trig: {exc}",
-            }
-        )
-        return rows, True
+        return _parse_failure_rows(exc), True
 
+    return validate_graph_dataset(dataset)
+
+
+def validate_graph_dataset(dataset: Dataset) -> tuple[list[dict[str, str]], bool]:
+    rows: list[dict[str, str]] = []
     rows.append(
         {
             "check": "parseable_trig",
@@ -139,8 +135,22 @@ def validate_graph(graph_path: Path) -> tuple[list[dict[str, str]], bool]:
     return rows, has_failures
 
 
+def _parse_failure_rows(exc: Exception) -> list[dict[str, str]]:
+    return [
+        {
+            "check": "parseable_trig",
+            "status": "fail",
+            "details": f"failed to parse graph.trig: {exc}",
+        }
+    ]
+
+
 def diff_graph_inputs(graph_path: Path, mode: str) -> list[dict[str, str]]:
     dataset = _load_dataset(graph_path)
+    return diff_graph_inputs_dataset(dataset, graph_path=graph_path, mode=mode)
+
+
+def diff_graph_inputs_dataset(dataset: Dataset, *, graph_path: Path, mode: str) -> list[dict[str, str]]:
     baseline = _read_revision_manifest(dataset)
     current = _build_input_manifest(graph_path=graph_path)
 

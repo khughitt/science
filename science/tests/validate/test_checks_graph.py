@@ -42,6 +42,22 @@ def _messages(results: list[Result], severity: Severity | None = None) -> list[s
     return [result.message for result in results if severity is None or result.severity is severity]
 
 
+def _patch_graph_dataset(
+    monkeypatch: pytest.MonkeyPatch,
+    graph: Any,
+    *,
+    validate_rows: tuple[list[dict[str, str]], bool] | None = None,
+    diff_rows: list[dict[str, str]] | None = None,
+    inquiries: list[dict[str, str]] | None = None,
+) -> object:
+    dataset = object()
+    monkeypatch.setattr(graph, "_load_dataset", lambda _path: dataset)
+    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: validate_rows or ([], False))
+    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: diff_rows or [])
+    monkeypatch.setattr(graph, "list_inquiries_dataset", lambda _dataset: inquiries or [])
+    return dataset
+
+
 def test_peer_valid_empty_audit_no_graph_stops_before_graph_calls(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -53,9 +69,11 @@ def test_peer_valid_empty_audit_no_graph_stops_before_graph_calls(
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
     monkeypatch.setattr(graph, "validate_graph", fail_call)
-    monkeypatch.setattr(graph, "diff_graph_inputs", fail_call)
-    monkeypatch.setattr(graph, "list_inquiries", fail_call)
-    monkeypatch.setattr(graph, "validate_inquiry", fail_call)
+    monkeypatch.setattr(graph, "_load_dataset", fail_call)
+    monkeypatch.setattr(graph, "validate_graph_dataset", fail_call)
+    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", fail_call)
+    monkeypatch.setattr(graph, "list_inquiries_dataset", fail_call)
+    monkeypatch.setattr(graph, "validate_inquiry_dataset", fail_call)
 
     results = list(graph.check_graph(_ctx(tmp_path)))
 
@@ -155,8 +173,8 @@ def test_graph_validate_rows_map_statuses(monkeypatch: pytest.MonkeyPatch, tmp_p
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
     monkeypatch.setattr(
         graph,
-        "validate_graph",
-        lambda _path: (
+        "validate_graph_dataset",
+        lambda _dataset: (
             [
                 {"check": "parseable", "status": "pass", "details": "ok"},
                 {"check": "orphaned", "status": "warn", "details": "1 orphan"},
@@ -165,14 +183,67 @@ def test_graph_validate_rows_map_statuses(monkeypatch: pytest.MonkeyPatch, tmp_p
             True,
         ),
     )
-    monkeypatch.setattr(graph, "diff_graph_inputs", lambda **_kwargs: [])
-    monkeypatch.setattr(graph, "list_inquiries", lambda _path: [])
+    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: [])
+    monkeypatch.setattr(graph, "list_inquiries_dataset", lambda _dataset: [])
 
     results = list(graph.check_graph(_ctx(tmp_path)))
 
     assert "graph validate: acyclic — cycle" in _messages(results, Severity.ERROR)
     assert "graph validate: orphaned — 1 orphan" in _messages(results, Severity.WARN)
     assert "graph validate: parseable — ok" in _messages(results, Severity.INFO)
+
+
+def test_graph_check_reuses_one_loaded_dataset_for_graph_followups(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from science_tool.validate.checks import graph
+
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir()
+    graph_path.write_text("", encoding="utf-8")
+    loaded_dataset = object()
+    load_calls: list[Path] = []
+    validated_inquiries: list[tuple[object, str]] = []
+
+    def load_dataset(path: Path) -> object:
+        load_calls.append(path)
+        return loaded_dataset
+
+    def fail_path_api(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("path-based graph API should not be called by validate.checks.graph")
+
+    monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
+    monkeypatch.setattr(graph, "_load_dataset", load_dataset, raising=False)
+    monkeypatch.setattr(
+        graph,
+        "validate_graph_dataset",
+        lambda dataset: ([{"check": "parseable_trig", "status": "pass", "details": "ok"}], False),
+        raising=False,
+    )
+    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda dataset, *, graph_path, mode: [], raising=False)
+    monkeypatch.setattr(
+        graph,
+        "list_inquiries_dataset",
+        lambda dataset: [{"slug": "one"}, {"slug": "two"}],
+        raising=False,
+    )
+
+    def validate_inquiry_dataset(dataset: object, slug: str) -> list[dict[str, str]]:
+        validated_inquiries.append((dataset, slug))
+        return [{"check": "shape", "status": "pass", "message": "ok"}]
+
+    monkeypatch.setattr(graph, "validate_inquiry_dataset", validate_inquiry_dataset, raising=False)
+    monkeypatch.setattr(graph, "validate_graph", fail_path_api)
+    monkeypatch.setattr(graph, "diff_graph_inputs", fail_path_api, raising=False)
+    monkeypatch.setattr(graph, "list_inquiries", fail_path_api, raising=False)
+    monkeypatch.setattr(graph, "validate_inquiry", fail_path_api, raising=False)
+
+    results = list(graph.check_graph(_ctx(tmp_path, verbose=True)))
+
+    assert load_calls == [graph_path]
+    assert validated_inquiries == [(loaded_dataset, "one"), (loaded_dataset, "two")]
+    assert "Checking inquiries (2)..." in _messages(results, Severity.INFO)
 
 
 def test_parseable_trig_failure_stops_graph_followups(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -201,9 +272,9 @@ def test_parseable_trig_failure_stops_graph_followups(monkeypatch: pytest.Monkey
     def fail_call(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("graph follow-up API should not be called after parse failure")
 
-    monkeypatch.setattr(graph, "diff_graph_inputs", fail_call)
-    monkeypatch.setattr(graph, "list_inquiries", fail_call)
-    monkeypatch.setattr(graph, "validate_inquiry", fail_call)
+    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", fail_call)
+    monkeypatch.setattr(graph, "list_inquiries_dataset", fail_call)
+    monkeypatch.setattr(graph, "validate_inquiry_dataset", fail_call)
 
     results = list(graph.check_graph(_ctx(tmp_path)))
 
@@ -246,8 +317,8 @@ def test_graph_validate_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, t
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
     monkeypatch.setattr(
         graph,
-        "validate_graph",
-        lambda _path: ([{"check": "parseable", "status": "mystery", "details": "ok"}], False),
+        "validate_graph_dataset",
+        lambda _dataset: ([{"check": "parseable", "status": "mystery", "details": "ok"}], False),
     )
 
     with pytest.raises(ValueError, match="graph validate returned unknown status: mystery"):
@@ -262,16 +333,16 @@ def test_diff_rows_emit_stale_warning_and_verbose_details(monkeypatch: pytest.Mo
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
-    monkeypatch.setattr(graph, "validate_graph", lambda _path: ([], False))
+    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ([], False))
     monkeypatch.setattr(
         graph,
-        "diff_graph_inputs",
-        lambda **_kwargs: [
+        "diff_graph_inputs_dataset",
+        lambda _dataset, **_kwargs: [
             {"path": "doc/a.md", "status": "stale", "reason": "hash_changed"},
             {"path": "notes/b.md", "status": "stale", "reason": "new_file"},
         ],
     )
-    monkeypatch.setattr(graph, "list_inquiries", lambda _path: [])
+    monkeypatch.setattr(graph, "list_inquiries_dataset", lambda _dataset: [])
 
     results = list(graph.check_graph(_ctx(tmp_path, verbose=True)))
 
@@ -288,9 +359,11 @@ def test_diff_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
-    monkeypatch.setattr(graph, "validate_graph", lambda _path: ([], False))
+    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ([], False))
     monkeypatch.setattr(
-        graph, "diff_graph_inputs", lambda **_kwargs: [{"path": "doc/a.md", "status": "fresh", "reason": "ok"}]
+        graph,
+        "diff_graph_inputs_dataset",
+        lambda _dataset, **_kwargs: [{"path": "doc/a.md", "status": "fresh", "reason": "ok"}],
     )
 
     with pytest.raises(ValueError, match="graph diff returned unknown status: fresh"):
@@ -305,13 +378,13 @@ def test_inquiry_validation_maps_statuses_and_verbose_passes(monkeypatch: pytest
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
-    monkeypatch.setattr(graph, "validate_graph", lambda _path: ([], False))
-    monkeypatch.setattr(graph, "diff_graph_inputs", lambda **_kwargs: [])
-    monkeypatch.setattr(graph, "list_inquiries", lambda _path: [{"slug": "demo"}])
+    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ([], False))
+    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: [])
+    monkeypatch.setattr(graph, "list_inquiries_dataset", lambda _dataset: [{"slug": "demo"}])
     monkeypatch.setattr(
         graph,
-        "validate_inquiry",
-        lambda _path, _slug: [
+        "validate_inquiry_dataset",
+        lambda _dataset, _slug: [
             {"check": "shape", "status": "pass", "message": "ok"},
             {"check": "causal_optional", "status": "skip", "message": "not causal"},
             {"check": "causal_note", "status": "info", "message": "informational"},
@@ -342,14 +415,14 @@ def test_inquiry_value_error_propagates(monkeypatch: pytest.MonkeyPatch, tmp_pat
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
-    monkeypatch.setattr(graph, "validate_graph", lambda _path: ([], False))
-    monkeypatch.setattr(graph, "diff_graph_inputs", lambda **_kwargs: [])
-    monkeypatch.setattr(graph, "list_inquiries", lambda _path: [{"slug": "demo"}])
+    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ([], False))
+    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: [])
+    monkeypatch.setattr(graph, "list_inquiries_dataset", lambda _dataset: [{"slug": "demo"}])
 
-    def raise_value_error(_path: Path, _slug: str) -> list[dict[str, str]]:
+    def raise_value_error(_dataset: object, _slug: str) -> list[dict[str, str]]:
         raise ValueError("inquiry graph is malformed")
 
-    monkeypatch.setattr(graph, "validate_inquiry", raise_value_error)
+    monkeypatch.setattr(graph, "validate_inquiry_dataset", raise_value_error)
 
     with pytest.raises(ValueError, match="inquiry graph is malformed"):
         list(graph.check_graph(_ctx(tmp_path)))
@@ -363,11 +436,13 @@ def test_inquiry_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, tmp_path
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
-    monkeypatch.setattr(graph, "validate_graph", lambda _path: ([], False))
-    monkeypatch.setattr(graph, "diff_graph_inputs", lambda **_kwargs: [])
-    monkeypatch.setattr(graph, "list_inquiries", lambda _path: [{"slug": "demo"}])
+    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ([], False))
+    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: [])
+    monkeypatch.setattr(graph, "list_inquiries_dataset", lambda _dataset: [{"slug": "demo"}])
     monkeypatch.setattr(
-        graph, "validate_inquiry", lambda _path, _slug: [{"check": "shape", "status": "mystery", "message": "ok"}]
+        graph,
+        "validate_inquiry_dataset",
+        lambda _dataset, _slug: [{"check": "shape", "status": "mystery", "message": "ok"}],
     )
 
     with pytest.raises(ValueError, match="inquiry validate returned unknown status: mystery"):

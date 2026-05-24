@@ -1091,6 +1091,19 @@ def _write_support_plus_diagnostic_graph(root: Path) -> None:
     ds.serialize(destination=str(root / "knowledge" / "graph.trig"), format="trig")
 
 
+def _write_one_support_plus_excluded_circular_graph(root: Path) -> None:
+    ds = Dataset()
+    k = ds.graph(_graph_uri("graph/knowledge"))
+    p = ds.graph(_graph_uri("graph/provenance"))
+    prop = URIRef("https://example.org/prop/p3")
+    k.add((prop, RDF.type, SCI_NS.Proposition))
+    _line(p, k, URIRef("https://example.org/el/sup"), prop, group="g1")
+    _line(p, k, URIRef("https://example.org/el/circular"), prop, group="g2",
+          stance="disputes", independence="circular")
+    (root / "knowledge").mkdir(parents=True, exist_ok=True)
+    ds.serialize(destination=str(root / "knowledge" / "graph.trig"), format="trig")
+
+
 def test_fragile_single_line_flags_when_drop_flips(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import check_belief_fragile_single_line
     _write_two_support_graph(tmp_path)
@@ -1105,6 +1118,14 @@ def test_fragile_single_line_flags_diagnostic_only_contestation(tmp_path: Path):
     _write_support_plus_diagnostic_graph(tmp_path)
     results = list(check_belief_fragile_single_line(_ctx(tmp_path)))
     assert any(r.severity is Severity.WARN for r in results)
+
+
+def test_fragile_single_line_skips_single_kept_unit_plus_excluded_circular(tmp_path: Path):
+    # Raw units has length 2, but only one line is effectively kept. Leave-one-out operates on
+    # kept units, so this should not warn.
+    from science_tool.validate.checks.evidence_lines import check_belief_fragile_single_line
+    _write_one_support_plus_excluded_circular_graph(tmp_path)
+    assert list(check_belief_fragile_single_line(_ctx(tmp_path))) == []
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1124,13 +1145,13 @@ def check_belief_fragile_single_line(ctx: ValidateContext) -> Iterator[Result]:
         return
     for claim in _claims(knowledge):
         units = collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(knowledge, claim))
-        if len(units) < 2:
-            continue
         base = aggregate_belief(units)
         # Include diagnostics: a claim can be contested solely via a diagnostic dispute
         # (e.g. h012/Simeonov), and dropping that line flips contested — exactly the fragility
         # this check exists to surface.
         kept_uris = {u.line_uri for u in (*base.support_units, *base.dispute_units, *base.diagnostics)}
+        if len(kept_uris) < 2:
+            continue
         for drop in kept_uris:
             reduced = aggregate_belief([u for u in units if u.line_uri != drop])
             if reduced.magnitude != base.magnitude or reduced.contested != base.contested:
@@ -1226,6 +1247,44 @@ def test_nonreproducible_errors_on_corrupted_scalar_band(tmp_path: Path):
     snap.write_text(json.dumps(corrupted) + "\n", encoding="utf-8")
     results = list(check_belief_nonreproducible(ctx))
     assert any(r.severity is Severity.ERROR for r in results)
+
+
+def test_nonreproducible_errors_on_corrupted_diagnostic_count(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_support_plus_diagnostic_graph(tmp_path)
+    ctx = _ctx(tmp_path)
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    corrupted = rows[0] | {"diagnostic_dispute_count": 0}
+    snap.write_text(json.dumps(corrupted) + "\n", encoding="utf-8")
+    results = list(check_belief_nonreproducible(ctx))
+    assert any(r.severity is Severity.ERROR for r in results)
+
+
+def test_nonreproducible_uses_latest_matching_row_not_latest_per_claim(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_two_support_graph(tmp_path)
+    ctx = _ctx(tmp_path)
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    matching_corrupted = rows[0] | {"belief_state": "speculative"}
+    stale_later = rows[0] | {"input_hashes": ["sha256:stale"], "belief_state": "speculative"}
+    # Old latest-per-claim logic would inspect only the stale later row and skip. Correct
+    # latest-matching logic still finds the earlier row with current inputs and errors.
+    snap.write_text(
+        json.dumps(matching_corrupted) + "\n" + json.dumps(stale_later) + "\n",
+        encoding="utf-8",
+    )
+    results = list(check_belief_nonreproducible(ctx))
+    assert any(r.severity is Severity.ERROR for r in results)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1266,7 +1325,10 @@ def check_belief_nonreproducible(ctx: ValidateContext) -> Iterator[Result]:
         if not matches:
             continue
         prior = matches[-1]
-        diffs = [f for f in ("belief_state", "contested") if prior.get(f) != now.get(f)]
+        diffs = [
+            f for f in ("belief_state", "contested", "diagnostic_dispute_count")
+            if prior.get(f) != now.get(f)
+        ]
         if now["scalar_enabled"]:
             diffs += [f for f in _GOLDEN_SCALAR_FIELDS if prior.get(f) != now.get(f)]
         if diffs:

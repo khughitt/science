@@ -152,7 +152,14 @@ from collections.abc import Iterator
 from typing import Any
 
 from science_tool.graph.materialize import materialization_audit
-from science_tool.graph.store import diff_graph_inputs, list_inquiries, validate_graph, validate_inquiry
+from science_tool.graph.store import (
+    diff_graph_inputs_dataset,
+    list_inquiries_dataset,
+    validate_graph,
+    validate_graph_dataset,
+    validate_inquiry_dataset,
+)
+from science_tool.graph.store.dataset import _load_dataset
 from science_tool.peers_validate import PeerIssue, validate_peers
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -184,7 +191,12 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
     if not graph_path.is_file():
         return
 
-    rows, _has_failures = validate_graph(graph_path)
+    try:
+        dataset = _load_dataset(graph_path)
+    except Exception:  # noqa: BLE001
+        rows, _has_failures = validate_graph(graph_path)
+    else:
+        rows, _has_failures = validate_graph_dataset(dataset)
     parseable_failed = False
     for row in rows:
         status = _status(row, context="graph validate", accepted={"fail", "warn", "pass"})
@@ -198,7 +210,7 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
         return
 
     try:
-        diff_rows = diff_graph_inputs(graph_path=graph_path, mode="hybrid")
+        diff_rows = diff_graph_inputs_dataset(dataset, graph_path=graph_path, mode="hybrid")
     except (RuntimeError, ValueError) as exc:
         if not _is_missing_revision_metadata_exception(exc):
             raise
@@ -217,7 +229,7 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
         else:
             yield _result(Severity.INFO, "graph-prose sync: all inputs up to date")
 
-    inquiries = list_inquiries(graph_path)
+    inquiries = list_inquiries_dataset(dataset)
     if not inquiries:
         return
 
@@ -226,7 +238,7 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
         slug = inquiry["slug"]
         if not slug:
             continue
-        inquiry_rows = validate_inquiry(graph_path, slug)
+        inquiry_rows = validate_inquiry_dataset(dataset, slug)
 
         for row in inquiry_rows:
             status = _status(row, context="inquiry validate", accepted={"fail", "warn", "pass", "skip", "info"})

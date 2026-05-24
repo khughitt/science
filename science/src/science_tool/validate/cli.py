@@ -4,18 +4,17 @@ from contextlib import redirect_stdout
 from io import StringIO
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import click
 from rich.text import Text
 
 from science_tool.styles import ERROR_STYLE, SUCCESS_STYLE, WARNING_STYLE, get_console
 from science_tool.validate._helpers import section_banner
-from science_tool.validate.checks import CANONICAL_CHECKS
 from science_tool.validate.context import ValidateContextError
 from science_tool.validate.gates import GATE_TIERS
 from science_tool.validate.result import Result, Severity
-from science_tool.validate.runner import RunResult, run
+from science_tool.validate.runner import RunResult, VALIDATE_PROFILES, ValidationProfile, run
 
 
 BANNER = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -41,6 +40,14 @@ BANNER = "━━━━━━━━━━━━━━━━━━━━━━━�
     help="Output format.",
 )
 @click.option(
+    "--profile",
+    "profile",
+    type=click.Choice(list(VALIDATE_PROFILES)),
+    default="full",
+    show_default=True,
+    help="Validation profile to run. Use commit for fast authoring-time checks.",
+)
+@click.option(
     "--project-root",
     type=click.Path(file_okay=False, path_type=Path),
     default=Path.cwd,
@@ -55,6 +62,7 @@ def validate_cmd(
     strict: bool,
     fail_on: str | None,
     output_format: str,
+    profile: str,
     project_root: Path,
 ) -> None:
     """Validate a Science project."""
@@ -66,6 +74,7 @@ def validate_cmd(
                 strict=strict,
                 verbose=verbose,
                 fail_on=fail_on,
+                profile=cast(ValidationProfile, profile),
             )
     except ValidateContextError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -100,7 +109,7 @@ def _emit_text(result: RunResult) -> None:
     console.print("Science Project Validation")
     console.print(BANNER)
 
-    for section in _section_names():
+    for section in _section_names(result):
         console.print()
         console.print(section_banner(section))
 
@@ -112,12 +121,8 @@ def _emit_text(result: RunResult) -> None:
     console.print(_format_summary(result))
 
 
-def _section_names() -> list[str]:
-    sections: list[str] = []
-    for entry in CANONICAL_CHECKS:
-        if entry.section not in sections:
-            sections.append(entry.section)
-    return sections or ["Science project"]
+def _section_names(result: RunResult) -> list[str]:
+    return list(result.sections) or ["Science project"]
 
 
 def _format_result(result: Result) -> Text:

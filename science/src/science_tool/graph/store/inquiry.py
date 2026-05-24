@@ -56,6 +56,11 @@ def _discover_inquiries(dataset: Dataset) -> dict[str, tuple[URIRef, Graph]]:
 def list_inquiries(graph_path: Path) -> list[dict[str, str]]:
     """List all inquiries in the dataset, returning a list of summary dicts."""
     dataset = _load_dataset(graph_path)
+    return list_inquiries_dataset(dataset)
+
+
+def list_inquiries_dataset(dataset: Dataset) -> list[dict[str, str]]:
+    """List all inquiries from a parsed dataset, returning summary dicts."""
     results: list[dict[str, str]] = []
     for slug, (inquiry_uri, _home) in _discover_inquiries(dataset).items():
         results.append(
@@ -448,6 +453,11 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
     and optionally details (list).
     """
     dataset = _load_dataset(graph_path)
+    return validate_inquiry_dataset(dataset, slug)
+
+
+def validate_inquiry_dataset(dataset: Dataset, slug: str) -> list[dict]:
+    """Validate an inquiry using an already parsed graph dataset."""
     inquiries = _discover_inquiries(dataset)
 
     requested = slug

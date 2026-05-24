@@ -22,6 +22,7 @@ class InquiryInfo(TypedDict):
     description: str
     treatment: str | None
     outcome: str | None
+    related: list[str]
     boundary_in: list[str]
     boundary_out: list[str]
     edges: list[InquiryEdge]
