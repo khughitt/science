@@ -12,11 +12,11 @@ This command takes an inquiry from sketch to specified status.
 
 In the skeptical model:
 - variables get formal types
-- non-trivial scientific relations become explicit `relation_claim`s
-- evidence updates those claims via support/dispute
+- non-trivial scientific relations become explicit `proposition` records, preferably with subject-predicate-object structure
+- evidence lines update those propositions via support/dispute
 - uncertainty remains explicit unless the evidence base is genuinely strong
 
-The goal is not to convert every edge into a fact. The goal is to convert vague structure into explicit, reviewable claims with provenance.
+The goal is not to convert every edge into a fact. The goal is to convert vague structure into explicit, reviewable propositions with provenance.
 
 ## Tool Invocation
 
@@ -31,8 +31,8 @@ uv run science <command>
 - **MUST** read the existing inquiry before modifying it
 - **MUST** assign formal types to all important variables
 - **MUST** identify which inquiry edges are structural only and which represent uncertain scientific claims
-- **MUST** represent uncertain scientific relations as `relation_claim`s
-- **MUST** attach provenance to authored claims
+- **MUST** represent uncertain scientific relations as `proposition` entities
+- **MUST** attach provenance to authored propositions and evidence lines
 - **MUST** keep residual uncertainty visible when support is sparse, contested, or low-quality
 - **MUST** run `inquiry validate` after specifying
 - **SHOULD** identify confounders for directional or causal claims
@@ -78,37 +78,42 @@ Use commands like:
 science graph add concept "<name>" --type <CURIE> --definition "<definition>"
 ```
 
-### Step 3: Convert Scientific Edges Into Explicit Claims
+### Step 3: Convert Scientific Edges Into Explicit Propositions
 
 For each non-trivial scientific relation in the inquiry:
 
-1. Clarify the content of the claim
+1. Clarify the content of the proposition
    - What exactly is being asserted?
    - Is it `empirical_regularity`, `causal_effect`, `mechanistic_narrative`, or `structural_claim`?
    - Is the observed evidence direct or proxy-mediated?
 
-2. Create a `relation_claim`
+2. Create a durable proposition
 
 ```bash
-science graph add relation-claim \
-  "concept:<subject>" \
-  "<predicate>" \
-  "concept:<object>" \
-  --source "<ref>" \
-  --confidence <0-1> \
-  --text "<clear claim text>"
+science proposition create "<clear proposition title>" \
+  --id "proposition:<id>" \
+  --source-ref "<ref>"
 ```
 
-3. Attach the claim to the inquiry edge when the edge should remain in the model
+Then fill the proposition file with explicit subject-predicate-object structure in prose and, when useful, frontmatter fields such as:
+
+```yaml
+subject: "concept:<subject>"
+predicate: "<predicate>"
+object: "concept:<object>"
+claim_layer: "empirical_regularity|causal_effect|mechanistic_narrative|structural_claim"
+```
+
+3. Attach the proposition to the inquiry edge when the edge should remain in the model
 
 ```bash
 science inquiry add-edge "<slug>" "concept:<subject>" "<predicate>" "concept:<object>" \
-  --claim "relation_claim:<id>"
+  --claim "proposition:<id>"
 ```
 
-Use direct structural edges without claims only when the edge is organizational or procedural rather than epistemic.
+Use direct structural edges without propositions only when the edge is organizational or procedural rather than epistemic.
 
-When the claim is materially clearer with layered metadata, author it explicitly:
+When the proposition is materially clearer with layered metadata, author it explicitly:
 - `claim_layer`
 - `identification_strength`
 - `proxy_directness`
@@ -118,25 +123,23 @@ When the claim is materially clearer with layered metadata, author it explicitly
 
 ### Step 4: Attach Support And Dispute
 
-For each important claim, ask:
+For each important proposition, ask:
 - What currently supports it?
 - What currently disputes it?
 - What evidence is missing?
 - Does the support come from one independence group only?
 - Is any support actually a proxy that still needs a measurement model?
 
-When the project has concrete supporting or disputing project claims, represent them explicitly:
+When the project has concrete supporting or disputing evidence, represent it as evidence-line entities:
 
 ```bash
-science graph add claim "<supporting or disputing statement>" --source "<ref>" --confidence <0-1>
-science graph add relation-claim \
-  "claim:<supporting-claim>" \
-  "cito:supports" \
-  "relation_claim:<target>" \
-  --source "<ref>"
+science entity create evidence-line "<supporting or disputing evidence line>" \
+  --id "evidence-line:<id>" \
+  --source-ref "<ref>" \
+  --related "proposition:<target>"
 ```
 
-Use `cito:disputes` analogously for counter-evidence.
+Then set `target: "proposition:<target>"`, `stance: "supports"` or `stance: "disputes"`, and fill in strength, method, independence, and caveats.
 
 Do not force a flat verdict when the evidence is mixed or weak.
 
@@ -178,7 +181,7 @@ science graph stamp-revision
 ## Important Notes
 
 - Specifying a model increases clarity, not certainty.
-- A relation-claim with one weak line of evidence is still fragile.
+- A proposition with one weak line of evidence is still fragile.
 - The main output of this command is a model whose uncertainty can be inspected, challenged, and improved.
 
 ## Process Reflection

@@ -16,9 +16,9 @@ At sketch time:
 - uncertainty is expected
 - missing provenance is acceptable
 - edges are tentative
-- candidate `relation_claim`s are more important than polished formalism
+- candidate propositions are more important than polished formalism
 
-The output is an inquiry subgraph plus a rough set of candidate claims that can later be formalized with `/science:specify-model`.
+The output is an inquiry subgraph plus a rough set of candidate propositions that can later be formalized with `/science:specify-model`.
 
 ## Causal Mode Detection
 
@@ -32,7 +32,7 @@ When causal mode is active:
 - create the inquiry with `--type causal`
 - use `scic:causes` and `scic:confounds` as tentative causal structure
 - set the estimand with `inquiry set-estimand`
-- treat each causal edge as a candidate relation-claim, not an established fact
+- treat each causal edge as a candidate proposition, not an established fact
 - ask what evidence would support or dispute each proposed causal edge
 
 When causal mode is not active:
@@ -53,7 +53,7 @@ uv run science <command>
 - **MUST** initialize the graph if it does not exist (`science graph init`)
 - **MUST** create the inquiry before adding nodes or edges (`science inquiry init`)
 - **MUST** add entities to the knowledge graph and to the inquiry
-- **SHOULD** name candidate `relation_claim`s explicitly in notes or prose when the user proposes a real scientific relationship
+- **SHOULD** name candidate propositions explicitly in notes or prose when the user proposes a real scientific relationship
 - **MUST NOT** treat sketch edges as validated
 - **MUST NOT** require provenance or confidence at this stage
 - **SHOULD** use `sci:Unknown` nodes to make uncertainty visible rather than hiding it in prose
@@ -172,7 +172,7 @@ science inquiry add-edge "<slug>" "concept:<from>" "scic:causes" "concept:<to>"
 ```
 
 Do not imply that this edge is proven.
-Instead, record in the inquiry summary which candidate `relation_claim`s likely need to be formalized next.
+Instead, record in the inquiry summary which candidate propositions likely need to be formalized next.
 
 5. **Set the estimand when relevant**
 
@@ -190,7 +190,7 @@ science inquiry validate "<slug>" --format json
 Save the inquiry document to `doc/inquiries/<slug>.md`.
 
 The summary should explicitly note:
-- tentative relation-claims
+- tentative propositions
 - unresolved unknowns
 - which parts are structurally useful but epistemically weak
 - where `supports_scope` should later widen review output, while still remaining only a hint rather than a graph override

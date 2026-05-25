@@ -465,6 +465,25 @@ def test_command_docs_remove_claim_centric_terminology(
         assert legacy not in text
 
 
+def test_command_docs_do_not_reference_legacy_relation_claim_commands() -> None:
+    forbidden_strings = (
+        "`relation_claim`",
+        "relation_claim:",
+        "relation-claim",
+        "science graph add claim",
+        "science graph add relation-claim",
+        "graph claim surfaces",
+        "Claim And Graph Uncertainty",
+    )
+    offenders: list[str] = []
+    for path in sorted((ROOT / "commands").glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        for forbidden in forbidden_strings:
+            if forbidden in text:
+                offenders.append(f"{path.relative_to(ROOT)} contains {forbidden!r}")
+    assert not offenders
+
+
 def test_entity_creation_cookbook_covers_positive_and_negative_examples() -> None:
     text = _read("docs/process/entity-creation-cookbook.md")
 

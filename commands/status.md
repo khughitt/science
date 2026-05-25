@@ -60,7 +60,7 @@ From `doc/questions/*.md`:
 - list the top 5 by priority
 - include the question text and type
 
-### 4. Claim And Graph Uncertainty
+### 4. Proposition And Graph Uncertainty
 
 When `knowledge/graph.trig` exists:
 

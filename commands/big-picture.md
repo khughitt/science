@@ -72,7 +72,7 @@ Then for each hypothesis bundle, filter `all_gaps` to topics whose `hypotheses` 
 `included_question_ids` is the exact set already computed earlier in Phase 1 for aspect filtering — DO NOT recompute it here.
 
 Compute `provenance_coverage` per hypothesis:
-- `high` if >=1 `.edges.yaml` is present OR >=1 graph claim surfaces AND >=60% of
+- `high` if >=1 `.edges.yaml` is present OR >=1 graph proposition surface exists AND >=60% of
   related interpretations participate in materialized `sci:amends` /
   `sci:supersedes` conclusion chains.
 - `partial` if neither of those but >=30% of related interpretations participate

@@ -83,6 +83,13 @@ class TestInquiryAddNode:
 
 
 class TestInquiryAddEdge:
+    def test_edge_claim_help_uses_proposition_language(self, runner: CliRunner) -> None:
+        for args in (["graph", "add", "edge", "--help"], ["inquiry", "add-edge", "--help"]):
+            result = runner.invoke(main, args)
+            assert result.exit_code == 0, result.output
+            assert "Supporting proposition reference" in result.output
+            assert "relation claim" not in result.output
+
     def test_add_edge(self, runner: CliRunner, graph_path: Path) -> None:
         p = str(graph_path)
         runner.invoke(main, ["inquiry", "init", "test", "--label", "T", "--target", "hypothesis:h01", "--path", p])

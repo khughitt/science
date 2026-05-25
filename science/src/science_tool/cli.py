@@ -1955,7 +1955,7 @@ def graph_add_question(
 @click.argument("predicate")
 @click.argument("object")
 @click.option("--graph", "graph_layer", type=click.Choice(GRAPH_LAYERS), default="graph/knowledge", show_default=True)
-@click.option("--claim", "claim_refs", multiple=True, help="Supporting relation claim reference (repeatable)")
+@click.option("--claim", "claim_refs", multiple=True, help="Supporting proposition reference (repeatable)")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
@@ -2239,7 +2239,7 @@ def inquiry_add_node(slug: str, entity: str, role: str | None, graph_path: Path)
 @click.argument("subject")
 @click.argument("predicate")
 @click.argument("object", metavar="OBJECT")
-@click.option("--claim", "claim_refs", multiple=True, help="Supporting relation claim reference (repeatable)")
+@click.option("--claim", "claim_refs", multiple=True, help="Supporting proposition reference (repeatable)")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
