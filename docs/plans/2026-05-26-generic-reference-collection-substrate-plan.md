@@ -20,6 +20,8 @@
 
 **Backward-compatibility invariant (verify it holds after Task 1):** every existing `origin: derived` dataset has a `derivation` with `workflow_recipe` + `inputs` and **no** `kind` field. The new schema must keep those valid. This is why the change is additive (a `oneOf` whose first branch matches a `kind`-less workflow derivation) and stays at `mixin-dataset-1.0.json` rather than bumping the version (a version bump would ripple into `default_profile_for_kind`, `commons/promote.py:203`, and every dataset `schema_profile` string for no behavioural gain).
 
+**Implementation note (discovered during execution — the JSON schema is not sufficient on its own):** the graph loader (`load_project_sources`) validates each dataset through the *pydantic* model, not the JSON schema. The closed `Entity.derivation` was a `DerivationBlock` that **requires** `workflow`/`workflow_run`, so a `member_of` dataset failed pydantic validation and was **skipped** at load — never reaching Task 4's check. Task 1's schema change therefore had to be accompanied by a pydantic change (made during Task 4): a new `MemberOfDerivationBlock` in `science/model/src/science_model/packages/schema.py` (`kind`/`parent_dataset`/`member_key`, with `dataset:` and non-empty validators mirroring the JSON branch), `Entity.derivation: DerivationBlock | MemberOfDerivationBlock | None`, a `kind`-dispatch in `frontmatter._coerce_derivation`, a member-of branch in `DatasetEntity._derived_readiness`, and a guard in `plan_gate.check_inputs` (the only other site that reads `derivation.workflow_run`). If re-running this plan from scratch, fold that pydantic change into Task 1.
+
 ---
 
 ## File Structure
@@ -691,14 +693,16 @@ parent collection, unless it explicitly declares `resolution_status:
 declared_unresolved`. See
 docs/plans/2026-05-26-reference-collection-member-promotion-design.md.
 
-Reads RAW frontmatter, NOT the typed graph `Entity`. The graph `Entity` is a
-closed pydantic model: its `derivation` is a typed `DerivationBlock` with no
-`kind`/`member_key`/`parent_dataset` (it requires `workflow`/`workflow_run`),
-and `resolution_status` is not modelled at all (pydantic `extra="ignore"` drops
-it). Reading those via `getattr(entity, ...)` would therefore silently no-op on
-every `member_of` dataset. We re-read each entity's `file_path` (resolved under
-`ctx.project_root`, so the check works from any cwd) as raw frontmatter and feed
-Plan 1's dict-based helpers, which already accept a frontmatter dict.
+Reads RAW frontmatter, NOT the typed graph `Entity`, for two reasons: (1)
+`resolution_status` is not modelled on `Entity` at all (pydantic drops unknown
+keys), so a typed read would miss it entirely; and (2) `parse_member_of` and the
+malformed-member guard operate on a plain frontmatter dict, whereas the typed
+`derivation` is a pydantic object (`DerivationBlock` | `MemberOfDerivationBlock`).
+Raw frontmatter is therefore also the un-schema-validated surface for locally
+authored files, so this check re-enforces the schema-critical member_of fields
+itself (a `_member_defect` guard, mirroring the assembly check's
+`_assembly_defect`) instead of crashing on a malformed block. Each entity's
+`file_path` is resolved under `ctx.project_root` so the check works from any cwd.
 """
 
 from __future__ import annotations
