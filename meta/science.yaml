@@ -1,4 +1,5 @@
 name: "science-meta"
+id: "science-meta"
 created: "2026-04-23"
 last_modified: "2026-04-23"
 summary: "Applying Science to Science itself. Software layer: the research-agent + knowledge-graph + causal-inference tooling (primary focus so far). Research layer: evidence-driven design of the data/knowledge model and science-literature analysis informing the tool's direction."
