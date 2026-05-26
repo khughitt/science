@@ -145,3 +145,28 @@ class DerivationBlock(BaseModel):
             if not item.startswith("dataset:"):
                 raise ValueError(f"inputs must be dataset:<slug> entity references; got {item!r}")
         return v
+
+
+class MemberOfDerivationBlock(BaseModel):
+    """Reference-collection member promotion derivation (RCM-D5).
+
+    A promoted member declares `derivation.kind: member_of` with a
+    `parent_dataset` entity reference and a `member_key` identifying the
+    specific row within that collection. No workflow provenance is expected
+    (the promotion is a structural declaration, not a compute step).
+    """
+
+    kind: Literal["member_of"]
+    parent_dataset: str
+    member_key: str
+
+    @field_validator("parent_dataset")
+    @classmethod
+    def _parent_id(cls, v: str) -> str:
+        if not v.startswith("dataset:"):
+            raise ValueError("parent_dataset must be a dataset:<slug> entity reference")
+        return v
+
+
+# Backward-compatible alias kept for callers that imported WorkflowDerivationBlock.
+WorkflowDerivationBlock = DerivationBlock

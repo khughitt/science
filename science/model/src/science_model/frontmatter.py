@@ -8,9 +8,16 @@ from typing import Literal, cast
 
 import yaml
 
-from science_model.entities import Entity, EntityType, EpistemicReviewState, EvidenceLineEntity, MechanismEntity, core_entity_type_for_kind
+from science_model.entities import (
+    Entity,
+    EntityType,
+    EpistemicReviewState,
+    EvidenceLineEntity,
+    MechanismEntity,
+    core_entity_type_for_kind,
+)
 from science_model.identity import EntityScope, ExternalId
-from science_model.packages.schema import AccessBlock, AccessException, DerivationBlock
+from science_model.packages.schema import AccessBlock, AccessException, DerivationBlock, MemberOfDerivationBlock
 from science_model.sync import SyncSource
 
 
@@ -258,10 +265,21 @@ def _coerce_review_state(fm: dict) -> EpistemicReviewState | None:
     )
 
 
-def _coerce_derivation(fm: dict) -> DerivationBlock | None:
+def _coerce_derivation(fm: dict) -> DerivationBlock | MemberOfDerivationBlock | None:
     raw = fm.get("derivation")
     if not isinstance(raw, dict):
         return None
+    kind = raw.get("kind", "workflow")
+    if kind == "member_of":
+        parent_dataset = raw.get("parent_dataset", "")
+        member_key = raw.get("member_key", "")
+        if not parent_dataset or not member_key:
+            return None
+        return MemberOfDerivationBlock(
+            kind="member_of",
+            parent_dataset=parent_dataset,
+            member_key=member_key,
+        )
     workflow = raw.get("workflow", "")
     workflow_run = raw.get("workflow_run", "")
     # DerivationBlock validators require non-empty, prefixed values for workflow and workflow_run.
@@ -367,10 +385,10 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
     if kind == EntityType.EVIDENCE_LINE.value:
         return EvidenceLineEntity(
             **entity_kwargs,
-            stance=fm.get("stance"),          # required; pydantic raises if missing/invalid
-            target=fm.get("target"),          # required; pydantic raises if missing
+            stance=fm.get("stance"),  # required; pydantic raises if missing/invalid
+            target=fm.get("target"),  # required; pydantic raises if missing
             source=fm.get("source"),
-            strength=fm.get("strength"),      # optional; pydantic coerces or None
+            strength=fm.get("strength"),  # optional; pydantic coerces or None
             independence=fm.get("independence"),
             dispute_scope=fm.get("dispute_scope"),
             shared_dataset=fm.get("shared_dataset"),

@@ -62,6 +62,7 @@ def _load_canonical_checks() -> None:
         "tasks",
         "id_prefixes",
         "cross_references",
+        "reference_collections",
         "prose_lints",
         "annotations",
         "evidence_lines",
