@@ -65,3 +65,23 @@ def test_evaluate_key_resolution_unknown_when_no_index_and_no_declaration() -> N
 def test_evaluate_key_resolution_rejects_unknown_declared_status() -> None:
     with pytest.raises(ValueError, match="resolution_status"):
         evaluate_key_resolution(key="X", available_keys=None, declared_status="bogus")
+
+
+def test_evaluate_key_resolution_declared_resolved_does_not_override_index() -> None:
+    # "resolved" is a valid authored status but never bypasses the index check.
+    present = evaluate_key_resolution(
+        key="K", available_keys={"K"}, declared_status="resolved"
+    )
+    assert present is ResolutionState.RESOLVED
+    absent = evaluate_key_resolution(
+        key="K", available_keys={"OTHER"}, declared_status="resolved"
+    )
+    assert absent is ResolutionState.UNRESOLVED
+
+
+def test_evaluate_key_resolution_declared_unresolved_wins_over_present_index() -> None:
+    # declared_unresolved is honoured even when a populated index lacks the key.
+    state = evaluate_key_resolution(
+        key="K", available_keys={"OTHER"}, declared_status="declared_unresolved"
+    )
+    assert state is ResolutionState.DECLARED_UNRESOLVED

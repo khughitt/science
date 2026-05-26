@@ -69,6 +69,12 @@ from science_tool.commons.overlay import (
     validate_project_overlays,
 )
 from science_tool.commons.inventory import build_commons_inventory
+from science_tool.commons.member import (
+    MemberOf,
+    ResolutionState,
+    evaluate_key_resolution,
+    parse_member_of,
+)
 from science_tool.commons.promote import (
     ConflictResolution,
     DiscoveryResult,
@@ -112,6 +118,7 @@ __all__ = [
     "DiscoveryResult",
     "FailedCandidate",
     "FieldConflict",
+    "MemberOf",
     "MergedEntity",
     "OverlayAdapter",
     "OverlayMergeError",
@@ -138,14 +145,17 @@ __all__ = [
     "RebuildReport",
     "RegistryBuilder",
     "ResolvedDataResource",
+    "ResolutionState",
     "ValidationReport",
     "apply_promote",
     "build_commons_inventory",
     "commons_group",
     "discover_candidates",
+    "evaluate_key_resolution",
     "init_commons",
     "load_data_overrides",
     "merge_entity",
+    "parse_member_of",
     "parse_resource_hash",
     "plan_promote",
     "prompt_resolve",

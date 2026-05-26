@@ -62,6 +62,12 @@ def evaluate_key_resolution(
     - else (no index, no declaration) → UNKNOWN; the caller decides severity.
 
     `declared_status` must be one of {"resolved", "declared_unresolved"} or None.
+
+    Note: `declared_status == "resolved"` is accepted (it is a valid authored
+    `resolution_status`) but is NOT an authoritative override — resolution is
+    still decided by `available_keys`. A dataset cannot bypass key-index
+    verification by declaring itself resolved; if its key is absent the result
+    is UNRESOLVED.
     """
     if declared_status is not None and declared_status not in _VALID_DECLARED_STATUS:
         raise ValueError(
