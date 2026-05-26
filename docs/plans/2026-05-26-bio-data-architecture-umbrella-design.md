@@ -245,6 +245,15 @@ gene-set arm consumes D, so D leads B within Phase 3 (B may start its paper-side
 engine in parallel, deferring the gene-set declarations until D's collection schema lands). E lands
 last. Each doc is independently implementable and reviewable.
 
+**Foundation primitive (cross-pillar).** C's assembly registry and D's gene-set collection turn out to
+share one model — *reference collection → keyed member → promoted member* — defined once in
+`docs/plans/2026-05-26-reference-collection-member-promotion-design.md` and consumed by both (and by the
+C2/C3 crosswalks and the C4 variant-label registry). D is its **first concrete instance**, not its parent:
+the mechanism is the generalization of D's collection/member/promotion, so it is settled alongside C/D
+rather than as a separately-numbered phase. See that doc for the model and its invariants (resolve-or-
+`declared_unresolved`; `derivation.kind: member_of`; exact-key-equality-is-identity vs. compatibility
+relations).
+
 ---
 
 ## 7. Open questions for review

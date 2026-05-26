@@ -6,6 +6,7 @@ Status: design for review (Phase 3 of the bio data architecture; last foundation
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar D
+- `docs/plans/2026-05-26-reference-collection-member-promotion-design.md` — foundation primitive; D is its first concrete instance
 - `docs/plans/2026-05-26-bio-dataset-influence-provenance-design.md` — Pillar B; D realizes per-set `dataset_usage`
 - `docs/plans/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` — Pillar A; `source_class: reference`
 - `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; `identifier_space`
@@ -22,6 +23,13 @@ recorded, and how an individual set becomes an evidence-bearing, citable object 
 entities** (the never-cited long tail stays collection rows). It is the realization of Pillar B's
 provenance interface for gene sets, and the consumer of Pillar A's `reference` class and Pillar C's
 identity layer.
+
+**D is the first concrete instance of the reference-collection / keyed-member / promoted-member foundation
+primitive** (`2026-05-26-reference-collection-member-promotion-design.md`). The collection→member→
+promotion model, the resolve-or-`declared_unresolved` invariant (RCM-D2), the `member_of` derivation and
+virtual-member rule (RCM-D5), and the equality-vs-compatibility guardrail (RCM-D6) are **inherited** from
+the primitive; D fixes the member key to `set_key` and adds the gene-set-specific fields. The decisions
+below are stated in those inherited terms.
 
 **Locked decisions (this review):**
 
@@ -56,7 +64,8 @@ the double-counting and circularity machinery needs.
 ### D-D1 — The collection: `dataset` + `bio.geneset`
 
 A gene-set collection is a `dataset` (typically `origin: external`, `source_class: reference`) carrying a
-`bio.geneset` extension:
+`bio.geneset` extension. On top of the primitive's collection mechanism (RCM-D1), D adds **only** the
+gene-set-specific fields:
 
 - `n_sets`, set-size distribution summary
 - `identifier_space` — the gene/protein identity space the members are keyed in, **resolved through
@@ -69,9 +78,10 @@ A gene-set collection is a `dataset` (typically `origin: external`, `source_clas
 
 ### D-D2 — Unpromoted set: a collection row addressed by `set_key`
 
-An individual set that has not been promoted is **not** an entity. It is addressed as
-`{collection, set_key}` and, where it must participate in provenance, is referenced *inside* a reified
-`sci:DatasetUsage` record (B-D4) with a set-key qualifier. This keeps B's option-2 (qualified sub-reference)
+An individual set that has not been promoted is **not** an entity — it is the primitive's **keyed member**
+(RCM-D2), addressed as `{collection, set_key}` and, where it must participate in provenance, referenced
+*inside* a reified `sci:DatasetUsage` record (B-D4) with a set-key qualifier. A reference to a set by
+`set_key` must resolve in the collection or carry `resolution_status: declared_unresolved` (RCM-D2). This keeps B's option-2 (qualified sub-reference)
 as an internal detail and avoids minting entities for the long tail of never-cited sets.
 
 ### D-D3 — Promotion: an on-demand child dataset
@@ -92,10 +102,10 @@ profiles:
   - science-entity-base/1.0
   - dataset/1.0
   - bio.geneset.member/1.0
-derivation:                        # the member-derivation variant (D-D5) — satisfies origin: derived
+derivation:                        # the member_of variant (primitive RCM-D5) — satisfies origin: derived
   kind: member_of
   parent_dataset: dataset:reactome-v89
-  set_key: R-HSA-12345
+  member_key: R-HSA-12345          # the gene set's set_key
 dataset_usage:                     # per-set provenance B consumes
   - ref: dataset:study-a
     role: set_definition_source
@@ -105,8 +115,9 @@ identifier_space: hgnc
 n_members: 42
 ```
 
-`set_key` and the collection link live in `derivation.member_of` (canonical, machine-checkable, D-D5), so
-the extension carries only the gene-set descriptors (`identifier_space`, `n_members`).
+The member key and the collection link live in `derivation` (the `member_of` variant — canonical,
+machine-checkable, RCM-D5), so the extension carries only the gene-set descriptors (`identifier_space`,
+`n_members`).
 
 **`source_class` and `derived_kind` on a member.** A member's `source_class` is **copied from the per-set
 override, defaulting to the collection's class** (§4). In the common case it is `reference`, and A requires
@@ -114,24 +125,25 @@ override, defaulting to the collection's class** (§4). In the common case it is
 curation down-weight applies, and there is no `derived_kind` tension. **But** a per-set override that makes a
 member `source_class: derived` (an experimentally-derived set) **does** require `derived_kind`, per A.
 
-### D-D5 — The `member_of` derivation variant (locked)
+### D-D5 — The `member_of` derivation variant (inherited from the primitive)
 
-The dataset schema requires `derivation` (`workflow_recipe` + `inputs`) whenever `origin: derived`. A
-promoted member has no workflow — its derivation *is* "member `set_key` of `parent_dataset`". D therefore
-makes `derivation` a **discriminated union on `kind`**, adding a `member_of` variant:
+The `member_of` derivation variant is **defined by the foundation primitive** (RCM-D5): `derivation`
+becomes a discriminated union on `kind`, and the `member_of` kind carries `parent_dataset` + `member_key`,
+satisfying `origin: derived` for a promoted member that has no workflow. D consumes it with the gene set's
+key as the `member_key` value:
 
 ```yaml
 derivation:
   kind: member_of
   parent_dataset: dataset:reactome-v89
-  set_key: R-HSA-12345
+  member_key: R-HSA-12345          # the gene set's set_key
 ```
 
-The default (workflow) kind still requires `workflow_recipe` + `inputs`; the `member_of` kind requires
-`parent_dataset` + `set_key`. This keeps `origin: derived` **explicit and machine-checkable**, and is
-preferred over (a) relaxing `derivation` validation by profile — which would let `bio.geneset.member`
-silently weaken a core dataset invariant — and (b) mislabeling members as `origin: external`, which they
-are not (we extracted them). Small, honest change to the core derivation schema.
+`set_key` survives as the **name of the collection's key column** (and, where useful, a descriptor on the
+`bio.geneset.member` extension); the *derivation* uses the primitive's generic `member_key`. The rationale
+the primitive locks — explicit, machine-checkable `origin: derived`, preferred over relaxing `derivation`
+validation by profile (which would let `bio.geneset.member` silently weaken a core dataset invariant) or
+mislabeling members as `origin: external` (they are not — we extracted them) — applies unchanged.
 
 ### D-D6 — Per-set provenance is the circularity substrate
 
@@ -141,14 +153,16 @@ set are recorded as `set_definition_source` (in the collection's columns while u
 `dataset_usage` once promoted). B reads exactly this to raise `suspect-circular`. A set **validated** in an
 independent cohort records `validation_source` instead — B's anti-circularity positive.
 
-### D-D7 — Promoted members are virtual unless materialized
+### D-D7 — Promoted members are virtual unless materialized (inherited from the primitive)
 
+The virtual-member rule is **the primitive's** (RCM-D5), not D-specific; recorded here for completeness.
 The dataset mixin **requires `datapackage`**. A promoted member must not force a fabricated tiny artifact
-per set. D's rule: a `member_of` dataset is a **virtual derived dataset** whose runtime payload is
-**resolved by slicing `parent_dataset` on `set_key`** — the `datapackage` requirement is satisfied by a
-virtual/derived descriptor pointing at that resolution, not by separate bulk bytes. A member is
-materialized to its own artifact only when explicitly needed (e.g. an expensive or frozen export). Without
-this rule, implementation would either fabricate many tiny datapackages or fail schema validation.
+per set: a `member_of` dataset is a **virtual derived dataset** whose runtime payload is **resolved by
+slicing `parent_dataset` on `member_key`** (here, the `set_key`) — the `datapackage` requirement is
+satisfied by a virtual/derived descriptor pointing at that resolution, not by separate bulk bytes. A
+member is materialized to its own artifact only when explicitly needed (e.g. an expensive or frozen
+export). Without this rule, implementation would either fabricate many tiny datapackages or fail schema
+validation.
 
 ---
 

@@ -6,6 +6,7 @@ Status: design for review (Phase 1 of the bio data architecture; foundational)
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar C
+- `docs/plans/2026-05-26-reference-collection-member-promotion-design.md` — foundation primitive; the assembly registry is an instance
 - `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` — dataset mixin, `origin`, `access`
 - `science/model/src/science_model/schemas/extension-bio-*.json` — `bio.rnaseq`/`bio.scrna`/`bio.cna` carry free-text `reference_genome`
 - `docs/plans/2026-05-23-store-decomposition-design.md` — commons store (where pinned snapshots live)
@@ -33,9 +34,10 @@ dataset influence (B), define the gene-set type (D), or ingest Reactome (E). It 
 *non-molecular* entity identity — cell lines (Cellosaurus), diseases/phenotypes (MONDO/HPO), tissues, and
 other ontology terms. These are **resolver infrastructure, not epistemic taxonomy**, so they get their
 *own later identity pillar* (not folded into A; §7). C covers molecular identity (gene/protein/variant)
-plus reference-genome/assembly, and ships the **`identity_space` declaration interface** that the later
-pillar will extend: every bio extension may declare the identity space of its keys, and any space outside
-C resolves as **declared-unresolved** until that pillar lands.
+plus reference-genome/assembly, and ships the **`bio.identity_context` declaration component** (C-D6) that
+the later pillar will extend: a dataset declares the identity *coordinate system it is expressed in* —
+molecular id namespaces per tier, and for coordinate-bearing data its assembly — and any space outside C
+carries `resolution_status: declared_unresolved` until that pillar lands.
 
 ---
 
@@ -81,14 +83,21 @@ versioned mapping — hence rsID is gated on a pinned dbSNP / NCBI Variation sna
   accession (`GCA_…`/`GCF_…`) and human labels (`GRCh38`, `hg38`) are **aliases/metadata**, not the key.
   This is deliberate: `b37`, `hs37d5`, and assorted decoy/alt/patch flavors are **not** simple synonyms
   for "GRCh37" — they are *different sequence collections* with potentially different coordinates, and a
-  label-based synonym table would silently conflate them. seqcol's comparison protocol additionally lets
-  us assert a *shared coordinate system* between two collections that are not byte-identical.
+  label-based synonym table would silently conflate them. **Exact `seqcol_digest` equality is identity;**
+  seqcol's comparison protocol — asserting a *compatible coordinate system* or liftover-possibility
+  between two non-identical collections — is a **relation between distinct assemblies, never a collapse of
+  two digests into one** (the primitive's guardrail 2, RCM-D6). C1 ships exact equality; the
+  compatibility/liftover relations land in C4.
 - **Per-contig refget sequence digests** still pin each contig to actual sequence bytes (the GA4GH
   sequence checksum) and tie to **refgenie** asset digests for genome assets (FASTA, indices); the seqcol
   digest is the collection-level roll-up over them.
-- `reference_genome` is promoted from free text to a structured assembly field validated against a pinned
-  **assembly registry** keyed by seqcol digest; an unrecognized assembly or a coordinate-system mismatch
-  is a detectable condition.
+- **The assembly registry is a `reference` collection** in the sense of the foundation primitive
+  (`2026-05-26-reference-collection-member-promotion-design.md`): a `dataset` whose member rows are keyed
+  by `seqcol_digest`. `reference_genome` is promoted from free text to a structured **inline
+  `seqcol_digest` declaration** carried on `bio.identity_context` (C-D6); the declaration must resolve in
+  the registry or carry `resolution_status: declared_unresolved` — never an unchecked string (the
+  primitive's guardrail 1, RCM-D2). An individual assembly is promoted to its own `dataset` entity only
+  on demand (citation, independent provenance, asset packaging, or review state).
 
 ### C-D3 — Pinned crosswalk sources (the authoritative join layer)
 
@@ -128,20 +137,52 @@ adopted). `latest`/`current` endpoints are discovery-only.
   Because VRS ids are assembly-anchored, the lifted variant is a distinct (linked) identity, making the
   re-identification explicit rather than an implicit coordinate coincidence.
 
+### C-D6 — The `bio.identity_context/1.0` declaration component
+
+Identity declarations live in **one shared component**, `bio.identity_context`, composed by the bio
+extensions whose data carry molecular keys or genomic coordinates — *not* duplicated per assay extension
+(today's accidental triplication of free-text `reference_genome` across `bio.rnaseq`/`bio.scrna`/`bio.cna`)
+and *not* on the universal `dataset` mixin (most datasets have no assembly). It is named
+**`identity_context`, not `identity`**, because it records the identity *coordinate system the dataset is
+expressed in*, not the dataset's biological identity — leaving room for later non-molecular contexts (cell
+line, disease, ontology) as siblings without pretending they are molecular identity.
+
+```yaml
+identity_context:
+  taxon: 9606
+  molecular_ids:
+    gene: {namespace: hgnc, canonical: true}   # declared in C1; gene *resolution* lands in C2
+  assembly:
+    seqcol_digest: SQ...        # canonical key, inline, authority-free (C-D2)
+    label: GRCh38               # advisory alias, validated against the registry
+    registry: dataset:assembly-registry
+    resolution_status: resolved # resolved | declared_unresolved (RCM-D2, guardrail 1)
+  # later non-molecular siblings: cell_line:, disease:, ontology:
+```
+
+This **realizes and supersedes** the umbrella's flat "identity_space interface": the identity space of a
+tier's keys is now `molecular_ids.<tier>.namespace`, and `assembly` is its coordinate-system counterpart.
+**C1 ships the `identity_context` container and full `assembly` resolution; the `molecular_ids` declaration
+is accepted in C1 but `molecular_ids.gene` resolution is `declared_unresolved` until C2's gene crosswalk
+lands.** Protein (C3) and variant (C4) tiers extend `molecular_ids` / `assembly` the same way.
+
 ---
 
 ## 4. How identity infra lives in the commons
 
 The crosswalks, assembly registry, and liftover chains are pinned `reference` datasets under the commons
 data root, each with `recipe/` (fetch + build + lockfile) and a `datapackage.yaml` carrying
-`hash: sha256:…` per resource — the same structure as `ccle-proteomics-nusinow-2020`. A thin **resolver
+`hash: sha256:…` per resource — the same structure as `ccle-proteomics-nusinow-2020`. Each is a **reference
+collection** per the foundation primitive — keyed member rows, members promoted to their own `dataset`
+only on demand — so the assembly registry, the gene/protein crosswalks (C2/C3), and the variant-label
+table (C4) share one collection/member/promotion mechanism with Pillar D's gene sets. A thin **resolver
 library** reads these snapshots and exposes a **species-aware, namespace-explicit** API — e.g.
 `to_canonical({taxon, namespace, id}, target_space)`, `assembly(label_or_digest) → registry entry`,
 `liftover(coord, from_seqcol, to_seqcol)`, and `vrs_id(variant, assembly_seqcol)`. There is **no bare
 `gene_id`**: every call carries taxon + namespace, so multi-species support (implementation deferred,
 §7 d6) needs no later API break. The resolver is pure over pinned inputs (no network), so any pipeline
-that uses it is reproducible by construction. It also honors the `identity_space` declaration: keys in a
-space C does not yet resolve (cell line, ontology) pass through as **declared-unresolved**, not errors.
+that uses it is reproducible by construction. It also honors the `identity_context` declaration: keys in a
+space C does not yet resolve (cell line, ontology) pass through as **`declared_unresolved`**, not errors.
 
 This makes Pillar C the **first real exercise of Pillar A's `reference` class** — a useful forcing
 function: if the identity snapshots don't fit the dataset model cleanly, A needs revision before it
@@ -151,13 +192,14 @@ locks.
 
 ## 5. Validation surface (new checks)
 
-1. **Assembly declared & recognized** — any `bio.*` extension carrying coordinates must set a structured
-   assembly that resolves in the registry. Free-text-only `reference_genome` becomes a warning, then an
-   error after migration.
+1. **Assembly declared & recognized** — any `bio.*` extension carrying coordinates must declare
+   `identity_context.assembly.seqcol_digest`, which must resolve in the registry or carry
+   `resolution_status: declared_unresolved` (never an unchecked string; the primitive's guardrail 1).
+   Free-text-only `reference_genome` becomes a warning, then an error after migration.
 2. **Identifier resolvability** — declared keys resolve against the pinned crosswalk for their declared
-   `identity_space`; unresolved ids are reported with counts (not silently passed). Keys whose
-   `identity_space` is outside C (cell line, ontology) are **declared-unresolved** and pass without error
-   until the later identity pillar lands.
+   `molecular_ids.<tier>.namespace`; unresolved ids are reported with counts (not silently passed). Keys
+   whose namespace is outside C (cell line, ontology) carry `resolution_status: declared_unresolved` and
+   pass without error until the later identity pillar lands.
 3. **Cross-dataset assembly mismatch** — a derived dataset whose inputs span assemblies (differing seqcol
    digests) without a liftover step is flagged. **C1 *detects* the mismatch; the remedy (liftover) is not
    available until C4** — until then the flag stands as a blocking condition the author resolves manually
@@ -173,14 +215,14 @@ locks.
 | Source | What C must handle | Verdict |
 |---|---|---|
 | GTEx bulk RNA-seq | gene ids + single assembly | assembly registry + gene crosswalk (in scope) |
-| DepMap | gene crosswalk **+ cell-line identity** | gene part in scope; **cell-line identity declared-unresolved** until the later identity pillar (§7 d3) — surfaced via `identity_space`, not half-solved |
+| DepMap | gene crosswalk **+ cell-line identity** | gene part in scope; **cell-line identity declared-unresolved** until the later identity pillar (§7 d3) — surfaced via `identity_context`, not half-solved |
 | MSigDB / Reactome | symbol↔Entrez↔Ensembl mapping; the "unsafe pathway-co-membership join" lesson | gene crosswalk replaces unsafe joins (in scope) |
 | Open Targets / GO / MONDO | gene + **disease/ontology identity** | gene part in scope; **disease/ontology identity declared-unresolved** until the later identity pillar (§7 d3) |
 | AlphaMissense | variant identity + assembly-anchored coordinates + liftover | VRS 2.0 + C-D2 + C-D5 (in scope; the reason variant tier is Phase 1) |
 | UniProt / AlphaFold | protein identity + protein↔gene | protein crosswalk (in scope) |
 
 C cleanly serves the molecular-identity needs of all six; the two non-molecular identity needs (cell
-line, disease/ontology) it surfaces are **declared-unresolved** via the `identity_space` interface and
+line, disease/ontology) it surfaces are **`declared_unresolved`** via the `identity_context` component and
 routed to the later identity pillar — named and interface-stubbed, not half-solved.
 
 ---
@@ -196,8 +238,9 @@ All six umbrella-review open questions were resolved in review; recorded here as
    *declared source* assembly, lifted to GRCh38 by default (a GRCh37 target requires explicit project
    opt-in). Source and lifted assembly are preserved separately (C-D5).
 3. **(d3) Non-molecular identity.** Gets its **own later identity pillar** — it is resolver
-   infrastructure, not epistemic taxonomy, so it is **not** folded into A. C ships the `identity_space`
-   declaration interface now; spaces outside C are declared-unresolved until that pillar lands.
+   infrastructure, not epistemic taxonomy, so it is **not** folded into A. C ships the
+   `bio.identity_context` declaration component now (C-D6); spaces outside C carry
+   `resolution_status: declared_unresolved` until that pillar lands.
 4. **(d4) VRS version.** Target **VRS 2.0** (GA4GH-approved; inherent-property computed-identifier model).
    C4 pins the exact spec + library version.
 5. **(d5) Protein isoforms.** Canonical protein entity = UniProtKB accession; isoform accessions
@@ -218,10 +261,10 @@ C is large; it ships in independently-testable sub-phases:
 
 | Sub-phase | Locks |
 |---|---|
-| C1 — Assembly registry (seqcol-keyed) + structured `reference_genome` + `identity_space` interface + checks 1 & 3 (detect-only) | assembly identity; cheapest win, unblocks GTEx-class data; mismatch *detected*, remedy in C4 |
+| C1 — Assembly registry (seqcol-keyed, as a reference collection) + `bio.identity_context` container + inline `seqcol_digest` declaration with `resolution_status` + checks 1 & 3 (detect-only, exact-equality only) | assembly identity; cheapest win, unblocks GTEx-class data; mismatch *detected*, remedy (liftover/compatibility) in C4 |
 | C2 — Gene crosswalk reference datasets + resolver `to_canonical` + checks 2 & 4 | gene identity; unblocks MSigDB/Reactome/GTEx joins |
 | C3 — Protein crosswalk | protein identity; unblocks UniProt/AlphaFold |
-| C4 — Variant identity (VRS 2.0 / SPDI) + liftover (C-D5); optional dbSNP + transcript-ref snapshots | variant identity; unblocks AlphaMissense-class; supplies the liftover remedy for check 3 |
+| C4 — Variant identity (VRS 2.0 / SPDI) + liftover (C-D5) + seqcol compatibility relations (RCM-D6); optional dbSNP + transcript-ref snapshots | variant identity; unblocks AlphaMissense-class; supplies the liftover remedy for check 3 |
 
 C1→C2 are the critical path for the other pillars (A's `reference` class, D's gene-set identifier space,
 B's dataset resolution all need gene identity first). C3/C4 can trail.
