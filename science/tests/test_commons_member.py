@@ -115,3 +115,11 @@ def test_resolve_member_raises_when_parent_missing() -> None:
 
     with pytest.raises(CommonsError):
         resolve_member("dataset:orphan-member", commons_root=_COMMONS)
+
+
+def test_resolve_member_raises_when_member_absent() -> None:
+    # The docstring promises a CommonsError when the member entity itself is absent.
+    from science_tool.commons.errors import CommonsError
+
+    with pytest.raises(CommonsError):
+        resolve_member("dataset:does-not-exist", commons_root=_COMMONS)
