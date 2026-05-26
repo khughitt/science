@@ -2,423 +2,128 @@
 
 ![Science](extra/Science.webp)
 
-Science is a Claude Code plugin that helps scientists and researchers develop ideas, refine hypotheses, represent uncertain propositions, and build reproducible computational pipelines.
+Science helps Claude and Codex users develop research questions, refine
+hypotheses, represent uncertain propositions, track evidence, and build
+reproducible computational workflows.
 
-Its default stance is _skeptical_:
+## What Science Is
+
+Science is both an agent workflow package and local project tooling for
+research work. Claude and Codex workflows are the primary interface; the
+`science` CLI supports validation, source-authored entities, graph
+materialization, evidence summaries, synchronization, and project health.
+
+Science is skeptical by default:
+
 - hypotheses are organizing conjectures
-- propositions and evidence are the main units of belief
+- propositions are the main belief-bearing assertions
 - evidence supports or disputes propositions rather than proving them outright
-- uncertainty is something to inspect and prioritize, not hide
+- uncertainty, contestation, and fragility stay visible
+- literature, data, and causal provenance should be explicit
 
-See [docs/proposition-and-evidence-model.md](docs/proposition-and-evidence-model.md) for the canonical reasoning model.
+## Start Here
 
-## What It Does
+For Claude plugin installation:
 
-Science provides **skills** (structured research methodology), **commands** (interactive research tools), and **aspects** (project-type modifiers) that turn Claude Code into a research colleague:
-
-- **Summarize topics** from Claude's training knowledge, supplemented by web search
-- **Summarize papers** using LLM knowledge first, web search second, PDFs only when provided
-- **Identify research gaps** and turn them into prioritized next tasks
-- **Run structured discussions** (including optional double-blind mode)
-- **Review and reprioritize task plans** using explicit rationale
-- **Interpret results** as support/dispute updates on propositions, hypotheses, and priorities
-- **Develop hypotheses** as bundles of uncertain propositions with structured falsifiability criteria
-- **Pre-register expectations** — formalize predictions and decision criteria before analysis
-- **Compare competing hypotheses** — head-to-head evidence evaluation with discriminating predictions
-- **Audit for biases** — systematic cognitive and methodological bias checklist
-- **Sketch and formalize models** — capture variables, candidate relationships, and unknowns, then attach proposition and evidence provenance
-- **Build and critique causal DAGs** — identify treatment, outcome, confounders, and check identifiability
-- **Plan and review pipelines** — translate inquiries into computational steps with validation criteria
-- **Find datasets** from public repositories, ranked by project relevance
-- **Create research projects** with consistent, version-controlled structure
-- **Import existing projects** into the Science framework without restructuring
-- **Validate project structure** with automated checks (template conformance, citation integrity)
-- **Synchronize across projects** — align entities, propagate content, and detect duplicates
-- **Use domain ontologies** — standard vocabulary from community ontologies (e.g., biology, physics, units) for entity types and relation predicates
-
-## Reasoning Model
-
-Science treats research graphs as uncertain by default.
-
-- hypotheses are organizing conjectures
-- propositions and evidence are the units of belief
-- evidence supports or disputes propositions
-- dashboard summaries should help you find fragile propositions, contested regions, and propositions lacking empirical support
-
-If a project still mainly expresses confidence as scalar values on hypotheses or questions, and does not yet expose proposition-backed evidence, it is only partially migrated to the current model.
-
-## Project Peers
-
-Science supports decentralized project peers for cross-project references and
-graph composition. A project declares recognized namespaces in `science.yaml`
-with `peers:`, checks them with `science peers check`, and inspects them with
-`science peers list` or `science peers show <peer-id>`. `science graph build`
-writes the local graph to `knowledge/graph.trig`; when peers are declared it
-also writes `knowledge/composite.trig` from the host local graph plus each
-peer's local graph. See [docs/federation.md](docs/federation.md) for the current
-peers and addressing reference.
-
-## Installation
-
-### From a Marketplace
-
-```
+```text
 /plugin marketplace add <marketplace-url>
 /plugin install science@<marketplace>
 ```
 
-### Local Development
+For local Claude development:
 
-```
+```bash
 claude --plugin-dir /path/to/science
 ```
 
-### Codex
+For Codex, see [docs/README.codex.md](docs/README.codex.md). Codex support uses
+generated `science-*` skills from `codex-skills/`.
 
-See [docs/README.codex.md](docs/README.codex.md).
-Codex support uses generated `science-*` skills from `codex-skills/` rather than Claude slash commands.
+The main manual is [docs/user-guide.md](docs/user-guide.md).
 
-## Commands
+## Core Model
 
-| Command | Description |
-|---|---|
-| `/science:status` | Curated project orientation — hypotheses, questions, uncertainty hotspots, activity, next steps |
-| `/science:create-project` | Scaffold a new Science-managed project using the `research` or `software` profile |
-| `/science:import-project` | Migrate an existing project into a canonical Science project profile |
-| `/science:research-papers` | Research and synthesize one or more papers (LLM knowledge → web search → PDF) |
-| `/science:research-topic` | Research and synthesize a topic with project context |
-| `/science:next-steps` | Gap analysis + progress synthesis + prioritized recommendations |
-| `/science:discuss` | Structured critical discussion for ideas, hypotheses, or approaches |
-| `/science:tasks` | Manage research and development tasks — add, complete, defer, list, filter |
-| `/science:search-literature` | Search OpenAlex/PubMed, rank results, and create a prioritized reading queue |
-| `/science:find-datasets` | Discover and document candidate datasets from public repositories |
-| `/science:add-hypothesis` | Develop and refine a hypothesis as a bundle of uncertain propositions |
-| `/science:pre-register` | Formalize expectations and decision criteria before analysis |
-| `/science:compare-hypotheses` | Head-to-head comparison of competing proposition bundles |
-| `/science:bias-audit` | Systematic bias and threat-to-validity check |
-| `/science:interpret-results` | Interpret results as proposition-level support/dispute updates |
-| `/science:sketch-model` | Sketch a research model with tentative propositions and unknowns |
-| `/science:specify-model` | Formalize a model with explicit propositions, evidence, and uncertainty |
-| `/science:critique-approach` | Review model for problems, sensitivity analysis |
-| `/science:plan-pipeline` | Generate implementation plan with QA checkpoints |
-| `/science:review-pipeline` | Audit plan against evidence rubric with QA coverage |
-| `/science:create-graph` | Build canonical KG sources, audit them, and materialize the graph |
-| `/science:update-graph` | Re-audit and re-materialize the graph after source changes |
-| `/science:sync` | Synchronize knowledge model and content across registered projects |
+Science uses a layered reasoning model:
 
-## Skills
+- `question`: what the project wants to learn
+- `hypothesis`: an organizing conjecture
+- `proposition`: a belief-bearing assertion
+- `observation`: a concrete empirical finding
+- `evidence-line`: durable support or dispute with provenance
+- `inquiry`: a graph-backed work program connecting variables, assumptions,
+  propositions, datasets, transformations, and decisions
+- graph summaries and belief snapshots: derived views over authored sources
 
-Auto-triggered skills activate based on the task at hand:
+For field-level detail, see
+[docs/proposition-and-evidence-model.md](docs/proposition-and-evidence-model.md).
+For workflow teaching, see [docs/user-guide.md](docs/user-guide.md).
 
-| Skill | Triggers When |
-|---|---|
-| `research-methodology` | Conducting literature review, evaluating sources, synthesizing findings |
-| `scientific-writing` | Writing research documents, background sections, summaries |
-| `data-management` | Working with datasets, data packages, provenance |
+## Fast Start
 
-Reference skills are loaded by specific commands as background context:
+One possible research loop:
 
-| Skill | Loaded By |
-|---|---|
-| `knowledge-graph` | `create-graph`, `update-graph`, `sketch-model`, `specify-model`, `critique-approach` |
-| `causal-dag` | `sketch-model` (causal mode), `critique-approach` |
-
-## Aspects
-
-Aspects are project-type modifiers declared in `science.yaml` that tailor command behavior to your research context. Commands detect active aspects and adjust their output sections, prompts, and validation accordingly.
-
-| Aspect | Focus |
-|---|---|
-| `causal-modeling` | Causal inference and DAG-based reasoning |
-| `hypothesis-testing` | Formal hypothesis development, tracking, and evaluation |
-| `computational-analysis` | Computational and exploratory data analysis |
-| `software-development` | Software engineering — applications, tools, and libraries |
-
-For example, with `hypothesis-testing` active, `/science:interpret-results` can add more explicit proposition and evidence evaluation. With `causal-modeling`, it adds causal-model implications instead. Aspects compose — a project can activate several at once.
-
-## Project Structure
-
-See [docs/project-organization-profiles.md](docs/project-organization-profiles.md) for migration rules and profile-selection guidance.
-
-Science supports two steady-state project profiles:
-
-- `research` for research-first projects
-- `software` for tools, apps, libraries, and CLIs
-
-All Science-managed projects draw from a common root set:
-
-```
-project/
-├── science.yaml              # Project manifest (profile, ontologies, aspects, knowledge_profiles)
-├── pyproject.toml            # Root tool manifest for project-local Science tooling
-├── AGENTS.md                 # Primary operational guide
-├── CLAUDE.md                 # Contains only: @AGENTS.md
-├── README.md
-├── tasks/
-├── specs/
-├── doc/
-├── knowledge/
-└── .ai/                      # Optional project-specific AI overrides/additions
+```text
+create/import project -> status -> research-topic/search-literature ->
+add-hypothesis -> proposition/evidence lines -> graph build ->
+dashboard summary -> validate/health -> next-steps
 ```
 
-The root `pyproject.toml` is a tool-only manifest when the repository is not a Python project. It is where
-`science` gets installed for project-local tooling such as task management, feedback, validation, and graph workflows:
-
-```bash
-uv add --dev --editable "$SCIENCE_TOOL_PATH"
-```
-
-Research-profile projects add the research execution/data roots:
-
-```
-project/
-├── src/                      # Optional installable package root for Python projects
-├── tests/                    # Optional package-aligned tests
-├── code/
-│   ├── scripts/
-│   ├── notebooks/
-│   └── workflows/
-├── data/
-│   ├── raw/
-│   └── processed/
-├── results/
-├── models/
-└── papers/
-    ├── references.bib
-    └── pdfs/
-```
-
-Software-profile projects keep their native implementation roots:
-
-```
-project/
-├── src/
-├── tests/
-└── <framework-native roots>
-```
-
-Conventions:
-
-- `doc/` is the canonical root for Science-managed project documents
-- use `doc/background/topics/` for topic background and `doc/background/papers/` for paper summaries
-- root `papers/` is bibliography/PDF management only
-- use `code/workflows/` consistently; do not split between `workflows/` and `pipelines/`
-- framework prompts/templates are resolved centrally; `.ai/` is for project-specific overrides only
-- `archive/` is an accepted optional root for superseded material
-
-## Typical Workflow
-
-A research project typically moves through these phases. Commands can be repeated and interleaved as understanding deepens.
-
-### 1. Bootstrap the project
-
-```
-/science:create-project
-```
-
-Interactive conversation refines your research question, then scaffolds the full directory structure, populates core files, and makes the initial git commit. You'll end up with `science.yaml`, `specs/research-question.md`, a starter `doc/01-overview.md`, and empty slots for everything else.
-
-Projects that use the knowledge graph should also declare ontologies and profile composition in `science.yaml`:
-
-```yaml
-profile: research
-layout_version: 2
-ontologies: [biology]
-knowledge_profiles:
-  local: local
-```
-
-`ontologies` declares which community ontologies provide vocabulary for entity types and relation predicates (currently available: `biology`, `physics`, `units`, `math`, `earth`). Entities whose `kind` matches an ontology type (e.g., `gene`, `protein`, `pathway`) automatically get routed to that ontology's profile. `local` controls the directory name under `knowledge/sources/`.
-
-### 2. State your hypotheses
-
-```
-/science:add-hypothesis
-```
-
-For each conjecture — even vague ones — this command walks you through clarifying the organizing idea, decomposing it into testable propositions, defining falsifiability criteria, listing predictions, and identifying required evidence. Output lands in `specs/hypotheses/` and gets cross-linked to open questions.
-
-As the project matures, treat each hypothesis as a proposition bundle rather than a single verdict target.
-Important propositions should accumulate explicit support or dispute from:
-
-- `literature_evidence`
-- `empirical_data_evidence`
-- `simulation_evidence`
-- `benchmark_evidence`
-- `expert_judgment`
-- `negative_result`
-
-After adding hypotheses, formalize your expectations:
-
-```
-/science:pre-register
-```
-
-This walks you through declaring expected outcomes, decision criteria, and a null-result plan — all before running any analysis. The pre-registration is version-controlled and cross-checked later by `/science:interpret-results`.
-
-### 3. Build background knowledge
-
-```
-/science:research-topic "circadian regulation of immune response"
-```
-
-Synthesizes a structured background document from LLM knowledge + web search, adds BibTeX entries, and saves to `doc/background/topics/`. Repeat for each major topic area your project touches.
-
-### 4. Search the literature
-
-```
-/science:search-literature
-```
-
-Queries OpenAlex and PubMed with multiple query variants, deduplicates, and ranks results by project relevance. Produces a prioritized reading queue with tiers: *Core now*, *Relevant next*, *Peripheral monitor*. High-priority papers can be queued as tasks via `/science:tasks`.
-
-### 4b. Compare competing explanations
-
-```
-/science:compare-hypotheses
-```
-
-When 2+ hypotheses exist for the same phenomenon, this command performs a structured head-to-head comparison — identifying discriminating predictions and crucial experiments.
-
-### 5. Summarize key papers
-
-```
-/science:research-papers "Doe et al. 2023 circadian immune oscillations"
-```
-
-For each high-priority paper from the search, this command synthesizes a structured summary (from LLM knowledge, web search, or a provided PDF), saves it to `doc/papers/`, and updates the bibliography.
-
-### 6. Identify gaps and reprioritize
-
-```
-/science:next-steps
-```
-
-Audits coverage across five dimensions (concepts, evidence quality, contradictions, testability, data feasibility), synthesizes recent progress and uncertainty hotspots, and recommends 3-5 high-value next actions.
-
-### 7. Stress-test ideas
-
-```
-/science:discuss "H1: circadian gating of inflammatory cytokine release"
-```
-
-Runs a structured critical discussion that surfaces assumptions, alternative explanations, confounders, and missing evidence. Supports an optional **double-blind mode** where you and the agent write independent analyses before comparing. Discussion output feeds back into open questions and the research plan.
-
-### 7b. Audit for biases
-
-```
-/science:bias-audit
-```
-
-Systematic check of cognitive and methodological biases against current project state. Especially valuable before interpreting results or when a project feels "too settled".
-
-### 8. Model cause and effect
-
-```
-/science:sketch-model
-/science:specify-model
-/science:critique-approach
-```
-
-`sketch-model` captures variables, candidate relationships, data sources, and unknowns as an inquiry subgraph — auto-detecting causal mode when appropriate. `specify-model` formalizes the sketch with explicit propositions, support/dispute links, and evidence provenance.
-
-`critique-approach` reviews the model for missing confounders, identifiability issues, structural problems, and sensitivity analysis.
-
-### 9. Find datasets
-
-```
-/science:find-datasets
-```
-
-Searches public dataset repositories (via LLM knowledge + repository APIs), ranks results by project relevance, and documents candidates in `doc/datasets/`.
-
-### 10. Plan computational pipelines
-
-```
-/science:plan-pipeline
-/science:review-pipeline
-```
-
-`plan-pipeline` translates a specified inquiry into concrete pipeline steps with tools, configs, tests, and validation criteria. `review-pipeline` audits the plan against an evidence rubric — checking data availability, assumption validity, identifiability, and reproducibility.
-
-### 11. Build the knowledge graph
-
-```
-/science:create-graph
-```
-
-Materializes a project knowledge graph (`knowledge/graph.trig`) from canonical upstream sources in `specs/`, `doc/`, `tasks/`, and `knowledge/sources/`. Entity types and relation predicates use vocabulary from declared ontologies (e.g., biology, physics, units) and controlled predicates (`cito:supports`, `skos:related`, `sci:causes`, etc.).
-
-If the project declares `ontologies: [biology]`, entities with kinds like `gene`, `protein`, or `pathway` are automatically assigned to the biology profile. During build, the system suggests undeclared ontologies when it detects matching CURIE prefixes or entity kinds.
-
-After subsequent research rounds, run:
-
-```
-/science:update-graph
-```
-
-This detects stale canonical sources, runs migration/audit checks for unresolved references, and then re-materializes `knowledge/graph.trig` from upstream inputs.
-
-### 12. Sync across projects
-
-```
-/science:sync
-```
-
-Aligns knowledge models across registered Science projects. Detects shared entities via tiered matching (canonical ID, alias, ontology term, fuzzy), propagates relevant content, and maintains a cross-project registry at `~/.config/science/registry/`. Projects are auto-registered on `graph build`.
-
-### Iterate
-
-Research isn't linear. A typical session might look like:
-
-```
-research-topic → add-hypothesis → pre-register → search-literature → research-papers ×3
-→ compare-hypotheses → next-steps → discuss → bias-audit
-→ sketch-model → specify-model → critique-approach
-→ find-datasets → plan-pipeline → review-pipeline
-→ [run analysis] → interpret-results → update-graph → sync → next-steps
-```
-
-Each command reads existing project state and builds on it. All artifacts are version-controlled and cross-linked. The managed `validate.sh` artifact remains the project entrypoint for validation, but it now delegates to [`science validate`](docs/conventions/validate.md), which owns the Python canonical checks, structured output, and Python sidecar hooks.
-
-For knowledge-graph projects, `knowledge/graph.trig` is generated from canonical upstream sources in `specs/`, `doc/`, `tasks/`, and `knowledge/sources/`. If the graph is wrong, fix the source artifact and re-materialize; do not patch the TriG file directly.
-
-Once the graph is materialized, use the `science` CLI for summaries and sync:
-
-```bash
-# Summary stack (top-down)
-science graph project-summary      # Research-level rollup (research projects only)
-science graph question-summary     # Thread-level prioritization (full by default; add --top to narrow)
-science graph inquiry-summary      # Inquiry-level detail
-science graph dashboard-summary    # Proposition/evidence overview
-science graph neighborhood-summary # Local-cluster detail
-
-# Cross-project sync
-science sync status               # Check current sync state
-science sync projects             # List registered projects
-science sync run                  # Run full sync (--dry-run to preview)
-```
-
-Use `knowledge/` for live dashboards, `doc/interpretations/` and `doc/reports/` for durable writeups, and `tasks/` for follow-up work derived from the summary outputs.
-
-## Packages
-
-Science includes two Python packages that back the plugin commands:
+Research is usually nonlinear. You may start from a paper, dataset, failed
+analysis, causal concern, or project-health warning, then loop through the same
+concepts in a different order.
+
+For durable evidence, prefer source-authored files such as propositions and
+evidence lines. If the graph is wrong, fix the source artifact and rebuild the
+graph rather than patching generated TriG directly.
+
+## Command Map
+
+| Intent | Claude | Codex | CLI |
+|---|---|---|---|
+| Start a project | `/science:create-project` | `science-create-project` | project scaffold workflows |
+| Adopt a project | `/science:import-project` | `science-import-project` | project scaffold workflows |
+| Orient | `/science:status` | `science-status` | `science graph dashboard-summary` |
+| Plan next work | `/science:next-steps` | `science-next-steps` | `science tasks list`, `science tasks summary` |
+| Research a topic | `/science:research-topic` | `science-research-topic` | source-authored docs |
+| Search literature | `/science:search-literature` | `science-search-literature` | `science bib add` |
+| Summarize papers | `/science:research-papers` | `science-research-papers` | source-authored docs |
+| Add hypotheses | `/science:add-hypothesis` | `science-add-hypothesis` | `science hypothesis create` |
+| Pre-register | `/science:pre-register` | `science-pre-register` | source-authored docs |
+| Compare alternatives | `/science:compare-hypotheses` | `science-compare-hypotheses` | source-authored docs |
+| Discuss critically | `/science:discuss` | `science-discuss` | `science discussion create` |
+| Audit bias | `/science:bias-audit` | `science-bias-audit` | source-authored docs |
+| Create propositions | workflow-guided | workflow-guided | `science proposition create` |
+| Add evidence lines | workflow-guided | workflow-guided | `science entity create evidence-line ...` |
+| Sketch a model | `/science:sketch-model` | `science-sketch-model` | `science inquiry init` |
+| Specify a model | `/science:specify-model` | `science-specify-model` | `science inquiry add-node`, `science inquiry add-edge` |
+| Critique approach | `/science:critique-approach` | `science-critique-approach` | `science inquiry validate` |
+| Plan analysis | `/science:plan-analysis` | `science-plan-analysis` | source-authored plans |
+| Plan pipeline | `/science:plan-pipeline` | `science-plan-pipeline` | source-authored plans |
+| Review pipeline | `/science:review-pipeline` | `science-review-pipeline` | validation and review docs |
+| Interpret results | `/science:interpret-results` | `science-interpret-results` | source-authored interpretations |
+| Build/update graph | `/science:create-graph`, `/science:update-graph` | `science-create-graph`, `science-update-graph` | `science graph build` |
+| Validate health | `/science:health` | `science-health` | `science validate`, `science health` |
+| Sync projects | `/science:sync` | `science-sync` | `science peers list`, `science sync status`, `science sync run` |
+
+## Canonical References
+
+- [docs/user-guide.md](docs/user-guide.md): end-user workflow guide
+- [docs/proposition-and-evidence-model.md](docs/proposition-and-evidence-model.md): reasoning model and field-level detail
+- [docs/project-organization-profiles.md](docs/project-organization-profiles.md): project profiles and layout
+- [docs/federation.md](docs/federation.md): peers, composite graphs, and cross-project references
+- [docs/conventions/validate.md](docs/conventions/validate.md): validation conventions
+- [docs/README.codex.md](docs/README.codex.md): Codex skill generation and installation
+
+## Development
+
+Science includes two Python packages:
 
 | Package | Description |
 |---|---|
-| `science-model` | Shared Pydantic data models — entities, relations, tasks, profiles, ontology catalogs, and project config |
-| `science` | Distribution for the `science` CLI — knowledge graph operations, cross-project sync, causal export, dataset validation, and task management |
+| `science-model` | Shared Pydantic models for entities, relations, tasks, profiles, ontologies, and project config |
+| `science` | CLI and graph/project tooling for validation, graph operations, sync, datasets, feedback, and task management |
 
-Both require Python >= 3.11. `science` depends on `science-model` and provides optional extras for causal modeling (`pgmpy`, `ChiRho`), dataset discovery (`httpx`, `pooch`), and graph distillation (`PyKEEN`, `OpenAlex`).
-
-## Design Principles
-
-- **Research as first-class output.** Documents, pipelines, and curated data — not just code.
-- **Templates as structural backpressure.** Consistent structure constrains output quality.
-- **Persistent state on disk.** All knowledge and progress in version-controlled files.
-- **LLM knowledge first.** Use Claude's training data before searching, and search before reading PDFs.
-- **Reproducibility by default.** Snakemake, Frictionless data packages, structured metadata.
+Both require Python >= 3.11.
 
 ## License
 
