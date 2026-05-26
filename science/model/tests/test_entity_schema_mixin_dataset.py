@@ -112,3 +112,69 @@ def test_validator_aggregates_errors_across_base_and_mixin() -> None:
     # At least one base error and one mixin error present in the joined message.
     assert "title" in message
     assert "datapackage" in message
+
+
+def test_dataset_member_of_derivation_validates(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "derived",
+        "parent_dataset": "dataset:reactome-v89",
+        "derivation": {
+            "kind": "member_of",
+            "parent_dataset": "dataset:reactome-v89",
+            "member_key": "R-HSA-12345",
+        },
+    }
+    EntityValidator().validate(entity)
+
+
+def test_dataset_workflow_derivation_without_kind_still_validates(base_entity: dict) -> None:
+    # Backward-compatibility: existing derived datasets carry no `kind`.
+    entity = base_entity | {
+        "origin": "derived",
+        "derivation": {
+            "workflow_recipe": "recipe/Snakefile",
+            "recipe_lockfile": "recipe/lockfile.yaml",
+            "inputs": ["dataset:upstream"],
+        },
+    }
+    EntityValidator().validate(entity)
+
+
+def test_dataset_member_of_missing_member_key_rejected(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "derived",
+        "derivation": {"kind": "member_of", "parent_dataset": "dataset:reactome-v89"},
+    }
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate(entity)
+
+
+def test_dataset_member_of_with_workflow_fields_rejected(base_entity: dict) -> None:
+    # member_of must not also carry workflow fields (RCM-D5: a member has no workflow).
+    entity = base_entity | {
+        "origin": "derived",
+        "derivation": {
+            "kind": "member_of",
+            "parent_dataset": "dataset:reactome-v89",
+            "member_key": "R-HSA-12345",
+            "workflow_recipe": "recipe/Snakefile",
+            "inputs": ["dataset:upstream"],
+        },
+    }
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate(entity)
+
+
+def test_dataset_member_of_with_recipe_lockfile_rejected(base_entity: dict) -> None:
+    # recipe_lockfile is a workflow field; a member_of has no workflow (RCM-D5).
+    entity = base_entity | {
+        "origin": "derived",
+        "derivation": {
+            "kind": "member_of",
+            "parent_dataset": "dataset:reactome-v89",
+            "member_key": "R-HSA-12345",
+            "recipe_lockfile": "recipe/lockfile.yaml",
+        },
+    }
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate(entity)

@@ -52,12 +52,29 @@
     },
     "derivation": {
       "type": "object",
-      "required": ["workflow_recipe", "inputs"],
-      "properties": {
-        "workflow_recipe": {"type": "string"},
-        "recipe_lockfile": {"type": "string"},
-        "inputs": {"type": "array", "items": {"type": "string", "pattern": "^dataset:"}}
-      }
+      "oneOf": [
+        {
+          "title": "workflow derivation",
+          "properties": {
+            "kind": {"const": "workflow"},
+            "workflow_recipe": {"type": "string"},
+            "recipe_lockfile": {"type": "string"},
+            "inputs": {"type": "array", "items": {"type": "string", "pattern": "^dataset:"}}
+          },
+          "required": ["workflow_recipe", "inputs"],
+          "not": {"anyOf": [{"required": ["parent_dataset"]}, {"required": ["member_key"]}]}
+        },
+        {
+          "title": "member_of derivation",
+          "properties": {
+            "kind": {"const": "member_of"},
+            "parent_dataset": {"type": "string", "pattern": "^dataset:"},
+            "member_key": {"type": "string", "minLength": 1}
+          },
+          "required": ["kind", "parent_dataset", "member_key"],
+          "not": {"anyOf": [{"required": ["workflow_recipe"]}, {"required": ["inputs"]}, {"required": ["recipe_lockfile"]}]}
+        }
+      ]
     }
   }
 }
