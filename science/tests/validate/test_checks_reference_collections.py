@@ -230,18 +230,11 @@ def test_member_defect_flags_non_dataset_parent() -> None:
 
 
 def test_member_defect_flags_blank_member_key() -> None:
-    assert "member_key" in _member_defect(
-        {"kind": "member_of", "parent_dataset": "dataset:x", "member_key": "  "}
-    )
+    assert "member_key" in _member_defect({"kind": "member_of", "parent_dataset": "dataset:x", "member_key": "  "})
 
 
 def test_member_defect_none_for_well_formed() -> None:
-    assert (
-        _member_defect(
-            {"kind": "member_of", "parent_dataset": "dataset:x", "member_key": "m-1"}
-        )
-        is None
-    )
+    assert _member_defect({"kind": "member_of", "parent_dataset": "dataset:x", "member_key": "m-1"}) is None
 
 
 # ---------------------------------------------------------------------------

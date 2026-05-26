@@ -23,9 +23,7 @@ def test_parse_member_of_extracts_parent_and_key() -> None:
             "member_key": "R-HSA-12345",
         },
     }
-    assert parse_member_of(entity) == MemberOf(
-        parent_dataset="dataset:reactome-v89", member_key="R-HSA-12345"
-    )
+    assert parse_member_of(entity) == MemberOf(parent_dataset="dataset:reactome-v89", member_key="R-HSA-12345")
 
 
 def test_parse_member_of_returns_none_for_workflow_derivation() -> None:
@@ -38,24 +36,18 @@ def test_parse_member_of_returns_none_when_no_derivation() -> None:
 
 
 def test_evaluate_key_resolution_resolved_when_key_present() -> None:
-    state = evaluate_key_resolution(
-        key="R-HSA-12345", available_keys={"R-HSA-12345", "R-HSA-2"}, declared_status=None
-    )
+    state = evaluate_key_resolution(key="R-HSA-12345", available_keys={"R-HSA-12345", "R-HSA-2"}, declared_status=None)
     assert state is ResolutionState.RESOLVED
 
 
 def test_evaluate_key_resolution_unresolved_when_key_absent() -> None:
-    state = evaluate_key_resolution(
-        key="R-HSA-999", available_keys={"R-HSA-1"}, declared_status=None
-    )
+    state = evaluate_key_resolution(key="R-HSA-999", available_keys={"R-HSA-1"}, declared_status=None)
     assert state is ResolutionState.UNRESOLVED
 
 
 def test_evaluate_key_resolution_declared_unresolved_is_first_class() -> None:
     # An explicit declared_unresolved is honoured even with no key index available.
-    state = evaluate_key_resolution(
-        key="X", available_keys=None, declared_status="declared_unresolved"
-    )
+    state = evaluate_key_resolution(key="X", available_keys=None, declared_status="declared_unresolved")
     assert state is ResolutionState.DECLARED_UNRESOLVED
 
 
@@ -73,21 +65,15 @@ def test_evaluate_key_resolution_rejects_unknown_declared_status() -> None:
 
 def test_evaluate_key_resolution_declared_resolved_does_not_override_index() -> None:
     # "resolved" is a valid authored status but never bypasses the index check.
-    present = evaluate_key_resolution(
-        key="K", available_keys={"K"}, declared_status="resolved"
-    )
+    present = evaluate_key_resolution(key="K", available_keys={"K"}, declared_status="resolved")
     assert present is ResolutionState.RESOLVED
-    absent = evaluate_key_resolution(
-        key="K", available_keys={"OTHER"}, declared_status="resolved"
-    )
+    absent = evaluate_key_resolution(key="K", available_keys={"OTHER"}, declared_status="resolved")
     assert absent is ResolutionState.UNRESOLVED
 
 
 def test_evaluate_key_resolution_declared_unresolved_wins_over_present_index() -> None:
     # declared_unresolved is honoured even when a populated index lacks the key.
-    state = evaluate_key_resolution(
-        key="K", available_keys={"OTHER"}, declared_status="declared_unresolved"
-    )
+    state = evaluate_key_resolution(key="K", available_keys={"OTHER"}, declared_status="declared_unresolved")
     assert state is ResolutionState.DECLARED_UNRESOLVED
 
 

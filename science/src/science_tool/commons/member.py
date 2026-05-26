@@ -75,8 +75,7 @@ def evaluate_key_resolution(
     """
     if declared_status is not None and declared_status not in _VALID_DECLARED_STATUS:
         raise ValueError(
-            f"resolution_status must be one of {sorted(_VALID_DECLARED_STATUS)} or absent; "
-            f"got {declared_status!r}"
+            f"resolution_status must be one of {sorted(_VALID_DECLARED_STATUS)} or absent; got {declared_status!r}"
         )
     if declared_status == "declared_unresolved":
         return ResolutionState.DECLARED_UNRESOLVED
@@ -99,9 +98,7 @@ class ResolvedMember:
     member_key: str
 
 
-def resolve_member(
-    member_id: str, *, commons_root: Path | None = None
-) -> ResolvedMember | None:
+def resolve_member(member_id: str, *, commons_root: Path | None = None) -> ResolvedMember | None:
     """Resolve a promoted member to its parent collection and key.
 
     Returns None if `member_id` is not a `member_of` dataset. Raises a

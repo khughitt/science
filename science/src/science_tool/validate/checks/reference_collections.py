@@ -142,8 +142,7 @@ def check_reference_collections(ctx: ValidateContext) -> Iterator[Result]:
             yield _result(
                 Severity.ERROR,
                 path,
-                f"{ident}: member_of parent_dataset "
-                f"{member_of.parent_dataset!r} does not resolve to a dataset entity",
+                f"{ident}: member_of parent_dataset {member_of.parent_dataset!r} does not resolve to a dataset entity",
                 "reference-collection.unresolved-parent",
             )
             continue
