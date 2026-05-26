@@ -4,7 +4,7 @@
 
 **Goal:** Land the C/D-agnostic substrate — `derivation.kind: member_of` as a core dataset-mixin variant, virtual-member resolution that delegates to the parent collection, and a reference-collection validation check (parent-collection resolution + declared key-status semantics) — so Pillars C (assembly registry) and D (gene sets) consume one mechanism instead of two look-alikes.
 
-**Architecture:** Two layers, no bio and no network. (1) **science-model**: an additive, backward-compatible discriminated-union change to the dataset mixin's `derivation` schema. (2) **science-tool**: a pure parser for the `member_of` derivation, a resolver that maps a promoted member to `(parent collection, member_key)` via the existing commons adapter, a reusable key-resolution evaluator (`resolved | unresolved | declared_unresolved | unknown`), and a `science validate` check that enforces **parent-collection resolution** (structural — always required) plus **declared key-status semantics**. Implements §RCM-D1/D2/D5 of `docs/plans/2026-05-26-reference-collection-member-promotion-design.md`. **Verifying that a member key is actually present in its collection's rows** needs instance-specific collection metadata (a key index) and is **out of scope** — it belongs to Plan 2 / the consuming instance, alongside row-level byte slicing.
+**Architecture:** Two layers, no bio and no network. (1) **science-model**: an additive, backward-compatible discriminated-union change to the dataset mixin's `derivation` schema. (2) **science-tool**: a pure parser for the `member_of` derivation, a resolver that maps a promoted member to `(parent collection, member_key)` via the existing commons adapter, a reusable key-resolution evaluator (`resolved | unresolved | declared_unresolved | unknown`), and a `science validate` check that enforces **parent-collection resolution** (structural — always required) plus **declared key-status semantics**. The check reads **raw frontmatter** (not the closed graph `Entity`, whose typed `DerivationBlock` carries no `kind`/`member_key` and drops `resolution_status`) so it does not silently no-op on `member_of` datasets. Implements §RCM-D1/D2/D5 of `docs/plans/2026-05-26-reference-collection-member-promotion-design.md`. **Verifying that a member key is actually present in its collection's rows** needs instance-specific collection metadata (a key index) and is **out of scope** — it belongs to Plan 2 / the consuming instance, alongside row-level byte slicing.
 
 **Tech Stack:** Python 3.11, `jsonschema` Draft 2020-12, `pytest`, `uv` (`uv run --frozen`), the `science-model` and `science` (`science_tool`) packages. All paths are relative to the repo root `~/d/science`.
 
@@ -16,7 +16,7 @@
 - `science/model/src/science_model/schemas/mixin-dataset-1.0.json` — the schema you will change. Today `$defs.derivation` requires `workflow_recipe` + `inputs`; the top-level `allOf` requires `derivation` when `origin: derived`.
 - `science/model/tests/test_entity_schema_mixin_dataset.py` — the test conventions to mirror (a `base_entity` fixture; `EntityValidator().validate(entity)` for the happy path; `pytest.raises(EntityValidationError)` for rejects).
 - `science/src/science_tool/commons/resolver.py` — `resolve(dataset_id, logical_path)` and `CommonsEntityAdapter(commons_root).load(dataset_id)` returning a record with `.slug`, `.datapackage_path`, `.body_path`. The member resolver reuses this adapter.
-- `science/src/science_tool/validate/checks/code_files.py` — the canonical check idiom: `load_project_sources(ctx.project_root, include_commons=False)`, iterate `sources.entities`, read fields with `getattr(entity, "<field>", default)`, use `entity.canonical_id` and `entity.file_path`, register via the `@Check(section=..., order=...)` decorator, and add the module name to `_load_canonical_checks()` in `validate/checks/__init__.py`.
+- `science/src/science_tool/validate/checks/code_files.py` — the canonical check idiom: `load_project_sources(ctx.project_root, ...)`, iterate `sources.entities`, use `entity.canonical_id` and `entity.file_path`, register via the `@Check(section=..., order=...)` decorator, and add the module name to `_load_canonical_checks()` in `validate/checks/__init__.py`. **One deviation in Task 4:** because the closed graph `Entity` cannot carry the `member_of` fields, this check does **not** read `getattr(entity, "derivation"/"resolution_status")`; it re-reads `entity.file_path` (resolved under `ctx.project_root`) as raw frontmatter and passes that dict to `parse_member_of`. Verify against the model: `science_model/entities.py::Entity` has no `model_config` `extra="allow"` (so `resolution_status` is dropped) and `derivation: DerivationBlock | None`, where `DerivationBlock` (`packages/schema.py`) requires `workflow`/`workflow_run` and has no `kind`/`member_key`.
 
 **Backward-compatibility invariant (verify it holds after Task 1):** every existing `origin: derived` dataset has a `derivation` with `workflow_recipe` + `inputs` and **no** `kind` field. The new schema must keep those valid. This is why the change is additive (a `oneOf` whose first branch matches a `kind`-less workflow derivation) and stays at `mixin-dataset-1.0.json` rather than bumping the version (a version bump would ripple into `default_profile_for_kind`, `commons/promote.py:203`, and every dataset `schema_profile` string for no behavioural gain).
 
@@ -690,12 +690,24 @@ A promoted member (`derivation.kind: member_of`) must resolve to an existing
 parent collection, unless it explicitly declares `resolution_status:
 declared_unresolved`. See
 docs/plans/2026-05-26-reference-collection-member-promotion-design.md.
+
+Reads RAW frontmatter, NOT the typed graph `Entity`. The graph `Entity` is a
+closed pydantic model: its `derivation` is a typed `DerivationBlock` with no
+`kind`/`member_key`/`parent_dataset` (it requires `workflow`/`workflow_run`),
+and `resolution_status` is not modelled at all (pydantic `extra="ignore"` drops
+it). Reading those via `getattr(entity, ...)` would therefore silently no-op on
+every `member_of` dataset. We re-read each entity's `file_path` (resolved under
+`ctx.project_root`, so the check works from any cwd) as raw frontmatter and feed
+Plan 1's dict-based helpers, which already accept a frontmatter dict.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from science_tool.commons.member import parse_member_of
 from science_tool.graph.sources import load_project_sources
@@ -704,33 +716,72 @@ from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
 
-def _result(severity: Severity, path: Path | None, message: str, rule: str) -> Result:
-    return Result(severity, path, None, message, rule, None)
+def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
+    return Result(severity, Path(path) if path else None, None, message, rule, None)
+
+
+def _raw_frontmatter(path: Path) -> dict[str, Any]:
+    """Raw frontmatter for either an entity.md (fenced YAML) or a datapackage.yaml."""
+    text = path.read_text(encoding="utf-8")
+    if path.suffix in (".yaml", ".yml"):
+        data = yaml.safe_load(text) or {}
+    elif text.startswith("---"):
+        end = text.find("\n---", 3)
+        data = yaml.safe_load(text[3:end]) if end != -1 else {}
+    else:
+        data = {}
+    return data if isinstance(data, dict) else {}
+
+
+def _dataset_frontmatters(ctx: ValidateContext) -> tuple[list[dict[str, Any]], set[str]]:
+    """Raw frontmatter per dataset entity + the set of all known dataset ids.
+
+    include_commons=True: a reference collection (the parent) typically lives in
+    the commons, so the id set must span project + commons. Commons loading is
+    reference-driven (`collect_referenced_commons_ids`), not a bulk scan, so this
+    does not leak the whole commons into a tmp_path test project. Note: that
+    extractor does not yet follow scalar `parent_dataset` into the commons, so a
+    member whose parent exists ONLY in the commons is not resolvable through this
+    check today; the assembly instance (Plan 2) resolves its collection directly
+    via the commons resolver instead.
+    """
+    sources = load_project_sources(ctx.project_root, include_commons=True)
+    dataset_ids = {e.canonical_id for e in sources.entities if getattr(e, "kind", None) == "dataset"}
+    frontmatters: list[dict[str, Any]] = []
+    for entity in sources.entities:
+        if getattr(entity, "kind", None) != "dataset":
+            continue
+        rel = Path(getattr(entity, "file_path", ""))
+        abs_path = rel if rel.is_absolute() else ctx.project_root / rel
+        if not abs_path.is_file():
+            continue
+        fm = _raw_frontmatter(abs_path)
+        fm.setdefault("type", "dataset")
+        if not fm.get("id"):
+            fm["id"] = getattr(entity, "canonical_id", "?")
+        fm["_path"] = str(rel)
+        frontmatters.append(fm)
+    return frontmatters, dataset_ids
 
 
 @Check(section="reference collections", order=24)
 def check_reference_collections(ctx: ValidateContext) -> Iterator[Result]:
-    # include_commons=True: reference collections (the parents) typically live in
-    # the commons, so a project member's parent must resolve against both sources.
-    sources = load_project_sources(ctx.project_root, include_commons=True)
-    dataset_ids = {
-        e.canonical_id for e in sources.entities if getattr(e, "kind", None) == "dataset"
-    }
+    frontmatters, dataset_ids = _dataset_frontmatters(ctx)
 
-    for entity in sources.entities:
-        if getattr(entity, "kind", None) != "dataset":
-            continue
-        derivation = getattr(entity, "derivation", None)
-        member_of = parse_member_of({"derivation": derivation}) if derivation else None
+    for fm in frontmatters:
+        member_of = parse_member_of(fm)
         if member_of is None:
             continue
 
-        top_parent = getattr(entity, "parent_dataset", None)
+        ident = fm.get("id", "?")
+        path = fm.get("_path")
+
+        top_parent = fm.get("parent_dataset")
         if top_parent is not None and top_parent != member_of.parent_dataset:
             yield _result(
                 Severity.WARN,
-                getattr(entity, "file_path", None),
-                f"{entity.canonical_id}: parent_dataset {top_parent!r} disagrees with "
+                path,
+                f"{ident}: parent_dataset {top_parent!r} disagrees with "
                 f"derivation.parent_dataset {member_of.parent_dataset!r}",
                 "reference-collection.parent-mismatch",
             )
@@ -741,8 +792,8 @@ def check_reference_collections(ctx: ValidateContext) -> Iterator[Result]:
         if member_of.parent_dataset not in dataset_ids:
             yield _result(
                 Severity.ERROR,
-                getattr(entity, "file_path", None),
-                f"{entity.canonical_id}: member_of parent_dataset "
+                path,
+                f"{ident}: member_of parent_dataset "
                 f"{member_of.parent_dataset!r} does not resolve to a dataset entity",
                 "reference-collection.unresolved-parent",
             )
@@ -751,17 +802,17 @@ def check_reference_collections(ctx: ValidateContext) -> Iterator[Result]:
         # Parent resolved. declared_unresolved is a property of the member key/row
         # lookup (the row check itself is deferred to the consuming instance),
         # surfaced here as an INFO state against the resolved collection.
-        if getattr(entity, "resolution_status", None) == "declared_unresolved":
+        if fm.get("resolution_status") == "declared_unresolved":
             yield _result(
                 Severity.INFO,
-                getattr(entity, "file_path", None),
-                f"{entity.canonical_id}: member key declared_unresolved against resolved "
+                path,
+                f"{ident}: member key declared_unresolved against resolved "
                 f"collection {member_of.parent_dataset!r} (honoured, RCM-D2)",
                 "reference-collection.declared-unresolved",
             )
 ```
 
-Note: `derivation` may arrive as a pydantic submodel rather than a plain dict. If `getattr(entity, "derivation", None)` is not a dict, coerce with `derivation.model_dump()` (or `dict(derivation)`) before passing to `parse_member_of` — match whatever `code_files.py`/`graph/sources.py` already do for nested fields.
+Why raw frontmatter (not `getattr(entity, ...)`): the graph `Entity` is closed — `parse_member_of({"derivation": entity.derivation})` would see a typed `DerivationBlock` (not a dict, no `kind`) and return `None`, and `entity.resolution_status` does not exist — so the typed path silently no-ops on every member. The pure helpers (`parse_member_of`, `evaluate_key_resolution`) are unchanged; only the check's data source moves to raw frontmatter. Plan 2's check 1 uses the identical `_raw_frontmatter`/`_dataset_frontmatters` pattern.
 
 - [ ] **Step 4: Register the check**
 
@@ -838,7 +889,9 @@ git commit -m "chore(substrate): ruff format + final substrate verification" || 
 - *reference-collection validation: member key resolves or is `declared_unresolved`* → Task 2 ships the reusable `evaluate_key_resolution` evaluator (`resolved | unresolved | declared_unresolved | unknown`); Task 4's check enforces the **structural** half — parent-collection resolution is **always** required (a missing parent is an ERROR regardless of `declared_unresolved`), and `declared_unresolved` is honoured only as a key/row-status INFO **after** the parent resolves. **Member-key-in-collection verification is deferred to Plan 2 / instance-specific key indices** — the substrate provides the evaluator, not a row-index check. ✓
 - *no bio, no network* → confirmed: nothing imports a bio extension or makes a network call ✓
 
-**Type consistency:** `MemberOf(parent_dataset, member_key)`, `ResolvedMember(member_id, parent_dataset, parent_slug, member_key)`, `ResolutionState` enum, `parse_member_of(entity)->MemberOf|None`, `resolve_member(member_id, *, commons_root)->ResolvedMember|None`, `evaluate_key_resolution(*, key, available_keys, declared_status)->ResolutionState` are used identically across Tasks 2–4. The check passes `{"derivation": derivation}` to `parse_member_of`, matching its `entity.get("derivation")` contract.
+**Type consistency:** `MemberOf(parent_dataset, member_key)`, `ResolvedMember(member_id, parent_dataset, parent_slug, member_key)`, `ResolutionState` enum, `parse_member_of(entity)->MemberOf|None`, `resolve_member(member_id, *, commons_root)->ResolvedMember|None`, `evaluate_key_resolution(*, key, available_keys, declared_status)->ResolutionState` are used identically across Tasks 2–4. The check passes the dataset's **raw frontmatter dict** (which contains `derivation`/`parent_dataset`/`resolution_status` as authored) to `parse_member_of`, matching its `entity.get("derivation")` contract.
+
+**Data source (resolved — the Plan-2 prerequisite, now folded in):** Task 4's check reads raw frontmatter via `_raw_frontmatter`/`_dataset_frontmatters`, not the typed `Entity`. This was originally surfaced as Plan 2's "Prerequisite (before Task 6)"; it is now implemented directly in this plan so the reference-collection check is load-bearing the moment it ships. The fixtures in Task 1/Task 3 author `parent_dataset` and `resolution_status` at the top level of frontmatter, so they exercise the raw-frontmatter path unchanged.
 
 **Adapter surface (resolved):** `resolve_member` uses `CommonsEntityAdapter.load(member_id).frontmatter` — the `CommonsEntityRecord` exposes `.frontmatter` (parsed frontmatter dict) plus `.slug`/`.datapackage_path`/`.body_path`, raising on absence. There is no `load_raw()` and no parser fallback is needed.
 

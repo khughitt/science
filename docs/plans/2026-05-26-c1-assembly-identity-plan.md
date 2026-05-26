@@ -35,7 +35,7 @@
 
 ## Prerequisite (before Task 6)
 
-Task 6 consumes Plan 1's substrate and assumes the reference-collection check is **load-bearing**. As written, Plan 1's Task-4 check reads the member-of derivation via `getattr(entity, "derivation")` off the closed graph `Entity`, whose typed `DerivationBlock` has no `kind`/`member_key` — so it will silently no-op on `member_of` datasets. **Before executing Task 6:** amend Plan 1's Task 4 to read raw frontmatter (the same `_raw_frontmatter` / `entity.file_path`-under-`project_root` pattern this plan uses) instead of the typed entity, and re-run Plan 1's check tests. Plan 1's *pure* helpers (`parse_member_of`, `evaluate_key_resolution`) are dict-based and need no change — only its check's data source does. (Tasks 1–5 of this plan do not depend on Plan 1 and may proceed first.)
+Task 6 consumes Plan 1's substrate and assumes the reference-collection check is **load-bearing**. The closed graph `Entity`'s typed `DerivationBlock` has no `kind`/`member_key` and drops `resolution_status`, so a check reading the member-of derivation via `getattr(entity, "derivation")` would silently no-op on `member_of` datasets. **This is now resolved upstream:** Plan 1's Task 4 has been amended to read raw frontmatter (the same `_raw_frontmatter` / `entity.file_path`-under-`project_root` pattern this plan uses), and ships that way. **Before executing Task 6:** confirm Plan 1's `reference_collections.py` reads raw frontmatter (a quick grep for `_raw_frontmatter` in that module) and that its check tests pass. Plan 1's *pure* helpers (`parse_member_of`, `evaluate_key_resolution`) are dict-based and unchanged. (Tasks 1–5 of this plan do not depend on Plan 1 and may proceed first.)
 
 ---
 
