@@ -76,6 +76,11 @@ For durable evidence, prefer source-authored files such as propositions and
 evidence lines. If the graph is wrong, fix the source artifact and rebuild the
 graph rather than patching generated TriG directly.
 
+Managed projects use `pyproject.toml` for project-local tooling so commands
+such as [`science validate`](docs/conventions/validate.md) resolve consistently.
+Validation can also load project-local Python sidecar hooks when a project needs
+custom checks.
+
 ## Command Map
 
 | Intent | Claude | Codex | CLI |
@@ -124,6 +129,10 @@ Science includes two Python packages:
 | `science` | CLI and graph/project tooling for validation, graph operations, sync, datasets, feedback, and task management |
 
 Both require Python >= 3.11.
+
+In managed projects, `pyproject.toml` is also the project-local tooling
+manifest that installs `science` for validation, graph workflows, task
+management, and related CLI commands.
 
 ## License
 
