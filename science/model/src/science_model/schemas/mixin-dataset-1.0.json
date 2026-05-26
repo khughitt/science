@@ -14,7 +14,7 @@
     "accessions": {"type": "array", "items": {"type": "string"}, "science:merge": "forbidden"},
     "access": {"$ref": "#/$defs/access", "science:merge": "forbidden"},
     "derivation": {"$ref": "#/$defs/derivation", "science:merge": "forbidden"},
-    "parent_dataset": {"type": "string"},
+    "parent_dataset": {"type": "string", "pattern": "^dataset:"},
     "siblings": {"type": "array", "items": {"type": "string"}},
     "consumed_by": {"type": "array", "items": {"type": "string"}}
   },

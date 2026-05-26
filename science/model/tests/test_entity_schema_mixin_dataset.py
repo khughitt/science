@@ -178,3 +178,41 @@ def test_dataset_member_of_with_recipe_lockfile_rejected(base_entity: dict) -> N
     }
     with pytest.raises(EntityValidationError):
         EntityValidator().validate(entity)
+
+
+def test_dataset_explicit_workflow_kind_validates(base_entity: dict) -> None:
+    # Branch 1 accepts an explicit kind: "workflow" (guards the const).
+    entity = base_entity | {
+        "origin": "derived",
+        "derivation": {
+            "kind": "workflow",
+            "workflow_recipe": "recipe/Snakefile",
+            "inputs": ["dataset:upstream"],
+        },
+    }
+    EntityValidator().validate(entity)
+
+
+def test_dataset_member_of_without_top_level_parent_dataset_validates(base_entity: dict) -> None:
+    # The schema does not couple top-level parent_dataset to derivation.parent_dataset;
+    # a member_of with only the derivation-level parent_dataset is valid.
+    entity = base_entity | {
+        "origin": "derived",
+        "derivation": {
+            "kind": "member_of",
+            "parent_dataset": "dataset:reactome-v89",
+            "member_key": "R-HSA-12345",
+        },
+    }
+    EntityValidator().validate(entity)
+
+
+def test_dataset_top_level_parent_dataset_pattern_enforced(base_entity: dict) -> None:
+    # Top-level parent_dataset must carry the dataset: prefix.
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "parent_dataset": "reactome-v89",  # missing dataset: prefix
+    }
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate(entity)
