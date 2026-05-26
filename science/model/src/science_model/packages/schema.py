@@ -167,6 +167,9 @@ class MemberOfDerivationBlock(BaseModel):
             raise ValueError("parent_dataset must be a dataset:<slug> entity reference")
         return v
 
-
-# Backward-compatible alias kept for callers that imported WorkflowDerivationBlock.
-WorkflowDerivationBlock = DerivationBlock
+    @field_validator("member_key")
+    @classmethod
+    def _non_empty_member_key(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("member_key must be a non-empty row key")
+        return v

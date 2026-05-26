@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from science_tool.validate.checks.reference_collections import check_reference_collections
+from science_tool.validate.checks.reference_collections import _member_defect, check_reference_collections
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Severity
 
@@ -90,6 +90,32 @@ profiles: [science-pkg-entity-1.0]
 id: dataset:workflow-out
 type: dataset
 title: Workflow Output
+status: active
+tier: use-now
+"""
+
+# Top-level parent_dataset disagrees with derivation.parent_dataset; derivation's
+# parent (dataset:parent-collection) IS present so only a WARN should fire.
+_MEMBER_PARENT_MISMATCH_DP = """\
+profiles: [science-pkg-entity-1.0]
+id: dataset:member-mismatch
+type: dataset
+title: Member Mismatch
+status: active
+origin: derived
+tier: use-now
+parent_dataset: dataset:some-other-collection
+derivation:
+  kind: member_of
+  parent_dataset: dataset:parent-collection
+  member_key: row-m
+"""
+
+_PARENT_COLLECTION_FOR_MISMATCH_DP = """\
+profiles: [science-pkg-entity-1.0]
+id: dataset:parent-collection
+type: dataset
+title: Parent Collection
 status: active
 tier: use-now
 """
@@ -186,3 +212,56 @@ def test_declared_unresolved_does_not_bypass_missing_parent(
 def test_non_member_datasets_ignored(refcoll_project_workflow_only: Path) -> None:
     results = list(check_reference_collections(_ctx(refcoll_project_workflow_only)))
     assert results == []
+
+
+# ---------------------------------------------------------------------------
+# _member_defect unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_member_defect_flags_missing_parent_dataset() -> None:
+    assert "parent_dataset" in _member_defect({"kind": "member_of", "member_key": "m-1"})
+
+
+def test_member_defect_flags_non_dataset_parent() -> None:
+    assert "parent_dataset" in _member_defect(
+        {"kind": "member_of", "parent_dataset": "reactome-v89", "member_key": "m-1"}
+    )
+
+
+def test_member_defect_flags_blank_member_key() -> None:
+    assert "member_key" in _member_defect(
+        {"kind": "member_of", "parent_dataset": "dataset:x", "member_key": "  "}
+    )
+
+
+def test_member_defect_none_for_well_formed() -> None:
+    assert (
+        _member_defect(
+            {"kind": "member_of", "parent_dataset": "dataset:x", "member_key": "m-1"}
+        )
+        is None
+    )
+
+
+# ---------------------------------------------------------------------------
+# parent-mismatch WARN integration test
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def refcoll_project_parent_mismatch(tmp_path: Path) -> Path:
+    """Parent collection present + member whose top-level parent_dataset differs
+    from derivation.parent_dataset (both valid dataset: refs). The derivation's
+    parent IS present, so only the WARN fires — not an unresolved-parent ERROR."""
+    _scaffold(tmp_path)
+    _write_dp(tmp_path, "parent-collection", "parent-collection", _PARENT_COLLECTION_FOR_MISMATCH_DP)
+    _write_dp(tmp_path, "member-mismatch", "member-mismatch", _MEMBER_PARENT_MISMATCH_DP)
+    return tmp_path
+
+
+def test_parent_mismatch_warns(refcoll_project_parent_mismatch: Path) -> None:
+    results = list(check_reference_collections(_ctx(refcoll_project_parent_mismatch)))
+    warns = [r for r in results if r.rule == "reference-collection.parent-mismatch"]
+    assert len(warns) == 1
+    assert not [r for r in results if r.severity is Severity.ERROR]

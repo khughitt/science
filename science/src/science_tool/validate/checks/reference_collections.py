@@ -5,14 +5,15 @@ parent collection, unless it explicitly declares `resolution_status:
 declared_unresolved`. See
 docs/plans/2026-05-26-reference-collection-member-promotion-design.md.
 
-Reads RAW frontmatter, NOT the typed graph `Entity`. The graph `Entity` is a
-closed pydantic model: its `derivation` is a typed `DerivationBlock` with no
-`kind`/`member_key`/`parent_dataset` (it requires `workflow`/`workflow_run`),
-and `resolution_status` is not modelled at all (pydantic `extra="ignore"` drops
-it). Reading those via `getattr(entity, ...)` would therefore silently no-op on
-every `member_of` dataset. We re-read each entity's `file_path` (resolved under
-`ctx.project_root`, so the check works from any cwd) as raw frontmatter and feed
-Plan 1's dict-based helpers, which already accept a frontmatter dict.
+Reads RAW frontmatter, NOT the typed graph `Entity`, for two reasons: (1)
+`resolution_status` is not modelled on `Entity` at all (pydantic drops unknown
+keys), so a typed read would miss it entirely; and (2) `parse_member_of` and the
+malformed-member guard operate on a plain frontmatter dict, whereas the typed
+`derivation` is a pydantic object (`DerivationBlock` | `MemberOfDerivationBlock`).
+Raw frontmatter is therefore also the un-schema-validated surface for locally
+authored files, so this check re-enforces the schema-critical member_of fields
+itself (mirroring the assembly check's `_assembly_defect`). Each entity's
+`file_path` is resolved under `ctx.project_root` so the check works from any cwd.
 """
 
 from __future__ import annotations
@@ -60,11 +61,12 @@ def _dataset_frontmatters(ctx: ValidateContext) -> tuple[list[dict[str, Any]], s
     via the commons resolver instead.
     """
     sources = load_project_sources(ctx.project_root, include_commons=True)
-    dataset_ids = {e.canonical_id for e in sources.entities if getattr(e, "kind", None) == "dataset"}
+    dataset_ids: set[str] = set()
     frontmatters: list[dict[str, Any]] = []
     for entity in sources.entities:
         if getattr(entity, "kind", None) != "dataset":
             continue
+        dataset_ids.add(entity.canonical_id)
         rel = Path(getattr(entity, "file_path", ""))
         abs_path = rel if rel.is_absolute() else ctx.project_root / rel
         if not abs_path.is_file():
@@ -78,17 +80,50 @@ def _dataset_frontmatters(ctx: ValidateContext) -> tuple[list[dict[str, Any]], s
     return frontmatters, dataset_ids
 
 
+def _member_defect(derivation: dict[str, Any]) -> str | None:
+    """Return a defect message if a ``kind: member_of`` derivation is malformed.
+
+    Raw frontmatter bypasses JSON-schema validation for locally authored files,
+    so the schema-critical member_of fields are re-enforced here rather than
+    trusting the typed load. Without this, a member_of block missing its keys
+    would crash the whole check via a KeyError in ``parse_member_of``. Returns
+    None when the block is well formed.
+    """
+    parent = derivation.get("parent_dataset")
+    if not isinstance(parent, str) or not parent.startswith("dataset:"):
+        return "member_of derivation requires a parent_dataset 'dataset:' reference"
+    key = derivation.get("member_key")
+    if not isinstance(key, str) or not key.strip():
+        return "member_of derivation requires a non-empty member_key"
+    return None
+
+
 @Check(section="reference collections", order=24)
 def check_reference_collections(ctx: ValidateContext) -> Iterator[Result]:
     frontmatters, dataset_ids = _dataset_frontmatters(ctx)
 
     for fm in frontmatters:
-        member_of = parse_member_of(fm)
-        if member_of is None:
+        derivation = fm.get("derivation")
+        if not isinstance(derivation, dict) or derivation.get("kind") != "member_of":
             continue
 
         ident = fm.get("id", "?")
         path = fm.get("_path")
+
+        defect = _member_defect(derivation)
+        if defect is not None:
+            yield _result(
+                Severity.ERROR,
+                path,
+                f"{ident}: {defect}",
+                "reference-collection.malformed-member",
+            )
+            continue
+
+        member_of = parse_member_of(fm)
+        if member_of is None:
+            # unreachable: _member_defect validated the fields
+            continue
 
         top_parent = fm.get("parent_dataset")
         if top_parent is not None and top_parent != member_of.parent_dataset:
@@ -107,7 +142,8 @@ def check_reference_collections(ctx: ValidateContext) -> Iterator[Result]:
             yield _result(
                 Severity.ERROR,
                 path,
-                f"{ident}: member_of parent_dataset {member_of.parent_dataset!r} does not resolve to a dataset entity",
+                f"{ident}: member_of parent_dataset "
+                f"{member_of.parent_dataset!r} does not resolve to a dataset entity",
                 "reference-collection.unresolved-parent",
             )
             continue
