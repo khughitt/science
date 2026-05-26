@@ -9,7 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any
+
+from science_tool.commons.adapter import CommonsEntityAdapter
+from science_tool.commons.config import resolve_commons_root
 
 _VALID_DECLARED_STATUS = frozenset({"resolved", "declared_unresolved"})
 
@@ -79,3 +83,43 @@ def evaluate_key_resolution(
     if available_keys is not None:
         return ResolutionState.RESOLVED if key in available_keys else ResolutionState.UNRESOLVED
     return ResolutionState.UNKNOWN
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedMember:
+    """A promoted member resolved to its parent collection + key (RCM-D5).
+
+    Byte-level slicing of the parent on `member_key` is the consumer's job; this
+    only resolves the delegation target.
+    """
+
+    member_id: str
+    parent_dataset: str
+    parent_slug: str
+    member_key: str
+
+
+def resolve_member(
+    member_id: str, *, commons_root: Path | None = None
+) -> ResolvedMember | None:
+    """Resolve a promoted member to its parent collection and key.
+
+    Returns None if `member_id` is not a `member_of` dataset. Raises a
+    CommonsError (via the adapter) if the member entity, or its declared parent
+    collection, is not present in the commons.
+    """
+    commons_root = commons_root or resolve_commons_root()
+    adapter = CommonsEntityAdapter(commons_root)
+
+    member_record = adapter.load(member_id)  # raises if the member entity is absent
+    member_of = parse_member_of(member_record.frontmatter)
+    if member_of is None:
+        return None
+
+    parent_record = adapter.load(member_of.parent_dataset)  # raises if absent
+    return ResolvedMember(
+        member_id=member_id,
+        parent_dataset=member_of.parent_dataset,
+        parent_slug=parent_record.slug,
+        member_key=member_of.member_key,
+    )

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from science_tool.commons.member import (
     MemberOf,
     ResolutionState,
+    ResolvedMember,
     evaluate_key_resolution,
     parse_member_of,
+    resolve_member,
 )
 
 
@@ -85,3 +89,29 @@ def test_evaluate_key_resolution_declared_unresolved_wins_over_present_index() -
         key="K", available_keys={"OTHER"}, declared_status="declared_unresolved"
     )
     assert state is ResolutionState.DECLARED_UNRESOLVED
+
+
+# ---------------------------------------------------------------------------
+# resolve_member — RCM-D5 virtual-member resolution
+# ---------------------------------------------------------------------------
+
+_COMMONS = Path(__file__).parent / "fixtures" / "commons" / "refcoll"
+
+
+def test_resolve_member_returns_parent_and_key() -> None:
+    resolved = resolve_member("dataset:promoted-member", commons_root=_COMMONS)
+    assert isinstance(resolved, ResolvedMember)
+    assert resolved.member_key == "m-1"
+    assert resolved.parent_dataset == "dataset:parent-collection"
+    assert resolved.parent_slug == "parent-collection"
+
+
+def test_resolve_member_none_for_non_member() -> None:
+    assert resolve_member("dataset:parent-collection", commons_root=_COMMONS) is None
+
+
+def test_resolve_member_raises_when_parent_missing() -> None:
+    from science_tool.commons.errors import CommonsError
+
+    with pytest.raises(CommonsError):
+        resolve_member("dataset:orphan-member", commons_root=_COMMONS)

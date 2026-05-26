@@ -1,0 +1,9 @@
+name: parent-collection
+profile: "data-package"
+resources:
+  - name: members
+    path: members.parquet
+    hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    bytes: 1024
+    format: "parquet"
+    mediatype: "application/vnd.apache.parquet"

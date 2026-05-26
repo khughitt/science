@@ -72,8 +72,10 @@ from science_tool.commons.inventory import build_commons_inventory
 from science_tool.commons.member import (
     MemberOf,
     ResolutionState,
+    ResolvedMember,
     evaluate_key_resolution,
     parse_member_of,
+    resolve_member,
 )
 from science_tool.commons.promote import (
     ConflictResolution,
@@ -145,6 +147,7 @@ __all__ = [
     "RebuildReport",
     "RegistryBuilder",
     "ResolvedDataResource",
+    "ResolvedMember",
     "ResolutionState",
     "ValidationReport",
     "apply_promote",
@@ -164,6 +167,7 @@ __all__ = [
     "resolve_commons_data_root",
     "resolve_commons_root",
     "resolve_entity",
+    "resolve_member",
     "resolve_project_by_id",
     "resolve_project_root",
     "validate_project_overlays",

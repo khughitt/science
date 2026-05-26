@@ -1,0 +1,9 @@
+name: orphan-member
+profile: "data-package"
+resources:
+  - name: member
+    path: member.parquet
+    hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    bytes: 64
+    format: "parquet"
+    mediatype: "application/vnd.apache.parquet"
