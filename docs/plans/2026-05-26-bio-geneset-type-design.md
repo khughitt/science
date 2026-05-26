@@ -1,0 +1,211 @@
+# Bio Gene-Set / Annotation Resource Type (Pillar D)
+
+Date: 2026-05-26
+
+Status: design for review (Phase 3 of the bio data architecture; last foundational pillar)
+
+Related (builds on):
+- `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar D
+- `docs/plans/2026-05-26-bio-dataset-influence-provenance-design.md` — Pillar B; D realizes per-set `dataset_usage`
+- `docs/plans/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` — Pillar A; `source_class: reference`
+- `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; `identifier_space`
+- `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` — dataset mixin (`origin`, `derivation`, `parent_dataset`)
+- `science/model/src/science_model/schemas/extension-bio-*.json` — sibling bio extensions
+
+---
+
+## 1. Purpose & scope
+
+Pillar D fills the "no gene-set data type" gap. It defines how a **collection** of gene sets / pathways /
+signatures / annotations is typed, how each set's **identifier space** and **per-set provenance** are
+recorded, and how an individual set becomes an evidence-bearing, citable object **without eagerly proliferating
+entities** (the never-cited long tail stays collection rows). It is the realization of Pillar B's
+provenance interface for gene sets, and the consumer of Pillar A's `reference` class and Pillar C's
+identity layer.
+
+**Locked decisions (this review):**
+
+1. **Two granularities, one entity model.** A gene-set *collection* is a `dataset` + a `bio.geneset`
+   extension. An *individual set* is, by default, just a **row of the collection addressed by `set_key`**
+   (the qualified sub-reference, kept as an internal detail). It is **promoted to its own child `dataset`**
+   (+ a `bio.geneset.member` extension) **only on demand**.
+2. **Promotion trigger.** Promote a set **only when it becomes evidence-bearing** — it is cited by an
+   evidence line (`source: dataset:<set-id>`) or needs independent provenance / review. Not eagerly.
+
+This reuses the durable entity, provenance, `dataset_usage`, `source_class`, `parent_dataset`, freshness,
+and evidence machinery rather than inventing a new entity kind before gene sets have a lifecycle distinct
+from "a small dataset subset with provenance."
+
+**Explicit non-goals.** D does not build identity (C), the epistemic class (A), or the influence engine
+(B). It does not ingest Reactome (E) — it is what E will instantiate against.
+
+---
+
+## 2. What exists, and the gap
+
+The bio extensions cover matrices and tables (`bio.matrix`, `bio.table`, `bio.rnaseq`, …) but **nothing
+represents a collection of sets**: no set count, no per-set membership keyed by identifier space, no per-set
+source provenance, no way for one set to carry its own `dataset_usage`. Today a gene-set collection could
+only be shoehorned into `bio.table`, losing exactly the structure (set membership, per-set provenance) that
+the double-counting and circularity machinery needs.
+
+---
+
+## 3. Locked design decisions
+
+### D-D1 — The collection: `dataset` + `bio.geneset`
+
+A gene-set collection is a `dataset` (typically `origin: external`, `source_class: reference`) carrying a
+`bio.geneset` extension:
+
+- `n_sets`, set-size distribution summary
+- `identifier_space` — the gene/protein identity space the members are keyed in, **resolved through
+  Pillar C** (e.g. `hgnc`); enables the unsafe-join lesson to be enforced
+- **per-set source provenance stored as cheap data columns** in the collection's bulk artifact (set_key →
+  defining PMIDs / `dataset:` refs / roles) — the "store fine" half of the policy; no graph cost until a
+  set is promoted
+- the curation/skeptical marker inherited from A (`source_class: reference` by default; see D-D6 for
+  heterogeneous collections)
+
+### D-D2 — Unpromoted set: a collection row addressed by `set_key`
+
+An individual set that has not been promoted is **not** an entity. It is addressed as
+`{collection, set_key}` and, where it must participate in provenance, is referenced *inside* a reified
+`sci:DatasetUsage` record (B-D4) with a set-key qualifier. This keeps B's option-2 (qualified sub-reference)
+as an internal detail and avoids minting entities for the long tail of never-cited sets.
+
+### D-D3 — Promotion: an on-demand child dataset
+
+When a set becomes evidence-bearing (D-D1's trigger), it is promoted to its **own child `dataset`** with a
+`bio.geneset.member` extension. Promotion gives the set a **stable, citable id** — which B needs to say
+"this specific set was defined from dataset A", and which evidence lines need for `source: dataset:<set-id>`.
+
+### D-D4 — The promoted-member shape
+
+```yaml
+id: dataset:reactome-r-hsa-12345
+type: dataset
+origin: derived
+source_class: reference            # copied from the per-set override; defaults to collection class (§4)
+parent_dataset: dataset:reactome-v89
+profiles:
+  - science-entity-base/1.0
+  - dataset/1.0
+  - bio.geneset.member/1.0
+derivation:                        # the member-derivation variant (D-D5) — satisfies origin: derived
+  kind: member_of
+  parent_dataset: dataset:reactome-v89
+  set_key: R-HSA-12345
+dataset_usage:                     # per-set provenance B consumes
+  - ref: dataset:study-a
+    role: set_definition_source
+    overlap: full
+# bio.geneset.member extension:
+identifier_space: hgnc
+n_members: 42
+```
+
+`set_key` and the collection link live in `derivation.member_of` (canonical, machine-checkable, D-D5), so
+the extension carries only the gene-set descriptors (`identifier_space`, `n_members`).
+
+**`source_class` and `derived_kind` on a member.** A member's `source_class` is **copied from the per-set
+override, defaulting to the collection's class** (§4). In the common case it is `reference`, and A requires
+`derived_kind` only when `source_class: derived` — so a `reference` member needs **no** `derived_kind`, the
+curation down-weight applies, and there is no `derived_kind` tension. **But** a per-set override that makes a
+member `source_class: derived` (an experimentally-derived set) **does** require `derived_kind`, per A.
+
+### D-D5 — The `member_of` derivation variant (locked)
+
+The dataset schema requires `derivation` (`workflow_recipe` + `inputs`) whenever `origin: derived`. A
+promoted member has no workflow — its derivation *is* "member `set_key` of `parent_dataset`". D therefore
+makes `derivation` a **discriminated union on `kind`**, adding a `member_of` variant:
+
+```yaml
+derivation:
+  kind: member_of
+  parent_dataset: dataset:reactome-v89
+  set_key: R-HSA-12345
+```
+
+The default (workflow) kind still requires `workflow_recipe` + `inputs`; the `member_of` kind requires
+`parent_dataset` + `set_key`. This keeps `origin: derived` **explicit and machine-checkable**, and is
+preferred over (a) relaxing `derivation` validation by profile — which would let `bio.geneset.member`
+silently weaken a core dataset invariant — and (b) mislabeling members as `origin: external`, which they
+are not (we extracted them). Small, honest change to the core derivation schema.
+
+### D-D6 — Per-set provenance is the circularity substrate
+
+The dangerous pattern (B §4) — *define a set from study A, then test enrichment of that set in study A* —
+is detectable only if set-definition provenance is explicit. D guarantees it: the defining datasets of a
+set are recorded as `set_definition_source` (in the collection's columns while unpromoted, on the member's
+`dataset_usage` once promoted). B reads exactly this to raise `suspect-circular`. A set **validated** in an
+independent cohort records `validation_source` instead — B's anti-circularity positive.
+
+### D-D7 — Promoted members are virtual unless materialized
+
+The dataset mixin **requires `datapackage`**. A promoted member must not force a fabricated tiny artifact
+per set. D's rule: a `member_of` dataset is a **virtual derived dataset** whose runtime payload is
+**resolved by slicing `parent_dataset` on `set_key`** — the `datapackage` requirement is satisfied by a
+virtual/derived descriptor pointing at that resolution, not by separate bulk bytes. A member is
+materialized to its own artifact only when explicitly needed (e.g. an expensive or frozen export). Without
+this rule, implementation would either fabricate many tiny datapackages or fail schema validation.
+
+---
+
+## 4. Heterogeneous collections
+
+A collection's `source_class: reference` is a **default**, not a straitjacket. MSigDB is the case: some sets
+are hand-curated (`reference`), others are *derived from a specific experiment* (effectively
+`set_definition_source`-heavy, closer to `derived`). D allows a **per-set source-class override** (stored in
+the collection columns, carried onto a promoted member) so an experimentally-derived set is not given the
+same curation treatment as a hand-curated one. The collection-level default covers the common case; the
+override covers the mixed collection.
+
+---
+
+## 5. Stress-test recheck (against umbrella §5)
+
+| Source | Collection | Notable |
+|---|---|---|
+| Reactome | `dataset` + `bio.geneset`, `source_class: reference`, `identifier_space: <C>` | the E instantiation; pathways promote to members on citation |
+| MSigDB | `dataset` + `bio.geneset` | **heterogeneous** — per-set source-class override (D-D6); per-set PMIDs/`dataset_usage` feed B's circularity check |
+| GO / MONDO (ontology) | *not a flat collection* | an ontology is a graph, not a set-of-sets; routed to the umbrella's non-tabular-reference question (matrix row 4) and C's deferred non-molecular identity — **out of D's flat-collection scope**, flagged not forced |
+| A signature from one study | promoted member, `set_definition_source: study` | the circularity substrate (D-D6) |
+
+D handles flat set collections cleanly and **explicitly declines** ontologies/knowledge-graphs (a distinct
+shape), naming the gap rather than mis-modeling it.
+
+---
+
+## 6. Open items for review
+
+1. **Per-set source-class override storage (D-D6/§4).** A column in the collection + a field on the
+   promoted member, vs derived solely from per-set `set_definition_source` density. Recommendation:
+   explicit field, defaulting to the collection's class (and copied onto the member, D-D4).
+2. **Ontologies / knowledge graphs** (GO, MONDO, Open Targets graph) are **out of D's scope** — they need
+   the non-tabular-reference treatment the umbrella parked and C's later non-molecular identity pillar. D
+   only states the boundary.
+
+---
+
+## 7. Decomposition & phasing (within D)
+
+| Sub-phase | Locks |
+|---|---|
+| D1 — `bio.geneset` collection extension (`n_sets`, `identifier_space`, per-set provenance columns, curation marker + per-set override) | the collection type |
+| D2 — `bio.geneset.member` extension + on-demand promotion + the `member_of` derivation variant + the virtual-member rule (core-mixin changes) | the citable promoted set |
+
+D depends on A (`source_class: reference`, the curation down-weight), C (`identifier_space`), and B
+(`dataset_usage` + the `set_definition_source`/`validation_source` roles). Within Phase 3, D1 should land
+before B's gene-set arm (B's per-set declarations attach to D's structures); D2's promotion can follow once
+evidence lines begin citing individual sets.
+
+---
+
+## 8. Status & next step
+
+Pillar D design for review — the last foundational design. On approval, the foundation (C, A, B, D) is fully
+specified, and Pillar E (Reactome ingestion) is revised to **instantiate** against it: a `bio.geneset`
+collection with `source_class: reference`, C-resolved `identifier_space`, per-pathway
+`set_definition_source` provenance, and pathways promoted to `bio.geneset.member` datasets on citation.
+Then writing-plans produces the phased implementation plans (critical path C1→C2, with A, B, D following).
