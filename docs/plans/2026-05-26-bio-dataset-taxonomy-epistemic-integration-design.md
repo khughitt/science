@@ -101,11 +101,12 @@ their training data**, so they are `source_class: derived` with `derived_kind: m
 artifact's inputs. Today that lives in `derivation.inputs`, but the dataset schema **gates `derivation` to
 `origin: derived`** and forbids it on `origin: external`. An externally-produced model output or
 meta-analysis is `origin: external` (we did not produce it) yet `source_class: derived` — so it **cannot**
-carry `derivation.inputs`. A and B therefore define a separate, origin-independent **`upstream_datasets`**
-field (B's `dataset:`-ref + usage-role provenance) that records the upstream / training datasets for
-*externally-produced* derived/reference artifacts. `derivation.inputs` stays for in-pipeline
-`origin: derived` datasets; `upstream_datasets` covers external ones. Without this, AlphaMissense and
-external meta-analyses have no derivable independence — this is the contract that makes A-D4 work for them.
+carry `derivation.inputs`. The fix is an origin-independent provenance record for *externally-produced*
+derived/reference artifacts. Pillar B provides this as its unified **`dataset_usage`** object with
+`role ∈ {upstream, training}` (model training data is `training`; a broad external dependency of unknown
+precise role is `upstream`); A relies on that `{upstream, training}` projection rather than defining a
+separate field. `derivation.inputs` stays for in-pipeline `origin: derived` datasets. Without this record,
+AlphaMissense and external meta-analyses have no derivable independence — the contract that makes A-D4 work.
 
 ### A-D4 — The class is a modifier on evidence, never an `evidence_type` override
 
@@ -126,9 +127,9 @@ This is the load-bearing integration rule (and the correction from umbrella revi
   Reactome"), the edge additionally takes `identification_strength: structural` (definitional/proxy), which
   the two-axis model already treats conservatively.
 - `derived` contributes through the **existing independence machinery**: a `derived` dataset is
-  non-independent of its inputs — `derivation.inputs` for in-pipeline `origin: derived`, or
-  `upstream_datasets` for externally-produced ones (A-D3) — so lines resting on it and on those inputs
-  collapse. No new collapse mechanism, just the provenance field that feeds it.
+  non-independent of its inputs — `derivation.inputs` for in-pipeline `origin: derived`, or `dataset_usage`
+  (`role ∈ {upstream, training}`) for externally-produced ones (A-D3) — so lines resting on it and on those
+  inputs collapse. No new collapse mechanism, just the provenance record that feeds it.
 
 ### A-D5 — A records, B and the aggregator consume
 
@@ -143,8 +144,8 @@ signal available; it does not itself trace influence.
 
 1. **Field home.** `source_class` lives on the **core dataset model/mixin**, not a bio extension — it feeds
    generic evidence aggregation, not bio-shape handling. `derived_kind` lives there too, **required only when
-   `source_class: derived`**. The `upstream_datasets` provenance field (A-D3) is likewise core (co-owned
-   with B).
+   `source_class: derived`**. The external-derived provenance record (A-D3) is Pillar B's `dataset_usage`
+   (`role ∈ {upstream, training}`), also core and co-owned with B.
 2. **Default flow.** `source_class` is **stored on the dataset**; the per-line curation modifier is
    **derived at graph build** into materialized evidence-unit metadata — authors do **not** copy it onto
    every evidence line. An explicit per-line **override** is allowed for exceptional cases and is
@@ -176,7 +177,7 @@ than the same result anchored on an independent primary dataset.
 | GTEx bulk RNA-seq | observational | observational | none |
 | DepMap CRISPR | observational | **interventional** (perturbational) | none — experimental strength is on the causal axis, not the class |
 | Meta-analysis we ran (e.g. MM30 SumZ) | derived (`origin: derived`) | inherited from inputs | independence collapse via `derivation.inputs` (existing) |
-| AlphaMissense (external) | derived (`origin: external`, `derived_kind: model_output`) | typically `structural`/proxy | model-output skepticism; independence via `upstream_datasets` (A-D3) |
+| AlphaMissense (external) | derived (`origin: external`, `derived_kind: model_output`) | typically `structural`/proxy | model-output skepticism; independence via `dataset_usage` `role: training` (A-D3) |
 | MSigDB / Reactome / GO / MONDO | reference | `structural` when the set *is* the claim | curation down-weight (once) |
 | UniProt curated annotation | reference | `structural`/proxy | curation down-weight |
 
@@ -189,9 +190,9 @@ which is the test the umbrella set.
 
 1. **Where the curation marker lives for gene sets** is settled in D (per-set vs collection-level), since a
    collection can mix curated and experimentally-derived sets; A only sets the dataset-level default.
-2. **The `upstream_datasets` field is co-owned with B** (A-D3): A needs it for independence; B owns its
-   usage-role semantics and the influence index. Its precise shape is fixed in the B design, consistent with
-   this contract.
+2. **External-derived provenance is B's `dataset_usage`** (A-D3): A needs the `{upstream, training}`
+   projection for independence; B owns the field, its role semantics, and the influence index. Fixed in the
+   B design, consistent with this contract.
 
 (`observational` is kept **atomic**: finer nuance — experimental / longitudinal / cross-sectional — is the
 `identification_strength` axis's job, not the class's. Settled by A-D1/A-D2.)
@@ -202,7 +203,7 @@ which is the test the umbrella set.
 
 | Sub-phase | Locks |
 |---|---|
-| A1 — `source_class` + `derived_kind` + `upstream_datasets` on the **core** dataset mixin + validation (`derived_kind` required for `derived`; `reference`-as-evidence without the modifier flagged) | the recorded signal + external-derived provenance contract |
+| A1 — `source_class` + `derived_kind` on the **core** dataset mixin + the A/B external-derived provenance contract (B's `dataset_usage` `role ∈ {upstream, training}`) + validation (`derived_kind` required for `derived`; `reference`-as-evidence without the modifier flagged) | the recorded signal + external-derived provenance contract |
 | A2 — Wire the curation penalty into EvidenceUnit scoring (one ordinal step floored at 0 via the shared unit-score path — both winner-selection and scalar) + `identification_strength: structural` tendency for reference-as-basis; **bump belief config version** | the epistemic effect |
 
 A1 depends on C only for the **`reference`-dataset pattern** (C's identity snapshots are the first
