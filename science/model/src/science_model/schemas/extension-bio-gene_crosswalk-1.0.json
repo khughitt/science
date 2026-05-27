@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/extension-bio-gene_crosswalk-1.0.json",
+  "title": "science entity bio.gene_crosswalk extension",
+  "type": "object",
+  "required": ["member_key_column"],
+  "properties": {
+    "member_key_column": {"const": "gene_key"},
+    "gene_count": {"type": "integer", "minimum": 0}
+  }
+}
