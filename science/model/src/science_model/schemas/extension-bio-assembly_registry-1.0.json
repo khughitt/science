@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/extension-bio-assembly_registry-1.0.json",
+  "title": "science entity bio.assembly_registry extension",
+  "type": "object",
+  "required": ["member_key_column"],
+  "properties": {
+    "member_key_column": {"const": "seqcol_digest"},
+    "assembly_count": {"type": "integer", "minimum": 0}
+  }
+}
