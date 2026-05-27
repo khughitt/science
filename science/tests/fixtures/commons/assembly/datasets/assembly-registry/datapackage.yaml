@@ -1,0 +1,9 @@
+name: assembly-registry
+profile: data-package
+resources:
+  - name: assemblies
+    path: assemblies.csv
+    format: csv
+    mediatype: text/csv
+    hash: "sha256:006712a35830b8b40a48ed73aaaa86d1a81fd269eebccd378fc98aae721dc8e0"
+    bytes: 225
