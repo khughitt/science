@@ -331,7 +331,11 @@ def test_protein_default_registry_used_when_unspecified() -> None:
 
 def test_protein_unsupported_namespace_errors() -> None:
     ds = _protein_ds({"namespace": "entrez"})
-    errs = [r for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID) if r.severity is Severity.ERROR]
+    errs = [
+        r
+        for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID)
+        if r.severity is Severity.ERROR
+    ]
     assert len(errs) == 1 and errs[0].rule == "identity.protein-namespace-unsupported"
 
 
@@ -344,7 +348,11 @@ def test_protein_declared_unresolved_infos() -> None:
 
 def test_protein_declared_unresolved_with_unsupported_namespace_still_errors() -> None:
     ds = _protein_ds({"namespace": "entrez", "resolution_status": "declared_unresolved"})
-    errs = [r for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID) if r.severity is Severity.ERROR]
+    errs = [
+        r
+        for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID)
+        if r.severity is Severity.ERROR
+    ]
     assert len(errs) == 1 and errs[0].rule == "identity.protein-namespace-unsupported"
 
 
@@ -369,19 +377,31 @@ def test_protein_unloadable_registry_infos_not_errors() -> None:
 
 def test_protein_malformed_registry_errors() -> None:
     ds = _protein_ds({"namespace": "uniprot", "registry": "protein-crosswalk-uniprot"})
-    errs = [r for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID) if r.severity is Severity.ERROR]
+    errs = [
+        r
+        for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID)
+        if r.severity is Severity.ERROR
+    ]
     assert len(errs) == 1 and errs[0].rule == "identity.protein-malformed"
 
 
 def test_protein_bad_resolution_status_errors() -> None:
     ds = _protein_ds({"namespace": "uniprot", "resolution_status": "maybe"})
-    errs = [r for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID) if r.severity is Severity.ERROR]
+    errs = [
+        r
+        for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID)
+        if r.severity is Severity.ERROR
+    ]
     assert len(errs) == 1 and errs[0].rule == "identity.protein-malformed"
 
 
 def test_protein_not_a_dict_errors() -> None:
     ds = _protein_ds("uniprot")
-    errs = [r for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID) if r.severity is Severity.ERROR]
+    errs = [
+        r
+        for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID)
+        if r.severity is Severity.ERROR
+    ]
     assert len(errs) == 1 and errs[0].rule == "identity.protein-malformed"
 
 

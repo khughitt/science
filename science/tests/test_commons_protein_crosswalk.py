@@ -137,7 +137,9 @@ def test_parse_rejects_merged_with_wrong_replacement_count() -> None:
     from science_tool.commons.protein_crosswalk import _parse_crosswalk_rows
 
     with pytest.raises(ProteinCrosswalkError, match="merged.*requires"):
-        _parse_crosswalk_rows([{"protein_key": "9606|uniprot|P99999", "status": "merged", "replacement_protein_keys": ""}])
+        _parse_crosswalk_rows(
+            [{"protein_key": "9606|uniprot|P99999", "status": "merged", "replacement_protein_keys": ""}]
+        )
 
 
 def test_make_protein_key_is_pipe_delimited_opaque_composite() -> None:
