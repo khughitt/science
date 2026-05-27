@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: design for review (umbrella — spawns focused per-area docs)
+Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3 merged (see §8). Spawns focused per-area docs.
 
 Related (builds on):
 - `docs/proposition-and-evidence-model.md` — core reasoning model
@@ -232,13 +232,13 @@ Each per-area doc should re-check its decisions against this matrix.
 
 Spawned design docs (in `~/d/science/docs/plans/`), with the dependency order:
 
-| Phase | Doc | Depends on | Locks |
-|---|---|---|---|
-| 1 | Identity, reference genomes & id mapping (C) | — | canonical assembly + gene/protein/variant crosswalks; pinned-vs-service policy |
-| 2 | Dataset taxonomy & epistemic integration (A) | C | source class (enum incl. model-output/experimental — A decides); curation down-weight as a *modifier*, mapped into aggregation + two-axis |
-| 3a | Gene-set / annotation type `bio.geneset` (D) | A, C | extension schema; per-set provenance; promotion rule; realizes B's interface for gene sets |
-| 3b | Dataset-influence & provenance tracking (B) | A, C (+ D for the gene-set arm) | `dataset:`-ref declarations + usage role; dataset→consumer derivation; *candidate* auto-independence |
-| 4 | Reactome ingestion revision (E) | A–D | first instantiation |
+| Phase | Doc | Depends on | Locks | Status |
+|---|---|---|---|---|
+| 1 | Identity, reference genomes & id mapping (C) | — | canonical assembly + gene/protein/variant crosswalks; pinned-vs-service policy | design ✓; **impl: C1 (assembly), C2 (gene), C3 (protein) merged; C4 (variant/liftover) pending** |
+| 2 | Dataset taxonomy & epistemic integration (A) | C | source class (enum incl. model-output/experimental — A decides); curation down-weight as a *modifier*, mapped into aggregation + two-axis | design ✓; impl not started |
+| 3a | Gene-set / annotation type `bio.geneset` (D) | A, C | extension schema; per-set provenance; promotion rule; realizes B's interface for gene sets | design ✓; impl not started |
+| 3b | Dataset-influence & provenance tracking (B) | A, C (+ D for the gene-set arm) | `dataset:`-ref declarations + usage role; dataset→consumer derivation; *candidate* auto-independence | design ✓; impl not started |
+| 4 | Reactome ingestion revision (E) | A–D | first instantiation | design ✓ (in `health/meta`); impl deferred (gated on A–D) |
 
 C is the long pole (everything joins on identity). A and C unblock D and the paper arm of B; B's
 gene-set arm consumes D, so D leads B within Phase 3 (B may start its paper-side and the derivation
@@ -252,7 +252,11 @@ C2/C3 crosswalks and the C4 variant-label registry). D is its **first concrete i
 the mechanism is the generalization of D's collection/member/promotion, so it is settled alongside C/D
 rather than as a separately-numbered phase. See that doc for the model and its invariants (resolve-or-
 `declared_unresolved`; `derivation.kind: member_of`; exact-key-equality-is-identity vs. compatibility
-relations).
+relations). **Status: implemented and merged** (the generic substrate — `commons/member.py`,
+`member_of` schema variant, reference-collections check); C1's assembly registry, C2's gene crosswalk,
+and C3's protein crosswalk are its first three instances. Its guardrail-2 *compatibility relation* side
+(distinct keys related with provenance, never collapsed) is still unexercised — C4's seqcol
+compatibility relations will be the first instance.
 
 ---
 
@@ -289,6 +293,27 @@ relations).
 
 ## 8. Status & next step
 
-Umbrella for review. On approval, the Phase-1 (identity, C) design doc is written first, since it is the
-deepest dependency and was independently flagged as a priority. Reactome ingestion (E) resumes only
-after A–D are settled enough to instantiate against.
+**Approved; implementation underway.** The umbrella and all spawned per-area design docs are written and
+user-reviewed. The cross-pillar **foundation substrate** (reference collection → keyed member → promoted
+member) and **Pillar C sub-phases C1 (assembly registry), C2 (gene crosswalk), C3 (protein crosswalk)**
+are implemented and merged to `~/d/science` `main` (substrate + C1 + C2 pushed to origin; C3 currently
+local-only). Each shipped its schema(s), a pinned reference collection + recipe, a pure resolver, and the
+corresponding `science validate` checks; the C2 gene check was generalized into a shared
+`evaluate_tier_identity` that C3's protein check reuses.
+
+**Remaining — Pillar C.** C4 — variant identity (VRS 2.0 / SPDI) + cross-assembly liftover + seqcol
+*compatibility relations* (the first realization of the primitive's RCM-D6 guardrail-2, and the liftover
+remedy that C1's check 3 defers). It is the heavyweight sub-phase (external VRS dependency, chain files,
+residual source decisions) and should be decomposed before planning.
+
+**Remaining — other pillars.** A (taxonomy), B (influence/provenance), and D (gene sets) have written,
+reviewed designs but no implementation. A + C unblock D and B's paper arm; D leads B's gene-set arm. E
+(Reactome ingestion) resumes once A–D are far enough along to instantiate against.
+
+**Operational follow-ups.**
+- Push `main` to `origin` when ready (the C3 sub-phase is local-only; the substrate + C1 + C2 are pushed).
+- The real commons collections — `assembly-registry`, `gene-crosswalk-hgnc`, `protein-crosswalk-uniprot` —
+  are committed **unbuilt** in `~/d/science-commons` (placeholder hash, count 0). Run each
+  `recipe/build.py` against the network, then pin the artifact hash + count and commit.
+- C3 left three deferred minor review findings (a `parse_secondary` skip-vs-fail-early comment; an
+  untested `fetch_text` gzip branch; a docstring nicety).
