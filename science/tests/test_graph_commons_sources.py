@@ -8,6 +8,7 @@ from typing import cast
 
 import pytest
 from science_model.entities import DatasetEntity, Entity, EntityScope, ThemeEntity
+from science_model.packages.schema import MemberOfDerivationBlock
 from science_model.source_contracts import BindingSource
 from science_model.source_ref import SourceRef
 
@@ -197,6 +198,65 @@ def test_collect_referenced_commons_ids_ignores_external_ontology_and_metadata_r
     )
 
     assert _collect(entities=[entity]) == {"topic:phf19"}
+
+
+def _promoted_member(member_id: str, parent_id: str) -> Entity:
+    """Build a promoted-member dataset entity with a MemberOfDerivationBlock."""
+    return Entity.model_validate(
+        {
+            "id": member_id,
+            "kind": "dataset",
+            "type": "dataset",
+            "title": member_id,
+            "project": "demo",
+            "ontology_terms": [],
+            "related": [],
+            "source_refs": [],
+            "content_preview": "",
+            "file_path": "",
+            "origin": "derived",
+            "parent_dataset": parent_id,
+            "derivation": {
+                "kind": "member_of",
+                "parent_dataset": parent_id,
+                "member_key": "R-HSA-1",
+            },
+        }
+    )
+
+
+def test_collect_referenced_commons_ids_follows_member_of_parent_dataset() -> None:
+    """A promoted member's commons parent collection must be collected (RCM-D5 / fix)."""
+    member = _promoted_member("dataset:my-member", "dataset:reactome-collection")
+
+    result = _collect(entities=[member])
+
+    assert "dataset:reactome-collection" in result
+
+
+def test_collect_referenced_commons_ids_workflow_derivation_dataset_no_spurious_parent() -> None:
+    """An ordinary workflow-derivation dataset does NOT contribute a spurious parent id."""
+    entity = Entity.model_validate(
+        {
+            "id": "dataset:workflow-out",
+            "kind": "dataset",
+            "type": "dataset",
+            "title": "Workflow output",
+            "project": "demo",
+            "ontology_terms": [],
+            "related": [],
+            "source_refs": [],
+            "content_preview": "",
+            "file_path": "",
+            "origin": "derived",
+            # parent_dataset is empty (the default) — no MemberOfDerivationBlock
+        }
+    )
+
+    result = _collect(entities=[entity])
+
+    # No dataset: ids should appear — the empty parent_dataset must not be added
+    assert not any(r.startswith("dataset:") for r in result)
 
 
 @dataclass(frozen=True)

@@ -54,11 +54,10 @@ def _dataset_frontmatters(ctx: ValidateContext) -> tuple[list[dict[str, Any]], s
     include_commons=True: a reference collection (the parent) typically lives in
     the commons, so the id set must span project + commons. Commons loading is
     reference-driven (`collect_referenced_commons_ids`), not a bulk scan, so this
-    does not leak the whole commons into a tmp_path test project. Note: that
-    extractor does not yet follow scalar `parent_dataset` into the commons, so a
-    member whose parent exists ONLY in the commons is not resolvable through this
-    check today; the assembly instance (Plan 2) resolves its collection directly
-    via the commons resolver instead.
+    does not leak the whole commons into a tmp_path test project.
+    `collect_referenced_commons_ids` follows a member's `parent_dataset` (scalar
+    and the member_of derivation's), so a parent collection hosted only in the
+    commons is loaded here and resolves correctly.
     """
     sources = load_project_sources(ctx.project_root, include_commons=True)
     dataset_ids: set[str] = set()

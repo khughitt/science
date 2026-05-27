@@ -14,6 +14,7 @@ from pathlib import Path
 from science_model.entities import Entity
 from science_model.entity_schema import parse_profile, read_merge_policy
 from science_model.ontologies.schema import OntologyCatalog
+from science_model.packages.schema import MemberOfDerivationBlock
 from science_model.source_contracts import BindingSource
 from science_model.source_ref import SourceRef
 
@@ -157,6 +158,13 @@ def collect_referenced_commons_ids(
             for raw in getattr(entity, field_name, None) or []:
                 _maybe_add(found, raw)
         _maybe_add(found, getattr(entity, "audits", None))
+        # A promoted member's parent collection (RCM-D5) may live in the commons;
+        # follow the scalar parent_dataset and the member_of derivation's parent so
+        # the reference-collection check can resolve a commons-hosted parent.
+        _maybe_add(found, getattr(entity, "parent_dataset", None))
+        derivation = getattr(entity, "derivation", None)
+        if isinstance(derivation, MemberOfDerivationBlock):
+            _maybe_add(found, derivation.parent_dataset)
 
     for relation in project_relations:
         _maybe_add(found, relation.subject)
