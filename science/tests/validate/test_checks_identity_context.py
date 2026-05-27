@@ -207,7 +207,9 @@ def test_gene_default_registry_used_when_unspecified() -> None:
 
 def test_gene_unsupported_namespace_errors() -> None:
     ds = _gene_ds({"namespace": "refseq"})
-    errs = [r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR]
+    errs = [
+        r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR
+    ]
     assert len(errs) == 1 and errs[0].rule == "identity.gene-namespace-unsupported"
 
 
@@ -222,7 +224,9 @@ def test_gene_declared_unresolved_with_unsupported_namespace_still_errors() -> N
     # declared_unresolved does not excuse a non-gene namespace: namespace support
     # is validated FIRST. The gene tier must use a recognized gene namespace.
     ds = _gene_ds({"namespace": "refseq", "resolution_status": "declared_unresolved"})
-    errs = [r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR]
+    errs = [
+        r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR
+    ]
     assert len(errs) == 1 and errs[0].rule == "identity.gene-namespace-unsupported"
 
 
@@ -248,13 +252,17 @@ def test_gene_unloadable_registry_infos_not_errors() -> None:
 
 def test_gene_not_a_dict_errors() -> None:
     ds = _gene_ds("hgnc_id")  # the gene tier must be an object
-    errs = [r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR]
+    errs = [
+        r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR
+    ]
     assert len(errs) == 1 and errs[0].rule == "identity.gene-malformed"
 
 
 def test_gene_missing_namespace_errors() -> None:
     ds = _gene_ds({"canonical": True})
-    errs = [r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR]
+    errs = [
+        r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR
+    ]
     assert len(errs) == 1 and errs[0].rule == "identity.gene-malformed"
 
 
@@ -262,14 +270,18 @@ def test_gene_malformed_registry_errors() -> None:
     # raw frontmatter bypasses the schema: a non-'dataset:' registry must ERROR
     # as malformed, not degrade to a misleading registry-unavailable INFO.
     ds = _gene_ds({"namespace": "hgnc_id", "registry": "gene-crosswalk-hgnc"})
-    errs = [r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR]
+    errs = [
+        r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR
+    ]
     assert len(errs) == 1 and errs[0].rule == "identity.gene-malformed"
 
 
 def test_gene_bad_resolution_status_errors() -> None:
     # 'maybe' must not be treated like 'resolved' and pass silently.
     ds = _gene_ds({"namespace": "hgnc_id", "resolution_status": "maybe"})
-    errs = [r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR]
+    errs = [
+        r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR
+    ]
     assert len(errs) == 1 and errs[0].rule == "identity.gene-malformed"
 
 

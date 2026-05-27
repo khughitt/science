@@ -120,9 +120,7 @@ def _parse_crosswalk_rows(rows: Iterable[dict[str, Any]]) -> list[CrosswalkRow]:
         seen.add(key)
         status = (row.get("status") or "").strip()
         if status not in _VALID_STATUS:
-            raise GeneCrosswalkError(
-                f"row {i}: invalid status {status!r} (expected one of {sorted(_VALID_STATUS)})"
-            )
+            raise GeneCrosswalkError(f"row {i}: invalid status {status!r} (expected one of {sorted(_VALID_STATUS)})")
         out.append(
             CrosswalkRow(
                 gene_key=key,
@@ -160,8 +158,7 @@ def available_gene_keys(
     """The set of gene_key member keys for `registry_id` (used by downstream
     payload-resolution audits; check 2 does not call this)."""
     return {
-        r.gene_key
-        for r in load_gene_crosswalk(registry_id=registry_id, commons_root=commons_root, data_root=data_root)
+        r.gene_key for r in load_gene_crosswalk(registry_id=registry_id, commons_root=commons_root, data_root=data_root)
     }
 
 
