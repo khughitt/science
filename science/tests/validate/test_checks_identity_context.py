@@ -4,6 +4,7 @@ from science_tool.validate.checks.identity_context import (
     evaluate_cross_dataset_assembly,
     evaluate_gene_identity,
     evaluate_identity_context,
+    evaluate_protein_identity,
 )
 from science_tool.validate.result import Severity
 
@@ -294,3 +295,102 @@ def test_dataset_without_gene_decl_ignored() -> None:
         "identity_context": {"taxon": 9606},
     }
     assert list(evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID)) == []
+
+
+# ---------------------------------------------------------------------------
+# Check 3: protein namespace & registry resolvability (declaration-level, C3)
+# ---------------------------------------------------------------------------
+
+_PROTEIN_REGISTRY = "dataset:protein-crosswalk-uniprot"
+_VALID_PROTEIN_META = {
+    "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.protein_crosswalk/1.0",
+    "member_key_column": "protein_key",
+}
+_PROTEIN_META_BY_ID = {_PROTEIN_REGISTRY: _VALID_PROTEIN_META}
+
+
+def _protein_ds(protein, id_="dataset:p") -> dict:
+    return {
+        "type": "dataset",
+        "id": id_,
+        "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.proteomics/1.0+bio.identity_context/1.0",
+        "_path": "data/p/entity.md",
+        "identity_context": {"taxon": 9606, "molecular_ids": {"protein": protein}},
+    }
+
+
+def test_protein_supported_namespace_with_valid_registry_passes_silently() -> None:
+    ds = _protein_ds({"namespace": "uniprot", "canonical": True})
+    assert list(evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID)) == []
+
+
+def test_protein_default_registry_used_when_unspecified() -> None:
+    ds = _protein_ds({"namespace": "ensembl_protein"})
+    assert list(evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID)) == []
+
+
+def test_protein_unsupported_namespace_errors() -> None:
+    ds = _protein_ds({"namespace": "entrez"})
+    errs = [r for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID) if r.severity is Severity.ERROR]
+    assert len(errs) == 1 and errs[0].rule == "identity.protein-namespace-unsupported"
+
+
+def test_protein_declared_unresolved_infos() -> None:
+    ds = _protein_ds({"namespace": "uniprot", "resolution_status": "declared_unresolved"})
+    res = list(evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID))
+    assert not [r for r in res if r.severity is Severity.ERROR]
+    assert [r for r in res if r.rule == "identity.protein-declared-unresolved"]
+
+
+def test_protein_declared_unresolved_with_unsupported_namespace_still_errors() -> None:
+    ds = _protein_ds({"namespace": "entrez", "resolution_status": "declared_unresolved"})
+    errs = [r for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID) if r.severity is Severity.ERROR]
+    assert len(errs) == 1 and errs[0].rule == "identity.protein-namespace-unsupported"
+
+
+def test_protein_wrong_registry_type_errors() -> None:
+    meta = {
+        "dataset:gene-crosswalk-hgnc": {
+            "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.gene_crosswalk/1.0",
+            "member_key_column": "gene_key",
+        }
+    }
+    ds = _protein_ds({"namespace": "uniprot", "registry": "dataset:gene-crosswalk-hgnc"})
+    errs = [r for r in evaluate_protein_identity([ds], registry_meta_by_id=meta) if r.severity is Severity.ERROR]
+    assert len(errs) == 1 and errs[0].rule == "identity.protein-registry-invalid"
+
+
+def test_protein_unloadable_registry_infos_not_errors() -> None:
+    ds = _protein_ds({"namespace": "uniprot"})
+    res = list(evaluate_protein_identity([ds], registry_meta_by_id={_PROTEIN_REGISTRY: None}))
+    assert not [r for r in res if r.severity is Severity.ERROR]
+    assert [r for r in res if r.rule == "identity.protein-registry-unavailable"]
+
+
+def test_protein_malformed_registry_errors() -> None:
+    ds = _protein_ds({"namespace": "uniprot", "registry": "protein-crosswalk-uniprot"})
+    errs = [r for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID) if r.severity is Severity.ERROR]
+    assert len(errs) == 1 and errs[0].rule == "identity.protein-malformed"
+
+
+def test_protein_bad_resolution_status_errors() -> None:
+    ds = _protein_ds({"namespace": "uniprot", "resolution_status": "maybe"})
+    errs = [r for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID) if r.severity is Severity.ERROR]
+    assert len(errs) == 1 and errs[0].rule == "identity.protein-malformed"
+
+
+def test_protein_not_a_dict_errors() -> None:
+    ds = _protein_ds("uniprot")
+    errs = [r for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID) if r.severity is Severity.ERROR]
+    assert len(errs) == 1 and errs[0].rule == "identity.protein-malformed"
+
+
+def test_dataset_without_protein_decl_ignored() -> None:
+    ds = {
+        "type": "dataset",
+        "id": "dataset:q",
+        "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.proteomics/1.0+bio.identity_context/1.0",
+        "_path": "data/q/entity.md",
+        "identity_context": {"taxon": 9606},
+    }
+    assert list(evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID)) == []

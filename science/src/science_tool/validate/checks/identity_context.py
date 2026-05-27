@@ -17,6 +17,7 @@ reference-collections check.
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,11 @@ from science_tool.commons.gene_crosswalk import (
     GENE_CROSSWALK_ID,
     MEMBER_KEY_COLUMN as _GENE_KEY_COLUMN,
     SUPPORTED_GENE_NAMESPACES,
+)
+from science_tool.commons.protein_crosswalk import (
+    PROTEIN_CROSSWALK_ID,
+    MEMBER_KEY_COLUMN as _PROTEIN_KEY_COLUMN,
+    SUPPORTED_PROTEIN_NAMESPACES,
 )
 from science_tool.commons.member import ResolutionState, evaluate_key_resolution
 from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
@@ -243,105 +249,111 @@ def check_cross_dataset_assembly(ctx: ValidateContext) -> Iterator[Result]:
     yield from evaluate_cross_dataset_assembly(_dataset_frontmatters(ctx))
 
 
-# --- C2: gene identity (check 2 — declaration-level resolvability) ---
+# --- C2/C3: molecular-id tier identity (declaration-level resolvability) ---
 
 
-def _gene_decl(fm: dict[str, Any]) -> Any:
-    """The raw identity_context.molecular_ids.gene declaration, or None."""
+@dataclass(frozen=True, slots=True)
+class _TierSpec:
+    """Per-tier parameters for the shared declaration-level identity check."""
+
+    tier: str  # the molecular_ids.<tier> key, e.g. "gene" | "protein"
+    supported_namespaces: frozenset[str]
+    default_registry: str
+    key_column: str  # the crosswalk collection's member_key_column const
+    profile_token: str  # e.g. "+bio.gene_crosswalk/"
+    rule_prefix: str  # e.g. "identity.gene"
+
+
+def _tier_decl(fm: dict[str, Any], tier: str) -> Any:
+    """The raw identity_context.molecular_ids.<tier> declaration, or None."""
     idc = fm.get("identity_context") or {}
     mids = idc.get("molecular_ids") if isinstance(idc, dict) else None
-    return mids.get("gene") if isinstance(mids, dict) else None
+    return mids.get(tier) if isinstance(mids, dict) else None
 
 
-def _gene_defect(gene: dict[str, Any]) -> str | None:
-    """Return a defect message if the raw gene tier is malformed, else None.
+def _tier_defect(decl: dict[str, Any]) -> str | None:
+    """Return a defect message if the raw tier declaration is malformed, else None.
 
     Raw authored frontmatter bypasses the JSON schema (the closed graph Entity
     drops extension fields), so the schema-critical fields are re-enforced here,
-    mirroring C1's `_assembly_defect`: `namespace` is required and non-blank;
-    `registry`, if present, must be a `dataset:` reference; `resolution_status`,
-    if present, must be one of the two valid states. Without this, `maybe` would
-    pass like `resolved` and a non-`dataset:` registry would degrade to INFO.
+    mirroring C1's `_assembly_defect`: `namespace` required + non-blank; optional
+    `registry` a `dataset:` reference; optional `resolution_status` a valid state.
+    Tier-independent. Without it, `maybe` would pass like `resolved` and a
+    non-`dataset:` registry would degrade to a misleading INFO.
     """
-    namespace = gene.get("namespace")
+    namespace = decl.get("namespace")
     if not isinstance(namespace, str) or not namespace.strip():
         return "missing or blank namespace"
-    registry = gene.get("registry")
+    registry = decl.get("registry")
     if registry is not None and (not isinstance(registry, str) or not registry.startswith("dataset:")):
         return "registry must be a 'dataset:' reference"
-    if gene.get("resolution_status") not in (None, "resolved", "declared_unresolved"):
+    if decl.get("resolution_status") not in (None, "resolved", "declared_unresolved"):
         return "resolution_status must be 'resolved' or 'declared_unresolved'"
     return None
 
 
-def _is_gene_crosswalk(meta: dict[str, Any]) -> bool:
+def _is_crosswalk(meta: dict[str, Any], *, profile_token: str, key_column: str) -> bool:
     profile = str(meta.get("schema_profile") or "")
-    return "+bio.gene_crosswalk/" in f"+{profile}" and meta.get("member_key_column") == _GENE_KEY_COLUMN
+    return profile_token in f"+{profile}" and meta.get("member_key_column") == key_column
 
 
-def evaluate_gene_identity(
-    datasets: Iterable[dict[str, Any]], *, registry_meta_by_id: dict[str, dict[str, Any] | None]
+def evaluate_tier_identity(
+    datasets: Iterable[dict[str, Any]],
+    *,
+    spec: _TierSpec,
+    registry_meta_by_id: dict[str, dict[str, Any] | None],
 ) -> Iterator[Result]:
-    """Pure core of check 2 (declaration-level). For each dataset declaring
-    identity_context.molecular_ids.gene, verify the namespace is crosswalk-
-    supported and the declared registry resolves to a bio.gene_crosswalk
-    collection (member_key_column: gene_key). No data payload is read.
+    """Pure core of the declaration-level identity check, parameterized per tier.
 
-    Namespace support is validated BEFORE the declared_unresolved escape: for the
-    gene tier every gene namespace is in C2's scope, so an unsupported gene
-    namespace is a real error that declared_unresolved must not excuse.
-    `registry_meta_by_id` maps each declared (or defaulted) registry id to its
-    entity metadata {schema_profile, member_key_column}, or None when it was
-    attempted but could not be loaded (-> INFO, never a false ERROR). A loaded
-    registry of the WRONG type is an ERROR -- a wrong registry must not quietly
-    pass. Unlike check 1 this does not resolve a member key: a gene declaration
-    names a namespace, not a single key.
+    For each dataset declaring identity_context.molecular_ids.<spec.tier>, verify
+    the namespace is crosswalk-supported and the declared registry resolves to the
+    tier's crosswalk collection (member_key_column: spec.key_column). No data
+    payload is read. Namespace support is validated BEFORE the declared_unresolved
+    escape (every tier namespace is in scope, so an unsupported one is a real
+    error). `registry_meta_by_id` maps each declared (or defaulted) registry id to
+    its entity metadata, or None when it was attempted but could not be loaded
+    (-> INFO, never a false ERROR). A loaded registry of the WRONG type is an
+    ERROR. Unlike check 1 this does not resolve a member key: a declaration names
+    a namespace, not a single key.
     """
     reported_registries: set[str] = set()
     for fm in datasets:
         if fm.get("type") != "dataset":
             continue
-        gene = _gene_decl(fm)
-        if gene is None:
+        decl = _tier_decl(fm, spec.tier)
+        if decl is None:
             continue
         path = fm.get("_path")
         ident = fm.get("id", "?")
-        if not isinstance(gene, dict):
-            yield _result(
-                Severity.ERROR,
-                path,
-                f"{ident}: identity_context.molecular_ids.gene must be an object",
-                "identity.gene-malformed",
-            )
+        loc = f"identity_context.molecular_ids.{spec.tier}"
+        if not isinstance(decl, dict):
+            yield _result(Severity.ERROR, path, f"{ident}: {loc} must be an object", f"{spec.rule_prefix}-malformed")
             continue
-        defect = _gene_defect(gene)
+        defect = _tier_defect(decl)
         if defect is not None:
             yield _result(
-                Severity.ERROR,
-                path,
-                f"{ident}: malformed identity_context.molecular_ids.gene -- {defect}",
-                "identity.gene-malformed",
+                Severity.ERROR, path, f"{ident}: malformed {loc} -- {defect}", f"{spec.rule_prefix}-malformed"
             )
             continue
-        namespace = str(gene["namespace"])  # _gene_defect guaranteed present + non-blank str
-        if namespace not in SUPPORTED_GENE_NAMESPACES:
+        namespace = str(decl["namespace"])  # _tier_defect guaranteed present + non-blank str
+        if namespace not in spec.supported_namespaces:
             yield _result(
                 Severity.ERROR,
                 path,
-                f"{ident}: gene namespace {namespace!r} is not crosswalk-supported "
-                f"(expected one of {sorted(SUPPORTED_GENE_NAMESPACES)})",
-                "identity.gene-namespace-unsupported",
+                f"{ident}: {spec.tier} namespace {namespace!r} is not crosswalk-supported "
+                f"(expected one of {sorted(spec.supported_namespaces)})",
+                f"{spec.rule_prefix}-namespace-unsupported",
             )
             continue
-        if gene.get("resolution_status") == "declared_unresolved":
+        if decl.get("resolution_status") == "declared_unresolved":
             yield _result(
                 Severity.INFO,
                 path,
-                f"{ident}: gene identity declared_unresolved (honoured, RCM-D2)",
-                "identity.gene-declared-unresolved",
+                f"{ident}: {spec.tier} identity declared_unresolved (honoured, RCM-D2)",
+                f"{spec.rule_prefix}-declared-unresolved",
             )
             continue
-        registry_id = gene["registry"] if isinstance(gene.get("registry"), str) else GENE_CROSSWALK_ID
+        registry_id = decl["registry"] if isinstance(decl.get("registry"), str) else spec.default_registry
         meta = registry_meta_by_id.get(registry_id)
         if meta is None:
             if registry_id not in reported_registries:
@@ -349,17 +361,18 @@ def evaluate_gene_identity(
                 yield _result(
                     Severity.INFO,
                     path,
-                    f"{ident}: gene registry {registry_id!r} unavailable; declared gene namespace cannot be verified",
-                    "identity.gene-registry-unavailable",
+                    f"{ident}: {spec.tier} registry {registry_id!r} unavailable; "
+                    f"declared {spec.tier} namespace cannot be verified",
+                    f"{spec.rule_prefix}-registry-unavailable",
                 )
             continue
-        if not _is_gene_crosswalk(meta):
+        if not _is_crosswalk(meta, profile_token=spec.profile_token, key_column=spec.key_column):
             yield _result(
                 Severity.ERROR,
                 path,
-                f"{ident}: gene registry {registry_id!r} is not a bio.gene_crosswalk collection "
-                f"with member_key_column={_GENE_KEY_COLUMN!r}",
-                "identity.gene-registry-invalid",
+                f"{ident}: {spec.tier} registry {registry_id!r} is not a {spec.profile_token[1:-1]} collection "
+                f"with member_key_column={spec.key_column!r}",
+                f"{spec.rule_prefix}-registry-invalid",
             )
         # supported namespace + valid crosswalk -> passes silently.
 
@@ -396,25 +409,66 @@ def _load_registry_meta(
     return meta
 
 
-@Check(section="gene identity", order=27)
-def check_gene_identity(ctx: ValidateContext) -> Iterator[Result]:
+def _run_tier_check(ctx: ValidateContext, spec: _TierSpec) -> Iterator[Result]:
+    """Gather raw frontmatter, load metadata for each registry a supported,
+    non-declared_unresolved tier declares (or defaults to), then evaluate."""
     datasets = _dataset_frontmatters(ctx)
     local_by_id = {fm["id"]: fm for fm in datasets if isinstance(fm.get("id"), str) and fm["id"]}
-    # Load metadata for each registry actually declared (or defaulted) by a gene
-    # tier whose namespace is supported and which is not declared_unresolved.
     declared: set[str] = set()
     for fm in datasets:
-        gene = _gene_decl(fm)
-        if not isinstance(gene, dict) or _gene_defect(gene) is not None:
+        decl = _tier_decl(fm, spec.tier)
+        if not isinstance(decl, dict) or _tier_defect(decl) is not None:
             continue  # malformed tiers are errored by the evaluator; load no registry for them
-        if gene.get("resolution_status") == "declared_unresolved":
+        if decl.get("resolution_status") == "declared_unresolved":
             continue
-        namespace = str(gene["namespace"])
-        if namespace in SUPPORTED_GENE_NAMESPACES:
-            declared.add(gene["registry"] if isinstance(gene.get("registry"), str) else GENE_CROSSWALK_ID)
+        if str(decl["namespace"]) in spec.supported_namespaces:
+            declared.add(decl["registry"] if isinstance(decl.get("registry"), str) else spec.default_registry)
     commons_cache: dict[str, dict[str, Any] | None] = {}
     registry_meta_by_id = {
         registry_id: _load_registry_meta(registry_id, local_by_id=local_by_id, commons_cache=commons_cache)
         for registry_id in declared
     }
-    yield from evaluate_gene_identity(datasets, registry_meta_by_id=registry_meta_by_id)
+    yield from evaluate_tier_identity(datasets, spec=spec, registry_meta_by_id=registry_meta_by_id)
+
+
+_GENE_SPEC = _TierSpec(
+    tier="gene",
+    supported_namespaces=SUPPORTED_GENE_NAMESPACES,
+    default_registry=GENE_CROSSWALK_ID,
+    key_column=_GENE_KEY_COLUMN,
+    profile_token="+bio.gene_crosswalk/",
+    rule_prefix="identity.gene",
+)
+
+_PROTEIN_SPEC = _TierSpec(
+    tier="protein",
+    supported_namespaces=SUPPORTED_PROTEIN_NAMESPACES,
+    default_registry=PROTEIN_CROSSWALK_ID,
+    key_column=_PROTEIN_KEY_COLUMN,
+    profile_token="+bio.protein_crosswalk/",
+    rule_prefix="identity.protein",
+)
+
+
+def evaluate_gene_identity(
+    datasets: Iterable[dict[str, Any]], *, registry_meta_by_id: dict[str, dict[str, Any] | None]
+) -> Iterator[Result]:
+    """C2 gene declaration-level evaluator (thin wrapper over the generalized core)."""
+    yield from evaluate_tier_identity(datasets, spec=_GENE_SPEC, registry_meta_by_id=registry_meta_by_id)
+
+
+def evaluate_protein_identity(
+    datasets: Iterable[dict[str, Any]], *, registry_meta_by_id: dict[str, dict[str, Any] | None]
+) -> Iterator[Result]:
+    """C3 protein declaration-level evaluator (thin wrapper over the generalized core)."""
+    yield from evaluate_tier_identity(datasets, spec=_PROTEIN_SPEC, registry_meta_by_id=registry_meta_by_id)
+
+
+@Check(section="gene identity", order=27)
+def check_gene_identity(ctx: ValidateContext) -> Iterator[Result]:
+    yield from _run_tier_check(ctx, _GENE_SPEC)
+
+
+@Check(section="protein identity", order=28)
+def check_protein_identity(ctx: ValidateContext) -> Iterator[Result]:
+    yield from _run_tier_check(ctx, _PROTEIN_SPEC)
