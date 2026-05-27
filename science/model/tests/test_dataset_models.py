@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from science_model.entities import DatasetEntity, Entity, EntityType
-from science_model.packages.schema import AccessBlock, AccessException, DerivationBlock
+from science_model.packages.schema import AccessBlock, AccessException, DatasetUsage, DerivationBlock
 
 
 class TestAccessException:
@@ -250,3 +250,28 @@ def test_code_provenance_derived_readiness_is_ready() -> None:
     r = ds.readiness()  # no resolver needed for code provenance
     assert r.ready is True
     assert r.state == "derived-via-code"
+
+
+class TestDatasetUsage:
+    def test_minimal_defaults_overlap_unknown(self) -> None:
+        u = DatasetUsage(ref="dataset:gtex-v8", role="analyzed")
+        assert u.ref == "dataset:gtex-v8"
+        assert u.role == "analyzed"
+        assert u.overlap == "unknown"
+
+    def test_training_role_full_overlap(self) -> None:
+        u = DatasetUsage(ref="dataset:corpus", role="training", overlap="full")
+        assert u.role == "training"
+        assert u.overlap == "full"
+
+    def test_ref_must_be_dataset_prefixed(self) -> None:
+        with pytest.raises(ValueError, match="dataset:"):
+            DatasetUsage(ref="paper:smith2024", role="cited")
+
+    def test_invalid_role_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            DatasetUsage(ref="dataset:x", role="consulted")  # type: ignore[arg-type]
+
+    def test_invalid_overlap_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            DatasetUsage(ref="dataset:x", role="analyzed", overlap="some")  # type: ignore[arg-type]

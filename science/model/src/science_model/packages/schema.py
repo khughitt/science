@@ -173,3 +173,26 @@ class MemberOfDerivationBlock(BaseModel):
         if not v.strip():
             raise ValueError("member_key must be a non-empty row key")
         return v
+
+
+class DatasetUsage(BaseModel):
+    """Forward-provenance: a consumer's declared use of one dataset (Pillar A/B).
+
+    Co-owned by Pillar A (which uses the `{upstream, training}` projection for the
+    external-derived independence contract, A-D3) and Pillar B (which adds the
+    materialization, role semantics, and auto-independence). A1 defines the full
+    shape so B1 does not migrate a partial field.
+    """
+
+    ref: str
+    role: Literal[
+        "analyzed", "set_definition_source", "validation_source", "cited", "upstream", "training"
+    ]
+    overlap: Literal["full", "partial", "unknown"] = "unknown"
+
+    @field_validator("ref")
+    @classmethod
+    def _ref_id(cls, v: str) -> str:
+        if not v.startswith("dataset:"):
+            raise ValueError("dataset_usage.ref must be a dataset:<slug> entity reference")
+        return v
