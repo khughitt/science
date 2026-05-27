@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from science_tool.validate.checks.identity_context import evaluate_cross_dataset_assembly, evaluate_identity_context
+from science_tool.validate.checks.identity_context import (
+    evaluate_cross_dataset_assembly,
+    evaluate_gene_identity,
+    evaluate_identity_context,
+)
 from science_tool.validate.result import Severity
 
 _REGISTRY = "dataset:assembly-registry"
@@ -167,3 +171,114 @@ def test_identity_context_not_a_dict_treated_as_undeclared() -> None:
     assert not [r for r in results if r.severity is Severity.ERROR]
     warns = [r for r in results if r.severity is Severity.WARN]
     assert len(warns) == 1 and warns[0].rule == "identity.assembly-undeclared"
+
+
+# ---------------------------------------------------------------------------
+# Check 2: gene namespace & registry resolvability (declaration-level, C2)
+# ---------------------------------------------------------------------------
+
+_GENE_REGISTRY = "dataset:gene-crosswalk-hgnc"
+_VALID_GENE_META = {
+    "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.gene_crosswalk/1.0",
+    "member_key_column": "gene_key",
+}
+_GENE_META_BY_ID = {_GENE_REGISTRY: _VALID_GENE_META}
+
+
+def _gene_ds(gene, id_="dataset:g") -> dict:
+    return {
+        "type": "dataset",
+        "id": id_,
+        "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.rnaseq/1.0+bio.identity_context/1.0",
+        "_path": "data/g/entity.md",
+        "identity_context": {"taxon": 9606, "molecular_ids": {"gene": gene}},
+    }
+
+
+def test_gene_supported_namespace_with_valid_registry_passes_silently() -> None:
+    ds = _gene_ds({"namespace": "hgnc_id", "canonical": True})
+    assert list(evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID)) == []
+
+
+def test_gene_default_registry_used_when_unspecified() -> None:
+    ds = _gene_ds({"namespace": "entrez"})  # no explicit registry -> default
+    assert list(evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID)) == []
+
+
+def test_gene_unsupported_namespace_errors() -> None:
+    ds = _gene_ds({"namespace": "refseq"})
+    errs = [r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR]
+    assert len(errs) == 1 and errs[0].rule == "identity.gene-namespace-unsupported"
+
+
+def test_gene_declared_unresolved_infos() -> None:
+    ds = _gene_ds({"namespace": "hgnc_id", "resolution_status": "declared_unresolved"})
+    res = list(evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID))
+    assert not [r for r in res if r.severity is Severity.ERROR]
+    assert [r for r in res if r.rule == "identity.gene-declared-unresolved"]
+
+
+def test_gene_declared_unresolved_with_unsupported_namespace_still_errors() -> None:
+    # declared_unresolved does not excuse a non-gene namespace: namespace support
+    # is validated FIRST. The gene tier must use a recognized gene namespace.
+    ds = _gene_ds({"namespace": "refseq", "resolution_status": "declared_unresolved"})
+    errs = [r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR]
+    assert len(errs) == 1 and errs[0].rule == "identity.gene-namespace-unsupported"
+
+
+def test_gene_wrong_registry_type_errors() -> None:
+    # points at a real dataset that is NOT a gene crosswalk
+    meta = {
+        "dataset:assembly-registry": {
+            "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.assembly_registry/1.0",
+            "member_key_column": "seqcol_digest",
+        }
+    }
+    ds = _gene_ds({"namespace": "hgnc_id", "registry": "dataset:assembly-registry"})
+    errs = [r for r in evaluate_gene_identity([ds], registry_meta_by_id=meta) if r.severity is Severity.ERROR]
+    assert len(errs) == 1 and errs[0].rule == "identity.gene-registry-invalid"
+
+
+def test_gene_unloadable_registry_infos_not_errors() -> None:
+    ds = _gene_ds({"namespace": "hgnc_id"})
+    res = list(evaluate_gene_identity([ds], registry_meta_by_id={_GENE_REGISTRY: None}))
+    assert not [r for r in res if r.severity is Severity.ERROR]
+    assert [r for r in res if r.rule == "identity.gene-registry-unavailable"]
+
+
+def test_gene_not_a_dict_errors() -> None:
+    ds = _gene_ds("hgnc_id")  # the gene tier must be an object
+    errs = [r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR]
+    assert len(errs) == 1 and errs[0].rule == "identity.gene-malformed"
+
+
+def test_gene_missing_namespace_errors() -> None:
+    ds = _gene_ds({"canonical": True})
+    errs = [r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR]
+    assert len(errs) == 1 and errs[0].rule == "identity.gene-malformed"
+
+
+def test_gene_malformed_registry_errors() -> None:
+    # raw frontmatter bypasses the schema: a non-'dataset:' registry must ERROR
+    # as malformed, not degrade to a misleading registry-unavailable INFO.
+    ds = _gene_ds({"namespace": "hgnc_id", "registry": "gene-crosswalk-hgnc"})
+    errs = [r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR]
+    assert len(errs) == 1 and errs[0].rule == "identity.gene-malformed"
+
+
+def test_gene_bad_resolution_status_errors() -> None:
+    # 'maybe' must not be treated like 'resolved' and pass silently.
+    ds = _gene_ds({"namespace": "hgnc_id", "resolution_status": "maybe"})
+    errs = [r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR]
+    assert len(errs) == 1 and errs[0].rule == "identity.gene-malformed"
+
+
+def test_dataset_without_gene_decl_ignored() -> None:
+    ds = {
+        "type": "dataset",
+        "id": "dataset:x",
+        "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.rnaseq/1.0+bio.identity_context/1.0",
+        "_path": "data/x/entity.md",
+        "identity_context": {"taxon": 9606},
+    }
+    assert list(evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID)) == []

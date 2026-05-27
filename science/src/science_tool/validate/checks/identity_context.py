@@ -22,8 +22,15 @@ from typing import Any
 
 import yaml
 
+from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.assembly import AssemblyRegistryError, available_assembly_keys
+from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsError
+from science_tool.commons.gene_crosswalk import (
+    GENE_CROSSWALK_ID,
+    MEMBER_KEY_COLUMN as _GENE_KEY_COLUMN,
+    SUPPORTED_GENE_NAMESPACES,
+)
 from science_tool.commons.member import ResolutionState, evaluate_key_resolution
 from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
 from science_tool.validate.checks import Check
@@ -234,3 +241,180 @@ def evaluate_cross_dataset_assembly(datasets: Iterable[dict[str, Any]]) -> Itera
 @Check(section="assembly identity", order=26)
 def check_cross_dataset_assembly(ctx: ValidateContext) -> Iterator[Result]:
     yield from evaluate_cross_dataset_assembly(_dataset_frontmatters(ctx))
+
+
+# --- C2: gene identity (check 2 — declaration-level resolvability) ---
+
+
+def _gene_decl(fm: dict[str, Any]) -> Any:
+    """The raw identity_context.molecular_ids.gene declaration, or None."""
+    idc = fm.get("identity_context") or {}
+    mids = idc.get("molecular_ids") if isinstance(idc, dict) else None
+    return mids.get("gene") if isinstance(mids, dict) else None
+
+
+def _gene_defect(gene: dict[str, Any]) -> str | None:
+    """Return a defect message if the raw gene tier is malformed, else None.
+
+    Raw authored frontmatter bypasses the JSON schema (the closed graph Entity
+    drops extension fields), so the schema-critical fields are re-enforced here,
+    mirroring C1's `_assembly_defect`: `namespace` is required and non-blank;
+    `registry`, if present, must be a `dataset:` reference; `resolution_status`,
+    if present, must be one of the two valid states. Without this, `maybe` would
+    pass like `resolved` and a non-`dataset:` registry would degrade to INFO.
+    """
+    namespace = gene.get("namespace")
+    if not isinstance(namespace, str) or not namespace.strip():
+        return "missing or blank namespace"
+    registry = gene.get("registry")
+    if registry is not None and (not isinstance(registry, str) or not registry.startswith("dataset:")):
+        return "registry must be a 'dataset:' reference"
+    if gene.get("resolution_status") not in (None, "resolved", "declared_unresolved"):
+        return "resolution_status must be 'resolved' or 'declared_unresolved'"
+    return None
+
+
+def _is_gene_crosswalk(meta: dict[str, Any]) -> bool:
+    profile = str(meta.get("schema_profile") or "")
+    return "+bio.gene_crosswalk/" in f"+{profile}" and meta.get("member_key_column") == _GENE_KEY_COLUMN
+
+
+def evaluate_gene_identity(
+    datasets: Iterable[dict[str, Any]], *, registry_meta_by_id: dict[str, dict[str, Any] | None]
+) -> Iterator[Result]:
+    """Pure core of check 2 (declaration-level). For each dataset declaring
+    identity_context.molecular_ids.gene, verify the namespace is crosswalk-
+    supported and the declared registry resolves to a bio.gene_crosswalk
+    collection (member_key_column: gene_key). No data payload is read.
+
+    Namespace support is validated BEFORE the declared_unresolved escape: for the
+    gene tier every gene namespace is in C2's scope, so an unsupported gene
+    namespace is a real error that declared_unresolved must not excuse.
+    `registry_meta_by_id` maps each declared (or defaulted) registry id to its
+    entity metadata {schema_profile, member_key_column}, or None when it was
+    attempted but could not be loaded (-> INFO, never a false ERROR). A loaded
+    registry of the WRONG type is an ERROR -- a wrong registry must not quietly
+    pass. Unlike check 1 this does not resolve a member key: a gene declaration
+    names a namespace, not a single key.
+    """
+    reported_registries: set[str] = set()
+    for fm in datasets:
+        if fm.get("type") != "dataset":
+            continue
+        gene = _gene_decl(fm)
+        if gene is None:
+            continue
+        path = fm.get("_path")
+        ident = fm.get("id", "?")
+        if not isinstance(gene, dict):
+            yield _result(
+                Severity.ERROR,
+                path,
+                f"{ident}: identity_context.molecular_ids.gene must be an object",
+                "identity.gene-malformed",
+            )
+            continue
+        defect = _gene_defect(gene)
+        if defect is not None:
+            yield _result(
+                Severity.ERROR,
+                path,
+                f"{ident}: malformed identity_context.molecular_ids.gene -- {defect}",
+                "identity.gene-malformed",
+            )
+            continue
+        namespace = str(gene["namespace"])  # _gene_defect guaranteed present + non-blank str
+        if namespace not in SUPPORTED_GENE_NAMESPACES:
+            yield _result(
+                Severity.ERROR,
+                path,
+                f"{ident}: gene namespace {namespace!r} is not crosswalk-supported "
+                f"(expected one of {sorted(SUPPORTED_GENE_NAMESPACES)})",
+                "identity.gene-namespace-unsupported",
+            )
+            continue
+        if gene.get("resolution_status") == "declared_unresolved":
+            yield _result(
+                Severity.INFO,
+                path,
+                f"{ident}: gene identity declared_unresolved (honoured, RCM-D2)",
+                "identity.gene-declared-unresolved",
+            )
+            continue
+        registry_id = gene["registry"] if isinstance(gene.get("registry"), str) else GENE_CROSSWALK_ID
+        meta = registry_meta_by_id.get(registry_id)
+        if meta is None:
+            if registry_id not in reported_registries:
+                reported_registries.add(registry_id)
+                yield _result(
+                    Severity.INFO,
+                    path,
+                    f"{ident}: gene registry {registry_id!r} unavailable; declared gene namespace cannot be verified",
+                    "identity.gene-registry-unavailable",
+                )
+            continue
+        if not _is_gene_crosswalk(meta):
+            yield _result(
+                Severity.ERROR,
+                path,
+                f"{ident}: gene registry {registry_id!r} is not a bio.gene_crosswalk collection "
+                f"with member_key_column={_GENE_KEY_COLUMN!r}",
+                "identity.gene-registry-invalid",
+            )
+        # supported namespace + valid crosswalk -> passes silently.
+
+
+def _load_registry_meta(
+    registry_id: str,
+    *,
+    local_by_id: dict[str, dict[str, Any]],
+    commons_cache: dict[str, dict[str, Any] | None],
+) -> dict[str, Any] | None:
+    """Load a registry's identifying metadata (schema_profile + member_key_column).
+
+    Project-local datasets first, then the commons directly. Returns None when the
+    registry cannot be loaded (commons not configured/available, or absent) -- the
+    evaluator reports that as INFO, never a false ERROR. Mirrors the
+    reference-collections check's commons lookup.
+    """
+    if registry_id in local_by_id:
+        fm = local_by_id[registry_id]
+        return {"schema_profile": fm.get("schema_profile", ""), "member_key_column": fm.get("member_key_column")}
+    if registry_id in commons_cache:
+        return commons_cache[registry_id]
+    root = resolve_commons_root()
+    meta: dict[str, Any] | None = None
+    if root.is_dir():
+        try:
+            record = CommonsEntityAdapter(root).load(registry_id)
+            body = getattr(record, "body_path", None)
+            fm = _raw_frontmatter(Path(body)) if body else {}
+            meta = {"schema_profile": fm.get("schema_profile", ""), "member_key_column": fm.get("member_key_column")}
+        except CommonsError:
+            meta = None
+    commons_cache[registry_id] = meta
+    return meta
+
+
+@Check(section="gene identity", order=27)
+def check_gene_identity(ctx: ValidateContext) -> Iterator[Result]:
+    datasets = _dataset_frontmatters(ctx)
+    local_by_id = {fm["id"]: fm for fm in datasets if isinstance(fm.get("id"), str) and fm["id"]}
+    # Load metadata for each registry actually declared (or defaulted) by a gene
+    # tier whose namespace is supported and which is not declared_unresolved.
+    declared: set[str] = set()
+    for fm in datasets:
+        gene = _gene_decl(fm)
+        if not isinstance(gene, dict) or _gene_defect(gene) is not None:
+            continue  # malformed tiers are errored by the evaluator; load no registry for them
+        if gene.get("resolution_status") == "declared_unresolved":
+            continue
+        namespace = str(gene["namespace"])
+        if namespace in SUPPORTED_GENE_NAMESPACES:
+            declared.add(gene["registry"] if isinstance(gene.get("registry"), str) else GENE_CROSSWALK_ID)
+    commons_cache: dict[str, dict[str, Any] | None] = {}
+    registry_meta_by_id = {
+        registry_id: _load_registry_meta(registry_id, local_by_id=local_by_id, commons_cache=commons_cache)
+        for registry_id in declared
+    }
+    yield from evaluate_gene_identity(datasets, registry_meta_by_id=registry_meta_by_id)
