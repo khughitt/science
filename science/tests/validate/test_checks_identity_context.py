@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from science_tool.validate.checks.identity_context import evaluate_identity_context
+from science_tool.validate.checks.identity_context import evaluate_cross_dataset_assembly, evaluate_identity_context
 from science_tool.validate.result import Severity
 
 _REGISTRY = "dataset:assembly-registry"
@@ -105,3 +105,40 @@ def test_bad_resolution_status_errors() -> None:
     ds = _ds(_COORD_PROFILE, identity_context={"taxon": 9606, "assembly": _assembly("X", status="maybe")})
     errors = [r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.ERROR]
     assert len(errors) == 1 and errors[0].rule == "identity.assembly-malformed"
+
+
+def _with_assembly(id_: str, digest: str, **extra) -> dict:
+    return {
+        "id": id_,
+        "type": "dataset",
+        "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.rnaseq/1.0+bio.identity_context/1.0",
+        "_path": f"data/{id_.split(':')[-1]}/entity.md",
+        "identity_context": {"taxon": 9606, "assembly": {"seqcol_digest": digest, "resolution_status": "resolved"}},
+        **extra,
+    }
+
+
+def test_inputs_spanning_two_assemblies_warns() -> None:
+    a = _with_assembly("dataset:a", "DIGEST_38")
+    b = _with_assembly("dataset:b", "DIGEST_37")
+    derived = _with_assembly(
+        "dataset:c", "DIGEST_38",
+        derivation={"inputs": ["dataset:a", "dataset:b"]},
+    )
+    warns = [
+        r
+        for r in evaluate_cross_dataset_assembly([a, b, derived])
+        if r.rule == "identity.cross-dataset-assembly-mismatch"
+    ]
+    assert len(warns) == 1
+
+
+def test_inputs_single_assembly_no_warn() -> None:
+    a = _with_assembly("dataset:a", "DIGEST_38")
+    derived = _with_assembly("dataset:c", "DIGEST_38", derivation={"inputs": ["dataset:a"]})
+    assert list(evaluate_cross_dataset_assembly([a, derived])) == []
+
+
+def test_no_derivation_inputs_no_warn() -> None:
+    a = _with_assembly("dataset:a", "DIGEST_38")
+    assert list(evaluate_cross_dataset_assembly([a])) == []

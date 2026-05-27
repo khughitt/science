@@ -189,3 +189,48 @@ def check_identity_context_assembly(ctx: ValidateContext) -> Iterator[Result]:
         except (CommonsError, AssemblyRegistryError):
             registry_keys_by_id[registry_id] = None
     yield from evaluate_identity_context(datasets, registry_keys_by_id=registry_keys_by_id)
+
+
+def _declared_digest(fm: dict[str, Any]) -> str | None:
+    idc = fm.get("identity_context") or {}
+    assembly = idc.get("assembly") if isinstance(idc, dict) else None
+    if isinstance(assembly, dict) and assembly.get("seqcol_digest"):
+        return str(assembly["seqcol_digest"])
+    return None
+
+
+def evaluate_cross_dataset_assembly(datasets: Iterable[dict[str, Any]]) -> Iterator[Result]:
+    """Pure core of check 3: flag a derived dataset whose inputs span assemblies.
+
+    Detect-only for C1 — the liftover remedy lands in C4 (§5 check 3).
+    """
+    by_id = {fm.get("id"): fm for fm in datasets if fm.get("id")}
+    for fm in datasets:
+        derivation = fm.get("derivation") or {}
+        inputs = derivation.get("inputs") if isinstance(derivation, dict) else None
+        if not inputs:
+            continue
+        digests: set[str] = set()
+        own = _declared_digest(fm)
+        if own:
+            digests.add(own)
+        for input_id in inputs:
+            parent = by_id.get(input_id)
+            if parent is None:
+                continue  # not project-local; C1 scope is project-local inputs
+            parent_digest = _declared_digest(parent)
+            if parent_digest:
+                digests.add(parent_digest)
+        if len(digests) >= 2:
+            yield _result(
+                Severity.WARN,
+                fm.get("_path"),
+                f"{fm.get('id', '?')}: derivation inputs span distinct assemblies {sorted(digests)} "
+                f"with no liftover available (detect-only; remedy in C4)",
+                "identity.cross-dataset-assembly-mismatch",
+            )
+
+
+@Check(section="assembly identity", order=26)
+def check_cross_dataset_assembly(ctx: ValidateContext) -> Iterator[Result]:
+    yield from evaluate_cross_dataset_assembly(_dataset_frontmatters(ctx))
