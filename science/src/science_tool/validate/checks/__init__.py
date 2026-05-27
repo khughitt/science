@@ -63,6 +63,7 @@ def _load_canonical_checks() -> None:
         "id_prefixes",
         "cross_references",
         "reference_collections",
+        "identity_context",
         "prose_lints",
         "annotations",
         "evidence_lines",
