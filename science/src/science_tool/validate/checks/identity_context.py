@@ -7,11 +7,12 @@ exact-equality RCM-D6). Check 3 (cross-dataset assembly mismatch) is added in a
 later task in this same module. See
 docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md.
 
-Dataset frontmatter is gathered by TOLERANT FILE DISCOVERY (DatapackageAdapter),
-not via `load_project_sources`: the graph loader strict-validates every dataset
-through pydantic and RAISES on a malformed core-kind entity, which would crash
-the whole run before this check could report a defect. Mirrors the
-reference-collections check.
+Dataset frontmatter is gathered by TOLERANT FILE DISCOVERY (both
+DatapackageAdapter and MarkdownAdapter, via `dataset_frontmatters` in
+`validate/_helpers.py`), not via `load_project_sources`: the graph loader
+strict-validates every dataset through pydantic and RAISES on a malformed
+core-kind entity, which would crash the whole run before this check could
+report a defect. Mirrors the reference-collections check.
 """
 
 from __future__ import annotations
@@ -20,8 +21,6 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
-import yaml
 
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.assembly import AssemblyRegistryError, available_assembly_keys
@@ -38,7 +37,7 @@ from science_tool.commons.protein_crosswalk import (
     SUPPORTED_PROTEIN_NAMESPACES,
 )
 from science_tool.commons.member import ResolutionState, evaluate_key_resolution
-from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
+from science_tool.validate._helpers import dataset_frontmatters, raw_frontmatter
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -49,19 +48,6 @@ _COORDINATE_EXTENSIONS = ("bio.rnaseq", "bio.scrna", "bio.cna")
 
 def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
     return Result(severity, Path(path) if path else None, None, message, rule, None)
-
-
-def _raw_frontmatter(path: Path) -> dict[str, Any]:
-    """Raw frontmatter for either an entity.md (fenced YAML) or a datapackage.yaml."""
-    text = path.read_text(encoding="utf-8")
-    if path.suffix in (".yaml", ".yml"):
-        data = yaml.safe_load(text) or {}
-    elif text.startswith("---"):
-        end = text.find("\n---", 3)
-        data = yaml.safe_load(text[3:end]) if end != -1 else {}
-    else:
-        data = {}
-    return data if isinstance(data, dict) else {}
 
 
 def _is_coordinate_bearing(profile: str) -> bool:
@@ -163,30 +149,9 @@ def evaluate_identity_context(
         # RESOLVED passes silently.
 
 
-def _dataset_frontmatters(ctx: ValidateContext) -> list[dict[str, Any]]:
-    """Raw frontmatter for every project dataset entity, by tolerant file discovery.
-
-    `DatapackageAdapter.discover` finds dataset entity packages without
-    strict-validating them through the graph loader (which RAISES on a malformed
-    core-kind entity and would crash the run). Each dict carries `_path`
-    (project-relative) for diagnostics. Mirrors the reference-collections check.
-    """
-    out: list[dict[str, Any]] = []
-    for ref in DatapackageAdapter().discover(ctx.project_root):
-        abs_path = ctx.project_root / ref.path
-        if not abs_path.is_file():
-            continue
-        fm = _raw_frontmatter(abs_path)
-        if fm.get("type") != "dataset":
-            continue
-        fm["_path"] = ref.path
-        out.append(fm)
-    return out
-
-
 @Check(section="assembly identity", order=25)
 def check_identity_context_assembly(ctx: ValidateContext) -> Iterator[Result]:
-    datasets = _dataset_frontmatters(ctx)
+    datasets = dataset_frontmatters(ctx)
     # Load keys for each registry actually declared (no default fallback): a
     # dataset's digest is verified only against the registry it names.
     declared_registries: set[str] = set()
@@ -246,7 +211,7 @@ def evaluate_cross_dataset_assembly(datasets: Iterable[dict[str, Any]]) -> Itera
 
 @Check(section="assembly identity", order=26)
 def check_cross_dataset_assembly(ctx: ValidateContext) -> Iterator[Result]:
-    yield from evaluate_cross_dataset_assembly(_dataset_frontmatters(ctx))
+    yield from evaluate_cross_dataset_assembly(dataset_frontmatters(ctx))
 
 
 # --- C2/C3: molecular-id tier identity (declaration-level resolvability) ---
@@ -401,7 +366,7 @@ def _load_registry_meta(
         try:
             record = CommonsEntityAdapter(root).load(registry_id)
             body = getattr(record, "body_path", None)
-            fm = _raw_frontmatter(Path(body)) if body else {}
+            fm = raw_frontmatter(Path(body)) if body else {}
             meta = {"schema_profile": fm.get("schema_profile", ""), "member_key_column": fm.get("member_key_column")}
         except CommonsError:
             meta = None
@@ -412,7 +377,7 @@ def _load_registry_meta(
 def _run_tier_check(ctx: ValidateContext, spec: _TierSpec) -> Iterator[Result]:
     """Gather raw frontmatter, load metadata for each registry a supported,
     non-declared_unresolved tier declares (or defaults to), then evaluate."""
-    datasets = _dataset_frontmatters(ctx)
+    datasets = dataset_frontmatters(ctx)
     local_by_id = {fm["id"]: fm for fm in datasets if isinstance(fm.get("id"), str) and fm["id"]}
     declared: set[str] = set()
     for fm in datasets:
