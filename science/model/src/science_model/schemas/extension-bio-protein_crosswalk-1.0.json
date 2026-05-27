@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/extension-bio-protein_crosswalk-1.0.json",
+  "title": "science entity bio.protein_crosswalk extension",
+  "type": "object",
+  "required": ["member_key_column"],
+  "properties": {
+    "member_key_column": {"const": "protein_key"},
+    "protein_count": {"type": "integer", "minimum": 0}
+  }
+}
