@@ -98,3 +98,39 @@ def test_identity_context_allows_future_sibling_keys(base_idc_entity: dict) -> N
     # non-molecular siblings (cell_line, disease, ontology) — C-D6.
     base_idc_entity["identity_context"]["cell_line"] = {"namespace": "cellosaurus"}
     EntityValidator().validate(base_idc_entity)
+
+
+def test_molecular_ids_gene_accepts_registry_and_resolution_status(base_idc_entity: dict) -> None:
+    base_idc_entity["identity_context"]["molecular_ids"]["gene"] = {
+        "namespace": "hgnc_id",
+        "canonical": True,
+        "registry": "dataset:gene-crosswalk-hgnc",
+        "resolution_status": "resolved",
+    }
+    EntityValidator().validate(base_idc_entity)
+
+
+def test_molecular_ids_gene_registry_must_be_dataset_ref(base_idc_entity: dict) -> None:
+    base_idc_entity["identity_context"]["molecular_ids"]["gene"] = {
+        "namespace": "hgnc_id",
+        "registry": "gene-crosswalk-hgnc",
+    }
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate(base_idc_entity)
+
+
+def test_molecular_ids_gene_rejects_unknown_resolution_status(base_idc_entity: dict) -> None:
+    base_idc_entity["identity_context"]["molecular_ids"]["gene"] = {
+        "namespace": "hgnc_id",
+        "resolution_status": "maybe",
+    }
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate(base_idc_entity)
+
+
+def test_molecular_ids_gene_declared_unresolved_passes(base_idc_entity: dict) -> None:
+    base_idc_entity["identity_context"]["molecular_ids"]["gene"] = {
+        "namespace": "hgnc_id",
+        "resolution_status": "declared_unresolved",
+    }
+    EntityValidator().validate(base_idc_entity)

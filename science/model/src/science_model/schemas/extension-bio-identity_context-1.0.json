@@ -18,7 +18,9 @@
             "required": ["namespace"],
             "properties": {
               "namespace": {"type": "string", "minLength": 1},
-              "canonical": {"type": "boolean"}
+              "canonical": {"type": "boolean"},
+              "registry": {"type": "string", "pattern": "^dataset:"},
+              "resolution_status": {"enum": ["resolved", "declared_unresolved"]}
             }
           }
         },
