@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: design for review (Phase 2 of the bio data architecture)
+Status: design ✓; impl: A1 merged (recording layer + validate check order 31); A2 (belief-math) pending
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar A
@@ -201,10 +201,10 @@ which is the test the umbrella set.
 
 ## 8. Decomposition & phasing (within A)
 
-| Sub-phase | Locks |
-|---|---|
-| A1 — `source_class` + `derived_kind` on the **core** dataset mixin + the A/B external-derived provenance contract (B's `dataset_usage` `role ∈ {upstream, training}`) + validation (`derived_kind` required for `derived`; `reference`-as-evidence without the modifier flagged) | the recorded signal + external-derived provenance contract |
-| A2 — Wire the curation penalty into EvidenceUnit scoring (one ordinal step floored at 0 via the shared unit-score path — both winner-selection and scalar) + `identification_strength: structural` tendency for reference-as-basis; **bump belief config version** | the epistemic effect |
+| Sub-phase | Locks | Status |
+|---|---|---|
+| A1 — `source_class` + `derived_kind` on the **core** dataset mixin + the A/B external-derived provenance contract (B's `dataset_usage` `role ∈ {upstream, training}`, full six-role schema shipped) + validation (`derived_kind` required for `derived`; `dataset_taxonomy` check at **order 31**) | the recorded signal + external-derived provenance contract | **merged** — landed at four layers: `mixin-dataset-1.0.json`, Pydantic `Entity` model (kind-gated `_validate_dataset_taxonomy`), `frontmatter.py` parse path, `DatapackageAdapter` whitelist; `science validate` check at order 31 |
+| A2 — Wire the curation penalty into EvidenceUnit scoring (one ordinal step floored at 0 via the shared unit-score path — both winner-selection and scalar) + `identification_strength: structural` tendency for reference-as-basis; **bump belief config version** | the epistemic effect | pending (separate plan) |
 
 A1 depends on C only for the **`reference`-dataset pattern** (C's identity snapshots are the first
 `reference` datasets, which validates the class on a real case). A2 depends on the aggregation internals
@@ -215,6 +215,19 @@ curation marker for gene sets).
 
 ## 9. Status & next step
 
-Pillar A design for review. On approval, the remaining Phase-3 designs (B — influence tracking; D —
-`bio.geneset`) follow, after which writing-plans produces implementation plans. A's own implementation
-(A1 then A2) can begin once C1/C2 have established the `reference`-dataset pattern A relies on.
+**A1 implemented and merged** to `~/d/science` `main`. The recording layer landed at four layers:
+JSON mixin schema (`mixin-dataset-1.0.json`), Pydantic `Entity` model (+ kind-gated
+`_validate_dataset_taxonomy` validator), the `frontmatter.py` parse path, and the
+`DatapackageAdapter._ENTITY_FIELDS` whitelist (graph path). The full `dataset_usage` schema (all six
+roles `analyzed|set_definition_source|validation_source|cited|upstream|training` + `overlap`
+`full|partial|unknown`) shipped in A1 per the co-ownership decision, so Pillar B1 does not migrate a
+partial field. A1 validates the `{upstream,training}` projection (the A-D3 external-derived
+independence nudge). A new tolerant `science validate` check `dataset_taxonomy` shipped at **order
+31** (the plan originally estimated order 29, but 29 was already taken by `evidence_lines`; actual
+order is 31).
+
+**A2 (belief-math) remains pending** — the curation down-weight in `belief.py`/`belief_scalar.py`,
+the `identification_strength: structural` tendency, and the CONFIG_VERSION bump are a separate plan.
+
+Remaining (gated on A2): D (`bio.geneset`) and B (influence/provenance) designs are ready; B's
+paper arm and D can begin once A2 lands.
