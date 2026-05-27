@@ -1,0 +1,9 @@
+name: protein-crosswalk-uniprot
+profile: data-package
+resources:
+  - name: crosswalk
+    path: crosswalk.csv
+    format: csv
+    mediatype: text/csv
+    hash: "sha256:a528394c880b570fa744a426e42404e315fd759db73b5cb21862f1e6499afc72"
+    bytes: 445

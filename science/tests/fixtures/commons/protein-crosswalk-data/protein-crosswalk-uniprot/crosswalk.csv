@@ -1,0 +1,5 @@
+protein_key,entry_name,ensembl_protein,refseq_protein,gene_key,status,replacement_protein_keys
+9606|uniprot|P04217,A1BG_HUMAN,ENSP00000263100;ENSPSHARED,NP_570602,9606|hgnc|HGNC:5,approved,
+9606|uniprot|P31946,1433B_HUMAN,ENSP00000300161;ENSP00000493072,NP_003395,9606|hgnc|HGNC:12849,approved,
+9606|uniprot|Q9NQ94,A1CF_HUMAN,ENSP00000363105;ENSPSHARED,NP_055521,9606|hgnc|HGNC:24086,approved,
+9606|uniprot|P99999,,,,,merged,9606|uniprot|P04217
