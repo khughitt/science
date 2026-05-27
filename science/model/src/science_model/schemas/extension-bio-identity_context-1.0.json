@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/extension-bio-identity_context-1.0.json",
+  "title": "science entity bio.identity_context extension",
+  "type": "object",
+  "required": ["identity_context"],
+  "properties": {
+    "identity_context": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["taxon"],
+      "properties": {
+        "taxon": {"type": "integer", "minimum": 1},
+        "molecular_ids": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["namespace"],
+            "properties": {
+              "namespace": {"type": "string", "minLength": 1},
+              "canonical": {"type": "boolean"}
+            }
+          }
+        },
+        "assembly": {"$ref": "#/$defs/assembly_identity"}
+      }
+    }
+  },
+  "$defs": {
+    "assembly_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seqcol_digest", "registry", "resolution_status"],
+      "properties": {
+        "seqcol_digest": {"type": "string", "minLength": 1},
+        "label": {"type": "string", "minLength": 1},
+        "registry": {"type": "string", "pattern": "^dataset:"},
+        "resolution_status": {"enum": ["resolved", "declared_unresolved"]}
+      }
+    }
+  }
+}
