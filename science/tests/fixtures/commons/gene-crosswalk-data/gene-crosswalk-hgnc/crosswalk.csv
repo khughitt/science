@@ -1,0 +1,5 @@
+gene_key,symbol,entrez_id,ensembl_gene_id,alias_symbol,prev_symbol,status,replacement_gene_keys
+9606|hgnc|HGNC:5,A1BG,1,ENSG00000121410,XYZ,,approved,
+9606|hgnc|HGNC:37133,A1BG-AS1,503538,ENSG00000268895,FLJ23569;XYZ,NCRNA00181;A1BGAS,approved,
+9606|hgnc|HGNC:99991,OLDA,,,,,merged,9606|hgnc|HGNC:5
+9606|hgnc|HGNC:99992,SPLITME,,,,,split,9606|hgnc|HGNC:5;9606|hgnc|HGNC:37133

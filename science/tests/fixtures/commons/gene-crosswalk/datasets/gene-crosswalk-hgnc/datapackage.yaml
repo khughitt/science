@@ -1,0 +1,9 @@
+name: gene-crosswalk-hgnc
+profile: data-package
+resources:
+  - name: crosswalk
+    path: crosswalk.csv
+    format: csv
+    mediatype: text/csv
+    hash: "sha256:527fdaba5614cd422864f7616140d9f19f35c21a7fd86f7acfeba96a57133d60"
+    bytes: 376
