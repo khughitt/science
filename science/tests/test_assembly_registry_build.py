@@ -56,6 +56,9 @@ def test_build_row_raises_on_digest_mismatch() -> None:
     pytest.importorskip("refget")
     with pytest.raises(ValueError, match="digest mismatch"):
         build_registry_row(
-            level2=_L2, label="TEST", accession="GCA_TEST.1",
-            server_digest="not-the-real-digest", source_url="https://x",
+            level2=_L2,
+            label="TEST",
+            accession="GCA_TEST.1",
+            server_digest="not-the-real-digest",
+            source_url="https://x",
         )

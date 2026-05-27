@@ -48,9 +48,7 @@ def build_registry_row(
     """
     computed = compute_seqcol_digest(level2)
     if computed != server_digest:
-        raise ValueError(
-            f"seqcol digest mismatch for {label!r}: server={server_digest!r} computed={computed!r}"
-        )
+        raise ValueError(f"seqcol digest mismatch for {label!r}: server={server_digest!r} computed={computed!r}")
     return {
         "seqcol_digest": server_digest,
         "label": label,
