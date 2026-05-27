@@ -275,3 +275,85 @@ class TestDatasetUsage:
     def test_invalid_overlap_rejected(self) -> None:
         with pytest.raises(ValueError):
             DatasetUsage(ref="dataset:x", role="analyzed", overlap="some")  # type: ignore[arg-type]
+
+
+def test_entity_carries_source_class_and_dataset_usage() -> None:
+    e = Entity(
+        **_entity_kwargs(),
+        origin="external",
+        access=_ext_access(),
+        source_class="observational",
+        dataset_usage=[DatasetUsage(ref="dataset:up", role="analyzed")],
+    )
+    assert e.source_class == "observational"
+    assert e.dataset_usage[0].role == "analyzed"
+
+
+# --- enforced on the plain-Entity (parse_entity_file / plan_gate) path ---
+
+
+def test_entity_dataset_kind_invalid_source_class_rejects() -> None:
+    with pytest.raises(ValueError, match="source_class"):
+        Entity(**_entity_kwargs(), origin="external", access=_ext_access(), source_class="curated")
+
+
+def test_entity_dataset_kind_derived_requires_derived_kind() -> None:
+    with pytest.raises(ValueError, match="requires derived_kind"):
+        Entity(**_entity_kwargs(), origin="external", access=_ext_access(), source_class="derived")
+
+
+def test_entity_dataset_kind_misplaced_derived_kind_rejects() -> None:
+    with pytest.raises(ValueError, match="derived_kind is only allowed"):
+        Entity(
+            **_entity_kwargs(),
+            origin="external",
+            access=_ext_access(),
+            source_class="observational",
+            derived_kind="aggregate",
+        )
+
+
+def test_non_dataset_kind_does_not_validate_source_class() -> None:
+    # Gate: the taxonomy rule applies only to kind == "dataset".
+    e = Entity(
+        id="hypothesis:h1",
+        kind="hypothesis",
+        type=EntityType.HYPOTHESIS,
+        title="H1",
+        project="p",
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path="doc/hypotheses/h1.md",
+        source_class="curated",  # not validated for non-datasets
+    )
+    assert e.source_class == "curated"
+
+
+# --- also enforced on the graph path (DatasetEntity inherits the Entity validator) ---
+
+
+def test_dataset_entity_derived_class_with_kind_ok() -> None:
+    ds = DatasetEntity(
+        **_entity_kwargs(),
+        origin="external",
+        access=_ext_access(),
+        source_class="derived",
+        derived_kind="model_output",
+    )
+    assert ds.derived_kind == "model_output"
+
+
+def test_dataset_entity_invalid_source_class_rejects() -> None:
+    with pytest.raises(ValueError, match="source_class"):
+        DatasetEntity(
+            **_entity_kwargs(), origin="external", access=_ext_access(), source_class="curated"
+        )
+
+
+def test_dataset_entity_invalid_source_class_rejected_without_origin() -> None:
+    # The taxonomy validator is independent of origin (not behind the origin=None
+    # early return in _enforce_dataset_invariants).
+    with pytest.raises(ValueError, match="source_class"):
+        DatasetEntity(**_entity_kwargs(), source_class="curated")

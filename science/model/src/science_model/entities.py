@@ -10,7 +10,7 @@ from typing import Any, Literal, Protocol
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from science_model.identity import EntityScope, ExternalId
-from science_model.packages.schema import AccessBlock, DerivationBlock, MemberOfDerivationBlock
+from science_model.packages.schema import AccessBlock, DatasetUsage, DerivationBlock, MemberOfDerivationBlock
 from science_model.reasoning import (
     ClaimLayer,
     DisputeScope,
@@ -262,6 +262,36 @@ class Entity(BaseModel):
             raise ValueError(f"review_state is not allowed on kind {self.kind!r} (non-epistemic by design)")
         return self
 
+    @model_validator(mode="after")
+    def _validate_dataset_taxonomy(self) -> "Entity":
+        # Pillar A (A-D1/A-D4): on dataset entities, source_class is a small epistemic
+        # class and derived_kind is required exactly when source_class == "derived".
+        # Lives on Entity (gated to kind) — not DatasetEntity — so it also covers the
+        # parse_entity_file path, which returns a plain Entity for datasets.
+        if self.kind != "dataset":
+            return self
+        if self.source_class is not None and self.source_class not in (
+            "observational",
+            "derived",
+            "reference",
+        ):
+            raise ValueError(
+                f"{self.id}: source_class must be observational|derived|reference, "
+                f"got {self.source_class!r}"
+            )
+        if self.source_class == "derived":
+            if self.derived_kind not in ("aggregate", "transform", "model_output"):
+                raise ValueError(
+                    f"{self.id}: source_class=derived requires derived_kind "
+                    f"(aggregate|transform|model_output), got {self.derived_kind!r}"
+                )
+        elif self.derived_kind is not None:
+            raise ValueError(
+                f"{self.id}: derived_kind is only allowed when source_class=derived "
+                f"(got source_class={self.source_class!r})"
+            )
+        return self
+
     deprecated_ids: list[str] = Field(default_factory=list)
     replaced_by: str | None = None
     taxon: str | None = None
@@ -286,6 +316,10 @@ class Entity(BaseModel):
     produced_by: list[str] = Field(default_factory=list)
     parent_dataset: str = ""
     siblings: list[str] = Field(default_factory=list)
+    # Pillar A — epistemic class (orthogonal to origin) + co-owned forward provenance
+    source_class: str | None = None       # "observational" | "derived" | "reference"
+    derived_kind: str | None = None        # "aggregate" | "transform" | "model_output"
+    dataset_usage: list[DatasetUsage] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _fill_derived_defaults(self) -> "Entity":
