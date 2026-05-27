@@ -5,15 +5,16 @@ parent collection, unless it explicitly declares `resolution_status:
 declared_unresolved`. See
 docs/plans/2026-05-26-reference-collection-member-promotion-design.md.
 
-Reads RAW frontmatter, NOT the typed graph `Entity`, for two reasons: (1)
-`resolution_status` is not modelled on `Entity` at all (pydantic drops unknown
-keys), so a typed read would miss it entirely; and (2) `parse_member_of` and the
-malformed-member guard operate on a plain frontmatter dict, whereas the typed
-`derivation` is a pydantic object (`DerivationBlock` | `MemberOfDerivationBlock`).
-Raw frontmatter is therefore also the un-schema-validated surface for locally
-authored files, so this check re-enforces the schema-critical member_of fields
-itself (mirroring the assembly check's `_assembly_defect`). Each entity's
-`file_path` is resolved under `ctx.project_root` so the check works from any cwd.
+Gathers dataset frontmatter by TOLERANT FILE DISCOVERY, not via
+`load_project_sources`. The graph loader strict-validates every dataset through
+pydantic and RAISES on a malformed core-kind entity (e.g. a member_of missing
+its `member_key`), which would crash the whole `science validate` run before
+this check could report the defect; it also aborts with CommonsRootNotFoundError
+when a member's commons-hosted parent is referenced but no commons root is
+configured. To stay robust on both counts, this check reads raw frontmatter
+directly (DatapackageAdapter discovery + `_raw_frontmatter`) and resolves a
+non-local parent against the commons directly, reporting `commons-unavailable`
+(INFO) instead of crashing or falsely claiming the parent is unresolved.
 """
 
 from __future__ import annotations
@@ -24,8 +25,11 @@ from typing import Any
 
 import yaml
 
+from science_tool.commons.adapter import CommonsEntityAdapter
+from science_tool.commons.config import resolve_commons_root
+from science_tool.commons.errors import CommonsError
 from science_tool.commons.member import parse_member_of
-from science_tool.graph.sources import load_project_sources
+from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -36,7 +40,7 @@ def _result(severity: Severity, path: str | None, message: str, rule: str) -> Re
 
 
 def _raw_frontmatter(path: Path) -> dict[str, Any]:
-    """Raw frontmatter for either an entity.md (fenced YAML) or a datapackage.yaml."""
+    """Raw frontmatter for either a datapackage.yaml or an entity.md (fenced YAML)."""
     text = path.read_text(encoding="utf-8")
     if path.suffix in (".yaml", ".yml"):
         data = yaml.safe_load(text) or {}
@@ -48,45 +52,33 @@ def _raw_frontmatter(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _dataset_frontmatters(ctx: ValidateContext) -> tuple[list[dict[str, Any]], set[str]]:
-    """Raw frontmatter per dataset entity + the set of all known dataset ids.
+def _discover_dataset_frontmatters(project_root: Path) -> list[dict[str, Any]]:
+    """Raw frontmatter for every project dataset entity, tolerant of bad shapes.
 
-    include_commons=True: a reference collection (the parent) typically lives in
-    the commons, so the id set must span project + commons. Commons loading is
-    reference-driven (`collect_referenced_commons_ids`), not a bulk scan, so this
-    does not leak the whole commons into a tmp_path test project.
-    `collect_referenced_commons_ids` follows a member's `parent_dataset` (scalar
-    and the member_of derivation's), so a parent collection hosted only in the
-    commons is loaded here and resolves correctly.
+    Project datasets live as `<data|results>/**/datapackage.yaml` entity packages;
+    `DatapackageAdapter.discover` finds them without typed-validating the
+    derivation, so a malformed member_of is surfaced as a diagnostic below rather
+    than crashing the loader.
     """
-    sources = load_project_sources(ctx.project_root, include_commons=True)
-    dataset_ids: set[str] = set()
-    frontmatters: list[dict[str, Any]] = []
-    for entity in sources.entities:
-        if getattr(entity, "kind", None) != "dataset":
-            continue
-        dataset_ids.add(entity.canonical_id)
-        rel = Path(getattr(entity, "file_path", ""))
-        abs_path = rel if rel.is_absolute() else ctx.project_root / rel
+    out: list[dict[str, Any]] = []
+    for ref in DatapackageAdapter().discover(project_root):
+        abs_path = project_root / ref.path
         if not abs_path.is_file():
             continue
         fm = _raw_frontmatter(abs_path)
-        fm.setdefault("type", "dataset")
-        if not fm.get("id"):
-            fm["id"] = getattr(entity, "canonical_id", "?")
-        fm["_path"] = str(rel)
-        frontmatters.append(fm)
-    return frontmatters, dataset_ids
+        if fm.get("type") != "dataset":
+            continue
+        fm["_path"] = ref.path
+        out.append(fm)
+    return out
 
 
 def _member_defect(derivation: dict[str, Any]) -> str | None:
     """Return a defect message if a ``kind: member_of`` derivation is malformed.
 
-    Raw frontmatter bypasses JSON-schema validation for locally authored files,
-    so the schema-critical member_of fields are re-enforced here rather than
-    trusting the typed load. Without this, a member_of block missing its keys
-    would crash the whole check via a KeyError in ``parse_member_of``. Returns
-    None when the block is well formed.
+    Raw frontmatter is not schema-validated, so the schema-critical member_of
+    fields are re-enforced here (mirroring the assembly check's `_assembly_defect`)
+    rather than crashing in `parse_member_of`. Returns None when well formed.
     """
     parent = derivation.get("parent_dataset")
     if not isinstance(parent, str) or not parent.startswith("dataset:"):
@@ -97,9 +89,33 @@ def _member_defect(derivation: dict[str, Any]) -> str | None:
     return None
 
 
+def _commons_has_dataset(parent_id: str, cache: dict[str, bool | None]) -> bool | None:
+    """Resolve a parent id against the commons directly.
+
+    Returns True if present, False if the commons is available but lacks the id,
+    and None if the commons root is not configured/available (cannot verify — the
+    check reports this as INFO, never a false unresolved-parent ERROR).
+    """
+    if parent_id in cache:
+        return cache[parent_id]
+    root = resolve_commons_root()
+    if not root.is_dir():
+        cache[parent_id] = None
+        return None
+    try:
+        CommonsEntityAdapter(root).load(parent_id)
+        result: bool | None = True
+    except CommonsError:
+        result = False
+    cache[parent_id] = result
+    return result
+
+
 @Check(section="reference collections", order=24)
 def check_reference_collections(ctx: ValidateContext) -> Iterator[Result]:
-    frontmatters, dataset_ids = _dataset_frontmatters(ctx)
+    frontmatters = _discover_dataset_frontmatters(ctx.project_root)
+    local_ids = {fm["id"] for fm in frontmatters if isinstance(fm.get("id"), str) and fm["id"]}
+    commons_cache: dict[str, bool | None] = {}
 
     for fm in frontmatters:
         derivation = fm.get("derivation")
@@ -120,8 +136,7 @@ def check_reference_collections(ctx: ValidateContext) -> Iterator[Result]:
             continue
 
         member_of = parse_member_of(fm)
-        if member_of is None:
-            # unreachable: _member_defect validated the fields
+        if member_of is None:  # unreachable: _member_defect validated the fields
             continue
 
         top_parent = fm.get("parent_dataset")
@@ -134,21 +149,30 @@ def check_reference_collections(ctx: ValidateContext) -> Iterator[Result]:
                 "reference-collection.parent-mismatch",
             )
 
-        # Parent-collection resolution is structural: always required. A missing
-        # parent is an ERROR even when declared_unresolved is set (RCM-D2 —
-        # declared_unresolved is about the key/row lookup, not parent existence).
-        if member_of.parent_dataset not in dataset_ids:
-            yield _result(
-                Severity.ERROR,
-                path,
-                f"{ident}: member_of parent_dataset {member_of.parent_dataset!r} does not resolve to a dataset entity",
-                "reference-collection.unresolved-parent",
-            )
-            continue
+        parent = member_of.parent_dataset
+        if parent not in local_ids:
+            present = _commons_has_dataset(parent, commons_cache)
+            if present is None:
+                yield _result(
+                    Severity.INFO,
+                    path,
+                    f"{ident}: parent collection {parent!r} is not local and the commons is not available to verify it",
+                    "reference-collection.commons-unavailable",
+                )
+                continue
+            if not present:
+                yield _result(
+                    Severity.ERROR,
+                    path,
+                    f"{ident}: member_of parent_dataset {parent!r} does not resolve to a "
+                    f"dataset entity (not in project or commons)",
+                    "reference-collection.unresolved-parent",
+                )
+                continue
 
-        # Parent resolved. declared_unresolved is a property of the member key/row
-        # lookup (the row check itself is deferred to the consuming instance),
-        # surfaced here as an INFO state against the resolved collection.
+        # Parent resolved (locally or in commons). declared_unresolved is a
+        # property of the member key/row lookup (deferred to the consuming
+        # instance), surfaced here as an INFO against the resolved collection.
         if fm.get("resolution_status") == "declared_unresolved":
             yield _result(
                 Severity.INFO,
