@@ -16,7 +16,10 @@
     "derivation": {"$ref": "#/$defs/derivation", "science:merge": "forbidden"},
     "parent_dataset": {"type": "string", "pattern": "^dataset:"},
     "siblings": {"type": "array", "items": {"type": "string"}},
-    "consumed_by": {"type": "array", "items": {"type": "string"}}
+    "consumed_by": {"type": "array", "items": {"type": "string"}},
+    "source_class": {"enum": ["observational", "derived", "reference"]},
+    "derived_kind": {"enum": ["aggregate", "transform", "model_output"]},
+    "dataset_usage": {"$ref": "#/$defs/dataset_usage"}
   },
   "not": {"required": ["resources"]},
   "allOf": [
@@ -33,6 +36,14 @@
         "required": ["derivation"],
         "not": {"anyOf": [{"required": ["access"]}, {"required": ["accessions"]}]}
       }
+    },
+    {
+      "if": {"properties": {"source_class": {"const": "derived"}}, "required": ["source_class"]},
+      "then": {"required": ["derived_kind"]}
+    },
+    {
+      "if": {"required": ["derived_kind"]},
+      "then": {"properties": {"source_class": {"const": "derived"}}, "required": ["source_class"]}
     }
   ],
   "$defs": {
@@ -48,6 +59,18 @@
         "verified_by": {"type": "string"},
         "source_url": {"type": "string"},
         "credentials_required": {"type": "string"}
+      }
+    },
+    "dataset_usage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ref", "role"],
+        "properties": {
+          "ref": {"type": "string", "pattern": "^dataset:"},
+          "role": {"enum": ["analyzed", "set_definition_source", "validation_source", "cited", "upstream", "training"]},
+          "overlap": {"enum": ["full", "partial", "unknown"]}
+        }
       }
     },
     "derivation": {

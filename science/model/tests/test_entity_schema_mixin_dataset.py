@@ -216,3 +216,96 @@ def test_dataset_top_level_parent_dataset_pattern_enforced(base_entity: dict) ->
     }
     with pytest.raises(EntityValidationError):
         EntityValidator().validate(entity)
+
+
+def test_dataset_observational_source_class_validates(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "source_class": "observational",
+    }
+    EntityValidator().validate(entity)
+
+
+def test_dataset_reference_source_class_validates(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "source_class": "reference",
+    }
+    EntityValidator().validate(entity)
+
+
+def test_dataset_source_class_invalid_enum_rejected(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "source_class": "curated",  # not in enum
+    }
+    with pytest.raises(EntityValidationError, match="source_class"):
+        EntityValidator().validate(entity)
+
+
+def test_dataset_derived_class_requires_derived_kind(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "source_class": "derived",  # derived_kind missing
+    }
+    with pytest.raises(EntityValidationError, match="derived_kind"):
+        EntityValidator().validate(entity)
+
+
+def test_dataset_derived_class_with_kind_validates(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "source_class": "derived",
+        "derived_kind": "model_output",
+    }
+    EntityValidator().validate(entity)
+
+
+def test_dataset_derived_kind_without_derived_class_rejected(base_entity: dict) -> None:
+    # derived_kind is only meaningful when source_class == derived.
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "source_class": "observational",
+        "derived_kind": "aggregate",
+    }
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate(entity)
+
+
+def test_dataset_usage_entry_validates(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "source_class": "derived",
+        "derived_kind": "model_output",
+        "dataset_usage": [
+            {"ref": "dataset:training-corpus", "role": "training", "overlap": "full"}
+        ],
+    }
+    EntityValidator().validate(entity)
+
+
+def test_dataset_usage_bad_role_rejected(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "dataset_usage": [{"ref": "dataset:x", "role": "consulted"}],  # bad role
+    }
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate(entity)
+
+
+def test_dataset_usage_ref_must_be_dataset_prefixed(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "dataset_usage": [{"ref": "paper:smith2024", "role": "analyzed"}],
+    }
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate(entity)
