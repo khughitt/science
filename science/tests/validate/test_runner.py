@@ -495,7 +495,7 @@ def test_python_sidecar_mode_without_validate_local_clears_existing_hooks(tmp_pa
     assert all(not hooks for hooks in _HOOKS.values())
 
 
-def test_disabled_sidecar_run_skips_post_validation_when_canonical_check_raises(tmp_path: Path) -> None:
+def test_disabled_sidecar_run_isolates_canonical_check_that_raises(tmp_path: Path) -> None:
     fired: list[str] = []
 
     @Check(section="canonical", order=10)
@@ -508,7 +508,128 @@ def test_disabled_sidecar_run_skips_post_validation_when_canonical_check_raises(
         fired.append("post")
         return []
 
-    with pytest.raises(RuntimeError, match="canonical boom"):
-        run(_project(tmp_path), strict=False, verbose=False, enable_python_sidecar=False)
+    # A raising canonical check is now isolated into an ERROR finding rather than
+    # aborting the whole run, so run() returns normally.
+    result = run(_project(tmp_path), strict=False, verbose=False, enable_python_sidecar=False)
 
     assert fired == ["check"]
+    crash = [r for r in result.results if r.rule == "validate.check-error"]
+    assert len(crash) == 1
+    assert "canonical" in crash[0].message
+    assert crash[0].severity is Severity.ERROR
+
+
+def test_run_isolates_a_crashing_canonical_check(tmp_path: Path) -> None:
+    @Check(section="early", order=5)
+    def boom(ctx: ValidateContext) -> list[Result]:
+        raise ValueError("schema validation failed for dataset:x")
+
+    @Check(section="late", order=99)
+    def later(ctx: ValidateContext) -> list[Result]:
+        return [Result(Severity.INFO, None, None, "later ran", "later.ok", None)]
+
+    result = run(_project(tmp_path), strict=False, verbose=False, enable_python_sidecar=False)
+
+    # the crash did NOT abort the run: the later check still ran
+    assert any(r.rule == "later.ok" for r in result.results)
+    # the crash was reported as a single ERROR finding, not raised
+    crash = [r for r in result.results if r.rule == "validate.check-error"]
+    assert len(crash) == 1
+    assert "boom" in crash[0].message
+    assert crash[0].severity is Severity.ERROR
+
+
+# ---------------------------------------------------------------------------
+# End-to-end: a malformed member_of datapackage must not abort the whole run.
+# ---------------------------------------------------------------------------
+
+_MALFORMED_MEMBER_MANIFEST = (
+    "name: demo\ncreated: 2026-01-01\nlast_modified: 2026-01-02\nstatus: active\n"
+    "summary: demo\nprofile: research\nlayout_version: 1\n"
+    "knowledge_profiles:\n  local: knowledge/local\n"
+)
+
+# A member_of derivation that is MISSING its required member_key. The entity
+# fields (id/type/title) stay valid so DatapackageAdapter.discover accepts the
+# package; only the derivation is malformed.
+_MALFORMED_MEMBER_DP = """\
+profiles: [science-pkg-entity-1.0]
+id: dataset:member-malformed
+type: dataset
+title: Member Malformed
+status: active
+origin: derived
+tier: use-now
+parent_dataset: dataset:some-parent
+derivation:
+  kind: member_of
+  parent_dataset: dataset:some-parent
+"""
+
+
+def _build_malformed_member_project(tmp_path: Path) -> Path:
+    tmp_path.joinpath("science.yaml").write_text(_MALFORMED_MEMBER_MANIFEST, encoding="utf-8")
+    (tmp_path / "knowledge" / "local").mkdir(parents=True)
+    dp_dir = tmp_path / "data" / "member-malformed"
+    dp_dir.mkdir(parents=True)
+    (dp_dir / "datapackage.yaml").write_text(_MALFORMED_MEMBER_DP, encoding="utf-8")
+    return tmp_path
+
+
+def _register_real_canonical_checks() -> None:
+    """Re-register the real canonical checks after the autouse fixture cleared them.
+
+    ``_load_canonical_checks`` only ``import_module``s the check submodules, which
+    is a no-op once they are already cached in ``sys.modules`` — so the ``@Check``
+    decorators never re-run and ``CANONICAL_CHECKS`` stays empty. Force a reload of
+    each already-imported submodule so the decorators fire again.
+    """
+    for module_name in (
+        "tooling",
+        "manifest",
+        "directory_structure",
+        "code_files",
+        "research_scope",
+        "document_structure",
+        "hypotheses",
+        "references",
+        "papers",
+        "unresolved_markers",
+        "gap_analysis",
+        "research_plan",
+        "discussions",
+        "prereg",
+        "hypothesis_comparisons",
+        "bias_audits",
+        "notes",
+        "graph",
+        "tasks",
+        "id_prefixes",
+        "cross_references",
+        "reference_collections",
+        "prose_lints",
+        "annotations",
+        "evidence_lines",
+    ):
+        full = f"science_tool.validate.checks.{module_name}"
+        module = sys.modules.get(full)
+        if module is not None:
+            importlib.reload(module)
+        else:
+            importlib.import_module(full)
+
+
+def test_full_run_reports_malformed_member_without_crashing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "empty-commons"))
+    (tmp_path / "empty-commons").mkdir()
+    _register_real_canonical_checks()  # register the real checks (autouse fixture cleared them)
+    project = _build_malformed_member_project(tmp_path)
+
+    result = run(project, strict=False, verbose=False, enable_python_sidecar=False)  # must NOT raise
+
+    # the malformed member is reported by reference_collections (it no longer crashes the run)
+    assert any(r.rule == "reference-collection.malformed-member" for r in result.results)
+    # and nothing propagated an exception — we got a RunResult with the error counted
+    assert result.errors >= 1

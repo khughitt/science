@@ -110,7 +110,23 @@ def run(
         if sidecar_enabled:
             results.extend(_dispatch_hooks("pre_validation", ctx))
         for entry in checks:
-            results.extend(entry.fn(ctx))
+            try:
+                results.extend(entry.fn(ctx))
+            except Exception as exc:  # noqa: BLE001 - one check must not abort the whole run
+                # A single check (e.g. one that loads project sources and hits a
+                # malformed entity) must not abort the entire validate run. Surface
+                # the failure as an ERROR finding and continue with the other checks.
+                results.append(
+                    Result(
+                        Severity.ERROR,
+                        None,
+                        None,
+                        f"check {entry.fn.__name__!r} (section {entry.section!r}) could not run: "
+                        f"{type(exc).__name__}: {exc}",
+                        "validate.check-error",
+                        None,
+                    )
+                )
         if sidecar_enabled:
             results.extend(_dispatch_hooks("extra_checks", ctx))
         run_result = _tally(results, checks)
