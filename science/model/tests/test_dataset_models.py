@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+from pydantic import ValidationError
 
 from science_model.entities import DatasetEntity, Entity, EntityType
+from science_model.frontmatter import parse_entity_file
 from science_model.packages.schema import AccessBlock, AccessException, DatasetUsage, DerivationBlock
 
 
@@ -357,3 +361,87 @@ def test_dataset_entity_invalid_source_class_rejected_without_origin() -> None:
     # early return in _enforce_dataset_invariants).
     with pytest.raises(ValueError, match="source_class"):
         DatasetEntity(**_entity_kwargs(), source_class="curated")
+
+
+# ---------------------------------------------------------------------------
+# Frontmatter parse path (Task 5)
+# ---------------------------------------------------------------------------
+
+
+def _write_dataset_md(tmp_path: Path, *extra_lines: str) -> Path:
+    md = tmp_path / "ds.md"
+    md.write_text(
+        "---\n"
+        "id: dataset:ds\n"
+        "type: dataset\n"
+        "title: A dataset\n"
+        "origin: external\n"
+        "tier: evaluate-next\n"
+        "datapackage: data/ds/datapackage.yaml\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n" + "".join(line + "\n" for line in extra_lines) + "---\nBody.\n",
+        encoding="utf-8",
+    )
+    return md
+
+
+def test_parse_dataset_source_class_and_usage(tmp_path: Path) -> None:
+    md = _write_dataset_md(
+        tmp_path,
+        "source_class: derived",
+        "derived_kind: model_output",
+        "dataset_usage:",
+        "  - ref: dataset:clinvar-training",
+        "    role: training",
+        "    overlap: full",
+    )
+    e = parse_entity_file(md, project_slug="testproj")
+    assert e is not None
+    assert e.source_class == "derived"
+    assert e.derived_kind == "model_output"
+    assert len(e.dataset_usage) == 1
+    assert e.dataset_usage[0].ref == "dataset:clinvar-training"
+    assert e.dataset_usage[0].role == "training"
+    assert e.dataset_usage[0].overlap == "full"
+
+
+def test_parse_dataset_invalid_source_class_raises(tmp_path: Path) -> None:
+    md = _write_dataset_md(tmp_path, "source_class: curated")
+    with pytest.raises(ValidationError, match="source_class"):
+        parse_entity_file(md, project_slug="testproj")
+
+
+def test_parse_dataset_derived_without_kind_raises(tmp_path: Path) -> None:
+    md = _write_dataset_md(tmp_path, "source_class: derived")
+    with pytest.raises(ValidationError, match="derived_kind"):
+        parse_entity_file(md, project_slug="testproj")
+
+
+def test_parse_dataset_misplaced_derived_kind_raises(tmp_path: Path) -> None:
+    md = _write_dataset_md(tmp_path, "source_class: observational", "derived_kind: aggregate")
+    with pytest.raises(ValidationError, match="derived_kind"):
+        parse_entity_file(md, project_slug="testproj")
+
+
+def test_parse_dataset_malformed_usage_raises(tmp_path: Path) -> None:
+    # A mapping authored without the leading list `-` must NOT be silently dropped.
+    md = _write_dataset_md(tmp_path, "dataset_usage:", "  ref: dataset:x", "  role: training")
+    with pytest.raises(ValidationError):
+        parse_entity_file(md, project_slug="testproj")
+
+
+def test_parse_dataset_empty_mapping_usage_raises(tmp_path: Path) -> None:
+    # Present-but-non-list `dataset_usage: {}` is a defect, not "no usage" — fail early
+    # (parity with the validate check), not silently coerced to [].
+    md = _write_dataset_md(tmp_path, "dataset_usage: {}")
+    with pytest.raises(ValidationError):
+        parse_entity_file(md, project_slug="testproj")
+
+
+def test_parse_dataset_usage_bad_role_raises(tmp_path: Path) -> None:
+    md = _write_dataset_md(
+        tmp_path, "dataset_usage:", "  - ref: dataset:x", "    role: consulted"
+    )
+    with pytest.raises(ValidationError):
+        parse_entity_file(md, project_slug="testproj")
