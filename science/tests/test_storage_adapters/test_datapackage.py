@@ -116,3 +116,58 @@ def test_malformed_yaml_silently_skipped(tmp_path: Path) -> None:
 
 def test_returns_empty_when_no_datapackages(tmp_path: Path) -> None:
     assert DatapackageAdapter().discover(tmp_path) == []
+
+
+def test_load_raw_surfaces_a1_taxonomy_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # A promoted reference-collection member (datapackage-backed) declaring A1 fields.
+    (tmp_path / "data" / "refcoll").mkdir(parents=True)
+    (tmp_path / "data" / "refcoll" / "datapackage.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "profiles": ["science-pkg-entity-1.0"],
+                "name": "refcoll",
+                "id": "dataset:refcoll",
+                "type": "dataset",
+                "title": "Ref coll",
+                "origin": "external",
+                "access": {"level": "public", "verified": True},
+                "source_class": "reference",
+                "dataset_usage": [
+                    {"ref": "dataset:src", "role": "set_definition_source", "overlap": "full"}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    adapter = DatapackageAdapter()
+    refs = adapter.discover(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    raw = adapter.load_raw(refs[0])
+    assert raw["source_class"] == "reference"
+    assert raw["dataset_usage"][0]["role"] == "set_definition_source"
+
+
+def test_load_raw_surfaces_derived_kind(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "data" / "am").mkdir(parents=True)
+    (tmp_path / "data" / "am" / "datapackage.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "profiles": ["science-pkg-entity-1.0"],
+                "name": "am",
+                "id": "dataset:am",
+                "type": "dataset",
+                "title": "AlphaMissense",
+                "origin": "external",
+                "access": {"level": "public", "verified": True},
+                "source_class": "derived",
+                "derived_kind": "model_output",
+            }
+        ),
+        encoding="utf-8",
+    )
+    adapter = DatapackageAdapter()
+    refs = adapter.discover(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    raw = adapter.load_raw(refs[0])
+    assert raw["source_class"] == "derived"
+    assert raw["derived_kind"] == "model_output"
