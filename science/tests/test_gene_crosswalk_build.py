@@ -76,3 +76,15 @@ def test_build_rows_round_trips_through_the_resolver_parser() -> None:
 def test_fetch_text_is_callable_without_network() -> None:
     # Importing the module does not require a network call.
     assert callable(fetch_text)
+
+
+def test_parse_withdrawn_merged_split_with_no_targets_is_withdrawn() -> None:
+    # A 'Merged/Split' row whose MERGED_INTO_REPORT(S) has no resolvable HGNC
+    # target is an anomaly; classify it as 'withdrawn' (a dead entry, no forward
+    # pointer) so the build never emits a 'merged' row with !=1 replacement.
+    rows = parse_withdrawn(
+        "HGNC_ID\tSTATUS\tWITHDRAWN_SYMBOL\tMERGED_INTO_REPORT(S)\nHGNC:99994\tMerged/Split\tNOTARGET\t\n"
+    )
+    row = next(r for r in rows if r["gene_key"] == "9606|hgnc|HGNC:99994")
+    assert row["status"] == "withdrawn"
+    assert row["replacement_gene_keys"] == ""

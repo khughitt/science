@@ -73,7 +73,11 @@ def parse_withdrawn(tsv_text: str) -> list[dict[str, Any]]:
             target_id = entry.split("|")[0].strip()
             if target_id.startswith("HGNC:"):
                 targets.append(make_gene_key(_HUMAN_TAXON, target_id))
-        if raw_status == "Entry Withdrawn":
+        # Classify by resolvable-target count so the row always satisfies the
+        # resolver's status<->count contract (merged == 1, split >= 2). A
+        # 'Merged/Split' entry with no resolvable HGNC target is an anomaly; treat
+        # it as a dead 'withdrawn' entry rather than emit an invalid 'merged' row.
+        if raw_status == "Entry Withdrawn" or not targets:
             status = "withdrawn"
         elif len(targets) >= 2:
             status = "split"

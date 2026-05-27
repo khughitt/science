@@ -145,3 +145,36 @@ def test_make_gene_key_is_pipe_delimited_opaque_composite() -> None:
     from science_tool.commons.gene_crosswalk import make_gene_key
 
     assert make_gene_key(9606, "HGNC:5") == "9606|hgnc|HGNC:5"
+
+
+def test_parse_rejects_split_with_single_replacement() -> None:
+    # A 'split' row needs >=2 forward targets; with 1 it would silently resolve as
+    # a single canonical gene (ResolvedGeneMatch) instead of AmbiguousGeneMatch.
+    from science_tool.commons.gene_crosswalk import _parse_crosswalk_rows
+
+    with pytest.raises(GeneCrosswalkError, match="split.*requires"):
+        _parse_crosswalk_rows(
+            [{"gene_key": "9606|hgnc|HGNC:1", "status": "split", "replacement_gene_keys": "9606|hgnc|HGNC:5"}]
+        )
+
+
+def test_parse_rejects_merged_with_no_replacement() -> None:
+    from science_tool.commons.gene_crosswalk import _parse_crosswalk_rows
+
+    with pytest.raises(GeneCrosswalkError, match="merged.*requires"):
+        _parse_crosswalk_rows([{"gene_key": "9606|hgnc|HGNC:1", "status": "merged", "replacement_gene_keys": ""}])
+
+
+def test_parse_rejects_merged_with_multiple_replacements() -> None:
+    from science_tool.commons.gene_crosswalk import _parse_crosswalk_rows
+
+    with pytest.raises(GeneCrosswalkError, match="merged.*requires"):
+        _parse_crosswalk_rows(
+            [
+                {
+                    "gene_key": "9606|hgnc|HGNC:1",
+                    "status": "merged",
+                    "replacement_gene_keys": "9606|hgnc|HGNC:5;9606|hgnc|HGNC:6",
+                }
+            ]
+        )

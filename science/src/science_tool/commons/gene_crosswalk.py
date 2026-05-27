@@ -121,6 +121,20 @@ def _parse_crosswalk_rows(rows: Iterable[dict[str, Any]]) -> list[CrosswalkRow]:
         status = (row.get("status") or "").strip()
         if status not in _VALID_STATUS:
             raise GeneCrosswalkError(f"row {i}: invalid status {status!r} (expected one of {sorted(_VALID_STATUS)})")
+        replacements = _split_multi(row.get("replacement_gene_keys", ""))
+        # The lifecycle status must match its forward-pointer count, or the
+        # resolver's contract breaks: a 'split' with <2 targets would silently
+        # resolve as a single canonical gene instead of AmbiguousGeneMatch, and a
+        # 'merged' is by definition a one-to-one redirect (RCM-D6: distinct keys
+        # related with provenance, never collapsed by guesswork).
+        if status == "split" and len(replacements) < 2:
+            raise GeneCrosswalkError(
+                f"row {i}: status 'split' requires >=2 replacement_gene_keys, got {len(replacements)}"
+            )
+        if status == "merged" and len(replacements) != 1:
+            raise GeneCrosswalkError(
+                f"row {i}: status 'merged' requires exactly 1 replacement_gene_key, got {len(replacements)}"
+            )
         out.append(
             CrosswalkRow(
                 gene_key=key,
@@ -130,7 +144,7 @@ def _parse_crosswalk_rows(rows: Iterable[dict[str, Any]]) -> list[CrosswalkRow]:
                 alias_symbol=_split_multi(row.get("alias_symbol", "")),
                 prev_symbol=_split_multi(row.get("prev_symbol", "")),
                 status=status,
-                replacement_gene_keys=_split_multi(row.get("replacement_gene_keys", "")),
+                replacement_gene_keys=replacements,
             )
         )
     return out
