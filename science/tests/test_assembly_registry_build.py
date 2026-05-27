@@ -62,3 +62,30 @@ def test_build_row_raises_on_digest_mismatch() -> None:
             server_digest="not-the-real-digest",
             source_url="https://x",
         )
+
+
+def test_compute_forwards_only_inherent_payload_without_lengths(monkeypatch) -> None:
+    # CI-running guard (no real refget): compute_seqcol_digest must forward ONLY
+    # names+sequences and an explicit inherent_attrs, so lengths can never leak
+    # into the canonical identity even if refget's default changed.
+    import sys
+    import types
+
+    captured: dict = {}
+
+    def _fake_seqcol_digest(payload, inherent_attrs=None):
+        captured["payload"] = payload
+        captured["inherent_attrs"] = inherent_attrs
+        return "FAKE_DIGEST"
+
+    fake_utils = types.ModuleType("refget.utils")
+    fake_utils.seqcol_digest = _fake_seqcol_digest
+    fake_refget = types.ModuleType("refget")
+    fake_refget.utils = fake_utils
+    monkeypatch.setitem(sys.modules, "refget", fake_refget)
+    monkeypatch.setitem(sys.modules, "refget.utils", fake_utils)
+
+    assert compute_seqcol_digest(_L2) == "FAKE_DIGEST"
+    assert set(captured["payload"].keys()) == {"names", "sequences"}
+    assert "lengths" not in captured["payload"]
+    assert captured["inherent_attrs"] == ["names", "sequences"]

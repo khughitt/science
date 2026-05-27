@@ -157,3 +157,13 @@ def test_inputs_single_assembly_no_warn() -> None:
 def test_no_derivation_inputs_no_warn() -> None:
     a = _with_assembly("dataset:a", "DIGEST_38")
     assert list(evaluate_cross_dataset_assembly([a])) == []
+
+
+def test_identity_context_not_a_dict_treated_as_undeclared() -> None:
+    # A coordinate-bearing dataset whose identity_context is not an object must
+    # not crash; it falls through to the undeclared-assembly WARN.
+    ds = _ds(_COORD_PROFILE, identity_context="GRCh38")
+    results = list(evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID))
+    assert not [r for r in results if r.severity is Severity.ERROR]
+    warns = [r for r in results if r.severity is Severity.WARN]
+    assert len(warns) == 1 and warns[0].rule == "identity.assembly-undeclared"
