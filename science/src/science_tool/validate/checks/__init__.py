@@ -64,6 +64,7 @@ def _load_canonical_checks() -> None:
         "cross_references",
         "reference_collections",
         "identity_context",
+        "dataset_taxonomy",
         "prose_lints",
         "annotations",
         "evidence_lines",
