@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: design ✓; impl: A1 merged (recording layer + validate check order 31); A2 (belief-math) pending
+Status: design ✓; impl: A1 merged (recording layer + validate check order 31); A2 merged (curation down-weight + config v2); Pillar A complete
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar A
@@ -204,7 +204,7 @@ which is the test the umbrella set.
 | Sub-phase | Locks | Status |
 |---|---|---|
 | A1 — `source_class` + `derived_kind` on the **core** dataset mixin + the A/B external-derived provenance contract (B's `dataset_usage` `role ∈ {upstream, training}`, full six-role schema shipped) + validation (`derived_kind` required for `derived`; `dataset_taxonomy` check at **order 31**) | the recorded signal + external-derived provenance contract | **merged** — landed at four layers: `mixin-dataset-1.0.json`, Pydantic `Entity` model (kind-gated `_validate_dataset_taxonomy`), `frontmatter.py` parse path, `DatapackageAdapter` whitelist; `science validate` check at order 31 |
-| A2 — Wire the curation penalty into EvidenceUnit scoring (one ordinal step floored at 0 via the shared unit-score path — both winner-selection and scalar) + `identification_strength: structural` tendency for reference-as-basis; **bump belief config version** | the epistemic effect | pending (separate plan) |
+| A2 — Wire the curation penalty into EvidenceUnit scoring (one ordinal step floored at 0 via the shared unit-score path — both winner-selection and scalar) + `identification_strength: structural` tendency for reference-as-basis; **bump belief config version** | the epistemic effect | **merged** — `CURATION_STEP_PENALTY = 1` applied as a full ordinal step (floored at 0) in `unit_score` (the scalar/log-odds path) and as a tiebreaker-only least-significant demotion in `quality_key` (Phase-1 `reduce_units` winner-selection); does NOT demote across the lexicographic `type/role/strength` tiers — a true cross-tier penalty would require flattening `quality_key` to a summed-step scalar (out of A2 scope); `sci:sourceClass` materialized on dataset entity URIs in the `knowledge` graph; `EvidenceUnit.is_reference_dataset` threaded by scanning `prov:wasDerivedFrom` objects against the reference-dataset URI set; `CONFIG_VERSION` bumped `belief-logodds-v1` → `belief-logodds-v2`; `identification_strength: structural` shipped as a **recording-only** `science validate` WARN nudge (`evidence.reference-basis-no-identification-strength`) — not wired into scoring; per-line curation override deferred (YAGNI) |
 
 A1 depends on C only for the **`reference`-dataset pattern** (C's identity snapshots are the first
 `reference` datasets, which validates the class on a real case). A2 depends on the aggregation internals
@@ -226,8 +226,25 @@ independence nudge). A new tolerant `science validate` check `dataset_taxonomy` 
 31** (the plan originally estimated order 29, but 29 was already taken by `evidence_lines`; actual
 order is 31).
 
-**A2 (belief-math) remains pending** — the curation down-weight in `belief.py`/`belief_scalar.py`,
-the `identification_strength: structural` tendency, and the CONFIG_VERSION bump are a separate plan.
+**A2 implemented and merged** to `~/d/science` branch `feat/a2-curation-downweight`. The curation
+down-weight landed across the belief machinery:
 
-Remaining (gated on A2): D (`bio.geneset`) and B (influence/provenance) designs are ready; B's
-paper arm and D can begin once A2 lands.
+- `CURATION_STEP_PENALTY = 1` applied as a **full ordinal step (floored at 0)** in `unit_score`
+  (the scalar/log-odds path, `~/d/science/science/src/science_tool/graph/belief_scalar.py`) and as
+  a **tiebreaker-only least-significant demotion** in `quality_key` (Phase-1 `reduce_units`
+  winner-selection, `~/d/science/science/src/science_tool/graph/belief.py`). This realizes A-D4's
+  "route through both paths": the scalar takes the full step; Phase-1 winner-selection takes it
+  only as the least-significant tiebreaker. It does **not** demote across the lexicographic
+  `type/role/strength` tiers — a true cross-tier penalty would require flattening `quality_key` to
+  a summed-step scalar and is **out of A2 scope**.
+- `sci:sourceClass` materialized on dataset entity URIs in the `knowledge` graph (`sci:sourceClass`
+  predicate registered and written at graph build time).
+- `EvidenceUnit.is_reference_dataset` threaded by scanning a line's `prov:wasDerivedFrom` objects
+  against the reference-dataset URI set derived from `sci:sourceClass`.
+- `CONFIG_VERSION` bumped `belief-logodds-v1` → `belief-logodds-v2`.
+- `identification_strength: structural` shipped as a **recording-only** `science validate` WARN
+  nudge (`evidence.reference-basis-no-identification-strength`, order 32) — NOT wired into scoring.
+- Per-line curation override deferred (YAGNI).
+
+**Pillar A is complete.** D (`bio.geneset`) and B (influence/provenance) designs are ready and
+unblocked; B's paper arm and D can begin immediately.

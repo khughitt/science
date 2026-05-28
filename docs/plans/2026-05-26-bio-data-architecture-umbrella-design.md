@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3 merged + Pillar A sub-phase A1 merged (see §8). Spawns focused per-area docs.
+Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3 merged + Pillar A (A1 + A2) merged; Pillar A complete (see §8). Spawns focused per-area docs.
 
 Related (builds on):
 - `docs/proposition-and-evidence-model.md` — core reasoning model
@@ -235,7 +235,7 @@ Spawned design docs (in `~/d/science/docs/plans/`), with the dependency order:
 | Phase | Doc | Depends on | Locks | Status |
 |---|---|---|---|---|
 | 1 | Identity, reference genomes & id mapping (C) | — | canonical assembly + gene/protein/variant crosswalks; pinned-vs-service policy | design ✓; **impl: C1 (assembly), C2 (gene), C3 (protein) merged; C4 (variant/liftover) pending** |
-| 2 | Dataset taxonomy & epistemic integration (A) | C | source class (enum incl. model-output/experimental — A decides); curation down-weight as a *modifier*, mapped into aggregation + two-axis | design ✓; **impl: A1 merged (recording layer + validate check order 31); A2 (belief-math) pending** |
+| 2 | Dataset taxonomy & epistemic integration (A) | C | source class (enum incl. model-output/experimental — A decides); curation down-weight as a *modifier*, mapped into aggregation + two-axis | design ✓; **impl: A1 + A2 merged** (recording layer + curation down-weight, config v2); **Pillar A complete** |
 | 3a | Gene-set / annotation type `bio.geneset` (D) | A, C | extension schema; per-set provenance; promotion rule; realizes B's interface for gene sets | design ✓; impl not started |
 | 3b | Dataset-influence & provenance tracking (B) | A, C (+ D for the gene-set arm) | `dataset:`-ref declarations + usage role; dataset→consumer derivation; *candidate* auto-independence | design ✓; impl not started |
 | 4 | Reactome ingestion revision (E) | A–D | first instantiation | design ✓ (in `health/meta`); impl deferred (gated on A–D) |
@@ -306,17 +306,22 @@ corresponding `science validate` checks; the C2 gene check was generalized into 
 remedy that C1's check 3 defers). It is the heavyweight sub-phase (external VRS dependency, chain files,
 residual source decisions) and should be decomposed before planning.
 
-**Pillar A — A1 merged.** `source_class` / `derived_kind` / `dataset_usage` recording layer landed on
-`~/d/science` `main`: JSON mixin schema (`mixin-dataset-1.0.json`), Pydantic `Entity` model (kind-gated
-`_validate_dataset_taxonomy`), `frontmatter.py` parse path, and `DatapackageAdapter` whitelist; full
-six-role `dataset_usage` schema shipped (so B1 does not migrate a partial field); `science validate`
-check `dataset_taxonomy` at **order 31**. **A2 (belief-math: curation down-weight in
-`belief.py`/`belief_scalar.py`, `identification_strength: structural` tendency, CONFIG_VERSION bump)
-remains pending** — separate plan.
+**Pillar A — A1 + A2 merged; Pillar A complete.** A1 (`source_class` / `derived_kind` /
+`dataset_usage` recording layer) landed on `~/d/science` `main`: JSON mixin schema
+(`mixin-dataset-1.0.json`), Pydantic `Entity` model (kind-gated `_validate_dataset_taxonomy`),
+`frontmatter.py` parse path, and `DatapackageAdapter` whitelist; full six-role `dataset_usage`
+schema shipped (so B1 does not migrate a partial field); `science validate` check `dataset_taxonomy`
+at **order 31**. A2 (curation down-weight) landed on branch `feat/a2-curation-downweight`:
+`CURATION_STEP_PENALTY = 1` applied as a full ordinal step in `unit_score` (scalar/log-odds path)
+and as a tiebreaker-only demotion in `quality_key` (Phase-1 winner-selection); `sci:sourceClass`
+materialized in the `knowledge` graph; `EvidenceUnit.is_reference_dataset` threaded from
+`prov:wasDerivedFrom`; `CONFIG_VERSION` bumped to `belief-logodds-v2`; `identification_strength:
+structural` shipped as a recording-only validate nudge (not scored); per-line override deferred.
 
 **Remaining — other pillars.** B (influence/provenance) and D (gene sets) have written, reviewed
-designs but no implementation. A2 + C unblock D and B's paper arm; D leads B's gene-set arm. E
-(Reactome ingestion) resumes once A–D are far enough along to instantiate against.
+designs but no implementation. Pillar A is complete; C (C1–C3 merged, C4 pending) and A together
+unblock D and B's paper arm; D leads B's gene-set arm. E (Reactome ingestion) resumes once A–D are
+far enough along to instantiate against.
 
 **Operational follow-ups.**
 - Push `main` to `origin` when ready (the C3 sub-phase is local-only; the substrate + C1 + C2 are pushed).
