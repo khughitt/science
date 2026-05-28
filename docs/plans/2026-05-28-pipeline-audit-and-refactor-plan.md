@@ -4,9 +4,9 @@
 
 **Goal:** Produce the project-agnostic "pipeline audit & refactor" playbook plus the small data-QA convention expansion and cross-links specified in the approved design.
 
-**Architecture:** A documentation-only change. The playbook (the reusable "how") is a new process doc with embedded report skeletons; the data-QA convention gains one table-shaped structural check (registry/enum); three existing docs gain cross-links. No code, so each task's "test" is a concrete verification (target files/anchors exist, code references match the real source, format matches house style) rather than a unit test.
+**Architecture:** A documentation-only change. The playbook (the reusable "how") is a new process doc with embedded report skeletons; the data-QA convention gains one table-shaped structural check (registry/enum); the convention README index is refreshed; three existing docs gain cross-links. No code, so each task's "test" is a concrete verification (target files/anchors exist, code references match the real source, format matches house style) rather than a unit test.
 
-**Tech Stack:** Markdown docs under `docs/`. Verification via `test`/`grep`/`rg` in `zsh`. Repo root: `/mnt/ssd/Dropbox/science`.
+**Tech Stack:** Markdown docs under `docs/`. Verification via `test`/`grep`/`rg` in `zsh`. Repo root: `~/d/science`.
 
 **Source of truth:** The approved design `docs/plans/2026-05-28-pipeline-audit-and-refactor-design.md` contains the verbatim substance for the playbook's narrative sections. Where a task says "render design §N," reproduce that section's content adapted from spec voice ("this design specifies…") to playbook voice ("do this…"); the must-include points are listed so the rendering is unambiguous. Novel content not in the design (report skeletons, the convention edit, cross-links) is given verbatim below.
 
@@ -16,10 +16,11 @@
 
 - **Create** `docs/process/pipeline-audit-and-refactor.md` — the playbook. One doc, sibling to `adding-a-domain.md`. Sections: Purpose → Organizing insight (incl. axis-1 scope caveat) → Artifact placement → Method (Phases 0–3) → Three axis rubrics → Deferred disciplines (analysis/result-QA, workflow/DAG-validation) → Embedded report skeletons → See also.
 - **Modify** `docs/conventions/pipeline-qa-checkpoints.md` — add the registry/enum structural check (prose at the structural-checks paragraph + one line in the config skeleton) and a See-also link to the playbook.
+- **Modify** `docs/conventions/README.md` — refresh the `pipeline-qa-checkpoints.md` index line to mention registry/enum validation.
 - **Modify** `aspects/computational-analysis/computational-analysis.md` — one cross-link to the playbook in the `review-pipeline` section.
 - **Modify** `docs/project-organization-profiles.md` — one cross-link to the playbook in the existing **Pipeline Data-QA** section.
 
-No index/README updates: `docs/process/` has no README, and no top-level docs index enumerates process docs (verified). The convention README already indexes `pipeline-qa-checkpoints.md`; the registry/enum addition does not warrant a new index line.
+No process-doc index update: `docs/process/` has no README, and no top-level docs index enumerates process docs (verified). The existing convention README entry for `pipeline-qa-checkpoints.md` is updated in Task 4 so the index reflects the new registry/enum structural-check coverage.
 
 ---
 
@@ -90,7 +91,7 @@ Each chain is swept on all three axes in one pass.
 
 Run:
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 test -f docs/process/pipeline-audit-and-refactor.md && \
 grep -c '^## ' docs/process/pipeline-audit-and-refactor.md
 ```
@@ -107,7 +108,7 @@ Expected: `OK: no directive comments left`. If any remain, you left a directive 
 - [ ] **Step 4: Commit.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add docs/process/pipeline-audit-and-refactor.md
 git commit -m "docs(process): scaffold pipeline audit & refactor playbook (purpose, insight, method)"
 ```
@@ -201,7 +202,7 @@ decision recorded in the synthesis "convention nominations".
 
 Run:
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 grep -nE '^### Axis [123] —|^## Deferred disciplines' docs/process/pipeline-audit-and-refactor.md
 ```
 Expected: four lines — Axis 1, Axis 2, Axis 3, and Deferred disciplines.
@@ -210,7 +211,7 @@ Expected: four lines — Axis 1, Axis 2, Axis 3, and Deferred disciplines.
 
 The procedure must match the real CLI. Run:
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 grep -n 'source_subdirs=("doc/datasets",)\|filename_prefix="data-"' science/src/science_tool/commons/promote.py
 grep -n 'required=True' science/src/science_tool/commons/cli.py | head
 ```
@@ -219,7 +220,7 @@ Expected: the `promote.py` line confirms `doc/datasets` + `data-` prefix; `cli.p
 - [ ] **Step 4: Commit.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add docs/process/pipeline-audit-and-refactor.md
 git commit -m "docs(process): add three-axis rubrics + deferred disciplines to playbook"
 ```
@@ -311,7 +312,7 @@ A machine-readable `inventory.json` mirrors the table: a list of objects with ke
 
 Run this link-resolver (extracts `](relative)` targets, strips anchors, checks each exists relative to `docs/process/`):
 ```bash
-cd /mnt/ssd/Dropbox/science/docs/process
+cd ~/d/science/docs/process
 rg -o '\]\(([^)]+)\)' -r '$1' pipeline-audit-and-refactor.md | grep -v '^http' | sed 's/#.*//' | sort -u | while read -r p; do
   [ -z "$p" ] && continue
   test -e "$p" && echo "OK  $p" || echo "BROKEN  $p"
@@ -322,7 +323,7 @@ Expected: every line begins `OK`. Any `BROKEN` line is a wrong relative path —
 - [ ] **Step 3: Re-verify no authoring directives leaked.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 grep -n '<!--' docs/process/pipeline-audit-and-refactor.md || echo "OK: clean"
 ```
 Expected: `OK: clean`.
@@ -330,7 +331,7 @@ Expected: `OK: clean`.
 - [ ] **Step 4: Commit.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add docs/process/pipeline-audit-and-refactor.md
 git commit -m "docs(process): add report skeletons + see-also to pipeline audit playbook"
 ```
@@ -341,6 +342,7 @@ git commit -m "docs(process): add report skeletons + see-also to pipeline audit 
 
 **Files:**
 - Modify: `docs/conventions/pipeline-qa-checkpoints.md` (structural-checks paragraph ~line 45; config skeleton ~line 76; See also ~line 132)
+- Modify: `docs/conventions/README.md` (the `pipeline-qa-checkpoints.md` index line)
 
 - [ ] **Step 1: Extend the structural-checks prose to cover a shared registry.**
 
@@ -380,21 +382,29 @@ Read the current `## See also` list, then add this as the first bullet under it:
   three-axis pipeline audit/refactor playbook; this convention is its axis-1 (data-QA) target.
 ```
 
-- [ ] **Step 4: Verify the edits landed and YAML still parses.**
+- [ ] **Step 4: Refresh the convention README index line.**
+
+In `docs/conventions/README.md`, replace the existing `pipeline-qa-checkpoints.md` bullet with:
+```markdown
+- [`pipeline-qa-checkpoints.md`](pipeline-qa-checkpoints.md) — concrete shape for a pipeline data-QA step (structural vs distribution severity, config-driven bounds including shared registry/enum validation, markdown report, fail-early on structural).
+```
+
+- [ ] **Step 5: Verify the edits landed and YAML still parses.**
 
 Run:
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 grep -n 'shared data registry\|allowed_from: "registries/contrasts.csv\|pipeline-audit-and-refactor' docs/conventions/pipeline-qa-checkpoints.md
+grep -n 'shared registry/enum validation' docs/conventions/README.md
 python3 -c "import yaml; yaml.safe_load('stage: {allowed: [1,2,3,4,5]}\ncontrast: {allowed_from: \"registries/contrasts.csv#name\"}'); print('yaml-ok')"
 ```
-Expected: three grep hits (prose, skeleton, see-also) and `yaml-ok` (the two edited flow-mapping lines parse — confirming the `#` is treated as a literal in the quoted scalar, not a YAML comment).
+Expected: three grep hits in `pipeline-qa-checkpoints.md` (prose, skeleton, see-also), one README hit, and `yaml-ok` (the two edited flow-mapping lines parse — confirming the `#` is treated as a literal in the quoted scalar, not a YAML comment).
 
-- [ ] **Step 5: Commit.**
+- [ ] **Step 6: Commit.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science
-git add docs/conventions/pipeline-qa-checkpoints.md
+cd ~/d/science
+git add docs/conventions/pipeline-qa-checkpoints.md docs/conventions/README.md
 git commit -m "docs(conventions): add shared-registry/enum structural check to pipeline-qa-checkpoints"
 ```
 
@@ -432,7 +442,7 @@ In `docs/project-organization-profiles.md`, append to the end of the **Pipeline 
 
 Run:
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 test -e docs/process/pipeline-audit-and-refactor.md && echo "target OK"
 grep -n 'pipeline-audit-and-refactor' aspects/computational-analysis/computational-analysis.md docs/project-organization-profiles.md
 # resolve the aspect's relative path explicitly:
@@ -444,7 +454,7 @@ Expected: `target OK`, one grep hit in each file, `aspect link OK`, `profiles li
 - [ ] **Step 4: Commit.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add aspects/computational-analysis/computational-analysis.md docs/project-organization-profiles.md
 git commit -m "docs: cross-link pipeline audit playbook from aspect and project-organization-profiles"
 ```
@@ -455,23 +465,24 @@ git commit -m "docs: cross-link pipeline audit playbook from aspect and project-
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Confirm all four deliverable touchpoints exist and reference each other.**
+- [ ] **Step 1: Confirm all deliverable touchpoints exist and reference each other.**
 
 Run:
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 test -f docs/process/pipeline-audit-and-refactor.md && echo "playbook OK"
 grep -lq 'pipeline-audit-and-refactor' docs/conventions/pipeline-qa-checkpoints.md && echo "convention link OK"
 grep -lq 'pipeline-audit-and-refactor' aspects/computational-analysis/computational-analysis.md && echo "aspect link OK"
 grep -lq 'pipeline-audit-and-refactor' docs/project-organization-profiles.md && echo "profiles link OK"
 grep -lq 'shared data registry' docs/conventions/pipeline-qa-checkpoints.md && echo "registry check OK"
+grep -lq 'shared registry/enum validation' docs/conventions/README.md && echo "convention README OK"
 ```
-Expected: five `… OK` lines.
+Expected: six `… OK` lines.
 
 - [ ] **Step 2: Confirm no authoring directives or placeholders shipped in the playbook.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 grep -nE '<!--|TBD|TODO|FIXME|<placeholder>' docs/process/pipeline-audit-and-refactor.md || echo "OK: no placeholders"
 ```
 Expected: `OK: no placeholders`.
@@ -479,7 +490,7 @@ Expected: `OK: no placeholders`.
 - [ ] **Step 3: Confirm the working tree is clean (everything committed).**
 
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git status --porcelain docs/process docs/conventions aspects/computational-analysis docs/project-organization-profiles.md
 ```
 Expected: empty output.
@@ -488,6 +499,6 @@ Expected: empty output.
 
 ## Self-Review notes (author)
 
-- **Spec coverage:** design §1 deliverable → Tasks 1–5; §2 insight + caveat → Task 1; §3 placement → Task 1; §4 method → Task 1; §5 rubrics + axis-3 procedure → Task 2; §6 analysis/result-QA + §7 output-ownership-as-DAG → Task 2 "Deferred disciplines"; §7 registry/enum convention edit → Task 4; §9 cross-links → Tasks 3–5. Report skeletons (implied by §3/§4 "embedded skeletons") → Task 3.
+- **Spec coverage:** design §1 deliverable → Tasks 1–5; §2 insight + caveat → Task 1; §3 placement → Task 1; §4 method → Task 1; §5 rubrics + axis-3 procedure → Task 2; §6 analysis/result-QA + §7 output-ownership-as-DAG → Task 2 "Deferred disciplines"; §7 registry/enum convention edit + README index line → Task 4; §9 cross-links → Tasks 3–5. Report skeletons (implied by §3/§4 "embedded skeletons") → Task 3.
 - **Placeholder policy:** the `<!-- … -->` blocks in Tasks 1–2 are *authoring directives* keyed to verbatim design sections (the design doc is the committed source of truth); Step 3 of Task 1 and Step 3 of Task 3 fail the task if any survive into the committed doc. The `<…>` tokens inside the report skeletons are intentional fill-in fields of the template itself, not plan placeholders.
 - **Reference consistency:** CLI facts (`doc/datasets`, `data-` prefix, `--slug`, `--from`, `--apply`, `mixin-dataset-1.0`) are checked against `promote.py` / `cli.py` in Task 2 Step 3 so the doc cannot drift from the source.
