@@ -229,6 +229,8 @@ def _add_entity(
         knowledge.add((uri, SCI_NS.domain, Literal(entity.domain)))
     if entity.status:
         knowledge.add((uri, SCI_NS.projectStatus, Literal(entity.status)))
+    if entity.kind == "dataset" and entity.source_class:
+        knowledge.add((uri, SCI_NS.sourceClass, Literal(entity.source_class)))
 
     source_uri = _source_uri(entity.file_path)
     provenance.add((uri, PROV.wasDerivedFrom, source_uri))

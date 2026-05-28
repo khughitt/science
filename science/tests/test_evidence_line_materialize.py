@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rdflib import Dataset, URIRef
+from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV
 
 from science_tool.graph.materialize import materialize_graph
@@ -253,6 +253,88 @@ target: proposition:p
     )
     assert (line_uri, CITO_NS.disputes, target_uri) not in knowledge, (
         "cito:disputes must not be emitted when stance is supports"
+    )
+
+
+def test_dataset_source_class_emitted_and_line_derives_from_same_uri(tmp_path: Path) -> None:
+    """A dataset with source_class=reference emits sci:sourceClass in knowledge.
+    An evidence-line whose source is that dataset has the same dataset URI as
+    one of its prov:wasDerivedFrom objects in provenance.
+    """
+    _write(tmp_path, "science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
+
+    # Target proposition
+    _write(
+        tmp_path,
+        "doc/propositions/p.md",
+        """---
+id: proposition:p
+kind: proposition
+title: "Proposition P"
+project: test
+ontology_terms: []
+related: []
+source_refs: []
+created: 2026-05-01
+updated: 2026-05-01
+---
+""",
+    )
+
+    # Dataset entity with source_class=reference (origin=external requires an access block)
+    dp = tmp_path / "data" / "refset" / "datapackage.yaml"
+    dp.parent.mkdir(parents=True, exist_ok=True)
+    dp.write_text(
+        "profiles: [science-pkg-entity-1.0]\n"
+        "id: dataset:refset\n"
+        "type: dataset\n"
+        "title: Reference Set\n"
+        "status: active\n"
+        "origin: external\n"
+        "source_class: reference\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n",
+        encoding="utf-8",
+    )
+
+    # Evidence-line entity whose source is the dataset
+    _write(
+        tmp_path,
+        "doc/evidence-lines/el-ref.md",
+        """---
+id: evidence-line:el-ref
+kind: evidence-line
+title: "EL cites refset"
+project: test
+ontology_terms: []
+related: []
+source_refs: []
+created: 2026-05-01
+updated: 2026-05-01
+stance: supports
+target: proposition:p
+source: dataset:refset
+---
+""",
+    )
+
+    rdf_dataset = _load_dataset(tmp_path)
+    knowledge = rdf_dataset.graph(PROJECT_NS["graph/knowledge"])
+    provenance = rdf_dataset.graph(PROJECT_NS["graph/provenance"])
+
+    ds_uri = PROJECT_NS["dataset/refset"]
+    line_uri = PROJECT_NS["evidence-line/el-ref"]
+
+    # sci:sourceClass triple in knowledge
+    assert (ds_uri, SCI_NS.sourceClass, Literal("reference")) in knowledge, (
+        "Expected sci:sourceClass 'reference' on dataset:refset in knowledge graph"
+    )
+
+    # Evidence-line's prov:wasDerivedFrom includes the same dataset URI
+    line_derived = {o for _, _, o in provenance.triples((line_uri, PROV.wasDerivedFrom, None))}
+    assert ds_uri in line_derived, (
+        f"Expected dataset URI {ds_uri} in evidence-line's prov:wasDerivedFrom; got {line_derived}"
     )
 
 

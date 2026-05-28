@@ -67,6 +67,7 @@ GRAPH_EXPORT_EDGE_METADATA_PREDICATES: frozenset[URIRef] = frozenset(
         SCI_NS.validatedBy,
         SCI_NS.projectStatus,
         SCI_NS.scope,
+        SCI_NS.sourceClass,
         SCI_NS.confidence,
         SCI_NS.evidenceType,
         SCI_NS.evidenceStrength,
@@ -206,6 +207,11 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
     {"predicate": "sci:storedIn", "description": "Data stored in database/repository", "layer": "graph/knowledge"},
     {"predicate": "sci:measuredBy", "description": "Variable measured by dataset", "layer": "graph/datasets"},
     {"predicate": "sci:projectStatus", "description": "Project status of entity", "layer": "graph/knowledge"},
+    {
+        "predicate": "sci:sourceClass",
+        "description": "Dataset epistemic source class (observational | derived | reference)",
+        "layer": "graph/knowledge",
+    },
     {"predicate": "sci:confidence", "description": "Confidence score (0.0-1.0)", "layer": "graph/provenance"},
     {
         "predicate": "sci:evidenceType",
