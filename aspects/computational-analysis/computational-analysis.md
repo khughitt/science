@@ -110,6 +110,9 @@ Evaluate QA discipline across the pipeline:
 
 Include QA Coverage as an additional row in the rubric results table.
 
+To audit and refactor an existing project's pipelines across QA, organization/code-quality, and data
+portability in one pass, follow [`docs/process/pipeline-audit-and-refactor.md`](../../docs/process/pipeline-audit-and-refactor.md).
+
 ## Signal categories
 
 - **Descriptive** — structure observed but not statistically testable (e.g., UMAP clusters, NMF factors, visualization patterns)
