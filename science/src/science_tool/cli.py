@@ -2823,6 +2823,21 @@ def tasks_migrate_ids(
     )
 
 
+def _warn_dangling_task_refs(tasks_dir: Path) -> None:
+    """Post-write self-check: surface any blocked-by/parent task ref that no
+    longer resolves, so a dropped sibling is caught here rather than at graph build."""
+    from science_tool.tasks import find_dangling_task_refs
+
+    dangling = find_dangling_task_refs(tasks_dir)
+    if not dangling:
+        return
+    for task_id, refs in sorted(dangling.items()):
+        click.echo(
+            f"WARNING: task {task_id} references unresolved task(s): {', '.join(refs)}",
+            err=True,
+        )
+
+
 @tasks.command("done")
 @click.argument("task_id")
 @click.option("--note", default=None)
@@ -2835,6 +2850,7 @@ def tasks_done(task_id: str, note: str | None) -> None:
     except KeyError as e:
         raise click.ClickException(str(e)) from e
     click.echo(f"[{task.id}] marked done")
+    _warn_dangling_task_refs(DEFAULT_TASKS_DIR)
 
 
 @tasks.command("defer")
@@ -2863,6 +2879,7 @@ def tasks_retire(task_id: str, reason: str | None) -> None:
     except KeyError as e:
         raise click.ClickException(str(e)) from e
     click.echo(f"[{task.id}] retired")
+    _warn_dangling_task_refs(DEFAULT_TASKS_DIR)
 
 
 @tasks.command("block")

@@ -1429,3 +1429,87 @@ def test_edit_task_rejects_untyped_blocker(tmp_path: Path):
             task_id="t001",
             blocked_by=["just-a-string"],
         )
+
+
+# --- Data-loss guards (fb-2026-05-27-001) -------------------------------------
+
+_TWO_TASKS = """\
+## [t100] First task
+- type: research
+- priority: P1
+- status: active
+- created: 2026-01-01
+
+Body 100.
+
+## [t101] Second task
+- type: research
+- priority: P1
+- status: active
+- blocked-by: [task:t100]
+- created: 2026-01-02
+
+Body 101.
+"""
+
+
+def test_edit_task_rejects_self_corrupting_description(tmp_path: Path) -> None:
+    """A description line starting with '## [tNNN]' makes the file unparseable on
+    the next read. The write must be refused (not silently corrupt the file)."""
+    from science_tool.tasks import TaskIntegrityError
+
+    tasks_dir = tmp_path / "tasks"
+    _write(tasks_dir / "active.md", _TWO_TASKS)
+    before = (tasks_dir / "active.md").read_text()
+
+    with pytest.raises(TaskIntegrityError):
+        edit_task(
+            project_root=tmp_path,
+            tasks_dir=tasks_dir,
+            task_id="t100",
+            description="Intro line.\n## [t453] a quoted task header\nmore",
+        )
+
+    # File left intact and still parses to the original two tasks.
+    assert (tasks_dir / "active.md").read_text() == before
+    assert [t.id for t in parse_tasks(tasks_dir / "active.md")] == ["t100", "t101"]
+
+
+def test_complete_task_is_atomic_when_note_would_corrupt(tmp_path: Path) -> None:
+    """complete_task must verify both active and done renders before writing
+    either, so a corrupting completion note cannot half-apply (data loss)."""
+    from science_tool.tasks import TaskIntegrityError
+
+    tasks_dir = tmp_path / "tasks"
+    _write(tasks_dir / "active.md", _TWO_TASKS)
+    before = (tasks_dir / "active.md").read_text()
+
+    with pytest.raises(TaskIntegrityError):
+        complete_task(tasks_dir, "t101", note="## [t999] looks like a header")
+
+    # active.md untouched; done file not created with a corrupt entry.
+    assert (tasks_dir / "active.md").read_text() == before
+    assert [t.id for t in parse_tasks(tasks_dir / "active.md")] == ["t100", "t101"]
+
+
+def test_find_dangling_task_refs_flags_unresolved_blocker(tmp_path: Path) -> None:
+    """A surviving blocked-by pointing at a missing task is reported, so a
+    dropped sibling is caught at the task layer (not only at graph build)."""
+    from science_tool.tasks import find_dangling_task_refs
+
+    tasks_dir = tmp_path / "tasks"
+    _write(
+        tasks_dir / "active.md",
+        """\
+## [t200] Only task
+- type: research
+- priority: P1
+- status: blocked
+- blocked-by: [task:t199]
+- created: 2026-01-01
+
+Body.
+""",
+    )
+    dangling = find_dangling_task_refs(tasks_dir)
+    assert dangling == {"t200": ["task:t199"]}
