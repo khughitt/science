@@ -155,3 +155,72 @@ does not specify them:
 
 Surface both during the sweep so they are not forgotten; writing either convention is a separate
 decision recorded in the synthesis "convention nominations".
+
+## Report skeletons (copy into the target project)
+
+Copy these into the project's audits area (`<doc-or-docs>/audits/pipeline-refactor/`).
+
+### `inventory.md` — one row per data-source chain
+
+````markdown
+# Pipeline inventory — <project>
+
+| Chain | Source | Ingest rule(s) | Clean base table | Base config | Project-specific downstream |
+| --- | --- | --- | --- | --- | --- |
+| <name> | <external source> | <rule(s)> | <path to clean table> | <config key/file> | <consumers> |
+````
+
+A machine-readable `inventory.json` mirrors the table: a list of objects with keys
+`chain, source, ingest_rules[], clean_base_table, base_config, downstream[]`.
+
+### `findings.md` — one section per chain
+
+````markdown
+# Pipeline audit findings — <project>
+
+## Chain: <name>
+
+- **Axis 1 — Data QA:** PASS / WARN / FAIL — <notes>
+  - substrates with a wired-in QA step: clean base [y/n]; <downstream tables…> [y/n]
+  - companion DAG-validation (output-ownership): PASS / WARN / FAIL
+- **Axis 2 — Consistency/quality:** PASS / WARN / FAIL — <notes>
+- **Axis 3 — Portability/commons:** PASS / WARN / FAIL — base separated [y/n]; promoted [y/n]
+
+### Findings
+| # | Axis | Finding | Severity | Disposition | Task |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1/2/3 | <what> | structural / distribution / quality | fix-now / backlog / promote / flagged-optional / leave | <task-id> |
+````
+
+### `synthesis.md` — roll-up across chains
+
+````markdown
+# Pipeline audit synthesis — <project>
+
+## Prioritized refactor backlog
+| Rank | Axis | Item | Chains affected | Effort | Task |
+| --- | --- | --- | --- | --- | --- |
+
+## Recurring anti-patterns
+- <pattern> — <chains where it recurs>
+
+## Convention nominations (upstream candidates)
+| Candidate check | Kind (data-QA / analysis-result-QA / workflow-DAG) | Evidence (chains / bugs caught) | Proposed home |
+| --- | --- | --- | --- |
+
+## Commons promotion candidates
+| Dataset | Entity exists? | Promoted? | Blocking prerequisites |
+| --- | --- | --- | --- |
+````
+
+## See also
+
+- [`../conventions/pipeline-qa-checkpoints.md`](../conventions/pipeline-qa-checkpoints.md) — the
+  axis-1 (data-QA) convention this playbook audits against.
+- [`../conventions/code-task-backlinks.md`](../conventions/code-task-backlinks.md) — axis-2 code→task
+  back-link patterns.
+- [`../../aspects/computational-analysis/computational-analysis.md`](../../aspects/computational-analysis/computational-analysis.md)
+  — `plan-pipeline` / `review-pipeline` QA sections.
+- `science commons promote dataset` (`science/src/science_tool/commons/promote.py`) — the axis-3 endpoint.
+- [`../plans/2026-05-28-pipeline-audit-and-refactor-design.md`](../plans/2026-05-28-pipeline-audit-and-refactor-design.md)
+  — the design this playbook implements.
