@@ -69,6 +69,8 @@ def _read_unit(
         # prov:wasDerivedFrom objects (its source file AND source entity); first wins.
         source=_lit(provenance, line, PROV.wasDerivedFrom),
         observability_keys=obs,
+        # Reference detection scans ALL wasDerivedFrom objects (the set above), unlike the
+        # first-wins `source` field — the reference dataset URI need not be the first object.
         is_reference_dataset=bool(derived_from & reference_dataset_uris),
     )
 
