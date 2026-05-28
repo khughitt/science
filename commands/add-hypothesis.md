@@ -94,6 +94,8 @@ Do not frame a single paper or result as proving the hypothesis.
 
 `science hypothesis create` defaults `status` to `proposed`. The supported life-cycle values are `proposed`, `under-investigation`, `partially-supported`, `supported`, `weakened`, and `refuted`. Use `--status under-investigation` only if active testing is already underway. Avoid `supported`, `weakened`, or `refuted` as the default outcome of authoring a new hypothesis — those are evidence-based exit states.
 
+`phase` defaults to `active` (a committed frame). For a trial framing you are promoting to organize work but have not yet committed to, pass `--phase candidate`: this sets `phase: candidate` in the frontmatter *and* includes the otherwise-optional `## Promotion criteria` section, where you state what evidence or analytic outcome would justify promoting it to `active`.
+
 Use optional layered-claim fields only when they reduce ambiguity, by editing the file body and frontmatter after creation:
 - `claim_layer`
 - `identification_strength`

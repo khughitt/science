@@ -249,6 +249,7 @@ def build_entity_markdown(
     related: list[str],
     source_refs: list[str],
     today: date,
+    phase: str | None = None,
     with_sections: list[str] | None = None,
     without_sections: list[str] | None = None,
     no_hints: bool = False,
@@ -272,6 +273,7 @@ def build_entity_markdown(
             "slug": slug_value,
             "local_part": local_part,
             "nn": _leading_number(local_part),
+            "phase": phase or "active",
         }
         try:
             return Renderer(today=today).render(
@@ -320,6 +322,7 @@ def create_entity(
     related: list[str] | None = None,
     source_refs: list[str] | None = None,
     today: date | None = None,
+    phase: str | None = None,
     with_sections: list[str] | None = None,
     without_sections: list[str] | None = None,
     no_hints: bool = False,
@@ -348,6 +351,7 @@ def create_entity(
         related=list(related or []),
         source_refs=list(source_refs or []),
         today=today_value,
+        phase=phase,
         with_sections=with_sections,
         without_sections=without_sections,
         no_hints=no_hints,

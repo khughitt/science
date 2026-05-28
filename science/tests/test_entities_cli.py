@@ -1098,6 +1098,41 @@ def test_discussion_create_with_optional_section_includes_addendum() -> None:
         assert "## Double-Blind Addendum" in path.read_text(encoding="utf-8")
 
 
+def test_hypothesis_create_phase_candidate_sets_field_and_includes_promotion_criteria() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(
+            main,
+            ["hypothesis", "create", "Trial framing", "--id", "hypothesis:h01-trial-framing", "--phase", "candidate"],
+        )
+
+        assert result.exit_code == 0, result.output
+        path = next(Path("specs/hypotheses").glob("*-trial-framing.md"))
+        text = path.read_text(encoding="utf-8")
+        assert "phase: candidate" in text
+        assert "## Promotion criteria" in text
+
+
+def test_hypothesis_create_defaults_phase_active_without_promotion_criteria() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(
+            main, ["hypothesis", "create", "Committed frame", "--id", "hypothesis:h01-committed-frame"]
+        )
+
+        assert result.exit_code == 0, result.output
+        path = next(Path("specs/hypotheses").glob("*-committed-frame.md"))
+        text = path.read_text(encoding="utf-8")
+        assert "phase: active" in text
+        assert "## Promotion criteria" not in text
+
+
 def test_discussion_create_no_hints_strips_html_comments() -> None:
     from datetime import date
 

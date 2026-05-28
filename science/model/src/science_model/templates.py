@@ -15,7 +15,20 @@ MIGRATED_KINDS: frozenset[str] = frozenset(
     {"hypothesis", "question", "interpretation", "discussion", "theme", "proposition", "evidence-line"}
 )
 VALID_FIELD_NAMES: frozenset[str] = frozenset(
-    {"entity_id", "kind", "title", "status", "related", "source_refs", "created", "updated", "slug", "local_part", "nn"}
+    {
+        "entity_id",
+        "kind",
+        "title",
+        "status",
+        "related",
+        "source_refs",
+        "created",
+        "updated",
+        "slug",
+        "local_part",
+        "nn",
+        "phase",
+    }
 )
 
 
@@ -31,11 +44,14 @@ class FrontmatterFieldPolicy(BaseModel):
     omit: bool = False
 
     @model_validator(mode="after")
-    def exactly_one_policy(self) -> "FrontmatterFieldPolicy":
-        enabled = [self.from_ is not None, "default" in self.model_fields_set, self.omit]
-        if sum(enabled) != 1:
-            raise ValueError("frontmatter field policy must use exactly one of from, default, or omit")
-        if "default" in self.model_fields_set and self.default is None:
+    def valid_policy(self) -> "FrontmatterFieldPolicy":
+        has_from = self.from_ is not None
+        has_default = "default" in self.model_fields_set
+        if self.omit and (has_from or has_default):
+            raise ValueError("omit cannot be combined with from or default")
+        if not (has_from or has_default or self.omit):
+            raise ValueError("frontmatter field policy must set one of from, default, or omit")
+        if has_default and self.default is None:
             raise ValueError("default cannot be null; use omit: true or a concrete default")
         if self.from_ is not None and self.from_ not in VALID_FIELD_NAMES:
             raise ValueError(f"unknown renderer field: {self.from_}")
@@ -225,7 +241,10 @@ def _render_frontmatter(metadata: TemplateMetadata, context: dict[str, object]) 
         if policy.omit:
             continue
         if policy.from_ is not None:
-            output[name] = context.get(policy.from_)
+            value = context.get(policy.from_)
+            if value is None and "default" in policy.model_fields_set:
+                value = policy.default
+            output[name] = value
             continue
         value = policy.default
         if isinstance(value, str):
