@@ -12,7 +12,7 @@ from collections import defaultdict
 from collections.abc import Iterator
 from pathlib import Path
 
-from rdflib import RDF, Dataset
+from rdflib import Literal, RDF, Dataset
 from rdflib.namespace import PROV
 
 from science_tool.graph.belief import (
@@ -500,3 +500,45 @@ def check_evidence_unscored_line(ctx: ValidateContext) -> Iterator[Result]:
                 rule="evidence.unscored-line",
                 task=None,
             )
+
+
+# ---------------------------------------------------------------------------
+# Check 9: evidence.reference-basis-no-identification-strength (WARN, A2/A-D4)
+#   A recording-only nudge: if an evidence line rests on a reference (human-
+#   curated) dataset but declares no identification_strength, suggest the
+#   author set identification_strength: structural. No scoring effect.
+# ---------------------------------------------------------------------------
+
+@Check(section="evidence lines", order=32)
+def check_reference_basis_no_identification_strength(ctx: ValidateContext) -> Iterator[Result]:
+    """#9 authoring nudge (A2/A-D4): lines resting on a reference dataset but declaring no
+    identification_strength should consider setting identification_strength: structural."""
+    knowledge, provenance = _load_belief_graphs(ctx)
+    if knowledge is None:
+        return
+
+    reference_uris = {
+        str(s)
+        for s, _, _ in knowledge.triples((None, SCI_NS.sourceClass, Literal("reference")))
+    }
+    if not reference_uris:
+        return
+
+    for line, _, _ in knowledge.triples((None, RDF.type, SCI_NS.EvidenceLine)):
+        derived = {str(o) for _, _, o in provenance.triples((line, PROV.wasDerivedFrom, None))}
+        if not (derived & reference_uris):
+            continue
+        if any(provenance.triples((line, SCI_NS.identificationStrength, None))):
+            continue
+        yield Result(
+            severity=Severity.WARN,
+            path=None,
+            line=None,
+            message=(
+                f"{line}: evidence rests on a reference dataset but declares no "
+                f"identification_strength; if the curated set IS the basis of the claim, "
+                f"set identification_strength: structural (A2/A-D4)"
+            ),
+            rule="evidence.reference-basis-no-identification-strength",
+            task=None,
+        )

@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from rdflib import Dataset, Literal, RDF, URIRef
+from rdflib.namespace import PROV
 
+from science_tool.graph.io import CITO_NS, SCI_NS
+from science_tool.graph.store import _graph_uri
 from science_tool.validate import Severity, ValidateContext
 
 
@@ -430,3 +434,87 @@ def test_unscored_line_skips_diagnostic_roles(tmp_path: Path):
     _write(tmp_path, "doc/evidence-lines/el01.md",
            "---\nstance: disputes\ntarget: proposition:p1\nevidence_role: model_criticism\n---\n")
     assert list(check_evidence_unscored_line(_ctx(tmp_path))) == []
+
+
+# ---------------------------------------------------------------------------
+# Rule: evidence.reference-basis-no-identification-strength (A2/A-D4)
+# ---------------------------------------------------------------------------
+
+def _write_reference_basis_graph(
+    root: Path,
+    *,
+    has_identification_strength: bool = False,
+    source_class: str = "reference",
+) -> None:
+    """Build a minimal graph with one evidence line derived from a dataset."""
+    ds = Dataset()
+    k = ds.graph(_graph_uri("graph/knowledge"))
+    p = ds.graph(_graph_uri("graph/provenance"))
+
+    dataset_uri = URIRef("https://example.org/dataset/ds1")
+    line_uri = URIRef("https://example.org/el/el1")
+    prop_uri = URIRef("https://example.org/prop/p1")
+
+    # Dataset with source_class in knowledge.
+    k.add((dataset_uri, RDF.type, SCI_NS.Dataset))
+    k.add((dataset_uri, SCI_NS.sourceClass, Literal(source_class)))
+
+    # Evidence line typed in knowledge; supports the proposition.
+    k.add((line_uri, RDF.type, SCI_NS.EvidenceLine))
+    k.add((line_uri, CITO_NS.supports, prop_uri))
+
+    # Provenance: line derived from dataset.
+    p.add((line_uri, PROV.wasDerivedFrom, dataset_uri))
+
+    # Optionally set identification_strength on the line (also in provenance).
+    if has_identification_strength:
+        p.add((line_uri, SCI_NS.identificationStrength, Literal("structural")))
+
+    (root / "knowledge").mkdir(parents=True, exist_ok=True)
+    ds.serialize(destination=str(root / "knowledge" / "graph.trig"), format="trig")
+
+
+def test_reference_basis_without_identification_strength_warns(tmp_path: Path) -> None:
+    from science_tool.validate.checks.evidence_lines import (
+        check_reference_basis_no_identification_strength,
+    )
+
+    _write_reference_basis_graph(tmp_path, has_identification_strength=False)
+    results = list(check_reference_basis_no_identification_strength(_ctx(tmp_path)))
+    rules = [(r.severity, r.rule) for r in results]
+    assert (Severity.WARN, "evidence.reference-basis-no-identification-strength") in rules
+
+
+def test_reference_basis_with_identification_strength_is_silent(tmp_path: Path) -> None:
+    from science_tool.validate.checks.evidence_lines import (
+        check_reference_basis_no_identification_strength,
+    )
+
+    _write_reference_basis_graph(tmp_path, has_identification_strength=True)
+    results = list(check_reference_basis_no_identification_strength(_ctx(tmp_path)))
+    rules = [r.rule for r in results]
+    assert "evidence.reference-basis-no-identification-strength" not in rules
+
+
+def test_non_reference_source_does_not_nudge(tmp_path: Path) -> None:
+    from science_tool.validate.checks.evidence_lines import (
+        check_reference_basis_no_identification_strength,
+    )
+
+    _write_reference_basis_graph(
+        tmp_path, has_identification_strength=False, source_class="observational"
+    )
+    results = list(check_reference_basis_no_identification_strength(_ctx(tmp_path)))
+    rules = [r.rule for r in results]
+    assert "evidence.reference-basis-no-identification-strength" not in rules
+
+
+def test_reference_basis_no_graph_is_silent(tmp_path: Path) -> None:
+    from science_tool.validate.checks.evidence_lines import (
+        check_reference_basis_no_identification_strength,
+    )
+
+    # No knowledge/graph.trig present → tolerant early-return, zero results, no crash.
+    results = list(check_reference_basis_no_identification_strength(_ctx(tmp_path)))
+    rules = [r.rule for r in results]
+    assert "evidence.reference-basis-no-identification-strength" not in rules
