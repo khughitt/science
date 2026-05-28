@@ -92,7 +92,7 @@ Each axis scores PASS / WARN / FAIL per sub-dimension; attach a disposition to e
 
 - A **wired-in** data-QA step (own pipeline rule on the default target) for **every table analysis
   consumes**: the clean base table **and** each project-specific analysis table produced downstream.
-  Clean-base QA does **not** satisfy final-table QA (see the scope caveat above). One QA step per
+  Clean-base QA does **not** satisfy final-analysis-table QA (see the scope caveat above). One QA step per
   substrate, per [`../conventions/pipeline-qa-checkpoints.md`](../conventions/pipeline-qa-checkpoints.md).
 - Each QA step splits **structural** (build-fatal) vs **distribution** (surfaced-not-fatal) flags.
 - Bounds / allowed-codes / sentinels are **config-driven** and shared with the cleaning step.
