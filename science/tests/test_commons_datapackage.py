@@ -91,8 +91,8 @@ def test_read_datapackage_parses_valid(tmp_path: Path) -> None:
     assert isinstance(descriptor, DatapackageDescriptor)
     assert descriptor.source_path == dp
     assert descriptor.resources == (
-        DataResource(path="counts.parquet", hash=_GOOD_HASH),
-        DataResource(path="raw/meta.csv", hash=_GOOD_HASH),
+        DataResource(path="counts.parquet", name="counts", hash=_GOOD_HASH),
+        DataResource(path="raw/meta.csv", name="meta", hash=_GOOD_HASH),
     )
 
 
@@ -107,6 +107,34 @@ def test_resource_lookup_hit_and_miss(tmp_path: Path) -> None:
     assert descriptor.resource("counts.parquet").path == "counts.parquet"
     with pytest.raises(CommonsDatapackageError, match="no resource"):
         descriptor.resource("missing.parquet")
+
+
+def test_resource_lookup_accepts_name_or_path(tmp_path: Path) -> None:
+    dp = _write(
+        tmp_path / "datapackage.yaml",
+        "resources:\n"
+        "  - name: variants\n"
+        "    path: data/variants.csv\n"
+        f'    hash: "{_GOOD_HASH}"\n',
+    )
+    descriptor = read_datapackage(dp)
+    assert descriptor.resource("variants").path == "data/variants.csv"
+    assert descriptor.resource("data/variants.csv").name == "variants"
+
+
+def test_read_datapackage_rejects_ambiguous_resource_alias(tmp_path: Path) -> None:
+    dp = _write(
+        tmp_path / "datapackage.yaml",
+        "resources:\n"
+        "  - name: data/variants.csv\n"
+        "    path: other.csv\n"
+        f'    hash: "{_GOOD_HASH}"\n'
+        "  - name: variants\n"
+        "    path: data/variants.csv\n"
+        f'    hash: "{_GOOD_HASH}"\n',
+    )
+    with pytest.raises(CommonsDatapackageError, match="ambiguous resource alias"):
+        read_datapackage(dp)
 
 
 def test_read_datapackage_rejects_malformed_yaml(tmp_path: Path) -> None:

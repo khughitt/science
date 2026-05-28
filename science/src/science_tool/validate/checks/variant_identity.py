@@ -166,7 +166,7 @@ def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, An
         try:
             resource = descriptor.resource(logical_path)
         except CommonsDatapackageError as error:
-            if error.reason.startswith("no resource with logical path "):
+            if error.reason.startswith("no resource with logical path"):
                 return None
             raise
         file_path = dp_path.parent / resource.path

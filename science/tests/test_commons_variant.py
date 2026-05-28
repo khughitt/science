@@ -269,16 +269,12 @@ def test_spdi_lowercase_base_is_rejected(tmp_path: Path) -> None:
     assert defect.reason == "unsupported-allele"
 
 
-def test_hgvs_g_accession_returns_typed_unsupported(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    _, digest = _proxy(tmp_path)
+def test_hgvs_g_accession_mints_vrs_id(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    proxy, digest = _proxy(tmp_path)
     monkeypatch.setattr(V, "_resolve_contig", lambda **_: ContigMatch(digest, "1", len(_SEQ), "refseq_accession"))
+    monkeypatch.setattr(V, "_open_proxy", lambda **_: proxy)
 
-    def fail_open_proxy(**_: object) -> None:
-        raise AssertionError("HGVS_g unsupported result should not open the sequence store")
-
-    monkeypatch.setattr(V, "_open_proxy", fail_open_proxy)
-
-    defect = V.vrs_id(
+    match = V.vrs_id(
         "NC_000001.11:g.6G>T",
         fmt="hgvs",
         assembly_seqcol="DIGEST38",
@@ -286,9 +282,9 @@ def test_hgvs_g_accession_returns_typed_unsupported(monkeypatch: pytest.MonkeyPa
         data_root=tmp_path,
     )
 
-    assert isinstance(defect, V.VariantDefect)
-    assert defect.reason == "unsupported-allele"
-    assert "hgvs-needs-accession" in defect.detail
+    assert isinstance(match, V.VariantMatch)
+    assert match.vrs_id == _GOLDEN_SNV
+    assert match.refget_digest == digest
 
 
 @pytest.mark.parametrize(

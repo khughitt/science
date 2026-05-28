@@ -93,20 +93,21 @@ def resolve(
     resource = descriptor.resource(logical_path)
     _, expected_digest = parse_resource_hash(resource.hash)
 
-    data_root_candidate = data_root / record.slug / logical_path
+    resolved_logical_path = resource.path
+    data_root_candidate = data_root / record.slug / resolved_logical_path
 
     if data_root_candidate.is_file():
         candidate, source = data_root_candidate, "data_root"
     else:
         override_dir = load_data_overrides().get(record.slug)
-        override_candidate = override_dir / logical_path if override_dir is not None else None
+        override_candidate = override_dir / resolved_logical_path if override_dir is not None else None
         if override_candidate is not None and override_candidate.is_file():
             candidate, source = override_candidate, "override"
         else:
             tried = [data_root_candidate]
             if override_candidate is not None:
                 tried.append(override_candidate)
-            raise DataResourceNotFoundError(dataset_id, logical_path, tried=tried)
+            raise DataResourceNotFoundError(dataset_id, resolved_logical_path, tried=tried)
 
     actual_digest = _sha256_file(candidate)
     if actual_digest != expected_digest:
@@ -120,6 +121,6 @@ def resolve(
         path=candidate.resolve(),
         hash=resource.hash,
         source=source,
-        logical_path=logical_path,
+        logical_path=resolved_logical_path,
         dataset_id=dataset_id,
     )

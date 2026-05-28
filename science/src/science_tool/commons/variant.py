@@ -214,21 +214,15 @@ def vrs_id(
     if not isinstance(resolution, ContigMatch):
         return _contig_defect(expr, resolution)
 
-    if fmt == "hgvs":
-        return VariantDefect(expr, "unsupported-allele", "hgvs-needs-accession")
-
     proxy = _open_proxy(commons_root=commons_root, data_root=data_root, store_root=store_root)
 
-    if fmt in {"spdi", "vcf"}:
-        defect = _validate_reference(expr, proxy, resolution, pos0=pos0, ref=ref)
-        if defect is not None:
-            return defect
-        spdi_expr = f"ga4gh:{resolution.refget_digest}:{pos0}:{ref}:{alt}"
-        try:
-            return VariantMatch(compute_vrs_id(proxy, fmt="spdi", expr=spdi_expr), resolution.refget_digest)
-        except (SequenceStoreError, VariantStoreUnavailable):
-            raise
-        except Exception as error:
-            return VariantDefect(expr, "unsupported-allele", f"translator-rejected: {error}")
-
-    return VariantDefect(expr, "unsupported-allele", "hgvs-needs-accession")
+    defect = _validate_reference(expr, proxy, resolution, pos0=pos0, ref=ref)
+    if defect is not None:
+        return defect
+    spdi_expr = f"ga4gh:{resolution.refget_digest}:{pos0}:{ref}:{alt}"
+    try:
+        return VariantMatch(compute_vrs_id(proxy, fmt="spdi", expr=spdi_expr), resolution.refget_digest)
+    except (SequenceStoreError, VariantStoreUnavailable):
+        raise
+    except Exception as error:
+        return VariantDefect(expr, "unsupported-allele", f"translator-rejected: {error}")

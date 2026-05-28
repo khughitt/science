@@ -171,8 +171,8 @@ identity_context:
       resolution_status: resolved
       locator:
         resource: variants.csv             # a resource named in the dataset datapackage
-        format: spdi                       # spdi | hgvs_g | vcf
-        column: variant                    # single-expression column (spdi | hgvs_g)
+        format: spdi                       # spdi | hgvs | vcf
+        column: variant                    # single-expression column (spdi | hgvs)
         # for format: vcf, use columns instead of column:
         # columns: {chrom: CHROM, pos: POS, ref: REF, alt: ALT}
         multiallelic: split                # split (one ALT/row) — required for vcf

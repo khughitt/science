@@ -93,6 +93,29 @@ def test_row_layer_reports_unresolved_defects_with_minted_count(tmp_path: Path, 
     ]
 
 
+def test_row_layer_locator_resource_can_name_datapackage_resource(tmp_path: Path, monkeypatch) -> None:
+    project = _variant_project(
+        tmp_path,
+        "variant\nNC_000001.11:100:A:T\n",
+        locator_resource="variants",
+        resource_name="variants",
+        resource_path="data/variants.csv",
+    )
+    calls: list[str] = []
+
+    def fake_vrs_id(expr: str, *, fmt: str, assembly_seqcol: str):
+        calls.append(expr)
+        return VariantMatch(vrs_id="ga4gh:VA.good", refget_digest="SQ.ref")
+
+    monkeypatch.setattr("science_tool.commons.variant.vrs_id", fake_vrs_id)
+
+    results = list(check_variant_identity(_ctx(project)))
+
+    assert not [r for r in results if r.rule == "identity.variant-resource-unavailable"]
+    assert not [r for r in results if r.rule == "identity.variant-resource-invalid"]
+    assert calls == ["NC_000001.11:100:A:T"]
+
+
 def test_row_layer_reports_sequence_store_unavailable_as_info(tmp_path: Path, monkeypatch) -> None:
     project = _variant_project(tmp_path, "variant\nNC_000001.11:100:A:T\n")
 
@@ -237,12 +260,16 @@ def _variant_project(
     *,
     datapackage_field: str | None = None,
     locator_resource: str = "variants.csv",
+    resource_name: str = "variants",
+    resource_path: str = "variants.csv",
 ) -> Path:
     return _variant_project_bytes(
         tmp_path,
         variants_csv.encode("utf-8"),
         datapackage_field=datapackage_field,
         locator_resource=locator_resource,
+        resource_name=resource_name,
+        resource_path=resource_path,
     )
 
 
@@ -252,11 +279,14 @@ def _variant_project_bytes(
     *,
     datapackage_field: str | None = None,
     locator_resource: str = "variants.csv",
+    resource_name: str = "variants",
+    resource_path: str = "variants.csv",
 ) -> Path:
     tmp_path.joinpath("science.yaml").write_text("name: demo\n", encoding="utf-8")
     data_dir = tmp_path / "data" / "variants"
     data_dir.mkdir(parents=True)
-    variants_path = data_dir / "variants.csv"
+    variants_path = data_dir / resource_path
+    variants_path.parent.mkdir(parents=True, exist_ok=True)
     variants_path.write_bytes(variants_bytes)
     digest = hashlib.sha256(variants_bytes).hexdigest()
     datapackage_line = f"datapackage: {datapackage_field}\n" if datapackage_field is not None else ""
@@ -279,8 +309,8 @@ identity_context:
         format: spdi
         column: variant
 resources:
-  - name: variants
-    path: variants.csv
+  - name: {resource_name}
+    path: {resource_path}
     hash: sha256:{digest}
     bytes: {len(variants_bytes)}
 """,
