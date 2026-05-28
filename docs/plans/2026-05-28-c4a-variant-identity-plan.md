@@ -13,9 +13,9 @@
 ## Pre-flight (read once before Task 1)
 
 - **Branch.** Create `feat/c4a-variant-identity` off `main`. Do all work there. (Subagent executors: `cd` to the repo root `~/d/science` and verify the branch before each task — commits must not land on `main`.)
-- **Two repos.** Code + tests + fixtures live in `~/d/science` (the `science_tool` package under `science/src/science_tool/`, tests under `science/tests/`). The *commons data artifacts* (the sequence-store dataset and the assembly-registry resource additions) live in the separate `~/d/science-commons` repo and ship **built-unbuilt** (placeholder hash, count 0), exactly like the C2/C3 crosswalks. Tasks 1–11 are entirely in `~/d/science`; Task 12 touches `~/d/science-commons`.
+- **Two working directories.** Git operations run from the repo root `~/d/science`. Python package operations run from the nested package root `~/d/science/science` (this is where `pyproject.toml` and `uv.lock` live). Code + tests + fixtures live under `~/d/science/science/` (`src/science_tool/`, `tests/`). The *commons data artifacts* (the sequence-store dataset and the assembly-registry resource additions) live in the separate `~/d/science-commons` repo and ship **built-unbuilt** (placeholder hash, count 0), exactly like the C2/C3 crosswalks. Tasks 1–11 are entirely in `~/d/science`; Task 12 touches `~/d/science-commons`.
 - **Design source of truth.** `docs/plans/2026-05-28-c4-variant-identity-design.md` (C4a = §1–§9). Parent: `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` (C-D1…C-D6).
-- **Test command.** From `~/d/science`: `uv run pytest science/tests/<file>::<test> -v`. The full validate suite is `uv run pytest science/tests/validate/ -q`.
+- **Test command.** From `~/d/science/science`: `uv run pytest tests/<file>::<test> -v`. The full validate suite is `uv run pytest tests/validate/ -q`. When a command needs both git-root paths and the package environment, use `git -C ~/d/science ...` for git and `cd ~/d/science/science && uv run ...` for Python.
 - **House conventions.** Composition > inheritance; explicit > defensive; fail early (no silent fallbacks); no "legacy"/"compatibility" layers; no "Unified" prefix; no `Co-Authored-By` trailers; use `~/d/` in any doc/code paths.
 - **Pattern templates to mirror (read these):** `science/src/science_tool/commons/assembly.py` (registry resolver), `commons/gene_crosswalk.py` + `gene_crosswalk_build.py` (resolver + build-helper split), `commons/resolver.py` (`resolve()` — note it re-hashes the whole file per call, so it is used **only** for the small CSVs, never the multi-GB sequence bytes), `validate/checks/identity_context.py` (`_tier_defect`, `_TierSpec`, two-stage check wiring), `science/tests/test_commons_gene_crosswalk.py` + `science/tests/validate/test_checks_identity_context.py` (test style).
 
@@ -23,8 +23,8 @@
 
 ## File Structure
 
-**New in `science/src/science_tool/commons/`:**
-- `assembly_report_build.py` — pure parser: NCBI assembly report text → contig rows + alias rows (build-time; `fetch_text` is the only network call).
+**New in `~/d/science/science/src/science_tool/commons/`:**
+- `assembly_report_build.py` — pure parser + fail-loud join: NCBI assembly report text → contig alias rows joined to seqcol contigs (build-time; `fetch_text` is the only network call).
 - `contigs.py` — resolver over the registry's `contigs.csv` + `contig_aliases.csv`: `resolve_contig(alias, *, seqcol_digest) → ContigMatch`. Exactly-one-match; ambiguous/unknown/accession-mismatch are explicit errors.
 - `sequence_store.py` — content-addressed per-contig sequence reader: `open_store(root).sequence(refget_digest, start, end)`; verify-once-per-contig against the refget digest; fail loud on missing.
 - `refget_proxy.py` — the `ga4gh.vrs` `DataProxy` subclass over `contigs` + `sequence_store` (offline; fail-loud).
@@ -32,14 +32,15 @@
 - `variant.py` — public resolver: `vrs_id(expr, *, fmt, assembly_seqcol, …) → VariantMatch` (parses, resolves contig, flags, calls `vrs.compute_vrs_id`).
 - `sequence_store_build.py` — build helper: slice FASTA into per-contig files named by refget digest, verify, write manifest (network build-time only).
 
-**Modified in `science/src/science_tool/`:**
+**Modified in `~/d/science/science/src/science_tool/`:**
 - `commons/assembly_registry_build.py` — add `build_contig_rows(level2, seqcol_digest)`.
 - `validate/checks/identity_context.py` — rename private `_tier_defect` → public `tier_declaration_defect` (the shared, registry-agnostic shape validator); update internal callers.
 - `validate/checks/variant_identity.py` *(new)* — `@Check(section="variant identity", order=33)`; declaration layer (reuses `tier_declaration_defect` + locator check) + row layer (mint located rows).
+- `validate/checks/__init__.py` — register `variant_identity` in `_load_canonical_checks()` so normal `science validate` runs the new check.
 
-**New tests in `science/tests/`:** `test_commons_assembly_report_build.py`, `test_commons_contigs.py`, `test_commons_sequence_store.py`, `test_commons_refget_proxy.py`, `test_commons_vrs_spike.py`, `test_commons_variant.py`, `validate/test_checks_variant_identity.py`.
+**New tests in `~/d/science/science/tests/`:** `test_commons_assembly_report_build.py`, `test_commons_contigs.py`, `test_commons_sequence_store.py`, `test_commons_refget_proxy.py`, `test_commons_vrs_spike.py`, `test_commons_variant.py`, `validate/test_checks_variant_identity.py`.
 
-**New fixtures under `science/tests/fixtures/commons/`:** `assembly-registry/` + `assembly-registry-data/` (entity + `assemblies.csv`/`contigs.csv`/`contig_aliases.csv`), `seqstore/` (a tiny synthetic contig file), and a `variant-dataset/` for the check.
+**New fixtures under `~/d/science/science/tests/fixtures/commons/`:** `assembly-c4a/datasets/assembly-registry/` + `assembly-c4a-data/assembly-registry/` (entity + `assemblies.csv`/`contigs.csv`/`contig_aliases.csv`), `seqstore/` (a tiny synthetic contig file), and a `variant-dataset/` for the check.
 
 **New in `~/d/science-commons/` (Task 12):** `datasets/sequence-store-grch38-grch37/` (datapackage + recipe + entity), and additions to `datasets/assembly-registry/`.
 
@@ -54,8 +55,8 @@
 
 - [ ] **Step 1: Add `ga4gh.vrs` to the environment for the spike only**
 
-Run (from `~/d/science`): `uv add --dev 'ga4gh.vrs>=2.3,<3'`
-Expected: resolves a non-yanked 2.x release (2.1.x are yanked). Record the exact resolved version from `uv.lock` (e.g. `2.3.0`) in the commit message — Task 2 promotes it to a real dependency.
+Run (from `~/d/science/science`): `uv add --dev 'ga4gh.vrs>=2.3,<3'`
+Expected: resolves a non-yanked 2.x release (2.1.x are yanked). Record the exact resolved version from `science/uv.lock` (e.g. `2.3.0`) in the commit message — Task 2 promotes it to a real dependency.
 
 - [ ] **Step 2: Write the spike test (an in-memory proxy + a known identity property)**
 
@@ -74,6 +75,7 @@ ga4gh_vrs = pytest.importorskip("ga4gh.vrs")
 
 # A 40bp synthetic contig and its refget digest, computed below.
 _SEQ = "CGTACGTACGTACGTACGTACGTACGTACGTACGTACGTA"
+_REPEAT_SEQ = "CCCCAAAAAGGGGTTTTCCCC"
 
 
 def _refget_digest(seq: str) -> str:
@@ -117,7 +119,7 @@ def test_vrs_identifies_an_snv_through_custom_proxy_offline() -> None:
 
 - [ ] **Step 3: Run the spike**
 
-Run: `uv run pytest science/tests/test_commons_vrs_spike.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_vrs_spike.py -v`
 Expected: PASS. If `AlleleTranslator`/`translate_from`/`ga4gh_identify`/`sha512t24u` import paths differ in the installed version, adjust the test to the real surface (that *is* the spike's job) until it passes, then keep it.
 
 - [ ] **Step 4: Add a normalization-property assertion**
@@ -129,18 +131,18 @@ def test_equivalent_indel_representations_share_one_id() -> None:
     from ga4gh.core import ga4gh_identify
     from ga4gh.vrs.extras.translator import AlleleTranslator
 
-    # _SEQ has a CGTA tandem repeat region; deleting one 'A' is representable at
-    # multiple positions but normalizes to one allele -> one id.
-    proxy = _MemoryProxy(_SEQ)
-    sq = _refget_digest(_SEQ)
+    # _REPEAT_SEQ has an A homopolymer; deleting one A is representable at
+    # multiple offsets but normalizes to one allele -> one id.
+    proxy = _MemoryProxy(_REPEAT_SEQ)
+    sq = _refget_digest(_REPEAT_SEQ)
     tlr = AlleleTranslator(data_proxy=proxy, normalize=True)
-    a = ga4gh_identify(tlr.translate_from(f"ga4gh:{sq}:7:A:", fmt="spdi"))
-    b = ga4gh_identify(tlr.translate_from(f"ga4gh:{sq}:11:A:", fmt="spdi"))
+    a = ga4gh_identify(tlr.translate_from(f"ga4gh:{sq}:4:A:", fmt="spdi"))
+    b = ga4gh_identify(tlr.translate_from(f"ga4gh:{sq}:5:A:", fmt="spdi"))
     assert a == b
 ```
 
-Run: `uv run pytest science/tests/test_commons_vrs_spike.py -v`
-Expected: PASS (if positions need adjusting for the synthetic sequence, adjust until the equivalence holds — the property, not the exact positions, is the point).
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_vrs_spike.py -v`
+Expected: PASS. If the exact offsets need adjustment for the installed VRS normalizer, keep the homopolymer fixture and adjust only within that repeated base run; do not switch back to a non-repeated sequence.
 
 - [ ] **Step 5: Record the confirmed surface**
 
@@ -151,7 +153,7 @@ In the commit body, record the working import paths + class/method names (`Allel
 If the spike passed: proceed. If it could **not** be made to pass offline through a custom proxy, STOP and escalate — Task 5 then implements the fallback (local SPDI/HGVS_g/VCF parsers building VRS core `models.Allele` objects + `normalize()` + `ga4gh_identify`, bypassing the translator), and Tasks 8–9 call that instead. Record which path is taken.
 
 ```bash
-git add science/tests/test_commons_vrs_spike.py uv.lock pyproject.toml
+git add science/tests/test_commons_vrs_spike.py science/uv.lock science/pyproject.toml
 git commit -m "spike(c4a): VRS identify through custom offline DataProxy"
 ```
 
@@ -161,7 +163,7 @@ git commit -m "spike(c4a): VRS identify through custom offline DataProxy"
 
 **Files:**
 - Modify: `science/pyproject.toml` (dependencies)
-- Modify: `pyproject.toml` / `uv.lock` (workspace lock)
+- Modify: `science/uv.lock` (package lock)
 
 - [ ] **Step 1: Write a guard test that the dependency + version are present**
 
@@ -176,25 +178,25 @@ def test_ga4gh_vrs_is_a_pinned_runtime_dependency() -> None:
 
 - [ ] **Step 2: Run it to confirm it passes with the dev-added dep**
 
-Run: `uv run pytest science/tests/test_commons_vrs_spike.py::test_ga4gh_vrs_is_a_pinned_runtime_dependency -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_vrs_spike.py::test_ga4gh_vrs_is_a_pinned_runtime_dependency -v`
 Expected: PASS (dep present from Task 1's `uv add --dev`).
 
 - [ ] **Step 3: Move it from dev to a real runtime dependency**
 
-Edit `science/src/science_tool`'s package config (`science/pyproject.toml`), adding to `[project].dependencies` the line `"ga4gh.vrs>=2.3,<3",` (exact resolved version stays pinned in `uv.lock`). Remove the dev-only entry added in Task 1.
+Edit the package config (`science/pyproject.toml`), adding to `[project].dependencies` the line `"ga4gh.vrs>=2.3,<3",` (exact resolved version stays pinned in `science/uv.lock`). Remove the dev-only entry added in Task 1.
 
-Run: `uv sync && uv run python -c "import ga4gh.vrs; print('ok')"`
+Run: `cd ~/d/science/science && uv sync && uv run python -c "import ga4gh.vrs; print('ok')"`
 Expected: prints `ok`.
 
 - [ ] **Step 4: Re-run the guard test**
 
-Run: `uv run pytest science/tests/test_commons_vrs_spike.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_vrs_spike.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/pyproject.toml pyproject.toml uv.lock
+git add science/pyproject.toml science/uv.lock
 git commit -m "build(c4a): pin ga4gh.vrs (VRS 2.x) as a runtime dependency"
 ```
 
@@ -244,7 +246,7 @@ def test_parse_assembly_report_emits_alias_rows_per_kind() -> None:
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `uv run pytest science/tests/test_commons_assembly_report_build.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_assembly_report_build.py -v`
 Expected: FAIL — `ModuleNotFoundError: science_tool.commons.assembly_report_build`.
 
 - [ ] **Step 3: Implement the parser**
@@ -324,12 +326,74 @@ def fetch_text(url: str) -> str:
     return resp.text
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [ ] **Step 4: Add the fail-loud contig/alias join helper**
 
-Run: `uv run pytest science/tests/test_commons_assembly_report_build.py -v`
+Append a test that the build-time alias join is explicit and cannot silently miss contigs. The assembly report's `Sequence-Name` is expected to match the seqcol level-2 `name`; if a future seqcol source uses accessions as names, this must fail during the commons build, not produce a partial alias table.
+
+```python
+def test_build_contig_alias_rows_joins_by_sequence_name_and_rejects_unmatched() -> None:
+    import pytest
+    from science_tool.commons.assembly_report_build import build_contig_alias_rows, parse_assembly_report
+
+    contigs = [
+        {"seqcol_digest": "DIGEST38", "sequence_index": 0, "name": "1", "refget_digest": "SQ.chr1", "length": 248956422},
+        {"seqcol_digest": "DIGEST38", "sequence_index": 1, "name": "MT", "refget_digest": "SQ.mt", "length": 16569},
+    ]
+    aliases = build_contig_alias_rows(contig_rows=contigs, report_rows=parse_assembly_report(_REPORT))
+    assert {
+        "seqcol_digest": "DIGEST38",
+        "refget_digest": "SQ.chr1",
+        "alias": "NC_000001.11",
+        "alias_kind": "refseq_accession",
+        "sequence_accession": "NC_000001.11",
+    } in aliases
+
+    with pytest.raises(ValueError, match="assembly-report sequence name"):
+        build_contig_alias_rows(contig_rows=contigs[:1], report_rows=parse_assembly_report(_REPORT))
+```
+
+Add to `assembly_report_build.py`:
+
+```python
+def build_contig_alias_rows(*, contig_rows: list[dict[str, Any]], report_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Join parsed assembly-report aliases to seqcol contig rows by Sequence-Name.
+
+    The join is intentionally hard-fail. Alias correctness is the resolver contract;
+    an unmatched report row means the seqcol level-2 names and assembly report do
+    not describe the same naming surface."""
+    by_name: dict[str, dict[str, Any]] = {}
+    for row in contig_rows:
+        name = str(row.get("name", "")).strip()
+        if not name:
+            raise ValueError("contig row has blank name")
+        if name in by_name:
+            raise ValueError(f"duplicate contig name {name!r}")
+        by_name[name] = row
+
+    out: list[dict[str, Any]] = []
+    for alias in report_rows:
+        name = str(alias.get("sequence_name", "")).strip()
+        contig = by_name.get(name)
+        if contig is None:
+            raise ValueError(f"assembly-report sequence name {name!r} has no seqcol contig row")
+        out.append(
+            {
+                "seqcol_digest": contig["seqcol_digest"],
+                "refget_digest": contig["refget_digest"],
+                "alias": alias["alias"],
+                "alias_kind": alias["alias_kind"],
+                "sequence_accession": alias["sequence_accession"],
+            }
+        )
+    return out
+```
+
+- [ ] **Step 5: Run it to verify it passes**
+
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_assembly_report_build.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add science/src/science_tool/commons/assembly_report_build.py science/tests/test_commons_assembly_report_build.py
@@ -369,11 +433,25 @@ def test_build_contig_rows_rejects_ragged_level2() -> None:
 
     with pytest.raises(ValueError, match="ragged level-2"):
         build_contig_rows(level2={"names": ["1"], "lengths": [1, 2], "sequences": ["SQ.a", "SQ.b"]}, seqcol_digest="D")
+
+
+def test_build_contig_rows_rejects_duplicate_names_and_blank_fields() -> None:
+    import pytest
+    from science_tool.commons.assembly_registry_build import build_contig_rows
+
+    with pytest.raises(ValueError, match="duplicate contig name"):
+        build_contig_rows(level2={"names": ["1", "1"], "lengths": [1, 1], "sequences": ["SQ.a", "SQ.b"]}, seqcol_digest="D")
+    with pytest.raises(ValueError, match="blank contig name"):
+        build_contig_rows(level2={"names": [" "], "lengths": [1], "sequences": ["SQ.a"]}, seqcol_digest="D")
+    with pytest.raises(ValueError, match="blank refget digest"):
+        build_contig_rows(level2={"names": ["1"], "lengths": [1], "sequences": [" "]}, seqcol_digest="D")
+    with pytest.raises(ValueError, match="invalid length"):
+        build_contig_rows(level2={"names": ["1"], "lengths": [0], "sequences": ["SQ.a"]}, seqcol_digest="D")
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `uv run pytest science/tests/test_assembly_registry_build.py -k build_contig_rows -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_assembly_registry_build.py -k build_contig_rows -v`
 Expected: FAIL — `ImportError: cannot import name 'build_contig_rows'`.
 
 - [ ] **Step 3: Implement `build_contig_rows`**
@@ -394,21 +472,36 @@ def build_contig_rows(*, level2: dict[str, Any], seqcol_digest: str) -> list[dic
             f"ragged level-2 record for {seqcol_digest!r}: "
             f"{len(names)} names / {len(lengths)} lengths / {len(sequences)} sequences"
         )
-    return [
-        {
-            "seqcol_digest": seqcol_digest,
-            "sequence_index": i,
-            "name": names[i],
-            "refget_digest": sequences[i],
-            "length": lengths[i],
-        }
-        for i in range(len(names))
-    ]
+    out: list[dict[str, Any]] = []
+    seen_names: set[str] = set()
+    for i, (name, length, refget_digest) in enumerate(zip(names, lengths, sequences, strict=True)):
+        name_s = str(name).strip()
+        digest_s = str(refget_digest).strip()
+        if not name_s:
+            raise ValueError(f"blank contig name at index {i} for {seqcol_digest!r}")
+        if not digest_s:
+            raise ValueError(f"blank refget digest at index {i} for {seqcol_digest!r}")
+        if name_s in seen_names:
+            raise ValueError(f"duplicate contig name {name_s!r} in {seqcol_digest!r}")
+        seen_names.add(name_s)
+        length_i = int(length)
+        if length_i <= 0:
+            raise ValueError(f"invalid length {length!r} for contig {name_s!r}")
+        out.append(
+            {
+                "seqcol_digest": seqcol_digest,
+                "sequence_index": i,
+                "name": name_s,
+                "refget_digest": digest_s,
+                "length": length_i,
+            }
+        )
+    return out
 ```
 
 - [ ] **Step 4: Run it to verify it passes**
 
-Run: `uv run pytest science/tests/test_assembly_registry_build.py -k build_contig_rows -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_assembly_registry_build.py -k build_contig_rows -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -427,11 +520,11 @@ Resolves an accepted input contig string (accession or label) to exactly one ref
 **Files:**
 - Create: `science/src/science_tool/commons/contigs.py`
 - Test: `science/tests/test_commons_contigs.py`
-- Fixtures: `science/tests/fixtures/commons/assembly-registry/` (entity + datapackage) and `…/assembly-registry-data/` (`contigs.csv`, `contig_aliases.csv`)
+- Fixtures: `science/tests/fixtures/commons/assembly-c4a/datasets/assembly-registry/` (entity + datapackage) and `science/tests/fixtures/commons/assembly-c4a-data/assembly-registry/` (`contigs.csv`, `contig_aliases.csv`)
 
 - [ ] **Step 1: Create the fixtures**
 
-Create `science/tests/fixtures/commons/assembly-registry-data/contigs.csv`:
+Create `science/tests/fixtures/commons/assembly-c4a-data/assembly-registry/contigs.csv`:
 
 ```csv
 seqcol_digest,sequence_index,name,refget_digest,length
@@ -439,7 +532,7 @@ DIGEST38,0,1,SQ.chr1_38,248956422
 DIGEST37,0,1,SQ.chr1_37,249250621
 ```
 
-Create `science/tests/fixtures/commons/assembly-registry-data/contig_aliases.csv`:
+Create `science/tests/fixtures/commons/assembly-c4a-data/assembly-registry/contig_aliases.csv`:
 
 ```csv
 seqcol_digest,refget_digest,alias,alias_kind,sequence_accession
@@ -451,18 +544,34 @@ DIGEST37,SQ.chr1_37,chr1,ucsc,
 DIGEST37,SQ.chr1_37,NC_000001.10,refseq_accession,NC_000001.10
 ```
 
-Create the commons entity + datapackage so `resolve()` finds these resources. `science/tests/fixtures/commons/assembly-registry/entity.md`:
+Create the commons entity + datapackage so `resolve()` finds these resources. `CommonsEntityAdapter.load()` requires the canonical commons layout `datasets/<slug>/entity.md`; `resolve()` then reads resource bytes from `data_root/<slug>/<logical_path>`.
+
+`science/tests/fixtures/commons/assembly-c4a/datasets/assembly-registry/entity.md`:
 
 ```markdown
 ---
 id: dataset:assembly-registry
 type: dataset
-schema_profile: science-entity-base/1.0+dataset/1.0
+schema_profile: science-entity-base/1.0+dataset/1.0+bio.assembly_registry/1.0
+title: "Assembly registry (C4a contig + alias fixture)"
+version: "1.0.0"
+created: "2026-05-28"
+updated: "2026-05-28"
+datapackage: datapackage.yaml
+origin: external
+status: active
+tier: use-now
+access:
+  level: public
+  verified: true
+source_class: reference
+member_key_column: seqcol_digest
+assembly_count: 2
 ---
 Assembly registry fixture (C4a contig/alias resources).
 ```
 
-`science/tests/fixtures/commons/assembly-registry/datapackage.yaml` — compute the two hashes/bytes with `sha256sum` on the CSVs you just wrote and paste them (the resolver verifies them):
+`science/tests/fixtures/commons/assembly-c4a/datasets/assembly-registry/datapackage.yaml` — compute the two hashes/bytes with `sha256sum` on the CSVs you just wrote and paste them (the resolver verifies them):
 
 ```yaml
 name: assembly-registry
@@ -482,7 +591,7 @@ resources:
     bytes: <byte length of contig_aliases.csv>
 ```
 
-Run to get the values: `sha256sum science/tests/fixtures/commons/assembly-registry-data/*.csv && wc -c science/tests/fixtures/commons/assembly-registry-data/*.csv`
+Run to get the values: `sha256sum science/tests/fixtures/commons/assembly-c4a-data/assembly-registry/*.csv && wc -c science/tests/fixtures/commons/assembly-c4a-data/assembly-registry/*.csv`
 
 - [ ] **Step 2: Write the failing test**
 
@@ -502,8 +611,8 @@ from science_tool.commons.contigs import (
     resolve_contig,
 )
 
-_FIX = Path(__file__).parent / "fixtures" / "commons" / "assembly-registry"
-_DATA = Path(__file__).parent / "fixtures" / "commons" / "assembly-registry-data"
+_FIX = Path(__file__).parent / "fixtures" / "commons" / "assembly-c4a"
+_DATA = Path(__file__).parent / "fixtures" / "commons" / "assembly-c4a-data"
 
 
 def _kw() -> dict:
@@ -552,7 +661,7 @@ def test_alias_ambiguous_within_assembly_is_ambiguous(tmp_path: Path) -> None:
 
 - [ ] **Step 3: Run it to verify it fails**
 
-Run: `uv run pytest science/tests/test_commons_contigs.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_contigs.py -v`
 Expected: FAIL — `ModuleNotFoundError: science_tool.commons.contigs`.
 
 - [ ] **Step 4: Implement `contigs.py`**
@@ -732,13 +841,13 @@ def test_parser_rejects_duplicate_contig_name() -> None:
 
 - [ ] **Step 6: Run all contig tests**
 
-Run: `uv run pytest science/tests/test_commons_contigs.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_contigs.py -v`
 Expected: PASS (the `test_alias_ambiguous…` test skips; duplicates covered by the parser tests).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add science/src/science_tool/commons/contigs.py science/tests/test_commons_contigs.py science/tests/fixtures/commons/assembly-registry science/tests/fixtures/commons/assembly-registry-data
+git add science/src/science_tool/commons/contigs.py science/tests/test_commons_contigs.py science/tests/fixtures/commons/assembly-c4a science/tests/fixtures/commons/assembly-c4a-data
 git commit -m "feat(c4a): contig + alias resolver with mismatch/ambiguity errors"
 ```
 
@@ -746,7 +855,7 @@ git commit -m "feat(c4a): contig + alias resolver with mismatch/ambiguity errors
 
 ## Task 6: Content-addressed sequence store reader (`sequence_store.py`)
 
-Per-contig files named by refget digest, verified once on open (never re-hashed per substring; never routed through `resolve()`'s whole-file sha256). Fails loud on a missing contig.
+Per-contig files named by refget digest, stream-verified once on first use, then sliced by byte offset (never re-read whole contigs per substring; never routed through `resolve()`'s whole-file sha256). Refget hashing is over the exact sequence bytes (no implicit uppercasing), matching `ga4gh.core.sha512t24u`; build-time registry checks catch any FASTA/seqcol case mismatch. Fails loud on a missing contig.
 
 **Files:**
 - Create: `science/src/science_tool/commons/sequence_store.py`
@@ -780,6 +889,7 @@ def test_full_and_sliced_reads(tmp_path: Path) -> None:
     assert store.sequence(digest) == _SEQ
     assert store.sequence(digest, 0, 4) == "ACGT"
     assert store.sequence(digest, 16, 20) == "TTTT"
+    assert store.length(digest) == len(_SEQ)
 
 
 def test_missing_contig_fails_loud(tmp_path: Path) -> None:
@@ -794,11 +904,19 @@ def test_corrupt_contig_fails_verification(tmp_path: Path) -> None:
     store = open_store(root)
     with pytest.raises(SequenceStoreError, match="refget digest mismatch"):
         store.sequence(digest, 0, 4)
+
+
+def test_refget_digest_matches_ga4gh_core_without_case_normalization() -> None:
+    from ga4gh.core import sha512t24u
+
+    seq = "ACgt"
+    assert refget_digest(seq) == "SQ." + sha512t24u(seq.encode("ascii"))
+    assert refget_digest(seq) != refget_digest(seq.upper())
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `uv run pytest science/tests/test_commons_sequence_store.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_sequence_store.py -v`
 Expected: FAIL — `ModuleNotFoundError: science_tool.commons.sequence_store`.
 
 - [ ] **Step 3: Implement `sequence_store.py`**
@@ -808,13 +926,15 @@ Expected: FAIL — `ModuleNotFoundError: science_tool.commons.sequence_store`.
 """Content-addressed per-contig reference-sequence reader (Pillar C, C4a-D3).
 
 A flat store: one file per contig, named by its refget digest (SQ.<sha512t24u>).
-A contig is verified ONCE on first read (its bytes must reproduce its digest),
-then cached — it is never routed through the commons `resolve()` whole-file
-sha256 (that would re-hash gigabytes per substring). The bytes are materialized
-locally (digests are the committed authority); a missing contig fails loud and
-NEVER triggers a fetch."""
+A contig is stream-verified ONCE on first use (its bytes must reproduce its
+digest), then subsequent substring reads seek by byte offset. It is never routed
+through the commons `resolve()` whole-file sha256 (that would re-hash gigabytes
+per substring). The bytes are materialized locally (digests are the committed
+authority); a missing contig fails loud and NEVER triggers a fetch."""
 from __future__ import annotations
 
+import base64
+import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -823,32 +943,52 @@ class SequenceStoreError(LookupError):
     """A requested contig is absent, or its bytes do not match its refget digest."""
 
 
-def refget_digest(seq: str) -> str:
-    """The GA4GH refget digest 'SQ.<sha512t24u>' of an (upper-case) sequence."""
-    from ga4gh.core import sha512t24u  # import path confirmed by the Task 1 spike
+def _sha512t24u(data: bytes) -> str:
+    return base64.urlsafe_b64encode(hashlib.sha512(data).digest()[:24]).decode("ascii").rstrip("=")
 
-    return "SQ." + sha512t24u(seq.upper().encode("ascii"))
+
+def refget_digest(seq: str) -> str:
+    """The GA4GH refget digest 'SQ.<sha512t24u>' of the exact sequence bytes."""
+    return "SQ." + _sha512t24u(seq.encode("ascii"))
 
 
 @dataclass
 class SequenceStore:
     root: Path
-    _verified: set[str] = field(default_factory=set)
+    _lengths: dict[str, int] = field(default_factory=dict)
 
     def _path(self, digest: str) -> Path:
         return self.root / digest
 
-    def sequence(self, digest: str, start: int | None = None, end: int | None = None) -> str:
+    def _verify(self, digest: str) -> int:
         path = self._path(digest)
         if not path.is_file():
             raise SequenceStoreError(f"contig {digest!r} not in sequence store at {self.root}")
-        seq = path.read_text(encoding="ascii")
-        if digest not in self._verified:
-            actual = refget_digest(seq)
-            if actual != digest:
-                raise SequenceStoreError(f"refget digest mismatch for {digest!r}: bytes hash to {actual!r}")
-            self._verified.add(digest)
-        return seq[start:end]
+        h = hashlib.sha512()
+        n = 0
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                n += len(chunk)
+                h.update(chunk)
+        actual = "SQ." + base64.urlsafe_b64encode(h.digest()[:24]).decode("ascii").rstrip("=")
+        if actual != digest:
+            raise SequenceStoreError(f"refget digest mismatch for {digest!r}: bytes hash to {actual!r}")
+        self._lengths[digest] = n
+        return n
+
+    def length(self, digest: str) -> int:
+        return self._lengths.get(digest) or self._verify(digest)
+
+    def sequence(self, digest: str, start: int | None = None, end: int | None = None) -> str:
+        length = self.length(digest)
+        start_i = 0 if start is None else start
+        end_i = length if end is None else end
+        if start_i < 0 or end_i < start_i or end_i > length:
+            raise SequenceStoreError(f"slice {start_i}:{end_i} outside contig {digest!r} length {length}")
+        path = self._path(digest)
+        with path.open("rb") as fh:
+            fh.seek(start_i)
+            return fh.read(end_i - start_i).decode("ascii")
 
 
 def open_store(root: Path) -> SequenceStore:
@@ -856,11 +996,11 @@ def open_store(root: Path) -> SequenceStore:
     return SequenceStore(root=Path(root))
 ```
 
-> Note: this reads whole-contig text for simplicity and correctness; a later optimization may `mmap`/offset-slice without changing this interface. The verify-once contract and fail-loud behavior are the invariants under test.
+> Note: one-time digest verification streams the full contig, but row-level base lookups after that use byte offsets and never re-read the whole contig.
 
 - [ ] **Step 4: Run it to verify it passes**
 
-Run: `uv run pytest science/tests/test_commons_sequence_store.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_sequence_store.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -921,7 +1061,7 @@ def test_missing_identifier_fails_loud_no_network(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `uv run pytest science/tests/test_commons_refget_proxy.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_refget_proxy.py -v`
 Expected: FAIL — `ModuleNotFoundError: science_tool.commons.refget_proxy`.
 
 - [ ] **Step 3: Implement `refget_proxy.py`**
@@ -955,15 +1095,15 @@ class RefgetProxy:
 
     def get_metadata(self, identifier: str) -> dict:
         digest = _bare(identifier)
-        seq = self.store.sequence(digest)  # raises if absent (fail loud, no network)
-        return {"length": len(seq), "aliases": [f"ga4gh:{digest}"], "alphabet": "ACGT", "added": None}
+        length = self.store.length(digest)  # raises if absent/corrupt (fail loud, no network)
+        return {"length": length, "aliases": [f"ga4gh:{digest}"], "alphabet": "ACGT", "added": None}
 ```
 
 > If the Task 1 spike showed the translator needs an additional DataProxy method or a richer `aliases` list (e.g. `translate_sequence_identifier`), add the minimal method here to match the spike's confirmed surface — the spike test is the contract.
 
 - [ ] **Step 4: Run it to verify it passes**
 
-Run: `uv run pytest science/tests/test_commons_refget_proxy.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_refget_proxy.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1018,7 +1158,7 @@ def test_compute_vrs_id_from_spdi_is_deterministic(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `uv run pytest science/tests/test_commons_variant.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_variant.py -v`
 Expected: FAIL — `ModuleNotFoundError: science_tool.commons.vrs`.
 
 - [ ] **Step 3: Implement `vrs.py` (mirror the Task 1 spike's confirmed surface)**
@@ -1035,7 +1175,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-_ACCEPTED_FMTS = frozenset({"spdi", "hgvs", "gnomad"})
+_ACCEPTED_FMTS = frozenset({"spdi", "hgvs"})
 
 
 class _Proxy(Protocol):
@@ -1050,10 +1190,11 @@ def _translator(proxy: _Proxy) -> Any:
 
 
 def compute_vrs_id(proxy: _Proxy, *, fmt: str, expr: str) -> str:
-    """Return 'ga4gh:VA.<digest>' for `expr` in `fmt` (spdi | hgvs | gnomad).
+    """Return 'ga4gh:VA.<digest>' for `expr` in `fmt` (spdi | hgvs).
 
-    `hgvs` is genomic HGVS only (transcript/protein HGVS is C4c). `gnomad` is the
-    VCF 'chrom-pos-ref-alt' string form. Raises ValueError on an unaccepted fmt."""
+    `hgvs` is genomic HGVS only (transcript/protein HGVS is C4c). VCF is parsed
+    in `variant.py` and re-expressed as SPDI before crossing this boundary.
+    Raises ValueError on an unaccepted fmt."""
     from ga4gh.core import ga4gh_identify
 
     if fmt not in _ACCEPTED_FMTS:
@@ -1064,7 +1205,7 @@ def compute_vrs_id(proxy: _Proxy, *, fmt: str, expr: str) -> str:
 
 - [ ] **Step 4: Run it to verify it passes**
 
-Run: `uv run pytest science/tests/test_commons_variant.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_variant.py -v`
 Expected: PASS. (If the spike recorded a different surface, mirror that surface here.)
 
 - [ ] **Step 5: Add the captured-golden + assembly-anchoring tests**
@@ -1093,12 +1234,18 @@ def test_same_change_on_a_different_sequence_is_a_different_id(tmp_path: Path) -
     a = compute_vrs_id(base, fmt="spdi", expr=f"ga4gh:{refget_digest(_SEQ)}:5:G:T")
     b = compute_vrs_id(proxy, fmt="spdi", expr=f"ga4gh:{od}:5:G:T")
     assert a != b
+
+
+def test_compute_vrs_id_rejects_uncovered_formats(tmp_path: Path) -> None:
+    proxy, digest = _proxy(tmp_path)
+    with pytest.raises(ValueError, match="unsupported variant fmt 'gnomad'"):
+        compute_vrs_id(proxy, fmt="gnomad", expr=f"ga4gh:{digest}:5:G:T")
 ```
 
-Capture command: `uv run python -c "from pathlib import Path; import tempfile; from science_tool.commons.sequence_store import open_store, refget_digest; from science_tool.commons.refget_proxy import RefgetProxy; from science_tool.commons.vrs import compute_vrs_id; d=Path(tempfile.mkdtemp()); s='CGTACGTACGTACGTACGTACGTACGTACGTACGTACGTA'; g=refget_digest(s); (d/g).write_text(s); print(compute_vrs_id(RefgetProxy(store=open_store(d)), fmt='spdi', expr=f'ga4gh:{g}:5:G:T'))"`
+Capture command: `cd ~/d/science/science && uv run python -c "from pathlib import Path; import tempfile; from science_tool.commons.sequence_store import open_store, refget_digest; from science_tool.commons.refget_proxy import RefgetProxy; from science_tool.commons.vrs import compute_vrs_id; d=Path(tempfile.mkdtemp()); s='CGTACGTACGTACGTACGTACGTACGTACGTACGTACGTA'; g=refget_digest(s); (d/g).write_text(s); print(compute_vrs_id(RefgetProxy(store=open_store(d)), fmt='spdi', expr=f'ga4gh:{g}:5:G:T'))"`
 Paste the printed value into `_GOLDEN_SNV`.
 
-Run: `uv run pytest science/tests/test_commons_variant.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_variant.py -v`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -1163,11 +1310,23 @@ def test_accession_assembly_mismatch_flagged(monkeypatch, tmp_path: Path) -> Non
     monkeypatch.setattr(V, "_resolve_contig", lambda q, **k: AccessionAssemblyMismatch(q, "DIGEST37"))
     m = V.vrs_id("NC_000001.10:5:G:T", fmt="spdi", assembly_seqcol="DIGEST38", commons_root=tmp_path, data_root=tmp_path)
     assert isinstance(m, V.VariantDefect) and m.reason == "accession-assembly-mismatch"
+
+
+def test_vrs_id_can_use_explicit_store_root_for_fixtures(monkeypatch, tmp_path: Path) -> None:
+    from science_tool.commons import variant as V
+    from science_tool.commons.contigs import ContigMatch
+    from science_tool.commons.sequence_store import refget_digest
+
+    digest = refget_digest(_SEQ)
+    (tmp_path / digest).write_text(_SEQ, encoding="ascii")
+    monkeypatch.setattr(V, "_resolve_contig", lambda q, **k: ContigMatch(digest, "1", len(_SEQ), "seqcol_name"))
+    m = V.vrs_id("1-6-G-T", fmt="vcf", assembly_seqcol="DIGEST38", store_root=tmp_path)
+    assert isinstance(m, V.VariantMatch)
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `uv run pytest science/tests/test_commons_variant.py -k "vcf or mismatch or symbolic" -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_variant.py -k "vcf or mismatch or symbolic" -v`
 Expected: FAIL — `ModuleNotFoundError: science_tool.commons.variant`.
 
 - [ ] **Step 3: Implement `variant.py`**
@@ -1179,14 +1338,16 @@ Expected: FAIL — `ModuleNotFoundError: science_tool.commons.variant`.
 vrs_id(expr, fmt, assembly_seqcol) parses an accepted small-allele expression
 (SPDI / genomic-HGVS / VCF chrom-pos-ref-alt), resolves its contig within the
 declared assembly (Task 5), validates the reference base, and mints the VRS id
-(Task 8). Every rejection is a typed VariantDefect (flagged, never dropped):
+(Task 8). Every data rejection is a typed VariantDefect (flagged, never dropped):
 unsupported-allele, accession-assembly-mismatch, ambiguous-contig, unknown-contig,
-ref-mismatch, out-of-bounds."""
+ref-mismatch, out-of-bounds. Local-store absence is infrastructure and raises
+VariantStoreUnavailable/SequenceStoreError so validate can downgrade it to INFO."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
 
+from science_tool.commons.errors import CommonsError
 from science_tool.commons.contigs import (
     AccessionAssemblyMismatch,
     AmbiguousContig,
@@ -1195,10 +1356,13 @@ from science_tool.commons.contigs import (
     resolve_contig as _resolve_contig,
 )
 from science_tool.commons.refget_proxy import RefgetProxy
+from science_tool.commons.resolver import resolve
 from science_tool.commons.sequence_store import open_store
 from science_tool.commons.vrs import compute_vrs_id
 
-_SYMBOLIC = ("<", "[", "]", ".")  # symbolic alleles / breakends / missing
+_BREAKEND_TOKENS = ("[", "]")
+_SEQUENCE_STORE_ID = "dataset:sequence-store-grch38-grch37"
+_SEQUENCE_STORE_MANIFEST = "manifest.csv"
 
 
 @dataclass(frozen=True, slots=True)
@@ -1215,12 +1379,28 @@ class VariantDefect:
     detail: str
 
 
-def _open_proxy(*, commons_root: Path | None, data_root: Path | None) -> RefgetProxy:
-    from science_tool.commons.config import resolve_commons_data_root
+class VariantStoreUnavailable(RuntimeError):
+    """The local sequence store dataset is absent or its manifest cannot verify."""
 
-    root = data_root if data_root is not None else resolve_commons_data_root()
-    # The sequence store is a sibling dataset slug under the data root.
-    return RefgetProxy(store=open_store(Path(root) / "sequence-store-grch38-grch37"))
+
+def _open_proxy(
+    *,
+    commons_root: Path | None,
+    data_root: Path | None,
+    store_root: Path | None = None,
+) -> RefgetProxy:
+    if store_root is not None:
+        return RefgetProxy(store=open_store(Path(store_root)))
+    try:
+        manifest = resolve(
+            _SEQUENCE_STORE_ID,
+            _SEQUENCE_STORE_MANIFEST,
+            commons_root=commons_root,
+            data_root=data_root,
+        )
+    except CommonsError as exc:
+        raise VariantStoreUnavailable(str(exc)) from exc
+    return RefgetProxy(store=open_store(manifest.path.parent))
 
 
 def _parse(expr: str, fmt: str) -> tuple[str, int, str, str] | None:
@@ -1229,17 +1409,46 @@ def _parse(expr: str, fmt: str) -> tuple[str, int, str, str] | None:
     pos0 is 0-based. SPDI is already 0-based; VCF is 1-based -> pos0 = pos-1.
     HGVS_g (g.<pos><ref>><alt>) is normalized by the translator, so we only pre-
     validate it is not symbolic and pass it through with pos/ref unknown (-1, '')."""
-    if any(tok in expr for tok in _SYMBOLIC):
-        return None
+    def unsupported_allele(ref: str, alt: str) -> bool:
+        # "." is unsupported only as a REF/ALT field, not inside accessions
+        # (`NC_000001.11`) or refget ids (`SQ.<digest>`). Empty REF/ALT is valid
+        # SPDI indel syntax; VCF symbolic alleles/breakends are rejected.
+        return (
+            (ref == "." or alt == ".")
+            or alt.startswith("<")
+            or any(tok in ref or tok in alt for tok in _BREAKEND_TOKENS)
+            or (ref == "" and alt == "")
+        )
+
     if fmt == "spdi":
-        seq, pos, ref, alt = expr.split(":")
-        return seq, int(pos), ref, alt
+        try:
+            seq, pos, ref, alt = expr.rsplit(":", 3)
+        except ValueError:
+            return None
+        if unsupported_allele(ref, alt):
+            return None
+        try:
+            pos0 = int(pos)
+        except ValueError:
+            return None
+        return seq, pos0, ref, alt
     if fmt == "vcf":
-        chrom, pos, ref, alt = expr.split("-")
+        try:
+            chrom, pos, ref, alt = expr.split("-")
+        except ValueError:
+            return None
+        if unsupported_allele(ref, alt):
+            return None
         if "," in alt:  # multiallelic must be pre-split (one ALT per row)
             return None
-        return chrom, int(pos) - 1, ref, alt
+        try:
+            pos0 = int(pos) - 1
+        except ValueError:
+            return None
+        return chrom, pos0, ref, alt
     if fmt == "hgvs":
+        if any(tok in expr for tok in ("[", "]", "<", ">?")):
+            return None
         contig = expr.split(":", 1)[0]
         return contig, -1, "", ""  # ref validated by the proxy during translation
     return None
@@ -1252,6 +1461,7 @@ def vrs_id(
     assembly_seqcol: str,
     commons_root: Path | None = None,
     data_root: Path | None = None,
+    store_root: Path | None = None,
 ) -> VariantMatch | VariantDefect:
     parsed = _parse(expr, fmt)
     if parsed is None:
@@ -1268,7 +1478,7 @@ def vrs_id(
         return VariantDefect(expr, "accession-assembly-mismatch", f"resolves only in {resolution.found_seqcol_digest}")
     assert isinstance(resolution, ContigMatch)
 
-    proxy = _open_proxy(commons_root=commons_root, data_root=data_root)
+    proxy = _open_proxy(commons_root=commons_root, data_root=data_root, store_root=store_root)
 
     # For SPDI/VCF we know the asserted REF; validate it against the pinned bytes
     # and bounds BEFORE minting (HGVS_g defers to the translator's own check).
@@ -1297,7 +1507,7 @@ def vrs_id(
 
 - [ ] **Step 4: Run the variant tests**
 
-Run: `uv run pytest science/tests/test_commons_variant.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_variant.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1334,7 +1544,7 @@ def test_tier_declaration_defect_is_public_and_registry_agnostic() -> None:
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `uv run pytest science/tests/validate/test_checks_identity_context.py -k tier_declaration_defect -v`
+Run: `cd ~/d/science/science && uv run pytest tests/validate/test_checks_identity_context.py -k tier_declaration_defect -v`
 Expected: FAIL — `ImportError: cannot import name 'tier_declaration_defect'`.
 
 - [ ] **Step 3: Rename `_tier_defect` → `tier_declaration_defect`**
@@ -1343,7 +1553,7 @@ In `science/src/science_tool/validate/checks/identity_context.py`, rename the fu
 
 - [ ] **Step 4: Run the full identity-context test file (no regressions)**
 
-Run: `uv run pytest science/tests/validate/test_checks_identity_context.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/validate/test_checks_identity_context.py -v`
 Expected: PASS (all existing tests + the new one).
 
 - [ ] **Step 5: Commit**
@@ -1359,6 +1569,7 @@ git commit -m "refactor(c4a): make tier_declaration_defect a public shared shape
 
 **Files:**
 - Create: `science/src/science_tool/validate/checks/variant_identity.py`
+- Modify: `science/src/science_tool/validate/checks/__init__.py`
 - Test: `science/tests/validate/test_checks_variant_identity.py`
 
 - [ ] **Step 1: Write the failing test (pure evaluators, synthetic frontmatter)**
@@ -1416,7 +1627,7 @@ def test_declared_unresolved_is_info_not_error() -> None:
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `uv run pytest science/tests/validate/test_checks_variant_identity.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/validate/test_checks_variant_identity.py -v`
 Expected: FAIL — `ModuleNotFoundError: science_tool.validate.checks.variant_identity`.
 
 - [ ] **Step 3: Implement the declaration layer + check wrapper**
@@ -1464,7 +1675,7 @@ def _locator_defect(locator: Any) -> str | None:
     if not isinstance(locator, dict):
         return "missing or non-object locator"
     if not isinstance(locator.get("resource"), str) or not locator["resource"].strip():
-        return "locator.resource (a datapackage resource name) is required"
+        return "locator.resource (a datapackage resource path) is required"
     fmt = locator.get("format")
     if fmt not in _FORMATS:
         return f"locator.format must be one of {sorted(_FORMATS)}"
@@ -1525,7 +1736,7 @@ def check_variant_identity(ctx: ValidateContext) -> Iterator[Result]:
 
 - [ ] **Step 4: Run the declaration-layer tests**
 
-Run: `uv run pytest science/tests/validate/test_checks_variant_identity.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/validate/test_checks_variant_identity.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Add the row layer + its test**
@@ -1535,11 +1746,44 @@ Add the row-minting fixture dataset under `science/tests/fixtures/` and a test t
 ```python
 def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, Any]]) -> Iterator[Result]:
     """Layer 2: for each well-declared, resolved variant tier, open the located
-    CSV/TSV resource (relative to the dataset directory / its datapackage) and mint
-    each row, reporting outcome counts. CSV/TSV only (no parquet dependency)."""
+    CSV/TSV resource through the dataset datapackage and mint each row, reporting
+    outcome counts. CSV/TSV only (no parquet dependency)."""
     import csv
 
-    from science_tool.commons.variant import VariantDefect, VariantMatch, vrs_id
+    from science_tool.commons.datapackage import read_datapackage, stream_sha256_and_bytes
+    from science_tool.commons.sequence_store import SequenceStoreError
+    from science_tool.commons.variant import VariantDefect, VariantMatch, VariantStoreUnavailable, vrs_id
+
+    def datapackage_path(fm: dict[str, Any]) -> Path | None:
+        raw_path = fm.get("_path")
+        if not isinstance(raw_path, str) or not raw_path:
+            return None
+        entity_or_dp = ctx.project_root / raw_path
+        if entity_or_dp.suffix in (".yaml", ".yml"):
+            return entity_or_dp
+        dp_value = fm.get("datapackage")
+        if not isinstance(dp_value, str) or not dp_value.strip():
+            return None
+        project_relative = ctx.project_root / dp_value
+        if project_relative.is_file():
+            return project_relative
+        return entity_or_dp.parent / dp_value
+
+    def locate_resource(fm: dict[str, Any], logical_path: str) -> Path:
+        dp = datapackage_path(fm)
+        if dp is None:
+            raise FileNotFoundError("dataset has no datapackage path")
+        descriptor = read_datapackage(dp)
+        resource = descriptor.resource(logical_path)
+        abs_path = dp.parent / resource.path
+        if not abs_path.is_file():
+            raise FileNotFoundError(str(abs_path))
+        actual_hash, actual_bytes = stream_sha256_and_bytes(abs_path)
+        if actual_hash != resource.hash:
+            raise ValueError(f"{resource.path}: expected {resource.hash}, got {actual_hash}")
+        if resource.bytes is not None and actual_bytes != resource.bytes:
+            raise ValueError(f"{resource.path}: expected {resource.bytes} bytes, got {actual_bytes}")
+        return abs_path
 
     for fm in datasets:
         decl = _variant_decl(fm)
@@ -1556,22 +1800,39 @@ def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, An
         if not isinstance(seqcol, str) or not seqcol:
             yield _result(Severity.ERROR, path, f"{ident}: variant rows need identity_context.assembly.seqcol_digest", "identity.variant-no-assembly")
             continue
-        resource = Path(str(path)).parent / locator["resource"] if path else None
-        if resource is None or not resource.is_file():
-            yield _result(Severity.INFO, path, f"{ident}: variant resource {locator['resource']!r} not found locally; rows not minted", "identity.variant-resource-unavailable")
+        try:
+            resource = locate_resource(fm, locator["resource"])
+        except FileNotFoundError as exc:
+            yield _result(Severity.INFO, path, f"{ident}: variant resource {locator['resource']!r} not found locally ({exc}); rows not minted", "identity.variant-resource-unavailable")
+            continue
+        except Exception as exc:
+            yield _result(Severity.ERROR, path, f"{ident}: variant resource {locator['resource']!r} failed datapackage verification ({exc})", "identity.variant-resource-invalid")
             continue
         fmt = locator["format"]
         minted = 0
         defects: dict[str, int] = {}
+        store_unavailable: str | None = None
         delimiter = "\t" if resource.suffix == ".tsv" else ","
         with resource.open(encoding="utf-8", newline="") as fh:
             for row in csv.DictReader(fh, delimiter=delimiter):
                 expr = _row_expr(row, locator, fmt)
-                result = vrs_id(expr, fmt=fmt, assembly_seqcol=seqcol)
+                try:
+                    result = vrs_id(expr, fmt=fmt, assembly_seqcol=seqcol)
+                except (SequenceStoreError, VariantStoreUnavailable) as exc:
+                    store_unavailable = str(exc)
+                    break
                 if isinstance(result, VariantMatch):
                     minted += 1
                 else:
                     defects[result.reason] = defects.get(result.reason, 0) + 1
+        if store_unavailable is not None:
+            yield _result(
+                Severity.INFO,
+                path,
+                f"{ident}: variant sequence store unavailable ({store_unavailable}); rows not minted",
+                "identity.variant-store-unavailable",
+            )
+            continue
         if defects:
             summary = ", ".join(f"{k}={v}" for k, v in sorted(defects.items()))
             yield _result(Severity.ERROR, path, f"{ident}: minted {minted}, unresolved variant rows: {summary}", "identity.variant-rows-unresolved")
@@ -1586,20 +1847,40 @@ def _row_expr(row: dict[str, Any], locator: dict[str, Any], fmt: str) -> str:
     return row[locator["column"]]
 ```
 
-Write `_row_expr`-driven fixture + test, run:
+Write `_row_expr`-driven fixture + test, including both cases: (1) a mocked `vrs_id`/tiny store path that yields `minted=1` plus one `ref-mismatch`, and (2) `vrs_id` raising `SequenceStoreError` to prove a fresh checkout with an unbuilt `sequence-store-grch38-grch37` reports `identity.variant-store-unavailable` at INFO instead of crashing. Because `_evaluate_variant_rows` imports `vrs_id` inside the function from `science_tool.commons.variant`, patch `science_tool.commons.variant.vrs_id` in the test; do not patch a name on `validate.checks.variant_identity`. Keep row defects as `Severity.ERROR`: a dataset declaring resolved variant identity is promising row resolvability; only local infrastructure absence (`variant-resource-unavailable`, `variant-store-unavailable`) degrades to INFO.
 
-Run: `uv run pytest science/tests/validate/test_checks_variant_identity.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/validate/test_checks_variant_identity.py -v`
 Expected: PASS (minted=1, one `ref-mismatch` defect → `identity.variant-rows-unresolved`).
 
-- [ ] **Step 6: Verify the check registers at the right order with no collision**
+- [ ] **Step 6: Register the check in the canonical loader**
 
-Run: `uv run python -c "from science_tool.validate.checks import variant_identity; print('ok')" && uv run pytest science/tests/validate/ -q`
-Expected: `ok`, then the whole validate suite passes (the new check at order 33 collides with nothing).
+In `science/src/science_tool/validate/checks/__init__.py`, add `"variant_identity"` to `_load_canonical_checks()` after `"dataset_taxonomy"` and before `"prose_lints"`:
 
-- [ ] **Step 7: Commit**
+```python
+        "identity_context",
+        "dataset_taxonomy",
+        "variant_identity",
+        "prose_lints",
+```
+
+Update every literal canonical-check mirror in the same commit so bash-vs-Python parity stays current. At the time this plan was written, the known mirrors are:
+
+- `science/tests/validate/test_parity_canonical_body.py::CHECK_MODULES`
+- `science/tests/validate/test_parity_corpus.py::CHECK_MODULES`
+- `science/tests/validate/test_formatter_snapshots.py::CHECK_MODULES`
+- the explicit module tuple in `science/tests/validate/test_runner.py`
+
+Use `rg -n "CHECK_MODULES|for module_name in \\(" science/tests/validate` before committing; any tuple that mirrors canonical modules must include `"variant_identity"` in the same relative position.
+
+- [ ] **Step 7: Verify the check registers at the right order with no collision**
+
+Run: `cd ~/d/science/science && uv run python -c "from science_tool.validate.checks import variant_identity; print('ok')" && uv run pytest tests/validate/ -q`
+Expected: `ok`, then the whole validate suite passes (the new check at order 33 collides with nothing and is imported by the canonical loader).
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add science/src/science_tool/validate/checks/variant_identity.py science/tests/validate/test_checks_variant_identity.py science/tests/fixtures
+git add science/src/science_tool/validate/checks/variant_identity.py science/src/science_tool/validate/checks/__init__.py science/tests/validate/test_checks_variant_identity.py science/tests/fixtures
 git commit -m "feat(c4a): variant-identity check (declaration + row minting, order 33)"
 ```
 
@@ -1641,6 +1922,22 @@ def test_slice_fasta_writes_verified_contigs(tmp_path: Path) -> None:
     assert (out / chr1_digest).read_text() == "ACGTACGTACGTACGT"
     assert {m["name"] for m in manifest} == {"1", "MT"}
     assert next(m for m in manifest if m["name"] == "1")["refget_digest"] == chr1_digest
+    assert next(m for m in manifest if m["name"] == "1")["sha256"].startswith("sha256:")
+
+
+def test_slice_fasta_preserves_case_for_refget_digest(tmp_path: Path) -> None:
+    fasta_path = tmp_path / "softmask.fa"
+    fasta_path.write_text(">soft\nACgt\n", encoding="ascii")
+    out = tmp_path / "store"
+    manifest = slice_fasta_to_store(fasta_path, out)
+    digest = refget_digest("ACgt")
+    assert len(manifest) == 1
+    row = manifest[0]
+    assert row["name"] == "soft"
+    assert row["refget_digest"] == digest
+    assert row["length"] == 4
+    assert row["sha256"].startswith("sha256:")
+    assert (out / digest).read_text(encoding="ascii") == "ACgt"
 
 
 def test_slice_fasta_rejects_empty_contig(tmp_path: Path) -> None:
@@ -1651,7 +1948,7 @@ def test_slice_fasta_rejects_empty_contig(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `uv run pytest science/tests/test_commons_sequence_store_build.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_sequence_store_build.py -v`
 Expected: FAIL — `ModuleNotFoundError: science_tool.commons.sequence_store_build`.
 
 - [ ] **Step 3: Implement `sequence_store_build.py`**
@@ -1665,38 +1962,69 @@ the bytes are materialized locally and NOT committed (digests are the committed
 authority). `fetch_fasta` is the only network call."""
 from __future__ import annotations
 
+import base64
+import hashlib
+import re
+import shutil
 from pathlib import Path
 from typing import Any
 
-from science_tool.commons.sequence_store import refget_digest
+_SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
-def _iter_fasta(text: str):
-    name: str | None = None
-    chunks: list[str] = []
-    for line in text.splitlines():
-        if line.startswith(">"):
-            if name is not None:
-                yield name, "".join(chunks)
-            name = line[1:].split()[0]  # id up to first whitespace
-            chunks = []
-        else:
-            chunks.append(line.strip())
-    if name is not None:
-        yield name, "".join(chunks)
+def _digest_from_hash(h: Any) -> str:
+    return "SQ." + base64.urlsafe_b64encode(h.digest()[:24]).decode("ascii").rstrip("=")
 
 
 def slice_fasta_to_store(fasta_path: Path, out_dir: Path) -> list[dict[str, Any]]:
-    """Write each contig to out_dir/<refget_digest>; return the manifest rows."""
+    """Stream a FASTA into out_dir/<refget_digest>; return the manifest rows."""
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest: list[dict[str, Any]] = []
-    for name, seq in _iter_fasta(Path(fasta_path).read_text(encoding="ascii")):
-        if not seq:
+
+    name: str | None = None
+    tmp: Path | None = None
+    handle = None
+    h: Any | None = None
+    sha256: Any | None = None
+    n = 0
+
+    def finish() -> None:
+        nonlocal name, tmp, handle, h, sha256, n
+        if name is None:
+            return
+        assert tmp is not None and handle is not None and h is not None and sha256 is not None
+        handle.close()
+        if n == 0:
+            tmp.unlink(missing_ok=True)
             raise ValueError(f"empty contig {name!r} in {fasta_path}")
-        seq = seq.upper()
-        digest = refget_digest(seq)
-        (out_dir / digest).write_text(seq, encoding="ascii")
-        manifest.append({"name": name, "refget_digest": digest, "length": len(seq)})
+        digest = _digest_from_hash(h)
+        target = out_dir / digest
+        tmp.replace(target)
+        manifest.append({"name": name, "refget_digest": digest, "length": n, "sha256": f"sha256:{sha256.hexdigest()}"})
+        name, tmp, handle, h, sha256, n = None, None, None, None, None, 0
+
+    with Path(fasta_path).open(encoding="ascii") as fh:
+        for raw in fh:
+            line = raw.strip()
+            if not line:
+                continue
+            if line.startswith(">"):
+                finish()
+                name = line[1:].split()[0]
+                tmp = out_dir / f".{_SAFE.sub('_', name)}.tmp"
+                handle = tmp.open("wb")
+                h = hashlib.sha512()
+                sha256 = hashlib.sha256()
+                n = 0
+                continue
+            if name is None or handle is None or h is None or sha256 is None:
+                raise ValueError(f"FASTA sequence before first header in {fasta_path}")
+            chunk = line.encode("ascii")
+            handle.write(chunk)
+            h.update(chunk)
+            sha256.update(chunk)
+            n += len(chunk)
+    finish()
     return manifest
 
 
@@ -1706,17 +2034,24 @@ def fetch_fasta(url: str, dest: Path) -> Path:
     import httpx
 
     dest = Path(dest)
+    tmp = dest.with_suffix(dest.suffix + ".download")
     with httpx.stream("GET", url, timeout=300.0, follow_redirects=True) as resp:
         resp.raise_for_status()
-        raw = b"".join(resp.iter_bytes())
-    data = gzip.decompress(raw) if url.endswith(".gz") else raw
-    dest.write_bytes(data)
+        with tmp.open("wb") as fh:
+            for chunk in resp.iter_bytes():
+                fh.write(chunk)
+    if url.endswith(".gz"):
+        with gzip.open(tmp, "rb") as src, dest.open("wb") as out:
+            shutil.copyfileobj(src, out, length=1024 * 1024)
+        tmp.unlink()
+    else:
+        tmp.replace(dest)
     return dest
 ```
 
 - [ ] **Step 4: Run it to verify it passes**
 
-Run: `uv run pytest science/tests/test_commons_sequence_store_build.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_commons_sequence_store_build.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Scaffold the commons dataset (built-unbuilt) in `~/d/science-commons`**
@@ -1751,6 +2086,17 @@ Create `datasets/sequence-store-grch38-grch37/entity.md`:
 id: dataset:sequence-store-grch38-grch37
 type: dataset
 schema_profile: science-entity-base/1.0+dataset/1.0
+title: "Reference sequence store (GRCh38 + GRCh37)"
+version: "1.0.0"
+created: "2026-05-28"
+updated: "2026-05-28"
+datapackage: datapackage.yaml
+origin: external
+status: active
+tier: use-now
+access:
+  level: public
+  verified: true
 source_class: reference
 ---
 Per-contig reference sequence bytes for GRCh38 + GRCh37, content-addressed by
@@ -1762,6 +2108,10 @@ Create `datasets/sequence-store-grch38-grch37/recipe/sources.yaml`:
 
 ```yaml
 # Pinned, dated genome FASTA releases (immutable handles; latest/ is discovery-only).
+# Before running this recipe, build datasets/assembly-registry/contigs.csv.
+# Each FASTA must match that assembly's seqcol exactly:
+# - no analysis-set extras (alts/decoys/HLA) unless those contigs are in the seqcol;
+# - the FASTA header first token must equal contigs.csv "name" for that seqcol.
 assemblies:
   - label: GRCh38
     seqcol_digest: "REPLACE_WITH_GRCh38_SEQCOL_DIGEST"
@@ -1792,16 +2142,45 @@ from science_tool.commons.sequence_store_build import fetch_fasta, slice_fasta_t
 
 _HERE = Path(__file__).resolve().parent
 _OUT = _HERE.parent
-_FIELDS = ["assembly_seqcol_digest", "name", "refget_digest", "length"]
+_FIELDS = ["assembly_seqcol_digest", "name", "refget_digest", "length", "sha256"]
+
+
+def _expected_by_assembly() -> dict[tuple[str, str], str]:
+    """Read the assembly-registry contigs.csv produced by the C1/C4a registry build."""
+    path = _OUT.parent / "assembly-registry" / "contigs.csv"
+    if not path.is_file():
+        raise RuntimeError(f"{path}: build assembly-registry/contigs.csv before the sequence store")
+    with path.open(encoding="utf-8", newline="") as fh:
+        return {
+            (row["seqcol_digest"], row["name"]): row["refget_digest"]
+            for row in csv.DictReader(fh)
+        }
 
 
 def main() -> None:
     src = yaml.safe_load((_HERE / "sources.yaml").read_text(encoding="utf-8"))
+    expected = _expected_by_assembly()
     rows: list[dict] = []
     for asm in src["assemblies"]:
         fasta = fetch_fasta(asm["fasta_url"], _HERE / f"{asm['label']}.fa")
+        seen: set[tuple[str, str]] = set()
         for m in slice_fasta_to_store(fasta, _OUT):
+            key = (asm["seqcol_digest"], m["name"])
+            wanted = expected.get(key)
+            if wanted is None:
+                raise RuntimeError(
+                    f"{key}: no matching assembly-registry contig row; FASTA must use the seqcol naming surface "
+                    "and must not include contigs outside that seqcol"
+                )
+            if wanted != m["refget_digest"]:
+                raise RuntimeError(f"{key}: FASTA digest {m['refget_digest']} != registry digest {wanted}")
+            seen.add(key)
             rows.append({"assembly_seqcol_digest": asm["seqcol_digest"], **m})
+        required = {key for key in expected if key[0] == asm["seqcol_digest"]}
+        missing = required - seen
+        if missing:
+            sample = ", ".join(f"{name}" for _, name in sorted(missing)[:5])
+            raise RuntimeError(f"{asm['label']}: FASTA missing {len(missing)} seqcol contigs (examples: {sample})")
         fasta.unlink()
     with (_OUT / "manifest.csv").open("w", encoding="utf-8", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=_FIELDS)
@@ -1814,11 +2193,11 @@ if __name__ == "__main__":
     main()
 ```
 
-Create `datasets/sequence-store-grch38-grch37/recipe/README.md` documenting: pinned/verifiable-not-archival caveat; bytes are local-only; commit only `manifest.csv`; rebuild may fail if upstream disappears but a produced store is digest-verified.
+Create `datasets/sequence-store-grch38-grch37/recipe/README.md` documenting: pinned/verifiable-not-archival caveat; bytes are local-only; commit only `manifest.csv`; rebuild may fail if upstream disappears but a produced store is digest-verified; build `datasets/assembly-registry/contigs.csv` first; the pinned FASTA must match the seqcol contig set and naming exactly (no analysis-set extras unless they are in the seqcol, and header first token equals `contigs.csv` `name`); after building, update `datapackage.yaml`'s `manifest` resource `hash` and `bytes` to match the committed `manifest.csv`. The runtime resolver verifies `manifest.csv` through the normal commons datapackage path before opening the sibling byte files.
 
 - [ ] **Step 6: Extend the assembly-registry recipe + datapackage**
 
-In `~/d/science-commons/datasets/assembly-registry/`: add `contigs` and `contig_aliases` resources to `datapackage.yaml` (placeholder hashes/bytes), add the NCBI assembly-report URLs to `recipe/sources.yaml`, and update `recipe/build.py` to also write `contigs.csv` (via `assembly_registry_build.build_contig_rows` over each fetched level-2 record) and `contig_aliases.csv` (via `assembly_report_build.parse_assembly_report` over each fetched assembly report, joined to contigs on sequence name).
+In `~/d/science-commons/datasets/assembly-registry/`: add `contigs` and `contig_aliases` resources to `datapackage.yaml` (placeholder hashes/bytes), add the NCBI assembly-report URLs to `recipe/sources.yaml`, and update `recipe/build.py` to also write `contigs.csv` (via `assembly_registry_build.build_contig_rows` over each fetched level-2 record) and `contig_aliases.csv` (via `assembly_report_build.parse_assembly_report` plus `build_contig_alias_rows`). Do not hand-roll the join in the recipe; the pure helper's unmatched-name failure is the regression guard for alias correctness.
 
 - [ ] **Step 7: Commit (two repos)**
 
@@ -1838,12 +2217,12 @@ git -C ~/d/science-commons commit -m "feat(c4a): sequence-store dataset + regist
 
 - [ ] **Step 1: Full suite green**
 
-Run: `uv run pytest science/tests/ -q`
+Run: `cd ~/d/science/science && uv run pytest tests/ -q`
 Expected: PASS (no regressions; new commons + validate tests included).
 
 - [ ] **Step 2: Lint clean**
 
-Run: `uv run ruff check science/src/science_tool/commons/ science/src/science_tool/validate/checks/variant_identity.py`
+Run: `cd ~/d/science/science && uv run ruff check src/science_tool/commons/ src/science_tool/validate/checks/variant_identity.py`
 Expected: no errors. (Do NOT reformat unrelated modules.)
 
 - [ ] **Step 3: Update the docs to mark C4a landed**
@@ -1862,18 +2241,18 @@ git commit -m "docs(c4a): mark variant-identity sub-phase implemented; C4b/C4c r
 ## Self-Review (run by the plan author)
 
 **Spec coverage (design §1–§9):**
-- §1 scope / accepted inputs → Tasks 8 (SPDI), 9 (HGVS_g, VCF), `_SYMBOLIC`/multiallelic rejection (Task 9 `_parse`). ✓
+- §1 scope / accepted inputs → Tasks 8 (SPDI), 9 (HGVS_g, VCF), allele-field symbolic/multiallelic rejection (Task 9 `_parse`). ✓
 - §2 contig + alias tables (incl. `sequence_index`, hard duplicate errors) → Tasks 3, 4, 5. ✓
-- §3 per-contig refget digests materialized → Task 4; alias source = pinned assembly report → Task 3 + Task 12 Step 6. ✓
+- §3 per-contig refget digests materialized → Task 4; alias source = pinned assembly report with fail-loud seqcol-name join → Task 3 + Task 12 Step 6. ✓
 - §4 assemblies by seqcol digest; b37/hs37d5 not aliased → enforced by `resolve_contig`'s assembly-scoped lookup + the registry only pinning exact digests (Task 5, Task 12). ✓
-- §5 sequence store, digests-committed/bytes-local, flat refget store, pinned-not-archival → Tasks 6, 12. ✓
+- §5 sequence store, digests-committed/bytes-local, flat refget store, pinned-not-archival, exact-byte refget digest consistency, manifest datapackage verification → Tasks 6, 9, 12. ✓
 - §6 offline DataProxy, no-network tested invariant, fail-loud → Task 7. ✓
 - §7 dependency spike first; pin pkg + spec version; fallback documented → Tasks 1, 2. ✓
-- §8 variant tier convention (no schema change), locator contract, two-layer check (`tier_declaration_defect` not `evaluate_tier_identity`); CSV/TSV only; datapackage-resolved resource → Tasks 10, 11. ✓
+- §8 variant tier convention (no schema change), locator contract, two-layer check (`tier_declaration_defect` not `evaluate_tier_identity`); CSV/TSV only; datapackage-resolved resource; unbuilt sequence store degrades to INFO not crash → Tasks 10, 11. ✓
 - §9 fixtures + negatives (ref-mismatch, out-of-bounds, ambiguous alias, symbolic, multiallelic, missing store, accession mismatch) + version-tied golden → Tasks 5, 6, 8, 9, 11. ✓
 
 **Placeholder scan:** The only intentional `REPLACE_WITH_*` tokens are in `~/d/science-commons` recipe `sources.yaml` (pinned digests/URLs an operator fills at build time — the same built-unbuilt pattern as C2/C3) and the captured `_GOLDEN_SNV` (empirically pinned in Task 8 Step 5, not invented). No code step is left as prose.
 
-**Type consistency:** `refget_digest`, `open_store`/`SequenceStore.sequence`, `RefgetProxy.get_sequence/get_metadata`, `compute_vrs_id(proxy, *, fmt, expr)`, `resolve_contig(...) → ContigMatch|AmbiguousContig|AccessionAssemblyMismatch`, `vrs_id(...) → VariantMatch|VariantDefect`, and `tier_declaration_defect` are used consistently across Tasks 5–11.
+**Type consistency:** `refget_digest`, `open_store`/`SequenceStore.sequence`, `RefgetProxy.get_sequence/get_metadata`, `compute_vrs_id(proxy, *, fmt, expr)`, `resolve_contig(...) → ContigMatch|AmbiguousContig|AccessionAssemblyMismatch`, `vrs_id(...) → VariantMatch|VariantDefect` (with `VariantStoreUnavailable` reserved for absent local infrastructure), and `tier_declaration_defect` are used consistently across Tasks 5–11.
 
 **Known external-API risk:** the exact `ga4gh.vrs` translator/identify symbols are pinned by the Task 1 spike and isolated in `vrs.py`; every downstream task depends only on our signatures, so a surface difference is absorbed in one module.
