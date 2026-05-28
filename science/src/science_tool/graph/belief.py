@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 
-from rdflib import Graph, RDF, URIRef
+from rdflib import Graph, Literal, RDF, URIRef
 from rdflib.namespace import PROV
 
 from .belief_weights import (
@@ -32,6 +32,7 @@ class EvidenceUnit:
     has_measurement_model: bool
     source: str | None
     observability_keys: tuple[str, ...]
+    is_reference_dataset: bool = False
 
 
 _OBSERVABILITY = {
@@ -48,8 +49,11 @@ def _lit(graph: Graph, subject: URIRef, predicate: URIRef) -> str | None:
     return None
 
 
-def _read_unit(provenance: Graph, line: URIRef, stance: str) -> EvidenceUnit:
+def _read_unit(
+    provenance: Graph, line: URIRef, stance: str, reference_dataset_uris: frozenset[str]
+) -> EvidenceUnit:
     obs = tuple(name for name, pred in _OBSERVABILITY.items() if _lit(provenance, line, pred))
+    derived_from = {str(o) for _, _, o in provenance.triples((line, PROV.wasDerivedFrom, None))}
     return EvidenceUnit(
         line_uri=str(line),
         stance=stance,
@@ -65,6 +69,7 @@ def _read_unit(provenance: Graph, line: URIRef, stance: str) -> EvidenceUnit:
         # prov:wasDerivedFrom objects (its source file AND source entity); first wins.
         source=_lit(provenance, line, PROV.wasDerivedFrom),
         observability_keys=obs,
+        is_reference_dataset=bool(derived_from & reference_dataset_uris),
     )
 
 
@@ -78,6 +83,9 @@ def collect_evidence_units(
     hypothesis sees its linked claims' evidence. Lines are de-duped by URI so a line bearing on
     multiple targets counts once.
     """
+    reference_dataset_uris = frozenset(
+        str(s) for s, _, _ in knowledge.triples((None, SCI_NS.sourceClass, Literal("reference")))
+    )
     units: list[EvidenceUnit] = []
     seen: set[str] = set()
     for target in targets:
@@ -88,7 +96,7 @@ def collect_evidence_units(
                 if str(subject) in seen:
                     continue
                 seen.add(str(subject))
-                units.append(_read_unit(provenance, subject, stance))
+                units.append(_read_unit(provenance, subject, stance, reference_dataset_uris))
     return units
 
 

@@ -53,3 +53,42 @@ def test_line_on_multiple_targets_counted_once():
     knowledge.add((LINE, CITO_NS.supports, HYP))
     units = collect_evidence_units(knowledge, provenance, [CLAIM, HYP])
     assert [u.line_uri for u in units] == [str(LINE)]
+
+
+DATASET = URIRef("http://example.org/science/entity/dataset/d")
+
+
+def test_reference_source_sets_is_reference_dataset():
+    """A line whose source dataset carries sci:sourceClass 'reference' → is_reference_dataset True."""
+    knowledge, provenance = Graph(), Graph()
+    knowledge.add((LINE, RDF.type, EVIDENCE_LINE_CLASS))
+    knowledge.add((LINE, CITO_NS.supports, CLAIM))
+    knowledge.add((DATASET, SCI_NS.sourceClass, Literal("reference")))
+    provenance.add((LINE, PROV.wasDerivedFrom, DATASET))
+    (u,) = collect_evidence_units(knowledge, provenance, [CLAIM])
+    assert u.is_reference_dataset is True
+
+
+def test_non_reference_source_leaves_flag_false():
+    """A line whose source dataset carries sci:sourceClass 'observational' → is_reference_dataset False."""
+    knowledge, provenance = Graph(), Graph()
+    knowledge.add((LINE, RDF.type, EVIDENCE_LINE_CLASS))
+    knowledge.add((LINE, CITO_NS.supports, CLAIM))
+    knowledge.add((DATASET, SCI_NS.sourceClass, Literal("observational")))
+    provenance.add((LINE, PROV.wasDerivedFrom, DATASET))
+    (u,) = collect_evidence_units(knowledge, provenance, [CLAIM])
+    assert u.is_reference_dataset is False
+
+
+def test_multi_derived_from_detects_reference_dataset():
+    """is_reference_dataset True when one of multiple wasDerivedFrom objects is the reference
+    dataset URI — proves ALL objects are scanned, not just the first."""
+    OTHER = URIRef("http://example.org/files/source.csv")
+    knowledge, provenance = Graph(), Graph()
+    knowledge.add((LINE, RDF.type, EVIDENCE_LINE_CLASS))
+    knowledge.add((LINE, CITO_NS.supports, CLAIM))
+    knowledge.add((DATASET, SCI_NS.sourceClass, Literal("reference")))
+    provenance.add((LINE, PROV.wasDerivedFrom, OTHER))   # non-reference, listed first
+    provenance.add((LINE, PROV.wasDerivedFrom, DATASET))  # reference dataset
+    (u,) = collect_evidence_units(knowledge, provenance, [CLAIM])
+    assert u.is_reference_dataset is True
