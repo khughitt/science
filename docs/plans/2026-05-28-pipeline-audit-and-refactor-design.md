@@ -39,9 +39,18 @@ metadata, but *before* any project-specific processing.
 
 That single boundary is simultaneously:
 
-- the **substrate axis 1** validates (the QA step reads the clean table analysis consumes);
+- a **substrate axis 1** must validate (a QA step reads the clean base table);
 - the **seam axis 2** wants factored out of project-specific code (a reusable ingestion module);
 - the **unit axis 3** promotes to the commons (a clean dataset + `datapackage.json`).
+
+**Important scope caveat for axis 1.** The clean base table is *one* QA substrate, not the only
+one. The data-QA convention validates **every table analysis actually consumes**, and a clean base
+table sits *before* project-specific processing — so QA at that boundary cannot see defects
+introduced by downstream project-specific transformations. Clean-base QA therefore **does not
+satisfy** final-analysis-table QA. Axis 1 requires a QA step on the clean base table **and** on each
+project-specific analysis table produced after it that feeds models or statistics (one QA step per
+substrate, per the convention). The "one boundary" framing below is about the *refactor move* that
+serves all three axes; it is not a claim that one QA step covers the whole pipeline.
 
 So the playbook's core move per source is **isolate → QA → promote the clean base table**, and one
 structural refactor — making that boundary explicit — pays off on all three axes at once. The
@@ -73,9 +82,10 @@ shared `science` codebase.
 **The two things that still flow upstream from an audit run** (neither is an audit *report*):
 - **Convention nominations** (Phase 2): a project-grown QA check judged broadly useful becomes a
   normal doc PR to `science/docs/conventions/`.
-- **Commons promotions** (axis 3): `science commons promote dataset` writes the clean dataset into
-  the shared store; cross-project reuse is realized through the **commons registry itself**, so no
-  central cross-project synthesis document is needed.
+- **Commons promotions** (axis 3): promotion writes the clean dataset into the shared store;
+  cross-project reuse is realized through the **commons registry itself**, so no central
+  cross-project synthesis document is needed. Promotion is **not a one-liner** — it has real
+  prerequisites; see the axis-3 procedure in §5.
 
 ## 4. Unit of work and method
 
@@ -98,7 +108,8 @@ task system.
 
 **Phase 3 — Execute & guard.** Refactors run through the normal task lifecycle (TDD). Axis-1 fixes
 land as **structural** QA checks that regression-guard the defect (per the convention). Axis-3
-promotions run `science commons promote dataset`.
+promotions follow the multi-step procedure in §5 (create/verify the dataset entity → dry-run →
+`--apply`), not a single command.
 
 ## 5. The three axis rubrics
 
@@ -106,16 +117,23 @@ Each axis scores PASS / WARN / FAIL per sub-dimension, with a disposition attach
 
 ### Axis 1 — Data QA
 
-- Does the chain's clean base table have a **wired-in** data-QA step (own pipeline rule on the
-  default target), per `pipeline-qa-checkpoints.md`?
-- Does it split **structural** (build-fatal) vs **distribution** (surfaced-not-fatal) flags?
+- Does **every table analysis consumes** have a **wired-in** data-QA step (own pipeline rule on the
+  default target), per `pipeline-qa-checkpoints.md`? This means the clean base table **and** each
+  project-specific analysis table produced downstream from it — clean-base QA does not satisfy
+  final-table QA (see §2). One QA step per substrate.
+- Does each QA step split **structural** (build-fatal) vs **distribution** (surfaced-not-fatal)
+  flags?
 - Are bounds/allowed-codes/sentinels **config-driven** and shared with the cleaning step (no drift)?
 - **Existing post-hoc checks:** which of the project's manual / pytest-only QA scripts should be
   promoted to wired-in structural checks on the clean table?
+- **Companion DAG-validation check (not table-QA):** is each pipeline output produced by exactly one
+  rule, with no orphaned or duplicately-owned outputs? This is a **workflow/DAG-level** structural
+  checkpoint, scored alongside data-QA but explicitly *outside* the table-QA convention (see §7) —
+  it inspects the rule graph, not a table.
 
-Rubric reuses the `review-pipeline` → **QA Coverage** dimension, including its severity-split row.
-Disposition: a missing structural check on an already-fixed bug → **fix-now** (regression-guard);
-missing distribution checks → **backlog**.
+Rubric reuses the `review-pipeline` → **QA Coverage** dimension, including its severity-split row,
+plus the DAG-validation check above as its own line. Disposition: a missing structural check on an
+already-fixed bug → **fix-now** (regression-guard); missing distribution checks → **backlog**.
 
 ### Axis 2 — Consistency, organization, code quality / reuse
 
@@ -138,10 +156,27 @@ large, opinionated refactor a project opts into deliberately.
   - Entangled → refactor task to **split the chain at the clean-base-table boundary** (the same
     boundary axis 1 QAs — do them together).
   - Cleanly factored → is the clean base dataset (with `datapackage.json`) **promoted to the
-    commons**? If not → `science commons promote dataset`.
+    commons**? If not, promote it (procedure below).
 
 Rubric: **PASS** (base separated *and* promoted) / **WARN** (separated, not promoted) / **FAIL**
 (entangled). Disposition: split → promote.
+
+**Promotion procedure (the axis-3 endpoint is not a one-liner).** `science commons promote dataset`
+sources from the project's **dataset entity descriptors** (`promote.py` `PROMOTE_KIND_DATASET`:
+`source_subdirs=("doc/datasets",)`, `filename_prefix="data-"`), requires the `--slug` flag, and
+selects the source project with `--from <project-id>`. So promoting a clean base dataset has
+prerequisites that are themselves refactor tasks:
+
+1. **Create / verify the project dataset entity** at `doc/datasets/data-<slug>.md`, carrying the
+   required `mixin-dataset-1.0` fields and a `datapackage:` pointer to the dataset's
+   `datapackage.json` (the manifest the clean base table already produces).
+2. **Dry-run** `science commons promote dataset --from <project-id> --slug <slug>` (apply omitted)
+   and inspect the plan.
+3. **Apply** with `--apply` (add `--mixin <bio.*>` where a structural/domain bio extension matches
+   the dataset modality).
+
+The rubric's "promoted" therefore presumes a valid dataset entity exists; "WARN (separated, not
+promoted)" covers both *no entity yet* and *entity exists but not promoted*.
 
 ## 6. Analysis/result-QA — a named, deferred discipline
 
@@ -159,15 +194,23 @@ forgotten; writing the convention is a separate decision.
 
 ## 7. Convention expansion (done as part of this work)
 
-Two data-shaped structural checks observed in practice are **folded into
-`docs/conventions/pipeline-qa-checkpoints.md` now** (small additions to its structural-check list):
+One **table-shaped** structural check observed in practice is **folded into
+`docs/conventions/pipeline-qa-checkpoints.md` now** (a small addition to its structural-check list):
 
-- **Pipeline output-ownership / dedup** — each pipeline output is produced by exactly one rule; no
-  orphaned or duplicately-owned outputs. (DAG hygiene; a structural cousin of table integrity.)
-- **Registry / enum validation** — config-as-data registries (allowed contrasts, enumerations) are
-  validated against their schema as a structural check.
+- **Registry / enum validation** — when a pipeline ships a *data registry* (allowed contrasts,
+  enumerated codes) that the processed table is checked against, validate the table's values are a
+  subset of that registry as a structural check. This generalizes the convention's existing
+  `categoricals.allowed` check to a shared single-source-of-truth registry, consistent with its
+  "config-driven, single source of truth" principle. It reads the built table — it stays inside the
+  convention's "one script + one rule reads the table" contract.
 
-These are structural (build-fatal) by nature and fit the existing convention's structural bucket.
+**Pipeline output-ownership / dedup is deliberately *not* added to the table-QA convention.** Each
+pipeline output being produced by exactly one rule (no orphaned or duplicately-owned outputs) is a
+**DAG-level** property — and the convention's own contract states an end-table QA script "cannot see
+between-stage" structure. Folding a DAG check into the table-QA structural bucket would contradict
+that contract. Instead the playbook defines it as a **separate workflow/DAG-validation pipeline
+audit item** (a distinct structural checkpoint that inspects the rule graph, not a table), and
+nominates it as a candidate for its own future workflow-validation convention.
 
 ## 8. Scope / non-goals
 
@@ -178,7 +221,9 @@ These are structural (build-fatal) by nature and fit the existing convention's s
   refactors. Execution happens per-application through the normal task lifecycle.
 - No central cross-project synthesis document — cross-project data reuse is realized through the
   commons registry, not an audit roll-up.
-- The analysis/result-QA convention (§6) is named but not written.
+- The analysis/result-QA convention (§6) and the workflow/DAG-validation convention (§7) are named
+  and nominated, but not written. Only the table-shaped registry/enum check is folded into the
+  existing convention now.
 
 ## 9. Deliverables
 
