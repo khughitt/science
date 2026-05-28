@@ -39,6 +39,7 @@ CHECK_MODULES = (
     "tasks",
     "id_prefixes",
     "cross_references",
+    "variant_identity",
     "prose_lints",
     "annotations",
 )

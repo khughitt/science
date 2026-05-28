@@ -236,7 +236,7 @@ def _tier_decl(fm: dict[str, Any], tier: str) -> Any:
     return mids.get(tier) if isinstance(mids, dict) else None
 
 
-def _tier_defect(decl: dict[str, Any]) -> str | None:
+def tier_declaration_defect(decl: dict[str, Any]) -> str | None:
     """Return a defect message if the raw tier declaration is malformed, else None.
 
     Raw authored frontmatter bypasses the JSON schema (the closed graph Entity
@@ -294,13 +294,13 @@ def evaluate_tier_identity(
         if not isinstance(decl, dict):
             yield _result(Severity.ERROR, path, f"{ident}: {loc} must be an object", f"{spec.rule_prefix}-malformed")
             continue
-        defect = _tier_defect(decl)
+        defect = tier_declaration_defect(decl)
         if defect is not None:
             yield _result(
                 Severity.ERROR, path, f"{ident}: malformed {loc} -- {defect}", f"{spec.rule_prefix}-malformed"
             )
             continue
-        namespace = str(decl["namespace"])  # _tier_defect guaranteed present + non-blank str
+        namespace = str(decl["namespace"])  # tier_declaration_defect guaranteed present + non-blank str
         if namespace not in spec.supported_namespaces:
             yield _result(
                 Severity.ERROR,
@@ -382,7 +382,7 @@ def _run_tier_check(ctx: ValidateContext, spec: _TierSpec) -> Iterator[Result]:
     declared: set[str] = set()
     for fm in datasets:
         decl = _tier_decl(fm, spec.tier)
-        if not isinstance(decl, dict) or _tier_defect(decl) is not None:
+        if not isinstance(decl, dict) or tier_declaration_defect(decl) is not None:
             continue  # malformed tiers are errored by the evaluator; load no registry for them
         if decl.get("resolution_status") == "declared_unresolved":
             continue

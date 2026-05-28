@@ -256,6 +256,7 @@ class DataResource:
 
     path: str  # validated forward-slash relative logical path
     hash: str  # full "sha256:<hex>" string, verbatim from resources[].hash
+    name: str | None = None  # resources[].name if present
     bytes: int | None = None  # resources[].bytes if present
     format: str | None = None  # resources[].format if present
     mediatype: str | None = None  # resources[].mediatype if present
@@ -269,16 +270,16 @@ class DatapackageDescriptor:
     resources: tuple[DataResource, ...]
 
     def resource(self, logical_path: str) -> DataResource:
-        """Return the resource with the given logical path.
+        """Return the resource with the given logical path or resource name.
 
         Raises `CommonsDatapackageError` (naming `source_path`) if absent.
         """
         for resource in self.resources:
-            if resource.path == logical_path:
+            if resource.path == logical_path or resource.name == logical_path:
                 return resource
         raise CommonsDatapackageError(
             self.source_path,
-            reason=f"no resource with logical path {logical_path!r}",
+            reason=f"no resource with logical path or name {logical_path!r}",
         )
 
 
@@ -308,6 +309,7 @@ def read_datapackage(path: Path) -> DatapackageDescriptor:
 
     resources: list[DataResource] = []
     seen: set[str] = set()
+    aliases: dict[str, int] = {}
     for index, entry in enumerate(raw_resources):
         if not isinstance(entry, dict):
             raise CommonsDatapackageError(
@@ -332,6 +334,25 @@ def read_datapackage(path: Path) -> DatapackageDescriptor:
                 path, reason=f"duplicate resource path {logical_path!r}"
             )
         seen.add(logical_path)
+
+        raw_name = entry.get("name")
+        if raw_name is not None and (not isinstance(raw_name, str) or not raw_name.strip()):
+            raise CommonsDatapackageError(
+                path,
+                reason=f"resources[{index}] ({logical_path}) has a blank or non-string 'name'",
+            )
+        for alias in {logical_path, raw_name} - {None}:
+            assert isinstance(alias, str)
+            previous = aliases.get(alias)
+            if previous is not None and previous != index:
+                raise CommonsDatapackageError(
+                    path,
+                    reason=(
+                        f"ambiguous resource alias {alias!r} used by "
+                        f"resources[{previous}] and resources[{index}]"
+                    ),
+                )
+            aliases[alias] = index
 
         raw_hash = entry.get("hash")
         if not isinstance(raw_hash, str):
@@ -379,6 +400,7 @@ def read_datapackage(path: Path) -> DatapackageDescriptor:
             DataResource(
                 path=logical_path,
                 hash=raw_hash,
+                name=raw_name,
                 bytes=raw_bytes,
                 format=raw_format,
                 mediatype=raw_mediatype,

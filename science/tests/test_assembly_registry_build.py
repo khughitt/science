@@ -89,3 +89,73 @@ def test_compute_forwards_only_inherent_payload_without_lengths(monkeypatch) -> 
     assert set(captured["payload"].keys()) == {"names", "sequences"}
     assert "lengths" not in captured["payload"]
     assert captured["inherent_attrs"] == ["names", "sequences"]
+
+
+def test_build_contig_rows_materializes_level2_with_ordinal() -> None:
+    from science_tool.commons.assembly_registry_build import build_contig_rows
+
+    level2 = {
+        "names": ["1", "MT"],
+        "lengths": [248956422, 16569],
+        "sequences": ["SQ.aaa", "SQ.bbb"],
+    }
+    rows = build_contig_rows(level2=level2, seqcol_digest="DIGEST38")
+    assert rows == [
+        {
+            "seqcol_digest": "DIGEST38",
+            "sequence_index": 0,
+            "name": "1",
+            "refget_digest": "SQ.aaa",
+            "length": 248956422,
+        },
+        {
+            "seqcol_digest": "DIGEST38",
+            "sequence_index": 1,
+            "name": "MT",
+            "refget_digest": "SQ.bbb",
+            "length": 16569,
+        },
+    ]
+
+
+def test_build_contig_rows_rejects_ragged_level2() -> None:
+    from science_tool.commons.assembly_registry_build import build_contig_rows
+
+    with pytest.raises(ValueError, match="ragged level-2"):
+        build_contig_rows(
+            level2={"names": ["1"], "lengths": [1, 2], "sequences": ["SQ.a", "SQ.b"]},
+            seqcol_digest="D",
+        )
+
+
+def test_build_contig_rows_rejects_duplicate_names_and_blank_fields() -> None:
+    from science_tool.commons.assembly_registry_build import build_contig_rows
+
+    with pytest.raises(ValueError, match="duplicate contig name"):
+        build_contig_rows(
+            level2={"names": ["1", "1"], "lengths": [1, 1], "sequences": ["SQ.a", "SQ.b"]},
+            seqcol_digest="D",
+        )
+    with pytest.raises(ValueError, match="blank contig name"):
+        build_contig_rows(level2={"names": [" "], "lengths": [1], "sequences": ["SQ.a"]}, seqcol_digest="D")
+    with pytest.raises(ValueError, match="invalid contig name"):
+        build_contig_rows(level2={"names": [123], "lengths": [1], "sequences": ["SQ.a"]}, seqcol_digest="D")
+    with pytest.raises(ValueError, match="invalid contig name"):
+        build_contig_rows(level2={"names": [" 1"], "lengths": [1], "sequences": ["SQ.a"]}, seqcol_digest="D")
+    with pytest.raises(ValueError, match="blank refget digest"):
+        build_contig_rows(level2={"names": ["1"], "lengths": [1], "sequences": [" "]}, seqcol_digest="D")
+    with pytest.raises(ValueError, match="invalid refget digest"):
+        build_contig_rows(level2={"names": ["1"], "lengths": [1], "sequences": [None]}, seqcol_digest="D")
+    with pytest.raises(ValueError, match="invalid refget digest"):
+        build_contig_rows(level2={"names": ["1"], "lengths": [1], "sequences": [" SQ.a"]}, seqcol_digest="D")
+    with pytest.raises(ValueError, match="invalid length"):
+        build_contig_rows(level2={"names": ["1"], "lengths": [0], "sequences": ["SQ.a"]}, seqcol_digest="D")
+    with pytest.raises(ValueError, match="invalid length"):
+        build_contig_rows(level2={"names": ["1"], "lengths": [1.5], "sequences": ["SQ.a"]}, seqcol_digest="D")
+    with pytest.raises(ValueError, match="invalid length"):
+        build_contig_rows(level2={"names": ["1"], "lengths": [True], "sequences": ["SQ.a"]}, seqcol_digest="D")
+    with pytest.raises(ValueError, match="invalid length"):
+        build_contig_rows(
+            level2={"names": ["1"], "lengths": ["not-a-length"], "sequences": ["SQ.a"]},
+            seqcol_digest="D",
+        )

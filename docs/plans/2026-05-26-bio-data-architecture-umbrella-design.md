@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3 merged + Pillar A (A1 + A2) merged; Pillar A complete (see §8). Spawns focused per-area docs.
+Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a merged + Pillar A (A1 + A2) merged; Pillar A complete (see §8). Spawns focused per-area docs.
 
 Related (builds on):
 - `docs/proposition-and-evidence-model.md` — core reasoning model
@@ -234,7 +234,7 @@ Spawned design docs (in `~/d/science/docs/plans/`), with the dependency order:
 
 | Phase | Doc | Depends on | Locks | Status |
 |---|---|---|---|---|
-| 1 | Identity, reference genomes & id mapping (C) | — | canonical assembly + gene/protein/variant crosswalks; pinned-vs-service policy | design ✓; **impl: C1 (assembly), C2 (gene), C3 (protein) merged; C4 (variant/liftover) pending** |
+| 1 | Identity, reference genomes & id mapping (C) | — | canonical assembly + gene/protein/variant crosswalks; pinned-vs-service policy | design ✓; **impl: C1 (assembly), C2 (gene), C3 (protein), C4a (variant identity) merged; C4b/C4c pending** |
 | 2 | Dataset taxonomy & epistemic integration (A) | C | source class (enum incl. model-output/experimental — A decides); curation down-weight as a *modifier*, mapped into aggregation + two-axis | design ✓; **impl: A1 + A2 merged** (recording layer + curation down-weight, config v2); **Pillar A complete** |
 | 3a | Gene-set / annotation type `bio.geneset` (D) | A, C | extension schema; per-set provenance; promotion rule; realizes B's interface for gene sets | design ✓; impl not started |
 | 3b | Dataset-influence & provenance tracking (B) | A, C (+ D for the gene-set arm) | `dataset:`-ref declarations + usage role; dataset→consumer derivation; *candidate* auto-independence | design ✓; impl not started |
@@ -296,15 +296,15 @@ compatibility relations will be the first instance.
 **Approved; implementation underway.** The umbrella and all spawned per-area design docs are written and
 user-reviewed. The cross-pillar **foundation substrate** (reference collection → keyed member → promoted
 member) and **Pillar C sub-phases C1 (assembly registry), C2 (gene crosswalk), C3 (protein crosswalk)**
-are implemented and merged to `~/d/science` `main` (substrate + C1 + C2 pushed to origin; C3 currently
-local-only). Each shipped its schema(s), a pinned reference collection + recipe, a pure resolver, and the
-corresponding `science validate` checks; the C2 gene check was generalized into a shared
+and C4a (variant identity) are implemented and merged locally in `~/d/science`. Each shipped its
+schema(s), a pinned reference collection + recipe, a pure resolver, and the corresponding
+`science validate` checks; the C2 gene check was generalized into a shared
 `evaluate_tier_identity` that C3's protein check reuses.
 
-**Remaining — Pillar C.** C4 — variant identity (VRS 2.0 / SPDI) + cross-assembly liftover + seqcol
-*compatibility relations* (the first realization of the primitive's RCM-D6 guardrail-2, and the liftover
-remedy that C1's check 3 defers). It is the heavyweight sub-phase (external VRS dependency, chain files,
-residual source decisions) and should be decomposed before planning.
+**Remaining — Pillar C.** C4a variant identity (VRS 2.0 / SPDI) is merged. C4b remains for
+cross-assembly liftover + seqcol *compatibility relations* (the first realization of the primitive's
+RCM-D6 guardrail-2, and the liftover remedy that C1's check 3 defers). C4c remains for rsID,
+transcript, and protein projection inputs over pinned snapshots.
 
 **Pillar A — A1 + A2 merged; Pillar A complete.** A1 (`source_class` / `derived_kind` /
 `dataset_usage` recording layer) landed on `~/d/science` `main`: JSON mixin schema
@@ -319,12 +319,12 @@ materialized in the `knowledge` graph; `EvidenceUnit.is_reference_dataset` threa
 structural` shipped as a recording-only validate nudge (not scored); per-line override deferred.
 
 **Remaining — other pillars.** B (influence/provenance) and D (gene sets) have written, reviewed
-designs but no implementation. Pillar A is complete; C (C1–C3 merged, C4 pending) and A together
+designs but no implementation. Pillar A is complete; C (C1–C3 merged, C4a merged, C4b/C4c pending) and A together
 unblock D and B's paper arm; D leads B's gene-set arm. E (Reactome ingestion) resumes once A–D are
 far enough along to instantiate against.
 
 **Operational follow-ups.**
-- Push `main` to `origin` when ready (the C3 sub-phase is local-only; the substrate + C1 + C2 are pushed).
+- Push local implementation branches to `origin` when ready.
 - The real commons collections — `assembly-registry`, `gene-crosswalk-hgnc`, `protein-crosswalk-uniprot` —
   are committed **unbuilt** in `~/d/science-commons` (placeholder hash, count 0). Run each
   `recipe/build.py` against the network, then pin the artifact hash + count and commit.

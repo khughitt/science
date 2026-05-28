@@ -58,6 +58,55 @@ def build_registry_row(
     }
 
 
+def build_contig_rows(*, level2: dict[str, Any], seqcol_digest: str) -> list[dict[str, Any]]:
+    """Materialize level-2 names, SQ digests, and lengths into contig rows.
+
+    The seqcol digest identifies the aligned names and SQ digests; lengths are
+    persisted from the same level-2 record for validation and lookup metadata.
+    ``sequence_index`` makes that alignment auditable.
+    """
+    names, lengths, sequences = level2["names"], level2["lengths"], level2["sequences"]
+    if not (len(names) == len(lengths) == len(sequences)):
+        raise ValueError(
+            f"ragged level-2 record for {seqcol_digest!r}: "
+            f"{len(names)} names / {len(lengths)} lengths / {len(sequences)} sequences"
+        )
+
+    out: list[dict[str, Any]] = []
+    seen_names: set[str] = set()
+    for i, (name, length, refget_digest) in enumerate(zip(names, lengths, sequences, strict=True)):
+        if not isinstance(name, str):
+            raise ValueError(f"invalid contig name {name!r} at index {i} for {seqcol_digest!r}")
+        if not name.strip():
+            raise ValueError(f"blank contig name at index {i} for {seqcol_digest!r}")
+        if name != name.strip():
+            raise ValueError(f"invalid contig name {name!r} at index {i} for {seqcol_digest!r}")
+        if not isinstance(refget_digest, str):
+            raise ValueError(f"invalid refget digest {refget_digest!r} at index {i} for {seqcol_digest!r}")
+        if not refget_digest.strip():
+            raise ValueError(f"blank refget digest at index {i} for {seqcol_digest!r}")
+        if refget_digest != refget_digest.strip():
+            raise ValueError(f"invalid refget digest {refget_digest!r} at index {i} for {seqcol_digest!r}")
+        if name in seen_names:
+            raise ValueError(f"duplicate contig name {name!r} in {seqcol_digest!r}")
+        seen_names.add(name)
+        if not isinstance(length, int) or isinstance(length, bool):
+            raise ValueError(f"invalid length {length!r} for contig {name!r}")
+        length_i = length
+        if length_i <= 0:
+            raise ValueError(f"invalid length {length!r} for contig {name!r}")
+        out.append(
+            {
+                "seqcol_digest": seqcol_digest,
+                "sequence_index": i,
+                "name": name,
+                "refget_digest": refget_digest,
+                "length": length_i,
+            }
+        )
+    return out
+
+
 def fetch_seqcol_level2(digest: str, *, base_url: str = _SEQCOL_SERVER) -> dict[str, Any]:
     """Fetch a level-2 seqcol record from a refget seqcol server (build-time only).
 

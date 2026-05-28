@@ -87,6 +87,18 @@ def test_resolve_from_data_root(tmp_path: Path) -> None:
     assert result.hash == f"sha256:{hashlib.sha256(_CONTENT).hexdigest()}"
 
 
+def test_resolve_from_data_root_by_resource_name_uses_resource_path(tmp_path: Path) -> None:
+    commons_root = _make_commons(tmp_path)
+    data_root = tmp_path / "data"
+    target = _write_data(data_root)
+
+    result = resolve(f"dataset:{_SLUG}", "counts", commons_root=commons_root, data_root=data_root)
+
+    assert result.path == target.resolve()
+    assert result.source == "data_root"
+    assert result.logical_path == _LOGICAL
+
+
 def test_resolve_from_override(tmp_path: Path) -> None:
     commons_root = _make_commons(tmp_path)
     data_root = tmp_path / "data"  # intentionally empty
@@ -98,6 +110,22 @@ def test_resolve_from_override(tmp_path: Path) -> None:
     result = resolve(f"dataset:{_SLUG}", _LOGICAL, commons_root=commons_root, data_root=data_root)
     assert result.path == override_target.resolve()
     assert result.source == "override"
+
+
+def test_resolve_from_override_by_resource_name_uses_resource_path(tmp_path: Path) -> None:
+    commons_root = _make_commons(tmp_path)
+    data_root = tmp_path / "data"  # intentionally empty
+    override_dir = tmp_path / "legacy"
+    override_target = _write_override_data(override_dir)
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "data.yaml").write_text(yaml.dump({_SLUG: str(override_dir)}), encoding="utf-8")
+
+    result = resolve(f"dataset:{_SLUG}", "counts", commons_root=commons_root, data_root=data_root)
+
+    assert result.path == override_target.resolve()
+    assert result.source == "override"
+    assert result.logical_path == _LOGICAL
 
 
 def test_resolve_data_root_takes_precedence_over_override(tmp_path: Path) -> None:

@@ -1,0 +1,7 @@
+seqcol_digest,refget_digest,alias,alias_kind,sequence_accession
+DIGEST38,SQ.chr1_38,1,seqcol_name,
+DIGEST38,SQ.chr1_38,chr1,ucsc,
+DIGEST38,SQ.chr1_38,NC_000001.11,refseq_accession,NC_000001.11
+DIGEST37,SQ.chr1_37,1,seqcol_name,
+DIGEST37,SQ.chr1_37,chr1,ucsc,
+DIGEST37,SQ.chr1_37,NC_000001.10,refseq_accession,NC_000001.10

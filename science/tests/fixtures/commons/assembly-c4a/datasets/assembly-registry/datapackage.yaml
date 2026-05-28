@@ -1,0 +1,10 @@
+name: assembly-registry
+resources:
+  - name: contigs
+    path: contigs.csv
+    hash: sha256:dcadd72f51345bb526f133983ae23f1b8d368232b1f42c8975b62d71757681d8
+    bytes: 123
+  - name: contig_aliases
+    path: contig_aliases.csv
+    hash: sha256:6b4fb78484c52fdf352c65cfdd679678261367c902ccc318d152ceccf4739066
+    bytes: 322

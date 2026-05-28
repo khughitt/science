@@ -2,7 +2,7 @@
 
 Date: 2026-05-28
 
-Status: design for review (Pillar C, sub-phase 4 of the bio data architecture)
+Status: C4a implemented; C4b/C4c remaining (Pillar C, sub-phase 4 of the bio data architecture)
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; this details its C4 row (§8)
@@ -40,12 +40,12 @@ because liftover (C4b) relates ids that C4a must first be able to mint.
 
 ---
 
-## 2. What exists, what C4a adds
+## 2. What C4a added
 
-| Today (post C1–C3) | C4a adds |
+| Before C4a (post C1–C3) | C4a implemented |
 |---|---|
 | Assembly registry keyed by `seqcol_digest`; `assemblies.csv` carries `seqcol_digest, label, accession, n_sequences, source_url` only | A per-contig resource (`contigs.csv`) materializing the seqcol level-2 record the digest already rolls up over, **plus a contig alias table** (§3) |
-| `assembly_registry_build.py` fetches the level-2 record (`names`, per-contig `SQ.` digests, `lengths`) then **discards** it | The build persists level-2 (names + `SQ.` digests + lengths + ordinal); contig **aliases** come from a newly-pinned NCBI assembly report (a new build input — not read today) |
+| `assembly_registry_build.py` fetches the level-2 record (`names`, per-contig `SQ.` digests, `lengths`) then **discards** it | The build persists level-2 (names + `SQ.` digests + lengths + ordinal); contig **aliases** come from a pinned NCBI assembly report added by C4a |
 | No reference-sequence bytes anywhere | A pinned, content-addressed, **locally-materialized** sequence store for GRCh38 + GRCh37 (§5) |
 | No variant identity | `vrs_id(expr, assembly_seqcol)` over an injected, offline refget proxy (§6/§7) |
 | `molecular_ids` accepts arbitrary tiers; C2/C3 `evaluate_tier_identity` validates a tier *declaration* | A `variant` tier convention **with an explicit row-level locator contract** + a row-level minting check (§8) |
@@ -56,13 +56,12 @@ because liftover (C4b) relates ids that C4a must first be able to mint.
 
 `(assembly, contig name) → refget_digest` is **not** a sufficient contract: accepted inputs name contigs
 in incompatible ways — genomic HGVS uses a **sequence accession** (`NC_000001.11`), VCF `CHROM` uses a
-bare or prefixed label (`1`, `chr1`). C4a therefore materializes two registry resources in the
+bare or prefixed label (`1`, `chr1`). C4a therefore materialized two registry resources in the
 `assembly-registry` collection (dogfooding C1). The `name`/`refget_digest`/`length`/`sequence_index`
 columns come from the seqcol **level-2 record** C1 already fetches; the **alias** columns (RefSeq/GenBank
-accession, UCSC/Ensembl names) are **not** in seqcol level-2, so C4a adds a **pinned, dated NCBI assembly
-report** (`GCF_…_assembly_report.txt`) as a *new* build input and joins it on sequence name. C1's build
-does not read assembly reports today (`sources.yaml` pins only label/accession/digest), so adding +
-pinning this source is itself a C4a task:
+accession, UCSC/Ensembl names) are **not** in seqcol level-2, so C4a added a **pinned, dated NCBI assembly
+report** (`GCF_…_assembly_report.txt`) as a build input and joins it on sequence name. C4a added and
+pinned this source because C1 originally pinned only label/accession/digest:
 
 **`contigs.csv`** — one row per sequence in a collection:
 
@@ -119,7 +118,7 @@ refget `SQ.` digest.
   committed digests, so identity is reproducible wherever the store exists.
 - **Format:** a **flat refget store** keyed by `SQ.` digest, sliced by byte offset — preferred over
   bgzip+faidx to avoid C-heavy dependencies, since the only access pattern the proxy needs is
-  "substring of one contig." (Final format confirmed at plan time if a dependency makes faidx cheaper.)
+  "substring of one contig."
 
 ## 6. C4a-D4 — Refget-backed DataProxy (pure, offline, fail-loud)
 
@@ -134,17 +133,17 @@ sequence store + the registry contig/alias map.
 
 ## 7. C4a-D5 — VRS dependency + variant resolver (spike-gated)
 
-- **Dependency spike is the first implementation task.** Before committing to `ga4gh.vrs`, prove on a
-  synthetic contig that the pinned package can **parse → normalize → `ga4gh_identify`** an allele *through
-  the injected proxy* with **no SeqRepo and no network**. `vrs-python`'s translation/extras stack commonly
-  assumes SeqRepo/UTA backing data; the spike confirms the core models + identifier generation work over a
-  custom `DataProxy`.
+- **Dependency spike ran first.** Before committing to `ga4gh.vrs`, C4a proved on a synthetic contig that
+  the pinned package can **parse → normalize → `ga4gh_identify`** an allele *through the injected proxy*
+  with **no SeqRepo and no network**. `vrs-python`'s translation/extras stack commonly assumes SeqRepo/UTA
+  backing data; the spike confirmed the core models + identifier generation work over a custom
+  `DataProxy`.
   - **Fallback if the spike fails:** local parsers for the accepted simple forms (SPDI / genomic-HGVS /
     VCF small alleles) feeding `vrs-python` **core models + identifier generation only** (not its
     translators). The computed-identifier guarantee survives; only the parsing layer changes.
 - **Pin both** the `ga4gh.vrs` **package version** and the **VRS spec/schema version** (in code or
   metadata), and **avoid yanked releases** (2.1.x are yanked; 2.x is the actively-maintained line that maps
-  to VRS 2.x). Exact pin chosen at plan time and recorded with the golden ids.
+  to VRS 2.x). C4a pinned the exact package surface with golden ids.
 - `commons/variant.py` exposes `vrs_id(expr, assembly_seqcol) -> "ga4gh:VA…"`: parse the expression,
   resolve its contig via §3, normalize (fully-justified) against the proxy, compute the id.
 - **Flags, never silently drops** (mirrors C-D6 check 4): reference-base mismatch (provided REF ≠ pinned
@@ -172,8 +171,8 @@ identity_context:
       resolution_status: resolved
       locator:
         resource: variants.csv             # a resource named in the dataset datapackage
-        format: spdi                       # spdi | hgvs_g | vcf
-        column: variant                    # single-expression column (spdi | hgvs_g)
+        format: spdi                       # spdi | hgvs | vcf
+        column: variant                    # single-expression column (spdi | hgvs)
         # for format: vcf, use columns instead of column:
         # columns: {chrom: CHROM, pos: POS, ref: REF, alt: ALT}
         multiallelic: split                # split (one ALT/row) — required for vcf
@@ -243,7 +242,5 @@ adds the dependency.
 
 ## 12. Status & next step
 
-C4a design for review (C4b/C4c scoped, deferred). On approval, writing-plans produces the **C4a**
-implementation plan, **starting with the §7 dependency spike** (prove `ga4gh.vrs` normalize/identify
-through the injected proxy, no SeqRepo/network) before any sequence-store or resolver work, so the heavy
-dependency is de-risked first.
+C4a is implemented and merged. C4b (cross-assembly liftover + seqcol compatibility relations) and C4c
+(rsID input + transcript/protein HGVS projection inputs) remain as the next named increments.
