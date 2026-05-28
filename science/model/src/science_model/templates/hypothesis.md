@@ -15,7 +15,7 @@ _template:
     type: { default: "hypothesis" }
     title: { from: title }
     status: { from: status }
-    phase: { default: "active" }
+    phase: { from: phase, default: "active" }
     source_refs: { from: source_refs }
     related: { from: related }
     created: { from: created }

@@ -238,6 +238,40 @@ def test_build_entity_markdown_can_strip_template_hints() -> None:
     assert "<!--" not in text
 
 
+def test_build_entity_markdown_hypothesis_defaults_phase_active() -> None:
+    text = build_entity_markdown(
+        kind="hypothesis",
+        entity_id="hypothesis:h01-default-phase",
+        title="Default phase hypothesis",
+        status="proposed",
+        related=[],
+        source_refs=[],
+        today=date(2026, 5, 28),
+    )
+    _, frontmatter_text, _ = text.split("---\n", 2)
+    frontmatter = yaml.safe_load(frontmatter_text)
+    assert frontmatter["phase"] == "active"
+    assert "## Promotion criteria" not in text
+
+
+def test_build_entity_markdown_hypothesis_candidate_phase_includes_promotion_criteria() -> None:
+    text = build_entity_markdown(
+        kind="hypothesis",
+        entity_id="hypothesis:h02-candidate-phase",
+        title="Candidate phase hypothesis",
+        status="proposed",
+        related=[],
+        source_refs=[],
+        today=date(2026, 5, 28),
+        phase="candidate",
+        with_sections=["promotion-criteria"],
+    )
+    _, frontmatter_text, _ = text.split("---\n", 2)
+    frontmatter = yaml.safe_load(frontmatter_text)
+    assert frontmatter["phase"] == "candidate"
+    assert "## Promotion criteria" in text
+
+
 def test_template_driven_create_entity_passes_prospective_audit_for_all_migrated_kinds(tmp_path: Path) -> None:
     seed_project(tmp_path)
     write_markdown_entity(

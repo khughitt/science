@@ -74,6 +74,18 @@ def test_without_removes_required_section() -> None:
     assert "## Organizing Conjecture" in text
 
 
+def test_hypothesis_phase_defaults_to_active_when_unset() -> None:
+    text = Renderer(today=date(2026, 5, 3)).render("hypothesis", fields=_fields("hypothesis"))
+    assert _frontmatter(text)["phase"] == "active"
+
+
+def test_hypothesis_phase_takes_context_value() -> None:
+    fields = _fields("hypothesis")
+    fields["phase"] = "candidate"
+    text = Renderer(today=date(2026, 5, 3)).render("hypothesis", fields=fields)
+    assert _frontmatter(text)["phase"] == "candidate"
+
+
 def test_no_hints_strips_html_comments() -> None:
     text = Renderer(today=date(2026, 5, 3)).render("discussion", fields=_fields("discussion"), no_hints=True)
     assert "<!--" not in text
