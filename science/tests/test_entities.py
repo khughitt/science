@@ -426,6 +426,29 @@ def test_create_entity_with_unresolved_related_succeeds_with_warning(tmp_path: P
     assert any("unresolved_reference" in warning for warning in result.warnings)
 
 
+def test_create_entity_unresolved_warning_names_failing_ref(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/questions/q01-existing.md",
+        {"id": "question:q01-existing", "type": "question", "title": "Existing"},
+    )
+
+    result = create_entity(
+        project_root=tmp_path,
+        kind="question",
+        title="New Question",
+        related=["hypothesis:h99-missing"],
+        today=date(2026, 4, 28),
+    )
+
+    unresolved = [w for w in result.warnings if "unresolved_reference" in w]
+    assert unresolved
+    # The warning must name both the failing field and the unresolved ref so the
+    # author does not need a separate `science validate --format json` to locate it.
+    assert any("related" in w and "hypothesis:h99-missing" in w for w in unresolved)
+
+
 def test_create_entity_rejects_concept_with_guidance(tmp_path: Path) -> None:
     seed_project(tmp_path)
     with pytest.raises(EntityCommandError, match="graph add concept"):

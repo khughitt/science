@@ -25,6 +25,11 @@ class TaskAdapter(StorageAdapter):
         refs: list[SourceRef] = []
         for path in sorted(tasks_dir.rglob("*.md")):
             if path == tasks_dir / "archive.md":
+                # archive.md holds historical aliases for old PROSE references
+                # only (see refs._load_task_ids). Structured graph refs must
+                # point at live tasks, so archived IDs are intentionally NOT
+                # materialized — this is why `refs check` and graph audit can
+                # disagree on an archived task ID.
                 continue
             try:
                 rel = str(path.relative_to(project_root))

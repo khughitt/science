@@ -641,16 +641,31 @@ def _is_allowed_unresolved_target_warning(row: Mapping[str, object], target_enti
     )
 
 
+def _format_ref_location(row: Mapping[str, object]) -> str:
+    """`field -> target` locator, when both are present, so the author can see
+    exactly which reference failed without a separate validate pass."""
+    field = str(row.get("field", "")).strip()
+    target = str(row.get("target", "")).strip()
+    if field and target:
+        return f" ({field} -> {target})"
+    if target:
+        return f" ({target})"
+    return ""
+
+
 def _format_preexisting_warning(row: Mapping[str, object]) -> str:
-    return f"pre-existing audit failure: {row.get('check')} on {row.get('source')}: {row.get('details')}"
+    return (
+        f"pre-existing audit failure: {row.get('check')} on {row.get('source')}"
+        f"{_format_ref_location(row)}: {row.get('details')}"
+    )
 
 
 def _format_new_warning(row: Mapping[str, object]) -> str:
-    return f"{row.get('check')} on {row.get('source')}: {row.get('details')}"
+    return f"{row.get('check')} on {row.get('source')}{_format_ref_location(row)}: {row.get('details')}"
 
 
 def _format_blocking_row(row: Mapping[str, object]) -> str:
-    return f"{row.get('check')} on {row.get('source')}: {row.get('details')}"
+    return f"{row.get('check')} on {row.get('source')}{_format_ref_location(row)}: {row.get('details')}"
 
 
 def _existing_local_parts(project_root: Path, kind: str) -> list[str]:
