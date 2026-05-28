@@ -186,6 +186,17 @@ _VALID_GENE_META = {
 _GENE_META_BY_ID = {_GENE_REGISTRY: _VALID_GENE_META}
 
 
+def test_tier_declaration_defect_is_public_and_registry_agnostic() -> None:
+    from science_tool.validate.checks.identity_context import tier_declaration_defect
+
+    assert tier_declaration_defect({"namespace": "vrs"}) is None
+    assert tier_declaration_defect({"namespace": ""}) == "missing or blank namespace"
+    assert tier_declaration_defect({"namespace": "vrs", "registry": "x"}) == "registry must be a 'dataset:' reference"
+    assert tier_declaration_defect({"namespace": "vrs", "resolution_status": "maybe"}) == (
+        "resolution_status must be 'resolved' or 'declared_unresolved'"
+    )
+
+
 def _gene_ds(gene, id_="dataset:g") -> dict:
     return {
         "type": "dataset",
