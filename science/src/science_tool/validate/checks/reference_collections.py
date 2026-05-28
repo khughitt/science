@@ -12,9 +12,10 @@ its `member_key`), which would crash the whole `science validate` run before
 this check could report the defect; it also aborts with CommonsRootNotFoundError
 when a member's commons-hosted parent is referenced but no commons root is
 configured. To stay robust on both counts, this check reads raw frontmatter
-directly (DatapackageAdapter discovery + `_raw_frontmatter`) and resolves a
-non-local parent against the commons directly, reporting `commons-unavailable`
-(INFO) instead of crashing or falsely claiming the parent is unresolved.
+directly (the shared `dataset_frontmatters` discovery, which scans both backends
+without typed-validating the derivation) and resolves a non-local parent against
+the commons directly, reporting `commons-unavailable` (INFO) instead of crashing
+or falsely claiming the parent is unresolved.
 """
 
 from __future__ import annotations
@@ -23,13 +24,11 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsError
 from science_tool.commons.member import parse_member_of
-from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
+from science_tool.validate._helpers import dataset_frontmatters
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -37,40 +36,6 @@ from science_tool.validate.result import Result, Severity
 
 def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
     return Result(severity, Path(path) if path else None, None, message, rule, None)
-
-
-def _raw_frontmatter(path: Path) -> dict[str, Any]:
-    """Raw frontmatter for either a datapackage.yaml or an entity.md (fenced YAML)."""
-    text = path.read_text(encoding="utf-8")
-    if path.suffix in (".yaml", ".yml"):
-        data = yaml.safe_load(text) or {}
-    elif text.startswith("---"):
-        end = text.find("\n---", 3)
-        data = yaml.safe_load(text[3:end]) if end != -1 else {}
-    else:
-        data = {}
-    return data if isinstance(data, dict) else {}
-
-
-def _discover_dataset_frontmatters(project_root: Path) -> list[dict[str, Any]]:
-    """Raw frontmatter for every project dataset entity, tolerant of bad shapes.
-
-    Project datasets live as `<data|results>/**/datapackage.yaml` entity packages;
-    `DatapackageAdapter.discover` finds them without typed-validating the
-    derivation, so a malformed member_of is surfaced as a diagnostic below rather
-    than crashing the loader.
-    """
-    out: list[dict[str, Any]] = []
-    for ref in DatapackageAdapter().discover(project_root):
-        abs_path = project_root / ref.path
-        if not abs_path.is_file():
-            continue
-        fm = _raw_frontmatter(abs_path)
-        if fm.get("type") != "dataset":
-            continue
-        fm["_path"] = ref.path
-        out.append(fm)
-    return out
 
 
 def _member_defect(derivation: dict[str, Any]) -> str | None:
@@ -113,7 +78,7 @@ def _commons_has_dataset(parent_id: str, cache: dict[str, bool | None]) -> bool 
 
 @Check(section="reference collections", order=24)
 def check_reference_collections(ctx: ValidateContext) -> Iterator[Result]:
-    frontmatters = _discover_dataset_frontmatters(ctx.project_root)
+    frontmatters = dataset_frontmatters(ctx)
     local_ids = {fm["id"] for fm in frontmatters if isinstance(fm.get("id"), str) and fm["id"]}
     commons_cache: dict[str, bool | None] = {}
 
