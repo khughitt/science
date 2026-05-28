@@ -19,10 +19,12 @@ from science_model.tasks import Task, TaskCreate, TaskStatus, TaskUpdate
 __all__ = [
     "Task",
     "TaskCreate",
+    "TaskIntegrityError",
     "TaskLocation",
     "TaskStatus",
     "TaskUpdate",
     "append_task_note",
+    "find_dangling_task_refs",
     "find_task_location",
     "parse_tasks_for_cli",
     "retire_task",
@@ -30,6 +32,16 @@ __all__ = [
 ]
 
 _VALID_STATUSES = {s.value for s in TaskStatus}
+
+
+class TaskIntegrityError(ValueError):
+    """A task-file write would corrupt or lose data and was refused.
+
+    Raised by the round-trip guard when the text about to be persisted does not
+    re-parse to the tasks it was rendered from (e.g. a description line starting
+    with ``## [`` is mistaken for a task header), so callers never silently
+    write a self-corrupting file.
+    """
 
 
 _TASK_ID_PATTERN = r"t[0-9]{3,}"
@@ -135,12 +147,8 @@ def _parse_task_block(lines: list[str], *, path: Path | None = None) -> Task:
     )
 
 
-def parse_tasks(path: Path) -> list[Task]:
-    """Parse tasks from a markdown file. Returns empty list if file is missing or empty."""
-    if not path.is_file():
-        return []
-
-    text = path.read_text()
+def _parse_tasks_text(text: str, *, path: Path | None = None) -> list[Task]:
+    """Parse task blocks from markdown text (no file I/O)."""
     if not text.strip():
         return []
 
@@ -160,6 +168,76 @@ def parse_tasks(path: Path) -> list[Task]:
         blocks.append(current)
 
     return [_parse_task_block(block, path=path) for block in blocks]
+
+
+def parse_tasks(path: Path) -> list[Task]:
+    """Parse tasks from a markdown file. Returns empty list if file is missing or empty."""
+    if not path.is_file():
+        return []
+    return _parse_tasks_text(path.read_text(), path=path)
+
+
+def _verify_round_trip(text: str, expected: list[Task], *, path: Path) -> None:
+    """Guard against silent task-file corruption / data loss.
+
+    Re-parse the text we are about to persist and confirm it yields exactly the
+    tasks it was rendered from (same ids, same descriptions). The common failure
+    is a description line starting with ``## [`` (a task-header shape) which the
+    parser would split into a phantom block on the next read.
+    """
+    try:
+        reparsed = _parse_tasks_text(text, path=path)
+    except ValueError as exc:
+        raise TaskIntegrityError(
+            f"refusing to write {path}: the rendered task file does not parse back "
+            f"({exc}). A task description likely contains a line starting with "
+            f"'## [' — indent or rephrase it so it is not read as a task header."
+        ) from exc
+    got = [t.id for t in reparsed]
+    want = [t.id for t in expected]
+    if got != want:
+        raise TaskIntegrityError(
+            f"refusing to write {path}: task set changed on round-trip "
+            f"(expected {want}, got {got}); aborting to avoid data loss."
+        )
+    for original, parsed in zip(expected, reparsed):
+        if original.description.strip() != parsed.description.strip():
+            raise TaskIntegrityError(
+                f"refusing to write {path}: description of task {original.id} does "
+                f"not round-trip; a body line is being read as task structure. "
+                f"Aborting to avoid data loss."
+            )
+
+
+def _task_ref_number(ref: str) -> str | None:
+    """Extract a bare tNNN id from a task ref like 'task:t001' or 't001'."""
+    candidate = ref.strip()
+    if candidate.startswith("task:"):
+        candidate = candidate[len("task:") :]
+    return candidate if re.fullmatch(_TASK_ID_PATTERN, candidate) else None
+
+
+def find_dangling_task_refs(tasks_dir: Path) -> dict[str, list[str]]:
+    """Map task-id -> blocked_by/parent task refs that do not resolve to a known task.
+
+    A post-write self-check: if a sibling task block was dropped, a surviving
+    `blocked-by: [task:tNNN]` (or `parent:`) is reported here so the problem is
+    caught at the task layer rather than only at `graph build`.
+    """
+    known = known_task_ids(tasks_dir)
+    dangling: dict[str, list[str]] = {}
+    for path in _task_search_paths(tasks_dir):
+        for task in parse_tasks(path):
+            bad: list[str] = []
+            for ref in [*task.blocked_by, task.parent]:
+                if not ref:
+                    continue
+                num = _task_ref_number(ref)
+                if num is not None and num not in known:
+                    bad.append(ref)
+            if bad:
+                dangling[task.id] = bad
+    return dangling
 
 
 def parse_tasks_for_cli(path: Path) -> tuple[list[Task], list[str]]:
@@ -285,7 +363,9 @@ def _render_task_file(path: Path, tasks: list[Task]) -> str:
 def _write_active(tasks_dir: Path, tasks: list[Task]) -> None:
     tasks_dir.mkdir(parents=True, exist_ok=True)
     active = tasks_dir / "active.md"
-    active.write_text(_render_task_file(active, tasks))
+    text = _render_task_file(active, tasks)
+    _verify_round_trip(text, tasks, path=active)
+    active.write_text(text)
 
 
 @dataclass(frozen=True)
@@ -351,7 +431,9 @@ def find_task_location(tasks_dir: Path, task_id: str) -> TaskLocation:
 def write_task_location(location: TaskLocation) -> None:
     """Rewrite the markdown file that owns a task location."""
     location.path.parent.mkdir(parents=True, exist_ok=True)
-    location.path.write_text(_render_task_file(location.path, location.tasks))
+    text = _render_task_file(location.path, location.tasks)
+    _verify_round_trip(text, location.tasks, path=location.path)
+    location.path.write_text(text)
 
 
 def _format_note(note_date: date, note: str) -> str:
@@ -452,6 +534,30 @@ def add_task(
     return task
 
 
+def _move_task_to_done(tasks_dir: Path, remaining: list[Task], done_path: Path, task: Task) -> None:
+    """Atomically move a task from active.md to a done archive.
+
+    Both the new active.md and the new done file are rendered AND round-trip
+    verified before either is written, so a corrupting payload (or a parser
+    fragility) aborts the whole move instead of half-applying it and losing data.
+    """
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    done_path.parent.mkdir(parents=True, exist_ok=True)
+
+    active = tasks_dir / "active.md"
+    active_text = _render_task_file(active, remaining)
+    _verify_round_trip(active_text, remaining, path=active)
+
+    existing_done = parse_tasks(done_path)
+    existing_done.append(task)
+    done_text = render_tasks(existing_done)
+    _verify_round_trip(done_text, existing_done, path=done_path)
+
+    # Both renders verified — now commit both writes.
+    active.write_text(active_text)
+    done_path.write_text(done_text)
+
+
 def complete_task(tasks_dir: Path, task_id: str, note: str | None = None) -> Task:
     """Mark task done, add completion date, move from active.md to done/YYYY-MM.md."""
     tasks = _read_active(tasks_dir)
@@ -462,18 +568,10 @@ def complete_task(tasks_dir: Path, task_id: str, note: str | None = None) -> Tas
     if note:
         task.description = f"{task.description}\n\n{note}".strip()
 
-    # Remove from active
-    tasks = [t for t in tasks if t.id != task_id]
-    _write_active(tasks_dir, tasks)
-
-    # Append to done file
+    remaining = [t for t in tasks if t.id != task_id]
     done_dir = tasks_dir / "done"
-    done_dir.mkdir(parents=True, exist_ok=True)
     done_path = done_dir / f"{date.today().strftime('%Y-%m')}.md"
-    existing_done = parse_tasks(done_path)
-    existing_done.append(task)
-    done_path.write_text(render_tasks(existing_done))
-
+    _move_task_to_done(tasks_dir, remaining, done_path, task)
     return task
 
 
@@ -500,18 +598,10 @@ def retire_task(tasks_dir: Path, task_id: str, reason: str | None = None) -> Tas
     if reason:
         task.description = f"{task.description}\n\n**Retired:** {reason}".strip()
 
-    # Remove from active
-    tasks = [t for t in tasks if t.id != task_id]
-    _write_active(tasks_dir, tasks)
-
-    # Append to done file (retired tasks archived alongside done tasks)
+    remaining = [t for t in tasks if t.id != task_id]
     done_dir = tasks_dir / "done"
-    done_dir.mkdir(parents=True, exist_ok=True)
     done_path = done_dir / f"{date.today().strftime('%Y-%m')}.md"
-    existing_done = parse_tasks(done_path)
-    existing_done.append(task)
-    done_path.write_text(render_tasks(existing_done))
-
+    _move_task_to_done(tasks_dir, remaining, done_path, task)
     return task
 
 

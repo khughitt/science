@@ -83,6 +83,25 @@ class TestBareAuthorYear:
         assert len(issues) == 1
         assert "Brunton 2022" in issues[0].message
 
+    def test_no_flag_iso_date_year(self, tmp_path):
+        # The 4-digit year is the year component of an ISO date, not a citation.
+        path = _write(tmp_path, "Cohort 2026-05-04 was processed in one batch.\n")
+        assert detect_bare_author_year(path) == []
+
+    def test_no_flag_iso_year_month(self, tmp_path):
+        path = _write(tmp_path, "Snapshot 2026-05 covers the first window.\n")
+        assert detect_bare_author_year(path) == []
+
+    def test_no_flag_stopword_leading_token(self, tmp_path):
+        for body in (
+            "Backfilled 2026 entries during the sweep.\n",
+            "The 2026 audit found several issues.\n",
+            "Done 2026 migration of the records.\n",
+            "Resolved 2026 in the prior session.\n",
+        ):
+            path = _write(tmp_path, body)
+            assert detect_bare_author_year(path) == [], body
+
 
 class TestShortFormIds:
     def test_flags_bare_q_number(self, tmp_path):

@@ -77,6 +77,20 @@ _DATE_WORDS: frozenset[str] = frozenset(
         "saturday", "sunday",
     }
 )
+# Common non-author leading tokens that match the <Capitalized> <Year> shape in
+# dated status/prose lines ("Backfilled 2026-05-04:", "The 2026 audit ..."),
+# not author-year citations.
+_LEADING_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "the", "this", "these", "those", "that",
+        "done", "resolved", "fixed", "closed", "merged", "completed",
+        "backfilled", "published", "updated", "added", "created", "removed",
+        "in", "by", "on", "at", "see", "per", "via", "note", "since", "as",
+    }
+)
+# Year immediately followed by `-NN` (the month/day of an ISO date like
+# `2026-05-04` or year-month `2026-05`).
+_ISO_DATE_TAIL_RE = re.compile(r"-\d\d")
 
 # Short-form prefix → canonical kind mapping. Lowercase letter prefixes pulled
 # from refs._LOCAL_ENTITY_KINDS first letters where a unique mapping exists;
@@ -131,7 +145,10 @@ def detect_bare_author_year(path: Path, *, strict: bool = False) -> list[LintIss
         line = strip_inline_code(raw_line)
         for match in _BARE_AUTHOR_YEAR_RE.finditer(line):
             mention = f"{match.group(1)} {match.group(2)}"
-            if match.group(1).split()[0].lower() in _DATE_WORDS:
+            leading_token = match.group(1).split()[0].lower()
+            if leading_token in _DATE_WORDS or leading_token in _LEADING_STOPWORDS:
+                continue
+            if _ISO_DATE_TAIL_RE.match(line, match.end()):
                 continue
             window_start = max(0, match.start() - 30)
             window_end = min(len(line), match.end() + 30)

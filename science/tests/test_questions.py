@@ -168,6 +168,21 @@ class TestReserveQuestion:
         reserve_question(nested, "first")
         assert nested.is_dir()
 
+    def test_counts_create_style_unprefixed_files(self, tmp_path: Path) -> None:
+        """`science question create` writes NN-slug.md (no q prefix). reserve must
+        count those when picking the next number, or it silently reissues a number
+        that create already used."""
+        (tmp_path / "02-foo.md").write_text("# foo\n")
+        (tmp_path / "03-bar.md").write_text("# bar\n")
+        result = reserve_question(tmp_path, "baz")
+        assert result.number == 4
+
+    def test_counts_mixed_prefixed_and_unprefixed(self, tmp_path: Path) -> None:
+        (tmp_path / "q01-foo.md").write_text("# foo\n")
+        (tmp_path / "04-bar.md").write_text("# bar\n")  # higher number, no q prefix
+        result = reserve_question(tmp_path, "baz")
+        assert result.number == 5
+
     def test_unrelated_files_ignored_in_scan(self, tmp_path: Path) -> None:
         (tmp_path / "README.md").write_text("readme\n")
         (tmp_path / "q-not-numbered.md").write_text("# no number\n")

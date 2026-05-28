@@ -184,6 +184,15 @@ def _load_task_ids(root: Path) -> set[str]:
     `tasks/archive.md` is reserved for historical aliases that should resolve
     old prose references without reintroducing them into active/done ledgers.
     Returns the set of bare numeric IDs (e.g. `"75"`, not `"t75"`).
+
+    Intentional divergence from the graph audit: `refs check` resolves
+    archive.md aliases (this function reads it) so historical *prose* mentions
+    stay green, but the graph materializer's TaskAdapter deliberately skips
+    archive.md, so a *structured* frontmatter ref (related/blocked_by) to an
+    archived task still fails graph audit. Structured edges must point at live
+    entities; prose may reference retired ones. Keep the two in step only by
+    promoting the task back into active/done, not by teaching the graph to read
+    archive.md.
     """
     declared: set[str] = set()
     candidates: list[Path] = []
@@ -701,6 +710,11 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
                 target = m.group(2)
                 # Skip external URLs and anchors
                 if target.startswith(("http://", "https://", "#", "mailto:")):
+                    continue
+                # Only resolve path-like destinations as intra-repo file links.
+                # Inline math such as `[x](x')` is syntactically link-shaped but
+                # its destination is a bare symbol, not a file path.
+                if "/" not in target and "." not in target:
                     continue
                 # Resolve relative to the file's directory
                 resolved = (file_path.parent / target).resolve()

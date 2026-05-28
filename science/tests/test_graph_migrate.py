@@ -970,6 +970,61 @@ Body.
     assert "science commons promote" in bad["details"]
 
 
+def _scaffold_project_with_related(project: Path, related: str) -> None:
+    project.mkdir()
+    (project / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("", encoding="utf-8")
+    hypothesis_path = project / "doc" / "hypotheses" / "h1.md"
+    hypothesis_path.parent.mkdir(parents=True)
+    hypothesis_path.write_text(
+        f"""---
+id: "hypothesis:h1"
+type: "hypothesis"
+title: "H1"
+related: [{related}]
+source_refs: []
+created: "2026-03-12"
+updated: "2026-03-12"
+---
+
+Body.
+""",
+        encoding="utf-8",
+    )
+
+
+def test_audit_unresolved_nonpromotable_kind_omits_promote_hint(tmp_path: Path) -> None:
+    """A non-promotable kind (e.g. question) must not be told to run commons
+    promote; the hint should point to prose linking instead."""
+    project = tmp_path / "project"
+    _scaffold_project_with_related(project, '"question:does-not-exist"')
+
+    sources = load_project_sources(project)
+    rows, _ = audit_project_sources(sources)
+
+    bad = next(row for row in rows if row["target"] == "question:does-not-exist")
+    assert bad["check"] == "unresolved_reference"
+    assert "science commons promote" not in bad["details"]
+    assert "prose" in bad["details"].lower()
+
+
+def test_audit_unresolved_cross_project_address_omits_promote_hint(tmp_path: Path) -> None:
+    """A peer-addressed cross-project ref in `related` must not suggest commons
+    promote (you cannot promote a peer's entity); point to prose linking."""
+    project = tmp_path / "project"
+    _scaffold_project_with_related(project, '"health-meta:research-question:foo"')
+
+    sources = load_project_sources(project)
+    rows, _ = audit_project_sources(sources)
+
+    bad = next(row for row in rows if row["target"] == "health-meta:research-question:foo")
+    assert bad["check"] == "unresolved_reference"
+    assert "science commons promote" not in bad["details"]
+    assert "prose" in bad["details"].lower()
+
+
 def test_audit_unresolved_dataset_includes_dataset_commons_hint(tmp_path: Path, monkeypatch) -> None:
     fixture_root = Path(__file__).parent / "fixtures" / "commons" / "valid"
     commons_root = tmp_path / "commons"
