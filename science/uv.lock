@@ -1770,6 +1770,8 @@ version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
+    { name = "ga4gh-vrs" },
+    { name = "hgvs" },
     { name = "httpx" },
     { name = "jsonschema" },
     { name = "pydantic" },
@@ -1800,8 +1802,6 @@ distill = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "ga4gh-vrs" },
-    { name = "hgvs" },
     { name = "networkx" },
     { name = "numpy" },
     { name = "pytest" },
@@ -1813,6 +1813,8 @@ dev = [
 requires-dist = [
     { name = "chirho", marker = "extra == 'causal'", specifier = ">=0.2.0" },
     { name = "click", specifier = ">=8.1" },
+    { name = "ga4gh-vrs", specifier = ">=2.3,<3" },
+    { name = "hgvs", specifier = ">=1.5.5,<2" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'datasets'", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'distill'" },
@@ -1835,8 +1837,6 @@ provides-extras = ["distill", "causal", "datasets"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "ga4gh-vrs", specifier = ">=2.3,<3" },
-    { name = "hgvs", specifier = ">=1.5.5,<2" },
     { name = "networkx", specifier = ">=3.2" },
     { name = "numpy", specifier = ">=2.4.2" },
     { name = "pytest", specifier = ">=9.0.2" },

@@ -12,6 +12,8 @@ dependencies = [
   "jsonschema>=4.0",
   "pydantic>=2.0",
   "ruamel.yaml>=0.17",
+  "ga4gh-vrs>=2.3,<3",
+  "hgvs>=1.5.5,<2",
   "science-model",
   "ruff>=0.15.6",
 ]
@@ -52,8 +54,6 @@ science-model = { path = "model", editable = true }
 
 [dependency-groups]
 dev = [
-    "ga4gh-vrs>=2.3,<3",
-    "hgvs>=1.5.5,<2",
     "networkx>=3.2",
     "numpy>=2.4.2",
     "pytest>=9.0.2",

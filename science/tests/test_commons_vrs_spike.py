@@ -6,12 +6,8 @@ They intentionally avoid SeqRepo and network access so later production code
 can preserve that dependency boundary.
 """
 
-import pytest
-
-pytest.importorskip("ga4gh.vrs")
-
-from ga4gh.core import ga4gh_identify, sha512t24u
-from ga4gh.vrs.extras.translator import AlleleTranslator
+from importlib import import_module
+from importlib.metadata import version
 
 
 _SEQ = "CGTACGTACGTACGTACGTACGTACGTACGTACGTACGTA"
@@ -19,6 +15,8 @@ _REPEAT_SEQ = "CCCCAAAAAGGGGTTTTCCCC"
 
 
 def _refget_digest(seq: str) -> str:
+    from ga4gh.core import sha512t24u
+
     return "SQ." + sha512t24u(seq.encode("ascii"))
 
 
@@ -48,7 +46,25 @@ class _MemoryProxy:
         return self._sq
 
 
+def test_ga4gh_vrs_is_a_pinned_runtime_dependency() -> None:
+    import_module("ga4gh.vrs")
+    import_module("ga4gh.core")
+    import_module("ga4gh.vrs.extras.translator")
+    v = version("ga4gh.vrs")
+    major, minor = (int(x) for x in v.split(".")[:2])
+    assert (major, minor) >= (2, 3) and major < 3, f"unexpected ga4gh.vrs {v}"
+
+
+def test_hgvs_is_available_for_vrs_allele_translator() -> None:
+    v = version("hgvs")
+    major, minor, patch = (int(x) for x in v.split(".")[:3])
+    assert (major, minor, patch) >= (1, 5, 5) and major < 2, f"unexpected hgvs {v}"
+
+
 def test_vrs_identifies_an_snv_through_custom_proxy_offline() -> None:
+    from ga4gh.core import ga4gh_identify
+    from ga4gh.vrs.extras.translator import AlleleTranslator
+
     proxy = _MemoryProxy(_SEQ)
     sq = _refget_digest(_SEQ)
     tlr = AlleleTranslator(data_proxy=proxy)
@@ -61,6 +77,9 @@ def test_vrs_identifies_an_snv_through_custom_proxy_offline() -> None:
 
 
 def test_equivalent_indel_representations_share_one_id() -> None:
+    from ga4gh.core import ga4gh_identify
+    from ga4gh.vrs.extras.translator import AlleleTranslator
+
     proxy = _MemoryProxy(_REPEAT_SEQ)
     sq = _refget_digest(_REPEAT_SEQ)
     tlr = AlleleTranslator(data_proxy=proxy)
