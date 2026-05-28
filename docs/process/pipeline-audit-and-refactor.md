@@ -83,3 +83,75 @@ backlog into tasks in the project's task system.
 fixes as **structural** QA checks that regression-guard the defect (per the convention). Run axis-3
 promotions through the multi-step procedure in the axis-3 rubric (create/verify the dataset entity →
 dry-run → `--apply`), not a single command.
+
+## The three axis rubrics
+
+Each axis scores PASS / WARN / FAIL per sub-dimension; attach a disposition to every finding.
+
+### Axis 1 — Data QA
+
+- A **wired-in** data-QA step (own pipeline rule on the default target) for **every table analysis
+  consumes**: the clean base table **and** each project-specific analysis table produced downstream.
+  Clean-base QA does **not** satisfy final-table QA (see the scope caveat above). One QA step per
+  substrate, per [`../conventions/pipeline-qa-checkpoints.md`](../conventions/pipeline-qa-checkpoints.md).
+- Each QA step splits **structural** (build-fatal) vs **distribution** (surfaced-not-fatal) flags.
+- Bounds / allowed-codes / sentinels are **config-driven** and shared with the cleaning step.
+- **Existing post-hoc checks:** which manual / pytest-only QA scripts should become wired-in
+  structural checks on a built table?
+- **Companion DAG-validation check (NOT table-QA):** is each pipeline output produced by exactly one
+  rule, with no orphaned/duplicately-owned outputs? This is a **workflow/DAG-level** structural
+  checkpoint scored alongside data-QA but explicitly *outside* the table-QA convention (it inspects
+  the rule graph, not a table). See "Deferred disciplines" below.
+
+Rubric reuses the `review-pipeline` → **QA Coverage** dimension (incl. its severity-split row), plus
+the DAG-validation check as its own line. Disposition: a missing structural check on an
+already-fixed bug → **fix-now** (regression-guard); missing distribution checks → **backlog**.
+
+### Axis 2 — Consistency, organization, code quality / reuse
+
+- **Naming & layout** consistency across chains (e.g. `workflows/` vs `scripts/` vs an unused
+  `code/`; config sprawl; versioned-config drift like `v8` / `v8.1`).
+- **Config-driven over hardcoded:** flag scripts bypassing config with hardcoded data paths.
+- **Duplication → shared helpers:** repeated datapackage boilerplate, effect-size/association logic,
+  decode logic wanting a shared module.
+- **Code → task back-links** per [`../conventions/code-task-backlinks.md`](../conventions/code-task-backlinks.md).
+
+Disposition: extract helper / consolidate config / add back-links → **backlog** (mechanical,
+TDD-guarded). **Package consolidation** (flat `scripts/` + `sys.path` hacks → an installable
+package) is an **optional flagged finding**, never a default recommendation.
+
+### Axis 3 — Data portability / commons
+
+Per source: is the **base ingestion + cleaning** (clean state + good metadata, no project-specific
+processing) **disentangled** from downstream?
+
+- Entangled → refactor task to **split the chain at the clean-base-table boundary** (the same
+  boundary axis 1 QAs — do them together).
+- Cleanly factored → is the clean base dataset (with `datapackage.json`) **promoted to the commons**?
+
+Rubric: **PASS** (base separated *and* promoted) / **WARN** (separated, not promoted — includes "no
+dataset entity yet") / **FAIL** (entangled).
+
+**Promotion procedure (not a one-liner).** `science commons promote dataset` sources from the
+project's dataset entity descriptors (`doc/datasets/data-<slug>.md`), requires `--slug`, and selects
+the source project with `--from <project-id>`. So promotion has prerequisites that are themselves
+refactor tasks:
+
+1. **Create / verify the dataset entity** at `doc/datasets/data-<slug>.md` with the required
+   `mixin-dataset-1.0` fields and a `datapackage:` pointer to the clean base table's `datapackage.json`.
+2. **Dry-run** `science commons promote dataset --from <project-id> --slug <slug>` and inspect the plan.
+3. **Apply** with `--apply` (add `--mixin <bio.*>` where a bio extension matches the dataset modality).
+
+## Deferred disciplines (named, not specified here)
+
+This playbook **names** two related disciplines and **nominates** each as a future convention, but
+does not specify them:
+
+- **Analysis / result-QA** — validates *results*, not the input table: leave-one-out /
+  dataset-dropout stability; permutation / empirical-null calibration and assumption sweeps.
+- **Workflow / DAG-validation** — validates the *rule graph*, not a table: output-ownership / dedup
+  (each output produced by exactly one rule). Deliberately kept out of the table-QA convention,
+  whose contract is "one script + one rule reads the built table" and which cannot see DAG structure.
+
+Surface both during the sweep so they are not forgotten; writing either convention is a separate
+decision recorded in the synthesis "convention nominations".
