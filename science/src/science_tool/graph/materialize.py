@@ -336,6 +336,18 @@ def _add_relations(
         )
         knowledge.add((entity_uri, predicate, target_uri))
 
+    # Inquiry `target:` frontmatter → sci:target. The CLI mutation path is the
+    # only other writer of this edge; doc-authored inquiries set it here so the
+    # target_exists graph audit can resolve a target node.
+    if entity.kind == "inquiry":
+        raw_inquiry_target = getattr(entity, "target", None)
+        if raw_inquiry_target and not is_metadata_reference(raw_inquiry_target):
+            resolution = resolver.resolve(raw_inquiry_target, allow_cross_kind_fallback=True)
+            if resolution.status == "resolved" and resolution.canonical_id is not None:
+                target = entity_index.get(resolution.canonical_id)
+                if target is not None:
+                    knowledge.add((entity_uri, SCI_NS.target, _entity_uri(target.canonical_id)))
+
     # `blocked_by` lives on ProjectEntity; defensive getattr for bare Entity instances.
     for raw_target in sorted(getattr(entity, "blocked_by", []) or []):
         if is_metadata_reference(raw_target):

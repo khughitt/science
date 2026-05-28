@@ -19,6 +19,7 @@ from science_model.entities import (
     Entity,
     EntityClass,
     EvidenceLineEntity,
+    InquiryEntity,
     MechanismEntity,
     PaperEntity,
     ProjectEntity,
@@ -130,6 +131,7 @@ class EntityRegistry:
             EvidenceLineEntity,
             entity_class=_CORE_KIND_CLASSES["evidence-line"],
         )
+        r.register_core_kind("inquiry", InquiryEntity, entity_class=_CORE_KIND_CLASSES["inquiry"])
         # Generic project kinds → ProjectEntity.
         for kind in (
             "concept",
@@ -137,7 +139,6 @@ class EntityRegistry:
             "question",
             "proposition",
             "observation",
-            "inquiry",
             "research-question",
             "topic",
             "interpretation",

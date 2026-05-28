@@ -209,6 +209,30 @@ def test_materialize_graph_includes_task_nodes_and_canonical_links(tmp_path: Pat
     assert (task_uri, SCI.tests, question_uri) in knowledge
 
 
+def test_materialize_emits_inquiry_target_from_frontmatter(tmp_path: Path) -> None:
+    """A doc-authored inquiry's `target:` frontmatter must materialize as
+    sci:target so the target_exists graph audit can resolve it."""
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    _write_minimal_entity(
+        project / "doc" / "inquiries" / "demo-inquiry.md",
+        "inquiry:demo-inquiry",
+        "inquiry",
+        "Demo inquiry",
+        extra_frontmatter=['target: "question:q01-demo"'],
+    )
+
+    trig_path = materialize_graph(project)
+
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    inquiry_uri = PROJECT_NS["inquiry/demo-inquiry"]
+    question_uri = PROJECT_NS["question/q01-demo"]
+    assert (inquiry_uri, SCI.target, question_uri) in knowledge
+
+
 def test_materialize_emits_scope_triple_for_project_entity(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)

@@ -734,3 +734,14 @@ class EvidenceLineEntity(ProjectEntity):
     shared_platform: str | None = None
     shared_cohort: str | None = None
     evidence_type: str | None = None
+
+
+class InquiryEntity(ProjectEntity):
+    """A scoped research inquiry (boundary + estimand over the knowledge graph).
+
+    `target` is the entity the inquiry is about; doc-authored inquiries carry it
+    in frontmatter and it materializes as sci:target, mirroring the
+    `science inquiry` CLI mutation path.
+    """
+
+    target: str | None = None
