@@ -293,7 +293,7 @@ def test_promote_kind_paper_constant() -> None:
     from science_tool.commons.promote import PROMOTE_KIND_PAPER
 
     assert PROMOTE_KIND_PAPER.kind == "paper"
-    assert PROMOTE_KIND_PAPER.source_subdirs == ("doc/papers",)
+    assert PROMOTE_KIND_PAPER.source_subdirs == ("doc/papers", "doc/background/papers")
     assert PROMOTE_KIND_PAPER.overlay_dest_subdir == "doc/papers"
     assert PROMOTE_KIND_PAPER.commons_subdir == "papers"
     assert PROMOTE_KIND_PAPER.id_prefix == "paper:"
