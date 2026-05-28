@@ -118,6 +118,19 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[CausalEdg
             members.add(s)  # type: ignore[arg-type]
             members.add(o)  # type: ignore[arg-type]
 
+    # Pull in confounders: a scic:confounds edge whose confounded variable is
+    # already an inquiry member declares a (possibly out-of-boundary, latent)
+    # common cause. Add it so the backdoor path survives into the export rather
+    # than being silently dropped by the member filter below.
+    causal_graph_for_members = dataset.graph(_graph_uri("graph/causal"))
+    for graph in (inquiry_graph, causal_graph_for_members):
+        for s, _, o in graph.triples((None, SCIC_NS.confounds, None)):
+            if not isinstance(s, URIRef) or not isinstance(o, URIRef):
+                continue
+            if s in members or o in members:
+                members.add(s)
+                members.add(o)
+
     # Collect observability for each member variable from graph/knowledge
     knowledge_graph = dataset.graph(_graph_uri("graph/knowledge"))
     observability: dict[str, str | None] = {}
@@ -347,6 +360,20 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
         comment = f"  # {', '.join(comment_parts)}" if comment_parts else ""
         edge_tuples.append(f'("{s_name}", "{o_name}"),{comment}')
 
+    # Encode confounders as latent common causes. Each scic:confounds edge
+    # becomes a directed edge from the (typically unobserved) confounder into
+    # the variable it confounds, so CausalInference sees the backdoor path
+    # instead of falsely reporting an empty adjustment set. A confounder is
+    # declared latent unless the graph explicitly marks it observed.
+    latent_confounders: list[str] = []
+    for e in confound_edges:
+        s_name = _variable_name(e["subject"])
+        o_name = _variable_name(e["object"])
+        edge_tuples.append(f'("{s_name}", "{o_name}"),  # confounder (latent common cause)')
+        if e.get("subject_observability") != "observed":
+            latent_confounders.append(s_name)
+    latent_confounders = sorted(set(latent_confounders))
+
     lines: list[str] = []
 
     # Provenance header
@@ -361,22 +388,26 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
     lines.append("")
 
     # Imports
-    lines.append("from pgmpy.models import BayesianNetwork")
+    lines.append("from pgmpy.models import DiscreteBayesianNetwork")
     lines.append("from pgmpy.inference import CausalInference")
     lines.append("")
 
     # Build model
     edges_str = "\n    ".join(edge_tuples)
-    lines.append(f"model = BayesianNetwork([\n    {edges_str}\n])")
+    if latent_confounders:
+        latents_str = ", ".join(f'"{name}"' for name in latent_confounders)
+        lines.append(f"model = DiscreteBayesianNetwork([\n    {edges_str}\n], latents={{{latents_str}}})")
+    else:
+        lines.append(f"model = DiscreteBayesianNetwork([\n    {edges_str}\n])")
     lines.append("")
 
-    # Confounders as comments
     if confound_edges:
-        lines.append("# Confounders (not directly representable as directed edges):")
-        for e in confound_edges:
-            s_name = _variable_name(e["subject"])
-            o_name = _variable_name(e["object"])
-            lines.append(f"#   {s_name} <-> {o_name}")
+        lines.append(
+            "# Confounders above are encoded as latent common causes (directed edges into the"
+        )
+        lines.append(
+            "# variables they confound), so backdoor paths are visible to CausalInference."
+        )
         lines.append("")
 
     # Inference

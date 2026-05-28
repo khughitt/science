@@ -208,9 +208,16 @@ class TestExportPgmpy:
     def test_export_pgmpy_generates_valid_script(self, graph_path: Path) -> None:
         slug = self._build_simple_dag(graph_path)
         script = export_pgmpy_script(graph_path, slug)
-        assert "from pgmpy.models import BayesianNetwork" in script
-        assert "BayesianNetwork(" in script
+        assert "from pgmpy.models import DiscreteBayesianNetwork" in script
+        assert "DiscreteBayesianNetwork(" in script
         assert "CausalInference" in script
+
+    def test_export_pgmpy_uses_non_deprecated_class(self, graph_path: Path) -> None:
+        """pgmpy>=1.0 renamed BayesianNetwork -> DiscreteBayesianNetwork."""
+        slug = self._build_simple_dag(graph_path)
+        script = export_pgmpy_script(graph_path, slug)
+        assert "from pgmpy.models import BayesianNetwork\n" not in script
+        assert "= BayesianNetwork(" not in script
 
     def test_export_pgmpy_includes_provenance_comments(self, graph_path: Path) -> None:
         slug = self._build_simple_dag(graph_path)
@@ -265,6 +272,37 @@ class TestExportPgmpy:
         slug = self._build_simple_dag(graph_path)
         script = export_pgmpy_script(graph_path, slug)
         assert "# Revision:" in script
+
+    def test_export_pgmpy_includes_confounds_as_latent_edges(self, graph_path: Path) -> None:
+        """A confounder declared only via scic:confounds must appear as directed
+        edges (a latent common cause) so the exported model exposes the backdoor
+        path instead of falsely reporting an empty adjustment set."""
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_concept(
+            graph_path,
+            "Hidden",
+            concept_type="sci:Variable",
+            ontology_id=None,
+            properties=[("sci:observability", "latent")],
+        )
+        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        add_inquiry(graph_path, "conf-dag", "Conf DAG", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "conf-dag", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "conf-dag", "concept/recovery", "BoundaryOut")
+        set_treatment_outcome(graph_path, "conf-dag", treatment="concept/drug", outcome="concept/recovery")
+        add_edge(graph_path, "concept/drug", "scic:causes", "concept/recovery", graph_layer="graph/causal")
+        add_edge(graph_path, "concept/hidden", "scic:confounds", "concept/drug", graph_layer="graph/causal")
+        add_edge(graph_path, "concept/hidden", "scic:confounds", "concept/recovery", graph_layer="graph/causal")
+
+        script = export_pgmpy_script(graph_path, "conf-dag")
+
+        # Confounder edges are now part of the directed model structure.
+        assert '("hidden", "drug")' in script
+        assert '("hidden", "recovery")' in script
+        # Declared latent so CausalInference surfaces non-identifiability.
+        assert "latents={" in script
+        assert '"hidden"' in script
 
     def test_export_pgmpy_todo_section(self, graph_path: Path) -> None:
         """Export includes TODO section noting latent variables."""
