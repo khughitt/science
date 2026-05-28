@@ -138,7 +138,7 @@ class PromoteKindConfig:
 
 PROMOTE_KIND_PAPER = PromoteKindConfig(
     kind="paper",
-    source_subdirs=("doc/papers",),
+    source_subdirs=("doc/papers", "doc/background/papers"),
     overlay_dest_subdir="doc/papers",
     commons_subdir="papers",
     id_prefix="paper:",
