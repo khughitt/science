@@ -24,7 +24,10 @@ import yaml
 
 from science_tool.entities import truncate_slug_on_word_boundary
 
-_QUESTION_FILE_RE = re.compile(r"^q(?P<num>\d+)-")
+# Match both the reserve scheme (`q##-slug.md`) and the `science question create`
+# scheme (`NN-slug.md`, no prefix) so the next-number scan can't silently reissue
+# a number that create already consumed.
+_QUESTION_FILE_RE = re.compile(r"^q?(?P<num>\d+)-")
 _DEFAULT_PADDING = 2
 _MAX_SLUG_LENGTH = 50
 _TITLE_PLACEHOLDER = "<Question>"
