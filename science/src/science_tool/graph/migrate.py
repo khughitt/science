@@ -110,10 +110,23 @@ _COMMONS_TYPE_TO_DIR = {"dataset": "datasets", "paper": "papers", "topic": "topi
 def _commons_hint_for(target: str) -> str:
     if ":" not in target:
         return ""
+    # A `project:kind:slug` address points at a peer project's entity, which
+    # cannot be commons-promoted from here. Cross-project links belong in prose.
+    if target.count(":") >= 2:
+        return (
+            f" (no local entity for {target}; cross-project references to peer-project "
+            f"entities are not commons-promotable -- link them in prose rather than "
+            f"structured frontmatter, or check the ref's spelling)"
+        )
     type_part, slug = target.split(":", 1)
     type_dir = _COMMONS_TYPE_TO_DIR.get(type_part)
     if type_dir is None:
-        return ""
+        # Only dataset/paper/topic/theme are commons-promotable; for any other
+        # kind, suggesting `commons promote` is a dead end.
+        return (
+            f" (no local entity for {target}; '{type_part}' is not a commons-promotable "
+            f"kind -- check the ref's spelling, or link cross-cutting references in prose)"
+        )
     if type_part == "dataset":
         canonical_path = f"~/d/science-commons/datasets/{slug}/entity.md"
         promote_command = f"science commons promote dataset --slug {slug} --from <project>"
