@@ -232,6 +232,21 @@ def test_valid_markdown_link() -> None:
         assert len(link_issues) == 0
 
 
+def test_bracketed_math_not_flagged_as_link() -> None:
+    """Inline math like [x](x') has a non-path destination and must not be
+    resolved as a file reference."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "# Test\nThe deviation [x](x') and the prime [x'](x) appear in the cost.\n"
+        )
+        issues = check_refs(root)
+        link_issues = [i for i in issues if i.ref_type == "link"]
+        assert link_issues == []
+
+
 def test_unverified_and_legacy_needs_citation_tracked() -> None:
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)

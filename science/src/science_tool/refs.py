@@ -702,6 +702,11 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
                 # Skip external URLs and anchors
                 if target.startswith(("http://", "https://", "#", "mailto:")):
                     continue
+                # Only resolve path-like destinations as intra-repo file links.
+                # Inline math such as `[x](x')` is syntactically link-shaped but
+                # its destination is a bare symbol, not a file path.
+                if "/" not in target and "." not in target:
+                    continue
                 # Resolve relative to the file's directory
                 resolved = (file_path.parent / target).resolve()
                 if not resolved.exists():
