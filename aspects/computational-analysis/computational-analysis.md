@@ -79,6 +79,13 @@ For each pipeline stage (each `sci:Transformation` node), define:
 
 Add QA checkpoints as first-class steps in the pipeline plan, not as afterthoughts. Each transformation task should include its assertions alongside the implementation steps.
 
+For the concrete implementation shape — a dedicated QA step (one script + one rule) that
+reads the processed table and writes a `qa_report.md`, splitting flags into **structural**
+(build-fatal) vs **distribution** (surfaced, not fatal), with config-driven bounds — follow
+[`docs/conventions/pipeline-qa-checkpoints.md`](../../docs/conventions/pipeline-qa-checkpoints.md).
+Plan the QA step as its own task wired into the default target, and prefer a *structural*
+check that regression-guards any source-level fix the pipeline already makes.
+
 ### Additional guidance
 
 When planning computational pipelines:
@@ -99,6 +106,7 @@ Evaluate QA discipline across the pipeline:
 - **Failure handling:** What happens when an assertion fails? Is it hard stop or silent? Score: PASS (hard stop default) / WARN (mixed) / FAIL (all silent)
 - **Dry run step:** Is there a "run on small/synthetic data" step before full execution? Score: PASS (present) / WARN (suggested but not planned) / FAIL (absent)
 - **Edge case coverage:** Are edge cases documented (empty inputs, missing values, extreme values)? Score: PASS (documented) / WARN (partial) / FAIL (not considered)
+- **Severity split:** Does the QA step distinguish build-fatal *structural* violations (bad key, illegal code, broken invariant) from surfaced-not-fatal *distribution* flags (extreme-but-possible values), per [`docs/conventions/pipeline-qa-checkpoints.md`](../../docs/conventions/pipeline-qa-checkpoints.md)? Score: PASS (both, structural fails the build) / WARN (single bucket) / FAIL (no QA step)
 
 Include QA Coverage as an additional row in the rubric results table.
 
