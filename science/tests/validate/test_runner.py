@@ -607,6 +607,7 @@ def _register_real_canonical_checks() -> None:
         "id_prefixes",
         "cross_references",
         "reference_collections",
+        "variant_identity",
         "prose_lints",
         "annotations",
         "evidence_lines",
