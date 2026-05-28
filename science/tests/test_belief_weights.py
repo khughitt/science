@@ -43,5 +43,6 @@ def test_steps_are_rank_minus_one_floored_at_zero():
 def test_phase2_constants_present():
     from science_tool.graph import belief_weights as bw
     assert bw.PROXY_STEP_PENALTY == 2
+    assert bw.CURATION_STEP_PENALTY == 1
     assert bw.DELTA_ENVELOPE == (0.3, 1.0)
-    assert bw.CONFIG_VERSION == "belief-logodds-v1"
+    assert bw.CONFIG_VERSION == "belief-logodds-v2"

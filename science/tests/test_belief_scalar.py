@@ -120,3 +120,16 @@ def test_format_belief_weight_diagnostic_caveat():
     ])
     bw = format_belief_weight(r, belief_scalar(r))
     assert "contested (diagnostic)" in bw["notes"]
+
+
+def test_reference_dataset_lowers_score_by_one():
+    assert unit_score(_u(is_reference_dataset=True)) == 6           # 7 - 1
+    # floored at zero, and never negative even with a minimal unit:
+    assert unit_score(_u(evidence_role="background_constraint", strength="weak",
+                         evidence_type="literature", is_reference_dataset=True)) == 0   # 1 - 1
+
+
+def test_proxy_and_curation_penalties_stack():
+    gated_ref = _u(proxy_directness="indirect", has_measurement_model=False,
+                   is_reference_dataset=True)
+    assert unit_score(gated_ref) == 4                               # 7 - 2 - 1

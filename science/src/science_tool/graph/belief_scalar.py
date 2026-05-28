@@ -10,7 +10,7 @@ from typing import Any
 
 from .belief import BeliefMagnitude, BeliefResult, EvidenceUnit, is_proxy_gated
 from .belief_weights import (
-    DELTA_ENVELOPE, PROXY_STEP_PENALTY, role_steps, strength_steps, type_steps,
+    CURATION_STEP_PENALTY, DELTA_ENVELOPE, PROXY_STEP_PENALTY, role_steps, strength_steps, type_steps,
 )
 
 _FEATURE_FLAG_BELIEF_SCALAR = re.compile(
@@ -22,6 +22,8 @@ def unit_score(u: EvidenceUnit) -> int:
     s = type_steps(u.evidence_type) + role_steps(u.evidence_role) + strength_steps(u.strength)
     if is_proxy_gated(u):
         s = max(0, s - PROXY_STEP_PENALTY)
+    if u.is_reference_dataset:
+        s = max(0, s - CURATION_STEP_PENALTY)
     return s
 
 

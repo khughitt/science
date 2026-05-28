@@ -9,7 +9,7 @@ from rdflib import Graph, Literal, RDF, URIRef
 from rdflib.namespace import PROV
 
 from .belief_weights import (
-    CIRCULAR, DIAGNOSTIC_ROLES, EVIDENCE_ROLE_RANK, EVIDENCE_TYPE_RANK,
+    CIRCULAR, CURATION_STEP_PENALTY, DIAGNOSTIC_ROLES, EVIDENCE_ROLE_RANK, EVIDENCE_TYPE_RANK,
     GATED_PROXY, INDEPENDENT, ROLE_DIRECT_TEST, SCOPE_WHOLE_CLAIM, SHARED_SOURCE,
     STRENGTH_RANK, normalize_evidence_type,
 )
@@ -100,11 +100,15 @@ def collect_evidence_units(
     return units
 
 
-def quality_key(u: EvidenceUnit) -> tuple[int, int, int]:
+def quality_key(u: EvidenceUnit) -> tuple[int, int, int, int]:
+    # A-D4: the curation discount also routes through winner-selection. It is the LAST
+    # (least-significant) component, so a reference-backed unit loses only to an otherwise
+    # equal (type/role/strength) non-reference unit — it never crosses those axes.
     return (
         EVIDENCE_TYPE_RANK.get(normalize_evidence_type(u.evidence_type), 0),
         EVIDENCE_ROLE_RANK.get(u.evidence_role or "", 0),
         STRENGTH_RANK.get(u.strength or "", 0),
+        -CURATION_STEP_PENALTY if u.is_reference_dataset else 0,
     )
 
 
