@@ -43,8 +43,11 @@ Every flag is one of two severities. This split is the load-bearing part of the 
 | **Distribution** | A value is *suspicious but possibly real* — an extreme assay value, a rare category, a heavy tail. | **Surfaced, not fatal.** Written to the report for analyst judgement; never auto-corrected. |
 
 Structural checks encode things that must be true if the code is correct: unique primary
-key, required columns present and complete, categorical values within an allowed set,
-cross-field invariants (e.g. two flags that must be mutually exclusive), and guards against
+key, required columns present and complete, categorical values within an allowed set — or,
+when that allowed set is a *shared data registry* the pipeline also consumes (e.g. a contrast or
+code registry), the table's values validated as a subset of that registry so a single source of
+truth governs both, cross-field invariants (e.g. two flags that must be mutually exclusive), and
+guards against
 known decode artifacts. Distribution checks encode physiological/domain plausibility:
 value ranges, surviving missing-sentinels, outlier counts, survey-weight and design-variable
 sanity.
@@ -73,7 +76,8 @@ qa:
   unique_key: SUBJECT_ID
   required_complete: [stratum, psu]        # structural: present AND non-missing
   categoricals:
-    stage: {allowed: [1, 2, 3, 4, 5]}      # structural: illegal code => bug
+    stage:    {allowed: [1, 2, 3, 4, 5]}                       # structural: illegal code => bug
+    contrast: {allowed_from: "registries/contrasts.csv#name"}  # structural: subset of a shared registry
   exclusive_flags: [[on_drug_a, on_drug_b]]  # structural: must not co-occur
   ranges:                                   # distribution: flagged, not fatal
     age:    {min: 0,   max: 120}
@@ -131,6 +135,8 @@ gate's failure never touches the report.
 
 ## See also
 
+- [`../process/pipeline-audit-and-refactor.md`](../process/pipeline-audit-and-refactor.md) — the
+  three-axis pipeline audit/refactor playbook; this convention is its axis-1 (data-QA) target.
 - [`../project-organization-profiles.md`](../project-organization-profiles.md) — Pipeline
   Data-QA section.
 - [`../../aspects/computational-analysis/computational-analysis.md`](../../aspects/computational-analysis/computational-analysis.md)
