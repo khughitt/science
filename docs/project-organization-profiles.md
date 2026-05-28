@@ -167,3 +167,7 @@ Close the code-side linkage gap (notebooks and scripts → tasks, questions, hyp
 - **Commit-message tag** — `fix(t131): ...` Conventional-Commits scope. Orthogonal to the in-file patterns. See [`docs/conventions/code-task-backlinks.md`](conventions/code-task-backlinks.md#pattern-4-commit-message-tag).
 
 Guidance only; no validator rules. See [`docs/conventions/`](conventions/README.md) for the full convention catalog.
+
+## Pipeline Data-QA
+
+For pipelines that produce a processed analysis table consumed by models or statistics, add a dedicated data-QA step — one script + one rule that reads the processed table and writes a `qa_report.md`, splitting flags into build-fatal **structural** violations vs surfaced-not-fatal **distribution** flags, with config-driven bounds as the single source of truth. Complements the per-stage assertions in the `computational-analysis` aspect; does not replace them. See [`docs/conventions/pipeline-qa-checkpoints.md`](conventions/pipeline-qa-checkpoints.md).

@@ -7,8 +7,8 @@ check; this one says *how to build the check* so it runs every pipeline invocati
 fails loudly when integrity breaks.
 
 It is a deliberately-promoted single-project pattern (health-cycles) with a clear
-cross-project rationale: in two separate pipelines the QA step caught source-level bugs
-that every other check missed — a therapeutic-category code that was a silent superset of
+cross-project rationale: in two separate pipelines within that project the QA step caught
+source-level bugs that every other check missed — a therapeutic-category code that was a silent superset of
 another, and SAS XPORT special-missing values that survived as tiny denormal floats and
 would have entered models as near-zero measurements. Any project whose pipeline produces a
 processed analysis table feeding models or statistics should adopt it.
@@ -19,12 +19,19 @@ A QA checkpoint is **one script + one workflow rule** that reads a processed tab
 writes a markdown report — nothing more exotic:
 
 - It is its own pipeline stage (e.g. a Snakemake rule), wired into the default target so
-  it runs on every build, *after* the table it validates is produced.
+  it runs on every build, *after* the table it validates is produced. Note that a
+  build-fatal exit interacts with output cleanup — see the script contract below.
 - It reads the already-built table (`*.parquet` / `*.csv`), never the raw inputs — it
   validates the substrate analysis actually consumes.
 - It writes a single `results/<workflow>/qa_report.md`: a header with row/entity counts,
   the flagged issues split by severity, and a per-variable distribution table. The report
   is a small text artifact — git-track it; it regenerates with the pipeline.
+
+This end-table QA step **complements, does not replace**, the per-stage assertions and
+inter-stage invariants `plan-pipeline` already calls for (row-count conservation, referential
+integrity, cardinality between stages). A single script reading the processed end table
+cannot see between-stage conservation; keep those checks at the transformations and use this
+step to validate the substrate analysis finally consumes.
 
 ## Two severities
 
@@ -70,7 +77,7 @@ qa:
   exclusive_flags: [[on_drug_a, on_drug_b]]  # structural: must not co-occur
   ranges:                                   # distribution: flagged, not fatal
     age:    {min: 0,   max: 120}
-    glucose:{min: 30,  max: 500}
+    glucose: {min: 30, max: 500}
   missing_sentinels: [-1, -7, -8, -9]       # coerce upstream; QA guards survivors
 ```
 
@@ -92,7 +99,16 @@ Report skeleton:
 
 Script contract: read the table, run the checks, write the report, then
 `sys.exit(...)` if any structural flag fired (unless an explicit `--no-strict` escape is
-passed for inspection).
+passed for local inspection — never wire `--no-strict` into the default target).
+
+**Mind the failed-job output cleanup.** Most build tools delete a failed job's declared
+outputs by default — Snakemake removes the rule's `output:` files on non-zero exit (recover
+with `--keep-incomplete`). That collides with "write the report, then exit non-zero": the
+report you most need is deleted on exactly the build-fatal path. Avoid it by *not* declaring
+`qa_report.md` as the strict rule's output. Either write the report to a path outside that
+rule's `output:` set, or split into two rules — one that always writes the report (its
+output), and a downstream strict-gate rule that reads the report and fails the build. The
+gate's failure never touches the report.
 
 ## When to use / when not
 
@@ -115,6 +131,8 @@ passed for inspection).
 
 ## See also
 
+- [`../project-organization-profiles.md`](../project-organization-profiles.md) — Pipeline
+  Data-QA section.
 - [`../../aspects/computational-analysis/computational-analysis.md`](../../aspects/computational-analysis/computational-analysis.md)
   — `plan-pipeline` (QA Checkpoints) and `review-pipeline` (QA Coverage) sections this
   pattern realizes.
