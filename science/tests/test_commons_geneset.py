@@ -121,6 +121,20 @@ def test_dataset_usage_rejects_noncanonical_role() -> None:
         )
 
 
+def test_dataset_usage_rejects_explicit_null_overlap() -> None:
+    with pytest.raises(GenesetCollectionError, match="overlap"):
+        parse_geneset_rows(
+            [
+                {
+                    "set_key": "A",
+                    "name": "one",
+                    "member_ids": "HGNC:1",
+                    "dataset_usage": '[{"ref":"dataset:x","role":"training","overlap":null}]',
+                }
+            ]
+        )
+
+
 def test_invalid_source_class_errors() -> None:
     with pytest.raises(GenesetCollectionError, match="source_class"):
         parse_geneset_rows([{"set_key": "A", "name": "one", "member_ids": "HGNC:1", "source_class": "curated"}])

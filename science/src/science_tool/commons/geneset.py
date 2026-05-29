@@ -62,8 +62,7 @@ def _dataset_usage_defect(entry: Any) -> str | None:
     role = entry.get("role")
     if role not in GENESET_USAGE_ROLES:
         return f"role must be one of {sorted(GENESET_USAGE_ROLES)}"
-    overlap = entry.get("overlap")
-    if overlap is not None and overlap not in GENESET_USAGE_OVERLAPS:
+    if "overlap" in entry and entry["overlap"] not in GENESET_USAGE_OVERLAPS:
         return f"overlap must be one of {sorted(GENESET_USAGE_OVERLAPS)}"
     return None
 

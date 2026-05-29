@@ -214,6 +214,18 @@ def test_boolean_numeric_collection_fields_are_malformed() -> None:
     assert _rules(results) == ["geneset.collection-malformed"]
 
 
+def test_float_min_max_collection_fields_are_malformed_before_row_read() -> None:
+    fm = _geneset(set_size_summary={"min": 1.1, "median": 1.1, "max": 1.1})
+    results = list(
+        evaluate_geneset_collections(
+            [fm],
+            rows_by_dataset_id={},
+            registry_meta_by_id={},
+        )
+    )
+    assert _rules(results) == ["geneset.collection-malformed"]
+
+
 def test_n_sets_mismatch_errors() -> None:
     fm = _geneset(n_sets=2)
     results = list(

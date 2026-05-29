@@ -77,10 +77,13 @@ def _collection_defect(fm: dict[str, Any]) -> str | None:
     summary = fm.get("set_size_summary")
     if not isinstance(summary, dict):
         return "set_size_summary must be an object"
-    for key in ("min", "median", "max"):
+    for key in ("min", "max"):
         value = summary.get(key)
-        if not _is_number(value) or value < 0:
-            return f"set_size_summary.{key} must be a non-negative number"
+        if not _is_int(value) or value < 0:
+            return f"set_size_summary.{key} must be a non-negative integer"
+    median_value = summary.get("median")
+    if not _is_number(median_value) or median_value < 0:
+        return "set_size_summary.median must be a non-negative number"
     if not (summary["min"] <= summary["median"] <= summary["max"]):
         return "set_size_summary must satisfy min <= median <= max"
     ident = fm.get("identifier_space")
