@@ -54,7 +54,7 @@ def _candidate(tmp_path, resources, project_slug="mm"):
 
 
 def _sourced(ref="${OUTPUT_ROOT}/scrna/walker2024.h5ad", *, hash_=VALID_HASH, bytes_=14010935296):
-    # NOTE: default ref is a ${OUTPUT_ROOT} token — tests that verify it must set OUTPUT_ROOT.
+    # default ref is a ${OUTPUT_ROOT} token — tests that verify it must set OUTPUT_ROOT.
     return {
         "name": "walker-h5ad",
         "path": "walker2024.h5ad",
@@ -123,6 +123,16 @@ def test_path_failing_logical_validation_rejected(tmp_path):
 
     res = _sourced()
     res["path"] = "../escape.h5ad"
+    with pytest.raises(PromoteCandidateError, match="path"):
+        promote._dataset_per_resource(_candidate(tmp_path, [res]))
+
+
+def test_path_failing_logical_validation_rejected_for_colocated(tmp_path):
+    from science_tool.commons import promote
+    from science_tool.commons.errors import PromoteCandidateError
+
+    # co-located resource (no source) with a parent-escape path
+    res = {"name": "bad", "path": "../escape.csv"}
     with pytest.raises(PromoteCandidateError, match="path"):
         promote._dataset_per_resource(_candidate(tmp_path, [res]))
 
