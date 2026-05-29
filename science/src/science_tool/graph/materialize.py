@@ -656,6 +656,8 @@ def _geneset_usage_records(sources: ProjectSources, *, resolver: ReferenceResolv
     for entity in sources.entities:
         if entity.kind != "dataset":
             continue
+        if sources.entity_source_adapters.get(entity.canonical_id) != "datapackage":
+            continue
         fm_path = project_root / entity.file_path
         fm = raw_frontmatter(fm_path)
         if not is_geneset_frontmatter(fm):

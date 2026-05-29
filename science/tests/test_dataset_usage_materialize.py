@@ -6,6 +6,9 @@ from rdflib.namespace import RDF
 from science_model.entities import Entity, EntityType, PaperEntity
 from science_model.packages.schema import AccessBlock, DatasetUsage, DerivationBlock
 
+from science_tool.graph.entity_registry import EntityRegistry
+from science_tool.graph.reference_resolution import ReferenceResolver
+from science_tool.graph.sources import KnowledgeProfiles, ProjectSources
 from science_tool.graph.store import PROJECT_NS, SCI_NS
 
 
@@ -183,6 +186,24 @@ def test_add_usage_record_to_graph_preserves_absolute_virtual_consumer_uri() -> 
     assert (node, SCI_NS.usageRole, RDFLiteral("annotates")) in graph
     assert (node, SCI_NS.usageOverlap, RDFLiteral("partial")) in graph
     assert (node, SCI_NS.usageSource, RDFLiteral("geneset.members_resource")) in graph
+
+
+def test_geneset_row_usage_rejects_virtual_uri_normalization_collision() -> None:
+    from types import SimpleNamespace
+
+    from science_tool.graph.dataset_usage import DatasetUsageMaterializationError, usage_records_for_geneset_rows
+
+    rows = [
+        SimpleNamespace(set_key="é", dataset_usage=()),
+        SimpleNamespace(set_key="e\u0301", dataset_usage=()),
+    ]
+
+    with pytest.raises(DatasetUsageMaterializationError, match="collides"):
+        usage_records_for_geneset_rows(
+            collection_id="dataset:reactome-v89",
+            source_path="data/reactome/datapackage.yaml",
+            rows=rows,
+        )
 
 
 def test_usage_node_uri_is_deterministic_for_record_payload() -> None:
@@ -710,6 +731,37 @@ def test_materialize_graph_emits_geneset_row_usage_nodes(tmp_path):
     assert (nodes[0], SCI_NS.usageSource, Literal("geneset.members_resource")) in graph
 
 
+def test_materialize_graph_canonicalizes_geneset_row_usage_alias(tmp_path):
+    from science_tool.graph.materialize import materialize_graph
+
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path / "data" / "gtex" / "datapackage.yaml",
+        "gtex-v8",
+        "aliases: [dataset:gtex]\n"
+        "origin: external\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n",
+    )
+    _write_geneset_collection(tmp_path)
+    (tmp_path / "data" / "reactome" / "sets.csv").write_text(
+        "set_key,name,member_ids,dataset_usage\n"
+        'R-HSA-1,Cell cycle,HGNC:1;HGNC:2,"[{""ref"":""dataset:gtex"",""role"":""set_definition_source""}]"\n',
+        encoding="utf-8",
+    )
+
+    trig = materialize_graph(tmp_path)
+    graph = _load_trig(trig).graph(PROJECT_NS["graph/provenance"])
+
+    row_uri = PROJECT_NS["virtual/geneset-member/reactome-v89/R-HSA-1"]
+    nodes = list(graph.objects(row_uri, SCI_NS.hasDatasetUsage))
+
+    assert len(nodes) == 1
+    assert (nodes[0], SCI_NS.dataset, PROJECT_NS["dataset/gtex-v8"]) in graph
+    assert (nodes[0], SCI_NS.dataset, PROJECT_NS["dataset/gtex"]) not in graph
+
+
 def test_materialize_graph_requires_geneset_members_resource(tmp_path):
     from science_tool.graph.materialize import materialize_graph
 
@@ -718,3 +770,112 @@ def test_materialize_graph_requires_geneset_members_resource(tmp_path):
 
     with pytest.raises(RuntimeError, match="members_resource"):
         materialize_graph(tmp_path)
+
+
+def test_geneset_usage_records_skip_non_datapackage_sources(tmp_path, monkeypatch):
+    from science_tool.graph import materialize
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    commons_entity = tmp_path / "commons" / "datasets" / "reactome-v89" / "entity.md"
+    commons_entity.parent.mkdir(parents=True)
+    commons_entity.write_text(
+        "---\n"
+        "id: dataset:reactome-v89\n"
+        "type: dataset\n"
+        "title: Reactome\n"
+        "schema_profile: science-entity-base/1.0+dataset/1.0+bio.geneset/1.0\n"
+        "members_resource: sets\n"
+        "resources:\n"
+        "  - name: sets\n"
+        "    path: sets.csv\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    entity = Entity(
+        id="dataset:reactome-v89",
+        canonical_id="dataset:reactome-v89",
+        kind="dataset",
+        type=EntityType.DATASET,
+        title="Reactome",
+        project="demo",
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path=str(commons_entity),
+    )
+    sources = ProjectSources(
+        project_name="demo",
+        project_root=str(project_root),
+        profiles=KnowledgeProfiles(local="local"),
+        entities=[entity],
+        entity_source_adapters={"dataset:reactome-v89": "commons-merged"},
+        registry=EntityRegistry.with_core_types(),
+    )
+    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases={})
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("read_member_rows should not be called for non-local gene-set entities")
+
+    monkeypatch.setattr(materialize, "read_member_rows", fail_if_called)
+
+    assert list(materialize._geneset_usage_records(sources, resolver=resolver)) == []
+
+
+def test_materialization_audit_reports_unresolved_geneset_row_usage_refs(tmp_path):
+    from science_tool.graph.materialize import materialization_audit
+
+    _write_project(tmp_path)
+    _write_geneset_collection(tmp_path)
+    (tmp_path / "data" / "reactome" / "sets.csv").write_text(
+        "set_key,name,member_ids,dataset_usage\n"
+        'R-HSA-1,Cell cycle,HGNC:1;HGNC:2,"[{""ref"":""dataset:missing"",""role"":""set_definition_source""}]"\n',
+        encoding="utf-8",
+    )
+
+    rows, has_failures = materialization_audit(tmp_path)
+
+    assert has_failures is True
+    assert any(
+        row["check"] == "unresolved_reference"
+        and row["field"] == "members_resource.dataset_usage"
+        and row["target"] == "dataset:missing"
+        for row in rows
+    )
+
+
+def test_materialization_audit_reports_non_dataset_geneset_row_usage_refs(tmp_path):
+    from science_tool.graph.materialize import materialization_audit
+
+    _write_project(tmp_path)
+    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir.mkdir(parents=True)
+    (paper_dir / "Smith2024.md").write_text(
+        "---\n"
+        "id: paper:Smith2024\n"
+        "type: paper\n"
+        "title: Smith\n"
+        "aliases: [dataset:smith]\n"
+        "status: active\n"
+        "created: '2026-05-29'\n"
+        "updated: '2026-05-29'\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    _write_geneset_collection(tmp_path)
+    (tmp_path / "data" / "reactome" / "sets.csv").write_text(
+        "set_key,name,member_ids,dataset_usage\n"
+        'R-HSA-1,Cell cycle,HGNC:1;HGNC:2,"[{""ref"":""dataset:smith"",""role"":""set_definition_source""}]"\n',
+        encoding="utf-8",
+    )
+
+    rows, has_failures = materialization_audit(tmp_path)
+
+    assert has_failures is True
+    assert any(
+        row["check"] == "invalid_dataset_reference"
+        and row["field"] == "members_resource.dataset_usage"
+        and row["target"] == "dataset:smith"
+        for row in rows
+    )

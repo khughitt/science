@@ -13,6 +13,9 @@ from science_model.frontmatter import parse_frontmatter
 
 from science_tool.addressing import is_address
 from science_tool.bibliography import is_bibliography_reference
+from science_tool.commons.frontmatter import raw_frontmatter
+from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
+from science_tool.commons.geneset_resources import is_geneset_frontmatter, read_member_rows
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
     AliasCollisionError,
@@ -163,6 +166,7 @@ def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool
 
     for entity in sources.entities:
         rows.extend(_audit_entity(entity, resolver, ext_prefixes=ext_prefixes))
+    rows.extend(_audit_geneset_row_dataset_usage(sources, resolver, ext_prefixes=ext_prefixes))
     for relation in sources.relations:
         rows.extend(_audit_relation(relation, resolver, ext_prefixes=ext_prefixes))
     for binding in sources.bindings:
@@ -186,6 +190,46 @@ def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool
     rows.sort(key=lambda row: (row["source"], row["target"]))
     has_failures = any(row["status"] == "fail" for row in rows)
     return rows, has_failures
+
+
+def _audit_geneset_row_dataset_usage(
+    sources: ProjectSources,
+    resolver: ReferenceResolver,
+    *,
+    ext_prefixes: frozenset[str],
+) -> list[AuditRow]:
+    rows: list[AuditRow] = []
+    project_root = Path(sources.project_root)
+    for entity in sources.entities:
+        if entity.kind != "dataset":
+            continue
+        if sources.entity_source_adapters.get(entity.canonical_id) != "datapackage":
+            continue
+        fm = raw_frontmatter(project_root / entity.file_path)
+        if not is_geneset_frontmatter(fm):
+            continue
+        fm["_path"] = entity.file_path
+        raw_rows = read_member_rows(project_root, fm)
+        if raw_rows is None or isinstance(raw_rows, Exception):
+            continue
+        try:
+            geneset_rows = parse_geneset_rows(raw_rows)
+        except GenesetCollectionError:
+            continue
+        for geneset_row in geneset_rows:
+            for usage in geneset_row.dataset_usage:
+                rows.extend(
+                    _audit_dataset_reference(
+                        entity,
+                        "members_resource.dataset_usage",
+                        str(usage["ref"]),
+                        resolver,
+                        ext_prefixes=ext_prefixes,
+                        allow_cross_kind_fallback=False,
+                        allow_tag=False,
+                    )
+                )
+    return rows
 
 
 def audit_project_graph(project_root: Path) -> AuditProjectReport:
