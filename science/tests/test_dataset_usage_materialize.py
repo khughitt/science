@@ -68,6 +68,32 @@ def test_paper_legacy_datasets_union_without_duplicate() -> None:
     ]
 
 
+def test_paper_legacy_datasets_duplicate_refs_emit_once() -> None:
+    from science_tool.graph.dataset_usage import usage_records_for_entity
+
+    paper = PaperEntity(
+        id="paper:Adams2025",
+        canonical_id="paper:Adams2025",
+        kind="paper",
+        type="paper",
+        title="Adams",
+        project="demo",
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path="doc/papers/Adams2025.md",
+        datasets=["dataset:encode-v4", "dataset:encode-v4"],
+        dataset_usage=[],
+    )
+
+    records = usage_records_for_entity(paper)
+
+    assert [(r.dataset_ref, r.role, r.overlap, r.source) for r in records] == [
+        ("dataset:encode-v4", "analyzed", "unknown", "paper.datasets")
+    ]
+
+
 def test_derived_dataset_inputs_project_to_upstream_unknown() -> None:
     from science_tool.graph.dataset_usage import usage_records_for_entity
 

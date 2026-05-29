@@ -48,13 +48,13 @@ class DatasetUsageRecord:
 
 def usage_records_for_entity(entity: Entity) -> list[DatasetUsageRecord]:
     records: list[DatasetUsageRecord] = []
-    explicit_refs: set[str] = set()
+    materialized_refs: set[str] = set()
     source_path = str(getattr(entity, "file_path", "") or "")
 
     for usage in getattr(entity, "dataset_usage", []) or []:
         dataset_ref = str(usage.ref)
         _reject_self_reference(entity, dataset_ref)
-        explicit_refs.add(dataset_ref)
+        materialized_refs.add(dataset_ref)
         records.append(
             DatasetUsageRecord(
                 consumer_id=entity.canonical_id,
@@ -68,12 +68,14 @@ def usage_records_for_entity(entity: Entity) -> list[DatasetUsageRecord]:
 
     if entity.kind == "paper":
         for dataset_ref in getattr(entity, "datasets", []) or []:
-            if dataset_ref in explicit_refs:
+            dataset_ref = str(dataset_ref)
+            if dataset_ref in materialized_refs:
                 continue
+            materialized_refs.add(dataset_ref)
             records.append(
                 DatasetUsageRecord(
                     consumer_id=entity.canonical_id,
-                    dataset_ref=str(dataset_ref),
+                    dataset_ref=dataset_ref,
                     role="analyzed",
                     overlap="unknown",
                     source="paper.datasets",
