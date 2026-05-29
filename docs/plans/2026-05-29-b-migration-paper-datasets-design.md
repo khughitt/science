@@ -54,8 +54,10 @@ adding the ambiguous legacy field and future B2 logic has to keep remembering th
 
 The migration rewrites only markdown/frontmatter documents whose frontmatter declares `type: paper` or
 `kind: paper`. The paper kind is a hard gate: a non-paper entity that happens to carry a `datasets` key
-must be ignored. The scanner may use the same source surfaces as `load_project_sources`, but selection is
-by parsed frontmatter kind rather than by directory name alone.
+must be ignored. Both keys are accepted because current source adapters normalize legacy `type` and newer
+`kind` frontmatter surfaces into entity kind; the migration should not depend on which spelling a paper
+has already adopted. The scanner may use the same source surfaces as `load_project_sources`, but selection
+is by parsed frontmatter kind rather than by directory name alone.
 
 Malformed frontmatter is not a migration target. It is reported as a conflict row only if the file was
 inside the paper source surface and looked like an intended paper file; otherwise it is skipped.
@@ -84,6 +86,10 @@ paper frontmatter. Removing an empty `datasets: []` is allowed.
 The migration preserves existing `dataset_usage` entry order and appends only missing refs in their
 source `datasets` order. Repeated legacy refs are deduped by first occurrence before appending. It must be
 idempotent: running it twice produces the same file content after the first successful run.
+
+The migration is ref-resolution agnostic. A `datasets` entry is moved verbatim if it is syntactically a
+`dataset:` ref, even if it does not resolve locally or in commons. Reference-resolution warnings remain
+owned by B1 validation and graph audit; this migration must not require commons to be built or available.
 
 ### B-M3 -- Same-Ref Merge Rules
 
@@ -145,6 +151,20 @@ science graph migrate-paper-datasets --project-root . --apply
 
 Dry-run is the default and reports the files that would change plus conflicts. `--apply` writes the
 rewrites.
+
+Exit-code semantics are pinned for migration-campaign automation:
+
+| Mode/result | Exit code |
+|---|---:|
+| dry-run, no pending rewrites and no conflicts | 0 |
+| dry-run, pending rewrites and no conflicts | 1 |
+| dry-run, any conflicts | 2 |
+| apply, rewrites applied and no conflicts | 0 |
+| apply, no rewrites needed and no conflicts | 0 |
+| apply, any conflicts, even if other files were migrated | 2 |
+
+Conflicts take precedence over pending-change status. A non-2 dry-run exit code therefore tells CI
+whether the project is already migrated (`0`) or has safe rewrites waiting (`1`).
 
 The pure implementation should live outside the CLI, likely as a focused helper module or focused
 functions near `science_tool.graph.migrate`, so tests can exercise frontmatter rewriting without invoking
@@ -212,6 +232,9 @@ The implementation should be accepted only when these behaviors are covered:
 - same-ref existing non-`analyzed` usage reports a conflict and leaves the file unchanged;
 - malformed legacy or canonical fields report stable conflict codes and leave files unchanged;
 - running apply twice is idempotent;
+- syntactically valid but unresolved `dataset:` refs are migrated verbatim and still reported later by
+  validation/audit;
+- CLI exit codes follow the pinned clean/pending/conflict matrix;
 - CLI JSON and table outputs include changed files and conflicts;
 - existing B1 graph materialization and dataset-influence validate tests still pass after migration code
   is added.

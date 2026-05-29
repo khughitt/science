@@ -119,6 +119,9 @@ among evidence lines that share a target. Global influence reporting can reuse t
 later, but B2 acceptance is about independence and circularity, not a complete UI for influence
 exploration.
 
+Virtual gene-set member paths never commit in B2. They stay candidate-only until D2 promotion or another
+explicit graph relation makes the individual set a normal evidence source with direct provenance.
+
 ---
 
 ## 5. Committed Versus Candidate Signals
@@ -141,10 +144,14 @@ Committed output should align with existing aggregation inputs, but through one 
 target rather than one group per dataset:
 
 - `independence = shared-source`;
-- `independence_group = dataset-derived:<hash>` stable group key;
+- `independence_group = dataset-derived:<dataset-or-dataset-set-key>` stable group key;
 - `shared_dataset = dataset:<slug>` when a component has one shared dataset, or a deterministic
   comma-separated/multi-value graph representation when several shared datasets justify the same
   component.
+
+`shared_dataset` is explanatory observability metadata only. Scoring must key on
+`independence_group`; `aggregate_belief` must not parse comma-joined or multi-value `shared_dataset`
+payloads to decide collapse behavior.
 
 The component rule is necessary because the current `EvidenceUnit` model has a single
 `independence_group` field. If line A shares full-overlap dataset X with line B and full-overlap dataset Y
@@ -152,10 +159,28 @@ with line C, B2 forms one connected committed component `{A, B, C}` for that tar
 to one derived group key, with both datasets retained as justification. B2 must not emit multiple
 committed independence groups for one evidence line.
 
+This is an equivalence-class collapse, and it is deliberately conservative. In the `{A, B, C}` example,
+line A and line C may not pairwise share any dataset; they are collapsed because hub line B shares
+different full-overlap datasets with each. That can under-credit independent evidence, but it does not
+inflate support. A finer correlation model that can represent overlapping-but-not-transitive dependence
+sets is deferred beyond B2.
+
 The component key must not include stance. The existing reducer chooses winners by `(independence_group,
 stance)` and separately marks a group contested when both support and dispute winners share the group. If
 a support line and a dispute line share the same full-overlap dataset, they need the same derived group
 key so the current contested-group behavior still works.
+
+Derived group keys should be deterministic without churning on every component membership change:
+
+- single-dataset committed components use `dataset-derived:<dataset-slug>` or an equivalent stable
+  dataset-derived key;
+- multi-dataset committed components use `dataset-derived:<hash(sorted-dataset-refs)>`;
+- the component record URI may hash the full payload, including evidence-line members, but the
+  `independence_group` value exposed to aggregation should not hash sorted evidence-line URIs.
+
+Adding a new line to an existing single-dataset component therefore does not rename the group for
+pre-existing lines. Adding a genuinely new shared dataset to a multi-dataset component may change the
+dataset-set key; that reflects a changed dependence explanation rather than incidental membership churn.
 
 The implementation may choose whether to materialize component metadata as graph-only derived metadata or
 to expose it through the same `EvidenceUnit` fields read by `aggregate_belief`. It must not rewrite
@@ -275,6 +300,10 @@ Pinned severities:
 | authored `shared_dataset` group cannot be supported by B2 but B2 has enough graph data to check that dataset basis | WARNING |
 | graph data unavailable or no usage path exists | no result |
 
+The committed-vs-authored-independent ERROR is raised against a line's own direct full-overlap
+shared-dataset edge. It is not raised merely because the line was swept into a connected component
+through another line's hub relationship.
+
 Validation should not require commons resources beyond what graph build already materialized. If graph
 data is absent, B2 checks should degrade cleanly with no result rather than re-parsing source files or
 emitting stale warnings.
@@ -317,7 +346,12 @@ The B2 implementation plan should cover:
   commitment-worthy;
 - graph tests proving a line with multiple full-overlap shared datasets is assigned one connected
   component group, not multiple committed groups;
+- graph tests for the transitive hub case: A-B share dataset X, B-C share dataset Y, and B2 produces one
+  conservative connected component while preserving both datasets as justification;
+- graph tests proving virtual gene-set member ancestry is candidate-only in B2;
 - validation tests for candidate WARN and committed-vs-authored-independent ERROR;
+- validation tests proving the ERROR attaches only to direct full-overlap shared-dataset edges, not mere
+  component co-membership;
 - aggregation tests proving candidates do not affect belief and committed full-overlap dependence does;
 - aggregation tests proving support/dispute lines in the same derived component still set `contested`;
 - snapshot/version tests if `CONFIG_VERSION` changes;
