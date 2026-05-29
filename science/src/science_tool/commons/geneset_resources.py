@@ -10,6 +10,7 @@ import yaml
 
 from science_tool.commons.datapackage import validate_logical_path
 from science_tool.commons.errors import CommonsError
+from science_tool.commons.frontmatter import raw_frontmatter
 
 PROFILE_TOKEN = "+bio.geneset/"
 
@@ -17,6 +18,19 @@ PROFILE_TOKEN = "+bio.geneset/"
 def is_geneset_frontmatter(fm: dict[str, Any]) -> bool:
     profile = str(fm.get("schema_profile") or "")
     return (fm.get("kind") or fm.get("type")) == "dataset" and PROFILE_TOKEN in f"+{profile}"
+
+
+def geneset_resource_frontmatter(project_root: Path, entity_path: str | Path) -> dict[str, Any] | None:
+    path = Path(entity_path)
+    source_path = path if path.is_absolute() else project_root / path
+    fm = raw_frontmatter(source_path)
+    if not is_geneset_frontmatter(fm):
+        return None
+    if source_path.name == "entity.md":
+        fm["_path"] = str(source_path.parent / "datapackage.yaml")
+    else:
+        fm["_path"] = str(path)
+    return fm
 
 
 def resource_path_for_members(project_root: Path, fm: dict[str, Any]) -> Path | Exception | None:

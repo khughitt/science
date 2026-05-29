@@ -624,6 +624,46 @@ dataset_usage:
     assert "dataset:rnaseq-example" in {entity.canonical_id for entity in sources.entities}
 
 
+def test_load_project_sources_pulls_transitive_commons_dataset_usage_ref(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commons_root = _build_commons(tmp_path)
+    paper_path = commons_root / "papers" / "Adams2025.md"
+    paper_text = paper_path.read_text(encoding="utf-8")
+    paper_path.write_text(
+        paper_text.replace(
+            "\n---\n\n#",
+            "\ndataset_usage:\n  - ref: \"dataset:rnaseq-example\"\n    role: analyzed\n---\n\n#",
+        ),
+        encoding="utf-8",
+    )
+    RegistryBuilder(commons_root, CommonsEntityAdapter(commons_root)).rebuild()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    (project_root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    manifest_path = project_root / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("", encoding="utf-8")
+    hypothesis_path = project_root / "doc" / "hypotheses" / "h1.md"
+    hypothesis_path.parent.mkdir(parents=True)
+    hypothesis_path.write_text(
+        """---
+id: "hypothesis:h1"
+type: "hypothesis"
+title: "H1"
+related: ["paper:Adams2025"]
+---
+""",
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(project_root)
+
+    assert {"paper:Adams2025", "dataset:rnaseq-example"} <= {entity.canonical_id for entity in sources.entities}
+
+
 def test_load_project_sources_pulls_commons_geneset_row_usage_ref(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

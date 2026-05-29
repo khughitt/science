@@ -395,6 +395,34 @@ def test_check_dataset_influence_uses_manual_aliases_for_dataset_usage_refs(
     assert list(check_dataset_influence(_ctx(tmp_path))) == []
 
 
+def test_check_dataset_influence_manual_alias_to_non_dataset_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.validate.checks.dataset_influence import check_dataset_influence
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
+    _write_project(tmp_path)
+    mappings = tmp_path / "knowledge" / "sources" / "local" / "mappings.yaml"
+    mappings.parent.mkdir(parents=True)
+    mappings.write_text('aliases:\n  "dataset:gtex": "paper:Adams2025"\n', encoding="utf-8")
+    (tmp_path / "doc" / "papers").mkdir(parents=True)
+    (tmp_path / "doc" / "papers" / "Adams2025.md").write_text(
+        "---\n"
+        "id: paper:Adams2025\n"
+        "type: paper\n"
+        "title: Adams\n"
+        "dataset_usage:\n"
+        "  - ref: dataset:gtex\n"
+        "    role: analyzed\n"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    results = list(check_dataset_influence(_ctx(tmp_path)))
+
+    assert _rules(results) == [(Severity.ERROR, "dataset-influence.ref-not-dataset")]
+
+
 def test_check_dataset_influence_dataset_usage_alias_self_reference_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -795,7 +795,7 @@ def test_materialize_graph_requires_geneset_members_resource(tmp_path):
         materialize_graph(tmp_path)
 
 
-def test_geneset_usage_records_skip_non_datapackage_sources(tmp_path, monkeypatch):
+def test_geneset_usage_records_require_commons_members_resource(tmp_path):
     from science_tool.graph import materialize
 
     project_root = tmp_path / "project"
@@ -838,12 +838,103 @@ def test_geneset_usage_records_skip_non_datapackage_sources(tmp_path, monkeypatc
     )
     resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases={})
 
-    def fail_if_called(*_args, **_kwargs):
-        raise AssertionError("read_member_rows should not be called for non-local gene-set entities")
+    with pytest.raises(RuntimeError, match="members_resource"):
+        list(materialize._geneset_usage_records(sources, resolver=resolver))
 
-    monkeypatch.setattr(materialize, "read_member_rows", fail_if_called)
 
-    assert list(materialize._geneset_usage_records(sources, resolver=resolver)) == []
+def test_materialize_graph_emits_commons_geneset_row_usage_nodes(tmp_path, monkeypatch):
+    from science_tool.commons.adapter import CommonsEntityAdapter
+    from science_tool.commons.registry import RegistryBuilder
+    from science_tool.graph.materialize import materialize_graph
+
+    commons_root = tmp_path / "commons"
+    (commons_root / "datasets" / "rnaseq-example").mkdir(parents=True)
+    (commons_root / "datasets" / "rnaseq-example" / "entity.md").write_text(
+        "---\n"
+        "schema_profile: science-entity-base/1.0+dataset/1.0\n"
+        "id: dataset:rnaseq-example\n"
+        "type: dataset\n"
+        "title: RNA-seq\n"
+        "version: 1.0.0\n"
+        "status: active\n"
+        "created: '2026-05-29'\n"
+        "updated: '2026-05-29'\n"
+        "origin: external\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n"
+        "access: {level: public, verified: true}\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    (commons_root / "datasets" / "rnaseq-example" / "datapackage.yaml").write_text(
+        "resources: []\n",
+        encoding="utf-8",
+    )
+    reactome_dir = commons_root / "datasets" / "reactome-v89"
+    reactome_dir.mkdir(parents=True)
+    (reactome_dir / "entity.md").write_text(
+        "---\n"
+        "schema_profile: science-entity-base/1.0+dataset/1.0+bio.geneset/1.0\n"
+        "id: dataset:reactome-v89\n"
+        "type: dataset\n"
+        "title: Reactome\n"
+        "version: 1.0.0\n"
+        "status: active\n"
+        "created: '2026-05-29'\n"
+        "updated: '2026-05-29'\n"
+        "origin: external\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n"
+        "source_class: reference\n"
+        "access: {level: public, verified: true}\n"
+        "member_key_column: set_key\n"
+        "members_resource: sets\n"
+        "n_sets: 1\n"
+        "set_size_summary: {min: 2, median: 2, max: 2}\n"
+        "identifier_space: {tier: gene, namespace: hgnc_id, resolution_status: declared_unresolved}\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    (reactome_dir / "datapackage.yaml").write_text(
+        "resources:\n"
+        "  - name: sets\n"
+        "    path: sets.csv\n",
+        encoding="utf-8",
+    )
+    (reactome_dir / "sets.csv").write_text(
+        "set_key,name,member_ids,dataset_usage\n"
+        'R-HSA-1,Cell cycle,HGNC:1;HGNC:2,"[{""ref"":""dataset:rnaseq-example"",""role"":""set_definition_source""}]"\n',
+        encoding="utf-8",
+    )
+    RegistryBuilder(commons_root, CommonsEntityAdapter(commons_root)).rebuild()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    _write_project(tmp_path)
+    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir.mkdir(parents=True)
+    (paper_dir / "Adams2025.md").write_text(
+        "---\n"
+        "id: paper:Adams2025\n"
+        "type: paper\n"
+        "title: Adams\n"
+        "status: active\n"
+        "created: '2026-05-29'\n"
+        "updated: '2026-05-29'\n"
+        "dataset_usage:\n"
+        "  - ref: dataset:reactome-v89\n"
+        "    role: analyzed\n"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    trig = materialize_graph(tmp_path)
+    graph = _load_trig(trig).graph(PROJECT_NS["graph/provenance"])
+    row_uri = PROJECT_NS["virtual/geneset-member/reactome-v89/R-HSA-1"]
+    nodes = list(graph.objects(row_uri, SCI_NS.hasDatasetUsage))
+
+    assert len(nodes) == 1
+    assert (nodes[0], SCI_NS.dataset, PROJECT_NS["dataset/rnaseq-example"]) in graph
+    assert (nodes[0], SCI_NS.usageSource, Literal("geneset.members_resource")) in graph
 
 
 def test_materialization_audit_reports_unresolved_geneset_row_usage_refs(tmp_path):

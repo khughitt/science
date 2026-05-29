@@ -23,9 +23,8 @@ from science_tool.commons.errors import (
     CommonsRootNotFoundError,
     OverlayValidationError,
 )
-from science_tool.commons.frontmatter import raw_frontmatter
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
-from science_tool.commons.geneset_resources import is_geneset_frontmatter, read_member_rows
+from science_tool.commons.geneset_resources import geneset_resource_frontmatter, read_member_rows
 from science_tool.commons.overlay import MergedEntity, OverlayAdapter, merge_entity
 from science_tool.commons.query import CommonsQuery
 from science_tool.graph.entity_registry import EntityRegistry
@@ -90,8 +89,8 @@ def _load_commons_referenced_entities(
     )
     referenced_ids.difference_update(identity_table)
 
-    needed_ids = referenced_ids | (set(overlays) - set(identity_table))
-    if not needed_ids:
+    pending_ids = referenced_ids | (set(overlays) - set(identity_table))
+    if not pending_ids:
         return [], {}
 
     commons_root = resolve_commons_root()
@@ -102,7 +101,14 @@ def _load_commons_referenced_entities(
     loaded: list[tuple[Entity, SourceRef]] = []
     overlay_paths: dict[str, str] = {}
     pinned_unenforced: list[str] = []
-    for canonical_id in sorted(needed_ids):
+    seen_ids: set[str] = set()
+    resolved_ids: set[str] = set(identity_table)
+    while pending_ids:
+        canonical_id = sorted(pending_ids)[0]
+        pending_ids.remove(canonical_id)
+        if canonical_id in seen_ids or canonical_id in resolved_ids:
+            continue
+        seen_ids.add(canonical_id)
         overlay = overlays.get(canonical_id)
         try:
             record = query.show(canonical_id)
@@ -132,8 +138,16 @@ def _load_commons_referenced_entities(
             path=_commons_source_ref_path(record.type, record.slug),
         )
         loaded.append((entity, ref))
+        resolved_ids.add(canonical_id)
         if overlay is not None:
             overlay_paths[canonical_id] = str(overlay.overlay_path)
+        transitive_ids = collect_referenced_commons_ids(
+            project_root=project_root,
+            project_entities=[entity],
+            project_relations=[],
+            project_bindings=[],
+        )
+        pending_ids.update(transitive_ids - resolved_ids - seen_ids)
 
     if pinned_unenforced:
         # One aggregated line, not one per entity: a project that pins hundreds
@@ -193,12 +207,9 @@ def _collect_geneset_row_usage_refs(found: set[str], *, project_root: Path, enti
     if not isinstance(file_path, str) or not file_path:
         return
     rel_path = Path(file_path)
-    if rel_path.is_absolute():
+    fm = geneset_resource_frontmatter(project_root, rel_path)
+    if fm is None:
         return
-    fm = raw_frontmatter(project_root / rel_path)
-    if not is_geneset_frontmatter(fm):
-        return
-    fm["_path"] = file_path
     raw_rows = read_member_rows(project_root, fm)
     if raw_rows is None or isinstance(raw_rows, Exception):
         return

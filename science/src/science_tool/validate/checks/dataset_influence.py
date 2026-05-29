@@ -17,7 +17,7 @@ from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
-DatasetRefStatus = Literal["resolved", "missing", "unavailable"]
+DatasetRefStatus = Literal["resolved", "missing", "unavailable", "non_dataset"]
 _COMMONS_LAYOUT_DIRS = (".git", "datasets", "papers", "topics", "themes")
 _ROLES = ("analyzed", "set_definition_source", "validation_source", "cited", "upstream", "training")
 _OVERLAPS = ("full", "partial", "unknown")
@@ -180,6 +180,13 @@ def evaluate_dataset_influence(
                 f"{consumer}: dataset ref {ref!r} cannot be checked because registry resources are unavailable",
                 "dataset-influence.ref-unresolved-unavailable",
             )
+        elif status == "non_dataset":
+            yield _result(
+                Severity.ERROR,
+                path,
+                f"{consumer}: dataset ref {ref!r} resolves to a non-dataset entity",
+                "dataset-influence.ref-not-dataset",
+            )
         else:
             yield _result(
                 Severity.WARN,
@@ -189,15 +196,20 @@ def evaluate_dataset_influence(
             )
 
 
-def _dataset_ref_statuses(ctx: ValidateContext, refs: set[str]) -> dict[str, DatasetRefStatus]:
-    local_ids = _local_dataset_ids(dataset_frontmatters(ctx))
+def _dataset_ref_statuses(
+    ctx: ValidateContext,
+    refs: set[str],
+    frontmatters: Iterable[dict[str, Any]],
+) -> dict[str, DatasetRefStatus]:
+    local_kinds = _local_entity_kinds(frontmatters)
     root = resolve_commons_root()
     commons_available = _has_initialized_commons_layout(root)
     adapter = CommonsEntityAdapter(root) if commons_available else None
     out: dict[str, DatasetRefStatus] = {}
     for ref in refs:
-        if ref in local_ids:
-            out[ref] = "resolved"
+        local_kind = local_kinds.get(ref)
+        if local_kind is not None:
+            out[ref] = "resolved" if local_kind == "dataset" else "non_dataset"
             continue
         if adapter is None:
             out[ref] = "unavailable"
@@ -208,12 +220,18 @@ def _dataset_ref_statuses(ctx: ValidateContext, refs: set[str]) -> dict[str, Dat
             out[ref] = "missing"
             continue
         kind = record.frontmatter.get("kind") or record.frontmatter.get("type")
-        out[ref] = "resolved" if kind == "dataset" else "missing"
+        out[ref] = "resolved" if kind == "dataset" else "non_dataset"
     return out
 
 
-def _local_dataset_ids(frontmatters: Iterable[dict[str, Any]]) -> set[str]:
-    return {str(fm["id"]) for fm in frontmatters if isinstance(fm.get("id"), str) and fm["id"]}
+def _local_entity_kinds(frontmatters: Iterable[dict[str, Any]]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for fm in frontmatters:
+        ident = fm.get("id")
+        kind = fm.get("kind") or fm.get("type")
+        if isinstance(ident, str) and ident and isinstance(kind, str) and kind:
+            out[ident] = kind
+    return out
 
 
 class _DatasetRefResolver:
@@ -338,7 +356,7 @@ def check_dataset_influence(ctx: ValidateContext) -> Iterator[Result]:
         manual_aliases=load_manual_aliases(ctx.project_root, local_profile=_local_profile(ctx)),
     )
     row_refs = _row_usage_refs(ctx, frontmatters, resolver.resolve)
-    statuses = _dataset_ref_statuses(ctx, _collect_refs(frontmatters, row_refs, resolver.resolve))
+    statuses = _dataset_ref_statuses(ctx, _collect_refs(frontmatters, row_refs, resolver.resolve), frontmatters)
     yield from evaluate_dataset_influence(
         frontmatters,
         dataset_ref_status=statuses,
