@@ -106,6 +106,40 @@ def usage_records_for_entity(
     return records
 
 
+def usage_records_for_geneset_rows(
+    *,
+    collection_id: str,
+    source_path: str,
+    rows,
+    resolve_dataset_ref: Callable[[str], str] | None = None,
+) -> list[DatasetUsageRecord]:
+    records: list[DatasetUsageRecord] = []
+    seen_virtual: dict[str, str] = {}
+    for row in rows:
+        consumer_uri = virtual_geneset_member_uri(collection_id, row.set_key)
+        previous = seen_virtual.get(str(consumer_uri))
+        if previous is not None and previous != row.set_key:
+            raise DatasetUsageMaterializationError(
+                f"{collection_id}: set_key {row.set_key!r} collides with {previous!r}"
+            )
+        seen_virtual[str(consumer_uri)] = row.set_key
+        for usage in row.dataset_usage:
+            dataset_ref = _canonical_dataset_ref(str(usage["ref"]), resolve_dataset_ref)
+            overlap = str(usage.get("overlap") or "unknown")
+            records.append(
+                DatasetUsageRecord(
+                    consumer_id=str(consumer_uri),
+                    dataset_ref=dataset_ref,
+                    role=str(usage["role"]),
+                    overlap=overlap,
+                    source="geneset.members_resource",
+                    source_path=source_path,
+                    row_key=row.set_key,
+                )
+            )
+    return records
+
+
 def _canonical_dataset_ref(raw_ref: str, resolve_dataset_ref: Callable[[str], str] | None) -> str:
     if resolve_dataset_ref is None:
         return raw_ref
@@ -120,6 +154,8 @@ def _reject_self_reference(entity: Entity, dataset_ref: str) -> None:
 
 
 def project_entity_uri(canonical_id: str) -> URIRef:
+    if canonical_id.startswith("http://") or canonical_id.startswith("https://"):
+        return URIRef(canonical_id)
     kind, slug = canonical_id.split(":", 1)
     return URIRef(PROJECT_NS[f"{kind}/{slug.lower()}"])
 

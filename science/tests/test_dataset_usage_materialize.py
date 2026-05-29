@@ -646,3 +646,75 @@ def test_materialize_graph_audits_derivation_inputs_as_dataset_only(tmp_path):
     assert "derivation.inputs" in message
     assert "dataset:smith" in message
     assert not (tmp_path / "knowledge" / "graph.trig").exists()
+
+
+def _write_geneset_collection(root, *, with_members=True):
+    dp_dir = root / "data" / "reactome"
+    dp_dir.mkdir(parents=True, exist_ok=True)
+    (dp_dir / "datapackage.yaml").write_text(
+        "profiles: [science-pkg-entity-1.0]\n"
+        "id: dataset:reactome-v89\n"
+        "type: dataset\n"
+        "title: Reactome\n"
+        "status: active\n"
+        "origin: external\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n"
+        "schema_profile: science-entity-base/1.0+dataset/1.0+bio.geneset/1.0\n"
+        "source_class: reference\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n"
+        "member_key_column: set_key\n"
+        "members_resource: sets\n"
+        "n_sets: 1\n"
+        "set_size_summary: {min: 2, median: 2, max: 2}\n"
+        "identifier_space: {tier: gene, namespace: hgnc_id, resolution_status: declared_unresolved}\n"
+        "resources:\n"
+        "  - name: sets\n"
+        "    path: sets.csv\n",
+        encoding="utf-8",
+    )
+    if with_members:
+        (dp_dir / "sets.csv").write_text(
+            "set_key,name,member_ids,dataset_usage\n"
+            'R-HSA-1,Cell cycle,HGNC:1;HGNC:2,"[{""ref"":""dataset:gtex-v8"",""role"":""set_definition_source"",""overlap"":""full""}]"\n',
+            encoding="utf-8",
+        )
+
+
+def test_materialize_graph_emits_geneset_row_usage_nodes(tmp_path):
+    from science_tool.graph.materialize import materialize_graph
+
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path / "data" / "gtex" / "datapackage.yaml",
+        "gtex-v8",
+        "origin: external\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n",
+    )
+    _write_geneset_collection(tmp_path)
+
+    trig = materialize_graph(tmp_path)
+    graph = _load_trig(trig).graph(PROJECT_NS["graph/provenance"])
+
+    row_uri = PROJECT_NS["virtual/geneset-member/reactome-v89/R-HSA-1"]
+    nodes = list(graph.objects(row_uri, SCI_NS.hasDatasetUsage))
+
+    assert len(nodes) == 1
+    assert (nodes[0], SCI_NS.dataset, PROJECT_NS["dataset/gtex-v8"]) in graph
+    assert (nodes[0], SCI_NS.usageRole, Literal("set_definition_source")) in graph
+    assert (nodes[0], SCI_NS.usageOverlap, Literal("full")) in graph
+    assert (nodes[0], SCI_NS.usageSource, Literal("geneset.members_resource")) in graph
+
+
+def test_materialize_graph_requires_geneset_members_resource(tmp_path):
+    from science_tool.graph.materialize import materialize_graph
+
+    _write_project(tmp_path)
+    _write_geneset_collection(tmp_path, with_members=False)
+
+    with pytest.raises(RuntimeError, match="members_resource"):
+        materialize_graph(tmp_path)
