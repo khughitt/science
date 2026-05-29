@@ -193,8 +193,14 @@ def _entity_datapackage_paths(project_root: Path) -> list[str]:
             continue
         for path in sorted(root.rglob("datapackage.yaml")):
             fm = raw_frontmatter(path)
-            profiles = fm.get("profiles") or []
+            profiles = _profile_names(fm.get("profiles"))
             if "science-pkg-entity-1.0" not in profiles:
                 continue
             paths.append(str(path.relative_to(project_root)))
     return paths
+
+
+def _profile_names(value: Any) -> set[str]:
+    if not isinstance(value, (list, tuple, set)):
+        return set()
+    return {profile for profile in value if isinstance(profile, str)}

@@ -98,6 +98,24 @@ def test_entity_frontmatters_tolerates_entity_datapackage_missing_title(tmp_path
     assert by_id["dataset:gtex-v8"]["_path"] == "data/gtex/datapackage.yaml"
 
 
+def test_entity_frontmatters_skips_datapackage_with_malformed_profiles(tmp_path: Path) -> None:
+    from science_tool.validate._helpers import entity_frontmatters
+
+    dp_dir = tmp_path / "data" / "gtex"
+    dp_dir.mkdir(parents=True)
+    (dp_dir / "datapackage.yaml").write_text(
+        "profiles: 1\n"
+        "id: dataset:gtex-v8\n"
+        "type: dataset\n"
+        "title: GTEx\n",
+        encoding="utf-8",
+    )
+
+    rows = entity_frontmatters(_ctx(tmp_path))  # type: ignore[arg-type]
+
+    assert rows == []
+
+
 def test_raw_frontmatter_shared_helper_reads_markdown_and_yaml(tmp_path: Path) -> None:
     from science_tool.commons.frontmatter import raw_frontmatter
 
