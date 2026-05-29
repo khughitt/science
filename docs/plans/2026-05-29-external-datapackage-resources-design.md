@@ -6,7 +6,9 @@
 off-repo (bulk storage now; remote commons — Zenodo / GitHub / a daemon —
 later), so `science commons promote dataset` records each resource's
 location + checksum **without requiring the bytes co-located under the
-datapackage directory and without streaming multi-GB files at promote time**.
+datapackage directory, and without being required to stream multi-GB files at
+promote time** — by default it trusts the build-stamped digest and does no local
+I/O; integrity re-checking is opt-in (`--verify-digests`).
 
 **Architecture (one sentence):** A resource gains an optional typed `source`
 descriptor; its presence flips the resource from "co-located, promote computes
@@ -97,14 +99,14 @@ resources:
 - **`type`** enum: `local | zenodo | github | url | daemon`. Only **`local`** is
   *resolved* this iteration; the other kinds are schema-validated and recorded
   but **not fetched** (forward-compatible slots for remote commons).
-- **`local.ref`**: an off-repo filesystem path. Supports an `${OUTPUT_ROOT}`
-  token and plain absolute paths, so refs are portable rather than hardcoding a
-  host path. The canonical `datapackage.yaml` stores `source` **verbatim** (the
-  unexpanded token), keeping the committed artifact host-independent. Token
-  expansion happens only transiently inside promote when it tries to locate the
-  file (see below); promote stays project-agnostic by expanding from the
-  `OUTPUT_ROOT` environment variable, **best-effort**: an unexpandable token
-  (env unset) simply means "not locally resolvable on this host," never an error.
+- **`local.ref`**: an off-repo filesystem path. **Allowed forms: a path that
+  begins with the `${OUTPUT_ROOT}` token, or a plain absolute path.** A plain
+  *relative* ref is rejected (cwd-dependent, ambiguous — there is no project root
+  to resolve it against at consume time). The canonical `datapackage.yaml` stores
+  `source` **verbatim** (the unexpanded token), keeping the committed artifact
+  host-independent. Token expansion happens only transiently, and only under
+  `--verify-digests` (below), when promote tries to locate the file; promote stays
+  project-agnostic by expanding from the `OUTPUT_ROOT` environment variable.
 - **Discriminator decision (a):** the *presence* of `source` marks a resource as
   sourced; there is no separate `external: true` flag. Fewer fields, one source of
   truth, and co-located resources are unchanged.
@@ -114,17 +116,30 @@ resources:
 ## Promote behavior
 
 `_dataset_per_resource` (and the resource-existence validation it shares with
-`_validate_datapackage_resources`) becomes source-aware:
+`_validate_datapackage_resources`) becomes source-aware. The **default** path
+never touches a sourced resource's bytes — that is what satisfies the
+"not required to stream" goal for the 14 GB case:
 
-1. **No `source`** → current path: resolve under the datapackage dir, stream →
-   `(hash, bytes)`.
-2. **`source` + locally resolvable** (`local.ref` expands via `OUTPUT_ROOT` /
-   absolute path to a file that exists on this host) → **verify-if-present**:
-   stream the file, assert it matches the recorded `hash` + `bytes`, fail loud on
-   drift.
-3. **`source` + not locally resolvable** (a remote `type`; a `local.ref` whose
-   token is unexpandable here; or a resolved path that does not exist) → **trust
-   recorded** `hash` + `bytes`; no streaming.
+- **No `source` (co-located)** → unchanged: resolve under the datapackage dir,
+  stream → `(hash, bytes)`.
+- **`source` present (default)** → **trust** the build-stamped `(hash, bytes)`
+  verbatim. **No local I/O** — no stat, no stream, no token expansion. This is
+  also remote-uniform: a `/data` file and a Zenodo file behave identically.
+
+Integrity re-checking is **opt-in** via a new `--verify-digests` flag. When set,
+promote attempts to locate each sourced resource on this host and reports a
+per-resource verdict (it never silently skips):
+
+| ref state under `--verify-digests` | action | verdict |
+| --- | --- | --- |
+| `local` ref resolves to an existing file | stream + assert match | `verified` or **hard error** on drift (`PromoteResourceDigestMismatchError`) |
+| `local` ref resolves but the file is **missing** (env-expanded path absent, or absolute ref absent) | — | **hard error** (stale/typo ref; you asked to verify and it is broken) |
+| `local` ref token unexpandable (env unset) | — | `skipped (off-host)` — reported, non-fatal |
+| remote `type` (zenodo/github/url/daemon) | — | `skipped (no fetcher this iteration)` — reported, non-fatal |
+
+`--verify-digests` exits non-zero if any resource is a hard error; the summary
+lists verified / skipped / failed so nothing is silently dropped. Co-located
+resources are always streamed regardless of the flag (unchanged).
 
 The rendered canonical `datapackage.yaml` carries `path + hash + bytes + source`
 for sourced resources (co-located resources render `path + hash + bytes` as
@@ -132,52 +147,78 @@ today).
 
 ## Validation and errors (fail-loud, no silent fallback)
 
+These checks run at promote time regardless of `--verify-digests` (they are
+descriptor-shape checks, not byte checks):
+
+- **`path` is always a safe logical path.** Every resource's `path` (co-located
+  *and* sourced) is run through the existing `validate_logical_path`
+  (`commons/datapackage.py`) — rejects absolute, `..`, backslashes, drive-letters,
+  and non-normalized forms. For sourced resources `path` is a logical package
+  name, so this is the only structural guard on it (the old parent-escape /
+  `is_file` filesystem check does not apply to sourced resources).
 - A sourced resource missing `hash` or `bytes` → hard error (cannot trust an
   unstamped, possibly-remote resource).
 - `source.type` outside the enum → hard error.
-- A source whose `ref` is malformed (empty, or syntactically-broken `${...}`
-  token) → hard error. An `OUTPUT_ROOT` token that is well-formed but
-  *unexpandable* here (env unset) is **not** an error — it falls through to
-  case 3 (trust recorded). Remote-typed sources are validated for shape only (a
-  non-empty `ref`); they are recorded, never fetched, this iteration.
+- A source `ref` that is malformed → hard error: empty/whitespace, a
+  syntactically-broken `${...}` token, or (for `local`) a plain *relative* path.
+  Allowed `local.ref`: `${OUTPUT_ROOT}`-prefixed or absolute.
 - A co-located resource (no `source`) still hits the existing parent-escape /
-  `is_file` checks unchanged.
-- **verify-if-present** mismatch → a new `PromoteResourceDigestMismatchError`
-  naming the resource and the expected vs. actual `(hash, bytes)`.
+  `is_file` checks unchanged, and is always streamed.
+
+Byte-level outcomes (only under `--verify-digests`) follow the table above: a
+digest mismatch or a resolvable-but-missing local file is a **hard error**; an
+unexpandable token / remote type is a reported, non-fatal skip. The new error
+type is `PromoteResourceDigestMismatchError`, naming the resource and expected
+vs. actual `(hash, bytes)`.
 
 ## Components (all in `~/d/science/science/src/science_tool/commons/`)
 
 - **`datapackage.py`** — add a `ResourceSource` value type (`type`, `ref`); parse
   it in `parse_canonical_datapackage_yaml` / `read_datapackage` and expose it on
-  `DataResource`; render it in `render_canonical_datapackage_yaml`. Add
-  `resolve_local_ref(ref) -> Path | None` (expands a well-formed `${OUTPUT_ROOT}`
-  token from the environment; returns `None` when the token is unexpandable or the
-  resolved path does not exist; raises only on malformed token syntax). `local` is
-  the only resolvable type; a small registry maps `type` → resolver, with remote
-  types mapped to a "record-only" resolver that always returns `None`.
-- **`promote.py`** — make `_dataset_per_resource` and the shared resource-path
-  validation source-aware per the three cases above; add
-  `PromoteResourceDigestMismatchError`.
+  `DataResource` (so the source survives a read round-trip); render it in
+  `render_canonical_datapackage_yaml`. Validate `source.type` against the enum and
+  `ref` shape (reject relative `local` refs). Add
+  `resolve_local_ref(ref) -> Path | None`: raises on malformed token syntax;
+  returns `None` when the token is unexpandable (env unset) **or** the resolved
+  path does not exist *for non-`local` callers*. Because promote must distinguish
+  "unexpandable" (skip) from "resolved-but-missing" (error), `resolve_local_ref`
+  returns a small result — `Unexpandable | Resolved(path, exists: bool)` — rather
+  than collapsing both to `None`. `local` is the only resolvable type; a registry
+  maps `type` → resolver, remote types → a record-only resolver (always
+  `Unexpandable`).
+- **`promote.py`** — make `_dataset_per_resource` + the shared resource-path
+  validation source-aware (default trust; co-located stream unchanged); add the
+  `--verify-digests` CLI flag and the verify path with its per-resource verdict
+  table; add `PromoteResourceDigestMismatchError`; run `validate_logical_path` on
+  every resource `path`.
+- **`inventory.py`** — `build_commons_inventory` serializes per-resource
+  `{path, hash, bytes, format, mediatype}` (line ~116); **add `source`** so the
+  inventory is not lossy for sourced resources.
 
 The producer-side stamping is **out of scope** for this design (see boundary).
+`resolver.py` (`science commons data resolve`) is **also out of scope this
+iteration** (see non-goals).
 
 ## Data flow
 
 ```
-build step (producer)        promote (mint)                     commons artifact
-─────────────────────        ──────────────                     ────────────────
-stamps hash+bytes+source  →  no source:    stream → (hash,bytes) → datapackage.yaml
-into datapackage.json        source+local:  verify-if-present       (path+hash+bytes
-                             source+remote: trust recorded           [+source])
-                             /off-host:     trust recorded
+build step (producer)        promote (mint)                       commons artifact
+─────────────────────        ───────────────                      ────────────────
+stamps hash+bytes+source  →  no source:        stream → (hash,bytes) → datapackage.yaml
+into datapackage.json        source (default):  trust recorded         (path+hash+bytes
+                             source (--verify-  verify-if-resolvable     [+source])
+                               digests):          else skip/ERROR
 ```
 
 ## Scope boundary (two repos)
 
 - **THIS design + implementation plan (`~/d/science`):** the descriptor schema
-  (`source` on parse / read / render), source-aware `_dataset_per_resource` +
-  resource validation, the new mismatch error, `${OUTPUT_ROOT}` ref resolution,
-  and tests. This makes the *capability* exist and verified in isolation.
+  (`source` on parse / read / render + `DataResource`), source-aware
+  `_dataset_per_resource` (default trust) + resource validation
+  (`validate_logical_path` on every `path`), the `--verify-digests` flag and its
+  verify path, the new mismatch error, `${OUTPUT_ROOT}` best-effort ref resolution,
+  the inventory `source` field, and tests. This makes the *capability* exist and
+  verified in isolation.
 - **Downstream mm30 task (unblocks t717):** mm30's
   `scripts/shared/datapackage.py::add_resource` and the Walker / Oetjen
   `build_data_package.py` stamp `hash` + `bytes` + `source: {type: local, ref:
@@ -189,13 +230,21 @@ into datapackage.json        source+local:  verify-if-present       (path+hash+b
 
 Unit tests in `~/d/science/science/tests/`:
 
-- parse / render round-trip with `source` (local and a remote kind).
-- promote **trusts** a non-resolvable sourced resource — asserts no stream
-  occurs and the recorded `(hash, bytes)` is copied into the rendered yaml.
-- promote **verify-if-present** passes when a local-resolvable `source.ref`
-  matches, and raises `PromoteResourceDigestMismatchError` on drift.
-- a sourced resource missing `hash`/`bytes` is rejected; a bad `source.type` is
-  rejected; a malformed `local.ref` is rejected.
+- parse / render round-trip with `source` (local and a remote kind); read
+  round-trip surfaces `source` on `DataResource`.
+- **default promote trusts** a sourced resource — asserts **no byte I/O** occurs
+  (e.g. patch/spy `stream_sha256_and_bytes` and assert not called for the sourced
+  resource) and the recorded `(hash, bytes)` is copied into the rendered yaml.
+- `--verify-digests`: passes when a local-resolvable `source.ref` matches; raises
+  `PromoteResourceDigestMismatchError` on drift; **hard-errors** when the ref
+  resolves but the file is missing; **reports a non-fatal skip** when the token is
+  unexpandable (env unset) and when the type is remote.
+- validation: sourced resource missing `hash`/`bytes` rejected; bad `source.type`
+  rejected; empty / relative / malformed-token `local.ref` rejected; a `path`
+  failing `validate_logical_path` (absolute, `..`, backslash) rejected for both
+  co-located and sourced resources.
+- `inventory.py`: a sourced resource's `source` survives into the inventory
+  serialization (not dropped).
 - regression: a co-located resource (no `source`) promotes exactly as before
   (streams, computes, renders).
 
@@ -207,3 +256,11 @@ Unit tests in `~/d/science/science/tests/`:
 - No producer/build helper in `science_tool` — producers compute `(sha256,
   bytes)` with their own tooling; `science_tool` only accepts, validates, and
   trusts/verifies the stamped values.
+- **`resolver.py` (`commons data resolve`) is unchanged this iteration.** It
+  resolves `data_root/<slug>/<logical_path>` and re-hashes on every call (built
+  for small co-located CSVs, never multi-GB bytes), so it neither consults
+  `source.ref` nor fetches remote sources. A sourced large resource is therefore
+  promote-side metadata that is **not** retrievable via `data resolve` yet;
+  teaching the resolver to honor `source` (local ref first, then remote fetchers)
+  is the natural follow-on once remote commons lands. Called out so the limitation
+  is explicit, not silent.
