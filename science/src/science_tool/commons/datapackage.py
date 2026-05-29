@@ -7,10 +7,12 @@ docs/plans/2026-05-14-commons-data-resolver-design.md §5.2.
 
 from __future__ import annotations
 
+import os
 import re
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import final
 
 import yaml
 
@@ -135,6 +137,59 @@ def _validate_local_ref_shape(ref: str) -> None:
             f"local source.ref {ref!r} must be absolute or use the "
             f"{OUTPUT_ROOT_TOKEN} token; a plain relative path is ambiguous"
         )
+
+
+class RefResolution:
+    """Sealed result of resolving a `local` source ref on this host."""
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class Unexpandable(RefResolution):
+    """The ref carries the `${OUTPUT_ROOT}` token but OUTPUT_ROOT is unset.
+
+    Reported as `skipped_off_host` by promote — non-fatal.
+    """
+
+    ref: str
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class Resolved(RefResolution):
+    """The ref resolved to a concrete local path (which may or may not exist)."""
+
+    path: Path
+    exists: bool
+
+
+def resolve_local_ref(ref: str) -> RefResolution:
+    """Resolve a validated `local` source ref against this host.
+
+    - absolute ref → `Resolved(path, exists)`.
+    - `${OUTPUT_ROOT}`-token ref, OUTPUT_ROOT unset → `Unexpandable` (off-host).
+    - `${OUTPUT_ROOT}`-token ref, OUTPUT_ROOT set to an absolute path →
+      `Resolved(expanded_path, exists)`.
+
+    Raises `ValueError` only on a configuration error that blocks resolution:
+    OUTPUT_ROOT set but blank or relative. (Malformed refs are already rejected
+    by `validate_source`; this function assumes a validated ref.)
+    """
+    if ref == OUTPUT_ROOT_TOKEN or ref.startswith(OUTPUT_ROOT_TOKEN + "/"):
+        root = os.environ.get("OUTPUT_ROOT")
+        if root is None:
+            return Unexpandable(ref=ref)
+        if not root.strip() or not Path(root).is_absolute():
+            raise ValueError(
+                f"OUTPUT_ROOT must be a non-blank absolute path to expand {ref!r}; "
+                f"got {root!r}"
+            )
+        suffix = ref[len(OUTPUT_ROOT_TOKEN):].lstrip("/")
+        path = Path(root) / suffix if suffix else Path(root)
+        return Resolved(path=path, exists=path.exists())
+    # validate_source guarantees the only remaining shape is an absolute path.
+    path = Path(ref)
+    return Resolved(path=path, exists=path.exists())
 
 
 def stream_sha256_and_bytes(path: Path) -> tuple[str, int]:
