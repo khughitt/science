@@ -40,7 +40,7 @@ graph, and add validate checks around references and transition behavior.
 - expose `dataset_usage` on paper schema/frontmatter, reusing the existing model field where possible,
 - keep `paper.datasets` as a transition input,
 - project legacy `paper.datasets` into usage records,
-- materialize authored and derived usage records as `sci:DatasetUsage` nodes,
+- materialize authored `dataset_usage` from any entity as `sci:DatasetUsage` nodes,
 - derive usage nodes from `derivation.inputs`,
 - validate malformed/unresolved/legacy usage,
 - document and enforce a migration path toward the single canonical system.
@@ -58,7 +58,7 @@ members, and does not ingest Reactome.
 
 | Exists | Concerns | Limitation |
 |---|---|---|
-| `dataset_usage` on datasets | structured forward provenance | not graph-materialized yet |
+| `dataset_usage` on base `Entity` | structured forward provenance any entity can carry | not graph-materialized yet |
 | D1 row-level `dataset_usage` | per-set provenance in `bio.geneset` members resource | row-shape checked, but not projected into the graph as usage nodes |
 | `paper.datasets` (`[dataset:ref]`, plain) | datasets a paper used | no role or overlap; cannot distinguish analyzed data from background citation |
 | `derivation.inputs` | in-pipeline execution provenance | not visible as `DatasetUsage` nodes for influence queries |
@@ -67,7 +67,10 @@ members, and does not ingest Reactome.
 | Independence collapse + `suspect-circular` WARN | double-counting | currently relies on manually authored evidence-line metadata |
 
 **The B1 gap:** make declared dataset use queryable and consistent without changing independence scoring.
-`dataset_usage`, `paper.datasets`, and `derivation.inputs` all need one graph projection.
+`dataset_usage`, `paper.datasets`, and `derivation.inputs` all need one graph projection. Because
+`dataset_usage` is currently on the base `Entity` model, B1 materializes authored `dataset_usage`
+universally for any entity that carries it; restricting materialization to only datasets/papers would
+silently drop valid parsed frontmatter on other entity kinds.
 
 ---
 
@@ -133,7 +136,8 @@ source: paper.datasets
   `paper.datasets` are still projected, and refs present in `dataset_usage` use the explicit
   `dataset_usage` entry. Same-ref legacy duplicates are not double-materialized. A same-ref legacy
   `datasets` entry plus an explicit non-`analyzed` usage is reported as a migration conflict because the
-  legacy field semantically implied `analyzed`.
+  legacy field semantically implied `analyzed`; materialization still uses the explicit `dataset_usage`
+  entry and emits a warning rather than blocking graph build.
 
 ### B-D4 — Migration To One System
 
@@ -173,12 +177,11 @@ frontmatter locations can map to the same source value (`authored`).
 
 ### B-D6 — Sources Of Usage Records
 
-B1 materializes usage records from five sources:
+B1 materializes usage records from four usage-source classes:
 
 | Source | Projection |
 |---|---|
-| authored `dataset_usage` on datasets | `usageSource: authored` |
-| authored `dataset_usage` on papers | `usageSource: authored` |
+| authored `dataset_usage` on any entity kind | `usageSource: authored`, consumer is that entity |
 | legacy `paper.datasets` | `role: analyzed`, `overlap: unknown`, `usageSource: paper.datasets` |
 | `derivation.inputs` on derived datasets | `role: upstream`, `overlap: unknown`, `usageSource: derivation.inputs` |
 | D1 `bio.geneset` member rows | `usageSource: geneset.members_resource`, consumer is a virtual collection-member URI |
@@ -186,9 +189,11 @@ B1 materializes usage records from five sources:
 D1 gene-set rows are already parsed and validate-checked. B1 turns a row-level `dataset_usage` block into
 usage records for a deterministic virtual collection-member URI, derived from `(collection dataset id,
 set_key)`. The collection side uses the same canonical dataset id/slug parsing as ordinary entity URIs;
-the `set_key` segment is percent-encoded as a path segment, and the encoder must be a shared helper with
-round-trip tests. If two distinct `(collection id, set_key)` pairs produce the same virtual URI, graph
-build fails rather than merging them.
+the `set_key` segment is normalized to Unicode NFC, encoded as UTF-8, then percent-encoded as a path
+segment with uppercase hex escapes and only RFC 3986 unreserved bytes left literal. The encoder must be a
+shared helper with round-trip tests. Virtual member URIs live under a reserved project namespace prefix
+that cannot collide with real entity URIs such as `project:dataset/<slug>`. If two distinct `(collection
+id, set_key)` pairs produce the same virtual URI, graph build fails rather than merging them.
 
 The virtual member URI is a graph/provenance address only; it is **not** a promoted dataset entity and
 does not require D2. In B1, row-level usage nodes make the forward query "which gene-set row declares use
@@ -199,9 +204,12 @@ path. If a row is later promoted by D2, the promoted dataset can point back to t
 and carry equivalent `dataset_usage`.
 
 When a consumer has usage records for the same dataset from multiple sources, B1 keeps separate usage
-nodes because the provenance of the assertion differs. B2 must de-duplicate by `(consumer, dataset, role,
-overlap)` or a stricter policy before deriving independence so multi-source assertions do not create
-double-counted dependence.
+nodes because the provenance of the assertion differs. The handoff to B2 is intentionally explicit:
+before deriving independence, B2 must collapse same `(consumer, dataset)` assertions using a
+most-dependent-wins policy over role and overlap, not just exact-tuple de-duplication. For example, an
+authored `{role: analyzed, overlap: full}` record and a derived `{role: upstream, overlap: unknown}`
+record for the same pair are not contradictory graph facts; they are multi-source assertions that B2 must
+reduce to one dependence interpretation.
 
 ### B-D7 — Reverse Influence Groundwork
 
@@ -219,17 +227,19 @@ uses the existing `bears_on` / provenance closure and can be built on top of the
 B1 adds a tolerant validate check for dataset influence/provenance. It should report issues without
 requiring every referenced commons artifact to be built locally.
 
-The B1 check covers:
+The B1 check covers these cases with pinned severities:
 
-- malformed `dataset_usage` on papers and datasets,
-- unresolved `dataset_usage.ref` values against local/commons dataset entities,
-- legacy `paper.datasets` usage and migration warnings,
-- duplicate/conflicting `paper.datasets` and `paper.dataset_usage` declarations,
-- invalid `paper.datasets` entries that are not `dataset:` refs,
-- optional checks for authored `consumed_by` as stale/cache-like metadata,
-- `derivation.inputs` projections only when their input refs resolve to datasets,
-- D1 gene-set row-level `dataset_usage.ref` values resolve to datasets when the members resource is
-  available.
+| Case | Severity | Rule intent |
+|---|---|---|
+| malformed `dataset_usage` shape on any entity | ERROR | the authored object cannot be safely materialized |
+| `dataset_usage.ref` or `derivation.inputs` self-reference | ERROR | self-loop usage would create false circularity candidates |
+| invalid `paper.datasets` entry that is not a `dataset:` ref | ERROR | legacy transition input still has a strict ref contract |
+| duplicate/conflicting `paper.datasets` and `paper.dataset_usage` declarations | WARNING | explicit `dataset_usage` materializes; warning directs migration cleanup |
+| legacy `paper.datasets` without equivalent `dataset_usage` | WARNING | accepted during transition, but authors should migrate |
+| unresolved ref when commons/local registry needed to check it is unavailable | INFO | tolerant fresh-checkout behavior |
+| unresolved ref when local/commons discovery is available and the dataset is absent | WARNING | likely authoring gap without crashing validation |
+| authored `consumed_by` stale against derived reverse index | INFO | cache-like field is not graph truth |
+| D1 row-level `dataset_usage.ref` unresolved while members resource is available | WARNING or INFO by the same ref-resolution rule above | row usage is parsed by D1, resolved by B1 |
 
 D1 row-level `dataset_usage` shape remains checked by `genesets`; B1 reuses the D1 parser for projection
 and adds reference-resolution checks for the parsed row usage records.
