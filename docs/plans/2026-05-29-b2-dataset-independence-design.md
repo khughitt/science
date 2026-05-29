@@ -89,6 +89,10 @@ interpretation:
 3. Overlap rank is `full > partial > unknown` for dependence severity.
 4. `source` is retained as a set of contributing sources, not used as the semantic winner.
 
+For reduced dependence records, overlap is the maximum overlap rank among contributing
+dependence-role records, not merely the overlap attached to a single winning source record. A
+`validation_source` or `cited` record does not upgrade the overlap of a dependence interpretation.
+
 This handles the realistic B1 case where a derived dataset has both an authored
 `{role: analyzed, overlap: full}` entry and a `derivation.inputs` `{role: upstream, overlap: unknown}`
 entry for the same upstream dataset. The graph facts are not contradictory; B2 reduces them to one
@@ -106,13 +110,14 @@ relationships:
 - if the evidence line itself has usage records, those datasets apply directly;
 - if the evidence line `prov:wasDerivedFrom` a consumer with usage records, those datasets apply;
 - if a consumer with usage records `bears_on` the evidence line's target proposition, the dataset is a
-  candidate ancestor for that line;
+  candidate ancestor for that line only;
 - virtual gene-set member consumers participate only when a graph path connects that virtual URI to the
   evidence line or its target.
 
-The implementation should keep the first B2 pass narrow: derive pairwise signals for evidence lines that
-share a target. Global influence reporting can reuse the same ancestor index later, but B2 acceptance is
-about independence and circularity, not a complete UI for influence exploration.
+The implementation should keep the first B2 pass narrow: derive candidate/committed component signals
+among evidence lines that share a target. Global influence reporting can reuse the same ancestor index
+later, but B2 acceptance is about independence and circularity, not a complete UI for influence
+exploration.
 
 ---
 
@@ -121,17 +126,40 @@ about independence and circularity, not a complete UI for influence exploration.
 ### B2-D3 -- Committed Dependence
 
 B2 may commit a collapse signal only when two evidence lines on the same target share a dataset ancestor
-through a dependence role and the winning overlap is `full` on both sides.
+through a dependence role, the winning overlap is `full` on both sides, and the ancestry path is direct.
 
-Committed output should align with existing aggregation inputs:
+Direct ancestry means either:
+
+- the evidence line itself has the relevant usage record, or
+- the evidence line is directly `prov:wasDerivedFrom` a consumer with the relevant usage record.
+
+`bears_on`-only ancestry is never enough to commit a collapse. `bears_on` is a broad closure for
+influence queries; using it as a scoring input would over-commit ambiguous provenance. Shared datasets
+found only through `bears_on` produce candidates with reason `indirect-bears-on`.
+
+Committed output should align with existing aggregation inputs, but through one derived component per
+target rather than one group per dataset:
 
 - `independence = shared-source`;
-- `independence_group = dataset:<slug>`-derived stable group key;
-- `shared_dataset = dataset:<slug>` or the graph URI equivalent.
+- `independence_group = dataset-derived:<hash>` stable group key;
+- `shared_dataset = dataset:<slug>` when a component has one shared dataset, or a deterministic
+  comma-separated/multi-value graph representation when several shared datasets justify the same
+  component.
 
-The implementation may choose whether to materialize these as graph-only derived metadata or to expose
-them through the same `EvidenceUnit` fields read by `aggregate_belief`. It must not rewrite source
-frontmatter.
+The component rule is necessary because the current `EvidenceUnit` model has a single
+`independence_group` field. If line A shares full-overlap dataset X with line B and full-overlap dataset Y
+with line C, B2 forms one connected committed component `{A, B, C}` for that target. That component maps
+to one derived group key, with both datasets retained as justification. B2 must not emit multiple
+committed independence groups for one evidence line.
+
+The component key must not include stance. The existing reducer chooses winners by `(independence_group,
+stance)` and separately marks a group contested when both support and dispute winners share the group. If
+a support line and a dispute line share the same full-overlap dataset, they need the same derived group
+key so the current contested-group behavior still works.
+
+The implementation may choose whether to materialize component metadata as graph-only derived metadata or
+to expose it through the same `EvidenceUnit` fields read by `aggregate_belief`. It must not rewrite
+source frontmatter.
 
 Once committed metadata is visible to `aggregate_belief`, `CONFIG_VERSION` in
 `science_tool.graph.belief_weights` must be bumped because belief snapshots can change.
@@ -142,22 +170,26 @@ All weaker shared-dataset cases are candidates:
 
 - either side has `overlap: unknown`;
 - either side has `overlap: partial`;
+- the shared ancestry exists only through `bears_on` rather than direct line/source provenance;
 - the path is through a virtual gene-set member that is not promoted or explicitly connected enough to
   prove direct dependence;
 - the shared role is only `validation_source`;
+- one side uses a dependence role and the other side uses `validation_source`;
 - the shared fact is only `cited`.
 
-Candidates must be queryable and reportable, but they do not affect `aggregate_belief`. They should feed
-an expanded `suspect-circular` check so reviewers see likely double-counting before the model commits to
-collapse.
+Candidates must be queryable and reportable, but they do not affect `aggregate_belief`. They should
+feed an expanded `suspect-circular` check so reviewers see likely double-counting before the model
+commits to collapse. Near-term, migrated legacy `paper.datasets` refs have `overlap: unknown`, so they
+can produce candidates but not committed collapse until authors enrich overlap explicitly.
 
 Candidate records should include enough explanation for review:
 
 - target proposition,
-- evidence line A and B,
-- shared dataset,
-- reduced role/overlap on each side,
-- whether the reason is unknown overlap, partial overlap, virtual row path, validation, or citation only.
+- evidence-line member set, with pairwise explanations derivable for display,
+- shared dataset or datasets,
+- reduced role/overlap per member line,
+- whether the reason is unknown overlap, partial overlap, indirect `bears_on`, virtual row path,
+  validation, mixed validation/dependence, or citation only.
 
 ---
 
@@ -174,8 +206,11 @@ Conflict policy:
   contradiction in validation;
 - authored `independence: independent` plus candidate dependence remains a WARN-class
   `suspect-circular` result;
-- authored committed metadata may continue to drive aggregation even when B2 cannot derive the same
-  signal, but validation should report a review warning so stale hand-authored collapse can be audited.
+- authored dataset-based committed metadata may continue to drive aggregation even when B2 cannot derive
+  the same signal, but validation should report a review warning when `sci:sharedDataset` is present and
+  B2 has enough graph data to refute that dataset basis. Non-dataset groups, such as shared lab, shared
+  cohort, shared platform, or shared method, are outside B2's evidence base and should not warn merely
+  because B2 cannot derive them.
 
 This policy preserves current projects while making derived graph evidence visible.
 
@@ -186,12 +221,17 @@ This policy preserves current projects while making derived graph evidence visib
 B2 should materialize derived records in the provenance graph rather than inventing a separate file
 format. B2 introduces two derived record classes:
 
-- `sci:DatasetIndependenceCandidate` for review-only pairwise signals;
+- `sci:DatasetIndependenceCandidate` for review-only component signals;
 - `sci:DatasetIndependenceCommitment` for full-overlap dependence that aggregation may consume.
 
+B2 materializes one record per `(target, kind, reason, connected evidence-line component)` rather than
+one record per evidence-line pair. A component record may contain two or more `sci:evidenceLine` triples.
+This avoids an O(K^2) record blow-up for heavily supported propositions while still allowing validation
+and review code to derive pairwise explanations from the member set.
+
 Both record types should be deterministic from their payloads so graph builds are stable. They should
-point at the two evidence lines, the shared dataset, the target proposition, and the usage records or
-reduced usage facts that justify the signal.
+point at the evidence lines, the shared dataset or datasets, the target proposition, and the usage records
+or reduced usage facts that justify the signal.
 
 The predicate surface should be explicit and small:
 
@@ -206,10 +246,10 @@ record  sci:independenceReason      reason-token
 record  sci:derivedFromDatasetUsage usage-node
 ```
 
-The two `sci:evidenceLine` triples form an unordered pair; deterministic record identity comes from the
-sorted evidence-line URIs, target, dataset, reason, and reduced usage payload. The committed record may
-also emit convenience triples equivalent to current aggregation metadata. Those triples are derived graph
-facts, not source rewrites.
+The `sci:evidenceLine` triples form an unordered member set; deterministic record identity comes from the
+sorted evidence-line URIs, target, sorted datasets, reason, and reduced usage payload. The committed
+record may also emit convenience triples equivalent to current aggregation metadata. Those triples are
+derived graph facts, not source rewrites.
 
 ---
 
@@ -222,13 +262,17 @@ B2 extends validation in two places:
 2. A new or extended check should report contradictions between authored independence and committed
    derived dependence.
 
+Keeping the existing `independence.suspect-circular` rule id is intentional: B2 expands the source of
+the suspicion from authored observability fields to derived dataset candidates, but the reviewer-facing
+meaning remains "authored independence may be circular or double-counted."
+
 Pinned severities:
 
 | Case | Severity |
 |---|---|
 | derived candidate between two authored-independent lines on same target | WARNING |
 | derived committed shared-source dependence but line is authored `independent` | ERROR |
-| authored shared-source/circular group cannot be supported by B2 but B2 has enough graph data to check | WARNING |
+| authored `shared_dataset` group cannot be supported by B2 but B2 has enough graph data to check that dataset basis | WARNING |
 | graph data unavailable or no usage path exists | no result |
 
 Validation should not require commons resources beyond what graph build already materialized. If graph
@@ -269,8 +313,13 @@ The B2 implementation plan should cover:
 
 - pure tests for usage reduction and most-dependent-wins behavior;
 - graph tests deriving candidate and committed records from B1 usage nodes;
+- graph tests proving `bears_on`-only ancestry is candidate-only even when role and overlap are otherwise
+  commitment-worthy;
+- graph tests proving a line with multiple full-overlap shared datasets is assigned one connected
+  component group, not multiple committed groups;
 - validation tests for candidate WARN and committed-vs-authored-independent ERROR;
 - aggregation tests proving candidates do not affect belief and committed full-overlap dependence does;
+- aggregation tests proving support/dispute lines in the same derived component still set `contested`;
 - snapshot/version tests if `CONFIG_VERSION` changes;
 - regression tests showing `cited` alone does not collapse and `validation_source` does not become
   dependence unless the same pair also has a dependence role.

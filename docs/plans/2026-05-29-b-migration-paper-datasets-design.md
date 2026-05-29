@@ -50,7 +50,17 @@ adding the ambiguous legacy field and future B2 logic has to keep remembering th
 
 ## 3. Migration Contract
 
-### B-M1 -- Lossless Projection
+### B-M1 -- Paper Selection Gate
+
+The migration rewrites only markdown/frontmatter documents whose frontmatter declares `type: paper` or
+`kind: paper`. The paper kind is a hard gate: a non-paper entity that happens to carry a `datasets` key
+must be ignored. The scanner may use the same source surfaces as `load_project_sources`, but selection is
+by parsed frontmatter kind rather than by directory name alone.
+
+Malformed frontmatter is not a migration target. It is reported as a conflict row only if the file was
+inside the paper source surface and looked like an intended paper file; otherwise it is skipped.
+
+### B-M2 -- Lossless Projection
 
 For each paper frontmatter document:
 
@@ -71,10 +81,11 @@ dataset_usage:
 After all legacy refs are represented in `dataset_usage`, the `datasets` field is removed from that
 paper frontmatter. Removing an empty `datasets: []` is allowed.
 
-The migration preserves existing `dataset_usage` entries and appends only missing refs. It must be
+The migration preserves existing `dataset_usage` entry order and appends only missing refs in their
+source `datasets` order. Repeated legacy refs are deduped by first occurrence before appending. It must be
 idempotent: running it twice produces the same file content after the first successful run.
 
-### B-M2 -- Same-Ref Merge Rules
+### B-M3 -- Same-Ref Merge Rules
 
 The migration operates per dataset ref:
 
@@ -90,7 +101,11 @@ The migration operates per dataset ref:
 The `overlap` value on an existing analyzed entry is not a conflict. For example, `role: analyzed`,
 `overlap: full` is a valid refinement of the legacy meaning and should not block migration.
 
-### B-M3 -- Conflict Handling
+The same-ref role-conflict predicate must be shared with the B1 validate check's
+`dataset-influence.paper-datasets-conflict` behavior: same ref plus explicit role other than `analyzed`
+is a conflict; same ref plus explicit `role: analyzed` is not a conflict, regardless of overlap.
+
+### B-M4 -- Conflict Handling
 
 Conflicts are reported, not guessed through. A paper is unchanged if the tool cannot prove the rewrite is
 lossless. Other non-conflicting papers in the project may still be migrated in the same run.
@@ -102,6 +117,16 @@ Conflict rows should include:
 - conflicted dataset ref when applicable,
 - reason code,
 - short human-readable detail.
+
+Stable reason codes:
+
+| Code | Meaning |
+|---|---|
+| `malformed-frontmatter` | paper-like file cannot be parsed as YAML frontmatter |
+| `malformed-datasets` | `datasets` is present but is not a list of `dataset:` strings |
+| `malformed-usage` | `dataset_usage` is present but is not a list of canonical usage objects |
+| `role-conflict` | same ref appears in `datasets` and explicit `dataset_usage` with non-`analyzed` role |
+| `roundtrip-failure` | the migration cannot safely rewrite the frontmatter block |
 
 The implementation should avoid partial rewrites within one paper. Either that paper's legacy field is
 fully removed and missing usage entries are added, or the file is left untouched.
@@ -146,6 +171,10 @@ it should be deterministic and minimal:
 - `datasets` is omitted after successful migration;
 - unrelated frontmatter fields are preserved.
 
+For migrated papers, comments inside the YAML frontmatter block may be lost because the block is
+re-serialized. That loss is acceptable for this mechanical migration, but it must be visible in dry-run
+file lists and reviewable in the applied diff. Untouched papers are not re-serialized.
+
 If the current parser cannot round-trip a file safely, the tool should report a conflict and leave the
 file unchanged. Silent best-effort rewrites are not acceptable for migration code.
 
@@ -175,10 +204,13 @@ steps straightforward and tracked.
 The implementation should be accepted only when these behaviors are covered:
 
 - dry-run reports a paper with legacy `datasets` and does not write files;
+- non-paper markdown/frontmatter files with a `datasets` key are ignored;
 - apply adds missing `dataset_usage` entries and removes `datasets`;
+- existing `dataset_usage` order is preserved, missing refs append in legacy source order, and repeated
+  legacy refs are deduped;
 - same-ref existing `role: analyzed`, `overlap: full` is treated as already migrated, not a conflict;
 - same-ref existing non-`analyzed` usage reports a conflict and leaves the file unchanged;
-- malformed legacy or canonical fields report conflicts and leave files unchanged;
+- malformed legacy or canonical fields report stable conflict codes and leave files unchanged;
 - running apply twice is idempotent;
 - CLI JSON and table outputs include changed files and conflicts;
 - existing B1 graph materialization and dataset-influence validate tests still pass after migration code
