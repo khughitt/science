@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/extension-bio-geneset-1.0.json",
+  "title": "science entity bio.geneset extension",
+  "type": "object",
+  "required": [
+    "member_key_column",
+    "members_resource",
+    "n_sets",
+    "set_size_summary",
+    "identifier_space"
+  ],
+  "properties": {
+    "member_key_column": {"const": "set_key"},
+    "members_resource": {"type": "string", "minLength": 1},
+    "n_sets": {"type": "integer", "minimum": 1},
+    "set_size_summary": {
+      "type": "object",
+      "required": ["min", "median", "max"],
+      "properties": {
+        "min": {"type": "integer", "minimum": 0},
+        "median": {"type": "number", "minimum": 0},
+        "max": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "identifier_space": {
+      "type": "object",
+      "required": ["tier", "namespace"],
+      "properties": {
+        "tier": {"enum": ["gene", "protein"]},
+        "namespace": {"type": "string", "minLength": 1},
+        "registry": {"type": "string", "pattern": "^dataset:"},
+        "resolution_status": {"enum": ["resolved", "declared_unresolved"]}
+      },
+      "additionalProperties": false
+    }
+  }
+}
