@@ -587,6 +587,17 @@ def promote_theme_cmd(
                 "stacked; choose extensions that match the dataset modality."
             ),
         ),
+        click.Option(
+            ["--verify-digests"],
+            "verify_digests",
+            is_flag=True,
+            default=False,
+            help=(
+                "Re-verify each sourced resource's build-stamped digest against "
+                "its local bytes (when resolvable on this host). Off by default: "
+                "promote trusts the stamped digest and does no byte I/O."
+            ),
+        ),
     ],
 )
 def promote_dataset_cmd(
@@ -596,6 +607,7 @@ def promote_dataset_cmd(
     limit: int | None,
     slug: str,
     mixin_args: tuple[str, ...],
+    verify_digests: bool,
 ) -> None:
     """Promote one dataset entity into the commons store."""
     if entity_id is not None:
@@ -614,6 +626,7 @@ def promote_dataset_cmd(
         apply_=apply_flag,
         limit=limit,
         mixin_extensions=mixin_extensions,
+        verify_digests=verify_digests,
     )
 
 
@@ -625,6 +638,7 @@ def _promote_kind_cmd(
     apply_: bool,
     limit: int | None,
     mixin_extensions: tuple["ProfileComponent", ...] = (),
+    verify_digests: bool = False,
 ) -> None:
     """Shared implementation for `commons promote <kind>` commands."""
     root = resolve_commons_root()
@@ -698,6 +712,7 @@ def _promote_kind_cmd(
             kind=kind,
             from_order=list(from_),
             mixin_extensions=mixin_extensions,
+            verify_digests=verify_digests,
         )
     except CommonsError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -770,6 +785,12 @@ def _echo_dataset_plan_details(plan: PromotePlan, decision: PromoteDecision) -> 
         click.echo("    dropped fields: " + ", ".join(str(field) for field in dropped_fields))
     else:
         click.echo("    dropped fields: (none)")
+
+    verifications = plan.resource_verifications.get(decision.slug, ())
+    if verifications:
+        click.echo("    verify:")
+        for v in verifications:
+            click.echo(f"      - [{v.project_slug}] {v.name}: {v.status} ({v.detail})")
 
     for project_slug, overlay in sorted(decision.overlays.items()):
         click.echo(f"    overlay rewrite: {project_slug}: {overlay.path}")
