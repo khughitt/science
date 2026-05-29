@@ -8,6 +8,7 @@ docs/plans/2026-05-14-commons-data-resolver-design.md §5.2.
 from __future__ import annotations
 
 import re
+import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -23,6 +24,9 @@ _SHA256_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 _DRIVE_LETTER = re.compile(r"^[A-Za-z]:")
 _PROJECT_ONLY_DATAPACKAGE_KEYS = frozenset({"conformsTo", "mm30", "derivedFrom"})
 _RESOURCE_COMPUTED_KEYS = frozenset({"hash", "bytes"})
+
+SOURCE_TYPES = frozenset({"local", "zenodo", "github", "url", "daemon"})
+OUTPUT_ROOT_TOKEN = "${OUTPUT_ROOT}"
 
 
 def validate_logical_path(logical_path: str) -> str:
@@ -82,6 +86,55 @@ def parse_resource_hash(raw: str) -> tuple[str, str]:
             f"malformed sha256 digest {digest!r}; expected 64 lowercase hex chars"
         )
     return (algorithm, digest)
+
+
+def validate_source(raw: object) -> ResourceSource:
+    """Validate a resource `source` mapping and return a `ResourceSource`.
+
+    Raises `ValueError` on any unsafe/malformed form. Callers wrap this into
+    their own error type. Only `local` and `url` refs are shape-checked beyond
+    "non-empty string"; the other remote kinds are opaque this iteration.
+    """
+    if not isinstance(raw, dict):
+        raise ValueError("source must be a mapping with 'type' and 'ref'")
+    type_ = raw.get("type")
+    if type_ not in SOURCE_TYPES:
+        raise ValueError(
+            f"source.type {type_!r} is not one of {sorted(SOURCE_TYPES)}"
+        )
+    ref = raw.get("ref")
+    if not isinstance(ref, str) or not ref.strip():
+        raise ValueError(f"source.ref must be a non-empty string, got {ref!r}")
+
+    if type_ == "local":
+        _validate_local_ref_shape(ref)
+    elif type_ == "url":
+        parsed = urllib.parse.urlparse(ref)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError(
+                f"url source.ref must be an absolute http(s) URL with a host, got {ref!r}"
+            )
+    # zenodo / github / daemon: opaque non-empty string (already checked).
+    return ResourceSource(type=type_, ref=ref)
+
+
+def _validate_local_ref_shape(ref: str) -> None:
+    """Allow only: an absolute path, exactly `${OUTPUT_ROOT}`, or `${OUTPUT_ROOT}/...`."""
+    if ref == OUTPUT_ROOT_TOKEN or (
+        ref.startswith(OUTPUT_ROOT_TOKEN + "/")
+        and len(ref) > len(OUTPUT_ROOT_TOKEN) + 1
+    ):
+        return
+    if "${" in ref:
+        raise ValueError(
+            f"local source.ref {ref!r} uses an unsupported or malformed token; "
+            f"only {OUTPUT_ROOT_TOKEN} (bare or followed by '/') is allowed"
+        )
+    if not PurePosixPath(ref).is_absolute():
+        raise ValueError(
+            f"local source.ref {ref!r} must be absolute or use the "
+            f"{OUTPUT_ROOT_TOKEN} token; a plain relative path is ambiguous"
+        )
 
 
 def stream_sha256_and_bytes(path: Path) -> tuple[str, int]:
@@ -260,6 +313,19 @@ class DataResource:
     bytes: int | None = None  # resources[].bytes if present
     format: str | None = None  # resources[].format if present
     mediatype: str | None = None  # resources[].mediatype if present
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceSource:
+    """An off-repo origin for a content-addressed resource.
+
+    `type` is one of SOURCE_TYPES; `ref` is the type-specific locator (a
+    filesystem path or `${OUTPUT_ROOT}` token for `local`, an http(s) URL for
+    `url`, an opaque non-empty string for the remote kinds).
+    """
+
+    type: str
+    ref: str
 
 
 @dataclass(frozen=True, slots=True)
