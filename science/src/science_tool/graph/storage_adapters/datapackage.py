@@ -38,6 +38,11 @@ _ENTITY_FIELDS = (
     "source_refs",
     "same_as",
     "aliases",
+    "member_key_column",
+    "members_resource",
+    "n_sets",
+    "set_size_summary",
+    "identifier_space",
 )
 
 

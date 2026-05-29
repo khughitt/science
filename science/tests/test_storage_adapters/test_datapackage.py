@@ -171,3 +171,40 @@ def test_load_raw_surfaces_derived_kind(tmp_path: Path, monkeypatch: pytest.Monk
     raw = adapter.load_raw(refs[0])
     assert raw["source_class"] == "derived"
     assert raw["derived_kind"] == "model_output"
+
+
+def test_datapackage_adapter_preserves_geneset_extension_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "data" / "reactome").mkdir(parents=True)
+    (tmp_path / "data" / "reactome" / "datapackage.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "profiles": ["science-pkg-entity-1.0"],
+                "id": "dataset:reactome-v89",
+                "type": "dataset",
+                "title": "Reactome v89",
+                "status": "active",
+                "origin": "external",
+                "tier": "use-now",
+                "member_key_column": "set_key",
+                "members_resource": "sets",
+                "n_sets": 1,
+                "set_size_summary": {"min": 2, "median": 2, "max": 2},
+                "identifier_space": {"tier": "gene", "namespace": "hgnc_id"},
+                "resources": [{"name": "sets", "path": "sets.csv"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    adapter = DatapackageAdapter()
+    refs = adapter.discover(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    raw = adapter.load_raw(refs[0])
+
+    assert raw["member_key_column"] == "set_key"
+    assert raw["members_resource"] == "sets"
+    assert raw["n_sets"] == 1
+    assert raw["set_size_summary"]["median"] == 2
+    assert raw["identifier_space"]["namespace"] == "hgnc_id"
