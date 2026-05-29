@@ -294,8 +294,7 @@ def _line_graph() -> tuple[Graph, Graph, URIRef, URIRef, URIRef]:
     target = PROJECT_NS["proposition/p1"]
     line_a = PROJECT_NS["evidence-line/a"]
     line_b = PROJECT_NS["evidence-line/b"]
-    line_c = PROJECT_NS["evidence-line/c"]
-    for line in (line_a, line_b, line_c):
+    for line in (line_a, line_b):
         knowledge.add((line, RDF.type, SCI_NS.EvidenceLine))
         knowledge.add((line, CITO_NS.supports, target))
     return knowledge, provenance, target, line_a, line_b
@@ -360,6 +359,8 @@ def test_bears_on_only_shared_dataset_is_candidate_even_with_full_overlap() -> N
 def test_transitive_hub_full_overlap_forms_one_conservative_component() -> None:
     knowledge, provenance, target, line_a, line_b = _line_graph()
     line_c = PROJECT_NS["evidence-line/c"]
+    knowledge.add((line_c, RDF.type, SCI_NS.EvidenceLine))
+    knowledge.add((line_c, CITO_NS.supports, target))
     dataset_x = PROJECT_NS["dataset/x"]
     dataset_y = PROJECT_NS["dataset/y"]
     _add_usage(provenance, line_a, dataset_x, "analyzed", "full", "a-x")
@@ -448,6 +449,14 @@ class DatasetIndependenceRecord:
     @property
     def independence(self) -> str | None:
         return "shared-source" if self.kind == "commitment" else None
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateEdge:
+    left: LineAncestor
+    right: LineAncestor
+    dataset: URIRef
+    reason: str
 ```
 
 Then add the implementation:
@@ -523,6 +532,8 @@ def _is_virtual_gene_set_member(uri: URIRef) -> bool:
     return "/virtual/geneset-member/" in str(uri)
 ```
 
+This intentionally checks `(consumer, sci:bearsOn, target)`. `freshness.py` emits that orientation after closure for a source consumer that reaches an evidence line/proposition, so B2 should not reverse the edge.
+
 Add component logic:
 
 ```python
@@ -549,43 +560,63 @@ def _candidate_components(
     ancestors: list[LineAncestor],
 ) -> list[DatasetIndependenceRecord]:
     out: list[DatasetIndependenceRecord] = []
-    reasons = [
-        ("unknown-overlap", lambda a: a.path == "direct" and a.usage.interpretation == "dependence" and a.usage.overlap == "unknown"),
-        ("partial-overlap", lambda a: a.path == "direct" and a.usage.interpretation == "dependence" and a.usage.overlap == "partial"),
-        ("indirect-bears-on", lambda a: a.path == "indirect-bears-on"),
-        ("virtual-row", lambda a: a.path == "virtual"),
-        ("citation-only", lambda a: a.usage.interpretation == "citation"),
-    ]
-    for reason, predicate in reasons:
-        candidates = [
-            ancestor
-            for ancestor in ancestors
-            if ancestor.target == target and ancestor.line in target_lines and predicate(ancestor)
-        ]
-        out.extend(_components_from_edges("candidate", reason, target, candidates))
-    validation_or_mixed = _validation_candidate_ancestors(target, target_lines, ancestors)
-    out.extend(_components_from_edges("candidate", "validation", target, validation_or_mixed))
+    edges_by_reason: dict[str, list[CandidateEdge]] = defaultdict(list)
+    for edge in _candidate_edges(target, target_lines, ancestors):
+        edges_by_reason[edge.reason].append(edge)
+    for reason, edges in sorted(edges_by_reason.items()):
+        out.extend(_records_from_candidate_edges(target, reason, edges))
     return out
 
 
-def _validation_candidate_ancestors(
+def _candidate_edges(
     target: URIRef,
     target_lines: frozenset[URIRef],
     ancestors: list[LineAncestor],
-) -> list[LineAncestor]:
+) -> list[CandidateEdge]:
     by_dataset: dict[URIRef, list[LineAncestor]] = defaultdict(list)
     for ancestor in ancestors:
         if ancestor.target != target or ancestor.line not in target_lines:
             continue
-        if ancestor.path != "direct":
-            continue
-        if ancestor.usage.interpretation in {"validation", "dependence"}:
-            by_dataset[ancestor.dataset].append(ancestor)
-    out: list[LineAncestor] = []
-    for group in by_dataset.values():
-        if any(ancestor.usage.interpretation == "validation" for ancestor in group) and len({ancestor.line for ancestor in group}) >= 2:
-            out.extend(group)
+        by_dataset[ancestor.dataset].append(ancestor)
+    out: list[CandidateEdge] = []
+    for dataset, group in by_dataset.items():
+        ordered = sorted(group, key=lambda ancestor: str(ancestor.line))
+        for left_index, left in enumerate(ordered):
+            for right in ordered[left_index + 1 :]:
+                if left.line == right.line:
+                    continue
+                if _is_committable_pair(left, right):
+                    continue
+                reason = _candidate_reason(left, right)
+                if reason is not None:
+                    out.append(CandidateEdge(left=left, right=right, dataset=dataset, reason=reason))
     return out
+
+
+def _is_committable_pair(left: LineAncestor, right: LineAncestor) -> bool:
+    return (
+        left.path == right.path == "direct"
+        and left.usage.interpretation == right.usage.interpretation == "dependence"
+        and left.usage.overlap == right.usage.overlap == "full"
+    )
+
+
+def _candidate_reason(left: LineAncestor, right: LineAncestor) -> str | None:
+    if "indirect-bears-on" in {left.path, right.path}:
+        return "indirect-bears-on"
+    if "virtual" in {left.path, right.path}:
+        return "virtual-row"
+    interpretations = {left.usage.interpretation, right.usage.interpretation}
+    if "citation" in interpretations:
+        return "citation-only"
+    if "validation" in interpretations:
+        return "validation"
+    overlaps = {left.usage.overlap, right.usage.overlap}
+    if "unknown" in overlaps:
+        return "unknown-overlap"
+    if "partial" in overlaps:
+        return "partial-overlap"
+    return None
 
 
 def _components_from_edges(
@@ -627,6 +658,37 @@ def _components_from_edges(
                 datasets=member_datasets,
                 usage_nodes=usage_nodes,
                 independence_group=_group_key(member_datasets),
+            )
+        )
+    return records
+
+
+def _records_from_candidate_edges(
+    target: URIRef,
+    reason: str,
+    edges: list[CandidateEdge],
+) -> list[DatasetIndependenceRecord]:
+    graph_edges = [(edge.left.line, edge.right.line, edge.dataset) for edge in edges]
+    components = _connected_components(graph_edges)
+    records: list[DatasetIndependenceRecord] = []
+    for members in components:
+        component_edges = [edge for edge in edges if edge.left.line in members and edge.right.line in members]
+        datasets = frozenset(edge.dataset for edge in component_edges)
+        usage_nodes = frozenset(
+            node
+            for edge in component_edges
+            for ancestor in (edge.left, edge.right)
+            for node in ancestor.usage.usage_nodes
+        )
+        records.append(
+            DatasetIndependenceRecord(
+                kind="candidate",
+                reason=reason,
+                target=target,
+                members=frozenset(members),
+                datasets=datasets,
+                usage_nodes=usage_nodes,
+                independence_group=_group_key(datasets),
             )
         )
     return records
@@ -805,6 +867,8 @@ rtk git commit -m "feat: materialize dataset independence records"
 - Modify: `science/tests/test_belief_collect.py`
 - Modify: `science/tests/test_belief_aggregate.py`
 - Modify: `science/tests/test_belief_weights.py`
+- Modify: `science/tests/test_belief_snapshot.py`
+- Modify: `science/tests/test_belief_cli.py`
 
 - [ ] **Step 1: Write failing collection and aggregation tests**
 
@@ -875,10 +939,34 @@ def test_aggregate_belief_candidates_do_not_collapse_but_committed_records_do() 
     assert len(reduced.collapsed) == 1
 ```
 
-In `science/tests/test_belief_weights.py`, change the config assertion to:
+In `science/tests/test_belief_weights.py`, change the config assertion inside `test_phase2_constants_present` to:
 
 ```python
 assert bw.CONFIG_VERSION == "belief-logodds-v3"
+```
+
+In `science/tests/test_belief_snapshot.py`, change:
+
+```python
+assert row["config_version"] == "belief-logodds-v2"
+```
+
+to:
+
+```python
+assert row["config_version"] == "belief-logodds-v3"
+```
+
+In `science/tests/test_belief_cli.py`, change the canned snapshot row from:
+
+```python
+"input_hashes": ["sha256:abc"], "config_version": "belief-logodds-v2",
+```
+
+to:
+
+```python
+"input_hashes": ["sha256:abc"], "config_version": "belief-logodds-v3",
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -886,7 +974,7 @@ assert bw.CONFIG_VERSION == "belief-logodds-v3"
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_belief_collect.py::test_collect_evidence_units_merges_committed_dataset_independence_for_untagged_lines science/tests/test_belief_collect.py::test_collect_evidence_units_keeps_authored_circular_over_derived_commitment science/tests/test_belief_aggregate.py::test_aggregate_belief_candidates_do_not_collapse_but_committed_records_do science/tests/test_belief_weights.py::test_config_version -q
+uv run --frozen pytest science/tests/test_belief_collect.py::test_collect_evidence_units_merges_committed_dataset_independence_for_untagged_lines science/tests/test_belief_collect.py::test_collect_evidence_units_keeps_authored_circular_over_derived_commitment science/tests/test_belief_aggregate.py::test_aggregate_belief_candidates_do_not_collapse_but_committed_records_do science/tests/test_belief_weights.py::test_phase2_constants_present science/tests/test_belief_snapshot.py::test_snapshot_records_basic_shape science/tests/test_belief_cli.py::test_belief_snapshot_writes_jsonl -q
 ```
 
 Expected: belief collection tests FAIL because committed records are ignored; config test FAILS with current `belief-logodds-v2`.
@@ -979,17 +1067,17 @@ CONFIG_VERSION = "belief-logodds-v3"   # B2 committed dataset-derived independen
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_belief_collect.py science/tests/test_belief_aggregate.py science/tests/test_belief_weights.py science/tests/test_belief_snapshot.py -q
+uv run --frozen pytest science/tests/test_belief_collect.py science/tests/test_belief_aggregate.py science/tests/test_belief_weights.py science/tests/test_belief_snapshot.py science/tests/test_belief_cli.py -q
 ```
 
-Expected: PASS after updating any golden snapshot expectation that records `belief-logodds-v2`.
+Expected: PASS after updating every `belief-logodds-v2` assertion in the affected belief tests to `belief-logodds-v3`.
 
 - [ ] **Step 7: Commit**
 
 Run:
 
 ```bash
-rtk git add science/src/science_tool/graph/dataset_independence.py science/src/science_tool/graph/belief.py science/src/science_tool/graph/belief_weights.py science/tests/test_belief_collect.py science/tests/test_belief_aggregate.py science/tests/test_belief_weights.py science/tests/test_belief_snapshot.py
+rtk git add science/src/science_tool/graph/dataset_independence.py science/src/science_tool/graph/belief.py science/src/science_tool/graph/belief_weights.py science/tests/test_belief_collect.py science/tests/test_belief_aggregate.py science/tests/test_belief_weights.py science/tests/test_belief_snapshot.py science/tests/test_belief_cli.py
 rtk git commit -m "feat: merge committed dataset independence into belief"
 ```
 
@@ -1075,6 +1163,8 @@ uv run --frozen pytest science/tests/validate/test_checks_evidence_lines.py::tes
 ```
 
 Expected: FAIL because the check does not read B2 records.
+
+B2 validation reads `knowledge/graph.trig` if present and emits no B2-derived result when it is absent. That means these warnings are only as current as the last graph build; the check must not reparse papers, datasets, or gene-set CSVs during validate.
 
 - [ ] **Step 3: Extend evidence-line validation to read B2 graph records**
 
@@ -1379,7 +1469,7 @@ Status: implementation ready; see `docs/plans/2026-05-29-b2-dataset-independence
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_dataset_independence.py science/tests/test_dataset_usage_materialize.py science/tests/test_belief_collect.py science/tests/test_belief_aggregate.py science/tests/test_belief_weights.py science/tests/test_belief_snapshot.py science/tests/validate/test_checks_evidence_lines.py -q
+uv run --frozen pytest science/tests/test_dataset_independence.py science/tests/test_dataset_usage_materialize.py science/tests/test_belief_collect.py science/tests/test_belief_aggregate.py science/tests/test_belief_weights.py science/tests/test_belief_snapshot.py science/tests/test_belief_cli.py science/tests/validate/test_checks_evidence_lines.py -q
 ```
 
 Expected: PASS.
@@ -1389,7 +1479,7 @@ Expected: PASS.
 Run:
 
 ```bash
-uv run --frozen ruff check science/src/science_tool/graph/dataset_independence.py science/src/science_tool/graph/materialize.py science/src/science_tool/graph/belief.py science/src/science_tool/graph/belief_weights.py science/src/science_tool/validate/checks/evidence_lines.py science/tests/test_dataset_independence.py science/tests/test_dataset_usage_materialize.py science/tests/test_belief_collect.py science/tests/test_belief_aggregate.py science/tests/test_belief_weights.py science/tests/validate/test_checks_evidence_lines.py
+uv run --frozen ruff check science/src/science_tool/graph/dataset_independence.py science/src/science_tool/graph/materialize.py science/src/science_tool/graph/belief.py science/src/science_tool/graph/belief_weights.py science/src/science_tool/validate/checks/evidence_lines.py science/tests/test_dataset_independence.py science/tests/test_dataset_usage_materialize.py science/tests/test_belief_collect.py science/tests/test_belief_aggregate.py science/tests/test_belief_weights.py science/tests/test_belief_snapshot.py science/tests/test_belief_cli.py science/tests/validate/test_checks_evidence_lines.py
 rtk git diff --check
 ```
 

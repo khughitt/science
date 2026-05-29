@@ -167,7 +167,29 @@ def test_unresolved_dataset_ref_moves_verbatim_when_syntactically_valid() -> Non
     assert fm["dataset_usage"] == [
         {"ref": "dataset:not-in-commons", "role": "analyzed", "overlap": "unknown"}
     ]
+
+
+def test_alias_equivalent_refs_are_not_deduped_by_the_migration() -> None:
+    original = _body(
+        {
+            "id": "paper:smith-2025",
+            "type": "paper",
+            "dataset_usage": [{"ref": "dataset:gtex-v8", "role": "analyzed", "overlap": "full"}],
+            "datasets": ["dataset:gtex"],
+        }
+    )
+
+    result = migrate_paper_frontmatter("doc/papers/smith-2025.md", original)
+
+    assert result.conflicts == []
+    fm = _frontmatter(result.updated_text)
+    assert fm["dataset_usage"] == [
+        {"ref": "dataset:gtex-v8", "role": "analyzed", "overlap": "full"},
+        {"ref": "dataset:gtex", "role": "analyzed", "overlap": "unknown"},
+    ]
 ```
+
+The migration is intentionally ref-resolution agnostic, so it compares refs as raw strings. That means it can diverge from B1 validation when aliases canonicalize two different strings to one dataset. For v1 this is acceptable because requiring commons/local resolution would break the mechanical migration contract; B1 validation remains the place that canonicalizes and reports alias-level same-ref conflicts.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -938,6 +960,37 @@ def test_plan_uses_configured_local_profile_paper_surface(tmp_path: Path) -> Non
     report = plan_paper_dataset_migration(root)
 
     assert report.changed_files == [str(paper)]
+
+
+def test_plan_reports_malformed_frontmatter_in_discovered_paper_surface(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "science.yaml").write_text(
+        "\n".join(
+            [
+                "name: demo",
+                "knowledge_profiles:",
+                "  local: lab",
+                "profiles:",
+                "  lab:",
+                "    papers:",
+                "      - literature/papers",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    paper_dir = root / "literature" / "papers"
+    paper_dir.mkdir(parents=True)
+    valid = paper_dir / "valid.md"
+    bad = paper_dir / "bad.md"
+    valid.write_text(_body({"id": "paper:valid", "type": "paper"}), encoding="utf-8")
+    bad.write_text("---\nid: [\n---\nBody.\n", encoding="utf-8")
+
+    report = plan_paper_dataset_migration(root)
+
+    assert [conflict.reason for conflict in report.conflicts] == ["malformed-frontmatter"]
+    assert report.conflicts[0].path == str(bad)
 ```
 
 - [ ] **Step 2: Run test to verify it fails if scanner only hardcodes `doc/papers`**
@@ -945,35 +998,133 @@ def test_plan_uses_configured_local_profile_paper_surface(tmp_path: Path) -> Non
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_paper_dataset_migration.py::test_plan_uses_configured_local_profile_paper_surface -q
+uv run --frozen pytest science/tests/test_paper_dataset_migration.py::test_plan_uses_configured_local_profile_paper_surface science/tests/test_paper_dataset_migration.py::test_plan_reports_malformed_frontmatter_in_discovered_paper_surface -q
 ```
 
-Expected: FAIL if `_candidate_markdown_files` does not consult project source surfaces.
+Expected: FAIL if `_candidate_markdown_files` does not consult project source surfaces or if malformed-paper reporting is still hardcoded to `doc/**/papers`.
 
 - [ ] **Step 3: Reuse `load_project_sources` surfaces without depending on entity validity**
 
-Adjust `paper_dataset_migration.py` so `_candidate_markdown_files` uses `load_project_sources(project_root)` when available and falls back to conventional doc paths only if source loading fails. `ProjectSources.markdown_documents` contains `MarkdownSourceDocument(path=..., frontmatter=..., body=...)`, where `path` is project-relative.
+Adjust `paper_dataset_migration.py` so `_source_scan(project_root)` uses `load_project_sources(project_root)` when available and returns both candidate markdown files and discovered paper roots. `ProjectSources.markdown_documents` contains `MarkdownSourceDocument(path=..., frontmatter=..., body=...)`, where `path` is project-relative. Do not silently mask source-loading failures: if `load_project_sources` raises, return a `roundtrip-failure` conflict with the exception class/message and fall back only to conventional `doc/papers` paths for best-effort visibility.
 
 ```python
-def _candidate_markdown_files(project_root: Path) -> list[Path]:
+@dataclass(frozen=True, slots=True)
+class _SourceScan:
+    files: list[Path]
+    paper_roots: frozenset[Path]
+    load_conflict: PaperDatasetMigrationConflict | None = None
+
+
+def _source_scan(project_root: Path) -> _SourceScan:
     files: set[Path] = set()
+    paper_roots: set[Path] = {
+        project_root / "doc" / "papers",
+        project_root / "doc" / "background" / "papers",
+        *_declared_paper_roots(project_root),
+    }
+    load_conflict: PaperDatasetMigrationConflict | None = None
     try:
         from science_tool.graph.sources import load_project_sources
 
         sources = load_project_sources(project_root)
         for doc in sources.markdown_documents:
             path = Path(doc.path)
-            if path.suffix == ".md":
-                files.add(path if path.is_absolute() else project_root / path)
-    except Exception:
-        pass
+            absolute = path if path.is_absolute() else project_root / path
+            if absolute.suffix != ".md":
+                continue
+            files.add(absolute)
+            kind = doc.frontmatter.get("kind") or doc.frontmatter.get("type")
+            if kind == "paper":
+                paper_roots.add(absolute.parent)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        load_conflict = PaperDatasetMigrationConflict(
+            path=str(project_root / "science.yaml"),
+            paper_id=None,
+            dataset_ref=None,
+            reason="roundtrip-failure",
+            detail=f"could not load project sources for migration scan: {type(exc).__name__}: {exc}",
+        )
     for root in (project_root / "doc" / "papers", project_root / "doc" / "background" / "papers"):
         if root.is_dir():
             files.update(path for path in root.rglob("*.md") if path.is_file())
-    return sorted(path for path in files if path.is_file())
+    for root in list(paper_roots):
+        if root.is_dir():
+            files.update(path for path in root.rglob("*.md") if path.is_file())
+    return _SourceScan(
+        files=sorted(path for path in files if path.is_file()),
+        paper_roots=frozenset(root.resolve() for root in paper_roots if root.is_dir()),
+        load_conflict=load_conflict,
+    )
+
+
+def _declared_paper_roots(project_root: Path) -> set[Path]:
+    manifest_path = project_root / "science.yaml"
+    if not manifest_path.is_file():
+        return set()
+    try:
+        data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return set()
+    if not isinstance(data, dict):
+        return set()
+    roots: set[Path] = set()
+    profiles = data.get("profiles")
+    if isinstance(profiles, dict):
+        for profile in profiles.values():
+            if not isinstance(profile, dict):
+                continue
+            papers = profile.get("papers")
+            if isinstance(papers, list):
+                roots.update(project_root / item for item in papers if isinstance(item, str))
+    return roots
 ```
 
-Keep `_looks_like_paper_source_path` strict for malformed frontmatter reporting: only paths under a paper source surface report `malformed-frontmatter`.
+Update `plan_paper_dataset_migration` to use the scan result:
+
+```python
+def plan_paper_dataset_migration(project_root: Path, *, apply: bool = False) -> PaperDatasetMigrationReport:
+    root = project_root.resolve()
+    changed_files: list[str] = []
+    conflicts: list[PaperDatasetMigrationConflict] = []
+    scan = _source_scan(root)
+    if scan.load_conflict is not None:
+        conflicts.append(scan.load_conflict)
+    for path in scan.files:
+        text = path.read_text(encoding="utf-8")
+        result = migrate_paper_frontmatter(path, text)
+        if result.conflicts:
+            if _looks_like_paper_source_path(path, scan.paper_roots):
+                conflicts.extend(result.conflicts)
+            continue
+        if result.changed:
+            changed_files.append(str(path))
+            if apply:
+                path.write_text(result.updated_text, encoding="utf-8")
+    return PaperDatasetMigrationReport(
+        project_root=str(root),
+        apply=apply,
+        changed_files=sorted(changed_files),
+        conflicts=sorted(conflicts, key=lambda item: (item.path, item.reason, item.dataset_ref or "")),
+    )
+```
+
+Replace `_looks_like_paper_source_path` with a root-set check:
+
+```python
+def _looks_like_paper_source_path(path: Path, paper_roots: frozenset[Path]) -> bool:
+    resolved = path.resolve()
+    for root in paper_roots:
+        try:
+            resolved.relative_to(root)
+            return True
+        except ValueError:
+            continue
+    return False
+```
+
+Only paths under the discovered paper source roots report `malformed-frontmatter`. A malformed markdown file under an unrelated directory is still skipped.
+
+CRLF frontmatter (`---\r\n`) remains out of scope for v1; `_split_frontmatter` only recognizes the repo's LF convention. If a CRLF paper is encountered, it is skipped rather than rewritten.
 
 - [ ] **Step 4: Update design status**
 

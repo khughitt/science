@@ -117,6 +117,10 @@ is a conflict; same ref plus explicit `role: analyzed` is not a conflict, regard
 The implementation should extract this predicate from the inlined B1 validate logic into a small shared
 helper so the migration and validator cannot drift.
 
+The migration remains ref-resolution agnostic, so "same ref" here means the same raw ref string. B1
+validation may canonicalize aliases before comparing refs; the migration should not, because doing so
+would make this mechanical source rewrite depend on local/commons resolution state.
+
 ### B-M4 -- Conflict Handling
 
 Conflicts are reported, not guessed through. A paper is unchanged if the tool cannot prove the rewrite is
