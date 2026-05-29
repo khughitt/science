@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import pytest
-from rdflib import URIRef
+from rdflib import Graph, URIRef
 from science_model.entities import Entity, PaperEntity
 from science_model.packages.schema import AccessBlock, DatasetUsage, DerivationBlock
 
-from science_tool.graph.store import PROJECT_NS
+from science_tool.graph.store import PROJECT_NS, SCI_NS
 
 
 def _base_entity_kwargs() -> dict[str, object]:
@@ -157,3 +157,60 @@ def test_virtual_geneset_member_uri_uses_canonical_percent_encoding() -> None:
     uri = virtual_geneset_member_uri("dataset:reactome-v89", "A B/é")
 
     assert uri == URIRef(PROJECT_NS["virtual/geneset-member/reactome-v89/A%20B%2F%C3%A9"])
+
+
+def test_add_usage_record_to_graph_preserves_absolute_virtual_consumer_uri() -> None:
+    from science_tool.graph.dataset_usage import (
+        DatasetUsageRecord,
+        add_usage_record_to_graph,
+        usage_node_uri,
+        virtual_geneset_member_uri,
+    )
+
+    consumer = virtual_geneset_member_uri("dataset:reactome-v89", "MYC targets")
+    record = DatasetUsageRecord(
+        consumer_id=str(consumer),
+        dataset_ref="dataset:gtex-v8",
+        role="annotates",
+        overlap="partial",
+        source="geneset.members_resource",
+        source_path="data/reactome/members.tsv",
+        row_key="MYC targets",
+    )
+    graph = Graph()
+
+    add_usage_record_to_graph(record, graph)
+
+    assert (consumer, SCI_NS.hasDatasetUsage, usage_node_uri(record)) in graph
+
+
+def test_usage_node_uri_is_deterministic_for_record_payload() -> None:
+    from science_tool.graph.dataset_usage import DatasetUsageRecord, usage_node_uri
+
+    record = DatasetUsageRecord(
+        consumer_id="observation:o1",
+        dataset_ref="dataset:gtex-v8",
+        role="validation_source",
+        overlap="partial",
+        source="authored",
+        source_path="doc/observations/o1.md",
+    )
+    same_record = DatasetUsageRecord(
+        consumer_id="observation:o1",
+        dataset_ref="dataset:gtex-v8",
+        role="validation_source",
+        overlap="partial",
+        source="authored",
+        source_path="doc/observations/o1.md",
+    )
+    changed_role = DatasetUsageRecord(
+        consumer_id="observation:o1",
+        dataset_ref="dataset:gtex-v8",
+        role="analyzed",
+        overlap="partial",
+        source="authored",
+        source_path="doc/observations/o1.md",
+    )
+
+    assert usage_node_uri(record) == usage_node_uri(same_record)
+    assert usage_node_uri(record) != usage_node_uri(changed_role)

@@ -137,9 +137,17 @@ def usage_node_uri(record: DatasetUsageRecord) -> URIRef:
     return URIRef(PROJECT_NS[f"dataset-usage/{digest}"])
 
 
+def _consumer_uri(consumer_id: str) -> URIRef:
+    if consumer_id.startswith(("http://", "https://")):
+        return URIRef(consumer_id)
+    if ":" in consumer_id:
+        return project_entity_uri(consumer_id)
+    return URIRef(consumer_id)
+
+
 def add_usage_record_to_graph(record: DatasetUsageRecord, graph) -> None:
     node = usage_node_uri(record)
-    consumer = project_entity_uri(record.consumer_id) if ":" in record.consumer_id else URIRef(record.consumer_id)
+    consumer = _consumer_uri(record.consumer_id)
     dataset_uri = project_entity_uri(record.dataset_ref)
     graph.add((consumer, SCI_NS.hasDatasetUsage, node))
     graph.add((node, RDF.type, SCI_NS.DatasetUsage))
