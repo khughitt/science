@@ -199,6 +199,21 @@ def test_malformed_collection_errors() -> None:
     assert results[0].severity is Severity.ERROR
 
 
+def test_boolean_numeric_collection_fields_are_malformed() -> None:
+    fm = _geneset(
+        n_sets=True,
+        set_size_summary={"min": True, "median": True, "max": True},
+    )
+    results = list(
+        evaluate_geneset_collections(
+            [fm],
+            rows_by_dataset_id={"dataset:reactome-v89": [{"set_key": "R-HSA-1", "name": "One", "member_ids": "HGNC:1"}]},
+            registry_meta_by_id={_GENE_REGISTRY: _VALID_GENE_META},
+        )
+    )
+    assert _rules(results) == ["geneset.collection-malformed"]
+
+
 def test_n_sets_mismatch_errors() -> None:
     fm = _geneset(n_sets=2)
     results = list(

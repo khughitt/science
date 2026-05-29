@@ -57,6 +57,14 @@ def _is_geneset(fm: dict[str, Any]) -> bool:
     return (fm.get("kind") or fm.get("type")) == "dataset" and _PROFILE_TOKEN in f"+{profile}"
 
 
+def _is_int(value: object) -> bool:
+    return type(value) is int
+
+
+def _is_number(value: object) -> bool:
+    return type(value) in (int, float)
+
+
 def _collection_defect(fm: dict[str, Any]) -> str | None:
     if fm.get("member_key_column") != GENESET_MEMBER_KEY_COLUMN:
         return "member_key_column must be 'set_key'"
@@ -64,14 +72,14 @@ def _collection_defect(fm: dict[str, Any]) -> str | None:
     if not isinstance(resource, str) or not resource.strip():
         return "members_resource must name a Frictionless resource"
     n_sets = fm.get("n_sets")
-    if not isinstance(n_sets, int) or n_sets < 1:
+    if not _is_int(n_sets) or n_sets < 1:
         return "n_sets must be a positive integer"
     summary = fm.get("set_size_summary")
     if not isinstance(summary, dict):
         return "set_size_summary must be an object"
     for key in ("min", "median", "max"):
         value = summary.get(key)
-        if not isinstance(value, (int, float)) or value < 0:
+        if not _is_number(value) or value < 0:
             return f"set_size_summary.{key} must be a non-negative number"
     if not (summary["min"] <= summary["median"] <= summary["max"]):
         return "set_size_summary must satisfy min <= median <= max"
