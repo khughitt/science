@@ -133,14 +133,17 @@ def raw_frontmatter(path: Path) -> dict[str, Any]:
     callers re-enforce schema-critical fields themselves, because raw frontmatter
     bypasses the closed graph Entity.
     """
-    text = path.read_text(encoding="utf-8")
-    if path.suffix in (".yaml", ".yml"):
-        data = yaml.safe_load(text) or {}
-    elif text.startswith("---"):
-        end = text.find("\n---", 3)
-        data = yaml.safe_load(text[3:end]) if end != -1 else {}
-    else:
-        data = {}
+    try:
+        text = path.read_text(encoding="utf-8")
+        if path.suffix in (".yaml", ".yml"):
+            data = yaml.safe_load(text) or {}
+        elif text.startswith("---"):
+            end = text.find("\n---", 3)
+            data = yaml.safe_load(text[3:end]) if end != -1 else {}
+        else:
+            data = {}
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return {}
     return data if isinstance(data, dict) else {}
 
 

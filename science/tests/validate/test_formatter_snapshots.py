@@ -40,6 +40,7 @@ CHECK_MODULES = (
     "id_prefixes",
     "cross_references",
     "variant_identity",
+    "genesets",
     "prose_lints",
     "annotations",
 )

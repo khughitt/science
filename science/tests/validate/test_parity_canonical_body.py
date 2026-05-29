@@ -55,6 +55,7 @@ CHECK_MODULES = (
     "identity_context",
     "dataset_taxonomy",
     "variant_identity",
+    "genesets",
     "prose_lints",
     "annotations",
     "evidence_lines",

@@ -3,6 +3,7 @@ from pathlib import Path
 import yaml
 
 from science_tool.validate._helpers import dataset_frontmatters
+from science_tool.validate._helpers import raw_frontmatter
 
 
 class _Ctx:
@@ -30,3 +31,10 @@ def test_dataset_frontmatters_covers_markdown_and_datapackage(tmp_path: Path) ->
     )
     ids = {fm["id"] for fm in dataset_frontmatters(_Ctx(tmp_path))}  # type: ignore[arg-type]
     assert ids == {"dataset:gtex", "dataset:refcoll"}
+
+
+def test_raw_frontmatter_tolerates_malformed_yaml(tmp_path: Path) -> None:
+    path = tmp_path / "datapackage.yaml"
+    path.write_text("id: [unterminated\n", encoding="utf-8")
+
+    assert raw_frontmatter(path) == {}
