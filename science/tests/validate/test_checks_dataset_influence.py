@@ -34,6 +34,22 @@ def _write_project(root: Path) -> None:
     (root / "science.yaml").write_text(_MANIFEST, encoding="utf-8")
 
 
+def _write_dataset_usage_paper(root: Path, ref: str = "dataset:gtex-v8") -> None:
+    (root / "doc" / "papers").mkdir(parents=True)
+    (root / "doc" / "papers" / "Adams2025.md").write_text(
+        f"---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndataset_usage:\n"
+        f"  - ref: {ref}\n    role: analyzed\n---\n",
+        encoding="utf-8",
+    )
+
+
+def _write_initialized_commons(root: Path) -> Path:
+    commons = root / "commons"
+    for dirname in (".git", "datasets", "papers", "topics", "themes"):
+        (commons / dirname).mkdir(parents=True)
+    return commons
+
+
 def test_malformed_dataset_usage_errors() -> None:
     from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
 
@@ -218,12 +234,7 @@ def test_check_dataset_influence_resolves_local_dataset_ref(
 
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "empty-commons"))
     _write_project(tmp_path)
-    (tmp_path / "doc" / "papers").mkdir(parents=True)
-    (tmp_path / "doc" / "papers" / "Adams2025.md").write_text(
-        "---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndataset_usage:\n"
-        "  - ref: dataset:gtex-v8\n    role: analyzed\n---\n",
-        encoding="utf-8",
-    )
+    _write_dataset_usage_paper(tmp_path)
     dp_dir = tmp_path / "data" / "gtex"
     dp_dir.mkdir(parents=True)
     (dp_dir / "datapackage.yaml").write_text(
@@ -242,16 +253,41 @@ def test_check_dataset_influence_unbuilt_commons_ref_infos(
 
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
     _write_project(tmp_path)
-    (tmp_path / "doc" / "papers").mkdir(parents=True)
-    (tmp_path / "doc" / "papers" / "Adams2025.md").write_text(
-        "---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndataset_usage:\n"
-        "  - ref: dataset:gtex-v8\n    role: analyzed\n---\n",
-        encoding="utf-8",
-    )
+    _write_dataset_usage_paper(tmp_path)
 
     results = list(check_dataset_influence(_ctx(tmp_path)))
 
     assert _rules(results) == [(Severity.INFO, "dataset-influence.ref-unresolved-unavailable")]
+
+
+def test_check_dataset_influence_empty_commons_dir_ref_infos(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.validate.checks.dataset_influence import check_dataset_influence
+
+    commons = tmp_path / "empty-commons"
+    commons.mkdir()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
+    _write_project(tmp_path)
+    _write_dataset_usage_paper(tmp_path)
+
+    results = list(check_dataset_influence(_ctx(tmp_path)))
+
+    assert _rules(results) == [(Severity.INFO, "dataset-influence.ref-unresolved-unavailable")]
+
+
+def test_check_dataset_influence_built_commons_missing_ref_warns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.validate.checks.dataset_influence import check_dataset_influence
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(_write_initialized_commons(tmp_path)))
+    _write_project(tmp_path)
+    _write_dataset_usage_paper(tmp_path)
+
+    results = list(check_dataset_influence(_ctx(tmp_path)))
+
+    assert _rules(results) == [(Severity.WARN, "dataset-influence.ref-unresolved")]
 
 
 def test_dataset_influence_registration_after_genesets() -> None:

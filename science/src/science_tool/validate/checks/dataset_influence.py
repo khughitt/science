@@ -17,6 +17,7 @@ from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
 DatasetRefStatus = Literal["resolved", "missing", "unavailable"]
+_COMMONS_LAYOUT_DIRS = (".git", "datasets", "papers", "topics", "themes")
 _ROLES = ("analyzed", "set_definition_source", "validation_source", "cited", "upstream", "training")
 _OVERLAPS = ("full", "partial", "unknown")
 
@@ -170,7 +171,7 @@ def _dataset_ref_statuses(ctx: ValidateContext, refs: set[str]) -> dict[str, Dat
         if isinstance(fm.get("id"), str) and fm["id"]
     }
     root = resolve_commons_root()
-    commons_available = root.is_dir()
+    commons_available = _has_initialized_commons_layout(root)
     adapter = CommonsEntityAdapter(root) if commons_available else None
     out: dict[str, DatasetRefStatus] = {}
     for ref in refs:
@@ -188,6 +189,10 @@ def _dataset_ref_statuses(ctx: ValidateContext, refs: set[str]) -> dict[str, Dat
         kind = record.frontmatter.get("kind") or record.frontmatter.get("type")
         out[ref] = "resolved" if kind == "dataset" else "missing"
     return out
+
+
+def _has_initialized_commons_layout(root: Path) -> bool:
+    return root.is_dir() and all((root / dirname).is_dir() for dirname in _COMMONS_LAYOUT_DIRS)
 
 
 def _collect_refs(frontmatters: list[dict[str, Any]], row_usage_refs: list[tuple[str, str, str]]) -> set[str]:
