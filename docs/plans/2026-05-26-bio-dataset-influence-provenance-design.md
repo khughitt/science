@@ -28,14 +28,16 @@ does so in phases so provenance materialization lands before any belief-aggregat
 declared data dependence. The object is authored in frontmatter where supported and materialized as
 reified, qualified `sci:DatasetUsage` nodes at graph-build time.
 
-**Current implementation reality.** A1 already shipped `dataset_usage` on dataset entities with the full
-six-role vocabulary. D1 already accepts row-level `dataset_usage` in `bio.geneset` collection member rows.
-B1 therefore does **not** invent the field; it extends the same object to papers, makes the provenance
-queryable in the graph, and adds validate checks around references and transition behavior.
+**Current implementation reality.** A1 already shipped `dataset_usage` on the base `Entity` model and
+the dataset schema with the full six-role vocabulary. D1 already accepts row-level `dataset_usage` in
+`bio.geneset` collection member rows. B1 therefore does **not** invent the object. For papers, the model
+side is likely a no-op because `PaperEntity` inherits the base field; the B1 work is to expose the field
+explicitly in the paper schema/frontmatter contract, document it as canonical, make it queryable in the
+graph, and add validate checks around references and transition behavior.
 
 **B1 boundary.** B1 is the authored-to-graph provenance layer:
 
-- add `dataset_usage` to paper schema/model/frontmatter,
+- expose `dataset_usage` on paper schema/frontmatter, reusing the existing model field where possible,
 - keep `paper.datasets` as a transition input,
 - project legacy `paper.datasets` into usage records,
 - materialize authored and derived usage records as `sci:DatasetUsage` nodes,
@@ -107,13 +109,15 @@ model when omitted.
 
 ### B-D3 — `paper.datasets` Is A Transition Input
 
-B1 adds `dataset_usage` to papers but does not break existing projects that still author
-`paper.datasets`.
+B1 exposes `dataset_usage` on papers but does not break existing projects that still author
+`paper.datasets`. The model field already exists through the base `Entity`; the implementation should
+verify that parse/materialization paths preserve it for `PaperEntity` rather than adding duplicate model
+state.
 
 During B1:
 
-- `paper.dataset_usage` is canonical when present.
-- `paper.datasets` remains readable as legacy transition input.
+- `paper.dataset_usage` is canonical per referenced dataset.
+- `paper.datasets` remains readable as legacy transition input and is projected per ref.
 - Each `paper.datasets` ref is projected as:
 
 ```yaml
@@ -125,8 +129,11 @@ source: paper.datasets
 
 - The validate check emits a migration warning when a paper still uses `datasets` without equivalent
   `dataset_usage`.
-- If both fields are present, B1 treats `dataset_usage` as canonical and warns on duplicate/conflicting
-  `datasets` entries instead of silently double-materializing them.
+- If both fields are present, materialization uses a **per-ref union**: refs present only in
+  `paper.datasets` are still projected, and refs present in `dataset_usage` use the explicit
+  `dataset_usage` entry. Same-ref legacy duplicates are not double-materialized. A same-ref legacy
+  `datasets` entry plus an explicit non-`analyzed` usage is reported as a migration conflict because the
+  legacy field semantically implied `analyzed`.
 
 ### B-D4 — Migration To One System
 
@@ -161,7 +168,8 @@ usage-node  sci:usageSource      "authored" | "paper.datasets" | "derivation.inp
 ```
 
 The usage node is canonical. Convenience edges may be derived for query ergonomics, but they are not the
-source of truth.
+source of truth. `sci:usageSource` is a closed B1 enum with exactly the four values shown above; multiple
+frontmatter locations can map to the same source value (`authored`).
 
 ### B-D6 — Sources Of Usage Records
 
@@ -172,14 +180,28 @@ B1 materializes usage records from five sources:
 | authored `dataset_usage` on datasets | `usageSource: authored` |
 | authored `dataset_usage` on papers | `usageSource: authored` |
 | legacy `paper.datasets` | `role: analyzed`, `overlap: unknown`, `usageSource: paper.datasets` |
-| `derivation.inputs` on derived datasets | `role: upstream`, `overlap: full`, `usageSource: derivation.inputs` |
+| `derivation.inputs` on derived datasets | `role: upstream`, `overlap: unknown`, `usageSource: derivation.inputs` |
 | D1 `bio.geneset` member rows | `usageSource: geneset.members_resource`, consumer is a virtual collection-member URI |
 
 D1 gene-set rows are already parsed and validate-checked. B1 turns a row-level `dataset_usage` block into
 usage records for a deterministic virtual collection-member URI, derived from `(collection dataset id,
-set_key)`. That URI is a graph/provenance address only; it is **not** a promoted dataset entity and does
-not require D2. If a row is later promoted by D2, the promoted dataset can point back to the same
-collection/set key and carry equivalent `dataset_usage`.
+set_key)`. The collection side uses the same canonical dataset id/slug parsing as ordinary entity URIs;
+the `set_key` segment is percent-encoded as a path segment, and the encoder must be a shared helper with
+round-trip tests. If two distinct `(collection id, set_key)` pairs produce the same virtual URI, graph
+build fails rather than merging them.
+
+The virtual member URI is a graph/provenance address only; it is **not** a promoted dataset entity and
+does not require D2. In B1, row-level usage nodes make the forward query "which gene-set row declares use
+of dataset X?" visible, but they do not automatically participate in the broader dataset → proposition
+influence closure unless another edge already connects that virtual row to a proposition. D2 promotion, or
+a later explicit evidence-line reference to a row, is what gives an individual set a normal `bears_on`
+path. If a row is later promoted by D2, the promoted dataset can point back to the same collection/set key
+and carry equivalent `dataset_usage`.
+
+When a consumer has usage records for the same dataset from multiple sources, B1 keeps separate usage
+nodes because the provenance of the assertion differs. B2 must de-duplicate by `(consumer, dataset, role,
+overlap)` or a stricter policy before deriving independence so multi-source assertions do not create
+double-counted dependence.
 
 ### B-D7 — Reverse Influence Groundwork
 
@@ -211,6 +233,11 @@ The B1 check covers:
 
 D1 row-level `dataset_usage` shape remains checked by `genesets`; B1 reuses the D1 parser for projection
 and adds reference-resolution checks for the parsed row usage records.
+
+The optional `consumed_by` staleness check is a different cost class from per-record shape/reference
+checks: it requires building the reverse usage index and comparing authored backlinks to the derived view.
+It should be planned as a separate B1 task or deferred if it threatens the narrower provenance
+materialization path.
 
 ---
 
@@ -261,7 +288,7 @@ study A and validated in independent cohort B — remains distinguishable throug
 | MSigDB set built from a study | gene-set row usage, `set_definition_source` | circular if tested in same data |
 | Set validated in independent cohort | gene-set row usage, `validation_source` | independence-positive |
 | AlphaMissense training data | dataset usage node, `training` | training dependence |
-| Derived dataset from workflow inputs | `derivation.inputs` usage nodes, `upstream` | dependence against inputs |
+| Derived dataset from workflow inputs | `derivation.inputs` usage nodes, `upstream`, `unknown` | dependence candidate unless overlap is later declared as full |
 
 ---
 
@@ -281,5 +308,5 @@ contract. B2 depends on B1's materialized usage nodes.
 ## 11. Status & Next Step
 
 Pillar B is approved with a B1-first implementation boundary. The next artifact is a B1 implementation
-plan that adds paper `dataset_usage`, materializes usage nodes, validates references and legacy fields,
+plan that exposes paper `dataset_usage`, materializes usage nodes, validates references and legacy fields,
 and documents the migration path from `paper.datasets` to the single canonical `dataset_usage` system.
