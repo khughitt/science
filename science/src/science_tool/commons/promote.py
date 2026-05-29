@@ -39,16 +39,25 @@ from science_model.entity_schema import (
 from science_model.entity_schema.loader import SchemaNotFoundError
 from science_model.entity_schema.profile import ProfileComponent
 from science_tool.commons.datapackage import (
+    Resolved,
+    ResourceSource,
+    Unexpandable,
+    parse_resource_hash,
     render_canonical_datapackage_yaml,
+    resolve_local_ref,
     stream_sha256_and_bytes,
+    validate_logical_path,
+    validate_source,
 )
 from science_tool.commons.config import check_override_conflict, resolve_project_by_id
 from science_tool.commons.errors import (
     CommonsError,
+    DataLogicalPathError,
     PromoteCandidateError,
     PromoteConflictAbort,
     PromoteInputError,
     PromoteMixinResolutionError,
+    PromoteResourceDigestMismatchError,
     PromoteResourceMissingError,
     PromoteValidationError,
     PromoteWriteError,
@@ -436,6 +445,32 @@ class PromotePlan:
 
 
 @dataclass(frozen=True, slots=True)
+class ResourceVerification:
+    """One sourced resource's --verify-digests verdict (non-fatal outcomes only).
+
+    `project_slug` disambiguates the same resource `name` appearing in more than
+    one project of a multi-project dataset group.
+    """
+
+    project_slug: str
+    name: str
+    status: Literal["verified", "skipped_off_host", "skipped_remote"]
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
+class PerResourceResult:
+    """Return type of `_dataset_per_resource`.
+
+    `per_resource` is the unchanged {alias: (hash, bytes)} payload used by
+    rendering; `verifications` is empty unless `--verify-digests` is set.
+    """
+
+    per_resource: dict[str, tuple[str, int]]
+    verifications: tuple[ResourceVerification, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class PromoteResult:
     op_id: str
     started_at: datetime
@@ -722,7 +757,8 @@ def plan_promote(
         dataset_primary_per_resource: dict[str, tuple[str, int]] | None = None
         if kind.kind == "dataset":
             dataset_primary = _primary_candidate_for_plan(classified, from_order)
-            dataset_primary_per_resource = _dataset_per_resource(dataset_primary)
+            _primary_result = _dataset_per_resource(dataset_primary)
+            dataset_primary_per_resource = _primary_result.per_resource
             if (
                 dataset_primary.datapackage_doc is None
                 or dataset_primary.datapackage_source_path is None
@@ -2376,7 +2412,9 @@ def _overlay_target_path(
     return candidate.project_root / kind.overlay_dest_subdir / filename
 
 
-def _dataset_per_resource(candidate: PromoteCandidate) -> dict[str, tuple[str, int]]:
+def _dataset_per_resource(
+    candidate: PromoteCandidate, *, verify_digests: bool = False
+) -> PerResourceResult:
     if candidate.datapackage_source_path is None or candidate.datapackage_doc is None:
         raise PromoteCandidateError(
             "dataset planning requires discovery datapackage metadata",
@@ -2384,6 +2422,7 @@ def _dataset_per_resource(candidate: PromoteCandidate) -> dict[str, tuple[str, i
         )
 
     per_resource: dict[str, tuple[str, int]] = {}
+    verifications: list[ResourceVerification] = []
     dp_parent = candidate.datapackage_source_path.parent
     resources = candidate.datapackage_doc.get("resources")
     if not isinstance(resources, list):
@@ -2403,22 +2442,144 @@ def _dataset_per_resource(candidate: PromoteCandidate) -> dict[str, tuple[str, i
                 f"datapackage resources[{idx}].path must be a non-empty string",
                 slug=candidate.slug,
             )
-        resource_abs = _datapackage_relative_path(
-            dp_parent,
-            resource_path,
-            field=f"datapackage resources[{idx}].path",
-        )
         try:
-            per_resource[_resource_name(resource, resource_path)] = stream_sha256_and_bytes(
-                resource_abs
-            )
-        except OSError as exc:
+            validate_logical_path(resource_path)
+        except DataLogicalPathError as exc:
             raise PromoteCandidateError(
-                f"cannot read datapackage resources[{idx}] bytes: {exc}",
+                f"datapackage resources[{idx}].path is invalid: {exc.reason}",
                 slug=candidate.slug,
-                path=resource_abs,
             ) from exc
-    return per_resource
+        name = _resource_name(resource, resource_path)
+
+        raw_source = resource.get("source")
+        if raw_source is None:
+            # Co-located resource: resolve under the datapackage dir and stream.
+            resource_abs = _datapackage_relative_path(
+                dp_parent,
+                resource_path,
+                field=f"datapackage resources[{idx}].path",
+            )
+            try:
+                per_resource[name] = stream_sha256_and_bytes(resource_abs)
+            except OSError as exc:
+                raise PromoteCandidateError(
+                    f"cannot read datapackage resources[{idx}] bytes: {exc}",
+                    slug=candidate.slug,
+                    path=resource_abs,
+                ) from exc
+            continue
+
+        # Sourced resource: trust the build-stamped (hash, bytes); no local I/O
+        # in the default path.
+        try:
+            source = validate_source(raw_source)
+        except ValueError as exc:
+            raise PromoteCandidateError(
+                f"datapackage resources[{idx}] has an invalid source: {exc}",
+                slug=candidate.slug,
+            ) from exc
+        stamped = _stamped_metadata(resource, idx, candidate.slug)
+        per_resource[name] = stamped
+        if verify_digests:
+            verifications.append(
+                _verify_sourced_resource(
+                    candidate.project_slug, name, source, stamped, candidate.slug
+                )
+            )
+
+    return PerResourceResult(
+        per_resource=per_resource, verifications=tuple(verifications)
+    )
+
+
+def _stamped_metadata(
+    resource: Mapping[str, Any], idx: int, slug: str
+) -> tuple[str, int]:
+    """Validate and return the build-stamped (hash, bytes) of a sourced resource."""
+    raw_hash = resource.get("hash")
+    if not isinstance(raw_hash, str):
+        raise PromoteCandidateError(
+            f"sourced datapackage resources[{idx}] has a missing or non-string 'hash'",
+            slug=slug,
+        )
+    try:
+        parse_resource_hash(raw_hash)
+    except ValueError as exc:
+        raise PromoteCandidateError(
+            f"sourced datapackage resources[{idx}] has an invalid 'hash': {exc}",
+            slug=slug,
+        ) from exc
+    raw_bytes = resource.get("bytes")
+    if (
+        not isinstance(raw_bytes, int)
+        or isinstance(raw_bytes, bool)
+        or raw_bytes < 0
+    ):
+        raise PromoteCandidateError(
+            f"sourced datapackage resources[{idx}] has a missing or invalid 'bytes'",
+            slug=slug,
+        )
+    return raw_hash, raw_bytes
+
+
+def _verify_sourced_resource(
+    project_slug: str,
+    name: str,
+    source: ResourceSource,
+    stamped: tuple[str, int],
+    slug: str,
+) -> ResourceVerification:
+    """Resolve a sourced resource on this host and return its verify verdict.
+
+    Raises on a hard error (digest drift, or a ref that resolves but is missing).
+    """
+    if source.type != "local":
+        return ResourceVerification(
+            project_slug=project_slug,
+            name=name,
+            status="skipped_remote",
+            detail=f"{source.type}: no fetcher this iteration",
+        )
+    try:
+        resolution = resolve_local_ref(source.ref)
+    except ValueError as exc:
+        raise PromoteCandidateError(
+            f"cannot verify sourced resource {name!r}: {exc}",
+            slug=slug,
+        ) from exc
+    if isinstance(resolution, Unexpandable):
+        return ResourceVerification(
+            project_slug=project_slug,
+            name=name,
+            status="skipped_off_host",
+            detail=resolution.ref,
+        )
+    if not isinstance(resolution, Resolved):
+        raise AssertionError(
+            f"unexpected RefResolution type: {type(resolution).__name__}"
+        )
+    if not resolution.exists:
+        raise PromoteCandidateError(
+            f"sourced resource {name!r} ref resolves to a missing file: "
+            f"{resolution.path}",
+            slug=slug,
+            path=resolution.path,
+        )
+    actual = stream_sha256_and_bytes(resolution.path)
+    if actual != stamped:
+        raise PromoteResourceDigestMismatchError(
+            slug=slug,
+            resource_name=name,
+            expected=stamped,
+            actual=actual,
+            path=resolution.path,
+        )
+    return ResourceVerification(
+        project_slug=project_slug,
+        name=name,
+        status="verified",
+        detail=f"{actual[0]} ({actual[1]} bytes)",
+    )
 
 
 def _validate_dataset_group_datapackages(
@@ -2443,7 +2604,10 @@ def _validate_dataset_group_datapackages(
     for candidate in candidates:
         if candidate is primary:
             continue
-        candidate_per_resource = _dataset_per_resource(candidate)
+        # NOTE: verify_digests is threaded through here in a later task so that
+        # secondary-project sourced resources are also verified; for now group
+        # validation only compares the (hash, bytes) payloads.
+        candidate_per_resource = _dataset_per_resource(candidate).per_resource
         if candidate_per_resource != primary_per_resource:
             raise PromoteCandidateError(
                 f"dataset {canonical_slug!r} project {candidate.project_slug!r} "
