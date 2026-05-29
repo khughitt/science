@@ -97,8 +97,10 @@ def evaluate_dataset_influence(
                         refs_to_check.append((ref, ident, str(path or "")))
 
         if kind == "paper":
-            raw_datasets = fm.get("datasets") or []
-            if raw_datasets and not isinstance(raw_datasets, list):
+            raw_datasets = fm.get("datasets")
+            if raw_datasets is None:
+                raw_datasets = []
+            if not isinstance(raw_datasets, list):
                 yield _result(
                     Severity.ERROR,
                     path,

@@ -44,6 +44,34 @@ def test_paper_datasets_invalid_entry_errors() -> None:
     assert _rules(results) == [(Severity.ERROR, "dataset-influence.paper-datasets-invalid")]
 
 
+def test_paper_datasets_empty_mapping_errors() -> None:
+    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
+
+    results = list(
+        evaluate_dataset_influence(
+            [_fm(datasets={})],
+            dataset_ref_status={},
+            row_usage_refs=[],
+        )
+    )
+
+    assert _rules(results) == [(Severity.ERROR, "dataset-influence.paper-datasets-invalid")]
+
+
+def test_paper_datasets_empty_string_errors() -> None:
+    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
+
+    results = list(
+        evaluate_dataset_influence(
+            [_fm(datasets="")],
+            dataset_ref_status={},
+            row_usage_refs=[],
+        )
+    )
+
+    assert _rules(results) == [(Severity.ERROR, "dataset-influence.paper-datasets-invalid")]
+
+
 def test_legacy_paper_datasets_warns_when_not_equivalent() -> None:
     from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
 
@@ -117,6 +145,27 @@ def test_dataset_self_reference_errors() -> None:
     assert _rules(results) == [(Severity.ERROR, "dataset-influence.self-reference")]
 
 
+def test_dataset_derivation_inputs_self_reference_errors() -> None:
+    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
+
+    results = list(
+        evaluate_dataset_influence(
+            [
+                {
+                    "id": "dataset:self",
+                    "type": "dataset",
+                    "_path": "data/self/datapackage.yaml",
+                    "derivation": {"inputs": ["dataset:self"]},
+                }
+            ],
+            dataset_ref_status={"dataset:self": "resolved"},
+            row_usage_refs=[],
+        )
+    )
+
+    assert _rules(results) == [(Severity.ERROR, "dataset-influence.self-reference")]
+
+
 def test_unresolved_refs_use_pinned_severities() -> None:
     from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
 
@@ -135,6 +184,29 @@ def test_unresolved_refs_use_pinned_severities() -> None:
                 "dataset:unknown-b": "missing",
             },
             row_usage_refs=[],
+        )
+    )
+
+    assert _rules(results) == [
+        (Severity.INFO, "dataset-influence.ref-unresolved-unavailable"),
+        (Severity.WARN, "dataset-influence.ref-unresolved"),
+    ]
+
+
+def test_row_usage_refs_unresolved_uses_pinned_severities() -> None:
+    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
+
+    results = list(
+        evaluate_dataset_influence(
+            [],
+            dataset_ref_status={
+                "dataset:row-a": "unavailable",
+                "dataset:row-b": "missing",
+            },
+            row_usage_refs=[
+                ("dataset:row-a", "geneset:one", "doc/gene-sets.tsv"),
+                ("dataset:row-b", "geneset:two", "doc/gene-sets.tsv"),
+            ],
         )
     )
 
