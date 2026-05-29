@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from science_tool.bibliography import bibliography_key_from_reference, load_bib_keys
+from science_tool.commons.frontmatter import raw_frontmatter
 from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
 
@@ -126,27 +127,6 @@ def _paper_slug(ref: str) -> str | None:
     return slug or None
 
 
-def raw_frontmatter(path: Path) -> dict[str, Any]:
-    """Raw frontmatter for either an entity.md (fenced YAML) or a datapackage.yaml.
-
-    Reads directly (uncached) and tolerates malformed input by returning {} —
-    callers re-enforce schema-critical fields themselves, because raw frontmatter
-    bypasses the closed graph Entity.
-    """
-    try:
-        text = path.read_text(encoding="utf-8")
-        if path.suffix in (".yaml", ".yml"):
-            data = yaml.safe_load(text) or {}
-        elif text.startswith("---"):
-            end = text.find("\n---", 3)
-            data = yaml.safe_load(text[3:end]) if end != -1 else {}
-        else:
-            data = {}
-    except (OSError, UnicodeDecodeError, yaml.YAMLError):
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
 def dataset_frontmatters(ctx: ValidateContext) -> list[dict[str, Any]]:
     """Raw frontmatter for every project dataset entity, BOTH backends, by tolerant
     file discovery that does NOT strict-validate through the graph loader (which
@@ -174,6 +154,32 @@ def dataset_frontmatters(ctx: ValidateContext) -> list[dict[str, Any]]:
                 if ident in seen_ids:
                     continue
                 seen_ids.add(ident)
+            fm["_path"] = ref.path
+            out.append(fm)
+    return out
+
+
+def entity_frontmatters(ctx: ValidateContext) -> list[dict[str, Any]]:
+    """Raw frontmatter for every project entity discovered by tolerant adapters.
+
+    This is for validate checks that must inspect malformed fields without
+    strict-loading the closed graph Entity model first.
+    """
+    out: list[dict[str, Any]] = []
+    seen_paths: set[str] = set()
+    adapters = (DatapackageAdapter(), MarkdownAdapter())
+    for adapter in adapters:
+        for ref in adapter.discover(ctx.project_root):
+            if ref.path in seen_paths:
+                continue
+            seen_paths.add(ref.path)
+            abs_path = ctx.project_root / ref.path
+            if not abs_path.is_file():
+                continue
+            fm = raw_frontmatter(abs_path)
+            kind = fm.get("kind") or fm.get("type")
+            if not isinstance(kind, str) or not kind:
+                continue
             fm["_path"] = ref.path
             out.append(fm)
     return out

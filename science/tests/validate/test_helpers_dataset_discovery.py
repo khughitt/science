@@ -11,6 +11,10 @@ class _Ctx:
         self.project_root = root
 
 
+def _ctx(root: Path) -> _Ctx:
+    return _Ctx(root)
+
+
 def test_dataset_frontmatters_covers_markdown_and_datapackage(tmp_path: Path) -> None:
     (tmp_path / "doc" / "datasets").mkdir(parents=True)
     (tmp_path / "doc" / "datasets" / "gtex.md").write_text(
@@ -38,3 +42,51 @@ def test_raw_frontmatter_tolerates_malformed_yaml(tmp_path: Path) -> None:
     path.write_text("id: [unterminated\n", encoding="utf-8")
 
     assert raw_frontmatter(path) == {}
+
+
+def test_entity_frontmatters_discovers_papers_and_datapackage_datasets(tmp_path: Path) -> None:
+    from science_tool.validate._helpers import entity_frontmatters
+
+    (tmp_path / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    (tmp_path / "doc" / "papers").mkdir(parents=True)
+    (tmp_path / "doc" / "papers" / "Adams2025.md").write_text(
+        "---\n"
+        "id: paper:Adams2025\n"
+        "type: paper\n"
+        "title: Adams\n"
+        "dataset_usage:\n"
+        "  - ref: dataset:gtex-v8\n"
+        "    role: analyzed\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    dp_dir = tmp_path / "data" / "gtex"
+    dp_dir.mkdir(parents=True)
+    (dp_dir / "datapackage.yaml").write_text(
+        "profiles: [science-pkg-entity-1.0]\n"
+        "id: dataset:gtex-v8\n"
+        "type: dataset\n"
+        "title: GTEx\n"
+        "origin: external\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n",
+        encoding="utf-8",
+    )
+
+    rows = entity_frontmatters(_ctx(tmp_path))  # type: ignore[arg-type]
+
+    by_id = {row["id"]: row for row in rows}
+    assert by_id["paper:Adams2025"]["_path"] == "doc/papers/Adams2025.md"
+    assert by_id["dataset:gtex-v8"]["_path"] == "data/gtex/datapackage.yaml"
+
+
+def test_raw_frontmatter_shared_helper_reads_markdown_and_yaml(tmp_path: Path) -> None:
+    from science_tool.commons.frontmatter import raw_frontmatter
+
+    md = tmp_path / "entity.md"
+    md.write_text("---\nid: paper:Adams2025\ntype: paper\n---\nBody\n", encoding="utf-8")
+    yaml_path = tmp_path / "datapackage.yaml"
+    yaml_path.write_text("id: dataset:gtex-v8\ntype: dataset\n", encoding="utf-8")
+
+    assert raw_frontmatter(md)["id"] == "paper:Adams2025"
+    assert raw_frontmatter(yaml_path)["id"] == "dataset:gtex-v8"
