@@ -609,6 +609,7 @@ def _register_real_canonical_checks() -> None:
         "reference_collections",
         "variant_identity",
         "genesets",
+        "dataset_influence",
         "prose_lints",
         "annotations",
         "evidence_lines",
@@ -635,3 +636,18 @@ def test_full_run_reports_malformed_member_without_crashing(
     assert any(r.rule == "reference-collection.malformed-member" for r in result.results)
     # and nothing propagated an exception — we got a RunResult with the error counted
     assert result.errors >= 1
+
+
+def test_canonical_loader_registers_dataset_influence_after_genesets() -> None:
+    import science_tool.validate.checks as checks
+
+    clear_checks_for_tests()
+    for module_name in ("genesets", "dataset_influence"):
+        sys.modules.pop(f"science_tool.validate.checks.{module_name}", None)
+
+    checks._load_canonical_checks()
+
+    ordered = [(entry.section, entry.order, entry.fn.__module__) for entry in checks.CANONICAL_CHECKS]
+    genesets_index = next(index for index, entry in enumerate(ordered) if entry[0] == "gene-set collections")
+    influence_index = next(index for index, entry in enumerate(ordered) if entry[0] == "dataset influence")
+    assert influence_index == genesets_index + 1

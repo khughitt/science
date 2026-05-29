@@ -6,6 +6,12 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any, Literal
 
+from science_tool.commons.adapter import CommonsEntityAdapter
+from science_tool.commons.config import resolve_commons_root
+from science_tool.commons.errors import CommonsError
+from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
+from science_tool.commons.geneset_resources import is_geneset_frontmatter, read_member_rows
+from science_tool.validate._helpers import dataset_frontmatters, entity_frontmatters
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -157,6 +163,79 @@ def evaluate_dataset_influence(
             )
 
 
+def _dataset_ref_statuses(ctx: ValidateContext, refs: set[str]) -> dict[str, DatasetRefStatus]:
+    local_ids = {
+        str(fm["id"])
+        for fm in dataset_frontmatters(ctx)
+        if isinstance(fm.get("id"), str) and fm["id"]
+    }
+    root = resolve_commons_root()
+    commons_available = root.is_dir()
+    adapter = CommonsEntityAdapter(root) if commons_available else None
+    out: dict[str, DatasetRefStatus] = {}
+    for ref in refs:
+        if ref in local_ids:
+            out[ref] = "resolved"
+            continue
+        if adapter is None:
+            out[ref] = "unavailable"
+            continue
+        try:
+            record = adapter.load(ref)
+        except CommonsError:
+            out[ref] = "missing"
+            continue
+        kind = record.frontmatter.get("kind") or record.frontmatter.get("type")
+        out[ref] = "resolved" if kind == "dataset" else "missing"
+    return out
+
+
+def _collect_refs(frontmatters: list[dict[str, Any]], row_usage_refs: list[tuple[str, str, str]]) -> set[str]:
+    refs = {ref for ref, _consumer, _path in row_usage_refs}
+    for fm in frontmatters:
+        usage = fm.get("dataset_usage")
+        if isinstance(usage, list):
+            for entry in usage:
+                if isinstance(entry, dict) and isinstance(entry.get("ref"), str):
+                    refs.add(entry["ref"])
+        datasets = fm.get("datasets")
+        if isinstance(datasets, list):
+            refs.update(ref for ref in datasets if isinstance(ref, str) and ref.startswith("dataset:"))
+        derivation = fm.get("derivation")
+        if isinstance(derivation, dict) and isinstance(derivation.get("inputs"), list):
+            refs.update(ref for ref in derivation["inputs"] if isinstance(ref, str) and ref.startswith("dataset:"))
+    return refs
+
+
+def _row_usage_refs(ctx: ValidateContext, frontmatters: list[dict[str, Any]]) -> list[tuple[str, str, str]]:
+    refs: list[tuple[str, str, str]] = []
+    for fm in frontmatters:
+        if not is_geneset_frontmatter(fm):
+            continue
+        ident = fm.get("id")
+        path = str(fm.get("_path") or "")
+        if not isinstance(ident, str) or not ident:
+            continue
+        raw_rows = read_member_rows(ctx.project_root, fm)
+        if raw_rows is None or isinstance(raw_rows, Exception):
+            continue
+        try:
+            rows = parse_geneset_rows(raw_rows)
+        except GenesetCollectionError:
+            continue
+        for row in rows:
+            for usage in row.dataset_usage:
+                refs.append((str(usage["ref"]), f"{ident}#{row.set_key}", path))
+    return refs
+
+
 @Check(section="dataset influence", order=35)
 def check_dataset_influence(ctx: ValidateContext) -> Iterator[Result]:
-    return iter(())
+    frontmatters = entity_frontmatters(ctx)
+    row_refs = _row_usage_refs(ctx, frontmatters)
+    statuses = _dataset_ref_statuses(ctx, _collect_refs(frontmatters, row_refs))
+    yield from evaluate_dataset_influence(
+        frontmatters,
+        dataset_ref_status=statuses,
+        row_usage_refs=row_refs,
+    )

@@ -1,10 +1,24 @@
 from __future__ import annotations
 
+import importlib
+from pathlib import Path
+
+import pytest
+
+from science_tool.validate.checks import CANONICAL_CHECKS, clear_checks_for_tests
+from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Severity
+
+
+_MANIFEST = "name: demo\nknowledge_profiles:\n  local: local\n"
 
 
 def _rules(results):
     return [(r.severity, r.rule) for r in results]
+
+
+def _ctx(root: Path) -> ValidateContext:
+    return ValidateContext.from_project_root(root, strict=False, verbose=False)
 
 
 def _fm(**extra):
@@ -14,6 +28,10 @@ def _fm(**extra):
         "_path": "doc/papers/Adams2025.md",
         **extra,
     }
+
+
+def _write_project(root: Path) -> None:
+    (root / "science.yaml").write_text(_MANIFEST, encoding="utf-8")
 
 
 def test_malformed_dataset_usage_errors() -> None:
@@ -191,6 +209,64 @@ def test_unresolved_refs_use_pinned_severities() -> None:
         (Severity.INFO, "dataset-influence.ref-unresolved-unavailable"),
         (Severity.WARN, "dataset-influence.ref-unresolved"),
     ]
+
+
+def test_check_dataset_influence_resolves_local_dataset_ref(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.validate.checks.dataset_influence import check_dataset_influence
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "empty-commons"))
+    _write_project(tmp_path)
+    (tmp_path / "doc" / "papers").mkdir(parents=True)
+    (tmp_path / "doc" / "papers" / "Adams2025.md").write_text(
+        "---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndataset_usage:\n"
+        "  - ref: dataset:gtex-v8\n    role: analyzed\n---\n",
+        encoding="utf-8",
+    )
+    dp_dir = tmp_path / "data" / "gtex"
+    dp_dir.mkdir(parents=True)
+    (dp_dir / "datapackage.yaml").write_text(
+        "profiles: [science-pkg-entity-1.0]\nid: dataset:gtex-v8\ntype: dataset\ntitle: GTEx\n"
+        "origin: external\ntier: use-now\ndatapackage: datapackage.yaml\naccess: {level: public, verified: true}\n",
+        encoding="utf-8",
+    )
+
+    assert list(check_dataset_influence(_ctx(tmp_path))) == []
+
+
+def test_check_dataset_influence_unbuilt_commons_ref_infos(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.validate.checks.dataset_influence import check_dataset_influence
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
+    _write_project(tmp_path)
+    (tmp_path / "doc" / "papers").mkdir(parents=True)
+    (tmp_path / "doc" / "papers" / "Adams2025.md").write_text(
+        "---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndataset_usage:\n"
+        "  - ref: dataset:gtex-v8\n    role: analyzed\n---\n",
+        encoding="utf-8",
+    )
+
+    results = list(check_dataset_influence(_ctx(tmp_path)))
+
+    assert _rules(results) == [(Severity.INFO, "dataset-influence.ref-unresolved-unavailable")]
+
+
+def test_dataset_influence_registration_after_genesets() -> None:
+    clear_checks_for_tests()
+
+    import science_tool.validate.checks.dataset_influence as dataset_influence
+    import science_tool.validate.checks.genesets as genesets
+
+    importlib.reload(genesets)
+    importlib.reload(dataset_influence)
+
+    ordered = [(entry.section, entry.order, entry.fn.__module__) for entry in CANONICAL_CHECKS]
+    genesets_index = next(index for index, entry in enumerate(ordered) if entry[0] == "gene-set collections")
+    influence_index = next(index for index, entry in enumerate(ordered) if entry[0] == "dataset influence")
+    assert influence_index == genesets_index + 1
 
 
 def test_row_usage_refs_unresolved_uses_pinned_severities() -> None:
