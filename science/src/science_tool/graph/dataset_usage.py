@@ -71,8 +71,13 @@ def usage_records_for_entity(
         )
 
     if entity.kind == "paper":
-        for dataset_ref in getattr(entity, "datasets", []) or []:
-            dataset_ref = _canonical_dataset_ref(str(dataset_ref), resolve_dataset_ref)
+        for raw_ref in getattr(entity, "datasets", []) or []:
+            raw_ref = str(raw_ref)
+            if not raw_ref.startswith("dataset:"):
+                raise DatasetUsageMaterializationError(
+                    f"{entity.canonical_id}: paper.datasets entry {raw_ref!r} is not a dataset reference"
+                )
+            dataset_ref = _canonical_dataset_ref(raw_ref, resolve_dataset_ref)
             if dataset_ref in materialized_refs:
                 continue
             materialized_refs.add(dataset_ref)

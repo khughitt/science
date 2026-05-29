@@ -126,6 +126,21 @@ def test_paper_datasets_invalid_entry_errors() -> None:
     assert _rules(results) == [(Severity.ERROR, "dataset-influence.paper-datasets-invalid")]
 
 
+def test_paper_datasets_bare_alias_errors_even_when_canonicalizer_resolves() -> None:
+    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
+
+    results = list(
+        evaluate_dataset_influence(
+            [_fm(datasets=["gtex"])],
+            dataset_ref_status={"dataset:gtex-v8": "resolved"},
+            row_usage_refs=[],
+            canonicalize_dataset_ref=lambda ref: "dataset:gtex-v8" if ref == "gtex" else ref,
+        )
+    )
+
+    assert _rules(results) == [(Severity.ERROR, "dataset-influence.paper-datasets-invalid")]
+
+
 def test_paper_datasets_empty_mapping_errors() -> None:
     from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
 
@@ -334,7 +349,7 @@ def test_check_dataset_influence_dataset_usage_requires_raw_dataset_ref(
     assert _rules(results) == [(Severity.ERROR, "dataset-influence.dataset-usage-malformed")]
 
 
-def test_check_dataset_influence_legacy_paper_datasets_alias_warns_only(
+def test_check_dataset_influence_legacy_paper_datasets_bare_alias_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from science_tool.validate.checks.dataset_influence import check_dataset_influence
@@ -356,7 +371,28 @@ def test_check_dataset_influence_legacy_paper_datasets_alias_warns_only(
 
     results = list(check_dataset_influence(_ctx(tmp_path)))
 
-    assert _rules(results) == [(Severity.WARN, "dataset-influence.paper-datasets-legacy")]
+    assert _rules(results) == [(Severity.ERROR, "dataset-influence.paper-datasets-invalid")]
+
+
+def test_check_dataset_influence_uses_manual_aliases_for_dataset_usage_refs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.validate.checks.dataset_influence import check_dataset_influence
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
+    _write_project(tmp_path)
+    mappings = tmp_path / "knowledge" / "sources" / "local" / "mappings.yaml"
+    mappings.parent.mkdir(parents=True)
+    mappings.write_text('aliases:\n  "dataset:gtex": "dataset:gtex-v8"\n', encoding="utf-8")
+    _write_dataset_usage_paper(tmp_path, ref="dataset:gtex")
+    _write_dataset(
+        tmp_path,
+        "gtex-v8",
+        "origin: external\n"
+        "access: {level: public, verified: true}\n",
+    )
+
+    assert list(check_dataset_influence(_ctx(tmp_path))) == []
 
 
 def test_check_dataset_influence_dataset_usage_alias_self_reference_errors(

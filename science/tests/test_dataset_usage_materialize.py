@@ -472,7 +472,7 @@ def test_materialize_graph_canonicalizes_authored_usage_alias(tmp_path):
     assert (paper_nodes[0], SCI_NS.usageSource, Literal("authored")) in graph
 
 
-def test_materialize_graph_canonicalizes_legacy_paper_dataset_alias(tmp_path):
+def test_materialize_graph_rejects_legacy_paper_dataset_bare_alias(tmp_path):
     from science_tool.graph.materialize import materialize_graph
 
     _write_project(tmp_path)
@@ -500,15 +500,13 @@ def test_materialize_graph_canonicalizes_legacy_paper_dataset_alias(tmp_path):
         encoding="utf-8",
     )
 
-    trig = materialize_graph(tmp_path)
-    graph = _load_trig(trig).graph(PROJECT_NS["graph/provenance"])
-    paper_uri = PROJECT_NS["paper/Adams2025".lower()]
-    paper_nodes = list(graph.objects(paper_uri, SCI_NS.hasDatasetUsage))
+    with pytest.raises(ValueError) as excinfo:
+        materialize_graph(tmp_path)
 
-    assert len(paper_nodes) == 1
-    assert (paper_nodes[0], SCI_NS.dataset, PROJECT_NS["dataset/gtex-v8"]) in graph
-    assert (paper_nodes[0], SCI_NS.dataset, PROJECT_NS["dataset/gtex"]) not in graph
-    assert (paper_nodes[0], SCI_NS.usageSource, Literal("paper.datasets")) in graph
+    message = str(excinfo.value)
+    assert "Cannot materialize graph with unresolved references" in message
+    assert "datasets" in message
+    assert "gtex" in message
 
 
 def test_materialize_graph_canonicalizes_derivation_input_alias(tmp_path):

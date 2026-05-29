@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from science_tool.commons.adapter import CommonsEntityAdapter
+from science_tool.commons.aliases import load_manual_aliases
 from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsError
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
@@ -140,7 +141,7 @@ def evaluate_dataset_influence(
                 continue
             explicit_by_ref = {canonicalize_dataset_ref(str(entry["ref"])): entry for entry in usage_entries}
             for raw_ref in raw_datasets:
-                if not isinstance(raw_ref, str):
+                if not isinstance(raw_ref, str) or not raw_ref.startswith("dataset:"):
                     yield _result(
                         Severity.ERROR,
                         path,
@@ -149,14 +150,6 @@ def evaluate_dataset_influence(
                     )
                     continue
                 ref = canonicalize_dataset_ref(raw_ref)
-                if not ref.startswith("dataset:"):
-                    yield _result(
-                        Severity.ERROR,
-                        path,
-                        f"{ident}: paper.datasets entry {raw_ref!r} is not a dataset: ref",
-                        "dataset-influence.paper-datasets-invalid",
-                    )
-                    continue
                 if ref in explicit_by_ref:
                     entry = explicit_by_ref[ref]
                     if entry.get("role") != "analyzed":
@@ -224,7 +217,12 @@ def _local_dataset_ids(frontmatters: Iterable[dict[str, Any]]) -> set[str]:
 
 
 class _DatasetRefResolver:
-    def __init__(self, frontmatters: Iterable[dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        frontmatters: Iterable[dict[str, Any]],
+        *,
+        manual_aliases: dict[str, str] | None = None,
+    ) -> None:
         aliases: dict[str, str | None] = {}
         for fm in frontmatters:
             ident = fm.get("id")
@@ -239,6 +237,9 @@ class _DatasetRefResolver:
                 if isinstance(alias, str) and alias:
                     self._register(aliases, alias, ident)
                     self._register(aliases, alias.lower(), ident)
+        for alias, canonical_id in (manual_aliases or {}).items():
+            self._register(aliases, alias, canonical_id)
+            self._register(aliases, alias.lower(), canonical_id)
         self._aliases = aliases
 
     @staticmethod
@@ -262,6 +263,13 @@ class _DatasetRefResolver:
 
 def _has_initialized_commons_layout(root: Path) -> bool:
     return root.is_dir() and all((root / dirname).is_dir() for dirname in _COMMONS_LAYOUT_DIRS)
+
+
+def _local_profile(ctx: ValidateContext) -> str:
+    profiles = ctx.manifest.get("knowledge_profiles")
+    if isinstance(profiles, dict) and isinstance(profiles.get("local"), str):
+        return profiles["local"]
+    return "local"
 
 
 def _collect_refs(
@@ -325,7 +333,10 @@ def _row_usage_refs(
 @Check(section="dataset influence", order=35)
 def check_dataset_influence(ctx: ValidateContext) -> Iterator[Result]:
     frontmatters = entity_frontmatters(ctx)
-    resolver = _DatasetRefResolver(dataset_frontmatters(ctx))
+    resolver = _DatasetRefResolver(
+        dataset_frontmatters(ctx),
+        manual_aliases=load_manual_aliases(ctx.project_root, local_profile=_local_profile(ctx)),
+    )
     row_refs = _row_usage_refs(ctx, frontmatters, resolver.resolve)
     statuses = _dataset_ref_statuses(ctx, _collect_refs(frontmatters, row_refs, resolver.resolve))
     yield from evaluate_dataset_influence(

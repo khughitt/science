@@ -23,6 +23,9 @@ from science_tool.commons.errors import (
     CommonsRootNotFoundError,
     OverlayValidationError,
 )
+from science_tool.commons.frontmatter import raw_frontmatter
+from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
+from science_tool.commons.geneset_resources import is_geneset_frontmatter, read_member_rows
 from science_tool.commons.overlay import MergedEntity, OverlayAdapter, merge_entity
 from science_tool.commons.query import CommonsQuery
 from science_tool.graph.entity_registry import EntityRegistry
@@ -80,6 +83,7 @@ def _load_commons_referenced_entities(
             overlays[item.canonical_id] = item
 
     referenced_ids = collect_referenced_commons_ids(
+        project_root=project_root,
         project_entities=project_entities,
         project_relations=project_relations,
         project_bindings=project_bindings,
@@ -146,6 +150,7 @@ def _load_commons_referenced_entities(
 
 def collect_referenced_commons_ids(
     *,
+    project_root: Path | None = None,
     project_entities: list[Entity],
     project_relations: list[SourceRelation],
     project_bindings: list[BindingSource],
@@ -157,6 +162,16 @@ def collect_referenced_commons_ids(
             for raw in getattr(entity, field_name, None) or []:
                 _maybe_add(found, raw)
         _maybe_add(found, getattr(entity, "audits", None))
+        for usage in getattr(entity, "dataset_usage", None) or []:
+            _maybe_add(found, getattr(usage, "ref", None))
+        if getattr(entity, "kind", None) == "paper":
+            for raw in getattr(entity, "datasets", None) or []:
+                _maybe_add(found, raw)
+        derivation = getattr(entity, "derivation", None)
+        for raw in getattr(derivation, "inputs", None) or []:
+            _maybe_add(found, raw)
+        if project_root is not None:
+            _collect_geneset_row_usage_refs(found, project_root=project_root, entity=entity)
 
     for relation in project_relations:
         _maybe_add(found, relation.subject)
@@ -169,6 +184,31 @@ def collect_referenced_commons_ids(
             _maybe_add(found, raw)
 
     return found
+
+
+def _collect_geneset_row_usage_refs(found: set[str], *, project_root: Path, entity: Entity) -> None:
+    if getattr(entity, "kind", None) != "dataset":
+        return
+    file_path = getattr(entity, "file_path", None)
+    if not isinstance(file_path, str) or not file_path:
+        return
+    rel_path = Path(file_path)
+    if rel_path.is_absolute():
+        return
+    fm = raw_frontmatter(project_root / rel_path)
+    if not is_geneset_frontmatter(fm):
+        return
+    fm["_path"] = file_path
+    raw_rows = read_member_rows(project_root, fm)
+    if raw_rows is None or isinstance(raw_rows, Exception):
+        return
+    try:
+        rows = parse_geneset_rows(raw_rows)
+    except GenesetCollectionError:
+        return
+    for row in rows:
+        for usage in row.dataset_usage:
+            _maybe_add(found, usage.get("ref"))
 
 
 def _materialize_commons_entity(

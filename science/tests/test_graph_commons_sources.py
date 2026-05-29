@@ -7,7 +7,8 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
-from science_model.entities import DatasetEntity, Entity, EntityScope, ThemeEntity
+from science_model.entities import DatasetEntity, Entity, PaperEntity, ThemeEntity
+from science_model.identity import EntityScope
 from science_model.source_contracts import BindingSource
 from science_model.source_ref import SourceRef
 
@@ -99,6 +100,17 @@ def test_collect_referenced_commons_ids_collects_entity_related() -> None:
 
 def test_collect_referenced_commons_ids_collects_entity_source_refs() -> None:
     assert _collect(entities=[_entity("concept:local", source_refs=["dataset:rnaseq"])]) == {"dataset:rnaseq"}
+
+
+def test_collect_referenced_commons_ids_collects_b1_entity_usage_refs() -> None:
+    paper = SimpleNamespace(
+        kind="paper",
+        dataset_usage=[SimpleNamespace(ref="dataset:authored")],
+        datasets=["dataset:legacy"],
+    )
+    derived = SimpleNamespace(kind="dataset", derivation=SimpleNamespace(inputs=["dataset:upstream"]))
+
+    assert _collect(entities=[paper, derived]) == {"dataset:authored", "dataset:legacy", "dataset:upstream"}
 
 
 @pytest.mark.parametrize(
@@ -311,6 +323,7 @@ def test_translate_paper_carries_mixin_fields() -> None:
         }
     )
 
+    assert isinstance(entity, PaperEntity)
     assert entity.bibkey == "Adams2025"
     assert entity.authors == ["Adams, A.", "Baker, B."]
     assert entity.year == 2025
@@ -333,6 +346,7 @@ def test_translate_paper_legacy_journal_flows_to_venue() -> None:
         }
     )
 
+    assert isinstance(entity, PaperEntity)
     assert entity.venue == "Nature Methods"
 
 
@@ -576,6 +590,86 @@ related: ["topic:single-cell-foundation-models"]
     assert "topic:single-cell-foundation-models" in entity_ids
     assert entity_ids == sorted(entity_ids)
     assert sources.commons_overlay_paths == {}
+
+
+def test_load_project_sources_pulls_commons_dataset_usage_ref(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    (project_root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    manifest_path = project_root / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("", encoding="utf-8")
+    paper_path = project_root / "doc" / "papers" / "Adams2025.md"
+    paper_path.parent.mkdir(parents=True)
+    paper_path.write_text(
+        """---
+id: "paper:Adams2025"
+type: "paper"
+title: "Adams"
+dataset_usage:
+  - ref: "dataset:rnaseq-example"
+    role: analyzed
+---
+""",
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(project_root)
+
+    assert "dataset:rnaseq-example" in {entity.canonical_id for entity in sources.entities}
+
+
+def test_load_project_sources_pulls_commons_geneset_row_usage_ref(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    (project_root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    manifest_path = project_root / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("", encoding="utf-8")
+    dp_dir = project_root / "data" / "reactome"
+    dp_dir.mkdir(parents=True)
+    (dp_dir / "datapackage.yaml").write_text(
+        """profiles: [science-pkg-entity-1.0]
+id: dataset:reactome-v89
+type: dataset
+title: Reactome
+status: active
+origin: external
+tier: use-now
+datapackage: datapackage.yaml
+schema_profile: science-entity-base/1.0+dataset/1.0+bio.geneset/1.0
+source_class: reference
+access: {level: public, verified: true}
+member_key_column: set_key
+members_resource: sets
+n_sets: 1
+set_size_summary: {min: 2, median: 2, max: 2}
+identifier_space: {tier: gene, namespace: hgnc_id, resolution_status: declared_unresolved}
+resources:
+  - name: sets
+    path: sets.csv
+""",
+        encoding="utf-8",
+    )
+    (dp_dir / "sets.csv").write_text(
+        "set_key,name,member_ids,dataset_usage\n"
+        'R-HSA-1,Cell cycle,HGNC:1;HGNC:2,"[{""ref"":""dataset:rnaseq-example"",""role"":""set_definition_source""}]"\n',
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(project_root)
+
+    assert "dataset:rnaseq-example" in {entity.canonical_id for entity in sources.entities}
 
 
 def test_load_project_sources_populates_overlay_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

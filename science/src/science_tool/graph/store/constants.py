@@ -68,8 +68,6 @@ GRAPH_EXPORT_EDGE_METADATA_PREDICATES: frozenset[URIRef] = frozenset(
         SCI_NS.projectStatus,
         SCI_NS.scope,
         SCI_NS.sourceClass,
-        SCI_NS.hasDatasetUsage,
-        SCI_NS.dataset,
         SCI_NS.usageRole,
         SCI_NS.usageOverlap,
         SCI_NS.usageSource,
