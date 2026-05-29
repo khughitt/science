@@ -149,12 +149,37 @@ def test_dataset_self_reference_is_materialization_error() -> None:
         usage_records_for_entity(entity)
 
 
+def test_materialize_graph_rejects_dataset_usage_self_reference(tmp_path):
+    from science_tool.graph.materialize import materialize_graph
+
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path / "data" / "self" / "datapackage.yaml",
+        "self",
+        "dataset_usage:\n"
+        "  - ref: dataset:self\n"
+        "    role: analyzed\n",
+    )
+
+    with pytest.raises(ValueError, match="self-referential"):
+        materialize_graph(tmp_path)
+
+
 def test_virtual_geneset_member_uri_uses_canonical_percent_encoding() -> None:
     from science_tool.graph.dataset_usage import virtual_geneset_member_uri
 
     uri = virtual_geneset_member_uri("dataset:reactome-v89", "A B/é")
 
     assert uri == URIRef(PROJECT_NS["virtual/geneset-member/reactome-v89/A%20B%2F%C3%A9"])
+
+
+def test_virtual_member_uri_normalizes_nfc() -> None:
+    from science_tool.graph.dataset_usage import virtual_geneset_member_uri
+
+    composed = virtual_geneset_member_uri("dataset:reactome-v89", "é")
+    decomposed = virtual_geneset_member_uri("dataset:reactome-v89", "e\u0301")
+
+    assert composed == decomposed
 
 
 def test_add_usage_record_to_graph_preserves_absolute_virtual_consumer_uri() -> None:
