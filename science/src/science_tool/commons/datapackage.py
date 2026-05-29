@@ -355,6 +355,15 @@ def parse_canonical_datapackage_yaml(yaml_text: str) -> dict:
                 f"resources[{index}] ({logical_path}) has a missing or invalid 'bytes'"
             )
 
+        raw_source = entry.get("source")
+        if raw_source is not None:
+            try:
+                validate_source(raw_source)
+            except ValueError as exc:
+                raise CommonsError(
+                    f"resources[{index}] ({logical_path}) has an invalid source: {exc}"
+                ) from exc
+
     return raw
 
 
@@ -368,6 +377,7 @@ class DataResource:
     bytes: int | None = None  # resources[].bytes if present
     format: str | None = None  # resources[].format if present
     mediatype: str | None = None  # resources[].mediatype if present
+    source: ResourceSource | None = None  # resources[].source if present
 
 
 @dataclass(frozen=True, slots=True)
@@ -517,6 +527,17 @@ def read_datapackage(path: Path) -> DatapackageDescriptor:
                 ),
             )
 
+        raw_source = entry.get("source")
+        source = None
+        if raw_source is not None:
+            try:
+                source = validate_source(raw_source)
+            except ValueError as exc:
+                raise CommonsDatapackageError(
+                    path,
+                    reason=f"resources[{index}] ({logical_path}) has an invalid source: {exc}",
+                ) from exc
+
         resources.append(
             DataResource(
                 path=logical_path,
@@ -525,6 +546,7 @@ def read_datapackage(path: Path) -> DatapackageDescriptor:
                 bytes=raw_bytes,
                 format=raw_format,
                 mediatype=raw_mediatype,
+                source=source,
             )
         )
 

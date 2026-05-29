@@ -1,6 +1,8 @@
 """Tests for the datapackage `source` descriptor (ResourceSource + validate_source)."""
 from __future__ import annotations
 
+import textwrap
+
 import pytest
 
 from science_tool.commons.datapackage import (
@@ -9,9 +11,21 @@ from science_tool.commons.datapackage import (
     Resolved,
     ResourceSource,
     Unexpandable,
+    parse_canonical_datapackage_yaml,
+    read_datapackage,
+    render_canonical_datapackage_yaml,
     resolve_local_ref,
     validate_source,
 )
+from science_tool.commons.errors import CommonsDatapackageError, CommonsError
+
+VALID_HASH = "sha256:" + "a" * 64
+
+
+def _write_dp(tmp_path, body: str):
+    p = tmp_path / "datapackage.yaml"
+    p.write_text(textwrap.dedent(body), encoding="utf-8")
+    return p
 
 
 def test_source_types_enum():
@@ -154,3 +168,102 @@ def test_resolve_raises_when_output_root_relative(monkeypatch):
     monkeypatch.setenv("OUTPUT_ROOT", "relative/dir")
     with pytest.raises(ValueError, match="OUTPUT_ROOT"):
         resolve_local_ref("${OUTPUT_ROOT}/x.h5ad")
+
+
+def test_read_datapackage_surfaces_source(tmp_path):
+    p = _write_dp(
+        tmp_path,
+        f"""\
+        name: ds
+        resources:
+          - name: walker
+            path: walker2024.h5ad
+            hash: {VALID_HASH}
+            bytes: 14010935296
+            source:
+              type: local
+              ref: ${{OUTPUT_ROOT}}/scrna/walker2024.h5ad
+        """,
+    )
+    desc = read_datapackage(p)
+    src = desc.resources[0].source
+    assert src is not None
+    assert src.type == "local"
+    assert src.ref == "${OUTPUT_ROOT}/scrna/walker2024.h5ad"
+
+
+def test_read_datapackage_source_absent_is_none(tmp_path):
+    p = _write_dp(
+        tmp_path,
+        f"""\
+        name: ds
+        resources:
+          - name: r1
+            path: r1.txt
+            hash: {VALID_HASH}
+            bytes: 12
+        """,
+    )
+    assert read_datapackage(p).resources[0].source is None
+
+
+def test_read_datapackage_rejects_bad_source(tmp_path):
+    p = _write_dp(
+        tmp_path,
+        f"""\
+        name: ds
+        resources:
+          - name: r1
+            path: r1.txt
+            hash: {VALID_HASH}
+            bytes: 12
+            source:
+              type: local
+              ref: relative/path.h5ad
+        """,
+    )
+    with pytest.raises(CommonsDatapackageError, match="source"):
+        read_datapackage(p)
+
+
+def test_parse_canonical_validates_source():
+    text = textwrap.dedent(
+        f"""\
+        name: ds
+        resources:
+          - name: r1
+            path: r1.txt
+            hash: {VALID_HASH}
+            bytes: 12
+            source:
+              type: bogus
+              ref: x
+        """
+    )
+    with pytest.raises(CommonsError, match="source"):
+        parse_canonical_datapackage_yaml(text)
+
+
+def test_render_preserves_source_verbatim():
+    project_doc = {
+        "name": "ds",
+        "resources": [
+            {
+                "name": "walker",
+                "path": "walker2024.h5ad",
+                "source": {
+                    "type": "local",
+                    "ref": "${OUTPUT_ROOT}/scrna/walker2024.h5ad",
+                },
+            }
+        ],
+    }
+    rendered = render_canonical_datapackage_yaml(
+        project_doc=project_doc,
+        canonical_slug="ds",
+        per_resource={"walker": (VALID_HASH, 14010935296)},
+    )
+    parsed = parse_canonical_datapackage_yaml(rendered)
+    r = parsed["resources"][0]
+    assert r["source"] == {"type": "local", "ref": "${OUTPUT_ROOT}/scrna/walker2024.h5ad"}
+    assert r["hash"] == VALID_HASH and r["bytes"] == 14010935296
