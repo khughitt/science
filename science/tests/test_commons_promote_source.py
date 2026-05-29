@@ -215,3 +215,36 @@ def test_verify_two_sourced_resources_yields_two_verdicts(tmp_path, monkeypatch)
     result = promote._dataset_per_resource(_candidate(tmp_path, [r1, r2]), verify_digests=True)
     assert [v.name for v in result.verifications] == ["res-a", "res-b"]
     assert all(v.status == "skipped_off_host" for v in result.verifications)
+
+
+def test_validate_resources_skips_filesystem_check_for_sourced(tmp_path):
+    from science_tool.commons import promote
+
+    dp_abs = tmp_path / "datapackage.json"
+    dp_abs.write_text("{}", encoding="utf-8")
+    dp_doc = {"resources": [_sourced()]}  # off-repo file does not exist locally
+    # Must NOT raise PromoteResourceMissingError for a sourced resource.
+    promote._validate_datapackage_resources("walker", dp_abs, dp_doc)
+
+
+def test_validate_resources_still_requires_colocated_file(tmp_path):
+    from science_tool.commons import promote
+    from science_tool.commons.errors import PromoteResourceMissingError
+
+    dp_abs = tmp_path / "datapackage.json"
+    dp_abs.write_text("{}", encoding="utf-8")
+    dp_doc = {"resources": [{"name": "r1", "path": "missing.txt"}]}
+    with pytest.raises(PromoteResourceMissingError):
+        promote._validate_datapackage_resources("ds", dp_abs, dp_doc)
+
+
+def test_validate_resources_rejects_bad_source_at_discovery(tmp_path):
+    from science_tool.commons import promote
+    from science_tool.commons.errors import PromoteCandidateError
+
+    dp_abs = tmp_path / "datapackage.json"
+    dp_abs.write_text("{}", encoding="utf-8")
+    res = _sourced()
+    res["source"] = {"type": "local", "ref": "relative/path"}
+    with pytest.raises(PromoteCandidateError, match="source"):
+        promote._validate_datapackage_resources("walker", dp_abs, {"resources": [res]})

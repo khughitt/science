@@ -1968,6 +1968,25 @@ def _validate_datapackage_resources(slug: str, dp_abs: Path, dp_doc: dict[str, A
         resource_path = resource.get("path")
         if not isinstance(resource_path, str) or not resource_path.strip():
             raise PromoteCandidateError(f"datapackage resources[{idx}].path must be a non-empty string")
+        try:
+            validate_logical_path(resource_path)
+        except DataLogicalPathError as exc:
+            raise PromoteCandidateError(
+                f"datapackage resources[{idx}].path is invalid: {exc.reason}"
+            ) from exc
+
+        raw_source = resource.get("source")
+        if raw_source is not None:
+            # Sourced resource: bytes are off-repo; validate the source shape
+            # and skip the co-located filesystem existence check.
+            try:
+                validate_source(raw_source)
+            except ValueError as exc:
+                raise PromoteCandidateError(
+                    f"datapackage resources[{idx}] has an invalid source: {exc}"
+                ) from exc
+            continue
+
         resource_abs = _datapackage_relative_path(
             dp_abs.parent,
             resource_path,
