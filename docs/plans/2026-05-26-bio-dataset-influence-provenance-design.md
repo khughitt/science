@@ -43,7 +43,7 @@ graph, and add validate checks around references and transition behavior.
 - materialize authored `dataset_usage` from any entity as `sci:DatasetUsage` nodes,
 - derive usage nodes from `derivation.inputs`,
 - validate malformed/unresolved/legacy usage,
-- document and enforce a migration path toward the single canonical system.
+- document the migration path toward the single canonical system and emit transition warnings.
 
 **B2 boundary.** B2 derives candidate and committed independence signals from the usage graph. It owns the
 committed/candidate split, `suspect-circular` integration, and any changes to belief aggregation inputs.
