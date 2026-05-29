@@ -21,6 +21,13 @@ from science_model.relations import relation_allows_kinds
 from science_tool.addressing import is_address, parse_address
 from science_tool.bibliography import is_bibliography_reference
 from science_tool.code.lifecycle import ORPHAN_GATING_EXEMPT_STATUSES
+from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
+from science_tool.commons.geneset_resources import geneset_resource_frontmatter, read_member_rows
+from science_tool.graph.dataset_usage import (
+    add_usage_record_to_graph,
+    usage_records_for_entity,
+    usage_records_for_geneset_rows,
+)
 from science_tool.graph.freshness import (
     EntityFreshnessInfo,
     close_bears_on,
@@ -102,6 +109,7 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
         )
 
     _add_produced_by_edges(sources, entity_index=entity_index, knowledge=knowledge)
+    _add_dataset_usage_edges(sources, resolver=resolver, provenance=provenance)
 
     kind_class = _classify_entities(sources)
     pre_registration_targets = _pre_registration_commitment_targets(
@@ -620,6 +628,53 @@ def _add_produced_by_edges(
             knowledge.add(
                 (_entity_uri(entity.canonical_id), SCI_NS.producedBy, _entity_uri(target.canonical_id))
             )
+
+
+def _add_dataset_usage_edges(sources: ProjectSources, *, resolver: ReferenceResolver, provenance) -> None:
+    for entity in sources.entities:
+        for record in usage_records_for_entity(
+            entity,
+            resolve_dataset_ref=lambda raw_ref: _resolve_dataset_usage_ref(raw_ref, resolver),
+        ):
+            add_usage_record_to_graph(record, provenance)
+    for record in _geneset_usage_records(sources, resolver=resolver):
+        add_usage_record_to_graph(record, provenance)
+
+
+def _resolve_dataset_usage_ref(raw_ref: str, resolver: ReferenceResolver) -> str:
+    resolution = resolver.resolve(raw_ref)
+    if resolution.status != "resolved" or resolution.canonical_id is None:
+        raise ValueError(f"unresolved dataset usage reference: {raw_ref}")
+    if not resolution.canonical_id.startswith("dataset:"):
+        raise ValueError(f"dataset usage reference resolved to non-dataset entity: {raw_ref} -> {resolution.canonical_id}")
+    return resolution.canonical_id
+
+
+def _geneset_usage_records(sources: ProjectSources, *, resolver: ReferenceResolver):
+    project_root = Path(sources.project_root)
+    for entity in sources.entities:
+        if entity.kind != "dataset":
+            continue
+        if sources.entity_source_adapters.get(entity.canonical_id) not in {"datapackage", "commons-merged"}:
+            continue
+        fm = geneset_resource_frontmatter(project_root, entity.file_path)
+        if fm is None:
+            continue
+        raw_rows = read_member_rows(project_root, fm)
+        if raw_rows is None:
+            raise RuntimeError(f"{entity.canonical_id}: members_resource unavailable for graph materialization")
+        if isinstance(raw_rows, Exception):
+            raise RuntimeError(f"{entity.canonical_id}: members_resource malformed: {raw_rows}") from raw_rows
+        try:
+            rows = parse_geneset_rows(raw_rows)
+        except GenesetCollectionError as exc:
+            raise RuntimeError(f"{entity.canonical_id}: members_resource malformed: {exc}") from exc
+        yield from usage_records_for_geneset_rows(
+            collection_id=entity.canonical_id,
+            source_path=entity.file_path,
+            rows=rows,
+            resolve_dataset_ref=lambda raw_ref: _resolve_dataset_usage_ref(raw_ref, resolver),
+        )
 
 
 def _eligible_code_files(sources: ProjectSources) -> set[URIRef]:

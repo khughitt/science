@@ -175,6 +175,21 @@ def _empty_commons(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
 
 
+def test_geneset_resource_helper_reads_local_rows(tmp_path: Path) -> None:
+    from science_tool.commons.geneset_resources import read_member_rows
+
+    _write_project(tmp_path)
+    _write_geneset_dataset(
+        tmp_path,
+        rows="set_key,name,member_ids\nR-HSA-1,Cell cycle,HGNC:1;HGNC:2\n",
+    )
+    fm = _geneset(_path="data/reactome/datapackage.yaml")
+
+    rows = read_member_rows(tmp_path, fm)
+
+    assert rows == [{"set_key": "R-HSA-1", "name": "Cell cycle", "member_ids": "HGNC:1;HGNC:2"}]
+
+
 def test_valid_geneset_collection_passes_silently() -> None:
     results = list(
         evaluate_geneset_collections(

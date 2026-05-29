@@ -67,6 +67,7 @@ def _load_canonical_checks() -> None:
         "dataset_taxonomy",
         "variant_identity",
         "genesets",
+        "dataset_influence",
         "prose_lints",
         "annotations",
         "evidence_lines",

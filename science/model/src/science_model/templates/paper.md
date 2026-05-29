@@ -4,6 +4,8 @@ type: "paper"
 title: "{{Title}}"
 status: "active"
 ontology_terms: []
+dataset_usage: []
+# Transition input only; prefer dataset_usage above.
 datasets: []
 source_refs:
   - "cite:{{bibtex_key}}"

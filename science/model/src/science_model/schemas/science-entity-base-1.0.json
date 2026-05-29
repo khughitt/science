@@ -66,6 +66,21 @@
     "ontology_terms": {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
     "same_as": {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
     "tags": {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
+    "dataset_usage": {"$ref": "#/$defs/dataset_usage", "science:merge": "append"},
     "status": {"type": "string"}
+  },
+  "$defs": {
+    "dataset_usage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ref", "role"],
+        "properties": {
+          "ref": {"type": "string", "pattern": "^dataset:"},
+          "role": {"enum": ["analyzed", "set_definition_source", "validation_source", "cited", "upstream", "training"]},
+          "overlap": {"enum": ["full", "partial", "unknown"]}
+        }
+      }
+    }
   }
 }

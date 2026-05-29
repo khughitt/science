@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from rdflib import Namespace, URIRef
-from rdflib.namespace import PROV, RDF, SKOS, XSD
+from rdflib.namespace import PROV, RDF, SKOS
 from science_model.profiles import CORE_PROFILE
 from science_model.profiles.schema import RelationKind
 
@@ -11,8 +11,8 @@ from science_tool.graph.io import (
     BIOLINK_NS,
     CITO_NS,
     DCTERMS_NS,
-    PROJECT_NS,
-    REVISION_URI,
+    PROJECT_NS as PROJECT_NS,
+    REVISION_URI as REVISION_URI,
     SCHEMA_NS,
     SCI_NS,
     SCIC_NS,
@@ -68,6 +68,9 @@ GRAPH_EXPORT_EDGE_METADATA_PREDICATES: frozenset[URIRef] = frozenset(
         SCI_NS.projectStatus,
         SCI_NS.scope,
         SCI_NS.sourceClass,
+        SCI_NS.usageRole,
+        SCI_NS.usageOverlap,
+        SCI_NS.usageSource,
         SCI_NS.confidence,
         SCI_NS.evidenceType,
         SCI_NS.evidenceStrength,
@@ -211,6 +214,31 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "predicate": "sci:sourceClass",
         "description": "Dataset epistemic source class (observational | derived | reference)",
         "layer": "graph/knowledge",
+    },
+    {
+        "predicate": "sci:hasDatasetUsage",
+        "description": "Links a consumer entity to a reified dataset usage record",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:dataset",
+        "description": "Dataset referenced by a reified dataset usage record",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:usageRole",
+        "description": "Role of a dataset in a reified usage record",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:usageOverlap",
+        "description": "Overlap of a dataset usage record: full, partial, or unknown",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:usageSource",
+        "description": "Projection source for a reified dataset usage record",
+        "layer": "graph/provenance",
     },
     {"predicate": "sci:confidence", "description": "Confidence score (0.0-1.0)", "layer": "graph/provenance"},
     {

@@ -20,6 +20,7 @@ CHECK_MODULES = (
     "tooling",
     "manifest",
     "directory_structure",
+    "code_files",
     "research_scope",
     "document_structure",
     "hypotheses",
@@ -37,6 +38,9 @@ CHECK_MODULES = (
     "tasks",
     "id_prefixes",
     "cross_references",
+    "variant_identity",
+    "genesets",
+    "dataset_influence",
     "prose_lints",
     "annotations",
 )

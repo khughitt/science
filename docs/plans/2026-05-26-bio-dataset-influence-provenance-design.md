@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; B1 design refreshed for additive transition, implementation plan next
+Status: B1 implemented locally; B-migration and B2 deferred
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar B ("north star")
@@ -43,7 +43,7 @@ graph, and add validate checks around references and transition behavior.
 - materialize authored `dataset_usage` from any entity as `sci:DatasetUsage` nodes,
 - derive usage nodes from `derivation.inputs`,
 - validate malformed/unresolved/legacy usage,
-- document and enforce a migration path toward the single canonical system.
+- document the migration path toward the single canonical system and emit transition warnings.
 
 **B2 boundary.** B2 derives candidate and committed independence signals from the usage graph. It owns the
 committed/candidate split, `suspect-circular` integration, and any changes to belief aggregation inputs.
@@ -54,23 +54,25 @@ members, and does not ingest Reactome.
 
 ---
 
-## 2. What Exists, And The Gap
+## 2. What Exists, And The Pre-B1 Gap
 
 | Exists | Concerns | Limitation |
 |---|---|---|
-| `dataset_usage` on base `Entity` | structured forward provenance any entity can carry | not graph-materialized yet |
-| D1 row-level `dataset_usage` | per-set provenance in `bio.geneset` members resource | row-shape checked, but not projected into the graph as usage nodes |
+| `dataset_usage` on base `Entity` | structured forward provenance any entity can carry | before B1, not graph-materialized |
+| D1 row-level `dataset_usage` | per-set provenance in `bio.geneset` members resource | before B1, row-shape checked but not projected into the graph as usage nodes |
 | `paper.datasets` (`[dataset:ref]`, plain) | datasets a paper used | no role or overlap; cannot distinguish analyzed data from background citation |
-| `derivation.inputs` | in-pipeline execution provenance | not visible as `DatasetUsage` nodes for influence queries |
+| `derivation.inputs` | in-pipeline execution provenance | before B1, not visible as `DatasetUsage` nodes for influence queries |
 | `consumed_by` | reverse "who used this" | authored/cache-like field that can drift |
 | Contract C `bears_on` / provenance closure | data-to-finding propagation | lacks consumer-to-dataset usage nodes to traverse |
 | Independence collapse + `suspect-circular` WARN | double-counting | currently relies on manually authored evidence-line metadata |
 
-**The B1 gap:** make declared dataset use queryable and consistent without changing independence scoring.
-`dataset_usage`, `paper.datasets`, and `derivation.inputs` all need one graph projection. Because
-`dataset_usage` is currently on the base `Entity` model, B1 materializes authored `dataset_usage`
+**The pre-B1 gap:** make declared dataset use queryable and consistent without changing independence
+scoring. `dataset_usage`, `paper.datasets`, and `derivation.inputs` all needed one graph projection.
+Because `dataset_usage` is on the base `Entity` model, B1 now materializes authored `dataset_usage`
 universally for any entity that carries it; restricting materialization to only datasets/papers would
-silently drop valid parsed frontmatter on other entity kinds.
+silently drop valid parsed frontmatter on other entity kinds. B1 also closes the graph-materialization
+gaps for D1 row-level usage records and `derivation.inputs`. B-migration and B2 remain separate follow-up
+work.
 
 ---
 
@@ -228,8 +230,8 @@ The immediate B1 graph question is: "which consumers declare use of dataset X?" 
 `sci:DatasetUsage` nodes. The broader influence query — dataset → consumers → propositions they bear on —
 uses the existing `bears_on` / provenance closure and can be built on top of the same nodes.
 
-`consumed_by` becomes a derived cache/index target, not authored truth. B1 may validate authored
-`consumed_by` as legacy/stale, but graph queries should use usage nodes.
+`consumed_by` becomes a derived cache/index target, not authored truth. B1 graph queries use usage
+nodes; validation of authored `consumed_by` as legacy/stale is deferred outside B1.
 
 ---
 
@@ -249,7 +251,6 @@ The B1 check covers these cases with pinned severities:
 | legacy `paper.datasets` without equivalent `dataset_usage` | WARNING | accepted during transition, but authors should migrate |
 | unresolved ref when commons/local registry needed to check it is unavailable | INFO | tolerant fresh-checkout behavior |
 | unresolved ref when local/commons discovery is available and the dataset is absent | WARNING | likely authoring gap without crashing validation |
-| authored `consumed_by` stale against derived reverse index | INFO | cache-like field is not graph truth |
 | D1 row-level `dataset_usage.ref` unresolved while members resource is available | WARNING or INFO by the same ref-resolution rule above | row usage is parsed by D1, resolved by B1 |
 
 D1 row-level `dataset_usage` shape remains checked by `genesets`; B1 reuses the D1 parser for projection
@@ -259,10 +260,9 @@ The self-reference rule applies only where the consumer itself is a dataset id, 
 authored `dataset_usage` or its `derivation.inputs`. Paper consumers and virtual gene-set member consumers
 cannot equal a `dataset:` ref and therefore cannot trigger this rule.
 
-The optional `consumed_by` staleness check is a different cost class from per-record shape/reference
-checks: it requires building the reverse usage index and comparing authored backlinks to the derived view.
-It should be planned as a separate B1 task or deferred if it threatens the narrower provenance
-materialization path.
+The optional future `consumed_by` staleness check is a different cost class from the B1 per-record
+shape/reference checks: it requires building the reverse usage index and comparing authored backlinks to
+the derived view. It did not land in B1 and is explicitly deferred outside B1 as future optional work.
 
 ---
 
@@ -321,7 +321,7 @@ study A and validated in independent cohort B — remains distinguishable throug
 
 | Sub-phase | Locks | Status |
 |---|---|---|
-| B1 — additive `dataset_usage` transition for papers, usage-node graph materialization, `derivation.inputs` projection, legacy `paper.datasets` warnings, influence-query groundwork | authored-to-graph provenance layer | design refreshed; implementation plan next |
+| B1 — additive `dataset_usage` transition for papers, usage-node graph materialization, `derivation.inputs` projection, legacy `paper.datasets` warnings, influence-query groundwork | authored-to-graph provenance layer | implemented locally |
 | B-migration — mechanical conversion of `paper.datasets` to `paper.dataset_usage` | single-system migration path | planned after B1 |
 | B2 — auto-independence with committed/candidate split; `suspect-circular` reads candidates; aggregation reads committed fields only | epistemic automation | deferred |
 
@@ -332,6 +332,6 @@ contract. B2 depends on B1's materialized usage nodes.
 
 ## 11. Status & Next Step
 
-Pillar B is approved with a B1-first implementation boundary. The next artifact is a B1 implementation
-plan that exposes paper `dataset_usage`, materializes usage nodes, validates references and legacy fields,
-and documents the migration path from `paper.datasets` to the single canonical `dataset_usage` system.
+Pillar B1 is implemented as an authored-to-graph provenance layer. The next B work is the
+B-migration mechanical conversion from `paper.datasets` to `paper.dataset_usage`, followed by
+B2 candidate/committed independence derivation.

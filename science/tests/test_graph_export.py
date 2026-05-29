@@ -290,6 +290,42 @@ def test_export_graph_payload_includes_dashboard_style_named_layers(tmp_path: Pa
     assert next(layer for layer in payload.layers if layer.id == "graph/model").node_count == 1
 
 
+def test_export_graph_payload_includes_dataset_usage_connectivity(tmp_path: Path) -> None:
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir(parents=True)
+    graph_path.write_text(INITIAL_GRAPH_TEMPLATE, encoding="utf-8")
+
+    dataset = _load_dataset(graph_path)
+    provenance = dataset.graph(_graph_uri("graph/provenance"))
+    paper_uri = URIRef("http://example.org/project/paper/Adams2025")
+    usage_uri = URIRef("http://example.org/project/dataset-usage/abc123")
+    dataset_uri = URIRef("http://example.org/project/dataset/gtex-v8")
+    provenance.add((paper_uri, RDF.type, SCI_NS.Paper))
+    provenance.add((paper_uri, SKOS.prefLabel, Literal("Adams 2025")))
+    provenance.add((dataset_uri, RDF.type, SCI_NS.Dataset))
+    provenance.add((dataset_uri, SKOS.prefLabel, Literal("GTEx v8")))
+    provenance.add((paper_uri, SCI_NS.hasDatasetUsage, usage_uri))
+    provenance.add((usage_uri, RDF.type, SCI_NS.DatasetUsage))
+    provenance.add((usage_uri, SCI_NS.dataset, dataset_uri))
+    provenance.add((usage_uri, SCI_NS.usageRole, Literal("analyzed")))
+    _save_dataset(dataset, graph_path)
+
+    payload = export_graph_payload(graph_path)
+    edge_tuples = {(edge.subject, edge.predicate, edge.object) for edge in payload.edges}
+
+    assert (
+        str(paper_uri),
+        str(SCI_NS.hasDatasetUsage),
+        str(usage_uri),
+    ) in edge_tuples
+    assert (
+        str(usage_uri),
+        str(SCI_NS.dataset),
+        str(dataset_uri),
+    ) in edge_tuples
+    assert str(usage_uri) in {node.id for node in payload.nodes}
+
+
 def test_export_graph_payload_supports_legacy_project_named_layers(tmp_path: Path) -> None:
     graph_path = tmp_path / "knowledge" / "graph.trig"
     graph_path.parent.mkdir(parents=True)

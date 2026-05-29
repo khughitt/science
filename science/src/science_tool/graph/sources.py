@@ -34,6 +34,7 @@ from science_model.source_ref import SourceRef
 
 from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.bibliography import is_bibliography_reference as _is_bibliography_reference
+from science_tool.commons.aliases import load_manual_aliases
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.errors import EntityIdentityCollisionError
 from science_tool.graph.storage_adapters.aggregate import AggregateAdapter
@@ -860,20 +861,7 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
 
 
 def _load_manual_aliases(project_root: Path, *, local_profile: str) -> dict[str, str]:
-    mappings_path = local_profile_sources_dir(project_root, local_profile=local_profile) / "mappings.yaml"
-    if not mappings_path.is_file():
-        return {}
-
-    data = yaml.safe_load(mappings_path.read_text(encoding="utf-8")) or {}
-    aliases = data.get("aliases") or {}
-    if not isinstance(aliases, dict):
-        return {}
-
-    result: dict[str, str] = {}
-    for alias, canonical_id in aliases.items():
-        if isinstance(alias, str) and isinstance(canonical_id, str):
-            result[alias] = canonical_id
-    return result
+    return load_manual_aliases(project_root, local_profile=local_profile)
 
 
 def _nested_relations(

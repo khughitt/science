@@ -47,6 +47,22 @@ def test_paper_with_rich_fields_validates(base_entity: dict) -> None:
     EntityValidator().validate(entity)
 
 
+def test_paper_dataset_usage_validates(base_entity: dict) -> None:
+    entity = base_entity | {
+        "dataset_usage": [
+            {"ref": "dataset:gtex-v8", "role": "analyzed", "overlap": "full"},
+            {"ref": "dataset:msigdb-c2", "role": "cited"},
+        ]
+    }
+    EntityValidator().validate(entity)
+
+
+def test_paper_dataset_usage_bad_role_rejected(base_entity: dict) -> None:
+    entity = base_entity | {"dataset_usage": [{"ref": "dataset:x", "role": "consulted"}]}
+    with pytest.raises(EntityValidationError, match="dataset_usage"):
+        EntityValidator().validate(entity)
+
+
 def test_paper_id_lowercase_slug_rejected(base_entity: dict) -> None:
     entity = base_entity | {"id": "paper:adams-2025"}  # kebab rejected for papers
     with pytest.raises(EntityValidationError):
@@ -96,6 +112,19 @@ def test_mixin_paper_2_0_canonical_body_sections_annotation():
     assert "Limitations" in sections
 
 
+def test_base_schema_declares_dataset_usage_once() -> None:
+    raw = (_SCHEMAS / "science-entity-base-1.0.json").read_text(encoding="utf-8")
+    base_schema = json.loads(raw)
+    paper_raw = (_SCHEMAS / "mixin-paper-2.0.json").read_text(encoding="utf-8")
+    dataset_raw = (_SCHEMAS / "mixin-dataset-1.0.json").read_text(encoding="utf-8")
+    paper_schema = json.loads(paper_raw)
+    dataset_schema = json.loads(dataset_raw)
+
+    assert "dataset_usage" in base_schema["properties"]
+    assert "dataset_usage" not in paper_schema["properties"]
+    assert "dataset_usage" not in dataset_schema["properties"]
+
+
 def test_mixin_paper_2_0_merge_policy_overrides_base_for_created_updated_status():
     profile = parse_profile("science-entity-base/1.0+paper/2.0")
     policy = read_merge_policy(profile)
@@ -105,6 +134,7 @@ def test_mixin_paper_2_0_merge_policy_overrides_base_for_created_updated_status(
     # Base contributes these; mixin does NOT override:
     assert policy["tags"] == MergePolicy.APPEND
     assert policy["ontology_terms"] == MergePolicy.APPEND
+    assert policy["dataset_usage"] == MergePolicy.APPEND
     # Paper-specific canonical fields default to REPLACE:
     assert policy["title"] == MergePolicy.REPLACE
     assert policy["authors"] == MergePolicy.REPLACE

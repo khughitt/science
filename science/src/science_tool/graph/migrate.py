@@ -13,6 +13,8 @@ from science_model.frontmatter import parse_frontmatter
 
 from science_tool.addressing import is_address
 from science_tool.bibliography import is_bibliography_reference
+from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
+from science_tool.commons.geneset_resources import geneset_resource_frontmatter, read_member_rows
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
     AliasCollisionError,
@@ -163,6 +165,7 @@ def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool
 
     for entity in sources.entities:
         rows.extend(_audit_entity(entity, resolver, ext_prefixes=ext_prefixes))
+    rows.extend(_audit_geneset_row_dataset_usage(sources, resolver, ext_prefixes=ext_prefixes))
     for relation in sources.relations:
         rows.extend(_audit_relation(relation, resolver, ext_prefixes=ext_prefixes))
     for binding in sources.bindings:
@@ -186,6 +189,45 @@ def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool
     rows.sort(key=lambda row: (row["source"], row["target"]))
     has_failures = any(row["status"] == "fail" for row in rows)
     return rows, has_failures
+
+
+def _audit_geneset_row_dataset_usage(
+    sources: ProjectSources,
+    resolver: ReferenceResolver,
+    *,
+    ext_prefixes: frozenset[str],
+) -> list[AuditRow]:
+    rows: list[AuditRow] = []
+    project_root = Path(sources.project_root)
+    for entity in sources.entities:
+        if entity.kind != "dataset":
+            continue
+        if sources.entity_source_adapters.get(entity.canonical_id) not in {"datapackage", "commons-merged"}:
+            continue
+        fm = geneset_resource_frontmatter(project_root, entity.file_path)
+        if fm is None:
+            continue
+        raw_rows = read_member_rows(project_root, fm)
+        if raw_rows is None or isinstance(raw_rows, Exception):
+            continue
+        try:
+            geneset_rows = parse_geneset_rows(raw_rows)
+        except GenesetCollectionError:
+            continue
+        for geneset_row in geneset_rows:
+            for usage in geneset_row.dataset_usage:
+                rows.extend(
+                    _audit_dataset_reference(
+                        entity,
+                        "members_resource.dataset_usage",
+                        str(usage["ref"]),
+                        resolver,
+                        ext_prefixes=ext_prefixes,
+                        allow_cross_kind_fallback=False,
+                        allow_tag=False,
+                    )
+                )
+    return rows
 
 
 def audit_project_graph(project_root: Path) -> AuditProjectReport:
@@ -401,6 +443,44 @@ def _audit_entity(
                 ext_prefixes=ext_prefixes,
                 allow_cross_kind_fallback=True,
                 allow_cross_project_address=True,
+            )
+        )
+    for usage in getattr(entity, "dataset_usage", []) or []:
+        rows.extend(
+            _audit_dataset_reference(
+                entity,
+                "dataset_usage",
+                str(usage.ref),
+                resolver,
+                ext_prefixes=ext_prefixes,
+                allow_cross_kind_fallback=False,
+                allow_tag=False,
+            )
+        )
+    if entity.kind == "paper":
+        for target in getattr(entity, "datasets", []) or []:
+            rows.extend(
+                _audit_dataset_reference(
+                    entity,
+                    "datasets",
+                    str(target),
+                    resolver,
+                    ext_prefixes=ext_prefixes,
+                    allow_cross_kind_fallback=False,
+                    allow_tag=False,
+                )
+            )
+    derivation = getattr(entity, "derivation", None)
+    for target in getattr(derivation, "inputs", []) or []:
+        rows.extend(
+            _audit_dataset_reference(
+                entity,
+                "derivation.inputs",
+                str(target),
+                resolver,
+                ext_prefixes=ext_prefixes,
+                allow_cross_kind_fallback=False,
+                allow_tag=False,
             )
         )
     for target in getattr(entity, "chain", None) or []:
@@ -640,6 +720,76 @@ def _audit_relation_endpoint(
         ]
 
     return []
+
+
+def _audit_dataset_reference(
+    entity: Entity,
+    field_name: str,
+    raw_target: str,
+    resolver: ReferenceResolver,
+    *,
+    ext_prefixes: frozenset[str],
+    allow_cross_kind_fallback: bool = False,
+    allow_tag: bool = False,
+) -> list[AuditRow]:
+    if (
+        is_external_reference(raw_target, known_prefixes=ext_prefixes)
+        or is_metadata_reference(raw_target)
+        or not raw_target.startswith("dataset:")
+    ):
+        return [_invalid_dataset_reference_row(entity, field_name, raw_target)]
+
+    resolution = resolver.resolve(
+        raw_target,
+        allow_cross_kind_fallback=allow_cross_kind_fallback,
+        allow_tag=allow_tag,
+    )
+    if resolution.status == "ambiguous":
+        return [
+            {
+                "check": "ambiguous_cross_kind_reference",
+                "status": "fail",
+                "source": entity.canonical_id,
+                "field": field_name,
+                "target": raw_target,
+                "details": (
+                    f"{entity.file_path} resolves to multiple canonical identities: " + ", ".join(resolution.candidates)
+                ),
+            }
+        ]
+    if resolution.status != "resolved" or resolution.canonical_id is None:
+        return [
+            {
+                "check": "unresolved_reference",
+                "status": "fail",
+                "source": entity.canonical_id,
+                "field": field_name,
+                "target": raw_target,
+                "details": f"{entity.file_path} references an unknown dataset entity{_commons_hint_for(raw_target)}",
+            }
+        ]
+    if not resolution.canonical_id.startswith("dataset:"):
+        return [_invalid_dataset_reference_row(entity, field_name, raw_target, canonical_id=resolution.canonical_id)]
+
+    return []
+
+
+def _invalid_dataset_reference_row(
+    entity: Entity,
+    field_name: str,
+    raw_target: str,
+    *,
+    canonical_id: str | None = None,
+) -> AuditRow:
+    resolved_suffix = f" resolved to non-dataset entity {canonical_id}" if canonical_id is not None else ""
+    return {
+        "check": "invalid_dataset_reference",
+        "status": "fail",
+        "source": entity.canonical_id,
+        "field": field_name,
+        "target": raw_target,
+        "details": f"{entity.file_path} {field_name} must reference a dataset:<slug> entity{resolved_suffix}",
+    }
 
 
 def _audit_reference(

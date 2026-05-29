@@ -41,6 +41,7 @@ CHECK_MODULES = (
     "cross_references",
     "variant_identity",
     "genesets",
+    "dataset_influence",
     "prose_lints",
     "annotations",
 )

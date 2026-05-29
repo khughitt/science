@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from science_model.entity_schema.validator import EntityValidationError, EntityValidator
+
+_SCHEMAS = Path(__file__).resolve().parents[1] / "src" / "science_model" / "schemas"
 
 
 @pytest.fixture
@@ -75,6 +80,16 @@ def test_dataset_id_slug_lowercase_kebab_only(base_entity: dict) -> None:
     }
     with pytest.raises(EntityValidationError):
         EntityValidator().validate(entity)
+
+
+def test_dataset_usage_schema_is_owned_by_base_schema() -> None:
+    base_raw = (_SCHEMAS / "science-entity-base-1.0.json").read_text(encoding="utf-8")
+    dataset_raw = (_SCHEMAS / "mixin-dataset-1.0.json").read_text(encoding="utf-8")
+    base_schema = json.loads(base_raw)
+    dataset_schema = json.loads(dataset_raw)
+
+    assert "dataset_usage" in base_schema["properties"]
+    assert "dataset_usage" not in dataset_schema["properties"]
 
 
 # --- composition + aggregated-error coverage previously deferred from Task 4 ---
