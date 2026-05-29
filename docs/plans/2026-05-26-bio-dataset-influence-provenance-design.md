@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; B1 design refreshed for additive transition, implementation plan next
+Status: B1 implemented locally; B-migration and B2 deferred
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar B ("north star")
@@ -321,7 +321,7 @@ study A and validated in independent cohort B — remains distinguishable throug
 
 | Sub-phase | Locks | Status |
 |---|---|---|
-| B1 — additive `dataset_usage` transition for papers, usage-node graph materialization, `derivation.inputs` projection, legacy `paper.datasets` warnings, influence-query groundwork | authored-to-graph provenance layer | design refreshed; implementation plan next |
+| B1 — additive `dataset_usage` transition for papers, usage-node graph materialization, `derivation.inputs` projection, legacy `paper.datasets` warnings, influence-query groundwork | authored-to-graph provenance layer | implemented locally |
 | B-migration — mechanical conversion of `paper.datasets` to `paper.dataset_usage` | single-system migration path | planned after B1 |
 | B2 — auto-independence with committed/candidate split; `suspect-circular` reads candidates; aggregation reads committed fields only | epistemic automation | deferred |
 
@@ -332,6 +332,6 @@ contract. B2 depends on B1's materialized usage nodes.
 
 ## 11. Status & Next Step
 
-Pillar B is approved with a B1-first implementation boundary. The next artifact is a B1 implementation
-plan that exposes paper `dataset_usage`, materializes usage nodes, validates references and legacy fields,
-and documents the migration path from `paper.datasets` to the single canonical `dataset_usage` system.
+Pillar B1 is implemented as an authored-to-graph provenance layer. The next B work is the
+B-migration mechanical conversion from `paper.datasets` to `paper.dataset_usage`, followed by
+B2 candidate/committed independence derivation.

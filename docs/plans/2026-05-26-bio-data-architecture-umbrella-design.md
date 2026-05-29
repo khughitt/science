@@ -237,7 +237,7 @@ Spawned design docs (in `~/d/science/docs/plans/`), with the dependency order:
 | 1 | Identity, reference genomes & id mapping (C) | — | canonical assembly + gene/protein/variant crosswalks; pinned-vs-service policy | design ✓; **impl: C1 (assembly), C2 (gene), C3 (protein), C4a (variant identity) merged; C4b/C4c pending** |
 | 2 | Dataset taxonomy & epistemic integration (A) | C | source class (enum incl. model-output/experimental — A decides); curation down-weight as a *modifier*, mapped into aggregation + two-axis | design ✓; **impl: A1 + A2 merged** (recording layer + curation down-weight, config v2); **Pillar A complete** |
 | 3a | Gene-set / annotation type `bio.geneset` (D) | A, C | extension schema; per-set provenance; promotion rule; realizes B's interface for gene sets | design ✓; **impl: D1 collection type implemented; D2 promoted members pending** |
-| 3b | Dataset-influence & provenance tracking (B) | A, C (+ D for the gene-set arm) | `dataset:`-ref declarations + usage role; dataset→consumer derivation; *candidate* auto-independence | design ✓; impl not started |
+| 3b | Dataset-influence & provenance tracking (B) | A, C (+ D for the gene-set arm) | `dataset:`-ref declarations + usage role; dataset→consumer derivation; *candidate* auto-independence | B1 implemented locally; B-migration/B2 open |
 | 4 | Reactome ingestion revision (E) | A–D | first instantiation | design ✓ (in `health/meta`); impl deferred (gated on A–D) |
 
 C is the long pole (everything joins on identity). A and C unblock D and the paper arm of B; B's
@@ -320,11 +320,10 @@ structural` shipped as a recording-only validate nudge (not scored); per-line ov
 
 **Remaining — other pillars.** D has D1 implemented: the `bio.geneset` collection profile,
 row-contract parser, validate check, and graph retention guard are in place; D2 promoted members remain
-pending until evidence lines need first-class child datasets for individual sets. B
-(influence/provenance) is the next dependency for provenance materialization, with D1 providing the
-gene-set arm's collection-row substrate. Pillar A is complete; C (C1–C3 merged, C4a merged, C4b/C4c
-pending) and A together unblock D and B's paper arm. E (Reactome ingestion) resumes once A–D are far
-enough along to instantiate against.
+pending until evidence lines need first-class child datasets for individual sets. B1 is implemented
+locally as the authored-to-graph provenance layer; B-migration and B2 remain open. Pillar A is complete;
+C (C1–C3 merged, C4a merged, C4b/C4c pending) and A together unblock D and B's paper arm. E (Reactome
+ingestion) resumes once A–D are far enough along to instantiate against.
 
 **Operational follow-ups.**
 - Push local implementation branches to `origin` when ready.
