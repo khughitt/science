@@ -175,6 +175,11 @@ The usage node is canonical. Convenience edges may be derived for query ergonomi
 source of truth. `sci:usageSource` is a closed B1 enum with exactly the four values shown above; multiple
 frontmatter locations can map to the same source value (`authored`).
 
+Graph materialization is strict even though validation is tolerant. The materializer assumes validate has
+passed; if a malformed usage record, self-referential dataset usage, or other ERROR-class condition
+reaches graph build, graph build fails. It must never silently skip the record or emit a partial/bad
+usage node.
+
 ### B-D6 — Sources Of Usage Records
 
 B1 materializes usage records from four usage-source classes:
@@ -202,6 +207,12 @@ influence closure unless another edge already connects that virtual row to a pro
 a later explicit evidence-line reference to a row, is what gives an individual set a normal `bears_on`
 path. If a row is later promoted by D2, the promoted dataset can point back to the same collection/set key
 and carry equivalent `dataset_usage`.
+
+Because row usage nodes require parsing the collection's members resource, graph materialization treats
+that resource as required for any `bio.geneset` collection selected for graph build. If the members
+resource is absent or cannot be resolved, graph build fails rather than under-materializing the influence
+graph. Fresh-checkout validation may still report this as INFO when the resource is unavailable; graph
+build has a stricter contract because its output is queryable truth, not a lint report.
 
 When a consumer has usage records for the same dataset from multiple sources, B1 keeps separate usage
 nodes because the provenance of the assertion differs. The handoff to B2 is intentionally explicit:
@@ -243,6 +254,10 @@ The B1 check covers these cases with pinned severities:
 
 D1 row-level `dataset_usage` shape remains checked by `genesets`; B1 reuses the D1 parser for projection
 and adds reference-resolution checks for the parsed row usage records.
+
+The self-reference rule applies only where the consumer itself is a dataset id, such as a dataset entity's
+authored `dataset_usage` or its `derivation.inputs`. Paper consumers and virtual gene-set member consumers
+cannot equal a `dataset:` ref and therefore cannot trigger this rule.
 
 The optional `consumed_by` staleness check is a different cost class from per-record shape/reference
 checks: it requires building the reverse usage index and comparing authored backlinks to the derived view.
