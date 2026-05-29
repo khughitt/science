@@ -54,23 +54,25 @@ members, and does not ingest Reactome.
 
 ---
 
-## 2. What Exists, And The Gap
+## 2. What Exists, And The Pre-B1 Gap
 
 | Exists | Concerns | Limitation |
 |---|---|---|
-| `dataset_usage` on base `Entity` | structured forward provenance any entity can carry | not graph-materialized yet |
-| D1 row-level `dataset_usage` | per-set provenance in `bio.geneset` members resource | row-shape checked, but not projected into the graph as usage nodes |
+| `dataset_usage` on base `Entity` | structured forward provenance any entity can carry | before B1, not graph-materialized |
+| D1 row-level `dataset_usage` | per-set provenance in `bio.geneset` members resource | before B1, row-shape checked but not projected into the graph as usage nodes |
 | `paper.datasets` (`[dataset:ref]`, plain) | datasets a paper used | no role or overlap; cannot distinguish analyzed data from background citation |
-| `derivation.inputs` | in-pipeline execution provenance | not visible as `DatasetUsage` nodes for influence queries |
+| `derivation.inputs` | in-pipeline execution provenance | before B1, not visible as `DatasetUsage` nodes for influence queries |
 | `consumed_by` | reverse "who used this" | authored/cache-like field that can drift |
 | Contract C `bears_on` / provenance closure | data-to-finding propagation | lacks consumer-to-dataset usage nodes to traverse |
 | Independence collapse + `suspect-circular` WARN | double-counting | currently relies on manually authored evidence-line metadata |
 
-**The B1 gap:** make declared dataset use queryable and consistent without changing independence scoring.
-`dataset_usage`, `paper.datasets`, and `derivation.inputs` all need one graph projection. Because
-`dataset_usage` is currently on the base `Entity` model, B1 materializes authored `dataset_usage`
+**The pre-B1 gap:** make declared dataset use queryable and consistent without changing independence
+scoring. `dataset_usage`, `paper.datasets`, and `derivation.inputs` all needed one graph projection.
+Because `dataset_usage` is on the base `Entity` model, B1 now materializes authored `dataset_usage`
 universally for any entity that carries it; restricting materialization to only datasets/papers would
-silently drop valid parsed frontmatter on other entity kinds.
+silently drop valid parsed frontmatter on other entity kinds. B1 also closes the graph-materialization
+gaps for D1 row-level usage records and `derivation.inputs`. B-migration and B2 remain separate follow-up
+work.
 
 ---
 
@@ -261,8 +263,7 @@ cannot equal a `dataset:` ref and therefore cannot trigger this rule.
 
 The optional `consumed_by` staleness check is a different cost class from per-record shape/reference
 checks: it requires building the reverse usage index and comparing authored backlinks to the derived view.
-It should be planned as a separate B1 task or deferred if it threatens the narrower provenance
-materialization path.
+It did not land in B1 and is explicitly deferred outside B1 as future optional work.
 
 ---
 
