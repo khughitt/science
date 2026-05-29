@@ -403,6 +403,44 @@ def _audit_entity(
                 allow_cross_project_address=True,
             )
         )
+    for usage in getattr(entity, "dataset_usage", []) or []:
+        rows.extend(
+            _audit_reference(
+                entity,
+                "dataset_usage",
+                str(usage.ref),
+                resolver,
+                ext_prefixes=ext_prefixes,
+                allow_cross_kind_fallback=False,
+                allow_tag=False,
+            )
+        )
+    if entity.kind == "paper":
+        for target in getattr(entity, "datasets", []) or []:
+            rows.extend(
+                _audit_reference(
+                    entity,
+                    "datasets",
+                    str(target),
+                    resolver,
+                    ext_prefixes=ext_prefixes,
+                    allow_cross_kind_fallback=False,
+                    allow_tag=False,
+                )
+            )
+    derivation = getattr(entity, "derivation", None)
+    for target in getattr(derivation, "inputs", []) or []:
+        rows.extend(
+            _audit_reference(
+                entity,
+                "derivation.inputs",
+                str(target),
+                resolver,
+                ext_prefixes=ext_prefixes,
+                allow_cross_kind_fallback=False,
+                allow_tag=False,
+            )
+        )
     for target in getattr(entity, "chain", None) or []:
         rows.extend(
             _audit_reference(

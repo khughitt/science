@@ -309,3 +309,75 @@ def test_materialize_graph_emits_entity_usage_nodes(tmp_path):
     assert (derived_nodes[0], SCI_NS.usageRole, Literal("upstream")) in graph
     assert (derived_nodes[0], SCI_NS.usageOverlap, Literal("unknown")) in graph
     assert (derived_nodes[0], SCI_NS.usageSource, Literal("derivation.inputs")) in graph
+
+
+@pytest.mark.parametrize(
+    ("frontmatter", "field_name"),
+    [
+        (
+            "dataset_usage:\n"
+            "  - ref: dataset:gtex-v88\n"
+            "    role: analyzed\n"
+            "    overlap: full\n",
+            "dataset_usage",
+        ),
+        ('datasets: ["dataset:gtex-v88"]\n', "datasets"),
+    ],
+)
+def test_materialize_graph_rejects_unresolved_paper_usage_refs(tmp_path, frontmatter, field_name):
+    from science_tool.graph.materialize import materialize_graph
+
+    _write_project(tmp_path)
+    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir.mkdir(parents=True)
+    (paper_dir / "Adams2025.md").write_text(
+        "---\n"
+        "id: paper:Adams2025\n"
+        "type: paper\n"
+        "title: Adams\n"
+        "status: active\n"
+        "created: '2026-05-29'\n"
+        "updated: '2026-05-29'\n"
+        f"{frontmatter}"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        materialize_graph(tmp_path)
+
+    message = str(excinfo.value)
+    assert "Cannot materialize graph with unresolved references" in message
+    assert field_name in message
+    assert "dataset:gtex-v88" in message
+    assert not (tmp_path / "knowledge" / "graph.trig").exists()
+
+
+def test_materialize_graph_rejects_unresolved_derivation_inputs(tmp_path):
+    from science_tool.graph.materialize import materialize_graph
+
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path / "data" / "derived" / "datapackage.yaml",
+        "derived",
+        "source_class: derived\n"
+        "derived_kind: aggregate\n"
+        "origin: derived\n"
+        "derivation:\n"
+        "  workflow: workflow:w\n"
+        "  workflow_run: workflow-run:r\n"
+        "  git_commit: abc\n"
+        "  config_snapshot: cfg\n"
+        "  produced_at: '2026-05-29'\n"
+        "  inputs:\n"
+        "    - dataset:gtex-v88\n",
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        materialize_graph(tmp_path)
+
+    message = str(excinfo.value)
+    assert "Cannot materialize graph with unresolved references" in message
+    assert "derivation.inputs" in message
+    assert "dataset:gtex-v88" in message
+    assert not (tmp_path / "knowledge" / "graph.trig").exists()
