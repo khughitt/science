@@ -304,6 +304,8 @@ def test_materialize_graph_emits_entity_usage_nodes(tmp_path):
     assert (paper_nodes[0], SCI_NS.usageRole, Literal("analyzed")) in graph
     assert (paper_nodes[0], SCI_NS.usageOverlap, Literal("full")) in graph
     assert (paper_nodes[0], SCI_NS.usageSource, Literal("authored")) in graph
+    assert (derived_nodes[0], RDF.type, SCI_NS.DatasetUsage) in graph
     assert (derived_nodes[0], SCI_NS.dataset, gtex_uri) in graph
     assert (derived_nodes[0], SCI_NS.usageRole, Literal("upstream")) in graph
     assert (derived_nodes[0], SCI_NS.usageOverlap, Literal("unknown")) in graph
+    assert (derived_nodes[0], SCI_NS.usageSource, Literal("derivation.inputs")) in graph
