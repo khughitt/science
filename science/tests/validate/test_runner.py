@@ -578,12 +578,14 @@ def _build_malformed_member_project(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _write_dataset_influence_project(root: Path, *, local_dataset: bool = False) -> Path:
+def _write_dataset_influence_project(
+    root: Path, *, local_dataset: bool = False, usage_ref: str = "dataset:gtex-v8"
+) -> Path:
     root.joinpath("science.yaml").write_text(_DATASET_INFLUENCE_MANIFEST, encoding="utf-8")
     (root / "doc" / "papers").mkdir(parents=True)
     (root / "doc" / "papers" / "Adams2025.md").write_text(
         "---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndataset_usage:\n"
-        "  - ref: dataset:gtex-v8\n    role: analyzed\n---\n",
+        f"  - ref: {usage_ref}\n    role: analyzed\n---\n",
         encoding="utf-8",
     )
     if local_dataset:
@@ -591,6 +593,7 @@ def _write_dataset_influence_project(root: Path, *, local_dataset: bool = False)
         dp_dir.mkdir(parents=True)
         (dp_dir / "datapackage.yaml").write_text(
             "profiles: [science-pkg-entity-1.0]\nid: dataset:gtex-v8\ntype: dataset\ntitle: GTEx\n"
+            "aliases: [dataset:gtex]\n"
             "origin: external\ntier: use-now\ndatapackage: datapackage.yaml\naccess: {level: public, verified: true}\n",
             encoding="utf-8",
         )
@@ -695,6 +698,18 @@ def test_runner_dataset_influence_resolves_local_dataset_ref(
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
     _register_real_canonical_checks()
     project = _write_dataset_influence_project(tmp_path, local_dataset=True)
+
+    result = run(project, strict=False, verbose=False, enable_python_sidecar=False)
+
+    assert _dataset_influence_rules(result) == []
+
+
+def test_runner_dataset_influence_resolves_local_dataset_alias_ref(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
+    _register_real_canonical_checks()
+    project = _write_dataset_influence_project(tmp_path, local_dataset=True, usage_ref="dataset:gtex")
 
     result = run(project, strict=False, verbose=False, enable_python_sidecar=False)
 

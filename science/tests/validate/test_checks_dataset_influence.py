@@ -43,11 +43,59 @@ def _write_dataset_usage_paper(root: Path, ref: str = "dataset:gtex-v8") -> None
     )
 
 
+def _write_dataset(root: Path, slug: str, extra: str = "") -> None:
+    dp_dir = root / "data" / slug
+    dp_dir.mkdir(parents=True)
+    (dp_dir / "datapackage.yaml").write_text(
+        "profiles: [science-pkg-entity-1.0]\n"
+        f"id: dataset:{slug}\n"
+        "type: dataset\n"
+        f"title: {slug}\n"
+        "status: active\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n"
+        f"{extra}",
+        encoding="utf-8",
+    )
+
+
 def _write_initialized_commons(root: Path) -> Path:
     commons = root / "commons"
     for dirname in (".git", "datasets", "papers", "topics", "themes"):
         (commons / dirname).mkdir(parents=True)
     return commons
+
+
+def _write_geneset_collection(root: Path, dataset_ref: str) -> None:
+    dp_dir = root / "data" / "reactome"
+    dp_dir.mkdir(parents=True)
+    (dp_dir / "datapackage.yaml").write_text(
+        "profiles: [science-pkg-entity-1.0]\n"
+        "id: dataset:reactome-v89\n"
+        "type: dataset\n"
+        "title: Reactome\n"
+        "status: active\n"
+        "origin: external\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n"
+        "schema_profile: science-entity-base/1.0+dataset/1.0+bio.geneset/1.0\n"
+        "source_class: reference\n"
+        "access: {level: public, verified: true}\n"
+        "member_key_column: set_key\n"
+        "members_resource: sets\n"
+        "n_sets: 1\n"
+        "set_size_summary: {min: 2, median: 2, max: 2}\n"
+        "identifier_space: {tier: gene, namespace: hgnc_id, resolution_status: declared_unresolved}\n"
+        "resources:\n"
+        "  - name: sets\n"
+        "    path: sets.csv\n",
+        encoding="utf-8",
+    )
+    (dp_dir / "sets.csv").write_text(
+        "set_key,name,member_ids,dataset_usage\n"
+        f'R-HSA-1,Cell cycle,HGNC:1;HGNC:2,"[{{""ref"":""{dataset_ref}"",""role"":""set_definition_source""}}]"\n',
+        encoding="utf-8",
+    )
 
 
 def test_malformed_dataset_usage_errors() -> None:
@@ -242,6 +290,118 @@ def test_check_dataset_influence_resolves_local_dataset_ref(
         "origin: external\ntier: use-now\ndatapackage: datapackage.yaml\naccess: {level: public, verified: true}\n",
         encoding="utf-8",
     )
+
+    assert list(check_dataset_influence(_ctx(tmp_path))) == []
+
+
+def test_check_dataset_influence_resolves_local_dataset_alias_ref(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.validate.checks.dataset_influence import check_dataset_influence
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
+    _write_project(tmp_path)
+    _write_dataset_usage_paper(tmp_path, ref="dataset:gtex")
+    _write_dataset(
+        tmp_path,
+        "gtex-v8",
+        "aliases: [dataset:gtex]\n"
+        "origin: external\n"
+        "access: {level: public, verified: true}\n",
+    )
+
+    assert list(check_dataset_influence(_ctx(tmp_path))) == []
+
+
+def test_check_dataset_influence_legacy_paper_datasets_alias_warns_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.validate.checks.dataset_influence import check_dataset_influence
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path,
+        "gtex-v8",
+        "aliases: [dataset:gtex, gtex]\n"
+        "origin: external\n"
+        "access: {level: public, verified: true}\n",
+    )
+    (tmp_path / "doc" / "papers").mkdir(parents=True)
+    (tmp_path / "doc" / "papers" / "Adams2025.md").write_text(
+        "---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndatasets: [gtex]\n---\n",
+        encoding="utf-8",
+    )
+
+    results = list(check_dataset_influence(_ctx(tmp_path)))
+
+    assert _rules(results) == [(Severity.WARN, "dataset-influence.paper-datasets-legacy")]
+
+
+def test_check_dataset_influence_dataset_usage_alias_self_reference_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.validate.checks.dataset_influence import check_dataset_influence
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path,
+        "derived",
+        "aliases: [dataset:derived-alias]\n"
+        "origin: derived\n"
+        "dataset_usage:\n"
+        "  - ref: dataset:derived-alias\n"
+        "    role: upstream\n",
+    )
+
+    results = list(check_dataset_influence(_ctx(tmp_path)))
+
+    assert _rules(results) == [(Severity.ERROR, "dataset-influence.self-reference")]
+
+
+def test_check_dataset_influence_derivation_input_alias_resolves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.validate.checks.dataset_influence import check_dataset_influence
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path,
+        "gtex-v8",
+        "aliases: [dataset:gtex]\n"
+        "origin: external\n"
+        "access: {level: public, verified: true}\n",
+    )
+    _write_dataset(
+        tmp_path,
+        "derived",
+        "origin: derived\n"
+        "derivation:\n"
+        "  kind: aggregate\n"
+        "  inputs:\n"
+        "    - dataset:gtex\n",
+    )
+
+    assert list(check_dataset_influence(_ctx(tmp_path))) == []
+
+
+def test_check_dataset_influence_geneset_row_alias_resolves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.validate.checks.dataset_influence import check_dataset_influence
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path,
+        "gtex-v8",
+        "aliases: [dataset:gtex]\n"
+        "origin: external\n"
+        "access: {level: public, verified: true}\n",
+    )
+    _write_geneset_collection(tmp_path, dataset_ref="dataset:gtex")
 
     assert list(check_dataset_influence(_ctx(tmp_path))) == []
 

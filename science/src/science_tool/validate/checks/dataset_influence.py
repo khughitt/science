@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any, Literal
 
@@ -22,15 +22,19 @@ _ROLES = ("analyzed", "set_definition_source", "validation_source", "cited", "up
 _OVERLAPS = ("full", "partial", "unknown")
 
 
+def _identity_dataset_ref(ref: str) -> str:
+    return ref
+
+
 def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
     return Result(severity, Path(path) if path else None, None, message, rule, None)
 
 
-def _usage_defect(entry: Any) -> str | None:
+def _usage_defect(entry: Any, canonicalize_dataset_ref: Callable[[str], str]) -> str | None:
     if not isinstance(entry, dict):
         return "entry is not an object"
     ref = entry.get("ref")
-    if not isinstance(ref, str) or not ref.startswith("dataset:"):
+    if not isinstance(ref, str) or not canonicalize_dataset_ref(ref).startswith("dataset:"):
         return "ref must be a 'dataset:' reference"
     if entry.get("role") not in _ROLES:
         return f"role must be one of {list(_ROLES)}"
@@ -40,7 +44,9 @@ def _usage_defect(entry: Any) -> str | None:
     return None
 
 
-def _iter_usage_entries(fm: dict[str, Any]) -> tuple[list[dict[str, Any]], str | None]:
+def _iter_usage_entries(
+    fm: dict[str, Any], canonicalize_dataset_ref: Callable[[str], str]
+) -> tuple[list[dict[str, Any]], str | None]:
     usage = fm.get("dataset_usage")
     if usage is None:
         return [], None
@@ -48,7 +54,7 @@ def _iter_usage_entries(fm: dict[str, Any]) -> tuple[list[dict[str, Any]], str |
         return [], f"dataset_usage must be a list, got {type(usage).__name__}"
     entries: list[dict[str, Any]] = []
     for index, entry in enumerate(usage):
-        defect = _usage_defect(entry)
+        defect = _usage_defect(entry, canonicalize_dataset_ref)
         if defect is not None:
             return [], f"dataset_usage[{index}] malformed -- {defect}"
         entries.append(entry)
@@ -60,13 +66,14 @@ def evaluate_dataset_influence(
     *,
     dataset_ref_status: dict[str, DatasetRefStatus],
     row_usage_refs: Iterable[tuple[str, str, str]],
+    canonicalize_dataset_ref: Callable[[str], str] = _identity_dataset_ref,
 ) -> Iterator[Result]:
     refs_to_check: list[tuple[str, str, str]] = []
     for fm in frontmatters:
         ident = str(fm.get("id") or "?")
         path = fm.get("_path")
         kind = fm.get("kind") or fm.get("type")
-        usage_entries, defect = _iter_usage_entries(fm)
+        usage_entries, defect = _iter_usage_entries(fm, canonicalize_dataset_ref)
         if defect is not None:
             yield _result(
                 Severity.ERROR,
@@ -77,7 +84,7 @@ def evaluate_dataset_influence(
             continue
 
         for entry in usage_entries:
-            ref = str(entry["ref"])
+            ref = canonicalize_dataset_ref(str(entry["ref"]))
             if kind == "dataset" and ref == ident:
                 yield _result(
                     Severity.ERROR,
@@ -92,15 +99,18 @@ def evaluate_dataset_influence(
         if kind == "dataset" and isinstance(derivation, dict):
             inputs = derivation.get("inputs")
             if isinstance(inputs, list):
-                for ref in inputs:
-                    if isinstance(ref, str) and ref == ident:
+                for raw_ref in inputs:
+                    if not isinstance(raw_ref, str):
+                        continue
+                    ref = canonicalize_dataset_ref(raw_ref)
+                    if ref == ident:
                         yield _result(
                             Severity.ERROR,
                             path,
                             f"{ident}: derivation.inputs must not reference itself",
                             "dataset-influence.self-reference",
                         )
-                    elif isinstance(ref, str) and ref.startswith("dataset:"):
+                    elif ref.startswith("dataset:"):
                         refs_to_check.append((ref, ident, str(path or "")))
 
         if kind == "paper":
@@ -115,13 +125,22 @@ def evaluate_dataset_influence(
                     "dataset-influence.paper-datasets-invalid",
                 )
                 continue
-            explicit_by_ref = {str(entry["ref"]): entry for entry in usage_entries}
-            for ref in raw_datasets:
-                if not isinstance(ref, str) or not ref.startswith("dataset:"):
+            explicit_by_ref = {canonicalize_dataset_ref(str(entry["ref"])): entry for entry in usage_entries}
+            for raw_ref in raw_datasets:
+                if not isinstance(raw_ref, str):
                     yield _result(
                         Severity.ERROR,
                         path,
-                        f"{ident}: paper.datasets entry {ref!r} is not a dataset: ref",
+                        f"{ident}: paper.datasets entry {raw_ref!r} is not a dataset: ref",
+                        "dataset-influence.paper-datasets-invalid",
+                    )
+                    continue
+                ref = canonicalize_dataset_ref(raw_ref)
+                if not ref.startswith("dataset:"):
+                    yield _result(
+                        Severity.ERROR,
+                        path,
+                        f"{ident}: paper.datasets entry {raw_ref!r} is not a dataset: ref",
                         "dataset-influence.paper-datasets-invalid",
                     )
                     continue
@@ -165,11 +184,7 @@ def evaluate_dataset_influence(
 
 
 def _dataset_ref_statuses(ctx: ValidateContext, refs: set[str]) -> dict[str, DatasetRefStatus]:
-    local_ids = {
-        str(fm["id"])
-        for fm in dataset_frontmatters(ctx)
-        if isinstance(fm.get("id"), str) and fm["id"]
-    }
+    local_ids = _local_dataset_ids(dataset_frontmatters(ctx))
     root = resolve_commons_root()
     commons_available = _has_initialized_commons_layout(root)
     adapter = CommonsEntityAdapter(root) if commons_available else None
@@ -191,28 +206,85 @@ def _dataset_ref_statuses(ctx: ValidateContext, refs: set[str]) -> dict[str, Dat
     return out
 
 
+def _local_dataset_ids(frontmatters: Iterable[dict[str, Any]]) -> set[str]:
+    return {str(fm["id"]) for fm in frontmatters if isinstance(fm.get("id"), str) and fm["id"]}
+
+
+class _DatasetRefResolver:
+    def __init__(self, frontmatters: Iterable[dict[str, Any]]) -> None:
+        aliases: dict[str, str | None] = {}
+        for fm in frontmatters:
+            ident = fm.get("id")
+            if not isinstance(ident, str) or not ident:
+                continue
+            self._register(aliases, ident, ident)
+            self._register(aliases, ident.lower(), ident)
+            raw_aliases = fm.get("aliases")
+            if not isinstance(raw_aliases, list):
+                continue
+            for alias in raw_aliases:
+                if isinstance(alias, str) and alias:
+                    self._register(aliases, alias, ident)
+                    self._register(aliases, alias.lower(), ident)
+        self._aliases = aliases
+
+    @staticmethod
+    def _register(aliases: dict[str, str | None], alias: str, canonical_id: str) -> None:
+        existing = aliases.get(alias)
+        if existing is None and alias in aliases:
+            return
+        if existing is not None and existing != canonical_id:
+            aliases[alias] = None
+            return
+        aliases[alias] = canonical_id
+
+    def resolve(self, ref: str) -> str:
+        canonical = self._aliases.get(ref)
+        if canonical is None and ref in self._aliases:
+            return ref
+        if canonical is None:
+            canonical = self._aliases.get(ref.lower())
+        return ref if canonical is None else canonical
+
+
 def _has_initialized_commons_layout(root: Path) -> bool:
     return root.is_dir() and all((root / dirname).is_dir() for dirname in _COMMONS_LAYOUT_DIRS)
 
 
-def _collect_refs(frontmatters: list[dict[str, Any]], row_usage_refs: list[tuple[str, str, str]]) -> set[str]:
+def _collect_refs(
+    frontmatters: list[dict[str, Any]],
+    row_usage_refs: list[tuple[str, str, str]],
+    canonicalize_dataset_ref: Callable[[str], str],
+) -> set[str]:
     refs = {ref for ref, _consumer, _path in row_usage_refs}
     for fm in frontmatters:
         usage = fm.get("dataset_usage")
         if isinstance(usage, list):
             for entry in usage:
                 if isinstance(entry, dict) and isinstance(entry.get("ref"), str):
-                    refs.add(entry["ref"])
+                    refs.add(canonicalize_dataset_ref(entry["ref"]))
         datasets = fm.get("datasets")
         if isinstance(datasets, list):
-            refs.update(ref for ref in datasets if isinstance(ref, str) and ref.startswith("dataset:"))
+            refs.update(
+                ref
+                for ref in (canonicalize_dataset_ref(raw_ref) for raw_ref in datasets if isinstance(raw_ref, str))
+                if ref.startswith("dataset:")
+            )
         derivation = fm.get("derivation")
         if isinstance(derivation, dict) and isinstance(derivation.get("inputs"), list):
-            refs.update(ref for ref in derivation["inputs"] if isinstance(ref, str) and ref.startswith("dataset:"))
+            refs.update(
+                ref
+                for ref in (
+                    canonicalize_dataset_ref(raw_ref) for raw_ref in derivation["inputs"] if isinstance(raw_ref, str)
+                )
+                if ref.startswith("dataset:")
+            )
     return refs
 
 
-def _row_usage_refs(ctx: ValidateContext, frontmatters: list[dict[str, Any]]) -> list[tuple[str, str, str]]:
+def _row_usage_refs(
+    ctx: ValidateContext, frontmatters: list[dict[str, Any]], canonicalize_dataset_ref: Callable[[str], str]
+) -> list[tuple[str, str, str]]:
     refs: list[tuple[str, str, str]] = []
     for fm in frontmatters:
         if not is_geneset_frontmatter(fm):
@@ -230,17 +302,19 @@ def _row_usage_refs(ctx: ValidateContext, frontmatters: list[dict[str, Any]]) ->
             continue
         for row in rows:
             for usage in row.dataset_usage:
-                refs.append((str(usage["ref"]), f"{ident}#{row.set_key}", path))
+                refs.append((canonicalize_dataset_ref(str(usage["ref"])), f"{ident}#{row.set_key}", path))
     return refs
 
 
 @Check(section="dataset influence", order=35)
 def check_dataset_influence(ctx: ValidateContext) -> Iterator[Result]:
     frontmatters = entity_frontmatters(ctx)
-    row_refs = _row_usage_refs(ctx, frontmatters)
-    statuses = _dataset_ref_statuses(ctx, _collect_refs(frontmatters, row_refs))
+    resolver = _DatasetRefResolver(dataset_frontmatters(ctx))
+    row_refs = _row_usage_refs(ctx, frontmatters, resolver.resolve)
+    statuses = _dataset_ref_statuses(ctx, _collect_refs(frontmatters, row_refs, resolver.resolve))
     yield from evaluate_dataset_influence(
         frontmatters,
         dataset_ref_status=statuses,
         row_usage_refs=row_refs,
+        canonicalize_dataset_ref=resolver.resolve,
     )
