@@ -433,7 +433,7 @@ def test_materialize_graph_canonicalizes_legacy_paper_dataset_alias(tmp_path):
     _write_dataset(
         tmp_path / "data" / "gtex" / "datapackage.yaml",
         "gtex-v8",
-        "aliases: [dataset:gtex]\n"
+        "aliases: [dataset:gtex, gtex]\n"
         "origin: external\n"
         "access:\n"
         "  level: public\n"
@@ -449,7 +449,7 @@ def test_materialize_graph_canonicalizes_legacy_paper_dataset_alias(tmp_path):
         "status: active\n"
         "created: '2026-05-29'\n"
         "updated: '2026-05-29'\n"
-        'datasets: ["dataset:gtex"]\n'
+        'datasets: ["gtex"]\n'
         "---\n",
         encoding="utf-8",
     )

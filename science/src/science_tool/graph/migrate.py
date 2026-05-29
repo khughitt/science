@@ -693,7 +693,6 @@ def _audit_dataset_reference(
     if (
         is_external_reference(raw_target, known_prefixes=ext_prefixes)
         or is_metadata_reference(raw_target)
-        or not raw_target.startswith("dataset:")
     ):
         return [_invalid_dataset_reference_row(entity, field_name, raw_target)]
 
