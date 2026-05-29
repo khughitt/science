@@ -32,10 +32,11 @@ _ENTITY_COLUMNS = (
 class CommonsQuery:
     """Read-only access to the commons registry. Warns (does not rebuild) on staleness."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, warn_stale: bool = True) -> None:
         self._root = root
         self._adapter = CommonsEntityAdapter(root)
         self._builder = RegistryBuilder(root, self._adapter)
+        self._warn_stale = warn_stale
 
     def show(self, canonical_id: str) -> CommonsEntityRecord:
         self._require_registry()
@@ -178,6 +179,8 @@ class CommonsQuery:
         )
 
     def _warn_if_stale(self) -> None:
+        if not self._warn_stale:
+            return
         if os.environ.get("SCIENCE_COMMONS_QUIET_STALE"):
             return
         if self._builder.is_stale():

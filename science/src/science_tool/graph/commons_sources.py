@@ -97,7 +97,7 @@ def _load_commons_referenced_entities(
     if not commons_root.is_dir():
         raise CommonsRootNotFoundError(commons_root)
 
-    query = CommonsQuery(commons_root)
+    query = CommonsQuery(commons_root, warn_stale=False)
     loaded: list[tuple[Entity, SourceRef]] = []
     overlay_paths: dict[str, str] = {}
     pinned_unenforced: list[str] = []
