@@ -320,3 +320,50 @@ def test_group_validator_returns_non_primary_verdicts(tmp_path, monkeypatch):
     # The group validator returns only the NON-primary candidates' verdicts.
     assert [v.project_slug for v in verifications] == ["proj-b"]
     assert verifications[0].status == "skipped_off_host"
+
+
+def test_sourced_dataset_promotes_end_to_end_without_streaming(tmp_path, monkeypatch):
+    from science_tool.commons import promote as promote_mod
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    proj = sourced_project(tmp_path, "${OUTPUT_ROOT}/scrna/x.h5ad")
+    commons = init_commons(tmp_path)
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.delenv("SCIENCE_CONFIG_DIR", raising=False)
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: {"proj-dataset": proj}[slug],
+    )
+
+    # Spy on streaming: the sourced r1 must NOT be streamed; the co-located r2 must.
+    streamed = []
+    real_stream = promote_mod.stream_sha256_and_bytes
+    monkeypatch.setattr(
+        promote_mod,
+        "stream_sha256_and_bytes",
+        lambda p: streamed.append(p.name) or real_stream(p),
+    )
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    assert discovery.failed_candidates == []
+    plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
+    apply_promote(plan, commons_root=commons, invocation="source-e2e")
+
+    assert "r1.txt" not in streamed       # sourced → never read
+    assert "r2.txt" in streamed           # co-located → streamed
+
+    import yaml as y
+
+    parsed = y.safe_load(
+        (commons / "datasets/fixture-ds/datapackage.yaml").read_text(encoding="utf-8")
+    )
+    r1 = next(r for r in parsed["resources"] if r["name"] == "r1")
+    assert r1["hash"] == "sha256:" + "a" * 64
+    assert r1["bytes"] == 12
+    assert r1["source"] == {"type": "local", "ref": "${OUTPUT_ROOT}/scrna/x.h5ad"}
