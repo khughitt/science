@@ -100,15 +100,30 @@ resources:
 
 - **`type`** enum: `local | zenodo | github | url | daemon`. Only **`local`** is
   *resolved* this iteration; the other kinds are schema-validated and recorded
-  but **not fetched** (forward-compatible slots for remote commons).
-- **`local.ref`**: an off-repo filesystem path. **Allowed forms: a path that
-  begins with the `${OUTPUT_ROOT}` token, or a plain absolute path.** A plain
-  *relative* ref is rejected (cwd-dependent, ambiguous — there is no project root
-  to resolve it against at consume time). The canonical `datapackage.yaml` stores
-  `source` **verbatim** (the unexpanded token), keeping the committed artifact
+  but **not fetched** (forward-compatible slots for remote commons). Record-only
+  remote refs are intentionally minimal this iteration:
+
+  | type | `ref` shape this iteration |
+  | --- | --- |
+  | `local` | absolute path, exactly `${OUTPUT_ROOT}`, or `${OUTPUT_ROOT}/...` |
+  | `url` | absolute `http://` or `https://` URL |
+  | `zenodo` | non-empty opaque string |
+  | `github` | non-empty opaque string |
+  | `daemon` | non-empty opaque string |
+
+  The opaque remote forms are not interpreted until fetchers exist; the only
+  guarantee now is that they are non-empty strings and survive promotion.
+- **`local.ref`**: an off-repo filesystem path. **Allowed forms: an absolute
+  path, exactly `${OUTPUT_ROOT}`, or a path starting with `${OUTPUT_ROOT}/`.**
+  `${OUTPUT_ROOT}foo` is malformed. A plain *relative* ref is rejected
+  (cwd-dependent, ambiguous — there is no project root to resolve it against at
+  consume time). The canonical `datapackage.yaml` stores `source` **verbatim**
+  (the unexpanded token), keeping the committed artifact
   host-independent. Token expansion happens only transiently, and only under
   `--verify-digests` (below), when promote tries to locate the file; promote stays
-  project-agnostic by expanding from the `OUTPUT_ROOT` environment variable.
+  project-agnostic by expanding from the `OUTPUT_ROOT` environment variable. When
+  set, `OUTPUT_ROOT` itself must expand to an absolute, non-blank path; unset is
+  `skipped_off_host`, but blank or relative is a hard configuration error.
 - **Discriminator decision (a):** the *presence* of `source` marks a resource as
   sourced; there is no separate `external: true` flag. Fewer fields, one source of
   truth, and co-located resources are unchanged.
@@ -171,10 +186,14 @@ descriptor-shape checks, not byte checks):
   already applies on the commons read side, hoisted to the project-side promote
   input.
 - `source.type` outside the enum → hard error.
-- A source `ref` that is malformed → hard error: empty/whitespace, a
+- A source `ref` that is missing, non-string, or malformed → hard error:
+  empty/whitespace, a
   syntactically-broken `${...}` token, **any token other than `${OUTPUT_ROOT}`**,
-  or (for `local`) a plain *relative* path.
-  Allowed `local.ref`: `${OUTPUT_ROOT}`-prefixed or absolute.
+  `${OUTPUT_ROOT}foo`, or (for `local`) a plain *relative* path.
+  Allowed `local.ref`: absolute path, exactly `${OUTPUT_ROOT}`, or
+  `${OUTPUT_ROOT}/...`. Under `--verify-digests`, a set-but-blank or set-but-relative
+  `OUTPUT_ROOT` is a hard error; an unset `OUTPUT_ROOT` remains a reported
+  `skipped_off_host`.
 - A co-located resource (no `source`) still hits the existing parent-escape /
   `is_file` checks unchanged, and is always streamed.
 
@@ -211,10 +230,12 @@ vs. actual `(hash, bytes)`.
   validation time. `resolve_local_ref` raises only on malformed `ref` (already
   caught by validation); otherwise returns `Unexpandable` (the `${OUTPUT_ROOT}`
   token present but `OUTPUT_ROOT` unset) or `Resolved(path, exists)` (an absolute
-  ref, or a token expanded against a set `OUTPUT_ROOT`). This lets promote tell
-  "off-host skip" from "resolved-but-missing error" without a `None` overload.
-  `local` is the only resolvable type; a registry maps `type` → resolver, remote
-  types → a record-only resolver (always `Unexpandable`).
+  ref, or a token expanded against a set, absolute `OUTPUT_ROOT`). A blank or
+  relative `OUTPUT_ROOT` is a configuration error when verification requests
+  expansion. This lets promote tell "off-host skip" from "resolved-but-missing
+  error" without a `None` overload. `local` is the only resolvable type; a
+  registry maps `type` → resolver, remote types → a record-only resolver (always
+  `Unexpandable`).
 - **`promote.py`** — make `_dataset_per_resource` + the shared resource-path
   validation source-aware (default trust; co-located stream unchanged); add
   `PromoteResourceDigestMismatchError`; run `validate_logical_path` on every
@@ -233,7 +254,7 @@ vs. actual `(hash, bytes)`.
   @dataclass(frozen=True)
   class PerResourceResult:
       per_resource: dict[str, tuple[str, int]]      # unchanged payload for rendering
-      verifications: list[ResourceVerification]     # empty unless --verify-digests
+      verifications: tuple[ResourceVerification, ...]  # empty unless --verify-digests
   ```
 
   Callers read `.per_resource` exactly where they used the old dict (rendering is
@@ -312,8 +333,10 @@ Unit tests in `~/d/science/science/tests/`:
 - validation: sourced resource with missing **or invalid** `hash` (not
   `sha256:<64hex>`) / `bytes` (non-int, `bool`, or negative) rejected; bad
   `source.type` rejected; empty / relative / non-`${OUTPUT_ROOT}` / malformed-token
-  `local.ref` rejected; a `path` failing `validate_logical_path` (absolute, `..`,
-  backslash) rejected for both co-located and sourced resources.
+  / `${OUTPUT_ROOT}foo` `local.ref` rejected; set-but-blank or set-but-relative
+  `OUTPUT_ROOT` hard-errors under `--verify-digests`; a `path` failing
+  `validate_logical_path` (absolute, `..`, backslash) rejected for both co-located
+  and sourced resources.
 - `inventory.py`: a sourced resource's `source` survives into the inventory
   serialization (not dropped).
 - regression: a co-located resource (no `source`) promotes exactly as before
