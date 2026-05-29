@@ -12,7 +12,7 @@ from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsError
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
 from science_tool.commons.geneset_resources import is_geneset_frontmatter, read_member_rows
-from science_tool.validate._helpers import dataset_frontmatters, entity_frontmatters
+from science_tool.validate._helpers import entity_frontmatters
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -124,8 +124,7 @@ def evaluate_dataset_influence(
                             f"{ident}: derivation.inputs must not reference itself",
                             "dataset-influence.self-reference",
                         )
-                    elif ref.startswith("dataset:"):
-                        refs_to_check.append((ref, ident, str(path or "")))
+                    refs_to_check.append((ref, ident, str(path or "")))
 
         if kind == "paper":
             raw_datasets = fm.get("datasets")
@@ -306,20 +305,16 @@ def _collect_refs(
         datasets = fm.get("datasets")
         if isinstance(datasets, list):
             refs.update(
-                ref
-                for ref in (canonicalize_dataset_ref(raw_ref) for raw_ref in datasets if isinstance(raw_ref, str))
-                if ref.startswith("dataset:")
+                canonicalize_dataset_ref(raw_ref)
+                for raw_ref in datasets
+                if isinstance(raw_ref, str) and raw_ref.startswith("dataset:")
             )
         derivation = fm.get("derivation")
         if isinstance(derivation, dict) and isinstance(derivation.get("inputs"), list):
             refs.update(
-                ref
-                for ref in (
-                    canonicalize_dataset_ref(raw_ref)
-                    for raw_ref in derivation["inputs"]
-                    if isinstance(raw_ref, str) and raw_ref.startswith("dataset:")
-                )
-                if ref.startswith("dataset:")
+                canonicalize_dataset_ref(raw_ref)
+                for raw_ref in derivation["inputs"]
+                if isinstance(raw_ref, str) and raw_ref.startswith("dataset:")
             )
     return refs
 
@@ -352,7 +347,7 @@ def _row_usage_refs(
 def check_dataset_influence(ctx: ValidateContext) -> Iterator[Result]:
     frontmatters = entity_frontmatters(ctx)
     resolver = _DatasetRefResolver(
-        dataset_frontmatters(ctx),
+        frontmatters,
         manual_aliases=load_manual_aliases(ctx.project_root, local_profile=_local_profile(ctx)),
     )
     row_refs = _row_usage_refs(ctx, frontmatters, resolver.resolve)

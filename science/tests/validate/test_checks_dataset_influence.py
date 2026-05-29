@@ -423,6 +423,79 @@ def test_check_dataset_influence_manual_alias_to_non_dataset_errors(
     assert _rules(results) == [(Severity.ERROR, "dataset-influence.ref-not-dataset")]
 
 
+def test_check_dataset_influence_paper_datasets_alias_to_non_dataset_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.validate.checks.dataset_influence import check_dataset_influence
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
+    _write_project(tmp_path)
+    mappings = tmp_path / "knowledge" / "sources" / "local" / "mappings.yaml"
+    mappings.parent.mkdir(parents=True)
+    mappings.write_text('aliases:\n  "dataset:gtex": "paper:Smith2024"\n', encoding="utf-8")
+    (tmp_path / "doc" / "papers").mkdir(parents=True)
+    (tmp_path / "doc" / "papers" / "Adams2025.md").write_text(
+        "---\n"
+        "id: paper:Adams2025\n"
+        "type: paper\n"
+        "title: Adams\n"
+        "datasets: [dataset:gtex]\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "doc" / "papers" / "Smith2024.md").write_text(
+        "---\n"
+        "id: paper:Smith2024\n"
+        "type: paper\n"
+        "title: Smith\n"
+        "aliases: [dataset:smith]\n"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    results = list(check_dataset_influence(_ctx(tmp_path)))
+
+    assert _rules(results) == [
+        (Severity.WARN, "dataset-influence.paper-datasets-legacy"),
+        (Severity.ERROR, "dataset-influence.ref-not-dataset"),
+    ]
+
+
+def test_check_dataset_influence_derivation_input_alias_to_non_dataset_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.validate.checks.dataset_influence import check_dataset_influence
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
+    _write_project(tmp_path)
+    mappings = tmp_path / "knowledge" / "sources" / "local" / "mappings.yaml"
+    mappings.parent.mkdir(parents=True)
+    mappings.write_text('aliases:\n  "dataset:gtex": "paper:Smith2024"\n', encoding="utf-8")
+    _write_dataset(
+        tmp_path,
+        "derived",
+        "origin: derived\n"
+        "derivation:\n"
+        "  kind: aggregate\n"
+        "  inputs:\n"
+        "    - dataset:gtex\n",
+    )
+    (tmp_path / "doc" / "papers").mkdir(parents=True)
+    (tmp_path / "doc" / "papers" / "Smith2024.md").write_text(
+        "---\n"
+        "id: paper:Smith2024\n"
+        "type: paper\n"
+        "title: Smith\n"
+        "aliases: [dataset:smith]\n"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    results = list(check_dataset_influence(_ctx(tmp_path)))
+
+    assert _rules(results) == [(Severity.ERROR, "dataset-influence.ref-not-dataset")]
+
+
 def test_check_dataset_influence_dataset_usage_alias_self_reference_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
