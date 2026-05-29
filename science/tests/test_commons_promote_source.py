@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from promote_source_fixtures import init_commons, sourced_project
+
 
 def test_digest_mismatch_error_names_resource_and_values():
     from science_tool.commons.errors import (
@@ -248,3 +250,73 @@ def test_validate_resources_rejects_bad_source_at_discovery(tmp_path):
     res["source"] = {"type": "local", "ref": "relative/path"}
     with pytest.raises(PromoteCandidateError, match="source"):
         promote._validate_datapackage_resources("walker", dp_abs, {"resources": [res]})
+
+
+def test_plan_promote_aggregates_skip_verdict(tmp_path, monkeypatch):
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        discover_candidates,
+        plan_promote,
+    )
+
+    proj = sourced_project(tmp_path, "${OUTPUT_ROOT}/scrna/x.h5ad")
+    commons = init_commons(tmp_path)
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.delenv("SCIENCE_CONFIG_DIR", raising=False)
+    monkeypatch.delenv("OUTPUT_ROOT", raising=False)  # token unexpandable → off-host
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: {"proj-dataset": proj}[slug],
+    )
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    assert discovery.failed_candidates == []
+    plan = plan_promote(
+        discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET, verify_digests=True
+    )
+    verifs = plan.resource_verifications.get("fixture-ds", ())
+    assert any(v.name == "r1" and v.status == "skipped_off_host" for v in verifs)
+
+
+def test_plan_promote_no_verify_has_empty_verifications(tmp_path, monkeypatch):
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        discover_candidates,
+        plan_promote,
+    )
+
+    proj = sourced_project(tmp_path, "${OUTPUT_ROOT}/scrna/x.h5ad")
+    commons = init_commons(tmp_path)
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.delenv("SCIENCE_CONFIG_DIR", raising=False)
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: {"proj-dataset": proj}[slug],
+    )
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
+    assert plan.resource_verifications.get("fixture-ds", ()) == ()
+
+
+def test_group_validator_returns_non_primary_verdicts(tmp_path, monkeypatch):
+    """A non-primary project's skip verdict is returned, not silently discarded."""
+    from science_tool.commons import promote
+
+    monkeypatch.delenv("OUTPUT_ROOT", raising=False)
+    primary = _candidate(tmp_path / "a", [_sourced()], project_slug="proj-a")
+    secondary = _candidate(tmp_path / "b", [_sourced()], project_slug="proj-b")
+
+    primary_result = promote._dataset_per_resource(primary, verify_digests=True)
+    verifications = promote._validate_dataset_group_datapackages(
+        canonical_slug="walker",
+        primary=primary,
+        candidates=[primary, secondary],
+        primary_per_resource=primary_result.per_resource,
+        verify_digests=True,
+    )
+    # The group validator returns only the NON-primary candidates' verdicts.
+    assert [v.project_slug for v in verifications] == ["proj-b"]
+    assert verifications[0].status == "skipped_off_host"

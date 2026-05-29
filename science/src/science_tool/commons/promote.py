@@ -442,6 +442,9 @@ class PromotePlan:
     kind: PromoteKindConfig
     dataset_audit_extras: dict[str, dict[str, Any]] = field(default_factory=dict)
     mixin_extensions: tuple["ProfileComponent", ...] = ()
+    resource_verifications: dict[str, tuple[ResourceVerification, ...]] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -612,6 +615,7 @@ def plan_promote(
     resolve_conflict: Callable[[FieldConflict | ExistingCanonicalConflict], Any] | None = None,
     from_order: list[str] | None = None,
     mixin_extensions: tuple["ProfileComponent", ...] = (),
+    verify_digests: bool = False,
 ) -> PromotePlan:
     """Build a PromotePlan from a DiscoveryResult.
 
@@ -663,6 +667,7 @@ def plan_promote(
     decisions: list[PromoteDecision] = []
     soft_failures: list[FailedCandidate] = list(discovery.failed_candidates)
     dataset_audit_extras: dict[str, dict[str, Any]] = {}
+    dataset_resource_verifications: dict[str, tuple[ResourceVerification, ...]] = {}
 
     for slug_norm in sorted(discovery.candidates_by_slug):
         raw_group = discovery.candidates_by_slug[slug_norm]
@@ -757,8 +762,11 @@ def plan_promote(
         dataset_primary_per_resource: dict[str, tuple[str, int]] | None = None
         if kind.kind == "dataset":
             dataset_primary = _primary_candidate_for_plan(classified, from_order)
-            _primary_result = _dataset_per_resource(dataset_primary)
+            _primary_result = _dataset_per_resource(
+                dataset_primary, verify_digests=verify_digests
+            )
             dataset_primary_per_resource = _primary_result.per_resource
+            _group_verifications: tuple[ResourceVerification, ...] = ()
             if (
                 dataset_primary.datapackage_doc is None
                 or dataset_primary.datapackage_source_path is None
@@ -767,12 +775,18 @@ def plan_promote(
                     "dataset planning requires discovery datapackage metadata",
                     slug=canonical_case,
                 )
-            _validate_dataset_group_datapackages(
+            _group_verifications = _validate_dataset_group_datapackages(
                 canonical_slug=canonical_case,
                 primary=dataset_primary,
                 candidates=classified,
                 primary_per_resource=dataset_primary_per_resource,
+                verify_digests=verify_digests,
             )
+            combined_verifications = (
+                _primary_result.verifications + _group_verifications
+            )
+            if combined_verifications:
+                dataset_resource_verifications[canonical_case] = combined_verifications
             check_override_conflict(
                 slug=canonical_case,
                 planned_path=dataset_primary.datapackage_source_path.parent,
@@ -1040,6 +1054,7 @@ def plan_promote(
         kind=kind,
         dataset_audit_extras=dataset_audit_extras,
         mixin_extensions=mixin_extensions,
+        resource_verifications=dataset_resource_verifications,
     )
 
 
@@ -2607,9 +2622,10 @@ def _validate_dataset_group_datapackages(
     primary: PromoteCandidate,
     candidates: list[PromoteCandidate],
     primary_per_resource: dict[str, tuple[str, int]],
-) -> None:
+    verify_digests: bool = False,
+) -> tuple[ResourceVerification, ...]:
     if len(candidates) <= 1:
-        return
+        return ()
     if primary.datapackage_doc is None:
         raise PromoteCandidateError(
             "dataset planning requires discovery datapackage metadata",
@@ -2620,13 +2636,13 @@ def _validate_dataset_group_datapackages(
         canonical_slug=canonical_slug,
         per_resource=primary_per_resource,
     )
+    group_verifications: list[ResourceVerification] = []
     for candidate in candidates:
         if candidate is primary:
             continue
-        # NOTE: verify_digests is threaded through here in a later task so that
-        # secondary-project sourced resources are also verified; for now group
-        # validation only compares the (hash, bytes) payloads.
-        candidate_per_resource = _dataset_per_resource(candidate).per_resource
+        candidate_result = _dataset_per_resource(candidate, verify_digests=verify_digests)
+        candidate_per_resource = candidate_result.per_resource
+        group_verifications.extend(candidate_result.verifications)
         if candidate_per_resource != primary_per_resource:
             raise PromoteCandidateError(
                 f"dataset {canonical_slug!r} project {candidate.project_slug!r} "
@@ -2654,6 +2670,7 @@ def _validate_dataset_group_datapackages(
                 slug=canonical_slug,
                 path=candidate.datapackage_source_path,
             )
+    return tuple(group_verifications)
 
 
 def _rewrite_rendered_frontmatter(rendered: str, updates: Mapping[str, Any]) -> str:
