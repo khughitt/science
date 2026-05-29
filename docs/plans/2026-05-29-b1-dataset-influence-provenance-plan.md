@@ -28,8 +28,10 @@
   - Use the shared gene-set resource helper instead of private copies.
 - Modify `science/tests/validate/test_checks_genesets.py`
   - Lock the shared helper behavior through the existing check tests.
+- Create `science/src/science_tool/commons/frontmatter.py`
+  - Own tolerant YAML/frontmatter reading shared by validate and graph code.
 - Modify `science/src/science_tool/validate/_helpers.py`
-  - Add tolerant all-entity frontmatter discovery for checks that cannot rely on strict model loading.
+  - Import shared raw frontmatter reading and add tolerant all-entity frontmatter discovery for checks that cannot rely on strict model loading.
 - Create `science/src/science_tool/graph/dataset_usage.py`
   - Define `DatasetUsageRecord`, virtual gene-set member URI encoding, strict usage projection, deterministic usage-node URIs, and graph triple emission helpers.
 - Modify `science/src/science_tool/graph/materialize.py`
@@ -37,7 +39,7 @@
 - Modify `science/src/science_tool/graph/store/constants.py`
   - Include B1 usage predicates in graph export edge metadata and predicate registry.
 - Modify `science/src/science_tool/validate/checks/__init__.py`
-  - Register the new check after `genesets` and before prose linting.
+  - Register the new check last, immediately after `genesets`.
 - Create `science/src/science_tool/validate/checks/dataset_influence.py`
   - Validate B1 malformed/self-reference/legacy/ref-resolution cases with pinned severities.
 - Create `science/tests/validate/test_checks_dataset_influence.py`
@@ -62,6 +64,7 @@
 - Graph materialization fails on malformed usage, dataset self-reference, virtual URI collision, or unavailable members resource for any selected `bio.geneset` collection.
 - Validate emits INFO when a referenced dataset cannot be checked because commons/local resources are unavailable, and WARN when discovery is available and the dataset is absent.
 - `consumed_by` stale-backlink auditing is not implemented in this B1 plan. It is a separate cost class that requires a derived reverse index.
+- Malformed usage reaching graph materialization is blocked by the existing strict entity loader for entity-sourced usage and by `parse_geneset_rows` for row-sourced usage; if an ERROR-class condition still reaches the B1 materializer, it raises rather than skipping.
 
 ---
 
@@ -357,9 +360,10 @@ git commit -m "refactor: share geneset member resource reader"
 
 ---
 
-### Task 3: Raw Entity Frontmatter Discovery
+### Task 3: Shared Raw Frontmatter And Entity Discovery
 
 **Files:**
+- Create: `science/src/science_tool/commons/frontmatter.py`
 - Modify: `science/src/science_tool/validate/_helpers.py`
 - Test: `science/tests/validate/test_helpers_dataset_discovery.py`
 
@@ -402,6 +406,18 @@ def test_entity_frontmatters_discovers_papers_and_datapackage_datasets(tmp_path:
     by_id = {row["id"]: row for row in rows}
     assert by_id["paper:Adams2025"]["_path"] == "doc/papers/Adams2025.md"
     assert by_id["dataset:gtex-v8"]["_path"] == "data/gtex/datapackage.yaml"
+
+
+def test_raw_frontmatter_shared_helper_reads_markdown_and_yaml(tmp_path: Path) -> None:
+    from science_tool.commons.frontmatter import raw_frontmatter
+
+    md = tmp_path / "entity.md"
+    md.write_text("---\nid: paper:Adams2025\ntype: paper\n---\nBody\n", encoding="utf-8")
+    yaml_path = tmp_path / "datapackage.yaml"
+    yaml_path.write_text("id: dataset:gtex-v8\ntype: dataset\n", encoding="utf-8")
+
+    assert raw_frontmatter(md)["id"] == "paper:Adams2025"
+    assert raw_frontmatter(yaml_path)["id"] == "dataset:gtex-v8"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -409,12 +425,53 @@ def test_entity_frontmatters_discovers_papers_and_datapackage_datasets(tmp_path:
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/validate/test_helpers_dataset_discovery.py::test_entity_frontmatters_discovers_papers_and_datapackage_datasets -q
+uv run --frozen pytest science/tests/validate/test_helpers_dataset_discovery.py -q
 ```
 
-Expected: FAIL with `ImportError` or `AttributeError` because `entity_frontmatters` does not exist.
+Expected: FAIL with `ImportError` or `AttributeError` because `entity_frontmatters` and `science_tool.commons.frontmatter` do not exist.
 
-- [ ] **Step 3: Implement tolerant entity discovery**
+- [ ] **Step 3: Move raw frontmatter reader to commons**
+
+Create `science/src/science_tool/commons/frontmatter.py`:
+
+```python
+"""Tolerant frontmatter readers shared by graph and validate code."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+
+def raw_frontmatter(path: Path) -> dict[str, Any]:
+    """Raw frontmatter for either a fenced markdown entity or a YAML descriptor.
+
+    Reads directly and tolerates malformed input by returning {}. Callers that
+    need schema-critical guarantees must enforce those rules themselves.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+        if path.suffix in (".yaml", ".yml"):
+            data = yaml.safe_load(text) or {}
+        elif text.startswith("---"):
+            end = text.find("\n---", 3)
+            data = yaml.safe_load(text[3:end]) if end != -1 else {}
+        else:
+            data = {}
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return {}
+    return data if isinstance(data, dict) else {}
+```
+
+In `science/src/science_tool/validate/_helpers.py`, import the shared helper and remove the local `raw_frontmatter` function body:
+
+```python
+from science_tool.commons.frontmatter import raw_frontmatter
+```
+
+- [ ] **Step 4: Implement tolerant entity discovery**
 
 Add to `science/src/science_tool/validate/_helpers.py`:
 
@@ -445,7 +502,7 @@ def entity_frontmatters(ctx: ValidateContext) -> list[dict[str, Any]]:
     return out
 ```
 
-- [ ] **Step 4: Run helper tests**
+- [ ] **Step 5: Run helper tests**
 
 Run:
 
@@ -455,11 +512,11 @@ uv run --frozen pytest science/tests/validate/test_helpers_dataset_discovery.py 
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add science/src/science_tool/validate/_helpers.py science/tests/validate/test_helpers_dataset_discovery.py
-git commit -m "feat: discover raw entity frontmatter for validate checks"
+git add science/src/science_tool/commons/frontmatter.py science/src/science_tool/validate/_helpers.py science/tests/validate/test_helpers_dataset_discovery.py
+git commit -m "feat: share raw entity frontmatter discovery"
 ```
 
 ---
@@ -635,7 +692,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Literal
 
-from rdflib import Literal, URIRef
+from rdflib import Literal as RDFLiteral, URIRef
 from rdflib.namespace import RDF
 from science_model.entities import Entity
 from science_model.packages.schema import DerivationBlock
@@ -769,9 +826,9 @@ def add_usage_record_to_graph(record: DatasetUsageRecord, graph) -> None:
     graph.add((consumer, SCI_NS.hasDatasetUsage, node))
     graph.add((node, RDF.type, SCI_NS.DatasetUsage))
     graph.add((node, SCI_NS.dataset, dataset_uri))
-    graph.add((node, SCI_NS.usageRole, Literal(record.role)))
-    graph.add((node, SCI_NS.usageOverlap, Literal(record.overlap)))
-    graph.add((node, SCI_NS.usageSource, Literal(record.source)))
+    graph.add((node, SCI_NS.usageRole, RDFLiteral(record.role)))
+    graph.add((node, SCI_NS.usageOverlap, RDFLiteral(record.overlap)))
+    graph.add((node, SCI_NS.usageSource, RDFLiteral(record.source)))
 ```
 
 - [ ] **Step 4: Run helper tests**
@@ -1140,7 +1197,7 @@ In `science/src/science_tool/graph/materialize.py`, add imports:
 ```python
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
 from science_tool.commons.geneset_resources import is_geneset_frontmatter, read_member_rows
-from science_tool.validate._helpers import raw_frontmatter
+from science_tool.commons.frontmatter import raw_frontmatter
 from science_tool.graph.dataset_usage import usage_records_for_geneset_rows
 ```
 
@@ -1293,6 +1350,25 @@ def test_paper_datasets_conflict_warns_and_explicit_wins() -> None:
     )
 
     assert _rules(results) == [(Severity.WARN, "dataset-influence.paper-datasets-conflict")]
+
+
+def test_paper_datasets_analyzed_full_is_refinement_not_conflict() -> None:
+    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
+
+    results = list(
+        evaluate_dataset_influence(
+            [
+                _fm(
+                    datasets=["dataset:gtex-v8"],
+                    dataset_usage=[{"ref": "dataset:gtex-v8", "role": "analyzed", "overlap": "full"}],
+                )
+            ],
+            dataset_ref_status={"dataset:gtex-v8": "resolved"},
+            row_usage_refs=[],
+        )
+    )
+
+    assert results == []
 
 
 def test_dataset_self_reference_errors() -> None:
@@ -1478,7 +1554,7 @@ def evaluate_dataset_influence(
                     continue
                 if ref in explicit_by_ref:
                     entry = explicit_by_ref[ref]
-                    if entry.get("role") != "analyzed" or entry.get("overlap", "unknown") != "unknown":
+                    if entry.get("role") != "analyzed":
                         yield _result(
                             Severity.WARN,
                             path,
@@ -1619,18 +1695,14 @@ def test_dataset_influence_registration_after_genesets() -> None:
 
     import science_tool.validate.checks.dataset_influence as dataset_influence
     import science_tool.validate.checks.genesets as genesets
-    import science_tool.validate.checks.prose_lints as prose_lints
 
     importlib.reload(genesets)
     importlib.reload(dataset_influence)
-    importlib.reload(prose_lints)
 
     ordered = [(entry.section, entry.order, entry.fn.__module__) for entry in CANONICAL_CHECKS]
     genesets_index = next(index for index, entry in enumerate(ordered) if entry[0] == "gene-set collections")
     influence_index = next(index for index, entry in enumerate(ordered) if entry[0] == "dataset influence")
-    prose_index = next(index for index, entry in enumerate(ordered) if entry[0] == "prose quality lints...")
     assert influence_index == genesets_index + 1
-    assert prose_index == influence_index + 1
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -1742,14 +1814,13 @@ def check_dataset_influence(ctx: ValidateContext) -> Iterator[Result]:
 
 - [ ] **Step 4: Register check and parity mirrors**
 
-In `science/src/science_tool/validate/checks/__init__.py`, insert `"dataset_influence"` after `"genesets"` and before `"prose_lints"`.
+In `science/src/science_tool/validate/checks/__init__.py`, insert `"dataset_influence"` immediately after `"genesets"` in the import tuple. The check's `@Check(..., order=35)` registration makes it last in the sorted canonical check sequence, immediately after `genesets` at order 34.
 
 In each `CHECK_MODULES` tuple in the parity files, insert `"dataset_influence"` after `"genesets"`:
 
 ```python
     "genesets",
     "dataset_influence",
-    "prose_lints",
 ```
 
 - [ ] **Step 5: Run validate tests**
