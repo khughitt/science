@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: design for review (Phase 3 of the bio data architecture; last foundational pillar)
+Status: approved; D1 collection type implemented, D2 promoted-member implementation deferred
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar D
@@ -44,8 +44,16 @@ This reuses the durable entity, provenance, `dataset_usage`, `source_class`, `pa
 and evidence machinery rather than inventing a new entity kind before gene sets have a lifecycle distinct
 from "a small dataset subset with provenance."
 
+**Implementation boundary.** The first implementation plan is **D1 only**: the `bio.geneset`
+collection extension, collection-level row contract, identifier-space declaration, and validate
+check. D2's promoted-member model stays designed here but is not implemented until a real
+evidence-bearing set needs a citable child dataset. This keeps Reactome/MSigDB-style collection
+ingestion and B's gene-set provenance arm unblocked without forcing member promotion mechanics too
+early.
+
 **Explicit non-goals.** D does not build identity (C), the epistemic class (A), or the influence engine
-(B). It does not ingest Reactome (E) — it is what E will instantiate against.
+(B). It does not ingest Reactome (E) — it is what E will instantiate against. The D1 plan also does not
+add `bio.geneset.member`, new promotion commands, or virtual member payload resolution.
 
 ---
 
@@ -68,11 +76,16 @@ A gene-set collection is a `dataset` (typically `origin: external`, `source_clas
 gene-set-specific fields:
 
 - `n_sets`, set-size distribution summary
-- `identifier_space` — the gene/protein identity space the members are keyed in, **resolved through
-  Pillar C** (e.g. `hgnc`); enables the unsafe-join lesson to be enforced
+- `members_resource` — the Frictionless datapackage resource name for the collection's row table
+- `identifier_space` — an object declaring the gene/protein identity tier and namespace the members are
+  keyed in, **resolved through Pillar C** (for example `{tier: gene, namespace: hgnc_id, registry:
+  dataset:gene-crosswalk-hgnc}`); enables the unsafe-join lesson to be enforced
 - **per-set source provenance stored as cheap data columns** in the collection's bulk artifact (set_key →
-  defining PMIDs / `dataset:` refs / roles) — the "store fine" half of the policy; no graph cost until a
-  set is promoted
+  defining PMIDs / `dataset:` refs / canonical `dataset_usage` roles) — the "store fine" half of the
+  policy; no graph cost until a set is promoted. D1 accepts the full canonical `dataset_usage` role
+  vocabulary (`analyzed`, `set_definition_source`, `validation_source`, `cited`, `upstream`, `training`)
+  so row provenance cannot drift from the dataset mixin; B's first circularity logic consumes
+  `set_definition_source` and `validation_source`.
 - the curation/skeptical marker inherited from A (`source_class: reference` by default; see D-D6 for
   heterogeneous collections)
 
@@ -111,7 +124,10 @@ dataset_usage:                     # per-set provenance B consumes
     role: set_definition_source
     overlap: full
 # bio.geneset.member extension:
-identifier_space: hgnc
+identifier_space:
+  tier: gene
+  namespace: hgnc_id
+  registry: dataset:gene-crosswalk-hgnc
 n_members: 42
 ```
 
@@ -206,20 +222,22 @@ shape), naming the gap rather than mis-modeling it.
 
 | Sub-phase | Locks |
 |---|---|
-| D1 — `bio.geneset` collection extension (`n_sets`, `identifier_space`, per-set provenance columns, curation marker + per-set override) | the collection type |
-| D2 — `bio.geneset.member` extension + on-demand promotion + the `member_of` derivation variant + the virtual-member rule (core-mixin changes) | the citable promoted set |
+| D1 — `bio.geneset` collection extension (`n_sets`, `identifier_space`, per-set provenance columns, curation marker + per-set override) | the collection type; **implemented** |
+| D2 — `bio.geneset.member` extension + on-demand promotion + the `member_of` derivation variant + the virtual-member rule (core-mixin changes) | the citable promoted set; **deferred until needed by evidence-bearing set citation** |
 
 D depends on A (`source_class: reference`, the curation down-weight), C (`identifier_space`), and B
-(`dataset_usage` + the `set_definition_source`/`validation_source` roles). Within Phase 3, D1 should land
-before B's gene-set arm (B's per-set declarations attach to D's structures); D2's promotion can follow once
-evidence lines begin citing individual sets.
+(`dataset_usage` + the `set_definition_source`/`validation_source` roles). Within Phase 3, D1 lands
+before B's gene-set arm (B's per-set declarations attach to D's structures); D2 follows once evidence
+lines begin citing individual sets.
 
 ---
 
 ## 8. Status & next step
 
-Pillar D design for review — the last foundational design. On approval, the foundation (C, A, B, D) is fully
-specified, and Pillar E (Reactome ingestion) is revised to **instantiate** against it: a `bio.geneset`
-collection with `source_class: reference`, C-resolved `identifier_space`, per-pathway
-`set_definition_source` provenance, and pathways promoted to `bio.geneset.member` datasets on citation.
-Then writing-plans produces the phased implementation plans (critical path C1→C2, with A, B, D following).
+Pillar D D1 is implemented: `bio.geneset` collections now have a schema profile, collection-row parser,
+and `science validate` check for `set_key` uniqueness, row counts, set-size summaries, per-set provenance
+row shape, and C-backed identifier-space declarations. D2 promoted members remain deferred until evidence
+lines need to cite individual sets as child datasets.
+
+Reactome can first instantiate as a collection with per-pathway provenance rows. Individual pathway
+promotion can follow when evidence lines actually cite those pathways.
