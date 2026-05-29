@@ -60,9 +60,10 @@ to generalize cleanly to that future:
   remote consumer needs: fetch bytes from wherever, verify against the committed
   hash before use.
 - Verification is **layered** across boundaries: the producer stamps at build,
-  promote verifies *if the file is locally resolvable*, and a future remote
-  consumer verifies *on fetch*. One hash, many sources, verification wherever the
-  bytes meet the descriptor.
+  promote can re-verify *on demand* (`--verify-digests`, when the file is locally
+  resolvable), and a future remote consumer verifies *on fetch*. One hash, many
+  sources, verification wherever the bytes meet the descriptor — but never forced
+  into the default promote path.
 
 This iteration **builds** the local/off-repo source kind and **models** the
 remote kinds as forward-compatible, schema-validated slots that are recorded but
@@ -177,20 +178,43 @@ vs. actual `(hash, bytes)`.
   it in `parse_canonical_datapackage_yaml` / `read_datapackage` and expose it on
   `DataResource` (so the source survives a read round-trip); render it in
   `render_canonical_datapackage_yaml`. Validate `source.type` against the enum and
-  `ref` shape (reject relative `local` refs). Add
-  `resolve_local_ref(ref) -> Path | None`: raises on malformed token syntax;
-  returns `None` when the token is unexpandable (env unset) **or** the resolved
-  path does not exist *for non-`local` callers*. Because promote must distinguish
-  "unexpandable" (skip) from "resolved-but-missing" (error), `resolve_local_ref`
-  returns a small result — `Unexpandable | Resolved(path, exists: bool)` — rather
-  than collapsing both to `None`. `local` is the only resolvable type; a registry
-  maps `type` → resolver, remote types → a record-only resolver (always
-  `Unexpandable`).
+  `ref` shape (reject relative `local` refs). Add `resolve_local_ref` with a
+  **single** explicit contract:
+
+  ```python
+  # one frozen result type — no Path | None ambiguity
+  class RefResolution: ...                       # sealed/Union of the two below
+  @dataclass(frozen=True)
+  class Unexpandable(RefResolution): ...          # token needs an env var that is unset, or a remote type
+  @dataclass(frozen=True)
+  class Resolved(RefResolution):
+      path: Path
+      exists: bool
+
+  def resolve_local_ref(ref: str) -> RefResolution: ...
+  ```
+
+  It raises only on *malformed* `ref` (caught earlier by validation anyway);
+  otherwise returns `Unexpandable` (env unset) or `Resolved(path, exists)`. This
+  lets promote tell "off-host skip" from "resolved-but-missing error" without a
+  `None` overload. `local` is the only resolvable type; a registry maps `type` →
+  resolver, remote types → a record-only resolver (always `Unexpandable`).
 - **`promote.py`** — make `_dataset_per_resource` + the shared resource-path
-  validation source-aware (default trust; co-located stream unchanged); add the
-  `--verify-digests` CLI flag and the verify path with its per-resource verdict
-  table; add `PromoteResourceDigestMismatchError`; run `validate_logical_path` on
-  every resource `path`.
+  validation source-aware (default trust; co-located stream unchanged); add
+  `PromoteResourceDigestMismatchError`; run `validate_logical_path` on every
+  resource `path`. **Thread the opt-in flag through the existing API** rather than
+  reading global state:
+  - CLI: add `--verify-digests` to the `promote dataset` command (`cli.py`), pass
+    `verify_digests=` into `_promote_kind_cmd` (cli.py:620), which forwards it to
+    `plan_promote(..., verify_digests=...)`.
+  - `plan_promote` (promote.py:572) gains a keyword-only `verify_digests: bool =
+    False`; it forwards to `_dataset_per_resource(dataset_primary, verify_digests=...)`
+    (call site ~725) and to `_validate_dataset_group_datapackages(...,
+    verify_digests=...)` (~734), which in turn passes it to its inner
+    `_dataset_per_resource(candidate, verify_digests=...)` (~2446).
+  - `_dataset_per_resource(candidate, *, verify_digests: bool = False)`
+    (promote.py:2379) is where the default-trust vs verify-table logic lives.
+  Default `False` everywhere preserves every existing caller/test untouched.
 - **`inventory.py`** — `build_commons_inventory` serializes per-resource
   `{path, hash, bytes, format, mediatype}` (line ~116); **add `source`** so the
   inventory is not lossy for sourced resources.
