@@ -178,6 +178,7 @@ def test_build_commons_inventory_projects_dataset_resources(
             "bytes": 4521339201,
             "format": "parquet",
             "mediatype": "application/vnd.apache.parquet",
+            "source": None,
         }
     ]
     rnaseq = next(e for e in payload.entities if e.id == "dataset:rnaseq-example")
@@ -228,3 +229,34 @@ def test_build_commons_inventory_missing_root(tmp_path: Path, monkeypatch: pytes
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "nope"))
     with pytest.raises(CommonsRootNotFoundError):
         build_commons_inventory()
+
+
+def test_build_commons_inventory_preserves_resource_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A sourced resource's `source` survives end-to-end into the inventory."""
+    root = _make_store(tmp_path)
+    (root / "datasets" / "cath-domains" / "datapackage.yaml").write_text(
+        "name: cath-domains\n"
+        "profile: \"data-package\"\n"
+        "resources:\n"
+        "  - name: cath_domains\n"
+        "    path: cath_domains.parquet\n"
+        "    hash: \"sha256:" + "0" * 64 + "\"\n"
+        "    bytes: 4521339201\n"
+        "    format: \"parquet\"\n"
+        "    mediatype: \"application/vnd.apache.parquet\"\n"
+        "    source:\n"
+        "      type: local\n"
+        "      ref: ${OUTPUT_ROOT}/cath/cath_domains.parquet\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    payload = build_commons_inventory()
+
+    cath = next(e for e in payload.entities if e.id == "dataset:cath-domains")
+    assert cath.data["resources"][0]["source"] == {
+        "type": "local",
+        "ref": "${OUTPUT_ROOT}/cath/cath_domains.parquet",
+    }

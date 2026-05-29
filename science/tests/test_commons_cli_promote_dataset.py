@@ -226,3 +226,32 @@ def test_cli_promote_dataset_apply_writes_artifacts(tmp_path, monkeypatch):
     )
     assert r.exit_code == 0, r.output
     assert (commons / "datasets/fixture-ds/entity.md").is_file()
+
+
+def test_promote_dataset_verify_digests_prints_skip(tmp_path, monkeypatch):
+    from promote_source_fixtures import init_commons, sourced_project
+    from science_tool.commons.cli import commons_group
+
+    proj = sourced_project(tmp_path, "${OUTPUT_ROOT}/scrna/x.h5ad")
+    commons = init_commons(tmp_path)
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.delenv("SCIENCE_CONFIG_DIR", raising=False)
+    monkeypatch.delenv("OUTPUT_ROOT", raising=False)
+    monkeypatch.setattr(
+        "science_tool.commons.config.resolve_project_by_id",
+        lambda s: {"proj-dataset": proj}[s],
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda s: {"proj-dataset": proj}[s],
+    )
+
+    result = CliRunner().invoke(
+        commons_group,
+        ["promote", "dataset", "--from", "proj-dataset", "--slug", "fixture-ds", "--verify-digests"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "verify:" in result.output
+    assert "skipped_off_host" in result.output

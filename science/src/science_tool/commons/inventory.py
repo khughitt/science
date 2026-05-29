@@ -121,6 +121,11 @@ def _entity_from_record(
                     "bytes": resource.bytes,
                     "format": resource.format,
                     "mediatype": resource.mediatype,
+                    "source": (
+                        {"type": resource.source.type, "ref": resource.source.ref}
+                        if resource.source is not None
+                        else None
+                    ),
                 }
                 for resource in descriptor.resources
             ]

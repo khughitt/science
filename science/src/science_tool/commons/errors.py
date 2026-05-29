@@ -228,6 +228,34 @@ class PromoteResourceMissingError(CommonsError):
         )
 
 
+class PromoteResourceDigestMismatchError(CommonsError):
+    """A sourced resource's local bytes do not match its build-stamped digest.
+
+    Raised only under `--verify-digests`, when a `local` ref resolves to an
+    existing file whose `(sha256, bytes)` differs from the stamped values.
+    Hard error — aborts the promote.
+    """
+
+    def __init__(
+        self,
+        *,
+        slug: str,
+        resource_name: str,
+        expected: tuple[str, int],
+        actual: tuple[str, int],
+        path: "Path | None",
+    ) -> None:
+        self.slug = slug
+        self.resource_name = resource_name
+        self.expected = expected
+        self.actual = actual
+        self.path = path
+        super().__init__(
+            f"dataset {slug!r}: resource {resource_name!r} digest mismatch at "
+            f"{path}: expected {expected}, got {actual}"
+        )
+
+
 class PromoteValidationError(CommonsError):
     """Canonical content or an overlay failed schema validation at the end
     of `plan_promote`. Raised BEFORE any I/O — no rollback needed.
