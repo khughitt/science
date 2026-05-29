@@ -60,7 +60,11 @@ has already adopted. The scanner may use the same source surfaces as `load_proje
 is by parsed frontmatter kind rather than by directory name alone.
 
 Malformed frontmatter is not a migration target. It is reported as a conflict row only if the file was
-inside the paper source surface and looked like an intended paper file; otherwise it is skipped.
+inside a paper source surface and looked like an intended paper file; otherwise it is skipped. The
+predicate is concrete: the file is under a source root the graph loader treats as papers, such as
+`doc/papers/` or an equivalent profile paper source, and its content begins with a YAML frontmatter fence
+(`---`) that cannot be parsed. A malformed markdown file outside the paper source surface is skipped by
+this migration.
 
 ### B-M2 -- Lossless Projection
 
@@ -110,6 +114,8 @@ The `overlap` value on an existing analyzed entry is not a conflict. For example
 The same-ref role-conflict predicate must be shared with the B1 validate check's
 `dataset-influence.paper-datasets-conflict` behavior: same ref plus explicit role other than `analyzed`
 is a conflict; same ref plus explicit `role: analyzed` is not a conflict, regardless of overlap.
+The implementation should extract this predicate from the inlined B1 validate logic into a small shared
+helper so the migration and validator cannot drift.
 
 ### B-M4 -- Conflict Handling
 
@@ -157,14 +163,16 @@ Exit-code semantics are pinned for migration-campaign automation:
 | Mode/result | Exit code |
 |---|---:|
 | dry-run, no pending rewrites and no conflicts | 0 |
-| dry-run, pending rewrites and no conflicts | 1 |
-| dry-run, any conflicts | 2 |
+| dry-run, pending rewrites and no conflicts | 10 |
+| dry-run, any conflicts | 20 |
 | apply, rewrites applied and no conflicts | 0 |
 | apply, no rewrites needed and no conflicts | 0 |
-| apply, any conflicts, even if other files were migrated | 2 |
+| apply, any conflicts, even if other files were migrated | 20 |
 
-Conflicts take precedence over pending-change status. A non-2 dry-run exit code therefore tells CI
-whether the project is already migrated (`0`) or has safe rewrites waiting (`1`).
+Conflicts take precedence over pending-change status. Codes `10` and `20` are intentionally outside the
+normal Click traceback/usage-error range, so automation can distinguish migration state from tool
+failure. A non-20 dry-run exit code therefore tells CI whether the project is already migrated (`0`) or
+has safe rewrites waiting (`10`).
 
 The pure implementation should live outside the CLI, likely as a focused helper module or focused
 functions near `science_tool.graph.migrate`, so tests can exercise frontmatter rewriting without invoking
@@ -230,7 +238,9 @@ The implementation should be accepted only when these behaviors are covered:
   legacy refs are deduped;
 - same-ref existing `role: analyzed`, `overlap: full` is treated as already migrated, not a conflict;
 - same-ref existing non-`analyzed` usage reports a conflict and leaves the file unchanged;
+- same-ref role-conflict logic is shared with the B1 validator rather than retyped in two places;
 - malformed legacy or canonical fields report stable conflict codes and leave files unchanged;
+- malformed frontmatter conflict reporting is deterministic for paper-source files with a YAML fence;
 - running apply twice is idempotent;
 - syntactically valid but unresolved `dataset:` refs are migrated verbatim and still reported later by
   validation/audit;

@@ -223,6 +223,21 @@ Candidate records should include enough explanation for review:
 Authored independence fields remain valid. B2 adds derived signals; it does not remove the manual escape
 hatch.
 
+Derived commitment records must not create nondeterministic same-predicate collisions on evidence-line
+nodes. The existing belief reader currently treats `sci:evidenceIndependence` and
+`sci:independenceGroup` as single-valued fields; if a line has both authored and derived triples with the
+same predicate, RDF iteration order would decide the result. B2 therefore keeps derived commitment facts
+on the commitment record and adds an explicit merge step in the evidence-unit collection path.
+
+Merge precedence is pinned:
+
+1. authored `circular` wins over derived shared-source;
+2. authored `shared-source` wins when present, with validation warnings for dataset-backed disagreement;
+3. authored `independent` plus committed derived dependence is an ERROR and should block a clean validate
+   run; collection may still leave the authored value untouched to avoid hiding the contradiction;
+4. untagged lines may receive derived `shared-source` metadata from B2 commitment records;
+5. candidate records never populate aggregation fields.
+
 Conflict policy:
 
 - authored `independence: circular` remains stronger than derived shared-source;
@@ -250,31 +265,36 @@ format. B2 introduces two derived record classes:
 - `sci:DatasetIndependenceCommitment` for full-overlap dependence that aggregation may consume.
 
 B2 materializes one record per `(target, kind, reason, connected evidence-line component)` rather than
-one record per evidence-line pair. A component record may contain two or more `sci:evidenceLine` triples.
-This avoids an O(K^2) record blow-up for heavily supported propositions while still allowing validation
-and review code to derive pairwise explanations from the member set.
+one record per evidence-line pair. A component record may contain two or more member triples. This avoids
+an O(K^2) record blow-up for heavily supported propositions while still allowing validation and review
+code to derive pairwise explanations from the member set.
 
 Both record types should be deterministic from their payloads so graph builds are stable. They should
 point at the evidence lines, the shared dataset or datasets, the target proposition, and the usage records
 or reduced usage facts that justify the signal.
 
-The predicate surface should be explicit and small:
+The predicate surface should be explicit, small, and non-overloaded. B2 must not reuse
+`sci:evidenceLine` for membership because that predicate already means proposition-to-JSON-encoded
+evidence line in the graph store. B2 must also avoid reusing broad `sci:target`; the record target is a
+specific proposition/finding target for an independence derivation, not an inquiry target. Use
+B2-specific predicates instead:
 
 ```text
 record  rdf:type                    sci:DatasetIndependenceCandidate | sci:DatasetIndependenceCommitment
-record  sci:target                  proposition-uri
-record  sci:evidenceLine            evidence-line-uri
-record  sci:evidenceLine            evidence-line-uri
+record  sci:independenceTarget      proposition-uri
+record  sci:independenceMember      evidence-line-uri
+record  sci:independenceMember      evidence-line-uri
 record  sci:sharedDataset           dataset-uri-or-canonical-ref
 record  sci:independenceGroup       stable-derived-group
 record  sci:independenceReason      reason-token
 record  sci:derivedFromDatasetUsage usage-node
 ```
 
-The `sci:evidenceLine` triples form an unordered member set; deterministic record identity comes from the
-sorted evidence-line URIs, target, sorted datasets, reason, and reduced usage payload. The committed
-record may also emit convenience triples equivalent to current aggregation metadata. Those triples are
-derived graph facts, not source rewrites.
+The `sci:independenceMember` triples form an unordered member set; deterministic record identity comes
+from the sorted evidence-line URIs, target, sorted datasets, reason, and reduced usage payload. The
+committed record may emit derived metadata only on the commitment record itself. It must not emit
+`sci:evidenceIndependence`, `sci:independenceGroup`, or `sci:sharedDataset` convenience triples onto
+evidence-line nodes; the collection path handles the authored-vs-derived merge explicitly.
 
 ---
 
@@ -295,7 +315,7 @@ Pinned severities:
 
 | Case | Severity |
 |---|---|
-| derived candidate between two authored-independent lines on same target | WARNING |
+| derived candidate between two authored-independent or untagged lines on same target | WARNING |
 | derived committed shared-source dependence but line is authored `independent` | ERROR |
 | authored `shared_dataset` group cannot be supported by B2 but B2 has enough graph data to check that dataset basis | WARNING |
 | graph data unavailable or no usage path exists | no result |
@@ -307,6 +327,12 @@ through another line's hub relationship.
 Validation should not require commons resources beyond what graph build already materialized. If graph
 data is absent, B2 checks should degrade cleanly with no result rather than re-parsing source files or
 emitting stale warnings.
+
+"Enough graph data to check that dataset basis" means the authored `shared_dataset` value resolves to a
+dataset URI, every evidence-line member of the authored group exists in the materialized graph, and each
+member has either direct usage ancestry or an explicit absence of direct usage ancestry in the B2 ancestor
+index. If any member is missing from the graph or only has candidate/indirect ancestry, B2 should not
+claim to refute the authored dataset basis.
 
 ---
 
@@ -350,9 +376,13 @@ The B2 implementation plan should cover:
   conservative connected component while preserving both datasets as justification;
 - graph tests proving virtual gene-set member ancestry is candidate-only in B2;
 - validation tests for candidate WARN and committed-vs-authored-independent ERROR;
+- validation tests proving untagged same-target lines with derived dataset candidates warn, not just
+  lines explicitly authored as `independent`;
 - validation tests proving the ERROR attaches only to direct full-overlap shared-dataset edges, not mere
   component co-membership;
 - aggregation tests proving candidates do not affect belief and committed full-overlap dependence does;
+- aggregation tests proving authored independence metadata and derived commitment records merge by the
+  pinned precedence, without relying on RDF triple iteration order;
 - aggregation tests proving support/dispute lines in the same derived component still set `contested`;
 - snapshot/version tests if `CONFIG_VERSION` changes;
 - regression tests showing `cited` alone does not collapse and `validation_source` does not become
