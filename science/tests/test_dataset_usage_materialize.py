@@ -530,3 +530,119 @@ def test_materialize_graph_rejects_dataset_self_reference_through_alias(tmp_path
         materialize_graph(tmp_path)
 
     assert not (tmp_path / "knowledge" / "graph.trig").exists()
+
+
+@pytest.mark.parametrize(
+    ("frontmatter", "field_name"),
+    [
+        (
+            "dataset_usage:\n"
+            "  - ref: dataset:smith\n"
+            "    role: analyzed\n"
+            "    overlap: full\n",
+            "dataset_usage",
+        ),
+        ('datasets: ["dataset:smith"]\n', "datasets"),
+    ],
+)
+def test_materialize_graph_audits_paper_usage_refs_as_dataset_only(tmp_path, frontmatter, field_name):
+    from science_tool.graph.materialize import materialization_audit, materialize_graph
+
+    _write_project(tmp_path)
+    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir.mkdir(parents=True)
+    (paper_dir / "Smith2024.md").write_text(
+        "---\n"
+        "id: paper:Smith2024\n"
+        "type: paper\n"
+        "title: Smith\n"
+        "aliases: [dataset:smith]\n"
+        "status: active\n"
+        "created: '2026-05-29'\n"
+        "updated: '2026-05-29'\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    (paper_dir / "Adams2025.md").write_text(
+        "---\n"
+        "id: paper:Adams2025\n"
+        "type: paper\n"
+        "title: Adams\n"
+        "status: active\n"
+        "created: '2026-05-29'\n"
+        "updated: '2026-05-29'\n"
+        f"{frontmatter}"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    rows, has_failures = materialization_audit(tmp_path)
+
+    assert has_failures is True
+    assert any(
+        row["check"] == "invalid_dataset_reference"
+        and row["field"] == field_name
+        and row["target"] == "dataset:smith"
+        for row in rows
+    )
+    with pytest.raises(ValueError) as excinfo:
+        materialize_graph(tmp_path)
+
+    message = str(excinfo.value)
+    assert "Cannot materialize graph with unresolved references" in message
+    assert field_name in message
+    assert "dataset:smith" in message
+    assert not (tmp_path / "knowledge" / "graph.trig").exists()
+
+
+def test_materialize_graph_audits_derivation_inputs_as_dataset_only(tmp_path):
+    from science_tool.graph.materialize import materialization_audit, materialize_graph
+
+    _write_project(tmp_path)
+    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir.mkdir(parents=True)
+    (paper_dir / "Smith2024.md").write_text(
+        "---\n"
+        "id: paper:Smith2024\n"
+        "type: paper\n"
+        "title: Smith\n"
+        "aliases: [dataset:smith]\n"
+        "status: active\n"
+        "created: '2026-05-29'\n"
+        "updated: '2026-05-29'\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    _write_dataset(
+        tmp_path / "data" / "derived" / "datapackage.yaml",
+        "derived",
+        "source_class: derived\n"
+        "derived_kind: aggregate\n"
+        "origin: derived\n"
+        "derivation:\n"
+        "  workflow: workflow:w\n"
+        "  workflow_run: workflow-run:r\n"
+        "  git_commit: abc\n"
+        "  config_snapshot: cfg\n"
+        "  produced_at: '2026-05-29'\n"
+        "  inputs:\n"
+        "    - dataset:smith\n",
+    )
+
+    rows, has_failures = materialization_audit(tmp_path)
+
+    assert has_failures is True
+    assert any(
+        row["check"] == "invalid_dataset_reference"
+        and row["field"] == "derivation.inputs"
+        and row["target"] == "dataset:smith"
+        for row in rows
+    )
+    with pytest.raises(ValueError) as excinfo:
+        materialize_graph(tmp_path)
+
+    message = str(excinfo.value)
+    assert "Cannot materialize graph with unresolved references" in message
+    assert "derivation.inputs" in message
+    assert "dataset:smith" in message
+    assert not (tmp_path / "knowledge" / "graph.trig").exists()
