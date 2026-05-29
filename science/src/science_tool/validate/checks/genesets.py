@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-import csv
 import math
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from statistics import median
 from typing import Any
 
-import yaml
-
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.config import resolve_commons_root
-from science_tool.commons.datapackage import validate_logical_path
 from science_tool.commons.errors import CommonsError
 from science_tool.commons.gene_crosswalk import (
     GENE_CROSSWALK_ID,
@@ -26,6 +22,10 @@ from science_tool.commons.geneset import (
     GenesetRow,
     parse_geneset_rows,
 )
+from science_tool.commons.geneset_resources import (
+    is_geneset_frontmatter,
+    read_member_rows,
+)
 from science_tool.commons.protein_crosswalk import (
     MEMBER_KEY_COLUMN as PROTEIN_KEY_COLUMN,
     PROTEIN_CROSSWALK_ID,
@@ -36,7 +36,6 @@ from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
-_PROFILE_TOKEN = "+bio.geneset/"
 _SUPPORTED_BY_TIER = {
     "gene": (SUPPORTED_GENE_NAMESPACES, GENE_CROSSWALK_ID, "+bio.gene_crosswalk/", GENE_KEY_COLUMN),
     "protein": (
@@ -53,8 +52,7 @@ def _result(severity: Severity, path: str | None, message: str, rule: str) -> Re
 
 
 def _is_geneset(fm: dict[str, Any]) -> bool:
-    profile = str(fm.get("schema_profile") or "")
-    return (fm.get("kind") or fm.get("type")) == "dataset" and _PROFILE_TOKEN in f"+{profile}"
+    return is_geneset_frontmatter(fm)
 
 
 def _is_int(value: object) -> bool:
@@ -232,48 +230,6 @@ def evaluate_geneset_collections(
             )
 
 
-def _resource_path_for_members(project_root: Path, fm: dict[str, Any]) -> Path | Exception | None:
-    rel = fm.get("_path")
-    resource_name = fm.get("members_resource")
-    if not isinstance(rel, str) or not isinstance(resource_name, str):
-        return None
-    dp_path = project_root / rel
-    try:
-        doc = yaml.safe_load(dp_path.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError):
-        return None
-    resources = doc.get("resources")
-    if not isinstance(resources, list):
-        return None
-    for resource in resources:
-        if not isinstance(resource, dict):
-            continue
-        if resource.get("name") != resource_name:
-            continue
-        resource_path = resource.get("path")
-        if not isinstance(resource_path, str):
-            return None
-        try:
-            logical_path = validate_logical_path(resource_path)
-        except CommonsError as exc:
-            return exc
-        return dp_path.parent / logical_path
-    return None
-
-
-def _read_member_rows(project_root: Path, fm: dict[str, Any]) -> list[dict[str, Any]] | Exception | None:
-    path = _resource_path_for_members(project_root, fm)
-    if isinstance(path, Exception):
-        return path
-    if path is None or not path.is_file():
-        return None
-    try:
-        with path.open(encoding="utf-8", newline="") as fh:
-            return list(csv.DictReader(fh))
-    except (OSError, UnicodeError, csv.Error) as exc:
-        return exc
-
-
 def _load_registry_meta(
     registry_id: str,
     *,
@@ -304,7 +260,7 @@ def check_genesets(ctx: ValidateContext) -> Iterator[Result]:
     genesets = [fm for fm in datasets if _is_geneset(fm)]
     local_by_id = {fm["id"]: fm for fm in datasets if isinstance(fm.get("id"), str) and fm["id"]}
     rows_by_dataset_id = {
-        str(fm["id"]): _read_member_rows(ctx.project_root, fm)
+        str(fm["id"]): read_member_rows(ctx.project_root, fm)
         for fm in genesets
         if isinstance(fm.get("id"), str) and fm["id"]
     }
