@@ -1,0 +1,276 @@
+# B2 Dataset-Derived Independence Design
+
+Date: 2026-05-29
+
+Status: design drafted; implementation plan next
+
+Related:
+- `docs/plans/2026-05-26-bio-dataset-influence-provenance-design.md` — Pillar B north star and B2 boundary
+- `docs/plans/2026-05-29-b-migration-paper-datasets-design.md` — single-system migration path for papers
+- `docs/plans/2026-05-22-evidence-aggregation-and-belief-design.md` — independence collapse and `suspect-circular`
+- `science/src/science_tool/graph/dataset_usage.py` — B1 materialized usage records
+- `science/src/science_tool/graph/belief.py` — current aggregation reads committed independence fields
+- `science/src/science_tool/validate/checks/evidence_lines.py` — current authored `suspect-circular` check
+- `science/src/science_tool/graph/freshness.py` — existing `bears_on` closure derivation
+
+---
+
+## 1. Purpose And Scope
+
+B1 made dataset use queryable. B2 interprets that graph truth so the system can detect when evidence
+lines are not independent because they rest on the same upstream dataset.
+
+B2 must be conservative. It should surface derived non-independence without silently changing belief
+scores for ambiguous cases. The key split is:
+
+- **committed dependence:** strong enough to affect aggregation because the shared dataset dependence is
+  direct and full-overlap;
+- **candidate dependence:** useful reviewer signal, but not enough to alter scoring.
+
+`aggregate_belief` continues to read committed independence metadata only. Candidate signals feed
+validation/reporting, especially `suspect-circular`, but do not collapse evidence units by themselves.
+
+---
+
+## 2. Inputs From B1 And Existing Graphs
+
+B2 reads from the materialized graph, not raw frontmatter.
+
+Primary input:
+
+```text
+consumer    sci:hasDatasetUsage  usage-node
+usage-node  rdf:type             sci:DatasetUsage
+usage-node  sci:dataset          dataset-uri
+usage-node  sci:usageRole        role
+usage-node  sci:usageOverlap     overlap
+usage-node  sci:usageSource      source
+```
+
+Context input:
+
+- evidence-line nodes and their `cito:supports` / `cito:disputes` edges;
+- current authored independence metadata (`sci:evidenceIndependence`, `sci:independenceGroup`,
+  `sci:sharedDataset`);
+- `prov:wasDerivedFrom` and the existing `bears_on` closure that connects consumers to propositions;
+- virtual gene-set member URIs from B1, where row-level usage is visible but may not yet connect to a
+  proposition until D2 or an explicit evidence relation creates a path.
+
+B2 should not parse papers, datasets, or gene-set CSV rows again. If a fact is not in the graph, it is
+out of scope for B2.
+
+---
+
+## 3. Usage Reduction
+
+B1 may emit multiple usage nodes for the same `(consumer, dataset)` pair. B2 first reduces those nodes to
+one interpreted dependence record per pair.
+
+### B2-D1 -- Role Interpretation
+
+Roles are interpreted as:
+
+| Role | Dependence interpretation |
+|---|---|
+| `analyzed` | dependence |
+| `set_definition_source` | dependence |
+| `training` | dependence |
+| `upstream` | dependence |
+| `validation_source` | independence-positive unless the same pair also has a dependence role |
+| `cited` | informational only |
+
+### B2-D2 -- Most-Dependent-Wins
+
+When several usage records exist for the same `(consumer, dataset)` pair, B2 chooses the most dependent
+interpretation:
+
+1. Any dependence role beats `validation_source` and `cited`.
+2. `validation_source` beats `cited` only as an independence-positive annotation.
+3. Overlap rank is `full > partial > unknown` for dependence severity.
+4. `source` is retained as a set of contributing sources, not used as the semantic winner.
+
+This handles the realistic B1 case where a derived dataset has both an authored
+`{role: analyzed, overlap: full}` entry and a `derivation.inputs` `{role: upstream, overlap: unknown}`
+entry for the same upstream dataset. The graph facts are not contradictory; B2 reduces them to one
+dependence interpretation before deriving independence signals.
+
+---
+
+## 4. Evidence-Line Dataset Ancestors
+
+B2 needs to ask: for each evidence line, which dataset dependencies can reach it?
+
+The derivation should walk from usage consumers to evidence lines/propositions through existing graph
+relationships:
+
+- if the evidence line itself has usage records, those datasets apply directly;
+- if the evidence line `prov:wasDerivedFrom` a consumer with usage records, those datasets apply;
+- if a consumer with usage records `bears_on` the evidence line's target proposition, the dataset is a
+  candidate ancestor for that line;
+- virtual gene-set member consumers participate only when a graph path connects that virtual URI to the
+  evidence line or its target.
+
+The implementation should keep the first B2 pass narrow: derive pairwise signals for evidence lines that
+share a target. Global influence reporting can reuse the same ancestor index later, but B2 acceptance is
+about independence and circularity, not a complete UI for influence exploration.
+
+---
+
+## 5. Committed Versus Candidate Signals
+
+### B2-D3 -- Committed Dependence
+
+B2 may commit a collapse signal only when two evidence lines on the same target share a dataset ancestor
+through a dependence role and the winning overlap is `full` on both sides.
+
+Committed output should align with existing aggregation inputs:
+
+- `independence = shared-source`;
+- `independence_group = dataset:<slug>`-derived stable group key;
+- `shared_dataset = dataset:<slug>` or the graph URI equivalent.
+
+The implementation may choose whether to materialize these as graph-only derived metadata or to expose
+them through the same `EvidenceUnit` fields read by `aggregate_belief`. It must not rewrite source
+frontmatter.
+
+Once committed metadata is visible to `aggregate_belief`, `CONFIG_VERSION` in
+`science_tool.graph.belief_weights` must be bumped because belief snapshots can change.
+
+### B2-D4 -- Candidate Dependence
+
+All weaker shared-dataset cases are candidates:
+
+- either side has `overlap: unknown`;
+- either side has `overlap: partial`;
+- the path is through a virtual gene-set member that is not promoted or explicitly connected enough to
+  prove direct dependence;
+- the shared role is only `validation_source`;
+- the shared fact is only `cited`.
+
+Candidates must be queryable and reportable, but they do not affect `aggregate_belief`. They should feed
+an expanded `suspect-circular` check so reviewers see likely double-counting before the model commits to
+collapse.
+
+Candidate records should include enough explanation for review:
+
+- target proposition,
+- evidence line A and B,
+- shared dataset,
+- reduced role/overlap on each side,
+- whether the reason is unknown overlap, partial overlap, virtual row path, validation, or citation only.
+
+---
+
+## 6. Interaction With Authored Metadata
+
+Authored independence fields remain valid. B2 adds derived signals; it does not remove the manual escape
+hatch.
+
+Conflict policy:
+
+- authored `independence: circular` remains stronger than derived shared-source;
+- authored `independence: shared-source` remains acceptable if the derived group agrees;
+- authored `independence: independent` plus committed derived full-overlap dependence is an ERROR-class
+  contradiction in validation;
+- authored `independence: independent` plus candidate dependence remains a WARN-class
+  `suspect-circular` result;
+- authored committed metadata may continue to drive aggregation even when B2 cannot derive the same
+  signal, but validation should report a review warning so stale hand-authored collapse can be audited.
+
+This policy preserves current projects while making derived graph evidence visible.
+
+---
+
+## 7. Graph Output
+
+B2 should materialize derived records in the provenance graph rather than inventing a separate file
+format. B2 introduces two derived record classes:
+
+- `sci:DatasetIndependenceCandidate` for review-only pairwise signals;
+- `sci:DatasetIndependenceCommitment` for full-overlap dependence that aggregation may consume.
+
+Both record types should be deterministic from their payloads so graph builds are stable. They should
+point at the two evidence lines, the shared dataset, the target proposition, and the usage records or
+reduced usage facts that justify the signal.
+
+The predicate surface should be explicit and small:
+
+```text
+record  rdf:type                    sci:DatasetIndependenceCandidate | sci:DatasetIndependenceCommitment
+record  sci:target                  proposition-uri
+record  sci:evidenceLine            evidence-line-uri
+record  sci:evidenceLine            evidence-line-uri
+record  sci:sharedDataset           dataset-uri-or-canonical-ref
+record  sci:independenceGroup       stable-derived-group
+record  sci:independenceReason      reason-token
+record  sci:derivedFromDatasetUsage usage-node
+```
+
+The two `sci:evidenceLine` triples form an unordered pair; deterministic record identity comes from the
+sorted evidence-line URIs, target, dataset, reason, and reduced usage payload. The committed record may
+also emit convenience triples equivalent to current aggregation metadata. Those triples are derived graph
+facts, not source rewrites.
+
+---
+
+## 8. Validate Check Changes
+
+B2 extends validation in two places:
+
+1. `independence.suspect-circular` should include graph-derived candidates in addition to authored
+   `shared_dataset` / `independence_group` coincidences.
+2. A new or extended check should report contradictions between authored independence and committed
+   derived dependence.
+
+Pinned severities:
+
+| Case | Severity |
+|---|---|
+| derived candidate between two authored-independent lines on same target | WARNING |
+| derived committed shared-source dependence but line is authored `independent` | ERROR |
+| authored shared-source/circular group cannot be supported by B2 but B2 has enough graph data to check | WARNING |
+| graph data unavailable or no usage path exists | no result |
+
+Validation should not require commons resources beyond what graph build already materialized. If graph
+data is absent, B2 checks should degrade cleanly with no result rather than re-parsing source files or
+emitting stale warnings.
+
+---
+
+## 9. Belief Aggregation Boundary
+
+B2 has one allowed path into scoring: committed derived metadata. Candidate metadata is excluded.
+
+The implementation should keep this boundary testable:
+
+- `aggregate_belief` with only candidate records produces the same result as before B2;
+- committed shared-source records collapse like authored `independence_group`;
+- authored circular records continue to exclude like they do before B2;
+- snapshot outputs carry the new belief config version only once committed derived metadata can affect
+  results.
+
+B2 should not change evidence strength, curation down-weight, source-class handling, or dispute
+semantics. Those belong to A and existing belief code.
+
+---
+
+## 10. Non-Goals
+
+B2 does not mechanically migrate `paper.datasets`; that is B-migration. It does not promote gene-set rows
+to first-class dataset entities; that is D2. It does not infer biological overlap between distinct
+datasets, perform cohort/sample-level matching, or resolve accession aliases. It only interprets shared
+canonical dataset refs already materialized by B1.
+
+---
+
+## 11. Acceptance Criteria
+
+The B2 implementation plan should cover:
+
+- pure tests for usage reduction and most-dependent-wins behavior;
+- graph tests deriving candidate and committed records from B1 usage nodes;
+- validation tests for candidate WARN and committed-vs-authored-independent ERROR;
+- aggregation tests proving candidates do not affect belief and committed full-overlap dependence does;
+- snapshot/version tests if `CONFIG_VERSION` changes;
+- regression tests showing `cited` alone does not collapse and `validation_source` does not become
+  dependence unless the same pair also has a dependence role.
