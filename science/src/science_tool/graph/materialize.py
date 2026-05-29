@@ -103,7 +103,7 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
         )
 
     _add_produced_by_edges(sources, entity_index=entity_index, knowledge=knowledge)
-    _add_dataset_usage_edges(sources, provenance=provenance)
+    _add_dataset_usage_edges(sources, resolver=resolver, provenance=provenance)
 
     kind_class = _classify_entities(sources)
     pre_registration_targets = _pre_registration_commitment_targets(
@@ -624,10 +624,22 @@ def _add_produced_by_edges(
             )
 
 
-def _add_dataset_usage_edges(sources: ProjectSources, *, provenance) -> None:
+def _add_dataset_usage_edges(sources: ProjectSources, *, resolver: ReferenceResolver, provenance) -> None:
     for entity in sources.entities:
-        for record in usage_records_for_entity(entity):
+        for record in usage_records_for_entity(
+            entity,
+            resolve_dataset_ref=lambda raw_ref: _resolve_dataset_usage_ref(raw_ref, resolver),
+        ):
             add_usage_record_to_graph(record, provenance)
+
+
+def _resolve_dataset_usage_ref(raw_ref: str, resolver: ReferenceResolver) -> str:
+    resolution = resolver.resolve(raw_ref)
+    if resolution.status != "resolved" or resolution.canonical_id is None:
+        raise ValueError(f"unresolved dataset usage reference: {raw_ref}")
+    if not resolution.canonical_id.startswith("dataset:"):
+        raise ValueError(f"dataset usage reference resolved to non-dataset entity: {raw_ref} -> {resolution.canonical_id}")
+    return resolution.canonical_id
 
 
 def _eligible_code_files(sources: ProjectSources) -> set[URIRef]:

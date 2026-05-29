@@ -6,7 +6,7 @@ import hashlib
 import json
 import unicodedata
 from dataclasses import dataclass
-from typing import Literal
+from typing import Callable, Literal
 
 from rdflib import Graph, Literal as RDFLiteral, URIRef
 from rdflib.namespace import RDF
@@ -46,13 +46,17 @@ class DatasetUsageRecord:
         }
 
 
-def usage_records_for_entity(entity: Entity) -> list[DatasetUsageRecord]:
+def usage_records_for_entity(
+    entity: Entity,
+    *,
+    resolve_dataset_ref: Callable[[str], str] | None = None,
+) -> list[DatasetUsageRecord]:
     records: list[DatasetUsageRecord] = []
     materialized_refs: set[str] = set()
     source_path = str(getattr(entity, "file_path", "") or "")
 
     for usage in getattr(entity, "dataset_usage", []) or []:
-        dataset_ref = str(usage.ref)
+        dataset_ref = _canonical_dataset_ref(str(usage.ref), resolve_dataset_ref)
         _reject_self_reference(entity, dataset_ref)
         materialized_refs.add(dataset_ref)
         records.append(
@@ -68,7 +72,7 @@ def usage_records_for_entity(entity: Entity) -> list[DatasetUsageRecord]:
 
     if entity.kind == "paper":
         for dataset_ref in getattr(entity, "datasets", []) or []:
-            dataset_ref = str(dataset_ref)
+            dataset_ref = _canonical_dataset_ref(str(dataset_ref), resolve_dataset_ref)
             if dataset_ref in materialized_refs:
                 continue
             materialized_refs.add(dataset_ref)
@@ -86,11 +90,12 @@ def usage_records_for_entity(entity: Entity) -> list[DatasetUsageRecord]:
     derivation = getattr(entity, "derivation", None)
     if entity.kind == "dataset" and isinstance(derivation, DerivationBlock):
         for dataset_ref in derivation.inputs:
+            dataset_ref = _canonical_dataset_ref(str(dataset_ref), resolve_dataset_ref)
             _reject_self_reference(entity, dataset_ref)
             records.append(
                 DatasetUsageRecord(
                     consumer_id=entity.canonical_id,
-                    dataset_ref=str(dataset_ref),
+                    dataset_ref=dataset_ref,
                     role="upstream",
                     overlap="unknown",
                     source="derivation.inputs",
@@ -99,6 +104,12 @@ def usage_records_for_entity(entity: Entity) -> list[DatasetUsageRecord]:
             )
 
     return records
+
+
+def _canonical_dataset_ref(raw_ref: str, resolve_dataset_ref: Callable[[str], str] | None) -> str:
+    if resolve_dataset_ref is None:
+        return raw_ref
+    return resolve_dataset_ref(raw_ref)
 
 
 def _reject_self_reference(entity: Entity, dataset_ref: str) -> None:

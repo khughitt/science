@@ -381,3 +381,152 @@ def test_materialize_graph_rejects_unresolved_derivation_inputs(tmp_path):
     assert "derivation.inputs" in message
     assert "dataset:gtex-v88" in message
     assert not (tmp_path / "knowledge" / "graph.trig").exists()
+
+
+def test_materialize_graph_canonicalizes_authored_usage_alias(tmp_path):
+    from science_tool.graph.materialize import materialize_graph
+
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path / "data" / "gtex" / "datapackage.yaml",
+        "gtex-v8",
+        "aliases: [dataset:gtex]\n"
+        "origin: external\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n",
+    )
+    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir.mkdir(parents=True)
+    (paper_dir / "Adams2025.md").write_text(
+        "---\n"
+        "id: paper:Adams2025\n"
+        "type: paper\n"
+        "title: Adams\n"
+        "status: active\n"
+        "created: '2026-05-29'\n"
+        "updated: '2026-05-29'\n"
+        "dataset_usage:\n"
+        "  - ref: dataset:gtex\n"
+        "    role: analyzed\n"
+        "    overlap: full\n"
+        'datasets: ["dataset:gtex-v8"]\n'
+        "---\n",
+        encoding="utf-8",
+    )
+
+    trig = materialize_graph(tmp_path)
+    graph = _load_trig(trig).graph(PROJECT_NS["graph/provenance"])
+    paper_uri = PROJECT_NS["paper/Adams2025".lower()]
+    paper_nodes = list(graph.objects(paper_uri, SCI_NS.hasDatasetUsage))
+
+    assert len(paper_nodes) == 1
+    assert (paper_nodes[0], SCI_NS.dataset, PROJECT_NS["dataset/gtex-v8"]) in graph
+    assert (paper_nodes[0], SCI_NS.dataset, PROJECT_NS["dataset/gtex"]) not in graph
+    assert (paper_nodes[0], SCI_NS.usageSource, Literal("authored")) in graph
+
+
+def test_materialize_graph_canonicalizes_legacy_paper_dataset_alias(tmp_path):
+    from science_tool.graph.materialize import materialize_graph
+
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path / "data" / "gtex" / "datapackage.yaml",
+        "gtex-v8",
+        "aliases: [dataset:gtex]\n"
+        "origin: external\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n",
+    )
+    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir.mkdir(parents=True)
+    (paper_dir / "Adams2025.md").write_text(
+        "---\n"
+        "id: paper:Adams2025\n"
+        "type: paper\n"
+        "title: Adams\n"
+        "status: active\n"
+        "created: '2026-05-29'\n"
+        "updated: '2026-05-29'\n"
+        'datasets: ["dataset:gtex"]\n'
+        "---\n",
+        encoding="utf-8",
+    )
+
+    trig = materialize_graph(tmp_path)
+    graph = _load_trig(trig).graph(PROJECT_NS["graph/provenance"])
+    paper_uri = PROJECT_NS["paper/Adams2025".lower()]
+    paper_nodes = list(graph.objects(paper_uri, SCI_NS.hasDatasetUsage))
+
+    assert len(paper_nodes) == 1
+    assert (paper_nodes[0], SCI_NS.dataset, PROJECT_NS["dataset/gtex-v8"]) in graph
+    assert (paper_nodes[0], SCI_NS.dataset, PROJECT_NS["dataset/gtex"]) not in graph
+    assert (paper_nodes[0], SCI_NS.usageSource, Literal("paper.datasets")) in graph
+
+
+def test_materialize_graph_canonicalizes_derivation_input_alias(tmp_path):
+    from science_tool.graph.materialize import materialize_graph
+
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path / "data" / "gtex" / "datapackage.yaml",
+        "gtex-v8",
+        "aliases: [dataset:gtex]\n"
+        "origin: external\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n",
+    )
+    _write_dataset(
+        tmp_path / "data" / "derived" / "datapackage.yaml",
+        "derived",
+        "source_class: derived\n"
+        "derived_kind: aggregate\n"
+        "origin: derived\n"
+        "derivation:\n"
+        "  workflow: workflow:w\n"
+        "  workflow_run: workflow-run:r\n"
+        "  git_commit: abc\n"
+        "  config_snapshot: cfg\n"
+        "  produced_at: '2026-05-29'\n"
+        "  inputs:\n"
+        "    - dataset:gtex\n",
+    )
+
+    trig = materialize_graph(tmp_path)
+    graph = _load_trig(trig).graph(PROJECT_NS["graph/provenance"])
+    derived_uri = PROJECT_NS["dataset/derived"]
+    derived_nodes = list(graph.objects(derived_uri, SCI_NS.hasDatasetUsage))
+
+    assert len(derived_nodes) == 1
+    assert (derived_nodes[0], SCI_NS.dataset, PROJECT_NS["dataset/gtex-v8"]) in graph
+    assert (derived_nodes[0], SCI_NS.dataset, PROJECT_NS["dataset/gtex"]) not in graph
+    assert (derived_nodes[0], SCI_NS.usageSource, Literal("derivation.inputs")) in graph
+
+
+def test_materialize_graph_rejects_dataset_self_reference_through_alias(tmp_path):
+    from science_tool.graph.materialize import materialize_graph
+
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path / "data" / "derived" / "datapackage.yaml",
+        "derived",
+        "aliases: [dataset:derived-alias]\n"
+        "source_class: derived\n"
+        "derived_kind: aggregate\n"
+        "origin: derived\n"
+        "derivation:\n"
+        "  workflow: workflow:w\n"
+        "  workflow_run: workflow-run:r\n"
+        "  git_commit: abc\n"
+        "  config_snapshot: cfg\n"
+        "  produced_at: '2026-05-29'\n"
+        "  inputs:\n"
+        "    - dataset:derived-alias\n",
+    )
+
+    with pytest.raises(ValueError, match="self-referential dataset usage"):
+        materialize_graph(tmp_path)
+
+    assert not (tmp_path / "knowledge" / "graph.trig").exists()
