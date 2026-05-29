@@ -21,6 +21,7 @@ from science_model.relations import relation_allows_kinds
 from science_tool.addressing import is_address, parse_address
 from science_tool.bibliography import is_bibliography_reference
 from science_tool.code.lifecycle import ORPHAN_GATING_EXEMPT_STATUSES
+from science_tool.graph.dataset_usage import add_usage_record_to_graph, usage_records_for_entity
 from science_tool.graph.freshness import (
     EntityFreshnessInfo,
     close_bears_on,
@@ -102,6 +103,7 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
         )
 
     _add_produced_by_edges(sources, entity_index=entity_index, knowledge=knowledge)
+    _add_dataset_usage_edges(sources, provenance=provenance)
 
     kind_class = _classify_entities(sources)
     pre_registration_targets = _pre_registration_commitment_targets(
@@ -620,6 +622,12 @@ def _add_produced_by_edges(
             knowledge.add(
                 (_entity_uri(entity.canonical_id), SCI_NS.producedBy, _entity_uri(target.canonical_id))
             )
+
+
+def _add_dataset_usage_edges(sources: ProjectSources, *, provenance) -> None:
+    for entity in sources.entities:
+        for record in usage_records_for_entity(entity):
+            add_usage_record_to_graph(record, provenance)
 
 
 def _eligible_code_files(sources: ProjectSources) -> set[URIRef]:

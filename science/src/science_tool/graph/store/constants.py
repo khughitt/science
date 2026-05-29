@@ -68,6 +68,11 @@ GRAPH_EXPORT_EDGE_METADATA_PREDICATES: frozenset[URIRef] = frozenset(
         SCI_NS.projectStatus,
         SCI_NS.scope,
         SCI_NS.sourceClass,
+        SCI_NS.hasDatasetUsage,
+        SCI_NS.dataset,
+        SCI_NS.usageRole,
+        SCI_NS.usageOverlap,
+        SCI_NS.usageSource,
         SCI_NS.confidence,
         SCI_NS.evidenceType,
         SCI_NS.evidenceStrength,
@@ -211,6 +216,31 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "predicate": "sci:sourceClass",
         "description": "Dataset epistemic source class (observational | derived | reference)",
         "layer": "graph/knowledge",
+    },
+    {
+        "predicate": "sci:hasDatasetUsage",
+        "description": "Links a consumer entity to a reified dataset usage record",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:dataset",
+        "description": "Dataset referenced by a reified dataset usage record",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:usageRole",
+        "description": "Role of a dataset in a reified usage record",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:usageOverlap",
+        "description": "Overlap of a dataset usage record: full, partial, or unknown",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:usageSource",
+        "description": "Projection source for a reified dataset usage record",
+        "layer": "graph/provenance",
     },
     {"predicate": "sci:confidence", "description": "Confidence score (0.0-1.0)", "layer": "graph/provenance"},
     {

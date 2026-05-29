@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from rdflib import Graph, Literal as RDFLiteral, URIRef
+from rdflib import Dataset, Graph, Literal, Literal as RDFLiteral, URIRef
 from rdflib.namespace import RDF
 from science_model.entities import Entity, EntityType, PaperEntity
 from science_model.packages.schema import AccessBlock, DatasetUsage, DerivationBlock
@@ -215,3 +215,95 @@ def test_usage_node_uri_is_deterministic_for_record_payload() -> None:
 
     assert usage_node_uri(record) == usage_node_uri(same_record)
     assert usage_node_uri(record) != usage_node_uri(changed_role)
+
+
+def _write_project(root):
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+
+
+def _write_dataset(path, slug, extra):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "profiles: [science-pkg-entity-1.0]\n"
+        f"id: dataset:{slug}\n"
+        "type: dataset\n"
+        f"title: {slug}\n"
+        "status: active\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n"
+        f"{extra}",
+        encoding="utf-8",
+    )
+
+
+def _load_trig(path):
+    ds = Dataset()
+    ds.parse(source=str(path), format="trig")
+    return ds
+
+
+def test_materialize_graph_emits_entity_usage_nodes(tmp_path):
+    from science_tool.graph.materialize import materialize_graph
+
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path / "data" / "gtex" / "datapackage.yaml",
+        "gtex-v8",
+        "origin: external\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n",
+    )
+    _write_dataset(
+        tmp_path / "data" / "derived" / "datapackage.yaml",
+        "derived",
+        "source_class: derived\n"
+        "derived_kind: aggregate\n"
+        "origin: derived\n"
+        "derivation:\n"
+        "  workflow: workflow:w\n"
+        "  workflow_run: workflow-run:r\n"
+        "  git_commit: abc\n"
+        "  config_snapshot: cfg\n"
+        "  produced_at: '2026-05-29'\n"
+        "  inputs:\n"
+        "    - dataset:gtex-v8\n",
+    )
+    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir.mkdir(parents=True)
+    (paper_dir / "Adams2025.md").write_text(
+        "---\n"
+        "id: paper:Adams2025\n"
+        "type: paper\n"
+        "title: Adams\n"
+        "status: active\n"
+        "created: '2026-05-29'\n"
+        "updated: '2026-05-29'\n"
+        "dataset_usage:\n"
+        "  - ref: dataset:gtex-v8\n"
+        "    role: analyzed\n"
+        "    overlap: full\n"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    trig = materialize_graph(tmp_path)
+    graph = _load_trig(trig).graph(PROJECT_NS["graph/provenance"])
+
+    paper_uri = PROJECT_NS["paper/Adams2025".lower()]
+    derived_uri = PROJECT_NS["dataset/derived"]
+    gtex_uri = PROJECT_NS["dataset/gtex-v8"]
+    paper_nodes = list(graph.objects(paper_uri, SCI_NS.hasDatasetUsage))
+    derived_nodes = list(graph.objects(derived_uri, SCI_NS.hasDatasetUsage))
+
+    assert len(paper_nodes) == 1
+    assert len(derived_nodes) == 1
+    assert (paper_nodes[0], RDF.type, SCI_NS.DatasetUsage) in graph
+    assert (paper_nodes[0], SCI_NS.dataset, gtex_uri) in graph
+    assert (paper_nodes[0], SCI_NS.usageRole, Literal("analyzed")) in graph
+    assert (paper_nodes[0], SCI_NS.usageOverlap, Literal("full")) in graph
+    assert (paper_nodes[0], SCI_NS.usageSource, Literal("authored")) in graph
+    assert (derived_nodes[0], SCI_NS.dataset, gtex_uri) in graph
+    assert (derived_nodes[0], SCI_NS.usageRole, Literal("upstream")) in graph
+    assert (derived_nodes[0], SCI_NS.usageOverlap, Literal("unknown")) in graph
