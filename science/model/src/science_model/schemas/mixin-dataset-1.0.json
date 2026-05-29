@@ -18,8 +18,7 @@
     "siblings": {"type": "array", "items": {"type": "string"}},
     "consumed_by": {"type": "array", "items": {"type": "string"}},
     "source_class": {"enum": ["observational", "derived", "reference"]},
-    "derived_kind": {"enum": ["aggregate", "transform", "model_output"]},
-    "dataset_usage": {"$ref": "#/$defs/dataset_usage"}
+    "derived_kind": {"enum": ["aggregate", "transform", "model_output"]}
   },
   "not": {"required": ["resources"]},
   "allOf": [
@@ -59,18 +58,6 @@
         "verified_by": {"type": "string"},
         "source_url": {"type": "string"},
         "credentials_required": {"type": "string"}
-      }
-    },
-    "dataset_usage": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["ref", "role"],
-        "properties": {
-          "ref": {"type": "string", "pattern": "^dataset:"},
-          "role": {"enum": ["analyzed", "set_definition_source", "validation_source", "cited", "upstream", "training"]},
-          "overlap": {"enum": ["full", "partial", "unknown"]}
-        }
       }
     },
     "derivation": {
