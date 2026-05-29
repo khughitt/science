@@ -2,7 +2,7 @@
 
 Date: 2026-05-29
 
-Status: design drafted; implementation plan next
+Status: implementation plan drafted; see `docs/plans/2026-05-29-b2-dataset-independence-plan.md`
 
 Related:
 - `docs/plans/2026-05-26-bio-dataset-influence-provenance-design.md` — Pillar B north star and B2 boundary
