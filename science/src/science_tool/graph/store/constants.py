@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from rdflib import Namespace, URIRef
-from rdflib.namespace import PROV, RDF, SKOS, XSD
+from rdflib.namespace import PROV, RDF, SKOS
 from science_model.profiles import CORE_PROFILE
 from science_model.profiles.schema import RelationKind
 
@@ -11,8 +11,8 @@ from science_tool.graph.io import (
     BIOLINK_NS,
     CITO_NS,
     DCTERMS_NS,
-    PROJECT_NS,
-    REVISION_URI,
+    PROJECT_NS as PROJECT_NS,
+    REVISION_URI as REVISION_URI,
     SCHEMA_NS,
     SCI_NS,
     SCIC_NS,
