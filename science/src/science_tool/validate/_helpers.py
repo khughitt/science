@@ -167,19 +167,34 @@ def entity_frontmatters(ctx: ValidateContext) -> list[dict[str, Any]]:
     """
     out: list[dict[str, Any]] = []
     seen_paths: set[str] = set()
-    adapters = (DatapackageAdapter(), MarkdownAdapter())
-    for adapter in adapters:
-        for ref in adapter.discover(ctx.project_root):
-            if ref.path in seen_paths:
-                continue
-            seen_paths.add(ref.path)
-            abs_path = ctx.project_root / ref.path
-            if not abs_path.is_file():
-                continue
-            fm = raw_frontmatter(abs_path)
-            kind = fm.get("kind") or fm.get("type")
-            if not isinstance(kind, str) or not kind:
-                continue
-            fm["_path"] = ref.path
-            out.append(fm)
+    paths = _entity_datapackage_paths(ctx.project_root)
+    paths.extend(ref.path for ref in MarkdownAdapter().discover(ctx.project_root))
+    for path in paths:
+        if path in seen_paths:
+            continue
+        seen_paths.add(path)
+        abs_path = ctx.project_root / path
+        if not abs_path.is_file():
+            continue
+        fm = raw_frontmatter(abs_path)
+        kind = fm.get("kind") or fm.get("type")
+        if not isinstance(kind, str) or not kind:
+            continue
+        fm["_path"] = path
+        out.append(fm)
     return out
+
+
+def _entity_datapackage_paths(project_root: Path) -> list[str]:
+    paths: list[str] = []
+    for rel in ("data", "results"):
+        root = project_root / rel
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("datapackage.yaml")):
+            fm = raw_frontmatter(path)
+            profiles = fm.get("profiles") or []
+            if "science-pkg-entity-1.0" not in profiles:
+                continue
+            paths.append(str(path.relative_to(project_root)))
+    return paths
