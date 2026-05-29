@@ -313,6 +313,27 @@ def test_check_dataset_influence_resolves_local_dataset_alias_ref(
     assert list(check_dataset_influence(_ctx(tmp_path))) == []
 
 
+def test_check_dataset_influence_dataset_usage_requires_raw_dataset_ref(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.validate.checks.dataset_influence import check_dataset_influence
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
+    _write_project(tmp_path)
+    _write_dataset_usage_paper(tmp_path, ref="gtex")
+    _write_dataset(
+        tmp_path,
+        "gtex-v8",
+        "aliases: [gtex]\n"
+        "origin: external\n"
+        "access: {level: public, verified: true}\n",
+    )
+
+    results = list(check_dataset_influence(_ctx(tmp_path)))
+
+    assert _rules(results) == [(Severity.ERROR, "dataset-influence.dataset-usage-malformed")]
+
+
 def test_check_dataset_influence_legacy_paper_datasets_alias_warns_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -385,6 +406,35 @@ def test_check_dataset_influence_derivation_input_alias_resolves(
     )
 
     assert list(check_dataset_influence(_ctx(tmp_path))) == []
+
+
+def test_check_dataset_influence_derivation_inputs_require_raw_dataset_refs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.validate.checks.dataset_influence import check_dataset_influence
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path,
+        "gtex-v8",
+        "aliases: [gtex]\n"
+        "origin: external\n"
+        "access: {level: public, verified: true}\n",
+    )
+    _write_dataset(
+        tmp_path,
+        "derived",
+        "origin: derived\n"
+        "derivation:\n"
+        "  kind: aggregate\n"
+        "  inputs:\n"
+        "    - gtex\n",
+    )
+
+    results = list(check_dataset_influence(_ctx(tmp_path)))
+
+    assert _rules(results) == [(Severity.ERROR, "dataset-influence.derivation-inputs-invalid")]
 
 
 def test_check_dataset_influence_geneset_row_alias_resolves(

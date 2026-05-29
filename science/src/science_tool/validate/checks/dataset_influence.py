@@ -30,11 +30,11 @@ def _result(severity: Severity, path: str | None, message: str, rule: str) -> Re
     return Result(severity, Path(path) if path else None, None, message, rule, None)
 
 
-def _usage_defect(entry: Any, canonicalize_dataset_ref: Callable[[str], str]) -> str | None:
+def _usage_defect(entry: Any) -> str | None:
     if not isinstance(entry, dict):
         return "entry is not an object"
     ref = entry.get("ref")
-    if not isinstance(ref, str) or not canonicalize_dataset_ref(ref).startswith("dataset:"):
+    if not isinstance(ref, str) or not ref.startswith("dataset:"):
         return "ref must be a 'dataset:' reference"
     if entry.get("role") not in _ROLES:
         return f"role must be one of {list(_ROLES)}"
@@ -44,9 +44,7 @@ def _usage_defect(entry: Any, canonicalize_dataset_ref: Callable[[str], str]) ->
     return None
 
 
-def _iter_usage_entries(
-    fm: dict[str, Any], canonicalize_dataset_ref: Callable[[str], str]
-) -> tuple[list[dict[str, Any]], str | None]:
+def _iter_usage_entries(fm: dict[str, Any]) -> tuple[list[dict[str, Any]], str | None]:
     usage = fm.get("dataset_usage")
     if usage is None:
         return [], None
@@ -54,11 +52,19 @@ def _iter_usage_entries(
         return [], f"dataset_usage must be a list, got {type(usage).__name__}"
     entries: list[dict[str, Any]] = []
     for index, entry in enumerate(usage):
-        defect = _usage_defect(entry, canonicalize_dataset_ref)
+        defect = _usage_defect(entry)
         if defect is not None:
             return [], f"dataset_usage[{index}] malformed -- {defect}"
         entries.append(entry)
     return entries, None
+
+
+def _derivation_input_defect(raw_ref: Any) -> str | None:
+    if not isinstance(raw_ref, str):
+        return "entry is not a string"
+    if not raw_ref.startswith("dataset:"):
+        return "entry must be a 'dataset:' reference"
+    return None
 
 
 def evaluate_dataset_influence(
@@ -73,7 +79,7 @@ def evaluate_dataset_influence(
         ident = str(fm.get("id") or "?")
         path = fm.get("_path")
         kind = fm.get("kind") or fm.get("type")
-        usage_entries, defect = _iter_usage_entries(fm, canonicalize_dataset_ref)
+        usage_entries, defect = _iter_usage_entries(fm)
         if defect is not None:
             yield _result(
                 Severity.ERROR,
@@ -99,8 +105,15 @@ def evaluate_dataset_influence(
         if kind == "dataset" and isinstance(derivation, dict):
             inputs = derivation.get("inputs")
             if isinstance(inputs, list):
-                for raw_ref in inputs:
-                    if not isinstance(raw_ref, str):
+                for index, raw_ref in enumerate(inputs):
+                    defect = _derivation_input_defect(raw_ref)
+                    if defect is not None:
+                        yield _result(
+                            Severity.ERROR,
+                            path,
+                            f"{ident}: derivation.inputs[{index}] invalid -- {defect}",
+                            "dataset-influence.derivation-inputs-invalid",
+                        )
                         continue
                     ref = canonicalize_dataset_ref(raw_ref)
                     if ref == ident:
@@ -261,8 +274,9 @@ def _collect_refs(
         usage = fm.get("dataset_usage")
         if isinstance(usage, list):
             for entry in usage:
-                if isinstance(entry, dict) and isinstance(entry.get("ref"), str):
-                    refs.add(canonicalize_dataset_ref(entry["ref"]))
+                raw_ref = entry.get("ref") if isinstance(entry, dict) else None
+                if isinstance(raw_ref, str) and raw_ref.startswith("dataset:"):
+                    refs.add(canonicalize_dataset_ref(raw_ref))
         datasets = fm.get("datasets")
         if isinstance(datasets, list):
             refs.update(
@@ -275,7 +289,9 @@ def _collect_refs(
             refs.update(
                 ref
                 for ref in (
-                    canonicalize_dataset_ref(raw_ref) for raw_ref in derivation["inputs"] if isinstance(raw_ref, str)
+                    canonicalize_dataset_ref(raw_ref)
+                    for raw_ref in derivation["inputs"]
+                    if isinstance(raw_ref, str) and raw_ref.startswith("dataset:")
                 )
                 if ref.startswith("dataset:")
             )
