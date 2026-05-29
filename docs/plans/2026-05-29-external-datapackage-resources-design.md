@@ -16,7 +16,8 @@ the digest by streaming" to "content-addressed, the digest is build-stamped and
 the bytes may live anywhere," with `(hash, bytes)` as the canonical identity
 that ties every source and verification boundary together.
 
-**Tech stack:** Python 3.13, the existing `science_tool.commons` promote /
+**Tech stack:** Python 3.11+ (the existing project runtime — `requires-python
+>=3.11`, pyright `pythonVersion = 3.11`); the existing `science_tool.commons` promote /
 datapackage layer, frictionless-style datapackage descriptors, pytest.
 
 ---
@@ -138,9 +139,14 @@ per-resource verdict (it never silently skips):
 | `local` ref token unexpandable (env unset) | — | `skipped (off-host)` — reported, non-fatal |
 | remote `type` (zenodo/github/url/daemon) | — | `skipped (no fetcher this iteration)` — reported, non-fatal |
 
-`--verify-digests` exits non-zero if any resource is a hard error; the summary
-lists verified / skipped / failed so nothing is silently dropped. Co-located
-resources are always streamed regardless of the flag (unchanged).
+A hard error (digest drift, or a resolvable-but-missing ref) raises and aborts
+the promote, so "failed" verdicts surface as the raised exception rather than
+the summary. The remaining verdicts — `verified` and the two `skipped` kinds —
+**must** be carried back to the CLI so the skips are visible; that is what makes
+"never silently skips" implementable (see the result-object change below). The
+CLI prints a per-resource `verified / skipped(off-host) / skipped(remote)`
+summary. Co-located resources are always streamed regardless of the flag
+(unchanged).
 
 The rendered canonical `datapackage.yaml` carries `path + hash + bytes + source`
 for sourced resources (co-located resources render `path + hash + bytes` as
@@ -157,11 +163,17 @@ descriptor-shape checks, not byte checks):
   and non-normalized forms. For sourced resources `path` is a logical package
   name, so this is the only structural guard on it (the old parent-escape /
   `is_file` filesystem check does not apply to sourced resources).
-- A sourced resource missing `hash` or `bytes` → hard error (cannot trust an
-  unstamped, possibly-remote resource).
+- A sourced resource with a missing **or invalid** `hash`/`bytes` → hard error
+  (cannot trust an unstamped or malformed resource — default promote copies these
+  fields verbatim into the rendered yaml). `hash` must pass the existing
+  `parse_resource_hash` (`sha256:<64 hex>`); `bytes` must be an `int`, **not** a
+  `bool`, and `>= 0`. This is the same check `parse_canonical_datapackage_yaml`
+  already applies on the commons read side, hoisted to the project-side promote
+  input.
 - `source.type` outside the enum → hard error.
 - A source `ref` that is malformed → hard error: empty/whitespace, a
-  syntactically-broken `${...}` token, or (for `local`) a plain *relative* path.
+  syntactically-broken `${...}` token, **any token other than `${OUTPUT_ROOT}`**,
+  or (for `local`) a plain *relative* path.
   Allowed `local.ref`: `${OUTPUT_ROOT}`-prefixed or absolute.
 - A co-located resource (no `source`) still hits the existing parent-escape /
   `is_file` checks unchanged, and is always streamed.
@@ -185,7 +197,7 @@ vs. actual `(hash, bytes)`.
   # one frozen result type — no Path | None ambiguity
   class RefResolution: ...                       # sealed/Union of the two below
   @dataclass(frozen=True)
-  class Unexpandable(RefResolution): ...          # token needs an env var that is unset, or a remote type
+  class Unexpandable(RefResolution): ...          # ${OUTPUT_ROOT} but OUTPUT_ROOT env unset, or a remote type
   @dataclass(frozen=True)
   class Resolved(RefResolution):
       path: Path
@@ -194,16 +206,45 @@ vs. actual `(hash, bytes)`.
   def resolve_local_ref(ref: str) -> RefResolution: ...
   ```
 
-  It raises only on *malformed* `ref` (caught earlier by validation anyway);
-  otherwise returns `Unexpandable` (env unset) or `Resolved(path, exists)`. This
-  lets promote tell "off-host skip" from "resolved-but-missing error" without a
-  `None` overload. `local` is the only resolvable type; a registry maps `type` →
-  resolver, remote types → a record-only resolver (always `Unexpandable`).
+  **Only `${OUTPUT_ROOT}` is a valid token this iteration** (expanded from the
+  `OUTPUT_ROOT` env var); any other `${VAR}` is *malformed* and rejected at
+  validation time. `resolve_local_ref` raises only on malformed `ref` (already
+  caught by validation); otherwise returns `Unexpandable` (the `${OUTPUT_ROOT}`
+  token present but `OUTPUT_ROOT` unset) or `Resolved(path, exists)` (an absolute
+  ref, or a token expanded against a set `OUTPUT_ROOT`). This lets promote tell
+  "off-host skip" from "resolved-but-missing error" without a `None` overload.
+  `local` is the only resolvable type; a registry maps `type` → resolver, remote
+  types → a record-only resolver (always `Unexpandable`).
 - **`promote.py`** — make `_dataset_per_resource` + the shared resource-path
   validation source-aware (default trust; co-located stream unchanged); add
   `PromoteResourceDigestMismatchError`; run `validate_logical_path` on every
-  resource `path`. **Thread the opt-in flag through the existing API** rather than
-  reading global state:
+  resource `path`.
+
+  **Result channel for verify verdicts.** `_dataset_per_resource` no longer
+  returns a bare `dict[str, tuple[str, int]]`; it returns a small frozen result so
+  non-fatal skips can reach the CLI:
+
+  ```python
+  @dataclass(frozen=True)
+  class ResourceVerification:
+      name: str
+      status: Literal["verified", "skipped_off_host", "skipped_remote"]
+      detail: str                       # e.g. the unexpanded ref / remote type
+  @dataclass(frozen=True)
+  class PerResourceResult:
+      per_resource: dict[str, tuple[str, int]]      # unchanged payload for rendering
+      verifications: list[ResourceVerification]     # empty unless --verify-digests
+  ```
+
+  Callers read `.per_resource` exactly where they used the old dict (rendering is
+  untouched). `plan_promote` aggregates `.verifications` across datasets onto the
+  returned `PromotePlan` (alongside the existing `dataset_audit_extras` channel),
+  and `_promote_kind_cmd` prints the per-resource summary. Hard-error verdicts
+  (drift / resolvable-but-missing) raise from inside `_dataset_per_resource` and
+  never reach the list.
+
+  **Thread the opt-in flag through the existing API** rather than reading global
+  state:
   - CLI: add `--verify-digests` to the `promote dataset` command (`cli.py`), pass
     `verify_digests=` into `_promote_kind_cmd` (cli.py:620), which forwards it to
     `plan_promote(..., verify_digests=...)`.
@@ -262,11 +303,17 @@ Unit tests in `~/d/science/science/tests/`:
 - `--verify-digests`: passes when a local-resolvable `source.ref` matches; raises
   `PromoteResourceDigestMismatchError` on drift; **hard-errors** when the ref
   resolves but the file is missing; **reports a non-fatal skip** when the token is
-  unexpandable (env unset) and when the type is remote.
-- validation: sourced resource missing `hash`/`bytes` rejected; bad `source.type`
-  rejected; empty / relative / malformed-token `local.ref` rejected; a `path`
-  failing `validate_logical_path` (absolute, `..`, backslash) rejected for both
-  co-located and sourced resources.
+  unexpandable (`OUTPUT_ROOT` unset) and when the type is remote.
+- the verify verdicts reach the caller: `_dataset_per_resource` returns a
+  `PerResourceResult` whose `verifications` list is empty without the flag and,
+  with it, carries one `ResourceVerification` per sourced resource with the right
+  `status` (verified / skipped_off_host / skipped_remote); `plan_promote` surfaces
+  them on the plan so the CLI summary cannot silently drop a skip.
+- validation: sourced resource with missing **or invalid** `hash` (not
+  `sha256:<64hex>`) / `bytes` (non-int, `bool`, or negative) rejected; bad
+  `source.type` rejected; empty / relative / non-`${OUTPUT_ROOT}` / malformed-token
+  `local.ref` rejected; a `path` failing `validate_logical_path` (absolute, `..`,
+  backslash) rejected for both co-located and sourced resources.
 - `inventory.py`: a sourced resource's `source` survives into the inventory
   serialization (not dropped).
 - regression: a co-located resource (no `source`) promotes exactly as before
