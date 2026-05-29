@@ -230,8 +230,8 @@ The immediate B1 graph question is: "which consumers declare use of dataset X?" 
 `sci:DatasetUsage` nodes. The broader influence query — dataset → consumers → propositions they bear on —
 uses the existing `bears_on` / provenance closure and can be built on top of the same nodes.
 
-`consumed_by` becomes a derived cache/index target, not authored truth. B1 may validate authored
-`consumed_by` as legacy/stale, but graph queries should use usage nodes.
+`consumed_by` becomes a derived cache/index target, not authored truth. B1 graph queries use usage
+nodes; validation of authored `consumed_by` as legacy/stale is deferred outside B1.
 
 ---
 
@@ -251,7 +251,6 @@ The B1 check covers these cases with pinned severities:
 | legacy `paper.datasets` without equivalent `dataset_usage` | WARNING | accepted during transition, but authors should migrate |
 | unresolved ref when commons/local registry needed to check it is unavailable | INFO | tolerant fresh-checkout behavior |
 | unresolved ref when local/commons discovery is available and the dataset is absent | WARNING | likely authoring gap without crashing validation |
-| authored `consumed_by` stale against derived reverse index | INFO | cache-like field is not graph truth |
 | D1 row-level `dataset_usage.ref` unresolved while members resource is available | WARNING or INFO by the same ref-resolution rule above | row usage is parsed by D1, resolved by B1 |
 
 D1 row-level `dataset_usage` shape remains checked by `genesets`; B1 reuses the D1 parser for projection
@@ -261,9 +260,9 @@ The self-reference rule applies only where the consumer itself is a dataset id, 
 authored `dataset_usage` or its `derivation.inputs`. Paper consumers and virtual gene-set member consumers
 cannot equal a `dataset:` ref and therefore cannot trigger this rule.
 
-The optional `consumed_by` staleness check is a different cost class from per-record shape/reference
-checks: it requires building the reverse usage index and comparing authored backlinks to the derived view.
-It did not land in B1 and is explicitly deferred outside B1 as future optional work.
+The optional future `consumed_by` staleness check is a different cost class from the B1 per-record
+shape/reference checks: it requires building the reverse usage index and comparing authored backlinks to
+the derived view. It did not land in B1 and is explicitly deferred outside B1 as future optional work.
 
 ---
 
