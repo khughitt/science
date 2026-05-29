@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from science_tool.validate.checks.genesets import check_genesets
@@ -16,6 +17,11 @@ _VALID_GENE_META = {
     "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.gene_crosswalk/1.0",
     "member_key_column": "gene_key",
 }
+_MANIFEST = (
+    "name: demo\ncreated: 2026-01-01\nlast_modified: 2026-01-02\nstatus: active\n"
+    "summary: demo\nprofile: research\nlayout_version: 1\n"
+    "knowledge_profiles:\n  local: knowledge/local\n"
+)
 
 
 def _geneset(**extra: object) -> dict[str, object]:
@@ -52,10 +58,11 @@ def _ctx(root: Path) -> ValidateContext:
 
 
 def _write_project(root: Path) -> None:
-    (root / "science.yaml").write_text("profile: research\n", encoding="utf-8")
+    (root / "science.yaml").write_text(_MANIFEST, encoding="utf-8")
+    (root / "knowledge" / "local").mkdir(parents=True)
 
 
-def _write_geneset_datapackage(root: Path, *, resource_path: str) -> Path:
+def _write_geneset_datapackage(root: Path, *, resource_path: str, n_sets: int = 1) -> Path:
     dp_dir = root / "data" / "reactome"
     dp_dir.mkdir(parents=True)
     dp_dir.joinpath("datapackage.yaml").write_text(
@@ -65,11 +72,15 @@ def _write_geneset_datapackage(root: Path, *, resource_path: str) -> Path:
                 "id": "dataset:reactome-v89",
                 "type": "dataset",
                 "title": "Reactome v89",
+                "status": "active",
+                "origin": "external",
+                "tier": "use-now",
                 "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.geneset/1.0",
                 "source_class": "reference",
+                "access": {"level": "public", "verified": True},
                 "member_key_column": "set_key",
                 "members_resource": "sets",
-                "n_sets": 1,
+                "n_sets": n_sets,
                 "set_size_summary": {"min": 2, "median": 2, "max": 2},
                 "identifier_space": {
                     "tier": "gene",
@@ -83,6 +94,85 @@ def _write_geneset_datapackage(root: Path, *, resource_path: str) -> Path:
         encoding="utf-8",
     )
     return dp_dir
+
+
+def _write_geneset_dataset(root: Path, *, rows: str, n_sets: int = 1) -> None:
+    dp_dir = _write_geneset_datapackage(root, resource_path="sets.csv", n_sets=n_sets)
+    dp_dir.joinpath("sets.csv").write_text(rows, encoding="utf-8")
+
+
+def _write_gene_crosswalk_dataset(root: Path) -> None:
+    dp_dir = root / "data" / "gene-crosswalk"
+    dp_dir.mkdir(parents=True)
+    dp_dir.joinpath("datapackage.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "profiles": ["science-pkg-entity-1.0"],
+                "id": _GENE_REGISTRY,
+                "type": "dataset",
+                "title": "HGNC crosswalk",
+                "status": "active",
+                "origin": "external",
+                "tier": "use-now",
+                "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.gene_crosswalk/1.0",
+                "source_class": "reference",
+                "access": {"level": "public", "verified": True},
+                "member_key_column": "gene_key",
+                "resources": [{"name": "crosswalk", "path": "crosswalk.csv"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_gene_crosswalk_commons(root: Path) -> Path:
+    commons = root / "commons"
+    dataset_dir = commons / "datasets" / "gene-crosswalk-hgnc"
+    dataset_dir.mkdir(parents=True)
+    dataset_dir.joinpath("entity.md").write_text(
+        """\
+---
+schema_profile: "science-entity-base/1.0+dataset/1.0+bio.gene_crosswalk/1.0"
+id: "dataset:gene-crosswalk-hgnc"
+type: "dataset"
+title: "HGNC crosswalk"
+version: "1.0.0"
+status: "active"
+created: "2026-05-28"
+updated: "2026-05-28"
+datapackage: "datapackage.yaml"
+origin: "external"
+tier: "use-now"
+source_class: "reference"
+access:
+  level: "public"
+  verified: true
+member_key_column: "gene_key"
+---
+
+# HGNC crosswalk
+""",
+        encoding="utf-8",
+    )
+    dataset_dir.joinpath("datapackage.yaml").write_text(
+        """\
+name: gene-crosswalk-hgnc
+profile: "data-package"
+resources:
+  - name: crosswalk
+    path: crosswalk.csv
+    hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    bytes: 0
+""",
+        encoding="utf-8",
+    )
+    return commons
+
+
+def _empty_commons(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    commons = root / "empty-commons"
+    commons.mkdir()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
 
 
 def test_valid_geneset_collection_passes_silently() -> None:
@@ -191,3 +281,60 @@ def test_check_genesets_reports_malformed_member_resource_bytes(tmp_path: Path) 
 
     assert _rules(results) == ["geneset.members-resource-malformed"]
     assert results[0].severity is Severity.ERROR
+
+
+def test_check_genesets_reads_local_members_resource(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_project(tmp_path)
+    _empty_commons(tmp_path, monkeypatch)
+    _write_gene_crosswalk_dataset(tmp_path)
+    _write_geneset_dataset(
+        tmp_path,
+        rows="set_key,name,member_ids,dataset_usage,source_pmids\n"
+        'R-HSA-1,Cell cycle,HGNC:1;HGNC:2,"[{""ref"":""dataset:study-a"",""role"":""set_definition_source""}]",12345\n',
+    )
+
+    results = list(check_genesets(_ctx(tmp_path)))
+
+    assert results == []
+
+
+def test_check_genesets_resolves_identifier_registry_from_commons(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_project(tmp_path)
+    commons = _write_gene_crosswalk_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
+    _write_geneset_dataset(
+        tmp_path,
+        rows="set_key,name,member_ids,dataset_usage,source_pmids\n"
+        'R-HSA-1,Cell cycle,HGNC:1;HGNC:2,"[{""ref"":""dataset:study-a"",""role"":""training""}]",12345\n',
+    )
+
+    results = list(check_genesets(_ctx(tmp_path)))
+
+    assert results == []
+
+
+def test_check_genesets_reports_malformed_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_project(tmp_path)
+    _empty_commons(tmp_path, monkeypatch)
+    _write_gene_crosswalk_dataset(tmp_path)
+    _write_geneset_dataset(tmp_path, rows="set_key,name,member_ids\nR-HSA-1,Cell cycle,\n")
+
+    results = list(check_genesets(_ctx(tmp_path)))
+
+    assert _rules(results) == ["geneset.members-resource-malformed"]
+    assert results[0].severity is Severity.ERROR
+
+
+def test_check_genesets_unbuilt_members_resource_infos(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_project(tmp_path)
+    _empty_commons(tmp_path, monkeypatch)
+    _write_gene_crosswalk_dataset(tmp_path)
+    _write_geneset_dataset(tmp_path, rows="set_key,name,member_ids\nR-HSA-1,Cell cycle,HGNC:1;HGNC:2\n")
+    tmp_path.joinpath("data", "reactome", "sets.csv").unlink()
+
+    results = list(check_genesets(_ctx(tmp_path)))
+
+    assert _rules(results) == ["geneset.members-resource-unavailable"]
+    assert results[0].severity is Severity.INFO
