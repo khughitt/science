@@ -101,7 +101,16 @@ def test_validate_source_accepts_url():
     assert src.type == "url"
 
 
-@pytest.mark.parametrize("ref", ["ftp://example.org/x", "example.org/x", ""])
+@pytest.mark.parametrize(
+    "ref",
+    [
+        "ftp://example.org/x",  # wrong scheme
+        "example.org/x",        # no scheme
+        "",                     # empty
+        "https://",             # scheme but no host
+        "https:///x.h5ad",      # scheme + path but empty host
+    ],
+)
 def test_validate_source_rejects_bad_url(ref):
     with pytest.raises(ValueError):
         validate_source({"type": "url", "ref": ref})
@@ -143,7 +152,7 @@ Expected: FAIL — `ImportError: cannot import name 'ResourceSource'`.
 
 - [ ] **Step 3: Implement `ResourceSource` + `validate_source`**
 
-In `science/src/science_tool/commons/datapackage.py`, add near the top-level constants (after line 25, the `_RESOURCE_COMPUTED_KEYS` definition):
+In `science/src/science_tool/commons/datapackage.py`, first add `import urllib.parse` to the imports at the top (next to `import re`, line 10). Then add near the top-level constants (after line 25, the `_RESOURCE_COMPUTED_KEYS` definition):
 
 ```python
 SOURCE_TYPES = frozenset({"local", "zenodo", "github", "url", "daemon"})
@@ -190,8 +199,11 @@ def validate_source(raw: object) -> ResourceSource:
     if type_ == "local":
         _validate_local_ref_shape(ref)
     elif type_ == "url":
-        if not (ref.startswith("http://") or ref.startswith("https://")):
-            raise ValueError(f"url source.ref must be an http(s) URL, got {ref!r}")
+        parsed = urllib.parse.urlparse(ref)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError(
+                f"url source.ref must be an absolute http(s) URL with a host, got {ref!r}"
+            )
     # zenodo / github / daemon: opaque non-empty string (already checked).
     return ResourceSource(type=type_, ref=ref)
 
@@ -693,16 +705,17 @@ from pathlib import Path
 VALID_HASH = "sha256:" + "a" * 64
 
 
-def _candidate(tmp_path, resources):
+def _candidate(tmp_path, resources, project_slug="mm"):
     """Build a minimal dataset PromoteCandidate with the given resources list."""
     from science_tool.commons.promote import PromoteCandidate
 
+    tmp_path.mkdir(parents=True, exist_ok=True)
     dp_path = tmp_path / "datapackage.json"
     dp_path.write_text("{}", encoding="utf-8")  # bytes unused; doc passed directly
     return PromoteCandidate(
         slug="walker",
         slug_normalized="walker",
-        project_slug="mm",
+        project_slug=project_slug,
         project_root=tmp_path,
         overlay_source_path=tmp_path / "doc" / "data-walker.md",
         canonical_fields={},
@@ -867,8 +880,13 @@ Add the result types near `PromotePlan` (after line 435):
 ```python
 @dataclass(frozen=True, slots=True)
 class ResourceVerification:
-    """One sourced resource's --verify-digests verdict (non-fatal outcomes only)."""
+    """One sourced resource's --verify-digests verdict (non-fatal outcomes only).
 
+    `project_slug` disambiguates the same resource `name` appearing in more than
+    one project of a multi-project dataset group.
+    """
+
+    project_slug: str
     name: str
     status: Literal["verified", "skipped_off_host", "skipped_remote"]
     detail: str
@@ -963,7 +981,9 @@ def _dataset_per_resource(
         per_resource[name] = stamped
         if verify_digests:
             verifications.append(
-                _verify_sourced_resource(name, source, stamped, candidate.slug)
+                _verify_sourced_resource(
+                    candidate.project_slug, name, source, stamped, candidate.slug
+                )
             )
 
     return PerResourceResult(
@@ -1002,6 +1022,7 @@ def _stamped_metadata(
 
 
 def _verify_sourced_resource(
+    project_slug: str,
     name: str,
     source: "ResourceSource",
     stamped: tuple[str, int],
@@ -1013,6 +1034,7 @@ def _verify_sourced_resource(
     """
     if source.type != "local":
         return ResourceVerification(
+            project_slug=project_slug,
             name=name,
             status="skipped_remote",
             detail=f"{source.type}: no fetcher this iteration",
@@ -1026,7 +1048,10 @@ def _verify_sourced_resource(
         ) from exc
     if isinstance(resolution, Unexpandable):
         return ResourceVerification(
-            name=name, status="skipped_off_host", detail=resolution.ref
+            project_slug=project_slug,
+            name=name,
+            status="skipped_off_host",
+            detail=resolution.ref,
         )
     assert isinstance(resolution, Resolved)
     if not resolution.exists:
@@ -1046,7 +1071,10 @@ def _verify_sourced_resource(
             path=resolution.path,
         )
     return ResourceVerification(
-        name=name, status="verified", detail=f"{actual[0]} ({actual[1]} bytes)"
+        project_slug=project_slug,
+        name=name,
+        status="verified",
+        detail=f"{actual[0]} ({actual[1]} bytes)",
     )
 ```
 
@@ -1198,34 +1226,42 @@ git commit -m "feat(commons): skip co-located file check for sourced resources a
 - Modify: `science/src/science_tool/commons/promote.py`
 - Test: `science/tests/test_commons_promote_source.py` (extend)
 
-`plan_promote` gains a keyword-only `verify_digests: bool = False`, forwards it to `_dataset_per_resource` (primary) and `_validate_dataset_group_datapackages` (group members), and aggregates the primary's `verifications` onto a new `PromotePlan.resource_verifications` channel keyed by canonical slug. Default `False` everywhere keeps every existing caller and test untouched.
+`plan_promote` gains a keyword-only `verify_digests: bool = False`, forwards it to `_dataset_per_resource` (primary) and `_validate_dataset_group_datapackages` (group members). It aggregates **both** the primary's `verifications` **and** the group members' verifications (returned by the group validator) onto a new `PromotePlan.resource_verifications` channel keyed by canonical slug — otherwise a non-primary project's off-host/remote skip would be silently discarded, breaking the "never silently skips" contract for multi-project dataset groups. Each `ResourceVerification` carries its `project_slug`, so the same resource `name` across projects stays distinguishable. Default `False` everywhere keeps every existing caller and test untouched.
 
 - [ ] **Step 1: Write the failing test**
 
-This test drives the full discover → plan path using a synthetic project whose datapackage declares a sourced resource. Append to `science/tests/test_commons_promote_source.py`:
+This test drives the full discover → plan path using a synthetic project whose datapackage declares a sourced resource. The project/commons scaffolding is reused by Task 8's CLI test and Task 10's end-to-end test, so put it in a shared, importable (non-test) helper module rather than inline.
+
+First create `science/tests/promote_source_fixtures.py`:
 
 ```python
+"""Shared fixtures for source-aware promote tests (Tasks 7, 8, 10)."""
+from __future__ import annotations
+
+import json
 import shutil
 import subprocess
-import textwrap
-
-import yaml as pyyaml
+from pathlib import Path
 
 
-def _init_repo(root: Path) -> None:
+def init_repo(root: Path) -> None:
     subprocess.run(["git", "init", "-q", str(root)], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(root), "config", "user.email", "t@x"], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(root), "config", "user.name", "t"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(root), "config", "user.email", "t@x"],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(root), "config", "user.name", "t"],
+        check=True, capture_output=True,
+    )
 
 
-def _sourced_project(tmp_path, ref):
+def sourced_project(tmp_path: Path, ref: str) -> Path:
     """A copy of the proj-dataset fixture with r1 turned into a sourced resource."""
     src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
     proj = tmp_path / "proj-dataset"
     shutil.copytree(src, proj)
     dp_path = proj / "data" / "fixture-ds" / "datapackage.json"
-    import json
-
     dp = json.loads(dp_path.read_text())
     dp["resources"][0] = {
         "name": "r1",
@@ -1239,10 +1275,29 @@ def _sourced_project(tmp_path, ref):
     dp_path.write_text(json.dumps(dp), encoding="utf-8")
     # r2 stays co-located; delete r1.txt so only the sourced one is off-repo.
     (proj / "data" / "fixture-ds" / "r1.txt").unlink()
-    _init_repo(proj)
+    init_repo(proj)
     subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
     subprocess.run(["git", "-C", str(proj), "commit", "-q", "-m", "init"], check=True)
     return proj
+
+
+def init_commons(tmp_path: Path) -> Path:
+    """A minimal initialized commons store with the empty layout dirs."""
+    commons = tmp_path / "commons"
+    commons.mkdir()
+    init_repo(commons)
+    (commons / "datasets").mkdir()
+    (commons / ".migrations").mkdir()
+    (commons / ".gitkeep").write_text("", encoding="utf-8")
+    subprocess.run(["git", "-C", str(commons), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(commons), "commit", "-q", "-m", "init"], check=True)
+    return commons
+```
+
+Then append the plan-level tests to `science/tests/test_commons_promote_source.py` (note the import of the shared helpers and `init_repo`/`sourced_project`/`init_commons` are now the canonical names):
+
+```python
+from promote_source_fixtures import init_commons, init_repo, sourced_project
 
 
 def test_plan_promote_aggregates_skip_verdict(tmp_path, monkeypatch):
@@ -1252,11 +1307,8 @@ def test_plan_promote_aggregates_skip_verdict(tmp_path, monkeypatch):
         plan_promote,
     )
 
-    proj = _sourced_project(tmp_path, "${OUTPUT_ROOT}/scrna/x.h5ad")
-    commons = tmp_path / "commons"
-    commons.mkdir()
-    _init_repo(commons)
-    (commons / "datasets").mkdir()
+    proj = sourced_project(tmp_path, "${OUTPUT_ROOT}/scrna/x.h5ad")
+    commons = init_commons(tmp_path)
 
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.delenv("SCIENCE_CONFIG_DIR", raising=False)
@@ -1282,11 +1334,8 @@ def test_plan_promote_no_verify_has_empty_verifications(tmp_path, monkeypatch):
         plan_promote,
     )
 
-    proj = _sourced_project(tmp_path, "${OUTPUT_ROOT}/scrna/x.h5ad")
-    commons = tmp_path / "commons"
-    commons.mkdir()
-    _init_repo(commons)
-    (commons / "datasets").mkdir()
+    proj = sourced_project(tmp_path, "${OUTPUT_ROOT}/scrna/x.h5ad")
+    commons = init_commons(tmp_path)
 
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.delenv("SCIENCE_CONFIG_DIR", raising=False)
@@ -1298,8 +1347,36 @@ def test_plan_promote_no_verify_has_empty_verifications(tmp_path, monkeypatch):
     discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
     plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
     assert plan.resource_verifications.get("fixture-ds", ()) == ()
+
+
+def test_group_validator_returns_non_primary_verdicts(tmp_path, monkeypatch):
+    """A non-primary project's skip verdict is returned, not silently discarded.
+
+    Drives `_validate_dataset_group_datapackages` directly with two candidates
+    that share identical stamped (hash, bytes) — passing divergence — both
+    sourced and off-host (OUTPUT_ROOT unset). Both projects' skips must surface,
+    distinguished by project_slug.
+    """
+    from science_tool.commons import promote
+
+    monkeypatch.delenv("OUTPUT_ROOT", raising=False)
+    primary = _candidate(tmp_path / "a", [_sourced()], project_slug="proj-a")
+    secondary = _candidate(tmp_path / "b", [_sourced()], project_slug="proj-b")
+
+    primary_result = promote._dataset_per_resource(primary, verify_digests=True)
+    verifications = promote._validate_dataset_group_datapackages(
+        canonical_slug="walker",
+        primary=primary,
+        candidates=[primary, secondary],
+        primary_per_resource=primary_result.per_resource,
+        verify_digests=True,
+    )
+    # The group validator returns only the NON-primary candidates' verdicts.
+    assert [v.project_slug for v in verifications] == ["proj-b"]
+    assert verifications[0].status == "skipped_off_host"
 ```
 
+(`_candidate` takes the project root as its first arg and `mkdir`s it; pass distinct subdirs `tmp_path / "a"` and `tmp_path / "b"` and distinct `project_slug` values so the two candidates have separate datapackage paths and distinguishable verdicts.)
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_commons_promote_source.py -k plan_promote -q`
@@ -1345,7 +1422,7 @@ Add the accumulator next to `dataset_audit_extras` (~line 630):
     dataset_resource_verifications: dict[str, tuple[ResourceVerification, ...]] = {}
 ```
 
-Update the primary call site (the lines just edited in Task 5, ~line 725):
+Update the primary call site (the lines just edited in Task 5, ~line 725). Collect the primary's verdicts AND the group members' verdicts (returned by the group validator) so no project's skip is dropped:
 
 ```python
             dataset_primary = _primary_candidate_for_plan(classified, from_order)
@@ -1353,22 +1430,26 @@ Update the primary call site (the lines just edited in Task 5, ~line 725):
                 dataset_primary, verify_digests=verify_digests
             )
             dataset_primary_per_resource = _primary_result.per_resource
-            if _primary_result.verifications:
-                dataset_resource_verifications[canonical_case] = (
-                    _primary_result.verifications
-                )
+            _group_verifications: tuple[ResourceVerification, ...] = ()
 ```
 
-Pass `verify_digests` into the group validator (~line 734):
+(the existing `datapackage_doc is None` guard stays as-is between this and the group-validator call)
+
+Pass `verify_digests` into the group validator and capture its returned verdicts (~line 734):
 
 ```python
-            _validate_dataset_group_datapackages(
+            _group_verifications = _validate_dataset_group_datapackages(
                 canonical_slug=canonical_case,
                 primary=dataset_primary,
                 candidates=classified,
                 primary_per_resource=dataset_primary_per_resource,
                 verify_digests=verify_digests,
             )
+            combined_verifications = (
+                _primary_result.verifications + _group_verifications
+            )
+            if combined_verifications:
+                dataset_resource_verifications[canonical_case] = combined_verifications
 ```
 
 Add `resource_verifications=dataset_resource_verifications` to the `PromotePlan(...)` constructor at the end of `plan_promote` (~line 1001):
@@ -1384,9 +1465,11 @@ Add `resource_verifications=dataset_resource_verifications` to the `PromotePlan(
     )
 ```
 
-- [ ] **Step 3c: Thread `verify_digests` through `_validate_dataset_group_datapackages`**
+- [ ] **Step 3c: Thread `verify_digests` through `_validate_dataset_group_datapackages` and return its verdicts**
 
-Add the keyword-only param (signature ~line 2424) and use it at the inner call (~line 2446):
+The group validator already calls `_dataset_per_resource` for every non-primary candidate (~line 2446); thread `verify_digests` into that call and collect the resulting `verifications` so they reach `plan_promote` instead of being discarded. Change the return type from `None` to `tuple[ResourceVerification, ...]`.
+
+Add the keyword-only param and an accumulator (signature ~line 2424):
 
 ```python
 def _validate_dataset_group_datapackages(
@@ -1396,14 +1479,18 @@ def _validate_dataset_group_datapackages(
     candidates: list[PromoteCandidate],
     primary_per_resource: dict[str, tuple[str, int]],
     verify_digests: bool = False,
-) -> None:
+) -> tuple[ResourceVerification, ...]:
 ```
 
+The early return for single-candidate groups (`if len(candidates) <= 1: return`) becomes `return ()`. Inside the per-candidate loop, capture the full result (~line 2446):
+
 ```python
-        candidate_per_resource = _dataset_per_resource(
-            candidate, verify_digests=verify_digests
-        ).per_resource
+        candidate_result = _dataset_per_resource(candidate, verify_digests=verify_digests)
+        candidate_per_resource = candidate_result.per_resource
+        group_verifications.extend(candidate_result.verifications)
 ```
+
+Declare `group_verifications: list[ResourceVerification] = []` at the top of the function (after the single-candidate early return), and `return tuple(group_verifications)` at the end. Every `raise` path is unchanged (hard errors still abort before any return).
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -1434,32 +1521,48 @@ This shows the `CliRunner` setup (sandboxed `XDG_CONFIG_HOME`, the `resolve_proj
 
 - [ ] **Step 2: Write the failing test**
 
-Append a test to `science/tests/test_commons_cli_promote_dataset.py` that copies the `_sourced_project` helper pattern from Task 7 (or imports it), invokes the command with `--verify-digests` and no `OUTPUT_ROOT`, and asserts the summary text:
+Append this test to `science/tests/test_commons_cli_promote_dataset.py`. It imports the shared fixtures from Task 7's `promote_source_fixtures` module, invokes `promote dataset --verify-digests` with `OUTPUT_ROOT` unset (so the local token is unexpandable → reported `skipped_off_host`), and asserts the summary text:
 
 ```python
 def test_promote_dataset_verify_digests_prints_skip(tmp_path, monkeypatch):
-    # Reuse the sourced-project + commons scaffolding pattern; OUTPUT_ROOT unset
-    # so the local token is unexpandable → reported skipped(off-host).
     from click.testing import CliRunner
 
+    from promote_source_fixtures import init_commons, sourced_project
     from science_tool.commons.cli import commons_group
-    # ... build proj (sourced r1, ${OUTPUT_ROOT}/scrna/x.h5ad), commons, env,
-    #     and resolve_project_by_id monkeypatch exactly as in
-    #     test_plan_promote_aggregates_skip_verdict ...
 
+    proj = sourced_project(tmp_path, "${OUTPUT_ROOT}/scrna/x.h5ad")
+    commons = init_commons(tmp_path)
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.delenv("SCIENCE_CONFIG_DIR", raising=False)
     monkeypatch.delenv("OUTPUT_ROOT", raising=False)
+    # resolve_commons_root must point at our sandboxed commons store. The other
+    # CLI dataset tests in this module set this via XDG/config; mirror whatever
+    # they do (e.g. monkeypatch resolve_commons_root or write the config file).
+    monkeypatch.setattr(
+        "science_tool.commons.cli.resolve_commons_root", lambda: commons
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: {"proj-dataset": proj}[slug],
+    )
+
     runner = CliRunner()
     result = runner.invoke(
         commons_group,
-        ["promote", "dataset", "--from", "proj-dataset", "--slug", "fixture-ds",
-         "--verify-digests"],
+        [
+            "promote", "dataset",
+            "--from", "proj-dataset",
+            "--slug", "fixture-ds",
+            "--verify-digests",
+        ],
     )
     assert result.exit_code == 0, result.output
     assert "verify:" in result.output
     assert "skipped_off_host" in result.output
 ```
 
-(Build the project/commons/env scaffolding by lifting the helper bodies from `test_commons_promote_source.py::_sourced_project` / `_init_repo`; keep them local to the test module or import them.)
+> The `resolve_commons_root` monkeypatch above is the one detail to reconcile with this module's existing harness (Step 1's `sed` shows how the other dataset CLI tests point the command at a sandboxed commons). Use the same mechanism they use; the rest of the scaffolding comes from the shared `promote_source_fixtures` helpers.
 
 - [ ] **Step 3: Run the test to verify it fails**
 
@@ -1543,7 +1646,7 @@ In `_echo_dataset_plan_details` (~line 747), after the `resources:` block, add:
     if verifications:
         click.echo("    verify:")
         for v in verifications:
-            click.echo(f"      - {v.name}: {v.status} ({v.detail})")
+            click.echo(f"      - [{v.project_slug}] {v.name}: {v.status} ({v.detail})")
 ```
 
 - [ ] **Step 5: Run the test + the existing dataset CLI suite**
@@ -1566,60 +1669,68 @@ git commit -m "feat(commons): add --verify-digests flag and per-resource verify 
 - Modify: `science/src/science_tool/commons/inventory.py`
 - Test: `science/tests/test_commons_inventory.py` (extend)
 
-`build_commons_inventory` serializes each resource as `{path, hash, bytes, format, mediatype}` — dropping `source`. Add `source` so the inventory is not lossy for sourced resources.
+`build_commons_inventory` serializes each resource as `{path, hash, bytes, format, mediatype}` — dropping `source`. Add `source` so the inventory is not lossy for sourced resources. This test drives `build_commons_inventory` **end-to-end** against a real commons store fixture (the same `_make_store` + `SCIENCE_COMMONS_ROOT` harness the existing inventory tests use), so it genuinely gates the production change rather than re-deriving the expected dict from `read_datapackage`.
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `science/tests/test_commons_inventory.py` (match the module's existing fixture style for building a commons dataset with a datapackage.yaml — find an existing test that constructs a dataset entity + datapackage and add a sourced resource to it):
+Append to `science/tests/test_commons_inventory.py`. It copies the valid store, rewrites the `cath-domains` datapackage's single resource into a *sourced* resource, then runs the real inventory build:
 
 ```python
-def test_inventory_preserves_resource_source(tmp_path):
-    """A sourced resource's `source` survives into the inventory serialization."""
-    from science_tool.commons.datapackage import read_datapackage
-
-    # Build a datapackage.yaml with one sourced resource, mirroring the
-    # construction used by the other inventory tests in this module.
-    dp = tmp_path / "datapackage.yaml"
-    dp.write_text(
-        "name: ds\n"
+def test_build_commons_inventory_preserves_resource_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A sourced resource's `source` survives end-to-end into the inventory."""
+    root = _make_store(tmp_path)
+    (root / "datasets" / "cath-domains" / "datapackage.yaml").write_text(
+        "name: cath-domains\n"
+        "profile: \"data-package\"\n"
         "resources:\n"
-        "  - name: walker\n"
-        "    path: walker2024.h5ad\n"
-        "    hash: sha256:" + "a" * 64 + "\n"
-        "    bytes: 14010935296\n"
+        "  - name: cath_domains\n"
+        "    path: cath_domains.parquet\n"
+        "    hash: \"sha256:" + "0" * 64 + "\"\n"
+        "    bytes: 4521339201\n"
+        "    format: \"parquet\"\n"
+        "    mediatype: \"application/vnd.apache.parquet\"\n"
         "    source:\n"
         "      type: local\n"
-        "      ref: ${OUTPUT_ROOT}/scrna/walker2024.h5ad\n",
+        "      ref: ${OUTPUT_ROOT}/cath/cath_domains.parquet\n",
         encoding="utf-8",
     )
-    # The serialization helper under test reads via read_datapackage; assert the
-    # round-trip dict carries `source`.
-    descriptor = read_datapackage(dp)
-    serialized = [
-        {
-            "path": r.path,
-            "hash": r.hash,
-            "bytes": r.bytes,
-            "format": r.format,
-            "mediatype": r.mediatype,
-            "source": {"type": r.source.type, "ref": r.source.ref} if r.source else None,
-        }
-        for r in descriptor.resources
-    ]
-    assert serialized[0]["source"] == {
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    payload = build_commons_inventory()
+
+    cath = next(e for e in payload.entities if e.id == "dataset:cath-domains")
+    assert cath.data["resources"][0]["source"] == {
         "type": "local",
-        "ref": "${OUTPUT_ROOT}/scrna/walker2024.h5ad",
+        "ref": "${OUTPUT_ROOT}/cath/cath_domains.parquet",
     }
 ```
 
-> Note: this test pins the *expected serialized shape*. After Step 3 wires that shape into `inventory.py`, prefer converting it (or adding a second test) to drive `build_commons_inventory` end-to-end if the module's existing fixtures make that straightforward; otherwise this shape-pinning test plus the production change below is sufficient.
-
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_commons_inventory.py -k source -q`
-Expected: FAIL — the helper does not yet emit `source` (the production dict at `inventory.py:117` has no `source` key, and `DataResource.source` exists only after Task 3).
+Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_commons_inventory.py -k preserves_resource_source -q`
+Expected: FAIL with `KeyError: 'source'` — the production dict at `inventory.py:117` does not yet emit a `source` key.
 
-- [ ] **Step 3: Add `source` to the serialized resource dict**
+- [ ] **Step 3a: Update the existing co-located assertion to expect `source: None`**
+
+Adding `source` to the serialized dict changes the shape asserted by the existing `test_build_commons_inventory_projects_dataset_resources` (it pins the full resource dict for `cath-domains` and `rnaseq-example`). Update that assertion (~line 174) so co-located resources carry an explicit `"source": None`:
+
+```python
+    cath = next(e for e in payload.entities if e.id == "dataset:cath-domains")
+    assert cath.data["resources"] == [
+        {
+            "path": "cath_domains.parquet",
+            "hash": "sha256:" + "0" * 64,
+            "bytes": 4521339201,
+            "format": "parquet",
+            "mediatype": "application/vnd.apache.parquet",
+            "source": None,
+        }
+    ]
+```
+
+- [ ] **Step 3b: Add `source` to the serialized resource dict**
 
 In `science/src/science_tool/commons/inventory.py`, extend the per-resource dict (~line 117):
 
@@ -1676,15 +1787,8 @@ def test_sourced_dataset_promotes_end_to_end_without_streaming(tmp_path, monkeyp
         plan_promote,
     )
 
-    proj = _sourced_project(tmp_path, "${OUTPUT_ROOT}/scrna/x.h5ad")
-    commons = tmp_path / "commons"
-    commons.mkdir()
-    _init_repo(commons)
-    (commons / "datasets").mkdir()
-    (commons / ".migrations").mkdir()
-    (commons / ".gitkeep").write_text("", encoding="utf-8")
-    subprocess.run(["git", "-C", str(commons), "add", "."], check=True)
-    subprocess.run(["git", "-C", str(commons), "commit", "-q", "-m", "init"], check=True)
+    proj = sourced_project(tmp_path, "${OUTPUT_ROOT}/scrna/x.h5ad")
+    commons = init_commons(tmp_path)
 
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.delenv("SCIENCE_CONFIG_DIR", raising=False)
@@ -1768,14 +1872,16 @@ Use the **superpowers:finishing-a-development-branch** skill on `feat/external-d
 - valid (not merely present) `hash`/`bytes` via `parse_resource_hash` + non-bool int ≥ 0 → Task 5 (`_stamped_metadata`).
 - `validate_logical_path` on every `path` (co-located + sourced) → Task 5, Task 6.
 - discovery skips the co-located file check for sourced resources → Task 6.
-- `PerResourceResult` result channel; `plan_promote` aggregates onto `PromotePlan`; CLI prints summary; never-silently-skips → Task 5, Task 7, Task 8.
+- `PerResourceResult` result channel; CLI prints summary; never-silently-skips → Task 5, Task 7, Task 8.
+- **`plan_promote` aggregates BOTH primary and group-member verdicts** onto `PromotePlan` — the group validator returns its non-primary verdicts instead of discarding them, and `ResourceVerification.project_slug` keeps duplicate resource names distinguishable across a multi-project group → Task 5 (`project_slug` field + `test_group_validator_returns_non_primary_verdicts`), Task 7 (aggregation + return-type change).
 - `verify_digests` threaded keyword-only through `_promote_kind_cmd` → `plan_promote` → `_dataset_per_resource` + `_validate_dataset_group_datapackages`, default `False` → Task 7, Task 8.
 - `PromoteResourceDigestMismatchError` → Task 4.
-- inventory `source` not lossy → Task 9.
+- inventory `source` not lossy → Task 9 (real end-to-end `build_commons_inventory` test; existing co-located assertion updated to `source: None`).
+- `url` ref requires scheme ∈ {http, https} + netloc (via `urllib.parse.urlparse`, not `startswith`) → Task 1.
 - render carries `path + hash + bytes + source` → Task 3 (verbatim pass-through) + Task 10 (e2e assertion).
 - regression: co-located promotes as before → Task 5, Task 10.
 - non-goals (no remote fetch, no producer helper, `resolver.py` unchanged) → not implemented by design; no task.
 
-**2. Placeholder scan:** every code step carries the actual code; commands carry expected outcomes. Task 8's CLI test and Task 9's inventory test reference "lift the scaffolding from Task 7 / match the module's fixture style" — this is reuse guidance (the full helper bodies appear in Task 7), not a placeholder for unwritten logic.
+**2. Placeholder scan:** every code step carries the actual code; commands carry expected outcomes. The shared `promote_source_fixtures.py` helper module (created in Task 7) is imported by Tasks 8 and 10 — there are no `# ...` elisions in any test body. The single residual prose note is in Task 8: reconcile the `resolve_commons_root` monkeypatch with this module's existing harness (the one mechanism that genuinely differs per test file); the test body itself is complete.
 
-**3. Type consistency:** `ResourceSource(type, ref)`, `Unexpandable(ref)`, `Resolved(path, exists)`, `resolve_local_ref(ref) -> RefResolution`, `validate_source(raw) -> ResourceSource`, `_dataset_per_resource(candidate, *, verify_digests=False) -> PerResourceResult`, `PerResourceResult(per_resource, verifications)`, `ResourceVerification(name, status, detail)`, `PromotePlan.resource_verifications: dict[str, tuple[ResourceVerification, ...]]`, `plan_promote(..., verify_digests=False)`, `_validate_dataset_group_datapackages(..., verify_digests=False)`, `PromoteResourceDigestMismatchError(slug, resource_name, expected, actual, path)` — names and signatures are used identically across the tasks that define and consume them.
+**3. Type consistency:** `ResourceSource(type, ref)`, `Unexpandable(ref)`, `Resolved(path, exists)`, `resolve_local_ref(ref) -> RefResolution`, `validate_source(raw) -> ResourceSource`, `_dataset_per_resource(candidate, *, verify_digests=False) -> PerResourceResult`, `PerResourceResult(per_resource, verifications)`, `ResourceVerification(project_slug, name, status, detail)`, `_verify_sourced_resource(project_slug, name, source, stamped, slug)`, `PromotePlan.resource_verifications: dict[str, tuple[ResourceVerification, ...]]`, `plan_promote(..., verify_digests=False)`, `_validate_dataset_group_datapackages(..., verify_digests=False) -> tuple[ResourceVerification, ...]`, `PromoteResourceDigestMismatchError(slug, resource_name, expected, actual, path)` — names and signatures are used identically across the tasks that define and consume them. Shared test helpers: `init_repo`, `sourced_project`, `init_commons` (in `promote_source_fixtures.py`).
