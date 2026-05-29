@@ -8,7 +8,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Literal
 
-from rdflib import Literal as RDFLiteral, URIRef
+from rdflib import Graph, Literal as RDFLiteral, URIRef
 from rdflib.namespace import RDF
 from science_model.entities import Entity
 from science_model.packages.schema import DerivationBlock
@@ -145,7 +145,7 @@ def _consumer_uri(consumer_id: str) -> URIRef:
     return URIRef(consumer_id)
 
 
-def add_usage_record_to_graph(record: DatasetUsageRecord, graph) -> None:
+def add_usage_record_to_graph(record: DatasetUsageRecord, graph: Graph) -> None:
     node = usage_node_uri(record)
     consumer = _consumer_uri(record.consumer_id)
     dataset_uri = project_entity_uri(record.dataset_ref)

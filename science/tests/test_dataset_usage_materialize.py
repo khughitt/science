@@ -1,27 +1,12 @@
 from __future__ import annotations
 
 import pytest
-from rdflib import Graph, URIRef
-from science_model.entities import Entity, PaperEntity
+from rdflib import Graph, Literal as RDFLiteral, URIRef
+from rdflib.namespace import RDF
+from science_model.entities import Entity, EntityType, PaperEntity
 from science_model.packages.schema import AccessBlock, DatasetUsage, DerivationBlock
 
 from science_tool.graph.store import PROJECT_NS, SCI_NS
-
-
-def _base_entity_kwargs() -> dict[str, object]:
-    return {
-        "id": "observation:o1",
-        "canonical_id": "observation:o1",
-        "kind": "observation",
-        "type": "observation",
-        "title": "Observation",
-        "project": "demo",
-        "ontology_terms": [],
-        "related": [],
-        "source_refs": [],
-        "content_preview": "",
-        "file_path": "doc/observations/o1.md",
-    }
 
 
 def _paper() -> PaperEntity:
@@ -29,7 +14,7 @@ def _paper() -> PaperEntity:
         id="paper:Adams2025",
         canonical_id="paper:Adams2025",
         kind="paper",
-        type="paper",
+        type=EntityType.PAPER,
         title="Adams",
         project="demo",
         ontology_terms=[],
@@ -46,7 +31,17 @@ def test_entity_usage_records_are_universal_for_authored_dataset_usage() -> None
     from science_tool.graph.dataset_usage import usage_records_for_entity
 
     entity = Entity(
-        **_base_entity_kwargs(),
+        id="observation:o1",
+        canonical_id="observation:o1",
+        kind="observation",
+        type=EntityType.OBSERVATION,
+        title="Observation",
+        project="demo",
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path="doc/observations/o1.md",
         dataset_usage=[DatasetUsage(ref="dataset:gtex-v8", role="validation_source", overlap="partial")],
     )
 
@@ -75,7 +70,7 @@ def test_paper_legacy_datasets_duplicate_refs_emit_once() -> None:
         id="paper:Adams2025",
         canonical_id="paper:Adams2025",
         kind="paper",
-        type="paper",
+        type=EntityType.PAPER,
         title="Adams",
         project="demo",
         ontology_terms=[],
@@ -101,7 +96,7 @@ def test_derived_dataset_inputs_project_to_upstream_unknown() -> None:
         id="dataset:derived",
         canonical_id="dataset:derived",
         kind="dataset",
-        type="dataset",
+        type=EntityType.DATASET,
         title="Derived",
         project="demo",
         ontology_terms=[],
@@ -134,7 +129,7 @@ def test_dataset_self_reference_is_materialization_error() -> None:
         id="dataset:self",
         canonical_id="dataset:self",
         kind="dataset",
-        type="dataset",
+        type=EntityType.DATASET,
         title="Self",
         project="demo",
         ontology_terms=[],
@@ -178,10 +173,16 @@ def test_add_usage_record_to_graph_preserves_absolute_virtual_consumer_uri() -> 
         row_key="MYC targets",
     )
     graph = Graph()
+    node = usage_node_uri(record)
 
     add_usage_record_to_graph(record, graph)
 
-    assert (consumer, SCI_NS.hasDatasetUsage, usage_node_uri(record)) in graph
+    assert (consumer, SCI_NS.hasDatasetUsage, node) in graph
+    assert (node, RDF.type, SCI_NS.DatasetUsage) in graph
+    assert (node, SCI_NS.dataset, URIRef(PROJECT_NS["dataset/gtex-v8"])) in graph
+    assert (node, SCI_NS.usageRole, RDFLiteral("annotates")) in graph
+    assert (node, SCI_NS.usageOverlap, RDFLiteral("partial")) in graph
+    assert (node, SCI_NS.usageSource, RDFLiteral("geneset.members_resource")) in graph
 
 
 def test_usage_node_uri_is_deterministic_for_record_payload() -> None:
