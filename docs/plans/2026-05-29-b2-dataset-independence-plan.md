@@ -28,6 +28,20 @@
 
 Do not emit derived `sci:evidenceIndependence`, `sci:independenceGroup`, or `sci:sharedDataset` triples onto evidence-line nodes. That would collide with authored values and make `_lit()` order-dependent.
 
+## Current-Code Alignment Notes
+
+These refinements are from the pre-implementation plan review against the current repo:
+
+- Run commands from the repo root (`~/d/science`) and keep the AGENTS/RTK convention:
+  `rtk uv run --frozen --project science ...`. Test paths therefore keep the `science/tests/...`
+  prefix.
+- `science/src/science_tool/validate/checks/evidence_lines.py` already has `_load_belief_graphs(ctx)`.
+  Reuse it for B2 validation instead of adding a second graph loader.
+- `science/tests/test_dataset_usage_materialize.py` already has `_write_project`, `_write_dataset`, and
+  `_load_trig`; integration tests should use those helpers and must create the target proposition entity,
+  otherwise evidence-line `cito:supports` edges are not materialized.
+- B2 record emission must stay blank-node-free because canonical graph serialization rejects blank nodes.
+
 ## Task 1: Usage Reduction
 
 **Files:**
@@ -131,7 +145,7 @@ def test_reduce_usage_facts_keeps_validation_and_citation_non_committing() -> No
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_dataset_independence.py -q
+rtk uv run --frozen --project science pytest science/tests/test_dataset_independence.py -q
 ```
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'science_tool.graph.dataset_independence'`.
@@ -253,7 +267,7 @@ def _one_literal(graph: Graph, subject: URIRef, predicate: URIRef) -> str | None
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_dataset_independence.py -q
+rtk uv run --frozen --project science pytest science/tests/test_dataset_independence.py -q
 ```
 
 Expected: PASS.
@@ -403,7 +417,7 @@ def test_emit_records_uses_b2_specific_predicates_not_evidence_line_or_target() 
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_dataset_independence.py::test_full_overlap_direct_shared_dataset_derives_one_commitment_component science/tests/test_dataset_independence.py::test_unknown_overlap_shared_dataset_derives_candidate_only science/tests/test_dataset_independence.py::test_bears_on_only_shared_dataset_is_candidate_even_with_full_overlap science/tests/test_dataset_independence.py::test_transitive_hub_full_overlap_forms_one_conservative_component science/tests/test_dataset_independence.py::test_emit_records_uses_b2_specific_predicates_not_evidence_line_or_target -q
+rtk uv run --frozen --project science pytest science/tests/test_dataset_independence.py::test_full_overlap_direct_shared_dataset_derives_one_commitment_component science/tests/test_dataset_independence.py::test_unknown_overlap_shared_dataset_derives_candidate_only science/tests/test_dataset_independence.py::test_bears_on_only_shared_dataset_is_candidate_even_with_full_overlap science/tests/test_dataset_independence.py::test_transitive_hub_full_overlap_forms_one_conservative_component science/tests/test_dataset_independence.py::test_emit_records_uses_b2_specific_predicates_not_evidence_line_or_target -q
 ```
 
 Expected: FAIL with missing `derive_dataset_independence_records`.
@@ -743,7 +757,7 @@ def _record_uri(record: DatasetIndependenceRecord) -> URIRef:
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_dataset_independence.py -q
+rtk uv run --frozen --project science pytest science/tests/test_dataset_independence.py -q
 ```
 
 Expected: PASS.
@@ -782,37 +796,72 @@ Then append:
 
 ```python
 def test_materialize_graph_emits_dataset_independence_commitment(tmp_path: Path) -> None:
-    root = tmp_path / "project"
-    root.mkdir()
-    (root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
-    (root / "doc" / "datasets").mkdir(parents=True)
-    (root / "doc" / "datasets" / "gtex.md").write_text(
-        "---\nid: dataset:gtex-v8\nkind: dataset\ntitle: GTEx\n---\n",
-        encoding="utf-8",
-    )
-    (root / "doc" / "papers").mkdir(parents=True)
-    (root / "doc" / "papers" / "p1.md").write_text(
-        "---\nid: paper:p1\nkind: paper\ntitle: P1\ndataset_usage:\n  - ref: dataset:gtex-v8\n    role: analyzed\n    overlap: full\n---\n",
-        encoding="utf-8",
-    )
-    (root / "doc" / "papers" / "p2.md").write_text(
-        "---\nid: paper:p2\nkind: paper\ntitle: P2\ndataset_usage:\n  - ref: dataset:gtex-v8\n    role: analyzed\n    overlap: full\n---\n",
-        encoding="utf-8",
-    )
-    (root / "doc" / "evidence").mkdir(parents=True)
-    (root / "doc" / "evidence" / "a.md").write_text(
-        "---\nid: evidence-line:a\nkind: evidence-line\ntarget: proposition:p1\nstance: supports\nsource: paper:p1\n---\n",
-        encoding="utf-8",
-    )
-    (root / "doc" / "evidence" / "b.md").write_text(
-        "---\nid: evidence-line:b\nkind: evidence-line\ntarget: proposition:p1\nstance: supports\nsource: paper:p2\n---\n",
-        encoding="utf-8",
-    )
+    from science_tool.graph.materialize import materialize_graph
 
-    graph_path = materialize_graph(root)
-    dataset = Dataset()
-    dataset.parse(graph_path, format="trig")
-    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path / "data" / "gtex" / "datapackage.yaml",
+        "gtex-v8",
+        "origin: external\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n",
+    )
+    prop_dir = tmp_path / "doc" / "propositions"
+    prop_dir.mkdir(parents=True)
+    (prop_dir / "p1.md").write_text(
+        "---\n"
+        "id: proposition:p1\n"
+        "type: proposition\n"
+        "title: P1\n"
+        "status: active\n"
+        "claim_layer: empirical_regularity\n"
+        "identification_strength: observational\n"
+        "proxy_directness: direct\n"
+        "created: '2026-05-29'\n"
+        "updated: '2026-05-29'\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir.mkdir(parents=True)
+    for slug in ("p1", "p2"):
+        (paper_dir / f"{slug}.md").write_text(
+            "---\n"
+            f"id: paper:{slug}\n"
+            "type: paper\n"
+            f"title: {slug.upper()}\n"
+            "status: active\n"
+            "created: '2026-05-29'\n"
+            "updated: '2026-05-29'\n"
+            "dataset_usage:\n"
+            "  - ref: dataset:gtex-v8\n"
+            "    role: analyzed\n"
+            "    overlap: full\n"
+            "---\n",
+            encoding="utf-8",
+        )
+    evidence_dir = tmp_path / "doc" / "evidence-lines"
+    evidence_dir.mkdir(parents=True)
+    for slug, paper in (("a", "p1"), ("b", "p2")):
+        (evidence_dir / f"{slug}.md").write_text(
+            "---\n"
+            f"id: evidence-line:{slug}\n"
+            "type: evidence-line\n"
+            f"title: Evidence {slug.upper()}\n"
+            "status: active\n"
+            "stance: supports\n"
+            "target: proposition:p1\n"
+            f"source: paper:{paper}\n"
+            "strength: moderate\n"
+            "created: '2026-05-29'\n"
+            "updated: '2026-05-29'\n"
+            "---\n",
+            encoding="utf-8",
+        )
+
+    graph_path = materialize_graph(tmp_path)
+    provenance = _load_trig(graph_path).graph(PROJECT_NS["graph/provenance"])
     line_a = PROJECT_NS["evidence-line/a"]
     line_b = PROJECT_NS["evidence-line/b"]
 
@@ -821,15 +870,22 @@ def test_materialize_graph_emits_dataset_independence_commitment(tmp_path: Path)
 
     records = list(provenance.subjects(RDF.type, SCI_NS.DatasetIndependenceCommitment))
     assert len(records) == 1
-    assert (records[0], SCI_NS.independenceGroup, Literal("dataset-derived:gtex-v8")) in provenance
+    assert (
+        records[0],
+        SCI_NS.independenceGroup,
+        Literal("dataset-derived:gtex-v8"),
+    ) in provenance
 ```
+
+This test deliberately creates the proposition target. Without `proposition:p1`, materialization cannot
+resolve the evidence lines' `target`, so no `cito:supports` edge exists for B2 to inspect.
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_dataset_usage_materialize.py::test_materialize_graph_emits_dataset_independence_commitment -q
+rtk uv run --frozen --project science pytest science/tests/test_dataset_usage_materialize.py::test_materialize_graph_emits_dataset_independence_commitment -q
 ```
 
 Expected: FAIL because no B2 commitment records are emitted.
@@ -861,7 +917,7 @@ Do not put this in `materialize_graph`: that function only receives the already-
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_dataset_usage_materialize.py science/tests/test_graph_materialize.py -q
+rtk uv run --frozen --project science pytest science/tests/test_dataset_usage_materialize.py science/tests/test_graph_materialize.py -q
 ```
 
 Expected: PASS.
@@ -991,7 +1047,7 @@ to:
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_belief_collect.py::test_collect_evidence_units_merges_committed_dataset_independence_for_untagged_lines science/tests/test_belief_collect.py::test_collect_evidence_units_keeps_authored_circular_over_derived_commitment science/tests/test_belief_aggregate.py::test_aggregate_belief_candidates_do_not_collapse_but_committed_records_do science/tests/test_belief_weights.py::test_phase2_constants_present science/tests/test_belief_snapshot.py::test_snapshot_records_basic_shape science/tests/test_belief_cli.py::test_belief_snapshot_writes_jsonl -q
+rtk uv run --frozen --project science pytest science/tests/test_belief_collect.py::test_collect_evidence_units_merges_committed_dataset_independence_for_untagged_lines science/tests/test_belief_collect.py::test_collect_evidence_units_keeps_authored_circular_over_derived_commitment science/tests/test_belief_aggregate.py::test_aggregate_belief_candidates_do_not_collapse_but_committed_records_do science/tests/test_belief_weights.py::test_phase2_constants_present science/tests/test_belief_snapshot.py::test_snapshot_records_basic_shape science/tests/test_belief_cli.py::test_belief_snapshot_writes_jsonl -q
 ```
 
 Expected: belief collection tests FAIL because committed records are ignored; config test FAILS with current `belief-logodds-v2`.
@@ -1084,7 +1140,7 @@ CONFIG_VERSION = "belief-logodds-v3"   # B2 committed dataset-derived independen
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_belief_collect.py science/tests/test_belief_aggregate.py science/tests/test_belief_weights.py science/tests/test_belief_snapshot.py science/tests/test_belief_cli.py -q
+rtk uv run --frozen --project science pytest science/tests/test_belief_collect.py science/tests/test_belief_aggregate.py science/tests/test_belief_weights.py science/tests/test_belief_snapshot.py science/tests/test_belief_cli.py -q
 ```
 
 Expected: PASS after updating every `belief-logodds-v2` assertion in the affected belief tests to `belief-logodds-v3`.
@@ -1143,6 +1199,14 @@ def _ctx_with_b2_graph(tmp_path: Path, *, record_type: URIRef, authored: dict[st
     provenance.add((record, SCI_NS.independenceGroup, Literal("dataset-derived:gtex-v8")))
     provenance.add((record, SCI_NS.independenceReason, Literal("unknown-overlap")))
     provenance.add((record, SCI_NS.sharedDataset, PROJECT_NS["dataset/gtex-v8"]))
+    for suffix, line in (("a", line_a), ("b", line_b)):
+        usage = PROJECT_NS[f"dataset-usage/{suffix}"]
+        provenance.add((line, SCI_NS.hasDatasetUsage, usage))
+        provenance.add((usage, RDF.type, SCI_NS.DatasetUsage))
+        provenance.add((usage, SCI_NS.dataset, PROJECT_NS["dataset/gtex-v8"]))
+        provenance.add((usage, SCI_NS.usageRole, Literal("analyzed")))
+        provenance.add((usage, SCI_NS.usageOverlap, Literal("full")))
+        provenance.add((usage, SCI_NS.usageSource, Literal("authored")))
     ds.serialize(graph_path, format="trig")
     return ValidateContext.from_project_root(root, strict=False, verbose=False)
 
@@ -1176,7 +1240,7 @@ def test_committed_dataset_dependence_errors_when_line_authored_independent(tmp_
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/validate/test_checks_evidence_lines.py::test_suspect_circular_warns_for_untagged_lines_with_derived_candidate science/tests/validate/test_checks_evidence_lines.py::test_committed_dataset_dependence_errors_when_line_authored_independent -q
+rtk uv run --frozen --project science pytest science/tests/validate/test_checks_evidence_lines.py::test_suspect_circular_warns_for_untagged_lines_with_derived_candidate science/tests/validate/test_checks_evidence_lines.py::test_committed_dataset_dependence_errors_when_line_authored_independent -q
 ```
 
 Expected: FAIL because the check does not read B2 records.
@@ -1188,40 +1252,32 @@ B2 validation reads `knowledge/graph.trig` if present and emits no B2-derived re
 In `science/src/science_tool/validate/checks/evidence_lines.py`, add imports:
 
 ```python
-from rdflib import Dataset, URIRef
-from science_tool.graph.io import PROJECT_NS, SCI_NS
+from rdflib import URIRef
 ```
 
-Add helper functions near `check_independence_suspect_circular`:
+In the current file this means adding `URIRef` to the existing `rdflib` import:
 
 ```python
-def _load_provenance_graph(ctx: ValidateContext):
-    graph_path = ctx.project_root / "knowledge" / "graph.trig"
-    if not graph_path.exists():
-        return None
-    dataset = Dataset()
-    dataset.parse(graph_path, format="trig")
-    return dataset.graph(PROJECT_NS["graph/provenance"])
+from rdflib import Literal, RDF, Dataset, URIRef
+```
 
+`SCI_NS` and `Dataset` are already imported, and `_load_belief_graphs(ctx)` already loads both named
+graphs from `knowledge/graph.trig`; do not add a second provenance-only graph loader.
 
+Add this helper near `check_independence_suspect_circular`:
+
+```python
 def _line_independence(provenance, line: URIRef) -> str | None:
-    if provenance is None:
-        return None
     for value in provenance.objects(line, SCI_NS.evidenceIndependence):
         return str(value)
     return None
 ```
 
-At the start of `check_independence_suspect_circular`, load provenance:
-
-```python
-    provenance = _load_provenance_graph(ctx)
-```
-
 After the existing authored pair loop, add:
 
 ```python
-    if provenance is None:
+    knowledge, provenance = _load_belief_graphs(ctx)
+    if knowledge is None:
         return
     for record in provenance.subjects(RDF.type, SCI_NS.DatasetIndependenceCommitment):
         members = [member for member in provenance.objects(record, SCI_NS.independenceMember) if isinstance(member, URIRef)]
@@ -1263,7 +1319,7 @@ This deliberately reads materialized graph truth and does not reparse papers, da
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/validate/test_checks_evidence_lines.py -q
+rtk uv run --frozen --project science pytest science/tests/validate/test_checks_evidence_lines.py -q
 ```
 
 Expected: PASS.
@@ -1288,7 +1344,7 @@ rtk git commit -m "feat: validate dataset-derived independence"
 Append to `science/tests/validate/test_checks_evidence_lines.py`:
 
 ```python
-def test_authored_shared_dataset_refuted_only_when_all_group_members_are_checkable(tmp_path: Path) -> None:
+def test_authored_shared_dataset_refuted_only_when_line_has_direct_b2_usage(tmp_path: Path) -> None:
     ctx = _ctx_with_b2_graph(
         tmp_path,
         record_type=SCI_NS.DatasetIndependenceCandidate,
@@ -1309,36 +1365,67 @@ def test_authored_shared_dataset_refuted_only_when_all_group_members_are_checkab
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/validate/test_checks_evidence_lines.py::test_authored_shared_dataset_refuted_only_when_all_group_members_are_checkable -q
+rtk uv run --frozen --project science pytest science/tests/validate/test_checks_evidence_lines.py::test_authored_shared_dataset_refuted_only_when_line_has_direct_b2_usage -q
 ```
 
 Expected: FAIL because no `independence.shared-dataset-refuted` result exists.
 
-- [ ] **Step 3: Implement narrow refutation warning**
+- [ ] **Step 3: Implement narrow direct-usage refutation warning**
 
-Add this helper in `evidence_lines.py`:
+Add these helpers in `evidence_lines.py`:
 
 ```python
-def _record_datasets(provenance, record) -> set[str]:
-    return {str(value) for value in provenance.objects(record, SCI_NS.sharedDataset)}
+_B2_DEPENDENCE_ROLES = frozenset({"analyzed", "set_definition_source", "training", "upstream"})
+
+
+def _one_graph_literal(graph, subject, predicate) -> str | None:
+    for value in graph.objects(subject, predicate):
+        return str(value)
+    return None
+
+
+def _one_graph_uri(graph, subject, predicate) -> URIRef | None:
+    for value in graph.objects(subject, predicate):
+        if isinstance(value, URIRef):
+            return value
+    return None
+
+
+def _direct_dependence_datasets_for_member(provenance, member: URIRef) -> set[str]:
+    consumers = {member}
+    consumers.update(value for value in provenance.objects(member, PROV.wasDerivedFrom) if isinstance(value, URIRef))
+    datasets: set[str] = set()
+    for consumer in consumers:
+        for usage in provenance.objects(consumer, SCI_NS.hasDatasetUsage):
+            dataset = _one_graph_uri(provenance, usage, SCI_NS.dataset)
+            role = _one_graph_literal(provenance, usage, SCI_NS.usageRole)
+            if dataset is not None and role in _B2_DEPENDENCE_ROLES:
+                datasets.add(str(dataset))
+    return datasets
 ```
 
-In the B2 section of `check_independence_suspect_circular`, for each `DatasetIndependenceCommitment` and `DatasetIndependenceCandidate`, build a map:
+In the B2 section of `check_independence_suspect_circular`, for each
+`DatasetIndependenceCommitment` and `DatasetIndependenceCandidate`, build a per-member direct
+dataset map from B1 usage triples:
 
 ```python
-    b2_datasets_by_member: dict[str, set[str]] = defaultdict(set)
+    b2_direct_datasets_by_member: dict[str, set[str]] = defaultdict(set)
     if provenance is not None:
         for klass in (SCI_NS.DatasetIndependenceCommitment, SCI_NS.DatasetIndependenceCandidate):
             for record in provenance.subjects(RDF.type, klass):
-                datasets = _record_datasets(provenance, record)
                 for member in provenance.objects(record, SCI_NS.independenceMember):
-                    b2_datasets_by_member[str(member)].update(datasets)
+                    if isinstance(member, URIRef):
+                        b2_direct_datasets_by_member[str(member)].update(
+                            _direct_dependence_datasets_for_member(provenance, member)
+                        )
 ```
 
-Then warn only when a line has authored `shared_dataset`, B2 has some dataset evidence for that same line, and the authored dataset is absent from B2's dataset set:
+Then warn only when a line has authored `shared_dataset`, B2 has direct usage evidence for that same
+line (or the line's direct `prov:wasDerivedFrom` source), and the authored dataset is absent from that
+direct dataset set:
 
 ```python
-    for member_uri, b2_datasets in sorted(b2_datasets_by_member.items()):
+    for member_uri, b2_datasets in sorted(b2_direct_datasets_by_member.items()):
         member = URIRef(member_uri)
         authored_dataset = next((str(value) for value in provenance.objects(member, SCI_NS.sharedDataset)), None)
         if authored_dataset and b2_datasets and authored_dataset not in b2_datasets:
@@ -1352,14 +1439,20 @@ Then warn only when a line has authored `shared_dataset`, B2 has some dataset ev
             )
 ```
 
-This is narrower than a full proof of absence, but it respects the design's "enough graph data" boundary by requiring B2 dataset evidence for that line before warning.
+Do not derive this warning from the component-level `sci:sharedDataset` record alone. In a transitive
+component, the record may contain dataset X and dataset Y even though a particular member only directly
+uses dataset X. Component-level membership is sufficient for candidate/commitment review, but not for
+per-line refutation of authored `shared_dataset`.
+
+This is narrower than a full authored-group proof of absence, but it respects the design's "enough graph
+data" boundary by requiring direct B1 dataset evidence for that line before warning.
 
 - [ ] **Step 4: Run validation tests**
 
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/validate/test_checks_evidence_lines.py -q
+rtk uv run --frozen --project science pytest science/tests/validate/test_checks_evidence_lines.py -q
 ```
 
 Expected: PASS.
@@ -1448,7 +1541,7 @@ def test_collect_evidence_units_ignores_dataset_independence_candidates_for_scor
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_dataset_independence.py science/tests/test_belief_collect.py -q
+rtk uv run --frozen --project science pytest science/tests/test_dataset_independence.py science/tests/test_belief_collect.py -q
 ```
 
 Expected: PASS.
@@ -1486,8 +1579,8 @@ Status: implementation ready; see `docs/plans/2026-05-29-b2-dataset-independence
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_dataset_independence.py science/tests/test_dataset_usage_materialize.py science/tests/test_belief_collect.py science/tests/test_belief_aggregate.py science/tests/test_belief_weights.py science/tests/test_belief_snapshot.py science/tests/test_belief_cli.py science/tests/validate/test_checks_evidence_lines.py -q
-uv run --frozen pytest science/tests/validate -q
+rtk uv run --frozen --project science pytest science/tests/test_dataset_independence.py science/tests/test_dataset_usage_materialize.py science/tests/test_belief_collect.py science/tests/test_belief_aggregate.py science/tests/test_belief_weights.py science/tests/test_belief_snapshot.py science/tests/test_belief_cli.py science/tests/validate/test_checks_evidence_lines.py -q
+rtk uv run --frozen --project science pytest science/tests/validate -q
 ```
 
 Expected: PASS.
@@ -1497,7 +1590,7 @@ Expected: PASS.
 Run:
 
 ```bash
-uv run --frozen ruff check science/src/science_tool/graph/dataset_independence.py science/src/science_tool/graph/materialize.py science/src/science_tool/graph/belief.py science/src/science_tool/graph/belief_weights.py science/src/science_tool/validate/checks/evidence_lines.py science/tests/test_dataset_independence.py science/tests/test_dataset_usage_materialize.py science/tests/test_belief_collect.py science/tests/test_belief_aggregate.py science/tests/test_belief_weights.py science/tests/test_belief_snapshot.py science/tests/test_belief_cli.py science/tests/validate/test_checks_evidence_lines.py
+rtk uv run --frozen --project science ruff check science/src/science_tool/graph/dataset_independence.py science/src/science_tool/graph/materialize.py science/src/science_tool/graph/belief.py science/src/science_tool/graph/belief_weights.py science/src/science_tool/validate/checks/evidence_lines.py science/tests/test_dataset_independence.py science/tests/test_dataset_usage_materialize.py science/tests/test_belief_collect.py science/tests/test_belief_aggregate.py science/tests/test_belief_weights.py science/tests/test_belief_snapshot.py science/tests/test_belief_cli.py science/tests/validate/test_checks_evidence_lines.py
 rtk git diff --check
 ```
 
