@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a merged + Pillar A (A1 + A2) merged and complete; Pillar D1, B1, B-migration, and B2 merged locally; C4b/C4c, D2, and E remain open. Spawns focused per-area docs.
+Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a merged + Pillar A (A1 + A2) merged and complete; Pillar D1, B1, B-migration, B2, and E (Reactome ingestion) merged locally; C4b/C4c, D2, and non-tabular reference modeling remain open. Spawns focused per-area docs.
 
 Related (builds on):
 - `docs/proposition-and-evidence-model.md` — core reasoning model
@@ -195,11 +195,13 @@ A new domain extension (sibling to `bio.table`/`bio.rnaseq`/…), filling the "n
   test-enrichment-in-study-A* (circular), not "Reactome + an independent cohort." The extension should
   make set-definition provenance explicit enough to detect that overlap via B.
 
-### 4.5 Pillar E — Reactome ingestion (instantiation, deferred)
+### 4.5 Pillar E — Reactome ingestion (instantiation)
 
-Revise `health/meta:doc/plans/2026-05-25-reactome-commons-ingestion-design.md` to consume A–D: tag
-`reference`/curated class (A), carry `bio.geneset` for the panel (D), declare per-pathway source
-provenance (B), and resolve identifiers via C. Lands after the foundational areas are far enough along.
+Reactome ingestion consumes A-D: it tags the collection as `source_class: reference` (A), carries the
+implemented `bio.geneset` collection profile (D1), preserves row-level `dataset_usage` hooks for B, and
+resolves Entrez membership through the built C2 HGNC gene crosswalk. **Status: implemented and merged
+locally** in `~/d/science-commons`, `~/d/health/meta`, and `~/d/health/comparisons/pan-disease`; see
+`docs/plans/2026-05-30-reactome-commons-ingestion-plan.md`.
 
 ---
 
@@ -232,7 +234,7 @@ Spawned design docs (in `~/d/science/docs/plans/`), with the dependency order:
 | 2 | Dataset taxonomy & epistemic integration (A) | C | `source_class` + `derived_kind`; curation down-weight as a *modifier*, mapped into aggregation + two-axis | design ✓; **impl: A1 + A2 merged** (recording layer + curation down-weight, config v2); **Pillar A complete** |
 | 3a | Gene-set / annotation type `bio.geneset` (D) | A, C | extension schema; per-set provenance; promotion rule; realizes B's interface for gene sets | design ✓; **impl: D1 collection type implemented; D2 promoted members pending** |
 | 3b | Dataset-influence & provenance tracking (B) | A, C (+ D for the gene-set arm) | `dataset:`-ref declarations + usage role; dataset→consumer derivation; *candidate* auto-independence | B1 implemented locally; B-migration implemented; **B2 merged locally** |
-| 4 | Reactome ingestion revision (E) | A–D | first instantiation | design ✓ (in `health/meta`); implementation plan drafted in `docs/plans/2026-05-30-reactome-commons-ingestion-plan.md` |
+| 4 | Reactome ingestion revision (E) | A-D | first instantiation | **implemented and merged locally**; plan/status in `docs/plans/2026-05-30-reactome-commons-ingestion-plan.md` |
 
 C is the long pole (everything joins on identity). A and C unblock D and the paper arm of B; B's
 gene-set arm consumes D, so D leads B within Phase 3 (B may start its paper-side and the derivation
@@ -320,14 +322,18 @@ provenance layer, B-migration is implemented (`science graph migrate-paper-datas
 and B2 is implemented as the dataset-derived independence layer
 (`science_tool.graph.dataset_independence`, graph materialization, validation integration, aggregation
 metadata merge, and `belief-logodds-v3`). Pillar A is complete; C (C1–C3 merged, C4a merged, C4b/C4c
-pending), D1, and B1/B2 are far enough along for Reactome-style instantiation. E (Reactome ingestion) is
-the next recommended implementation target, with D2 deferred until a real evidence line needs a promoted
-pathway dataset.
+pending), D1, and B1/B2 are now exercised by E. Reactome is implemented as the first real
+`bio.geneset` commons dataset: Reactome release 96 was fetched from the versioned Reactome download URL,
+the C2 HGNC gene crosswalk was built, `dataset:reactome` was promoted into `~/d/science-commons`, and the
+pan-disease local Reactome stub was removed so consumers resolve through commons. D2 remains deferred
+until a real evidence line needs a promoted pathway dataset.
 
 **Operational follow-ups.**
 - Push local implementation branches to `origin` when ready.
-- The real commons collections — `assembly-registry`, `gene-crosswalk-hgnc`, `protein-crosswalk-uniprot` —
-  are committed **unbuilt** in `~/d/science-commons` (placeholder hash, count 0). Run each
-  `recipe/build.py` against the network, then pin the artifact hash + count and commit.
+- `gene-crosswalk-hgnc` is now built and pinned in `~/d/science-commons`; `assembly-registry` and
+  `protein-crosswalk-uniprot` may still need their real artifact builds if downstream work requires
+  non-placeholder data.
+- Reactome bulk CSVs were verified under `$SCIENCE_COMMONS_DATA_ROOT/reactome`; make that data root
+  persistent before treating the local build cache as durable.
 - C3 left three deferred minor review findings (a `parse_secondary` skip-vs-fail-early comment; an
   untested `fetch_text` gzip branch; a docstring nicety).

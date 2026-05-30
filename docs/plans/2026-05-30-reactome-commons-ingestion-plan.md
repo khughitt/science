@@ -2,6 +2,38 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Implemented and merged locally on 2026-05-30 across `~/d/science-commons`,
+`~/d/health/meta`, and `~/d/health/comparisons/pan-disease`.
+
+**Implementation outcome:**
+
+- Built `dataset:gene-crosswalk-hgnc` from pinned HGNC inputs (`gene_count: 49359`) and committed the
+  real `crosswalk.csv` hash/bytes in `~/d/science-commons`.
+- Fetched Reactome release 96 from `https://download.reactome.org/96/` (Zenodo record
+  `https://zenodo.org/records/19581589`), then built and promoted `dataset:reactome` as a
+  `bio.geneset` commons dataset.
+- Reactome build outputs: `n_sets: 2819`; `set_size_summary: {min: 1, median: 15.0, max: 2606}`;
+  resolution counts `approved: 137108`, `unresolved: 2676`, `ambiguous: 0`, `deprecated: 0`,
+  `dropped_empty: 26`.
+- Updated `~/d/health/meta` with the Reactome recipe, dataset overlay, and D1-aligned design doc.
+- Removed the duplicate pan-disease local Reactome stub so `dataset:reactome` resolves through commons.
+
+**Verification outcome:**
+
+- Reactome recipe unit tests passed in `~/d/health/meta`.
+- C2 gene-crosswalk tests passed in `~/d/science`.
+- Targeted D1/B1/B2 Reactome-adjacent science tests and ruff checks passed.
+- Full `science validate` in `~/d/health/meta` and `~/d/health/comparisons/pan-disease` still reports
+  pre-existing project-wide validation backlog, but filtered Reactome checks showed no new Reactome
+  unresolved-reference or code metadata defects.
+
+**Remaining follow-ups:**
+
+- Make the `$SCIENCE_COMMONS_DATA_ROOT/reactome` data cache durable; the implementation was verified
+  against `/tmp/science-commons-data/reactome`.
+- D2 promoted pathway datasets, Reactome curation PMID ingestion, Reactome/MSigDB concordance, non-human
+  Reactome, and non-tabular ontology support remain deferred.
+
 **Goal:** Ingest human Reactome into `~/d/science-commons` as the first real `bio.geneset` commons dataset that exercises the implemented C/A/B/D foundation.
 
 **Architecture:** The implementation uses the current D1 contract: `members_resource` is a CSV resource with one row per pathway and columns `set_key`, `name`, and semicolon-delimited `member_ids`. Reactome publishes Entrez-to-pathway membership, so the D1 membership table declares `identifier_space.namespace: entrez`; a separate long-form canonical panel resolves those Entrez ids through a single loaded C2 crosswalk index into `gene_key` and `symbol`. B2 is already implemented, so this pass carries row-level `dataset_usage` where Reactome source datasets are known, but does not implement D2 promoted pathway datasets.
@@ -17,8 +49,8 @@
 - The implemented gene crosswalk resolver returns an opaque `gene_key`. Do not split `gene_key` to recover `HGNC:<id>`. Use `identifier_space.namespace: entrez` for `sets.csv.member_ids`, and put `gene_key` in the auxiliary canonical panel.
 - `resolution_status: resolved` means the declared Entrez member namespace has a live C2 registry and the recipe resolved the auxiliary canonical panel. It does not mean `sets.csv.member_ids` are rewritten to `gene_key`.
 - Do not call `to_canonical(...)` once per Entrez id. That function reloads and hash-verifies the C2 CSV on each call. The recipe must call `load_gene_crosswalk()` once, build an in-memory Entrez index, and pass that index into pure table builders.
-- `dataset:gene-crosswalk-hgnc` currently exists in `~/d/science-commons`, but may be unbuilt (`hash: sha256:000...`, `bytes: 0`, `gene_count: 0`). Reactome promotion is blocked until this dataset has real bytes and metadata.
-- The pan-disease `~/d/health/comparisons/pan-disease/doc/datasets/data-reactome.md` file is a local pre-commons stub. Once commons `dataset:reactome` resolves, remove that local duplicate and let refs resolve through commons.
+- `dataset:gene-crosswalk-hgnc` exists in `~/d/science-commons` with real bytes and metadata; Reactome promotion used this built C2 registry.
+- The pan-disease `~/d/health/comparisons/pan-disease/doc/datasets/data-reactome.md` local pre-commons stub has been removed; child-project refs now resolve through commons.
 
 ## File Map
 
@@ -547,6 +579,7 @@ Expected:
   fake `GeneResolution` index; zero-retained pathways are excluded from `sets`; the canonical collection
   does not apply enrichment-style size filters; `set_size_summary` is the explicit `{min, median, max}`
   object; `dataset_usage` remains a JSON array string; archived Reactome URLs are required for fetches.
-- **Known blocker:** Reactome promotion is blocked if `dataset:gene-crosswalk-hgnc` remains placeholder.
+- **Resolved blocker:** Reactome promotion required a built `dataset:gene-crosswalk-hgnc`; that C2
+  registry is now built and pinned.
 - **Deferred:** D2 promoted pathway datasets, Reactome curation PMID ingestion, Reactome/MSigDB concordance,
   non-human Reactome, and non-tabular ontology support.
