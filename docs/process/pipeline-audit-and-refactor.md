@@ -207,12 +207,46 @@ This playbook scores two related disciplines during the sweep, but keeps them di
 
 - **Analysis / result-QA** — validates *results*, not the input table: leave-one-out /
   dataset-dropout stability; permutation / empirical-null calibration and assumption sweeps.
-- **Workflow / DAG-validation** — validates the *rule graph*, not a table: output-ownership / dedup
-  (each output produced by exactly one rule). Deliberately kept out of the table-QA convention,
-  whose contract is "one script + one rule reads the built table" and which cannot see DAG structure.
+- **Workflow / DAG-validation** — validates the *rule graph*, not a table; specified below.
 
 Surface both during the sweep so they are not forgotten.
 If a project-grown check becomes broadly reusable, record it in the synthesis "convention nominations".
+
+### Workflow / DAG-validation — single-writer / output-ownership
+
+Data-QA reads a *built artifact*; this discipline reads the **rule graph itself**, which the table-QA
+convention deliberately cannot see (its contract is "one script + one rule reads the built table"). A
+workflow whose every individual rule passes data-QA can still be unbuildable or non-reproducible
+because the *wiring* is wrong. Promote this from a named discipline to three specified, scorable
+checks — each with a worked defect from the cancer-evolution audit:
+
+1. **Single-writer (output-ownership).** Every file the workflow writes is the declared output of
+   **exactly one** rule. FAIL when a rule writes a path another rule already declares as its output
+   *without declaring it* — two undeclared writers to one artifact, which the workflow engine cannot
+   order. *Worked defect (t015):* `report_bundle` mutates `{PROCESSED_DIR}/datapackage.json` —
+   `normalize_workbook`'s declared output — while declaring only `{RESULT_DIR}/datapackage.json`. The
+   second write is invisible to the DAG, so the two rules have no enforced order.
+
+2. **Declared-input completeness (no path-escape dependencies).** Every file a rule reads is in its
+   `input:` block. WARN/FAIL when a rule reads a file via a `../../../` path-escape (or a hardcoded
+   absolute path) that is **not** a declared input — the DAG has no edge forcing the producer to run
+   first, so the rule can run against a stale or missing file and "works" only by run-order luck.
+   *Worked defect (t007):* `run_datapackage` reads `treatment_status.tsv` through a `../../../` path
+   that is not a declared input dependency.
+
+3. **No orphan inputs.** Every declared input is either produced by another rule or is a registered
+   external/source artifact. WARN/FAIL when an input is referenced by no producing rule and is not a
+   declared source — it appears from nowhere and silently breaks a clean-checkout rebuild. *Worked
+   defect (t007):* orphan inputs `ffpe_flags.tsv` and `primary_amplicon_segments.parquet`, produced by
+   no rule.
+
+**Rubric.** PASS (every output single-owned, every read declared, no orphan inputs) / WARN (orphan
+inputs or undeclared reads that currently resolve only by run-order luck) / FAIL (an output with two
+undeclared writers, or a declared input no rule produces). Record the verdict on the Axis-1
+`companion DAG-validation (output-ownership)` line. The fix is always **structural**: declare the
+missing output/input edges (or split the offending rule) so the DAG — not wall-clock run order or a
+path-escape — encodes every producer→consumer dependency. Like axis-1 fixes, land it as a guard
+(a workflow lint or a `--dry-run`/DAG assertion) so the defect cannot silently return.
 
 ## Report skeletons (copy into the target project)
 
