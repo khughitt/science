@@ -31,6 +31,7 @@ _ENTITY_FIELDS = (
     "parent_dataset",
     "siblings",
     "source_class",
+    "license",
     "derived_kind",
     "dataset_usage",
     "ontology_terms",
