@@ -28,6 +28,10 @@ from science_tool.graph.dataset_usage import (
     usage_records_for_entity,
     usage_records_for_geneset_rows,
 )
+from science_tool.graph.dataset_independence import (
+    derive_dataset_independence_records,
+    emit_dataset_independence_records,
+)
 from science_tool.graph.freshness import (
     EntityFreshnessInfo,
     close_bears_on,
@@ -146,6 +150,10 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
         kind_class=kind_class,
         pre_registration_targets=pre_registration_targets,
         eligible_code_files=_eligible_code_files(sources),
+    )
+    emit_dataset_independence_records(
+        provenance,
+        derive_dataset_independence_records(knowledge, provenance),
     )
     if sources.freshness_enabled:
         entity_meta = _build_entity_meta(sources, kind_class)

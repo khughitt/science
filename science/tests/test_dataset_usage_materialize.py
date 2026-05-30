@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 from rdflib import Dataset, Graph, Literal, Literal as RDFLiteral, URIRef
-from rdflib.namespace import RDF
+from rdflib.namespace import PROV, RDF
 from science_model.entities import Entity, EntityType, PaperEntity
 from science_model.packages.schema import AccessBlock, DatasetUsage, DerivationBlock
 
@@ -355,6 +355,88 @@ def test_materialize_graph_emits_entity_usage_nodes(tmp_path):
     assert (derived_nodes[0], SCI_NS.usageRole, Literal("upstream")) in graph
     assert (derived_nodes[0], SCI_NS.usageOverlap, Literal("unknown")) in graph
     assert (derived_nodes[0], SCI_NS.usageSource, Literal("derivation.inputs")) in graph
+
+
+def test_materialize_graph_emits_dataset_independence_commitment(tmp_path) -> None:
+    from science_tool.graph.materialize import materialize_graph
+
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path / "data" / "gtex" / "datapackage.yaml",
+        "gtex-v8",
+        "origin: external\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n",
+    )
+    prop_dir = tmp_path / "doc" / "propositions"
+    prop_dir.mkdir(parents=True)
+    (prop_dir / "p1.md").write_text(
+        "---\n"
+        "id: proposition:p1\n"
+        "type: proposition\n"
+        "title: P1\n"
+        "status: active\n"
+        "claim_layer: empirical_regularity\n"
+        "identification_strength: observational\n"
+        "proxy_directness: direct\n"
+        "created: '2026-05-29'\n"
+        "updated: '2026-05-29'\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir.mkdir(parents=True)
+    for slug in ("p1", "p2"):
+        (paper_dir / f"{slug}.md").write_text(
+            "---\n"
+            f"id: paper:{slug}\n"
+            "type: paper\n"
+            f"title: {slug.upper()}\n"
+            "status: active\n"
+            "created: '2026-05-29'\n"
+            "updated: '2026-05-29'\n"
+            "dataset_usage:\n"
+            "  - ref: dataset:gtex-v8\n"
+            "    role: analyzed\n"
+            "    overlap: full\n"
+            "---\n",
+            encoding="utf-8",
+        )
+    evidence_dir = tmp_path / "doc" / "evidence-lines"
+    evidence_dir.mkdir(parents=True)
+    for slug, paper in (("a", "p1"), ("b", "p2")):
+        (evidence_dir / f"{slug}.md").write_text(
+            "---\n"
+            f"id: evidence-line:{slug}\n"
+            "type: evidence-line\n"
+            f"title: Evidence {slug.upper()}\n"
+            "status: active\n"
+            "stance: supports\n"
+            "target: proposition:p1\n"
+            f"source: paper:{paper}\n"
+            "strength: moderate\n"
+            "created: '2026-05-29'\n"
+            "updated: '2026-05-29'\n"
+            "---\n",
+            encoding="utf-8",
+        )
+
+    graph_path = materialize_graph(tmp_path)
+    provenance = _load_trig(graph_path).graph(PROJECT_NS["graph/provenance"])
+    line_a = PROJECT_NS["evidence-line/a"]
+    line_b = PROJECT_NS["evidence-line/b"]
+
+    assert (line_a, PROV.wasDerivedFrom, PROJECT_NS["paper/p1"]) in provenance
+    assert (line_b, PROV.wasDerivedFrom, PROJECT_NS["paper/p2"]) in provenance
+
+    records = list(provenance.subjects(RDF.type, SCI_NS.DatasetIndependenceCommitment))
+    assert len(records) == 1
+    assert (
+        records[0],
+        SCI_NS.independenceGroup,
+        Literal("dataset-derived:gtex-v8"),
+    ) in provenance
 
 
 @pytest.mark.parametrize(
