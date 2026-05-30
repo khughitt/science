@@ -934,6 +934,83 @@ def test_doi_check_skipped_in_doc_papers() -> None:
         assert [i for i in issues if i.ref_type == "doi"] == []
 
 
+def test_doi_with_internal_parentheses_is_matched() -> None:
+    """Legacy Elsevier DOIs contain parens (e.g. 10.1016/0197-2456(86)90046-2);
+    a prose citation must resolve against the bib, not truncate at the first ')'."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold_with_bib(
+            root,
+            "@article{DerSimonian1986,\n  title={X},\n  doi={10.1016/0197-2456(86)90046-2},\n}\n",
+        )
+        (root / "doc" / "background" / "topics" / "x.md").write_text(
+            "# X\nRandom-effects meta-analysis via 10.1016/0197-2456(86)90046-2 here.\n"
+        )
+        issues = check_refs(root)
+        assert [i for i in issues if i.ref_type == "doi"] == []
+
+
+def test_doi_wrapped_in_parentheses_trims_trailing_paren() -> None:
+    """A parenthesis-wrapped DOI in prose reports the bare DOI, not a trailing ')'."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold_with_bib(
+            root,
+            "@article{Smith2024,\n  title={X},\n  doi={10.1038/s41586-024-00001-1},\n}\n",
+        )
+        (root / "doc" / "background" / "topics" / "x.md").write_text(
+            "# X\nA candidate result (10.9999/fake.123) was noted.\n"
+        )
+        issues = check_refs(root)
+        doi_issues = [i for i in issues if i.ref_type == "doi"]
+        assert len(doi_issues) == 1
+        assert doi_issues[0].ref_value == "10.9999/fake.123"
+
+
+def test_doi_pmid_check_skipped_in_doc_searches_by_default() -> None:
+    """Search docs are literature-discovery logs (candidate identifiers), not
+    citation sites — exempt from DOI/PMID bib-completeness by default."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold_with_bib(
+            root,
+            "@article{Smith2024,\n  title={X},\n  doi={10.1038/s41586-024-00001-1},\n}\n",
+        )
+        (root / "doc" / "searches").mkdir(parents=True, exist_ok=True)
+        (root / "doc" / "searches" / "2026-survey.md").write_text(
+            "# Survey\nCandidate found: PMID: 99999999 / DOI: 10.9999/fake.123 (not adopted).\n"
+        )
+        issues = check_refs(root)
+        assert [i for i in issues if i.ref_type in ("doi", "pmid")] == []
+
+
+def test_doi_pmid_exempt_dirs_is_configurable() -> None:
+    """A project can override the exempt-dir list; dropping doc/searches re-enables
+    the check there."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold_with_bib(
+            root,
+            "@article{Smith2024,\n  title={X},\n  doi={10.1038/s41586-024-00001-1},\n}\n",
+        )
+        (root / "science.yaml").write_text(
+            "name: demo\nid: demo\nrefs:\n  doi_pmid_exempt_dirs: [doc/papers]\n",
+            encoding="utf-8",
+        )
+        (root / "doc" / "searches").mkdir(parents=True, exist_ok=True)
+        (root / "doc" / "searches" / "2026-survey.md").write_text(
+            "# Survey\nCandidate DOI: 10.9999/fake.123 (not adopted).\n"
+        )
+        issues = check_refs(root)
+        doi_issues = [i for i in issues if i.ref_type == "doi"]
+        assert len(doi_issues) == 1
+        assert doi_issues[0].ref_value == "10.9999/fake.123"
+
+
 def test_doi_check_silent_when_no_bib_or_paper_notes() -> None:
     """No corpus → no DOI claims to validate against → no false positives."""
     runner = CliRunner()
