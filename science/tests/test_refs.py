@@ -369,6 +369,37 @@ peers:
         assert result.exception is not None
 
 
+def test_cli_refs_check_id_mismatch_names_offending_science_yaml() -> None:
+    """A peer id_mismatch must give an actionable message naming the file.
+
+    Regression for fb-2026-05-29-004: the abort message named neither the
+    offending science.yaml nor declared-vs-found ids, so root-causing required
+    manually diffing files. The error now names the peer's science.yaml path.
+    """
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        peer = root / "peer-dir"
+        peer.mkdir()
+        (peer / "science.yaml").write_text(
+            'name: actual\nid: actual-id\nprofile: research\nresearch_question: "..."\n',
+            encoding="utf-8",
+        )
+        (root / "science.yaml").write_text(
+            f'name: host\nid: host\nprofile: research\nresearch_question: "..."\n'
+            f"peers:\n  - id: declared-id\n    path: {peer}\n",
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(main, ["refs", "check"])
+
+        assert result.exit_code == 1
+        assert "id_mismatch" in result.output
+        assert str(peer / "science.yaml") in result.output
+        assert "declared-id" in result.output and "actual-id" in result.output
+
+
 def test_multiple_citations_in_one_bracket() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem() as td:

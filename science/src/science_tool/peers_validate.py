@@ -200,7 +200,9 @@ def _validate_peer_id(
             _issue(
                 PeerIssueKind.ID_MISMATCH,
                 entry.id,
-                f"declared id {entry.id!r}, peer's science.yaml says {peer_self_id!r}",
+                f"peers entry declares id {entry.id!r}, but {peer_yaml} declares id "
+                f"{peer_self_id!r} — align the peers entry to the peer's id (or fix "
+                "the peer's science.yaml)",
                 entry_index=entry_index,
             )
         )
