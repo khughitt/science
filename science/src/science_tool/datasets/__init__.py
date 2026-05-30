@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+import logging
+
 from science_tool.datasets._base import DatasetAdapter, DatasetResult, FileInfo
 
 __all__ = [
@@ -39,13 +42,27 @@ def search_all(
     *,
     sources: list[str] | None = None,
     max_per_source: int = 10,
+    on_error: Callable[[str, Exception], None] | None = None,
 ) -> list[DatasetResult]:
-    """Fan out search across multiple adapters, merge results."""
+    """Fan out search across multiple adapters, merge results.
+
+    A single adapter failing (e.g. a rate-limited source returning HTTP 429)
+    must not abort the whole fan-out: the failing source is skipped and the
+    other adapters' results are still returned. Each failure is reported via
+    ``on_error(name, exc)`` if provided, otherwise logged as a warning, so the
+    degradation is never silent.
+    """
     targets = sources or list(_ADAPTERS)
     results: list[DatasetResult] = []
     for name in targets:
         adapter = get_adapter(name)
-        results.extend(adapter.search(query, max_results=max_per_source))
+        try:
+            results.extend(adapter.search(query, max_results=max_per_source))
+        except Exception as exc:  # noqa: BLE001 - degrade per-source, never abort the fan-out
+            if on_error is not None:
+                on_error(name, exc)
+            else:
+                logging.getLogger(__name__).warning("dataset source %r failed: %s", name, exc)
     return results
 
 

@@ -2540,7 +2540,12 @@ def datasets_sources() -> None:
 def datasets_search(query: str, source: str | None, max_results: int, output_format: str) -> None:
     """Search for datasets across repositories."""
     sources = source.split(",") if source else None
-    results = search_all(query, sources=sources, max_per_source=max_results)
+    results = search_all(
+        query,
+        sources=sources,
+        max_per_source=max_results,
+        on_error=lambda name, exc: click.echo(f"Warning: source {name!r} unavailable: {exc}", err=True),
+    )
     if not results:
         click.echo("No datasets found.")
         return

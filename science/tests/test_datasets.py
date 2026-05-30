@@ -102,6 +102,52 @@ class TestRegistry:
         results = search_all("test", sources=["fake"], max_per_source=5)
         assert len(results) >= 1
 
+    def test_search_all_degrades_when_one_adapter_fails(self) -> None:
+        """A single failing adapter must not abort the whole fan-out.
+
+        Regression for fb-2026-05-29-002: a semantic_scholar 429 killed the
+        entire 'datasets search', hiding GEO/zenodo/dryad results. search_all
+        should skip the failing source, return partial results, and report the
+        error via on_error rather than raising.
+        """
+        from science_tool.datasets import register, search_all
+
+        class GoodAdapter:
+            name = "good"
+
+            def search(self, query: str, *, max_results: int = 20) -> list[DatasetResult]:
+                return [DatasetResult(source="good", id="1", title=query)]
+
+            def metadata(self, dataset_id: str) -> DatasetResult:
+                return DatasetResult(source="good", id=dataset_id, title="Good")
+
+            def files(self, dataset_id: str) -> list[FileInfo]:
+                return []
+
+            def download(self, file_info: FileInfo, dest_dir: Path) -> Path:
+                return dest_dir / file_info.filename
+
+        class RateLimitedAdapter(GoodAdapter):
+            name = "ratelimited"
+
+            def search(self, query: str, *, max_results: int = 20) -> list[DatasetResult]:
+                raise RuntimeError("429 Too Many Requests")
+
+        register("good", GoodAdapter)
+        register("ratelimited", RateLimitedAdapter)
+
+        errors: list[tuple[str, Exception]] = []
+        results = search_all(
+            "q",
+            sources=["ratelimited", "good"],
+            on_error=lambda name, exc: errors.append((name, exc)),
+        )
+
+        assert [r.source for r in results] == ["good"]
+        assert len(errors) == 1
+        assert errors[0][0] == "ratelimited"
+        assert isinstance(errors[0][1], RuntimeError)
+
     def test_get_unknown_adapter_raises(self) -> None:
         from science_tool.datasets import get_adapter
 
