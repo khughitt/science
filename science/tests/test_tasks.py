@@ -338,6 +338,45 @@ def test_render_excludes_completed_when_absent() -> None:
     assert "completed" not in rendered
 
 
+def test_render_includes_empty_aspects_field() -> None:
+    """A task with no aspects must still render the required 'aspects' field.
+
+    'science validate' lists aspects in REQUIRED_FIELDS, so a task created via
+    'tasks add' without --aspects (aspects == []) must still emit '- aspects: []'
+    or it fails validation immediately after creation (feedback fb-2026-05-30-005).
+    """
+    t = Task(
+        id="t010",
+        title="No aspects",
+        type="dev",
+        priority="P1",
+        status="proposed",
+        created=date(2026, 3, 1),
+        description="Body.",
+    )
+    rendered = render_task(t)
+    assert "- aspects: []" in rendered
+
+
+def test_empty_aspects_round_trips(tmp_path: Path) -> None:
+    f = _write(
+        tmp_path / "active.md",
+        """\
+## [t001] No aspects
+- priority: P1
+- status: proposed
+- aspects: []
+- created: 2026-05-30
+
+Body.
+""",
+    )
+    task = parse_tasks(f)[0]
+    assert task.aspects == []
+    rendered = render_task(task)
+    assert "- aspects: []" in rendered
+
+
 def test_parse_and_render_parent_round_trips(tmp_path: Path) -> None:
     f = _write(
         tmp_path / "active.md",
@@ -1272,7 +1311,9 @@ def test_render_task_emits_aspects_when_nonempty() -> None:
     assert "- aspects: [hypothesis-testing, computational-analysis]" in rendered
 
 
-def test_render_task_omits_aspects_when_empty() -> None:
+def test_render_task_emits_empty_aspects_field() -> None:
+    # aspects is validate-required; an empty list still emits '- aspects: []'
+    # so a task without aspects is validate-clean (feedback fb-2026-05-30-005).
     from datetime import date
 
     from science_tool.tasks import Task, render_task
@@ -1285,7 +1326,7 @@ def test_render_task_omits_aspects_when_empty() -> None:
         created=date(2026, 4, 19),
     )
     rendered = render_task(t)
-    assert "aspects" not in rendered
+    assert "- aspects: []" in rendered
 
 
 def test_add_task_with_aspects(tmp_path) -> None:
@@ -1307,14 +1348,16 @@ def test_add_task_with_aspects(tmp_path) -> None:
     assert reread[0].aspects == ["hypothesis-testing"]
 
 
-def test_add_task_without_aspects_writes_no_aspects_line(tmp_path) -> None:
+def test_add_task_without_aspects_writes_empty_aspects_line(tmp_path) -> None:
+    # Without --aspects the task must still carry '- aspects: []' so the next
+    # 'science validate' passes (feedback fb-2026-05-30-005).
     from science_tool.tasks import add_task
 
     (tmp_path / "active.md").write_text("")
     add_task(project_root=tmp_path, tasks_dir=tmp_path, title="Test", priority="P2")
 
     body = (tmp_path / "active.md").read_text()
-    assert "aspects" not in body
+    assert "- aspects: []" in body
 
 
 # ---------------------------------------------------------------------------

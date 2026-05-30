@@ -270,9 +270,10 @@ def render_task(task: Task) -> str:
     lines.append(f"- status: {task.status}")
     if task.parent:
         lines.append(f"- parent: {task.parent}")
-    if task.aspects:
-        items = ", ".join(task.aspects)
-        lines.append(f"- aspects: [{items}]")
+    # aspects is a validate-required field, so emit it even when empty
+    # (a task added without --aspects must still be validate-clean).
+    items = ", ".join(task.aspects)
+    lines.append(f"- aspects: [{items}]")
     if task.related:
         items = ", ".join(task.related)
         lines.append(f"- related: [{items}]")

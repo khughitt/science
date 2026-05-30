@@ -566,7 +566,9 @@ def test_tasks_add_without_type_or_aspects(tmp_path, monkeypatch):
     result = runner.invoke(main, ["tasks", "add", "Demo", "--priority", "P2"])
     assert result.exit_code == 0, result.output
     body = (tmp_path / "tasks" / "active.md").read_text()
-    assert "aspects" not in body
+    # aspects is validate-required, so add without --aspects still emits '[]'
+    # (feedback fb-2026-05-30-005); only type stays omitted when empty.
+    assert "- aspects: []" in body
     assert "- type:" not in body
 
 
