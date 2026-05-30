@@ -55,6 +55,41 @@ def test_expands_path_symbol_indirection_across_files(tmp_path: Path) -> None:
     ]
 
 
+def test_reused_symbol_name_resolves_per_file(tmp_path: Path) -> None:
+    """A symbol name reused across Snakefiles must resolve per-file, not globally.
+
+    Regression for fb-2026-05-28-004: a global first-definition-wins symbol
+    table made every workflow's `SCRIPTS = Path(...)` collapse to the first
+    file's value, so later workflows' `{SCRIPTS}/x.py` resolved to the wrong
+    directory and their real scripts were flagged code.orphaned-executable.
+    """
+    swan = tmp_path / "code" / "workflows" / "swan"
+    cosmic = tmp_path / "code" / "workflows" / "cosmic"
+    swan.mkdir(parents=True)
+    cosmic.mkdir(parents=True)
+    swan_smk = swan / "swan.smk"
+    swan_smk.write_text(
+        'from pathlib import Path\n\nSCRIPTS = Path("code/analysis/swan")\n'
+        '\n'
+        'rule swan_run:\n'
+        '    shell:\n'
+        '        "uv run python {SCRIPTS}/run.py"\n',
+        encoding="utf-8",
+    )
+    cosmic_smk = cosmic / "cosmic.smk"
+    cosmic_smk.write_text(
+        'from pathlib import Path\n\nSCRIPTS = Path("code/analysis/cosmic")\n'
+        '\n'
+        'rule cosmic_run:\n'
+        '    shell:\n'
+        '        "uv run python {SCRIPTS}/run.py"\n',
+        encoding="utf-8",
+    )
+    refs = _refs(tmp_path, swan_smk, cosmic_smk)
+    assert refs["code/analysis/swan/run.py"] == ["code/workflows/swan/swan.smk::swan_run"]
+    assert refs["code/analysis/cosmic/run.py"] == ["code/workflows/cosmic/cosmic.smk::cosmic_run"]
+
+
 def test_expands_multiline_f_string_reference(tmp_path: Path) -> None:
     wf = tmp_path / "code" / "workflows" / "external"
     wf.mkdir(parents=True)
