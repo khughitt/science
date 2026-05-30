@@ -68,6 +68,7 @@ GRAPH_EXPORT_EDGE_METADATA_PREDICATES: frozenset[URIRef] = frozenset(
         SCI_NS.projectStatus,
         SCI_NS.scope,
         SCI_NS.sourceClass,
+        SCI_NS.license,
         SCI_NS.usageRole,
         SCI_NS.usageOverlap,
         SCI_NS.usageSource,
@@ -213,6 +214,11 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
     {
         "predicate": "sci:sourceClass",
         "description": "Dataset epistemic source class (observational | derived | reference)",
+        "layer": "graph/knowledge",
+    },
+    {
+        "predicate": "sci:license",
+        "description": "Dataset license (SPDX id or sentinel: unknown | proprietary | custom)",
         "layer": "graph/knowledge",
     },
     {
