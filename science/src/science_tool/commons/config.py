@@ -262,6 +262,11 @@ def resolve_project_root(name: str) -> Path:
     for project in cfg.projects:
         if project.name == name:
             return Path(project.path).expanduser()
+    # Fall back to id so the same identifier works with both validate --project
+    # (name) and promote --from (id) (fb-2026-05-29-003). Name takes precedence.
+    for project in cfg.projects:
+        if project.id == name:
+            return Path(project.path).expanduser()
     raise ProjectNotRegisteredError(name)
 
 
@@ -303,4 +308,10 @@ def resolve_project_by_id(project_id: str) -> Path:
                 f"project {project_id!r} has id: null; assign an id "
                 "in ~/.config/science/config.yaml or deregister the entry"
             )
+    # Fall back to name so the same identifier works with both promote --from
+    # (id) and validate --project (name) (fb-2026-05-29-003). Id takes precedence;
+    # the null-id diagnostic above still fires first for legacy registrations.
+    for project in cfg.projects:
+        if project.name == project_id:
+            return Path(project.path).expanduser()
     raise CommonsError(f"no registered project with id {project_id!r}")

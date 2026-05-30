@@ -51,7 +51,39 @@ class TestDatasetsCLI:
         with patch("science_tool.cli.search_all", return_value=mock_results) as mock_search:
             result = runner.invoke(main, ["datasets", "search", "rna-seq", "--source", "geo"])
         assert result.exit_code == 0
-        mock_search.assert_called_once_with("rna-seq", sources=["geo"], max_per_source=20)
+        args, kwargs = mock_search.call_args
+        assert args == ("rna-seq",)
+        assert kwargs["sources"] == ["geo"]
+        assert kwargs["max_per_source"] == 20
+        assert callable(kwargs["on_error"])
+
+    def test_search_reports_failed_source_without_aborting(self, runner: CliRunner) -> None:
+        """A rate-limited source must surface a stderr warning, not abort (fb-2026-05-29-002)."""
+        from science_tool.datasets import register, search_all
+
+        class FlakyAdapter:
+            name = "flaky"
+
+            def search(self, query: str, *, max_results: int = 20) -> list[DatasetResult]:
+                raise RuntimeError("429 Too Many Requests")
+
+            def metadata(self, dataset_id: str) -> DatasetResult:  # pragma: no cover
+                return DatasetResult(source="flaky", id=dataset_id, title="x")
+
+            def files(self, dataset_id: str):  # pragma: no cover
+                return []
+
+            def download(self, file_info, dest_dir):  # pragma: no cover
+                return dest_dir
+
+        register("flaky", FlakyAdapter)
+        # mix_stderr defaults so stderr is captured separately from stdout output
+        result = runner.invoke(main, ["datasets", "search", "q", "--source", "flaky"])
+        assert result.exit_code == 0
+        combined = result.output + (result.stderr if result.stderr_bytes else "")
+        assert "flaky" in combined and "429" in combined
+        # search_all itself returns no rows (all sources failed) rather than raising
+        assert search_all("q", sources=["flaky"], on_error=lambda *_: None) == []
 
     def test_search_empty_results(self, runner: CliRunner) -> None:
         with patch("science_tool.cli.search_all", return_value=[]):

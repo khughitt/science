@@ -125,6 +125,21 @@ def test_missing_required_fields_emit_all_errors(tmp_path: Path) -> None:
     ]
 
 
+def test_task_added_without_aspects_validates_clean(tmp_path: Path) -> None:
+    """A task created via add_task without --aspects must pass validation.
+
+    Regression for feedback fb-2026-05-30-005 / fb-2026-05-29-007 /
+    fb-2026-05-28-005: 'science tasks add' wrote no aspects field, so the very
+    next 'science validate' failed with 'missing required field: aspects'.
+    """
+    from science_tool.tasks import add_task
+    from science_tool.validate.checks.tasks import check_tasks
+
+    add_task(tmp_path, tmp_path / "tasks", "New task", "P2", description="Body.")
+
+    assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == []
+
+
 def test_duplicate_ids_across_active_and_done_emit_bash_parity_message(tmp_path: Path) -> None:
     from science_tool.validate.checks.tasks import check_tasks
 

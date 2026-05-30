@@ -549,6 +549,67 @@ def test_resolve_project_root_returns_registered_path(
     )
 
 
+def test_resolve_project_root_accepts_id_as_fallback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """validate --project should accept the project id too, matching promote --from.
+
+    Regression for fb-2026-05-29-003: promote --from resolves by id while
+    validate --project resolved only by name, so the same logical argument
+    needed a different value for each command.
+    """
+    from science_tool.commons.config import resolve_project_root
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.yaml").write_text(
+        yaml.dump(
+            {
+                "projects": [
+                    {
+                        "path": "/home/me/d/cancer/meta",
+                        "name": "cancer-meta",
+                        "id": "meta",
+                        "registered": "2026-05-14",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    # name still works
+    assert resolve_project_root("cancer-meta") == Path("/home/me/d/cancer/meta")
+    # id now works too
+    assert resolve_project_root("meta") == Path("/home/me/d/cancer/meta")
+
+
+def test_resolve_project_by_id_accepts_name_as_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """promote --from should accept the project name too, matching validate --project."""
+    from science_tool.commons.config import resolve_project_by_id
+
+    cfg_dir = _write_config(
+        tmp_path,
+        """
+        projects:
+          - path: ~/d/cancer/meta
+            name: cancer-meta
+            id: meta
+            role: meta
+            parent: null
+            registered: "2026-01-01"
+        """,
+    )
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    # id still works
+    assert resolve_project_by_id("meta") == (tmp_path / "d" / "cancer" / "meta")
+    # name now works too
+    assert resolve_project_by_id("cancer-meta") == (tmp_path / "d" / "cancer" / "meta")
+
+
 def test_resolve_project_root_unknown_name_raises(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

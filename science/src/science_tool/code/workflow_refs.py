@@ -120,9 +120,14 @@ def _add_reference(
             refs[rel].append(reference)
 
 
-def _build_path_symbols(sources: list[tuple[Path, str]]) -> dict[str, str]:
-    lines = [line for _path, text in sources for line in text.splitlines()]
-    symbols: dict[str, str] = {}
+def _resolve_symbols(lines: list[str], *, seed: dict[str, str] | None = None) -> dict[str, str]:
+    """Resolve `NAME = Path(...)` / `NAME = BASE / "x"` symbols for one scope.
+
+    `seed` pre-populates cross-file (shared) symbols; an in-scope redefinition of
+    a seeded name keeps the first value (the seed), and the first in-file
+    definition wins over later conflicting ones.
+    """
+    symbols: dict[str, str] = dict(seed) if seed else {}
 
     def set_symbol(name: str, value: str) -> bool:
         existing = symbols.get(name)
@@ -154,6 +159,34 @@ def _build_path_symbols(sources: list[tuple[Path, str]]) -> dict[str, str]:
     return symbols
 
 
+def _build_path_symbols(sources: list[tuple[Path, str]]) -> dict[Path, dict[str, str]]:
+    """Resolve path symbols per source file.
+
+    A global first-definition-wins table silently misresolves a symbol name
+    (e.g. ``SCRIPTS``) that different Snakefiles define with different values:
+    later workflows' references collapse to the first file's value, flagging
+    their real scripts as orphaned. So symbols are scoped per file.
+
+    Cross-file indirection (a symbol defined in one Snakefile and used in
+    another, e.g. via ``include:``) is preserved by seeding each file with the
+    *globally-unique* symbols — names that every defining file agrees on. A
+    name defined with conflicting values across files is never shared; each
+    file resolves it from its own definition.
+    """
+    file_lines = {path: text.splitlines() for path, text in sources}
+    # Phase A: resolve each file in isolation to discover which symbols are
+    # defined consistently everywhere (safe to share) vs. redefined per-file.
+    isolated = {path: _resolve_symbols(lines) for path, lines in file_lines.items()}
+    values: dict[str, set[str]] = {}
+    for syms in isolated.values():
+        for name, value in syms.items():
+            values.setdefault(name, set()).add(value)
+    shared = {name: next(iter(vals)) for name, vals in values.items() if len(vals) == 1}
+    # Phase B: re-resolve each file seeded with the shared symbols so cross-file
+    # indirection still resolves while per-file redefinitions stay scoped.
+    return {path: _resolve_symbols(lines, seed=shared) for path, lines in file_lines.items()}
+
+
 def _rule_blocks(text: str) -> Iterable[tuple[str, str]]:
     matches = list(_RULE_RE.finditer(text))
     for idx, match in enumerate(matches):
@@ -181,11 +214,12 @@ def find_workflow_references(
             # over-report orphans (fail-closed), never hide one — so the anomaly
             # is surfaced, not silently swallowed.
             continue
-    symbols = _build_path_symbols(sources)
+    symbols_by_file = _build_path_symbols(sources)
     literal_re = _literal_re(code_root_names)
     module_re = _python_module_re(code_root_names)
     refs: dict[str, list[str]] = {}
     for smk_path, text in sources:
+        symbols = symbols_by_file.get(smk_path, {})
         rel_smk = smk_path.relative_to(project_root).as_posix()
         for rule_name, block in _rule_blocks(text):
             reference = f"{rel_smk}::{rule_name}"

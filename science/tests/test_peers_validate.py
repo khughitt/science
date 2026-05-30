@@ -106,6 +106,9 @@ peers:
     assert mismatch.severity == "error"
     assert "actual-id" in mismatch.detail
     assert "declared-id" in mismatch.detail
+    # Detail must name the offending science.yaml PATH so the fix is actionable
+    # without manually diffing files (fb-2026-05-29-004).
+    assert str(peer / "science.yaml") in mismatch.detail
 
 
 def test_duplicate_peer_id_error(tmp_path: Path) -> None:
