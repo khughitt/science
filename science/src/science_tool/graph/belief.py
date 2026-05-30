@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
 from rdflib import Graph, Literal, RDF, URIRef
@@ -13,6 +13,7 @@ from .belief_weights import (
     GATED_PROXY, INDEPENDENT, ROLE_DIRECT_TEST, SCOPE_WHOLE_CLAIM, SHARED_SOURCE,
     STRENGTH_RANK, normalize_evidence_type,
 )
+from .dataset_independence import DerivedCommitmentMetadata, committed_metadata_by_line
 from .io import CITO_NS, SCI_NS
 
 EVIDENCE_LINE_CLASS = SCI_NS.EvidenceLine  # rdf:type minted by materialize.py _kind_class_name("evidence-line")
@@ -75,6 +76,22 @@ def _read_unit(
     )
 
 
+def _with_derived_commitment(
+    unit: EvidenceUnit,
+    derived: dict[URIRef, DerivedCommitmentMetadata],
+) -> EvidenceUnit:
+    metadata = derived.get(URIRef(unit.line_uri))
+    if metadata is None:
+        return unit
+    if unit.independence in (CIRCULAR, SHARED_SOURCE, INDEPENDENT):
+        return unit
+    return replace(
+        unit,
+        independence=metadata.independence,
+        independence_group=metadata.independence_group,
+    )
+
+
 def collect_evidence_units(
     knowledge: Graph, provenance: Graph, targets: Iterable[URIRef]
 ) -> list[EvidenceUnit]:
@@ -90,7 +107,8 @@ def collect_evidence_units(
     )
     units: list[EvidenceUnit] = []
     seen: set[str] = set()
-    for target in targets:
+    target_set = frozenset(targets)
+    for target in target_set:
         for predicate, stance in ((CITO_NS.supports, "supports"), (CITO_NS.disputes, "disputes")):
             for subject, _, _ in knowledge.triples((None, predicate, target)):
                 if (subject, RDF.type, EVIDENCE_LINE_CLASS) not in knowledge:
@@ -99,7 +117,8 @@ def collect_evidence_units(
                     continue
                 seen.add(str(subject))
                 units.append(_read_unit(provenance, subject, stance, reference_dataset_uris))
-    return units
+    derived = committed_metadata_by_line(provenance, target_set)
+    return [_with_derived_commitment(unit, derived) for unit in units]
 
 
 def quality_key(u: EvidenceUnit) -> tuple[int, int, int, int]:

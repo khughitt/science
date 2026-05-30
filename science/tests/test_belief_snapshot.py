@@ -39,7 +39,7 @@ def test_snapshot_records_basic_shape():
     assert row["net_band"] is None                 # scalar fields null when disabled
     assert row["massed_support_score"] is None
     assert row["input_hashes"] and all(h.startswith("sha256:") for h in row["input_hashes"])
-    assert row["config_version"] == "belief-logodds-v2"
+    assert row["config_version"] == "belief-logodds-v3"
 
 
 def test_snapshot_records_scalar_enabled_fills_scores():

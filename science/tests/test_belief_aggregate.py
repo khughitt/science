@@ -1,4 +1,5 @@
-from science_tool.graph.belief import EvidenceUnit, BeliefMagnitude, aggregate_belief
+from science_tool.graph.belief import EvidenceUnit, BeliefMagnitude, aggregate_belief, reduce_units
+from science_tool.graph.io import PROJECT_NS
 
 def _u(stance="supports", **kw):
     base = dict(line_uri="x", stance=stance, strength="strong", independence="independent",
@@ -49,3 +50,19 @@ def test_pilot_shape_fragile_contested_not_eliminated():
     assert r.magnitude == BeliefMagnitude.FRAGILE
     assert r.contested is True and r.capped_by_refutation is False
     assert r.display() == "fragile (contested)"
+
+
+def test_aggregate_belief_candidates_do_not_collapse_but_committed_records_do() -> None:
+    ungrouped = [
+        EvidenceUnit(str(PROJECT_NS["evidence-line/a"]), "supports", "medium", None, None, None, None, None, None, False, None, ()),
+        EvidenceUnit(str(PROJECT_NS["evidence-line/b"]), "supports", "medium", None, None, None, None, None, None, False, None, ()),
+    ]
+    committed = [
+        EvidenceUnit(str(PROJECT_NS["evidence-line/a"]), "supports", "medium", "shared-source", "dataset-derived:gtex-v8", None, None, None, None, False, None, ()),
+        EvidenceUnit(str(PROJECT_NS["evidence-line/b"]), "supports", "medium", "shared-source", "dataset-derived:gtex-v8", None, None, None, None, False, None, ()),
+    ]
+
+    assert len(reduce_units(ungrouped).kept) == 2
+    reduced = reduce_units(committed)
+    assert len(reduced.kept) == 1
+    assert len(reduced.collapsed) == 1

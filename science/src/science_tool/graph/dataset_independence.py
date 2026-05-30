@@ -85,6 +85,12 @@ class CandidateEdge:
     reason: str
 
 
+@dataclass(frozen=True, slots=True)
+class DerivedCommitmentMetadata:
+    independence: str
+    independence_group: str
+
+
 def read_dataset_usage_facts(provenance: Graph) -> list[UsageFact]:
     facts: list[UsageFact] = []
     for consumer, _, usage_node in provenance.triples((None, SCI_NS.hasDatasetUsage, None)):
@@ -162,6 +168,21 @@ def emit_dataset_independence_records(provenance: Graph, records: list[DatasetIn
             provenance.add((node, SCI_NS.sharedDataset, dataset))
         for usage_node in sorted(record.usage_nodes, key=str):
             provenance.add((node, SCI_NS.derivedFromDatasetUsage, usage_node))
+
+
+def committed_metadata_by_line(provenance: Graph, targets: frozenset[URIRef]) -> dict[URIRef, DerivedCommitmentMetadata]:
+    out: dict[URIRef, DerivedCommitmentMetadata] = {}
+    for record in provenance.subjects(RDF.type, SCI_NS.DatasetIndependenceCommitment):
+        target = _one_uri(provenance, URIRef(record), SCI_NS.independenceTarget)
+        if target not in targets:
+            continue
+        group = _one_literal(provenance, URIRef(record), SCI_NS.independenceGroup)
+        if group is None:
+            continue
+        for member in provenance.objects(record, SCI_NS.independenceMember):
+            if isinstance(member, URIRef):
+                out[member] = DerivedCommitmentMetadata("shared-source", group)
+    return out
 
 
 def _evidence_line_targets(knowledge: Graph) -> dict[URIRef, URIRef]:

@@ -45,4 +45,4 @@ def test_phase2_constants_present():
     assert bw.PROXY_STEP_PENALTY == 2
     assert bw.CURATION_STEP_PENALTY == 1
     assert bw.DELTA_ENVELOPE == (0.3, 1.0)
-    assert bw.CONFIG_VERSION == "belief-logodds-v2"
+    assert bw.CONFIG_VERSION == "belief-logodds-v3"

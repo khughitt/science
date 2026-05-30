@@ -46,7 +46,7 @@ def normalize_evidence_type(value: str | None) -> str:
 PROXY_STEP_PENALTY = 2          # gated proxy counts two ordinal steps lower (logic, not a cliff)
 CURATION_STEP_PENALTY = 1       # reference (human-curated) dataset: one ordinal step lower (A2/A-D4)
 DELTA_ENVELOPE = (0.3, 1.0)     # log-odds per ordinal step; OR ~1.35..2.72; SWEPT, not chosen
-CONFIG_VERSION = "belief-logodds-v2"   # A2 curation down-weight; bump on any change here
+CONFIG_VERSION = "belief-logodds-v3"   # B2 committed dataset-derived independence; bump on any scoring input change
 
 
 def type_steps(evidence_type: str | None) -> int:
