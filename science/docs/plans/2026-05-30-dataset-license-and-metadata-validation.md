@@ -114,10 +114,11 @@ queryable" goal we emit it explicitly:
   `entity.kind == "dataset"` block, emit `sci:license` when present. A graph-assertion
   test must confirm the triple lands.
 - `src/science_tool/graph/store/constants.py`: register `sci:license` as a first-class
-  query predicate — add `SCI_NS.license` to the `PREDICATE_REGISTRY` tuple (~line 68,
-  beside `SCI_NS.sourceClass`) and a metadata allow-list entry (~line 212) with a
-  description/layer, matching the `sci:sourceClass` precedent. A test asserts it shows
-  up in `science graph predicates`.
+  query predicate — add `SCI_NS.license` to `GRAPH_EXPORT_EDGE_METADATA_PREDICATES`
+  (beside `SCI_NS.sourceClass`) so graph export does not misclassify the literal
+  metadata as an edge, and add a `PREDICATE_REGISTRY` entry with description/layer
+  (beside the `sci:sourceClass` entry) so it shows up in `science graph predicates`.
+  A test asserts both registrations.
 
 ### 1a. Schema + template synchronization
 
