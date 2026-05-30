@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from science_tool.bibliography import add_bib_entry, load_bib_keys
+from science_tool.bibliography import (
+    add_bib_entry,
+    load_bib_author_surnames,
+    load_bib_keys,
+)
 
 SMITH = """\
 @article{Smith2024,
@@ -86,6 +90,22 @@ def test_add_rejects_truncated_entry(tmp_path: Path) -> None:
     truncated = "@article{Broken2024,\n  title={Unterminated"
     with pytest.raises(ValueError, match="balanced|truncated|brace"):
         add_bib_entry(tmp_path, truncated)
+
+
+def test_author_surnames_none_without_bib(tmp_path: Path) -> None:
+    # No references.bib -> None, so bib-aware lints fall back to flag-all.
+    assert load_bib_author_surnames(tmp_path) is None
+
+
+def test_author_surnames_comma_format(tmp_path: Path) -> None:
+    add_bib_entry(tmp_path, SMITH_REVISED)  # author={Smith, Jane and Doe, John}
+    assert load_bib_author_surnames(tmp_path) == {"smith", "doe"}
+
+
+def test_author_surnames_first_last_format(tmp_path: Path) -> None:
+    entry = "@article{Levine2016,\n  author={Morgan E. Levine and Felix Day},\n  year={2016}\n}"
+    add_bib_entry(tmp_path, entry)
+    assert load_bib_author_surnames(tmp_path) == {"levine", "day"}
 
 
 def _concurrent_add_worker(args: tuple[Path, int]) -> str:

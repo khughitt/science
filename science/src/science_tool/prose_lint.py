@@ -123,8 +123,26 @@ def _mask_wikilinks(line: str) -> str:
     return _WIKILINK_SPAN_RE.sub(lambda m: " " * len(m.group(0)), line)
 
 
-def detect_bare_author_year(path: Path, *, strict: bool = False) -> list[LintIssue]:
-    """Detect `<Capitalized> <Year>` mentions in body prose without [@key]."""
+def detect_bare_author_year(
+    path: Path,
+    *,
+    strict: bool = False,
+    deny: list[str] | None = None,
+    bib_surnames: set[str] | None = None,
+) -> list[LintIssue]:
+    """Detect `<Capitalized> <Year>` mentions in body prose without [@key].
+
+    `deny` lists exact mentions (e.g. ``"IMMULITE 2000"``) to skip — residual
+    false positives, parity with short-form-ids' deny-list.
+
+    `bib_surnames` (lowercased author surnames from `references.bib`) makes the
+    check bib-aware: when provided, only a mention whose author surname is in the
+    bib is flagged — i.e. "you have this paper but didn't cite it". This skips
+    secondary citations to papers not in the bib and non-author false positives
+    (journal/org/product fragments) by construction, mirroring short-form-ids'
+    resolver. When ``None`` (no bibliography), the check falls back to flagging
+    every unanchored mention.
+    """
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
@@ -145,9 +163,19 @@ def detect_bare_author_year(path: Path, *, strict: bool = False) -> list[LintIss
         line = strip_inline_code(raw_line)
         for match in _BARE_AUTHOR_YEAR_RE.finditer(line):
             mention = f"{match.group(1)} {match.group(2)}"
+            if deny and mention in deny:
+                continue
             leading_token = match.group(1).split()[0].lower()
             if leading_token in _DATE_WORDS or leading_token in _LEADING_STOPWORDS:
                 continue
+            if bib_surnames is not None:
+                surnames = {
+                    tok.lower()
+                    for tok in match.group(1).split()
+                    if tok.lower() not in {"and", "&"}
+                }
+                if surnames.isdisjoint(bib_surnames):
+                    continue
             if _ISO_DATE_TAIL_RE.match(line, match.end()):
                 continue
             window_start = max(0, match.start() - 30)
@@ -403,12 +431,19 @@ def scan_root(
     anchor_patterns: list[str] | None = None,
     short_form_ids_deny: list[str] | None = None,
     resolver: dict[str, str] | None = None,
+    bare_author_year_deny: list[str] | None = None,
+    bib_surnames: set[str] | None = None,
 ) -> dict:
     """Scan a project tree and return ``{"counts": {check: N}, "hits": [...]}``.
 
     `resolver` (alias → canonical-id map) is forwarded to the short-form-ids
     detector so references that resolve to real entities are not flagged. Build
     it with `build_short_form_resolver(root)`.
+
+    `bib_surnames` (lowercased author surnames from `references.bib`) and
+    `bare_author_year_deny` are forwarded to the bare-author-year detector so it
+    flags only mentions of papers actually in the bibliography (minus deny-listed
+    residuals). Build the surnames with `science_tool.bibliography.load_bib_author_surnames`.
     """
     selected = checks or list(CHECKS)
     unknown = [c for c in selected if c not in _DETECTORS]
@@ -423,6 +458,10 @@ def scan_root(
                 hits.extend(detector(path, strict=strict, anchor_patterns=anchor_patterns))
             elif check == "short-form-ids":
                 hits.extend(detector(path, strict=strict, deny=short_form_ids_deny, resolver=resolver))
+            elif check == "bare-author-year":
+                hits.extend(
+                    detector(path, strict=strict, deny=bare_author_year_deny, bib_surnames=bib_surnames)
+                )
             else:
                 hits.extend(detector(path, strict=strict))
     counts: dict[str, int] = {}

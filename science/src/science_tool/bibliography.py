@@ -43,6 +43,44 @@ def load_bib_keys(project_root: Path) -> set[str]:
     return keys
 
 
+_BIBTEX_AUTHOR_FIELD_RE = re.compile(r"author\s*=\s*[{\"]([^{}\"]*)[}\"]", re.IGNORECASE)
+
+
+def _surname_of(author: str) -> str | None:
+    """Extract the surname from one BibTeX author name, lowercased.
+
+    Handles both ``Last, First`` (surname before the comma) and ``First Last``
+    (surname is the last whitespace token). Returns None for an empty name.
+    """
+    author = author.strip().strip("{}").strip()
+    if not author:
+        return None
+    surname = author.split(",")[0].strip() if "," in author else author.split()[-1]
+    surname = surname.strip("{}.").strip().lower()
+    return surname or None
+
+
+def load_bib_author_surnames(project_root: Path) -> set[str] | None:
+    """Return lowercased author surnames in ``papers/references.bib``.
+
+    Returns ``None`` when the bibliography is absent, so a bib-aware lint can
+    distinguish "no bibliography to check against" (fall back to flag-all) from
+    "bibliography present but this surname is not in it" (skip). Co-authors from
+    every entry's ``author`` field are included.
+    """
+    bib_path = project_root / "papers" / "references.bib"
+    if not bib_path.is_file():
+        return None
+    text = bib_path.read_text(encoding="utf-8")
+    surnames: set[str] = set()
+    for field in _BIBTEX_AUTHOR_FIELD_RE.finditer(text):
+        for author in re.split(r"\s+and\s+", field.group(1)):
+            surname = _surname_of(author)
+            if surname:
+                surnames.add(surname)
+    return surnames
+
+
 @dataclass(frozen=True)
 class BibAddResult:
     """Outcome of an ``add_bib_entry`` call."""

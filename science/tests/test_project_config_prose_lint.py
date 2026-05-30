@@ -56,3 +56,24 @@ def test_short_form_ids_deny_explicit_list(tmp_path):
     )
     config = load_project_config(tmp_path)
     assert config.prose_lint.short_form_ids_deny == ["D1", "H3", "T1"]
+
+
+def test_bare_author_year_deny_defaults_to_empty(tmp_path):
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\nprose_lint:\n  anchor_patterns: ['task:']\n"
+    )
+    config = load_project_config(tmp_path)
+    assert config.prose_lint is not None
+    assert config.prose_lint.bare_author_year_deny == []
+
+
+def test_bare_author_year_deny_explicit_list(tmp_path):
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\n"
+        "prose_lint:\n"
+        "  bare_author_year_deny:\n"
+        "    - 'IMMULITE 2000'\n"
+        "    - 'CDC 2011'\n"
+    )
+    config = load_project_config(tmp_path)
+    assert config.prose_lint.bare_author_year_deny == ["IMMULITE 2000", "CDC 2011"]

@@ -9,7 +9,7 @@ handled by the [annotation-token vocabulary](annotation-tokens.md), not by these
 
 | Check (`--check=`)        | Detects                                                                                                              | Default severity |
 |---------------------------|----------------------------------------------------------------------------------------------------------------------|------------------|
-| `bare-author-year`        | `<Capitalized> <Year>` mentions (e.g., `Brunton 2022`) without an adjacent `[@key]` BibTeX-style anchor              | `warn`           |
+| `bare-author-year`        | `<Capitalized> <Year>` mentions (e.g., `Brunton 2022`) without an adjacent `[@key]` BibTeX-style anchor; **bib-aware** — when `papers/references.bib` exists, flags only mentions whose author is in the bibliography | `warn`           |
 | `short-form-ids`          | Bare `Q1`, `t088`, `q54` etc. — short forms of canonical entity refs                                                 | `warn`           |
 | `frontmatter-inline-gap`  | Frontmatter `related:` entries that never appear in the document body                                                | `info`           |
 | `numeric-anchor`          | Numeric claims (`ρ = 0.168`, `30%`, `n = 184`) without an anchor token (`task:`, `pipeline/`, `[@…]`) in the same paragraph | `info` |
@@ -45,6 +45,9 @@ prose_lint:
     - "D1"   # cyclin D1 — biology shorthand, not a project entity ref
     - "H3"   # histone H3
     - "T1"   # T1-weighted MRI
+  bare_author_year_deny:
+    - "IMMULITE 2000"   # assay/product name, not an author-year citation
+    - "CDC 2011"        # org+year, not an author-year citation
 ```
 
 Defaults: all four checks enabled; `anchor_patterns` defaults to `["task:", "pipeline/", "\\[@", "data/", "scripts/"]`.
@@ -55,6 +58,22 @@ projects where common shorthand collides with the canonical short-form
 regex `\b([qQhHtTdDiI])(\d{1,4})\b`. See
 [`docs/audits/2026-05-10-prose-lint-baselines.md`](../audits/2026-05-10-prose-lint-baselines.md)
 for diagnostic guidance on whether your project actually needs a deny-list.
+
+`bare-author-year` is **driveable to zero** by design, mirroring `short-form-ids`:
+
+- **Bib-awareness (resolver).** When `papers/references.bib` exists, the detector
+  flags only `<Surname> <Year>` mentions whose surname matches an author in the
+  bibliography — i.e. "you have this paper but never cited it with `[@key]`".
+  Secondary citations to papers *not* in the bib, and non-author false positives
+  (journal/org/product fragments like `Metab 2005`, `NHANES 2015`, `IMMULITE 2000`),
+  are skipped by construction. With no `references.bib`, the check falls back to
+  flagging every unanchored mention.
+- **`bare_author_year_deny`** is a list of exact `<Surname> <Year>` strings to skip,
+  for any residual false positive the resolver can't exclude — parity with
+  `short_form_ids_deny`.
+
+This is why `bare-author-year` is a `warn`-tier check: like `short-form-ids` it has
+both a resolver and a deny-list, so a well-maintained project can drive it to zero.
 
 ## Tooling
 

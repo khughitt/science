@@ -1,38 +1,57 @@
 # Pipeline Audit & Refactor — a three-axis playbook
 
-This playbook gives science projects a repeatable method to **audit and refactor their data
-pipelines along three axes**, in a single pass per data source:
+This playbook gives science projects a repeatable method to **audit and refactor their
+computational data workflows along three axes**, in a single pass per source chain:
 
-1. **Data QA** — every table analysis consumes has a wired-in QA/sanity step (per
+1. **Data QA** — every substrate analysis consumes has a wired-in QA/sanity step (per
    [`../conventions/pipeline-qa-checkpoints.md`](../conventions/pipeline-qa-checkpoints.md)).
 2. **Consistency, organization, code quality / reuse.**
 3. **Data portability** — reusable "base" ingestion+cleaning is disentangled from project-specific
-   processing, and clean base datasets are promoted to the shared commons.
+   processing, and clean base substrates are promoted to the shared commons when appropriate.
 
-## The organizing insight — the "clean base table" boundary
+## The organizing insight — the "clean base substrate" boundary
 
 Do not treat the three axes as three independent checklists. They **converge on one boundary in
-every pipeline: the clean base table** — the dataset after ingestion and source-level cleaning,
-carrying good metadata, but *before* any project-specific processing.
+every pipeline: the clean base substrate** — the reusable artifact after ingestion and source-level
+cleaning, carrying good metadata, but *before* any project-specific processing.
+
+The substrate may be a table, but it may also be a record stream, graph, corpus, model-result bundle,
+manifest, or package:
+
+| Substrate kind | Examples | Typical clean-base QA |
+| --- | --- | --- |
+| Table | CSV, TSV, Feather, Parquet | schema, required columns, bounds, sentinels, duplicate keys |
+| Record stream | JSONL, NDJSON | parseability, required fields, duplicate record IDs, enum coverage |
+| Graph | RDF/TriG, graph JSON, edge list | parseability, dangling refs, edge-shape checks, reachability/orphan checks |
+| Corpus | PDFs, TeX source trees, markdown source docs | source-yield, file integrity, extraction coverage, inaccessible-source accounting |
+| Result bundle | fit estimates, predictions, score artifacts | schema, numeric-domain checks, split/leakage checks, status consistency |
+| Manifest/package | datapackage, research package, KG source bundle | resource existence, hashes, provenance, entity cross-references |
 
 That single boundary is at once three things:
 
-- the **substrate axis 1 must validate** — a QA step reads the clean base table;
+- the **substrate axis 1 must validate** — a QA step reads the clean base substrate;
 - the **seam axis 2 wants factored** out of project-specific code — a reusable ingestion module;
-- the **unit axis 3 promotes** to the commons — a clean dataset plus its `datapackage.json`.
+- the **unit axis 3 promotes** to the commons — a clean dataset/substrate plus its manifest.
 
-So the core move for every data source is **isolate → QA → promote the clean base table**. Force
-that boundary into the open for each source, and one structural refactor — making the boundary
+So the core move for every data source is **isolate → QA → promote the clean base substrate**. Force
+that boundary into the open for each source, and one structural refactor — making the substrate
 explicit — pays off on all three axes at once.
 
-**Scope caveat for axis 1 — load-bearing.** The clean base table is *one* QA substrate, not the
-only one. The data-QA convention validates **every table analysis actually consumes**, and the
-clean base table sits *before* project-specific processing — so QA at that boundary cannot see
-defects introduced by downstream project-specific transformations. Clean-base QA therefore **does
-not satisfy** final-analysis-table QA. Require a QA step on the clean base table **and** on each
-project-specific analysis table produced after it that feeds models or statistics (one QA step per
-substrate, per the convention). The "one boundary" framing above is about the *refactor move* that
-serves all three axes; it is not a claim that one QA step covers the whole pipeline.
+**Scope caveat for axis 1 — load-bearing.** The clean base substrate is *one* QA substrate, not the
+only one. The existing data-QA convention is table-centered, but this playbook generalizes the same
+principle to every consumed substrate. The clean base substrate sits *before* project-specific
+processing, so QA at that boundary cannot see defects introduced by downstream project-specific
+transformations. Clean-base QA therefore **does not satisfy** final-analysis-substrate or final-result
+QA. Require a QA step on the clean base substrate **and** on each project-specific analysis substrate
+produced after it that feeds models, statistics, or interpretation (one QA step per substrate, per
+the convention's intent). The "one boundary" framing above is about the *refactor move* that serves
+all three axes; it is not a claim that one QA step covers the whole pipeline.
+
+**Consumer-contract caveat — also load-bearing.** A substrate can pass its own QA and still break the
+next stage. During the sweep, also check the **consumer contract** at every important handoff:
+does the producer's output schema, dimensions, key space, status vocabulary, and freshness match what
+the consuming script, model, report, or UI actually reads?
+This is the pipeline-audit version of the `review-pipeline` integration-boundary dimension.
 
 ## Artifact placement — upstream vs downstream
 
@@ -62,27 +81,42 @@ Two things still flow upstream from an audit run — and neither is an audit *re
 
 ## Method
 
-The unit of work is the **data-source chain**:
-`external source → ingest → clean/normalize → clean base table → project-specific downstream`.
+The unit of work is the **source-substrate chain**:
+`external/internal source → ingest → clean/normalize → clean base substrate → project-specific downstream`.
 Each chain is swept on all three axes in one pass.
 
-**Phase 0 — Inventory.** Enumerate the project's data-source chains. For each, capture the source,
-the ingest/clean rules, the clean base table output, its config, and the project-specific downstream
-that consumes it. Produce `pipeline-refactor/inventory.{md,json}`.
+**Phase 0 — Inventory.** Enumerate the project's source-substrate chains. For each, capture the source,
+the substrate kind, the ingest/clean rules, the clean base substrate output, its config, and the
+project-specific downstream that consumes it. Produce `pipeline-refactor/inventory.{md,json}`.
+
+Use an explicit discovery pass before hand-curating the inventory:
+
+- workflow definitions: `Snakefile`, `*.smk`, CI workflows, notebooks, task runners;
+- command surfaces: `package.json`, `pyproject.toml`, `Makefile`, `justfile`, project CLIs;
+- generated substrates: `data/processed/`, `pipeline/`, `results/`, `reports/`, `knowledge/sources/`;
+- manifests and packages: `datapackage.json`, research packages, lockfiles, provenance manifests;
+- QA and validation: test files, audit scripts, health checks, schema validators;
+- dataset entities: `doc/datasets/data-*.md`, KG dataset records, commons registrations.
 
 **Phase 1 — Per-chain sweep (all three axes together).** Walk each chain once and score the three
 axis rubrics. Record findings in `pipeline-refactor/findings.md`, one section per chain, and attach a
 disposition to every finding — fix-now / backlog / promote / flagged-optional / leave.
+For each chain, explicitly record both substrate QA and consumer-contract QA.
 
 **Phase 2 — Synthesis & backlog.** Roll the findings into `pipeline-refactor/synthesis.md`: a
 prioritized refactor backlog, recurring code anti-patterns, and a dedicated **"convention
 nominations"** subsection listing project-grown QA checks worth promoting upstream. Triage the
-backlog into tasks in the project's task system.
+backlog into tasks in the project's task system. The audit is not finished until each non-`leave`
+finding has either a task ID or an explicit `defer-no-task` rationale.
 
 **Phase 3 — Execute & guard.** Run refactors through the normal task lifecycle with TDD. Land axis-1
 fixes as **structural** QA checks that regression-guard the defect (per the convention). Run axis-3
 promotions through the multi-step procedure in the axis-3 rubric (create/verify the dataset entity →
 dry-run → `--apply`), not a single command.
+
+**Risk ordering.** Start execution where the clean-base substrate is already explicit, the downstream
+blast radius is small, and the QA can be made structural quickly. Defer large entangled chains until a
+smaller slice has established the local QA and manifest pattern.
 
 ## The three axis rubrics
 
@@ -90,25 +124,42 @@ Each axis scores PASS / WARN / FAIL per sub-dimension; attach a disposition to e
 
 ### Axis 1 — Data QA
 
-- A **wired-in** data-QA step (own pipeline rule on the default target) for **every table analysis
-  consumes**: the clean base table **and** each project-specific analysis table produced downstream.
-  Clean-base QA does **not** satisfy final-analysis-table QA (see the scope caveat above). One QA step per
-  substrate, per [`../conventions/pipeline-qa-checkpoints.md`](../conventions/pipeline-qa-checkpoints.md).
+- A **wired-in** data-QA step (own pipeline rule on the default target) for **every substrate analysis
+  consumes**: the clean base substrate **and** each project-specific analysis substrate produced downstream.
+  Clean-base QA does **not** satisfy final-analysis-substrate QA (see the scope caveat above). One QA step
+  per substrate, per [`../conventions/pipeline-qa-checkpoints.md`](../conventions/pipeline-qa-checkpoints.md).
 - Each QA step splits **structural** (build-fatal) vs **distribution** (surfaced-not-fatal) flags.
 - Bounds / allowed-codes / sentinels are **config-driven** and shared with the cleaning step.
 - **Existing post-hoc checks:** which manual / pytest-only QA scripts should become wired-in
-  structural checks on a built table?
-- **Companion DAG-validation check (NOT table-QA):** is each pipeline output produced by exactly one
-  rule, with no orphaned/duplicately-owned outputs? This is a **workflow/DAG-level** structural
-  checkpoint scored alongside data-QA but explicitly *outside* the table-QA convention (it inspects
-  the rule graph, not a table). See "Deferred disciplines" below.
+  structural checks on a built substrate?
+- **Consumer-contract QA:** does each consumed output match the next stage's expected schema, dimensions,
+  key namespace, status values, and freshness assumptions?
+- **Companion DAG-validation check (NOT substrate-QA):** is each pipeline output produced by exactly one
+  rule, included in a default target when appropriate, and free of orphaned/duplicately-owned outputs?
+  This is a **workflow/DAG-level** structural checkpoint scored alongside data-QA but explicitly *outside*
+  the table-QA convention (it inspects the rule graph, not a table).
+
+Use modality-specific checks when the substrate is not a table:
+
+- **JSON/JSONL:** parseability, required fields, duplicate record IDs, enum coverage, null policy.
+- **Graphs:** parser validity, unresolved refs, orphan nodes, edge-shape constraints, reachability.
+- **Corpora:** source-yield, extraction-yield, checksums, inaccessible-source accounting.
+- **Fit/prediction/score bundles:** numeric domains, split disjointness, leakage checks, prediction
+  coverage, status/readiness consistency.
+- **Manifests/packages:** resource existence, hashes, provenance, declared entity links.
 
 Rubric reuses the `review-pipeline` → **QA Coverage** dimension (incl. its severity-split row), plus
 the DAG-validation check as its own line. Disposition: a missing structural check on an
 already-fixed bug → **fix-now** (regression-guard); missing distribution checks → **backlog**.
+Result-QA findings are recorded here as **analysis-result-QA**, but they do not substitute for data-QA.
 
 ### Axis 2 — Consistency, organization, code quality / reuse
 
+- **Minimum workflow contract:** each active workflow should have a root-runnable command, declared
+  config, explicit default target, QA target, manifest/datapackage when outputs feed later analyses,
+  and task/code back-links. Manifest `created`/`updated` must derive from run identity, not
+  regeneration wall-clock (per
+  [`../conventions/reproducible-manifest-dates.md`](../conventions/reproducible-manifest-dates.md)).
 - **Naming & layout** consistency across chains (e.g. `workflows/` vs `scripts/` vs an unused
   `code/`; config sprawl; versioned-config drift like `v8` / `v8.1`).
 - **Config-driven over hardcoded:** flag scripts bypassing config with hardcoded data paths.
@@ -125,12 +176,21 @@ package) is an **optional flagged finding**, never a default recommendation.
 Per source: is the **base ingestion + cleaning** (clean state + good metadata, no project-specific
 processing) **disentangled** from downstream?
 
-- Entangled → refactor task to **split the chain at the clean-base-table boundary** (the same
+- Entangled → refactor task to **split the chain at the clean-base-substrate boundary** (the same
   boundary axis 1 QAs — do them together).
 - Cleanly factored → is the clean base dataset (with `datapackage.json`) **promoted to the commons**?
 
 Rubric: **PASS** (base separated *and* promoted) / **WARN** (separated, not promoted — includes "no
 dataset entity yet") / **FAIL** (entangled).
+
+**Commons-readiness gate.** Do not jump from "datapackage exists" to "promote".
+A clean base substrate is commons-ready only when:
+
+- the local runtime file stages and passes structural QA;
+- a dataset entity exists with access verification or an explicit exception;
+- the manifest lists all resources with hashes/provenance;
+- downstream project-specific outputs are excluded from the base dataset;
+- license/access restrictions are recorded.
 
 **Promotion procedure (not a one-liner).** `science commons promote dataset` sources from the
 project's dataset entity descriptors (`doc/datasets/data-<slug>.md`), requires `--slug`, and selects
@@ -138,40 +198,74 @@ the source project with `--from <project-id>`. So promotion has prerequisites th
 refactor tasks:
 
 1. **Create / verify the dataset entity** at `doc/datasets/data-<slug>.md` with the required
-   `mixin-dataset-1.0` fields and a `datapackage:` pointer to the clean base table's `datapackage.json`.
+   `mixin-dataset-1.0` fields and a `datapackage:` pointer to the clean base substrate's
+   `datapackage.json`.
 2. **Dry-run** `science commons promote dataset --from <project-id> --slug <slug>` and inspect the plan.
 3. **Apply** with `--apply` (add `--mixin <bio.*>` where a bio extension matches the dataset modality).
 
-## Deferred disciplines (named, not specified here)
+## Related QA disciplines
 
-This playbook **names** two related disciplines and **nominates** each as a future convention, but
-does not specify them:
+This playbook scores two related disciplines during the sweep, but keeps them distinct from data-QA:
 
 - **Analysis / result-QA** — validates *results*, not the input table: leave-one-out /
   dataset-dropout stability; permutation / empirical-null calibration and assumption sweeps.
-- **Workflow / DAG-validation** — validates the *rule graph*, not a table: output-ownership / dedup
-  (each output produced by exactly one rule). Deliberately kept out of the table-QA convention,
-  whose contract is "one script + one rule reads the built table" and which cannot see DAG structure.
+- **Workflow / DAG-validation** — validates the *rule graph*, not a table; specified below.
 
-Surface both during the sweep so they are not forgotten; writing either convention is a separate
-decision recorded in the synthesis "convention nominations".
+Surface both during the sweep so they are not forgotten.
+If a project-grown check becomes broadly reusable, record it in the synthesis "convention nominations".
+
+### Workflow / DAG-validation — single-writer / output-ownership
+
+Data-QA reads a *built artifact*; this discipline reads the **rule graph itself**, which the table-QA
+convention deliberately cannot see (its contract is "one script + one rule reads the built table"). A
+workflow whose every individual rule passes data-QA can still be unbuildable or non-reproducible
+because the *wiring* is wrong. Promote this from a named discipline to three specified, scorable
+checks — each with a worked defect from the cancer-evolution audit:
+
+1. **Single-writer (output-ownership).** Every file the workflow writes is the declared output of
+   **exactly one** rule. FAIL when a rule writes a path another rule already declares as its output
+   *without declaring it* — two undeclared writers to one artifact, which the workflow engine cannot
+   order. *Worked defect (t015):* `report_bundle` mutates `{PROCESSED_DIR}/datapackage.json` —
+   `normalize_workbook`'s declared output — while declaring only `{RESULT_DIR}/datapackage.json`. The
+   second write is invisible to the DAG, so the two rules have no enforced order.
+
+2. **Declared-input completeness (no path-escape dependencies).** Every file a rule reads is in its
+   `input:` block. WARN/FAIL when a rule reads a file via a `../../../` path-escape (or a hardcoded
+   absolute path) that is **not** a declared input — the DAG has no edge forcing the producer to run
+   first, so the rule can run against a stale or missing file and "works" only by run-order luck.
+   *Worked defect (t007):* `run_datapackage` reads `treatment_status.tsv` through a `../../../` path
+   that is not a declared input dependency.
+
+3. **No orphan inputs.** Every declared input is either produced by another rule or is a registered
+   external/source artifact. WARN/FAIL when an input is referenced by no producing rule and is not a
+   declared source — it appears from nowhere and silently breaks a clean-checkout rebuild. *Worked
+   defect (t007):* orphan inputs `ffpe_flags.tsv` and `primary_amplicon_segments.parquet`, produced by
+   no rule.
+
+**Rubric.** PASS (every output single-owned, every read declared, no orphan inputs) / WARN (orphan
+inputs or undeclared reads that currently resolve only by run-order luck) / FAIL (an output with two
+undeclared writers, or a declared input no rule produces). Record the verdict on the Axis-1
+`companion DAG-validation (output-ownership)` line. The fix is always **structural**: declare the
+missing output/input edges (or split the offending rule) so the DAG — not wall-clock run order or a
+path-escape — encodes every producer→consumer dependency. Like axis-1 fixes, land it as a guard
+(a workflow lint or a `--dry-run`/DAG assertion) so the defect cannot silently return.
 
 ## Report skeletons (copy into the target project)
 
 Copy these into the project's audits area (`<doc-or-docs>/audits/pipeline-refactor/`).
 
-### `inventory.md` — one row per data-source chain
+### `inventory.md` — one row per source-substrate chain
 
 ````markdown
 # Pipeline inventory — <project>
 
-| Chain | Source | Ingest rule(s) | Clean base table | Base config | Project-specific downstream |
-| --- | --- | --- | --- | --- | --- |
-| <name> | <external source> | <rule(s)> | <path to clean table> | <config key/file> | <consumers> |
+| Chain | Source | Substrate kind | Ingest rule(s) | Clean base substrate | Base config | Project-specific downstream |
+| --- | --- | --- | --- | --- | --- | --- |
+| <name> | <external source> | <table/jsonl/graph/corpus/result/manifest> | <rule(s)> | <path to clean substrate> | <config key/file> | <consumers> |
 ````
 
 A machine-readable `inventory.json` mirrors the table: a list of objects with keys
-`chain, source, ingest_rules[], clean_base_table, base_config, downstream[]`.
+`chain, source, substrate_kind, ingest_rules[], clean_base_substrate, base_config, downstream[]`.
 
 ### `findings.md` — one section per chain
 
@@ -181,7 +275,8 @@ A machine-readable `inventory.json` mirrors the table: a list of objects with ke
 ## Chain: <name>
 
 - **Axis 1 — Data QA:** PASS / WARN / FAIL — <notes>
-  - substrates with a wired-in QA step: clean base [y/n]; <downstream tables…> [y/n]
+  - substrates with a wired-in QA step: clean base [y/n]; <downstream substrates…> [y/n]
+  - consumer-contract QA: PASS / WARN / FAIL
   - companion DAG-validation (output-ownership): PASS / WARN / FAIL
 - **Axis 2 — Consistency/quality:** PASS / WARN / FAIL — <notes>
 - **Axis 3 — Portability/commons:** PASS / WARN / FAIL — base separated [y/n]; promoted [y/n]
@@ -189,7 +284,7 @@ A machine-readable `inventory.json` mirrors the table: a list of objects with ke
 ### Findings
 | # | Axis | Finding | Severity | Disposition | Task |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 1/2/3 | <what> | structural / distribution / quality | fix-now / backlog / promote / flagged-optional / leave | <task-id> |
+| 1 | 1/2/3 | <what> | structural / distribution / consumer-contract / result-QA / quality | fix-now / backlog / promote / flagged-optional / leave | <task-id or defer-no-task:rationale> |
 ````
 
 ### `synthesis.md` — roll-up across chains

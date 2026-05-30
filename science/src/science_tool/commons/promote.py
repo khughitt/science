@@ -2015,6 +2015,44 @@ def _validate_datapackage_resources(slug: str, dp_abs: Path, dp_doc: dict[str, A
             )
 
 
+def _normalize_derivation_for_commons(derivation: Any) -> Any:
+    """Normalize a derived-dataset `derivation` block into the commons form.
+
+    Project-local validation accepts the heavyweight register-run `DerivationBlock`
+    (`workflow`, `workflow_run`, `git_commit`, `config_snapshot`, `produced_at`,
+    `inputs`), but commons `mixin-dataset-1.0` "workflow derivation" requires the
+    lightweight `workflow_recipe` + `inputs` shape. Promote synthesizes the
+    lightweight form from the heavyweight one so a single authored state is both
+    validate-clean and promotable (fb-2026-05-30-003):
+
+    - `workflow_recipe` ← the heavyweight `workflow` entity ref (the recipe pointer);
+    - `recipe_lockfile` ← `config_snapshot`, when present (optional in commons);
+    - `inputs` carried over unchanged (already `dataset:` refs);
+    - run-specific provenance (`workflow_run`, `git_commit`, `produced_at`) is
+      dropped — it is run identity, not recipe identity, and the commons dataset
+      is recipe-level.
+
+    Already-lightweight blocks (have `workflow_recipe`) and `member_of` derivations
+    are returned unchanged. An unrecognized shape is returned unchanged so the
+    commons schema validator reports it rather than this function masking it.
+    """
+    if not isinstance(derivation, dict):
+        return derivation
+    if "workflow_recipe" in derivation or derivation.get("kind") == "member_of":
+        return derivation
+    if "workflow" not in derivation:
+        return derivation
+    normalized: dict[str, Any] = {
+        "kind": "workflow",
+        "workflow_recipe": derivation["workflow"],
+        "inputs": list(derivation.get("inputs", [])),
+    }
+    config_snapshot = derivation.get("config_snapshot")
+    if config_snapshot:
+        normalized["recipe_lockfile"] = config_snapshot
+    return normalized
+
+
 def _scan_project(
     project_root: Path,
     project_slug: str,
@@ -2210,6 +2248,12 @@ def _scan_project(
                     missing_fields.append("access")
                 if origin == "derived" and ("derivation" not in fm or fm["derivation"] in (None, "")):
                     missing_fields.append("derivation")
+                elif origin == "derived":
+                    # Normalize the heavyweight register-run derivation into the
+                    # lightweight commons workflow_recipe form so a single
+                    # authored state is both validate-clean and promotable
+                    # (fb-2026-05-30-003).
+                    fm = {**fm, "derivation": _normalize_derivation_for_commons(fm["derivation"])}
                 if missing_fields:
                     for field in missing_fields:
                         failures.append(
