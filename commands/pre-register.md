@@ -56,6 +56,29 @@ input QA, preprocessing/normalization checks, independent unit, estimand,
 power/resolution limit, or sensitivity-arbitration rule. The recommendation is
 advisory, not a hard dependency.
 
+### 1b. Feasibility Against Real Input Artifacts
+
+Before locking any threshold in § 3, **load the actual input artifacts** — not your memory of them —
+and check the analysis is feasible as framed. § 4 asks you to *reason* about power; this step makes
+you *look*. For each arm of the planned comparison:
+
+- **Support-set size.** What is the real *n* feeding each arm? Open the table/dataset and count.
+- **Universe alignment.** How many of those rows survive into the *covering universe* the test
+  actually runs against (after joins, filters, eligibility)? The effective *n* is usually smaller
+  than the raw *n*.
+- **Base rates.** What is the background/overlap rate the effect must beat? A high base rate can make
+  a nominally-significant arm uninformative.
+
+If the numbers reveal an arm is underpowered or that the wrong arm was slated as confirmatory, **fix
+the design here** — re-scope, swap which arm is confirmatory/exploratory, or add a feasibility
+precondition — rather than discovering it post-data. This is exactly what pre-registration exists to
+surface.
+
+*Worked case (natural-systems H09).* Inspecting the inputs caught that the headline arm was
+underpowered (cycle-support n=22, only 10 in the covering universe, 73% overlap base rate) and that
+the confirmatory/exploratory assignment should be inverted — caught pre-data because the artifacts
+were loaded before the criteria were locked.
+
 ### 2. State Expected Outcomes
 
 - What do you expect to find?
