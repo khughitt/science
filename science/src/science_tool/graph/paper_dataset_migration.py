@@ -43,8 +43,57 @@ class PaperDatasetMigrationResult:
     conflicts: list[PaperDatasetMigrationConflict] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class PaperDatasetMigrationReport:
+    project_root: str
+    apply: bool
+    changed_files: list[str]
+    conflicts: list[PaperDatasetMigrationConflict]
+
+    @property
+    def conflict_count(self) -> int:
+        return len(self.conflicts)
+
+    @property
+    def changed_file_count(self) -> int:
+        return len(self.changed_files)
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "project_root": self.project_root,
+            "apply": self.apply,
+            "changed_files": self.changed_files,
+            "changed_file_count": self.changed_file_count,
+            "conflicts": [conflict.to_json() for conflict in self.conflicts],
+            "conflict_count": self.conflict_count,
+        }
+
+
 def is_paper_dataset_role_conflict(entry: Mapping[str, Any]) -> bool:
     return entry.get("role") != "analyzed"
+
+
+def plan_paper_dataset_migration(project_root: Path, *, apply: bool = False) -> PaperDatasetMigrationReport:
+    root = project_root.resolve()
+    changed_files: list[str] = []
+    conflicts: list[PaperDatasetMigrationConflict] = []
+    for path in _candidate_markdown_files(root):
+        text = path.read_text(encoding="utf-8")
+        result = migrate_paper_frontmatter(path, text)
+        if result.conflicts:
+            if _looks_like_paper_source_path(root, path):
+                conflicts.extend(result.conflicts)
+            continue
+        if result.changed:
+            changed_files.append(str(path))
+            if apply:
+                path.write_text(result.updated_text, encoding="utf-8")
+    return PaperDatasetMigrationReport(
+        project_root=str(root),
+        apply=apply,
+        changed_files=sorted(changed_files),
+        conflicts=sorted(conflicts, key=lambda item: (item.path, item.reason, item.dataset_ref or "")),
+    )
 
 
 def migrate_paper_frontmatter(path: str | Path, text: str) -> PaperDatasetMigrationResult:
@@ -197,3 +246,24 @@ def _single_conflict(
 def _paper_id(frontmatter: Mapping[str, Any]) -> str | None:
     value = frontmatter.get("id")
     return value if isinstance(value, str) else None
+
+
+def _candidate_markdown_files(project_root: Path) -> list[Path]:
+    roots = [project_root / "doc" / "papers", project_root / "doc" / "background" / "papers"]
+    files: list[Path] = []
+    for root in roots:
+        if root.is_dir():
+            files.extend(path for path in root.rglob("*.md") if path.is_file())
+    doc_root = project_root / "doc"
+    if doc_root.is_dir():
+        files.extend(path for path in doc_root.rglob("*.md") if path.is_file())
+    return sorted(set(files))
+
+
+def _looks_like_paper_source_path(project_root: Path, path: Path) -> bool:
+    try:
+        rel = path.relative_to(project_root)
+    except ValueError:
+        return False
+    parts = rel.parts
+    return len(parts) >= 3 and parts[0] == "doc" and parts[-2] == "papers"
