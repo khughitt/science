@@ -38,6 +38,7 @@ from science_tool.validate.result import Result, Severity
 # Observability keys that, if shared between two "independent" lines on the
 # same target, make them suspect.
 _OBSERVABILITY_KEYS = ("shared_dataset", "shared_lab", "shared_platform", "shared_cohort")
+_B2_DEPENDENCE_ROLES = frozenset({"analyzed", "set_definition_source", "training", "upstream"})
 
 
 def _ev_lines(ctx: ValidateContext) -> list[tuple[Path, dict]]:
@@ -214,11 +215,59 @@ def check_independence_suspect_circular(ctx: ValidateContext) -> Iterator[Result
                 task=None,
             )
 
+    b2_direct_datasets_by_member: dict[str, set[str]] = defaultdict(set)
+    for klass in (SCI_NS.DatasetIndependenceCommitment, SCI_NS.DatasetIndependenceCandidate):
+        for record in provenance.subjects(RDF.type, klass):
+            for member in provenance.objects(record, SCI_NS.independenceMember):
+                if isinstance(member, URIRef):
+                    b2_direct_datasets_by_member[str(member)].update(
+                        _direct_dependence_datasets_for_member(provenance, member)
+                    )
+
+    for member_uri, b2_datasets in sorted(b2_direct_datasets_by_member.items()):
+        member = URIRef(member_uri)
+        authored_dataset = next((str(value) for value in provenance.objects(member, SCI_NS.sharedDataset)), None)
+        if authored_dataset and b2_datasets and authored_dataset not in b2_datasets:
+            yield Result(
+                severity=Severity.WARN,
+                path=None,
+                line=None,
+                message=f"{member_uri}: authored shared_dataset {authored_dataset!r} is not supported by dataset-derived independence records",
+                rule="independence.shared-dataset-refuted",
+                task=None,
+            )
+
 
 def _line_independence(provenance, line: URIRef) -> str | None:
     for value in provenance.objects(line, SCI_NS.evidenceIndependence):
         return str(value)
     return None
+
+
+def _one_graph_literal(graph, subject, predicate) -> str | None:
+    for value in graph.objects(subject, predicate):
+        return str(value)
+    return None
+
+
+def _one_graph_uri(graph, subject, predicate) -> URIRef | None:
+    for value in graph.objects(subject, predicate):
+        if isinstance(value, URIRef):
+            return value
+    return None
+
+
+def _direct_dependence_datasets_for_member(provenance, member: URIRef) -> set[str]:
+    consumers = {member}
+    consumers.update(value for value in provenance.objects(member, PROV.wasDerivedFrom) if isinstance(value, URIRef))
+    datasets: set[str] = set()
+    for consumer in consumers:
+        for usage in provenance.objects(consumer, SCI_NS.hasDatasetUsage):
+            dataset = _one_graph_uri(provenance, usage, SCI_NS.dataset)
+            role = _one_graph_literal(provenance, usage, SCI_NS.usageRole)
+            if dataset is not None and role in _B2_DEPENDENCE_ROLES:
+                datasets.add(str(dataset))
+    return datasets
 
 
 def _first_shared_signal(

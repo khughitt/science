@@ -507,6 +507,24 @@ def test_committed_dataset_dependence_errors_when_line_authored_independent(tmp_
     ]
 
 
+def test_authored_shared_dataset_refuted_only_when_line_has_direct_b2_usage(tmp_path: Path) -> None:
+    from science_tool.validate.checks.evidence_lines import check_independence_suspect_circular
+
+    ctx = _ctx_with_b2_graph(
+        tmp_path,
+        record_type=SCI_NS.DatasetIndependenceCandidate,
+        authored={
+            "independence": "shared-source",
+            "independence_group": "manual-gtex",
+            "shared_dataset": str(PROJECT_NS["dataset/other"]),
+        },
+    )
+
+    results = list(check_independence_suspect_circular(ctx))
+
+    assert any(result.rule == "independence.shared-dataset-refuted" for result in results)
+
+
 # ---------------------------------------------------------------------------
 # Rule: evidence.reference-basis-no-identification-strength (A2/A-D4)
 # ---------------------------------------------------------------------------
