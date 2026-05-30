@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 from rdflib import Graph, Literal, URIRef
-from rdflib.namespace import RDF
+from rdflib.namespace import PROV, RDF
 
 from science_tool.graph.dataset_independence import (
+    DERIVED_GROUP_PREFIX,
     ReducedUsage,
     UsageFact,
+    derive_dataset_independence_records,
+    emit_dataset_independence_records,
     read_dataset_usage_facts,
     reduce_usage_facts,
 )
-from science_tool.graph.io import PROJECT_NS, SCI_NS
+from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
 
 
 def _usage_graph(*facts: tuple[str, str, str, str, str]) -> Graph:
@@ -83,3 +86,113 @@ def test_reduce_usage_facts_keeps_validation_and_citation_non_committing() -> No
 
     assert reduced[(consumer, dataset)].interpretation == "validation"
     assert reduced[(consumer, PROJECT_NS["dataset/cited"])].interpretation == "citation"
+
+
+def _line_graph() -> tuple[Graph, Graph, URIRef, URIRef, URIRef]:
+    knowledge = Graph()
+    provenance = Graph()
+    target = PROJECT_NS["proposition/p1"]
+    line_a = PROJECT_NS["evidence-line/a"]
+    line_b = PROJECT_NS["evidence-line/b"]
+    for line in (line_a, line_b):
+        knowledge.add((line, RDF.type, SCI_NS.EvidenceLine))
+        knowledge.add((line, CITO_NS.supports, target))
+    return knowledge, provenance, target, line_a, line_b
+
+
+def _add_usage(provenance: Graph, consumer: URIRef, dataset: URIRef, role: str, overlap: str, suffix: str) -> URIRef:
+    usage = PROJECT_NS[f"dataset-usage/{suffix}"]
+    provenance.add((consumer, SCI_NS.hasDatasetUsage, usage))
+    provenance.add((usage, RDF.type, SCI_NS.DatasetUsage))
+    provenance.add((usage, SCI_NS.dataset, dataset))
+    provenance.add((usage, SCI_NS.usageRole, Literal(role)))
+    provenance.add((usage, SCI_NS.usageOverlap, Literal(overlap)))
+    provenance.add((usage, SCI_NS.usageSource, Literal("authored")))
+    return usage
+
+
+def test_full_overlap_direct_shared_dataset_derives_one_commitment_component() -> None:
+    knowledge, provenance, target, line_a, line_b = _line_graph()
+    dataset = PROJECT_NS["dataset/gtex-v8"]
+    _add_usage(provenance, line_a, dataset, "analyzed", "full", "a")
+    _add_usage(provenance, line_b, dataset, "analyzed", "full", "b")
+
+    records = derive_dataset_independence_records(knowledge, provenance)
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.kind == "commitment"
+    assert record.reason == "full-overlap"
+    assert record.target == target
+    assert record.members == frozenset({line_a, line_b})
+    assert record.datasets == frozenset({dataset})
+    assert record.independence == "shared-source"
+    assert record.independence_group == f"{DERIVED_GROUP_PREFIX}gtex-v8"
+
+
+def test_unknown_overlap_shared_dataset_derives_candidate_only() -> None:
+    knowledge, provenance, _target, line_a, line_b = _line_graph()
+    dataset = PROJECT_NS["dataset/gtex-v8"]
+    _add_usage(provenance, line_a, dataset, "analyzed", "unknown", "a")
+    _add_usage(provenance, line_b, dataset, "analyzed", "full", "b")
+
+    records = derive_dataset_independence_records(knowledge, provenance)
+
+    assert [(record.kind, record.reason) for record in records] == [("candidate", "unknown-overlap")]
+
+
+def test_bears_on_only_shared_dataset_is_candidate_even_with_full_overlap() -> None:
+    knowledge, provenance, target, line_a, line_b = _line_graph()
+    dataset = PROJECT_NS["dataset/gtex-v8"]
+    paper = PROJECT_NS["paper/p1"]
+    _add_usage(provenance, paper, dataset, "analyzed", "full", "paper")
+    knowledge.add((paper, SCI_NS.bearsOn, target))
+    _add_usage(provenance, line_b, dataset, "analyzed", "full", "line")
+
+    records = derive_dataset_independence_records(knowledge, provenance)
+
+    assert [(record.kind, record.reason, record.members) for record in records] == [
+        ("candidate", "indirect-bears-on", frozenset({line_a, line_b}))
+    ]
+
+
+def test_transitive_hub_full_overlap_forms_one_conservative_component() -> None:
+    knowledge, provenance, target, line_a, line_b = _line_graph()
+    line_c = PROJECT_NS["evidence-line/c"]
+    knowledge.add((line_c, RDF.type, SCI_NS.EvidenceLine))
+    knowledge.add((line_c, CITO_NS.supports, target))
+    dataset_x = PROJECT_NS["dataset/x"]
+    dataset_y = PROJECT_NS["dataset/y"]
+    _add_usage(provenance, line_a, dataset_x, "analyzed", "full", "a-x")
+    _add_usage(provenance, line_b, dataset_x, "analyzed", "full", "b-x")
+    _add_usage(provenance, line_b, dataset_y, "analyzed", "full", "b-y")
+    _add_usage(provenance, line_c, dataset_y, "analyzed", "full", "c-y")
+
+    records = derive_dataset_independence_records(knowledge, provenance)
+
+    assert len(records) == 1
+    assert records[0].kind == "commitment"
+    assert records[0].target == target
+    assert records[0].members == frozenset({line_a, line_b, line_c})
+    assert records[0].datasets == frozenset({dataset_x, dataset_y})
+
+
+def test_emit_records_uses_b2_specific_predicates_not_evidence_line_or_target() -> None:
+    knowledge, provenance, target, line_a, line_b = _line_graph()
+    dataset = PROJECT_NS["dataset/gtex-v8"]
+    _add_usage(provenance, line_a, dataset, "analyzed", "full", "a")
+    _add_usage(provenance, line_b, dataset, "analyzed", "full", "b")
+    records = derive_dataset_independence_records(knowledge, provenance)
+
+    emit_dataset_independence_records(provenance, records)
+
+    record_nodes = list(provenance.subjects(RDF.type, SCI_NS.DatasetIndependenceCommitment))
+    assert len(record_nodes) == 1
+    record = record_nodes[0]
+    assert (record, SCI_NS.independenceTarget, target) in provenance
+    assert (record, SCI_NS.independenceMember, line_a) in provenance
+    assert (record, SCI_NS.independenceMember, line_b) in provenance
+    assert (record, SCI_NS.sharedDataset, dataset) in provenance
+    assert list(provenance.triples((record, SCI_NS.evidenceLine, None))) == []
+    assert list(provenance.triples((record, SCI_NS.target, None))) == []
+    assert list(provenance.triples((line_a, SCI_NS.evidenceIndependence, None))) == []
