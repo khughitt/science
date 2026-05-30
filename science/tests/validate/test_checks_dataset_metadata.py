@@ -11,6 +11,26 @@ from science_tool.validate.checks.dataset_metadata import (
 from science_tool.validate.result import Severity
 
 
+def _load_checks_with_dataset_metadata_fresh() -> None:
+    """Order-robust canonical registration for the wiring tests below.
+
+    Other validate test modules clear ``CANONICAL_CHECKS`` and reload only subsets,
+    so by the time these tests run the registry may lack ``dataset_metadata``. Drop
+    the module from the import cache and run the REAL ``_load_canonical_checks``:
+    that re-fires its ``@Check`` decorator regardless of prior test order while
+    still proving the module is wired into the loader's tuple (a bare ``reload``
+    would pass even if it were missing from the loader). Mirrors the reload idiom
+    in ``test_runner.py``'s ``_register_real_canonical_checks``.
+    """
+    import sys
+
+    import science_tool.validate.checks as checks
+
+    checks.clear_checks_for_tests()
+    sys.modules.pop("science_tool.validate.checks.dataset_metadata", None)
+    checks._load_canonical_checks()
+
+
 def _rules(datasets: list[dict]) -> list[tuple[Severity, str]]:
     return [(r.severity, r.rule) for r in evaluate_dataset_metadata(datasets)]
 
@@ -93,10 +113,11 @@ def test_non_string_cadence_is_unrecognized_not_crash() -> None:
 
 
 def test_module_is_registered() -> None:
-    # Importing the checks package triggers _load_canonical_checks; the new
-    # module must be wired in or it silently never runs.
+    # The new module must be wired into _load_canonical_checks's tuple or it
+    # silently never runs. Run the real loader (order-robust) and assert membership.
     from science_tool.validate.checks import CANONICAL_CHECKS
 
+    _load_checks_with_dataset_metadata_fresh()
     assert any(entry.fn.__module__.endswith("dataset_metadata") for entry in CANONICAL_CHECKS)
 
 
@@ -105,6 +126,7 @@ def test_license_missing_surfaces_through_runner(tmp_path: Path) -> None:
     # the pure core. Proves wiring (registration + raw-frontmatter discovery).
     from science_tool.validate.runner import run
 
+    _load_checks_with_dataset_metadata_fresh()
     (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
     ds_dir = tmp_path / "doc" / "datasets"
     ds_dir.mkdir(parents=True)

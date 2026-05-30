@@ -54,6 +54,7 @@ CHECK_MODULES = (
     "reference_collections",
     "identity_context",
     "dataset_taxonomy",
+    "dataset_metadata",
     "variant_identity",
     "genesets",
     "dataset_influence",
