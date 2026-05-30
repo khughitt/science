@@ -37,6 +37,11 @@ In scope: `license`, `tier`, `update_cadence` on `kind: dataset` entities.
 
 Out of scope (flagged for a future effort, not built here):
 
+- **Capturing/materializing `tier` and `update_cadence`.** They are validated here
+  (raw-frontmatter check) but remain on `DatasetEntity` only and are not threaded into
+  the markdown parse path, so they are neither reliably captured on the parse-path
+  `Entity` nor materialized. Promoting them to `Entity` + threading + emitting
+  `sci:tier`/`sci:updateCadence` is a separate consistency fix, deliberately deferred.
 - `profiles` (plural) vestigial gap on **all** entities — template writes a list
   (`profiles: ["science-pkg-entity-1.0"]`) but the model only has singular
   `profile: str`. Needs confirmation it isn't intentional before touching.
@@ -61,32 +66,58 @@ malformed entity cannot crash the strict loader. This design matches that patter
 
 This means the model field and the check serve complementary purposes:
 
-- Model field + adapter extraction → `license` becomes a first-class, queryable,
-  materialized graph property.
+- `Entity` field + frontmatter threading + adapter extraction + explicit
+  materialization + predicate registration → `license` becomes a first-class,
+  queryable, materialized graph property (see §1 — capture, materialization, and
+  query-registration are three separate steps, none implied by the others).
 - Check (over raw frontmatter) → friendly, non-fatal vocabulary warnings.
 
 ## Design
 
 ### 1. Data model + extraction
 
-- `model/src/science_model/entities.py`: add `license: str = ""` to `DatasetEntity`
-  (beside `tier`, `update_cadence`). This alone makes markdown-authored datasets
-  *capture* it (the strict loader will now keep the key instead of dropping it).
+**`license` must live on `Entity`, not `DatasetEntity`.** The markdown parse path
+(`parse_entity_file`, `model/src/science_model/frontmatter.py:404`) returns a plain
+`Entity(**entity_kwargs)` for datasets — it never constructs `DatasetEntity`. This is
+deliberate and documented: the existing dataset field `source_class` lives on `Entity`
+(gated to `kind == "dataset"`) "so it also covers the parse_entity_file path"
+(`entities.py:265-268`). `DatasetEntity` is used only on the typed/graph-load path, not
+the markdown parse. So a `license` added only to `DatasetEntity` would be silently
+dropped (Entity is `extra="ignore"`) for every markdown-authored dataset — and the §5
+regression test would fail. Concretely:
+
+- `model/src/science_model/entities.py`: add `license: str = ""` to **`Entity`**
+  (alongside `source_class` and the other dataset-unification fields). `DatasetEntity`
+  inherits it; no separate field there.
+- `model/src/science_model/frontmatter.py`: thread it into the `entity_kwargs` dict
+  (built ~line 331), i.e. `"license": fm.get("license", "")`, mirroring how
+  `source_class` is threaded (~line 371).
 - `src/science_tool/graph/storage_adapters/datapackage.py`: add `"license"` to
   `_ENTITY_FIELDS` so datapackage-sourced datasets carry it into the graph too.
-- `tier` / `update_cadence` already exist on the model — no model change, checks only.
 
-**Capture is not materialization.** Adding the model field makes `license` available
-on the parsed `DatasetEntity`, but it does **not** put it in `graph.trig`:
+`tier` / `update_cadence` get **validation only** (the check reads raw frontmatter, so
+their model placement is irrelevant to it). They are *not* moved or materialized here:
+they currently live on `DatasetEntity` only and are likewise absent from the parse-path
+`Entity` and from `entity_kwargs`, so emitting `sci:tier`/`sci:updateCadence` from
+`_add_entity` would read attributes that don't exist on the object materialization
+actually sees. Making them captured+materialized is a separate consistency fix, noted
+in *Out of scope*.
+
+**Capture is not materialization.** Adding the `Entity` field makes `license`
+available on the parsed entity, but it does **not** put it in `graph.trig`:
 `materialize.py`'s `_add_entity` emits only a hand-picked predicate set, and for
 datasets it currently stops at `sci:sourceClass`
 (`src/science_tool/graph/materialize.py:240-241`). To meet the "first-class,
-queryable" goal we must emit it explicitly:
+queryable" goal we emit it explicitly:
 
-- `src/science_tool/graph/materialize.py`: in `_add_entity`, in the existing
-  `entity.kind == "dataset"` block, emit `sci:license` when present, and (for
-  consistency, since they are modeled but likewise unmaterialized today) `sci:tier`
-  and `sci:updateCadence`. A graph-assertion test must confirm the triple lands.
+- `src/science_tool/graph/materialize.py`: in `_add_entity`, inside the existing
+  `entity.kind == "dataset"` block, emit `sci:license` when present. A graph-assertion
+  test must confirm the triple lands.
+- `src/science_tool/graph/store/constants.py`: register `sci:license` as a first-class
+  query predicate — add `SCI_NS.license` to the `PREDICATE_REGISTRY` tuple (~line 68,
+  beside `SCI_NS.sourceClass`) and a metadata allow-list entry (~line 212) with a
+  description/layer, matching the `sci:sourceClass` precedent. A test asserts it shows
+  up in `science graph predicates`.
 
 ### 1a. Schema + template synchronization
 
@@ -190,16 +221,23 @@ automatic from file creation alone.
   (or `science health`) on a fixture project and assert a `dataset_metadata` finding
   appears — proves the module is wired into `_load_canonical_checks`, not just that
   the pure core works in isolation.
+- **Datapackage-extraction test**: load a `science-pkg-entity-1.0` datapackage source
+  with a `license` through `DatapackageAdapter` and assert `license` survives into the
+  entity — guards the `_ENTITY_FIELDS` allow-list change independently of the markdown
+  path. (May be folded into the materialization test by sourcing the fixture dataset
+  from a datapackage rather than markdown.)
 - **Graph-materialization test**: materialize a fixture dataset with
   `license: CC-BY-4.0` and assert the `sci:license` triple is present in the emitted
-  graph (and `sci:tier`/`sci:updateCadence` when set) — guards the capture-vs-
-  materialization gap.
+  graph — guards the capture-vs-materialization gap.
+- **Predicate-registry test**: assert `sci:license` is visible via
+  `science graph predicates` (i.e. registered in `PREDICATE_REGISTRY` + allow-list).
 - **Schema-sync test**: load `science-pkg-entity-1.0.json` and assert the check's
   allowed-cadence constant equals its `update_cadence` enum (minus `""`), and that
   `tier` agrees across the check and both schema surfaces — prevents vocabulary drift.
 - **Regression test (guards the vestigial bug)**: parse a dataset markdown with a
-  `license:` value through the model and assert the field survives onto the
-  `DatasetEntity` (would have been silently dropped before this change).
+  `license:` value through `parse_entity_file` and assert the field survives onto the
+  returned `Entity` (would have been silently dropped before this change — and would
+  still drop if `license` were added only to `DatasetEntity`).
 
 ### 6. Backward compatibility / migration
 
@@ -212,10 +250,12 @@ blocks. Authors clear it by setting a real license or an explicit sentinel
 
 | File | Change |
 |---|---|
-| `model/src/science_model/entities.py` | add `license: str = ""` to `DatasetEntity` |
+| `model/src/science_model/entities.py` | add `license: str = ""` to **`Entity`** (gated to datasets, like `source_class`) |
+| `model/src/science_model/frontmatter.py` | thread `"license": fm.get("license", "")` into `entity_kwargs` |
 | `model/src/science_model/licenses.py` | **new** — `KNOWN_LICENSES`, `LICENSE_SENTINELS`, `suggest()` |
 | `src/science_tool/graph/storage_adapters/datapackage.py` | add `"license"` to `_ENTITY_FIELDS` |
-| `src/science_tool/graph/materialize.py` | emit `sci:license` (+ `sci:tier`, `sci:updateCadence`) for datasets in `_add_entity` |
+| `src/science_tool/graph/materialize.py` | emit `sci:license` for datasets in `_add_entity` |
+| `src/science_tool/graph/store/constants.py` | register `sci:license` in `PREDICATE_REGISTRY` + metadata allow-list |
 | `src/science_tool/validate/checks/dataset_metadata.py` | **new** — license/tier/cadence checks |
 | `src/science_tool/validate/checks/__init__.py` | register `dataset_metadata` in `_load_canonical_checks` |
 | `model/src/science_model/schemas/mixin-dataset-1.0.json` | add `"license": {"type": "string"}` |
@@ -225,8 +265,9 @@ blocks. Authors clear it by setting a real license or an explicit sentinel
 
 ## Success criteria
 
-- A dataset markdown with `license: CC-BY-4.0` round-trips: the value is on the parsed
-  `DatasetEntity` **and** a `sci:license` triple is present in `graph.trig`.
+- A dataset markdown with `license: CC-BY-4.0` round-trips: the value is on the
+  parsed `Entity` (via `parse_entity_file`) **and** a `sci:license` triple is present
+  in `graph.trig` **and** `sci:license` is visible in `science graph predicates`.
 - The check runs as part of the full suite (`runner.run` / `science health`), i.e. it
   is registered — not merely importable.
 - `science validate` / `science health` warn on: external dataset with no license,
