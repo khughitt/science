@@ -616,6 +616,7 @@ def plan_promote(
     from_order: list[str] | None = None,
     mixin_extensions: tuple["ProfileComponent", ...] = (),
     verify_digests: bool = False,
+    skip_on_conflict: bool = False,
 ) -> PromotePlan:
     """Build a PromotePlan from a DiscoveryResult.
 
@@ -670,268 +671,376 @@ def plan_promote(
     dataset_resource_verifications: dict[str, tuple[ResourceVerification, ...]] = {}
 
     for slug_norm in sorted(discovery.candidates_by_slug):
-        raw_group = discovery.candidates_by_slug[slug_norm]
+        try:
+            raw_group = discovery.candidates_by_slug[slug_norm]
 
-        classified: list[PromoteCandidate] = []
-        dataset_dropped_by_project: dict[str, list[str]] = {}
-        for c in raw_group:
-            raw_fm = c.project_only_body.get(_RAW_FRONTMATTER_KEY)
-            raw_body = c.project_only_body.get(_RAW_BODY_KEY, "")
-            if not isinstance(raw_fm, dict):
-                soft_failures.append(
-                    FailedCandidate(
+            classified: list[PromoteCandidate] = []
+            dataset_dropped_by_project: dict[str, list[str]] = {}
+            for c in raw_group:
+                raw_fm = c.project_only_body.get(_RAW_FRONTMATTER_KEY)
+                raw_body = c.project_only_body.get(_RAW_BODY_KEY, "")
+                if not isinstance(raw_fm, dict):
+                    soft_failures.append(
+                        FailedCandidate(
+                            slug=c.slug,
+                            project_slug=c.project_slug,
+                            source_path=c.overlay_source_path,
+                            error_class="PromoteCandidateError",
+                            error_message="discovery payload missing raw frontmatter",
+                        )
+                    )
+                    continue
+                can_f, proj_f, can_b, proj_b = _classify_entity(
+                    raw_fm,
+                    raw_body,
+                    merge_policy,
+                    body_sections,
+                )
+                if kind.kind == "dataset":
+                    proj_f = {k: v for k, v in proj_f.items() if k in overlay_field_keys}
+                    dataset_dropped_by_project[c.project_slug] = _dataset_dropped_fields(
+                        raw_fm,
+                        canonical_fields=can_f,
+                        project_only_fields=proj_f,
+                    )
+                classified.append(
+                    PromoteCandidate(
                         slug=c.slug,
+                        slug_normalized=c.slug_normalized,
                         project_slug=c.project_slug,
-                        source_path=c.overlay_source_path,
-                        error_class="PromoteCandidateError",
-                        error_message="discovery payload missing raw frontmatter",
+                        project_root=c.project_root,
+                        overlay_source_path=c.overlay_source_path,
+                        canonical_fields=can_f,
+                        project_only_fields=proj_f,
+                        canonical_body=can_b,
+                        project_only_body=proj_b,
+                        datapackage_source_path=c.datapackage_source_path,
+                        datapackage_doc=c.datapackage_doc,
+                    )
+                )
+
+            if not classified:
+                continue
+
+            canonical_case = _pick_canonical_bibkey_case(classified, from_order)
+
+            # Detect an already-promoted canonical (paper only, t063). When present,
+            # the committed case overrides the source-derived case so the
+            # collision pre-check and overlay-target computation below use it, and
+            # the decision becomes an overlay against the existing version rather
+            # than minting a duplicate. May raise PromoteInputError on multi-case
+            # commons corruption — let it propagate.
+            existing = (
+                _existing_canonical_for_slug(commons_root, kind, slug_norm)
+                if kind.kind == "paper"
+                else None
+            )
+            if existing is not None:
+                committed_case, existing_version = existing
+                canonical_case = committed_case
+            canonical_version = existing_version if existing else "1.0.0"
+            overlay_mode: Literal["mint", "overlay_existing"] = (
+                "overlay_existing" if existing else "mint"
+            )
+
+            # Pre-check for case-rename collisions before any conflict prompts
+            # (design §4.1.3): if the rename target already exists in the project
+            # directory and is NOT the source file itself, the group is un-promotable.
+            for c in classified:
+                source_path = c.overlay_source_path
+                target_path = _overlay_target_path(c, kind=kind, canonical_case=canonical_case)
+                if source_path.name != target_path.name and target_path.exists():
+                    raise PromoteInputError(
+                        f"case-rename collision in {c.project_slug}: cannot rename "
+                        f"{source_path} → {target_path}; target already exists"
+                    )
+                if source_path.parent != target_path.parent and target_path.exists():
+                    raise PromoteInputError(
+                        f"overlay target collision in {c.project_slug}: cannot flatten "
+                        f"{source_path} → {target_path}; target already exists"
+                    )
+
+            dataset_primary: PromoteCandidate | None = None
+            dataset_primary_per_resource: dict[str, tuple[str, int]] | None = None
+            if kind.kind == "dataset":
+                dataset_primary = _primary_candidate_for_plan(classified, from_order)
+                _primary_result = _dataset_per_resource(
+                    dataset_primary, verify_digests=verify_digests
+                )
+                dataset_primary_per_resource = _primary_result.per_resource
+                _group_verifications: tuple[ResourceVerification, ...] = ()
+                if (
+                    dataset_primary.datapackage_doc is None
+                    or dataset_primary.datapackage_source_path is None
+                ):
+                    raise PromoteCandidateError(
+                        "dataset planning requires discovery datapackage metadata",
+                        slug=canonical_case,
+                    )
+                _group_verifications = _validate_dataset_group_datapackages(
+                    canonical_slug=canonical_case,
+                    primary=dataset_primary,
+                    candidates=classified,
+                    primary_per_resource=dataset_primary_per_resource,
+                    verify_digests=verify_digests,
+                )
+                combined_verifications = (
+                    _primary_result.verifications + _group_verifications
+                )
+                if combined_verifications:
+                    dataset_resource_verifications[canonical_case] = combined_verifications
+                check_override_conflict(
+                    slug=canonical_case,
+                    planned_path=dataset_primary.datapackage_source_path.parent,
+                )
+
+            merged, conflicts = _merge_canonical_fields(classified, merge_policy, kind=kind.kind)
+
+            resolved_conflicts: list[ConflictResolution] = []
+            for conflict in conflicts:
+                resolved_value = resolve_conflict(conflict)
+                source_project = next(
+                    (slug for slug, v in conflict.candidates.items() if v == resolved_value),
+                    None,
+                )
+                resolved_conflicts.append(
+                    ConflictResolution(
+                        slug=canonical_case,
+                        field=conflict.field,
+                        candidates=conflict.candidates,
+                        resolved_to=resolved_value,
+                        source_project=source_project,
+                    )
+                )
+                merged[conflict.field] = resolved_value
+
+            # Divergence gate (paper, overlay_existing): compare the merged
+            # source-derived canonical against the committed canonical. Equal/subset
+            # → safe to overlay; divergent → route each diverging field through the
+            # resolve_conflict channel (keep-existing or abort). t063 §3 / §3a.
+            if existing is not None:
+                existing_fm, existing_body_text = _parse_entity_file(
+                    commons_root / kind.commons_subdir / f"{canonical_case}.md"
+                )
+                ex_fields, _, ex_body, _ = _classify_entity(
+                    existing_fm, existing_body_text, merge_policy, body_sections
+                )
+                src_fields = merged
+                src_body = classified[0].canonical_body
+                src_fields_wo_identity = {k: v for k, v in src_fields.items() if k not in _PROMOTE_DERIVED_IDENTITY_KEYS}
+                ex_fields_wo_identity = {k: v for k, v in ex_fields.items() if k not in _PROMOTE_DERIVED_IDENTITY_KEYS}
+                verdict, diverging = _canonical_fields_equal_or_subset(
+                    src_fields_wo_identity, src_body, ex_fields_wo_identity, ex_body
+                )
+                if verdict == "divergent":
+                    # Body sections and frontmatter share one comparison namespace;
+                    # look each diverging key up wherever it lives.
+                    merged_src = {**src_fields_wo_identity, **src_body}
+                    merged_ex = {**ex_fields_wo_identity, **ex_body}
+                    for diverging_field in diverging:
+                        source_value = merged_src.get(diverging_field)
+                        existing_value = merged_ex.get(diverging_field)
+                        conflict = ExistingCanonicalConflict(
+                            slug=canonical_case,
+                            kind=kind.kind,
+                            field=diverging_field,
+                            source_value=source_value,
+                            existing_value=existing_value,
+                            existing_version=existing_version,
+                        )
+                        resolution = resolve_conflict(conflict)
+                        if resolution is not KEEP_EXISTING:
+                            # The callback's only non-abort outcome is KEEP_EXISTING;
+                            # an abort raises PromoteConflictAbort (propagates). Any
+                            # other return is a programming error.
+                            raise PromoteInputError(
+                                "resolve_conflict returned an unexpected value for an "
+                                f"ExistingCanonicalConflict ({resolution!r}); expected "
+                                "KEEP_EXISTING or a PromoteConflictAbort"
+                            )
+                        resolved_conflicts.append(
+                            ConflictResolution(
+                                slug=canonical_case,
+                                field=diverging_field,
+                                candidates={
+                                    "<commons-existing>": existing_value,
+                                    "<source-merged>": source_value,
+                                },
+                                resolved_to=existing_value,
+                                source_project=None,
+                            )
+                        )
+
+            if kind.kind == "dataset":
+                canonical_artifact_path = Path(kind.commons_subdir) / canonical_case / "entity.md"
+            else:
+                canonical_artifact_path = Path(kind.commons_subdir) / f"{canonical_case}.md"
+            overlays: dict[str, OverlayRewrite] = {}
+            for c in classified:
+                source_path = c.overlay_source_path
+                target_path = _overlay_target_path(c, kind=kind, canonical_case=canonical_case)
+                rename_from = source_path if source_path.name != target_path.name else None
+                unlinked_source = source_path if source_path.parent != target_path.parent else None
+                if rename_from is not None and target_path.exists():
+                    raise PromoteInputError(
+                        f"case-rename collision in {c.project_slug}: cannot rename "
+                        f"{rename_from} → {target_path}; target already exists"
+                    )
+                if source_path.parent != target_path.parent and target_path.exists():
+                    raise PromoteInputError(
+                        f"overlay target collision in {c.project_slug}: cannot flatten "
+                        f"{source_path} → {target_path}; target already exists"
+                    )
+                project_only_fields = c.project_only_fields
+                if kind.kind == "dataset":
+                    project_only_fields = dict(c.project_only_fields)
+                    if c.datapackage_source_path is not None:
+                        project_only_fields["source"] = _project_relative_posix(
+                            c.project_root,
+                            c.datapackage_source_path,
+                        )
+                rendered_overlay = _render_overlay(
+                    PromoteDecision(
+                        slug=canonical_case,
+                        canonical_artifacts=[
+                            CanonicalArtifact(
+                                path=canonical_artifact_path,
+                                content="",
+                                validator="entity-mixin",
+                            )
+                        ],
+                        canonical_version=canonical_version,
+                        overlays={},
+                        resolved_conflicts=(),
+                    ),
+                    project_only_fields=project_only_fields,
+                    project_only_body=c.project_only_body,
+                    kind=kind,
+                )
+                overlays[c.project_slug] = OverlayRewrite(
+                    project_slug=c.project_slug,
+                    path=target_path,
+                    before_sha="",
+                    after_content=rendered_overlay,
+                    pin_version=canonical_version,
+                    rename_from=rename_from,
+                    unlinked_source=unlinked_source,
+                )
+
+            if overlay_mode == "overlay_existing":
+                # The canonical already lives in the commons at `existing_version`;
+                # nothing to write. Overlays (built above) still pin to it. t063 §4.
+                decisions.append(
+                    PromoteDecision(
+                        slug=canonical_case,
+                        canonical_artifacts=[],
+                        canonical_version=canonical_version,
+                        overlays=overlays,
+                        resolved_conflicts=tuple(resolved_conflicts),
+                        mode=overlay_mode,
+                        existing_version=existing_version if existing else None,
                     )
                 )
                 continue
-            can_f, proj_f, can_b, proj_b = _classify_entity(
-                raw_fm,
-                raw_body,
-                merge_policy,
-                body_sections,
-            )
-            if kind.kind == "dataset":
-                proj_f = {k: v for k, v in proj_f.items() if k in overlay_field_keys}
-                dataset_dropped_by_project[c.project_slug] = _dataset_dropped_fields(
-                    raw_fm,
-                    canonical_fields=can_f,
-                    project_only_fields=proj_f,
-                )
-            classified.append(
-                PromoteCandidate(
-                    slug=c.slug,
-                    slug_normalized=c.slug_normalized,
-                    project_slug=c.project_slug,
-                    project_root=c.project_root,
-                    overlay_source_path=c.overlay_source_path,
-                    canonical_fields=can_f,
-                    project_only_fields=proj_f,
-                    canonical_body=can_b,
-                    project_only_body=proj_b,
-                    datapackage_source_path=c.datapackage_source_path,
-                    datapackage_doc=c.datapackage_doc,
-                )
-            )
 
-        if not classified:
-            continue
-
-        canonical_case = _pick_canonical_bibkey_case(classified, from_order)
-
-        # Detect an already-promoted canonical (paper only, t063). When present,
-        # the committed case overrides the source-derived case so the
-        # collision pre-check and overlay-target computation below use it, and
-        # the decision becomes an overlay against the existing version rather
-        # than minting a duplicate. May raise PromoteInputError on multi-case
-        # commons corruption — let it propagate.
-        existing = (
-            _existing_canonical_for_slug(commons_root, kind, slug_norm)
-            if kind.kind == "paper"
-            else None
-        )
-        if existing is not None:
-            committed_case, existing_version = existing
-            canonical_case = committed_case
-        canonical_version = existing_version if existing else "1.0.0"
-        overlay_mode: Literal["mint", "overlay_existing"] = (
-            "overlay_existing" if existing else "mint"
-        )
-
-        # Pre-check for case-rename collisions before any conflict prompts
-        # (design §4.1.3): if the rename target already exists in the project
-        # directory and is NOT the source file itself, the group is un-promotable.
-        for c in classified:
-            source_path = c.overlay_source_path
-            target_path = _overlay_target_path(c, kind=kind, canonical_case=canonical_case)
-            if source_path.name != target_path.name and target_path.exists():
-                raise PromoteInputError(
-                    f"case-rename collision in {c.project_slug}: cannot rename "
-                    f"{source_path} → {target_path}; target already exists"
-                )
-            if source_path.parent != target_path.parent and target_path.exists():
-                raise PromoteInputError(
-                    f"overlay target collision in {c.project_slug}: cannot flatten "
-                    f"{source_path} → {target_path}; target already exists"
-                )
-
-        dataset_primary: PromoteCandidate | None = None
-        dataset_primary_per_resource: dict[str, tuple[str, int]] | None = None
-        if kind.kind == "dataset":
-            dataset_primary = _primary_candidate_for_plan(classified, from_order)
-            _primary_result = _dataset_per_resource(
-                dataset_primary, verify_digests=verify_digests
-            )
-            dataset_primary_per_resource = _primary_result.per_resource
-            _group_verifications: tuple[ResourceVerification, ...] = ()
-            if (
-                dataset_primary.datapackage_doc is None
-                or dataset_primary.datapackage_source_path is None
-            ):
-                raise PromoteCandidateError(
-                    "dataset planning requires discovery datapackage metadata",
-                    slug=canonical_case,
-                )
-            _group_verifications = _validate_dataset_group_datapackages(
-                canonical_slug=canonical_case,
-                primary=dataset_primary,
-                candidates=classified,
-                primary_per_resource=dataset_primary_per_resource,
-                verify_digests=verify_digests,
-            )
-            combined_verifications = (
-                _primary_result.verifications + _group_verifications
-            )
-            if combined_verifications:
-                dataset_resource_verifications[canonical_case] = combined_verifications
-            check_override_conflict(
+            canonical_decision = PromoteDecision(
                 slug=canonical_case,
-                planned_path=dataset_primary.datapackage_source_path.parent,
-            )
-
-        merged, conflicts = _merge_canonical_fields(classified, merge_policy, kind=kind.kind)
-
-        resolved_conflicts: list[ConflictResolution] = []
-        for conflict in conflicts:
-            resolved_value = resolve_conflict(conflict)
-            source_project = next(
-                (slug for slug, v in conflict.candidates.items() if v == resolved_value),
-                None,
-            )
-            resolved_conflicts.append(
-                ConflictResolution(
-                    slug=canonical_case,
-                    field=conflict.field,
-                    candidates=conflict.candidates,
-                    resolved_to=resolved_value,
-                    source_project=source_project,
-                )
-            )
-            merged[conflict.field] = resolved_value
-
-        # Divergence gate (paper, overlay_existing): compare the merged
-        # source-derived canonical against the committed canonical. Equal/subset
-        # → safe to overlay; divergent → route each diverging field through the
-        # resolve_conflict channel (keep-existing or abort). t063 §3 / §3a.
-        if existing is not None:
-            existing_fm, existing_body_text = _parse_entity_file(
-                commons_root / kind.commons_subdir / f"{canonical_case}.md"
-            )
-            ex_fields, _, ex_body, _ = _classify_entity(
-                existing_fm, existing_body_text, merge_policy, body_sections
-            )
-            src_fields = merged
-            src_body = classified[0].canonical_body
-            src_fields_wo_identity = {k: v for k, v in src_fields.items() if k not in _PROMOTE_DERIVED_IDENTITY_KEYS}
-            ex_fields_wo_identity = {k: v for k, v in ex_fields.items() if k not in _PROMOTE_DERIVED_IDENTITY_KEYS}
-            verdict, diverging = _canonical_fields_equal_or_subset(
-                src_fields_wo_identity, src_body, ex_fields_wo_identity, ex_body
-            )
-            if verdict == "divergent":
-                # Body sections and frontmatter share one comparison namespace;
-                # look each diverging key up wherever it lives.
-                merged_src = {**src_fields_wo_identity, **src_body}
-                merged_ex = {**ex_fields_wo_identity, **ex_body}
-                for diverging_field in diverging:
-                    source_value = merged_src.get(diverging_field)
-                    existing_value = merged_ex.get(diverging_field)
-                    conflict = ExistingCanonicalConflict(
-                        slug=canonical_case,
-                        kind=kind.kind,
-                        field=diverging_field,
-                        source_value=source_value,
-                        existing_value=existing_value,
-                        existing_version=existing_version,
+                canonical_artifacts=[
+                    CanonicalArtifact(
+                        path=canonical_artifact_path,
+                        content="",
+                        validator="entity-mixin",
                     )
-                    resolution = resolve_conflict(conflict)
-                    if resolution is not KEEP_EXISTING:
-                        # The callback's only non-abort outcome is KEEP_EXISTING;
-                        # an abort raises PromoteConflictAbort (propagates). Any
-                        # other return is a programming error.
-                        raise PromoteInputError(
-                            "resolve_conflict returned an unexpected value for an "
-                            f"ExistingCanonicalConflict ({resolution!r}); expected "
-                            "KEEP_EXISTING or a PromoteConflictAbort"
-                        )
-                    resolved_conflicts.append(
-                        ConflictResolution(
-                            slug=canonical_case,
-                            field=diverging_field,
-                            candidates={
-                                "<commons-existing>": existing_value,
-                                "<source-merged>": source_value,
-                            },
-                            resolved_to=existing_value,
-                            source_project=None,
-                        )
-                    )
+                ],
+                canonical_version=canonical_version,
+                overlays=overlays,
+                resolved_conflicts=tuple(resolved_conflicts),
+            )
 
-        if kind.kind == "dataset":
-            canonical_artifact_path = Path(kind.commons_subdir) / canonical_case / "entity.md"
-        else:
-            canonical_artifact_path = Path(kind.commons_subdir) / f"{canonical_case}.md"
-        overlays: dict[str, OverlayRewrite] = {}
-        for c in classified:
-            source_path = c.overlay_source_path
-            target_path = _overlay_target_path(c, kind=kind, canonical_case=canonical_case)
-            rename_from = source_path if source_path.name != target_path.name else None
-            unlinked_source = source_path if source_path.parent != target_path.parent else None
-            if rename_from is not None and target_path.exists():
-                raise PromoteInputError(
-                    f"case-rename collision in {c.project_slug}: cannot rename "
-                    f"{rename_from} → {target_path}; target already exists"
-                )
-            if source_path.parent != target_path.parent and target_path.exists():
-                raise PromoteInputError(
-                    f"overlay target collision in {c.project_slug}: cannot flatten "
-                    f"{source_path} → {target_path}; target already exists"
-                )
-            project_only_fields = c.project_only_fields
+            primary = dataset_primary if dataset_primary is not None else classified[0]
+            # NOTE: design §4.1.1 says `created` / `updated` should reflect the
+            # apply timestamp, but apply_promote currently writes this rendered
+            # artifact content directly.
+            canonical_body = primary.canonical_body
             if kind.kind == "dataset":
-                project_only_fields = dict(c.project_only_fields)
-                if c.datapackage_source_path is not None:
-                    project_only_fields["source"] = _project_relative_posix(
-                        c.project_root,
-                        c.datapackage_source_path,
-                    )
-            rendered_overlay = _render_overlay(
-                PromoteDecision(
-                    slug=canonical_case,
-                    canonical_artifacts=[
-                        CanonicalArtifact(
-                            path=canonical_artifact_path,
-                            content="",
-                            validator="entity-mixin",
-                        )
-                    ],
-                    canonical_version=canonical_version,
-                    overlays={},
-                    resolved_conflicts=(),
-                ),
-                project_only_fields=project_only_fields,
-                project_only_body=c.project_only_body,
+                canonical_body = {**primary.project_only_body, **primary.canonical_body}
+            canonical_content = _render_canonical(
+                canonical_decision,
+                canonical_fields=merged,
+                canonical_body=canonical_body,
+                created=date.today(),
+                updated=date.today(),
                 kind=kind,
+                active_profile=active_profile,
             )
-            overlays[c.project_slug] = OverlayRewrite(
-                project_slug=c.project_slug,
-                path=target_path,
-                before_sha="",
-                after_content=rendered_overlay,
-                pin_version=canonical_version,
-                rename_from=rename_from,
-                unlinked_source=unlinked_source,
-            )
-
-        if overlay_mode == "overlay_existing":
-            # The canonical already lives in the commons at `existing_version`;
-            # nothing to write. Overlays (built above) still pin to it. t063 §4.
+            if kind.kind == "dataset":
+                canonical_content = _rewrite_rendered_frontmatter(
+                    canonical_content,
+                    {"datapackage": "datapackage.yaml"},
+                )
+                if dataset_primary_per_resource is None:
+                    raise PromoteCandidateError(
+                        "dataset planning requires discovery datapackage metadata",
+                        slug=canonical_case,
+                    )
+                per_resource = dataset_primary_per_resource
+                if primary.datapackage_doc is None or primary.datapackage_source_path is None:
+                    raise PromoteCandidateError(
+                        "dataset planning requires discovery datapackage metadata",
+                        slug=canonical_case,
+                    )
+                datapackage_content = render_canonical_datapackage_yaml(
+                    project_doc=primary.datapackage_doc,
+                    canonical_slug=canonical_case,
+                    per_resource=per_resource,
+                )
+                source_hint = _dataset_recipe_source_hint(merged)
+                recipe_content = _render_dataset_recipe_stub(
+                    slug=canonical_case,
+                    source_hint=source_hint,
+                )
+                canonical_artifacts = [
+                    CanonicalArtifact(
+                        path=canonical_artifact_path,
+                        content=canonical_content,
+                        validator="entity-mixin",
+                    ),
+                    CanonicalArtifact(
+                        path=Path(kind.commons_subdir) / canonical_case / "datapackage.yaml",
+                        content=datapackage_content,
+                        validator="frictionless-datapackage",
+                    ),
+                    CanonicalArtifact(
+                        path=Path(kind.commons_subdir) / canonical_case / "recipe" / "README.md",
+                        content=recipe_content,
+                        validator="plain",
+                    ),
+                ]
+                dropped_fields = sorted(
+                    {
+                        field
+                        for dropped in dataset_dropped_by_project.values()
+                        for field in dropped
+                    }
+                )
+                dataset_audit_extras[canonical_case] = {
+                    "per_resource": per_resource,
+                    "dropped_fields": dropped_fields,
+                    "recipe_stubbed": True,
+                    "override_path": str(primary.datapackage_source_path.parent),
+                }
+            else:
+                canonical_artifacts = [
+                    CanonicalArtifact(
+                        path=canonical_artifact_path,
+                        content=canonical_content,
+                        validator="entity-mixin",
+                    )
+                ]
             decisions.append(
                 PromoteDecision(
                     slug=canonical_case,
-                    canonical_artifacts=[],
+                    canonical_artifacts=canonical_artifacts,
                     canonical_version=canonical_version,
                     overlays=overlays,
                     resolved_conflicts=tuple(resolved_conflicts),
@@ -939,114 +1048,28 @@ def plan_promote(
                     existing_version=existing_version if existing else None,
                 )
             )
+
+        except PromoteConflictAbort:
+            if not skip_on_conflict:
+                raise
+            # Non-interactive skip-and-continue (fb-2026-05-30-009): a citekey
+            # colliding with a DIFFERENT existing entity must not abort the whole
+            # batch. Record each candidate as a skipped soft-failure and move on.
+            for _skipped in discovery.candidates_by_slug[slug_norm]:
+                soft_failures.append(
+                    FailedCandidate(
+                        slug=_skipped.slug,
+                        project_slug=_skipped.project_slug,
+                        source_path=_skipped.overlay_source_path,
+                        error_class="PromoteConflictSkipped",
+                        error_message=(
+                            "skipped on conflict (non-interactive): collides with a "
+                            "different existing commons entity; re-run interactively "
+                            "or promote under a disambiguated key"
+                        ),
+                    )
+                )
             continue
-
-        canonical_decision = PromoteDecision(
-            slug=canonical_case,
-            canonical_artifacts=[
-                CanonicalArtifact(
-                    path=canonical_artifact_path,
-                    content="",
-                    validator="entity-mixin",
-                )
-            ],
-            canonical_version=canonical_version,
-            overlays=overlays,
-            resolved_conflicts=tuple(resolved_conflicts),
-        )
-
-        primary = dataset_primary if dataset_primary is not None else classified[0]
-        # NOTE: design §4.1.1 says `created` / `updated` should reflect the
-        # apply timestamp, but apply_promote currently writes this rendered
-        # artifact content directly.
-        canonical_body = primary.canonical_body
-        if kind.kind == "dataset":
-            canonical_body = {**primary.project_only_body, **primary.canonical_body}
-        canonical_content = _render_canonical(
-            canonical_decision,
-            canonical_fields=merged,
-            canonical_body=canonical_body,
-            created=date.today(),
-            updated=date.today(),
-            kind=kind,
-            active_profile=active_profile,
-        )
-        if kind.kind == "dataset":
-            canonical_content = _rewrite_rendered_frontmatter(
-                canonical_content,
-                {"datapackage": "datapackage.yaml"},
-            )
-            if dataset_primary_per_resource is None:
-                raise PromoteCandidateError(
-                    "dataset planning requires discovery datapackage metadata",
-                    slug=canonical_case,
-                )
-            per_resource = dataset_primary_per_resource
-            if primary.datapackage_doc is None or primary.datapackage_source_path is None:
-                raise PromoteCandidateError(
-                    "dataset planning requires discovery datapackage metadata",
-                    slug=canonical_case,
-                )
-            datapackage_content = render_canonical_datapackage_yaml(
-                project_doc=primary.datapackage_doc,
-                canonical_slug=canonical_case,
-                per_resource=per_resource,
-            )
-            source_hint = _dataset_recipe_source_hint(merged)
-            recipe_content = _render_dataset_recipe_stub(
-                slug=canonical_case,
-                source_hint=source_hint,
-            )
-            canonical_artifacts = [
-                CanonicalArtifact(
-                    path=canonical_artifact_path,
-                    content=canonical_content,
-                    validator="entity-mixin",
-                ),
-                CanonicalArtifact(
-                    path=Path(kind.commons_subdir) / canonical_case / "datapackage.yaml",
-                    content=datapackage_content,
-                    validator="frictionless-datapackage",
-                ),
-                CanonicalArtifact(
-                    path=Path(kind.commons_subdir) / canonical_case / "recipe" / "README.md",
-                    content=recipe_content,
-                    validator="plain",
-                ),
-            ]
-            dropped_fields = sorted(
-                {
-                    field
-                    for dropped in dataset_dropped_by_project.values()
-                    for field in dropped
-                }
-            )
-            dataset_audit_extras[canonical_case] = {
-                "per_resource": per_resource,
-                "dropped_fields": dropped_fields,
-                "recipe_stubbed": True,
-                "override_path": str(primary.datapackage_source_path.parent),
-            }
-        else:
-            canonical_artifacts = [
-                CanonicalArtifact(
-                    path=canonical_artifact_path,
-                    content=canonical_content,
-                    validator="entity-mixin",
-                )
-            ]
-        decisions.append(
-            PromoteDecision(
-                slug=canonical_case,
-                canonical_artifacts=canonical_artifacts,
-                canonical_version=canonical_version,
-                overlays=overlays,
-                resolved_conflicts=tuple(resolved_conflicts),
-                mode=overlay_mode,
-                existing_version=existing_version if existing else None,
-            )
-        )
-
     _validate_plan(decisions)
     return PromotePlan(
         decisions=decisions,

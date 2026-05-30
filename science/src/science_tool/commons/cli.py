@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -705,6 +706,11 @@ def _promote_kind_cmd(
         click.echo("Nothing to promote.")
         return
 
+    # Non-interactive runs (piped/redirected stdin) cannot answer a conflict
+    # prompt, so a citekey colliding with a different existing entity would abort
+    # the whole batch on the first collision. Skip-and-continue instead, and
+    # report the skips afterward (fb-2026-05-30-009).
+    non_interactive = not sys.stdin.isatty()
     try:
         plan = plan_promote(
             discovery,
@@ -713,9 +719,22 @@ def _promote_kind_cmd(
             from_order=list(from_),
             mixin_extensions=mixin_extensions,
             verify_digests=verify_digests,
+            skip_on_conflict=non_interactive,
         )
     except CommonsError as exc:
         raise click.ClickException(str(exc)) from exc
+
+    skipped_on_conflict = [
+        fc for fc in plan.failed_candidates if fc.error_class == "PromoteConflictSkipped"
+    ]
+    if skipped_on_conflict:
+        click.echo(
+            f"Skipped {len(skipped_on_conflict)} candidate(s) on conflict (non-interactive); "
+            "re-run interactively to resolve, or promote under a disambiguated key:",
+            err=True,
+        )
+        for fc in skipped_on_conflict:
+            click.echo(f"  - {fc.slug or '?'} (from {fc.project_slug})", err=True)
 
     click.echo(
         f"Plan: {len(plan.decisions)} canonical entities, "
