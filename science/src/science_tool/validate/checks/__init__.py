@@ -67,6 +67,7 @@ def _load_canonical_checks() -> None:
         "identity_context",
         "dataset_taxonomy",
         "dataset_metadata",
+        "dataset_promotion_contract",
         "variant_identity",
         "genesets",
         "dataset_influence",

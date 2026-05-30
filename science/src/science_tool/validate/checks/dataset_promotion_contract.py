@@ -1,0 +1,165 @@
+"""Promotable dataset descriptor contract checks.
+
+This is an authoring-time guard for project-local dataset descriptors before
+`science commons promote dataset` is run. It intentionally stays side-effect
+free: validate checks the same local datapackage prerequisites promotion needs,
+but does not touch the commons checkout or global data overrides.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator, Mapping
+from pathlib import Path
+from typing import Any
+
+from science_tool.commons.errors import PromoteCandidateError, PromoteResourceMissingError
+from science_tool.commons.promote import (
+    _load_project_datapackage,
+    _validate_datapackage_resources,
+)
+from science_tool.validate._helpers import dataset_frontmatters
+from science_tool.validate.checks import Check
+from science_tool.validate.context import ValidateContext
+from science_tool.validate.result import Result, Severity
+
+
+def _result(path: str | None, message: str, rule: str) -> Result:
+    return Result(Severity.ERROR, Path(path) if path else None, None, message, rule, None)
+
+
+def _is_dataset_descriptor(fm: Mapping[str, Any]) -> bool:
+    path = fm.get("_path")
+    return isinstance(path, str) and path.startswith("doc/datasets/")
+
+
+def _is_pinned_overlay(fm: Mapping[str, Any]) -> bool:
+    return bool(fm.get("overlay_of")) or bool(fm.get("pin_version")) or bool(fm.get("source"))
+
+
+def _ident(fm: Mapping[str, Any]) -> str:
+    ident = fm.get("id")
+    return ident if isinstance(ident, str) and ident else "dataset:?"
+
+
+def _validate_datapackage_ref(
+    *,
+    ctx: ValidateContext,
+    fm: Mapping[str, Any],
+    field: str,
+    rule: str,
+) -> tuple[Path, dict[str, Any]] | Result:
+    path = fm.get("_path")
+    ident = _ident(fm)
+    try:
+        datapackage_path, datapackage_doc = _load_project_datapackage(
+            ctx.project_root,
+            fm.get(field),
+        )
+        _validate_datapackage_resources(ident.removeprefix("dataset:"), datapackage_path, datapackage_doc)
+    except PromoteResourceMissingError as exc:
+        return _result(
+            path if isinstance(path, str) else None,
+            f"{ident}: {field} datapackage resource is missing: {exc}",
+            rule,
+        )
+    except PromoteCandidateError as exc:
+        return _result(
+            path if isinstance(path, str) else None,
+            f"{ident}: {field} datapackage is not promotable: {exc}",
+            rule,
+        )
+    return datapackage_path, datapackage_doc
+
+
+def _has_qa_resource(datapackage_doc: Mapping[str, Any]) -> bool:
+    resources = datapackage_doc.get("resources")
+    if not isinstance(resources, list):
+        return False
+    for resource in resources:
+        if not isinstance(resource, Mapping):
+            continue
+        candidates = [resource.get("name"), resource.get("path")]
+        for candidate in candidates:
+            if isinstance(candidate, str) and "qa" in candidate.lower():
+                return True
+    return False
+
+
+def _source_refs_missing(fm: Mapping[str, Any]) -> bool:
+    refs = fm.get("source_refs")
+    return not isinstance(refs, list) or not any(isinstance(ref, str) and ref.strip() for ref in refs)
+
+
+def _missing_candidate_fields(fm: Mapping[str, Any]) -> list[str]:
+    missing = [
+        field
+        for field in ("origin", "tier")
+        if field not in fm or fm[field] in (None, "")
+    ]
+    origin = fm.get("origin")
+    if origin == "external" and ("access" not in fm or fm["access"] in (None, "")):
+        missing.append("access")
+    if origin == "derived" and ("derivation" not in fm or fm["derivation"] in (None, "")):
+        missing.append("derivation")
+    return missing
+
+
+def evaluate_dataset_promotion_contract(
+    datasets: list[dict[str, Any]],
+    *,
+    ctx: ValidateContext,
+) -> Iterator[Result]:
+    for fm in datasets:
+        if (fm.get("kind") or fm.get("type")) != "dataset" or not _is_dataset_descriptor(fm):
+            continue
+
+        path = fm.get("_path")
+        rel_path = path if isinstance(path, str) else None
+        ident = _ident(fm)
+
+        if _source_refs_missing(fm):
+            yield _result(
+                rel_path,
+                f"{ident}: promotable dataset descriptor requires non-empty source_refs",
+                "dataset-promotion.source-refs-missing",
+            )
+
+        if _is_pinned_overlay(fm):
+            result = _validate_datapackage_ref(
+                ctx=ctx,
+                fm=fm,
+                field="source",
+                rule="dataset-promotion.source-unresolved",
+            )
+            if isinstance(result, Result):
+                yield result
+            continue
+
+        for field in _missing_candidate_fields(fm):
+            yield _result(
+                rel_path,
+                f"{ident}: dataset promotion candidate missing required field {field!r}",
+                "dataset-promotion.required-field-missing",
+            )
+
+        result = _validate_datapackage_ref(
+            ctx=ctx,
+            fm=fm,
+            field="datapackage",
+            rule="dataset-promotion.datapackage-unresolved",
+        )
+        if isinstance(result, Result):
+            yield result
+            continue
+        _datapackage_path, datapackage_doc = result
+        if not _has_qa_resource(datapackage_doc):
+            yield _result(
+                rel_path,
+                f"{ident}: datapackage has no QA resource; include a resource with qa in its name or path",
+                "dataset-promotion.qa-resource-missing",
+            )
+
+
+@Check(section="dataset promotion contract", order=33)
+def check_dataset_promotion_contract(ctx: ValidateContext) -> Iterator[Result]:
+    yield from evaluate_dataset_promotion_contract(dataset_frontmatters(ctx), ctx=ctx)
