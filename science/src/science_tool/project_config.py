@@ -86,6 +86,15 @@ class EntityIndexSource(StrEnum):
     KNOWLEDGE_GRAPH = "knowledge_graph"
 
 
+# Doc directories whose DOI/PMID identifiers are NOT citations requiring a
+# bibliography entry. `doc/papers` notes are corpus contributors (they declare
+# DOIs), and `doc/searches` are literature-discovery logs full of candidate
+# identifiers the project has surveyed but not adopted. Both are exempt from the
+# DOI/PMID broken-ref check by default; a project may override via
+# `refs.doi_pmid_exempt_dirs`.
+DEFAULT_DOI_PMID_EXEMPT_DIRS: tuple[str, ...] = ("doc/papers", "doc/searches")
+
+
 class RefsConfig(BaseModel):
     """Configuration for `science refs check`."""
 
@@ -93,6 +102,9 @@ class RefsConfig(BaseModel):
 
     entity_index_source: EntityIndexSource = EntityIndexSource.FRONTMATTER
     scan_roots: list[str] = Field(default_factory=list)
+    doi_pmid_exempt_dirs: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_DOI_PMID_EXEMPT_DIRS)
+    )
 
 
 class ProjectConfig(BaseModel):

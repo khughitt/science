@@ -20,7 +20,7 @@ from science_tool.markdown_utils import (
     is_fence_line as _is_fence_line,
     strip_inline_code as _strip_inline_code,
 )
-from science_tool.project_config import load_project_config
+from science_tool.project_config import DEFAULT_DOI_PMID_EXEMPT_DIRS, load_project_config
 
 
 @dataclass
@@ -46,10 +46,12 @@ _CITATION_RE = re.compile(r"\[@([^\]]+)\]")
 _LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 _BIBLIOGRAPHY_CITATION_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]*[0-9][A-Za-z0-9_.-]*$")
 # DOIs in prose: ``10.<registrant>/<suffix>``, optionally preceded by ``doi:`` or
-# a ``https://doi.org/`` URL prefix. The character class for the suffix follows
-# Crossref's spec (``[-._;()/:A-Z0-9]`` plus letters); we trim trailing
-# punctuation that is almost certainly sentence-final.
-_DOI_RE = re.compile(r"\b(?:doi:\s*|https?://(?:dx\.)?doi\.org/)?(10\.\d{4,9}/[^\s)\]]+)", re.IGNORECASE)
+# a ``https://doi.org/`` URL prefix. The suffix character class allows ``(`` and
+# ``)`` because DOIs legitimately contain parentheses (e.g. legacy Elsevier
+# ``10.1016/0197-2456(86)90046-2``); a trailing markdown wrapper paren
+# (``(10.1234/x)``) is trimmed downstream by ``_normalize_doi_token``, which
+# rstrips ``)`` and other sentence-final punctuation.
+_DOI_RE = re.compile(r"\b(?:doi:\s*|https?://(?:dx\.)?doi\.org/)?(10\.\d{4,9}/[^\s\]]+)", re.IGNORECASE)
 # PMIDs in prose: ``PMID: 12345`` / ``PMID 12345``. The bare-number form
 # (``12345``) without context is too ambiguous to flag, so we require the
 # ``PMID`` prefix.
@@ -298,6 +300,21 @@ def _load_refs_config(root: Path):
         return None
 
 
+def _doi_pmid_exempt_prefixes(refs_config) -> tuple[str, ...]:
+    """Normalized `rel_path.startswith(...)` prefixes for DOI/PMID-exempt dirs.
+
+    Falls back to the built-in defaults when no `refs` config is present. Each
+    configured dir is normalized to a trailing-slash prefix so `doc/searches`
+    matches `doc/searches/x.md` but not a sibling like `doc/searches-archive/`.
+    """
+    dirs = (
+        refs_config.doi_pmid_exempt_dirs
+        if refs_config is not None
+        else list(DEFAULT_DOI_PMID_EXEMPT_DIRS)
+    )
+    return tuple(d.rstrip("/") + "/" for d in dirs)
+
+
 def _resolve_entity_index(root: Path, refs_config) -> set[str]:
     """Choose entity-index loader based on configured truth source.
 
@@ -513,6 +530,7 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
     issues: list[RefIssue] = []
     refs_config = _load_refs_config(root)
     extra_roots = refs_config.scan_roots if refs_config is not None else None
+    doi_pmid_exempt_prefixes = _doi_pmid_exempt_prefixes(refs_config)
     files = _collect_markdown_files(root, extra_roots=extra_roots)
     hyp_ids = _load_hypothesis_ids(root)
     bib_keys = _load_bib_keys(root)
@@ -594,10 +612,12 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
         # IDs in headers — declarations are not "broken refs". Skip those.
         skip_task_check = skip_task_check or rel_path.startswith("tasks/")
         # DOI/PMID corpus is built FROM doc/papers/ — checking it against
-        # itself would flag every newly added paper note before its bib entry
-        # exists. The bibliography is the source of truth; paper notes are
-        # corpus contributors, not consumers.
-        skip_doi_pmid_check = rel_path.startswith("doc/papers/")
+        # DOI/PMID identifiers in exempt dirs are not citations requiring a bib
+        # entry: doc/papers notes are corpus contributors (checking them against
+        # the corpus they build would flag every new note), and doc/searches are
+        # literature-discovery logs full of surveyed-but-not-adopted candidates.
+        # Configurable via refs.doi_pmid_exempt_dirs (see project_config).
+        skip_doi_pmid_check = any(rel_path.startswith(p) for p in doi_pmid_exempt_prefixes)
 
         in_fenced_code = False
         for line_num, line in enumerate(lines, start=1):
