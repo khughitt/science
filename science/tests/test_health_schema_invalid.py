@@ -44,7 +44,7 @@ def test_nonstrict_load_degrades_to_skipped_entity(tmp_path: Path) -> None:
     root = _project_with_bad_dataset(tmp_path)
     sources = load_project_sources(root, strict_core_schema=False)
     reasons = {s.reason for s in sources.skipped_entities}
-    assert "entity_schema_validation_failed" in reasons
+    assert "core_schema_validation_failed" in reasons
 
 
 def test_health_report_renders_with_schema_invalid_finding(tmp_path: Path) -> None:

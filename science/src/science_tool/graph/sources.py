@@ -129,7 +129,7 @@ class SkippedEntity(BaseModel):
 
     path: str
     kind: str
-    reason: str  # "unknown_entity_kind" | "entity_schema_validation_failed"
+    reason: str  # "unknown_entity_kind" | "entity_schema_validation_failed" | "core_schema_validation_failed"
     details: str
 
 
@@ -332,11 +332,16 @@ def load_project_sources(
                             kind,
                             details,
                         )
+                        # Distinct reason from the missing-identity branch above
+                        # (which the entity_identity health check already reports
+                        # as missing-canonical-id): health surfaces ONLY these as
+                        # schema_invalid findings, avoiding double-counting
+                        # (fb-2026-05-30-008).
                         skipped_entities.append(
                             SkippedEntity(
                                 path=str(ref.path),
                                 kind=kind,
-                                reason="entity_schema_validation_failed",
+                                reason="core_schema_validation_failed",
                                 details=details,
                             )
                         )

@@ -635,7 +635,7 @@ def build_health_report(
             "message": skipped.details,
         }
         for skipped in (context.sources.skipped_entities if context.sources is not None else [])
-        if skipped.reason == "entity_schema_validation_failed"
+        if skipped.reason == "core_schema_validation_failed"
     ]
     legacy_task_type = cast("list[LegacyTaskTypeFinding]", check_results["legacy_task_type"])
     invalid_entity_aspects = cast("list[InvalidEntityAspectsFinding]", check_results["invalid_entity_aspects"])
