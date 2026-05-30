@@ -43,6 +43,7 @@ def _load_canonical_checks() -> None:
     for module_name in (
         "tooling",
         "manifest",
+        "registration_consistency",
         "directory_structure",
         "code_files",
         "research_scope",
