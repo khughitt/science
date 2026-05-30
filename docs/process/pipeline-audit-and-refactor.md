@@ -157,7 +157,9 @@ Result-QA findings are recorded here as **analysis-result-QA**, but they do not 
 
 - **Minimum workflow contract:** each active workflow should have a root-runnable command, declared
   config, explicit default target, QA target, manifest/datapackage when outputs feed later analyses,
-  and task/code back-links.
+  and task/code back-links. Manifest `created`/`updated` must derive from run identity, not
+  regeneration wall-clock (per
+  [`../conventions/reproducible-manifest-dates.md`](../conventions/reproducible-manifest-dates.md)).
 - **Naming & layout** consistency across chains (e.g. `workflows/` vs `scripts/` vs an unused
   `code/`; config sprawl; versioned-config drift like `v8` / `v8.1`).
 - **Config-driven over hardcoded:** flag scripts bypassing config with hardcoded data paths.
