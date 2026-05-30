@@ -44,6 +44,31 @@ Record the commitment-target subset as `commits_to:` in the pre-reg frontmatter 
 
 If `commits_to:` is absent, the deriver falls back to "all epistemic `related:` entries are commitment targets," which over-derives for many existing mixed pre-regs. When in doubt, populate `commits_to:` explicitly.
 
+#### Sub-axis: execution timing — runnable-now or data-gated?
+
+Target class (operational/epistemic) is orthogonal to *when the analysis can run*. Most pre-regs are
+**runnable-now**: the qualifying data/vehicle exists and § 4 (null/power) and the Null-Result Plan
+presuppose execution. But a pre-reg may commit a **rule before any qualifying vehicle exists** — the
+binding constraint is data availability (e.g. no adequately-powered cohort yet). Author these in
+**data-gated mode** rather than improvising:
+
+- **Commit the rule now, defer execution.** Write the decision criteria and expected outcomes as
+  usual, but mark the analysis as not-yet-runnable.
+- **Vehicle-admissibility gate.** State the explicit preconditions a future vehicle must satisfy to
+  *activate* the rule — e.g. a locked power floor (minimum n), required differential design, and any
+  lineage/comparator requirement. Spent vehicles that fail the floor do **not** qualify.
+- **Standing verdict = no update until a vehicle clears.** Until an admissible vehicle exists, the
+  pre-reg's standing interpretation is *inconclusive-for-coverage*: it produces **no `bears_on` belief
+  update**. This is distinct from a null result (which is evidence) — there is simply no qualifying
+  evidence yet. Map it to the canonical inconclusive verdict (`[?]`), not a new token.
+- **Track with a `status: blocked` task** whose blocker is the admissibility gate, so the deferred
+  analysis stays visible in the queue and activates when a qualifying vehicle arrives.
+
+This differs from **Pilot Calibration** (§ below), which defers a single *threshold* to a pilot while
+the analysis itself runs now. Data-gated mode defers the *entire analysis* pending a qualifying
+vehicle. Note it explicitly at the top of the pre-reg (e.g. `mode: data-gated`) so interpret-results
+treats the standing verdict as no-update rather than as a runnable null.
+
 ### 1. Identify the Analysis
 
 - What analysis are you about to run?

@@ -365,6 +365,27 @@ are authoring against. -->
 - Does null mean the hypothesis is wrong, or that the test was inadequate?
 - What would you do next? -->
 
+## Vehicle-Admissibility Gate
+
+<!-- DATA-GATED MODE ONLY. Omit unless this pre-reg commits a rule before any
+qualifying vehicle/data exists (binding constraint = data availability, not
+analysis design). If present, declare `mode: data-gated` near the top.
+
+Specify the explicit preconditions a future vehicle must satisfy to ACTIVATE
+this pre-reg's rule:
+- power floor: minimum n (and any design requirement, e.g. differential design)
+- comparator/lineage requirement, if any
+- which spent vehicles do NOT qualify, and why (state their n)
+
+Standing semantics until an admissible vehicle exists:
+- the standing verdict is *inconclusive-for-coverage* (canonical `[?]`), which
+  produces NO `bears_on` belief update — this is "no qualifying evidence yet",
+  not a null result (which would be evidence);
+- track activation with a `status: blocked` task whose blocker is this gate.
+
+Contrast with `## Pilot Calibration`, which defers a single threshold while the
+analysis runs now; data-gated mode defers the entire analysis. -->
+
 ## Suspicious/Unexpected Result Plan
 
 <!-- What would "too good to be true" look like?
