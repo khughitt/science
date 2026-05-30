@@ -137,3 +137,24 @@ def test_collect_evidence_units_keeps_authored_circular_over_derived_commitment(
 
     assert units[0].independence == "circular"
     assert units[0].independence_group == "manual-circular"
+
+
+def test_collect_evidence_units_ignores_dataset_independence_candidates_for_scoring() -> None:
+    knowledge = Graph()
+    provenance = Graph()
+    target = PROJECT_NS["proposition/p1"]
+    line_a = PROJECT_NS["evidence-line/a"]
+    line_b = PROJECT_NS["evidence-line/b"]
+    record = PROJECT_NS["dataset-independence/r1"]
+    for line in (line_a, line_b):
+        knowledge.add((line, RDF.type, SCI_NS.EvidenceLine))
+        knowledge.add((line, CITO_NS.supports, target))
+    provenance.add((record, RDF.type, SCI_NS.DatasetIndependenceCandidate))
+    provenance.add((record, SCI_NS.independenceTarget, target))
+    provenance.add((record, SCI_NS.independenceGroup, Literal("dataset-derived:gtex-v8")))
+    provenance.add((record, SCI_NS.independenceMember, line_a))
+    provenance.add((record, SCI_NS.independenceMember, line_b))
+
+    units = collect_evidence_units(knowledge, provenance, [target])
+
+    assert [(unit.independence, unit.independence_group) for unit in units] == [(None, None), (None, None)]

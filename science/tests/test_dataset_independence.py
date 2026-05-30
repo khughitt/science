@@ -196,3 +196,38 @@ def test_emit_records_uses_b2_specific_predicates_not_evidence_line_or_target() 
     assert list(provenance.triples((record, SCI_NS.evidenceLine, None))) == []
     assert list(provenance.triples((record, SCI_NS.target, None))) == []
     assert list(provenance.triples((line_a, SCI_NS.evidenceIndependence, None))) == []
+
+
+def test_validation_source_mixed_with_dependence_is_candidate_not_commitment() -> None:
+    knowledge, provenance, _target, line_a, line_b = _line_graph()
+    dataset = PROJECT_NS["dataset/gtex-v8"]
+    _add_usage(provenance, line_a, dataset, "validation_source", "full", "a")
+    _add_usage(provenance, line_b, dataset, "analyzed", "full", "b")
+
+    records = derive_dataset_independence_records(knowledge, provenance)
+
+    assert [(record.kind, record.reason) for record in records] == [("candidate", "validation")]
+
+
+def test_cited_alone_is_candidate_only_and_never_commitment() -> None:
+    knowledge, provenance, _target, line_a, line_b = _line_graph()
+    dataset = PROJECT_NS["dataset/gtex-v8"]
+    _add_usage(provenance, line_a, dataset, "cited", "full", "a")
+    _add_usage(provenance, line_b, dataset, "cited", "full", "b")
+
+    records = derive_dataset_independence_records(knowledge, provenance)
+
+    assert [(record.kind, record.reason) for record in records] == [("candidate", "citation-only")]
+
+
+def test_virtual_geneset_member_is_candidate_only_even_with_full_overlap() -> None:
+    knowledge, provenance, _target, line_a, line_b = _line_graph()
+    dataset = PROJECT_NS["dataset/gtex-v8"]
+    virtual = PROJECT_NS["virtual/geneset-member/collection/set-a"]
+    _add_usage(provenance, virtual, dataset, "analyzed", "full", "virtual")
+    provenance.add((line_a, PROV.wasDerivedFrom, virtual))
+    _add_usage(provenance, line_b, dataset, "analyzed", "full", "line")
+
+    records = derive_dataset_independence_records(knowledge, provenance)
+
+    assert [(record.kind, record.reason) for record in records] == [("candidate", "virtual-row")]
