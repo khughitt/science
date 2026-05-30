@@ -8,7 +8,9 @@ def test_normalization_handles_evidence_suffix():
 
 
 def test_type_ordering_via_rank():
-    rank = lambda v: bw.EVIDENCE_TYPE_RANK.get(bw.normalize_evidence_type(v), 0)
+    def rank(value):
+        return bw.EVIDENCE_TYPE_RANK.get(bw.normalize_evidence_type(value), 0)
+
     assert rank("empirical_data_evidence") > rank("simulation_evidence")
     assert rank("simulation_evidence") == rank("benchmark_evidence")
     assert rank("simulation_evidence") > rank("literature_evidence")
