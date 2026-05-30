@@ -36,6 +36,7 @@
 | `tests/validate/test_checks_dataset_metadata.py` | pure-core + registration + integration + schema-sync tests | new |
 | `tests/test_license_materialize.py` | datapackage-extraction + materialization + predicate-registry tests | new |
 | `model/tests/test_mixin_dataset_schema_license.py` | mixin schema has `license` | new |
+| `tests/test_load_project_sources_regression.py` | exclude `license` from kitchen-sink snapshot projection | modify |
 
 > **Test layout:** `science_model` tests live under `model/tests/` (the package's own test tree, with its `__init__.py` and `fixtures/`); `science_tool` tests live under `tests/`. Put each new test in the tree matching the package it exercises.
 
@@ -174,7 +175,16 @@ git commit -m "feat(model): add curated license vocabulary (KNOWN_LICENSES, sent
 **Files:**
 - Modify: `model/src/science_model/entities.py` (add field beside `source_class`, ~line 320)
 - Modify: `model/src/science_model/frontmatter.py` (`entity_kwargs` dict, ~line 371)
+- Modify: `tests/test_load_project_sources_regression.py` (exclude `license` from the snapshot projection)
 - Test: `model/tests/test_frontmatter_license.py`
+
+> **Two-surface contract (important):** `license: str` on the typed model rejects a
+> non-string value on the **load path** (Pydantic), consistent with every other typed
+> string field; `load_project_sources` catches it per-entity, so it is not a whole-run
+> crash. The **check** reads raw frontmatter (bypassing Pydantic) and still warns
+> (`dataset.license-unrecognized`) on the same input. The non-string *check* tests
+> (Task 4) and the non-string *load-error* test (here) assert these two different
+> surfaces — they are not in conflict.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -184,6 +194,9 @@ Create `model/tests/test_frontmatter_license.py`:
 from __future__ import annotations
 
 from pathlib import Path
+
+import pydantic
+import pytest
 
 from science_model.frontmatter import parse_entity_file
 
@@ -226,6 +239,20 @@ def test_license_defaults_empty_when_absent(tmp_path: Path) -> None:
 
     assert entity is not None
     assert entity.license == ""
+
+
+def test_non_string_license_is_a_typed_load_error(tmp_path: Path) -> None:
+    # Two-surface contract: the typed model field `license: str` rejects a
+    # non-string value on the load path (consistent with source_class/tier and
+    # every other typed string field). load_project_sources catches this
+    # per-entity (sources.py ValidationError handler) — it is NOT a whole-run
+    # crash, and the raw-frontmatter CHECK still emits dataset.license-unrecognized
+    # for the same input (see tests/validate/test_checks_dataset_metadata.py).
+    path = tmp_path / "bad.md"
+    path.write_text(_DATASET_MD.replace('license: "CC-BY-4.0"', "license: 123"), encoding="utf-8")
+
+    with pytest.raises(pydantic.ValidationError):
+        parse_entity_file(path, project_slug="demo")
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -256,15 +283,29 @@ In `model/src/science_model/frontmatter.py`, in the `entity_kwargs = { ... }` di
         "source_class": fm.get("source_class"),
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [ ] **Step 5: Update the load-path snapshot regression exclude set**
 
-Run: `uv run --frozen pytest model/tests/test_frontmatter_license.py -v`
-Expected: PASS (2 passed)
+Adding a new default field to `Entity` means `model_dump()` now carries `"license": ""` on **every** entity, which would break the kitchen-sink snapshot in `tests/test_load_project_sources_regression.py`. Add `"license"` to its `_EXCLUDED_FIELDS` frozenset (in the "Entity fields not relevant to this regression" group, ~line 33), keeping the snapshot focused rather than regenerating it:
 
-- [ ] **Step 6: Commit**
+```python
+        # Entity fields not relevant to this regression:
+        "accessions",
+        "license",
+        "consumed_by",
+```
+
+- [ ] **Step 6: Run the new test + the regression to verify they pass**
+
+Run:
+```bash
+uv run --frozen pytest model/tests/test_frontmatter_license.py tests/test_load_project_sources_regression.py -v
+```
+Expected: PASS (`test_frontmatter_license.py`: 3 passed — incl. the typed-load-error case; regression: 1 passed, no snapshot diff)
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add model/src/science_model/entities.py model/src/science_model/frontmatter.py model/tests/test_frontmatter_license.py
+git add model/src/science_model/entities.py model/src/science_model/frontmatter.py model/tests/test_frontmatter_license.py tests/test_load_project_sources_regression.py
 git commit -m "feat(model): capture dataset license on Entity + thread through frontmatter parse"
 ```
 
@@ -319,6 +360,7 @@ from pathlib import Path
 
 from science_tool.validate.checks.dataset_metadata import (
     _ALLOWED_CADENCES,
+    _ALLOWED_TIERS,
     evaluate_dataset_metadata,
 )
 from science_tool.validate.result import Severity
@@ -438,16 +480,24 @@ def test_license_missing_surfaces_through_runner(tmp_path: Path) -> None:
     assert any(r.rule == "dataset.license-missing" for r in result.results)
 
 
+def _schema(name: str) -> dict:
+    path = Path(__file__).resolve().parents[2] / "model/src/science_model/schemas" / name
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def test_cadence_vocabulary_equals_schema_enum() -> None:
     # The check's cadence set must equal the authoritative schema enum (minus "")
     # so a value cannot pass the check yet fail schema validation, or vice versa.
-    schema_path = (
-        Path(__file__).resolve().parents[2]
-        / "model/src/science_model/schemas/science-pkg-entity-1.0.json"
-    )
-    schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    enum = set(schema["properties"]["update_cadence"]["enum"]) - {""}
+    enum = set(_schema("science-pkg-entity-1.0.json")["properties"]["update_cadence"]["enum"]) - {""}
     assert _ALLOWED_CADENCES == enum
+
+
+def test_tier_vocabulary_agrees_across_both_schema_surfaces() -> None:
+    # tier must agree across the check and BOTH schema surfaces (legacy pkg-entity
+    # and the mixin profile), per the spec's schema-sync requirement.
+    pkg_tier = set(_schema("science-pkg-entity-1.0.json")["properties"]["tier"]["enum"])
+    mixin_tier = set(_schema("mixin-dataset-1.0.json")["properties"]["tier"]["enum"])
+    assert _ALLOWED_TIERS == pkg_tier == mixin_tier
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -597,7 +647,7 @@ In `src/science_tool/validate/checks/__init__.py`, in the `_load_canonical_check
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `uv run --frozen pytest tests/validate/test_checks_dataset_metadata.py -v`
-Expected: PASS (16 passed)
+Expected: PASS (17 passed)
 
 - [ ] **Step 6: Commit**
 
@@ -866,7 +916,7 @@ git commit -m "feat(model): declare license in mixin-dataset schema + document s
 
 Run:
 ```bash
-uv run --frozen pytest model/tests/test_licenses.py model/tests/test_frontmatter_license.py model/tests/test_mixin_dataset_schema_license.py tests/validate/test_checks_dataset_metadata.py tests/test_license_materialize.py tests/test_datasets.py tests/test_graph_cli.py -v
+uv run --frozen pytest model/tests/test_licenses.py model/tests/test_frontmatter_license.py model/tests/test_mixin_dataset_schema_license.py tests/validate/test_checks_dataset_metadata.py tests/test_license_materialize.py tests/test_load_project_sources_regression.py tests/test_datasets.py tests/test_graph_cli.py -v
 ```
 Expected: all PASS, no regressions.
 
@@ -906,5 +956,7 @@ git commit -m "docs(plan): mark dataset-license spec implemented"
 
 ## Self-review notes (spec coverage)
 
-- Spec §1 (license on Entity + thread + extract) → Tasks 2, 3. §1 materialization + predicate → Task 5. §1a (mixin schema + both templates) → Task 6. §2 (vocabulary) → Task 1. §3 (checks + registration + cadence=schema) → Task 4. §4 (health surfacing) → covered by registration (Task 4) + smoke test (Task 7). §5 (all tests: vocabulary, check-core, registration, datapackage-extraction, materialization, predicate-registry, schema-sync, regression) → Tasks 1/2/4/5/6.
+- Spec §1 (license on Entity + thread + extract) → Tasks 2, 3. §1 materialization + predicate → Task 5. §1a (mixin schema + both templates) → Task 6. §2 (vocabulary) → Task 1. §3 (checks + registration + cadence=schema) → Task 4. §4 (health surfacing) → registration (Task 4) + end-to-end `runner.run` test (Task 4) + smoke test (Task 7).
+- §5 tests: vocabulary (T1), check-core incl. non-string crash-safety (T4), registration + end-to-end runner (T4), schema-sync for **both** cadence and tier across both surfaces (T4), datapackage-extraction + materialization + predicate-registry (T5), markdown parse regression + typed-load-error contract + load-path snapshot exclude (T2), mixin schema (T6).
+- Interaction effects covered: the new `Entity.license` default is excluded from the kitchen-sink snapshot (T2 Step 5); the typed-load-vs-raw-check two-surface contract is asserted on both sides (T2 + T4) and documented.
 - Out-of-scope (`tier`/`update_cadence` materialization, `profiles`, wider field validation) → intentionally not implemented.
