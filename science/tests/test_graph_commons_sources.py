@@ -306,6 +306,33 @@ def test_translate_dataset_carries_mixin_fields() -> None:
     assert entity.update_cadence == "static"
 
 
+def test_translate_derived_dataset_accepts_commons_workflow_recipe_derivation() -> None:
+    entity = _translate(
+        {
+            "id": "dataset:clean-base",
+            "type": "dataset",
+            "title": "Clean base",
+            "origin": "derived",
+            "datapackage": "datapackage.yaml",
+            "tier": "use-now",
+            "source_class": "observational",
+            "derivation": {
+                "kind": "workflow",
+                "workflow_recipe": "workflow:h07-fidelity",
+                "inputs": ["dataset:raw-source"],
+                "recipe_lockfile": "workflows/h07-fidelity/config.yaml",
+            },
+        }
+    )
+
+    assert isinstance(entity, DatasetEntity)
+    assert entity.origin == "derived"
+    assert entity.derivation is not None
+    assert getattr(entity.derivation, "kind") == "workflow"
+    assert getattr(entity.derivation, "workflow_recipe") == "workflow:h07-fidelity"
+    assert getattr(entity.derivation, "inputs") == ["dataset:raw-source"]
+
+
 def test_translate_paper_carries_mixin_fields() -> None:
     entity = _translate(
         {

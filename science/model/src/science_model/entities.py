@@ -10,7 +10,13 @@ from typing import Any, Literal, Protocol
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from science_model.identity import EntityScope, ExternalId
-from science_model.packages.schema import AccessBlock, DatasetUsage, DerivationBlock, MemberOfDerivationBlock
+from science_model.packages.schema import (
+    AccessBlock,
+    DatasetUsage,
+    DerivationBlock,
+    MemberOfDerivationBlock,
+    WorkflowRecipeDerivationBlock,
+)
 from science_model.reasoning import (
     ClaimLayer,
     DisputeScope,
@@ -308,7 +314,7 @@ class Entity(BaseModel):
     # Dataset entity unification (rev 2.2)
     origin: str | None = None  # "external" | "derived"
     access: AccessBlock | None = None
-    derivation: DerivationBlock | MemberOfDerivationBlock | None = None
+    derivation: DerivationBlock | WorkflowRecipeDerivationBlock | MemberOfDerivationBlock | None = None
     accessions: list[str] = Field(default_factory=list)
     datapackage: str = ""
     local_path: str = ""
@@ -670,6 +676,8 @@ class DatasetEntity(ProjectEntity):
             # treat as structurally-derived (the row lookup is the consuming
             # instance's responsibility, not a pipeline run).
             return Readiness(ready=True, state="derived-via-member-of")
+        if isinstance(self.derivation, WorkflowRecipeDerivationBlock):
+            return Readiness(ready=True, state="derived-via-workflow-recipe")
         if resolver is None:
             return Readiness(
                 ready=False,

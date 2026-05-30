@@ -147,6 +147,30 @@ class DerivationBlock(BaseModel):
         return v
 
 
+class WorkflowRecipeDerivationBlock(BaseModel):
+    """Commons recipe-level derivation for promoted derived datasets."""
+
+    kind: Literal["workflow"]
+    workflow_recipe: str
+    inputs: list[str] = Field(default_factory=list)
+    recipe_lockfile: str = ""
+
+    @field_validator("workflow_recipe")
+    @classmethod
+    def _recipe_id(cls, v: str) -> str:
+        if not v.startswith("workflow:"):
+            raise ValueError("workflow_recipe must be a workflow:<slug> entity reference")
+        return v
+
+    @field_validator("inputs")
+    @classmethod
+    def _input_ids(cls, v: list[str]) -> list[str]:
+        for item in v:
+            if not item.startswith("dataset:"):
+                raise ValueError(f"inputs must be dataset:<slug> entity references; got {item!r}")
+        return v
+
+
 class MemberOfDerivationBlock(BaseModel):
     """Reference-collection member promotion derivation (RCM-D5).
 
