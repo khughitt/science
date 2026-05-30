@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a merged + Pillar A (A1 + A2) merged and complete; Pillar D1, B1, and B-migration implemented locally; C4b/C4c, D2, B2, and E remain open. Spawns focused per-area docs.
+Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a merged + Pillar A (A1 + A2) merged and complete; Pillar D1, B1, B-migration, and B2 merged locally; C4b/C4c, D2, and E remain open. Spawns focused per-area docs.
 
 Related (builds on):
 - `docs/proposition-and-evidence-model.md` — core reasoning model
@@ -231,8 +231,8 @@ Spawned design docs (in `~/d/science/docs/plans/`), with the dependency order:
 | 1 | Identity, reference genomes & id mapping (C) | — | canonical assembly + gene/protein/variant crosswalks; pinned-vs-service policy | design ✓; **impl: C1 (assembly), C2 (gene), C3 (protein), C4a (variant identity) merged; C4b/C4c pending** |
 | 2 | Dataset taxonomy & epistemic integration (A) | C | `source_class` + `derived_kind`; curation down-weight as a *modifier*, mapped into aggregation + two-axis | design ✓; **impl: A1 + A2 merged** (recording layer + curation down-weight, config v2); **Pillar A complete** |
 | 3a | Gene-set / annotation type `bio.geneset` (D) | A, C | extension schema; per-set provenance; promotion rule; realizes B's interface for gene sets | design ✓; **impl: D1 collection type implemented; D2 promoted members pending** |
-| 3b | Dataset-influence & provenance tracking (B) | A, C (+ D for the gene-set arm) | `dataset:`-ref declarations + usage role; dataset→consumer derivation; *candidate* auto-independence | B1 implemented locally; B-migration implemented; B2 open |
-| 4 | Reactome ingestion revision (E) | A–D | first instantiation | design ✓ (in `health/meta`); impl deferred (gated on A–D) |
+| 3b | Dataset-influence & provenance tracking (B) | A, C (+ D for the gene-set arm) | `dataset:`-ref declarations + usage role; dataset→consumer derivation; *candidate* auto-independence | B1 implemented locally; B-migration implemented; **B2 merged locally** |
+| 4 | Reactome ingestion revision (E) | A–D | first instantiation | design ✓ (in `health/meta`); implementation plan drafted in `docs/plans/2026-05-30-reactome-commons-ingestion-plan.md` |
 
 C is the long pole (everything joins on identity). A and C unblock D and the paper arm of B; B's
 gene-set arm consumes D, so D leads B within Phase 3 (B may start its paper-side and the derivation
@@ -269,7 +269,7 @@ compatibility relations will be the first instance.
 4. **Resolved (B): unresolved accessions.** The canonical record is `dataset_usage.ref: dataset:<slug>`.
    External accessions resolve through dataset entities. Missing dataset refs produce review warnings; no
    raw unresolved-accession field has been added.
-5. **Designed; implementation open (B2): scope of derived independence.** B2 commits aggregation-affecting
+5. **Resolved and implemented (B2): scope of derived independence.** B2 commits aggregation-affecting
    shared-source metadata only for direct, full-overlap dataset dependence. Partial/unknown, cited,
    validation-only, virtual gene-set member, or `bears_on`-only paths become candidate/review signals.
 6. **Resolved; D2 implementation open (D).** A gene-set collection is a `dataset` + `bio.geneset`; a set
@@ -316,12 +316,13 @@ row-contract parser, validate check, graph retention guard, and B1 row-level usa
 place. The generic `member_of` substrate is also implemented, but D2's gene-set-specific promoted-member
 extension, promotion path, and virtual member payload resolution remain deferred until evidence lines need
 first-class child datasets for individual sets. B1 is implemented locally as the authored-to-graph
-provenance layer, and B-migration is implemented (`science graph migrate-paper-datasets` plus pure/CLI
-tests). B2 remains open: its design and implementation plan exist, but the `graph/dataset_independence.py`
-derivation layer and aggregation/validation integration are not present in code. Pillar A is complete; C
-(C1–C3 merged, C4a merged, C4b/C4c pending), D1, and B1/B-migration together leave B2 as the next
-dataset-influence step before Reactome-style instantiation. E (Reactome ingestion) resumes once A–D are
-far enough along to instantiate against.
+provenance layer, B-migration is implemented (`science graph migrate-paper-datasets` plus pure/CLI tests),
+and B2 is implemented as the dataset-derived independence layer
+(`science_tool.graph.dataset_independence`, graph materialization, validation integration, aggregation
+metadata merge, and `belief-logodds-v3`). Pillar A is complete; C (C1–C3 merged, C4a merged, C4b/C4c
+pending), D1, and B1/B2 are far enough along for Reactome-style instantiation. E (Reactome ingestion) is
+the next recommended implementation target, with D2 deferred until a real evidence line needs a promoted
+pathway dataset.
 
 **Operational follow-ups.**
 - Push local implementation branches to `origin` when ready.
