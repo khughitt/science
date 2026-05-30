@@ -766,7 +766,19 @@ rtk git commit -m "feat: derive dataset independence records"
 
 - [ ] **Step 1: Write failing materialization integration test**
 
-Append to `science/tests/test_dataset_usage_materialize.py`:
+In `science/tests/test_dataset_usage_materialize.py`, change:
+
+```python
+from rdflib.namespace import RDF
+```
+
+to:
+
+```python
+from rdflib.namespace import PROV, RDF
+```
+
+Then append:
 
 ```python
 def test_materialize_graph_emits_dataset_independence_commitment(tmp_path: Path) -> None:
@@ -801,6 +813,11 @@ def test_materialize_graph_emits_dataset_independence_commitment(tmp_path: Path)
     dataset = Dataset()
     dataset.parse(graph_path, format="trig")
     provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+    line_a = PROJECT_NS["evidence-line/a"]
+    line_b = PROJECT_NS["evidence-line/b"]
+
+    assert (line_a, PROV.wasDerivedFrom, PROJECT_NS["paper/p1"]) in provenance
+    assert (line_b, PROV.wasDerivedFrom, PROJECT_NS["paper/p2"]) in provenance
 
     records = list(provenance.subjects(RDF.type, SCI_NS.DatasetIndependenceCommitment))
     assert len(records) == 1
@@ -828,7 +845,7 @@ from science_tool.graph.dataset_independence import (
 )
 ```
 
-After `_derive_bears_on_layer(...)` runs in `materialize_graph`, add:
+Inside `_build_dataset_from_sources`, after the `_derive_bears_on_layer(...)` block and before the freshness block / `return dataset`, add:
 
 ```python
     emit_dataset_independence_records(
@@ -837,7 +854,7 @@ After `_derive_bears_on_layer(...)` runs in `materialize_graph`, add:
     )
 ```
 
-Place this after `bears_on` derivation so `indirect-bears-on` candidates can see the closure, and before graph serialization.
+Do not put this in `materialize_graph`: that function only receives the already-built dataset and does not have `knowledge` or `provenance` locals. `_build_dataset_from_sources` is the correct scope because it owns `knowledge`, `provenance`, and the `_derive_bears_on_layer(...)` call. Placing B2 there also means B2 records are derived consistently for both disk materialization and the in-memory `propagate_freshness_in_memory` sweep, because both paths share this helper.
 
 - [ ] **Step 4: Run materialization tests**
 
@@ -1470,6 +1487,7 @@ Run:
 
 ```bash
 uv run --frozen pytest science/tests/test_dataset_independence.py science/tests/test_dataset_usage_materialize.py science/tests/test_belief_collect.py science/tests/test_belief_aggregate.py science/tests/test_belief_weights.py science/tests/test_belief_snapshot.py science/tests/test_belief_cli.py science/tests/validate/test_checks_evidence_lines.py -q
+uv run --frozen pytest science/tests/validate -q
 ```
 
 Expected: PASS.
