@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a merged + Pillar A (A1 + A2) merged and complete; Pillar B1 implemented locally, with B-migration/B2 open. Spawns focused per-area docs.
+Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a merged + Pillar A (A1 + A2) merged and complete; Pillar D1, B1, and B-migration implemented locally; C4b/C4c, D2, B2, and E remain open. Spawns focused per-area docs.
 
 Related (builds on):
 - `docs/proposition-and-evidence-model.md` — core reasoning model
@@ -122,30 +122,24 @@ The deepest dependency: aggregation, dedup, and gene-set membership all require 
 Extend the existing `origin` axis (which only splits `external|derived`) so the epistemic machinery can
 tell raw observational data from curated reference artifacts and model output.
 
-- **A source/epistemic class, orthogonal to `origin`.** Starting proposal (enum *not* locked here — A
-  decides it): `observational` (carries primary signal), `derived` (computed from upstream datasets —
-  non-independent of inputs), `reference` (curated knowledge/annotation — gene sets, ontologies,
-  hand-curated DBs). Reactome and MSigDB are `reference`; an expression matrix is `observational`; a
-  meta-analysis is `derived`. Note `origin` and this class are different questions: Reactome is
-  `origin: external` **and** class `reference`. **The stress-test matrix (§5) already strains the
-  three-value enum**: DepMap is observational but *experimental/perturbational* (a *stronger* causal id,
-  not weaker), and AlphaMissense is *model output* (neither raw observation nor human curation). A must
-  resolve whether `experimental` and `model_output`/`computational_prediction` are additional class
-  values, orthogonal modifiers, or left to the two-axis `identification` field — **before** the enum is
-  locked (§7 q3).
+- **A source/epistemic class, orthogonal to `origin`.** A resolved `source_class` enum now lives on the
+  dataset mixin: `observational` (primary assay-derived signal), `derived` (secondary synthesis or model
+  output; requires `derived_kind: aggregate|transform|model_output`), and `reference` (human-curated
+  knowledge/annotation — gene sets, ontologies, hand-curated DBs). Reactome and MSigDB are `reference`;
+  an expression matrix or DepMap CRISPR dependency score matrix is `observational`; AlphaMissense is
+  `derived` + `derived_kind: model_output`. Experimental/perturbational strength stays on the existing
+  evidence-line `identification_strength` axis rather than becoming a fourth source class.
 - **The class is a modifier, not an evidence-type override (review finding).** `evidence_type` is a
   property of an *evidence line* with a fixed taxonomy (`empirical_data_evidence`, `literature_evidence`,
   …) that the aggregator weights as `evidence_type × evidence_role × strength`. The source class must
   **not** rewrite that: enrichment of your data against a `reference` set is still
   `empirical_data_evidence` (principle 1), so mapping `reference → literature_evidence` would both
   contradict principle 1 and risk a *double* penalty if a curation down-weight is also applied. Instead
-  the class composes as a **curated-prior modifier** on the line: a bounded down-weight (a step penalty /
-  strength cap in the ordinal + log-odds scoring) **plus** a tendency toward two-axis
-  `identification: structural`, leaving `evidence_type` to describe the evidence itself. The A doc
-  specifies the exact composition and whether the down-weight is a stored field or derived from the class.
-- **Open question (named in §7):** field name and home — a dataset-level `data_class`/`source_class`
-  versus a per-line modifier (likely both, dataset default → line) — and how the down-weight composes
-  without zeroing the signal or double-penalizing.
+  the class composes as a **curated-prior modifier** on the line: `source_class: reference` reaches
+  `EvidenceUnit.is_reference_dataset` through `sci:sourceClass` and applies `CURATION_STEP_PENALTY = 1`
+  once in the scalar/log-odds path and as a tiebreaker-only winner-selection demotion. It does not cap
+  `strength`, rewrite `evidence_type`, or zero the signal. `identification_strength: structural` is a
+  recording-only validate nudge for curated/definitional edges.
 
 ### 4.3 Pillar B — Dataset-influence & provenance tracking (the north star)
 
@@ -155,18 +149,18 @@ Turn the currently-manual independence signal into a derived one, and make influ
   `paper.datasets` *already exists* and takes `dataset:` refs (not raw accessions); raw `accessions`
   already live on the `dataset` entity. So a paper/gene-set declares the **`dataset:` entities it
   analyzes / was constructed from**, and external accessions resolve *through* those entities — one
-  meaning per field. Gene-set entities (D) get the same `datasets:` ref field. A separate
-  *unresolved-accession* field is added only if the graph must record an accession with no minted dataset
-  entity yet (§7 q4); the default is "point to a `dataset:` entity."
+  meaning per field. The canonical forward-provenance field is `dataset_usage` with `dataset:` refs.
+  No raw unresolved-accession field is part of the implemented B1/B-migration surface; unresolved
+  `dataset:` refs validate as review warnings until the dataset entity exists.
 - **Declarations carry usage semantics, not bare links.** A link alone over-collapses: "analyzed as
   primary data" ≠ "cited as background" ≠ "used to *construct* the gene set" ≠ "used to *validate* it",
   and overlap can be partial. The declaration records a **usage role** (e.g. `analyzed` /
-  `set-definition-source` / `validation-source` / `cited`) and, where known, overlap extent, so B can
+  `set_definition_source` / `validation_source` / `cited`) and, where known, overlap extent, so B can
   distinguish dependence that should collapse from mere co-citation that should not.
 - **Derived influence + *candidate* auto-independence (user's mechanism 1).** `graph build` derives a
   dataset→consumer index and, via the existing `bears_on`/provenance closure, surfaces when two evidence
   lines rest on the *same* dataset entity. Crucially this is **not** an automatic collapse: a shared
-  `dataset:` ancestor with **dependent** usage (e.g. set-definition-source on one side, the same data
+  `dataset:` ancestor with **dependent** usage (e.g. `set_definition_source` on one side, the same data
   re-tested on the other) yields a derived `shared_dataset`/`independence_group` *candidate* that feeds
   the existing `independence.suspect-circular` **WARN**; a mere shared *citation* stays a flag for
   reviewer judgment. Auto-collapse to one effective unit happens only when direct dependence is
@@ -193,10 +187,10 @@ A new domain extension (sibling to `bio.table`/`bio.rnaseq`/…), filling the "n
 - **Granularity policy (resolved earlier with the user): store fine, promote on demand.** Per-set source
   provenance lives as cheap data columns in the dataset; it is lifted into the epistemic graph
   (`prov:wasDerivedFrom` / independence edges) only when a specific set feeds a proposition.
-- **Open question (§7):** is a gene set a `dataset` + `bio.geneset` (resolvable/versioned collection,
-  recommended for ingestion) or a first-class citable entity kind (like `paper`)? Likely both: the
-  *collection* is a dataset; an *individual set* can be promoted to a citable node carrying `datasets:`
-  for B. The D doc decides the promotion rule.
+- **Granularity decision.** The *collection* is a `dataset` + `bio.geneset`; an individual set remains a
+  row addressed by `set_key` until it becomes evidence-bearing, then promotes on demand to a child
+  `dataset` using the generic `derivation.kind: member_of` substrate. D1 implements the collection; D2
+  still needs the gene-set-specific promoted-member extension/promotion path when evidence lines need it.
 - **Circularity guidance to encode.** The dangerous pattern is *define-a-set-from-study-A then
   test-enrichment-in-study-A* (circular), not "Reactome + an independent cohort." The extension should
   make set-definition provenance explicit enough to detect that overlap via B.
@@ -217,7 +211,7 @@ diverse set spanning the dimensions that stress it:
 | Source | Epistemic class | Identifier space | Shape | Stresses |
 |---|---|---|---|---|
 | GTEx bulk RNA-seq | observational | gene (Ensembl/Entrez), one assembly | sample × gene matrix | baseline; `bio.rnaseq` + C assembly validation |
-| DepMap CRISPR dependency | observational/experimental | gene + cell line (Cellosaurus) | cell-line × gene | non-sample keying; multi-id identity |
+| DepMap CRISPR dependency | observational (interventional evidence lines) | gene + cell line (Cellosaurus) | cell-line × gene | non-sample keying; multi-id identity; causal strength stays on `identification_strength` |
 | MSigDB | reference (heterogeneous) | gene (symbol/Entrez) | gene-set collection | the double-counting hotspot (some sets *derived from* experiments); per-set PMIDs → B; `bio.geneset` |
 | Open Targets / GO / MONDO | reference | gene/disease/ontology terms | knowledge graph (non-tabular) | non-tabular shape; ontology ids; does the model handle graphs, not just tables? |
 | AlphaMissense | derived (model output) | variant / genomic coordinate | per-variant table | model-derived (neither observational nor curated); assembly-dependent coordinates → C/liftover |
@@ -235,9 +229,9 @@ Spawned design docs (in `~/d/science/docs/plans/`), with the dependency order:
 | Phase | Doc | Depends on | Locks | Status |
 |---|---|---|---|---|
 | 1 | Identity, reference genomes & id mapping (C) | — | canonical assembly + gene/protein/variant crosswalks; pinned-vs-service policy | design ✓; **impl: C1 (assembly), C2 (gene), C3 (protein), C4a (variant identity) merged; C4b/C4c pending** |
-| 2 | Dataset taxonomy & epistemic integration (A) | C | source class (enum incl. model-output/experimental — A decides); curation down-weight as a *modifier*, mapped into aggregation + two-axis | design ✓; **impl: A1 + A2 merged** (recording layer + curation down-weight, config v2); **Pillar A complete** |
+| 2 | Dataset taxonomy & epistemic integration (A) | C | `source_class` + `derived_kind`; curation down-weight as a *modifier*, mapped into aggregation + two-axis | design ✓; **impl: A1 + A2 merged** (recording layer + curation down-weight, config v2); **Pillar A complete** |
 | 3a | Gene-set / annotation type `bio.geneset` (D) | A, C | extension schema; per-set provenance; promotion rule; realizes B's interface for gene sets | design ✓; **impl: D1 collection type implemented; D2 promoted members pending** |
-| 3b | Dataset-influence & provenance tracking (B) | A, C (+ D for the gene-set arm) | `dataset:`-ref declarations + usage role; dataset→consumer derivation; *candidate* auto-independence | B1 implemented locally; B-migration/B2 open |
+| 3b | Dataset-influence & provenance tracking (B) | A, C (+ D for the gene-set arm) | `dataset:`-ref declarations + usage role; dataset→consumer derivation; *candidate* auto-independence | B1 implemented locally; B-migration implemented; B2 open |
 | 4 | Reactome ingestion revision (E) | A–D | first instantiation | design ✓ (in `health/meta`); impl deferred (gated on A–D) |
 
 C is the long pole (everything joins on identity). A and C unblock D and the paper arm of B; B's
@@ -260,34 +254,33 @@ compatibility relations will be the first instance.
 
 ---
 
-## 7. Open questions for review
+## 7. Resolved decisions and remaining open design
 
-1. **Class field name & home (A).** New dataset-level `data_class` / `source_class`, or a per-evidence-
-   line modifier, or both (a dataset default flowing into the line)? Whatever the home, it must compose
-   with `evidence_type` as a *modifier*, not replace it (§4.2).
-2. **How the curation down-weight composes (A).** A discrete step penalty in the ordinal/log-odds score,
-   a cap on `strength`, a tendency toward `identification: structural` — or a combination? Must not
-   silently zero the signal (principle 1) and must not double-penalize alongside any evidence-type effect.
-3. **Source-class enum breadth (A).** Are `experimental` (e.g. DepMap — a *stronger* causal id) and
-   `model_output`/`computational_prediction` (e.g. AlphaMissense) additional class values, orthogonal
-   modifiers, or deferred to the two-axis `identification` field? Resolve against §5 before locking the
-   enum.
-4. **Unresolved accessions (B).** Reuse the existing `dataset:`-ref fields (`paper.datasets`, a parallel
-   one on gene sets) and resolve accessions through dataset entities — or also allow a raw
-   unresolved-accession field for accessions with no minted dataset entity yet? Default is point-to a
-   `dataset:` entity.
-5. **Scope of auto-independence (B).** Given usage semantics (`analyzed` / `set-definition-source` /
-   `validation-source` / `cited`), what dependence triggers an automatic `shared_dataset` collapse vs. a
-   `suspect-circular` WARN vs. a reviewer flag? (Conservative default: collapse only on established direct
-   dependence.)
-6. **Gene-set entity granularity (D).** `dataset` + `bio.geneset` collection only, or also a promotable
-   first-class per-set node? What triggers promotion? (Sequencing: D realizes B's interface, so this is
-   settled in D before B's gene-set arm.)
-7. **Pinned vs. live identity (C).** Role for refgenie (genome assets) and MyGene.info (id queries) given
-   the reproducibility-over-convenience principle — discovery-only, or asset-provenance, with pinned
-   crosswalk snapshots as the authoritative join layer?
-8. **Non-tabular reference data (matrix row 4).** Do knowledge graphs/ontologies fit `dataset` +
-   extension, or need a distinct treatment? Resolve against the stress-test matrix.
+1. **Resolved (A): class field name & home.** `source_class` and `derived_kind` live on the core dataset
+   mixin/model. The per-line curation effect is derived from the dataset's graph-materialized
+   `sci:sourceClass`; a per-line override remains deferred/auditable rather than part of A1/A2.
+2. **Resolved (A): curation down-weight.** `source_class: reference` applies one bounded ordinal step
+   (`CURATION_STEP_PENALTY = 1`) in the scalar/log-odds path and a tiebreaker-only demotion in
+   winner-selection. It does not cap `strength` or rewrite `evidence_type`; `identification_strength:
+   structural` is a recording-only validate nudge.
+3. **Resolved (A): enum breadth.** `source_class` is `observational|derived|reference`; `derived_kind` is
+   `aggregate|transform|model_output`; experimental/perturbational strength stays on
+   `identification_strength`.
+4. **Resolved (B): unresolved accessions.** The canonical record is `dataset_usage.ref: dataset:<slug>`.
+   External accessions resolve through dataset entities. Missing dataset refs produce review warnings; no
+   raw unresolved-accession field has been added.
+5. **Designed; implementation open (B2): scope of derived independence.** B2 commits aggregation-affecting
+   shared-source metadata only for direct, full-overlap dataset dependence. Partial/unknown, cited,
+   validation-only, virtual gene-set member, or `bears_on`-only paths become candidate/review signals.
+6. **Resolved; D2 implementation open (D).** A gene-set collection is a `dataset` + `bio.geneset`; a set
+   promotes on demand to a child `dataset` when evidence-bearing. The generic `member_of` substrate is
+   implemented; the gene-set-specific promoted-member path remains deferred until needed.
+7. **Resolved (C): pinned vs. live identity.** Pinned local snapshots are authoritative for joins. Live
+   services are discovery/QA conveniences only; refgenie/refgenieserver may document genome asset
+   provenance but not replace pinned identity inputs.
+8. **Still open (non-tabular references).** Knowledge graphs/ontologies such as GO, MONDO, and Open
+   Targets are not handled by the flat `bio.geneset` collection model and still need a distinct
+   non-tabular-reference treatment.
 
 ---
 
@@ -319,11 +312,16 @@ materialized in the `knowledge` graph; `EvidenceUnit.is_reference_dataset` threa
 structural` shipped as a recording-only validate nudge (not scored); per-line override deferred.
 
 **Remaining — other pillars.** D has D1 implemented: the `bio.geneset` collection profile,
-row-contract parser, validate check, and graph retention guard are in place; D2 promoted members remain
-pending until evidence lines need first-class child datasets for individual sets. B1 is implemented
-locally as the authored-to-graph provenance layer; B-migration and B2 remain open. Pillar A is complete;
-C (C1–C3 merged, C4a merged, C4b/C4c pending) and A together unblock D and B's paper arm. E (Reactome
-ingestion) resumes once A–D are far enough along to instantiate against.
+row-contract parser, validate check, graph retention guard, and B1 row-level usage materialization are in
+place. The generic `member_of` substrate is also implemented, but D2's gene-set-specific promoted-member
+extension, promotion path, and virtual member payload resolution remain deferred until evidence lines need
+first-class child datasets for individual sets. B1 is implemented locally as the authored-to-graph
+provenance layer, and B-migration is implemented (`science graph migrate-paper-datasets` plus pure/CLI
+tests). B2 remains open: its design and implementation plan exist, but the `graph/dataset_independence.py`
+derivation layer and aggregation/validation integration are not present in code. Pillar A is complete; C
+(C1–C3 merged, C4a merged, C4b/C4c pending), D1, and B1/B-migration together leave B2 as the next
+dataset-influence step before Reactome-style instantiation. E (Reactome ingestion) resumes once A–D are
+far enough along to instantiate against.
 
 **Operational follow-ups.**
 - Push local implementation branches to `origin` when ready.
