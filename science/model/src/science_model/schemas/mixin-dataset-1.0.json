@@ -11,6 +11,7 @@
     "origin": {"enum": ["external", "derived"]},
     "tier": {"enum": ["use-now", "evaluate-next", "track"]},
     "update_cadence": {"type": "string"},
+    "license": {"type": "string"},
     "accessions": {"type": "array", "items": {"type": "string"}, "science:merge": "forbidden"},
     "access": {"$ref": "#/$defs/access", "science:merge": "forbidden"},
     "derivation": {"$ref": "#/$defs/derivation", "science:merge": "forbidden"},

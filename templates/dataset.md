@@ -6,7 +6,7 @@ status: "active"
 profiles: ["science-pkg-entity-1.0"]
 origin: "external"                # external | derived
 tier: "evaluate-next"             # use-now | evaluate-next | track
-license: ""                       # SPDX identifier or "unknown"
+license: ""                       # SPDX id (e.g. CC-BY-4.0) or sentinel: unknown | proprietary | custom
 update_cadence: ""                # static | rolling | monthly | ...
 ontology_terms: []                # CURIEs
 
