@@ -104,9 +104,42 @@ uv run science <command>
 
 ## Workflow
 
+### Step 0: Detect The Target Kind And DAG Representation
+
+the user input is not always an inquiry. Before Step 1, resolve what you were handed and how this
+project represents its model graph — otherwise `science inquiry show` errors (e.g. on a
+`hypothesis:` ref, which is not an inquiry).
+
+1. **Resolve the target kind.** If the ref is `inquiry:<slug>` (or a bare inquiry slug), proceed with
+   the inquiry/RDF-graph path (Step 1 onward). If it is a `hypothesis:` (or other epistemic kind), do
+   **not** run `science inquiry show` — read the entity file directly and treat *it* as the model to
+   specify.
+
+2. **Detect the DAG representation.** Some projects author the proposition/relation graph through the
+   inquiry RDF-graph CRUD path (`science graph add concept`, `science inquiry add-edge`). Others author
+   per-hypothesis DAGs as a **file pair** — e.g. `doc/figures/dags/<id>.dot` + `<id>.edges.yaml` —
+   consumed by `science big-picture` provenance-coverage rather than by `science graph add`. Check the
+   project for such a convention (look under `doc/figures/dags/`, `*.edges.yaml`, or the project's
+   `RESEARCH_PLAN`/conventions) before assuming the graph-CRUD path.
+
+3. **Route accordingly:**
+   - **Inquiry + RDF-graph project** → Steps 1–6 as written.
+   - **Hypothesis + file-based DAG project** → skip the `inquiry show/validate/add-edge` and
+     `graph add concept` steps (they don't map onto the file pair). Instead author/validate the
+     `.dot` + `.edges.yaml` pair the project's tooling consumes, and still do Step 3 (durable
+     `proposition` entities) and Step 4 (evidence-line entities) — those are tool-supported and
+     durable regardless of DAG representation. Validate with the project's DAG check (e.g.
+     `science big-picture`) rather than `inquiry validate`.
+
+The proposition + evidence-line authoring (Steps 3–4) is representation-agnostic; only the
+structural-graph steps (1, 2, the `add-edge` in 3, and 6's `inquiry validate`) are inquiry-specific.
+
 ### Step 1: Load And Assess The Inquiry
 
-If the user input contains a slug:
+*(Inquiry + RDF-graph path — see Step 0. For a hypothesis in a file-based DAG project, read the
+hypothesis file and its `.dot`/`.edges.yaml` pair instead.)*
+
+If the user input contains an inquiry slug:
 
 ```bash
 science inquiry show "<slug>" --format table

@@ -304,6 +304,13 @@ When graph updates are warranted, frame them as proposition updates:
 - attach it as `cito:supports` or `cito:disputes` to the affected proposition
 - note residual uncertainty, especially when evidence is single-source, weak, or contested
 - classify the new evidence explicitly using the canonical evidence types above
+- **group by cohort, not by workflow.** When a follow-up analysis (different workflow) reuses the
+  *same cohort / rows* as an existing evidence line, the new `shared-source` line must reuse the
+  **same `independence_group`** as that cohort's existing lines — independence groups are
+  cohort-level, not workflow-level. Minting a per-workflow group name (e.g. `swan` alongside an
+  existing `swan-stage-age`) makes the aggregator count two same-cohort lines as independent and
+  **over-promotes** the proposition. Setting `--independence shared-source` alone does **not** prevent
+  the over-count; the grouping is what does.
 - when the proposition is grounded in a pre-registered analysis, pass `--pre-registration pre-registration:<slug>` to `science graph add proposition`. This writes a `sci:preRegisteredIn` triple into the materialized graph so downstream weighted attention sampling can boost pre-registered evidence.
 
 Do not use hypothesis status changes as the primary output.
@@ -320,9 +327,40 @@ Call out any remaining:
 - proxy-mediated propositions lacking `measurement_model`
 - rival-model packets lacking discriminating predictions
 
+Then verify the update did not silently over-promote: confirm `belief.fragile-single-line` did **not
+newly fire** for the proposition you just touched. If it did, the most likely cause is a same-cohort
+line placed in its own `independence_group` (see the cohort-grouping rule above) — fix the grouping
+rather than the threshold.
+
 ### Structured Output
 
-After analyzing results, create structured entities in addition to the prose document:
+After analyzing results, create structured entities in addition to the prose document.
+
+**First, check whether the project has a materialized graph.** `science graph build` rematerializes
+`knowledge/graph.trig` deterministically from markdown sources; it never reads the existing
+`graph.trig` back. Two consequences shape this section:
+
+- **Partially-migrated project (no `knowledge/graph.trig`).** Every `science graph …` command below
+  will error. Do not try them per-command and accept the failures — instead route the structured
+  output to **source-authored files** (the durable path below), and keep the interpretation itself in
+  `doc/interpretations/` via `science interpretation create`. Note this in the output mode line.
+- **`graph add` is non-durable even when the graph exists.** `science graph add
+  observation/proposition/evidence/finding` writes *directly into* `graph.trig` and is **wiped on the
+  next `science graph build`** (the CLI prints this warning). Use `graph add` only for throwaway
+  inspection. For anything that must survive a rebuild, author it in a source the build reads:
+
+  - **Proposition** → `science proposition create "<title>"` (durable source-authored entity).
+  - **Observation** → it has no standalone source entity; **anchor it inside** a proposition,
+    finding, or interpretation source file rather than as a free-standing `graph add observation`.
+  - **Evidence with stance / strength / independence** → author an **evidence-line** entity under
+    `doc/evidence-lines/*.md` (kind `evidence-line`), which the build reads and materializes; or
+    express the relation inside the proposition/finding/interpretation source file. (Do not rely on a
+    bare `graph add evidence` edge — it does not survive the build.)
+  - **Interpretation / finding** → `science interpretation create` (step 5 below) produces a durable
+    source document; prefer it over `graph add interpretation`.
+
+The `graph add …` recipes below are the *throwaway-inspection* form; mirror each into the
+source-authored form above when the entity must persist.
 
 1. For each concrete empirical fact:
    `science graph add observation "<description>" --data-source <data-package-ref> --metric <what> --value <value>`

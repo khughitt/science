@@ -108,6 +108,31 @@ Record the commitment-target subset as `commits_to:` in the pre-reg frontmatter 
 
 If `commits_to:` is absent, the deriver falls back to "all epistemic `related:` entries are commitment targets," which over-derives for many existing mixed pre-regs. When in doubt, populate `commits_to:` explicitly.
 
+#### Sub-axis: execution timing — runnable-now or data-gated?
+
+Target class (operational/epistemic) is orthogonal to *when the analysis can run*. Most pre-regs are
+**runnable-now**: the qualifying data/vehicle exists and § 4 (null/power) and the Null-Result Plan
+presuppose execution. But a pre-reg may commit a **rule before any qualifying vehicle exists** — the
+binding constraint is data availability (e.g. no adequately-powered cohort yet). Author these in
+**data-gated mode** rather than improvising:
+
+- **Commit the rule now, defer execution.** Write the decision criteria and expected outcomes as
+  usual, but mark the analysis as not-yet-runnable.
+- **Vehicle-admissibility gate.** State the explicit preconditions a future vehicle must satisfy to
+  *activate* the rule — e.g. a locked power floor (minimum n), required differential design, and any
+  lineage/comparator requirement. Spent vehicles that fail the floor do **not** qualify.
+- **Standing verdict = no update until a vehicle clears.** Until an admissible vehicle exists, the
+  pre-reg's standing interpretation is *inconclusive-for-coverage*: it produces **no `bears_on` belief
+  update**. This is distinct from a null result (which is evidence) — there is simply no qualifying
+  evidence yet. Map it to the canonical inconclusive verdict (`[?]`), not a new token.
+- **Track with a `status: blocked` task** whose blocker is the admissibility gate, so the deferred
+  analysis stays visible in the queue and activates when a qualifying vehicle arrives.
+
+This differs from **Pilot Calibration** (§ below), which defers a single *threshold* to a pilot while
+the analysis itself runs now. Data-gated mode defers the *entire analysis* pending a qualifying
+vehicle. Note it explicitly at the top of the pre-reg (e.g. `mode: data-gated`) so interpret-results
+treats the standing verdict as no-update rather than as a runnable null.
+
 ### 1. Identify the Analysis
 
 - What analysis are you about to run?
@@ -119,6 +144,29 @@ exists, recommend `science-plan-analysis` when any of these are underspecified:
 input QA, preprocessing/normalization checks, independent unit, estimand,
 power/resolution limit, or sensitivity-arbitration rule. The recommendation is
 advisory, not a hard dependency.
+
+### 1b. Feasibility Against Real Input Artifacts
+
+Before locking any threshold in § 3, **load the actual input artifacts** — not your memory of them —
+and check the analysis is feasible as framed. § 4 asks you to *reason* about power; this step makes
+you *look*. For each arm of the planned comparison:
+
+- **Support-set size.** What is the real *n* feeding each arm? Open the table/dataset and count.
+- **Universe alignment.** How many of those rows survive into the *covering universe* the test
+  actually runs against (after joins, filters, eligibility)? The effective *n* is usually smaller
+  than the raw *n*.
+- **Base rates.** What is the background/overlap rate the effect must beat? A high base rate can make
+  a nominally-significant arm uninformative.
+
+If the numbers reveal an arm is underpowered or that the wrong arm was slated as confirmatory, **fix
+the design here** — re-scope, swap which arm is confirmatory/exploratory, or add a feasibility
+precondition — rather than discovering it post-data. This is exactly what pre-registration exists to
+surface.
+
+*Worked case (natural-systems H09).* Inspecting the inputs caught that the headline arm was
+underpowered (cycle-support n=22, only 10 in the covering universe, 73% overlap base rate) and that
+the confirmatory/exploratory assignment should be inverted — caught pre-data because the artifacts
+were loaded before the criteria were locked.
 
 ### 2. State Expected Outcomes
 
