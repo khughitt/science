@@ -217,3 +217,62 @@ def test_apply_rewrites_changed_files_and_second_run_is_clean(tmp_path: Path) ->
     assert second.changed_files == []
     assert "datasets:" not in paper.read_text(encoding="utf-8")
     assert "dataset_usage:" in paper.read_text(encoding="utf-8")
+
+
+def test_plan_uses_configured_local_profile_paper_surface(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "science.yaml").write_text(
+        "\n".join(
+            [
+                "name: demo",
+                "knowledge_profiles:",
+                "  local: lab",
+                "profiles:",
+                "  lab:",
+                "    papers:",
+                "      - literature/papers",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    paper_dir = root / "literature" / "papers"
+    paper_dir.mkdir(parents=True)
+    paper = paper_dir / "smith.md"
+    paper.write_text(_body({"id": "paper:smith", "type": "paper", "datasets": ["dataset:gtex-v8"]}), encoding="utf-8")
+
+    report = plan_paper_dataset_migration(root)
+
+    assert report.changed_files == [str(paper)]
+
+
+def test_plan_reports_malformed_frontmatter_in_discovered_paper_surface(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "science.yaml").write_text(
+        "\n".join(
+            [
+                "name: demo",
+                "knowledge_profiles:",
+                "  local: lab",
+                "profiles:",
+                "  lab:",
+                "    papers:",
+                "      - literature/papers",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    paper_dir = root / "literature" / "papers"
+    paper_dir.mkdir(parents=True)
+    valid = paper_dir / "valid.md"
+    bad = paper_dir / "bad.md"
+    valid.write_text(_body({"id": "paper:valid", "type": "paper"}), encoding="utf-8")
+    bad.write_text("---\nid: [\n---\nBody.\n", encoding="utf-8")
+
+    report = plan_paper_dataset_migration(root)
+
+    assert [conflict.reason for conflict in report.conflicts] == ["malformed-frontmatter"]
+    assert report.conflicts[0].path == str(bad)

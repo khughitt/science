@@ -2,7 +2,7 @@
 
 Date: 2026-05-29
 
-Status: implementation plan drafted; see `docs/plans/2026-05-29-b-migration-paper-datasets-plan.md`
+Status: implementation ready; see `docs/plans/2026-05-29-b-migration-paper-datasets-plan.md`
 
 Related:
 - `docs/plans/2026-05-26-bio-dataset-influence-provenance-design.md` — Pillar B north star and B1/B2 split

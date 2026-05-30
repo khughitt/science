@@ -69,6 +69,13 @@ class PaperDatasetMigrationReport:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class _SourceScan:
+    files: list[Path]
+    paper_roots: frozenset[Path]
+    load_conflict: PaperDatasetMigrationConflict | None = None
+
+
 def is_paper_dataset_role_conflict(entry: Mapping[str, Any]) -> bool:
     return entry.get("role") != "analyzed"
 
@@ -77,11 +84,14 @@ def plan_paper_dataset_migration(project_root: Path, *, apply: bool = False) -> 
     root = project_root.resolve()
     changed_files: list[str] = []
     conflicts: list[PaperDatasetMigrationConflict] = []
-    for path in _candidate_markdown_files(root):
+    scan = _source_scan(root)
+    if scan.load_conflict is not None:
+        conflicts.append(scan.load_conflict)
+    for path in scan.files:
         text = path.read_text(encoding="utf-8")
         result = migrate_paper_frontmatter(path, text)
         if result.conflicts:
-            if _looks_like_paper_source_path(root, path):
+            if _looks_like_paper_source_path(path, scan.paper_roots):
                 conflicts.extend(result.conflicts)
             continue
         if result.changed:
@@ -248,22 +258,84 @@ def _paper_id(frontmatter: Mapping[str, Any]) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def _candidate_markdown_files(project_root: Path) -> list[Path]:
-    roots = [project_root / "doc" / "papers", project_root / "doc" / "background" / "papers"]
-    files: list[Path] = []
-    for root in roots:
-        if root.is_dir():
-            files.extend(path for path in root.rglob("*.md") if path.is_file())
-    doc_root = project_root / "doc"
-    if doc_root.is_dir():
-        files.extend(path for path in doc_root.rglob("*.md") if path.is_file())
-    return sorted(set(files))
-
-
-def _looks_like_paper_source_path(project_root: Path, path: Path) -> bool:
+def _source_scan(project_root: Path) -> _SourceScan:
+    files: set[Path] = set()
+    paper_roots: set[Path] = {
+        project_root / "doc" / "papers",
+        project_root / "doc" / "background" / "papers",
+        *_declared_paper_roots(project_root),
+    }
+    load_conflict: PaperDatasetMigrationConflict | None = None
     try:
-        rel = path.relative_to(project_root)
-    except ValueError:
-        return False
-    parts = rel.parts
-    return len(parts) >= 3 and parts[0] == "doc" and parts[-2] == "papers"
+        from science_tool.graph.sources import load_project_sources
+
+        sources = load_project_sources(project_root)
+        for doc in sources.markdown_documents:
+            path = Path(doc.path)
+            absolute = path if path.is_absolute() else project_root / path
+            if absolute.suffix != ".md":
+                continue
+            files.add(absolute)
+            kind = doc.frontmatter.get("kind") or doc.frontmatter.get("type")
+            if kind == "paper":
+                paper_roots.add(absolute.parent)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        load_conflict = _source_load_conflict(project_root, exc)
+    for root in (project_root / "doc" / "papers", project_root / "doc" / "background" / "papers"):
+        if root.is_dir():
+            files.update(path for path in root.rglob("*.md") if path.is_file())
+    for root in list(paper_roots):
+        if root.is_dir():
+            files.update(path for path in root.rglob("*.md") if path.is_file())
+    return _SourceScan(
+        files=sorted(path for path in files if path.is_file()),
+        paper_roots=frozenset(root.resolve() for root in paper_roots if root.is_dir()),
+        load_conflict=load_conflict,
+    )
+
+
+def _declared_paper_roots(project_root: Path) -> set[Path]:
+    manifest_path = project_root / "science.yaml"
+    if not manifest_path.is_file():
+        return set()
+    try:
+        data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return set()
+    if not isinstance(data, dict):
+        return set()
+    roots: set[Path] = set()
+    profiles = data.get("profiles")
+    if isinstance(profiles, dict):
+        for profile in profiles.values():
+            if not isinstance(profile, dict):
+                continue
+            papers = profile.get("papers")
+            if isinstance(papers, list):
+                roots.update(project_root / item for item in papers if isinstance(item, str))
+    return roots
+
+
+def _source_load_conflict(project_root: Path, exc: OSError | ValueError | yaml.YAMLError) -> PaperDatasetMigrationConflict | None:
+    if isinstance(exc, yaml.YAMLError):
+        return None
+    if isinstance(exc, ValueError) and str(exc).startswith("schema validation failed for registered entity kind"):
+        return None
+    return PaperDatasetMigrationConflict(
+        path=str(project_root / "science.yaml"),
+        paper_id=None,
+        dataset_ref=None,
+        reason="roundtrip-failure",
+        detail=f"could not load project sources for migration scan: {type(exc).__name__}: {exc}",
+    )
+
+
+def _looks_like_paper_source_path(path: Path, paper_roots: frozenset[Path]) -> bool:
+    resolved = path.resolve()
+    for root in paper_roots:
+        try:
+            resolved.relative_to(root)
+            return True
+        except ValueError:
+            continue
+    return False
