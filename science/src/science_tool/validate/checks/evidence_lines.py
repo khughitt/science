@@ -12,7 +12,7 @@ from collections import defaultdict
 from collections.abc import Iterator
 from pathlib import Path
 
-from rdflib import Literal, RDF, Dataset
+from rdflib import Literal, RDF, Dataset, URIRef
 from rdflib.namespace import PROV
 
 from science_tool.graph.belief import (
@@ -178,6 +178,47 @@ def check_independence_suspect_circular(ctx: ValidateContext) -> Iterator[Result
                         rule="independence.suspect-circular",
                         task=None,
                     )
+
+    _knowledge, provenance = _load_belief_graphs(ctx)
+    if provenance is None:
+        return
+    for record in provenance.subjects(RDF.type, SCI_NS.DatasetIndependenceCommitment):
+        members = [member for member in provenance.objects(record, SCI_NS.independenceMember) if isinstance(member, URIRef)]
+        for member in members:
+            if _line_independence(provenance, member) == "independent":
+                yield Result(
+                    severity=Severity.ERROR,
+                    path=None,
+                    line=None,
+                    message=f"{member}: authored independence=independent contradicts committed dataset-derived shared-source dependence",
+                    rule="independence.dataset-derived-contradiction",
+                    task=None,
+                )
+    for record in provenance.subjects(RDF.type, SCI_NS.DatasetIndependenceCandidate):
+        members = [member for member in provenance.objects(record, SCI_NS.independenceMember) if isinstance(member, URIRef)]
+        if len(members) < 2:
+            continue
+        eligible = [
+            member
+            for member in members
+            if _line_independence(provenance, member) in (None, "independent")
+        ]
+        if len(eligible) >= 2:
+            reason = next((str(value) for value in provenance.objects(record, SCI_NS.independenceReason)), "dataset-derived")
+            yield Result(
+                severity=Severity.WARN,
+                path=None,
+                line=None,
+                message=f"dataset-derived candidate dependence ({reason}) links {len(eligible)} untagged/authored-independent lines on the same target",
+                rule="independence.suspect-circular",
+                task=None,
+            )
+
+
+def _line_independence(provenance, line: URIRef) -> str | None:
+    for value in provenance.objects(line, SCI_NS.evidenceIndependence):
+        return str(value)
+    return None
 
 
 def _first_shared_signal(

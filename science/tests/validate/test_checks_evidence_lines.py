@@ -9,7 +9,7 @@ from rdflib import Dataset, Literal, RDF, URIRef
 from rdflib.namespace import PROV
 
 from science_tool.graph.io import CITO_NS, SCI_NS
-from science_tool.graph.store import _graph_uri
+from science_tool.graph.store import PROJECT_NS, _graph_uri
 from science_tool.validate import Severity, ValidateContext
 
 
@@ -434,6 +434,77 @@ def test_unscored_line_skips_diagnostic_roles(tmp_path: Path):
     _write(tmp_path, "doc/evidence-lines/el01.md",
            "---\nstance: disputes\ntarget: proposition:p1\nevidence_role: model_criticism\n---\n")
     assert list(check_evidence_unscored_line(_ctx(tmp_path))) == []
+
+
+def _ctx_with_b2_graph(tmp_path: Path, *, record_type: URIRef, authored: dict[str, str] | None = None) -> ValidateContext:
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    graph_path = root / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir(parents=True)
+    ds = Dataset()
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    provenance = ds.graph(PROJECT_NS["graph/provenance"])
+    target = PROJECT_NS["proposition/p1"]
+    line_a = PROJECT_NS["evidence-line/a"]
+    line_b = PROJECT_NS["evidence-line/b"]
+    for line in (line_a, line_b):
+        knowledge.add((line, RDF.type, SCI_NS.EvidenceLine))
+        knowledge.add((line, CITO_NS.supports, target))
+    if authored:
+        for key, value in authored.items():
+            predicate = {
+                "independence": SCI_NS.evidenceIndependence,
+                "independence_group": SCI_NS.independenceGroup,
+                "shared_dataset": SCI_NS.sharedDataset,
+            }[key]
+            provenance.add((line_a, predicate, Literal(value)))
+    record = PROJECT_NS["dataset-independence/r1"]
+    provenance.add((record, RDF.type, record_type))
+    provenance.add((record, SCI_NS.independenceTarget, target))
+    provenance.add((record, SCI_NS.independenceMember, line_a))
+    provenance.add((record, SCI_NS.independenceMember, line_b))
+    provenance.add((record, SCI_NS.independenceGroup, Literal("dataset-derived:gtex-v8")))
+    provenance.add((record, SCI_NS.independenceReason, Literal("unknown-overlap")))
+    provenance.add((record, SCI_NS.sharedDataset, PROJECT_NS["dataset/gtex-v8"]))
+    for suffix, line in (("a", line_a), ("b", line_b)):
+        usage = PROJECT_NS[f"dataset-usage/{suffix}"]
+        provenance.add((line, SCI_NS.hasDatasetUsage, usage))
+        provenance.add((usage, RDF.type, SCI_NS.DatasetUsage))
+        provenance.add((usage, SCI_NS.dataset, PROJECT_NS["dataset/gtex-v8"]))
+        provenance.add((usage, SCI_NS.usageRole, Literal("analyzed")))
+        provenance.add((usage, SCI_NS.usageOverlap, Literal("full")))
+        provenance.add((usage, SCI_NS.usageSource, Literal("authored")))
+    ds.serialize(graph_path, format="trig")
+    return ValidateContext.from_project_root(root, strict=False, verbose=False)
+
+
+def test_suspect_circular_warns_for_untagged_lines_with_derived_candidate(tmp_path: Path) -> None:
+    from science_tool.validate.checks.evidence_lines import check_independence_suspect_circular
+
+    ctx = _ctx_with_b2_graph(tmp_path, record_type=SCI_NS.DatasetIndependenceCandidate)
+
+    results = list(check_independence_suspect_circular(ctx))
+
+    assert [(result.severity, result.rule) for result in results] == [
+        (Severity.WARN, "independence.suspect-circular")
+    ]
+
+
+def test_committed_dataset_dependence_errors_when_line_authored_independent(tmp_path: Path) -> None:
+    from science_tool.validate.checks.evidence_lines import check_independence_suspect_circular
+
+    ctx = _ctx_with_b2_graph(
+        tmp_path,
+        record_type=SCI_NS.DatasetIndependenceCommitment,
+        authored={"independence": "independent"},
+    )
+
+    results = list(check_independence_suspect_circular(ctx))
+
+    assert [(result.severity, result.rule) for result in results] == [
+        (Severity.ERROR, "independence.dataset-derived-contradiction")
+    ]
 
 
 # ---------------------------------------------------------------------------
