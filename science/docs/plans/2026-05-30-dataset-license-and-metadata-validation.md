@@ -1,7 +1,7 @@
 # Dataset `license` as a first-class checkable property (+ `tier`/`update_cadence` validation)
 
 - **Date:** 2026-05-30
-- **Status:** design (approved, pre-implementation)
+- **Status:** implemented
 - **Branch:** `feat/dataset-license-metadata-validation`
 - **Origin:** Surfaced from a `science health` triage in the `meta` project — a dataset
   note carried an `[UNVERIFIED]` license, prompting the question "is `license` even a
