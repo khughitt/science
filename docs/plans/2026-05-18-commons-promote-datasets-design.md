@@ -281,6 +281,17 @@ Plus conditionals on `origin`:
   and `verified`.
 - `origin: derived` → requires `derivation` block with `workflow_recipe`
   and `inputs` (list of `dataset:<slug>` ids).
+  - **Heavyweight-form normalization (fb-2026-05-30-003).** Project-local
+    validation accepts the *heavyweight register-run* `DerivationBlock`
+    (`workflow`, `workflow_run`, `git_commit`, `config_snapshot`, `produced_at`,
+    `inputs`) used by auto-registered run-output datasets, which lacks the
+    `workflow_recipe` the commons schema requires. To let a single authored
+    state be both validate-clean and promotable, promote discovery normalizes
+    the heavyweight form into the commons workflow-recipe form
+    (`_normalize_derivation_for_commons`): `workflow_recipe ← workflow`,
+    `recipe_lockfile ← config_snapshot`, `inputs` carried over, and the
+    run-specific fields dropped. Already-lightweight and `member_of`
+    derivations pass through unchanged.
 
 Promote fails-fast at discovery on datasets that are missing any of these
 fields (recorded as a `FailedCandidate` per missing-field reason, with
