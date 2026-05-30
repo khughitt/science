@@ -316,6 +316,9 @@ class Entity(BaseModel):
     produced_by: list[str] = Field(default_factory=list)
     parent_dataset: str = ""
     siblings: list[str] = Field(default_factory=list)
+    # Dataset license (SPDX id or sentinel). On Entity (gated to kind) so the
+    # parse_entity_file path, which returns a plain Entity for datasets, keeps it.
+    license: str = ""
     # Pillar A — epistemic class (orthogonal to origin) + co-owned forward provenance
     source_class: str | None = None       # "observational" | "derived" | "reference"
     derived_kind: str | None = None        # "aggregate" | "transform" | "model_output"

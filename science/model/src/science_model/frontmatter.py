@@ -368,6 +368,7 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         "produced_by": list(fm.get("produced_by") or []),
         "parent_dataset": fm.get("parent_dataset", ""),
         "siblings": list(fm.get("siblings") or []),
+        "license": fm.get("license", ""),
         "source_class": fm.get("source_class"),
         "derived_kind": fm.get("derived_kind"),
         "dataset_usage": [] if fm.get("dataset_usage") is None else fm.get("dataset_usage"),

@@ -31,6 +31,7 @@ _EXCLUDED_FIELDS = frozenset(
         "description",
         # Entity fields not relevant to this regression:
         "accessions",
+        "license",
         "consumed_by",
         "produced_by",
         "local_path",
