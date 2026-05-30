@@ -9,6 +9,7 @@ from pathlib import Path
 
 import click
 
+from science_tool.bibliography import load_bib_author_surnames
 from science_tool.project_config import DEFAULT_ANCHOR_PATTERNS, load_project_config
 from science_tool.prose_lint import CHECKS, build_short_form_resolver, scan_root
 
@@ -35,6 +36,7 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
     anchor_patterns = list(DEFAULT_ANCHOR_PATTERNS)
     enabled_from_config: list[str] | None = None
     short_form_ids_deny: list[str] = []
+    bare_author_year_deny: list[str] = []
     science_yaml = root / "science.yaml"
     if science_yaml.is_file():
         config = load_project_config(root)
@@ -42,12 +44,16 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
             anchor_patterns = config.prose_lint.anchor_patterns
             enabled_from_config = config.prose_lint.enabled_checks
             short_form_ids_deny = config.prose_lint.short_form_ids_deny
+            bare_author_year_deny = config.prose_lint.bare_author_year_deny
     if selected is None and enabled_from_config:
         selected = enabled_from_config
 
     effective_checks = selected if selected is not None else list(CHECKS)
     resolver = (
         build_short_form_resolver(root) if "short-form-ids" in effective_checks else None
+    )
+    bib_surnames = (
+        load_bib_author_surnames(root) if "bare-author-year" in effective_checks else None
     )
 
     result = scan_root(
@@ -57,6 +63,8 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
         anchor_patterns=anchor_patterns,
         short_form_ids_deny=short_form_ids_deny,
         resolver=resolver,
+        bare_author_year_deny=bare_author_year_deny,
+        bib_surnames=bib_surnames,
     )
 
     if fmt == "json":

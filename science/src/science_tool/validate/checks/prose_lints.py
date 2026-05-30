@@ -39,6 +39,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
+from science_tool.bibliography import load_bib_author_surnames
 from science_tool.project_config import DEFAULT_ANCHOR_PATTERNS, load_project_config
 from science_tool.prose_lint import CHECKS, build_short_form_resolver, scan_root
 from science_tool.validate.checks import Check
@@ -60,17 +61,24 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
     selected: list[str] | None = None
     anchor_patterns = list(DEFAULT_ANCHOR_PATTERNS)
     short_form_ids_deny: list[str] = []
+    bare_author_year_deny: list[str] = []
     if (ctx.project_root / "science.yaml").is_file():
         config = load_project_config(ctx.project_root)
         if config.prose_lint is not None:
             anchor_patterns = config.prose_lint.anchor_patterns
             selected = config.prose_lint.enabled_checks
             short_form_ids_deny = config.prose_lint.short_form_ids_deny
+            bare_author_year_deny = config.prose_lint.bare_author_year_deny
 
     effective_checks = selected if selected is not None else list(CHECKS)
     resolver = (
         build_short_form_resolver(ctx.project_root)
         if "short-form-ids" in effective_checks
+        else None
+    )
+    bib_surnames = (
+        load_bib_author_surnames(ctx.project_root)
+        if "bare-author-year" in effective_checks
         else None
     )
 
@@ -81,6 +89,8 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
         anchor_patterns=anchor_patterns,
         short_form_ids_deny=short_form_ids_deny,
         resolver=resolver,
+        bare_author_year_deny=bare_author_year_deny,
+        bib_surnames=bib_surnames,
     )
 
     severity_by_check: dict[str, str] = {}

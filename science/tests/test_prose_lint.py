@@ -102,6 +102,38 @@ class TestBareAuthorYear:
             path = _write(tmp_path, body)
             assert detect_bare_author_year(path) == [], body
 
+    def test_bib_aware_flags_only_known_authors(self, tmp_path):
+        # With a bib-surname set, flag only mentions whose author is in the bib
+        # (bucket 1: "you have this paper but didn't cite it"). A secondary
+        # citation to a paper not in the bib (bucket 3) is skipped.
+        path = _write(
+            tmp_path,
+            "Brunton 2022 framed it; the idea traces to Latman 1983 as cited there.\n",
+        )
+        issues = detect_bare_author_year(path, bib_surnames={"brunton"})
+        assert [i.match for i in issues] == ["Brunton 2022"]
+
+    def test_bib_aware_skips_non_author_false_positives(self, tmp_path):
+        # Org/journal/product fragments (bucket 4) are not bib authors -> skipped.
+        path = _write(tmp_path, "Per CDC 2011 and the Metab 2005 review, rates rose.\n")
+        assert detect_bare_author_year(path, bib_surnames={"brunton"}) == []
+
+    def test_bib_aware_matches_any_coauthor(self, tmp_path):
+        # "Smith and Jones 2020" -> match if either surname is a known author.
+        path = _write(tmp_path, "The result in Smith and Jones 2020 stands.\n")
+        issues = detect_bare_author_year(path, bib_surnames={"jones"})
+        assert len(issues) == 1
+
+    def test_no_bib_surnames_falls_back_to_flag_all(self, tmp_path):
+        # bib_surnames=None preserves the original behavior (flag all mentions).
+        path = _write(tmp_path, "The idea traces to Latman 1983 in that thread.\n")
+        issues = detect_bare_author_year(path, bib_surnames=None)
+        assert [i.match for i in issues] == ["Latman 1983"]
+
+    def test_deny_list_skips_residual_false_positive(self, tmp_path):
+        path = _write(tmp_path, "The IMMULITE 2000 assay was used throughout.\n")
+        assert detect_bare_author_year(path, deny=["IMMULITE 2000"]) == []
+
 
 class TestShortFormIds:
     def test_flags_bare_q_number(self, tmp_path):
