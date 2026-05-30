@@ -71,10 +71,42 @@ This means the model field and the check serve complementary purposes:
 
 - `model/src/science_model/entities.py`: add `license: str = ""` to `DatasetEntity`
   (beside `tier`, `update_cadence`). This alone makes markdown-authored datasets
-  capture it (the strict loader will now keep the key instead of dropping it).
+  *capture* it (the strict loader will now keep the key instead of dropping it).
 - `src/science_tool/graph/storage_adapters/datapackage.py`: add `"license"` to
   `_ENTITY_FIELDS` so datapackage-sourced datasets carry it into the graph too.
 - `tier` / `update_cadence` already exist on the model — no model change, checks only.
+
+**Capture is not materialization.** Adding the model field makes `license` available
+on the parsed `DatasetEntity`, but it does **not** put it in `graph.trig`:
+`materialize.py`'s `_add_entity` emits only a hand-picked predicate set, and for
+datasets it currently stops at `sci:sourceClass`
+(`src/science_tool/graph/materialize.py:240-241`). To meet the "first-class,
+queryable" goal we must emit it explicitly:
+
+- `src/science_tool/graph/materialize.py`: in `_add_entity`, in the existing
+  `entity.kind == "dataset"` block, emit `sci:license` when present, and (for
+  consistency, since they are modeled but likewise unmaterialized today) `sci:tier`
+  and `sci:updateCadence`. A graph-assertion test must confirm the triple lands.
+
+### 1a. Schema + template synchronization
+
+`license` is already declared on the legacy entity-schema surface
+(`science-pkg-entity-1.0.json:19`, `license: {"type": "string"}`) and in both dataset
+templates, but is **absent** from the mixin-profile surface. Both surfaces must agree:
+
+- `model/src/science_model/schemas/mixin-dataset-1.0.json`: add
+  `"license": {"type": "string"}` (the `schema_profile:
+  science-entity-base/1.0+dataset/1.0` validator uses this file; it currently has
+  `tier` and `update_cadence` but no `license`, so a first-class `license` would be
+  undeclared there).
+- Dataset templates — **two byte-identical copies** exist and a quick search found no
+  generator that produces one from the other, so both are hand-maintained and both
+  must be updated: `model/src/science_model/templates/dataset.md` (packaged) and
+  `templates/dataset.md` at the workspace root (the shared dir referenced by project
+  `AGENTS.md` files as `../templates/`). Update the `license` comment to mention the
+  sentinels in both. **Implementation note:** confirm during the plan whether a
+  generation/sync step exists; if one is found, regenerate rather than hand-editing
+  both.
 
 ### 2. License vocabulary (new module)
 
@@ -109,22 +141,41 @@ Rules (all `WARN`, never `ERROR` — nothing blocks `validate` by default; the
   `KNOWN_LICENSES ∪ LICENSE_SENTINELS`. Message includes `suggest()` output when
   available ("did you mean `CC-BY-4.0`?").
 - **`dataset.tier-unrecognized`** — `tier` present and not in
-  `{use-now, evaluate-next, track}`.
-- **`dataset.cadence-unrecognized`** — `update_cadence` present and not in the
-  *recommended* set `{static, rolling, daily, weekly, monthly, quarterly, annual,
-  irregular}`. Soft by design: the template defines `update_cadence` as open-ended
-  (`static | rolling | monthly | ...`), so this is a recommendation nudge, kept
-  trivially extensible, not a closed enum.
+  `{use-now, evaluate-next, track}` (matches both schema surfaces).
+- **`dataset.cadence-unrecognized`** — `update_cadence` present and not in
+  `{static, rolling, monthly, quarterly, annual, versioned-releases}`.
+
+**The cadence set must equal the schema enum, not a separately-invented set.** The
+authoritative closed enum is in `science-pkg-entity-1.0.json:20`
+(`["", "static", "rolling", "monthly", "quarterly", "annual",
+"versioned-releases"]`). The dataset template's comment (`static | rolling | monthly |
+...`) reads as open-ended, but the schema is what actually enforces, and it is closed.
+An earlier draft of this plan invented `daily`/`weekly`/`irregular` and dropped
+`versioned-releases` — that would make a dataset pass this check yet fail schema
+validation (and vice versa). To prevent that divergence, the check's allowed-cadence
+constant is defined to equal the schema enum (minus `""`), and a **sync test**
+(see §5) loads the schema JSON and asserts equality. If the cadence vocabulary should
+genuinely grow (e.g. add `daily`), the schema enum is updated first and the check
+follows — never the reverse.
 
 Empty/absent `tier` and `update_cadence` are **not** flagged (optional metadata);
 only a *present, unrecognized* value warns. `license` is the only one with a
 missing-value warning, and only for external datasets.
 
+**Registration (required — checks are not auto-discovered).** A `@Check`-decorated
+function only runs if its module is imported, and the canonical import list is a
+hard-coded tuple in `_load_canonical_checks`
+(`src/science_tool/validate/checks/__init__.py:42`). The new `dataset_metadata`
+module **must be added to that tuple** (next to `dataset_taxonomy`), or it silently
+never runs. This is covered by the integration test in §5.
+
 ### 4. Health surfacing
 
-`science health` already sources its `validation` array from the validate checks, so
-the new rules appear automatically (exactly as `code.ghost` did) and
-`science validate --verbose` lists per-file locations. No bespoke health plumbing.
+Once the module is registered (§3), `science health` sources its `validation` array
+from the validate checks, so the new rules appear in health output (exactly as
+`code.ghost` did) and `science validate --verbose` lists per-file locations. No
+bespoke health plumbing — but the surfacing is contingent on registration, not
+automatic from file creation alone.
 
 ### 5. Testing
 
@@ -133,8 +184,19 @@ the new rules appear automatically (exactly as `code.ghost` did) and
 - **Check-function tests** over fixture raw-frontmatter dicts:
   external + missing license → `license-missing`; derived + missing → no warning;
   valid id → clean; `unknown` sentinel → clean; unrecognized id → `license-unrecognized`
-  with suggestion; bad `tier` → `tier-unrecognized`; odd `update_cadence` → soft warn;
-  absent `tier`/`cadence` → clean.
+  with suggestion; bad `tier` → `tier-unrecognized`; unrecognized `update_cadence` →
+  `cadence-unrecognized`; `versioned-releases` → clean; absent `tier`/`cadence` → clean.
+- **Registration / integration test**: run the full check suite through `runner.run`
+  (or `science health`) on a fixture project and assert a `dataset_metadata` finding
+  appears — proves the module is wired into `_load_canonical_checks`, not just that
+  the pure core works in isolation.
+- **Graph-materialization test**: materialize a fixture dataset with
+  `license: CC-BY-4.0` and assert the `sci:license` triple is present in the emitted
+  graph (and `sci:tier`/`sci:updateCadence` when set) — guards the capture-vs-
+  materialization gap.
+- **Schema-sync test**: load `science-pkg-entity-1.0.json` and assert the check's
+  allowed-cadence constant equals its `update_cadence` enum (minus `""`), and that
+  `tier` agrees across the check and both schema surfaces — prevents vocabulary drift.
 - **Regression test (guards the vestigial bug)**: parse a dataset markdown with a
   `license:` value through the model and assert the field survives onto the
   `DatasetEntity` (would have been silently dropped before this change).
@@ -153,18 +215,26 @@ blocks. Authors clear it by setting a real license or an explicit sentinel
 | `model/src/science_model/entities.py` | add `license: str = ""` to `DatasetEntity` |
 | `model/src/science_model/licenses.py` | **new** — `KNOWN_LICENSES`, `LICENSE_SENTINELS`, `suggest()` |
 | `src/science_tool/graph/storage_adapters/datapackage.py` | add `"license"` to `_ENTITY_FIELDS` |
+| `src/science_tool/graph/materialize.py` | emit `sci:license` (+ `sci:tier`, `sci:updateCadence`) for datasets in `_add_entity` |
 | `src/science_tool/validate/checks/dataset_metadata.py` | **new** — license/tier/cadence checks |
+| `src/science_tool/validate/checks/__init__.py` | register `dataset_metadata` in `_load_canonical_checks` |
+| `model/src/science_model/schemas/mixin-dataset-1.0.json` | add `"license": {"type": "string"}` |
 | `model/src/science_model/templates/dataset.md` | (minor) note sentinels in the `license` comment |
-| tests | vocabulary, check-function, and parse-regression tests |
+| `templates/dataset.md` (workspace root) | same comment update (byte-identical copy; confirm no generator) |
+| tests | vocabulary, check-function, registration/integration, graph-materialization, schema-sync, and parse-regression tests |
 
 ## Success criteria
 
 - A dataset markdown with `license: CC-BY-4.0` round-trips: the value is on the parsed
-  `DatasetEntity` and is materialized into `graph.trig`.
+  `DatasetEntity` **and** a `sci:license` triple is present in `graph.trig`.
+- The check runs as part of the full suite (`runner.run` / `science health`), i.e. it
+  is registered — not merely importable.
 - `science validate` / `science health` warn on: external dataset with no license,
   unrecognized license (with suggestion), unrecognized `tier`, unrecognized
   `update_cadence`.
 - `unknown`/`proprietary`/`custom` clear the missing-license warning without being
-  flagged as unrecognized.
+  flagged as unrecognized; `versioned-releases` is an accepted cadence.
+- The check's cadence vocabulary equals the schema enum (sync test passes); no value
+  passes the check while failing schema validation or vice versa.
 - No new `ERROR`s; no path can crash the loader on a malformed value.
 - New + existing test suites green.
