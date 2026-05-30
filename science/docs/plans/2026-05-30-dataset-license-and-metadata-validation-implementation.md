@@ -31,11 +31,13 @@
 | `model/src/science_model/schemas/mixin-dataset-1.0.json` | add `license` property | modify |
 | `model/src/science_model/templates/dataset.md` | note sentinels in `license` comment | modify |
 | `templates/dataset.md` (workspace root) | same comment update | modify |
-| `tests/model/test_licenses.py` | vocabulary unit tests | new |
-| `tests/model/test_frontmatter_license.py` | parse-path regression test | new |
-| `tests/validate/test_checks_dataset_metadata.py` | pure-core + registration + schema-sync tests | new |
+| `model/tests/test_licenses.py` | vocabulary unit tests | new |
+| `model/tests/test_frontmatter_license.py` | parse-path regression test | new |
+| `tests/validate/test_checks_dataset_metadata.py` | pure-core + registration + integration + schema-sync tests | new |
 | `tests/test_license_materialize.py` | datapackage-extraction + materialization + predicate-registry tests | new |
-| `tests/model/test_mixin_dataset_schema_license.py` | mixin schema has `license` | new |
+| `model/tests/test_mixin_dataset_schema_license.py` | mixin schema has `license` | new |
+
+> **Test layout:** `science_model` tests live under `model/tests/` (the package's own test tree, with its `__init__.py` and `fixtures/`); `science_tool` tests live under `tests/`. Put each new test in the tree matching the package it exercises.
 
 ---
 
@@ -43,11 +45,11 @@
 
 **Files:**
 - Create: `model/src/science_model/licenses.py`
-- Test: `tests/model/test_licenses.py`
+- Test: `model/tests/test_licenses.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/model/test_licenses.py`:
+Create `model/tests/test_licenses.py`:
 
 ```python
 from __future__ import annotations
@@ -89,7 +91,7 @@ def test_suggest_returns_none_for_gibberish_and_empty() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest tests/model/test_licenses.py -v`
+Run: `uv run --frozen pytest model/tests/test_licenses.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'science_model.licenses'`
 
 - [ ] **Step 3: Write the implementation**
@@ -155,13 +157,13 @@ def suggest(value: str) -> str | None:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest tests/model/test_licenses.py -v`
+Run: `uv run --frozen pytest model/tests/test_licenses.py -v`
 Expected: PASS (5 passed)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add model/src/science_model/licenses.py tests/model/test_licenses.py
+git add model/src/science_model/licenses.py model/tests/test_licenses.py
 git commit -m "feat(model): add curated license vocabulary (KNOWN_LICENSES, sentinels, suggest)"
 ```
 
@@ -172,11 +174,11 @@ git commit -m "feat(model): add curated license vocabulary (KNOWN_LICENSES, sent
 **Files:**
 - Modify: `model/src/science_model/entities.py` (add field beside `source_class`, ~line 320)
 - Modify: `model/src/science_model/frontmatter.py` (`entity_kwargs` dict, ~line 371)
-- Test: `tests/model/test_frontmatter_license.py`
+- Test: `model/tests/test_frontmatter_license.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/model/test_frontmatter_license.py`:
+Create `model/tests/test_frontmatter_license.py`:
 
 ```python
 from __future__ import annotations
@@ -228,7 +230,7 @@ def test_license_defaults_empty_when_absent(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest tests/model/test_frontmatter_license.py -v`
+Run: `uv run --frozen pytest model/tests/test_frontmatter_license.py -v`
 Expected: FAIL — `AttributeError: 'Entity' object has no attribute 'license'`
 
 - [ ] **Step 3: Add the field to `Entity`**
@@ -256,13 +258,13 @@ In `model/src/science_model/frontmatter.py`, in the `entity_kwargs = { ... }` di
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `uv run --frozen pytest tests/model/test_frontmatter_license.py -v`
+Run: `uv run --frozen pytest model/tests/test_frontmatter_license.py -v`
 Expected: PASS (2 passed)
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add model/src/science_model/entities.py model/src/science_model/frontmatter.py tests/model/test_frontmatter_license.py
+git add model/src/science_model/entities.py model/src/science_model/frontmatter.py model/tests/test_frontmatter_license.py
 git commit -m "feat(model): capture dataset license on Entity + thread through frontmatter parse"
 ```
 
@@ -379,7 +381,28 @@ def test_absent_tier_and_cadence_not_flagged() -> None:
 
 
 def test_non_dataset_rows_ignored() -> None:
-    assert evaluate_dataset_metadata([{"type": "paper", "id": "paper:x", "_path": "p.md"}]) == []
+    # evaluate_dataset_metadata yields an iterator — must materialize before comparing.
+    assert list(evaluate_dataset_metadata([{"type": "paper", "id": "paper:x", "_path": "p.md"}])) == []
+
+
+def test_non_string_license_is_unrecognized_not_crash() -> None:
+    # license: 123 must not raise AttributeError on .strip(); treat as unrecognized.
+    assert (Severity.WARN, "dataset.license-unrecognized") in _rules(
+        [_ds(origin="external", license=123)]
+    )
+
+
+def test_non_string_tier_is_unrecognized_not_crash() -> None:
+    # tier: [] must not raise TypeError on set membership; treat as unrecognized.
+    assert (Severity.WARN, "dataset.tier-unrecognized") in _rules(
+        [_ds(origin="external", license="MIT", tier=[])]
+    )
+
+
+def test_non_string_cadence_is_unrecognized_not_crash() -> None:
+    assert (Severity.WARN, "dataset.cadence-unrecognized") in _rules(
+        [_ds(origin="external", license="MIT", update_cadence=[1])]
+    )
 
 
 def test_module_is_registered() -> None:
@@ -388,6 +411,31 @@ def test_module_is_registered() -> None:
     from science_tool.validate.checks import CANONICAL_CHECKS
 
     assert any(entry.fn.__module__.endswith("dataset_metadata") for entry in CANONICAL_CHECKS)
+
+
+def test_license_missing_surfaces_through_runner(tmp_path: Path) -> None:
+    # End-to-end: the finding must appear in a real validate run, not just in
+    # the pure core. Proves wiring (registration + raw-frontmatter discovery).
+    from science_tool.validate.runner import run
+
+    (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    ds_dir = tmp_path / "doc" / "datasets"
+    ds_dir.mkdir(parents=True)
+    (ds_dir / "x.md").write_text(
+        '---\n'
+        'id: "dataset:x"\n'
+        'type: "dataset"\n'
+        'title: "X"\n'
+        'status: "active"\n'
+        'origin: "external"\n'
+        'ontology_terms: []\n'
+        '---\n\n# X\n',
+        encoding="utf-8",
+    )
+
+    result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=False)
+
+    assert any(r.rule == "dataset.license-missing" for r in result.results)
 
 
 def test_cadence_vocabulary_equals_schema_enum() -> None:
@@ -450,17 +498,52 @@ def _result(severity: Severity, path: str | None, message: str, rule: str) -> Re
     return Result(severity, Path(path) if path else None, None, message, rule, None)
 
 
+def _enum_finding(
+    value: object, allowed: set[str], *, path: str | None, ident: str, field: str, rule: str
+) -> Result | None:
+    """Warn when a present value is non-string or outside `allowed`. Absent
+    (None / "" / whitespace-only string) → no finding. Never raises on odd types."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped or stripped in allowed:
+            return None
+        display: object = stripped
+    else:
+        # Present but not a string (e.g. a list or int): unrecognized, not a crash.
+        display = value
+    return _result(
+        Severity.WARN,
+        path,
+        f"{ident}: unrecognized {field} {display!r} (expected one of {sorted(allowed)})",
+        rule,
+    )
+
+
 def evaluate_dataset_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
-    """Pure core: `datasets` are raw frontmatter dicts (each with `_path`)."""
+    """Pure core: `datasets` are raw frontmatter dicts (each with `_path`).
+
+    Defensive against malformed raw frontmatter: non-string license/tier/cadence
+    values become warnings, never exceptions (this runs on un-validated input).
+    """
     for fm in datasets:
         if (fm.get("kind") or fm.get("type")) != "dataset":
             continue
         path = fm.get("_path")
         ident = fm.get("id", "?")
-
-        license_value = (fm.get("license") or "").strip()
         origin = fm.get("origin")
-        if not license_value:
+
+        # --- license ---
+        license_raw = fm.get("license")
+        if isinstance(license_raw, str):
+            license_value: str | None = license_raw.strip()
+        elif license_raw is None:
+            license_value = ""
+        else:
+            license_value = None  # present but non-string → unrecognized
+
+        if license_value == "":
             if origin == "external":
                 yield _result(
                     Severity.WARN,
@@ -469,34 +552,31 @@ def evaluate_dataset_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                     f"(set an SPDX id, or a sentinel: {sorted(LICENSE_SENTINELS)})",
                     "dataset.license-missing",
                 )
-        elif not is_recognized(license_value):
-            hint = suggest(license_value)
+        elif license_value is None or not is_recognized(license_value):
+            hint = suggest(license_value) if isinstance(license_value, str) else None
             suffix = f" — did you mean {hint!r}?" if hint else ""
+            display = license_raw if license_value is None else license_value
             yield _result(
                 Severity.WARN,
                 path,
-                f"{ident}: unrecognized license {license_value!r}{suffix}",
+                f"{ident}: unrecognized license {display!r}{suffix}",
                 "dataset.license-unrecognized",
             )
 
-        tier = fm.get("tier")
-        if tier and tier not in _ALLOWED_TIERS:
-            yield _result(
-                Severity.WARN,
-                path,
-                f"{ident}: unrecognized tier {tier!r} (expected one of {sorted(_ALLOWED_TIERS)})",
-                "dataset.tier-unrecognized",
-            )
+        # --- tier / update_cadence (present-but-unrecognized only) ---
+        tier_finding = _enum_finding(
+            fm.get("tier"), _ALLOWED_TIERS,
+            path=path, ident=ident, field="tier", rule="dataset.tier-unrecognized",
+        )
+        if tier_finding is not None:
+            yield tier_finding
 
-        cadence = fm.get("update_cadence")
-        if cadence and cadence not in _ALLOWED_CADENCES:
-            yield _result(
-                Severity.WARN,
-                path,
-                f"{ident}: unrecognized update_cadence {cadence!r} "
-                f"(expected one of {sorted(_ALLOWED_CADENCES)})",
-                "dataset.cadence-unrecognized",
-            )
+        cadence_finding = _enum_finding(
+            fm.get("update_cadence"), _ALLOWED_CADENCES,
+            path=path, ident=ident, field="update_cadence", rule="dataset.cadence-unrecognized",
+        )
+        if cadence_finding is not None:
+            yield cadence_finding
 
 
 @Check(section="dataset metadata", order=32)
@@ -517,7 +597,7 @@ In `src/science_tool/validate/checks/__init__.py`, in the `_load_canonical_check
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `uv run --frozen pytest tests/validate/test_checks_dataset_metadata.py -v`
-Expected: PASS (12 passed)
+Expected: PASS (16 passed)
 
 - [ ] **Step 6: Commit**
 
@@ -693,12 +773,12 @@ git commit -m "feat(graph): materialize sci:license + register the query predica
 **Files:**
 - Modify: `model/src/science_model/schemas/mixin-dataset-1.0.json`
 - Modify: `model/src/science_model/templates/dataset.md`
-- Modify: `templates/dataset.md` (workspace root, `~/d/science/templates/dataset.md`)
-- Test: `tests/model/test_mixin_dataset_schema_license.py`
+- Modify: `templates/dataset.md` (workspace root, `~/d/science/templates/dataset.md` — same git repo, committed alongside)
+- Test: `model/tests/test_mixin_dataset_schema_license.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/model/test_mixin_dataset_schema_license.py`:
+Create `model/tests/test_mixin_dataset_schema_license.py` (`parents[2]` resolves to the `science/` repo dir from `model/tests/`):
 
 ```python
 from __future__ import annotations
@@ -720,7 +800,7 @@ def test_mixin_dataset_schema_declares_license() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest tests/model/test_mixin_dataset_schema_license.py -v`
+Run: `uv run --frozen pytest model/tests/test_mixin_dataset_schema_license.py -v`
 Expected: FAIL — `KeyError: 'license'` / assertion error
 
 - [ ] **Step 3: Add `license` to the mixin schema**
@@ -734,7 +814,7 @@ In `model/src/science_model/schemas/mixin-dataset-1.0.json`, in `properties`, ad
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest tests/model/test_mixin_dataset_schema_license.py -v`
+Run: `uv run --frozen pytest model/tests/test_mixin_dataset_schema_license.py -v`
 Expected: PASS (1 passed)
 
 - [ ] **Step 5: Update both template comments**
@@ -764,16 +844,16 @@ Expected: no output (identical)
 - [ ] **Step 7: Commit**
 
 ```bash
-git add model/src/science_model/schemas/mixin-dataset-1.0.json model/src/science_model/templates/dataset.md tests/model/test_mixin_dataset_schema_license.py
-git -C ~/d/science add templates/dataset.md
+git add model/src/science_model/schemas/mixin-dataset-1.0.json model/src/science_model/templates/dataset.md model/tests/test_mixin_dataset_schema_license.py
+git add ../templates/dataset.md
 git commit -m "feat(model): declare license in mixin-dataset schema + document sentinels in template"
 ```
 
-> **Note:** `~/d/science/templates/dataset.md` is in a *different* git repo (the `~/d/science` workspace root), not `~/d/science/science`. Commit it separately in that repo:
-> ```bash
-> cd ~/d/science && git add templates/dataset.md && git commit -m "docs(templates): document license sentinels in dataset template"
-> ```
-> If `~/d/science` is not a git repo or the file is not tracked, note that in the task report and skip its commit.
+> **Single repo:** `~/d/science` and `~/d/science/science` share one git top-level
+> (`git rev-parse --show-toplevel` returns the same path for both), and
+> `templates/dataset.md` is tracked in it. So `../templates/dataset.md` is staged
+> into the *same* commit on the `feat/dataset-license-metadata-validation` branch —
+> no separate repo, no separate commit.
 
 ---
 
@@ -786,7 +866,7 @@ git commit -m "feat(model): declare license in mixin-dataset schema + document s
 
 Run:
 ```bash
-uv run --frozen pytest tests/model tests/validate tests/test_license_materialize.py tests/test_datasets.py tests/test_graph_cli.py -v
+uv run --frozen pytest model/tests/test_licenses.py model/tests/test_frontmatter_license.py model/tests/test_mixin_dataset_schema_license.py tests/validate/test_checks_dataset_metadata.py tests/test_license_materialize.py tests/test_datasets.py tests/test_graph_cli.py -v
 ```
 Expected: all PASS, no regressions.
 
