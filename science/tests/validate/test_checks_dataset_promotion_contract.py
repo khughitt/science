@@ -3,6 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from science_tool.commons.adapter import CommonsEntityAdapter
+from science_tool.commons.registry import RegistryBuilder
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Severity
 
@@ -52,6 +56,39 @@ def _write_datapackage(
         resource_path = resource.get("path")
         if isinstance(resource_path, str):
             _write_resource(root, str(datapackage_path.parent / resource_path))
+
+
+def _write_commons_dataset(root: Path, *, slug: str = "demo-dataset", version: str = "1.0.0") -> Path:
+    commons = root / "commons"
+    dataset_dir = commons / "datasets" / slug
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    (dataset_dir / "entity.md").write_text(
+        "---\n"
+        "schema_profile: science-entity-base/1.0+dataset/1.0\n"
+        f"id: dataset:{slug}\n"
+        "type: dataset\n"
+        "title: Demo Dataset\n"
+        f"version: \"{version}\"\n"
+        "created: \"2026-01-01\"\n"
+        "updated: \"2026-01-01\"\n"
+        "status: active\n"
+        "datapackage: datapackage.yaml\n"
+        "origin: derived\n"
+        "tier: use-now\n"
+        "derivation:\n"
+        "  kind: workflow\n"
+        "  workflow_recipe: workflow:demo\n"
+        "  inputs: []\n"
+        "---\n"
+        "# Demo Dataset\n",
+        encoding="utf-8",
+    )
+    (dataset_dir / "datapackage.yaml").write_text(
+        "name: demo-dataset\nresources: []\n",
+        encoding="utf-8",
+    )
+    RegistryBuilder(commons, CommonsEntityAdapter(commons)).rebuild()
+    return commons
 
 
 def _write_descriptor(
@@ -148,11 +185,15 @@ def test_candidate_descriptor_requires_source_refs(tmp_path: Path) -> None:
     assert results[0].severity is Severity.ERROR
 
 
-def test_pinned_overlay_requires_resolvable_source_datapackage(tmp_path: Path) -> None:
+def test_pinned_overlay_requires_resolvable_source_datapackage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from science_tool.validate.checks.dataset_promotion_contract import (
         check_dataset_promotion_contract,
     )
 
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(_write_commons_dataset(tmp_path)))
     _write_descriptor(
         tmp_path,
         extra_frontmatter=(
@@ -168,11 +209,70 @@ def test_pinned_overlay_requires_resolvable_source_datapackage(tmp_path: Path) -
     assert results[0].severity is Severity.ERROR
 
 
-def test_pinned_overlay_with_resolvable_source_passes_contract(tmp_path: Path) -> None:
+def test_pinned_overlay_requires_resolvable_commons_canonical(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from science_tool.validate.checks.dataset_promotion_contract import (
         check_dataset_promotion_contract,
     )
 
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
+    _write_datapackage(tmp_path)
+    _write_descriptor(
+        tmp_path,
+        extra_frontmatter=(
+            "overlay_of: dataset:demo-dataset\n"
+            "pin_version: \"1.0.0\"\n"
+            "source: data/processed/demo/datapackage.json\n"
+        ),
+    )
+
+    results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
+
+    assert _rules(results) == ["dataset-promotion.pin-unresolved"]
+    assert results[0].severity is Severity.ERROR
+    assert "commons canonical could not be resolved" in results[0].message
+
+
+def test_pinned_overlay_requires_matching_commons_version(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.validate.checks.dataset_promotion_contract import (
+        check_dataset_promotion_contract,
+    )
+
+    monkeypatch.setenv(
+        "SCIENCE_COMMONS_ROOT",
+        str(_write_commons_dataset(tmp_path, version="2.0.0")),
+    )
+    _write_datapackage(tmp_path)
+    _write_descriptor(
+        tmp_path,
+        extra_frontmatter=(
+            "overlay_of: dataset:demo-dataset\n"
+            "pin_version: \"1.0.0\"\n"
+            "source: data/processed/demo/datapackage.json\n"
+        ),
+    )
+
+    results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
+
+    assert _rules(results) == ["dataset-promotion.pin-version-mismatch"]
+    assert results[0].severity is Severity.ERROR
+    assert "pins 1.0.0 but commons canonical is 2.0.0" in results[0].message
+
+
+def test_pinned_overlay_with_resolvable_source_passes_contract(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.validate.checks.dataset_promotion_contract import (
+        check_dataset_promotion_contract,
+    )
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(_write_commons_dataset(tmp_path)))
     _write_datapackage(tmp_path)
     _write_descriptor(
         tmp_path,

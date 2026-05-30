@@ -768,15 +768,9 @@ relevance: "central to this project"
     }
 
 
-def test_pin_not_enforced_warning_is_aggregated(
+def test_pinned_overlay_matching_commons_version_does_not_warn(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Multiple pinned overlays produce ONE summary warning, not one per entity.
-
-    Regression for fb-2026-05-22-007: a project pinning hundreds of commons
-    overlays emitted hundreds of identical warning lines, drowning the signal
-    (and machine-output consumers that capture combined streams).
-    """
     import logging
 
     commons_root = _build_commons(tmp_path)
@@ -798,8 +792,25 @@ def test_pin_not_enforced_warning_is_aggregated(
         _load_commons(project_root)
 
     pin_records = [r for r in caplog.records if "pinning is not enforced" in r.getMessage()]
-    assert len(pin_records) == 1, f"expected one aggregated warning, got {len(pin_records)}: {[r.getMessage() for r in pin_records]}"
-    message = pin_records[0].getMessage()
-    assert "2" in message  # names the count of affected entities
-    assert "paper:Adams2025" in message
-    assert "topic:single-cell-foundation-models" in message
+    assert pin_records == []
+
+
+def test_pinned_overlay_rejects_commons_version_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = tmp_path / "project"
+    overlay_path = project_root / "doc" / "papers" / "Adams2025.md"
+    overlay_path.parent.mkdir(parents=True, exist_ok=True)
+    overlay_path.write_text(
+        '---\nid: "paper:Adams2025"\noverlay_of: "paper:Adams2025"\npin_version: "9.9.9"\n---\n\n## Notes\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(OverlayValidationError) as excinfo:
+        _load_commons(project_root)
+
+    assert excinfo.value.canonical_id == "paper:Adams2025"
+    assert "pins 9.9.9 but commons canonical is 1.0.0" in str(excinfo.value)

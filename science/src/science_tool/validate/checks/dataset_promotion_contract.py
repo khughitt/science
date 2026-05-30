@@ -12,7 +12,9 @@ from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
-from science_tool.commons.errors import PromoteCandidateError, PromoteResourceMissingError
+from science_tool.commons.adapter import CommonsEntityAdapter
+from science_tool.commons.config import resolve_commons_root
+from science_tool.commons.errors import CommonsError, PromoteCandidateError, PromoteResourceMissingError
 from science_tool.commons.promote import (
     _load_project_datapackage,
     _validate_datapackage_resources,
@@ -104,6 +106,51 @@ def _missing_candidate_fields(fm: Mapping[str, Any]) -> list[str]:
     return missing
 
 
+def _validate_overlay_pin(fm: Mapping[str, Any]) -> Result | None:
+    path = fm.get("_path")
+    rel_path = path if isinstance(path, str) else None
+    ident = _ident(fm)
+    overlay_of = fm.get("overlay_of")
+    pin_version = fm.get("pin_version")
+    if not isinstance(overlay_of, str) or not overlay_of.strip():
+        return _result(
+            rel_path,
+            f"{ident}: pinned dataset overlay requires overlay_of",
+            "dataset-promotion.pin-missing",
+        )
+    if not isinstance(pin_version, str) or not pin_version.strip():
+        return _result(
+            rel_path,
+            f"{ident}: pinned dataset overlay requires pin_version",
+            "dataset-promotion.pin-missing",
+        )
+    if overlay_of != ident:
+        return _result(
+            rel_path,
+            f"{ident}: overlay_of {overlay_of!r} does not match descriptor id",
+            "dataset-promotion.pin-mismatch",
+        )
+    try:
+        commons_root = resolve_commons_root()
+        if not commons_root.is_dir():
+            raise FileNotFoundError(commons_root)
+        canonical = CommonsEntityAdapter(commons_root).load(overlay_of)
+    except (CommonsError, OSError) as exc:
+        return _result(
+            rel_path,
+            f"{ident}: commons canonical could not be resolved for pinned overlay: {exc}",
+            "dataset-promotion.pin-unresolved",
+        )
+    canonical_version = canonical.frontmatter.get("version")
+    if canonical_version != pin_version:
+        return _result(
+            rel_path,
+            f"{ident}: pins {pin_version} but commons canonical is {canonical_version}",
+            "dataset-promotion.pin-version-mismatch",
+        )
+    return None
+
+
 def evaluate_dataset_promotion_contract(
     datasets: list[dict[str, Any]],
     *,
@@ -125,6 +172,9 @@ def evaluate_dataset_promotion_contract(
             )
 
         if _is_pinned_overlay(fm):
+            pin_result = _validate_overlay_pin(fm)
+            if pin_result is not None:
+                yield pin_result
             result = _validate_datapackage_ref(
                 ctx=ctx,
                 fm=fm,

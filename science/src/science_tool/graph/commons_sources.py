@@ -8,7 +8,6 @@ loaded project graph sources without performing I/O or commons access.
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 from science_model.entities import Entity
@@ -25,7 +24,7 @@ from science_tool.commons.errors import (
 )
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
 from science_tool.commons.geneset_resources import geneset_resource_frontmatter, read_member_rows
-from science_tool.commons.overlay import MergedEntity, OverlayAdapter, merge_entity
+from science_tool.commons.overlay import MergedEntity, OverlayAdapter, merge_entity, validate_overlay_pin
 from science_tool.commons.query import CommonsQuery
 from science_tool.graph.entity_registry import EntityRegistry
 from science_tool.graph.sources import (
@@ -35,8 +34,6 @@ from science_tool.graph.sources import (
     is_external_reference,
     is_metadata_reference,
 )
-
-logger = logging.getLogger(__name__)
 
 _COMMONS_TYPES = frozenset({"dataset", "paper", "topic", "theme"})
 _TYPE_TO_DIR = {"dataset": "datasets", "paper": "papers", "topic": "topics", "theme": "themes"}
@@ -100,7 +97,6 @@ def _load_commons_referenced_entities(
     query = CommonsQuery(commons_root, warn_stale=False)
     loaded: list[tuple[Entity, SourceRef]] = []
     overlay_paths: dict[str, str] = {}
-    pinned_unenforced: list[str] = []
     seen_ids: set[str] = set()
     resolved_ids: set[str] = set(identity_table)
     while pending_ids:
@@ -121,10 +117,8 @@ def _load_commons_referenced_entities(
                 ) from exc
             continue
 
-        if overlay is not None and (overlay.pin_version or overlay.pin_effective_version):
-            pinned_unenforced.append(canonical_id)
-
         policy = read_merge_policy(parse_profile(record.schema_profile))
+        validate_overlay_pin(record, overlay)
         merged = merge_entity(record, overlay, policy)
         entity = _materialize_commons_entity(
             merged,
@@ -148,16 +142,6 @@ def _load_commons_referenced_entities(
             project_bindings=[],
         )
         pending_ids.update(transitive_ids - resolved_ids - seen_ids)
-
-    if pinned_unenforced:
-        # One aggregated line, not one per entity: a project that pins hundreds
-        # of overlays would otherwise bury its own diagnostics in repetition.
-        logger.warning(
-            "commons overlay pinning is not enforced (pins are parsed but not yet acted on) for %d entit%s: %s",
-            len(pinned_unenforced),
-            "y" if len(pinned_unenforced) == 1 else "ies",
-            ", ".join(pinned_unenforced),
-        )
 
     return loaded, overlay_paths
 

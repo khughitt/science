@@ -1,10 +1,9 @@
 """Project-overlay discovery and read-time merge for the commons store.
 
 A project carries a thin overlay file (`<project>/doc/<type>/<slug>.md`) for a
-commons entity. This module discovers, parses, and validates overlay files,
-and merges them onto the canonical entity per the schema's `science:merge`
-policy. Git `pin_version` resolution is deferred to Phase E; D1 parses the
-field but the merge always uses the live canonical entity.
+commons entity. This module discovers, parses, validates overlay files,
+checks overlay pins against the live canonical version, and merges them onto
+the canonical entity per the schema's `science:merge` policy.
 
 See docs/plans/2026-05-14-commons-overlay-merge-design.md.
 """
@@ -196,6 +195,41 @@ def _overlay_canonical_id_from_filename(type_name: str, stem: str, *, declared: 
     if declared == promoted_id:
         return promoted_id
     return canonical_id
+
+
+def validate_overlay_pin(canonical: CommonsEntityRecord, overlay: OverlayRecord | None) -> None:
+    """Fail if a pinned overlay does not match the resolved canonical version."""
+    if overlay is None:
+        return
+    if overlay.pin_version is None and overlay.pin_effective_version is None:
+        return
+    if overlay.pin_version and overlay.pin_effective_version and overlay.pin_version != overlay.pin_effective_version:
+        raise OverlayValidationError(
+            overlay.overlay_path,
+            canonical_id=overlay.canonical_id,
+            cause=EntityValidationError(
+                f"{overlay.canonical_id} pin_version {overlay.pin_version} conflicts "
+                f"with pin_effective_version {overlay.pin_effective_version}"
+            ),
+        )
+    pinned_version = overlay.pin_effective_version or overlay.pin_version
+    canonical_version = canonical.frontmatter.get("version")
+    if not isinstance(canonical_version, str) or not canonical_version:
+        raise OverlayValidationError(
+            overlay.overlay_path,
+            canonical_id=overlay.canonical_id,
+            cause=EntityValidationError(
+                f"{overlay.canonical_id} commons canonical has no version for pin validation"
+            ),
+        )
+    if canonical_version != pinned_version:
+        raise OverlayValidationError(
+            overlay.overlay_path,
+            canonical_id=overlay.canonical_id,
+            cause=EntityValidationError(
+                f"{overlay.canonical_id} pins {pinned_version} but commons canonical is {canonical_version}"
+            ),
+        )
 
 
 _SKIP_OVERLAY_FIELDS = frozenset({"id", "overlay_of", "pin_version", "pin_effective_version"})
