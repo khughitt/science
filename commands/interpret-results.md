@@ -240,6 +240,13 @@ When graph updates are warranted, frame them as proposition updates:
 - attach it as `cito:supports` or `cito:disputes` to the affected proposition
 - note residual uncertainty, especially when evidence is single-source, weak, or contested
 - classify the new evidence explicitly using the canonical evidence types above
+- **group by cohort, not by workflow.** When a follow-up analysis (different workflow) reuses the
+  *same cohort / rows* as an existing evidence line, the new `shared-source` line must reuse the
+  **same `independence_group`** as that cohort's existing lines — independence groups are
+  cohort-level, not workflow-level. Minting a per-workflow group name (e.g. `swan` alongside an
+  existing `swan-stage-age`) makes the aggregator count two same-cohort lines as independent and
+  **over-promotes** the proposition. Setting `--independence shared-source` alone does **not** prevent
+  the over-count; the grouping is what does.
 - when the proposition is grounded in a pre-registered analysis, pass `--pre-registration pre-registration:<slug>` to `science graph add proposition`. This writes a `sci:preRegisteredIn` triple into the materialized graph so downstream weighted attention sampling can boost pre-registered evidence.
 
 Do not use hypothesis status changes as the primary output.
@@ -255,6 +262,11 @@ Call out any remaining:
 - unsupported mechanistic narratives
 - proxy-mediated propositions lacking `measurement_model`
 - rival-model packets lacking discriminating predictions
+
+Then verify the update did not silently over-promote: confirm `belief.fragile-single-line` did **not
+newly fire** for the proposition you just touched. If it did, the most likely cause is a same-cohort
+line placed in its own `independence_group` (see the cohort-grouping rule above) — fix the grouping
+rather than the threshold.
 
 ### Structured Output
 
