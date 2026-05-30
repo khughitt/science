@@ -68,7 +68,8 @@ def evaluate_dataset_taxonomy(datasets: Iterable[dict[str, Any]]) -> Iterator[Re
                 Severity.WARN,
                 path,
                 f"{ident}: dataset declares no source_class "
-                f"(observational|derived|reference); epistemic weighting cannot apply",
+                f"(observational|derived|reference); epistemic weighting cannot apply "
+                f"(note: source_class=derived additionally requires derived_kind)",
                 "taxonomy.source-class-undeclared",
             )
         elif source_class not in _SOURCE_CLASSES:

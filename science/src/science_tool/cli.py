@@ -3693,6 +3693,7 @@ def health_command(
     agent_context = report.get("agent_context") or []
     unregistered_ref_kinds = report.get("unregistered_ref_kinds") or []
     entity_identity = report.get("entity_identity") or []
+    schema_invalid = report.get("schema_invalid") or []
     validation = report.get("validation") or []
 
     total_issues = (
@@ -3705,6 +3706,7 @@ def health_command(
         + layered_claim_issue_count
         + coverage_gaps
         + len(report.get("dataset_anomalies") or [])
+        + len(schema_invalid)
         + (1 if archive_lag_total else 0)
         + managed_artifacts_issue_count
         + len(tooling_scaffold)
@@ -3768,6 +3770,20 @@ def health_command(
         console.print(
             "\n[bold]Next:[/bold] keep [cyan]CLAUDE.md[/cyan] minimal, remove [cyan]@core/*[/cyan] "
             "includes, and keep [cyan]core/overview.md[/cyan] as concise boot context."
+        )
+
+    if schema_invalid:
+        si_table = Table(title=f"Schema-invalid entities ({len(schema_invalid)})")
+        si_table.add_column("Kind", style="bold")
+        si_table.add_column("Path")
+        si_table.add_column("Detail")
+        for row in schema_invalid:
+            si_table.add_row(row["kind"], row["path"], row["message"])
+        console.print(si_table)
+        console.print(
+            "\n[bold]Next:[/bold] fix each entity's frontmatter to satisfy its schema "
+            "(these are excluded from the graph until repaired); rerun "
+            "[cyan]science validate[/cyan] for the authoritative error."
         )
 
     if report["unresolved_refs"]:

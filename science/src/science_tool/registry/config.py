@@ -15,6 +15,18 @@ from science_tool.commons.config import CommonsSettings
 _UNSET = object()
 
 
+def _safe_resolved(path_str: str) -> Path:
+    """Resolve a stored project path (expanding ~ and following symlinks).
+
+    Tolerates unresolvable paths by falling back to the lexical absolute form so
+    a single bad entry never breaks registration/dedup.
+    """
+    try:
+        return Path(path_str).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return Path(path_str).expanduser().absolute()
+
+
 def get_science_config_dir() -> Path:
     """Resolve the Science config directory at runtime."""
     configured_dir = os.environ.get("SCIENCE_CONFIG_DIR")
@@ -110,24 +122,47 @@ def ensure_registered(
 ) -> None:
     """Register or refresh a project. Idempotent; uses resolved path."""
     config_path = config_path or get_default_config_path()
-    resolved = str(project_root.resolve())
+    resolved_path = project_root.resolve()
+    resolved = str(resolved_path)
     cfg = load_global_config(config_path)
 
-    for project in cfg.projects:
-        if project.path == resolved:
-            changed = False
-            if project_id is not None and project.id != project_id:
-                project.id = project_id
-                changed = True
-            if role is not None and project.role != role:
-                project.role = role
-                changed = True
-            if parent is not _UNSET and project.parent != parent:
-                project.parent = cast(str | None, parent)
-                changed = True
-            if changed:
-                save_global_config(cfg, config_path)
-            return
+    # Match by *resolved* path, not raw string: a project reachable via a symlink
+    # alias (e.g. ~/d -> realpath) must not auto-register a duplicate entry that
+    # shares the same id (fb-2026-05-30-010). `prune_missing_projects` already
+    # resolves stored paths the same way.
+    matches = [
+        project
+        for project in cfg.projects
+        if _safe_resolved(project.path) == resolved_path
+    ]
+    if matches:
+        primary = matches[0]
+        changed = False
+        # Collapse any pre-existing duplicates that resolve to the same real path
+        # (self-heals a config that already accumulated colliding-id entries).
+        if len(matches) > 1:
+            cfg.projects = [
+                project
+                for project in cfg.projects
+                if project is primary or _safe_resolved(project.path) != resolved_path
+            ]
+            changed = True
+        # Normalize the stored path to the real path so future raw-string reads agree.
+        if primary.path != resolved:
+            primary.path = resolved
+            changed = True
+        if project_id is not None and primary.id != project_id:
+            primary.id = project_id
+            changed = True
+        if role is not None and primary.role != role:
+            primary.role = role
+            changed = True
+        if parent is not _UNSET and primary.parent != parent:
+            primary.parent = cast(str | None, parent)
+            changed = True
+        if changed:
+            save_global_config(cfg, config_path)
+        return
 
     cfg.projects.append(
         RegisteredProject(

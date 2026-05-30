@@ -350,10 +350,10 @@ class TestBuildHealthReport:
         real_load_project_sources = health_module.load_project_sources
         call_count = 0
 
-        def counted_load_project_sources(project_root: Path):
+        def counted_load_project_sources(project_root: Path, **kwargs: object):
             nonlocal call_count
             call_count += 1
-            return real_load_project_sources(project_root)
+            return real_load_project_sources(project_root, **kwargs)
 
         monkeypatch.setattr(health_module, "load_project_sources", counted_load_project_sources)
 

@@ -174,8 +174,18 @@ def load_project_sources(
     markdown_overrides: dict[str, str] | None = None,
     *,
     include_commons: bool = True,
+    strict_core_schema: bool = True,
 ) -> ProjectSources:
-    """Load all project entities through the unified registry + adapters flow."""
+    """Load all project entities through the unified registry + adapters flow.
+
+    When ``strict_core_schema`` is True (the default, used by ``validate`` and
+    graph build), a core-kind entity that fails schema validation raises a
+    ``ValueError`` — those callers must fail hard on a malformed core entity.
+    When False (used by the ``health`` diagnostic sweep), the failure is recorded
+    as a ``SkippedEntity`` (reason ``entity_schema_validation_failed``) and the
+    rest of the project still loads, so one bad entity cannot take the whole
+    report offline (fb-2026-05-30-008).
+    """
     project_root = project_root.resolve()
     config = _read_project_config(project_root)
     profiles = KnowledgeProfiles.model_validate(config["knowledge_profiles"])
@@ -312,9 +322,25 @@ def load_project_sources(
                                 )
                             )
                             continue
-                        raise ValueError(
-                            f"schema validation failed for registered entity kind {kind!r} at {ref.path}: {details}"
-                        ) from exc
+                        if strict_core_schema:
+                            raise ValueError(
+                                f"schema validation failed for registered entity kind {kind!r} at {ref.path}: {details}"
+                            ) from exc
+                        logger.warning(
+                            "skipping %s: schema validation failed for registered core kind %r (%s)",
+                            ref.path,
+                            kind,
+                            details,
+                        )
+                        skipped_entities.append(
+                            SkippedEntity(
+                                path=str(ref.path),
+                                kind=kind,
+                                reason="entity_schema_validation_failed",
+                                details=details,
+                            )
+                        )
+                        continue
                     logger.warning(
                         "skipping %s: schema validation failed for registered profile kind %r (%s)",
                         ref.path,

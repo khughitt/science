@@ -299,6 +299,20 @@ class ValidationFinding(TypedDict):
     task: str | None
 
 
+class SchemaInvalidFinding(TypedDict):
+    """A source entity dropped from the health sweep because it failed schema validation.
+
+    Surfaced as a finding (rather than aborting the whole report) so a single
+    malformed entity does not take the diagnostic offline (fb-2026-05-30-008).
+    """
+
+    code: str  # always "entity.schema-invalid"
+    severity: str  # "error"
+    kind: str
+    path: str
+    message: str
+
+
 class HealthReport(TypedDict):
     unresolved_refs: list[UnresolvedRef]
     unregistered_ref_kinds: list[UnregisteredRefKind]
@@ -311,6 +325,7 @@ class HealthReport(TypedDict):
     invalid_entity_aspects: list["InvalidEntityAspectsFinding"]
     legacy_structured_literature_prefixes: list["LegacyStructuredLiteraturePrefixFinding"]
     dataset_anomalies: list[dict]
+    schema_invalid: list[SchemaInvalidFinding]
     archive_lag: TaskArchiveLag
     managed_artifacts: list[dict]
     tooling_scaffold: list[ToolingScaffoldFinding]
@@ -548,7 +563,13 @@ def build_health_report(
     total_started = perf_counter()
     needs_sources = any(check.requires_sources for check in selected_checks)
     if needs_sources:
-        context.sources = context.run("load_project_sources", lambda: load_project_sources(project_root))
+        # Health is a diagnostic sweep: a single schema-invalid core entity must
+        # NOT abort the whole report (fb-2026-05-30-008). Load non-strict and
+        # surface the dropped entities as `schema_invalid` findings below.
+        context.sources = context.run(
+            "load_project_sources",
+            lambda: load_project_sources(project_root, strict_core_schema=False),
+        )
     check_results = _empty_check_results(project_root)
     check_results.update(_run_health_checks(context))
     identity_policy_findings = cast("list[IdentityPolicyFinding]", check_results["identity_policy"])
@@ -605,6 +626,17 @@ def build_health_report(
         check_results["legacy_structured_literature_prefixes"],
     )
     dataset_anomalies = cast("list[dict]", check_results["dataset_anomalies"])
+    schema_invalid: list[SchemaInvalidFinding] = [
+        {
+            "code": "entity.schema-invalid",
+            "severity": "error",
+            "kind": skipped.kind,
+            "path": skipped.path,
+            "message": skipped.details,
+        }
+        for skipped in (context.sources.skipped_entities if context.sources is not None else [])
+        if skipped.reason == "entity_schema_validation_failed"
+    ]
     legacy_task_type = cast("list[LegacyTaskTypeFinding]", check_results["legacy_task_type"])
     invalid_entity_aspects = cast("list[InvalidEntityAspectsFinding]", check_results["invalid_entity_aspects"])
     validation = cast("list[ValidationFinding]", check_results["validate"])
@@ -638,6 +670,7 @@ def build_health_report(
         + layered_claim_issue_count
         + coverage_gaps
         + len(dataset_anomalies)
+        + len(schema_invalid)
         + (1 if archive_lag_total else 0)
         + sum(1 for f in managed_artifacts if f["counts_as_issue"])
         + len(tooling_scaffold)
@@ -661,6 +694,7 @@ def build_health_report(
         "invalid_entity_aspects": invalid_entity_aspects,
         "legacy_structured_literature_prefixes": legacy_structured_literature_prefixes,
         "dataset_anomalies": dataset_anomalies,
+        "schema_invalid": schema_invalid,
         "archive_lag": cast("TaskArchiveLag", archive_lag),
         "managed_artifacts": cast("list[dict]", managed_artifacts),
         "tooling_scaffold": tooling_scaffold,
