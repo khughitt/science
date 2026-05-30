@@ -1,17 +1,17 @@
 ---
-id: "paper:Alnajjar2026"
-type: "paper"
-title: "A Fast Integrative Clustering and Feature Selection Approach for High-Dimensional Multiview Data"
-status: "active"
+id: paper:Alnajjar2026
+type: paper
+title: A Fast Integrative Clustering and Feature Selection Approach for High-Dimensional
+  Multiview Data
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Alnajjar2026"
+- cite:Alnajjar2026
 related:
-  - "question:01-evidence-payload-schema"
-  - "question:03-source-and-pipeline-provenance"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:01-evidence-payload-schema
+- question:03-source-and-pipeline-provenance
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # A Fast Integrative Clustering and Feature Selection Approach for High-Dimensional Multiview Data

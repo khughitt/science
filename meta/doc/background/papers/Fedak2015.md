@@ -1,16 +1,16 @@
 ---
-id: "paper:Fedak2015"
-type: "paper"
-title: "Applying the Bradford Hill Criteria in the 21st Century: How Data Integration Has Changed Causal Inference in Molecular Epidemiology"
-status: "active"
+id: paper:Fedak2015
+type: paper
+title: 'Applying the Bradford Hill Criteria in the 21st Century: How Data Integration
+  Has Changed Causal Inference in Molecular Epidemiology'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Fedak2015"
+- cite:Fedak2015
 related:
-  - "question:02-causal-synthesis-guardrails"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:02-causal-synthesis-guardrails
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # Applying the Bradford Hill Criteria in the 21st Century

@@ -1,16 +1,16 @@
 ---
-id: "paper:Mulder2026"
-type: "paper"
-title: "Bayes Factor Hypothesis Testing in Meta-Analyses: Practical Advantages and Methodological Considerations"
-status: "active"
+id: paper:Mulder2026
+type: paper
+title: 'Bayes Factor Hypothesis Testing in Meta-Analyses: Practical Advantages and
+  Methodological Considerations'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Mulder2026"
+- cite:Mulder2026
 related:
-  - "topic:bayesian-methods-continuous-belief"
-created: "2026-05-05"
-updated: "2026-05-05"
+- topic:bayesian-methods-continuous-belief
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # Bayes Factor Hypothesis Testing in Meta-Analyses: Practical Advantages and Methodological Considerations

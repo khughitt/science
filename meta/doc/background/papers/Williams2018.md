@@ -1,15 +1,14 @@
 ---
-id: "paper:Williams2018"
-type: "paper"
-title: "Bayesian Meta-Analysis with Weakly Informative Prior Distributions"
-status: "active"
+id: paper:Williams2018
+type: paper
+title: Bayesian Meta-Analysis with Weakly Informative Prior Distributions
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Williams2018"
+- cite:Williams2018
 related: []
-created: "2026-05-05"
-updated: "2026-05-05"
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # Bayesian Meta-Analysis with Weakly Informative Prior Distributions

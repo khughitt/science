@@ -1,17 +1,17 @@
 ---
-id: "paper:Maity2020"
-type: "paper"
-title: "Bayesian Data Integration and Variable Selection for Pan-Cancer Survival Prediction Using Protein Expression Data"
-status: "active"
+id: paper:Maity2020
+type: paper
+title: Bayesian Data Integration and Variable Selection for Pan-Cancer Survival Prediction
+  Using Protein Expression Data
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Maity2020"
+- cite:Maity2020
 related:
-  - "question:01-evidence-payload-schema"
-  - "question:03-source-and-pipeline-provenance"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:01-evidence-payload-schema
+- question:03-source-and-pipeline-provenance
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # Bayesian Data Integration and Variable Selection for Pan-Cancer Survival Prediction Using Protein Expression Data

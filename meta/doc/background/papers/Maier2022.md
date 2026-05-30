@@ -1,15 +1,14 @@
 ---
-id: "paper:Maier2022"
-type: "paper"
-title: "Robust Bayesian Meta-Analysis: Addressing Publication Bias With Model-Averaging"
-status: "active"
+id: paper:Maier2022
+type: paper
+title: 'Robust Bayesian Meta-Analysis: Addressing Publication Bias With Model-Averaging'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Maier2022"
+- cite:Maier2022
 related: []
-created: "2026-05-05"
-updated: "2026-05-05"
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # Robust Bayesian Meta-Analysis: Addressing Publication Bias With Model-Averaging

@@ -1,16 +1,16 @@
 ---
-id: "paper:Volker2023"
-type: "paper"
-title: "Combining Support for Hypotheses over Heterogeneous Studies with Bayesian Evidence Synthesis: A Simulation Study"
-status: "active"
+id: paper:Volker2023
+type: paper
+title: 'Combining Support for Hypotheses over Heterogeneous Studies with Bayesian
+  Evidence Synthesis: A Simulation Study'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Volker2023"
+- cite:Volker2023
 related:
-  - "topic:bayesian-methods-continuous-belief"
-created: "2026-05-05"
-updated: "2026-05-05"
+- topic:bayesian-methods-continuous-belief
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # Combining Support for Hypotheses over Heterogeneous Studies with Bayesian Evidence Synthesis: A Simulation Study

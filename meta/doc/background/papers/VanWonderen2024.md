@@ -1,16 +1,16 @@
 ---
-id: "paper:VanWonderen2024"
-type: "paper"
-title: "Bayesian Evidence Synthesis as a Flexible Alternative to Meta-Analysis: A Simulation Study and Empirical Demonstration"
-status: "active"
+id: paper:VanWonderen2024
+type: paper
+title: 'Bayesian Evidence Synthesis as a Flexible Alternative to Meta-Analysis: A
+  Simulation Study and Empirical Demonstration'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:VanWonderen2024"
+- cite:VanWonderen2024
 related:
-  - "topic:bayesian-methods-continuous-belief"
-created: "2026-05-05"
-updated: "2026-05-05"
+- topic:bayesian-methods-continuous-belief
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # Bayesian Evidence Synthesis as a Flexible Alternative to Meta-Analysis: A Simulation Study and Empirical Demonstration

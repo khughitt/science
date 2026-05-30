@@ -1,18 +1,18 @@
 ---
-id: "paper:Heyard2025"
-type: "paper"
-title: "A Scoping Review on Metrics to Quantify Reproducibility: A Multitude of Questions Leads to a Multitude of Metrics"
-status: "active"
+id: paper:Heyard2025
+type: paper
+title: 'A Scoping Review on Metrics to Quantify Reproducibility: A Multitude of Questions
+  Leads to a Multitude of Metrics'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Heyard2025"
+- cite:Heyard2025
 related:
-  - "question:13-robustness-reproducibility-evaluation"
-  - "question:01-evidence-payload-schema"
-  - "topic:analytic-flexibility-and-replication"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:13-robustness-reproducibility-evaluation
+- question:01-evidence-payload-schema
+- topic:analytic-flexibility-and-replication
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # A Scoping Review on Metrics to Quantify Reproducibility

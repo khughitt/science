@@ -1,17 +1,17 @@
 ---
-id: "paper:Zhang2025ScientificMethod"
-type: "paper"
-title: "Exploring the Role of Large Language Models in the Scientific Method: From Hypothesis to Discovery"
-status: "active"
+id: paper:Zhang2025ScientificMethod
+type: paper
+title: 'Exploring the Role of Large Language Models in the Scientific Method: From
+  Hypothesis to Discovery'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Zhang2025ScientificMethod"
+- cite:Zhang2025ScientificMethod
 related:
-  - "question:07-llm-agents-as-fallible-sources"
-  - "question:03-source-and-pipeline-provenance"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:07-llm-agents-as-fallible-sources
+- question:03-source-and-pipeline-provenance
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # Exploring the Role of Large Language Models in the Scientific Method: From Hypothesis to Discovery

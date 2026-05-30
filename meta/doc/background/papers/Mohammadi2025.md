@@ -1,17 +1,17 @@
 ---
-id: "paper:Mohammadi2025"
-type: "paper"
-title: "Scalable Bayesian Structure Learning for Gaussian Graphical Models Using Marginal Pseudo-likelihood"
-status: "active"
+id: paper:Mohammadi2025
+type: paper
+title: Scalable Bayesian Structure Learning for Gaussian Graphical Models Using Marginal
+  Pseudo-likelihood
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Mohammadi2025"
+- cite:Mohammadi2025
 related:
-  - "question:01-evidence-payload-schema"
-  - "question:10-causal-graph-construction-pipeline"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:01-evidence-payload-schema
+- question:10-causal-graph-construction-pipeline
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # Scalable Bayesian Structure Learning for Gaussian Graphical Models Using Marginal Pseudo-likelihood

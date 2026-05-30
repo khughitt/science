@@ -1,17 +1,16 @@
 ---
-id: "paper:Bhagwat2023"
-type: "paper"
-title: "Causal Data Integration"
-status: "active"
+id: paper:Bhagwat2023
+type: paper
+title: Causal Data Integration
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Bhagwat2023"
+- cite:Bhagwat2023
 related:
-  - "question:02-causal-synthesis-guardrails"
-  - "question:03-source-and-pipeline-provenance"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:02-causal-synthesis-guardrails
+- question:03-source-and-pipeline-provenance
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # Causal Data Integration

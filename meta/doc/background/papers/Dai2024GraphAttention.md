@@ -1,17 +1,16 @@
 ---
-id: "paper:Dai2024GraphAttention"
-type: "paper"
-title: "Integrating Causal Inference and Graph Attention for Structure-Aware Data Mining"
-status: "active"
+id: paper:Dai2024GraphAttention
+type: paper
+title: Integrating Causal Inference and Graph Attention for Structure-Aware Data Mining
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Dai2024GraphAttention"
+- cite:Dai2024GraphAttention
 related:
-  - "question:10-causal-graph-construction-pipeline"
-  - "question:11-graph-valued-synthesis-artifacts"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:10-causal-graph-construction-pipeline
+- question:11-graph-valued-synthesis-artifacts
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # Integrating Causal Inference and Graph Attention for Structure-Aware Data Mining

@@ -1,16 +1,15 @@
 ---
-id: "paper:Srinivasan2024"
-type: "paper"
-title: "Bayesian Evidence Estimation from Posterior Samples with Normalizing Flows"
-status: "active"
+id: paper:Srinivasan2024
+type: paper
+title: Bayesian Evidence Estimation from Posterior Samples with Normalizing Flows
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Srinivasan2024"
+- cite:Srinivasan2024
 related:
-  - "topic:bayesian-methods-continuous-belief"
-created: "2026-05-05"
-updated: "2026-05-05"
+- topic:bayesian-methods-continuous-belief
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # Bayesian Evidence Estimation from Posterior Samples with Normalizing Flows

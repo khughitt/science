@@ -1,16 +1,15 @@
 ---
-id: "paper:Berenfeld2026"
-type: "paper"
-title: "Causal Meta-Analysis: Rethinking the Foundations of Evidence-Based Medicine"
-status: "active"
+id: paper:Berenfeld2026
+type: paper
+title: 'Causal Meta-Analysis: Rethinking the Foundations of Evidence-Based Medicine'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Berenfeld2026"
+- cite:Berenfeld2026
 related:
-  - "topic:bayesian-methods-continuous-belief"
-created: "2026-05-05"
-updated: "2026-05-05"
+- topic:bayesian-methods-continuous-belief
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # Causal Meta-Analysis: Rethinking the Foundations of Evidence-Based Medicine

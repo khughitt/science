@@ -1,16 +1,16 @@
 ---
-id: "paper:Linkov2017"
-type: "paper"
-title: "From Weight of Evidence to Quantitative Data Integration using Multicriteria Decision Analysis and Bayesian Methods"
-status: "active"
+id: paper:Linkov2017
+type: paper
+title: From Weight of Evidence to Quantitative Data Integration using Multicriteria
+  Decision Analysis and Bayesian Methods
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Linkov2017"
+- cite:Linkov2017
 related:
-  - "topic:bayesian-methods-continuous-belief"
-created: "2026-05-05"
-updated: "2026-05-05"
+- topic:bayesian-methods-continuous-belief
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # From Weight of Evidence to Quantitative Data Integration using Multicriteria Decision Analysis and Bayesian Methods

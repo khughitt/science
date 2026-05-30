@@ -1,17 +1,16 @@
 ---
-id: "paper:Vahabi2022"
-type: "paper"
-title: "Unsupervised Multi-Omics Data Integration Methods: A Comprehensive Review"
-status: "active"
+id: paper:Vahabi2022
+type: paper
+title: 'Unsupervised Multi-Omics Data Integration Methods: A Comprehensive Review'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Vahabi2022"
+- cite:Vahabi2022
 related:
-  - "question:01-evidence-payload-schema"
-  - "question:03-source-and-pipeline-provenance"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:01-evidence-payload-schema
+- question:03-source-and-pipeline-provenance
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # Unsupervised Multi-Omics Data Integration Methods: A Comprehensive Review

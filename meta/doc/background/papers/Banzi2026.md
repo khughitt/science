@@ -1,18 +1,17 @@
 ---
-id: "paper:Banzi2026"
-type: "paper"
-title: "An International Consensus on Core Reproducibility Items in Research"
-status: "active"
+id: paper:Banzi2026
+type: paper
+title: An International Consensus on Core Reproducibility Items in Research
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Banzi2026"
+- cite:Banzi2026
 related:
-  - "question:13-robustness-reproducibility-evaluation"
-  - "question:01-evidence-payload-schema"
-  - "topic:analytic-flexibility-and-replication"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:13-robustness-reproducibility-evaluation
+- question:01-evidence-payload-schema
+- topic:analytic-flexibility-and-replication
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # An International Consensus on Core Reproducibility Items in Research

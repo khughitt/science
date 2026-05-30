@@ -1,16 +1,15 @@
 ---
-id: "paper:Zhang2021gCastle"
-type: "paper"
-title: "gCastle: A Python Toolbox for Causal Discovery"
-status: "active"
+id: paper:Zhang2021gCastle
+type: paper
+title: 'gCastle: A Python Toolbox for Causal Discovery'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Zhang2021gCastle"
+- cite:Zhang2021gCastle
 related:
-  - "question:02-causal-synthesis-guardrails"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:02-causal-synthesis-guardrails
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # gCastle: A Python Toolbox for Causal Discovery

@@ -1,16 +1,15 @@
 ---
-id: "paper:Zheng2024"
-type: "paper"
-title: "Causal-learn: Causal Discovery in Python"
-status: "active"
+id: paper:Zheng2024
+type: paper
+title: 'Causal-learn: Causal Discovery in Python'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Zheng2024"
+- cite:Zheng2024
 related:
-  - "question:02-causal-synthesis-guardrails"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:02-causal-synthesis-guardrails
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # Causal-learn: Causal Discovery in Python

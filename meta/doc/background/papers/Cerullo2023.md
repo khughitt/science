@@ -1,15 +1,15 @@
 ---
-id: "paper:Cerullo2023"
-type: "paper"
-title: "MetaBayesDTA: codeless Bayesian meta-analysis of test accuracy, with or without a gold standard"
-status: "active"
+id: paper:Cerullo2023
+type: paper
+title: 'MetaBayesDTA: codeless Bayesian meta-analysis of test accuracy, with or without
+  a gold standard'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Cerullo2023"
+- cite:Cerullo2023
 related: []
-created: "2026-05-05"
-updated: "2026-05-05"
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # MetaBayesDTA: codeless Bayesian meta-analysis of test accuracy, with or without a gold standard

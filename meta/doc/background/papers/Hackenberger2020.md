@@ -1,15 +1,14 @@
 ---
-id: "paper:Hackenberger2020"
-type: "paper"
-title: "Bayesian meta-analysis now - let's do it"
-status: "active"
+id: paper:Hackenberger2020
+type: paper
+title: Bayesian meta-analysis now - let's do it
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Hackenberger2020"
+- cite:Hackenberger2020
 related: []
-created: "2026-05-05"
-updated: "2026-05-05"
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # Bayesian meta-analysis now - let's do it

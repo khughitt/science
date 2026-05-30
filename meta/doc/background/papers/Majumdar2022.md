@@ -1,15 +1,15 @@
 ---
-id: "paper:Majumdar2022"
-type: "paper"
-title: "Joint Estimation and Inference for Data Integration Problems based on Multiple Multi-layered Gaussian Graphical Models"
-status: "active"
+id: paper:Majumdar2022
+type: paper
+title: Joint Estimation and Inference for Data Integration Problems based on Multiple
+  Multi-layered Gaussian Graphical Models
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Majumdar2022"
+- cite:Majumdar2022
 related: []
-created: "2026-05-05"
-updated: "2026-05-05"
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # Joint Estimation and Inference for Data Integration Problems based on Multiple Multi-layered Gaussian Graphical Models

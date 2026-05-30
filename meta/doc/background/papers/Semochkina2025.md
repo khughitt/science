@@ -1,16 +1,16 @@
 ---
-id: "paper:Semochkina2025"
-type: "paper"
-title: "Incorporating Additional Evidence as Prior Information to Resolve Non-Identifiability in Bayesian Disease Model Calibration: A Tutorial"
-status: "active"
+id: paper:Semochkina2025
+type: paper
+title: 'Incorporating Additional Evidence as Prior Information to Resolve Non-Identifiability
+  in Bayesian Disease Model Calibration: A Tutorial'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Semochkina2025"
+- cite:Semochkina2025
 related:
-  - "question:01-evidence-payload-schema"
-created: "2026-05-05"
-updated: "2026-05-05"
+- question:01-evidence-payload-schema
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # Incorporating Additional Evidence as Prior Information to Resolve Non-Identifiability in Bayesian Disease Model Calibration: A Tutorial

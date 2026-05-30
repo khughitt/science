@@ -1,18 +1,18 @@
 ---
-id: "paper:Zhang2017CancerGenomics"
-type: "paper"
-title: "A Statistical Framework for Data Integration Through Graphical Models with Application to Cancer Genomics"
-status: "active"
+id: paper:Zhang2017CancerGenomics
+type: paper
+title: A Statistical Framework for Data Integration Through Graphical Models with
+  Application to Cancer Genomics
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Zhang2017CancerGenomics"
+- cite:Zhang2017CancerGenomics
 related:
-  - "question:01-evidence-payload-schema"
-  - "question:03-source-and-pipeline-provenance"
-  - "question:10-causal-graph-construction-pipeline"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:01-evidence-payload-schema
+- question:03-source-and-pipeline-provenance
+- question:10-causal-graph-construction-pipeline
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # A Statistical Framework for Data Integration Through Graphical Models with Application to Cancer Genomics

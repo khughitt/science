@@ -1,15 +1,14 @@
 ---
-id: "paper:Klugkist2023"
-type: "paper"
-title: "Bayesian Evidence Synthesis for Informative Hypotheses: An Introduction"
-status: "active"
+id: paper:Klugkist2023
+type: paper
+title: 'Bayesian Evidence Synthesis for Informative Hypotheses: An Introduction'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Klugkist2023"
+- cite:Klugkist2023
 related: []
-created: "2026-05-05"
-updated: "2026-05-05"
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # Bayesian Evidence Synthesis for Informative Hypotheses: An Introduction

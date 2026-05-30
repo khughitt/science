@@ -1,17 +1,17 @@
 ---
-id: "paper:Petersen2014"
-type: "paper"
-title: "Causal Models and Learning from Data: Integrating Causal Modeling and Statistical Estimation"
-status: "active"
+id: paper:Petersen2014
+type: paper
+title: 'Causal Models and Learning from Data: Integrating Causal Modeling and Statistical
+  Estimation'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Petersen2014"
+- cite:Petersen2014
 related:
-  - "question:02-causal-synthesis-guardrails"
-  - "hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:02-causal-synthesis-guardrails
+- hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # Causal Models and Learning from Data: Integrating Causal Modeling and Statistical Estimation

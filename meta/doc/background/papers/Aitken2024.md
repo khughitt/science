@@ -1,16 +1,15 @@
 ---
-id: "paper:Aitken2024"
-type: "paper"
-title: "The Role of the Bayes Factor in the Evaluation of Evidence"
-status: "active"
+id: paper:Aitken2024
+type: paper
+title: The Role of the Bayes Factor in the Evaluation of Evidence
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Aitken2024"
+- cite:Aitken2024
 related:
-  - "topic:bayesian-methods-continuous-belief"
-created: "2026-05-05"
-updated: "2026-05-05"
+- topic:bayesian-methods-continuous-belief
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # The Role of the Bayes Factor in the Evaluation of Evidence

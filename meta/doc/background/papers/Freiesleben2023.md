@@ -1,18 +1,17 @@
 ---
-id: "paper:Freiesleben2023"
-type: "paper"
-title: "Beyond Generalization: A Theory of Robustness in Machine Learning"
-status: "active"
+id: paper:Freiesleben2023
+type: paper
+title: 'Beyond Generalization: A Theory of Robustness in Machine Learning'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Freiesleben2023"
+- cite:Freiesleben2023
 related:
-  - "question:13-robustness-reproducibility-evaluation"
-  - "question:01-evidence-payload-schema"
-  - "topic:analytic-flexibility-and-replication"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:13-robustness-reproducibility-evaluation
+- question:01-evidence-payload-schema
+- topic:analytic-flexibility-and-replication
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # Beyond Generalization: A Theory of Robustness in Machine Learning

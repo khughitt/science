@@ -1,16 +1,16 @@
 ---
-id: "paper:Zuber2025"
-type: "paper"
-title: "Bayesian Causal Graphical Model for Joint Mendelian Randomization Analysis of Multiple Exposures and Outcomes"
-status: "active"
+id: paper:Zuber2025
+type: paper
+title: Bayesian Causal Graphical Model for Joint Mendelian Randomization Analysis
+  of Multiple Exposures and Outcomes
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Zuber2025"
+- cite:Zuber2025
 related:
-  - "question:02-causal-synthesis-guardrails"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:02-causal-synthesis-guardrails
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # Bayesian Causal Graphical Model for Joint Mendelian Randomization Analysis of Multiple Exposures and Outcomes

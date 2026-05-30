@@ -1,16 +1,16 @@
 ---
-id: "paper:VanLissa2024"
-type: "paper"
-title: "A Tutorial on Aggregating Evidence from Conceptual Replication Studies Using the Product Bayes Factor"
-status: "active"
+id: paper:VanLissa2024
+type: paper
+title: A Tutorial on Aggregating Evidence from Conceptual Replication Studies Using
+  the Product Bayes Factor
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:VanLissa2024"
+- cite:VanLissa2024
 related:
-  - "topic:bayesian-methods-continuous-belief"
-created: "2026-05-05"
-updated: "2026-05-05"
+- topic:bayesian-methods-continuous-belief
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # A Tutorial on Aggregating Evidence from Conceptual Replication Studies Using the Product Bayes Factor

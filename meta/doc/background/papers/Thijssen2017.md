@@ -1,15 +1,15 @@
 ---
-id: "paper:Thijssen2017"
-type: "paper"
-title: "Bayesian Data Integration for Quantifying the Contribution of Diverse Measurements to Parameter Estimates"
-status: "active"
+id: paper:Thijssen2017
+type: paper
+title: Bayesian Data Integration for Quantifying the Contribution of Diverse Measurements
+  to Parameter Estimates
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Thijssen2017"
+- cite:Thijssen2017
 related: []
-created: "2026-05-05"
-updated: "2026-05-05"
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # Bayesian Data Integration for Quantifying the Contribution of Diverse Measurements to Parameter Estimates

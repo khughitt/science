@@ -1,15 +1,14 @@
 ---
-id: "paper:Allen2017"
-type: "paper"
-title: "Statistical Data Integration: Challenges and Opportunities"
-status: "active"
+id: paper:Allen2017
+type: paper
+title: 'Statistical Data Integration: Challenges and Opportunities'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Allen2017"
+- cite:Allen2017
 related: []
-created: "2026-05-05"
-updated: "2026-05-05"
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # Statistical Data Integration: Challenges and Opportunities

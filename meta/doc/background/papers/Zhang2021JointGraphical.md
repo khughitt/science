@@ -1,17 +1,17 @@
 ---
-id: "paper:Zhang2021JointGraphical"
-type: "paper"
-title: "A Joint Graphical Model for Inferring Gene Networks Across Multiple Subpopulations and Data Types"
-status: "active"
+id: paper:Zhang2021JointGraphical
+type: paper
+title: A Joint Graphical Model for Inferring Gene Networks Across Multiple Subpopulations
+  and Data Types
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Zhang2021JointGraphical"
+- cite:Zhang2021JointGraphical
 related:
-  - "question:01-evidence-payload-schema"
-  - "question:10-causal-graph-construction-pipeline"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:01-evidence-payload-schema
+- question:10-causal-graph-construction-pipeline
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # A Joint Graphical Model for Inferring Gene Networks Across Multiple Subpopulations and Data Types

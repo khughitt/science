@@ -1,15 +1,14 @@
 ---
-id: "paper:Gronau2021"
-type: "paper"
-title: "A Primer on Bayesian Model-Averaged Meta-Analysis"
-status: "active"
+id: paper:Gronau2021
+type: paper
+title: A Primer on Bayesian Model-Averaged Meta-Analysis
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Gronau2021"
+- cite:Gronau2021
 related: []
-created: "2026-05-05"
-updated: "2026-05-05"
+created: '2026-05-05'
+updated: '2026-05-05'
 ---
 
 # A Primer on Bayesian Model-Averaged Meta-Analysis

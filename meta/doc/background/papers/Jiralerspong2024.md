@@ -1,16 +1,15 @@
 ---
-id: "paper:Jiralerspong2024"
-type: "paper"
-title: "Efficient Causal Graph Discovery Using Large Language Models"
-status: "active"
+id: paper:Jiralerspong2024
+type: paper
+title: Efficient Causal Graph Discovery Using Large Language Models
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Jiralerspong2024"
+- cite:Jiralerspong2024
 related:
-  - "question:02-causal-synthesis-guardrails"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:02-causal-synthesis-guardrails
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # Efficient Causal Graph Discovery Using Large Language Models

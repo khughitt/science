@@ -1,17 +1,16 @@
 ---
-id: "paper:Faller2024"
-type: "paper"
-title: "Self-Compatibility: Evaluating Causal Discovery without Ground Truth"
-status: "active"
+id: paper:Faller2024
+type: paper
+title: 'Self-Compatibility: Evaluating Causal Discovery without Ground Truth'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Faller2024"
+- cite:Faller2024
 related:
-  - "question:02-causal-synthesis-guardrails"
-  - "hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:02-causal-synthesis-guardrails
+- hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # Self-Compatibility: Evaluating Causal Discovery without Ground Truth

@@ -1,17 +1,16 @@
 ---
-id: "paper:Jiang2024"
-type: "paper"
-title: "DiffKG: Knowledge Graph Diffusion Model for Recommendation"
-status: "active"
+id: paper:Jiang2024
+type: paper
+title: 'DiffKG: Knowledge Graph Diffusion Model for Recommendation'
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Jiang2024"
+- cite:Jiang2024
 related:
-  - "question:03-source-and-pipeline-provenance"
-  - "question:11-graph-valued-synthesis-artifacts"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:03-source-and-pipeline-provenance
+- question:11-graph-valued-synthesis-artifacts
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # DiffKG: Knowledge Graph Diffusion Model for Recommendation

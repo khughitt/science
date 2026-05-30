@@ -1,17 +1,17 @@
 ---
-id: "paper:Deleu2023"
-type: "paper"
-title: "Joint Bayesian Inference of Graphical Structure and Parameters with a Single Generative Flow Network"
-status: "active"
+id: paper:Deleu2023
+type: paper
+title: Joint Bayesian Inference of Graphical Structure and Parameters with a Single
+  Generative Flow Network
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Deleu2023"
+- cite:Deleu2023
 related:
-  - "question:01-evidence-payload-schema"
-  - "question:10-causal-graph-construction-pipeline"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:01-evidence-payload-schema
+- question:10-causal-graph-construction-pipeline
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # Joint Bayesian Inference of Graphical Structure and Parameters with a Single Generative Flow Network

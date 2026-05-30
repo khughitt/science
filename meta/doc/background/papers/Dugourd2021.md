@@ -1,17 +1,17 @@
 ---
-id: "paper:Dugourd2021"
-type: "paper"
-title: "Causal Integration of Multi-Omics Data with Prior Knowledge to Generate Mechanistic Hypotheses"
-status: "active"
+id: paper:Dugourd2021
+type: paper
+title: Causal Integration of Multi-Omics Data with Prior Knowledge to Generate Mechanistic
+  Hypotheses
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Dugourd2021"
+- cite:Dugourd2021
 related:
-  - "question:01-evidence-payload-schema"
-  - "question:02-causal-synthesis-guardrails"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:01-evidence-payload-schema
+- question:02-causal-synthesis-guardrails
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # Causal Integration of Multi-Omics Data with Prior Knowledge to Generate Mechanistic Hypotheses

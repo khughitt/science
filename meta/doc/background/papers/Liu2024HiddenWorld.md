@@ -1,17 +1,16 @@
 ---
-id: "paper:Liu2024HiddenWorld"
-type: "paper"
-title: "Discovery of the Hidden World with Large Language Models"
-status: "active"
+id: paper:Liu2024HiddenWorld
+type: paper
+title: Discovery of the Hidden World with Large Language Models
+status: active
 ontology_terms: []
-datasets: []
 source_refs:
-  - "cite:Liu2024HiddenWorld"
+- cite:Liu2024HiddenWorld
 related:
-  - "question:03-source-and-pipeline-provenance"
-  - "hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting"
-created: "2026-05-06"
-updated: "2026-05-06"
+- question:03-source-and-pipeline-provenance
+- hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting
+created: '2026-05-06'
+updated: '2026-05-06'
 ---
 
 # Discovery of the Hidden World with Large Language Models
