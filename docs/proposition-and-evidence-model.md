@@ -189,6 +189,35 @@ In practice this means:
 
 The system should therefore treat support and dispute as updates to belief, not as switches between truth states.
 
+## Evidence Integrity (Non-Negotiable)
+
+Belief state, validation, and health checks are instruments for reading the evidence — never targets to
+be hit. **Gaming any check by misrepresenting evidence is never acceptable.** Specifically, never:
+
+- relabel a weak or indirect line as `strong` / `direct_test` to clear a fragility or leave-one-out warning;
+- assign distinct `independence_group`s to lines that are not actually independent (same cohort, same
+  instrument, same source) to inflate the independent-support count;
+- overstate `stance`, `strength`, `relevance`, or `claim_layer` to push a proposition's `belief_state` up;
+- add, drop, or re-scope evidence edges for the purpose of changing a check's color rather than because
+  the evidence genuinely warrants it.
+
+**A check may legitimately remain yellow.** If the honest evidence is one strong line plus weaker support,
+the correct outcome is a fragile/`supported` belief with the warning standing — not a green check bought by
+mislabeling. Driving a check green by overstating evidence is a worse outcome than an honest yellow,
+because it silently corrupts every downstream belief that reads it.
+
+When a check fires, the only acceptable moves are: (1) add *genuine* independent evidence that honestly
+clears it, (2) correct an *actual* mislabeling in the existing evidence, or (3) accept the residual flag
+and record why the evidence warrants it. **"Force the check green by overstating" is not an option and
+agents must not present it as one.** Treat this as a load-bearing, project-wide constraint.
+
+*Worked case (health-cycles H03).* `proposition:reproductive-stage-distinct-from-age` had one strong
+independent direct test (Levine2016 multi-cohort epigenetic). Fully clearing the leave-one-out warning
+would have required mislabeling Qu2025 (MR cycle-length→BMD) or Day2015 (puberty timing) as a `strong
+direct_test` of stage-distinct-from-age — a misrepresentation. The honest outcome was to add the genuine
+independent lines (upgrading `supported`→`well_supported`, removing the single-SWAN-cohort dependence)
+and **accept one residual leave-one-out flip** rather than suppress it.
+
 ## Worked Example
 
 ### 1. Question

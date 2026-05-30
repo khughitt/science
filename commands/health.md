@@ -112,3 +112,11 @@ git commit -m "chore(health): triage <N> issues — <brief description per clust
 - ALWAYS get confirmation before applying changes.
 - For ambiguous clusters, ask the user to classify before proposing actions.
 - The `looks_like` heuristic is just a hint — let the user override it if they disagree.
+- **Never clear a belief/evidence check by overstating evidence.** For `belief.fragile-single-line`
+  and similar belief/validation warnings, do NOT relabel weak/indirect lines as `strong`/`direct_test`,
+  split genuinely-dependent lines (same cohort/instrument/source) into separate `independence_group`s,
+  or otherwise misrepresent stance/strength/independence to force a check green. The only valid moves
+  are: add *genuine* independent evidence, correct an *actual* mislabeling, or accept the residual flag
+  and record why. A check may legitimately stay yellow — never present "overstate to clear it" as an
+  option. See [`../docs/proposition-and-evidence-model.md`](../docs/proposition-and-evidence-model.md)
+  → *Evidence Integrity (Non-Negotiable)*.
