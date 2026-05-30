@@ -1,3 +1,8 @@
+# science:code
+# status: library
+# task_ids: [t034]
+# decision_bearing: false
+# science:end
 """CLI for the t034 validator. Invoked from validate.local.sh.
 
 Usage: python -m t034_validator <yaml-dir>

@@ -1,3 +1,7 @@
+# science:code
+# status: library
+# task_ids: [t001]
+# science:end
 """Run orchestration and sweep runner for the h01 simulator."""
 
 from __future__ import annotations

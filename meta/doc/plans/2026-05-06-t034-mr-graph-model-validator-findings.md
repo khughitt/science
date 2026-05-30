@@ -30,21 +30,21 @@ Nine rules from `[t034]` v1.2's `mr-graph-model` spec:
 
 | Rule | Positive | Negative | Adapted-pilot |
 |---|---|---|---|
-| mr-1 | t01 | t22 | t24 (graph-posterior) |
-| mr-2 | t01, t05 | t02, t03, t04, t25 | t25 (Zuber strengthen attempt) |
-| mr-3 | t01 | t06 | t24 |
-| mr-4 | t01 | t11 | t24 |
-| mr-5 | t08, t09 | t07, t10 | t24 |
-| mr-6 | t01 | t21 | t24 |
-| mr-7 | t13, t14 | t12 | — |
-| mr-8 | t15, t17 | t16 | t24 (correct unspecified) |
-| mr-9 | t19, t20 | t18 | t24 (carve-out engaged) |
+| mr-1 | tc01 | tc22 | tc24 (graph-posterior) |
+| mr-2 | tc01, tc05 | tc02, tc03, tc04, tc25 | tc25 (Zuber strengthen attempt) |
+| mr-3 | tc01 | tc06 | tc24 |
+| mr-4 | tc01 | tc11 | tc24 |
+| mr-5 | tc08, tc09 | tc07, tc10 | tc24 |
+| mr-6 | tc01 | tc21 | tc24 |
+| mr-7 | tc13, tc14 | tc12 | — |
+| mr-8 | tc15, tc17 | tc16 | tc24 (correct unspecified) |
+| mr-9 | tc19, tc20 | tc18 | tc24 (carve-out engaged) |
 
 Special tests:
-- **t02** is the load-bearing natural-systems case: `validation_role: strengthen-belief` on a stage-(a) MR posterior. The validator rejects at extract-time.
-- **t08, t09** confirm the v1.2 P-pilot-1 relaxation gate: omitting `instrument_set` or `summary_statistic_provenance` is permitted iff `extracted-from-summary-only ∈ effective_codes`.
-- **t11** confirms the gate is *narrow*: it relaxes only the listed conditional fields, not always-required ones.
-- **t24** is an end-to-end adapted Zuber pilot exercising the full v1.2 surface: paper-summary-only relaxation gate, pleiotropy-unspecified carve-out, direction-inherent-from-iv-class carve-out — all engaged simultaneously, payload passes.
+- **tc02** is the load-bearing natural-systems case: `validation_role: strengthen-belief` on a stage-(a) MR posterior. The validator rejects at extract-time.
+- **tc08, tc09** confirm the v1.2 P-pilot-1 relaxation gate: omitting `instrument_set` or `summary_statistic_provenance` is permitted iff `extracted-from-summary-only ∈ effective_codes`.
+- **tc11** confirms the gate is *narrow*: it relaxes only the listed conditional fields, not always-required ones.
+- **tc24** is an end-to-end adapted Zuber pilot exercising the full v1.2 surface: paper-summary-only relaxation gate, pleiotropy-unspecified carve-out, direction-inherent-from-iv-class carve-out — all engaged simultaneously, payload passes.
 
 ## What this discharges
 

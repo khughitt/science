@@ -1,3 +1,7 @@
+# science:code
+# status: library
+# task_ids: [t001]
+# science:end
 """Allocation policies for the h01 simulator.
 
 Each factory returns a callable ``policy(model, action_idx, rng) -> int``

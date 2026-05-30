@@ -1,3 +1,7 @@
+# science:code
+# status: library
+# task_ids: [t001]
+# science:end
 """Beta-Bernoulli signal model for the h01 simulator."""
 
 from __future__ import annotations

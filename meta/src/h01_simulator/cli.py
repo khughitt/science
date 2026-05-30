@@ -1,3 +1,8 @@
+# science:code
+# status: library
+# task_ids: [t001]
+# decision_bearing: false
+# science:end
 """CLI entry point for running the h01-simulator sweep."""
 
 from __future__ import annotations

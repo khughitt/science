@@ -1,3 +1,7 @@
+# science:code
+# status: library
+# task_ids: [t034]
+# science:end
 """t034 evidence-payload validator (production fold-in of the slice prototypes).
 
 Bundles the three slice-prototype rule sets into a single runner against the

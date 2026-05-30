@@ -3,7 +3,7 @@ id: hypothesis:h05-sequential-evidence-improves-attention
 type: hypothesis
 title: Sequential anytime-valid evidence improves attention and stopping decisions over fixed-N synthesis
 status: proposed
-phase: speculative
+phase: candidate
 source_refs:
 - paper:Mulder2026
 - paper:Aitken2024

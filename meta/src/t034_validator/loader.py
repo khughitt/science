@@ -1,3 +1,7 @@
+# science:code
+# status: library
+# task_ids: [t034]
+# science:end
 """YAML payload loader for the t034 validator.
 
 Convention: one payload per .yaml/.yml file. The payload's `core.payload_id` is

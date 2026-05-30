@@ -1,3 +1,7 @@
+# science:code
+# status: library
+# task_ids: [t001]
+# science:end
 """End-of-run metrics for the h01 simulator.
 
 Metric / oracle taxonomy
