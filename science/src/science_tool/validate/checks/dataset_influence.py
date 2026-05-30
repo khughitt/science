@@ -12,6 +12,7 @@ from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsError
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
 from science_tool.commons.geneset_resources import is_geneset_frontmatter, read_member_rows
+from science_tool.graph.paper_dataset_migration import is_paper_dataset_role_conflict
 from science_tool.validate._helpers import entity_frontmatters
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -151,7 +152,7 @@ def evaluate_dataset_influence(
                 ref = canonicalize_dataset_ref(raw_ref)
                 if ref in explicit_by_ref:
                     entry = explicit_by_ref[ref]
-                    if entry.get("role") != "analyzed":
+                    if is_paper_dataset_role_conflict(entry):
                         yield _result(
                             Severity.WARN,
                             path,

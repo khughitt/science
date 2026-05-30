@@ -160,6 +160,12 @@ def test_alias_equivalent_refs_are_not_deduped_by_the_migration() -> None:
     ]
 
 
+def test_role_conflict_predicate_matches_validator_semantics() -> None:
+    assert is_paper_dataset_role_conflict({"ref": "dataset:x", "role": "analyzed", "overlap": "unknown"}) is False
+    assert is_paper_dataset_role_conflict({"ref": "dataset:x", "role": "analyzed", "overlap": "full"}) is False
+    assert is_paper_dataset_role_conflict({"ref": "dataset:x", "role": "validation_source", "overlap": "full"}) is True
+
+
 def _write_project(root: Path) -> None:
     (root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
     (root / "doc" / "papers").mkdir(parents=True)
