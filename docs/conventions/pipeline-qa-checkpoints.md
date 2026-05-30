@@ -78,6 +78,9 @@ qa:
   categoricals:
     stage:    {allowed: [1, 2, 3, 4, 5]}                       # structural: illegal code => bug
     contrast: {allowed_from: "registries/contrasts.csv#name"}  # structural: subset of a shared registry
+    # worked example (cancer-evolution t006): scale / cancer_type validated as a subset of a list
+    # the pipeline itself also consumes — one registry governs both, and an out-of-set value is
+    # build-fatal. This is the canonical realization of the allowed_from clause.
   exclusive_flags: [[on_drug_a, on_drug_b]]  # structural: must not co-occur
   ranges:                                   # distribution: flagged, not fatal
     age:    {min: 0,   max: 120}
@@ -132,6 +135,15 @@ gate's failure never touches the report.
   per substrate rather than one mega-report.
 - The two-severity split is the contract; the exact check list is per-project and grows
   from real bugs caught.
+- **A side-output counts file does NOT satisfy the convention.** A transform script that writes
+  a summary `*_qa.json` (or any counts/stats sidecar) as one of its own outputs looks like QA but
+  is not: it has no structural/distribution split, is never build-fatal, has no config-driven
+  thresholds, is not its own rule, and is not in the default target. A QA checkpoint is a
+  **separate rule that re-reads the built table** and applies the two-severity split — not a
+  byproduct of the transform that produced the table. *Worked counter-example (cancer-evolution
+  t015):* `observed_switches_qa.json` / `simulated_events_qa.json` are unconditional summary
+  side-outputs of the transform — they count, but they cannot fail a build and govern nothing, so
+  they do not discharge axis-1 QA for that table.
 
 ## See also
 
