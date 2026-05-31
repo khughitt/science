@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from science_tool.commons.assembly_compatibility import CompatibilityRelation
 from science_tool.validate.checks.identity_context import (
     evaluate_cross_dataset_assembly,
     evaluate_gene_identity,
@@ -162,6 +163,194 @@ def test_inputs_single_assembly_no_warn() -> None:
 def test_no_derivation_inputs_no_warn() -> None:
     a = _with_assembly("dataset:a", "DIGEST_38")
     assert list(evaluate_cross_dataset_assembly([a])) == []
+
+
+_LIFTOVER_DATASET = "dataset:assembly-liftover-grch37-grch38"
+
+
+def _relation(source: str, target: str) -> CompatibilityRelation:
+    return CompatibilityRelation(
+        source_seqcol_digest=source,
+        target_seqcol_digest=target,
+        relation="liftover_possible",
+        method="ucsc_chain",
+        chain_resource="chains/srcToTgt.over.chain.gz",
+        direction="forward",
+        source_label="source",
+        target_label="target",
+        source_url="https://example.test/srcToTgt.over.chain.gz",
+        chain_sha256="sha256:" + "a" * 64,
+    )
+
+
+def test_cross_dataset_mismatch_with_declared_liftover_passes() -> None:
+    a = _with_assembly("dataset:a", "DIGEST_37")
+    derived = _with_assembly(
+        "dataset:c",
+        "DIGEST_38",
+        derivation={
+            "inputs": ["dataset:a"],
+            "transformations": [
+                {
+                    "type": "liftover",
+                    "from_seqcol_digest": "DIGEST_37",
+                    "to_seqcol_digest": "DIGEST_38",
+                    "method": "ucsc_chain",
+                    "dataset": _LIFTOVER_DATASET,
+                }
+            ],
+        },
+    )
+
+    assert (
+        list(
+            evaluate_cross_dataset_assembly(
+                [a, derived],
+                compatibility_relations_by_dataset_id={
+                    _LIFTOVER_DATASET: [_relation("DIGEST_37", "DIGEST_38")]
+                },
+            )
+        )
+        == []
+    )
+
+
+def test_cross_dataset_mismatch_with_frontmatter_only_still_warns() -> None:
+    a = _with_assembly("dataset:a", "DIGEST_37")
+    derived = _with_assembly(
+        "dataset:c",
+        "DIGEST_38",
+        derivation={
+            "inputs": ["dataset:a"],
+            "transformations": [
+                {
+                    "type": "liftover",
+                    "from_seqcol_digest": "DIGEST_37",
+                    "to_seqcol_digest": "DIGEST_38",
+                    "method": "ucsc_chain",
+                    "dataset": _LIFTOVER_DATASET,
+                }
+            ],
+        },
+    )
+
+    warns = [
+        r
+        for r in evaluate_cross_dataset_assembly(
+            [a, derived], compatibility_relations_by_dataset_id={_LIFTOVER_DATASET: []}
+        )
+        if r.rule == "identity.cross-dataset-assembly-mismatch"
+    ]
+    assert len(warns) == 1
+
+
+def test_cross_dataset_mismatch_with_wrong_liftover_target_warns() -> None:
+    a = _with_assembly("dataset:a", "DIGEST_37")
+    derived = _with_assembly(
+        "dataset:c",
+        "DIGEST_38",
+        derivation={
+            "inputs": ["dataset:a"],
+            "transformations": [
+                {
+                    "type": "liftover",
+                    "from_seqcol_digest": "DIGEST_37",
+                    "to_seqcol_digest": "OTHER",
+                    "method": "ucsc_chain",
+                    "dataset": _LIFTOVER_DATASET,
+                }
+            ],
+        },
+    )
+
+    warns = [
+        r
+        for r in evaluate_cross_dataset_assembly(
+            [a, derived],
+            compatibility_relations_by_dataset_id={_LIFTOVER_DATASET: [_relation("DIGEST_37", "DIGEST_38")]},
+        )
+        if r.rule == "identity.cross-dataset-assembly-mismatch"
+    ]
+    assert len(warns) == 1
+
+
+def test_cross_dataset_mismatch_with_multiple_lifted_parents_passes() -> None:
+    a = _with_assembly("dataset:a", "DIGEST_37")
+    b = _with_assembly("dataset:b", "DIGEST_36")
+    derived = _with_assembly(
+        "dataset:c",
+        "DIGEST_38",
+        derivation={
+            "inputs": ["dataset:a", "dataset:b"],
+            "transformations": [
+                {
+                    "type": "liftover",
+                    "from_seqcol_digest": "DIGEST_37",
+                    "to_seqcol_digest": "DIGEST_38",
+                    "method": "ucsc_chain",
+                    "dataset": _LIFTOVER_DATASET,
+                },
+                {
+                    "type": "liftover",
+                    "from_seqcol_digest": "DIGEST_36",
+                    "to_seqcol_digest": "DIGEST_38",
+                    "method": "ucsc_chain",
+                    "dataset": _LIFTOVER_DATASET,
+                },
+            ],
+        },
+    )
+
+    assert (
+        list(
+            evaluate_cross_dataset_assembly(
+                [a, b, derived],
+                compatibility_relations_by_dataset_id={
+                    _LIFTOVER_DATASET: [
+                        _relation("DIGEST_37", "DIGEST_38"),
+                        _relation("DIGEST_36", "DIGEST_38"),
+                    ]
+                },
+            )
+        )
+        == []
+    )
+
+
+def test_load_relations_fallback_keeps_warning_when_dataset_unresolvable() -> None:
+    from science_tool.commons.errors import CommonsError
+    from science_tool.validate.checks.identity_context import _load_relations_for_datasets
+
+    def boom(*args, **kwargs):
+        raise CommonsError("boom")
+
+    a = _with_assembly("dataset:a", "DIGEST_37")
+    derived = _with_assembly(
+        "dataset:c",
+        "DIGEST_38",
+        derivation={
+            "inputs": ["dataset:a"],
+            "transformations": [
+                {
+                    "type": "liftover",
+                    "from_seqcol_digest": "DIGEST_37",
+                    "to_seqcol_digest": "DIGEST_38",
+                    "method": "ucsc_chain",
+                    "dataset": _LIFTOVER_DATASET,
+                }
+            ],
+        },
+    )
+
+    relation_map = _load_relations_for_datasets([a, derived], loader=boom)
+
+    assert relation_map == {_LIFTOVER_DATASET: None}
+    warns = [
+        r
+        for r in evaluate_cross_dataset_assembly([a, derived], compatibility_relations_by_dataset_id=relation_map)
+        if r.rule == "identity.cross-dataset-assembly-mismatch"
+    ]
+    assert len(warns) == 1
 
 
 def test_identity_context_not_a_dict_treated_as_undeclared() -> None:

@@ -17,13 +17,19 @@ report a defect. Mirrors the reference-collections check.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.assembly import AssemblyRegistryError, available_assembly_keys
+from science_tool.commons.assembly_compatibility import (
+    AssemblyCompatibilityError,
+    CompatibilityRelation,
+    load_compatibility_relations,
+    relation_for,
+)
 from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsError
 from science_tool.commons.gene_crosswalk import (
@@ -74,7 +80,7 @@ def _assembly_defect(assembly: Any) -> str | None:
 
 
 def evaluate_identity_context(
-    datasets: Iterable[dict[str, Any]], *, registry_keys_by_id: dict[str, set[str] | None]
+    datasets: Iterable[dict[str, Any]], *, registry_keys_by_id: Mapping[str, set[str] | None]
 ) -> Iterator[Result]:
     """Pure core of check 1. `datasets` are raw frontmatter dicts (with `_path`).
 
@@ -177,41 +183,148 @@ def _declared_digest(fm: dict[str, Any]) -> str | None:
     return None
 
 
-def evaluate_cross_dataset_assembly(datasets: Iterable[dict[str, Any]]) -> Iterator[Result]:
+def _has_liftover_remedy(
+    derivation: Any,
+    *,
+    from_digest: str,
+    to_digest: str,
+    compatibility_relations_by_dataset_id: dict[str, list[CompatibilityRelation] | None] | None,
+) -> bool:
+    if not isinstance(derivation, dict):
+        return False
+    transformations = derivation.get("transformations")
+    if not isinstance(transformations, list):
+        return False
+
+    relations_by_dataset_id = compatibility_relations_by_dataset_id or {}
+    for transformation in transformations:
+        if not isinstance(transformation, dict):
+            continue
+        dataset_id = transformation.get("dataset")
+        if (
+            transformation.get("type") != "liftover"
+            or transformation.get("from_seqcol_digest") != from_digest
+            or transformation.get("to_seqcol_digest") != to_digest
+            or transformation.get("method") != "ucsc_chain"
+            or not isinstance(dataset_id, str)
+            or not dataset_id.startswith("dataset:")
+        ):
+            continue
+
+        relations = relations_by_dataset_id.get(dataset_id)
+        if relations is None:
+            continue
+        if (
+            relation_for(relations, source_seqcol_digest=from_digest, target_seqcol_digest=to_digest)
+            is not None
+        ):
+            return True
+    return False
+
+
+def evaluate_cross_dataset_assembly(
+    datasets: Iterable[dict[str, Any]],
+    *,
+    compatibility_relations_by_dataset_id: dict[str, list[CompatibilityRelation] | None] | None = None,
+) -> Iterator[Result]:
     """Pure core of check 3: flag a derived dataset whose inputs span assemblies.
 
-    Detect-only for C1 — the liftover remedy lands in C4 (§5 check 3).
+    A declared liftover transformation remedies a parent-vs-derived mismatch
+    only when the referenced liftover dataset resolves to a parsed exact-pair
+    compatibility relation.
     """
-    by_id = {fm.get("id"): fm for fm in datasets if fm.get("id")}
-    for fm in datasets:
+    dataset_list = list(datasets)
+    by_id = {fm.get("id"): fm for fm in dataset_list if fm.get("id")}
+    for fm in dataset_list:
         derivation = fm.get("derivation") or {}
         inputs = derivation.get("inputs") if isinstance(derivation, dict) else None
         if not inputs:
             continue
-        digests: set[str] = set()
+        observed_digests: set[str] = set()
+        parent_pairs: set[tuple[str, str]] = set()
         own = _declared_digest(fm)
         if own:
-            digests.add(own)
+            observed_digests.add(own)
         for input_id in inputs:
             parent = by_id.get(input_id)
             if parent is None:
                 continue  # not project-local; C1 scope is project-local inputs
             parent_digest = _declared_digest(parent)
             if parent_digest:
-                digests.add(parent_digest)
-        if len(digests) >= 2:
+                observed_digests.add(parent_digest)
+            if own and parent_digest and own != parent_digest:
+                parent_pairs.add((parent_digest, own))
+
+        unresolved_pairs = [
+            (parent_digest, own_digest)
+            for parent_digest, own_digest in sorted(parent_pairs)
+            if not _has_liftover_remedy(
+                derivation,
+                from_digest=parent_digest,
+                to_digest=own_digest,
+                compatibility_relations_by_dataset_id=compatibility_relations_by_dataset_id,
+            )
+        ]
+        if unresolved_pairs:
             yield _result(
                 Severity.WARN,
                 fm.get("_path"),
-                f"{fm.get('id', '?')}: derivation inputs span distinct assemblies {sorted(digests)} "
-                f"with no liftover available (detect-only; remedy in C4)",
+                f"{fm.get('id', '?')}: derivation inputs span distinct assemblies "
+                f"{sorted(observed_digests)} without resolved declared liftover relations for "
+                f"{unresolved_pairs}",
+                "identity.cross-dataset-assembly-mismatch",
+            )
+        elif not parent_pairs and len(observed_digests) >= 2:
+            yield _result(
+                Severity.WARN,
+                fm.get("_path"),
+                f"{fm.get('id', '?')}: derivation inputs span distinct assemblies {sorted(observed_digests)} "
+                f"with no derived target assembly to remedy",
                 "identity.cross-dataset-assembly-mismatch",
             )
 
 
+def _declared_liftover_datasets(datasets: Iterable[dict[str, Any]]) -> set[str]:
+    dataset_ids: set[str] = set()
+    for fm in datasets:
+        derivation = fm.get("derivation") or {}
+        transformations = derivation.get("transformations") if isinstance(derivation, dict) else None
+        if not isinstance(transformations, list):
+            continue
+        for transformation in transformations:
+            if not isinstance(transformation, dict) or transformation.get("type") != "liftover":
+                continue
+            dataset_id = transformation.get("dataset")
+            if isinstance(dataset_id, str) and dataset_id.startswith("dataset:"):
+                dataset_ids.add(dataset_id)
+    return dataset_ids
+
+
+def _load_relations_for_datasets(
+    datasets: Iterable[dict[str, Any]],
+    *,
+    loader: Callable[..., list[CompatibilityRelation]] = load_compatibility_relations,
+    commons_root: Path | None = None,
+    data_root: Path | None = None,
+) -> dict[str, list[CompatibilityRelation] | None]:
+    relations_by_dataset_id: dict[str, list[CompatibilityRelation] | None] = {}
+    for dataset_id in _declared_liftover_datasets(datasets):
+        try:
+            relations_by_dataset_id[dataset_id] = loader(
+                dataset_id=dataset_id,
+                commons_root=commons_root,
+                data_root=data_root,
+            )
+        except (CommonsError, AssemblyCompatibilityError):
+            relations_by_dataset_id[dataset_id] = None
+    return relations_by_dataset_id
+
+
 @Check(section="assembly identity", order=26)
 def check_cross_dataset_assembly(ctx: ValidateContext) -> Iterator[Result]:
-    yield from evaluate_cross_dataset_assembly(dataset_frontmatters(ctx))
+    datasets = list(dataset_frontmatters(ctx))
+    relations = _load_relations_for_datasets(datasets)
+    yield from evaluate_cross_dataset_assembly(datasets, compatibility_relations_by_dataset_id=relations)
 
 
 # --- C2/C3: molecular-id tier identity (declaration-level resolvability) ---
@@ -266,7 +379,7 @@ def evaluate_tier_identity(
     datasets: Iterable[dict[str, Any]],
     *,
     spec: _TierSpec,
-    registry_meta_by_id: dict[str, dict[str, Any] | None],
+    registry_meta_by_id: Mapping[str, dict[str, Any] | None],
 ) -> Iterator[Result]:
     """Pure core of the declaration-level identity check, parameterized per tier.
 
@@ -416,14 +529,14 @@ _PROTEIN_SPEC = _TierSpec(
 
 
 def evaluate_gene_identity(
-    datasets: Iterable[dict[str, Any]], *, registry_meta_by_id: dict[str, dict[str, Any] | None]
+    datasets: Iterable[dict[str, Any]], *, registry_meta_by_id: Mapping[str, dict[str, Any] | None]
 ) -> Iterator[Result]:
     """C2 gene declaration-level evaluator (thin wrapper over the generalized core)."""
     yield from evaluate_tier_identity(datasets, spec=_GENE_SPEC, registry_meta_by_id=registry_meta_by_id)
 
 
 def evaluate_protein_identity(
-    datasets: Iterable[dict[str, Any]], *, registry_meta_by_id: dict[str, dict[str, Any] | None]
+    datasets: Iterable[dict[str, Any]], *, registry_meta_by_id: Mapping[str, dict[str, Any] | None]
 ) -> Iterator[Result]:
     """C3 protein declaration-level evaluator (thin wrapper over the generalized core)."""
     yield from evaluate_tier_identity(datasets, spec=_PROTEIN_SPEC, registry_meta_by_id=registry_meta_by_id)
