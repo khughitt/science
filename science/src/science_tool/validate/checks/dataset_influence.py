@@ -344,7 +344,7 @@ def _row_usage_refs(
     return refs
 
 
-@Check(section="dataset influence", order=35)
+@Check(section="dataset influence", order=36)
 def check_dataset_influence(ctx: ValidateContext) -> Iterator[Result]:
     frontmatters = entity_frontmatters(ctx)
     resolver = _DatasetRefResolver(

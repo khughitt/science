@@ -648,6 +648,7 @@ def _register_real_canonical_checks() -> None:
         "reference_collections",
         "variant_identity",
         "genesets",
+        "reference_graphs",
         "dataset_influence",
         "prose_lints",
         "annotations",
@@ -661,9 +662,7 @@ def _register_real_canonical_checks() -> None:
             importlib.import_module(full)
 
 
-def test_full_run_reports_malformed_member_without_crashing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_full_run_reports_malformed_member_without_crashing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "empty-commons"))
     (tmp_path / "empty-commons").mkdir()
     _register_real_canonical_checks()  # register the real checks (autouse fixture cleared them)
@@ -689,12 +688,31 @@ def test_canonical_loader_registers_dataset_influence_after_genesets() -> None:
     ordered = [(entry.section, entry.order, entry.fn.__module__) for entry in checks.CANONICAL_CHECKS]
     genesets_index = next(index for index, entry in enumerate(ordered) if entry[0] == "gene-set collections")
     influence_index = next(index for index, entry in enumerate(ordered) if entry[0] == "dataset influence")
-    assert influence_index == genesets_index + 1
+    assert influence_index > genesets_index
 
 
-def test_runner_dataset_influence_resolves_local_dataset_ref(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_canonical_loader_registers_reference_graphs_between_genesets_and_dataset_influence() -> None:
+    import science_tool.validate.checks as checks
+
+    clear_checks_for_tests()
+    for module_name in ("genesets", "reference_graphs", "dataset_influence"):
+        sys.modules.pop(f"science_tool.validate.checks.{module_name}", None)
+
+    checks._load_canonical_checks()
+
+    ordered = [(entry.section, entry.order, entry.fn.__module__) for entry in checks.CANONICAL_CHECKS]
+    genesets_index = next(index for index, entry in enumerate(ordered) if entry[0] == "gene-set collections")
+    reference_graphs_index = next(
+        index for index, entry in enumerate(ordered) if entry[0] == "reference graph collections"
+    )
+    influence_index = next(index for index, entry in enumerate(ordered) if entry[0] == "dataset influence")
+    assert genesets_index < reference_graphs_index < influence_index
+    assert ordered[genesets_index][1] == 34
+    assert ordered[reference_graphs_index][1] == 35
+    assert ordered[influence_index][1] == 36
+
+
+def test_runner_dataset_influence_resolves_local_dataset_ref(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
     _register_real_canonical_checks()
     project = _write_dataset_influence_project(tmp_path, local_dataset=True)
@@ -729,9 +747,7 @@ def test_runner_dataset_influence_unbuilt_commons_ref_infos(
 
     result = run(project, strict=False, verbose=False, enable_python_sidecar=False)
 
-    assert _dataset_influence_rules(result) == [
-        (Severity.INFO, "dataset-influence.ref-unresolved-unavailable")
-    ]
+    assert _dataset_influence_rules(result) == [(Severity.INFO, "dataset-influence.ref-unresolved-unavailable")]
 
 
 def test_runner_dataset_influence_initialized_commons_missing_ref_warns(

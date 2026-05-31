@@ -52,6 +52,7 @@ CANONICAL_CHECK_MODULES = (
     "dataset_promotion_contract",
     "variant_identity",
     "genesets",
+    "reference_graphs",
     "dataset_influence",
     "prose_lints",
     "annotations",

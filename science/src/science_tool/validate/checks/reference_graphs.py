@@ -16,6 +16,10 @@ from science_tool.commons.reference_graph import (
     parse_edge_rows,
     parse_node_index_rows,
 )
+from science_tool.commons.reference_graph_resources import graph_resource_available, read_edge_rows, read_node_rows
+from science_tool.validate._helpers import dataset_frontmatters
+from science_tool.validate.checks import Check
+from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
 
@@ -261,3 +265,46 @@ def evaluate_reference_graphs(
                 f"{member_id}: member_key {member_of.member_key!r} is {node.status}{replacement}",
                 "reference-graph.member-deprecated",
             )
+
+
+@Check(section="reference graph collections", order=35)
+def check_reference_graphs(ctx: ValidateContext) -> Iterator[Result]:
+    datasets = dataset_frontmatters(ctx)
+    collections = [fm for fm in datasets if is_reference_graph_frontmatter(fm)]
+    collection_ids = {str(fm["id"]) for fm in collections if isinstance(fm.get("id"), str) and fm["id"]}
+    graph_available_by_dataset_id = {
+        str(fm["id"]): graph_resource_available(ctx.project_root, fm)
+        for fm in collections
+        if isinstance(fm.get("id"), str) and fm["id"]
+    }
+    node_rows_by_dataset_id = {
+        str(fm["id"]): read_node_rows(ctx.project_root, fm)
+        for fm in collections
+        if isinstance(fm.get("id"), str) and fm["id"]
+    }
+    edge_rows_by_dataset_id = {
+        str(fm["id"]): read_edge_rows(ctx.project_root, fm)
+        for fm in collections
+        if isinstance(fm.get("id"), str) and fm["id"] and fm.get("edge_resource") is not None
+    }
+    members = []
+    for fm in datasets:
+        if not is_reference_graph_member_frontmatter(fm):
+            continue
+        derivation = fm.get("derivation")
+        if not isinstance(derivation, dict) or derivation.get("kind") != "member_of":
+            members.append(fm)
+            continue
+        if _member_defect(derivation) is not None:
+            members.append(fm)
+            continue
+        member_of = parse_member_of(fm)
+        if member_of is None or member_of.parent_dataset in collection_ids:
+            members.append(fm)
+    yield from evaluate_reference_graphs(
+        collections,
+        graph_available_by_dataset_id=graph_available_by_dataset_id,
+        node_rows_by_dataset_id=node_rows_by_dataset_id,
+        edge_rows_by_dataset_id=edge_rows_by_dataset_id,
+        member_datasets=members,
+    )

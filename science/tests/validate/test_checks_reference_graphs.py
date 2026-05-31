@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from science_tool.commons.reference_graph_resources import graph_resource_available, read_edge_rows, read_node_rows
-from science_tool.validate.checks.reference_graphs import evaluate_reference_graphs
+from science_tool.validate.checks.reference_graphs import check_reference_graphs, evaluate_reference_graphs
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
@@ -276,6 +276,44 @@ def test_reference_graph_resource_helper_missing_optional_edge_resource_returns_
     fm.pop("edge_resource")
 
     assert read_edge_rows(tmp_path, fm) is None
+
+
+def test_check_reference_graphs_reads_local_resources(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    dp_dir = _write_reference_graph_datapackage(tmp_path)
+    dp_dir.joinpath("graph.nt").write_text("<MONDO:0005148> <is_a> <MONDO:0000001> .\n", encoding="utf-8")
+    dp_dir.joinpath("nodes.csv").write_text(
+        "member_key,member_kind,label,status,replaced_by,dataset_usage\n"
+        "MONDO:0005148,term,multiple myeloma,active,,[]\n"
+        "MONDO:0000001,term,disease,active,,[]\n",
+        encoding="utf-8",
+    )
+    dp_dir.joinpath("edges.csv").write_text(
+        "subject,predicate,object,evidence,dataset_usage\nMONDO:0005148,is_a,MONDO:0000001,,[]\n",
+        encoding="utf-8",
+    )
+
+    assert list(check_reference_graphs(_ctx(tmp_path))) == []
+
+
+def test_check_reference_graphs_reports_malformed_node_rows(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    dp_dir = _write_reference_graph_datapackage(tmp_path)
+    dp_dir.joinpath("graph.nt").write_text("<MONDO:0005148> <is_a> <MONDO:0000001> .\n", encoding="utf-8")
+    dp_dir.joinpath("nodes.csv").write_text(
+        "member_key,member_kind,label,status,replaced_by,dataset_usage\n"
+        "MONDO:0005148,term,multiple myeloma,obsolete,,[]\n",
+        encoding="utf-8",
+    )
+    dp_dir.joinpath("edges.csv").write_text(
+        "subject,predicate,object,evidence,dataset_usage\nMONDO:0005148,is_a,MONDO:0000001,,[]\n",
+        encoding="utf-8",
+    )
+
+    results = list(check_reference_graphs(_ctx(tmp_path)))
+
+    assert _rules(results) == ["reference-graph.node-index-malformed"]
+    assert results[0].severity is Severity.ERROR
 
 
 def test_valid_reference_graph_passes_silently() -> None:
