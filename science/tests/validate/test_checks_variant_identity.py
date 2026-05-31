@@ -60,6 +60,28 @@ def test_vcf_locator_requires_columns_map() -> None:
     assert errors[0].rule == "identity.variant-locator-malformed"
 
 
+def test_rsid_locator_requires_registry() -> None:
+    ds = _ds({"namespace": "vrs", "locator": {"resource": "variants.csv", "format": "rsid", "column": "rsid"}})
+
+    errors = [r for r in evaluate_variant_declaration([ds]) if r.severity is Severity.ERROR]
+
+    assert errors[0].rule == "identity.variant-locator-malformed"
+    assert "rsid locator requires registry" in errors[0].message
+
+
+def test_rsid_locator_accepts_optional_allele_columns() -> None:
+    locator = {
+        "resource": "variants.csv",
+        "format": "rsid",
+        "column": "rsid",
+        "registry": "dataset:variant-labels-dbsnp-human",
+        "allele_columns": {"ref": "REF", "alt": "ALT"},
+    }
+    ds = _ds({"namespace": "vrs", "locator": locator})
+
+    assert list(evaluate_variant_declaration([ds])) == []
+
+
 def test_declared_unresolved_is_info_not_error() -> None:
     ds = _ds({"namespace": "vrs", "resolution_status": "declared_unresolved", "locator": _locator()})
     results = list(evaluate_variant_declaration([ds]))

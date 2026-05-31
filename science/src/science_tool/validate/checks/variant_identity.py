@@ -25,7 +25,7 @@ from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
 _SUPPORTED = frozenset({"vrs"})
-_FORMATS = frozenset({"spdi", "hgvs", "vcf"})
+_FORMATS = frozenset({"spdi", "hgvs", "vcf", "rsid"})
 
 
 def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
@@ -55,6 +55,22 @@ def _locator_defect(locator: Any) -> str | None:
             value = columns.get(key)
             if not isinstance(value, str) or not value.strip():
                 return f"vcf locator columns.{key} must be a nonblank string"
+        return None
+    if fmt.lower() == "rsid":
+        registry = locator.get("registry")
+        if not isinstance(registry, str) or not registry.startswith("dataset:"):
+            return "rsid locator requires registry dataset:<slug>"
+        column = locator.get("column")
+        if not isinstance(column, str) or not column.strip():
+            return "rsid locator requires a nonblank column"
+        allele_columns = locator.get("allele_columns")
+        if allele_columns is not None:
+            if not isinstance(allele_columns, dict):
+                return "rsid locator allele_columns must be an object"
+            for key in ("ref", "alt"):
+                value = allele_columns.get(key)
+                if not isinstance(value, str) or not value.strip():
+                    return f"rsid locator allele_columns.{key} must be a nonblank string"
         return None
     column = locator.get("column")
     if not isinstance(column, str) or not column.strip():
