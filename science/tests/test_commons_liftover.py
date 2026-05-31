@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from science_tool.commons.liftover import ChainFormatError, parse_chain_text
+from science_tool.commons.liftover import ChainFormatError, LiftoverDefect, LiftedInterval, lift_interval, parse_chain_text
 
 
 CHAIN = """\
@@ -69,3 +69,53 @@ def test_parse_chain_text_rejects_block_after_terminal_block() -> None:
 def test_parse_chain_text_rejects_non_decimal_integer_token() -> None:
     with pytest.raises(ChainFormatError, match="integer"):
         parse_chain_text("chain +1 chr1 100 + 0 10 chr1 100 + 0 10 1\n5\n")
+
+
+def test_lift_interval_maps_plus_strand_inside_one_block() -> None:
+    result = lift_interval(
+        parse_chain_text(CHAIN),
+        source_seqcol_digest="SRC",
+        target_seqcol_digest="TGT",
+        source_contig="chr1",
+        start=510,
+        end=511,
+    )
+    assert result == LiftedInterval(
+        source_seqcol_digest="SRC",
+        target_seqcol_digest="TGT",
+        source_contig="chr1",
+        target_contig="chr1",
+        source_start=510,
+        source_end=511,
+        target_start=1010,
+        target_end=1011,
+        target_strand="+",
+        chain_id=7,
+    )
+
+
+def test_lift_interval_rejects_gap_spanning_interval() -> None:
+    result = lift_interval(
+        parse_chain_text(CHAIN),
+        source_seqcol_digest="SRC",
+        target_seqcol_digest="TGT",
+        source_contig="chr1",
+        start=545,
+        end=565,
+    )
+    assert isinstance(result, LiftoverDefect)
+    assert result.status == "unliftable"
+
+
+def test_lift_interval_reports_multi_mapping() -> None:
+    duplicate = CHAIN + "\n" + CHAIN.replace(" 7\n", " 8\n")
+    result = lift_interval(
+        parse_chain_text(duplicate),
+        source_seqcol_digest="SRC",
+        target_seqcol_digest="TGT",
+        source_contig="chr1",
+        start=510,
+        end=511,
+    )
+    assert isinstance(result, LiftoverDefect)
+    assert result.status == "multi_mapping"

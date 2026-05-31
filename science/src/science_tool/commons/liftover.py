@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import Literal
+
+
+LiftoverStatus = Literal["lifted", "unliftable", "multi_mapping", "strand_ambiguous"]
 
 
 class ChainFormatError(ValueError):
@@ -29,6 +33,26 @@ class Chain:
     source_end: int
     chain_id: int
     blocks: tuple[ChainBlock, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LiftedInterval:
+    source_seqcol_digest: str
+    target_seqcol_digest: str
+    source_contig: str
+    target_contig: str
+    source_start: int
+    source_end: int
+    target_start: int
+    target_end: int
+    target_strand: Literal["+", "-"]
+    chain_id: int
+
+
+@dataclass(frozen=True, slots=True)
+class LiftoverDefect:
+    status: Literal["unliftable", "multi_mapping", "strand_ambiguous"]
+    detail: str
 
 
 def parse_chain_text(text: str) -> list[Chain]:
@@ -144,3 +168,76 @@ def _parse_non_negative_int(value: str, field_name: str, line_number: int) -> in
     if not value.isdecimal():
         raise ChainFormatError(f"{field_name} on line {line_number} must be a non-negative integer")
     return int(value)
+
+
+def _block_ranges(chain: Chain) -> list[tuple[int, int, int, int]]:
+    ranges: list[tuple[int, int, int, int]] = []
+    source_pos = chain.source_start
+    target_pos = chain.target_start
+
+    for block in chain.blocks:
+        ranges.append((source_pos, source_pos + block.size, target_pos, target_pos + block.size))
+        source_pos += block.size + block.dt
+        target_pos += block.size + block.dq
+
+    return ranges
+
+
+def _lift_with_chain(chain: Chain, start: int, end: int) -> tuple[int, int] | None:
+    if chain.source_strand != "+" or chain.target_strand != "+":
+        return None
+
+    for source_start, source_end, target_start, _target_end in _block_ranges(chain):
+        if source_start <= start and end <= source_end:
+            offset_start = start - source_start
+            offset_end = end - source_start
+            return target_start + offset_start, target_start + offset_end
+
+    return None
+
+
+def lift_interval(
+    chains: list[Chain],
+    *,
+    source_seqcol_digest: str,
+    target_seqcol_digest: str,
+    source_contig: str,
+    start: int,
+    end: int,
+) -> LiftedInterval | LiftoverDefect:
+    if start < 0 or end <= start:
+        return LiftoverDefect(status="unliftable", detail="invalid interval")
+
+    lifted: list[tuple[Chain, int, int]] = []
+    strand_ambiguous = False
+    for chain in chains:
+        if chain.source_name != source_contig:
+            continue
+        if chain.source_strand != "+" or chain.target_strand != "+":
+            strand_ambiguous = True
+            continue
+
+        mapped_interval = _lift_with_chain(chain, start, end)
+        if mapped_interval is not None:
+            target_start, target_end = mapped_interval
+            lifted.append((chain, target_start, target_end))
+
+    if len(lifted) > 1:
+        return LiftoverDefect(status="multi_mapping", detail="interval maps through multiple chains")
+    if len(lifted) == 1:
+        chain, target_start, target_end = lifted[0]
+        return LiftedInterval(
+            source_seqcol_digest=source_seqcol_digest,
+            target_seqcol_digest=target_seqcol_digest,
+            source_contig=source_contig,
+            target_contig=chain.target_name,
+            source_start=start,
+            source_end=end,
+            target_start=target_start,
+            target_end=target_end,
+            target_strand=chain.target_strand,
+            chain_id=chain.chain_id,
+        )
+    if strand_ambiguous:
+        return LiftoverDefect(status="strand_ambiguous", detail="reverse-strand chain support is not implemented")
+    return LiftoverDefect(status="unliftable", detail="interval does not map through a single chain block")
