@@ -328,9 +328,9 @@ Initial validation should be cheap and deterministic over pinned local artifacts
 6. **Member promotion resolution.** A `bio.reference_graph.member` dataset with `derivation.kind:
    member_of` must resolve `derivation.member_key` in its parent reference graph, unless a later
    implementation explicitly adds a declared-unresolved member state.
-7. **Deprecated-member references.** RG1 emits a review warning for promoted or referenced
-   deprecated/withdrawn members; `replaced_by` is reported, not auto-applied. Tier-based severity
-   graduation is deferred until a concrete validator policy needs it.
+7. **Deprecated promoted members.** RG1 emits a review warning for promoted deprecated/withdrawn
+   members; `replaced_by` is reported, not auto-applied. Arbitrary referenced-member handling is RG2+.
+   Tier-based severity graduation is deferred until a concrete validator policy needs it.
 8. **Dataset usage shape.** Dataset-level and member-level `dataset_usage` entries use the shared
    `DatasetUsage` role/overlap vocabulary and `dataset:` refs.
 

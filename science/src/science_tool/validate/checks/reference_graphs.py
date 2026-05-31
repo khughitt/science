@@ -41,6 +41,10 @@ def _collection_defect(fm: dict[str, Any]) -> str | None:
     member_key_space = fm.get("member_key_space")
     if not isinstance(member_key_space, dict):
         return "member_key_space must be an object"
+    allowed_member_key_space_keys = {"kind", "prefixes", "resolution_status"}
+    extra_member_key_space_keys = set(member_key_space) - allowed_member_key_space_keys
+    if extra_member_key_space_keys:
+        return "member_key_space must not contain extra properties"
     kind = member_key_space.get("kind")
     if kind not in ("curie", "iri", "tuple"):
         return "member_key_space.kind must be curie|iri|tuple"
@@ -51,6 +55,8 @@ def _collection_defect(fm: dict[str, Any]) -> str | None:
         or any(not isinstance(item, str) or not item for item in prefixes)
     ):
         return "member_key_space.prefixes must be a non-empty list of strings"
+    if len(prefixes) != len(set(prefixes)):
+        return "member_key_space.prefixes must be unique"
     status = member_key_space.get("resolution_status")
     if status not in ("resolved", "declared_unresolved"):
         return "member_key_space.resolution_status must be resolved|declared_unresolved"
@@ -163,8 +169,7 @@ def evaluate_reference_graphs(
                         f"{ident}: member_count={fm['member_count']} but node_index_resource has {len(nodes)} node rows",
                         "reference-graph.member-count-mismatch",
                     )
-                else:
-                    nodes_by_collection[ident] = _node_by_key(nodes)
+                nodes_by_collection[ident] = _node_by_key(nodes)
 
         raw_edges = edge_rows_by_dataset_id.get(ident)
         if raw_edges is None:

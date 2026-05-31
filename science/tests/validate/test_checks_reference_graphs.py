@@ -349,6 +349,30 @@ def test_malformed_reference_graph_collection_errors() -> None:
     assert results[0].severity is Severity.ERROR
 
 
+@pytest.mark.parametrize(
+    "member_key_space",
+    [
+        {"kind": "curie", "prefixes": ["MONDO", "MONDO"], "resolution_status": "resolved"},
+        {"kind": "curie", "prefixes": ["MONDO"], "resolution_status": "resolved", "extra": "nope"},
+    ],
+)
+def test_malformed_reference_graph_collection_rejects_member_key_space_schema_mismatches(
+    member_key_space: dict[str, object],
+) -> None:
+    results = list(
+        evaluate_reference_graphs(
+            [_reference_graph(member_key_space=member_key_space)],
+            graph_available_by_dataset_id={"dataset:mondo": True},
+            node_rows_by_dataset_id={"dataset:mondo": [_node()]},
+            edge_rows_by_dataset_id={},
+            member_datasets=[],
+        )
+    )
+
+    assert _rules(results) == ["reference-graph.collection-malformed"]
+    assert results[0].severity is Severity.ERROR
+
+
 def test_missing_graph_resource_does_not_suppress_node_validation() -> None:
     results = list(
         evaluate_reference_graphs(
@@ -412,6 +436,37 @@ def test_member_count_counts_deprecated_rows() -> None:
 
     assert _rules(results) == ["reference-graph.member-count-mismatch"]
     assert "has 2 node rows" in results[0].message
+
+
+def test_member_count_mismatch_still_allows_promoted_member_resolution() -> None:
+    member = {
+        "id": "dataset:missing",
+        "type": "dataset",
+        "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0",
+        "_path": "data/missing/entity.md",
+        "derivation": {"kind": "member_of", "parent_dataset": "dataset:mondo", "member_key": "MONDO:missing"},
+        "member_kind": "term",
+        "label": "missing",
+        "status": "active",
+    }
+
+    results = list(
+        evaluate_reference_graphs(
+            [_reference_graph(member_count=1)],
+            graph_available_by_dataset_id={"dataset:mondo": True},
+            node_rows_by_dataset_id={
+                "dataset:mondo": [_node(), _node(member_key="MONDO:obsolete", status="deprecated")]
+            },
+            edge_rows_by_dataset_id={"dataset:mondo": [_edge()]},
+            member_datasets=[member],
+        )
+    )
+
+    assert _rules(results) == [
+        "reference-graph.member-count-mismatch",
+        "reference-graph.member-unresolved",
+    ]
+    assert all(result.severity is Severity.ERROR for result in results)
 
 
 def test_edge_count_mismatch_errors_when_edge_resource_declared() -> None:
