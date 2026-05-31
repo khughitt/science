@@ -6,6 +6,8 @@ Checking tooling scaffold...
 
 Checking project manifest...
 
+Checking registration consistency...
+
 Checking directory structure...
 
 Checking research scope...
@@ -15,6 +17,8 @@ Checking document structure...
 Checking hypotheses...
 
 Checking code files...
+
+Checking code provenance
 
 Checking reference integrity...
 
@@ -41,6 +45,28 @@ Checking frontmatter cross-references...
 Checking prose quality lints...
 
 Checking annotation drift...
+
+Checking evidence lines
+
+Checking reference collections
+
+Checking assembly identity
+
+Checking gene identity
+
+Checking protein identity
+
+Checking dataset taxonomy
+
+Checking dataset metadata
+
+Checking dataset promotion contract
+
+Checking variant identity
+
+Checking gene-set collections
+
+Checking dataset influence
 ERROR validate.local.sh is no longer supported; migrate it using docs/migration/2026-05-19-validate-local-sh-porting-guide.md [validate.sidecar.legacy_removed]
 INFO pyproject.toml [tooling] pyproject.toml present
 INFO pyproject.toml [tooling]   science reference present
@@ -74,7 +100,8 @@ WARN 1 [UNVERIFIED] marker(s) found in documents [unresolved_markers]
 INFO No next-steps analysis found (doc/meta/next-steps-*.md) [gap_analysis]
 INFO RESEARCH_PLAN.md [research_plan] RESEARCH_PLAN.md exists
 INFO peer check: declared peers valid [graph]
-ERROR graph audit: unresolved_reference — task:t001 related -> question:q00 (tasks/active.md references an unknown canonical entity) [graph]
+WARN graph audit: unknown_entity_kind — knowledge/sources/local/terms.yaml kind -> term (not registered in core or active profiles) [graph]
+ERROR graph audit: unresolved_reference — task:t001 related -> question:q00 (tasks/active.md references an unknown canonical entity (no local entity for question:q00; 'question' is not a commons-promotable kind -- check the ref's spelling, or link cross-cutting references in prose)) [graph]
 INFO tasks/active.md exists [tasks]
 ERROR task t001 missing required field: aspects [tasks]
 ERROR task t099 missing required field: aspects [tasks]
@@ -85,4 +112,4 @@ INFO 10 prose lint issue(s): frontmatter-inline-gap (use --strict to promote) [p
 INFO no annotation sidecars (*.anno.trig) in this project [annotations]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FAILED: 5 error(s), 2 warning(s)
+FAILED: 5 error(s), 3 warning(s)

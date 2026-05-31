@@ -1,7 +1,7 @@
 {
   "summary": {
     "errors": 5,
-    "warnings": 2,
+    "warnings": 3,
     "infos": 35
   },
   "results": [
@@ -270,10 +270,18 @@
       "task": null
     },
     {
+      "severity": "warn",
+      "path": null,
+      "line": null,
+      "message": "graph audit: unknown_entity_kind \u2014 knowledge/sources/local/terms.yaml kind -> term (not registered in core or active profiles)",
+      "rule": "graph",
+      "task": null
+    },
+    {
       "severity": "error",
       "path": null,
       "line": null,
-      "message": "graph audit: unresolved_reference \u2014 task:t001 related -> question:q00 (tasks/active.md references an unknown canonical entity)",
+      "message": "graph audit: unresolved_reference \u2014 task:t001 related -> question:q00 (tasks/active.md references an unknown canonical entity (no local entity for question:q00; 'question' is not a commons-promotable kind -- check the ref's spelling, or link cross-cutting references in prose))",
       "rule": "graph",
       "task": null
     },

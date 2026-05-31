@@ -7,40 +7,13 @@ from pathlib import Path
 import pytest
 
 from science_tool.validate import Severity
-from science_tool.validate.checks import clear_checks_for_tests
+from science_tool.validate.checks import CANONICAL_CHECK_MODULES, clear_checks_for_tests
 from science_tool.validate.runner import run
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
 COMBINED_PROJECT = FIXTURES / "_combined"
-CHECK_MODULES = (
-    "tooling",
-    "manifest",
-    "directory_structure",
-    "code_files",
-    "research_scope",
-    "document_structure",
-    "hypotheses",
-    "references",
-    "papers",
-    "unresolved_markers",
-    "gap_analysis",
-    "research_plan",
-    "discussions",
-    "prereg",
-    "hypothesis_comparisons",
-    "bias_audits",
-    "notes",
-    "graph",
-    "tasks",
-    "id_prefixes",
-    "cross_references",
-    "variant_identity",
-    "genesets",
-    "dataset_influence",
-    "prose_lints",
-    "annotations",
-)
+CHECK_MODULES = CANONICAL_CHECK_MODULES
 
 
 def _ensure_canonical_checks() -> None:

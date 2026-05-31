@@ -22,6 +22,41 @@ class CheckEntry:
 
 
 CANONICAL_CHECKS: list[CheckEntry] = []
+CANONICAL_CHECK_MODULES = (
+    "tooling",
+    "manifest",
+    "registration_consistency",
+    "directory_structure",
+    "code_files",
+    "research_scope",
+    "document_structure",
+    "hypotheses",
+    "references",
+    "papers",
+    "unresolved_markers",
+    "gap_analysis",
+    "research_plan",
+    "discussions",
+    "prereg",
+    "hypothesis_comparisons",
+    "bias_audits",
+    "notes",
+    "graph",
+    "tasks",
+    "id_prefixes",
+    "cross_references",
+    "reference_collections",
+    "identity_context",
+    "dataset_taxonomy",
+    "dataset_metadata",
+    "dataset_promotion_contract",
+    "variant_identity",
+    "genesets",
+    "dataset_influence",
+    "prose_lints",
+    "annotations",
+    "evidence_lines",
+)
 
 
 class Check:
@@ -40,41 +75,7 @@ def clear_checks_for_tests() -> None:
 
 
 def _load_canonical_checks() -> None:
-    for module_name in (
-        "tooling",
-        "manifest",
-        "registration_consistency",
-        "directory_structure",
-        "code_files",
-        "research_scope",
-        "document_structure",
-        "hypotheses",
-        "references",
-        "papers",
-        "unresolved_markers",
-        "gap_analysis",
-        "research_plan",
-        "discussions",
-        "prereg",
-        "hypothesis_comparisons",
-        "bias_audits",
-        "notes",
-        "graph",
-        "tasks",
-        "id_prefixes",
-        "cross_references",
-        "reference_collections",
-        "identity_context",
-        "dataset_taxonomy",
-        "dataset_metadata",
-        "dataset_promotion_contract",
-        "variant_identity",
-        "genesets",
-        "dataset_influence",
-        "prose_lints",
-        "annotations",
-        "evidence_lines",
-    ):
+    for module_name in CANONICAL_CHECK_MODULES:
         importlib.import_module(f"{__name__}.{module_name}")
 
 

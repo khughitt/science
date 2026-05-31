@@ -9,42 +9,15 @@ import pytest
 from click.testing import CliRunner
 
 from science_tool.cli import main
-from science_tool.validate.checks import clear_checks_for_tests
+from science_tool.validate.checks import CANONICAL_CHECK_MODULES, clear_checks_for_tests
 from science_tool.validate.runner import clear_hooks_for_tests
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
 COMBINED_PROJECT = FIXTURES / "_combined"
 SNAPSHOTS = Path(__file__).parent / "snapshots"
-SNAPSHOT_TERMINAL_WIDTH = 240
-CHECK_MODULES = (
-    "tooling",
-    "manifest",
-    "directory_structure",
-    "code_files",
-    "research_scope",
-    "document_structure",
-    "hypotheses",
-    "references",
-    "papers",
-    "unresolved_markers",
-    "gap_analysis",
-    "research_plan",
-    "discussions",
-    "prereg",
-    "hypothesis_comparisons",
-    "bias_audits",
-    "notes",
-    "graph",
-    "tasks",
-    "id_prefixes",
-    "cross_references",
-    "variant_identity",
-    "genesets",
-    "dataset_influence",
-    "prose_lints",
-    "annotations",
-)
+SNAPSHOT_TERMINAL_WIDTH = 1000
+CHECK_MODULES = CANONICAL_CHECK_MODULES
 
 
 @pytest.fixture(autouse=True)

@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 
 from science_tool.validate import Result, Severity
-from science_tool.validate.checks import clear_checks_for_tests
+from science_tool.validate.checks import CANONICAL_CHECK_MODULES, clear_checks_for_tests
 from science_tool.validate.runner import run
 from science_tool.validate.runner import RunResult
 
@@ -28,40 +28,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 COMBINED_PROJECT = FIXTURES / "_combined"
 REAL_PROJECTS_CONFIG = FIXTURES / "real_projects.txt"
 VALIDATE_SH = REPO_ROOT / "src" / "science_tool" / "project_artifacts" / "data" / "validate.sh"
-# This tuple must mirror the full canonical check set; validate.sh is a CLI shim.
-CHECK_MODULES = (
-    "tooling",
-    "manifest",
-    "directory_structure",
-    "code_files",
-    "research_scope",
-    "document_structure",
-    "hypotheses",
-    "references",
-    "papers",
-    "unresolved_markers",
-    "gap_analysis",
-    "research_plan",
-    "discussions",
-    "prereg",
-    "hypothesis_comparisons",
-    "bias_audits",
-    "notes",
-    "graph",
-    "tasks",
-    "id_prefixes",
-    "cross_references",
-    "reference_collections",
-    "identity_context",
-    "dataset_taxonomy",
-    "dataset_metadata",
-    "variant_identity",
-    "genesets",
-    "dataset_influence",
-    "prose_lints",
-    "annotations",
-    "evidence_lines",
-)
+CHECK_MODULES = CANONICAL_CHECK_MODULES
 
 # validate.sh has no stable explicit rule IDs, and Python Result.rule is section-level
 # (for example, "manifest" or "graph"). Phase 1 semantic parity therefore uses the
