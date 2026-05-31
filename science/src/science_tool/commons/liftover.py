@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Literal
+from typing import Literal, cast
 
 
 LiftoverStatus = Literal["lifted", "unliftable", "multi_mapping", "strand_ambiguous"]
+ChainStrand = Literal["+", "-"]
 
 
 class ChainFormatError(ValueError):
@@ -23,12 +24,12 @@ class Chain:
     score: int
     target_name: str
     target_size: int
-    target_strand: str
+    target_strand: ChainStrand
     target_start: int
     target_end: int
     source_name: str
     source_size: int
-    source_strand: str
+    source_strand: ChainStrand
     source_start: int
     source_end: int
     chain_id: int
@@ -45,7 +46,7 @@ class LiftedInterval:
     source_end: int
     target_start: int
     target_end: int
-    target_strand: Literal["+", "-"]
+    target_strand: ChainStrand
     chain_id: int
 
 
@@ -116,6 +117,8 @@ def _parse_header(fields: list[str], line_number: int) -> Chain:
         raise ChainFormatError(f"invalid source strand on line {line_number}: {t_strand}")
     if q_strand not in {"+", "-"}:
         raise ChainFormatError(f"invalid target strand on line {line_number}: {q_strand}")
+    source_strand = cast(ChainStrand, t_strand)
+    target_strand = cast(ChainStrand, q_strand)
 
     score = _parse_non_negative_int(score_text, "score", line_number)
     t_size = _parse_non_negative_int(t_size_text, "source size", line_number)
@@ -130,12 +133,12 @@ def _parse_header(fields: list[str], line_number: int) -> Chain:
         score=score,
         target_name=q_name,
         target_size=q_size,
-        target_strand=q_strand,
+        target_strand=target_strand,
         target_start=q_start,
         target_end=q_end,
         source_name=t_name,
         source_size=t_size,
-        source_strand=t_strand,
+        source_strand=source_strand,
         source_start=t_start,
         source_end=t_end,
         chain_id=chain_id,
@@ -196,6 +199,10 @@ def _lift_with_chain(chain: Chain, start: int, end: int) -> tuple[int, int] | No
     return None
 
 
+def _source_blocks_cover_interval(chain: Chain, start: int, end: int) -> bool:
+    return any(source_start <= start and end <= source_end for source_start, source_end, _target_start, _target_end in _block_ranges(chain))
+
+
 def lift_interval(
     chains: list[Chain],
     *,
@@ -214,7 +221,8 @@ def lift_interval(
         if chain.source_name != source_contig:
             continue
         if chain.source_strand != "+" or chain.target_strand != "+":
-            strand_ambiguous = True
+            if _source_blocks_cover_interval(chain, start, end):
+                strand_ambiguous = True
             continue
 
         mapped_interval = _lift_with_chain(chain, start, end)

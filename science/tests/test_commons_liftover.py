@@ -119,3 +119,31 @@ def test_lift_interval_reports_multi_mapping() -> None:
     )
     assert isinstance(result, LiftoverDefect)
     assert result.status == "multi_mapping"
+
+
+def test_lift_interval_ignores_unsupported_strand_chain_outside_interval() -> None:
+    reverse_chain = CHAIN.replace(" + 500 630 ", " - 500 630 ")
+    result = lift_interval(
+        parse_chain_text(reverse_chain),
+        source_seqcol_digest="SRC",
+        target_seqcol_digest="TGT",
+        source_contig="chr1",
+        start=700,
+        end=701,
+    )
+    assert isinstance(result, LiftoverDefect)
+    assert result.status == "unliftable"
+
+
+def test_lift_interval_reports_strand_ambiguous_for_unsupported_strand_covering_interval() -> None:
+    reverse_chain = CHAIN.replace(" + 500 630 ", " - 500 630 ")
+    result = lift_interval(
+        parse_chain_text(reverse_chain),
+        source_seqcol_digest="SRC",
+        target_seqcol_digest="TGT",
+        source_contig="chr1",
+        start=510,
+        end=511,
+    )
+    assert isinstance(result, LiftoverDefect)
+    assert result.status == "strand_ambiguous"
