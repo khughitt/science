@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 from pathlib import Path
 
 from science_tool.commons.sequence_store import SequenceStoreError
@@ -83,7 +84,9 @@ def test_rsid_locator_accepts_optional_allele_columns() -> None:
     assert list(evaluate_variant_declaration([ds])) == []
 
 
-def test_row_layer_skips_rsid_locator_until_row_minting_is_implemented(tmp_path: Path, monkeypatch) -> None:
+def test_row_layer_reports_unavailable_rsid_registry_before_row_minting(tmp_path: Path, monkeypatch) -> None:
+    from science_tool.commons.errors import DataResourceNotFoundError
+
     project = _variant_project(
         tmp_path,
         "rsid\nrs123\n",
@@ -93,14 +96,19 @@ def test_row_layer_skips_rsid_locator_until_row_minting_is_implemented(tmp_path:
     )
 
     def fail_vrs_id(expr: str, *, fmt: str, assembly_seqcol: str):
-        raise AssertionError(f"rsID locator unexpectedly entered row minting: {expr} {fmt} {assembly_seqcol}")
+        raise AssertionError(f"rsID locator unexpectedly used generic VRS minting: {expr} {fmt} {assembly_seqcol}")
 
+    def fake_resolve(dataset_id: str, logical_path: str):
+        raise DataResourceNotFoundError(dataset_id, logical_path, tried=[])
+
+    monkeypatch.setattr("science_tool.commons.resolver.resolve", fake_resolve)
     monkeypatch.setattr("science_tool.commons.variant.vrs_id", fail_vrs_id)
 
     results = list(check_variant_identity(_ctx(project)))
 
     assert not [r for r in results if r.severity is Severity.ERROR]
-    assert not [r for r in results if r.rule in {"identity.variant-rows-minted", "identity.variant-rows-unresolved"}]
+    infos = [r for r in results if r.rule == "identity.variant-registry-unavailable"]
+    assert len(infos) == 1
 
 
 def test_row_layer_mints_rsid_locator(tmp_path: Path, monkeypatch) -> None:
@@ -117,7 +125,7 @@ def test_row_layer_mints_rsid_locator(tmp_path: Path, monkeypatch) -> None:
 """
     project = _variant_project(
         tmp_path,
-        "rsid,REF,ALT\nrs1,A,G\n",
+        "rsid,REF,ALT\nrs1,A,G\nrs2,C,T\n",
         locator=rsid_locator,
     )
 
@@ -147,7 +155,41 @@ def test_row_layer_mints_rsid_locator(tmp_path: Path, monkeypatch) -> None:
 
     assert [r.rule for r in results if r.rule == "identity.variant-rows-minted"] == ["identity.variant-rows-minted"]
     assert resolve_calls == [("dataset:variant-labels-dbsnp-human", "rsid_mappings.sqlite")]
-    assert calls == [("rs1", "A", "G")]
+    assert calls == [("rs1", "A", "G"), ("rs2", "C", "T")]
+
+
+def test_row_layer_reports_bad_rsid_sqlite_as_registry_unavailable(tmp_path: Path, monkeypatch) -> None:
+    sqlite_path = tmp_path / "rsid_mappings.sqlite"
+    sqlite_path.write_bytes(b"fixture")
+    rsid_locator = """\
+        resource: variants.csv
+        format: rsid
+        column: rsid
+        registry: dataset:variant-labels-dbsnp-human
+"""
+    project = _variant_project(
+        tmp_path,
+        "rsid\nrs1\n",
+        locator=rsid_locator,
+    )
+
+    monkeypatch.setattr(
+        "science_tool.commons.resolver.resolve",
+        lambda dataset_id, logical_path: type("Resolved", (), {"path": sqlite_path})(),
+    )
+
+    def bad_vrs_id_from_rsid(*args, **kwargs):
+        raise sqlite3.DatabaseError("bad sqlite")
+
+    monkeypatch.setattr("science_tool.commons.variant.vrs_id_from_rsid", bad_vrs_id_from_rsid)
+
+    results = list(check_variant_identity(_ctx(project)))
+
+    infos = [r for r in results if r.rule == "identity.variant-registry-unavailable"]
+    assert len(infos) == 1
+    assert infos[0].severity is Severity.INFO
+    assert "bad sqlite" in infos[0].message
+    assert not [r for r in results if r.severity is Severity.ERROR]
 
 
 def test_row_layer_reports_ambiguous_rsid(tmp_path: Path, monkeypatch) -> None:

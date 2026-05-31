@@ -132,6 +132,7 @@ def check_variant_identity(ctx: ValidateContext) -> Iterator[Result]:
 
 def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, Any]]) -> Iterator[Result]:
     import csv
+    import sqlite3
 
     from science_tool.commons.datapackage import read_datapackage, stream_sha256_and_bytes, validate_logical_path
     from science_tool.commons.errors import CommonsDatapackageError, CommonsError
@@ -302,7 +303,16 @@ def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, An
                     elif isinstance(result, VariantDefect):
                         defects[result.reason] += 1
                     else:
-                        raise TypeError(f"vrs_id returned unsupported result {type(result).__name__}")
+                        helper = "vrs_id_from_rsid" if fmt == "rsid" else "vrs_id"
+                        raise TypeError(f"{helper} returned unsupported result {type(result).__name__}")
+        except sqlite3.Error as error:
+            yield _result(
+                Severity.INFO,
+                path,
+                f"{ident}: variant rsID registry unavailable; row VRS IDs cannot be minted: {error}",
+                "identity.variant-registry-unavailable",
+            )
+            continue
         except (SequenceStoreError, VariantStoreUnavailable) as error:
             yield _result(
                 Severity.INFO,
