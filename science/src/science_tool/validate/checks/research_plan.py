@@ -28,6 +28,7 @@ def _result(severity: Severity, path: str | None, message: str) -> Result:
 @Check(section="research plan conventions...", order=10)
 def check_research_plan(ctx: ValidateContext) -> Iterator[Result]:
     plan_path = ctx.project_root / "RESEARCH_PLAN.md"
+    readme_path = ctx.project_root / "README.md"
     if plan_path.is_file():
         yield _result(Severity.INFO, "RESEARCH_PLAN.md", "RESEARCH_PLAN.md exists")
         text = ctx.read_text_cached(plan_path)
@@ -41,6 +42,9 @@ def check_research_plan(ctx: ValidateContext) -> Iterator[Result]:
         return
 
     if resolve_paths(ctx.project_root).profile == "research":
+        if readme_path.is_file():
+            yield _result(Severity.INFO, "README.md", "README.md exists; RESEARCH_PLAN.md not required")
+            return
         yield _result(
             Severity.INFO,
             None,

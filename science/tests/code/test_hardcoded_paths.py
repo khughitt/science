@@ -35,6 +35,11 @@ def test_windows_drive_is_flagged() -> None:
     assert any(f.pattern == "<windows-drive>" for f in findings)
 
 
+def test_escaped_newline_after_colon_is_not_windows_drive() -> None:
+    findings = find_hardcoded_paths('"axis-id sets differ across sources:\\n"\n')
+    assert findings == []
+
+
 def test_default_prefixes_are_absolute_roots() -> None:
     assert "/home/" in DEFAULT_HARDCODED_PREFIXES
     assert all(p.startswith("/") for p in DEFAULT_HARDCODED_PREFIXES)

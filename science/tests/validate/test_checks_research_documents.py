@@ -98,6 +98,17 @@ def test_research_plan_absence_depends_on_effective_profile(tmp_path: Path) -> N
     assert software_messages == []
 
 
+def test_research_plan_check_accepts_readme_when_plan_is_missing(tmp_path: Path) -> None:
+    from science_tool.validate.checks.research_plan import check_research_plan
+
+    ctx = _ctx(tmp_path, profile="research")
+    tmp_path.joinpath("README.md").write_text("# Demo\n", encoding="utf-8")
+
+    messages = _messages(check_research_plan(ctx))
+
+    assert messages == ["README.md exists; RESEARCH_PLAN.md not required"]
+
+
 def test_discussions_warn_for_missing_sections_and_skip_comparison_docs(tmp_path: Path) -> None:
     from science_tool.validate.checks.discussions import check_discussions
 

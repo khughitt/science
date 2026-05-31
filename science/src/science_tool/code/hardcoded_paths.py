@@ -21,7 +21,7 @@ DEFAULT_HARDCODED_PREFIXES: tuple[str, ...] = (
     "/srv/",
     "/proj/",
 )
-_WINDOWS_DRIVE_RE = re.compile(r"[A-Za-z]:\\")
+_WINDOWS_DRIVE_RE = re.compile(r"[A-Za-z]:\\(?![nrtbfav\"'])")
 _TRIPLE_QUOTE_RE = re.compile(r'"""|\'\'\'')
 # Full-line comment markers (Python/Snakemake `#`, C/JS `//`).
 _COMMENT_PREFIXES = ("#", "//")

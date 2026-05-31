@@ -113,15 +113,18 @@ def _check_overview(ctx: ValidateContext) -> Iterator[Result]:
 
 def _check_research_plan(ctx: ValidateContext, profile: str) -> Iterator[Result]:
     plan_path = ctx.project_root / "RESEARCH_PLAN.md"
+    readme_path = ctx.project_root / "README.md"
     if profile == "research":
-        if not plan_path.is_file():
+        if plan_path.is_file():
+            yield _result(Severity.INFO, "RESEARCH_PLAN.md", "RESEARCH_PLAN.md exists")
+        elif readme_path.is_file():
+            yield _result(Severity.INFO, "README.md", "README.md exists; RESEARCH_PLAN.md not required")
+        else:
             yield _result(
                 Severity.WARN,
                 "RESEARCH_PLAN.md",
                 "RESEARCH_PLAN.md not found (allowed if high-level planning is in README.md)",
             )
-        else:
-            yield _result(Severity.INFO, "RESEARCH_PLAN.md", "RESEARCH_PLAN.md exists")
     elif plan_path.is_file():
         yield _result(Severity.INFO, "RESEARCH_PLAN.md", "RESEARCH_PLAN.md exists")
 
