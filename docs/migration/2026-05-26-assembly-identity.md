@@ -23,4 +23,4 @@ RCM-D6) or carry `resolution_status: declared_unresolved`. Free-text
 `reference_genome` is deprecated: `science validate` warns
 (`identity.assembly-undeclared`) until migrated. Cross-assembly joins are
 detected (`identity.cross-dataset-assembly-mismatch`); the liftover remedy
-arrives in C4.
+is implemented in C4b and requires exact pinned liftover provenance.

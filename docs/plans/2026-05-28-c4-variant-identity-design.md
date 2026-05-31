@@ -246,7 +246,8 @@ adds the dependency.
 
 ## 12. Status & next step
 
-C4a and C4b are implemented and merged. C4b added cross-assembly liftover, seqcol compatibility relations,
-lifted VRS reminting, and the C1 check-3 provenance-verified liftover remedy; its implementation plan is
+C4a is implemented and merged. C4b is implemented on `feature/c4b-liftover`: it added cross-assembly
+liftover, seqcol compatibility relations, lifted VRS reminting, and the C1 check-3 provenance-verified
+liftover remedy. Its implementation plan is
 tracked at `docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`. C4c (rsID input +
 transcript/protein HGVS projection inputs) remains the next named increment.
