@@ -25,6 +25,9 @@ from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
 
+PROMOTABLE_ENTITY_PROFILE = "science-pkg-entity-1.0"
+
+
 def _result(path: str | None, message: str, rule: str) -> Result:
     return Result(Severity.ERROR, Path(path) if path else None, None, message, rule, None)
 
@@ -34,8 +37,18 @@ def _is_dataset_descriptor(fm: Mapping[str, Any]) -> bool:
     return isinstance(path, str) and path.startswith("doc/datasets/")
 
 
+def _profile_names(value: Any) -> set[str]:
+    if not isinstance(value, (list, tuple, set)):
+        return set()
+    return {profile for profile in value if isinstance(profile, str)}
+
+
+def _is_promotion_candidate(fm: Mapping[str, Any]) -> bool:
+    return PROMOTABLE_ENTITY_PROFILE in _profile_names(fm.get("profiles")) or _is_pinned_overlay(fm)
+
+
 def _is_pinned_overlay(fm: Mapping[str, Any]) -> bool:
-    return bool(fm.get("overlay_of")) or bool(fm.get("pin_version")) or bool(fm.get("source"))
+    return bool(fm.get("overlay_of")) or bool(fm.get("pin_version"))
 
 
 def _ident(fm: Mapping[str, Any]) -> str:
@@ -82,7 +95,10 @@ def _has_qa_resource(datapackage_doc: Mapping[str, Any]) -> bool:
             continue
         candidates = [resource.get("name"), resource.get("path")]
         for candidate in candidates:
-            if isinstance(candidate, str) and "qa" in candidate.lower():
+            if not isinstance(candidate, str):
+                continue
+            normalized = candidate.lower()
+            if "qa" in normalized or "qc" in normalized:
                 return True
     return False
 
@@ -163,6 +179,9 @@ def evaluate_dataset_promotion_contract(
         path = fm.get("_path")
         rel_path = path if isinstance(path, str) else None
         ident = _ident(fm)
+
+        if not _is_promotion_candidate(fm):
+            continue
 
         if _source_refs_missing(fm):
             yield _result(

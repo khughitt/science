@@ -106,6 +106,7 @@ def _write_descriptor(
         f"id: dataset:{slug}\n"
         "type: dataset\n"
         "title: Demo Dataset\n"
+        "profiles: [science-pkg-entity-1.0]\n"
         "origin: derived\n"
         "tier: use-now\n"
         "derivation:\n"
@@ -133,6 +134,30 @@ def test_clean_candidate_dataset_descriptor_passes_contract(tmp_path: Path) -> N
 
     _write_datapackage(tmp_path)
     _write_descriptor(tmp_path)
+
+    results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
+
+    assert results == []
+
+
+def test_plain_dataset_reference_doc_is_not_a_promotion_candidate(tmp_path: Path) -> None:
+    from science_tool.validate.checks.dataset_promotion_contract import (
+        check_dataset_promotion_contract,
+    )
+
+    path = tmp_path / "doc" / "datasets" / "data-reference-only.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "---\n"
+        "id: dataset:reference-only\n"
+        "type: dataset\n"
+        "title: Reference-only Dataset\n"
+        "status: active\n"
+        "source_refs: []\n"
+        "---\n"
+        "# Reference-only Dataset\n",
+        encoding="utf-8",
+    )
 
     results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
 
@@ -169,6 +194,25 @@ def test_candidate_descriptor_requires_qa_resource(tmp_path: Path) -> None:
     assert _rules(results) == ["dataset-promotion.qa-resource-missing"]
     assert results[0].severity is Severity.ERROR
     assert "no QA resource" in results[0].message
+
+
+def test_candidate_descriptor_accepts_qc_report_as_qa_resource(tmp_path: Path) -> None:
+    from science_tool.validate.checks.dataset_promotion_contract import (
+        check_dataset_promotion_contract,
+    )
+
+    _write_datapackage(
+        tmp_path,
+        resources=[
+            {"name": "table", "path": "table.csv"},
+            {"name": "dataset-qc-report", "path": "qc_report.json"},
+        ],
+    )
+    _write_descriptor(tmp_path)
+
+    results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
+
+    assert results == []
 
 
 def test_candidate_descriptor_requires_source_refs(tmp_path: Path) -> None:
