@@ -67,8 +67,50 @@ def test_resolve_rsid_filters_by_ref_alt(tmp_path: Path) -> None:
 
     result = resolve_rsid("rs2", assembly_seqcol="GRCH38", sqlite_path=path, ref="C", alt="A")
 
-    assert isinstance(result, RsidMatch)
-    assert result.alt == "A"
+    assert result == RsidMatch(
+        rsid="rs2",
+        seqcol_digest="GRCH38",
+        contig="NC_000001.11",
+        pos0=20,
+        ref="C",
+        alt="A",
+        source_vcf="GCF_000001405.40.gz",
+        allele_index=2,
+    )
+
+
+def test_resolve_rsid_filters_by_ref_only(tmp_path: Path) -> None:
+    path = _sqlite(tmp_path / "rsid_mappings.sqlite")
+
+    result = resolve_rsid("rs1", assembly_seqcol="GRCH38", sqlite_path=path, ref="A")
+
+    assert result == RsidMatch(
+        rsid="rs1",
+        seqcol_digest="GRCH38",
+        contig="NC_000001.11",
+        pos0=10,
+        ref="A",
+        alt="G",
+        source_vcf="GCF_000001405.40.gz",
+        allele_index=1,
+    )
+
+
+def test_resolve_rsid_filters_by_alt_only(tmp_path: Path) -> None:
+    path = _sqlite(tmp_path / "rsid_mappings.sqlite")
+
+    result = resolve_rsid("rs2", assembly_seqcol="GRCH38", sqlite_path=path, alt="A")
+
+    assert result == RsidMatch(
+        rsid="rs2",
+        seqcol_digest="GRCH38",
+        contig="NC_000001.11",
+        pos0=20,
+        ref="C",
+        alt="A",
+        source_vcf="GCF_000001405.40.gz",
+        allele_index=2,
+    )
 
 
 def test_resolve_rsid_reports_ambiguity_without_allele_filter(tmp_path: Path) -> None:

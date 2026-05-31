@@ -94,9 +94,13 @@ def resolve_rsid(
         return RsidDefect(rsid, "rsid-assembly-mismatch", f"no allele for declared assembly {assembly_seqcol}")
 
     if ref is not None or alt is not None:
-        ref_filter = "" if ref is None else ref.upper()
-        alt_filter = "" if alt is None else alt.upper()
-        rows = [row for row in rows if row["ref"] == ref_filter and row["alt"] == alt_filter]
+        ref_filter = None if ref is None else ref.upper()
+        alt_filter = None if alt is None else alt.upper()
+        rows = [
+            row
+            for row in rows
+            if (ref_filter is None or row["ref"] == ref_filter) and (alt_filter is None or row["alt"] == alt_filter)
+        ]
         if not rows:
             return RsidDefect(rsid, "rsid-allele-mismatch", "no candidate matches supplied REF/ALT")
 
