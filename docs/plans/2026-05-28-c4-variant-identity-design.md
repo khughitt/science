@@ -3,8 +3,9 @@
 Date: 2026-05-28
 
 Status: C4a implemented; C4b implemented via
-`docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`; C4c rsID-first implementation plan drafted in
-`docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md` (Pillar C, sub-phase 4 of the bio data architecture)
+`docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`; C4c-1 rsID input implemented locally via
+`docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`, with full dbSNP artifact build/operator smoke pending
+(Pillar C, sub-phase 4 of the bio data architecture)
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; this details its C4 row (§8)
@@ -31,8 +32,8 @@ decomposed before planning. It splits into three independently-testable incremen
 
 This document specifies **C4a** in full (§3–§9) and scopes C4b/C4c as named increments (§10). C4a led
 because variant identity is the headline "unblocks AlphaMissense-class data" deliverable, and because
-liftover (C4b) relates ids that C4a must first be able to mint. C4b is now implemented; C4c remains
-deferred.
+liftover (C4b) relates ids that C4a must first be able to mint. C4b is now implemented, and C4c-1 rsID
+input is implemented locally; transcript/protein projection remains deferred.
 
 **Locked sequencing decisions (this review):**
 1. **C4a before C4b before C4c.**
@@ -231,11 +232,11 @@ adds the dependency.
   identity (assembly-anchored VRS id on the target), recorded with liftover provenance (C-D5), never the
   source id by assertion. Reverse-strand allele reminting, broad interval/BED liftover, rsID,
   transcript HGVS, and protein projection remain outside C4b.
-- **C4c — External label / projection inputs.** rsID input via a pinned dbSNP / NCBI Variation snapshot
-  (rsID to allele/location) is planned first in
-  `docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`; transcript/protein HGVS via a pinned
-  transcript/protein-reference snapshot plus an explicit projection policy remains deferred. These add
-  input *surface*, not new identity semantics.
+- **C4c — External label / projection inputs.** C4c-1 rsID input via a pinned dbSNP / NCBI Variation
+  snapshot is implemented locally through `dataset:variant-labels-dbsnp-human`; full dbSNP artifact
+  build, lockfile pinning, datapackage hash refresh, and resolver smoke remain operator-pending.
+  Transcript/protein HGVS via a pinned transcript/protein-reference snapshot plus an explicit projection
+  policy remains deferred. These add input *surface*, not new identity semantics.
 
 ## 11. Stress-test recheck (umbrella §5)
 
@@ -250,6 +251,7 @@ adds the dependency.
 C4a is implemented and merged. C4b is merged locally: it added cross-assembly
 liftover, seqcol compatibility relations, lifted VRS reminting, and the C1 check-3 provenance-verified
 liftover remedy. Its implementation plan is
-tracked at `docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`. C4c-1 (rsID input) is planned in
-`docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`; transcript/protein HGVS projection remains a later
-C4c increment.
+tracked at `docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`. C4c-1 rsID input is implemented
+locally in `~/d/science` and `~/d/science-commons` via
+`docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`; full dbSNP artifact build/operator smoke is still
+pending, and transcript/protein HGVS projection remains a later C4c increment.

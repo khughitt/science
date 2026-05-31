@@ -4,7 +4,7 @@
 
 **Goal:** Add rsID input support for variant identity by resolving pinned dbSNP labels to exact small alleles, then minting the existing assembly-anchored VRS identity.
 
-**Implementation status:** Plan drafted; not implemented.
+**Implementation status:** Implemented locally in `~/d/science` and `~/d/science-commons` for C4c-1. The rsID resolver, VRS minting boundary, variant-row validation, and dbSNP recipe are in place; the recipe fixture build passes. Full dbSNP archive fetch/build, full-source lockfile pinning, datapackage hash refresh, and resolver smoke against the real commons artifact remain operator-pending because the generated SQLite was not built in this session. Transcript/protein HGVS projection remains out of scope.
 
 **Architecture:** C4c-1 is an input translation layer over C4a, not a new variant identity namespace. A pinned dbSNP reference dataset provides an indexed rsID-to-allele artifact; `science_tool.commons.rsid` resolves one rsID within a declared seqcol assembly; `variant.vrs_id_from_rsid(...)` converts the resolved allele to SPDI and delegates to `variant.vrs_id(...)`. The variant validator accepts `locator.format: rsid` while keeping `identity_context.molecular_ids.variant.namespace: vrs`.
 
@@ -178,7 +178,7 @@ Commons repo (`~/d/science-commons`):
 - Create: `science/src/science_tool/commons/rsid.py`
 - Test: `science/tests/test_commons_rsid.py`
 
-- [ ] **Step 1: Write the failing resolver tests**
+- [x] **Step 1: Write the failing resolver tests**
 
 Add `science/tests/test_commons_rsid.py`:
 
@@ -280,7 +280,7 @@ def test_resolve_rsid_rejects_malformed_label(tmp_path: Path) -> None:
     assert result == RsidDefect("1", "malformed-rsid", "expected rs followed by digits")
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run:
 
@@ -290,7 +290,7 @@ rtk uv run --frozen --project science pytest science/tests/test_commons_rsid.py 
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'science_tool.commons.rsid'`.
 
-- [ ] **Step 3: Implement the resolver**
+- [x] **Step 3: Implement the resolver**
 
 Create `science/src/science_tool/commons/rsid.py`:
 
@@ -413,7 +413,7 @@ def resolve_rsid(
     )
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run:
 
@@ -423,7 +423,7 @@ rtk uv run --frozen --project science pytest science/tests/test_commons_rsid.py 
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 rtk git add science/src/science_tool/commons/rsid.py science/tests/test_commons_rsid.py
@@ -436,7 +436,7 @@ rtk git commit -m "feat: add pinned rsid resolver"
 - Modify: `science/src/science_tool/commons/variant.py`
 - Test: `science/tests/test_commons_variant.py`
 
-- [ ] **Step 1: Write failing variant tests**
+- [x] **Step 1: Write failing variant tests**
 
 Append to `science/tests/test_commons_variant.py`:
 
@@ -489,7 +489,7 @@ def test_vrs_id_from_rsid_returns_variant_defect(monkeypatch: pytest.MonkeyPatch
     assert result == V.VariantDefect("rs2", "ambiguous-rsid", "2 candidate alleles for GRCH38")
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run:
 
@@ -499,7 +499,7 @@ rtk uv run --frozen --project science pytest science/tests/test_commons_variant.
 
 Expected: FAIL with `AttributeError: module 'science_tool.commons.variant' has no attribute 'vrs_id_from_rsid'`.
 
-- [ ] **Step 3: Add `vrs_id_from_rsid`**
+- [x] **Step 3: Add `vrs_id_from_rsid`**
 
 Modify `science/src/science_tool/commons/variant.py`:
 
@@ -546,7 +546,7 @@ def vrs_id_from_rsid(
     )
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run:
 
@@ -556,7 +556,7 @@ rtk uv run --frozen --project science pytest science/tests/test_commons_variant.
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 rtk git add science/src/science_tool/commons/variant.py science/tests/test_commons_variant.py
@@ -569,7 +569,7 @@ rtk git commit -m "feat: mint vrs ids from rsid labels"
 - Modify: `science/src/science_tool/validate/checks/variant_identity.py`
 - Test: `science/tests/validate/test_checks_variant_identity.py`
 
-- [ ] **Step 1: Write failing locator tests**
+- [x] **Step 1: Write failing locator tests**
 
 Append to `science/tests/validate/test_checks_variant_identity.py`:
 
@@ -596,7 +596,7 @@ def test_rsid_locator_accepts_optional_allele_columns() -> None:
     assert list(evaluate_variant_declaration([ds])) == []
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run:
 
@@ -606,7 +606,7 @@ rtk uv run --frozen --project science pytest science/tests/validate/test_checks_
 
 Expected: FAIL because `rsid` is not an accepted locator format.
 
-- [ ] **Step 3: Extend locator validation**
+- [x] **Step 3: Extend locator validation**
 
 In `science/src/science_tool/validate/checks/variant_identity.py`, change:
 
@@ -635,7 +635,7 @@ Then add this branch inside `_locator_defect(...)` after the `vcf` branch:
         return None
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run:
 
@@ -645,7 +645,7 @@ rtk uv run --frozen --project science pytest science/tests/validate/test_checks_
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 rtk git add science/src/science_tool/validate/checks/variant_identity.py science/tests/validate/test_checks_variant_identity.py
@@ -658,7 +658,7 @@ rtk git commit -m "feat: accept rsid variant locators"
 - Modify: `science/src/science_tool/validate/checks/variant_identity.py`
 - Test: `science/tests/validate/test_checks_variant_identity.py`
 
-- [ ] **Step 1: Write failing row-layer tests**
+- [x] **Step 1: Write failing row-layer tests**
 
 Append to `science/tests/validate/test_checks_variant_identity.py`:
 
@@ -846,7 +846,7 @@ def _variant_project(
     )
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run:
 
@@ -856,7 +856,7 @@ rtk uv run --frozen --project science pytest science/tests/validate/test_checks_
 
 Expected: FAIL because the row layer still dispatches all formats through `vrs_id(...)`.
 
-- [ ] **Step 3: Add rsID dispatch helpers**
+- [x] **Step 3: Add rsID dispatch helpers**
 
 In `science/src/science_tool/validate/checks/variant_identity.py`, change the row-layer imports to include
 `vrs_id_from_rsid` and the commons resolver:
@@ -946,7 +946,7 @@ Update `_required_columns(...)` so rsID locators require the rsID column plus op
         return required
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run:
 
@@ -956,7 +956,7 @@ rtk uv run --frozen --project science pytest science/tests/validate/test_checks_
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 rtk git add science/src/science_tool/validate/checks/variant_identity.py science/tests/validate/test_checks_variant_identity.py
@@ -973,7 +973,7 @@ rtk git commit -m "feat: validate rsid variant rows"
 - Create: `~/d/science-commons/datasets/variant-labels-dbsnp-human/recipe/README.md`
 - Create after fetch: `~/d/science-commons/datasets/variant-labels-dbsnp-human/recipe/lockfile.yaml`
 
-- [ ] **Step 1: Create the dataset entity**
+- [x] **Step 1: Create the dataset entity**
 
 Create `entity.md`:
 
@@ -1009,7 +1009,7 @@ variants, and rows that cannot be represented as `contig:pos0:ref:alt` SPDI inpu
 in `build-summary.yaml`.
 ```
 
-- [ ] **Step 2: Create the datapackage skeleton**
+- [x] **Step 2: Create the datapackage skeleton**
 
 Create `datapackage.yaml` with zero placeholders that `recipe/build.py --update-datapackage` replaces:
 
@@ -1037,7 +1037,7 @@ resources:
   bytes: 0
 ```
 
-- [ ] **Step 3: Implement `recipe/fetch.py`**
+- [x] **Step 3: Implement `recipe/fetch.py`**
 
 The fetcher must:
 
@@ -1050,7 +1050,7 @@ The fetcher must:
 
 Use the C4b liftover fetcher as the local pattern and adapt the dataset name, URL list, and lockfile keys.
 
-- [ ] **Step 4: Implement `recipe/build.py`**
+- [x] **Step 4: Implement `recipe/build.py`**
 
 The builder must:
 
@@ -1067,7 +1067,7 @@ The builder must:
 - Write `build-summary.yaml`.
 - With `--update-datapackage`, compute sha256/bytes for both resources and rewrite `datapackage.yaml`.
 
-- [ ] **Step 5: Create `recipe/README.md`**
+- [x] **Step 5: Create `recipe/README.md`**
 
 The README must state:
 
@@ -1088,7 +1088,7 @@ The commons repository stores the recipe, lockfile, entity, and datapackage hash
 or VCF bytes.
 ```
 
-- [ ] **Step 6: Run a tiny fixture build before the full source build**
+- [x] **Step 6: Run a tiny fixture build before the full source build**
 
 Add fixture mode or a small test VCF under a temporary directory and verify:
 
@@ -1111,7 +1111,7 @@ Expected: the summary reports input rows, retained alleles, skipped buckets, dis
 per-assembly counts, SQLite bytes, and build seconds. If the SQLite size or build time is outside local
 operational limits, stop before committing datapackage hashes and revisit partitioning/indexing.
 
-- [ ] **Step 8: Commit commons recipe**
+- [x] **Step 8: Commit commons recipe**
 
 In `~/d/science-commons`:
 
@@ -1124,6 +1124,11 @@ rtk git commit -m "data: add dbsnp variant label recipe"
 
 **Files:**
 - No new files unless the smoke reveals defects.
+
+**Status:** Deferred until an operator fetches/builds or installs the full dbSNP SQLite artifact under
+`$SCIENCE_COMMONS_DATA_ROOT/variant-labels-dbsnp-human/`. The recipe and fixture path are implemented,
+but this session intentionally did not download the 26 GB / 28 GB source archives or build the full
+SQLite.
 
 - [ ] **Step 1: Build or install the SQLite artifact**
 
@@ -1161,28 +1166,28 @@ rtk git commit -m "fix: pin dbsnp variant label hashes"
 - Modify: `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`
 - Modify: `docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`
 
-- [ ] **Step 1: Update C4 design status**
+- [x] **Step 1: Update C4 design status**
 
 In `docs/plans/2026-05-28-c4-variant-identity-design.md`, change C4c from wholly remaining to:
 
 ```markdown
 C4c-1 rsID input is implemented through `dataset:variant-labels-dbsnp-human`; transcript/protein HGVS
-projection remains deferred.
+projection remains deferred. Full dbSNP artifact build/operator smoke remains pending.
 ```
 
-- [ ] **Step 2: Update Pillar C status**
+- [x] **Step 2: Update Pillar C status**
 
 In `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md`, update the C4 row to say:
 
 ```markdown
-C4a variant identity, C4b liftover/compatibility, and C4c-1 rsID input merged locally; transcript/protein projection remains.
+C4a variant identity, C4b liftover/compatibility, and C4c-1 rsID input implemented locally; full dbSNP artifact build/operator smoke and transcript/protein projection remain.
 ```
 
-- [ ] **Step 3: Update umbrella status**
+- [x] **Step 3: Update umbrella status**
 
 In `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`, update the status line and §8 so C4c no longer appears fully open once C4c-1 lands.
 
-- [ ] **Step 4: Mark this plan implemented**
+- [x] **Step 4: Mark this plan implemented**
 
 Change this plan's task checkboxes as tasks land and add an implementation status paragraph near the top:
 
@@ -1190,7 +1195,7 @@ Change this plan's task checkboxes as tasks land and add an implementation statu
 **Implementation status:** Implemented locally in `~/d/science` and `~/d/science-commons`; C4c-1 supports pinned dbSNP rsID input. Transcript/protein HGVS projection remains out of scope.
 ```
 
-- [ ] **Step 5: Commit docs**
+- [x] **Step 5: Commit docs**
 
 ```bash
 rtk git add docs/plans/2026-05-28-c4-variant-identity-design.md docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md
@@ -1202,7 +1207,7 @@ rtk git commit -m "docs: update c4c rsid status"
 **Files:**
 - No new files.
 
-- [ ] **Step 1: Run targeted tests**
+- [x] **Step 1: Run targeted tests**
 
 ```bash
 rtk uv run --frozen --project science pytest \
@@ -1214,7 +1219,7 @@ rtk uv run --frozen --project science pytest \
 
 Expected: PASS.
 
-- [ ] **Step 2: Run lint**
+- [x] **Step 2: Run lint**
 
 ```bash
 rtk uv run --frozen --project science ruff check \
@@ -1228,7 +1233,7 @@ rtk uv run --frozen --project science ruff check \
 
 Expected: `All checks passed!`
 
-- [ ] **Step 3: Run type check**
+- [x] **Step 3: Run type check**
 
 ```bash
 rtk uv run --frozen --project science pyright \
@@ -1242,7 +1247,7 @@ rtk uv run --frozen --project science pyright \
 
 Expected: `0 errors, 0 warnings, 0 informations`.
 
-- [ ] **Step 4: Run whitespace check**
+- [x] **Step 4: Run whitespace check**
 
 ```bash
 rtk git diff --check
@@ -1254,13 +1259,13 @@ Expected: no output.
 
 ## Self-Review Checklist
 
-- [ ] **No new canonical identity:** rsID remains an input label; VRS remains canonical.
-- [ ] **No live service:** implementation uses only pinned local dbSNP artifacts.
-- [ ] **No silent ambiguity:** multi-allelic rsIDs require allele disambiguation or produce `ambiguous-rsid`.
-- [ ] **No giant CSV scan:** resolver uses indexed SQLite lookup.
-- [ ] **No per-row file hashing:** validation resolves/hash-verifies `rsid_mappings.sqlite` once per dataset and passes `sqlite_path` through row calls.
-- [ ] **Assembly anchored:** every lookup filters by declared `identity_context.assembly.seqcol_digest`.
-- [ ] **Registry-coupled digests:** the dbSNP build reads GRCh37/GRCh38 seqcol digests from `dataset:assembly-registry`, not hardcoded constants.
+- [x] **No new canonical identity:** rsID remains an input label; VRS remains canonical.
+- [x] **No live service:** implementation uses only pinned local dbSNP artifacts.
+- [x] **No silent ambiguity:** multi-allelic rsIDs require allele disambiguation or produce `ambiguous-rsid`.
+- [x] **No giant CSV scan:** resolver uses indexed SQLite lookup.
+- [x] **No per-row file hashing:** validation resolves/hash-verifies `rsid_mappings.sqlite` once per dataset and passes `sqlite_path` through row calls.
+- [x] **Assembly anchored:** every lookup filters by declared `identity_context.assembly.seqcol_digest`.
+- [x] **Registry-coupled digests:** the dbSNP build reads GRCh37/GRCh38 seqcol digests from `dataset:assembly-registry`, not hardcoded constants.
 - [ ] **Feasibility checked:** full-build SQLite size, build time, and retained/skipped row counts are recorded before datapackage hashes are committed.
-- [ ] **Hermetic tests:** unit and validation tests use temporary SQLite fixtures and monkeypatches, not full dbSNP data.
-- [ ] **Transcript/protein projection remains out of scope:** no partial projection implementation is added.
+- [x] **Hermetic tests:** unit and validation tests use temporary SQLite fixtures and monkeypatches, not full dbSNP data.
+- [x] **Transcript/protein projection remains out of scope:** no partial projection implementation is added.
