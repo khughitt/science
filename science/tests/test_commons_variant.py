@@ -173,9 +173,7 @@ def test_out_of_bounds_reference_span_is_flagged(monkeypatch: pytest.MonkeyPatch
     assert defect.reason == "out-of-bounds"
 
 
-def test_out_of_bounds_empty_ref_spdi_insertion_is_flagged(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_out_of_bounds_empty_ref_spdi_insertion_is_flagged(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     proxy, digest = _proxy(tmp_path)
     monkeypatch.setattr(V, "_resolve_contig", lambda **_: ContigMatch(digest, "1", len(_SEQ), "seqcol_name"))
     monkeypatch.setattr(V, "_open_proxy", lambda **_: proxy)
@@ -192,9 +190,7 @@ def test_out_of_bounds_empty_ref_spdi_insertion_is_flagged(
     assert defect.reason == "out-of-bounds"
 
 
-def test_empty_ref_spdi_insertion_at_contig_end_is_allowed(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_empty_ref_spdi_insertion_at_contig_end_is_allowed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     proxy, digest = _proxy(tmp_path)
     monkeypatch.setattr(V, "_resolve_contig", lambda **_: ContigMatch(digest, "1", len(_SEQ), "seqcol_name"))
     monkeypatch.setattr(V, "_open_proxy", lambda **_: proxy)
@@ -261,6 +257,54 @@ def test_spdi_invalid_base_is_rejected(tmp_path: Path) -> None:
 
     assert isinstance(defect, V.VariantDefect)
     assert defect.reason == "unsupported-allele"
+
+
+def test_vrs_id_from_rsid_delegates_to_spdi(monkeypatch: pytest.MonkeyPatch) -> None:
+    from science_tool.commons.rsid import RsidMatch
+
+    calls: list[tuple[str, str, str]] = []
+    rsid_calls: list[object] = []
+
+    def fake_resolve_rsid(*args: object, **kwargs: object) -> RsidMatch:
+        rsid_calls.append(kwargs.get("sqlite_path"))
+        return RsidMatch(
+            rsid="rs1",
+            seqcol_digest="GRCH38",
+            contig="NC_000001.11",
+            pos0=10,
+            ref="A",
+            alt="G",
+            source_vcf="GCF_000001405.40.gz",
+            allele_index=1,
+        )
+
+    monkeypatch.setattr(V, "resolve_rsid", fake_resolve_rsid)
+
+    def fake_vrs_id(expr: str, *, fmt: str, assembly_seqcol: str, **kwargs: object) -> V.VariantMatch:
+        calls.append((expr, fmt, assembly_seqcol))
+        return V.VariantMatch(vrs_id="ga4gh:VA.rsid", refget_digest="SQ.ref")
+
+    monkeypatch.setattr(V, "vrs_id", fake_vrs_id)
+
+    result = V.vrs_id_from_rsid("rs1", assembly_seqcol="GRCH38", sqlite_path="/tmp/rsid.sqlite")
+
+    assert result == V.VariantMatch(vrs_id="ga4gh:VA.rsid", refget_digest="SQ.ref")
+    assert calls == [("NC_000001.11:10:A:G", "spdi", "GRCH38")]
+    assert rsid_calls == ["/tmp/rsid.sqlite"]
+
+
+def test_vrs_id_from_rsid_returns_variant_defect(monkeypatch: pytest.MonkeyPatch) -> None:
+    from science_tool.commons.rsid import RsidDefect
+
+    monkeypatch.setattr(
+        V,
+        "resolve_rsid",
+        lambda *args, **kwargs: RsidDefect("rs2", "ambiguous-rsid", "2 candidate alleles for GRCH38"),
+    )
+
+    result = V.vrs_id_from_rsid("rs2", assembly_seqcol="GRCH38")
+
+    assert result == V.VariantDefect("rs2", "ambiguous-rsid", "2 candidate alleles for GRCH38")
 
 
 def test_spdi_lowercase_base_is_rejected(tmp_path: Path) -> None:

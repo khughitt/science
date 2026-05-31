@@ -17,6 +17,7 @@ from science_tool.commons.errors import CommonsError
 from science_tool.commons.liftover import Chain, LiftedInterval, LiftoverDefect, lift_interval
 from science_tool.commons.refget_proxy import RefgetProxy
 from science_tool.commons.resolver import resolve
+from science_tool.commons.rsid import RsidDefect, RsidMatch, resolve_rsid
 from science_tool.commons.sequence_store import SequenceStoreError, open_store
 from science_tool.commons.vrs import compute_vrs_id
 
@@ -257,6 +258,42 @@ def vrs_id(
         raise
     except Exception as error:
         return VariantDefect(expr, "unsupported-allele", f"translator-rejected: {error}")
+
+
+def vrs_id_from_rsid(
+    rsid: str,
+    *,
+    assembly_seqcol: str,
+    registry: str = "dataset:variant-labels-dbsnp-human",
+    sqlite_path: Path | str | None = None,
+    ref: str | None = None,
+    alt: str | None = None,
+    commons_root: Path | str | None = None,
+    data_root: Path | str | None = None,
+    store_root: Path | str | None = None,
+) -> VariantMatch | VariantDefect:
+    resolved = resolve_rsid(
+        rsid,
+        assembly_seqcol=assembly_seqcol,
+        registry=registry,
+        sqlite_path=sqlite_path,
+        ref=ref,
+        alt=alt,
+        commons_root=commons_root,
+        data_root=data_root,
+    )
+    if isinstance(resolved, RsidDefect):
+        return VariantDefect(resolved.query, resolved.reason, resolved.detail)
+    assert isinstance(resolved, RsidMatch)
+    expr = f"{resolved.contig}:{resolved.pos0}:{resolved.ref}:{resolved.alt}"
+    return vrs_id(
+        expr,
+        fmt="spdi",
+        assembly_seqcol=assembly_seqcol,
+        commons_root=commons_root,
+        data_root=data_root,
+        store_root=store_root,
+    )
 
 
 def lifted_vrs_id(
