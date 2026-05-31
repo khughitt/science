@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a merged and C4b implemented on `feature/c4b-liftover` + Pillar A (A1 + A2) merged and complete; Pillar D1, B1, B-migration, B2, and E (Reactome ingestion) merged locally; C4c, D2, and non-tabular reference modeling remain open. Spawns focused per-area docs.
+Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a/C4b merged locally and C4c rsID-first plan drafted + Pillar A (A1 + A2) merged and complete; Pillar D1, B1, B-migration, B2, and E (Reactome ingestion) merged locally; C4c transcript/protein projection, D2, and non-tabular reference modeling remain open. Spawns focused per-area docs.
 
 Related (builds on):
 - `docs/proposition-and-evidence-model.md` — core reasoning model
@@ -230,7 +230,7 @@ Spawned design docs (in `~/d/science/docs/plans/`), with the dependency order:
 
 | Phase | Doc | Depends on | Locks | Status |
 |---|---|---|---|---|
-| 1 | Identity, reference genomes & id mapping (C) | — | canonical assembly + gene/protein/variant crosswalks; pinned-vs-service policy | design ✓; **impl: C1 (assembly), C2 (gene), C3 (protein), and C4a (variant identity) merged; C4b (liftover/compatibility) implemented on `feature/c4b-liftover`; C4c pending** |
+| 1 | Identity, reference genomes & id mapping (C) | — | canonical assembly + gene/protein/variant crosswalks; pinned-vs-service policy | design ✓; **impl: C1 (assembly), C2 (gene), C3 (protein), C4a (variant identity), and C4b (liftover/compatibility) merged locally; C4c rsID-first plan drafted; transcript/protein projection pending** |
 | 2 | Dataset taxonomy & epistemic integration (A) | C | `source_class` + `derived_kind`; curation down-weight as a *modifier*, mapped into aggregation + two-axis | design ✓; **impl: A1 + A2 merged** (recording layer + curation down-weight, config v2); **Pillar A complete** |
 | 3a | Gene-set / annotation type `bio.geneset` (D) | A, C | extension schema; per-set provenance; promotion rule; realizes B's interface for gene sets | design ✓; **impl: D1 collection type implemented; D2 promoted members pending** |
 | 3b | Dataset-influence & provenance tracking (B) | A, C (+ D for the gene-set arm) | `dataset:`-ref declarations + usage role; dataset→consumer derivation; *candidate* auto-independence | B1 implemented locally; B-migration implemented; **B2 merged locally** |
@@ -300,7 +300,8 @@ schema(s), a pinned reference collection + recipe, a pure resolver, and the corr
 cross-assembly liftover chains, seqcol *compatibility relations* (the first realization of the primitive's
 RCM-D6 guardrail-2), lifted target-assembly VRS reminting, and the C1 check-3 liftover remedy are in
 place. The implementation plan is tracked at `docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`.
-C4c remains for rsID, transcript, and protein projection inputs over pinned snapshots.
+C4c-1 is planned for rsID input over pinned dbSNP snapshots; transcript and protein projection inputs over
+pinned snapshots remain later C4c work.
 
 **Pillar A — A1 + A2 merged; Pillar A complete.** A1 (`source_class` / `derived_kind` /
 `dataset_usage` recording layer) landed on `~/d/science` `main`: JSON mixin schema
@@ -323,7 +324,7 @@ provenance layer, B-migration is implemented (`science graph migrate-paper-datas
 and B2 is implemented as the dataset-derived independence layer
 (`science_tool.graph.dataset_independence`, graph materialization, validation integration, aggregation
 metadata merge, and `belief-logodds-v3`). Pillar A is complete; C (C1–C3 merged, C4a merged, C4b
-implemented on `feature/c4b-liftover`, C4c pending), D1, and B1/B2 are now exercised by E. Reactome is implemented as the first real
+merged locally, C4c rsID-first plan drafted), D1, and B1/B2 are now exercised by E. Reactome is implemented as the first real
 `bio.geneset` commons dataset: Reactome release 96 was fetched from the versioned Reactome download URL,
 the C2 HGNC gene crosswalk was built, `dataset:reactome` was promoted into `~/d/science-commons`, and the
 pan-disease local Reactome stub was removed so consumers resolve through commons. D2 remains deferred

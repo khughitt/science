@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; implementation underway — C1/C2/C3/C4a merged, C4b implemented on `feature/c4b-liftover`, C4c remaining (Phase 1 of the bio data architecture; foundational)
+Status: approved; implementation underway — C1/C2/C3/C4a/C4b merged locally, C4c rsID-first plan drafted (Phase 1 of the bio data architecture; foundational)
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar C
@@ -264,7 +264,7 @@ C is large; it ships in independently-testable sub-phases:
 | C1 — Assembly registry (seqcol-keyed, as a reference collection) + `bio.identity_context` container + inline `seqcol_digest` declaration with `resolution_status` + checks 1 & 3 (detect-only, exact-equality only) | assembly identity; cheapest win, unblocks GTEx-class data; mismatch *detected*, remedy (liftover/compatibility) in C4 |
 | C2 — Gene crosswalk reference datasets + resolver `to_canonical` + checks 2 & 4 | gene identity; unblocks MSigDB/Reactome/GTEx joins |
 | C3 — Protein crosswalk | protein identity; unblocks UniProt/AlphaFold |
-| C4 — Variant identity (VRS 2.0 / SPDI) + liftover (C-D5) + seqcol compatibility relations (RCM-D6); optional dbSNP + transcript-ref snapshots | C4a variant identity merged; C4b liftover/compatibility implemented on `feature/c4b-liftover`; C4c rsID/transcript/projection inputs remain |
+| C4 — Variant identity (VRS 2.0 / SPDI) + liftover (C-D5) + seqcol compatibility relations (RCM-D6); optional dbSNP + transcript-ref snapshots | C4a variant identity and C4b liftover/compatibility merged locally; C4c rsID-first implementation plan drafted; transcript/protein projection remains |
 
 C1→C2 are the critical path for the other pillars (A's `reference` class, D's gene-set identifier space,
 B's dataset resolution all need gene identity first). C3/C4 can trail.
@@ -274,8 +274,9 @@ B's dataset resolution all need gene identity first). C3/C4 can trail.
 ## 9. Status & next step
 
 Pillar C is partly implemented: C1 (assembly registry), C2 (gene crosswalk), C3 (protein crosswalk),
-C4a (variant identity over pinned offline VRS/refget inputs) are merged. C4b (cross-assembly liftover +
-seqcol compatibility relations, including the C1 check-3 remedy) is implemented on `feature/c4b-liftover`.
+C4a (variant identity over pinned offline VRS/refget inputs) and C4b (cross-assembly liftover +
+seqcol compatibility relations, including the C1 check-3 remedy) are merged locally.
 The C4b implementation plan is
-tracked at `docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`. The remaining unplanned C work is
-C4c (rsID plus transcript/protein projection inputs over pinned snapshots).
+tracked at `docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`. C4c-1 rsID input is planned in
+`docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`; transcript/protein projection inputs over pinned
+snapshots remain unplanned.

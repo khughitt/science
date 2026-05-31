@@ -4,7 +4,7 @@
 
 **Goal:** Add pinned cross-assembly coordinate liftover and seqcol compatibility relations so assembly-mismatch validation can distinguish unresolved mismatches from explicitly lifted, provenance-bearing re-identifications.
 
-**Implementation status:** Implemented in `~/d/science` on branch `feature/c4b-liftover` and in
+**Implementation status:** Implemented and merged locally in `~/d/science` and in
 `~/d/science-commons` via `dataset:assembly-liftover-grch37-grch38`. The first pass supports pinned UCSC
 GRCh37→GRCh38 same-strand chain-block liftover, explicit unliftable/multi-mapping/strand-ambiguous
 defects, lifted target-assembly VRS reminting, and provenance-verified validation remedies. Reverse-strand
