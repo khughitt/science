@@ -359,6 +359,47 @@ def test_lifted_vrs_id_links_source_and_target_ids(monkeypatch: pytest.MonkeyPat
     assert calls == [("chr1-10-A-T", "vcf", "SRC"), ("chr1:99:A:T", "spdi", "TGT")]
 
 
+def test_lifted_vrs_id_rejects_zero_width_insertion_before_minting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    vrs_id_called = False
+    lift_interval_called = False
+
+    def fake_vrs_id(*args: object, **kwargs: object) -> V.VariantMatch:
+        nonlocal vrs_id_called
+        vrs_id_called = True
+        return V.VariantMatch(vrs_id="ga4gh:VA.source", refget_digest="SQ.src")
+
+    def fake_lift_interval(*args: object, **kwargs: object) -> LiftedInterval:
+        nonlocal lift_interval_called
+        lift_interval_called = True
+        return LiftedInterval(
+            source_seqcol_digest="SRC",
+            target_seqcol_digest="TGT",
+            source_contig="chr1",
+            target_contig="chr1",
+            source_start=10,
+            source_end=10,
+            target_start=99,
+            target_end=99,
+            target_strand="+",
+            chain_id=1,
+        )
+
+    monkeypatch.setattr(V, "vrs_id", fake_vrs_id)
+    monkeypatch.setattr(V, "lift_interval", fake_lift_interval)
+
+    defect = V.lifted_vrs_id("chr1:10::T", fmt="spdi", source_seqcol="SRC", target_seqcol="TGT", chains=[])
+
+    assert defect == V.VariantDefect(
+        "chr1:10::T",
+        "unsupported-allele",
+        "lifted reminting does not support zero-width insertion alleles yet",
+    )
+    assert not vrs_id_called
+    assert not lift_interval_called
+
+
 def test_lifted_vrs_id_returns_liftover_defect(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         V,

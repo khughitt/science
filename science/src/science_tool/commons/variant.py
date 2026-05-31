@@ -254,6 +254,12 @@ def lifted_vrs_id(
     if parsed is None:
         return VariantDefect(expr, "unsupported-allele", detail)
     contig, pos0, ref, alt = parsed
+    if not ref:
+        return VariantDefect(
+            expr,
+            "unsupported-allele",
+            "lifted reminting does not support zero-width insertion alleles yet",
+        )
 
     source_match = vrs_id(
         expr,
