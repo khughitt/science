@@ -184,6 +184,18 @@ def _write_reference_graph_commons(
     return commons_root, data_root
 
 
+def _replace_resource_bytes(commons_root: Path, data_root: Path, *, name: str, path: str, content: bytes) -> None:
+    data_root.joinpath("mondo", path).write_bytes(content)
+    datapackage_path = commons_root / "datasets" / "mondo" / "datapackage.yaml"
+    datapackage = yaml.safe_load(datapackage_path.read_text(encoding="utf-8"))
+    for resource in datapackage["resources"]:
+        if resource["name"] == name:
+            resource["hash"] = _hash(content)
+            datapackage_path.write_text(yaml.safe_dump(datapackage, sort_keys=False), encoding="utf-8")
+            return
+    raise AssertionError(f"test fixture resource {name!r} not found")
+
+
 @pytest.fixture(autouse=True)
 def _hermetic_commons_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("SCIENCE_COMMONS_ROOT", raising=False)
@@ -240,6 +252,44 @@ def test_resolve_reference_graph_member_payload_rejects_missing_declared_edge_fi
     commons_root, data_root = _write_reference_graph_commons(tmp_path, write_edge_file=False)
 
     with pytest.raises(MemberPayloadError, match="edge resource cannot be read"):
+        resolve_virtual_member_payload(
+            "dataset:mondo-0005148",
+            commons_root=commons_root,
+            data_root=data_root,
+        )
+
+
+def test_resolve_reference_graph_member_payload_rejects_missing_declared_node_file(tmp_path: Path) -> None:
+    commons_root, data_root = _write_reference_graph_commons(tmp_path)
+    data_root.joinpath("mondo", "nodes.csv").unlink()
+
+    with pytest.raises(MemberPayloadError, match="node index resource cannot be read"):
+        resolve_virtual_member_payload(
+            "dataset:mondo-0005148",
+            commons_root=commons_root,
+            data_root=data_root,
+        )
+
+
+def test_resolve_reference_graph_member_payload_rejects_malformed_node_csv(tmp_path: Path) -> None:
+    commons_root, data_root = _write_reference_graph_commons(tmp_path)
+    malformed_nodes = b"member_key,member_kind,status,replaced_by,dataset_usage\nMONDO:0005148,term,active,,[]\n"
+    _replace_resource_bytes(commons_root, data_root, name="nodes", path="nodes.csv", content=malformed_nodes)
+
+    with pytest.raises(MemberPayloadError, match="node index is malformed"):
+        resolve_virtual_member_payload(
+            "dataset:mondo-0005148",
+            commons_root=commons_root,
+            data_root=data_root,
+        )
+
+
+def test_resolve_reference_graph_member_payload_rejects_malformed_edge_csv(tmp_path: Path) -> None:
+    commons_root, data_root = _write_reference_graph_commons(tmp_path)
+    malformed_edges = b"subject,predicate,evidence,dataset_usage\nMONDO:0005148,is_a,,[]\n"
+    _replace_resource_bytes(commons_root, data_root, name="edges", path="edges.csv", content=malformed_edges)
+
+    with pytest.raises(MemberPayloadError, match="edge resource is malformed"):
         resolve_virtual_member_payload(
             "dataset:mondo-0005148",
             commons_root=commons_root,
