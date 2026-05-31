@@ -230,6 +230,9 @@ The first implementation should support a small, explicit set of formats:
 - `rdf_ntriples`
 - `jsonl_edges`
 
+For `jsonl_edges`, `graph_resource` is the edge artifact. `edge_resource` is only needed when a distinct
+normalized projection is produced from another graph format such as RDF.
+
 Additional formats can be added when a real resource requires them.
 
 ---
@@ -262,7 +265,7 @@ Field intent:
 | `member_key_space` | Declares how addressable members are keyed |
 | `node_index_resource` | Required RG1 table for fast member lookup and status checks |
 | `edge_resource` | Optional normalized edge table for validation/query summaries |
-| `member_count` | Expected addressable node/member count |
+| `member_count` | Expected addressable node/member row count, including deprecated/withdrawn rows |
 | `edge_count` | Expected edge count, when cheaply knowable |
 
 `node_index_resource` is required for RG1. Without it, the existing keyed-member resolution helper can
@@ -281,6 +284,10 @@ member_key,member_kind,label,status,replaced_by,dataset_usage
 MONDO:0005148,term,multiple myeloma,active,,"[]"
 MONDO:obsolete,term,old label,deprecated,"MONDO:0005148","[]"
 ```
+
+`member_kind` is an open vocabulary in RG1. Term-graph fixtures should use `term`; association-specific
+kinds such as `disease`, `target`, or `association` are deferred until an association graph is the target
+resource.
 
 The edge resource, if present, should have:
 
@@ -321,8 +328,9 @@ Initial validation should be cheap and deterministic over pinned local artifacts
 6. **Member promotion resolution.** A `bio.reference_graph.member` dataset with `derivation.kind:
    member_of` must resolve `derivation.member_key` in its parent reference graph, unless a later
    implementation explicitly adds a declared-unresolved member state.
-7. **Deprecated-member references.** Promoted or referenced deprecated/withdrawn members produce a
-   review warning or error according to tier; `replaced_by` is reported, not auto-applied.
+7. **Deprecated-member references.** RG1 emits a review warning for promoted or referenced
+   deprecated/withdrawn members; `replaced_by` is reported, not auto-applied. Tier-based severity
+   graduation is deferred until a concrete validator policy needs it.
 8. **Dataset usage shape.** Dataset-level and member-level `dataset_usage` entries use the shared
    `DatasetUsage` role/overlap vocabulary and `dataset:` refs.
 
