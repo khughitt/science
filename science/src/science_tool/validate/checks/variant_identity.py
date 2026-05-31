@@ -14,7 +14,7 @@ registry member-key crosswalk.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -367,7 +367,7 @@ def _row_layer_decl_is_usable(decl: Any) -> bool:
     return str(locator["format"]).lower() in _ROW_MINTING_FORMATS
 
 
-def _missing_required_columns(fieldnames: list[str] | None, locator: dict[str, Any], fmt: str) -> list[str]:
+def _missing_required_columns(fieldnames: Sequence[str] | None, locator: dict[str, Any], fmt: str) -> list[str]:
     present = set(fieldnames or [])
     return [column for column in _required_columns(locator, fmt) if column not in present]
 

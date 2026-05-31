@@ -458,7 +458,7 @@ def test_markdown_entity_without_datapackage_reports_resource_unavailable(tmp_pa
 
 def test_row_expr_builds_vcf_shorthand_from_column_mapping() -> None:
     locator = {"columns": {"chrom": "chrom", "pos": "pos", "ref": "ref", "alt": "alt"}}
-    row = {"chrom": "1", "pos": "101", "ref": "A", "alt": "T"}
+    row: dict[str | None, str | list[str] | None] = {"chrom": "1", "pos": "101", "ref": "A", "alt": "T"}
     assert _row_expr(row, locator, "vcf") == "1-101-A-T"
 
 
