@@ -127,10 +127,17 @@ def truncate_slug_on_word_boundary(slug: str, max_length: int) -> str:
     return slug[:max_length].rstrip("-")
 
 
-def derive_slug(title: str) -> str:
+DERIVED_SLUG_MAX_LENGTH = 72
+
+
+def normalize_to_slug(title: str) -> str:
+    """Kebab-case a title without applying the length cap."""
     ascii_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode("ascii")
-    slug = re.sub(r"[^a-z0-9]+", "-", ascii_title.lower()).strip("-")
-    slug = truncate_slug_on_word_boundary(slug, 72)
+    return re.sub(r"[^a-z0-9]+", "-", ascii_title.lower()).strip("-")
+
+
+def derive_slug(title: str) -> str:
+    slug = truncate_slug_on_word_boundary(normalize_to_slug(title), DERIVED_SLUG_MAX_LENGTH)
     if len(slug) < 2:
         raise EntityCommandError("Title cannot derive a stable slug; requires --slug")
     return validate_slug(slug)
@@ -362,6 +369,16 @@ def create_entity(
         text=text,
         target_entity_id=entity_id_value,
     )
+    if slug is None and entity_id is None:
+        full_slug = normalize_to_slug(title)
+        used_slug = truncate_slug_on_word_boundary(full_slug, DERIVED_SLUG_MAX_LENGTH)
+        if used_slug != full_slug:
+            warnings.insert(
+                0,
+                f"Title truncated to derive id slug '{used_slug}' "
+                f"(dropped '{full_slug[len(used_slug):].lstrip('-')}'). "
+                f"The id is {entity_id_value}; pass --slug to choose a different one.",
+            )
 
     tmp_path = destination.with_suffix(destination.suffix + ".tmp")
     try:

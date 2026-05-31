@@ -720,6 +720,7 @@ def _promote_kind_cmd(
             mixin_extensions=mixin_extensions,
             verify_digests=verify_digests,
             skip_on_conflict=non_interactive,
+            skip_on_invalid=non_interactive,
         )
     except CommonsError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -735,6 +736,18 @@ def _promote_kind_cmd(
         )
         for fc in skipped_on_conflict:
             click.echo(f"  - {fc.slug or '?'} (from {fc.project_slug})", err=True)
+
+    skipped_on_invalid = [
+        fc for fc in plan.failed_candidates if fc.error_class == "PromoteValidationSkipped"
+    ]
+    if skipped_on_invalid:
+        click.echo(
+            f"Skipped {len(skipped_on_invalid)} schema-invalid candidate(s) (non-interactive); "
+            "fix the source entity and re-run to promote it:",
+            err=True,
+        )
+        for fc in skipped_on_invalid:
+            click.echo(f"  - {fc.slug or '?'} (from {fc.project_slug}): {fc.error_message}", err=True)
 
     click.echo(
         f"Plan: {len(plan.decisions)} canonical entities, "

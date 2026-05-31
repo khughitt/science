@@ -302,6 +302,41 @@ def test_template_driven_create_entity_passes_prospective_audit_for_all_migrated
         assert result.path.exists()
 
 
+def test_create_entity_warns_when_title_slug_is_truncated(tmp_path: Path) -> None:
+    # A long title silently truncates the derived id slug, which surprised a
+    # downstream user and left an orphan stub (fb-2026-05-30-012). Surface a
+    # warning naming the dropped tail and pointing at --slug.
+    seed_project(tmp_path)
+    long_title = (
+        "Disentangling tumor mutational burden from immune infiltration "
+        "as competing causes and confounding"
+    )
+    result = create_entity(
+        project_root=tmp_path,
+        kind="discussion",
+        title=long_title,
+        today=date(2026, 5, 30),
+    )
+
+    assert len(result.warnings) == 1
+    warning = result.warnings[0]
+    assert "truncat" in warning.lower()
+    assert "--slug" in warning
+    # The id carries only the truncated slug (the dropped tail is absent).
+    assert "confounding" not in result.entity_id
+
+
+def test_create_entity_no_truncation_warning_for_short_title(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    result = create_entity(
+        project_root=tmp_path,
+        kind="discussion",
+        title="A short discussion title",
+        today=date(2026, 5, 30),
+    )
+    assert result.warnings == []
+
+
 def test_append_note_to_body_creates_peer_notes_section() -> None:
     body = "# Title\n\n## Summary\n\nBody."
     updated = append_note_to_body(body, "- 2026-04-28: Clarified.")

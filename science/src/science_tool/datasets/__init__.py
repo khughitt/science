@@ -92,6 +92,12 @@ def _auto_register() -> None:
         register("semantic_scholar", SemanticScholarAdapter)
     except ImportError:
         pass
+    try:
+        from science_tool.datasets.cbioportal import CBioPortalAdapter
+
+        register("cbioportal", CBioPortalAdapter)
+    except ImportError:
+        pass
 
 
 _auto_register()

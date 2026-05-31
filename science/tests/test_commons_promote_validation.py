@@ -88,6 +88,56 @@ def test_plan_promote_validates_canonical_against_kind_profile(tmp_path, monkeyp
     assert "year" in err.schema_message.lower() or "99" in err.schema_message
 
 
+def test_skip_on_invalid_drops_bad_decision_and_keeps_valid(tmp_path, monkeypatch) -> None:
+    """One schema-invalid candidate must not abort a whole batch promote.
+
+    With skip_on_invalid=True (set for non-interactive runs), a candidate whose
+    canonical fails plan-time validation is dropped into a PromoteValidationSkipped
+    soft-failure and the valid candidates still promote — instead of aborting the
+    entire run on the first bad entity (fb-2026-05-31-002).
+    """
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        discover_candidates,
+        plan_promote,
+    )
+
+    proj = tmp_path / "proj_mixed"
+    (proj / "doc" / "papers").mkdir(parents=True)
+    (proj / "doc" / "papers" / "Good2025.md").write_text(
+        "---\nid: paper:Good2025\ntitle: Good\nyear: 2025\n---\n",
+        encoding="utf-8",
+    )
+    (proj / "doc" / "papers" / "Bad2025.md").write_text(
+        "---\nid: paper:Bad2025\ntitle: Bad\nyear: 99\n---\n",
+        encoding="utf-8",
+    )
+    commons = _init_commons_repo(tmp_path / "commons")
+
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+
+    discovery = discover_candidates(["proj_mixed"], PROMOTE_KIND_PAPER)
+    plan = plan_promote(
+        discovery,
+        commons_root=commons,
+        kind=PROMOTE_KIND_PAPER,
+        skip_on_invalid=True,
+    )
+
+    promoted = {d.slug for d in plan.decisions}
+    assert "Good2025" in promoted
+    assert "Bad2025" not in promoted
+    skipped = [
+        fc for fc in plan.failed_candidates if fc.error_class == "PromoteValidationSkipped"
+    ]
+    assert len(skipped) == 1
+    assert skipped[0].slug == "Bad2025"
+    assert "year" in skipped[0].error_message.lower() or "99" in skipped[0].error_message
+
+
 def test_plan_promote_wraps_overlay_validation_failure(tmp_path, monkeypatch) -> None:
     from science_model.entity_schema import EntityValidationError, EntityValidator
     from science_tool.commons.errors import PromoteValidationError

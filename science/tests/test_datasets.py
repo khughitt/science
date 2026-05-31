@@ -520,3 +520,122 @@ class TestSemanticScholarAdapter:
             results = adapter.search("nonexistent")
 
         assert results == []
+
+
+class TestCBioPortalAdapter:
+    # Sample of the public cbioportal.org /api/studies SUMMARY projection.
+    _CATALOG = [
+        {
+            "studyId": "gbm_cptac_2021",
+            "name": "Glioblastoma (CPTAC, Cell 2021)",
+            "description": "CPTAC <A HREF=\"x\">Glioblastoma</A> proteogenomics.",
+            "cancerTypeId": "gbm",
+            "allSampleCount": 99,
+            "publicStudy": True,
+        },
+        {
+            "studyId": "brca_tcga_pub2015",
+            "name": "Breast Invasive Carcinoma (TCGA, Cell 2015)",
+            "description": "TCGA breast cohort.",
+            "cancerTypeId": "brca",
+            "allSampleCount": 816,
+            "publicStudy": True,
+        },
+    ]
+
+    def _catalog_response(self) -> MagicMock:
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = self._CATALOG
+        return resp
+
+    def test_name(self) -> None:
+        from science_tool.datasets.cbioportal import CBioPortalAdapter
+
+        assert CBioPortalAdapter().name == "cbioportal"
+
+    def test_search_matches_case_insensitively(self) -> None:
+        # The public API's `keyword` filter is case-sensitive; the adapter must
+        # match a lowercase query against title-cased study names so oncology
+        # cohorts are actually reachable (fb-2026-05-30-013/014).
+        from science_tool.datasets.cbioportal import CBioPortalAdapter
+
+        adapter = CBioPortalAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = self._catalog_response()
+            results = adapter.search("glioblastoma", max_results=10)
+
+        assert len(results) == 1
+        r = results[0]
+        assert r.source == "cbioportal"
+        assert r.id == "gbm_cptac_2021"
+        assert r.title == "Glioblastoma (CPTAC, Cell 2021)"
+        assert r.year == 2021
+        # allSampleCount is a placeholder (1) in the list endpoint, so search
+        # results deliberately do not report a sample count.
+        assert r.sample_count is None
+        assert "https://www.cbioportal.org/study/summary?id=gbm_cptac_2021" == r.url
+        # HTML tags stripped from the description.
+        assert "<A" not in r.description
+
+    def test_metadata_fetches_real_sample_count(self) -> None:
+        # The study object reports allSampleCount=1 (placeholder); the real count
+        # comes only from the dedicated /samples listing.
+        from science_tool.datasets.cbioportal import CBioPortalAdapter
+
+        study_resp = MagicMock()
+        study_resp.status_code = 200
+        study_resp.json.return_value = {
+            "studyId": "gbm_tcga_pub2013",
+            "name": "Glioblastoma (TCGA, Cell 2013)",
+            "description": "TCGA GBM.",
+            "cancerTypeId": "gbm",
+            "allSampleCount": 1,
+        }
+        samples_resp = MagicMock()
+        samples_resp.status_code = 200
+        samples_resp.json.return_value = [{"sampleId": f"s{i}"} for i in range(577)]
+
+        adapter = CBioPortalAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.side_effect = [study_resp, samples_resp]
+            result = adapter.metadata("gbm_tcga_pub2013")
+
+        assert result.id == "gbm_tcga_pub2013"
+        assert result.sample_count == 577
+        assert result.year == 2013
+
+    def test_search_requires_all_tokens(self) -> None:
+        from science_tool.datasets.cbioportal import CBioPortalAdapter
+
+        adapter = CBioPortalAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = self._catalog_response()
+            results = adapter.search("breast tcga", max_results=10)
+
+        assert [r.id for r in results] == ["brca_tcga_pub2015"]
+
+    def test_search_empty_when_no_match(self) -> None:
+        from science_tool.datasets.cbioportal import CBioPortalAdapter
+
+        adapter = CBioPortalAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = self._catalog_response()
+            results = adapter.search("pancreatic xenograft", max_results=10)
+
+        assert results == []
+
+    def test_files_returns_public_datahub_tarball(self) -> None:
+        from science_tool.datasets.cbioportal import CBioPortalAdapter
+
+        files = CBioPortalAdapter().files("gbm_cptac_2021")
+        assert len(files) == 1
+        assert files[0].url == (
+            "https://cbioportal-datahub.s3.amazonaws.com/gbm_cptac_2021.tar.gz"
+        )
+        assert files[0].filename == "gbm_cptac_2021.tar.gz"
+
+    def test_registered_in_adapter_registry(self) -> None:
+        from science_tool.datasets import available_adapters
+
+        assert "cbioportal" in available_adapters()

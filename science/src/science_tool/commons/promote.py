@@ -617,6 +617,7 @@ def plan_promote(
     mixin_extensions: tuple["ProfileComponent", ...] = (),
     verify_digests: bool = False,
     skip_on_conflict: bool = False,
+    skip_on_invalid: bool = False,
 ) -> PromotePlan:
     """Build a PromotePlan from a DiscoveryResult.
 
@@ -1070,7 +1071,8 @@ def plan_promote(
                     )
                 )
             continue
-    _validate_plan(decisions)
+    decisions, validation_skipped = _validate_plan(decisions, skip_on_invalid=skip_on_invalid)
+    soft_failures.extend(validation_skipped)
     return PromotePlan(
         decisions=decisions,
         failed_candidates=soft_failures,
@@ -1081,10 +1083,10 @@ def plan_promote(
     )
 
 
-def _validate_plan(decisions: list[PromoteDecision]) -> None:
-    """Validate every canonical against its declared base+mixin profile and
-    every overlay against overlay-1.1. Raises PromoteValidationError on
-    the first failure. Pre-I/O — no disk state mutated.
+def _validate_decision(decision: PromoteDecision) -> None:
+    """Validate one decision's canonical artifacts against their declared
+    base+mixin profile and every overlay against overlay-1.1. Raises
+    PromoteValidationError on the first failure. Pre-I/O — no disk state mutated.
 
     Uses `EntityValidator` from science_model.entity_schema:
     - `.validate(entity_dict)` reads the entity's `schema_profile` field and
@@ -1095,25 +1097,74 @@ def _validate_plan(decisions: list[PromoteDecision]) -> None:
     """
     from science_model.entity_schema import EntityValidationError, EntityValidator
 
+    for artifact in decision.canonical_artifacts:
+        _validate_artifact(
+            artifact,
+            decision_slug=decision.slug,
+            project_id=None,
+        )
+    validator = EntityValidator()
+    for project_slug, overlay in decision.overlays.items():
+        overlay_fm = _parse_frontmatter_only(overlay.after_content)
+        try:
+            validator.validate_overlay(overlay_fm)
+        except EntityValidationError as exc:
+            raise PromoteValidationError(
+                decision_slug=decision.slug,
+                target_kind="overlay",
+                project_id=project_slug,
+                schema_message=str(exc),
+            ) from exc
+
+
+def _validate_plan(
+    decisions: list[PromoteDecision],
+    *,
+    skip_on_invalid: bool = False,
+) -> tuple[list[PromoteDecision], list[FailedCandidate]]:
+    """Validate every decision. Returns ``(valid_decisions, skipped)``.
+
+    By default a single schema-invalid decision raises PromoteValidationError,
+    aborting the whole plan. With ``skip_on_invalid=True`` (non-interactive batch
+    runs) an invalid decision is instead dropped and each contributing source is
+    recorded as a ``PromoteValidationSkipped`` soft-failure, so one bad
+    pre-existing entity no longer blocks promoting every valid one
+    (fb-2026-05-31-002).
+    """
+    valid: list[PromoteDecision] = []
+    skipped: list[FailedCandidate] = []
     for d in decisions:
-        for artifact in d.canonical_artifacts:
-            _validate_artifact(
-                artifact,
-                decision_slug=d.slug,
-                project_id=None,
-            )
-        validator = EntityValidator()
-        for project_slug, overlay in d.overlays.items():
-            overlay_fm = _parse_frontmatter_only(overlay.after_content)
-            try:
-                validator.validate_overlay(overlay_fm)
-            except EntityValidationError as exc:
-                raise PromoteValidationError(
-                    decision_slug=d.slug,
-                    target_kind="overlay",
-                    project_id=project_slug,
-                    schema_message=str(exc),
-                ) from exc
+        try:
+            _validate_decision(d)
+        except PromoteValidationError as exc:
+            if not skip_on_invalid:
+                raise
+            message = exc.schema_message or str(exc)
+            overlays = list(d.overlays.values())
+            if overlays:
+                for overlay in overlays:
+                    skipped.append(
+                        FailedCandidate(
+                            slug=d.slug,
+                            project_slug=overlay.project_slug,
+                            source_path=overlay.path,
+                            error_class="PromoteValidationSkipped",
+                            error_message=message,
+                        )
+                    )
+            else:
+                skipped.append(
+                    FailedCandidate(
+                        slug=d.slug,
+                        project_slug="?",
+                        source_path=d.canonical_artifacts[0].path,
+                        error_class="PromoteValidationSkipped",
+                        error_message=message,
+                    )
+                )
+            continue
+        valid.append(d)
+    return valid, skipped
 
 
 def _validate_artifact(
@@ -2779,6 +2830,23 @@ def _dataset_recipe_source_hint(canonical_fields: Mapping[str, Any]) -> str | No
 # --------------------------------------------------------------------------- #
 
 
+def _dedupe_sorted(items: list) -> list:
+    """Dedupe + deterministically sort an APPEND-field union.
+
+    APPEND fields are usually arrays of scalars (ontology_terms, tags,
+    source_refs, ...) but some are arrays of objects (dataset_usage). Dicts are
+    unhashable, so a plain `sorted(set(items))` raises TypeError
+    (fb-2026-05-31-001). Key each item by its canonical JSON form: that key both
+    deduplicates by value and gives a stable sort order for scalars and objects
+    alike. For a list of scalars the JSON key sorts identically to the values
+    themselves, preserving prior behavior.
+    """
+    by_key: dict[str, Any] = {}
+    for item in items:
+        by_key.setdefault(json.dumps(item, sort_keys=True, default=str), item)
+    return [by_key[k] for k in sorted(by_key)]
+
+
 def _merge_canonical_fields(
     candidates: list[PromoteCandidate],
     merge_policy: dict[str, MergePolicy],
@@ -2803,14 +2871,14 @@ def _merge_canonical_fields(
         present = [c for c in candidates if key in c.canonical_fields]
         policy = merge_policy.get(key, MergePolicy.REPLACE)
         if policy == MergePolicy.APPEND:
-            union: set = set()
+            items: list = []
             for c in present:
                 v = c.canonical_fields[key]
                 if isinstance(v, list):
-                    union.update(v)
+                    items.extend(v)
                 else:
-                    union.add(v)
-            merged[key] = sorted(union)
+                    items.append(v)
+            merged[key] = _dedupe_sorted(items)
             continue
 
         values = [c.canonical_fields[key] for c in present]

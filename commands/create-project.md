@@ -220,6 +220,26 @@ __pycache__/
 
 For research projects, also ignore raw/processed data payloads while keeping descriptors or `.gitkeep` files as appropriate.
 
+**Do not exclude a directory wholesale when it also holds version-controlled
+sources.** A whole-directory entry like `models/` is a trap: git does not
+descend into a fully-excluded directory, so a later child `models/.gitignore`
+with `!*.dot` has no effect and a `git add` appears to succeed while committing
+nothing. In particular, `models/` holds causal DAG sources (`.dot`/`.json`) that
+must stay tracked. If a directory mixes regenerable artifacts with sources, use
+the `dir/*` + explicit-negation idiom so git still descends:
+
+```gitignore
+# Regenerable model dumps, but keep DAG sources tracked
+models/*
+!models/README.md
+!models/*.dot
+!models/*.json
+```
+
+Alternatively, write regenerable dumps to a separate ignored directory (e.g.
+`results/models/`) and keep `models/` fully tracked. Either way, never emit a
+bare `models/` exclude.
+
 ### `CLAUDE.md`
 
 Create:

@@ -200,6 +200,20 @@ def test_merge_canonical_fields_append_unions_deterministically() -> None:
     assert conflicts == []
 
 
+def test_merge_canonical_fields_append_unions_unhashable_dict_items() -> None:
+    # `dataset_usage` is an APPEND field whose items are objects, not scalars.
+    # Merging across candidates must dedupe by value without choking on the
+    # unhashable dicts (regression: fb-2026-05-31-001 -> TypeError 'unhashable
+    # type: dict' in _merge_canonical_fields).
+    usage_a = {"ref": "dataset:d1", "role": "primary"}
+    usage_b = {"ref": "dataset:d2", "role": "validation"}
+    a = _merge_cand("A", {"dataset_usage": [usage_a, usage_b]})
+    b = _merge_cand("B", {"dataset_usage": [dict(usage_b)]})
+    merged, conflicts = _merge_canonical_fields([a, b], _PAPER_POLICY, kind="paper")
+    assert merged["dataset_usage"] == [usage_a, usage_b]
+    assert conflicts == []
+
+
 def test_pick_canonical_bibkey_case_from_order_first() -> None:
     cands = [_case_cand("B", "huh2024"), _case_cand("A", "Huh2024")]
     assert _pick_canonical_bibkey_case(cands, ["A", "B"]) == "Huh2024"

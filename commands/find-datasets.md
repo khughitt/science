@@ -65,7 +65,18 @@ science datasets search "<query>" --format json
 
 # Targeted search on specific sources
 science datasets search "<query>" --source zenodo,geo --format json
+
+# Oncology cohorts (TCGA, CPTAC, MSK, ...) via cBioPortal's public catalog
+science datasets search "<query>" --source cbioportal --format json
 ```
+
+Adapters cover Zenodo, NCBI GEO, Dryad, Semantic Scholar, and the public
+cBioPortal study catalog. **Limitation:** DUA-gated or separately hosted
+oncology resources — notably AACR GENIE / GENIE BPC (Synapse +
+`genie.cbioportal.org`), MSK-CHORD, and TCGA MC3 controlled-access tiers — are
+not indexed by any adapter. For those, fall back to LLM knowledge plus the
+project's `doc/datasets` cross-reference and record the access path (Synapse
+DUA, dbGaP, etc.) manually.
 
 For each promising result, get full metadata:
 
