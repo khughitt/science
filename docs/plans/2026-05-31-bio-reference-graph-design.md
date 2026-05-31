@@ -2,10 +2,10 @@
 
 Date: 2026-05-31
 
-Status: design for review; implementation plan pending
+Status: RG1 implemented locally; RG2+ pending
 
 Related:
-- `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this resolves its non-tabular-reference open item
+- `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; RG1 partly addresses its non-tabular-reference open item
 - `docs/plans/2026-05-26-reference-collection-member-promotion-design.md` — foundation primitive; graph nodes/associations are keyed members
 - `docs/plans/2026-05-26-bio-geneset-type-design.md` — flat set collections; this design is the sibling for graph-shaped references
 - `docs/plans/2026-05-26-bio-dataset-influence-provenance-design.md` — Pillar B; graph/member provenance feeds dataset influence
@@ -392,16 +392,17 @@ The model therefore covers non-tabular references without weakening the flat gen
 
 ## 9. Phasing
 
-| Phase | Scope |
-|---|---|
-| RG1 | Schema + parser + validation over tiny fixture graph/index/edge resources; node index required |
-| RG2 | Virtual member resolution and B materialization hooks for unpromoted graph members |
-| RG3 | Promoted `bio.reference_graph.member` child datasets |
-| RG4 | First real commons recipe, likely MONDO or GO, with pinned release artifacts |
-| RG5 | Later non-molecular identity resolvers over one or more reference graphs |
+| Phase | Scope | Status |
+|---|---|---|
+| RG1 | Schema + parser + validation over tiny fixture graph/index/edge resources; node index required | implemented locally |
+| RG2 | Virtual member resolution and B materialization hooks for unpromoted graph members | pending |
+| RG3 | Promoted `bio.reference_graph.member` child datasets | pending |
+| RG4 | First real commons recipe, likely MONDO or GO, with pinned release artifacts | pending |
+| RG5 | Later non-molecular identity resolvers over one or more reference graphs | pending |
 
-RG1 should be the first implementation plan. It is small enough to test hermetically and establishes the
-contract before any large public reference graph is ingested.
+RG1 is implemented locally: the tiny fixture graph/index/edge resources exercise the schema, parser, and
+validation contract before any large public reference graph is ingested. RG2 is now the next implementation
+planning target.
 
 RG2/RG3 depend on a generic virtual-member slice resolver: given a `member_of` child dataset, resolve the
 parent artifact and return the member payload. Implementing that resolver here should benefit D2's
@@ -427,6 +428,7 @@ phases are blocked on the equivalent D2 substrate.
 
 ## 11. Next step
 
-After review, write an implementation plan for RG1: add `bio.reference_graph/1.0`, a tiny parser module,
-validation checks, fixture datasets, and focused tests. Do not ingest a full public graph until the local
-contract is green.
+RG1 is implemented locally. Next, plan RG2+ follow-ups: virtual graph-member resolution and B
+materialization hooks for unpromoted graph members, then first real MONDO or GO commons recipe work with
+pinned release artifacts. Promoted graph-member datasets and later non-molecular identity resolvers remain
+subsequent phases.
