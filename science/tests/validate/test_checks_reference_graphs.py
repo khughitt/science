@@ -7,8 +7,9 @@ import pytest
 import yaml
 
 from science_tool.commons.reference_graph_resources import graph_resource_available, read_edge_rows, read_node_rows
+from science_tool.validate.checks.reference_graphs import evaluate_reference_graphs
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result
+from science_tool.validate.result import Result, Severity
 
 
 _MANIFEST = (
@@ -52,6 +53,17 @@ def _node(**extra: object) -> dict[str, object]:
         "label": "multiple myeloma",
         "status": "active",
         "replaced_by": "",
+        "dataset_usage": "[]",
+        **extra,
+    }
+
+
+def _edge(**extra: object) -> dict[str, object]:
+    return {
+        "subject": "MONDO:0005148",
+        "predicate": "is_a",
+        "object": "MONDO:0000001",
+        "evidence": "",
         "dataset_usage": "[]",
         **extra,
     }
@@ -264,3 +276,289 @@ def test_reference_graph_resource_helper_missing_optional_edge_resource_returns_
     fm.pop("edge_resource")
 
     assert read_edge_rows(tmp_path, fm) is None
+
+
+def test_valid_reference_graph_passes_silently() -> None:
+    results = list(
+        evaluate_reference_graphs(
+            [_reference_graph()],
+            graph_available_by_dataset_id={"dataset:mondo": True},
+            node_rows_by_dataset_id={
+                "dataset:mondo": [_node(), _node(member_key="MONDO:obsolete", status="deprecated")]
+            },
+            edge_rows_by_dataset_id={"dataset:mondo": [_edge()]},
+            member_datasets=[],
+        )
+    )
+
+    assert results == []
+
+
+def test_malformed_reference_graph_collection_errors() -> None:
+    fm = _reference_graph(graph_format="obo")
+
+    results = list(
+        evaluate_reference_graphs(
+            [fm],
+            graph_available_by_dataset_id={"dataset:mondo": True},
+            node_rows_by_dataset_id={"dataset:mondo": [_node()]},
+            edge_rows_by_dataset_id={},
+            member_datasets=[],
+        )
+    )
+
+    assert _rules(results) == ["reference-graph.collection-malformed"]
+    assert results[0].severity is Severity.ERROR
+
+
+def test_missing_graph_resource_does_not_suppress_node_validation() -> None:
+    results = list(
+        evaluate_reference_graphs(
+            [_reference_graph()],
+            graph_available_by_dataset_id={"dataset:mondo": None},
+            node_rows_by_dataset_id={"dataset:mondo": [_node()]},
+            edge_rows_by_dataset_id={"dataset:mondo": [_edge()]},
+            member_datasets=[],
+        )
+    )
+
+    assert _rules(results) == [
+        "reference-graph.graph-resource-unavailable",
+        "reference-graph.member-count-mismatch",
+    ]
+    assert results[0].severity is Severity.INFO
+
+
+def test_missing_node_index_is_info_not_silent() -> None:
+    results = list(
+        evaluate_reference_graphs(
+            [_reference_graph()],
+            graph_available_by_dataset_id={"dataset:mondo": True},
+            node_rows_by_dataset_id={},
+            edge_rows_by_dataset_id={"dataset:mondo": [_edge()]},
+            member_datasets=[],
+        )
+    )
+
+    assert _rules(results) == ["reference-graph.node-index-unavailable"]
+    assert results[0].severity is Severity.INFO
+
+
+def test_node_index_malformed_errors() -> None:
+    results = list(
+        evaluate_reference_graphs(
+            [_reference_graph()],
+            graph_available_by_dataset_id={"dataset:mondo": True},
+            node_rows_by_dataset_id={"dataset:mondo": [_node(status="obsolete")]},
+            edge_rows_by_dataset_id={"dataset:mondo": [_edge()]},
+            member_datasets=[],
+        )
+    )
+
+    assert _rules(results) == ["reference-graph.node-index-malformed"]
+    assert results[0].severity is Severity.ERROR
+
+
+def test_member_count_counts_deprecated_rows() -> None:
+    results = list(
+        evaluate_reference_graphs(
+            [_reference_graph(member_count=1)],
+            graph_available_by_dataset_id={"dataset:mondo": True},
+            node_rows_by_dataset_id={
+                "dataset:mondo": [_node(), _node(member_key="MONDO:obsolete", status="deprecated")]
+            },
+            edge_rows_by_dataset_id={"dataset:mondo": [_edge()]},
+            member_datasets=[],
+        )
+    )
+
+    assert _rules(results) == ["reference-graph.member-count-mismatch"]
+    assert "has 2 node rows" in results[0].message
+
+
+def test_edge_count_mismatch_errors_when_edge_resource_declared() -> None:
+    results = list(
+        evaluate_reference_graphs(
+            [_reference_graph(edge_count=2)],
+            graph_available_by_dataset_id={"dataset:mondo": True},
+            node_rows_by_dataset_id={
+                "dataset:mondo": [_node(), _node(member_key="MONDO:obsolete", status="deprecated")]
+            },
+            edge_rows_by_dataset_id={
+                "dataset:mondo": [
+                    {
+                        "subject": "MONDO:0005148",
+                        "predicate": "is_a",
+                        "object": "MONDO:0000001",
+                        "evidence": "",
+                        "dataset_usage": "[]",
+                    }
+                ]
+            },
+            member_datasets=[],
+        )
+    )
+
+    assert _rules(results) == ["reference-graph.edge-count-mismatch"]
+
+
+def test_edge_validation_still_runs_after_member_count_mismatch() -> None:
+    results = list(
+        evaluate_reference_graphs(
+            [_reference_graph(member_count=1, edge_count=2)],
+            graph_available_by_dataset_id={"dataset:mondo": True},
+            node_rows_by_dataset_id={
+                "dataset:mondo": [_node(), _node(member_key="MONDO:obsolete", status="deprecated")]
+            },
+            edge_rows_by_dataset_id={
+                "dataset:mondo": [
+                    {
+                        "subject": "MONDO:0005148",
+                        "predicate": "is_a",
+                        "object": "MONDO:0000001",
+                        "evidence": "",
+                        "dataset_usage": "[]",
+                    }
+                ]
+            },
+            member_datasets=[],
+        )
+    )
+
+    assert _rules(results) == [
+        "reference-graph.member-count-mismatch",
+        "reference-graph.edge-count-mismatch",
+    ]
+
+
+def test_jsonl_edges_format_is_enum_validated_without_distinct_edge_resource() -> None:
+    fm = _reference_graph(graph_format="jsonl_edges", edge_resource=None, edge_count=None)
+    fm.pop("edge_resource")
+    fm.pop("edge_count")
+    results = list(
+        evaluate_reference_graphs(
+            [fm],
+            graph_available_by_dataset_id={"dataset:mondo": True},
+            node_rows_by_dataset_id={
+                "dataset:mondo": [_node(), _node(member_key="MONDO:obsolete", status="deprecated")]
+            },
+            edge_rows_by_dataset_id={},
+            member_datasets=[],
+        )
+    )
+
+    assert results == []
+
+
+def test_deprecated_promoted_member_warns_with_replaced_by() -> None:
+    member = {
+        "id": "dataset:mondo-obsolete",
+        "type": "dataset",
+        "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0",
+        "_path": "data/mondo-obsolete/entity.md",
+        "derivation": {"kind": "member_of", "parent_dataset": "dataset:mondo", "member_key": "MONDO:obsolete"},
+        "member_kind": "term",
+        "label": "old label",
+        "status": "deprecated",
+    }
+    results = list(
+        evaluate_reference_graphs(
+            [_reference_graph()],
+            graph_available_by_dataset_id={"dataset:mondo": True},
+            node_rows_by_dataset_id={
+                "dataset:mondo": [
+                    _node(),
+                    _node(member_key="MONDO:obsolete", status="deprecated", replaced_by="MONDO:0005148"),
+                ]
+            },
+            edge_rows_by_dataset_id={
+                "dataset:mondo": [
+                    {
+                        "subject": "MONDO:0005148",
+                        "predicate": "is_a",
+                        "object": "MONDO:0000001",
+                        "evidence": "",
+                        "dataset_usage": "[]",
+                    }
+                ]
+            },
+            member_datasets=[member],
+        )
+    )
+
+    assert _rules(results) == ["reference-graph.member-deprecated"]
+    assert results[0].severity is Severity.WARN
+    assert "MONDO:0005148" in results[0].message
+
+
+@pytest.mark.parametrize(
+    ("derivation", "message_part"),
+    [
+        ({"kind": "member_of", "parent_dataset": "dataset:mondo"}, "member_key"),
+        ({"kind": "member_of", "parent_dataset": "mondo", "member_key": "MONDO:0005148"}, "parent_dataset"),
+    ],
+)
+def test_malformed_promoted_member_derivation_errors_without_raising(
+    derivation: dict[str, object], message_part: str
+) -> None:
+    member = {
+        "id": "dataset:malformed",
+        "type": "dataset",
+        "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0",
+        "_path": "data/malformed/entity.md",
+        "derivation": derivation,
+        "member_kind": "term",
+        "label": "malformed",
+        "status": "active",
+    }
+
+    results = list(
+        evaluate_reference_graphs(
+            [],
+            graph_available_by_dataset_id={},
+            node_rows_by_dataset_id={},
+            edge_rows_by_dataset_id={},
+            member_datasets=[member],
+        )
+    )
+
+    assert _rules(results) == ["reference-graph.member-malformed"]
+    assert results[0].severity is Severity.ERROR
+    assert message_part in results[0].message
+
+
+def test_unresolved_promoted_member_errors() -> None:
+    member = {
+        "id": "dataset:missing",
+        "type": "dataset",
+        "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0",
+        "_path": "data/missing/entity.md",
+        "derivation": {"kind": "member_of", "parent_dataset": "dataset:mondo", "member_key": "MONDO:missing"},
+        "member_kind": "term",
+        "label": "missing",
+        "status": "active",
+    }
+    results = list(
+        evaluate_reference_graphs(
+            [_reference_graph()],
+            graph_available_by_dataset_id={"dataset:mondo": True},
+            node_rows_by_dataset_id={
+                "dataset:mondo": [_node(), _node(member_key="MONDO:obsolete", status="deprecated")]
+            },
+            edge_rows_by_dataset_id={
+                "dataset:mondo": [
+                    {
+                        "subject": "MONDO:0005148",
+                        "predicate": "is_a",
+                        "object": "MONDO:0000001",
+                        "evidence": "",
+                        "dataset_usage": "[]",
+                    }
+                ]
+            },
+            member_datasets=[member],
+        )
+    )
+
+    assert _rules(results) == ["reference-graph.member-unresolved"]
+    assert results[0].severity is Severity.ERROR
