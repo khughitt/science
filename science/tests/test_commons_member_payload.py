@@ -149,3 +149,11 @@ def test_virtual_member_payload_dataclass_is_generic_container() -> None:
 
     assert container.payload is payload
     assert container.parent_slug == "mondo"
+
+
+def test_virtual_member_payload_api_is_exported_from_commons_package() -> None:
+    from science_tool.commons import VirtualMemberPayload as ExportedPayload
+    from science_tool.commons import resolve_virtual_member_payload as exported_resolver
+
+    assert ExportedPayload is VirtualMemberPayload
+    assert exported_resolver is resolve_virtual_member_payload

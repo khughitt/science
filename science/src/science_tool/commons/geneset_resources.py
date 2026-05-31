@@ -16,14 +16,8 @@ from science_tool.commons.errors import (
     DataResourceNotFoundError,
 )
 from science_tool.commons.frontmatter import raw_frontmatter
+from science_tool.commons.geneset import is_geneset_frontmatter
 from science_tool.commons.resolver import resolve
-
-PROFILE_TOKEN = "+bio.geneset/"
-
-
-def is_geneset_frontmatter(fm: dict[str, Any]) -> bool:
-    profile = str(fm.get("schema_profile") or "")
-    return (fm.get("kind") or fm.get("type")) == "dataset" and PROFILE_TOKEN in f"+{profile}"
 
 
 def geneset_resource_frontmatter(project_root: Path, entity_path: str | Path) -> dict[str, Any] | None:
