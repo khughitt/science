@@ -77,6 +77,13 @@ from science_tool.commons.member import (
     parse_member_of,
     resolve_member,
 )
+from science_tool.commons.member_payload import (
+    MemberPayloadError,
+    UnsupportedMemberPayloadError,
+    UnresolvedMemberPayloadError,
+    VirtualMemberPayload,
+    resolve_virtual_member_payload,
+)
 from science_tool.commons.promote import (
     ConflictResolution,
     DiscoveryResult,
@@ -121,6 +128,7 @@ __all__ = [
     "FailedCandidate",
     "FieldConflict",
     "MemberOf",
+    "MemberPayloadError",
     "MergedEntity",
     "OverlayAdapter",
     "OverlayMergeError",
@@ -149,7 +157,10 @@ __all__ = [
     "ResolvedDataResource",
     "ResolvedMember",
     "ResolutionState",
+    "UnsupportedMemberPayloadError",
+    "UnresolvedMemberPayloadError",
     "ValidationReport",
+    "VirtualMemberPayload",
     "apply_promote",
     "build_commons_inventory",
     "commons_group",
@@ -168,6 +179,7 @@ __all__ = [
     "resolve_commons_root",
     "resolve_entity",
     "resolve_member",
+    "resolve_virtual_member_payload",
     "resolve_project_by_id",
     "resolve_project_root",
     "validate_project_overlays",

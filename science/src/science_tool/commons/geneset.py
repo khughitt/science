@@ -16,6 +16,7 @@ from science_model.entity_schema.profile import ProfileComponent
 from science_model.packages.schema import DatasetUsage
 
 GENESET_MEMBER_KEY_COLUMN = "set_key"
+GENESET_PROFILE_TOKEN = "+bio.geneset/"
 GENESET_REQUIRED_COLUMNS = frozenset({"set_key", "name", "member_ids"})
 _DATASET_SCHEMA = SchemaLoader().load(ProfileComponent(name="dataset", version="1.0"))
 GENESET_SOURCE_CLASSES = frozenset(_DATASET_SCHEMA["properties"]["source_class"]["enum"])
@@ -41,6 +42,11 @@ class GenesetRow:
     @property
     def n_members(self) -> int:
         return len(self.member_ids)
+
+
+def is_geneset_frontmatter(fm: dict[str, Any]) -> bool:
+    profile = str(fm.get("schema_profile") or "")
+    return (fm.get("kind") or fm.get("type")) == "dataset" and GENESET_PROFILE_TOKEN in f"+{profile}"
 
 
 def _split_semicolon(raw: str, *, field: str, row_number: int) -> tuple[str, ...]:
