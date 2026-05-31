@@ -34,8 +34,12 @@ class Chain:
 def parse_chain_text(text: str) -> list[Chain]:
     chains: list[Chain] = []
     current: Chain | None = None
+    blocks: list[ChainBlock] = []
+    terminal_block_seen = False
+    last_line_number = 0
 
     for line_number, raw_line in enumerate(text.splitlines(), start=1):
+        last_line_number = line_number
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
@@ -43,18 +47,23 @@ def parse_chain_text(text: str) -> list[Chain]:
         fields = line.split()
         if fields[0] == "chain":
             if current is not None:
-                chains.append(current)
+                chains.append(_close_chain(current, blocks, line_number))
             current = _parse_header(fields, line_number)
+            blocks = []
+            terminal_block_seen = False
             continue
 
         if current is None:
             raise ChainFormatError(f"block before chain header on line {line_number}")
+        if terminal_block_seen:
+            raise ChainFormatError(f"block after terminal block on line {line_number}")
 
         block = _parse_block(fields, line_number)
-        current = replace(current, blocks=(*current.blocks, block))
+        blocks.append(block)
+        terminal_block_seen = len(fields) == 1
 
     if current is not None:
-        chains.append(current)
+        chains.append(_close_chain(current, blocks, last_line_number + 1))
 
     return chains
 
@@ -123,12 +132,15 @@ def _parse_block(fields: list[str], line_number: int) -> ChainBlock:
     return ChainBlock(size=size, dt=dt, dq=dq)
 
 
-def _parse_non_negative_int(value: str, field_name: str, line_number: int) -> int:
-    try:
-        parsed = int(value)
-    except ValueError as exc:
-        raise ChainFormatError(f"{field_name} on line {line_number} must be a non-negative integer") from exc
+def _close_chain(chain: Chain, blocks: list[ChainBlock], line_number: int) -> Chain:
+    if not blocks:
+        raise ChainFormatError(f"chain block missing before line {line_number}")
+    if blocks[-1].dt != 0 or blocks[-1].dq != 0:
+        raise ChainFormatError(f"chain missing terminal block before line {line_number}")
+    return replace(chain, blocks=tuple(blocks))
 
-    if parsed < 0:
+
+def _parse_non_negative_int(value: str, field_name: str, line_number: int) -> int:
+    if not value.isdecimal():
         raise ChainFormatError(f"{field_name} on line {line_number} must be a non-negative integer")
-    return parsed
+    return int(value)

@@ -38,3 +38,34 @@ def test_hg19_to_hg38_direction_uses_t_as_source_and_q_as_target() -> None:
 def test_parse_chain_text_rejects_ragged_block() -> None:
     with pytest.raises(ChainFormatError, match="block"):
         parse_chain_text("chain 1 chr1 100 + 0 10 chr1 100 + 0 10 1\n50 1\n")
+
+
+def test_parse_chain_text_rejects_header_only_chain() -> None:
+    with pytest.raises(ChainFormatError, match="block"):
+        parse_chain_text("chain 1 chr1 100 + 0 10 chr1 100 + 0 10 1\n")
+
+
+def test_parse_chain_text_rejects_chain_without_terminal_block() -> None:
+    with pytest.raises(ChainFormatError, match="terminal"):
+        parse_chain_text("chain 1 chr1 100 + 0 10 chr1 100 + 0 10 1\n5 1 1\n")
+
+
+def test_parse_chain_text_rejects_new_header_after_nonterminal_block() -> None:
+    text = """\
+chain 1 chr1 100 + 0 10 chr1 100 + 0 10 1
+5 1 1
+chain 2 chr2 100 + 0 10 chr2 100 + 0 10 2
+5
+"""
+    with pytest.raises(ChainFormatError, match="terminal"):
+        parse_chain_text(text)
+
+
+def test_parse_chain_text_rejects_block_after_terminal_block() -> None:
+    with pytest.raises(ChainFormatError, match="terminal"):
+        parse_chain_text("chain 1 chr1 100 + 0 10 chr1 100 + 0 10 1\n5\n1\n")
+
+
+def test_parse_chain_text_rejects_non_decimal_integer_token() -> None:
+    with pytest.raises(ChainFormatError, match="integer"):
+        parse_chain_text("chain +1 chr1 100 + 0 10 chr1 100 + 0 10 1\n5\n")
