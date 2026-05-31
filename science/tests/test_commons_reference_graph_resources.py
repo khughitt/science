@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 import yaml
 
+from science_tool.commons.errors import DataResourceNotFoundError
 from science_tool.commons.reference_graph_resources import read_commons_edge_rows, read_commons_node_rows
 
 
@@ -52,6 +53,7 @@ def _write_commons_reference_graph(
     tmp_path: Path,
     *,
     include_edge_resource: bool = True,
+    write_graph_file: bool = True,
     write_edge_file: bool = True,
 ) -> tuple[dict[str, Any], Path, Path]:
     commons_root = tmp_path / "commons"
@@ -61,7 +63,8 @@ def _write_commons_reference_graph(
     data_dir = data_root / "mondo"
     data_dir.mkdir(parents=True)
 
-    data_dir.joinpath("graph.nt").write_bytes(_GRAPH_BYTES)
+    if write_graph_file:
+        data_dir.joinpath("graph.nt").write_bytes(_GRAPH_BYTES)
     data_dir.joinpath("nodes.csv").write_bytes(_NODE_BYTES)
     if write_edge_file:
         data_dir.joinpath("edges.csv").write_bytes(_EDGE_BYTES)
@@ -133,9 +136,36 @@ def test_read_commons_edge_rows_reads_declared_edge_csv(tmp_path: Path) -> None:
     ]
 
 
+def test_read_commons_projection_rows_do_not_touch_declared_graph_resource(tmp_path: Path) -> None:
+    fm, commons_root, data_root = _write_commons_reference_graph(tmp_path, write_graph_file=False)
+
+    node_rows = read_commons_node_rows(fm, commons_root=commons_root, data_root=data_root)
+    edge_rows = read_commons_edge_rows(fm, commons_root=commons_root, data_root=data_root)
+
+    assert node_rows == [
+        {
+            "member_key": "MONDO:0005148",
+            "member_kind": "term",
+            "label": "multiple myeloma",
+            "status": "active",
+            "replaced_by": "",
+            "dataset_usage": "[]",
+        }
+    ]
+    assert edge_rows == [
+        {
+            "subject": "MONDO:0005148",
+            "predicate": "is_a",
+            "object": "MONDO:0000001",
+            "evidence": "",
+            "dataset_usage": "[]",
+        }
+    ]
+
+
 def test_read_commons_edge_rows_returns_exception_when_declared_edge_file_is_missing(tmp_path: Path) -> None:
     fm, commons_root, data_root = _write_commons_reference_graph(tmp_path, write_edge_file=False)
 
     rows = read_commons_edge_rows(fm, commons_root=commons_root, data_root=data_root)
 
-    assert isinstance(rows, Exception)
+    assert isinstance(rows, DataResourceNotFoundError)
