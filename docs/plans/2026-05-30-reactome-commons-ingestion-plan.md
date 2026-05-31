@@ -26,11 +26,16 @@
 - Full `science validate` in `~/d/health/meta` and `~/d/health/comparisons/pan-disease` still reports
   pre-existing project-wide validation backlog, but filtered Reactome checks showed no new Reactome
   unresolved-reference or code metadata defects.
+- Review follow-up: gene-set member reads now fall back to the hash-verified commons data resolver when
+  promoted dataset resources are not colocated next to `datapackage.yaml`, so D1 row stats can be checked
+  against data-root-backed resources. The Reactome recipe also has a `--verify-entity` guard that fails if
+  built `n_sets` or `set_size_summary` differs from the committed entity frontmatter.
 
 **Remaining follow-ups:**
 
-- Make the `$SCIENCE_COMMONS_DATA_ROOT/reactome` data cache durable; the implementation was verified
-  against `/tmp/science-commons-data/reactome`.
+- The Reactome data cache and C2 gene-crosswalk data copy were placed under durable local storage at
+  `~/d/science-commons-data/`, and the per-machine `reactome` and `gene-crosswalk-hgnc` data overrides
+  were corrected to point there.
 - D2 promoted pathway datasets, Reactome curation PMID ingestion, Reactome/MSigDB concordance, non-human
   Reactome, and non-tabular ontology support remain deferred.
 

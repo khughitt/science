@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -184,6 +185,80 @@ def test_geneset_resource_helper_reads_local_rows(tmp_path: Path) -> None:
         rows="set_key,name,member_ids\nR-HSA-1,Cell cycle,HGNC:1;HGNC:2\n",
     )
     fm = _geneset(_path="data/reactome/datapackage.yaml")
+
+    rows = read_member_rows(tmp_path, fm)
+
+    assert rows == [{"set_key": "R-HSA-1", "name": "Cell cycle", "member_ids": "HGNC:1;HGNC:2"}]
+
+
+def test_geneset_resource_helper_reads_commons_data_root_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.commons.geneset_resources import read_member_rows
+
+    rows_csv = "set_key,name,member_ids\nR-HSA-1,Cell cycle,HGNC:1;HGNC:2\n"
+    digest = hashlib.sha256(rows_csv.encode("utf-8")).hexdigest()
+    commons = tmp_path / "commons"
+    dataset_dir = commons / "datasets" / "reactome"
+    dataset_dir.mkdir(parents=True)
+    dataset_dir.joinpath("entity.md").write_text(
+        """\
+---
+schema_profile: science-entity-base/1.0+dataset/1.0+bio.geneset/1.0
+id: dataset:reactome
+type: dataset
+title: Reactome
+version: "1.0.0"
+datapackage: datapackage.yaml
+status: active
+origin: external
+tier: use-now
+source_class: reference
+created: "2026-05-30"
+updated: "2026-05-30"
+access:
+  level: public
+  availability: available
+  verified: true
+member_key_column: set_key
+members_resource: sets
+n_sets: 1
+set_size_summary:
+  min: 2
+  median: 2
+  max: 2
+identifier_space:
+  tier: gene
+  namespace: hgnc_id
+  registry: dataset:gene-crosswalk-hgnc
+  resolution_status: resolved
+---
+""",
+        encoding="utf-8",
+    )
+    dataset_dir.joinpath("datapackage.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "reactome",
+                "resources": [{"name": "sets", "path": "sets.csv", "hash": f"sha256:{digest}"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    data_root = tmp_path / "data"
+    sets_path = data_root / "reactome" / "sets.csv"
+    sets_path.parent.mkdir(parents=True)
+    sets_path.write_text(rows_csv, encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(data_root))
+
+    fm = {
+        "id": "dataset:reactome",
+        "type": "dataset",
+        "schema_profile": "science-entity-base/1.0+dataset/1.0+bio.geneset/1.0",
+        "_path": str(dataset_dir / "datapackage.yaml"),
+        "members_resource": "sets",
+    }
 
     rows = read_member_rows(tmp_path, fm)
 

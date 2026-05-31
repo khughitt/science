@@ -333,7 +333,8 @@ until a real evidence line needs a promoted pathway dataset.
 - `gene-crosswalk-hgnc` is now built and pinned in `~/d/science-commons`; `assembly-registry` and
   `protein-crosswalk-uniprot` may still need their real artifact builds if downstream work requires
   non-placeholder data.
-- Reactome bulk CSVs were verified under `$SCIENCE_COMMONS_DATA_ROOT/reactome`; make that data root
-  persistent before treating the local build cache as durable.
+- Reactome and C2 gene-crosswalk bulk CSVs were rebuilt/copied under durable local storage at
+  `~/d/science-commons-data`, and the per-machine `reactome` and `gene-crosswalk-hgnc` data overrides
+  now point at those directories.
 - C3 left three deferred minor review findings (a `parse_secondary` skip-vs-fail-early comment; an
   untested `fetch_text` gzip branch; a docstring nicety).

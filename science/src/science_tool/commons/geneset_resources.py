@@ -9,8 +9,14 @@ from typing import Any
 import yaml
 
 from science_tool.commons.datapackage import validate_logical_path
-from science_tool.commons.errors import CommonsError
+from science_tool.commons.errors import (
+    CommonsEntityError,
+    CommonsError,
+    CommonsRootNotFoundError,
+    DataResourceNotFoundError,
+)
 from science_tool.commons.frontmatter import raw_frontmatter
+from science_tool.commons.resolver import resolve
 
 PROFILE_TOKEN = "+bio.geneset/"
 
@@ -62,14 +68,36 @@ def resource_path_for_members(project_root: Path, fm: dict[str, Any]) -> Path | 
     return None
 
 
-def read_member_rows(project_root: Path, fm: dict[str, Any]) -> list[dict[str, Any]] | Exception | None:
-    path = resource_path_for_members(project_root, fm)
-    if isinstance(path, Exception):
-        return path
-    if path is None or not path.is_file():
-        return None
+def _read_csv(path: Path) -> list[dict[str, Any]] | Exception:
     try:
         with path.open(encoding="utf-8", newline="") as fh:
             return list(csv.DictReader(fh))
     except (OSError, UnicodeError, csv.Error) as exc:
         return exc
+
+
+def _resolve_commons_members_path(fm: dict[str, Any]) -> Path | Exception | None:
+    dataset_id = fm.get("id")
+    resource_name = fm.get("members_resource")
+    if not isinstance(dataset_id, str) or not isinstance(resource_name, str):
+        return None
+    try:
+        return resolve(dataset_id, resource_name).path
+    except (CommonsRootNotFoundError, CommonsEntityError, DataResourceNotFoundError):
+        return None
+    except CommonsError as exc:
+        return exc
+
+
+def read_member_rows(project_root: Path, fm: dict[str, Any]) -> list[dict[str, Any]] | Exception | None:
+    path = resource_path_for_members(project_root, fm)
+    if isinstance(path, Exception):
+        return path
+    if path is not None and path.is_file():
+        return _read_csv(path)
+    commons_path = _resolve_commons_members_path(fm)
+    if isinstance(commons_path, Exception):
+        return commons_path
+    if commons_path is None:
+        return None
+    return _read_csv(commons_path)
