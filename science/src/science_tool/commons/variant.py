@@ -174,6 +174,30 @@ def _contig_defect(expr: str, resolution: AmbiguousContig | AccessionAssemblyMis
     return VariantDefect(expr, "accession-assembly-mismatch", resolution.found_seqcol_digest)
 
 
+def _resolve_variant_contig(
+    expr: str,
+    *,
+    contig: str,
+    assembly_seqcol: str,
+    commons_root: Path | str | None,
+    data_root: Path | str | None,
+) -> ContigMatch | VariantDefect:
+    try:
+        resolution = _resolve_contig(
+            query=contig,
+            seqcol_digest=assembly_seqcol,
+            commons_root=None if commons_root is None else Path(commons_root),
+            data_root=None if data_root is None else Path(data_root),
+        )
+    except ContigError as error:
+        return VariantDefect(expr, "unknown-contig", str(error))
+
+    if not isinstance(resolution, ContigMatch):
+        return _contig_defect(expr, resolution)
+
+    return resolution
+
+
 def _validate_reference(
     expr: str,
     proxy: RefgetProxy,
@@ -211,18 +235,15 @@ def vrs_id(
         return VariantDefect(expr, "unsupported-allele", detail)
     contig, pos0, ref, alt = parsed
 
-    try:
-        resolution = _resolve_contig(
-            query=contig,
-            seqcol_digest=assembly_seqcol,
-            commons_root=None if commons_root is None else Path(commons_root),
-            data_root=None if data_root is None else Path(data_root),
-        )
-    except ContigError as error:
-        return VariantDefect(expr, "unknown-contig", str(error))
-
-    if not isinstance(resolution, ContigMatch):
-        return _contig_defect(expr, resolution)
+    resolution = _resolve_variant_contig(
+        expr,
+        contig=contig,
+        assembly_seqcol=assembly_seqcol,
+        commons_root=commons_root,
+        data_root=data_root,
+    )
+    if isinstance(resolution, VariantDefect):
+        return resolution
 
     proxy = _open_proxy(commons_root=commons_root, data_root=data_root, store_root=store_root)
 
@@ -261,6 +282,16 @@ def lifted_vrs_id(
             "lifted reminting does not support zero-width insertion alleles yet",
         )
 
+    source_resolution = _resolve_variant_contig(
+        expr,
+        contig=contig,
+        assembly_seqcol=source_seqcol,
+        commons_root=commons_root,
+        data_root=data_root,
+    )
+    if isinstance(source_resolution, VariantDefect):
+        return source_resolution
+
     source_match = vrs_id(
         expr,
         fmt=fmt,
@@ -276,7 +307,7 @@ def lifted_vrs_id(
         chains,
         source_seqcol_digest=source_seqcol,
         target_seqcol_digest=target_seqcol,
-        source_contig=contig,
+        source_contig=source_resolution.name,
         start=pos0,
         end=pos0 + len(ref),
     )

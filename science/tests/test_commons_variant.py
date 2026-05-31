@@ -329,6 +329,7 @@ def test_lifted_vrs_id_links_source_and_target_ids(monkeypatch: pytest.MonkeyPat
             return V.VariantMatch(vrs_id="ga4gh:VA.source", refget_digest="SQ.src")
         return V.VariantMatch(vrs_id="ga4gh:VA.target", refget_digest="SQ.tgt")
 
+    monkeypatch.setattr(V, "_resolve_contig", lambda **_: ContigMatch("SQ.src", "chr1", len(_SEQ), "seqcol_name"))
     monkeypatch.setattr(V, "vrs_id", fake_vrs_id)
     monkeypatch.setattr(
         V,
@@ -357,6 +358,55 @@ def test_lifted_vrs_id_links_source_and_target_ids(monkeypatch: pytest.MonkeyPat
         chain_id=1,
     )
     assert calls == [("chr1-10-A-T", "vcf", "SRC"), ("chr1:99:A:T", "spdi", "TGT")]
+
+
+def test_lifted_vrs_id_lifts_with_resolved_source_contig(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorded_source_contig = ""
+
+    def fake_resolve_contig(**kwargs: object) -> ContigMatch:
+        assert kwargs["query"] == "NC_000001.10"
+        assert kwargs["seqcol_digest"] == "SRC"
+        return ContigMatch("SQ.src", "chr1", len(_SEQ), "refseq_accession")
+
+    def fake_vrs_id(expr: str, *, fmt: str, assembly_seqcol: str, **kwargs: object) -> V.VariantMatch:
+        if assembly_seqcol == "SRC":
+            assert expr == "NC_000001.10:g.10A>T"
+            assert fmt == "hgvs"
+            return V.VariantMatch(vrs_id="ga4gh:VA.source", refget_digest="SQ.src")
+        assert expr == "chr1:99:A:T"
+        assert fmt == "spdi"
+        return V.VariantMatch(vrs_id="ga4gh:VA.target", refget_digest="SQ.tgt")
+
+    def fake_lift_interval(*args: object, **kwargs: object) -> LiftedInterval:
+        nonlocal recorded_source_contig
+        recorded_source_contig = str(kwargs["source_contig"])
+        return LiftedInterval(
+            source_seqcol_digest="SRC",
+            target_seqcol_digest="TGT",
+            source_contig=recorded_source_contig,
+            target_contig="chr1",
+            source_start=9,
+            source_end=10,
+            target_start=99,
+            target_end=100,
+            target_strand="+",
+            chain_id=1,
+        )
+
+    monkeypatch.setattr(V, "_resolve_contig", fake_resolve_contig)
+    monkeypatch.setattr(V, "vrs_id", fake_vrs_id)
+    monkeypatch.setattr(V, "lift_interval", fake_lift_interval)
+
+    result = V.lifted_vrs_id(
+        "NC_000001.10:g.10A>T",
+        fmt="hgvs",
+        source_seqcol="SRC",
+        target_seqcol="TGT",
+        chains=[],
+    )
+
+    assert recorded_source_contig == "chr1"
+    assert isinstance(result, V.LiftedVariantMatch)
 
 
 def test_lifted_vrs_id_rejects_zero_width_insertion_before_minting(
@@ -401,6 +451,7 @@ def test_lifted_vrs_id_rejects_zero_width_insertion_before_minting(
 
 
 def test_lifted_vrs_id_returns_liftover_defect(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(V, "_resolve_contig", lambda **_: ContigMatch("SQ.src", "chr1", len(_SEQ), "seqcol_name"))
     monkeypatch.setattr(
         V,
         "vrs_id",
@@ -418,6 +469,7 @@ def test_lifted_vrs_id_returns_liftover_defect(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_lifted_vrs_id_rejects_reverse_strand_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(V, "_resolve_contig", lambda **_: ContigMatch("SQ.src", "chr1", len(_SEQ), "seqcol_name"))
     monkeypatch.setattr(
         V,
         "vrs_id",
