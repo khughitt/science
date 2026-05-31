@@ -5,9 +5,10 @@ from pathlib import Path
 import pytest
 
 from science_tool.commons.contigs import AccessionAssemblyMismatch, AmbiguousContig, ContigError, ContigMatch
+from science_tool.commons.liftover import LiftedInterval, LiftoverDefect
+from science_tool.commons import variant as V
 from science_tool.commons.refget_proxy import RefgetProxy
 from science_tool.commons.sequence_store import open_store, refget_digest
-from science_tool.commons import variant as V
 from science_tool.commons.vrs import compute_vrs_id
 
 _SEQ = "CGTACGTACGTACGTACGTACGTACGTACGTACGTACGTA"
@@ -317,3 +318,91 @@ def test_non_genomic_hgvs_is_rejected(tmp_path: Path) -> None:
 
     assert isinstance(defect, V.VariantDefect)
     assert defect.reason == "unsupported-allele"
+
+
+def test_lifted_vrs_id_links_source_and_target_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str, str]] = []
+
+    def fake_vrs_id(expr: str, *, fmt: str, assembly_seqcol: str, **kwargs: object) -> V.VariantMatch:
+        calls.append((expr, fmt, assembly_seqcol))
+        if assembly_seqcol == "SRC":
+            return V.VariantMatch(vrs_id="ga4gh:VA.source", refget_digest="SQ.src")
+        return V.VariantMatch(vrs_id="ga4gh:VA.target", refget_digest="SQ.tgt")
+
+    monkeypatch.setattr(V, "vrs_id", fake_vrs_id)
+    monkeypatch.setattr(
+        V,
+        "lift_interval",
+        lambda *args, **kwargs: LiftedInterval(
+            source_seqcol_digest="SRC",
+            target_seqcol_digest="TGT",
+            source_contig="chr1",
+            target_contig="chr1",
+            source_start=9,
+            source_end=10,
+            target_start=99,
+            target_end=100,
+            target_strand="+",
+            chain_id=1,
+        ),
+    )
+
+    result = V.lifted_vrs_id("chr1-10-A-T", fmt="vcf", source_seqcol="SRC", target_seqcol="TGT", chains=[])
+
+    assert result == V.LiftedVariantMatch(
+        source_vrs_id="ga4gh:VA.source",
+        target_vrs_id="ga4gh:VA.target",
+        source_seqcol_digest="SRC",
+        target_seqcol_digest="TGT",
+        chain_id=1,
+    )
+    assert calls == [("chr1-10-A-T", "vcf", "SRC"), ("chr1:99:A:T", "spdi", "TGT")]
+
+
+def test_lifted_vrs_id_returns_liftover_defect(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        V,
+        "vrs_id",
+        lambda *args, **kwargs: V.VariantMatch(vrs_id="ga4gh:VA.source", refget_digest="SQ.src"),
+    )
+    monkeypatch.setattr(
+        V,
+        "lift_interval",
+        lambda *args, **kwargs: LiftoverDefect(status="multi_mapping", detail="2 mappings"),
+    )
+
+    defect = V.lifted_vrs_id("chr1-10-A-T", fmt="vcf", source_seqcol="SRC", target_seqcol="TGT", chains=[])
+
+    assert defect == V.VariantDefect("chr1-10-A-T", "liftover-multi_mapping", "2 mappings")
+
+
+def test_lifted_vrs_id_rejects_reverse_strand_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        V,
+        "vrs_id",
+        lambda *args, **kwargs: V.VariantMatch(vrs_id="ga4gh:VA.source", refget_digest="SQ.src"),
+    )
+    monkeypatch.setattr(
+        V,
+        "lift_interval",
+        lambda *args, **kwargs: LiftedInterval(
+            source_seqcol_digest="SRC",
+            target_seqcol_digest="TGT",
+            source_contig="chr1",
+            target_contig="chr1",
+            source_start=9,
+            source_end=10,
+            target_start=99,
+            target_end=100,
+            target_strand="-",
+            chain_id=1,
+        ),
+    )
+
+    defect = V.lifted_vrs_id("chr1-10-A-T", fmt="vcf", source_seqcol="SRC", target_seqcol="TGT", chains=[])
+
+    assert defect == V.VariantDefect(
+        "chr1-10-A-T",
+        "liftover-strand_ambiguous",
+        "reverse-strand allele reminting is not supported",
+    )

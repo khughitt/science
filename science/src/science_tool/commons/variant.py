@@ -14,6 +14,7 @@ from science_tool.commons.contigs import (
     resolve_contig as _resolve_contig,
 )
 from science_tool.commons.errors import CommonsError
+from science_tool.commons.liftover import Chain, LiftedInterval, LiftoverDefect, lift_interval
 from science_tool.commons.refget_proxy import RefgetProxy
 from science_tool.commons.resolver import resolve
 from science_tool.commons.sequence_store import SequenceStoreError, open_store
@@ -31,6 +32,15 @@ _HGVS_G_SUBSTITUTION = re.compile(r"^g\.([1-9][0-9]*)([ACGTN]+)>([ACGTN]+)$")
 class VariantMatch:
     vrs_id: str
     refget_digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class LiftedVariantMatch:
+    source_vrs_id: str
+    target_vrs_id: str
+    source_seqcol_digest: str
+    target_seqcol_digest: str
+    chain_id: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,3 +236,70 @@ def vrs_id(
         raise
     except Exception as error:
         return VariantDefect(expr, "unsupported-allele", f"translator-rejected: {error}")
+
+
+def lifted_vrs_id(
+    expr: str,
+    *,
+    fmt: str,
+    source_seqcol: str,
+    target_seqcol: str,
+    chains: list[Chain],
+    commons_root: Path | str | None = None,
+    data_root: Path | str | None = None,
+    store_root: Path | str | None = None,
+) -> LiftedVariantMatch | VariantDefect:
+    fmt = fmt.lower()
+    parsed, detail = _parse_with_detail(expr, fmt)
+    if parsed is None:
+        return VariantDefect(expr, "unsupported-allele", detail)
+    contig, pos0, ref, alt = parsed
+
+    source_match = vrs_id(
+        expr,
+        fmt=fmt,
+        assembly_seqcol=source_seqcol,
+        commons_root=commons_root,
+        data_root=data_root,
+        store_root=store_root,
+    )
+    if isinstance(source_match, VariantDefect):
+        return source_match
+
+    lifted: LiftedInterval | LiftoverDefect = lift_interval(
+        chains,
+        source_seqcol_digest=source_seqcol,
+        target_seqcol_digest=target_seqcol,
+        source_contig=contig,
+        start=pos0,
+        end=pos0 + len(ref),
+    )
+    if isinstance(lifted, LiftoverDefect):
+        return VariantDefect(expr, f"liftover-{lifted.status}", lifted.detail)
+
+    if lifted.target_strand != "+":
+        return VariantDefect(
+            expr,
+            "liftover-strand_ambiguous",
+            "reverse-strand allele reminting is not supported",
+        )
+
+    target_expr = f"{lifted.target_contig}:{lifted.target_start}:{ref}:{alt}"
+    target_match = vrs_id(
+        target_expr,
+        fmt="spdi",
+        assembly_seqcol=target_seqcol,
+        commons_root=commons_root,
+        data_root=data_root,
+        store_root=store_root,
+    )
+    if isinstance(target_match, VariantDefect):
+        return target_match
+
+    return LiftedVariantMatch(
+        source_vrs_id=source_match.vrs_id,
+        target_vrs_id=target_match.vrs_id,
+        source_seqcol_digest=lifted.source_seqcol_digest,
+        target_seqcol_digest=lifted.target_seqcol_digest,
+        chain_id=lifted.chain_id,
+    )
