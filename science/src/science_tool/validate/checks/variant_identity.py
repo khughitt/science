@@ -26,6 +26,7 @@ from science_tool.validate.result import Result, Severity
 
 _SUPPORTED = frozenset({"vrs"})
 _FORMATS = frozenset({"spdi", "hgvs", "vcf", "rsid"})
+_ROW_MINTING_FORMATS = frozenset({"spdi", "hgvs", "vcf"})
 
 
 def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
@@ -313,7 +314,11 @@ def _row_layer_decl_is_usable(decl: Any) -> bool:
         return False
     if decl.get("resolution_status") == "declared_unresolved":
         return False
-    return _locator_defect(decl.get("locator")) is None
+    locator = decl.get("locator")
+    if _locator_defect(locator) is not None:
+        return False
+    assert isinstance(locator, dict)
+    return str(locator["format"]).lower() in _ROW_MINTING_FORMATS
 
 
 def _missing_required_columns(fieldnames: list[str] | None, locator: dict[str, Any], fmt: str) -> list[str]:

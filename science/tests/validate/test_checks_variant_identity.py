@@ -65,6 +65,7 @@ def test_rsid_locator_requires_registry() -> None:
 
     errors = [r for r in evaluate_variant_declaration([ds]) if r.severity is Severity.ERROR]
 
+    assert len(errors) == 1
     assert errors[0].rule == "identity.variant-locator-malformed"
     assert "rsid locator requires registry" in errors[0].message
 
@@ -80,6 +81,26 @@ def test_rsid_locator_accepts_optional_allele_columns() -> None:
     ds = _ds({"namespace": "vrs", "locator": locator})
 
     assert list(evaluate_variant_declaration([ds])) == []
+
+
+def test_row_layer_skips_rsid_locator_until_row_minting_is_implemented(tmp_path: Path, monkeypatch) -> None:
+    project = _variant_project(
+        tmp_path,
+        "rsid\nrs123\n",
+        locator_format="rsid",
+        locator_column="rsid",
+        locator_registry="dataset:variant-labels-dbsnp-human",
+    )
+
+    def fail_vrs_id(expr: str, *, fmt: str, assembly_seqcol: str):
+        raise AssertionError(f"rsID locator unexpectedly entered row minting: {expr} {fmt} {assembly_seqcol}")
+
+    monkeypatch.setattr("science_tool.commons.variant.vrs_id", fail_vrs_id)
+
+    results = list(check_variant_identity(_ctx(project)))
+
+    assert not [r for r in results if r.severity is Severity.ERROR]
+    assert not [r for r in results if r.rule in {"identity.variant-rows-minted", "identity.variant-rows-unresolved"}]
 
 
 def test_declared_unresolved_is_info_not_error() -> None:
@@ -281,6 +302,9 @@ def _variant_project(
     variants_csv: str,
     *,
     datapackage_field: str | None = None,
+    locator_format: str = "spdi",
+    locator_column: str = "variant",
+    locator_registry: str | None = None,
     locator_resource: str = "variants.csv",
     resource_name: str = "variants",
     resource_path: str = "variants.csv",
@@ -289,6 +313,9 @@ def _variant_project(
         tmp_path,
         variants_csv.encode("utf-8"),
         datapackage_field=datapackage_field,
+        locator_format=locator_format,
+        locator_column=locator_column,
+        locator_registry=locator_registry,
         locator_resource=locator_resource,
         resource_name=resource_name,
         resource_path=resource_path,
@@ -300,6 +327,9 @@ def _variant_project_bytes(
     variants_bytes: bytes,
     *,
     datapackage_field: str | None = None,
+    locator_format: str = "spdi",
+    locator_column: str = "variant",
+    locator_registry: str | None = None,
     locator_resource: str = "variants.csv",
     resource_name: str = "variants",
     resource_path: str = "variants.csv",
@@ -312,6 +342,7 @@ def _variant_project_bytes(
     variants_path.write_bytes(variants_bytes)
     digest = hashlib.sha256(variants_bytes).hexdigest()
     datapackage_line = f"datapackage: {datapackage_field}\n" if datapackage_field is not None else ""
+    registry_line = f"        registry: {locator_registry}\n" if locator_registry is not None else ""
     data_dir.joinpath("datapackage.yaml").write_text(
         f"""\
 profiles: [science-pkg-entity-1.0]
@@ -328,8 +359,9 @@ identity_context:
       namespace: vrs
       locator:
         resource: {locator_resource}
-        format: spdi
-        column: variant
+        format: {locator_format}
+        column: {locator_column}
+{registry_line}\
 resources:
   - name: {resource_name}
     path: {resource_path}
