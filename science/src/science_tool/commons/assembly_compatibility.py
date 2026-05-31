@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
@@ -62,11 +63,27 @@ def _required(row: dict[str, str], row_number: int, column: str) -> str:
     return value
 
 
+def _validate_row_columns(row: dict[str, str], row_number: int) -> None:
+    actual = set(row)
+    expected = set(_COLUMNS)
+    if actual == expected:
+        return
+    details: list[str] = []
+    unexpected = sorted(actual - expected)
+    missing = sorted(expected - actual)
+    if unexpected:
+        details.append(f"unexpected columns {unexpected!r}")
+    if missing:
+        details.append(f"missing columns {missing!r}")
+    raise AssemblyCompatibilityError(f"row {row_number}: malformed compatibility row with {', '.join(details)}")
+
+
 def parse_compatibility_rows(rows: list[dict[str, str]]) -> list[CompatibilityRelation]:
     relations: list[CompatibilityRelation] = []
     seen: set[tuple[str, str, str]] = set()
 
     for row_number, row in enumerate(rows, start=1):
+        _validate_row_columns(row, row_number)
         values = {column: _required(row, row_number, column) for column in _COLUMNS}
 
         source_seqcol_digest = values["source_seqcol_digest"]
@@ -141,6 +158,11 @@ def relation_for(
     return matches[0] if matches else None
 
 
+def _validate_header(fieldnames: Sequence[str] | None) -> None:
+    if tuple(fieldnames or ()) != _COLUMNS:
+        raise AssemblyCompatibilityError("compatibility_relations.csv header does not match the pinned relation contract")
+
+
 def load_compatibility_relations(
     *,
     dataset_id: str,
@@ -150,9 +172,10 @@ def load_compatibility_relations(
     resolved = resolve(dataset_id, COMPATIBILITY_RESOURCE, commons_root=commons_root, data_root=data_root)
     with resolved.path.open(encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
+        _validate_header(reader.fieldnames)
         rows: list[dict[str, str]] = []
         for row_number, row in enumerate(reader, start=1):
             if None in row:
                 raise AssemblyCompatibilityError(f"row {row_number}: unexpected extra CSV columns")
-            rows.append({column: value for column, value in row.items() if column is not None and value is not None})
+            rows.append(cast(dict[str, str], row))
     return parse_compatibility_rows(rows)

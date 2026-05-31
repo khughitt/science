@@ -55,3 +55,12 @@ def test_parse_rejects_identity_relation() -> None:
         assert "must differ" in str(exc)
     else:
         raise AssertionError("expected AssemblyCompatibilityError")
+
+
+def test_parse_rejects_extra_named_columns() -> None:
+    try:
+        parse_compatibility_rows([_row(unexpected_column="extra")])
+    except AssemblyCompatibilityError as exc:
+        assert "unexpected columns" in str(exc)
+    else:
+        raise AssertionError("expected AssemblyCompatibilityError")
