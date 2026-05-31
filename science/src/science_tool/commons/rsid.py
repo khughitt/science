@@ -34,7 +34,7 @@ class RsidDefect:
 
 
 def normalize_rsid(query: str) -> str | RsidDefect:
-    value = query.strip().lower()
+    value = query.lower()
     if _RSID.fullmatch(value) is None:
         return RsidDefect(query, "malformed-rsid", "expected rs followed by digits")
     return value

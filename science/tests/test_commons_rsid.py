@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import sqlite3
+from types import SimpleNamespace
 from pathlib import Path
 
+import science_tool.commons.rsid as rsid_module
 from science_tool.commons.rsid import RsidDefect, RsidMatch, resolve_rsid
 
 
@@ -130,8 +132,55 @@ def test_resolve_rsid_reports_unknown_after_assembly_filter(tmp_path: Path) -> N
 
 
 def test_resolve_rsid_rejects_malformed_label(tmp_path: Path) -> None:
-    path = _sqlite(tmp_path / "rsid_mappings.sqlite")
+    path = tmp_path / "missing.sqlite"
 
     result = resolve_rsid("1", assembly_seqcol="GRCH38", sqlite_path=path)
 
     assert result == RsidDefect("1", "malformed-rsid", "expected rs followed by digits")
+
+
+def test_resolve_rsid_rejects_whitespace_padded_labels(tmp_path: Path) -> None:
+    path = _sqlite(tmp_path / "rsid_mappings.sqlite")
+
+    assert resolve_rsid(" RS1 ", assembly_seqcol="GRCH38", sqlite_path=path) == RsidDefect(
+        " RS1 ",
+        "malformed-rsid",
+        "expected rs followed by digits",
+    )
+    assert resolve_rsid("rs1\n", assembly_seqcol="GRCH38", sqlite_path=path) == RsidDefect(
+        "rs1\n",
+        "malformed-rsid",
+        "expected rs followed by digits",
+    )
+
+
+def test_resolve_rsid_uses_registry_only_without_explicit_sqlite_path(tmp_path: Path, monkeypatch) -> None:
+    path = _sqlite(tmp_path / "rsid_mappings.sqlite")
+    calls = []
+
+    def fake_resolve(*args, **kwargs):
+        calls.append((args, kwargs))
+        return SimpleNamespace(path=path)
+
+    monkeypatch.setattr(rsid_module, "resolve", fake_resolve)
+
+    explicit_result = resolve_rsid("rs1", assembly_seqcol="GRCH38", sqlite_path=path)
+
+    assert isinstance(explicit_result, RsidMatch)
+    assert calls == []
+
+    registry_result = resolve_rsid(
+        "rs1",
+        assembly_seqcol="GRCH38",
+        registry="dataset:test-rsid",
+        commons_root=tmp_path / "commons",
+        data_root=tmp_path / "data",
+    )
+
+    assert isinstance(registry_result, RsidMatch)
+    assert calls == [
+        (
+            ("dataset:test-rsid", "rsid_mappings.sqlite"),
+            {"commons_root": tmp_path / "commons", "data_root": tmp_path / "data"},
+        )
+    ]
