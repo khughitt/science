@@ -317,6 +317,44 @@ def test_cross_dataset_mismatch_with_multiple_lifted_parents_passes() -> None:
     )
 
 
+def test_cross_dataset_mismatch_with_partial_lifted_parents_warns() -> None:
+    a = _with_assembly("dataset:a", "DIGEST_37")
+    b = _with_assembly("dataset:b", "DIGEST_36")
+    derived = _with_assembly(
+        "dataset:c",
+        "DIGEST_38",
+        derivation={
+            "inputs": ["dataset:a", "dataset:b"],
+            "transformations": [
+                {
+                    "type": "liftover",
+                    "from_seqcol_digest": "DIGEST_37",
+                    "to_seqcol_digest": "DIGEST_38",
+                    "method": "ucsc_chain",
+                    "dataset": _LIFTOVER_DATASET,
+                },
+                {
+                    "type": "liftover",
+                    "from_seqcol_digest": "DIGEST_36",
+                    "to_seqcol_digest": "DIGEST_38",
+                    "method": "ucsc_chain",
+                    "dataset": _LIFTOVER_DATASET,
+                },
+            ],
+        },
+    )
+
+    warns = [
+        r
+        for r in evaluate_cross_dataset_assembly(
+            [a, b, derived],
+            compatibility_relations_by_dataset_id={_LIFTOVER_DATASET: [_relation("DIGEST_37", "DIGEST_38")]},
+        )
+        if r.rule == "identity.cross-dataset-assembly-mismatch"
+    ]
+    assert len(warns) == 1
+
+
 def test_load_relations_fallback_keeps_warning_when_dataset_unresolvable() -> None:
     from science_tool.commons.errors import CommonsError
     from science_tool.validate.checks.identity_context import _load_relations_for_datasets
