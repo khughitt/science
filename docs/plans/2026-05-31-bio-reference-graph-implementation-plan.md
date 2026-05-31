@@ -56,6 +56,8 @@ Modify:
 
 - `science/src/science_tool/validate/checks/__init__.py`
   - Register `reference_graphs` after `genesets` and before `dataset_influence`.
+- `science/src/science_tool/validate/checks/dataset_influence.py`
+  - Bump `dataset_influence` check order from 35 to 36 so `reference_graphs` can use a unique order 35.
 - `science/tests/validate/test_runner.py`
   - Update the helper list of real canonical checks and add an ordering assertion.
 - `docs/plans/2026-05-31-bio-reference-graph-design.md`
@@ -717,7 +719,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from science_tool.commons.reference_graph_resources import read_edge_rows, read_graph_bytes, read_node_rows
+from science_tool.commons.reference_graph_resources import graph_resource_available, read_edge_rows, read_node_rows
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
@@ -815,7 +817,7 @@ def _write_reference_graph_datapackage(
     return dp_dir
 
 
-def test_reference_graph_resource_helper_reads_local_rows_and_graph_bytes(tmp_path: Path) -> None:
+def test_reference_graph_resource_helper_reads_local_rows_and_checks_graph_availability(tmp_path: Path) -> None:
     _write_project(tmp_path)
     dp_dir = _write_reference_graph_datapackage(tmp_path)
     dp_dir.joinpath("graph.nt").write_text("<MONDO:0005148> <is_a> <MONDO:0000001> .\n", encoding="utf-8")
@@ -830,7 +832,7 @@ def test_reference_graph_resource_helper_reads_local_rows_and_graph_bytes(tmp_pa
     )
     fm = _reference_graph(_path="data/mondo/datapackage.yaml")
 
-    assert read_graph_bytes(tmp_path, fm) == b"<MONDO:0005148> <is_a> <MONDO:0000001> .\n"
+    assert graph_resource_available(tmp_path, fm) is True
     assert read_node_rows(tmp_path, fm) == [
         {
             "member_key": "MONDO:0005148",
@@ -876,7 +878,7 @@ def test_reference_graph_resource_helper_missing_optional_edge_resource_returns_
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/validate/test_checks_reference_graphs.py::test_reference_graph_resource_helper_reads_local_rows_and_graph_bytes -q
+uv run --frozen pytest science/tests/validate/test_checks_reference_graphs.py::test_reference_graph_resource_helper_reads_local_rows_and_checks_graph_availability -q
 ```
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'science_tool.commons.reference_graph_resources'`.
@@ -971,13 +973,6 @@ def _read_csv(path: Path) -> list[dict[str, Any]] | Exception:
         return exc
 
 
-def _read_bytes(path: Path) -> bytes | Exception:
-    try:
-        return path.read_bytes()
-    except OSError as exc:
-        return exc
-
-
 def _resolve_commons_resource_path(fm: dict[str, Any], *, kind: ResourceKind) -> Path | Exception | None:
     dataset_id = fm.get("id")
     resource_name = fm.get(_RESOURCE_FIELD_BY_KIND[kind])
@@ -1005,11 +1000,11 @@ def _resource_path(project_root: Path, fm: dict[str, Any], *, kind: ResourceKind
     return commons_path
 
 
-def read_graph_bytes(project_root: Path, fm: dict[str, Any]) -> bytes | Exception | None:
+def graph_resource_available(project_root: Path, fm: dict[str, Any]) -> bool | Exception | None:
     path = _resource_path(project_root, fm, kind="graph")
     if isinstance(path, Exception) or path is None:
         return path
-    return _read_bytes(path)
+    return path.is_file()
 
 
 def read_node_rows(project_root: Path, fm: dict[str, Any]) -> list[dict[str, Any]] | Exception | None:
@@ -1038,7 +1033,7 @@ Expected now: PASS for the three resource-helper tests. If the file also contain
 
 ```bash
 uv run --frozen pytest \
-  science/tests/validate/test_checks_reference_graphs.py::test_reference_graph_resource_helper_reads_local_rows_and_graph_bytes \
+  science/tests/validate/test_checks_reference_graphs.py::test_reference_graph_resource_helper_reads_local_rows_and_checks_graph_availability \
   science/tests/validate/test_checks_reference_graphs.py::test_reference_graph_resource_helper_rejects_unsafe_resource_path \
   science/tests/validate/test_checks_reference_graphs.py::test_reference_graph_resource_helper_missing_optional_edge_resource_returns_none \
   -q
@@ -1073,7 +1068,7 @@ def test_valid_reference_graph_passes_silently() -> None:
     results = list(
         evaluate_reference_graphs(
             [_reference_graph()],
-            graph_bytes_by_dataset_id={"dataset:mondo": b"<MONDO:0005148> <is_a> <MONDO:0000001> .\n"},
+            graph_available_by_dataset_id={"dataset:mondo": True},
             node_rows_by_dataset_id={"dataset:mondo": [_node(), _node(member_key="MONDO:obsolete", status="deprecated")]},
             edge_rows_by_dataset_id={
                 "dataset:mondo": [
@@ -1093,7 +1088,7 @@ def test_malformed_reference_graph_collection_errors() -> None:
     results = list(
         evaluate_reference_graphs(
             [fm],
-            graph_bytes_by_dataset_id={"dataset:mondo": b"x"},
+            graph_available_by_dataset_id={"dataset:mondo": True},
             node_rows_by_dataset_id={"dataset:mondo": [_node()]},
             edge_rows_by_dataset_id={},
             member_datasets=[],
@@ -1104,11 +1099,29 @@ def test_malformed_reference_graph_collection_errors() -> None:
     assert results[0].severity is Severity.ERROR
 
 
+def test_missing_graph_resource_does_not_suppress_node_validation() -> None:
+    results = list(
+        evaluate_reference_graphs(
+            [_reference_graph()],
+            graph_available_by_dataset_id={"dataset:mondo": None},
+            node_rows_by_dataset_id={"dataset:mondo": [_node()]},
+            edge_rows_by_dataset_id={},
+            member_datasets=[],
+        )
+    )
+
+    assert _rules(results) == [
+        "reference-graph.graph-resource-unavailable",
+        "reference-graph.member-count-mismatch",
+    ]
+    assert results[0].severity is Severity.INFO
+
+
 def test_missing_node_index_is_info_not_silent() -> None:
     results = list(
         evaluate_reference_graphs(
             [_reference_graph()],
-            graph_bytes_by_dataset_id={"dataset:mondo": b"x"},
+            graph_available_by_dataset_id={"dataset:mondo": True},
             node_rows_by_dataset_id={},
             edge_rows_by_dataset_id={},
             member_datasets=[],
@@ -1123,7 +1136,7 @@ def test_node_index_malformed_errors() -> None:
     results = list(
         evaluate_reference_graphs(
             [_reference_graph()],
-            graph_bytes_by_dataset_id={"dataset:mondo": b"x"},
+            graph_available_by_dataset_id={"dataset:mondo": True},
             node_rows_by_dataset_id={"dataset:mondo": [_node(status="obsolete")]},
             edge_rows_by_dataset_id={},
             member_datasets=[],
@@ -1138,7 +1151,7 @@ def test_member_count_counts_deprecated_rows() -> None:
     results = list(
         evaluate_reference_graphs(
             [_reference_graph(member_count=1)],
-            graph_bytes_by_dataset_id={"dataset:mondo": b"x"},
+            graph_available_by_dataset_id={"dataset:mondo": True},
             node_rows_by_dataset_id={"dataset:mondo": [_node(), _node(member_key="MONDO:obsolete", status="deprecated")]},
             edge_rows_by_dataset_id={},
             member_datasets=[],
@@ -1153,7 +1166,7 @@ def test_edge_count_mismatch_errors_when_edge_resource_declared() -> None:
     results = list(
         evaluate_reference_graphs(
             [_reference_graph(edge_count=2)],
-            graph_bytes_by_dataset_id={"dataset:mondo": b"x"},
+            graph_available_by_dataset_id={"dataset:mondo": True},
             node_rows_by_dataset_id={"dataset:mondo": [_node(), _node(member_key="MONDO:obsolete", status="deprecated")]},
             edge_rows_by_dataset_id={
                 "dataset:mondo": [
@@ -1165,6 +1178,23 @@ def test_edge_count_mismatch_errors_when_edge_resource_declared() -> None:
     )
 
     assert _rules(results) == ["reference-graph.edge-count-mismatch"]
+
+
+def test_jsonl_edges_format_is_enum_validated_without_distinct_edge_resource() -> None:
+    fm = _reference_graph(graph_format="jsonl_edges", edge_resource=None, edge_count=None)
+    fm.pop("edge_resource")
+    fm.pop("edge_count")
+    results = list(
+        evaluate_reference_graphs(
+            [fm],
+            graph_available_by_dataset_id={"dataset:mondo": True},
+            node_rows_by_dataset_id={"dataset:mondo": [_node(), _node(member_key="MONDO:obsolete", status="deprecated")]},
+            edge_rows_by_dataset_id={},
+            member_datasets=[],
+        )
+    )
+
+    assert results == []
 
 
 def test_deprecated_promoted_member_warns_with_replaced_by() -> None:
@@ -1181,7 +1211,7 @@ def test_deprecated_promoted_member_warns_with_replaced_by() -> None:
     results = list(
         evaluate_reference_graphs(
             [_reference_graph()],
-            graph_bytes_by_dataset_id={"dataset:mondo": b"x"},
+            graph_available_by_dataset_id={"dataset:mondo": True},
             node_rows_by_dataset_id={
                 "dataset:mondo": [
                     _node(),
@@ -1212,7 +1242,7 @@ def test_unresolved_promoted_member_errors() -> None:
     results = list(
         evaluate_reference_graphs(
             [_reference_graph()],
-            graph_bytes_by_dataset_id={"dataset:mondo": b"x"},
+            graph_available_by_dataset_id={"dataset:mondo": True},
             node_rows_by_dataset_id={"dataset:mondo": [_node(), _node(member_key="MONDO:obsolete", status="deprecated")]},
             edge_rows_by_dataset_id={},
             member_datasets=[member],
@@ -1316,7 +1346,7 @@ def _reference_graph_member_profile(fm: dict[str, Any]) -> bool:
 def evaluate_reference_graphs(
     datasets: Iterable[dict[str, Any]],
     *,
-    graph_bytes_by_dataset_id: dict[str, bytes | Exception | None],
+    graph_available_by_dataset_id: dict[str, bool | Exception | None],
     node_rows_by_dataset_id: dict[str, list[dict[str, Any]] | Exception | None],
     edge_rows_by_dataset_id: dict[str, list[dict[str, Any]] | Exception | None],
     member_datasets: Iterable[dict[str, Any]],
@@ -1336,23 +1366,21 @@ def evaluate_reference_graphs(
                 "reference-graph.collection-malformed",
             )
             continue
-        graph_bytes = graph_bytes_by_dataset_id.get(ident)
-        if graph_bytes is None:
+        graph_available = graph_available_by_dataset_id.get(ident)
+        if graph_available is None or graph_available is False:
             yield _result(
                 Severity.INFO,
                 path,
-                f"{ident}: graph_resource is unavailable; graph bytes cannot be verified",
+                f"{ident}: graph_resource is unavailable; graph artifact cannot be verified",
                 "reference-graph.graph-resource-unavailable",
             )
-            continue
-        if isinstance(graph_bytes, Exception):
+        elif isinstance(graph_available, Exception):
             yield _result(
                 Severity.ERROR,
                 path,
-                f"{ident}: graph_resource malformed -- {graph_bytes}",
+                f"{ident}: graph_resource malformed -- {graph_available}",
                 "reference-graph.graph-resource-malformed",
             )
-            continue
         raw_nodes = node_rows_by_dataset_id.get(ident)
         if raw_nodes is None:
             yield _result(
@@ -1572,6 +1600,21 @@ def test_canonical_loader_registers_reference_graphs_between_genesets_and_datase
     reference_graphs_index = next(index for index, entry in enumerate(ordered) if entry[0] == "reference graph collections")
     influence_index = next(index for index, entry in enumerate(ordered) if entry[0] == "dataset influence")
     assert genesets_index < reference_graphs_index < influence_index
+    assert ordered[genesets_index][1] == 34
+    assert ordered[reference_graphs_index][1] == 35
+    assert ordered[influence_index][1] == 36
+```
+
+Also update the existing `test_canonical_loader_registers_dataset_influence_after_genesets` assertion. Replace:
+
+```python
+assert influence_index == genesets_index + 1
+```
+
+with:
+
+```python
+assert influence_index > genesets_index
 ```
 
 - [ ] **Step 2: Run registered-check tests to verify they fail**
@@ -1592,20 +1635,20 @@ Expected: FAIL because `check_reference_graphs` is not decorated/implemented and
 Modify the imports at the top of `science/src/science_tool/validate/checks/reference_graphs.py` to include:
 
 ```python
-from science_tool.commons.reference_graph_resources import read_edge_rows, read_graph_bytes, read_node_rows
+from science_tool.commons.reference_graph_resources import graph_resource_available, read_edge_rows, read_node_rows
 from science_tool.validate._helpers import dataset_frontmatters
 ```
 
 Append this function to the end of `science/src/science_tool/validate/checks/reference_graphs.py`:
 
 ```python
-@Check(section="reference graph collections", order=34)
+@Check(section="reference graph collections", order=35)
 def check_reference_graphs(ctx: ValidateContext) -> Iterator[Result]:
     datasets = dataset_frontmatters(ctx)
     collections = [fm for fm in datasets if is_reference_graph_frontmatter(fm)]
     collection_ids = {str(fm["id"]) for fm in collections if isinstance(fm.get("id"), str) and fm["id"]}
-    graph_bytes_by_dataset_id = {
-        str(fm["id"]): read_graph_bytes(ctx.project_root, fm)
+    graph_available_by_dataset_id = {
+        str(fm["id"]): graph_resource_available(ctx.project_root, fm)
         for fm in collections
         if isinstance(fm.get("id"), str) and fm["id"]
     }
@@ -1628,14 +1671,14 @@ def check_reference_graphs(ctx: ValidateContext) -> Iterator[Result]:
             members.append(fm)
     yield from evaluate_reference_graphs(
         collections,
-        graph_bytes_by_dataset_id=graph_bytes_by_dataset_id,
+        graph_available_by_dataset_id=graph_available_by_dataset_id,
         node_rows_by_dataset_id=node_rows_by_dataset_id,
         edge_rows_by_dataset_id=edge_rows_by_dataset_id,
         member_datasets=members,
     )
 ```
 
-This intentionally validates promoted members only when their parent collection is local to the project. Commons-parent promoted members are a later RG3/RG4 concern once real graph commons artifacts exist.
+This intentionally validates promoted members only when their parent collection is local to the project. Commons-parent promoted members are a later RG3/RG4 concern once real graph commons artifacts exist. RG1 covers promoted-member resolution at the pure `evaluate_reference_graphs` layer only; RG3 must add an on-disk integration test that proves `dataset_frontmatters` discovers a promoted `bio.reference_graph.member` entity in the chosen filesystem location.
 
 - [ ] **Step 4: Register canonical check module**
 
@@ -1661,25 +1704,35 @@ Modify `_register_real_canonical_checks()` in `science/tests/validate/test_runne
         "prose_lints",
 ```
 
-- [ ] **Step 6: Run registered-check tests**
+- [ ] **Step 6: Bump dataset influence check order**
+
+Modify `science/src/science_tool/validate/checks/dataset_influence.py`, changing the decorator:
+
+```python
+@Check(section="dataset influence", order=36)
+def check_dataset_influence(ctx: ValidateContext) -> Iterator[Result]:
+```
+
+- [ ] **Step 7: Run registered-check tests**
 
 Run:
 
 ```bash
 uv run --frozen pytest \
   science/tests/validate/test_checks_reference_graphs.py \
+  science/tests/validate/test_runner.py::test_canonical_loader_registers_dataset_influence_after_genesets \
   science/tests/validate/test_runner.py::test_canonical_loader_registers_reference_graphs_between_genesets_and_dataset_influence \
   -q
 ```
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 Run:
 
 ```bash
-rtk git add science/src/science_tool/validate/checks/reference_graphs.py science/src/science_tool/validate/checks/__init__.py science/tests/validate/test_checks_reference_graphs.py science/tests/validate/test_runner.py
+rtk git add science/src/science_tool/validate/checks/reference_graphs.py science/src/science_tool/validate/checks/__init__.py science/src/science_tool/validate/checks/dataset_influence.py science/tests/validate/test_checks_reference_graphs.py science/tests/validate/test_runner.py
 rtk git commit -m "feat(validate): check reference graph datasets"
 ```
 
@@ -1745,6 +1798,7 @@ uv run --frozen pytest \
   science/model/tests/test_bio_extension_reference_graph.py \
   science/tests/test_commons_reference_graph.py \
   science/tests/validate/test_checks_reference_graphs.py \
+  science/tests/validate/test_runner.py::test_canonical_loader_registers_dataset_influence_after_genesets \
   science/tests/validate/test_runner.py::test_canonical_loader_registers_reference_graphs_between_genesets_and_dataset_influence \
   -q
 ```
@@ -1760,6 +1814,7 @@ uv run --frozen ruff check \
   science/src/science_tool/commons/reference_graph.py \
   science/src/science_tool/commons/reference_graph_resources.py \
   science/src/science_tool/validate/checks/reference_graphs.py \
+  science/src/science_tool/validate/checks/dataset_influence.py \
   science/tests/test_commons_reference_graph.py \
   science/tests/validate/test_checks_reference_graphs.py \
   science/model/tests/test_bio_extension_reference_graph.py
@@ -1776,6 +1831,7 @@ uv run --frozen pyright \
   science/src/science_tool/commons/reference_graph.py \
   science/src/science_tool/commons/reference_graph_resources.py \
   science/src/science_tool/validate/checks/reference_graphs.py \
+  science/src/science_tool/validate/checks/dataset_influence.py \
   science/tests/test_commons_reference_graph.py \
   science/tests/validate/test_checks_reference_graphs.py \
   science/model/tests/test_bio_extension_reference_graph.py
@@ -1806,7 +1862,7 @@ rtk git commit -m "docs: update reference graph rg1 status"
 
 ## Self-Review Checklist
 
-- [ ] **Spec coverage:** RG1 schema, parser, validation, required node index, count semantics, JSONL-edge distinction, deprecated-member warning, open `member_kind`, and no real public graph ingestion are all covered.
+- [ ] **Spec coverage:** RG1 schema, parser, validation, required node index, count semantics, graph resource availability without byte reads, graph_format enum validation including `jsonl_edges`, deprecated-member warning, open `member_kind`, and no real public graph ingestion are all covered.
 - [ ] **No placeholders:** Search this plan for the placeholder/red-flag phrases listed in the writing-plans skill; none should remain.
 - [ ] **Type consistency:** The collection descriptor is always `member_key_space`; scalar member identity is only `derivation.member_key`; node rows use `member_key`.
 - [ ] **YAGNI:** RG2/RG3/RG4/RG5 are named but not implemented in RG1.
