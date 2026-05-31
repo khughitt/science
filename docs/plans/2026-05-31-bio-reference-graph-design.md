@@ -82,7 +82,7 @@ profiles:
   - bio.reference_graph/1.0
 datapackage: datapackage.yaml
 graph_resource: mondo.nt
-member_key:
+member_key_space:
   kind: curie
   prefixes: [MONDO]
   resolution_status: resolved
@@ -91,9 +91,10 @@ edge_resource: edges.csv
 ```
 
 The extension is deliberately about graph-shaped reference data, not just ontologies. GO and MONDO fit as
-term graphs; Open Targets may fit as an association graph whose members include disease, target, and
-association keys. The first schema should therefore avoid ontology-only field names where a more general
-graph term is clearer.
+term graphs. Open Targets may fit later as an association graph whose members include disease, target, and
+association keys, but that fit is unproven until an association graph is the implementation target. The
+first schema should avoid ontology-only field names where a more general graph term is clearer, while RG1
+validates only term-graph fixtures.
 
 ### RG-D2 — Graph members are keyed members, not eager entities
 
@@ -106,9 +107,9 @@ Each addressable graph member is keyed within the parent dataset. Common key sha
 | Open Targets association graph | a stable association id or deterministic tuple key |
 | Mixed RDF graph | canonical IRI or compact CURIE |
 
-The key is the member identity within that release. A member row in an optional node index is the cheap
-addressable form; a promoted child `dataset` is only minted on demand through `derivation.kind:
-member_of`.
+The key is the member identity within that release. In RG1, a member row in the required node index is
+the cheap addressable form; a promoted child `dataset` is only minted on demand through
+`derivation.kind: member_of`.
 
 Exact key equality is identity inside one release. Cross-release replacement, obsoletion, xref,
 equivalence, or close-match assertions are relations between distinct keys, not key collapse.
@@ -132,14 +133,16 @@ derivation:
   kind: member_of
   parent_dataset: dataset:mondo
   member_key: MONDO:0005148
-member_key: MONDO:0005148
 member_kind: term
 label: multiple myeloma
+status: active
 ```
 
-The required dataset payload is virtual by default: resolve the member by slicing the parent graph or
-node index on `member_key`. A separate artifact is created only if a workflow needs a frozen materialized
-export.
+The required dataset payload is virtual by default: resolve the member by slicing the parent reference
+graph on `derivation.member_key`. For graph members, the default slice is the node-index row plus
+directly incident edges in the normalized edge resource. Transitive closure, ontology entailments, and
+neighborhood expansion are later adapters with their own pinned outputs. A separate artifact is created
+only if a workflow needs a frozen materialized export.
 
 Promotion triggers match the foundation primitive:
 
@@ -192,18 +195,27 @@ dataset usage records.
 
 ### RG-D6 — Deprecation and replacement are first-class member state
 
-Reference graphs commonly carry obsolete terms, merged terms, replaced terms, xrefs, and exact/close
-matches. The model must not silently resolve through them. The first member index should support at least:
+Reference graphs commonly carry obsolete terms, merged terms, and replaced terms. The model must not
+silently resolve through them. The first member index should support at least:
 
 - `member_key`
 - `member_kind`
 - `label`
 - `status`: `active | deprecated | withdrawn`
 - `replaced_by` as a semicolon-delimited list or JSON array of member keys
-- optional `xref` / `equivalent_to` / `close_match` fields
 
 Validation flags deprecated or withdrawn members when they are referenced or promoted. It may suggest
 `replaced_by`, but it must not rewrite the key automatically.
+
+Cross-key assertions such as `xref`, `equivalent_to`, and `close_match` are graph edges, not node-index
+columns. They are RCM-D6 compatibility/equivalence relations between distinct keys, so keeping them in
+`edge_resource` avoids inviting consumers to treat a node-row column as identity collapse.
+
+For OBO-style ontologies, the recipe maps source lifecycle terms into this compact lifecycle axis:
+`owl:deprecated true` and "obsolete" terms map to `status: deprecated`; `IAO:0100001` ("term replaced
+by") maps to `replaced_by`; source-specific `consider` relations remain explicit edges. This lifecycle
+`status` is separate from `member_key_space.resolution_status`, which describes whether the key space is
+validated against a registry.
 
 ### RG-D7 — Graph artifacts are pinned; graph import is an adapter, not the model
 
@@ -231,7 +243,7 @@ Minimum fields:
 ```yaml
 graph_resource: graph.nt
 graph_format: rdf_ntriples
-member_key:
+member_key_space:
   kind: curie
   prefixes: [GO, MONDO]
   resolution_status: resolved
@@ -247,11 +259,20 @@ Field intent:
 |---|---|
 | `graph_resource` | Datapackage resource holding the graph artifact |
 | `graph_format` | Parser/import contract for the graph artifact |
-| `member_key` | Declares how addressable members are keyed |
-| `node_index_resource` | Optional table for fast member lookup and status checks |
+| `member_key_space` | Declares how addressable members are keyed |
+| `node_index_resource` | Required RG1 table for fast member lookup and status checks |
 | `edge_resource` | Optional normalized edge table for validation/query summaries |
 | `member_count` | Expected addressable node/member count |
 | `edge_count` | Expected edge count, when cheaply knowable |
+
+`node_index_resource` is required for RG1. Without it, the existing keyed-member resolution helper can
+only report unknown membership, so promotion checks and count validation become vacuous. A bare
+`graph_resource`-only dataset is a later degraded mode, useful only after an RDF adapter can derive or
+validate the member index.
+
+The node and edge tables are build-derived projections of the graph artifact. RG1 treats those
+projections as the validation surface; reconciling them back against RDF triples is the recipe's
+responsibility until a later RDF adapter adds an explicit graph/index consistency check.
 
 The node index resource should have a minimal CSV contract:
 
@@ -273,15 +294,14 @@ MONDO:0005148,is_a,MONDO:0000001,,"[]"
 Minimum fields:
 
 ```yaml
-member_key: MONDO:0005148
 member_kind: term
 label: multiple myeloma
 status: active
 ```
 
 This extension intentionally does not duplicate `parent_dataset` or `derivation.member_key`; those live
-in the core `dataset`/`derivation` substrate. The extension carries graph-member descriptors needed for
-validation, display, and review.
+in the core `dataset`/`derivation` substrate. The extension carries only graph-member descriptors needed
+for validation, display, and review.
 
 ---
 
@@ -289,17 +309,18 @@ validation, display, and review.
 
 Initial validation should be cheap and deterministic over pinned local artifacts:
 
-1. **Resource existence.** `graph_resource`, `node_index_resource`, and `edge_resource` must resolve to
-   datapackage resources when declared.
+1. **Resource existence.** `graph_resource` and `node_index_resource` must resolve to datapackage
+   resources; `edge_resource` must resolve when declared.
 2. **Format support.** `graph_format` must be one of the supported graph formats.
-3. **Member-key declaration.** `member_key.kind`, prefixes, and `resolution_status` must be explicit.
-4. **Node index contract.** If a node index exists, `member_key` values are unique and required columns
-   parse.
+3. **Member-key declaration.** `member_key_space.kind`, prefixes, and `resolution_status` must be
+   explicit.
+4. **Node index contract.** The RG1 node index exists, `member_key` values are unique, and required
+   columns parse.
 5. **Count checks.** `member_count` and `edge_count` match the index/edge resource when those resources
    are declared.
 6. **Member promotion resolution.** A `bio.reference_graph.member` dataset with `derivation.kind:
-   member_of` must resolve `member_key` in its parent reference graph, unless it explicitly carries
-   `resolution_status: declared_unresolved`.
+   member_of` must resolve `derivation.member_key` in its parent reference graph, unless a later
+   implementation explicitly adds a declared-unresolved member state.
 7. **Deprecated-member references.** Promoted or referenced deprecated/withdrawn members produce a
    review warning or error according to tier; `replaced_by` is reported, not auto-applied.
 8. **Dataset usage shape.** Dataset-level and member-level `dataset_usage` entries use the shared
@@ -365,7 +386,7 @@ The model therefore covers non-tabular references without weakening the flat gen
 
 | Phase | Scope |
 |---|---|
-| RG1 | Schema + parser + validation over tiny fixture graph/index/edge resources |
+| RG1 | Schema + parser + validation over tiny fixture graph/index/edge resources; node index required |
 | RG2 | Virtual member resolution and B materialization hooks for unpromoted graph members |
 | RG3 | Promoted `bio.reference_graph.member` child datasets |
 | RG4 | First real commons recipe, likely MONDO or GO, with pinned release artifacts |
@@ -373,6 +394,11 @@ The model therefore covers non-tabular references without weakening the flat gen
 
 RG1 should be the first implementation plan. It is small enough to test hermetically and establishes the
 contract before any large public reference graph is ingested.
+
+RG2/RG3 depend on a generic virtual-member slice resolver: given a `member_of` child dataset, resolve the
+parent artifact and return the member payload. Implementing that resolver here should benefit D2's
+deferred promoted gene-set members as well. If that generic resolver is not implemented in RG2/RG3, those
+phases are blocked on the equivalent D2 substrate.
 
 ---
 
@@ -383,10 +409,11 @@ contract before any large public reference graph is ingested.
    conflation with gene sets. Open Targets is richer but more complex.
 2. **Member key form for association graphs.** Term graphs naturally use CURIEs. Association graphs need
    either upstream stable ids or deterministic tuple keys. The implementation should not invent a
-   generic tuple-key format until Open Targets is the target resource.
-3. **RDF reasoning boundary.** The first increment should validate explicit artifacts, not infer
-   transitive closure or ontology entailments. Reasoning can be a later adapter with its own pinned
-   outputs.
+   generic tuple-key format until Open Targets is the target resource; until then, association-graph
+   support is an intended extension point, not a validated capability.
+3. **RDF reasoning boundary.** The first increment should validate explicit build-derived index/edge
+   artifacts, not infer transitive closure or ontology entailments. Reasoning and graph/index
+   reconciliation can be later adapters with their own pinned outputs.
 
 ---
 
