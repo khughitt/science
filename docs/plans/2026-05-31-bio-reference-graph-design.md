@@ -2,7 +2,7 @@
 
 Date: 2026-05-31
 
-Status: RG1 implemented locally; RG2+ pending
+Status: RG1 and RG2 implemented locally; RG3+ pending
 
 Related:
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; RG1 partly addresses its non-tabular-reference open item
@@ -395,19 +395,21 @@ The model therefore covers non-tabular references without weakening the flat gen
 | Phase | Scope | Status |
 |---|---|---|
 | RG1 | Schema + parser + validation over tiny fixture graph/index/edge resources; node index required | implemented locally |
-| RG2 | Virtual member resolution and B materialization hooks for unpromoted graph members | pending |
+| RG2 | Virtual member payload resolution for promoted graph members; payload includes node row plus directly incident edges and exposes member-level `dataset_usage` for later B hooks | implemented locally |
 | RG3 | Promoted `bio.reference_graph.member` child datasets | pending |
 | RG4 | First real commons recipe, likely MONDO or GO, with pinned release artifacts | pending |
 | RG5 | Later non-molecular identity resolvers over one or more reference graphs | pending |
 
-RG1 is implemented locally: the tiny fixture graph/index/edge resources exercise the schema, parser, and
-validation contract before any large public reference graph is ingested. RG2 is now the next implementation
-planning target.
+RG2 is implemented locally for promoted `bio.reference_graph.member` datasets. The generic
+`member_of` payload dispatcher now detects unsupported collection kinds explicitly, and the
+reference-graph resolver returns the member node row plus directly incident normalized edges.
+Automated B materialization from unpromoted graph members remains RG3+/B follow-up work; RG2
+preserves the node/edge `dataset_usage` data needed for that work.
 
-RG2/RG3 depend on a generic virtual-member slice resolver: given a `member_of` child dataset, resolve the
-parent artifact and return the member payload. Implementing that resolver here should benefit D2's
-deferred promoted gene-set members as well. If that generic resolver is not implemented in RG2/RG3, those
-phases are blocked on the equivalent D2 substrate.
+RG2 implemented the generic virtual-member payload dispatcher and the first concrete
+`bio.reference_graph.member` resolver. D2 can now add the sibling `bio.geneset.member` resolver without
+reopening the generic dispatch boundary. Unpromoted-member B materialization remains separate follow-up
+work because RG2 only returns payload data; it does not emit influence graph records.
 
 ---
 
@@ -428,7 +430,6 @@ phases are blocked on the equivalent D2 substrate.
 
 ## 11. Next step
 
-RG1 is implemented locally. Next, plan RG2+ follow-ups: virtual graph-member resolution and B
-materialization hooks for unpromoted graph members, then first real MONDO or GO commons recipe work with
-pinned release artifacts. Promoted graph-member datasets and later non-molecular identity resolvers remain
-subsequent phases.
+RG1 and RG2 are implemented locally. Next, plan RG3/RG4 follow-ups: broader graph-member promotion
+workflows, unpromoted-member B materialization, and the first real MONDO or GO commons recipe with
+pinned release artifacts. Later non-molecular identity resolvers remain subsequent phases.

@@ -280,10 +280,10 @@ collapsed into identity.
 7. **Resolved (C): pinned vs. live identity.** Pinned local snapshots are authoritative for joins. Live
    services are discovery/QA conveniences only; refgenie/refgenieserver may document genome asset
    provenance but not replace pinned identity inputs.
-8. **Partly resolved (non-tabular references).** `bio.reference_graph` RG1 is implemented for pinned
-   graph-shaped reference datasets with node-index validation. Real GO/MONDO/Open Targets recipes,
-   virtual graph-member payload resolution, promoted graph members, and non-molecular identity resolvers
-   remain follow-up work.
+8. **Partly resolved (non-tabular references).** `bio.reference_graph` RG1 and RG2 are implemented for pinned graph-shaped reference datasets:
+   RG1 validates node indexes, and RG2 resolves promoted graph-member virtual payloads as node rows plus
+   directly incident edges. Real GO/MONDO/Open Targets recipes, broader graph-member promotion workflows,
+   unpromoted-member B materialization, and non-molecular identity resolvers remain follow-up work.
 
 ---
 
@@ -331,10 +331,11 @@ merged locally, C4c-1 rsID input implemented locally), D1, and B1/B2 are now exe
 `bio.geneset` commons dataset: Reactome release 96 was fetched from the versioned Reactome download URL,
 the C2 HGNC gene crosswalk was built, `dataset:reactome` was promoted into `~/d/science-commons`, and the
 pan-disease local Reactome stub was removed so consumers resolve through commons. D2 remains deferred
-until a real evidence line needs a promoted pathway dataset. `bio.reference_graph` RG1 is implemented
-locally for pinned graph-shaped reference datasets with node-index validation; RG2+ graph-member
-resolution, promoted members, real GO/MONDO/Open Targets recipes, and non-molecular identity resolvers
-remain pending.
+until a real evidence line needs a promoted pathway dataset. `bio.reference_graph` RG1 and RG2 are
+implemented locally for pinned graph-shaped reference datasets: RG1 validates node indexes, and RG2
+resolves promoted graph-member virtual payloads as node rows plus directly incident edges. Real
+GO/MONDO/Open Targets recipes, broader graph-member promotion workflows, unpromoted-member B
+materialization, and non-molecular identity resolvers remain follow-up work.
 
 **Operational follow-ups.**
 - Push local implementation branches to `origin` when ready.
