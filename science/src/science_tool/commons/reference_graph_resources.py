@@ -95,6 +95,24 @@ def _read_csv(path: Path) -> list[dict[str, Any]] | Exception:
         return exc
 
 
+def _read_commons_csv_resource(
+    fm: dict[str, Any],
+    *,
+    kind: ResourceKind,
+    commons_root: Path | None = None,
+    data_root: Path | None = None,
+) -> list[dict[str, Any]] | Exception | None:
+    dataset_id = fm.get("id")
+    resource_name = fm.get(_RESOURCE_FIELD_BY_KIND[kind])
+    if not isinstance(dataset_id, str) or not isinstance(resource_name, str):
+        return None
+    try:
+        resolved = resolve(dataset_id, resource_name, commons_root=commons_root, data_root=data_root)
+    except CommonsError as exc:
+        return exc
+    return _read_csv(resolved.path)
+
+
 def _resolve_commons_resource_path(fm: dict[str, Any], *, kind: ResourceKind) -> Path | Exception | None:
     dataset_id = fm.get("id")
     resource_name = fm.get(_RESOURCE_FIELD_BY_KIND[kind])
@@ -182,3 +200,21 @@ def read_edge_rows(project_root: Path, fm: dict[str, Any]) -> list[dict[str, Any
     if isinstance(path, Exception) or path is None:
         return path
     return _read_csv(path)
+
+
+def read_commons_node_rows(
+    fm: dict[str, Any],
+    *,
+    commons_root: Path | None = None,
+    data_root: Path | None = None,
+) -> list[dict[str, Any]] | Exception | None:
+    return _read_commons_csv_resource(fm, kind="node", commons_root=commons_root, data_root=data_root)
+
+
+def read_commons_edge_rows(
+    fm: dict[str, Any],
+    *,
+    commons_root: Path | None = None,
+    data_root: Path | None = None,
+) -> list[dict[str, Any]] | Exception | None:
+    return _read_commons_csv_resource(fm, kind="edge", commons_root=commons_root, data_root=data_root)
