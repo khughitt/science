@@ -2,9 +2,9 @@
 
 Date: 2026-05-28
 
-Status: C4a implemented; C4b implementation plan drafted in
-`docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`; C4c remaining (Pillar C, sub-phase 4 of
-the bio data architecture)
+Status: C4a implemented; C4b implemented via
+`docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`; C4c remaining (Pillar C, sub-phase 4 of the
+bio data architecture)
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; this details its C4 row (§8)
@@ -29,9 +29,10 @@ decomposed before planning. It splits into three independently-testable incremen
 | **C4b — Cross-assembly** | pinned liftover (GRCh37→GRCh38 default) + seqcol **compatibility relations** (RCM-D6 guardrail-2, first instance) + the check-3 *remedy* | medium: pinned chain files |
 | **C4c — External label / projection inputs** | rsID input (pinned dbSNP snapshot); transcript/protein HGVS projection (pinned transcript/protein-ref snapshot) | heavy: large pinned snapshots |
 
-This document specifies **C4a** in full (§3–§9) and scopes C4b/C4c as named, deferred increments (§10).
-C4a leads because variant identity is the headline "unblocks AlphaMissense-class data" deliverable, and
-because liftover (C4b) relates ids that C4a must first be able to mint.
+This document specifies **C4a** in full (§3–§9) and scopes C4b/C4c as named increments (§10). C4a led
+because variant identity is the headline "unblocks AlphaMissense-class data" deliverable, and because
+liftover (C4b) relates ids that C4a must first be able to mint. C4b is now implemented; C4c remains
+deferred.
 
 **Locked sequencing decisions (this review):**
 1. **C4a before C4b before C4c.**
@@ -221,14 +222,15 @@ adds the dependency.
 
 ## 10. Deferred increments (named, not half-built)
 
-- **C4b — Cross-assembly.** Pinned liftover chains (UCSC/Ensembl, GRCh37→GRCh38 default; a GRCh37 target
-  is per-project opt-in) as a `reference` dataset; a `liftover(coord, from_seqcol, to_seqcol)` resolver
-  that **flags** unliftable / multi-mapping / strand-ambiguous coordinates rather than dropping them;
-  **seqcol compatibility relations** (RCM-D6 guardrail-2: distinct digests related with provenance, never
-  collapsed) — the first realization of the primitive's compatibility side; and the **remedy for C1
-  check 3** (cross-dataset assembly mismatch is now resolvable, not just detected). A lifted variant is a
-  *distinct, linked* identity (assembly-anchored VRS id on the target), recorded with liftover provenance
-  (C-D5), never the source id by assertion.
+- **C4b — Cross-assembly (implemented).** Pinned UCSC GRCh37→GRCh38 liftover chains as a `reference`
+  dataset; a same-strand chain-block `lift_interval` resolver that **flags** unliftable / multi-mapping /
+  strand-ambiguous coordinates rather than dropping them; **seqcol compatibility relations** (RCM-D6
+  guardrail-2: distinct digests related with provenance, never collapsed) — the first realization of the
+  primitive's compatibility side; and the **remedy for C1 check 3** (cross-dataset assembly mismatch is now
+  resolvable when exact pinned liftover provenance is present). A lifted variant is a *distinct, linked*
+  identity (assembly-anchored VRS id on the target), recorded with liftover provenance (C-D5), never the
+  source id by assertion. Reverse-strand allele reminting, broad interval/BED liftover, rsID,
+  transcript HGVS, and protein projection remain outside C4b.
 - **C4c — External label / projection inputs.** rsID input via a pinned dbSNP / NCBI Variation snapshot
   (rsID → allele/location); transcript/protein HGVS via a pinned transcript/protein-reference snapshot +
   an explicit projection policy. Both are gated on large pinned snapshots and add input *surface*, not new
@@ -244,6 +246,7 @@ adds the dependency.
 
 ## 12. Status & next step
 
-C4a is implemented and merged. C4b (cross-assembly liftover + seqcol compatibility relations) now has an
-implementation plan at `docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`. C4c (rsID input +
-transcript/protein HGVS projection inputs) remains the next named increment after C4b.
+C4a and C4b are implemented and merged. C4b added cross-assembly liftover, seqcol compatibility relations,
+lifted VRS reminting, and the C1 check-3 provenance-verified liftover remedy; its implementation plan is
+tracked at `docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`. C4c (rsID input +
+transcript/protein HGVS projection inputs) remains the next named increment.

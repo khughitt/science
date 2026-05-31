@@ -4,6 +4,13 @@
 
 **Goal:** Add pinned cross-assembly coordinate liftover and seqcol compatibility relations so assembly-mismatch validation can distinguish unresolved mismatches from explicitly lifted, provenance-bearing re-identifications.
 
+**Implementation status:** Implemented in `~/d/science` on branch `feature/c4b-liftover` and in
+`~/d/science-commons` via `dataset:assembly-liftover-grch37-grch38`. The first pass supports pinned UCSC
+GRCh37→GRCh38 same-strand chain-block liftover, explicit unliftable/multi-mapping/strand-ambiguous
+defects, lifted target-assembly VRS reminting, and provenance-verified validation remedies. Reverse-strand
+allele reminting, broad interval/BED liftover, rsID, transcript HGVS, and protein projection remain out of
+C4b scope.
+
 **Architecture:** C4b is a remedy layer over C1/C4a, not a rewrite. It keeps seqcol digest equality as identity, stores cross-assembly relations as a separate reference dataset, parses pinned UCSC chain files into a pure resolver, and records lifted variants as distinct target-assembly VRS identities linked to their source with liftover provenance.
 
 **Tech Stack:** Python stdlib (`csv`, `gzip`, `hashlib`, `urllib.request`), existing commons resolver/datapackage helpers, existing C4a `variant.vrs_id`, pytest, `science validate`.
@@ -45,7 +52,7 @@ performs hg38-to-hg19 while labeling the result as GRCh38.
 - Create: `science/src/science_tool/commons/liftover.py`
   - Pure UCSC chain parser and coordinate resolver.
 - Create: `science/tests/test_commons_liftover.py`
-  - Unit tests for chain parsing, forward/reverse strand mapping, unliftable spans, multi-mapping, and invalid chains.
+  - Unit tests for chain parsing, same-strand mapping, strand-ambiguous defects, unliftable spans, multi-mapping, and invalid chains.
 - Create: `science/src/science_tool/commons/assembly_compatibility.py`
   - Resolver over compatibility relation rows.
 - Create: `science/tests/test_commons_assembly_compatibility.py`
@@ -128,7 +135,7 @@ class LiftoverDefect:
 - Create: `science/src/science_tool/commons/liftover.py`
 - Create: `science/tests/test_commons_liftover.py`
 
-- [ ] **Step 1: Write failing parser tests**
+- [x] **Step 1: Write failing parser tests**
 
 Create `science/tests/test_commons_liftover.py`:
 
@@ -175,7 +182,7 @@ def test_parse_chain_text_rejects_ragged_block() -> None:
         parse_chain_text("chain 1 chr1 100 + 0 10 chr1 100 + 0 10 1\n50 1\n")
 ```
 
-- [ ] **Step 2: Run parser tests and confirm failure**
+- [x] **Step 2: Run parser tests and confirm failure**
 
 ```bash
 rtk uv run --frozen --project science pytest science/tests/test_commons_liftover.py -q
@@ -183,7 +190,7 @@ rtk uv run --frozen --project science pytest science/tests/test_commons_liftover
 
 Expected: FAIL because `science_tool.commons.liftover` does not exist.
 
-- [ ] **Step 3: Implement minimal parser**
+- [x] **Step 3: Implement minimal parser**
 
 Create `science/src/science_tool/commons/liftover.py` with:
 
@@ -289,7 +296,7 @@ def parse_chain_text(text: str) -> list[Chain]:
     return chains
 ```
 
-- [ ] **Step 4: Run parser tests**
+- [x] **Step 4: Run parser tests**
 
 ```bash
 rtk uv run --frozen --project science pytest science/tests/test_commons_liftover.py -q
@@ -297,7 +304,7 @@ rtk uv run --frozen --project science pytest science/tests/test_commons_liftover
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 rtk git add science/src/science_tool/commons/liftover.py science/tests/test_commons_liftover.py
@@ -310,7 +317,7 @@ rtk git commit -m "feat: parse UCSC liftover chains"
 - Modify: `science/src/science_tool/commons/liftover.py`
 - Modify: `science/tests/test_commons_liftover.py`
 
-- [ ] **Step 1: Add failing coordinate tests**
+- [x] **Step 1: Add failing coordinate tests**
 
 Append to `science/tests/test_commons_liftover.py`:
 
@@ -368,7 +375,7 @@ def test_lift_interval_reports_multi_mapping() -> None:
     assert result.status == "multi_mapping"
 ```
 
-- [ ] **Step 2: Run coordinate tests and confirm failure**
+- [x] **Step 2: Run coordinate tests and confirm failure**
 
 ```bash
 rtk uv run --frozen --project science pytest science/tests/test_commons_liftover.py -q
@@ -376,7 +383,7 @@ rtk uv run --frozen --project science pytest science/tests/test_commons_liftover
 
 Expected: FAIL because `lift_interval` and result types do not exist.
 
-- [ ] **Step 3: Implement same-strand interval liftover**
+- [x] **Step 3: Implement same-strand interval liftover**
 
 Add the result dataclasses from the "Data Contracts" section to `liftover.py`, plus:
 
@@ -448,7 +455,7 @@ def lift_interval(
     return LiftoverDefect(status="unliftable", detail=f"no chain block covers {source_contig}:{start}-{end}")
 ```
 
-- [ ] **Step 4: Run coordinate tests**
+- [x] **Step 4: Run coordinate tests**
 
 ```bash
 rtk uv run --frozen --project science pytest science/tests/test_commons_liftover.py -q
@@ -456,7 +463,7 @@ rtk uv run --frozen --project science pytest science/tests/test_commons_liftover
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 rtk git add science/src/science_tool/commons/liftover.py science/tests/test_commons_liftover.py
@@ -469,7 +476,7 @@ rtk git commit -m "feat: lift coordinates through pinned chain blocks"
 - Create: `science/src/science_tool/commons/assembly_compatibility.py`
 - Create: `science/tests/test_commons_assembly_compatibility.py`
 
-- [ ] **Step 1: Write failing relation tests**
+- [x] **Step 1: Write failing relation tests**
 
 Create `science/tests/test_commons_assembly_compatibility.py`:
 
@@ -533,7 +540,7 @@ def test_parse_rejects_identity_relation() -> None:
         raise AssertionError("expected AssemblyCompatibilityError")
 ```
 
-- [ ] **Step 2: Run relation tests and confirm failure**
+- [x] **Step 2: Run relation tests and confirm failure**
 
 ```bash
 rtk uv run --frozen --project science pytest science/tests/test_commons_assembly_compatibility.py -q
@@ -541,7 +548,7 @@ rtk uv run --frozen --project science pytest science/tests/test_commons_assembly
 
 Expected: FAIL because `assembly_compatibility.py` does not exist.
 
-- [ ] **Step 3: Implement relation parser**
+- [x] **Step 3: Implement relation parser**
 
 Implement `assembly_compatibility.py` with:
 
@@ -669,7 +676,7 @@ def load_compatibility_relations(
         return parse_compatibility_rows(list(csv.DictReader(handle)))
 ```
 
-- [ ] **Step 4: Run relation tests**
+- [x] **Step 4: Run relation tests**
 
 ```bash
 rtk uv run --frozen --project science pytest science/tests/test_commons_assembly_compatibility.py -q
@@ -677,7 +684,7 @@ rtk uv run --frozen --project science pytest science/tests/test_commons_assembly
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 rtk git add science/src/science_tool/commons/assembly_compatibility.py science/tests/test_commons_assembly_compatibility.py
@@ -693,7 +700,7 @@ rtk git commit -m "feat: model assembly compatibility relations"
 - Create: `~/d/science-commons/datasets/assembly-liftover-grch37-grch38/recipe/build.py`
 - Create: `~/d/science-commons/datasets/assembly-liftover-grch37-grch38/recipe/README.md`
 
-- [ ] **Step 1: Create placeholder entity and datapackage**
+- [x] **Step 1: Create placeholder entity and datapackage**
 
 Use this entity frontmatter:
 
@@ -739,11 +746,11 @@ resources:
     bytes: 0
 ```
 
-- [ ] **Step 2: Implement `fetch.py`**
+- [x] **Step 2: Implement `fetch.py`**
 
 `fetch.py` downloads only from explicit URLs and writes `lockfile.yaml` with URL, sha256, and bytes. It must reject URLs containing `latest`, `current`, or `download/test`.
 
-- [ ] **Step 3: Implement `build.py`**
+- [x] **Step 3: Implement `build.py`**
 
 `build.py` reads `lockfile.yaml`, writes `compatibility_relations.csv`, computes resource hashes/bytes, and rewrites `datapackage.yaml`. It should accept explicit seqcol digests:
 
@@ -753,7 +760,7 @@ rtk uv run --frozen --project ~/d/science/science python recipe/build.py \
   --target-seqcol <GRCh38 seqcol digest>
 ```
 
-- [ ] **Step 4: Commit commons dataset scaffold**
+- [x] **Step 4: Commit commons dataset scaffold**
 
 ```bash
 cd ~/d/science-commons
@@ -772,7 +779,7 @@ rtk git commit -m "data: add assembly liftover recipe"
 is blocked until that sequence-store dataset is built locally; until then, real-data verification should
 be reported as skipped rather than inferred.
 
-- [ ] **Step 1: Write failing lifted variant tests**
+- [x] **Step 1: Write failing lifted variant tests**
 
 Add tests that monkeypatch `variant.vrs_id` for the target reminting boundary and call a new function:
 
@@ -818,7 +825,7 @@ def test_lifted_vrs_id_links_source_and_target_ids(monkeypatch) -> None:
     )
 ```
 
-- [ ] **Step 2: Implement `LiftedVariantMatch` and `lifted_vrs_id`**
+- [x] **Step 2: Implement `LiftedVariantMatch` and `lifted_vrs_id`**
 
 `lifted_vrs_id` must:
 
@@ -833,7 +840,7 @@ This deliberately supports same-strand small alleles first; reverse-complement a
 deferred until a concrete dataset needs it. Expect real UCSC chains to yield many `strand_ambiguous`
 defects under this first-pass scope; that miss rate must be reported in any real dataset lift, not hidden.
 
-- [ ] **Step 3: Run variant tests**
+- [x] **Step 3: Run variant tests**
 
 ```bash
 rtk uv run --frozen --project science pytest science/tests/test_commons_variant.py -q
@@ -841,7 +848,7 @@ rtk uv run --frozen --project science pytest science/tests/test_commons_variant.
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 rtk git add science/src/science_tool/commons/variant.py science/tests/test_commons_variant.py
@@ -854,7 +861,7 @@ rtk git commit -m "feat: remint lifted variant identities"
 - Modify: `science/src/science_tool/validate/checks/identity_context.py`
 - Modify: `science/tests/validate/test_checks_identity_context.py`
 
-- [ ] **Step 1: Add failing validation tests**
+- [x] **Step 1: Add failing validation tests**
 
 Add this import near the top of `science/tests/validate/test_checks_identity_context.py`:
 
@@ -1047,7 +1054,7 @@ def test_load_relations_fallback_keeps_warning_when_dataset_unresolvable() -> No
     assert len(warns) == 1
 ```
 
-- [ ] **Step 2: Implement narrow liftover provenance check**
+- [x] **Step 2: Implement narrow liftover provenance check**
 
 Change the pure function signature so tests can inject parsed relations:
 
@@ -1220,7 +1227,7 @@ def check_cross_dataset_assembly(ctx: ValidateContext) -> Iterator[Result]:
     yield from evaluate_cross_dataset_assembly(datasets, compatibility_relations_by_dataset_id=relations)
 ```
 
-- [ ] **Step 3: Run validation tests**
+- [x] **Step 3: Run validation tests**
 
 ```bash
 rtk uv run --frozen --project science pytest science/tests/validate/test_checks_identity_context.py -q
@@ -1228,7 +1235,7 @@ rtk uv run --frozen --project science pytest science/tests/validate/test_checks_
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 rtk git add science/src/science_tool/validate/checks/identity_context.py science/tests/validate/test_checks_identity_context.py
@@ -1242,11 +1249,11 @@ rtk git commit -m "feat: honor declared liftover provenance in assembly checks"
 - Modify: `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md`
 - Modify after implementation: `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`
 
-- [ ] **Step 1: Update C4 design status**
+- [x] **Step 1: Update C4 design status**
 
 Change C4b status from remaining to implementation-ready, and link this plan. After implementation, change it to implemented.
 
-- [ ] **Step 2: Run targeted verification**
+- [x] **Step 2: Run targeted verification**
 
 ```bash
 rtk uv run --frozen --project science pytest \
@@ -1272,24 +1279,24 @@ rtk git diff --check
 
 Expected: all tests pass, ruff passes, no whitespace errors.
 
-- [ ] **Step 3: Commit docs**
+- [x] **Step 3: Commit docs**
 
 ```bash
 rtk git add docs/plans/2026-05-28-c4-variant-identity-design.md docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md
-rtk git commit -m "docs: mark C4b liftover plan ready"
+rtk git commit -m "docs: mark C4b liftover implemented"
 ```
 
 ## Self-Review Checklist
 
-- [ ] **Spec coverage:** C4b has pinned chain data, compatibility relation rows, pure liftover, lifted VRS reminting, and a C1 check-3 remedy.
-- [ ] **No silent collapse:** seqcol equality remains identity; compatibility/liftover only relates distinct digests.
-- [ ] **Direction checked:** `hg19ToHg38` parses UCSC `t*` fields as source/from and `q*` fields as
+- [x] **Spec coverage:** C4b has pinned chain data, compatibility relation rows, pure liftover, lifted VRS reminting, and a C1 check-3 remedy.
+- [x] **No silent collapse:** seqcol equality remains identity; compatibility/liftover only relates distinct digests.
+- [x] **Direction checked:** `hg19ToHg38` parses UCSC `t*` fields as source/from and `q*` fields as
   target/to, with a test that asserts this direction explicitly.
-- [ ] **No silent drops:** unliftable, multi-mapping, and strand-ambiguous results are explicit defects.
-- [ ] **Verified relation remedy:** assembly-mismatch validation suppresses a warning only when the declared
+- [x] **No silent drops:** unliftable, multi-mapping, and strand-ambiguous results are explicit defects.
+- [x] **Verified relation remedy:** assembly-mismatch validation suppresses a warning only when the declared
   liftover dataset contains a pinned `liftover_possible` relation for the exact source/target digests.
-- [ ] **Tested IO fallback:** the `_load_relations_for_datasets` catch path is unit-tested — an unresolvable
+- [x] **Tested IO fallback:** the `_load_relations_for_datasets` catch path is unit-tested — an unresolvable
   liftover dataset maps to `None` and still warns (the "verified, not honor-system" guarantee lives here, not
   in the pure function).
-- [ ] **No live runtime calls:** fetch is recipe-only; resolvers read pinned local files via commons.
-- [ ] **No overreach:** reverse-strand allele reminting, broad interval/BED liftover, rsID, transcript HGVS, and protein projection remain out of C4b unless a concrete dataset demands them.
+- [x] **No live runtime calls:** fetch is recipe-only; resolvers read pinned local files via commons.
+- [x] **No overreach:** reverse-strand allele reminting, broad interval/BED liftover, rsID, transcript HGVS, and protein projection remain out of C4b unless a concrete dataset demands them.
