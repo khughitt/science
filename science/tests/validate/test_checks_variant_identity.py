@@ -103,6 +103,133 @@ def test_row_layer_skips_rsid_locator_until_row_minting_is_implemented(tmp_path:
     assert not [r for r in results if r.rule in {"identity.variant-rows-minted", "identity.variant-rows-unresolved"}]
 
 
+def test_row_layer_mints_rsid_locator(tmp_path: Path, monkeypatch) -> None:
+    sqlite_path = tmp_path / "rsid_mappings.sqlite"
+    sqlite_path.write_bytes(b"fixture")
+    rsid_locator = """\
+        resource: variants.csv
+        format: rsid
+        column: rsid
+        registry: dataset:variant-labels-dbsnp-human
+        allele_columns:
+          ref: REF
+          alt: ALT
+"""
+    project = _variant_project(
+        tmp_path,
+        "rsid,REF,ALT\nrs1,A,G\n",
+        locator=rsid_locator,
+    )
+
+    calls: list[tuple[str, str | None, str | None]] = []
+    resolve_calls: list[tuple[str, str]] = []
+
+    def fake_resolve(dataset_id: str, logical_path: str):
+        resolve_calls.append((dataset_id, logical_path))
+        return type("Resolved", (), {"path": sqlite_path})()
+
+    def fake_vrs_id_from_rsid(
+        rsid: str,
+        *,
+        assembly_seqcol: str,
+        sqlite_path: Path,
+        ref: str | None = None,
+        alt: str | None = None,
+    ) -> VariantMatch:
+        calls.append((rsid, ref, alt))
+        assert sqlite_path.name == "rsid_mappings.sqlite"
+        return VariantMatch(vrs_id="ga4gh:VA.good", refget_digest="SQ.ref")
+
+    monkeypatch.setattr("science_tool.commons.resolver.resolve", fake_resolve)
+    monkeypatch.setattr("science_tool.commons.variant.vrs_id_from_rsid", fake_vrs_id_from_rsid)
+
+    results = list(check_variant_identity(_ctx(project)))
+
+    assert [r.rule for r in results if r.rule == "identity.variant-rows-minted"] == ["identity.variant-rows-minted"]
+    assert resolve_calls == [("dataset:variant-labels-dbsnp-human", "rsid_mappings.sqlite")]
+    assert calls == [("rs1", "A", "G")]
+
+
+def test_row_layer_reports_ambiguous_rsid(tmp_path: Path, monkeypatch) -> None:
+    sqlite_path = tmp_path / "rsid_mappings.sqlite"
+    sqlite_path.write_bytes(b"fixture")
+    rsid_locator = """\
+        resource: variants.csv
+        format: rsid
+        column: rsid
+        registry: dataset:variant-labels-dbsnp-human
+"""
+    project = _variant_project(
+        tmp_path,
+        "rsid\nrs2\n",
+        locator=rsid_locator,
+    )
+
+    monkeypatch.setattr(
+        "science_tool.commons.variant.vrs_id_from_rsid",
+        lambda *args, **kwargs: VariantDefect("rs2", "ambiguous-rsid", "2 candidate alleles for GRCH38"),
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.resolver.resolve",
+        lambda dataset_id, logical_path: type("Resolved", (), {"path": sqlite_path})(),
+    )
+
+    results = list(check_variant_identity(_ctx(project)))
+
+    errors = [r for r in results if r.rule == "identity.variant-rows-unresolved"]
+    assert len(errors) == 1
+    assert "ambiguous-rsid=1" in errors[0].message
+
+
+def test_row_layer_reports_short_rsid_allele_row_as_resource_invalid(tmp_path: Path, monkeypatch) -> None:
+    sqlite_path = tmp_path / "rsid_mappings.sqlite"
+    sqlite_path.write_bytes(b"fixture")
+    rsid_locator = """\
+        resource: variants.csv
+        format: rsid
+        column: rsid
+        registry: dataset:variant-labels-dbsnp-human
+        allele_columns:
+          ref: REF
+          alt: ALT
+"""
+    project = _variant_project(tmp_path, "rsid,REF,ALT\nrs1,A\n", locator=rsid_locator)
+    monkeypatch.setattr(
+        "science_tool.commons.resolver.resolve",
+        lambda dataset_id, logical_path: type("Resolved", (), {"path": sqlite_path})(),
+    )
+
+    results = list(check_variant_identity(_ctx(project)))
+
+    errors = [r for r in results if r.rule == "identity.variant-resource-invalid"]
+    assert len(errors) == 1
+    assert "missing value for column 'ALT'" in errors[0].message
+
+
+def test_row_layer_reports_registry_unavailable_as_info(tmp_path: Path, monkeypatch) -> None:
+    from science_tool.commons.errors import DataResourceNotFoundError
+
+    rsid_locator = """\
+        resource: variants.csv
+        format: rsid
+        column: rsid
+        registry: dataset:variant-labels-dbsnp-human
+"""
+    project = _variant_project(tmp_path, "rsid\nrs1\n", locator=rsid_locator)
+
+    def fake_resolve(dataset_id: str, logical_path: str):
+        raise DataResourceNotFoundError(dataset_id, logical_path, tried=[])
+
+    monkeypatch.setattr("science_tool.commons.resolver.resolve", fake_resolve)
+
+    results = list(check_variant_identity(_ctx(project)))
+
+    infos = [r for r in results if r.rule == "identity.variant-registry-unavailable"]
+    assert len(infos) == 1
+    assert infos[0].severity is Severity.INFO
+    assert not [r for r in results if r.severity is Severity.ERROR]
+
+
 def test_declared_unresolved_is_info_not_error() -> None:
     ds = _ds({"namespace": "vrs", "resolution_status": "declared_unresolved", "locator": _locator()})
     results = list(evaluate_variant_declaration([ds]))
@@ -302,6 +429,7 @@ def _variant_project(
     variants_csv: str,
     *,
     datapackage_field: str | None = None,
+    locator: str | None = None,
     locator_format: str = "spdi",
     locator_column: str = "variant",
     locator_registry: str | None = None,
@@ -313,6 +441,7 @@ def _variant_project(
         tmp_path,
         variants_csv.encode("utf-8"),
         datapackage_field=datapackage_field,
+        locator=locator,
         locator_format=locator_format,
         locator_column=locator_column,
         locator_registry=locator_registry,
@@ -327,6 +456,7 @@ def _variant_project_bytes(
     variants_bytes: bytes,
     *,
     datapackage_field: str | None = None,
+    locator: str | None = None,
     locator_format: str = "spdi",
     locator_column: str = "variant",
     locator_registry: str | None = None,
@@ -343,6 +473,16 @@ def _variant_project_bytes(
     digest = hashlib.sha256(variants_bytes).hexdigest()
     datapackage_line = f"datapackage: {datapackage_field}\n" if datapackage_field is not None else ""
     registry_line = f"        registry: {locator_registry}\n" if locator_registry is not None else ""
+    locator_yaml = (
+        locator
+        if locator is not None
+        else f"""\
+        resource: {locator_resource}
+        format: {locator_format}
+        column: {locator_column}
+{registry_line}\
+"""
+    )
     data_dir.joinpath("datapackage.yaml").write_text(
         f"""\
 profiles: [science-pkg-entity-1.0]
@@ -358,10 +498,7 @@ identity_context:
     variant:
       namespace: vrs
       locator:
-        resource: {locator_resource}
-        format: {locator_format}
-        column: {locator_column}
-{registry_line}\
+{locator_yaml}\
 resources:
   - name: {resource_name}
     path: {resource_path}

@@ -26,7 +26,7 @@ from science_tool.validate.result import Result, Severity
 
 _SUPPORTED = frozenset({"vrs"})
 _FORMATS = frozenset({"spdi", "hgvs", "vcf", "rsid"})
-_ROW_MINTING_FORMATS = frozenset({"spdi", "hgvs", "vcf"})
+_ROW_MINTING_FORMATS = frozenset({"spdi", "hgvs", "vcf", "rsid"})
 
 
 def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
@@ -135,8 +135,16 @@ def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, An
 
     from science_tool.commons.datapackage import read_datapackage, stream_sha256_and_bytes, validate_logical_path
     from science_tool.commons.errors import CommonsDatapackageError, CommonsError
+    from science_tool.commons.resolver import resolve
+    from science_tool.commons.rsid import SQLITE_RESOURCE
     from science_tool.commons.sequence_store import SequenceStoreError
-    from science_tool.commons.variant import VariantDefect, VariantMatch, VariantStoreUnavailable, vrs_id
+    from science_tool.commons.variant import (
+        VariantDefect,
+        VariantMatch,
+        VariantStoreUnavailable,
+        vrs_id,
+        vrs_id_from_rsid,
+    )
 
     def datapackage_path(fm: dict[str, Any]) -> Path | None:
         source = fm.get("_path")
@@ -219,6 +227,20 @@ def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, An
             )
             continue
 
+        fmt = str(locator["format"]).lower()
+        rsid_sqlite_path: Path | None = None
+        if fmt == "rsid":
+            try:
+                rsid_sqlite_path = resolve(str(locator["registry"]), SQLITE_RESOURCE).path
+            except CommonsError as error:
+                yield _result(
+                    Severity.INFO,
+                    path,
+                    f"{ident}: variant rsID registry unavailable; row VRS IDs cannot be minted: {error}",
+                    "identity.variant-registry-unavailable",
+                )
+                continue
+
         try:
             resource_path = locate_resource(fm, str(locator["resource"]))
         except (CommonsError, ValueError, OSError) as error:
@@ -238,7 +260,6 @@ def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, An
             )
             continue
 
-        fmt = str(locator["format"]).lower()
         minted = 0
         defects: Counter[str] = Counter()
         delimiter = "\t" if resource_path.suffix == ".tsv" else ","
@@ -257,10 +278,25 @@ def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, An
                         break
                     try:
                         expr = _row_expr(row, locator, fmt)
+                        if fmt == "rsid":
+                            if rsid_sqlite_path is None:
+                                raise TypeError("rsID SQLite path was not resolved")
+                            ref_filter, alt_filter = _rsid_allele_filter(row, locator)
+                            # sqlite_path is pre-resolved once per dataset, so registry is
+                            # intentionally omitted here: resolve_rsid only consults registry
+                            # as a fallback when sqlite_path is None.
+                            result = vrs_id_from_rsid(
+                                expr,
+                                assembly_seqcol=seqcol,
+                                sqlite_path=rsid_sqlite_path,
+                                ref=ref_filter,
+                                alt=alt_filter,
+                            )
+                        else:
+                            result = vrs_id(expr, fmt=fmt, assembly_seqcol=seqcol)
                     except ValueError as error:
                         invalid_resource = f"row {row_number}: {error}"
                         break
-                    result = vrs_id(expr, fmt=fmt, assembly_seqcol=seqcol)
                     if isinstance(result, VariantMatch):
                         minted += 1
                     elif isinstance(result, VariantDefect):
@@ -330,6 +366,12 @@ def _required_columns(locator: dict[str, Any], fmt: str) -> list[str]:
     if fmt == "vcf":
         columns = locator["columns"]
         return [str(columns[key]) for key in ("chrom", "pos", "ref", "alt")]
+    if fmt == "rsid":
+        required = [str(locator["column"])]
+        allele_columns = locator.get("allele_columns")
+        if isinstance(allele_columns, dict):
+            required.extend([str(allele_columns["ref"]), str(allele_columns["alt"])])
+        return required
     return [str(locator["column"])]
 
 
@@ -338,6 +380,19 @@ def _row_expr(row: dict[str | None, str | list[str] | None], locator: dict[str, 
         columns = locator["columns"]
         return "-".join(_required_value(row, str(columns[key])) for key in ("chrom", "pos", "ref", "alt"))
     return _required_value(row, str(locator["column"]))
+
+
+def _rsid_allele_filter(
+    row: dict[str | None, str | list[str] | None],
+    locator: dict[str, Any],
+) -> tuple[str | None, str | None]:
+    allele_columns = locator.get("allele_columns")
+    if not isinstance(allele_columns, dict):
+        return None, None
+    return (
+        _required_value(row, str(allele_columns["ref"])),
+        _required_value(row, str(allele_columns["alt"])),
+    )
 
 
 def _required_value(row: dict[str | None, str | list[str] | None], column: str) -> str:
