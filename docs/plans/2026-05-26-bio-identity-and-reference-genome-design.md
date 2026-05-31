@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; implementation underway — C1/C2/C3/C4a merged, C4b/C4c remaining (Phase 1 of the bio data architecture; foundational)
+Status: approved; implementation underway — C1/C2/C3/C4a merged, C4b implementation plan drafted, C4c remaining (Phase 1 of the bio data architecture; foundational)
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar C
@@ -274,6 +274,7 @@ B's dataset resolution all need gene identity first). C3/C4 can trail.
 ## 9. Status & next step
 
 Pillar C is partly implemented: C1 (assembly registry), C2 (gene crosswalk), C3 (protein crosswalk),
-and C4a (variant identity over pinned offline VRS/refget inputs) are merged. The remaining C work is C4b
-(cross-assembly liftover + seqcol compatibility relations, including the C1 check-3 remedy) and C4c
+and C4a (variant identity over pinned offline VRS/refget inputs) are merged. C4b (cross-assembly liftover
++ seqcol compatibility relations, including the C1 check-3 remedy) has an implementation plan at
+`docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`. The remaining unplanned C work is C4c
 (rsID plus transcript/protein projection inputs over pinned snapshots).

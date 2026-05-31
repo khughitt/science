@@ -2,7 +2,9 @@
 
 Date: 2026-05-28
 
-Status: C4a implemented; C4b/C4c remaining (Pillar C, sub-phase 4 of the bio data architecture)
+Status: C4a implemented; C4b implementation plan drafted in
+`docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`; C4c remaining (Pillar C, sub-phase 4 of
+the bio data architecture)
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; this details its C4 row (§8)
@@ -242,5 +244,6 @@ adds the dependency.
 
 ## 12. Status & next step
 
-C4a is implemented and merged. C4b (cross-assembly liftover + seqcol compatibility relations) and C4c
-(rsID input + transcript/protein HGVS projection inputs) remain as the next named increments.
+C4a is implemented and merged. C4b (cross-assembly liftover + seqcol compatibility relations) now has an
+implementation plan at `docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`. C4c (rsID input +
+transcript/protein HGVS projection inputs) remains the next named increment after C4b.
