@@ -396,7 +396,7 @@ The model therefore covers non-tabular references without weakening the flat gen
 |---|---|---|
 | RG1 | Schema + parser + validation over tiny fixture graph/index/edge resources; node index required | implemented locally |
 | RG2 | Virtual member payload resolution for promoted graph members; payload includes node row plus directly incident edges and exposes member-level `dataset_usage` for later B hooks | implemented locally |
-| RG3 | Promoted `bio.reference_graph.member` child datasets | pending |
+| RG3 | Broader graph-member promotion workflows and unpromoted-member B materialization hooks | pending |
 | RG4 | First real commons recipe, likely MONDO or GO, with pinned release artifacts | pending |
 | RG5 | Later non-molecular identity resolvers over one or more reference graphs | pending |
 
