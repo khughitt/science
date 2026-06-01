@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a/C4b and C4c-1 rsID input merged and pushed to origin (full dbSNP artifact build/operator smoke still pending) + Pillar A (A1 + A2) merged and complete; Pillar D1, B1, B-migration, B2, and E (Reactome ingestion) merged and pushed to origin; non-tabular reference modeling is partly resolved by `bio.reference_graph` RG1/RG2/RG4 with `dataset:mondo` (pushed to origin) and `dataset:go` (implemented, pending merge) built in `~/d/science-commons`, and the Open Targets recipe plus RG3+ workflows pending; C4c transcript/protein projection and D2 remain open. The earlier `~/d/science` and `~/d/science-commons` work is on origin (as of 2026-06-01), with the `dataset:go` recipe in-flight on a feature branch; the `~/d/health/meta` and `~/d/health/comparisons/pan-disease` records that consume it are committed in Dropbox-only repos (no git remote). Spawns focused per-area docs.
+Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a/C4b and C4c-1 rsID input merged and pushed to origin (full dbSNP artifact build/operator smoke still pending) + Pillar A (A1 + A2) merged and complete; Pillar D1, B1, B-migration, B2, and E (Reactome ingestion) merged and pushed to origin; non-tabular reference modeling is partly resolved by `bio.reference_graph` RG1/RG2/RG4 with `dataset:mondo` (pushed to origin), `dataset:go` (implemented, pending merge), and `dataset:opentargets-associations` (Open Targets target–disease association graph, 25.12) built in `~/d/science-commons`, and RG3+ workflows pending; C4c transcript/protein projection and D2 remain open. The earlier `~/d/science` and `~/d/science-commons` work is on origin (as of 2026-06-01), with the `dataset:go` recipe in-flight on a feature branch; the `~/d/health/meta` and `~/d/health/comparisons/pan-disease` records that consume it are committed in Dropbox-only repos (no git remote). Spawns focused per-area docs.
 
 Related (builds on):
 - `docs/proposition-and-evidence-model.md` — core reasoning model
@@ -283,9 +283,10 @@ collapsed into identity.
    provenance but not replace pinned identity inputs.
 8. **Partly resolved (non-tabular references).** `bio.reference_graph` RG1, RG2, and RG4 are implemented
    and pushed to origin: RG1 validates node indexes, RG2 resolves promoted graph-member virtual payloads as
-   node rows plus directly incident edges, and RG4 adds `dataset:mondo` (pushed to origin) and `dataset:go`
-   (implemented, pending merge) as the first real pinned reference graph recipes in `~/d/science-commons`.
-   The Open Targets recipe, broader graph-member promotion workflows, unpromoted-member B materialization,
+   node rows plus directly incident edges, and RG4 adds `dataset:mondo` (pushed to origin), `dataset:go`
+   (implemented, pending merge), and `dataset:opentargets-associations` (Open Targets target–disease
+   association graph, 25.12) as the first real pinned reference graph recipes in `~/d/science-commons`.
+   Broader graph-member promotion workflows, unpromoted-member B materialization,
    and non-molecular identity resolvers remain follow-up work.
 
 ---
@@ -337,8 +338,9 @@ and pushed to origin on 2026-06-01), and the pan-disease local Reactome stub was
 resolve through commons. D2 remains deferred until a real evidence line needs a promoted pathway dataset.
 `bio.reference_graph` RG1, RG2, and RG4 are implemented and pushed to origin: RG1 validates node indexes,
 RG2 resolves promoted graph-member virtual payloads as node rows plus directly incident edges, and RG4
-adds `dataset:mondo` (pushed to origin) and `dataset:go` (implemented, pending merge) as the first real
-pinned reference graph recipes. The Open Targets recipe, broader graph-member promotion workflows,
+adds `dataset:mondo` (pushed to origin), `dataset:go` (implemented, pending merge), and
+`dataset:opentargets-associations` (Open Targets target–disease association graph, 25.12) as the first
+real pinned reference graph recipes. Broader graph-member promotion workflows,
 unpromoted-member B materialization, and non-molecular identity resolvers remain follow-up work.
 
 **Operational follow-ups.**

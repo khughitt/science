@@ -2,7 +2,7 @@
 
 Date: 2026-05-31
 
-Status: RG1, RG2, and RG4 implemented; two real recipes built from pinned OBO Graph JSON — `dataset:mondo` (pushed to origin) and `dataset:go`; RG3 and RG5 pending
+Status: RG1, RG2, and RG4 implemented; real recipes built — `dataset:mondo` (pushed to origin) and `dataset:go` from pinned OBO Graph JSON, plus the first association graph `dataset:opentargets-associations` (Open Targets 25.12 overall-direct, Model A); RG3 and RG5 pending
 
 Related:
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; RG1 partly addresses its non-tabular-reference open item
@@ -33,7 +33,7 @@ The core decision is:
 This design starts with the data-artifact model, not non-molecular identity resolution. Disease, ontology,
 cell-line, tissue, and association identity resolvers can consume this substrate later. The first
 implementation should prove schema, parsing, validation, graph-member resolution, and provenance hooks
-with tiny fixture artifacts; the real MONDO and GO recipes (`dataset:mondo`, `dataset:go`) are now implemented, and Open Targets remains follow-on work.
+with tiny fixture artifacts; the real MONDO, GO, and Open Targets recipes (`dataset:mondo`, `dataset:go`, `dataset:opentargets-associations`) are now implemented.
 
 Explicit non-goals:
 
@@ -382,7 +382,7 @@ automatic collapse across compatibility/xref relations.
 |---|---|
 | GO | Term graph keyed by `GO:` CURIEs; obsolete/replaced terms matter; `is_a`/`part_of` edges live in graph artifact |
 | MONDO | Disease ontology keyed by `MONDO:` CURIEs; xrefs to DOID/OMIM/EFO/NCIT are relations, not identity collapse |
-| Open Targets | Association graph keyed by stable association ids or deterministic tuples; disease/target/source provenance can live on edges |
+| Open Targets | Association graph keyed by stable association ids or deterministic tuples; disease/target/source provenance can live on edges. Implemented as `dataset:opentargets-associations` (25.12 overall-direct, Model A entity nodes) |
 | Reactome | Remains `bio.geneset` for pathway membership tables; pathway ontology-like relations may later be represented as a reference graph sibling |
 | MSigDB | Remains `bio.geneset`; not graph-shaped in the first model |
 
@@ -397,7 +397,7 @@ The model therefore covers non-tabular references without weakening the flat gen
 | RG1 | Schema + parser + validation over tiny fixture graph/index/edge resources; node index required | implemented locally |
 | RG2 | Virtual member payload resolution for promoted graph members; payload includes node row plus directly incident edges and exposes member-level `dataset_usage` for later B hooks | implemented locally |
 | RG3 | Broader graph-member promotion workflows and unpromoted-member B materialization hooks | pending |
-| RG4 | First real commons recipes: `dataset:mondo` (pushed to origin) and `dataset:go` from pinned OBO Graph JSON releases, with node/edge projections | implemented |
+| RG4 | First real commons recipes: `dataset:mondo` (pushed to origin) and `dataset:go` from pinned OBO Graph JSON releases, with node/edge projections; `dataset:opentargets-associations` as the first association graph (Open Targets 25.12 overall-direct, Model A entity nodes, `edge_resource` omitted) | implemented |
 | RG5 | Later non-molecular identity resolvers over one or more reference graphs | pending |
 
 RG2 is implemented locally for promoted `bio.reference_graph.member` datasets. The generic
@@ -419,9 +419,10 @@ work because RG2 only returns payload data; it does not emit influence graph rec
    clear downstream need and term deprecation/xrefs exercise the model. GO is broader but may tempt
    conflation with gene sets. Open Targets is richer but more complex.
 2. **Member key form for association graphs.** Term graphs naturally use CURIEs. Association graphs need
-   either upstream stable ids or deterministic tuple keys. The implementation should not invent a
-   generic tuple-key format until Open Targets is the target resource; until then, association-graph
-   support is an intended extension point, not a validated capability.
+   either upstream stable ids or deterministic tuple keys. Resolved by `dataset:opentargets-associations`:
+   Model A used heterogeneous CURIE keys (participating targets `ENSEMBL:ENSG…` ∪ diseases `EFO:`/`MONDO:`/…),
+   so the first association graph reuses the CURIE key space rather than a tuple key. The generic
+   tuple-key format remains unbuilt.
 3. **RDF reasoning boundary.** The first increment should validate explicit build-derived index/edge
    artifacts, not infer transitive closure or ontology entailments. Reasoning and graph/index
    reconciliation can be later adapters with their own pinned outputs.
@@ -430,6 +431,6 @@ work because RG2 only returns payload data; it does not emit influence graph rec
 
 ## 11. Next step
 
-RG1, RG2, and RG4 are implemented, with `dataset:mondo` and `dataset:go` as the real recipes. Remaining
-follow-ups are broader graph-member promotion workflows, unpromoted-member B materialization, additional
-real graph recipes such as Open Targets, and non-molecular identity resolvers.
+RG1, RG2, and RG4 are implemented, with `dataset:mondo`, `dataset:go`, and the first association graph
+`dataset:opentargets-associations` as the real recipes. Remaining follow-ups are RG3 broader graph-member
+promotion workflows, unpromoted-member B materialization, and RG5 non-molecular identity resolvers.
