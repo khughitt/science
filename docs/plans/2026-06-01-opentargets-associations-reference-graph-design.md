@@ -40,10 +40,15 @@ Nodes are the biological entities; associations are edges.
 - `member_key_space`: `kind: curie`, `resolution_status: resolved`,
   `prefixes: [ENSEMBL, EFO, MONDO, HP, Orphanet, …]` — the exact disease-prefix
   set is enumerated by the preflight (§7) and frozen into the entity.
-- Key normalization:
-  - target `ENSG…` → `ENSEMBL:ENSG…`
-  - disease `EFO_…` / `MONDO_…` / `HP_…` / `Orphanet_…` / `OTAR_…` → colonized
-    CURIE (`EFO:…`, `MONDO:…`, …).
+- Key normalization (every id is a **hard gate** — a non-conforming id aborts the
+  build, counted as an id-form / unknown-prefix reject per §7.5, never silently
+  passed through):
+  - target id **must** match `^ENSG[0-9]+$` → `ENSEMBL:<id>`; anything else is an
+    id-form error.
+  - disease id **must** match `^(EFO|MONDO|HP|Orphanet|OTAR|…)_[0-9A-Za-z]+$`
+    where the prefix is in the frozen `member_key_space.prefixes` → colonized
+    CURIE (`EFO:…`, `MONDO:…`, …); an out-of-set prefix is an unknown-prefix
+    error. (The exact disease-prefix set is discovered by the preflight, §7.6.)
 - `status = active` for every node. Open Targets does not track entity
   deprecation in these tables; obsolete disease terms are the disease ontology's
   concern (MONDO/EFO reference graphs), not OT's. `replaced_by` is therefore
@@ -97,6 +102,16 @@ This mirrors the GO recipe, where the rich upstream `go.json` was the source and
 `edges.csv` was the thin validated projection. The score is never silently
 dropped; it is simply not part of the validated edge contract.
 
+**Score validation (hard gate) and canonical JSON.** OT overall scores are a
+0–1 heuristic. The build asserts, per edge: `score` is **present, numeric, and
+finite** (no `null`/`NaN`/`inf`) and `0.0 <= score <= 1.0`; any violation aborts
+the build (not a tally — a malformed score is a structural defect). `graph.jsonl`
+is written with a **fixed key order** (`subject, predicate, object, score`) and
+**stable separators** (`json.dumps(..., separators=(",", ":"))`, no trailing
+whitespace, `\n`-terminated, UTF-8), and floats are formatted deterministically
+(e.g. `repr`/`float` round-trip), so the artifact — and therefore its datapackage
+hash — is byte-reproducible across runs of the same pinned release.
+
 **RG2 returns *unscored* incident edges.** `ReferenceGraphEdge`
 (`subject, predicate, object, evidence, dataset_usage`) has no score field, and
 the RG2 payload serializer emits only those columns — so even when
@@ -119,15 +134,31 @@ integrity anchor is multi-part:
 - `fetch.py` pins **each parquet part-file's `sha256` + `bytes`** in
   `lockfile.yaml`, and rejects any non-dated / "latest" / mutable URL (analogous
   to the GO `fetch.py` mutable-URL guard).
-- `build.py` deterministically synthesizes, from the pinned parquet:
+- `build.py` deterministically synthesizes, from the pinned parquet, via a
+  **bounded-memory external-sort pipeline** (the global sort + duplicate-triple
+  rejection of §4 cannot be done in a single streaming pass over ~11 M rows):
+  1. **Normalize** — read the association parquet **row-group by row-group**
+     (pyarrow), join target/disease ids, apply the §3 id gates and §5 score gate,
+     and append each normalized `subject\tpredicate\tobject\tscore` line to a temp
+     TSV. Bounded memory; no full-table materialization.
+  2. **External-sort** the temp TSV by `(subject, predicate, object)` (e.g.
+     `sort` with a fixed `LC_ALL=C` collation, or pyarrow/duckdb spill-to-disk) —
+     deterministic order independent of parquet part/row-group order.
+  3. **Emit** `graph.jsonl` by streaming the sorted TSV: write one canonical JSON
+     line per triple (§5), and **reject adjacent duplicate** `(subject, predicate,
+     object)` triples as a hard error (adjacency suffices after the sort).
+     Collect the participating member set in the same pass to build `nodes.csv`.
   - `graph.jsonl` — `graph_format: jsonl_edges`; every line a full edge
-    (`subject, predicate, object, score, …`). This is the canonical
+    (`subject, predicate, object, score`, canonical per §5). This is the canonical
     `graph_resource`; RG1 validation **only existence-checks** it (its
     datapackage hash is the real integrity pin), so it can hold the full edge set
     at any size.
-  - `nodes.csv` — the validated node index (`node_index_resource`).
-  - `edges.csv` — the edge projection (`edge_resource`); **declared or omitted
-    per §8**.
+  - `nodes.csv` — the validated node index (`node_index_resource`), sorted by
+    `member_key`.
+  - `edges.csv` — the edge projection (`edge_resource`); **on the expected
+    omit branch (§8) it is neither written nor registered in `datapackage.yaml`**
+    (`graph.jsonl` is then the *only* full edge artifact — no duplicated ~GB
+    file). Written only if §8 resolves to the declare branch.
   - `build_summary.json` — deterministic counts: `member_count`, `edge_count`,
     `kind_counts` (target/disease), `prefix_counts` (per disease prefix),
     participating-target / participating-disease counts, and the fallback /
@@ -152,12 +183,14 @@ test suite over the synthetic fixture.
 
 **Parquet engine.** The recipe reads Open Targets parquet via **`pyarrow`**
 (`pyarrow.parquet`). Exact row counts come from parquet metadata
-(`ParquetFile(path).metadata.num_rows`) without materializing the table, and the
-~11 M-row build streams **row-group by row-group** into `graph.jsonl` rather than
-loading the full association table into memory. `pyarrow` must be added as a
-dependency of whichever project the recipe executes under (`uv add` / lockfile
-update — see §11); synthetic parquet test fixtures are written with the same
-engine.
+(`ParquetFile(path).metadata.num_rows`) without materializing the table; the
+normalize stage (pipeline step 1) reads **row-group by row-group** so the full
+~11 M-row association table is never held in memory (global ordering is then the
+external sort's job, step 2). `pyarrow` is added to **`science/pyproject.toml`**
+with **`science/uv.lock`** updated — the same project the GO/MONDO recipes run
+under (`uv run --frozen --project ~/d/science/science …`); this recipe does **not**
+introduce a separate environment. Synthetic parquet test fixtures are written
+with the same engine.
 
 Bulk artifacts live outside the git repos at
 `~/d/science-commons-data/opentargets-associations/`, wired via a per-slug entry
@@ -196,8 +229,9 @@ branch** before any work. It must return:
    - target/disease **join misses**: association rows whose `targetId` /
      `diseaseId` is absent from the `target` / `disease` index.
    - duplicate `(targetId, diseaseId)` rows in the association set.
-   - **unknown ID-prefix** rows: ids that do not normalize to a CURIE in the
-     frozen `member_key_space.prefixes`.
+   - **id-form / unknown-prefix** rows: target ids that fail `^ENSG[0-9]+$`, or
+     disease ids whose prefix is outside the frozen `member_key_space.prefixes`
+     (§3). Both are hard gates, not silent drops.
 6. The exact set of disease-id **prefixes** present (to freeze
    `member_key_space.prefixes`).
 7. The actual target/disease id string forms and the association schema column
@@ -255,9 +289,10 @@ it), `member_count`, `edge_count`, `license: CC0-1.0`, `origin: external`,
 Mirrors the GO ingestion:
 
 1. Preflight subagent (§7) → ground the plan with real numbers; resolve §8.
-1a. Add `pyarrow` to the recipe's execution project (`uv add pyarrow` + lockfile
-   update) — the preflight confirms which `pyproject.toml`/environment the recipe
-   runs under (it must read parquet and write synthetic parquet test fixtures).
+1a. Add `pyarrow` to **`science/pyproject.toml`** and update **`science/uv.lock`**
+   (`uv add pyarrow --project ~/d/science/science`) — the same env the GO/MONDO
+   recipes run under (`uv run --frozen --project ~/d/science/science`); no separate
+   recipe environment. Needed to read parquet and write synthetic parquet fixtures.
 2. Subagent-driven-development on **in-place feature branches** (a science-commons
    worktree is invisible to `resolve_commons_root` / `validate`), TDD per task:
    `fetch.py`, `build.py` + hermetic `test_*` over a tiny synthetic parquet/edge
