@@ -748,15 +748,6 @@ Add a /science:add-theme skill analogous to /science:add-hypothesis so that them
 
 When 'science tasks list' or other inventory commands hit a schema-validation failure, the error currently shows only the failing field and the accepted-values list (e.g., 'theme_kind: Input should be methodological, biological, translational, evidence-quality or organizational'). Extend the error to include actionable next steps: (a) suggest 'science-tool entity sections <kind>' for the full effective-schema view (once t060 lands, this will include frontmatter constraints), (b) suggest 'science-tool entity create <kind> "Title"' as the preferred path for new entities, (c) cite the source schema file path so users can inspect it directly. Originally surfaced 2026-05-18 while creating themes for cancer/mechanisms/evolution: the schema-validation error correctly listed the accepted theme_kind values but offered no path forward — the agent only discovered 'science-tool entity create theme' existed by probing the CLI separately. Pairs with t060 (frontmatter constraints in entity sections) and t061 (add-theme skill); together they close the create-a-valid-entity discoverability gap from three angles. Low engineering cost relative to t060/t061; mostly a string-formatting change at the validation error sites.
 
-## [t064] Resolve RFC forks §12.1 (reuse t034) + §12.2 (storage substrate)
-- priority: P1
-- status: proposed
-- aspects: []
-- related: [hypothesis:h00-working-model]
-- created: 2026-05-31
-
-Foundational fork resolution for h00 working model (RFC: doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md §12). Decide: (1) reuse t034 causal-graph substrate verbatim (graph_object_type/epistemic_role/identification pipeline) — recommended; (2) storage substrate for patch + world<->claim reification + multi-edges: RDF-star/named-graphs/PROV-O vs labeled-property-graph vs hybrid. Everything downstream hangs off these.
-
 ## [t065] Prototype L1 patch on the pan-disease q14 slice (belief + provenance + opinion view)
 - priority: P1
 - status: proposed
@@ -783,3 +774,16 @@ RFC §8.1 / R3. Separate true construct from biased proxy (literature co-occurre
 - created: 2026-05-31
 
 RFC §2 federation / R1. Connect epistemic-neighborhood patches via the dual common space: ontology alignment (MONDO/MeSH/HGNC) + bias-corrected latent axis. Multi-scale views (within-patch/project; aggregate subset/sampled/global). Existing hooks: t035 multiview, t038 graph-views. Later-stage; depends on the L1 patch + latent-construct prototypes.
+
+## [t068] Cross-project entity reference syntax (single addressable world)
+- priority: P1
+- status: proposed
+- aspects: [software-development]
+- related: [hypothesis:h00-working-model, hypothesis:h06-adaptive-project-topology-improves-research-fit, question:14-adaptive-project-topology, task:t043]
+- created: 2026-05-31
+
+Design a VALIDATING cross-project entity reference syntax. Surfaced by fb-2026-05-31-012 (writing h00): a foreign 'type:id' ref resolves against the local repo so it reads as broken, and the refs-checker even resolves the bare token locally — forcing honest foreign mentions into untyped prose (the interim h00 policy), which defeats validation, graph linkage, and cross-boundary freshness.
+
+K.H. framing (load-bearing): all projects live in ONE WORLD; a project is sub-structure, itself decomposable into hypothesis/domain neighborhoods (h00 patches). A cross-project ref is a same-world ref crossing a sub-structure boundary, not a foreign ref needing a bridge — the resolver should treat project scope as a grouping level in one addressable space.
+
+This is the single primitive the recurring 'cross-project address syntax' open item in t015 (freshness propagation), t018 (typed blockers), and t043 (cross-project blockers spec) each separately defer; land it once. Design questions to settle: address grammar (project-qualified id e.g. pan-disease::task:t071 vs URN), resolver source of truth (live sibling-repo sweep vs federated graph snapshot), behavior when the target project is not locally available, validation severity (resolvable-vs-unresolvable vs warn-on-stale), and how refs-checker stops greedily resolving bare local tokens. Aligns h00 (multi-scale patch<=project<=collection), h06/q14 (adaptive topology), and the project-peers group (t043-t052).

@@ -208,8 +208,8 @@ Anchor the intuition as (2)+(3), not unguarded diffusion.
 
 ## 12. Open decisions (forks for K.H.)
 
-1. **t034 disposition:** reuse verbatim (recommended) vs extend vs supersede the causal/edge-typing substrate.
-2. **Storage substrate** for world↔payload reification + multi-edges: RDF-star/named-graphs/PROV-O (stay W3C-native) vs labeled-property-graph vs hybrid.
+1. **t034 disposition:** ✅ **DECIDED (K.H. + t064, 2026-05-31): reuse t034 verbatim**; `h00` net-new (R1/R3/R6) rides the t022 extension contract alongside t034, never edits it. Recorded as `core/decisions.md` **D-005**.
+2. **Storage substrate** for world↔payload reification + multi-edges: ✅ **DECIDED (t064, 2026-05-31): stay W3C-native** — the live `graph.trig` is already RDF/TriG with named graphs, PROV-O, and edge-as-node reification, so a **patch = a named graph**, world↔claim reification = the existing edge-as-node pattern (not RDF-star), multi-edges = distinct reified-edge nodes (t034 promotion-by-reference); LPG rejected. Recorded as **D-006**. (Nesting of patch graphs deferred to t067.)
 3. **Uncertainty representation:** keep belief-logodds-v3 scalars only vs add subjective-logic **derived view** (recommended if anything) vs propose opinions as **v4** successor vs credal/DS for special regimes.
 4. **Belief backbone:** keep formula-based `aggregate_belief` vs adopt an **argumentation-framework** semantics.
 5. **Latent-construct modeling now or later** — bias *correction* (latent proxy model) in scope, or only bias *flagging*? (High leverage for pan-disease.)

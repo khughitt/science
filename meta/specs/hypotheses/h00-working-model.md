@@ -24,6 +24,7 @@ related:
 - task:t065
 - task:t066
 - task:t067
+- task:t068
 source_refs: []
 created: '2026-05-31'
 updated: '2026-05-31'
@@ -133,10 +134,14 @@ section; a `role: working-model`-aware exemption is a deferred follow-up named i
 
 ## Status & open forks
 
-The model is **working/proposed**; its load-bearing design decisions are explicit
-**forks** in the RFC §12 (t034 disposition, storage substrate, uncertainty
-representation, argumentation backbone, latent-construct scope, elicited-belief
-richness, delivery shape). Net-new beyond existing work: R1 patch-as-first-class +
+The model is **working/proposed**. Its two **foundational** forks are now
+resolved (`task:t064` → `core/decisions.md` **D-005**, **D-006**): the
+causal/edge substrate is **reused t034 verbatim** with `h00` net-new riding the
+t022 extension contract, and the storage substrate stays **W3C-native** (a patch
+*is* a named graph; world↔claim reification uses the existing edge-as-node
+pattern). The remaining load-bearing decisions are still explicit **forks** in
+the RFC §12 (uncertainty representation, argumentation backbone, latent-construct
+scope, elicited-belief richness, delivery shape). Net-new beyond existing work: R1 patch-as-first-class +
 glue, R2 richer uncertainty view, R3 latent/measurement bias-correction, R4 wiring
 the existing pgmpy/ChiRho exporters, R5 provenance query surface, R6 elicited-belief
 representation.
@@ -154,9 +159,22 @@ own namespace — e.g. meta's `question:14` is "adaptive-project-topology", unre
 It *will* exercise this model on live data once both projects are connected; the
 local execution surface in this repo is the task chain `task:t064`–`task:t067`.
 
-**Cross-project reference policy:** typed `type:id` refs (in `related:` *and* in
-prose) are **local-only** — the validator resolves them against this repo, so a
-foreign `type:id` reads as a broken ref. References to entities in other projects
-(pan-disease) are therefore written **descriptively** (project name + plain
-short-id in parentheses), never in `type:id` form, until a validating
-cross-project ref syntax exists. (Answers the h00 review's open question.)
+**Cross-project reference policy (interim).** Typed `type:id` refs (in `related:`
+*and* in prose) are **local-only** — the validator resolves them against this repo,
+so a foreign `type:id` reads as a broken ref (the refs-checker even resolves the
+bare token locally). References to entities in other projects (pan-disease) are
+therefore written **descriptively** (project name + plain short-id in parentheses),
+never in `type:id` form, *until a validating cross-project ref syntax exists*.
+
+This interim de-typing is a **known limitation, not the model's stance**. The model
+holds the opposite: **all projects live in one world**, and a project is *sub-structure*
+— itself decomposable into the hypothesis/domain neighborhoods this model calls
+**patches**. A cross-project reference is thus a same-world reference crossing a
+sub-structure boundary, *not* a foreign reference needing a bridge; the resolver
+should treat project scope as one grouping level in a single addressable space
+(`patch ⊂ project ⊂ project-collection`, as in the federation schema above). The
+gap between that stance and the current local-only resolver is tracked as the
+federation-layer primitive `task:t068` (the single syntax that the deferred
+cross-project items — freshness propagation, typed blockers, the cross-project
+blockers spec — all separately need). It is the reference-layer instance of the
+same patchwork claim the rest of `h00` makes.
