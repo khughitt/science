@@ -74,6 +74,13 @@ provenance is itself addressable (RG3+ / B materialization).
 - `predicate = associated_with` (a stable literal label, mirroring GO's bare
   `is_a`).
 
+**Canonical edge orientation.** Every edge is `subject = target CURIE`,
+`object = disease CURIE`, `predicate = associated_with`. Edges are emitted sorted
+by `(subject, predicate, object)`, and a duplicate normalized `(subject,
+predicate, object)` triple is a **hard error** (the build aborts rather than
+silently de-duplicating) — duplicate `(targetId, diseaseId)` rows in the source
+are surfaced by the preflight (§7) first.
+
 ## 5. Score handling
 
 The RG1 edge contract (`ReferenceGraphEdge`) has required columns
@@ -89,6 +96,17 @@ as:
 This mirrors the GO recipe, where the rich upstream `go.json` was the source and
 `edges.csv` was the thin validated projection. The score is never silently
 dropped; it is simply not part of the validated edge contract.
+
+**RG2 returns *unscored* incident edges.** `ReferenceGraphEdge`
+(`subject, predicate, object, evidence, dataset_usage`) has no score field, and
+the RG2 payload serializer emits only those columns — so even when
+`edge_resource` is declared (§8), incident-edge resolution returns the target↔
+disease *adjacency* without the score. The scored edge (target, disease, score)
+lives only in `graph.jsonl`; a scored query is answered by reading that artifact
+directly. Promoting score to a first-class edge field (or `evidence`-encoded
+metadata) is deferred — it is an RG schema change, out of scope for the first
+recipe. This is a second reason the declare-`edge_resource` branch (§8) buys
+little for OT.
 
 ## 6. Artifacts and pinning
 
@@ -112,7 +130,34 @@ integrity anchor is multi-part:
     per §8**.
   - `build_summary.json` — deterministic counts: `member_count`, `edge_count`,
     `kind_counts` (target/disease), `prefix_counts` (per disease prefix),
-    plus any fallback tallies.
+    participating-target / participating-disease counts, and the fallback /
+    reject tallies from §7 (join misses, duplicate triples, unknown-prefix rows).
+
+**Build self-verification (mandatory, independent of `commons validate`).**
+Because `commons validate` only existence-checks `graph_resource` and only
+compares `edge_count` *when `edge_resource` is declared* — and the OT edge set is
+omitted on the expected path (§8) — the build must assert its own integrity so
+the most important count cannot drift silently:
+
+- `edge_count` (frontmatter / summary) **==** `graph.jsonl` line count, computed
+  by the build itself.
+- Every `subject` and `object` appearing in `graph.jsonl` **is present** in
+  `nodes.csv` (no dangling endpoints), and conversely every node participates in
+  ≥1 edge (no orphan members, per §3).
+- `member_count` **==** `nodes.csv` row count **==** participating-target +
+  participating-disease counts.
+
+These run as build assertions (hard failures) and are re-checked by the recipe
+test suite over the synthetic fixture.
+
+**Parquet engine.** The recipe reads Open Targets parquet via **`pyarrow`**
+(`pyarrow.parquet`). Exact row counts come from parquet metadata
+(`ParquetFile(path).metadata.num_rows`) without materializing the table, and the
+~11 M-row build streams **row-group by row-group** into `graph.jsonl` rather than
+loading the full association table into memory. `pyarrow` must be added as a
+dependency of whichever project the recipe executes under (`uv add` / lockfile
+update — see §11); synthetic parquet test fixtures are written with the same
+engine.
 
 Bulk artifacts live outside the git repos at
 `~/d/science-commons-data/opentargets-associations/`, wired via a per-slug entry
@@ -131,16 +176,33 @@ branch** before any work. It must return:
 
 1. The latest **pinnable** OT release (dated/versioned, immutable) and the exact
    FTP directory layout for `target`, `disease`, and the overall-direct
-   association dataset (the dataset name changed across releases — e.g.
-   `associationByOverallDirect` vs `association_overall_direct`).
+   association dataset. Releases post-25.03 changed paths and are **Parquet-only**;
+   the dataset directory is `association_overall_direct` (snake_case) under the
+   newer layout (older releases used `associationByOverallDirect`). The preflight
+   confirms the concrete paths for the chosen version (expected: 25.09 or later).
 2. Per parquet part-file: relative path, `sha256`, `bytes`.
-3. **Exact row counts**: targets, diseases, and overall-direct associations
-   (this number decides §8).
-4. The exact set of disease-id **prefixes** present (to freeze
+3. **Exact row counts** (from parquet metadata): total targets, total diseases,
+   and total overall-direct associations. Published 25.09 metrics list
+   **10,989,518** target–disease associations, so the §8 decision is expected to
+   land on the **omit-`edge_resource`** branch — the preflight confirms the live
+   number rather than assuming it.
+4. **Participating-member counts** (the actual member surface, per §3): distinct
+   `targetId` values and distinct `diseaseId` values appearing in the
+   overall-direct association set (these, not the full target/disease catalog
+   sizes, become `member_count`).
+5. **Integrity gates / fallback tallies** — each reported, and each is either a
+   hard build gate or an explicit counted-and-surfaced tally (never a silent
+   drop):
+   - target/disease **join misses**: association rows whose `targetId` /
+     `diseaseId` is absent from the `target` / `disease` index.
+   - duplicate `(targetId, diseaseId)` rows in the association set.
+   - **unknown ID-prefix** rows: ids that do not normalize to a CURIE in the
+     frozen `member_key_space.prefixes`.
+6. The exact set of disease-id **prefixes** present (to freeze
    `member_key_space.prefixes`).
-5. The actual target/disease id string forms and the association schema column
+7. The actual target/disease id string forms and the association schema column
    names (e.g. `targetId`, `diseaseId`, `score`).
-6. The license string as published for that release (expected CC0-1.0).
+8. The license string as published for that release (expected CC0-1.0).
 
 ## 8. `edge_resource` decision (preflight-count driven)
 
@@ -149,17 +211,23 @@ branch** before any work. It must return:
 (from §7.3) decides:
 
 - **≤ ~2 M edges → declare `edge_resource`** (full `edges.csv`). RG1 validates
-  `edge_count`; RG2 answers the headline query ("all disease associations for
-  target X" / "all targets for disease Y") by incident-edge resolution.
+  `edge_count`; RG2 resolves incident edges — though those payload edges are
+  *unscored* (§5).
 - **> ~2 M edges → omit `edge_resource`.** `validate`/RG2 stay light; the full
   edge set is still hash-pinned in `graph.jsonl`; RG2 returns node-only payloads
   (`incident_edges=()`, a supported, documented degradation). RG2-over-OT
   incident resolution is then deferred to a later increment (e.g. an indexed /
-  streaming edge reader).
+  streaming edge reader, ideally with score promoted to a first-class field).
 
-Either branch pins the full graph; only the validated-CSV incident-resolution
-path is at stake. The chosen branch is recorded in `entity.md` and the recipe
-README.
+**Expected outcome: omit.** Published 25.09 metrics (~10.99 M associations, §7.3)
+put OT well above the ~2 M threshold, so omit is the normal path; declare is a
+contingency for a future smaller subset. The declare branch is doubly weak for
+OT — it would load ~11 M rows on *every* `commons validate` *and* still return
+unscored incident edges (§5) — so the bar for choosing it is high. The build
+self-verification (§6) — not `commons validate` — is what guarantees
+`edge_count`/endpoint integrity on the omit path. The chosen branch is recorded
+in `entity.md` and the recipe README, with `edge_count` always set from the
+build-computed `graph.jsonl` line count.
 
 ## 9. Entity frontmatter (parity with GO/MONDO)
 
@@ -187,6 +255,9 @@ it), `member_count`, `edge_count`, `license: CC0-1.0`, `origin: external`,
 Mirrors the GO ingestion:
 
 1. Preflight subagent (§7) → ground the plan with real numbers; resolve §8.
+1a. Add `pyarrow` to the recipe's execution project (`uv add pyarrow` + lockfile
+   update) — the preflight confirms which `pyproject.toml`/environment the recipe
+   runs under (it must read parquet and write synthetic parquet test fixtures).
 2. Subagent-driven-development on **in-place feature branches** (a science-commons
    worktree is invisible to `resolve_commons_root` / `validate`), TDD per task:
    `fetch.py`, `build.py` + hermetic `test_*` over a tiny synthetic parquet/edge
