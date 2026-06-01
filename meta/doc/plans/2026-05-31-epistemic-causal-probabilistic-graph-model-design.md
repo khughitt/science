@@ -56,7 +56,7 @@ The top-level shape is the **federation**:
 
 **Why patchwork beats one-big-model:** honest about locality and partial knowledge (most patches stay L0–L2), tractable (assess one belief at a time), incremental (connect later via ontology or latent axis, with no grand unified schema up front). "Single graph" and "two layers" are special cases — a patch, and a within-patch aspect.
 
-**Net-new (R1):** the *patch* as a first-class, addressable unit (an epistemic neighborhood carrying a ladder level + provenance + uncertainty), plus the two glue mechanisms (ontology alignment + bias-corrected latent common axis), and a world↔claim reification *inside* each patch so it renders at any belief threshold. Substrate fork §12.2 governs how patches and that reification are stored and federated.
+**Net-new (R1):** the *patch* as a first-class, addressable unit (an epistemic neighborhood carrying a ladder level + provenance + uncertainty), plus the two glue mechanisms (ontology alignment + bias-corrected latent common axis), and a world↔claim reification *inside* each patch so it renders at any belief threshold. Substrate fork §12.2 governs how patches and that reification are stored and federated. ✅ **Prototyped end-to-end:** the patch as an L1 named graph (t065), its latent-construct correction (t066), and the **bias-corrected latent common axis as data-driven glue** (t067, `meta/src/h00_patch_l1/glue.py`, `interpretation:h00-t067-patch-federation-2026-06-01`) — CMT↔HSP federate via the latent axis (cosine 0.95, mutual top-2 of 3831) despite disjoint curated gene panels. The latent half's value is *reach* (it federates the ~3,700 diseases with no panel); cross-class validation + the disease-ontology symbolic axis are open (t070 / disease track).
 
 ---
 

@@ -9,13 +9,20 @@
 
 Views A–C are the t065 L1 patch (belief, provenance, honest ignorance, and the
 publication-gravity *discount*); View D is the t066 latent-construct *correction*
-(subtract the attention axis via PMI).
+(subtract the attention axis via PMI); View E is the t067 patch *federation*
+(the bias-corrected latent coordinate as the data-driven half of the glue).
 """
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
+from .glue import (
+    emit_federation_trig,
+    federation_link,
+    load_federation,
+    nearest_patches,
+)
 from .latent import correct_disease, three_way_report
 from .model import load_fixture, pubgravity_threshold
 from .patch import build_patch_report, emit_patch_trig
@@ -97,7 +104,42 @@ def main(argv: list[str] | None = None) -> int:
         if args.trig:
             out = emit_patch_trig(fixture, mesh_id, args.trig / f"{mesh_id.replace(':', '_')}.trig")
             print(f"\n  wrote patch named graph -> {out}")
+
+    _print_federation(fixture, args.trig)
     return 0
+
+
+CMT, HSP = "MESH:D002607", "MESH:D015419"
+
+
+def _print_federation(slice_fix: dict, trig_dir: Path | None) -> None:
+    """View E (t067): federate the two patches via the dual common space."""
+    fed = load_federation()
+    link = federation_link(fed, slice_fix, CMT, HSP)
+    ch = fed["cmt_hsp"]
+    print(f"\n{'=' * 72}")
+    print("FEDERATION (t067)  dual common space: symbolic (panel-gene) + latent (PPMI-SVD)")
+    print(f"  PPMI->SVD k={fed['provenance']['k']} "
+          f"(var explained {fed['provenance']['var_explained_k']}), {fed['n_diseases']} diseases")
+    print(f"\n  [View E] CMT <-> HSP federation link")
+    print(f"    symbolic Jaccard (shared panel genes): {link.symbolic_jaccard}  -> disjoint panels")
+    print(f"    latent cosine (bias-corrected coord) : {link.latent_cosine}  "
+          f"(HSP is CMT's #{ch['hsp_rank_among_cmt_corrected']} neighbor of {fed['n_diseases']})")
+    print(f"    glue kind: {link.glue_kind.upper()}  "
+          f"<- latent axis federates where gene-id overlap is 0")
+    print(f"\n    honesty — correction's marginal effect on federation is modest at the")
+    print(f"    profile scale: HSP rank among CMT neighbors  corrected #{ch['hsp_rank_among_cmt_corrected']}"
+          f"  vs raw #{ch['hsp_rank_among_cmt_raw']}  "
+          f"(cos {ch['cosine_corrected']} vs {ch['cosine_raw']}); a sharpening, not a rescue.")
+
+    for mesh, lbl in [(CMT, "CMT"), (HSP, "HSP")]:
+        print(f"\n    {lbl} top-6 latent neighbors (MeSH tree in brackets; all C10 = nervous system):")
+        for nb in nearest_patches(fed, mesh)[:6]:
+            print(f"      {nb['cosine']:.3f}  [{nb['tree']:14s}] {nb['name']}")
+
+    if trig_dir:
+        out = emit_federation_trig(fed, slice_fix, CMT, HSP, trig_dir / "federation.trig")
+        print(f"\n  wrote federation named graph -> {out}")
 
 
 if __name__ == "__main__":

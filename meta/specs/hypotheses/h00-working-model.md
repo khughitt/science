@@ -181,6 +181,24 @@ separation is partly a property of a slice built to contrast extremes —
 `PPMI>0` is a correction, *not* a calibrated panel classifier; full-matrix /
 held-out validation and a PMI sampling-variance guard are `task:t070`.
 
+**Patch federation** (the §2 dual common space) is now runnable too (`task:t067`,
+`interpretation:h00-t067-patch-federation-2026-06-01`, code
+`meta/src/h00_patch_l1/glue.py`). A truncated SVD of the corrected (PPMI) matrix
+gives every disease a shared-coordinate embedding; two patches relate by cosine
+in it — the **data-driven half** of the glue. The headline: CMT and HSP have
+*disjoint* curated panel genes (symbolic Jaccard 0) yet HSP is CMT's #2 latent
+neighbor of 3,831 (cosine 0.95), and every neighbor with a MeSH tree is a C10
+nervous-system disease — the embedding rediscovers the neurodegenerative class
+from corrected co-occurrence alone, validating that the latent axis is biology,
+not attention. Its real value is **reach**: it federates the ~3,700 diseases with
+no curated panel, where gene-level symbolic glue is impossible. **Scope (honest):**
+the attention correction's *marginal* effect on disease-disease federation is a
+*sharpening* (HSP raw rank 4 → corrected 2), not a rescue — the bias bites hard
+per-edge (t066) but softly at the aggregate-profile scale; and the symbolic axis
+here is narrow panel-gene Jaccard, not full disease-ontology alignment.
+Cross-class validation + comparison to pan-disease's gene/symptom disease-axes is
+`task:t070` / the disease track.
+
 **Proving ground (external, planned).** The intended proving ground is the
 **pan-disease** project — a *separate* Science project, not registered under this
 repo. The references below are **cross-project, named in prose only** (they are

@@ -748,15 +748,6 @@ Add a /science:add-theme skill analogous to /science:add-hypothesis so that them
 
 When 'science tasks list' or other inventory commands hit a schema-validation failure, the error currently shows only the failing field and the accepted-values list (e.g., 'theme_kind: Input should be methodological, biological, translational, evidence-quality or organizational'). Extend the error to include actionable next steps: (a) suggest 'science-tool entity sections <kind>' for the full effective-schema view (once t060 lands, this will include frontmatter constraints), (b) suggest 'science-tool entity create <kind> "Title"' as the preferred path for new entities, (c) cite the source schema file path so users can inspect it directly. Originally surfaced 2026-05-18 while creating themes for cancer/mechanisms/evolution: the schema-validation error correctly listed the accepted theme_kind values but offered no path forward — the agent only discovered 'science-tool entity create theme' existed by probing the CLI separately. Pairs with t060 (frontmatter constraints in entity sections) and t061 (add-theme skill); together they close the create-a-valid-entity discoverability gap from three angles. Low engineering cost relative to t060/t061; mostly a string-formatting change at the validation error sites.
 
-## [t067] Patch federation via ontology + data-driven latent common axis
-- priority: P3
-- status: proposed
-- aspects: []
-- related: [hypothesis:h00-working-model]
-- created: 2026-05-31
-
-RFC §2 federation / R1. Connect epistemic-neighborhood patches via the dual common space: ontology alignment (MONDO/MeSH/HGNC) + bias-corrected latent axis. Multi-scale views (within-patch/project; aggregate subset/sampled/global). Existing hooks: t035 multiview, t038 graph-views. Later-stage; depends on the L1 patch + latent-construct prototypes.
-
 ## [t068] Cross-project entity reference syntax (single addressable world)
 - priority: P1
 - status: proposed

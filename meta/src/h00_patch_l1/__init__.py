@@ -25,8 +25,24 @@ Four things the prototype demonstrates on real numbers:
      ignorance until corroborated (the subjective-logic opinion view);
   4. publication gravity as a **latent-construct CORRECTION** (t066, `latent.py`) —
      subtract the attention axis via PMI; universal genes go negative and drop out
-     as specific support entirely, rather than being collapsed-but-counted (3).
+     as specific support entirely, rather than being collapsed-but-counted (3);
+  5. patch **FEDERATION** via the dual common space (t067, `glue.py`) — factorize
+     the corrected (PPMI) matrix into a shared latent coordinate; CMT and HSP share
+     no panel genes (symbolic glue absent) yet are mutual top-2 latent neighbors,
+     so the data-driven axis federates patches gene-id overlap calls disconnected.
 """
+from .glue import (
+    FederationLink,
+    cosine,
+    emit_federation_trig,
+    federation_link,
+    gene_latent_similarity,
+    latent_similarity,
+    load_federation,
+    nearest_patches,
+    panel_genes,
+    symbolic_jaccard,
+)
 from .latent import (
     CorrectedAssociation,
     build_corrected_signature_units,
@@ -68,4 +84,15 @@ __all__ = [
     "build_corrected_signature_units",
     "corrected_fusion",
     "three_way_report",
+    # t067 patch federation (dual common space)
+    "FederationLink",
+    "load_federation",
+    "cosine",
+    "latent_similarity",
+    "nearest_patches",
+    "panel_genes",
+    "symbolic_jaccard",
+    "federation_link",
+    "gene_latent_similarity",
+    "emit_federation_trig",
 ]
