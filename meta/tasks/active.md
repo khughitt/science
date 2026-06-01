@@ -747,3 +747,39 @@ Add a /science:add-theme skill analogous to /science:add-hypothesis so that them
 - created: 2026-05-18
 
 When 'science tasks list' or other inventory commands hit a schema-validation failure, the error currently shows only the failing field and the accepted-values list (e.g., 'theme_kind: Input should be methodological, biological, translational, evidence-quality or organizational'). Extend the error to include actionable next steps: (a) suggest 'science-tool entity sections <kind>' for the full effective-schema view (once t060 lands, this will include frontmatter constraints), (b) suggest 'science-tool entity create <kind> "Title"' as the preferred path for new entities, (c) cite the source schema file path so users can inspect it directly. Originally surfaced 2026-05-18 while creating themes for cancer/mechanisms/evolution: the schema-validation error correctly listed the accepted theme_kind values but offered no path forward — the agent only discovered 'science-tool entity create theme' existed by probing the CLI separately. Pairs with t060 (frontmatter constraints in entity sections) and t061 (add-theme skill); together they close the create-a-valid-entity discoverability gap from three angles. Low engineering cost relative to t060/t061; mostly a string-formatting change at the validation error sites.
+
+## [t064] Resolve RFC forks §12.1 (reuse t034) + §12.2 (storage substrate)
+- priority: P1
+- status: proposed
+- aspects: []
+- related: [hypothesis:h00-working-model]
+- created: 2026-05-31
+
+Foundational fork resolution for h00 working model (RFC: doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md §12). Decide: (1) reuse t034 causal-graph substrate verbatim (graph_object_type/epistemic_role/identification pipeline) — recommended; (2) storage substrate for patch + world<->claim reification + multi-edges: RDF-star/named-graphs/PROV-O vs labeled-property-graph vs hybrid. Everything downstream hangs off these.
+
+## [t065] Prototype L1 patch on the pan-disease q14 slice (belief + provenance + opinion view)
+- priority: P1
+- status: proposed
+- aspects: []
+- related: [hypothesis:h00-working-model]
+- created: 2026-05-31
+
+RFC §11 step 3. On a REAL slice — pan-disease curated panels (q14) + gene-axis edges — encode one epistemic-neighborhood patch at ladder L1: belief result + provenance axes (editorial/ai-drafted vs empirical) + an experimental subjective-logic opinion view computed from existing EvidenceUnits, routed through the existing independence reduction. Demonstrate publication gravity as independence-discounted fusion. Proving ground = project:pan-disease (question q14 elicited route, task t071); informs RFC §12.3 (opinions: derived-view vs v4).
+
+## [t066] Latent-construct / measurement-model bias-correction prototype
+- priority: P2
+- status: proposed
+- aspects: []
+- related: [hypothesis:h00-working-model]
+- created: 2026-05-31
+
+RFC §8.1 / R3. Separate true construct from biased proxy (literature co-occurrence, DEG overlap) as a latent-variable measurement model — correct, not merely flag, publication gravity. The data-driven latent axis is also one half of the patch common space (§2 glue). Proving ground = project:pan-disease question q15 (discovered gene sets); the latent axis is what lets discovered posteriors update elicited panel priors.
+
+## [t067] Patch federation via ontology + data-driven latent common axis
+- priority: P3
+- status: proposed
+- aspects: []
+- related: [hypothesis:h00-working-model]
+- created: 2026-05-31
+
+RFC §2 federation / R1. Connect epistemic-neighborhood patches via the dual common space: ontology alignment (MONDO/MeSH/HGNC) + bias-corrected latent axis. Multi-scale views (within-patch/project; aggregate subset/sampled/global). Existing hooks: t035 multiview, t038 graph-views. Later-stage; depends on the L1 patch + latent-construct prototypes.
