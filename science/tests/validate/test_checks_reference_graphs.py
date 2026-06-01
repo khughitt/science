@@ -636,6 +636,34 @@ def test_malformed_promoted_member_derivation_errors_without_raising(
     assert message_part in results[0].message
 
 
+def test_reference_graph_accepts_mondo_style_replacement_and_xref_edges() -> None:
+    rows = [
+        _node(member_key="MONDO:0005148", label="type 2 diabetes mellitus"),
+        _node(
+            member_key="MONDO:0008549",
+            label="obsolete thoracic dysostosis, isolated",
+            status="deprecated",
+            replaced_by="MONDO:0979242",
+        ),
+    ]
+    edges = [
+        _edge(subject="MONDO:0005148", predicate="is_a", object="MONDO:0000001"),
+        _edge(subject="MONDO:0005148", predicate="xref", object="OMIM:125853"),
+    ]
+
+    results = list(
+        evaluate_reference_graphs(
+            [_reference_graph(graph_format="obograph_json", member_count=2, edge_count=2)],
+            graph_available_by_dataset_id={"dataset:mondo": True},
+            node_rows_by_dataset_id={"dataset:mondo": rows},
+            edge_rows_by_dataset_id={"dataset:mondo": edges},
+            member_datasets=[],
+        )
+    )
+
+    assert results == []
+
+
 def test_unresolved_promoted_member_errors() -> None:
     member = {
         "id": "dataset:missing",

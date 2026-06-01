@@ -76,6 +76,14 @@ def _write_reference_graph_commons(
             "dataset_usage": "[]",
         },
         {
+            "member_key": "MONDO:0008549",
+            "member_kind": "term",
+            "label": "obsolete thoracic dysostosis, isolated",
+            "status": "deprecated",
+            "replaced_by": "MONDO:0979242",
+            "dataset_usage": "[]",
+        },
+        {
             "member_key": "MONDO:9999999",
             "member_kind": "term",
             "label": "unrelated disease",
@@ -103,6 +111,13 @@ def _write_reference_graph_commons(
             "subject": "MONDO:9999999",
             "predicate": "is_a",
             "object": "MONDO:0000001",
+            "evidence": "",
+            "dataset_usage": "[]",
+        },
+        {
+            "subject": "MONDO:0008549",
+            "predicate": "xref",
+            "object": "OMIM:example",
             "evidence": "",
             "dataset_usage": "[]",
         },
@@ -135,11 +150,11 @@ def _write_reference_graph_commons(
         "graph_format": "rdf_ntriples",
         "member_key_space": {"kind": "curie", "prefixes": ["MONDO"], "resolution_status": "resolved"},
         "node_index_resource": "nodes",
-        "member_count": 3,
+        "member_count": 4,
     }
     if include_edge_resource:
         parent_fm["edge_resource"] = "edges"
-        parent_fm["edge_count"] = 3
+        parent_fm["edge_count"] = 4
     _write_entity(parent_dir, parent_fm)
 
     resources = [
@@ -306,3 +321,24 @@ def test_resolve_reference_graph_member_payload_rejects_absent_member_key(tmp_pa
             commons_root=commons_root,
             data_root=data_root,
         )
+
+
+def test_resolve_virtual_reference_graph_member_payload_returns_deprecated_node_and_xref_edges(
+    tmp_path: Path,
+) -> None:
+    commons_root, data_root = _write_reference_graph_commons(tmp_path, member_key="MONDO:0008549")
+
+    payload = resolve_virtual_member_payload(
+        "dataset:mondo-0005148",
+        commons_root=commons_root,
+        data_root=data_root,
+    )
+
+    assert isinstance(payload, VirtualMemberPayload)
+    assert payload.member_key == "MONDO:0008549"
+    assert payload.payload["node"]["status"] == "deprecated"
+    assert payload.payload["node"]["replaced_by"] == ["MONDO:0979242"]
+    assert ("MONDO:0008549", "xref", "OMIM:example") in {
+        (edge["subject"], edge["predicate"], edge["object"])
+        for edge in payload.payload["incident_edges"]
+    }
