@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a/C4b merged locally and C4c-1 rsID input implemented locally with full dbSNP artifact build/operator smoke pending + Pillar A (A1 + A2) merged and complete; Pillar D1, B1, B-migration, B2, and E (Reactome ingestion) merged locally; non-tabular reference modeling is partly resolved by `bio.reference_graph` RG1/RG2/RG4 with `dataset:mondo` implemented locally and GO/Open Targets recipes plus RG3+ workflows pending; C4c transcript/protein projection and D2 remain open. Spawns focused per-area docs.
+Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a/C4b and C4c-1 rsID input merged and pushed to origin (full dbSNP artifact build/operator smoke still pending) + Pillar A (A1 + A2) merged and complete; Pillar D1, B1, B-migration, B2, and E (Reactome ingestion) merged and pushed to origin; non-tabular reference modeling is partly resolved by `bio.reference_graph` RG1/RG2/RG4 with `dataset:mondo` built and pushed to origin in `~/d/science-commons`, and GO/Open Targets recipes plus RG3+ workflows pending; C4c transcript/protein projection and D2 remain open. All `~/d/science` and `~/d/science-commons` work is on origin (as of 2026-06-01); the `~/d/health/meta` and `~/d/health/comparisons/pan-disease` records that consume it are committed in Dropbox-only repos (no git remote). Spawns focused per-area docs.
 
 Related (builds on):
 - `docs/proposition-and-evidence-model.md` — core reasoning model
@@ -199,9 +199,10 @@ A new domain extension (sibling to `bio.table`/`bio.rnaseq`/…), filling the "n
 
 Reactome ingestion consumes A-D: it tags the collection as `source_class: reference` (A), carries the
 implemented `bio.geneset` collection profile (D1), preserves row-level `dataset_usage` hooks for B, and
-resolves Entrez membership through the built C2 HGNC gene crosswalk. **Status: implemented and merged
-locally** in `~/d/science-commons`, `~/d/health/meta`, and `~/d/health/comparisons/pan-disease`; see
-`docs/plans/2026-05-30-reactome-commons-ingestion-plan.md`.
+resolves Entrez membership through the built C2 HGNC gene crosswalk. **Status: implemented;
+`dataset:reactome` + the C2 crosswalk are built, merged, and pushed to origin in `~/d/science-commons`.**
+The `~/d/health/meta` recipe and the `~/d/health/comparisons/pan-disease` stub removal are committed in
+their Dropbox-only repos (no git remote). See `docs/plans/2026-05-30-reactome-commons-ingestion-plan.md`.
 
 ---
 
@@ -230,11 +231,11 @@ Spawned design docs (in `~/d/science/docs/plans/`), with the dependency order:
 
 | Phase | Doc | Depends on | Locks | Status |
 |---|---|---|---|---|
-| 1 | Identity, reference genomes & id mapping (C) | — | canonical assembly + gene/protein/variant crosswalks; pinned-vs-service policy | design ✓; **impl: C1 (assembly), C2 (gene), C3 (protein), C4a (variant identity), and C4b (liftover/compatibility) merged locally; C4c-1 rsID input implemented locally; full dbSNP artifact build/operator smoke and transcript/protein projection pending** |
+| 1 | Identity, reference genomes & id mapping (C) | — | canonical assembly + gene/protein/variant crosswalks; pinned-vs-service policy | design ✓; **impl: C1 (assembly), C2 (gene), C3 (protein), C4a (variant identity), and C4b (liftover/compatibility) merged and pushed to origin; C4c-1 rsID input pushed to origin; full dbSNP artifact build/operator smoke and transcript/protein projection pending** |
 | 2 | Dataset taxonomy & epistemic integration (A) | C | `source_class` + `derived_kind`; curation down-weight as a *modifier*, mapped into aggregation + two-axis | design ✓; **impl: A1 + A2 merged** (recording layer + curation down-weight, config v2); **Pillar A complete** |
 | 3a | Gene-set / annotation type `bio.geneset` (D) | A, C | extension schema; per-set provenance; promotion rule; realizes B's interface for gene sets | design ✓; **impl: D1 collection type implemented; D2 promoted members pending** |
-| 3b | Dataset-influence & provenance tracking (B) | A, C (+ D for the gene-set arm) | `dataset:`-ref declarations + usage role; dataset→consumer derivation; *candidate* auto-independence | B1 implemented locally; B-migration implemented; **B2 merged locally** |
-| 4 | Reactome ingestion revision (E) | A-D | first instantiation | **implemented and merged locally**; plan/status in `docs/plans/2026-05-30-reactome-commons-ingestion-plan.md` |
+| 3b | Dataset-influence & provenance tracking (B) | A, C (+ D for the gene-set arm) | `dataset:`-ref declarations + usage role; dataset→consumer derivation; *candidate* auto-independence | **B1, B-migration, and B2 merged and pushed to origin** |
+| 4 | Reactome ingestion revision (E) | A-D | first instantiation | **implemented; commons pushed to origin, health-side records Dropbox-only**; plan/status in `docs/plans/2026-05-30-reactome-commons-ingestion-plan.md` |
 
 C is the long pole (everything joins on identity). A and C unblock D and the paper arm of B; B's
 gene-set arm consumes D, so D leads B within Phase 3 (B may start its paper-side and the derivation
@@ -248,7 +249,7 @@ C2/C3 crosswalks and the C4 variant-label registry). D is its **first concrete i
 the mechanism is the generalization of D's collection/member/promotion, so it is settled alongside C/D
 rather than as a separately-numbered phase. See that doc for the model and its invariants (resolve-or-
 `declared_unresolved`; `derivation.kind: member_of`; exact-key-equality-is-identity vs. compatibility
-relations). **Status: implemented and merged** (the generic substrate — `commons/member.py`,
+relations). **Status: implemented, merged, and pushed to origin** (the generic substrate — `commons/member.py`,
 `member_of` schema variant, reference-collections check); C1's assembly registry, C2's gene crosswalk,
 and C3's protein crosswalk are its first three keyed-member instances. C4b now exercises its guardrail-2
 *compatibility relation* side: distinct seqcol digests are related with pinned liftover provenance, never
@@ -280,9 +281,10 @@ collapsed into identity.
 7. **Resolved (C): pinned vs. live identity.** Pinned local snapshots are authoritative for joins. Live
    services are discovery/QA conveniences only; refgenie/refgenieserver may document genome asset
    provenance but not replace pinned identity inputs.
-8. **Partly resolved (non-tabular references).** `bio.reference_graph` RG1, RG2, and RG4 are implemented locally:
-   RG1 validates node indexes, RG2 resolves promoted graph-member virtual payloads as node rows plus
-   directly incident edges, and RG4 adds `dataset:mondo` as the first real pinned reference graph recipe.
+8. **Partly resolved (non-tabular references).** `bio.reference_graph` RG1, RG2, and RG4 are implemented
+   and pushed to origin: RG1 validates node indexes, RG2 resolves promoted graph-member virtual payloads as
+   node rows plus directly incident edges, and RG4 adds `dataset:mondo` as the first real pinned reference
+   graph recipe (built and pushed to origin in `~/d/science-commons`).
    GO/Open Targets recipes, broader graph-member promotion workflows, unpromoted-member B materialization,
    and non-molecular identity resolvers remain follow-up work.
 
@@ -293,7 +295,7 @@ collapsed into identity.
 **Approved; implementation underway.** The umbrella and all spawned per-area design docs are written and
 user-reviewed. The cross-pillar **foundation substrate** (reference collection → keyed member → promoted
 member) and **Pillar C sub-phases C1 (assembly registry), C2 (gene crosswalk), C3 (protein crosswalk)**
-and C4a (variant identity) are implemented and merged locally in `~/d/science`. Each shipped its
+and C4a (variant identity) are implemented, merged, and pushed to origin in `~/d/science`. Each shipped its
 schema(s), a pinned reference collection + recipe, a pure resolver, and the corresponding
 `science validate` checks; the C2 gene check was generalized into a shared
 `evaluate_tier_identity` that C3's protein check reuses.
@@ -302,7 +304,7 @@ schema(s), a pinned reference collection + recipe, a pure resolver, and the corr
 cross-assembly liftover chains, seqcol *compatibility relations* (the first realization of the primitive's
 RCM-D6 guardrail-2), lifted target-assembly VRS reminting, and the C1 check-3 liftover remedy are in
 place. The implementation plan is tracked at `docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`.
-C4c-1 rsID input over pinned dbSNP snapshots is implemented locally in `~/d/science` and
+C4c-1 rsID input over pinned dbSNP snapshots is implemented and pushed to origin in `~/d/science` and
 `~/d/science-commons`; the full dbSNP archive fetch/build, lockfile pinning, datapackage hash refresh, and
 resolver smoke against the real artifact remain operator-pending. Transcript and protein projection inputs
 over pinned snapshots remain later C4c work.
@@ -323,23 +325,27 @@ structural` shipped as a recording-only validate nudge (not scored); per-line ov
 row-contract parser, validate check, graph retention guard, and B1 row-level usage materialization are in
 place. The generic `member_of` substrate is also implemented, but D2's gene-set-specific promoted-member
 extension, promotion path, and virtual member payload resolution remain deferred until evidence lines need
-first-class child datasets for individual sets. B1 is implemented locally as the authored-to-graph
-provenance layer, B-migration is implemented (`science graph migrate-paper-datasets` plus pure/CLI tests),
-and B2 is implemented as the dataset-derived independence layer
+first-class child datasets for individual sets. B1 is implemented and pushed to origin as the
+authored-to-graph provenance layer, B-migration is implemented (`science graph migrate-paper-datasets`
+plus pure/CLI tests), and B2 is implemented as the dataset-derived independence layer
 (`science_tool.graph.dataset_independence`, graph materialization, validation integration, aggregation
-metadata merge, and `belief-logodds-v3`). Pillar A is complete; C (C1-C3 merged, C4a merged, C4b
-merged locally, C4c-1 rsID input implemented locally), D1, and B1/B2 are now exercised by E. Reactome is implemented as the first real
+metadata merge, and `belief-logodds-v3`). Pillar A is complete; C (C1-C3, C4a, C4b, and
+C4c-1 rsID input all merged and pushed to origin), D1, and B1/B2 are now exercised by E. Reactome is implemented as the first real
 `bio.geneset` commons dataset: Reactome release 96 was fetched from the versioned Reactome download URL,
-the C2 HGNC gene crosswalk was built, `dataset:reactome` was promoted into `~/d/science-commons`, and the
-pan-disease local Reactome stub was removed so consumers resolve through commons. D2 remains deferred
-until a real evidence line needs a promoted pathway dataset. `bio.reference_graph` RG1, RG2, and RG4 are
-implemented locally: RG1 validates node indexes, RG2 resolves promoted graph-member virtual payloads as
-node rows plus directly incident edges, and RG4 adds `dataset:mondo` as the first real pinned reference
-graph recipe. GO/Open Targets recipes, broader graph-member promotion workflows, unpromoted-member B
-materialization, and non-molecular identity resolvers remain follow-up work.
+the C2 HGNC gene crosswalk was built, `dataset:reactome` was promoted into `~/d/science-commons` (merged
+and pushed to origin on 2026-06-01), and the pan-disease local Reactome stub was removed so consumers
+resolve through commons. D2 remains deferred until a real evidence line needs a promoted pathway dataset.
+`bio.reference_graph` RG1, RG2, and RG4 are implemented and pushed to origin: RG1 validates node indexes,
+RG2 resolves promoted graph-member virtual payloads as node rows plus directly incident edges, and RG4
+adds `dataset:mondo` as the first real pinned reference graph recipe. GO/Open Targets recipes, broader
+graph-member promotion workflows, unpromoted-member B materialization, and non-molecular identity
+resolvers remain follow-up work.
 
 **Operational follow-ups.**
-- Push local implementation branches to `origin` when ready.
+- `~/d/science` and `~/d/science-commons` `main` are pushed to origin as of 2026-06-01 (Pillars A-E +
+  `bio.reference_graph` RG1/RG2/RG4 + `dataset:mondo` and `dataset:reactome`); both repos report 0 ahead /
+  0 behind. `~/d/health/meta` and `~/d/health/comparisons/pan-disease` have no git remote and stay
+  Dropbox-only.
 - `gene-crosswalk-hgnc` is now built and pinned in `~/d/science-commons`; `assembly-registry` and
   `protein-crosswalk-uniprot` may still need their real artifact builds if downstream work requires
   non-placeholder data.

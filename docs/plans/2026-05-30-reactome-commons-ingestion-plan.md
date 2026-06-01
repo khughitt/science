@@ -2,8 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** Implemented and merged locally on 2026-05-30 across `~/d/science-commons`,
-`~/d/health/meta`, and `~/d/health/comparisons/pan-disease`.
+**Status:** Implemented 2026-05-30. `~/d/science-commons` (`dataset:reactome` + the C2
+`gene-crosswalk-hgnc` registry) was merged and **pushed to origin on 2026-06-01**. The
+`~/d/health/meta` recipe/dataset record and the `~/d/health/comparisons/pan-disease` stub
+removal are committed in their Dropbox-only repos (no git remote).
 
 **Implementation outcome:**
 
