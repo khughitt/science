@@ -134,20 +134,29 @@ integrity anchor is multi-part:
 - `fetch.py` pins **each parquet part-file's `sha256` + `bytes`** in
   `lockfile.yaml`, and rejects any non-dated / "latest" / mutable URL (analogous
   to the GO `fetch.py` mutable-URL guard).
-- `build.py` deterministically synthesizes, from the pinned parquet, via a
-  **bounded-memory external-sort pipeline** (the global sort + duplicate-triple
-  rejection of §4 cannot be done in a single streaming pass over ~11 M rows):
-  1. **Normalize** — read the association parquet **row-group by row-group**
-     (pyarrow), join target/disease ids, apply the §3 id gates and §5 score gate,
-     and append each normalized `subject\tpredicate\tobject\tscore` line to a temp
-     TSV. Bounded memory; no full-table materialization.
-  2. **External-sort** the temp TSV by `(subject, predicate, object)` (e.g.
-     `sort` with a fixed `LC_ALL=C` collation, or pyarrow/duckdb spill-to-disk) —
-     deterministic order independent of parquet part/row-group order.
-  3. **Emit** `graph.jsonl` by streaming the sorted TSV: write one canonical JSON
+- `build.py` deterministically synthesizes, from the pinned parquet, via an
+  **in-memory normalize + sort** pipeline. The original ~11 M-row estimate that
+  motivated a bounded-memory external sort was corrected by the §7 preflight: the
+  real `association_overall_direct` count is **4,492,971** edges, which comfortably
+  fits in memory as interned `(subject, object, score)` tuples. This is also the
+  approach the existing `dataset:go` and `dataset:mondo` recipes take (both sort
+  their edge set in memory), so it keeps the reference-graph recipe family
+  consistent. The chosen pipeline:
+  1. **Normalize** — read the association parquet (pyarrow), join target/disease
+     ids, apply the §3 id gates and §5 score gate, and collect each normalized
+     `(subject, object, score)` triple into an in-memory list.
+  2. **Sort** the collected triples in memory via a single `edges.sort()` keyed on
+     `(subject, object)` — deterministic order independent of parquet part/row-group
+     order.
+  3. **Emit** `graph.jsonl` by streaming the sorted list: write one canonical JSON
      line per triple (§5), and **reject adjacent duplicate** `(subject, predicate,
      object)` triples as a hard error (adjacency suffices after the sort).
      Collect the participating member set in the same pass to build `nodes.csv`.
+
+  The **bounded-memory external-sort / spill-to-disk** variant (normalize to a temp
+  TSV → `sort` with a fixed `LC_ALL=C` collation, or a pyarrow/duckdb spill — then
+  stream-emit) remains the documented fallback: adopt it if a future Open Targets
+  release grows the overall-direct edge count enough to pressure available memory.
   - `graph.jsonl` — `graph_format: jsonl_edges`; every line a full edge
     (`subject, predicate, object, score`, canonical per §5). This is the canonical
     `graph_resource`; RG1 validation **only existence-checks** it (its
@@ -184,9 +193,9 @@ test suite over the synthetic fixture.
 **Parquet engine.** The recipe reads Open Targets parquet via **`pyarrow`**
 (`pyarrow.parquet`). Exact row counts come from parquet metadata
 (`ParquetFile(path).metadata.num_rows`) without materializing the table; the
-normalize stage (pipeline step 1) reads **row-group by row-group** so the full
-~11 M-row association table is never held in memory (global ordering is then the
-external sort's job, step 2). `pyarrow` is added to **`science/pyproject.toml`**
+normalize stage (pipeline step 1) reads the parquet parts and collects the
+~4.49 M normalized triples in memory, which the in-memory `edges.sort()` (step 2)
+then orders. `pyarrow` is added to **`science/pyproject.toml`**
 with **`science/uv.lock`** updated — the same project the GO/MONDO recipes run
 under (`uv run --frozen --project ~/d/science/science …`); this recipe does **not**
 introduce a separate environment. Synthetic parquet test fixtures are written
