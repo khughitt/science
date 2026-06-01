@@ -2774,10 +2774,11 @@ def distill() -> None:
 @distill.command("openalex")
 @click.option("--level", type=click.Choice(("subfields", "topics")), default="subfields", show_default=True)
 @click.option("--output", "output_path", default=None, type=click.Path(path_type=Path))
-def distill_openalex_cmd(level: str, output_path: Path | None) -> None:
+@click.option("--cache-path", default=None, type=click.Path(path_type=Path))
+def distill_openalex_cmd(level: str, output_path: Path | None, cache_path: Path | None) -> None:
     """Fetch OpenAlex science hierarchy and write Turtle snapshot."""
 
-    result = distill_openalex(level=level, output_path=output_path)
+    result = distill_openalex(level=level, output_path=output_path, cache_path=cache_path)
     click.echo(f"Wrote OpenAlex snapshot ({level}) to {result}")
 
 

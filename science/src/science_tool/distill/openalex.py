@@ -12,6 +12,7 @@ from science_tool.distill import (
     bind_common_prefixes,
     write_snapshot,
 )
+from science_tool.openalex import OPENALEX_MAX_PER_PAGE, OpenAlexClient, OpenAlexRequestCache, OpenAlexStatus
 
 OPENALEX_BASE = "https://api.openalex.org"
 
@@ -23,6 +24,7 @@ def distill_openalex(
     *,
     level: str = "subfields",
     output_path: Path | None = None,
+    cache_path: Path | None = None,
 ) -> Path:
     """Fetch OpenAlex science hierarchy up to the given level and write Turtle snapshot."""
     if level not in LEVELS:
@@ -33,7 +35,7 @@ def distill_openalex(
 
     all_items: dict[str, dict[str, dict]] = {}
     for lvl in levels_to_fetch:
-        all_items[lvl] = {item["id"]: item for item in _fetch_all_pages(lvl)}
+        all_items[lvl] = {item["id"]: item for item in _fetch_all_pages(lvl, cache_path=cache_path)}
 
     g = Graph()
     bind_common_prefixes(g)
@@ -86,25 +88,20 @@ def _parent_level_key(level: str) -> str | None:
     }.get(level)
 
 
-def _fetch_all_pages(endpoint: str) -> list[dict]:
+def _fetch_all_pages(endpoint: str, *, cache_path: Path | None = None) -> list[dict]:
     """Fetch all pages from an OpenAlex API endpoint. Returns list of result dicts."""
-    try:
-        import httpx
-    except ImportError as exc:
-        raise ImportError(
-            "httpx is required for OpenAlex distillation. Install with: uv add --optional distill httpx"
-        ) from exc
-
-    url = f"{OPENALEX_BASE}/{endpoint}"
+    cache = OpenAlexRequestCache(cache_path) if cache_path is not None else None
+    client = OpenAlexClient(cache=cache)
     items: list[dict] = []
     page = 1
-    per_page = 200
+    per_page = OPENALEX_MAX_PER_PAGE
 
     while True:
-        params = {"per_page": per_page, "page": page}
-        response = httpx.get(url, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
+        record = client.get(f"/{endpoint}", params={"per_page": str(per_page), "page": str(page)})
+        if record.status not in {OpenAlexStatus.OK, OpenAlexStatus.EMPTY}:
+            raise RuntimeError(f"OpenAlex {endpoint} fetch failed: {record.status.value}: {record.error}")
+
+        data = record.payload or {}
 
         results = data.get("results", [])
         if not results:

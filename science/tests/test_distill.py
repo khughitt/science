@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import httpx
 import numpy as np
 from click.testing import CliRunner
 from rdflib import Dataset as RdfDataset
@@ -66,8 +67,9 @@ def _mock_openalex_response(level: str) -> list[dict]:
     return []
 
 
-def _mock_fetch_all(endpoint: str) -> list[dict]:
+def _mock_fetch_all(endpoint: str, *, cache_path: Path | None = None) -> list[dict]:
     """Mock for openalex._fetch_all_pages that returns fixture data."""
+    del cache_path
     level = endpoint.rstrip("/").rsplit("/", 1)[-1]
     return _mock_openalex_response(level)
 
@@ -108,6 +110,60 @@ def test_distill_openalex_writes_manifest(tmp_path: Path) -> None:
     g.parse(str(manifest), format="turtle")
     assert len(list(g.triples((None, SCHEMA.name, None)))) == 1
     assert len(list(g.triples((None, SCHEMA.sha256, None)))) == 1
+
+
+def test_distill_openalex_fetch_uses_supported_page_size(tmp_path: Path) -> None:
+    captured_params: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_params.append(dict(request.url.params))
+        return httpx.Response(200, json={"meta": {"count": 0}, "results": []})
+
+    with patch(
+        "httpx.Client",
+        return_value=httpx.Client(
+            transport=httpx.MockTransport(handler),
+            base_url="https://api.openalex.org",
+        ),
+    ):
+        assert distill_openalex(level="domains", output_path=tmp_path / "openalex-domains.ttl")
+
+    assert captured_params[0]["per_page"] == "100"
+
+
+def test_distill_openalex_reuses_cache_path(tmp_path: Path) -> None:
+    calls = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(
+            200,
+            json={
+                "meta": {"count": 1},
+                "results": [
+                    {
+                        "id": "https://openalex.org/domains/1",
+                        "display_name": "Life Sciences",
+                        "works_count": 100000,
+                    }
+                ],
+            },
+        )
+
+    cache_path = tmp_path / "openalex-cache.jsonl"
+    with patch(
+        "httpx.Client",
+        return_value=httpx.Client(
+            transport=httpx.MockTransport(handler),
+            base_url="https://api.openalex.org",
+        ),
+    ):
+        distill_openalex(level="domains", output_path=tmp_path / "first.ttl", cache_path=cache_path)
+        distill_openalex(level="domains", output_path=tmp_path / "second.ttl", cache_path=cache_path)
+
+    assert calls == 1
+    assert cache_path.exists()
 
 
 def _make_mock_triples_factory():

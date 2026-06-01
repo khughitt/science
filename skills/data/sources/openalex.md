@@ -35,6 +35,16 @@ Typical query patterns:
    - `GET /works/<openalex-id>`
 
 Prefer including contact metadata via `mailto` when supported by the endpoint.
+For agent-facing API details, also consult the OpenAlex LLM quick reference:
+<https://developers.openalex.org/guides/llm-quick-reference>.
+
+Current OpenAlex usage constraints to preserve in workflows:
+
+- Use `per_page` values at or below 100.
+- Prefer `select=` to retrieve only fields the workflow consumes.
+- Resolve human-readable names to OpenAlex IDs before applying filters where an ID filter is available.
+- Batch DOI lookup with pipe-separated values when the workflow has known DOIs.
+- Avoid deprecated Concepts endpoints and `/text`; prefer the current Topics, fields, subfields, domains, and Works surfaces.
 
 ## Query Construction
 
@@ -60,6 +70,16 @@ Start broad, then tighten based on result quality.
 - Pull multiple pages up to the command-level candidate cap.
 - Persist source query parameters and retrieval timestamp for provenance.
 - Stop early if results become clearly off-topic.
+
+For reusable Python tooling, prefer `science_tool.openalex.OpenAlexClient` over ad hoc `httpx` calls.
+Its request records distinguish successful hits, valid empty result sets, rate limits, server errors, and request errors.
+When a workflow can be long-running or quota-sensitive, attach `OpenAlexRequestCache` so successful and valid-empty requests are reused on rerun.
+For the built-in science-map distiller, pass `science distill openalex --cache-path <path>` to make the API page fetches resumable.
+Downstream QA should call `assert_no_unresolved_openalex_failures(...)` or an equivalent workflow-specific check before interpreting sparse results.
+
+Do not treat an HTTP failure as an empty scientific result.
+Only a successful payload with `meta.count == 0` and an empty `results` list should be interpreted as a valid empty OpenAlex result.
+If OpenAlex returns `429` or a transient server error after retries, stop the workflow or mark the run incomplete so it can resume after quota or service recovery.
 
 ## Field Normalization
 
