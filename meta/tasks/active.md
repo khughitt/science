@@ -764,7 +764,7 @@ Foundational fork resolution for h00 working model (RFC: doc/plans/2026-05-31-ep
 - related: [hypothesis:h00-working-model]
 - created: 2026-05-31
 
-RFC §11 step 3. On a REAL slice — pan-disease curated panels (q14) + gene-axis edges — encode one epistemic-neighborhood patch at ladder L1: belief result + provenance axes (editorial/ai-drafted vs empirical) + an experimental subjective-logic opinion view computed from existing EvidenceUnits, routed through the existing independence reduction. Demonstrate publication gravity as independence-discounted fusion. Proving ground = project:pan-disease (question q14 elicited route, task t071); informs RFC §12.3 (opinions: derived-view vs v4).
+RFC §11 step 3. On a REAL slice — pan-disease curated panels (q14) + gene-axis edges — encode one epistemic-neighborhood patch at ladder L1: belief result + provenance axes (editorial/ai-drafted vs empirical) + an experimental subjective-logic opinion view computed from existing EvidenceUnits, routed through the existing independence reduction. Demonstrate publication gravity as independence-discounted fusion. Proving ground = pan-disease's elicited curated-panel route (its first replication-probe slice); informs RFC §12.3 (opinions: derived-view vs v4).
 
 ## [t066] Latent-construct / measurement-model bias-correction prototype
 - priority: P2

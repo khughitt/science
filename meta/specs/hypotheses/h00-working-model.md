@@ -6,8 +6,12 @@ title: "Science working model: a federated patchwork of provenance-typed, uncert
 status: proposed
 phase: active
 related:
+- hypothesis:h01-stochastic-revisiting
 - hypothesis:h02-rich-evidence-payloads-improve-graph-calibration
+- hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting
 - hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening
+- hypothesis:h05-sequential-evidence-improves-attention
+- hypothesis:h06-adaptive-project-topology-improves-research-fit
 - question:01-evidence-payload-schema
 - question:02-causal-synthesis-guardrails
 - question:08-mcda-bayesian-interoperability
@@ -15,6 +19,11 @@ related:
 - question:11-graph-valued-synthesis-artifacts
 - question:12-agent-tool-kg-operations
 - question:13-robustness-reproducibility-evaluation
+- question:14-adaptive-project-topology
+- task:t064
+- task:t065
+- task:t066
+- task:t067
 source_refs: []
 created: '2026-05-31'
 updated: '2026-05-31'
@@ -54,14 +63,16 @@ Patch (epistemic neighborhood)
   ├─ ladder_level     : L0 typed-edge | L1 belief+provenance | L2 assoc/causal-role
   │                     | L3 partial-causal (CPDAG/PAG/ADMG) | L4 full PGM/SCM
   ├─ provenance_route : discovered (data→posterior) | elicited (belief→prior)
-  ├─ provenance_tier  : empirical | derived | literature | editorial(ai/human) | mathematical
+  ├─ provenance       : SPLIT across existing axes (RFC §5 — NOT one tier enum):
+  │                     ProvenanceType{math|empirical|editorial|derived} · evidence_type{lit|emp|sim|bench|expert}
+  │                     · source_class{obs|derived|ref}+derived_kind · PROV agent{human|ai} · review_state{ratified?}
   ├─ object_layer     : world entities + relations (genes, diseases, …)     [ABox]
   ├─ meta_layer       : claims/evidence/belief about those relations        [proposition+evidence]
   └─ uncertainty      : belief result (+ optional opinion / parameter priors)
 
 GLUE  (connect patches)
   ├─ ontology_alignment : shared symbolic ids (MONDO/MeSH/HGNC)
-  └─ latent_common_axis : data-driven, bias-corrected coordinate (q15 / measurement-model)
+  └─ latent_common_axis : data-driven, bias-corrected coordinate (measurement-model, RFC §8.1)
 
 FEDERATION (compose views)
   patch  ⊂  project  ⊂  project-collection
@@ -96,6 +107,8 @@ ASCII sketch:
 | Agent/tool KG operations (elicitation provenance) | `q12` (t037) |
 | Robustness / reproducibility (adversarial perturbation) | `q13` (t040) |
 | Uncertainty representation & MCDA/Bayesian interop | `q08` |
+| Belief DYNAMICS — revisiting, sequential update, ladder maturation (evidence moves prior→posterior) | `h01`, `h03`, `h05` |
+| FEDERATION — patch / project topology (the multi-scale composition) | `h06`, `q14` |
 
 ## Falsifiability
 
@@ -128,6 +141,22 @@ glue, R2 richer uncertainty view, R3 latent/measurement bias-correction, R4 wiri
 the existing pgmpy/ChiRho exporters, R5 provenance query surface, R6 elicited-belief
 representation.
 
-**Proving ground:** the `pan-disease` project exercises this model on live data —
-`question:q14` (elicited curated panels) and `question:q15` (data-driven gene sets)
-are the elicitation and discovery routes respectively; `task:t071` is the first slice.
+**Proving ground (external, planned).** The intended proving ground is the
+**pan-disease** project — a *separate* Science project, not registered under this
+repo. The references below are **cross-project, named in prose only** (they are
+deliberately *not* resolvable `meta` typed refs, to avoid colliding with meta's
+own namespace — e.g. meta's `question:14` is "adaptive-project-topology", unrelated):
+
+- pan-disease's **monogenic-vs-polygenic gene-axis** question — the **elicitation** route (curated panels as an elicited model);
+- pan-disease's **data-driven-causal-gene-sets** question — the **discovery** route (data-derived gene sets);
+- pan-disease's **first replication-probe** task — the slice that will exercise the model.
+
+It *will* exercise this model on live data once both projects are connected; the
+local execution surface in this repo is the task chain `task:t064`–`task:t067`.
+
+**Cross-project reference policy:** typed `type:id` refs (in `related:` *and* in
+prose) are **local-only** — the validator resolves them against this repo, so a
+foreign `type:id` reads as a broken ref. References to entities in other projects
+(pan-disease) are therefore written **descriptively** (project name + plain
+short-id in parentheses), never in `type:id` form, until a validating
+cross-project ref syntax exists. (Answers the h00 review's open question.)

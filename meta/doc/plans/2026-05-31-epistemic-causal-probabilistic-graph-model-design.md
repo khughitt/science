@@ -218,4 +218,4 @@ Anchor the intuition as (2)+(3), not unguarded diffusion.
 7. **Delivery shape:** opt-in aspect (recommended) vs core-model change.
 8. **Doc home / commit:** ✅ **DECIDED (K.H., 2026-05-31): `meta/doc/plans/`, alongside t034** — the RFC is entangled with the t034 causal-graph work and belongs in the same design corpus.
 
-*No code in this RFC. The pan-disease q15/t071 work proceeds independently on curated panels meanwhile; this model is what eventually retires those editorial labels.*
+*No code in this RFC. The pan-disease disease-side work proceeds independently on curated panels meanwhile; this model is what eventually retires those editorial labels.*
