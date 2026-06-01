@@ -748,15 +748,6 @@ Add a /science:add-theme skill analogous to /science:add-hypothesis so that them
 
 When 'science tasks list' or other inventory commands hit a schema-validation failure, the error currently shows only the failing field and the accepted-values list (e.g., 'theme_kind: Input should be methodological, biological, translational, evidence-quality or organizational'). Extend the error to include actionable next steps: (a) suggest 'science-tool entity sections <kind>' for the full effective-schema view (once t060 lands, this will include frontmatter constraints), (b) suggest 'science-tool entity create <kind> "Title"' as the preferred path for new entities, (c) cite the source schema file path so users can inspect it directly. Originally surfaced 2026-05-18 while creating themes for cancer/mechanisms/evolution: the schema-validation error correctly listed the accepted theme_kind values but offered no path forward — the agent only discovered 'science-tool entity create theme' existed by probing the CLI separately. Pairs with t060 (frontmatter constraints in entity sections) and t061 (add-theme skill); together they close the create-a-valid-entity discoverability gap from three angles. Low engineering cost relative to t060/t061; mostly a string-formatting change at the validation error sites.
 
-## [t066] Latent-construct / measurement-model bias-correction prototype
-- priority: P2
-- status: proposed
-- aspects: []
-- related: [hypothesis:h00-working-model]
-- created: 2026-05-31
-
-RFC §8.1 / R3. Separate true construct from biased proxy (literature co-occurrence, DEG overlap) as a latent-variable measurement model — correct, not merely flag, publication gravity. The data-driven latent axis is also one half of the patch common space (§2 glue). Proving ground = project:pan-disease question q15 (discovered gene sets); the latent axis is what lets discovered posteriors update elicited panel priors.
-
 ## [t067] Patch federation via ontology + data-driven latent common axis
 - priority: P3
 - status: proposed
@@ -793,3 +784,11 @@ Two pre-pattern hardening items from the t065 review (2026-06-01), to settle bef
 (2) PROV-O ACTIVITY/AGENT MODELING (review #3). The current emission (meta/src/h00_patch_l1/patch.py) uses prov:wasGeneratedBy with an AGENT IRI as a placeholder. PROV-O expects generation by an Activity, with agents linked via attribution/association (prov:wasAttributedTo / prov:wasAssociatedWith). Source provenance, AI extraction/prototype provenance, and human ratification are DISTINCT activities and must not collapse into one edge annotation. Model them as separate activities before this emission is reused as a pattern.
 
 Until both are done, t065 claims stay scoped: 'PROV-O round-trips structurally' (not 'fully carries the agent axis'); 'supports derived opinion as the default next representation' (not 'decides no v4 successor needed').
+
+## [t070] Validate + variance-guard the t066 PMI correction at scale
+- priority: P2
+- status: proposed
+- aspects: []
+- created: 2026-06-01
+
+t066 demonstrated the latent-construct (PMI) correction subtracts the publication-attention axis cleanly at BOTH ends of the slice (7 panel genes positive, 10 universal genes negative, for CMT + HSP) and flips raw-ranking errors. Two things it did NOT establish: (1) behavior on the ambiguous MIDDLE — the clean step is partly a property of a slice built to contrast extremes, so PPMI>0 is a correction, not a calibrated classifier; needs the full 18206x3831 matrix + held-out-panel validation (overlaps pan-disease recall@K / cluster-mate-AUC, the cross-project proving ground). (2) a sampling-variance guard — rare cells have high-variance PMI (e.g. CYP7B1 cooc=39); add shrinkage / Poisson-significance before any fine ranking or near-zero threshold. Code: meta/src/h00_patch_l1/latent.py. Interpretation: interpretation:h00-t066-latent-correction-2026-06-01.

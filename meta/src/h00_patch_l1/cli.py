@@ -4,14 +4,19 @@
 # science:end
 """Run the L1-patch demonstration on the real q14 slice.
 
-    uv run python -m h00_patch_l1            # print the three views for CMT + HSP
+    uv run python -m h00_patch_l1            # print views A–D for CMT + HSP
     uv run python -m h00_patch_l1 --trig OUT # also emit each patch as a TriG named graph
+
+Views A–C are the t065 L1 patch (belief, provenance, honest ignorance, and the
+publication-gravity *discount*); View D is the t066 latent-construct *correction*
+(subtract the attention axis via PMI).
 """
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
+from .latent import correct_disease, three_way_report
 from .model import load_fixture, pubgravity_threshold
 from .patch import build_patch_report, emit_patch_trig
 
@@ -54,6 +59,30 @@ def _print_disease(fixture: dict, mesh_id: str) -> None:
     pct = (100.0 * removed / f["naive_support_score"]) if f["naive_support_score"] else 0.0
     print(f"    -> reduction removed {removed} of {f['naive_support_score']} "
           f"support score ({pct:.0f}%) as publication gravity")
+
+    grand_total = fixture["grand_total"]
+    corrected = sorted(correct_disease(disease, grand_total),
+                       key=lambda c: (c.pmi if c.pmi is not None else -9e9), reverse=True)
+    print("\n  [View D] latent-construct correction: subtract the attention axis (PMI)")
+    print(f"    {'gene':9s} {'panel':5s} {'raw_cooc':>8s} {'PMI':>7s}  specific?")
+    for c in corrected:
+        pmi_s = f"{c.pmi:+.2f}" if c.pmi is not None else "  n/a"
+        print(f"    {c.gene:9s} {('yes' if c.in_panel else 'no'):5s} "
+              f"{c.raw_cooc:8d} {pmi_s:>7s}  {'YES' if c.specific else '·'}")
+    tw = three_way_report(disease, pubgrav, grand_total)
+    print(f"    naive {tw['naive']['support_count']:2d} -> discounted "
+          f"{tw['discounted']['support_count']:2d} (t065) -> corrected "
+          f"{tw['corrected']['support_count']:2d} specific (t066); "
+          f"{tw['corrected']['n_attention_only']} genes were attention-only")
+    # The flip the raw count gets wrong: highest-raw universal gene vs lowest-raw panel gene.
+    univ = [c for c in corrected if not c.in_panel and c.pmi is not None]
+    panel = [c for c in corrected if c.in_panel and c.pmi is not None]
+    if univ and panel:
+        top_u = max(univ, key=lambda c: c.raw_cooc)
+        lo_p = min(panel, key=lambda c: c.raw_cooc)
+        print(f"    flip: raw ranks {top_u.gene}(cooc={top_u.raw_cooc}) "
+              f"over {lo_p.gene}(cooc={lo_p.raw_cooc}); corrected "
+              f"{top_u.gene} PMI={top_u.pmi:+.2f} < {lo_p.gene} PMI={lo_p.pmi:+.2f}")
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -26,6 +26,7 @@ related:
 - task:t067
 - task:t068
 - task:t069
+- task:t070
 source_refs: []
 created: '2026-05-31'
 updated: '2026-05-31'
@@ -161,6 +162,24 @@ supports a subjective-logic opinion as the **default next representation** (RFC
 yet evidence of calibration, contested/base-rate, multi-source, or L2+ adequacy.
 Pre-pattern hardening (mapping sensitivity sweep + PROV-O activity/agent modeling)
 is `task:t069`.
+
+The **latent-construct correction** that t065 named as its next earned step is now
+also runnable (`task:t066`,
+`interpretation:h00-t066-latent-correction-2026-06-01`, code
+`meta/src/h00_patch_l1/latent.py`). It realizes RFC §8.1 / R3: literature
+co-occurrence is modelled as a biased *measurement* of latent biology, the bias
+being publication **attention**, and the attention axis is *subtracted* via PMI
+(the two-way independence residual) — genuine **correction**, where t065 only
+**discounted** double-counting. On the real slice all 7 curated panel genes
+survive (PMI>0) and all 10 universal genes drop (PMI<0) for both diseases,
+flipping raw-co-occurrence ranking errors (HSP's `TNF`, the highest raw count of
+any gene, goes negative; panel `CYP7B1` at cooc 39 goes to +3.16). The per-gene
+attention vector `α_g` **is** the data-driven latent axis named in the GLUE block,
+so this correction and the patch common-space coordinate are one decomposition
+(the PPMI factorization is the `task:t067` successor). **Scope:** the clean
+separation is partly a property of a slice built to contrast extremes —
+`PPMI>0` is a correction, *not* a calibrated panel classifier; full-matrix /
+held-out validation and a PMI sampling-variance guard are `task:t070`.
 
 **Proving ground (external, planned).** The intended proving ground is the
 **pan-disease** project — a *separate* Science project, not registered under this

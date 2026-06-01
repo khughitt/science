@@ -15,15 +15,29 @@ PubTator gene-disease co-occurrence (discovered/empirical route), extracted into
 `fixtures/q14_slice.json`. The cross-project data dependency lives ONLY at
 extraction time; this package consumes the JSON with the standard library.
 
-Three things the prototype demonstrates on real numbers:
+Four things the prototype demonstrates on real numbers:
   1. provenance axes — an EDITORIAL ai-drafted/human-ratified panel assertion is
      structurally lower-status (curation step penalty) than empirical evidence;
-  2. publication gravity as **independence-discounted fusion** — universal genes
-     (co-occur with every disease) share one `publication-gravity` source group
-     and collapse to a single unit instead of inflating the signature;
+  2. publication gravity as **independence-discounted fusion** (t065) — universal
+     genes (co-occur with every disease) share one `publication-gravity` source
+     group and collapse to a single unit instead of inflating the signature;
   3. an honest **uncertainty mass** — a thin editorial-only label carries high
-     ignorance until corroborated (the subjective-logic opinion view).
+     ignorance until corroborated (the subjective-logic opinion view);
+  4. publication gravity as a **latent-construct CORRECTION** (t066, `latent.py`) —
+     subtract the attention axis via PMI; universal genes go negative and drop out
+     as specific support entirely, rather than being collapsed-but-counted (3).
 """
+from .latent import (
+    CorrectedAssociation,
+    build_corrected_signature_units,
+    correct_disease,
+    correct_gene,
+    corrected_fusion,
+    disease_attention,
+    gene_attention,
+    pmi,
+    three_way_report,
+)
 from .model import (
     PUBGRAV_GROUP,
     build_edge_units,
@@ -44,4 +58,14 @@ __all__ = [
     "opinion_from_scores",
     "build_patch_report",
     "emit_patch_trig",
+    # t066 latent-construct correction
+    "CorrectedAssociation",
+    "pmi",
+    "gene_attention",
+    "disease_attention",
+    "correct_gene",
+    "correct_disease",
+    "build_corrected_signature_units",
+    "corrected_fusion",
+    "three_way_report",
 ]

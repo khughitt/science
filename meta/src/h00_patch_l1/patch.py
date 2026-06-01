@@ -19,6 +19,7 @@ from rdflib.namespace import PROV, RDFS, XSD
 from science_tool.graph.belief import aggregate_belief
 from science_tool.graph.belief_scalar import belief_scalar, unit_score
 
+from .latent import correct_gene, corrected_fusion
 from .model import PUBGRAV_GROUP, build_edge_units, build_signature_units, pubgravity_threshold
 from .opinion import Opinion, opinion_from_scores
 
@@ -111,6 +112,7 @@ def emit_patch_trig(fixture: dict, mesh_id: str, out_path: Path) -> Path:
     """Emit the disease patch as a single TriG named graph (D-006)."""
     disease = fixture["diseases"][mesh_id]
     pubgrav = pubgravity_threshold(fixture)
+    grand_total = fixture["grand_total"]
     ds = Dataset()
     patch_iri = URIRef(BASE[f"{mesh_id.replace(':', '_')}-gene-association"])
     g = ds.graph(patch_iri)
@@ -129,6 +131,13 @@ def emit_patch_trig(fixture: dict, mesh_id: str, out_path: Path) -> Path:
            Literal(fusion["naive_support_score"], datatype=XSD.integer)))
     g.add((patch_iri, SCI.discountedSupportScore,
            Literal(fusion["discounted_support_score"], datatype=XSD.integer)))
+    # t066: attention-CORRECTED support (PMI>0 genes only) — distinct from the
+    # t065 discount, which collapsed-but-counted the publication-gravity group.
+    corrected = corrected_fusion(disease, grand_total)
+    g.add((patch_iri, SCI.correctedSupportScore,
+           Literal(corrected["corrected_support_score"], datatype=XSD.integer)))
+    g.add((patch_iri, SCI.attentionOnlyGeneCount,
+           Literal(corrected["n_attention_only"], datatype=XSD.integer)))
 
     for gene in disease["genes"]:
         units = build_edge_units(disease, gene, pubgrav)
@@ -149,6 +158,13 @@ def emit_patch_trig(fixture: dict, mesh_id: str, out_path: Path) -> Path:
         g.add((edge, SCI.opinionBelief, Literal(round(eb.opinion.belief, 4), datatype=XSD.decimal)))
         g.add((edge, SCI.opinionUncertainty,
                Literal(round(eb.opinion.uncertainty, 4), datatype=XSD.decimal)))
+        # t066 latent-construct correction: attention-subtracted association (PMI)
+        # and whether the edge survives it. This is the *corrected* axis, vs the
+        # raw `publicationGravity` flag below (which only marks the bias).
+        ca = correct_gene(disease, gene, grand_total)
+        if ca.pmi is not None:
+            g.add((edge, SCI.pmi, Literal(round(ca.pmi, 4), datatype=XSD.decimal)))
+            g.add((edge, SCI.specificAfterCorrection, Literal(ca.specific)))
         # PROV agent axis (PLACEHOLDER, not a sanctioned pattern — see task t069):
         # PROV-O expects generation by an *Activity* with agents attached via
         # attribution/association, and source / AI-drafting / human-ratification are
