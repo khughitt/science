@@ -50,6 +50,22 @@ class CommonsQuery:
             )
         return self._hydrate(row)
 
+    def list(self) -> list[CommonsEntityRecord]:
+        self._require_registry()
+        self._warn_if_stale()
+        sql = f"SELECT {_ENTITY_COLUMNS} FROM entities ORDER BY canonical_id"
+        try:
+            conn = sqlite3.connect(self._root / REGISTRY_FILENAME)
+            try:
+                rows = conn.execute(sql).fetchall()
+            finally:
+                conn.close()
+        except sqlite3.Error as exc:
+            raise CommonsRegistryError(
+                self._root / REGISTRY_FILENAME, cause=exc
+            ) from exc
+        return [self._hydrate(row) for row in rows]
+
     def find(
         self,
         type: str,

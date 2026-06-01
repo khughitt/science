@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import date
 from enum import StrEnum
-from typing import TextIO
+from typing import Any, TextIO
 
 import click
 from rich.console import Console
@@ -73,6 +73,26 @@ ENTITY_KIND_STYLES: dict[str, tuple[str, str]] = {
     "paper": ("bold bright_cyan", "bright_cyan"),
     "workflow": ("bold bright_blue", "bright_blue"),
     "workflow-run": ("bold blue", "blue"),
+}
+
+ENTITY_STATUS_STYLES: dict[str, str] = {
+    "active": "green",
+    "open": "green",
+    "proposed": "yellow",
+    "draft": "yellow",
+    "candidate": "yellow",
+    "under-investigation": "bold yellow",
+    "partially-answered": "cyan",
+    "partially-supported": "cyan",
+    "supported": "bold green",
+    "answered": "bold green",
+    "complete": "bold green",
+    "contested": "bold red",
+    "weakened": "red",
+    "refuted": "bold red",
+    "deferred": "dim",
+    "superseded": "dim",
+    "retired": "dim strike",
 }
 
 MUTED_STYLE = "dim"
@@ -183,3 +203,29 @@ def render_entity_ref(ref: str) -> Text:
     text.append(":")
     text.append(local_part, style=local_style)
     return text
+
+
+def render_entity_kind(kind: str) -> Text:
+    prefix_style, _ = entity_kind_styles(kind)
+    return Text(kind, style=prefix_style)
+
+
+def render_entity_status(status: str) -> Text:
+    if not status:
+        return Text("")
+    return Text(status, style=ENTITY_STATUS_STYLES.get(status, ""))
+
+
+def render_muted(value: object) -> Text:
+    return Text(str(value), style=MUTED_STYLE)
+
+
+def entity_table_renderers() -> dict[str, Callable[[Any, Mapping[str, Any]], Any]]:
+    return {
+        "id": lambda value, _row: render_entity_ref(str(value)),
+        "canonical_id": lambda value, _row: render_entity_ref(str(value)),
+        "kind": lambda value, _row: render_entity_kind(str(value)),
+        "type": lambda value, _row: render_entity_kind(str(value)),
+        "status": lambda value, _row: render_entity_status(str(value)),
+        "path": lambda value, _row: render_muted(value),
+    }

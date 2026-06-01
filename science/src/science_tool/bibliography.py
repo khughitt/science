@@ -127,7 +127,7 @@ def add_bib_entry(project_root: Path, entry: str, *, replace: bool = False) -> B
     A single locked open-read-write-replace cycle eliminates the Read→Edit
     mtime race that the Edit tool hits when Dropbox touches the file mid-edit,
     and an exclusive ``flock`` serializes concurrent appends from parallel
-    subagents (the same problem ``science question reserve`` solves for
+    subagents (the same problem ``science questions reserve`` solves for
     question files). Idempotent by key: an entry whose key already exists is a
     no-op unless ``replace=True``, which swaps the existing block in place.
     """

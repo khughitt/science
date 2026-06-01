@@ -343,20 +343,20 @@ After analyzing results, create structured entities in addition to the prose doc
 - **Partially-migrated project (no `knowledge/graph.trig`).** Every `science graph …` command below
   will error. Do not try them per-command and accept the failures — instead route the structured
   output to **source-authored files** (the durable path below), and keep the interpretation itself in
-  `doc/interpretations/` via `science interpretation create`. Note this in the output mode line.
+  `doc/interpretations/` via `science interpretations create`. Note this in the output mode line.
 - **`graph add` is non-durable even when the graph exists.** `science graph add
   observation/proposition/evidence/finding` writes *directly into* `graph.trig` and is **wiped on the
   next `science graph build`** (the CLI prints this warning). Use `graph add` only for throwaway
   inspection. For anything that must survive a rebuild, author it in a source the build reads:
 
-  - **Proposition** → `science proposition create "<title>"` (durable source-authored entity).
+  - **Proposition** → `science propositions create "<title>"` (durable source-authored entity).
   - **Observation** → it has no standalone source entity; **anchor it inside** a proposition,
     finding, or interpretation source file rather than as a free-standing `graph add observation`.
   - **Evidence with stance / strength / independence** → author an **evidence-line** entity under
     `doc/evidence-lines/*.md` (kind `evidence-line`), which the build reads and materializes; or
     express the relation inside the proposition/finding/interpretation source file. (Do not rely on a
     bare `graph add evidence` edge — it does not survive the build.)
-  - **Interpretation / finding** → `science interpretation create` (step 5 below) produces a durable
+  - **Interpretation / finding** → `science interpretations create` (step 5 below) produces a durable
     source document; prefer it over `graph add interpretation`.
 
 The `graph add …` recipes below are the *throwaway-inspection* form; mirror each into the
@@ -375,7 +375,7 @@ source-authored form above when the entity must persist.
    `science graph add finding "<summary>" --confidence moderate --proposition <ref> --observation <ref> --source <data-package-ref>`
 
 5. Create the interpretation as a source-authored entity:
-   `science interpretation create "<summary>" --input <data-package-ref> --related <finding-or-proposition-ref>`
+   `science interpretations create "<summary>" --input <data-package-ref> --related <finding-or-proposition-ref>`
 
    This places the file under `doc/interpretations/<today>-<slug>.md` with canonical frontmatter and runs prospective validation. Prefer this over the older `science graph add interpretation`, which still works but does not produce a durable source document.
 
@@ -432,10 +432,10 @@ Pick the template that matches the mode:
 
 If the project uses open questions rather than formal hypotheses, adapt section headers in the output document accordingly — e.g., "Question-Level Implications" instead of "Hypothesis-Level Implications". Evaluate against questions in `doc/questions/` rather than hypothesis files in `specs/hypotheses/`.
 
-Create the interpretation file with `science interpretation create`:
+Create the interpretation file with `science interpretations create`:
 
 ```bash
-uv run science interpretation create "<short title>" \
+uv run science interpretations create "<short title>" \
   --input <data-package-or-run-ref> \
   --related <hypothesis:hNN-...|question:qNN-...>
 ```
@@ -444,8 +444,8 @@ The tool builds the canonical `interpretation:<today>-<slug>` ID, places the fil
 
 ## After Writing
 
-1. Update relevant hypothesis documents with new support/dispute and uncertainty notes. For metadata changes use `science hypothesis edit <ref> --status ...`; for body changes edit the file in place. Do not mechanically flip statuses to `supported` or `rejected`.
-2. **New questions surfaced:** create them with `science question create "<text>" [--related <ref>] [--source-ref <ref>]`. To attach the new question to the interpretation, run `science entity edit <interpretation-ref> --related <question-ref>`.
+1. Update relevant hypothesis documents with new support/dispute and uncertainty notes. For metadata changes use `science entity edit <ref> --status ...`; for body changes edit the file in place. Do not mechanically flip statuses to `supported` or `rejected`.
+2. **New questions surfaced:** create them with `science questions create "<text>" [--related <ref>] [--source-ref <ref>]`. To attach the new question to the interpretation, run `science entity edit <interpretation-ref> --related <question-ref>`.
 3. Update tasks via `science tasks`.
 Write durable result interpretations under `doc/interpretations/`, and when the findings change the project-level narrative or current state substantially, summarize that in `doc/reports/` as well.
 4. If graph updates were proposed, point the user to the exact proposition or evidence updates to make.

@@ -123,7 +123,7 @@ For each non-trivial scientific relation in the inquiry:
 2. Create a durable proposition
 
 ```bash
-science proposition create "<clear proposition title>" \
+science propositions create "<clear proposition title>" \
   --id "proposition:<id>" \
   --source-ref "<ref>"
 ```

@@ -43,6 +43,8 @@ from science_tool.commons.query import CommonsQuery
 from science_tool.commons.registry import RegistryBuilder
 from science_tool.commons.resolver import resolve
 from science_tool.commons.validator import CommonsValidator
+from science_tool.output import OUTPUT_FORMATS, emit_query_rows
+from science_tool.styles import entity_table_renderers
 
 if TYPE_CHECKING:
     from science_model.entity_schema.profile import ProfileComponent
@@ -146,6 +148,31 @@ def show_cmd(entity_id: str, as_json: bool, project: str | None) -> None:
         _print_merged_human(merged)
 
 
+@commons_group.command("list")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def list_cmd(output_format: str) -> None:
+    """List all indexed commons entities."""
+    root = _require_root()
+    try:
+        records = CommonsQuery(root).list()
+    except CommonsError as exc:
+        raise click.ClickException(str(exc)) from exc
+    rows = [_record_summary(record, root) for record in records]
+    emit_query_rows(
+        output_format=output_format,
+        title="Commons",
+        columns=[
+            ("id", "ID"),
+            ("kind", "Kind"),
+            ("status", "Status"),
+            ("title", "Title"),
+            ("path", "Path"),
+        ],
+        rows=rows,
+        renderers=entity_table_renderers(),
+    )
+
+
 @commons_group.command("find")
 @click.argument("entity_type", type=click.Choice(["dataset", "paper", "topic", "theme"]))
 @click.option("--tag", "tags", multiple=True, help="Filter by tag (repeatable; AND).")
@@ -213,6 +240,16 @@ def _record_to_json(record: CommonsEntityRecord, root: Path) -> dict:
             ),
             "mtime_ns": record.mtime_ns,
         },
+    }
+
+
+def _record_summary(record: CommonsEntityRecord, root: Path) -> dict[str, str]:
+    return {
+        "id": record.canonical_id,
+        "kind": record.type,
+        "status": str(record.frontmatter.get("status", "")),
+        "title": str(record.frontmatter.get("title", "")),
+        "path": str(record.body_path.relative_to(root)),
     }
 
 

@@ -92,12 +92,12 @@ custom checks.
 | Research a topic | `/science:research-topic` | `science-research-topic` | source-authored docs |
 | Search literature | `/science:search-literature` | `science-search-literature` | `science bib add` |
 | Summarize papers | `/science:research-papers` | `science-research-papers` | source-authored docs |
-| Add hypotheses | `/science:add-hypothesis` | `science-add-hypothesis` | `science hypothesis create` |
+| Add hypotheses | `/science:add-hypothesis` | `science-add-hypothesis` | `science hypotheses create` |
 | Pre-register | `/science:pre-register` | `science-pre-register` | source-authored docs |
 | Compare alternatives | `/science:compare-hypotheses` | `science-compare-hypotheses` | source-authored docs |
-| Discuss critically | `/science:discuss` | `science-discuss` | `science discussion create` |
+| Discuss critically | `/science:discuss` | `science-discuss` | `science discussions create` |
 | Audit bias | `/science:bias-audit` | `science-bias-audit` | source-authored docs |
-| Create propositions | workflow-guided | workflow-guided | `science proposition create` |
+| Create propositions | workflow-guided | workflow-guided | `science propositions create` |
 | Add evidence lines | workflow-guided | workflow-guided | `science entity create evidence-line ...` |
 | Sketch a model | `/science:sketch-model` | `science-sketch-model` | `science inquiry init` |
 | Specify a model | `/science:specify-model` | `science-specify-model` | `science inquiry add-node`, `science inquiry add-edge` |

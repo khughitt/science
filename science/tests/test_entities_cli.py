@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -13,6 +14,8 @@ from science_model.entities import EntityClass
 from science_model.profiles.schema import ProfileManifest
 from science_tool.cli import main
 from science_tool.graph.sources import load_project_sources
+
+ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 def test_entity_create_question_writes_source() -> None:
@@ -31,6 +34,102 @@ def test_entity_create_question_writes_source() -> None:
         assert result.exit_code == 0, result.output
         assert "question:q02-new-question" in result.output
         assert Path("doc/questions/q02-new-question.md").is_file()
+
+
+def test_questions_create_uses_plural_group_and_singular_is_removed() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "doc/questions/q01-existing.md",
+            {"id": "question:q01-existing", "type": "question", "title": "Existing", "status": "active"},
+        )
+
+        result = runner.invoke(main, ["questions", "create", "New Question"])
+        removed = runner.invoke(main, ["question", "--help"])
+
+        assert result.exit_code == 0, result.output
+        assert "question:q02-new-question" in result.output
+        assert Path("doc/questions/q02-new-question.md").is_file()
+        assert removed.exit_code != 0
+        assert "No such command 'question'" in removed.output
+
+
+def test_questions_show_rejects_other_entity_kinds() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "specs/hypotheses/h01-alpha.md",
+            {"id": "hypothesis:h01-alpha", "type": "hypothesis", "title": "Alpha", "status": "proposed"},
+        )
+
+        result = runner.invoke(main, ["questions", "show", "h01"])
+
+        assert result.exit_code != 0
+        assert "Expected question entity, got hypothesis:h01-alpha" in result.output
+
+
+def test_plural_entity_list_and_show_commands() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "doc/questions/q01-alpha.md",
+            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "active"},
+            "# Alpha\n\n## Summary\n\nBody content.\n",
+        )
+        write_markdown_entity(
+            root,
+            "specs/hypotheses/h01-beta.md",
+            {"id": "hypothesis:h01-beta", "type": "hypothesis", "title": "Beta", "status": "proposed"},
+        )
+        write_markdown_entity(
+            root,
+            "doc/discussions/2026-06-01-gamma.md",
+            {
+                "id": "discussion:2026-06-01-gamma",
+                "type": "discussion",
+                "title": "Gamma",
+                "status": "active",
+            },
+        )
+
+        questions_show = runner.invoke(main, ["questions", "show", "q01"])
+        hypotheses_list = runner.invoke(main, ["hypotheses", "list", "--format", "json"])
+        discussions_list = runner.invoke(main, ["discussions", "list"])
+
+        assert questions_show.exit_code == 0, questions_show.output
+        assert "question:q01-alpha" in questions_show.output
+        assert "Body content." in questions_show.output
+        assert hypotheses_list.exit_code == 0, hypotheses_list.output
+        assert [row["id"] for row in json.loads(hypotheses_list.output)["rows"]] == ["hypothesis:h01-beta"]
+        assert discussions_list.exit_code == 0, discussions_list.output
+        assert "discussion:2026-06-01-gamma" in discussions_list.output
+
+
+def test_plural_entity_list_uses_shared_color_styles() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "doc/questions/q01-alpha.md",
+            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "active"},
+        )
+
+        result = runner.invoke(main, ["--color", "always", "questions", "list"])
+
+        assert result.exit_code == 0, result.output
+        assert "question:q01-alpha" in ANSI_RE.sub("", result.output)
+        assert ANSI_RE.search(result.output) is not None
 
 
 def test_entity_create_theme_cli_round_trips() -> None:
@@ -792,7 +891,7 @@ def test_question_create_wrapper_delegates_to_entity_create() -> None:
             {"id": "question:q01-existing", "type": "question", "title": "Existing", "status": "open"},
         )
 
-        result = runner.invoke(main, ["question", "create", "Wrapper Question", "--slug", "wrapper"])
+        result = runner.invoke(main, ["questions", "create", "Wrapper Question", "--slug", "wrapper"])
 
         assert result.exit_code == 0, result.output
         assert "question:q02-wrapper" in result.output
@@ -808,7 +907,7 @@ def test_discussion_focus_maps_to_related() -> None:
         result = runner.invoke(
             main,
             [
-                "discussion",
+                "discussions",
                 "create",
                 "Planning",
                 "--id",
@@ -831,7 +930,7 @@ def test_interpretation_input_maps_to_source_refs() -> None:
         result = runner.invoke(
             main,
             [
-                "interpretation",
+                "interpretations",
                 "create",
                 "Result",
                 "--id",
@@ -880,7 +979,7 @@ def test_proposition_create_writes_source() -> None:
         result = runner.invoke(
             main,
             [
-                "proposition",
+                "propositions",
                 "create",
                 "Cadence shapes recovered switch history",
                 "--id",
@@ -921,7 +1020,7 @@ def test_graph_add_proposition_warns_about_ephemerality() -> None:
 
         assert result.exit_code == 0, result.output
         assert "wiped on the next" in result.output
-        assert "proposition create" in result.output
+        assert "propositions create" in result.output
 
 
 def test_graph_add_observation_warns_about_ephemerality() -> None:
@@ -1073,7 +1172,7 @@ def test_discussion_create_without_id_uses_today() -> None:
         root = Path.cwd()
         seed_project(root)
 
-        result = runner.invoke(main, ["discussion", "create", "Planning"])
+        result = runner.invoke(main, ["discussions", "create", "Planning"])
 
         assert result.exit_code == 0, result.output
         today = date.today().isoformat()
@@ -1089,7 +1188,7 @@ def test_discussion_create_with_optional_section_includes_addendum() -> None:
         root = Path.cwd()
         seed_project(root)
 
-        result = runner.invoke(main, ["discussion", "create", "Test discussion", "--with", "double-blind-addendum"])
+        result = runner.invoke(main, ["discussions", "create", "Test discussion", "--with", "double-blind-addendum"])
 
         assert result.exit_code == 0, result.output
         today = date.today().isoformat()
@@ -1106,7 +1205,7 @@ def test_hypothesis_create_phase_candidate_sets_field_and_includes_promotion_cri
 
         result = runner.invoke(
             main,
-            ["hypothesis", "create", "Trial framing", "--id", "hypothesis:h01-trial-framing", "--phase", "candidate"],
+            ["hypotheses", "create", "Trial framing", "--id", "hypothesis:h01-trial-framing", "--phase", "candidate"],
         )
 
         assert result.exit_code == 0, result.output
@@ -1123,7 +1222,7 @@ def test_hypothesis_create_defaults_phase_active_without_promotion_criteria() ->
         seed_project(root)
 
         result = runner.invoke(
-            main, ["hypothesis", "create", "Committed frame", "--id", "hypothesis:h01-committed-frame"]
+            main, ["hypotheses", "create", "Committed frame", "--id", "hypothesis:h01-committed-frame"]
         )
 
         assert result.exit_code == 0, result.output
@@ -1141,7 +1240,7 @@ def test_discussion_create_no_hints_strips_html_comments() -> None:
         root = Path.cwd()
         seed_project(root)
 
-        result = runner.invoke(main, ["discussion", "create", "Test discussion", "--no-hints"])
+        result = runner.invoke(main, ["discussions", "create", "Test discussion", "--no-hints"])
 
         assert result.exit_code == 0, result.output
         today = date.today().isoformat()
@@ -1175,7 +1274,7 @@ def test_discussion_create_unknown_section_key_errors() -> None:
         root = Path.cwd()
         seed_project(root)
 
-        result = runner.invoke(main, ["discussion", "create", "Test discussion", "--with", "bogus"])
+        result = runner.invoke(main, ["discussions", "create", "Test discussion", "--with", "bogus"])
 
         assert result.exit_code != 0
         assert "bogus" in result.output

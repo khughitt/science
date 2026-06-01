@@ -64,6 +64,33 @@ def test_index_rebuild_json(
     assert payload["duration_ms"] >= 0
 
 
+def test_list_outputs_all_indexed_entities(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import shutil
+
+    fixtures = Path(__file__).parent / "fixtures" / "commons" / "valid"
+    root = tmp_path / "commons"
+    shutil.copytree(fixtures, root)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    runner = CliRunner()
+    rebuild = runner.invoke(commons_group, ["index", "rebuild"])
+    result = runner.invoke(commons_group, ["list", "--format", "json"])
+
+    assert rebuild.exit_code == 0, rebuild.output
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert [row["id"] for row in payload["rows"]] == [
+        "dataset:cath-domains",
+        "dataset:rnaseq-example",
+        "paper:Adams2025",
+        "theme:research-hygiene",
+        "topic:single-cell-foundation-models",
+    ]
+
+
 def test_index_rebuild_exit_1_when_entity_errors(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

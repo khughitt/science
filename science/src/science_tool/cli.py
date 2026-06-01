@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import click
+from rich.text import Text
 
 from science_tool.causal.export_chirho import export_chirho_script
 from science_tool.causal.export_pgmpy import export_pgmpy_script
@@ -104,7 +105,17 @@ from science_tool.markers_cli import markers_group
 from science_tool.prose_lint_cli import prose_group
 from science_tool.refs_cli import refs_group
 from science_tool.research_package.cli import research_package_group
-from science_tool.styles import COLOR_POLICY_CHOICES, resolve_color_policy, set_color_policy
+from science_tool.styles import (
+    COLOR_POLICY_CHOICES,
+    entity_table_renderers,
+    get_console,
+    render_entity_kind,
+    render_entity_ref,
+    render_entity_status,
+    render_muted,
+    resolve_color_policy,
+    set_color_policy,
+)
 from science_tool.validate.cli import validate_cmd
 from science_tool.verdict.cli import verdict_group
 from science_tool.skills_lint import skills_group
@@ -336,31 +347,7 @@ def entity_show(ref: str, output_format: str) -> None:
         location = find_entity(Path.cwd(), ref)
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
-    related = _frontmatter_string_list(location.frontmatter.get("related"))
-    source_refs = _frontmatter_string_list(location.frontmatter.get("source_refs"))
-    payload = {
-        "id": location.entity_id,
-        "kind": location.kind,
-        "title": location.title,
-        "status": location.status,
-        "path": location.rel_path,
-        "related": related,
-        "source_refs": source_refs,
-        "body": location.body,
-    }
-    if output_format == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
-    click.echo(f"id: {payload['id']}")
-    click.echo(f"type: {payload['kind']}")
-    click.echo(f"title: {payload['title']}")
-    click.echo(f"status: {payload['status']}")
-    click.echo(f"path: {payload['path']}")
-    click.echo(f"related: {', '.join(related)}")
-    click.echo(f"source_refs: {', '.join(source_refs)}")
-    if location.body:
-        click.echo()
-        click.echo(location.body.rstrip("\n"))
+    _emit_entity_show(location, output_format)
 
 
 @entity_group.command("edit")
@@ -432,6 +419,7 @@ def entity_list(kind: str | None, status: str | None, related: str | None, outpu
         title="Entities",
         columns=[("id", "ID"), ("kind", "Kind"), ("status", "Status"), ("title", "Title"), ("path", "Path")],
         rows=rows,
+        renderers=entity_table_renderers(),
     )
 
 
@@ -532,7 +520,7 @@ def entity_needs_review(output_format: str) -> None:
     )
 
 
-@main.group("proposition")
+@main.group("propositions")
 def proposition_group() -> None:
     """Proposition source commands."""
 
@@ -574,7 +562,24 @@ def proposition_create(
     )
 
 
-@main.group("hypothesis")
+@proposition_group.command("show")
+@click.argument("ref")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def proposition_show(ref: str, output_format: str) -> None:
+    """Show a source-authored proposition."""
+    _show_typed_entity("proposition", ref, output_format)
+
+
+@proposition_group.command("list")
+@click.option("--status")
+@click.option("--related")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def proposition_list(status: str | None, related: str | None, output_format: str) -> None:
+    """List source-authored propositions."""
+    _list_typed_entities("proposition", status, related, output_format)
+
+
+@main.group("hypotheses")
 def hypothesis_group() -> None:
     """Hypothesis source commands."""
 
@@ -629,7 +634,24 @@ def hypothesis_create(
     )
 
 
-@main.group("discussion")
+@hypothesis_group.command("show")
+@click.argument("ref")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def hypothesis_show(ref: str, output_format: str) -> None:
+    """Show a source-authored hypothesis."""
+    _show_typed_entity("hypothesis", ref, output_format)
+
+
+@hypothesis_group.command("list")
+@click.option("--status")
+@click.option("--related")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def hypothesis_list(status: str | None, related: str | None, output_format: str) -> None:
+    """List source-authored hypotheses."""
+    _list_typed_entities("hypothesis", status, related, output_format)
+
+
+@main.group("discussions")
 def discussion_group() -> None:
     """Discussion source commands."""
 
@@ -671,7 +693,24 @@ def discussion_create(
     )
 
 
-@main.group("interpretation")
+@discussion_group.command("show")
+@click.argument("ref")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def discussion_show(ref: str, output_format: str) -> None:
+    """Show a source-authored discussion."""
+    _show_typed_entity("discussion", ref, output_format)
+
+
+@discussion_group.command("list")
+@click.option("--status")
+@click.option("--related")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def discussion_list(status: str | None, related: str | None, output_format: str) -> None:
+    """List source-authored discussions."""
+    _list_typed_entities("discussion", status, related, output_format)
+
+
+@main.group("interpretations")
 def interpretation_group() -> None:
     """Interpretation source commands."""
 
@@ -713,6 +752,23 @@ def interpretation_create(
     )
 
 
+@interpretation_group.command("show")
+@click.argument("ref")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def interpretation_show(ref: str, output_format: str) -> None:
+    """Show a source-authored interpretation."""
+    _show_typed_entity("interpretation", ref, output_format)
+
+
+@interpretation_group.command("list")
+@click.option("--status")
+@click.option("--related")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def interpretation_list(status: str | None, related: str | None, output_format: str) -> None:
+    """List source-authored interpretations."""
+    _list_typed_entities("interpretation", status, related, output_format)
+
+
 def _create_typed_entity(
     *,
     kind: str,
@@ -746,6 +802,87 @@ def _create_typed_entity(
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Created {result.entity_id} at {result.path.relative_to(Path.cwd())}")
     _emit_entity_warnings(result.warnings)
+
+
+def _show_typed_entity(kind: str, ref: str, output_format: str) -> None:
+    try:
+        location = find_entity(Path.cwd(), ref)
+    except EntityCommandError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if location.kind != kind:
+        raise click.ClickException(f"Expected {kind} entity, got {location.entity_id}")
+    _emit_entity_show(location, output_format)
+
+
+def _list_typed_entities(kind: str, status: str | None, related: str | None, output_format: str) -> None:
+    try:
+        rows = list_entities(Path.cwd(), kind=kind, status=status, related=related)
+    except EntityCommandError as exc:
+        raise click.ClickException(str(exc)) from exc
+    emit_query_rows(
+        output_format=output_format,
+        title=_ENTITY_LIST_TITLES.get(kind, kind.replace("-", " ").title() + "s"),
+        columns=[("id", "ID"), ("status", "Status"), ("title", "Title"), ("path", "Path")],
+        rows=rows,
+        renderers=entity_table_renderers(),
+    )
+
+
+_ENTITY_LIST_TITLES = {
+    "discussion": "Discussions",
+    "hypothesis": "Hypotheses",
+    "interpretation": "Interpretations",
+    "proposition": "Propositions",
+    "question": "Questions",
+}
+
+
+def _entity_show_payload(location: Any) -> dict[str, object]:
+    return {
+        "id": location.entity_id,
+        "kind": location.kind,
+        "title": location.title,
+        "status": location.status,
+        "path": location.rel_path,
+        "related": _frontmatter_string_list(location.frontmatter.get("related")),
+        "source_refs": _frontmatter_string_list(location.frontmatter.get("source_refs")),
+        "body": location.body,
+    }
+
+
+def _emit_entity_show(location: Any, output_format: str) -> None:
+    payload = _entity_show_payload(location)
+    if output_format == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    console = get_console(file=click.get_text_stream("stdout"))
+    _print_entity_field(console, "id", render_entity_ref(str(payload["id"])))
+    _print_entity_field(console, "type", render_entity_kind(str(payload["kind"])))
+    _print_entity_field(console, "title", Text(str(payload["title"])))
+    _print_entity_field(console, "status", render_entity_status(str(payload["status"])))
+    _print_entity_field(console, "path", render_muted(payload["path"]))
+    _print_entity_refs_field(console, "related", payload["related"])
+    _print_entity_refs_field(console, "source_refs", payload["source_refs"])
+    if location.body:
+        click.echo()
+        console.print(Text(location.body.rstrip("\n")))
+
+
+def _print_entity_field(console: Any, label: str, value: Text) -> None:
+    line = Text(f"{label}: ")
+    line.append_text(value)
+    console.print(line)
+
+
+def _print_entity_refs_field(console: Any, label: str, refs: object) -> None:
+    line = Text(f"{label}: ")
+    if isinstance(refs, list):
+        for index, ref in enumerate(refs):
+            if index:
+                line.append(", ")
+            line.append_text(render_entity_ref(str(ref)))
+    console.print(line)
 
 
 def _emit_entity_warnings(warnings: list[str]) -> None:
@@ -1885,7 +2022,7 @@ def add_proposition_cmd(
         "WARNING: this entry is written directly to graph.trig and will be wiped on the next "
         "`science graph build`, which rematerialises the graph from markdown sources."
     )
-    click.echo("Tip: use `science proposition create <title>` for durable source-authored project work.")
+    click.echo("Tip: use `science propositions create <title>` for durable source-authored project work.")
 
 
 @graph_add.command("observation")
@@ -4018,7 +4155,7 @@ def paper_fetch_cmd(
     click.echo(_json.dumps(result.to_dict(), indent=2))
 
 
-@main.group()
+@main.group("questions")
 def question() -> None:
     """Question-file management commands."""
 
@@ -4058,6 +4195,23 @@ def question_create(
         without_sections=list(without_sections),
         no_hints=no_hints,
     )
+
+
+@question.command("show")
+@click.argument("ref")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def question_show(ref: str, output_format: str) -> None:
+    """Show a source-authored question."""
+    _show_typed_entity("question", ref, output_format)
+
+
+@question.command("list")
+@click.option("--status")
+@click.option("--related")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def question_list(status: str | None, related: str | None, output_format: str) -> None:
+    """List source-authored questions."""
+    _list_typed_entities("question", status, related, output_format)
 
 
 def _split_csv(value: str | None) -> list[str]:

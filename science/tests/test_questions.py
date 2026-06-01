@@ -169,7 +169,7 @@ class TestReserveQuestion:
         assert nested.is_dir()
 
     def test_counts_create_style_unprefixed_files(self, tmp_path: Path) -> None:
-        """`science question create` writes NN-slug.md (no q prefix). reserve must
+        """`science questions create` writes NN-slug.md (no q prefix). reserve must
         count those when picking the next number, or it silently reissues a number
         that create already used."""
         (tmp_path / "02-foo.md").write_text("# foo\n")
@@ -197,7 +197,7 @@ def test_question_reserve_accepts_format_json(tmp_path: Path) -> None:
     result = runner.invoke(
         main,
         [
-            "question",
+            "questions",
             "reserve",
             "--slug",
             "why-things",
