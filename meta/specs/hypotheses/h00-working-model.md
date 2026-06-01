@@ -146,6 +146,18 @@ glue, R2 richer uncertainty view, R3 latent/measurement bias-correction, R4 wiri
 the existing pgmpy/ChiRho exporters, R5 provenance query surface, R6 elicited-belief
 representation.
 
+A first **L1 patch is now runnable** (`task:t065`,
+`interpretation:h00-l1-patch-prototype-2026-06-01`, code `meta/src/h00_patch_l1/`):
+on the real pan-disease q14 slice it reuses the shipped belief machinery, emits a
+patch as a TriG named graph (D-006), and shows the model's two headline
+properties on real numbers — provenance-qualified editorial labels carry
+*structurally* higher uncertainty (an HSP label alone → ignorance mass `u`=1.0),
+and publication gravity is removed as independence-discounted fusion (10 universal
+genes collapse to one; 53 % of the naive support score discounted). It supports
+the RFC §12.3 recommendation (a subjective-logic opinion as a **derived view**,
+not a v4 successor) and motivates R3/`task:t066` (correct, don't merely flag, the
+latent attention bias).
+
 **Proving ground (external, planned).** The intended proving ground is the
 **pan-disease** project — a *separate* Science project, not registered under this
 repo. The references below are **cross-project, named in prose only** (they are

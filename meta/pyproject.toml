@@ -28,7 +28,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/h01_simulator", "src/t034_validator"]
+packages = ["src/h01_simulator", "src/t034_validator", "src/h00_patch_l1"]
 
 [tool.pyright]
 include = ["src", "tests"]
