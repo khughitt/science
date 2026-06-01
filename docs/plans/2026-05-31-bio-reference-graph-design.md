@@ -2,7 +2,7 @@
 
 Date: 2026-05-31
 
-Status: RG1 and RG2 implemented locally; RG3+ pending
+Status: RG1, RG2, and RG4 implemented locally; RG3 and RG5 pending
 
 Related:
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; RG1 partly addresses its non-tabular-reference open item
@@ -397,7 +397,7 @@ The model therefore covers non-tabular references without weakening the flat gen
 | RG1 | Schema + parser + validation over tiny fixture graph/index/edge resources; node index required | implemented locally |
 | RG2 | Virtual member payload resolution for promoted graph members; payload includes node row plus directly incident edges and exposes member-level `dataset_usage` for later B hooks | implemented locally |
 | RG3 | Broader graph-member promotion workflows and unpromoted-member B materialization hooks | pending |
-| RG4 | First real commons recipe, likely MONDO or GO, with pinned release artifacts | pending |
+| RG4 | First real commons recipe: `dataset:mondo` from pinned MONDO OBO Graph JSON, with node/edge projections | implemented locally |
 | RG5 | Later non-molecular identity resolvers over one or more reference graphs | pending |
 
 RG2 is implemented locally for promoted `bio.reference_graph.member` datasets. The generic
@@ -430,6 +430,6 @@ work because RG2 only returns payload data; it does not emit influence graph rec
 
 ## 11. Next step
 
-RG1 and RG2 are implemented locally. Next, plan RG3/RG4 follow-ups: broader graph-member promotion
-workflows, unpromoted-member B materialization, and the first real MONDO or GO commons recipe with
-pinned release artifacts. Later non-molecular identity resolvers remain subsequent phases.
+RG1, RG2, and RG4 are implemented locally. Remaining follow-ups are broader graph-member promotion
+workflows, unpromoted-member B materialization, additional real graph recipes such as GO and Open
+Targets, and non-molecular identity resolvers.
