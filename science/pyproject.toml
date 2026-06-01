@@ -16,6 +16,7 @@ dependencies = [
   "hgvs>=1.5.5,<2",
   "science-model",
   "ruff>=0.15.6",
+  "pyarrow>=24.0.0",
 ]
 
 [project.scripts]
