@@ -79,6 +79,6 @@ That could save custom parsing work, but the implementation plan should verify w
 
 ## Follow-up
 
-Draft the MONDO commons ingestion plan around a pinned release, not the paper's 2022 counts.
+The MONDO commons ingestion path now targets pinned MONDO release `v2026-05-05` and derives counts from the built `nodes.csv`/`edges.csv`, not from the paper's 2022 release statistics.
 Prototype two extraction paths before committing the recipe design: direct MONDO release artifact parsing versus BioOntologies-mediated OBO Graph JSON conversion.
 The acceptance test should include at least one active disease term, one obsolete/deprecated term with replacement metadata, one `is_a` edge, and one xref/equivalence-like edge that remains a relation rather than an identity rewrite.

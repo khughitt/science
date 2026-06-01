@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a/C4b merged locally and C4c-1 rsID input implemented locally with full dbSNP artifact build/operator smoke pending + Pillar A (A1 + A2) merged and complete; Pillar D1, B1, B-migration, B2, and E (Reactome ingestion) merged locally; non-tabular reference modeling is partly resolved by `bio.reference_graph` RG1/RG2 with real MONDO/GO/Open Targets recipes and RG3+ workflows pending; C4c transcript/protein projection and D2 remain open. Spawns focused per-area docs.
+Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a/C4b merged locally and C4c-1 rsID input implemented locally with full dbSNP artifact build/operator smoke pending + Pillar A (A1 + A2) merged and complete; Pillar D1, B1, B-migration, B2, and E (Reactome ingestion) merged locally; non-tabular reference modeling is partly resolved by `bio.reference_graph` RG1/RG2/RG4 with `dataset:mondo` implemented locally and GO/Open Targets recipes plus RG3+ workflows pending; C4c transcript/protein projection and D2 remain open. Spawns focused per-area docs.
 
 Related (builds on):
 - `docs/proposition-and-evidence-model.md` — core reasoning model
@@ -280,10 +280,11 @@ collapsed into identity.
 7. **Resolved (C): pinned vs. live identity.** Pinned local snapshots are authoritative for joins. Live
    services are discovery/QA conveniences only; refgenie/refgenieserver may document genome asset
    provenance but not replace pinned identity inputs.
-8. **Partly resolved (non-tabular references).** `bio.reference_graph` RG1 and RG2 are implemented for pinned graph-shaped reference datasets:
-   RG1 validates node indexes, and RG2 resolves promoted graph-member virtual payloads as node rows plus
-   directly incident edges. Real GO/MONDO/Open Targets recipes, broader graph-member promotion workflows,
-   unpromoted-member B materialization, and non-molecular identity resolvers remain follow-up work.
+8. **Partly resolved (non-tabular references).** `bio.reference_graph` RG1, RG2, and RG4 are implemented locally:
+   RG1 validates node indexes, RG2 resolves promoted graph-member virtual payloads as node rows plus
+   directly incident edges, and RG4 adds `dataset:mondo` as the first real pinned reference graph recipe.
+   GO/Open Targets recipes, broader graph-member promotion workflows, unpromoted-member B materialization,
+   and non-molecular identity resolvers remain follow-up work.
 
 ---
 
@@ -331,10 +332,10 @@ merged locally, C4c-1 rsID input implemented locally), D1, and B1/B2 are now exe
 `bio.geneset` commons dataset: Reactome release 96 was fetched from the versioned Reactome download URL,
 the C2 HGNC gene crosswalk was built, `dataset:reactome` was promoted into `~/d/science-commons`, and the
 pan-disease local Reactome stub was removed so consumers resolve through commons. D2 remains deferred
-until a real evidence line needs a promoted pathway dataset. `bio.reference_graph` RG1 and RG2 are
-implemented locally for pinned graph-shaped reference datasets: RG1 validates node indexes, and RG2
-resolves promoted graph-member virtual payloads as node rows plus directly incident edges. Real
-GO/MONDO/Open Targets recipes, broader graph-member promotion workflows, unpromoted-member B
+until a real evidence line needs a promoted pathway dataset. `bio.reference_graph` RG1, RG2, and RG4 are
+implemented locally: RG1 validates node indexes, RG2 resolves promoted graph-member virtual payloads as
+node rows plus directly incident edges, and RG4 adds `dataset:mondo` as the first real pinned reference
+graph recipe. GO/Open Targets recipes, broader graph-member promotion workflows, unpromoted-member B
 materialization, and non-molecular identity resolvers remain follow-up work.
 
 **Operational follow-ups.**
