@@ -9,7 +9,7 @@
 ## 0. TL;DR / recommendation
 
 1. **This is mostly a reconciliation, not a greenfield.** Three mature bodies of work already cover ~70% of the ask (§1). The RFC's real job is to (a) name the **two-layer** structure explicitly, (b) **reuse t034** for all causal/edge semantics, (c) decide how a richer uncertainty representation **composes with the implemented belief pipeline**, and (d) **split** the provenance ask onto the existing axes. Net-new is small. One framing *is* net-new and load-bearing: a model can arrive by **discovery** *or* **elicitation** (a user asserting a belief), and both are first-class, distinguished only by provenance + uncertainty — the Bayesian prior↔posterior duality (§3.5).
-2. **Foundational move:** make the *object/world* vs *epistemic/meta* layering explicit (§2). It is already half-built; naming it dissolves most confusion and answers "science model alongside the project KG as the common world."
+2. **Foundational move:** model the graph as a **patchwork of epistemic neighborhoods** (local models) federated lazily via ontologies + data-driven latent axes — not one graph, nor two fixed layers (§2). Object/meta and discovered/elicited are *within-patch* aspects; the federation is multi-scale (patch → project → cross-project aggregate).
 3. **Do NOT invent a second CPDAG/PAG vocabulary.** t034 already owns `graph_object_type`, `epistemic_role`, the discovery→identification→estimate pipeline, and identification-by-reference promotion. Reuse verbatim (§3).
 4. **Do NOT make subjective-logic opinions canonical by fiat.** `belief-logodds-v3` (`aggregate_belief`/`belief_scalar`) is implemented and opt-in-shipped. Opinions are a **fork** (§4, §12): experimental derived view vs proposed v4 successor vs not-adopted.
 5. **Highest-leverage net-new framings** (worth exploring first, §8): a **latent-construct / measurement-model** layer (the right frame for publication gravity in pan-disease) and an **argumentation-framework** backbone for the belief derivation that is currently formula-based.
@@ -40,16 +40,23 @@ Everything else the original draft proposed already exists in one of the rows ab
 
 ---
 
-## 2. Foundational reframe: two layers over one world (R1)
+## 2. Foundational reframe: a patchwork of epistemic neighborhoods (R1)
 
-Two graphs share one identifier space:
+(K.H., 2026-05-31) Do **not** model this as one graph, or even two fixed layers (project/domain). Model it as a **patchwork of many small graphical representations** — local models stitched together lazily over time. Each **patch** is an *epistemic neighborhood* around a hypothesis / question / evidence cluster, and may be any of: a causal DAG, a Bayesian DAG, a data→evidence map, a literature→evidence map, an elicited belief subgraph, a discovered CPDAG fragment. This is the `bears_on`/attention neighborhood promoted to a first-class **modeling unit**, and it composes with t034 (each t034 payload is one patch).
 
-- **Object / world layer (ABox).** Domain entities (genes, diseases, tissues) and relations among them. Uncertainty = *"is this real-world relationship true?"*
-- **Epistemic / meta layer.** Claims about those relations + evidence + derived belief. Uncertainty = *"how warranted is our credence, given the record?"*
+Two structurings still apply, but as **within-patch aspects**, not the top-level shape:
+- *object/world* content (genes, diseases, relations) vs *epistemic/meta* content (claims, evidence, belief) — still must not be conflated;
+- *discovered* vs *elicited* provenance (§3.5).
 
-These are routinely conflated and must not be. The framework already separates them: **S-P-O propositions and t034 payloads are the lift** from world-relation to epistemic object. Your "multigraph of causal/associative edges with uncertainty vectors" = *a set of propositions/causal-graph edges over the same (subject, object) differing in `epistemic_role`/`claim_layer`*, each carrying its own evidence and belief. t034 already does exactly this: parallel edges with distinct `epistemic_role`, promoted by reference rather than overwrite.
+The top-level shape is the **federation**:
 
-**Net-new = R1 only:** an explicit, queryable reification linking a world-layer edge to the proposition(s)/payload(s) that assert it, so the world graph renders at any belief threshold. Substrate is a **fork** (§12.2): RDF-star/named-graphs/PROV-O (W3C-native, current TriG stack) vs labeled-property-graph (multigraph-native). This *is* the "science model alongside the project KG as the common world."
+- **Grow patches incrementally.** Collect data to assess *specific* beliefs — individual edges, subgraphs, sub-models — within a patch. A patch matures up the ladder (§6) as evidence accrues; you never need a global model to make a local one useful.
+- **Connect patches over time via a dual common space:** (a) **ontologies** — shared symbolic identifiers (MONDO/MeSH/HGNC) aligning entities across patches; (b) **data-driven, bias-corrected latent axes** — a learned common coordinate (the q15 / §8.1 latent-construct space) letting patches relate *without inheriting literature bias*. Symbolic glue where identities are known; latent glue where they aren't.
+- **Multi-scale federation.** A project is a collection of epistemic entities/patches; the user holds a collection of projects. Views compose: **within** one patch/project, or **aggregate** across projects — subset, sampled, or global. (Existing hooks: federation/composite-graph machinery, t035 multiview, t038 graph-views.)
+
+**Why patchwork beats one-big-model:** honest about locality and partial knowledge (most patches stay L0–L2), tractable (assess one belief at a time), incremental (connect later via ontology or latent axis, with no grand unified schema up front). "Single graph" and "two layers" are special cases — a patch, and a within-patch aspect.
+
+**Net-new (R1):** the *patch* as a first-class, addressable unit (an epistemic neighborhood carrying a ladder level + provenance + uncertainty), plus the two glue mechanisms (ontology alignment + bias-corrected latent common axis), and a world↔claim reification *inside* each patch so it renders at any belief threshold. Substrate fork §12.2 governs how patches and that reification are stored and federated.
 
 ---
 
