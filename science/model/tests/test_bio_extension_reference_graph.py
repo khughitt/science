@@ -94,6 +94,10 @@ def test_reference_graph_rejects_unknown_graph_format() -> None:
         EntityValidator().validate(_base_collection(graph_format="obo"))
 
 
+def test_reference_graph_accepts_obograph_json_format() -> None:
+    EntityValidator().validate(_base_collection(graph_format="obograph_json"))
+
+
 @pytest.mark.parametrize(
     ("member_key_space", "match"),
     [

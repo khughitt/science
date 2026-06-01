@@ -524,6 +524,22 @@ def test_edge_validation_still_runs_after_member_count_mismatch() -> None:
     ]
 
 
+def test_obograph_json_format_is_validated_as_supported_graph_artifact() -> None:
+    results = list(
+        evaluate_reference_graphs(
+            [_reference_graph(graph_format="obograph_json")],
+            graph_available_by_dataset_id={"dataset:mondo": True},
+            node_rows_by_dataset_id={
+                "dataset:mondo": [_node(), _node(member_key="MONDO:obsolete", status="deprecated")]
+            },
+            edge_rows_by_dataset_id={"dataset:mondo": [_edge()]},
+            member_datasets=[],
+        )
+    )
+
+    assert results == []
+
+
 def test_jsonl_edges_format_is_enum_validated_without_distinct_edge_resource() -> None:
     fm = _reference_graph(graph_format="jsonl_edges", edge_resource=None, edge_count=None)
     fm.pop("edge_resource")

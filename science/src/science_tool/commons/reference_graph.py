@@ -15,7 +15,7 @@ REFERENCE_GRAPH_REQUIRED_NODE_COLUMNS = frozenset(
 )
 REFERENCE_GRAPH_REQUIRED_EDGE_COLUMNS = frozenset({"subject", "predicate", "object"})
 REFERENCE_GRAPH_STATUSES = frozenset({"active", "deprecated", "withdrawn"})
-REFERENCE_GRAPH_FORMATS = frozenset({"rdf_turtle", "rdf_ntriples", "jsonl_edges"})
+REFERENCE_GRAPH_FORMATS = frozenset({"rdf_turtle", "rdf_ntriples", "jsonl_edges", "obograph_json"})
 REFERENCE_GRAPH_USAGE_ROLES = frozenset(get_args(DatasetUsage.model_fields["role"].annotation))
 REFERENCE_GRAPH_USAGE_OVERLAPS = frozenset(get_args(DatasetUsage.model_fields["overlap"].annotation))
 

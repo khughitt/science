@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from science_tool.commons.reference_graph import (
+    REFERENCE_GRAPH_FORMATS,
     REFERENCE_GRAPH_PROFILE_TOKEN,
     REFERENCE_GRAPH_REQUIRED_NODE_COLUMNS,
     ReferenceGraphCollectionError,
@@ -36,6 +37,10 @@ def _edge_row(**overrides: object) -> dict[str, object]:
     }
     row.update(overrides)
     return row
+
+
+def test_reference_graph_formats_include_obograph_json() -> None:
+    assert "obograph_json" in REFERENCE_GRAPH_FORMATS
 
 
 def test_reference_graph_profile_token() -> None:
