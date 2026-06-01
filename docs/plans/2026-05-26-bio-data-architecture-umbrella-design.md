@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a/C4b merged locally and C4c-1 rsID input implemented locally with full dbSNP artifact build/operator smoke pending + Pillar A (A1 + A2) merged and complete; Pillar D1, B1, B-migration, B2, and E (Reactome ingestion) merged locally; non-tabular reference modeling is partly resolved by `bio.reference_graph` RG1 with RG2+ pending; C4c transcript/protein projection and D2 remain open. Spawns focused per-area docs.
+Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a/C4b merged locally and C4c-1 rsID input implemented locally with full dbSNP artifact build/operator smoke pending + Pillar A (A1 + A2) merged and complete; Pillar D1, B1, B-migration, B2, and E (Reactome ingestion) merged locally; non-tabular reference modeling is partly resolved by `bio.reference_graph` RG1/RG2 with real MONDO/GO/Open Targets recipes and RG3+ workflows pending; C4c transcript/protein projection and D2 remain open. Spawns focused per-area docs.
 
 Related (builds on):
 - `docs/proposition-and-evidence-model.md` — core reasoning model
