@@ -7,6 +7,8 @@ artifact: "meta/src/h00_patch_l1/"
 related:
   - task:t065
   - task:t064
+  - task:t066
+  - task:t069
 created: "2026-06-01"
 updated: "2026-06-01"
 ---
@@ -60,52 +62,78 @@ the property K.H. asked for (editorial/AI labels carry lower epistemic status /
 higher uncertainty), achieved **structurally** — the weaker the provenance, the
 larger the honest ignorance mass — rather than by a hand-set confidence number.
 
-**Publication gravity is removed as independence-discounted fusion.** The
-patch-level claim "disease D's PubTator gene profile reflects D-specific biology"
-takes one literature support per co-occurring gene:
+**Publication-gravity double-counting is discounted by independence-aware
+fusion** (not the same as *removing* the bias — see below). The patch-level claim
+"disease D's PubTator gene profile reflects D-specific biology" takes one
+literature support per co-occurring gene:
 
 | | supports | support score | opinion `u` | projected `E` |
 |---|---|---|---|---|
 | naive (count every gene) | 17 | 17 | 0.105 | 0.947 |
 | discounted (shipped reduction) | 8 | 8 | 0.200 | 0.900 |
 
-The 10 universal genes collapse to **one** unit; the reduction removes **53 % of
-the naive support score** as publication gravity, and the opinion's uncertainty
-mass rises (0.105 → 0.200) — the naive read was over-confident exactly because it
-double-counted a single corpus-wide mechanism. No curated panel gene crosses the
-publication-gravity threshold, so specific biology survives intact.
+The 10 universal genes collapse to **one** unit; the reduction discounts **53 % of
+the naive support score** — the double-counting of a single corpus-wide
+mechanism — and the opinion's uncertainty mass rises (0.105 → 0.200), correcting
+an over-confident naive read. No curated panel gene crosses the publication-gravity
+threshold, so specific biology survives intact. **What this does *not* do:**
+estimate or subtract the latent corpus-attention axis. It prevents *double-counting*
+the shared-source group; it does not debias the individual co-occurrence signals.
+True correction is the §8.1 / `task:t066` latent-construct model.
 
 ## What this tells the RFC forks
 
-- **§12.3 (uncertainty representation): the "derived view, behind a flag"
-  recommendation holds.** The subjective-logic opinion is computed *from the same
-  post-reduction support/dispute scores* the shipped `belief_scalar` already
-  produces — no fork of the core aggregation. It adds the one thing the log-odds
-  scalar cannot name: an explicit **ignorance mass**, which is what makes editorial
-  honesty and over-confidence visible above. No evidence yet that a v4 successor
-  aggregation is needed; a derived opinion view is sufficient and cheap.
-- **§5 / R5 (provenance query): the axes were enough.** Editorial-vs-empirical
-  honesty needed no new tier enum — `is_reference_dataset` (curation penalty) +
-  `evidence_type` + `proxy_directness` already carried it; PROV-O carries the
-  AI-drafted/human-ratified agent axis on the emitted edge.
+- **§12.3 (uncertainty representation): a derived opinion view is the right
+  *default next* representation — scoped, not settled.** The subjective-logic
+  opinion is computed *from the same post-reduction support/dispute scores* the
+  shipped `belief_scalar` already produces — no fork of the core aggregation — and
+  adds the one thing the log-odds scalar cannot name: an explicit **ignorance
+  mass**, which is what makes editorial honesty and over-confidence visible above.
+  This is sufficient for *this* L1 positive-support, post-reduction **diagnostic**
+  view. It is **not** yet evidence that the opinion mapping is calibrated,
+  decision-ready, or adequate for contested evidence, base-rate-sensitive claims,
+  multi-source panels, or L2+ causal structure. The mapping rests on explicit
+  assumptions — prior weight `W=2`, `base_rate=0.5`, and treating ordinal support
+  scores as evidential counts (`opinion.py`) — that a v4-vs-derived-view decision
+  must still test. So: derived view as default next step, *not* "no v4 needed."
+- **§5 / R5 (provenance query): the axes were enough; PROV-O round-trips
+  structurally.** Editorial-vs-empirical honesty needed no new tier enum —
+  `is_reference_dataset` (curation penalty) + `evidence_type` + `proxy_directness`
+  already carried it. The PROV-O emission **round-trips structurally** but is a
+  *placeholder*, not a sanctioned pattern: it annotates the edge with
+  `prov:wasGeneratedBy` → an agent IRI, whereas PROV-O expects generation by an
+  *Activity* with agents attached via attribution/association, and the three
+  distinct activities (source provenance, AI extraction/drafting, human
+  ratification) should not collapse into one edge annotation. Correct modeling is
+  `task:t069` before this is reused.
 - **§2 / D-006 (patch = named graph): confirmed end-to-end.** Each patch
   serializes to a TriG named graph whose IRI *is* the context, with patch-level
   metadata (ladder level, naive/discounted scores) as triples about that IRI and
   every association as a reified edge-node (edge-as-node, multi-edge ready).
-- **§8.1 / R3 (latent construct) is the next earned step.** Publication gravity
-  here is *flagged-and-discounted*, not *corrected*: ubiquity is a hand-thresholded
-  proxy for the latent corpus-attention construct. The natural successor (t066) is
-  a measurement model that estimates and subtracts that latent axis instead of
-  thresholding it.
+- **§8.1 / R3 (latent construct) is the next earned step.** As above, publication
+  gravity here is *double-counting-discounted*, not *corrected*: ubiquity is a
+  hand-thresholded proxy for the latent corpus-attention construct. The natural
+  successor (`task:t066`) is a measurement model that estimates and subtracts that
+  latent axis instead of thresholding it.
 
 ## Limitations (carry-forward, not defects)
 
-- The evidence-field mapping (strength tiers, proxy gating, the q99 threshold) is
-  a modelling **choice**; the prototype's job is to make it concrete and testable,
-  not to ratify it. Sensitivity to the threshold is unexamined.
+- **Evidence-field mapping is the main sensitivity surface** (`model.py`): ClinGen
+  strict → `strength=strong`, OMIM/GeneReviews-broad → `moderate`, curated panels
+  → `is_reference_dataset=True`, q99 ubiquity → publication gravity. These are
+  reasonable prototype choices but **asserted, not swept** — the headline numbers
+  (u = 0.50/0.67/1.0; the 53 % discount) could move under other choices. Sweep =
+  `task:t069` (or fold into t066).
+- **Opinion-mapping assumptions** (`W=2`, `base_rate=0.5`, ordinal-scores-as-counts)
+  are unexamined; calibration and decision-readiness are untested (see §12.3 above).
+- **PROV-O emission is a structural placeholder**, not a sanctioned pattern —
+  activity/agent modeling deferred to `task:t069`.
+- **"One world" is only partially exercised.** The fixture is a **real, documented
+  extracted slice** — *not* federated live cross-project linkage. That is the
+  correct scope for t065, but the distinction matters: a live patch glued across
+  the meta↔pan-disease boundary still needs the validating cross-project reference
+  primitive (`task:t068`, still load-bearing).
 - Two focal diseases, one panel source each; the panel is treated as a single
   editorial act (no per-gene ClinGen study independence modelled).
 - "D-specific biology" as the fused claim is a deliberately simple stand-in; it
   shows the fusion mechanic, not a validated similarity estimand.
-- Publication gravity is discounted, not corrected — the §8.1 latent-construct
-  model (t066) is what would actually subtract the bias.

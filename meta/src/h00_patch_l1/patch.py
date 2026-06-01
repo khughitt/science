@@ -149,7 +149,11 @@ def emit_patch_trig(fixture: dict, mesh_id: str, out_path: Path) -> Path:
         g.add((edge, SCI.opinionBelief, Literal(round(eb.opinion.belief, 4), datatype=XSD.decimal)))
         g.add((edge, SCI.opinionUncertainty,
                Literal(round(eb.opinion.uncertainty, 4), datatype=XSD.decimal)))
-        # PROV agent axis: editorial assertions are AI-drafted + human-ratified.
+        # PROV agent axis (PLACEHOLDER, not a sanctioned pattern — see task t069):
+        # PROV-O expects generation by an *Activity* with agents attached via
+        # attribution/association, and source / AI-drafting / human-ratification are
+        # three DISTINCT activities. This single-edge annotation only round-trips
+        # structurally; correct activity/agent modeling is deferred to t069.
         if gene["in_panel"]:
             g.add((edge, PROV.wasGeneratedBy, AI_AGENT))
             g.add((edge, SCI.ratifiedBy, HUMAN_AGENT))

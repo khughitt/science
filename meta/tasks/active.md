@@ -778,3 +778,18 @@ Design a VALIDATING cross-project entity reference syntax. Surfaced by fb-2026-0
 K.H. framing (load-bearing): all projects live in ONE WORLD; a project is sub-structure, itself decomposable into hypothesis/domain neighborhoods (h00 patches). A cross-project ref is a same-world ref crossing a sub-structure boundary, not a foreign ref needing a bridge — the resolver should treat project scope as a grouping level in one addressable space.
 
 This is the single primitive the recurring 'cross-project address syntax' open item in t015 (freshness propagation), t018 (typed blockers), and t043 (cross-project blockers spec) each separately defer; land it once. Design questions to settle: address grammar (project-qualified id e.g. pan-disease::task:t071 vs URN), resolver source of truth (live sibling-repo sweep vs federated graph snapshot), behavior when the target project is not locally available, validation severity (resolvable-vs-unresolvable vs warn-on-stale), and how refs-checker stops greedily resolving bare local tokens. Aligns h00 (multi-scale patch<=project<=collection), h06/q14 (adaptive topology), and the project-peers group (t043-t052).
+
+## [t069] Harden L1 patch prototype before it becomes a pattern (sweep mapping + fix PROV-O)
+- priority: P2
+- status: proposed
+- aspects: [software-development]
+- related: [hypothesis:h00-working-model, task:t065, task:t066]
+- created: 2026-06-01
+
+Two pre-pattern hardening items from the t065 review (2026-06-01), to settle before the L1 patch is treated as canonical:
+
+(1) EVIDENCE-FIELD MAPPING SENSITIVITY (review #5). The prototype's mapping choices are the main sensitivity surface and are currently asserted, not swept: ClinGen-strict -> strength=strong, OMIM/GeneReviews-broad -> moderate, curated panels -> is_reference_dataset=True, and q99 ubiquity defines publication gravity (meta/src/h00_patch_l1/model.py). Sweep these (esp. the pub-gravity ubiquity threshold and the strength tiers) and report how the headline numbers (u=0.50/0.67/1.0; the 53% double-counting discount) move. Can fold into t066.
+
+(2) PROV-O ACTIVITY/AGENT MODELING (review #3). The current emission (meta/src/h00_patch_l1/patch.py) uses prov:wasGeneratedBy with an AGENT IRI as a placeholder. PROV-O expects generation by an Activity, with agents linked via attribution/association (prov:wasAttributedTo / prov:wasAssociatedWith). Source provenance, AI extraction/prototype provenance, and human ratification are DISTINCT activities and must not collapse into one edge annotation. Model them as separate activities before this emission is reused as a pattern.
+
+Until both are done, t065 claims stay scoped: 'PROV-O round-trips structurally' (not 'fully carries the agent axis'); 'supports derived opinion as the default next representation' (not 'decides no v4 successor needed').
