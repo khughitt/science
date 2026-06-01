@@ -3,7 +3,7 @@ id: "interpretation:h00-t067-patch-federation-2026-06-01"
 type: "interpretation"
 title: "Patch federation: the bias-corrected latent coordinate as data-driven glue"
 hypothesis: "hypothesis:h00-working-model"
-artifact: "meta/src/h00_patch_l1/glue.py"
+artifact: "science_tool.model.federation (machinery); pan-disease code/scripts/h00_patch_demo.py (application)"
 related:
   - task:t067
   - task:t066
@@ -20,8 +20,12 @@ RFC §2 / R1, executed. t066 *subtracted* the publication-attention axis per cel
 coordinate** and uses proximity in that coordinate to *connect patches* — the
 data-driven half of the §2 glue ("ontologies where identities are known;
 bias-corrected latent axes where they aren't"). Code:
-`meta/src/h00_patch_l1/glue.py`; tests: `meta/tests/test_h00_glue.py` (10, all
-green); demo View E: `PYTHONPATH=src uv run python -m h00_patch_l1`.
+the glue primitives (cosine, `FederationLink`, glue-kind, TriG emission) are
+`science_tool.model.federation` (framework; graduated per **D-007**), driven by
+the pan-disease application `code/scripts/h00_patch_demo.py` (`disease_federation`,
+which computes the symbolic Jaccard from the panels); demo:
+`uv run python code/scripts/h00_patch_demo.py`. (Originally prototyped in the
+now-retired `meta/src/h00_patch_l1/glue.py`.)
 
 ## The construction
 

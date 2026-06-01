@@ -149,7 +149,8 @@ the existing pgmpy/ChiRho exporters, R5 provenance query surface, R6 elicited-be
 representation.
 
 A first **L1 patch is now runnable** (`task:t065`,
-`interpretation:h00-l1-patch-prototype-2026-06-01`, code `meta/src/h00_patch_l1/`):
+`interpretation:h00-l1-patch-prototype-2026-06-01`; machinery `science_tool.model`,
+application pan-disease `code/scripts/h00_patch_demo.py` — D-007):
 on the real pan-disease q14 slice it reuses the shipped belief machinery, emits a
 patch as a TriG named graph (D-006), and shows two headline properties on real
 numbers — provenance-qualified editorial labels carry *structurally* higher
@@ -166,7 +167,7 @@ is `task:t069`.
 The **latent-construct correction** that t065 named as its next earned step is now
 also runnable (`task:t066`,
 `interpretation:h00-t066-latent-correction-2026-06-01`, code
-`meta/src/h00_patch_l1/latent.py`). It realizes RFC §8.1 / R3: literature
+`science_tool.model.correction`). It realizes RFC §8.1 / R3: literature
 co-occurrence is modelled as a biased *measurement* of latent biology, the bias
 being publication **attention**, and the attention axis is *subtracted* via PMI
 (the two-way independence residual) — genuine **correction**, where t065 only
@@ -183,7 +184,7 @@ held-out validation and a PMI sampling-variance guard are `task:t070`.
 
 **Patch federation** (the §2 dual common space) is now runnable too (`task:t067`,
 `interpretation:h00-t067-patch-federation-2026-06-01`, code
-`meta/src/h00_patch_l1/glue.py`). A truncated SVD of the corrected (PPMI) matrix
+`science_tool.model.federation`). A truncated SVD of the corrected (PPMI) matrix
 gives every disease a shared-coordinate embedding; two patches relate by cosine
 in it — the **data-driven half** of the glue. The headline: CMT and HSP have
 *disjoint* curated panel genes (symbolic Jaccard 0) yet HSP is CMT's #2 latent

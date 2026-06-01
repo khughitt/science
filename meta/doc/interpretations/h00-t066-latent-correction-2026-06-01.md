@@ -3,7 +3,7 @@ id: "interpretation:h00-t066-latent-correction-2026-06-01"
 type: "interpretation"
 title: "Latent-construct correction: subtracting the publication-attention axis on the q14 slice"
 hypothesis: "hypothesis:h00-working-model"
-artifact: "meta/src/h00_patch_l1/latent.py"
+artifact: "science_tool.model.correction (machinery); pan-disease code/scripts/h00_patch_demo.py (application)"
 related:
   - task:t066
   - task:t065
@@ -21,8 +21,11 @@ N times — but the [t065 interpretation](h00-l1-patch-prototype-2026-06-01.md)
 was explicit that this is **not** correction: each surviving co-occurrence signal
 was still biased by how much its gene is studied at all, and "true correction is
 the §8.1 / `task:t066` latent-construct model." This is that model. Code:
-`meta/src/h00_patch_l1/latent.py`; tests: `meta/tests/test_h00_latent.py` (9, all
-green); demo View D: `PYTHONPATH=src uv run python -m h00_patch_l1`.
+the PMI/PPMI primitives are `science_tool.model.correction` (framework;
+graduated per **D-007**), applied to the slice by the pan-disease application
+`code/scripts/h00_patch_demo.py` (`corrected_specific_genes`); demo:
+`uv run python code/scripts/h00_patch_demo.py`. (Originally prototyped in the
+now-retired `meta/src/h00_patch_l1/latent.py`.)
 
 ## The measurement model
 

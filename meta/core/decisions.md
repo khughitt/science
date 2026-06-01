@@ -227,3 +227,20 @@ check, not a redesign.
 - Whether patch named-graphs **nest** or stay flat under the
   `patch ⊂ project ⊂ collection` federation (h00) is deferred to `t067`
   (federation); D-006 only fixes that a patch *is* a named graph.
+
+## D-007: Model machinery lives in `science_tool.model`; meta holds research; projects hold applications
+
+- **Date:** 2026-06-01
+- **Status:** active
+- **Resolves:** Where the `h00` working-model *implementation* belongs (raised by K.H. reviewing `meta/src/h00_patch_l1`). Tasks `t065`–`t067`.
+- **Decision:** Separate **research** from **machinery** from **application**.
+  - **meta** holds the *research* — the RFC, the `h00` hypothesis, the interpretations (the thinking and findings). No reusable implementation.
+  - **`science_tool.model`** (new framework subpackage, peer of `graph/`) holds the *reusable machinery* — `patch` (epistemic-neighborhood patch as a TriG named graph + independence-aware fusion), `opinion` (subjective logic), `correction` (PMI/PPMI latent-construct correction), `federation` (the bias-corrected latent common axis). Built on the existing `graph.belief` primitives; pure-Python + rdflib, reusing the canonical `SCI_NS`; synthetic-fixture tests.
+  - **Projects** (e.g. pan-disease) hold the *application* — the dataset→evidence mapping, the heavy data processing (matrix PPMI, SVD), fixtures, and the demo.
+  - The prototype `meta/src/h00_patch_l1` is **retired**: machinery → `science_tool.model`; application + fixtures → pan-disease `code/scripts/h00_*`.
+
+**Why:**
+meta is where we *ask and research* questions about science; realized machinery that is reused across projects should be developed in normal modular software style inside the framework, not as a project-shaped prototype under `meta/src/`. The belief primitives this builds on already live in `science_tool.graph`, so this just extends the same pattern one layer up. The clean dependency boundary (framework = semantics + serialization, no numpy/sklearn; project = data processing) falls out of the split.
+
+**Carry-forward (not blocking):**
+- `science_tool.model` graduating does **not** bless the provisional parts as final — the opinion view (default-next, RFC §12.3) and the correction thresholds (pending pan-disease `t070`) carry their status in module docstrings.

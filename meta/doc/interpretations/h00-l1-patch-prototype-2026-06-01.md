@@ -3,7 +3,7 @@ id: "interpretation:h00-l1-patch-prototype-2026-06-01"
 type: "interpretation"
 title: "L1 epistemic-neighborhood patch prototype on the pan-disease q14 slice"
 hypothesis: "hypothesis:h00-working-model"
-artifact: "meta/src/h00_patch_l1/"
+artifact: "science_tool.model (machinery); pan-disease code/scripts/h00_patch_demo.py (application)"
 related:
   - task:t065
   - task:t064
@@ -19,8 +19,11 @@ RFC §11 step 3, executed. This is the first **runnable** instantiation of the
 `h00` working model: one epistemic-neighborhood **patch** at ladder level **L1**,
 built on a **real** data slice, **reusing** the shipped belief machinery (D-005)
 and emitting the patch as a **TriG named graph** (D-006). Code:
-`meta/src/h00_patch_l1/`; tests: `meta/tests/test_h00_patch_l1.py` (8, all green);
-demo: `PYTHONPATH=src uv run python -m h00_patch_l1 [--trig DIR]`.
+the patch/fusion/opinion machinery is `science_tool.model.patch` /
+`.opinion` (framework; graduated per **D-007**), driven by the pan-disease
+application `code/scripts/h00_patch_demo.py` (the q14→`EvidenceUnit` mapping);
+demo: `uv run python code/scripts/h00_patch_demo.py`. (Originally prototyped in the
+now-retired `meta/src/h00_patch_l1`.)
 
 ## What the patch is
 
@@ -38,7 +41,7 @@ routes per edge realize the prior↔posterior duality (RFC §3.5):
   with ~every disease (ubiquity ≥ q99 = 3702 of 3831) are pure publication
   gravity → `independence=shared-source`, one `publication-gravity` group.
 
-Only the fixture numbers are real (`meta/src/h00_patch_l1/fixtures/q14_slice.json`,
+Only the fixture numbers are real (pan-disease `code/scripts/h00_fixtures/q14_slice.json`,
 extracted from pan-disease `gene_disease_comat_filtered.feather`, PubTator
 2026-03-17). The mapping to evidence-schema fields is the prototype's modelling
 choice — documented, contestable, and exactly the kind of decision RFC fork
