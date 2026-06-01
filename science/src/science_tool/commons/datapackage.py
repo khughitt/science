@@ -24,7 +24,7 @@ from science_tool.commons.errors import (
 
 _SHA256_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 _DRIVE_LETTER = re.compile(r"^[A-Za-z]:")
-_PROJECT_ONLY_DATAPACKAGE_KEYS = frozenset({"conformsTo", "mm30", "derivedFrom"})
+_PROJECT_ONLY_DATAPACKAGE_KEYS = frozenset({"id", "conformsTo", "mm30", "derivedFrom"})
 _RESOURCE_COMPUTED_KEYS = frozenset({"hash", "bytes"})
 
 SOURCE_TYPES = frozenset({"local", "zenodo", "github", "url", "daemon"})

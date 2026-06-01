@@ -77,6 +77,7 @@ def test_render_canonical_datapackage_strips_project_fields_and_injects_hashes()
     )
     project_doc = {
         "name": "mm30-external-ccle-proteomics-2020-01",
+        "id": "mm30-external-ccle-proteomics-2020-01-2020-01",
         "conformsTo": "mm30",
         "mm30": {"external_source": "Nusinow 2020"},
         "resources": [
@@ -97,6 +98,7 @@ def test_render_canonical_datapackage_strips_project_fields_and_injects_hashes()
 
     parsed = parse_canonical_datapackage_yaml(yaml_text)
     assert parsed["name"] == "fixture-ds"
+    assert "id" not in parsed
     assert "conformsTo" not in parsed
     assert "mm30" not in parsed
     r = parsed["resources"][0]
