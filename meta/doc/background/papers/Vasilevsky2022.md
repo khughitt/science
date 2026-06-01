@@ -10,7 +10,7 @@ datasets: []
 source_refs:
   - "cite:Vasilevsky2022"
 related:
-  - "question:q09-bioinformatics-generalizability"
+  - "question:09-bioinformatics-generalizability"
 created: "2026-05-31"
 updated: "2026-05-31"
 ---
