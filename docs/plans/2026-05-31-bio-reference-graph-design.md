@@ -2,7 +2,7 @@
 
 Date: 2026-05-31
 
-Status: RG1, RG2, and RG4 implemented locally; RG3 and RG5 pending
+Status: RG1, RG2, and RG4 implemented; two real recipes built from pinned OBO Graph JSON — `dataset:mondo` (pushed to origin) and `dataset:go`; RG3 and RG5 pending
 
 Related:
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; RG1 partly addresses its non-tabular-reference open item
@@ -33,7 +33,7 @@ The core decision is:
 This design starts with the data-artifact model, not non-molecular identity resolution. Disease, ontology,
 cell-line, tissue, and association identity resolvers can consume this substrate later. The first
 implementation should prove schema, parsing, validation, graph-member resolution, and provenance hooks
-with tiny fixture artifacts; real GO/MONDO/Open Targets recipes are follow-on work.
+with tiny fixture artifacts; the real MONDO and GO recipes (`dataset:mondo`, `dataset:go`) are now implemented, and Open Targets remains follow-on work.
 
 Explicit non-goals:
 
@@ -397,7 +397,7 @@ The model therefore covers non-tabular references without weakening the flat gen
 | RG1 | Schema + parser + validation over tiny fixture graph/index/edge resources; node index required | implemented locally |
 | RG2 | Virtual member payload resolution for promoted graph members; payload includes node row plus directly incident edges and exposes member-level `dataset_usage` for later B hooks | implemented locally |
 | RG3 | Broader graph-member promotion workflows and unpromoted-member B materialization hooks | pending |
-| RG4 | First real commons recipe: `dataset:mondo` from pinned MONDO OBO Graph JSON, with node/edge projections | implemented locally |
+| RG4 | First real commons recipes: `dataset:mondo` (pushed to origin) and `dataset:go` from pinned OBO Graph JSON releases, with node/edge projections | implemented |
 | RG5 | Later non-molecular identity resolvers over one or more reference graphs | pending |
 
 RG2 is implemented locally for promoted `bio.reference_graph.member` datasets. The generic
@@ -430,6 +430,6 @@ work because RG2 only returns payload data; it does not emit influence graph rec
 
 ## 11. Next step
 
-RG1, RG2, and RG4 are implemented locally. Remaining follow-ups are broader graph-member promotion
-workflows, unpromoted-member B materialization, additional real graph recipes such as GO and Open
-Targets, and non-molecular identity resolvers.
+RG1, RG2, and RG4 are implemented, with `dataset:mondo` and `dataset:go` as the real recipes. Remaining
+follow-ups are broader graph-member promotion workflows, unpromoted-member B materialization, additional
+real graph recipes such as Open Targets, and non-molecular identity resolvers.
