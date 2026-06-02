@@ -74,6 +74,24 @@ def test_questions_show_rejects_other_entity_kinds() -> None:
         assert "Expected question entity, got hypothesis:h01-alpha" in result.output
 
 
+def test_questions_show_accepts_q_shortform_for_numbered_question_id() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "doc/questions/q01-alpha.md",
+            {"id": "question:01-alpha", "type": "question", "title": "Alpha", "status": "active"},
+        )
+
+        result = runner.invoke(main, ["questions", "show", "q01"])
+
+        assert result.exit_code == 0, result.output
+        assert "question:01-alpha" in result.output
+        assert "Alpha" in result.output
+
+
 def test_plural_entity_list_and_show_commands() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():

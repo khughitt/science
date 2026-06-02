@@ -42,7 +42,16 @@ _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
 _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 _LOCAL_PART_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _ID_PREFIX_RE = re.compile(r"^(?P<prefix>[a-z]?)(?P<number>\d+)-", re.IGNORECASE)
+_SHORTFORM_REF_RE = re.compile(r"^(?P<prefix>[A-Za-z])(?P<number>\d+)(?P<suffix>(?:[.-].*)?)$")
 _NOTES_HEADING_RE = re.compile(r"^##\s+Notes\s*$")
+_SHORTFORM_ENTITY_KINDS: dict[str, str] = {
+    "d": "discussion",
+    "h": "hypothesis",
+    "i": "interpretation",
+    "p": "proposition",
+    "q": "question",
+    "t": "theme",
+}
 _DEFAULT_STATUS: dict[str, str] = {
     "evidence-line": "draft",
     "question": "active",
@@ -212,16 +221,27 @@ def resolve_entity_ref(project_root: Path, ref: str) -> str:
                 return ref
         raise EntityCommandError(f"Entity not found: {ref}")
 
-    matches = [
-        entity["id"]
-        for entity in entities
-        if entity["id"].split(":", 1)[1] == ref or entity["id"].split(":", 1)[1].startswith(f"{ref}-")
-    ]
+    matches = [entity["id"] for entity in entities if _entity_ref_matches(entity["id"], ref)]
     if not matches:
         raise EntityCommandError(f"Entity not found: {ref}")
     if len(matches) > 1:
         raise EntityCommandError(f"Ambiguous entity reference {ref}: {', '.join(sorted(matches))}")
     return matches[0]
+
+
+def _entity_ref_matches(entity_id: str, ref: str) -> bool:
+    kind, local_part = entity_id.split(":", 1)
+    if local_part == ref or local_part.startswith(f"{ref}-"):
+        return True
+
+    shortform = _SHORTFORM_REF_RE.fullmatch(ref)
+    if shortform is None:
+        return False
+    if _SHORTFORM_ENTITY_KINDS.get(shortform.group("prefix").lower()) != kind:
+        return False
+
+    unprefixed_ref = shortform.group("number") + shortform.group("suffix")
+    return local_part == unprefixed_ref or local_part.startswith(f"{unprefixed_ref}-")
 
 
 def find_entity(project_root: Path, ref: str) -> EntityLocation:

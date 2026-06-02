@@ -625,6 +625,17 @@ def test_resolve_entity_ref_accepts_canonical_and_unique_prefix(tmp_path: Path) 
     assert resolve_entity_ref(tmp_path, "q01") == "question:q01-alpha"
 
 
+def test_resolve_entity_ref_accepts_question_shortform_for_numbered_local_part(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/questions/q01-alpha.md",
+        {"id": "question:01-alpha", "type": "question", "title": "Alpha"},
+    )
+
+    assert resolve_entity_ref(tmp_path, "q01") == "question:01-alpha"
+
+
 def test_resolve_entity_ref_rejects_ambiguous_prefix(tmp_path: Path) -> None:
     seed_project(tmp_path)
     write_markdown_entity(
