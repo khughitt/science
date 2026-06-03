@@ -341,6 +341,17 @@ def test_plan_uses_synthesized_created_for_frontmatterless(tmp_path: Path) -> No
     assert "entities/interpretations/0001-early-result.md" in paths
 
 
+def test_plan_maps_frontmatterless_stem_alias(tmp_path: Path) -> None:
+    # A prose-header file has no `old_id`. References to it use the old filename
+    # stem (`interpretation:early`). The plan must map that stem alias to the new
+    # id so rewrite_references can fix the link instead of reporting it unresolved.
+    raw = tmp_path / "doc/interpretations/early.md"
+    raw.parent.mkdir(parents=True, exist_ok=True)
+    raw.write_text("# Early result\n\n**Date:** 2026-01-01\n", encoding="utf-8")
+    plan = plan_migration(tmp_path)
+    assert plan.id_map["interpretation:early"] == "interpretation:0001-early-result"
+
+
 def test_plan_detects_duplicate_target_collision(tmp_path: Path) -> None:
     # Two papers with the same citekey from the two legacy paper homes.
     _write(tmp_path, "doc/papers/Adams2025.md", '---\nid: "paper:Adams2025"\ntype: paper\n---\n')
@@ -480,6 +491,15 @@ def _add_move(plan: MigrationPlan, entity: "LegacyEntity", new_rel: str, new_id:
     plan.moves.append(Move(entity.rel_path, new_rel, entity.old_id, new_id, kind))
     if entity.old_id:
         plan.id_map[entity.old_id] = new_id
+    # Frontmatterless / prose-header files carry no `old_id`, yet references may
+    # still point at them by their old filename stem (e.g. a link to
+    # `interpretation:2026-05-23-foo` for a file with no `id:`). Map a
+    # filename-derived alias `<kind>:<old-stem>` -> new_id so those refs rewrite
+    # instead of being reported unresolved. `setdefault` never clobbers a real
+    # `old_id` mapping; stems are unique within a kind's directory, so aliases
+    # never collide.
+    stem_alias = f"{kind}:{Path(entity.rel_path).stem}"
+    plan.id_map.setdefault(stem_alias, new_id)
 
 
 def _plan_singletons(project_root: Path, plan: MigrationPlan) -> None:
@@ -566,6 +586,7 @@ def test_rewrite_reports_bare_wikilink() -> None:
     # surfaced as unresolved rather than silently left as a dead link.
     out, unresolved = rewrite_references("See [[q01-foo]] for context.\n", {})
     assert "[[q01-foo]]" in unresolved
+```
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -984,10 +1005,12 @@ branch; use only `entities/claim-registry.yaml`.
 
 - [ ] **Step 3: Drop legacy-dir fallbacks in semantic checks**
 
-In `hypotheses.py`, `discussions.py`, `document_structure.py`, `papers.py`, remove
-the `... if entities_dir.is_dir() else legacy_dir` fallbacks introduced in Plan 2;
-point only at the `entities/` locations. In `discussions.py`, also drop the legacy
-`doc/reports/synthesis.md` singleton candidate retained for v2.
+In `hypotheses.py`, `discussions.py`, `document_structure.py`, `papers.py`, the
+Plan 2 checks scan **both** the new and legacy roots. Drop the legacy root from
+each `roots`/`synth_roots`/loop tuple so only the `entities/` location remains
+(e.g. `hypotheses.py` becomes a single `entities/hypotheses` scan). In
+`discussions.py`, also drop the legacy `doc/reports/synthesis.md` singleton
+candidate retained for v2.
 
 In `id_prefixes.py`, narrow the scan roots from
 `(ctx.project_root / "entities", ctx.doc_dir, ctx.specs_dir)` (Plan 2) to
@@ -1018,8 +1041,11 @@ def _severity(ctx: ValidateContext) -> Severity:
     return Severity.ERROR if isinstance(version, int) and version >= 3 else Severity.WARN
 ```
 
-(The stranded-file branch in `check_entity_location_coherence` keeps emitting
-`Severity.WARN` directly — a file in `doc/` is advisory, not a v3 violation.)
+This covers the stranded-file branch in `check_entity_location_coherence` too:
+Plan 2 already routes it through `_severity(ctx)` (Plan 2, Task 3, step (a)), so a
+markdown entity left in `doc/`/`specs/` becomes an **ERROR** at `layout_version: 3`
+— stranded entities are a v3 violation, not merely advisory. (Prose / non-entity
+markdown is still skipped by the `is_markdown_entity_kind` guard.)
 
 - [ ] **Step 6: Update tests to steady-state expectations**
 

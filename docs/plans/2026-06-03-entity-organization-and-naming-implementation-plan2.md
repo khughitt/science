@@ -632,16 +632,20 @@ Expected: FAIL — the check globs `specs/hypotheses/h*.md`, so `entities/hypoth
 
 - [ ] **Step 3: Repoint the directory and glob**
 
-In `science/src/science_tool/validate/checks/hypotheses.py`, replace lines 31-37:
+In `science/src/science_tool/validate/checks/hypotheses.py`, replace lines 31-38.
+Scan **both** the new and legacy roots (not either/or): during a partial migration
+some hypotheses live under `entities/` and some still under `specs/`, and an
+else-fallback would silently skip the un-migrated ones. A given file lives in
+exactly one place (the migration `git mv`s it), so scanning both never double-counts.
 
 ```python
 @Check(section="hypotheses...", order=5)
 def check_hypotheses(ctx: ValidateContext) -> Iterator[Result]:
-    hypotheses_dir = ctx.project_root / "entities" / "hypotheses"
-    legacy_dir = ctx.specs_dir / "hypotheses"
-    target = hypotheses_dir if hypotheses_dir.is_dir() else legacy_dir
-    if target.is_dir():
-        for path in sorted(target.glob("*.md")):  # was h*.md — numeric names have no letter
+    roots = (ctx.project_root / "entities" / "hypotheses", ctx.specs_dir / "hypotheses")
+    for target in roots:
+        if not target.is_dir():
+            continue
+        for path in sorted(target.glob("*.md")):  # was specs-only + h*.md; numeric names have no letter
             if path.is_file():
                 yield from _check_hypothesis(ctx, path)
 
@@ -702,31 +706,43 @@ def test_discussions_checked_under_entities(tmp_path: Path) -> None:
 
 Expected: FAIL — checks scan `doc/discussions` and `doc/reports/synthesis`.
 
-- [ ] **Step 3: Repoint both directories**
+- [ ] **Step 3: Repoint both directories (scan new AND legacy)**
 
-In `check_discussions` (line 48), prefer `entities/discussions`:
+Scan both roots, not either/or — a partial migration leaves some discussions under
+`entities/` and some under `doc/`; an else-fallback would skip the un-migrated ones.
 
-```python
-    entities_dir = ctx.project_root / "entities" / "discussions"
-    legacy_dir = ctx.doc_dir / "discussions"
-    discussions_dir = entities_dir if entities_dir.is_dir() else legacy_dir
-```
-
-In `_check_synthesis_frontmatter` (line 77), prefer `entities/synthesis`:
+In `check_discussions`, replace the body (lines 48-58):
 
 ```python
-    entities_synth = ctx.project_root / "entities" / "synthesis"
-    legacy_synth = ctx.doc_dir / "reports" / "synthesis"
-    if entities_synth.is_dir():
-        candidates = [*sorted(entities_synth.glob("*.md"))]
-    else:
-        # v2 fallback: keep scanning the legacy dir AND the legacy singleton file.
-        candidates = [*sorted(legacy_synth.glob("*.md")), ctx.doc_dir / "reports" / "synthesis.md"]
+@Check(section="discussion documents...", order=11)
+def check_discussions(ctx: ValidateContext) -> Iterator[Result]:
+    roots = (ctx.project_root / "entities" / "discussions", ctx.doc_dir / "discussions")
+    for discussions_dir in roots:
+        if not discussions_dir.is_dir():
+            continue
+        for path in sorted(discussions_dir.glob("*.md")):
+            if path.is_file():
+                relative = path.relative_to(ctx.project_root).as_posix()
+                if "comparison-" in relative:
+                    continue
+                yield from _check_discussion(ctx, path, relative)
+
+    yield from _check_synthesis_frontmatter(ctx)
 ```
 
-The legacy `doc/reports/synthesis.md` singleton candidate is **retained in the
-fallback** so v2 projects keep validating during the transition; it is dropped
-only at cutover (Plan 3, Task 9 Step 3 removes the legacy branch entirely).
+In `_check_synthesis_frontmatter` (line 77), build candidates from both roots,
+then the legacy singleton (the downstream loop already skips non-`synthesis` files):
+
+```python
+    synth_roots = (ctx.project_root / "entities" / "synthesis", ctx.doc_dir / "reports" / "synthesis")
+    candidates = [p for root in synth_roots if root.is_dir() for p in sorted(root.glob("*.md"))]
+    # v2: also scan the legacy singleton file (dropped at cutover, Plan 3 Task 9).
+    candidates.append(ctx.doc_dir / "reports" / "synthesis.md")
+```
+
+The legacy `doc/reports/synthesis.md` singleton candidate is **retained** so v2
+projects keep validating during the transition; it is dropped only at cutover
+(Plan 3, Task 9 Step 3 removes the legacy roots entirely).
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -785,13 +801,16 @@ Expected: FAIL — scans `doc/background/topics` and `doc/background/papers`.
 
 - [ ] **Step 3: Repoint**
 
-`document_structure.py` (lines 37-38):
+`document_structure.py` (lines 37-38) — scan both new and legacy roots so a
+partial migration never skips un-migrated topics/papers:
 
 ```python
-    topics_dir = ctx.project_root / "entities" / "topics"
-    papers_dir = ctx.project_root / "entities" / "papers"
-    yield from _check_documents(ctx, topics_dir if topics_dir.is_dir() else ctx.doc_dir / "background" / "topics", _TOPIC_SECTIONS)
-    yield from _check_documents(ctx, papers_dir if papers_dir.is_dir() else ctx.doc_dir / "background" / "papers", _PAPER_SECTIONS)
+    for topics_dir in (ctx.project_root / "entities" / "topics", ctx.doc_dir / "background" / "topics"):
+        if topics_dir.is_dir():
+            yield from _check_documents(ctx, topics_dir, _TOPIC_SECTIONS)
+    for papers_dir in (ctx.project_root / "entities" / "papers", ctx.doc_dir / "background" / "papers"):
+        if papers_dir.is_dir():
+            yield from _check_documents(ctx, papers_dir, _PAPER_SECTIONS)
 ```
 
 `papers.py` (the INFO message at lines 25-31):
@@ -804,9 +823,9 @@ Expected: FAIL — scans `doc/background/topics` and `doc/background/papers`.
     )
 ```
 
-(Also update `_check_paper_dataset_refs` if it iterates `ctx.papers_dir`; point it
-at `entities/papers` with a `doc/background/papers` fallback. Grep the function
-body before editing.)
+(Also update `_check_paper_dataset_refs` if it iterates `ctx.papers_dir`; scan
+**both** `entities/papers` and `doc/background/papers` — skipping whichever is
+absent — rather than an either/or fallback. Grep the function body before editing.)
 
 - [ ] **Step 4: Run to verify pass**
 
