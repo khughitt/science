@@ -279,9 +279,9 @@ def check_entity_location_coherence(ctx: ValidateContext) -> Iterator[Result]:
                 continue
             kind = _entity_type(ctx, path)
             if kind is None or not is_markdown_entity_kind(kind):
-                continue
+                continue  # prose / non-entity markdown is ignored
             yield _result(
-                Severity.WARN,
+                _severity(ctx),
                 _rel(ctx, path),
                 f"{kind} entity outside its home; expected under {resolve_path_policy(kind).root}/",
             )
@@ -334,10 +334,13 @@ def _severity(ctx: ValidateContext) -> Severity:
 ```
 
 > Plan 2 keeps `_severity(ctx)` returning `Severity.WARN`. Plan 3's cutover replaces the
-> body with the `layout_version`-gated severity (see Plan 3, Task 9 Step 5), so
-> the WARN→ERROR promotion is a one-function change. (The stranded-file branch
-> above stays WARN even at cutover — a stranded file in `doc/` is advisory, not a
-> v3 invariant violation, since `doc/` legitimately holds prose.)
+> body with the `layout_version`-gated severity (see Plan 3, Task 9 Step 5), so the
+> WARN→ERROR promotion is a single-function change that lifts **every** conformance
+> yield — including the stranded-file branch. A markdown *entity* found in `doc/`/
+> `specs/` under v3 is a real invariant violation (ERROR); prose markdown is
+> already skipped by the `is_markdown_entity_kind` guard, so prose-only `doc/` is
+> unaffected. **All five checks route through `_severity(ctx)` — no bare
+> `Severity.WARN` remains in this module** (see Task 3).
 
 - [ ] **Step 4: Register the module**
 
@@ -427,17 +430,17 @@ def check_entity_frontmatter_completeness(ctx: ValidateContext) -> Iterator[Resu
         for path in sorted(directory.glob("*.md")):
             match = _FRONTMATTER.match(ctx.read_text_cached(path))
             if match is None:
-                yield _result(Severity.WARN, _rel(ctx, path), f"{path.name}: no YAML frontmatter")
+                yield _result(_severity(ctx), _rel(ctx, path), f"{path.name}: no YAML frontmatter")
                 continue
             try:
                 data = yaml.safe_load(match.group(1)) or {}
             except yaml.YAMLError:
-                yield _result(Severity.WARN, _rel(ctx, path), f"{path.name}: invalid YAML frontmatter")
+                yield _result(_severity(ctx), _rel(ctx, path), f"{path.name}: invalid YAML frontmatter")
                 continue
             missing = [field for field in _REQUIRED_FRONTMATTER if field not in data]
             if missing:
                 yield _result(
-                    Severity.WARN, _rel(ctx, path), f"{path.name}: missing frontmatter fields: {', '.join(missing)}"
+                    _severity(ctx), _rel(ctx, path), f"{path.name}: missing frontmatter fields: {', '.join(missing)}"
                 )
 
 
@@ -459,7 +462,7 @@ def check_entity_number_hygiene(ctx: ValidateContext) -> Iterator[Result]:
         for number, names in sorted(seen.items()):
             if len(names) > 1:
                 yield _result(
-                    Severity.WARN, policy.root, f"duplicate {kind} number {number}: {', '.join(sorted(names))}"
+                    _severity(ctx), policy.root, f"duplicate {kind} number {number}: {', '.join(sorted(names))}"
                 )
 
 
@@ -474,14 +477,10 @@ def check_entity_stray_files(ctx: ValidateContext) -> Iterator[Result]:
             continue
         for path in sorted(directory.iterdir()):
             if path.is_dir():
-                yield _result(Severity.WARN, _rel(ctx, path), f"unexpected subdirectory in {policy.root}/")
-            elif path.suffix != (".md" if policy.strategy != "singleton" else path.suffix):
-                yield _result(Severity.WARN, _rel(ctx, path), f"non-entity file in {policy.root}/: {path.name}")
+                yield _result(_severity(ctx), _rel(ctx, path), f"unexpected subdirectory in {policy.root}/")
+            elif path.suffix != ".md":
+                yield _result(_severity(ctx), _rel(ctx, path), f"non-entity file in {policy.root}/: {path.name}")
 ```
-
-> Note the stray-file suffix guard simplifies to "must be `.md`" for the numeric/
-> citekey directories handled here (singletons are skipped). If a reviewer finds
-> the conditional awkward, replace the `elif` with `elif path.suffix != ".md":`.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -547,18 +546,45 @@ def prefix_rules() -> dict[str, str]:
 PREFIX_RULES = prefix_rules()
 ```
 
-Leave the rest of `check_id_prefixes` unchanged — it already reads `PREFIX_RULES`.
+- [ ] **Step 4: Repoint `check_id_prefixes`'s scan roots to include `entities/`**
 
-- [ ] **Step 4: Run to verify pass**
+`check_id_prefixes` currently iterates only `(ctx.doc_dir, ctx.specs_dir)`
+(`science/src/science_tool/validate/checks/id_prefixes.py:147`), so after migration
+it would never see files under `entities/`. Add a failing test, then fix the roots.
+
+Test (append to `tests/validate/test_checks_id_prefixes.py`):
+
+```python
+def test_id_prefixes_scans_entities_dir(tmp_path) -> None:
+    # a type/id mismatch under entities/ must be detected
+    (tmp_path / "science.yaml").write_text("name: t\nlayout_version: 3\n", encoding="utf-8")
+    d = tmp_path / "entities" / "questions"
+    d.mkdir(parents=True)
+    (d / "0001-x.md").write_text('---\ntype: question\nid: "hypothesis:0001-x"\n---\n', encoding="utf-8")
+    from science_tool.validate.context import ValidateContext
+    from science_tool.validate.checks.id_prefixes import check_id_prefixes
+    ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
+    assert any(r.severity is Severity.WARN for r in check_id_prefixes(ctx))
+```
+
+In `check_id_prefixes`, change the scan roots (line 147) to include `entities/`,
+keeping the legacy roots during the Plan 2 transition (the cutover in Plan 3
+removes `doc`/`specs`):
+
+```python
+    for root in (ctx.project_root / "entities", ctx.doc_dir, ctx.specs_dir):
+```
+
+- [ ] **Step 5: Run to verify pass**
 
 Run: `cd science && uv run pytest tests/validate/test_checks_id_prefixes.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add science/src/science_tool/validate/checks/id_prefixes.py science/tests/validate/test_checks_id_prefixes.py
-git commit -m "refactor(validate): derive id-prefix rules from the policy table"
+git commit -m "refactor(validate): derive id-prefix rules from policy table; scan entities/"
 ```
 
 ---

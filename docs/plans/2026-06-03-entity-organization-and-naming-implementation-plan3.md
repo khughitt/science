@@ -349,6 +349,15 @@ def test_plan_detects_duplicate_target_collision(tmp_path: Path) -> None:
     assert plan.collisions  # non-empty: same new_rel_path / new_id
 
 
+def test_plan_detects_duplicate_number_collision(tmp_path: Path) -> None:
+    # Two already-conformant files share number 0003 → different ids/paths, but a
+    # number-hygiene violation that path/id collision checks alone would miss.
+    _write(tmp_path, "specs/hypotheses/0003-a.md", '---\nid: "hypothesis:0003-a"\ntype: hypothesis\n---\n')
+    _write(tmp_path, "specs/hypotheses/0003-b.md", '---\nid: "hypothesis:0003-b"\ntype: hypothesis\n---\n')
+    plan = plan_migration(tmp_path)
+    assert any(c.get("kind") == "number" and c.get("number") == "0003" for c in plan.collisions)
+
+
 def test_plan_relocates_singletons(tmp_path: Path) -> None:
     _write(tmp_path, "specs/research-question.md", '---\nid: "rq:x"\ntitle: RQ\nstatus: active\n---\n')
     (tmp_path / "specs/claim-registry.yaml").write_text("claims: []\n", encoding="utf-8")
@@ -485,15 +494,26 @@ def _plan_singletons(project_root: Path, plan: MigrationPlan) -> None:
 def _detect_collisions(plan: MigrationPlan) -> None:
     by_path: dict[str, list[str]] = {}
     by_id: dict[str, list[str]] = {}
+    by_kind_number: dict[tuple[str, str], list[str]] = {}
     for move in plan.moves:
         by_path.setdefault(move.new_rel_path, []).append(move.old_rel_path)
         by_id.setdefault(move.new_id, []).append(move.old_rel_path)
+        # number-hygiene collision: two files keep the SAME number within a kind
+        # (e.g. pre-conformant 0003-a.md + 0003-b.md → different ids/paths, but a
+        # duplicate number, which by_path/by_id alone would miss).
+        local = move.new_id.split(":", 1)[1]
+        number_match = re.match(r"^(\d{4})-", local)
+        if number_match is not None:
+            by_kind_number.setdefault((move.kind, number_match.group(1)), []).append(move.old_rel_path)
     for target, sources in sorted(by_path.items()):
         if len(sources) > 1:
             plan.collisions.append({"kind": "path", "target": target, "sources": sorted(sources)})
     for new_id, sources in sorted(by_id.items()):
         if len(sources) > 1:
             plan.collisions.append({"kind": "id", "new_id": new_id, "sources": sorted(sources)})
+    for (kind, number), sources in sorted(by_kind_number.items()):
+        if len(sources) > 1:
+            plan.collisions.append({"kind": "number", "entity_kind": kind, "number": number, "sources": sorted(sources)})
 ```
 
 - [ ] **Step 4: Run to verify pass**
@@ -539,7 +559,13 @@ def test_rewrite_reports_unmapped_legacy_tokens() -> None:
     text = "Depends on hypothesis:h9-ghost which no longer exists.\n"
     out, unresolved = rewrite_references(text, id_map)
     assert "hypothesis:h9-ghost" in unresolved
-```
+
+
+def test_rewrite_reports_bare_wikilink() -> None:
+    # A bare [[q01-foo]] (no kind prefix) cannot be auto-rewritten; it must be
+    # surfaced as unresolved rather than silently left as a dead link.
+    out, unresolved = rewrite_references("See [[q01-foo]] for context.\n", {})
+    assert "[[q01-foo]]" in unresolved
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -555,6 +581,7 @@ Append to `science/src/science_tool/entity_layout_migration.py`:
 # prefix (q1, h09) or a date (2026-05-23); canonical are NNNN or a citekey.
 _REF_TOKEN_RE = re.compile(r"\b([a-z][a-z-]*):([A-Za-z0-9][A-Za-z0-9_.-]*)\b")
 _LEGACY_LOCAL_SHAPE = re.compile(r"^(?:[A-Za-z]+\d+|\d{4}-\d{2}-\d{2})(?:-|$)")
+_WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 
 
 def rewrite_references(text: str, id_map: dict[str, str]) -> tuple[str, list[str]]:
@@ -562,7 +589,8 @@ def rewrite_references(text: str, id_map: dict[str, str]) -> tuple[str, list[str
     collisions). Returns (rewritten_text, unresolved_legacy_tokens).
 
     A token that *looks* legacy-shaped but has no mapping is reported in
-    `unresolved` rather than left to rot into a dead link.
+    `unresolved` rather than left to rot into a dead link. This covers both
+    `<kind>:<local>` tokens AND bare `[[<local>]]` wiki-links (no colon).
     """
     # Replace longest keys first so question:q10-b is handled before question:q1-b.
     for old_id in sorted(id_map, key=len, reverse=True):
@@ -570,21 +598,31 @@ def rewrite_references(text: str, id_map: dict[str, str]) -> tuple[str, list[str
         text = re.sub(rf"(?<![\w:.-]){re.escape(old_id)}(?![\w.-])", new_id, text)
 
     unresolved: list[str] = []
+    # (a) kind-qualified tokens (covers id:, related:, inline, and [[kind:local]]).
     for match in _REF_TOKEN_RE.finditer(text):
         token, local = match.group(0), match.group(2)
         if token in id_map.values():
             continue  # already canonical (a freshly-written new id)
         if _LEGACY_LOCAL_SHAPE.match(local):
             unresolved.append(token)
+    # (b) bare wiki-links with NO kind prefix, e.g. [[q01-foo]] / [[2026-05-23-x]].
+    #     These cannot be disambiguated to a kind, so they are reported, not rewritten.
+    for match in _WIKILINK_RE.finditer(text):
+        inner = match.group(1).strip()
+        if ":" in inner:
+            continue  # kind-qualified — handled by (a)/token replacement above
+        if _LEGACY_LOCAL_SHAPE.match(inner):
+            unresolved.append(f"[[{inner}]]")
     return text, sorted(set(unresolved))
 ```
 
 > `rewrite_references` operates on a single file's full text (frontmatter + body),
-> which covers `id:`, `related:`, inline `<kind>:…`, and `[[<kind>:…]]` uniformly
-> because they are all the same token shape. Bare wiki-links without a kind
-> prefix (`[[q01-foo]]`) are intentionally surfaced via `unresolved` for manual
-> handling — the orchestrator (Task 5) treats a non-empty `unresolved` as a
-> blocking error under `--apply`.
+> covering `id:`, `related:`, inline `<kind>:…`, and `[[<kind>:…]]` uniformly
+> (same token shape). Bare wiki-links **without** a kind prefix (`[[q01-foo]]`)
+> are caught by the dedicated `_WIKILINK_RE` scan and surfaced via `unresolved`
+> for manual handling — they cannot be safely disambiguated to a kind. The
+> orchestrator (Task 5) treats a non-empty `unresolved` as a blocking error under
+> `--apply`.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -725,10 +763,28 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
         (project_root / sm.new_rel_path).write_text(singleton_text[sm.new_rel_path], encoding="utf-8")
     for rel, text in task_files.items():
         (project_root / rel).write_text(text, encoding="utf-8")
+
+    # 4. Final graph validation — token rewriting can miss semantic references, so
+    #    load the migrated tree and audit it. Fail loud (do NOT bump layout_version)
+    #    if anything fails to resolve. The working tree is left modified for
+    #    inspection; `git restore`/branch reset rolls back the uncommitted changes.
+    from science_tool.graph.migrate import audit_project_sources
+    from science_tool.graph.sources import load_project_sources
+
+    rows, failed = audit_project_sources(load_project_sources(project_root))
+    if failed:
+        bad = [r for r in rows if r.get("status") == "fail"]
+        raise ValueError(
+            f"post-migration graph validation failed with {len(bad)} issue(s); "
+            f"working tree left modified (git restore to roll back). First issues: {bad[:10]}"
+        )
+
+    # 5. Only after a clean audit: bump layout_version to 3.
     manifest_path = project_root / "science.yaml"
     manifest = _yaml_mod.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
     manifest["layout_version"] = 3
     manifest_path.write_text(_yaml_mod.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+    report["graph_validation"] = "passed"
     return report
 ```
 
@@ -930,7 +986,12 @@ branch; use only `entities/claim-registry.yaml`.
 
 In `hypotheses.py`, `discussions.py`, `document_structure.py`, `papers.py`, remove
 the `... if entities_dir.is_dir() else legacy_dir` fallbacks introduced in Plan 2;
-point only at the `entities/` locations.
+point only at the `entities/` locations. In `discussions.py`, also drop the legacy
+`doc/reports/synthesis.md` singleton candidate retained for v2.
+
+In `id_prefixes.py`, narrow the scan roots from
+`(ctx.project_root / "entities", ctx.doc_dir, ctx.specs_dir)` (Plan 2) to
+`(ctx.project_root / "entities",)` so the check no longer inspects legacy roots.
 
 - [ ] **Step 4: `layout_version < 3` becomes ERROR**
 
@@ -987,7 +1048,9 @@ git commit -m "feat: entities/ hard cutover — drop legacy fallbacks, enforce l
 - **Singletons** (`research-question.md`, `claim-registry.yaml`) relocated by explicit by-path branch, not kind inference → Task 3 (`_plan_singletons`) + Task 5 (singleton rewrite/move). ✅
 - **Date-prefixed slugs** drop the date (regex ordered date-first) → Task 3 (`_slug_from_legacy`). ✅
 - **Collision detection** (duplicate target path / new id) as a blocking report → Task 3 (`_detect_collisions`) + Task 5 (raises under `--apply`). ✅
-- Reference-rewrite completeness + fail-loud on unresolved → Task 4 (`unresolved` reporting) + Task 5 (blocks `--apply`). ✅
+- Reference-rewrite completeness + fail-loud on unresolved → Task 4 (`<kind>:local` tokens **and** bare `[[local]]` wiki-links via `_WIKILINK_RE`) + Task 5 (blocks `--apply`). ✅
+- **Final graph validation before success** (`audit_project_sources` after writes; no `layout_version` bump if it fails) → Task 5 step 4. ✅
+- **Number-hygiene collisions** (two files sharing a number within a kind) detected, not just path/id dupes → Task 3 (`_detect_collisions` `(kind, number)`). ✅
 - Claim-registry + task-graph ref rewriting → Task 5 (singleton + `tasks/**/*.md` buckets). ✅
 - Migration guide → Task 7. ✅
 - Pilot before cutover → Task 8. ✅
