@@ -28,6 +28,24 @@ validation checks (Plan 2), the migrate command, or the no-fallback cutover
 (Plan 3). Papers get a policy entry + create support here; their location
 *consolidation* happens in the migrate command (Plan 3).
 
+> **Intermediate-phase disclaimer.** Plan 1 is deliberately **additive** and
+> therefore *temporarily violates* the design's steady-state "hard cutover, no
+> fallback" decision (design §11): discovery keeps the legacy `doc/`/`specs/`
+> roots and the singleton checks fall back to `specs/`. This is a compatibility
+> bridge so the repo and downstream projects stay green between landing the
+> foundation and running migration. Plan 3 removes every fallback added here and
+> restores the steady-state invariant. Do not treat the fallbacks in Tasks 6–7
+> as permanent.
+
+**Create support in Plan 1 is "policy + loadable + generic scaffold."** All kinds
+become creatable and graph-loadable, but only the seven `MIGRATED_KINDS`
+(`science/model/src/science_model/templates.py:14`) have domain-specific
+templates; newly-added kinds (finding, inquiry, observation, mechanism,
+synthesis, report, plan, search, method, pre-registration, paper, topic) render
+with the **generic** scaffold. Authoring domain templates for those kinds is
+deferred to Plan 2. Atomic id reservation (design §290) is likewise deferred —
+see the deferred list.
+
 ---
 
 ## File structure
@@ -94,6 +112,14 @@ def test_synthesis_and_report_have_policies() -> None:
 def test_evidence_line_root_is_not_naive_pluralization() -> None:
     assert resolve_path_policy("evidence-line").root == Path("entities/evidence-lines")
     assert resolve_path_policy("pre-registration").root == Path("entities/pre-registrations")
+
+
+def test_singletons_are_in_the_policy_table() -> None:
+    from science_tool.entities import singleton_path
+
+    assert resolve_path_policy("research-question").strategy == "singleton"
+    assert singleton_path("research-question") == Path("entities/research-question.md")
+    assert singleton_path("claim-registry") == Path("entities/claim-registry.yaml")
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -141,14 +167,28 @@ _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
     "method": EntityPathPolicy(Path("entities/methods"), "numeric"),
     "pre-registration": EntityPathPolicy(Path("entities/pre-registrations"), "numeric"),
     "paper": EntityPathPolicy(Path("entities/papers"), "citekey"),
+    # Singletons: `root` is the file path itself, not a directory.
+    "research-question": EntityPathPolicy(Path("entities/research-question.md"), "singleton"),
+    "claim-registry": EntityPathPolicy(Path("entities/claim-registry.yaml"), "singleton"),
 }
 ```
 
 Delete the now-unused `EntityFilenamePolicy = Literal[...]` line (was line 20).
-Keep `_SLUG_RE`, `_LOCAL_PART_RE`, etc. as-is. Add `_CITEKEY_RE` near them:
+Keep `_SLUG_RE`, `_LOCAL_PART_RE`, etc. as-is. Add `_CITEKEY_RE` and the
+numeric-local-part validator near them, plus a `singleton_path` helper so the
+policy table is the authoritative source for singleton locations (consumed by
+Task 7):
 
 ```python
 _CITEKEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9.-]*$")
+_NUMERIC_LOCAL_PART_RE = re.compile(r"^\d{4}-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
+
+
+def singleton_path(kind: str) -> Path:
+    policy = resolve_path_policy(kind)
+    if policy.strategy != "singleton":
+        raise EntityCommandError(f"{kind} is not a singleton kind")
+    return policy.root
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -211,6 +251,21 @@ def test_citekey_requires_explicit_id(tmp_path) -> None:
         generate_entity_id(tmp_path, "paper", "Some Title", None, None)
     eid = generate_entity_id(tmp_path, "paper", "", "paper:Adams2025", None)
     assert eid == "paper:Adams2025"
+
+
+def test_explicit_numeric_id_must_be_canonical(tmp_path) -> None:
+    import pytest
+    from science_tool.entities import EntityCommandError
+
+    # Legacy letter-prefixed and wrong-width ids must be rejected, so --id
+    # cannot reintroduce drift under entities/questions/.
+    # signature: generate_entity_id(project_root, kind, title, entity_id, slug)
+    with pytest.raises(EntityCommandError):
+        generate_entity_id(tmp_path, "question", "", "question:q01-old-shape", None)
+    with pytest.raises(EntityCommandError):
+        generate_entity_id(tmp_path, "question", "", "question:5-too-short", None)
+    ok = generate_entity_id(tmp_path, "question", "", "question:0005-good", None)
+    assert ok == "question:0005-good"
 
 
 def test_path_for_entity_uses_policy_root(tmp_path) -> None:
@@ -276,12 +331,19 @@ def validate_entity_id(kind: str, entity_id: str) -> str:
     if not entity_id.startswith(prefix):
         raise EntityCommandError(f"Entity id must use prefix {prefix}")
     local_part = entity_id[len(prefix) :]
-    if resolve_path_policy(kind).strategy == "citekey":
+    strategy = resolve_path_policy(kind).strategy
+    if strategy == "singleton":
+        raise EntityCommandError(f"{kind} is a singleton and has no per-instance id")
+    if strategy == "citekey":
         if not _CITEKEY_RE.fullmatch(local_part):
             raise EntityCommandError(f"Invalid citekey local part: {entity_id}")
         return entity_id
-    if not _LOCAL_PART_RE.fullmatch(local_part):
-        raise EntityCommandError(f"Invalid local entity id: {entity_id}")
+    # numeric: an explicit --id must already be canonical, so it cannot
+    # reintroduce drift (e.g. question:q01-... or question:5-...).
+    if not _NUMERIC_LOCAL_PART_RE.fullmatch(local_part):
+        raise EntityCommandError(
+            f"Non-canonical numeric id {entity_id!r}; expected <kind>:NNNN-slug (4-digit number)"
+        )
     return entity_id
 ```
 
@@ -299,6 +361,107 @@ Expected: PASS.
 ```bash
 git add science/src/science_tool/entities.py science/tests/test_entity_policy.py
 git commit -m "feat(entities): width-4 numeric ids, no letter/date; citekey ids for papers"
+```
+
+---
+
+## Task 2.5: Shortform resolution for zero-padded ids
+
+`q5` / `h3` input sugar must resolve to `…:0005-…` / `…:0003-…`. The current
+matcher (`_entity_ref_matches`, `science/src/science_tool/entities.py:232`)
+compares the bare number `5` against `local_part.startswith("5-")`, which never
+matches `0005-`. Fix it to also try the width-padded form.
+
+**Files:**
+- Modify: `science/src/science_tool/entities.py:232-244` (`_entity_ref_matches`)
+- Test: `science/tests/test_entity_policy.py` (unit) + `science/tests/test_entities_cli.py` (integration)
+
+- [ ] **Step 1: Write failing tests**
+
+Append to `science/tests/test_entity_policy.py`:
+
+```python
+from science_tool.entities import _entity_ref_matches
+
+
+def test_shortform_resolves_zero_padded_id() -> None:
+    assert _entity_ref_matches("question:0005-model-granularity", "q5")
+    assert _entity_ref_matches("hypothesis:0003-attractor", "h3")
+    assert not _entity_ref_matches("question:0005-model-granularity", "h5")  # wrong kind
+
+
+def test_shortform_still_matches_legacy_unpadded_id() -> None:
+    # during transition, legacy ids like question:5-foo must still resolve
+    assert _entity_ref_matches("question:5-foo", "q5")
+```
+
+Append to `science/tests/test_entities_cli.py`:
+
+```python
+def test_entity_show_resolves_shortform() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "entities/questions/0005-granularity.md",
+            {"id": "question:0005-granularity", "type": "question", "title": "Granularity", "status": "active"},
+        )
+        result = runner.invoke(main, ["entity", "show", "q5"])
+        assert result.exit_code == 0, result.output
+        assert "question:0005-granularity" in result.output
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `cd science && uv run pytest tests/test_entity_policy.py -k shortform tests/test_entities_cli.py::test_entity_show_resolves_shortform -v`
+Expected: FAIL — `q5` does not match `0005-…`.
+
+- [ ] **Step 3: Pad the number when matching**
+
+In `science/src/science_tool/entities.py`, add a helper and rewrite
+`_entity_ref_matches` to try both the raw and width-padded number variants:
+
+```python
+def _numeric_variants(token: str) -> set[str]:
+    """Return {token, zero-padded-to-width(token)} when token starts with digits."""
+    match = re.match(r"^(\d+)(.*)$", token)
+    if match is None:
+        return {token}
+    digits, rest = match.group(1), match.group(2)
+    return {token, f"{int(digits):0{LOCAL_PART_WIDTH}d}{rest}"}
+
+
+def _entity_ref_matches(entity_id: str, ref: str) -> bool:
+    kind, local_part = entity_id.split(":", 1)
+    for variant in _numeric_variants(ref):
+        if local_part == variant or local_part.startswith(f"{variant}-"):
+            return True
+
+    shortform = _SHORTFORM_REF_RE.fullmatch(ref)
+    if shortform is None:
+        return False
+    if _SHORTFORM_ENTITY_KINDS.get(shortform.group("prefix").lower()) != kind:
+        return False
+
+    unprefixed_ref = shortform.group("number") + shortform.group("suffix")
+    for variant in _numeric_variants(unprefixed_ref):
+        if local_part == variant or local_part.startswith(f"{variant}-"):
+            return True
+    return False
+```
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `cd science && uv run pytest tests/test_entity_policy.py -k shortform tests/test_entities_cli.py::test_entity_show_resolves_shortform -v`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add science/src/science_tool/entities.py science/tests/test_entity_policy.py science/tests/test_entities_cli.py
+git commit -m "fix(entities): resolve q5/h3 shortforms against zero-padded ids"
 ```
 
 ---
@@ -507,7 +670,31 @@ def test_entity_create_paper_uses_citekey() -> None:
         )
         assert result.exit_code == 0, result.output
         assert Path("entities/papers/Adams2025.md").is_file()
+
+
+def test_entity_create_newly_added_kind_uses_generic_scaffold() -> None:
+    # A non-MIGRATED_KIND (no domain template) must still create successfully
+    # with valid required frontmatter (generic scaffold). Domain templates for
+    # these kinds are deferred to Plan 2.
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        result = runner.invoke(main, ["entity", "create", "finding", "A Finding"])
+        assert result.exit_code == 0, result.output
+        path = Path("entities/findings/0001-a-finding.md")
+        assert path.is_file()
+        fm = yaml.safe_load(path.read_text().split("---")[1])
+        assert fm["id"] == "finding:0001-a-finding"
+        assert fm["type"] == "finding"
+        assert {"title", "status", "created", "updated"} <= set(fm)
 ```
+
+> If `create_entity` hard-rejects kinds outside `MIGRATED_KINDS` (rather than
+> falling back to the generic scaffold), add a minimal step here to allow the
+> generic path for any kind whose policy `strategy` is `numeric`/`citekey`. Grep
+> `MIGRATED_KINDS` usage in `create_entity` / `templates.py` to confirm the
+> current behavior before assuming fallback.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -615,10 +802,13 @@ Expected: FAIL — check only looks in `specs/`.
 - [ ] **Step 3: Prefer `entities/`, fall back to `specs/` (fallback removed in Plan 3)**
 
 In `science/src/science_tool/validate/checks/research_scope.py`, replace the
-hard-coded path (line 28):
+hard-coded path (line 28) — resolve the canonical location from the policy table
+via `singleton_path`, then fall back to `specs/` (fallback removed in Plan 3):
 
 ```python
-    entities_rq = ctx.project_root / "entities" / "research-question.md"
+    from science_tool.entities import singleton_path
+
+    entities_rq = ctx.project_root / singleton_path("research-question")
     legacy_rq = ctx.specs_dir / "research-question.md"
     research_question = entities_rq if entities_rq.is_file() else legacy_rq
     if not research_question.is_file():
@@ -697,14 +887,26 @@ git commit -m "test: align remaining suites with entities/ layout"
 
 ## Self-review notes (coverage against the design)
 
-- Policy SSOT + per-kind strategy → Tasks 1, 4. ✅
-- Width-4 numeric, no letter/date; citekey papers → Task 2. ✅
+- Policy SSOT + per-kind strategy (incl. singleton rows) → Tasks 1, 4. ✅
+- Width-4 numeric, no letter/date; citekey papers; canonical explicit `--id` → Task 2. ✅
+- Shortform `q5`/`h3` → zero-padded id → Task 2.5. ✅
 - Synthesis promotion → Task 3. ✅
 - Discovery loads `entities/` → Task 6. ✅
-- Singleton discovery (research-question, claim-registry) → Task 7. ✅
-- Additive (repo stays green; no cutover) → Tasks 6, 7 keep legacy roots/fallback.
+- Singleton discovery driven by the policy table → Tasks 1 (`singleton_path`), 7. ✅
+- Additive (repo stays green; no cutover) → Tasks 6, 7 keep legacy roots/fallback;
+  see the intermediate-phase disclaimer at the top. ✅
 
 **Deferred to later plans (intentionally not in this plan):**
+- **Atomic id reservation (design §290).** Plan 1 keeps the non-atomic
+  "scan-max-then-write" flow, so parallel agents can collide on `000N`. Deferred
+  to Plan 2: generalize `questions.reserve`'s `O_CREAT|O_EXCL` loop
+  (`science/src/science_tool/questions.py:175`) into a kind-agnostic
+  `reserve_entity` for all numeric kinds. Acceptable in Plan 1 because
+  single-author create is the common path.
+- **Domain templates for newly-added kinds.** Only the seven `MIGRATED_KINDS`
+  have domain templates; finding/inquiry/observation/mechanism/synthesis/report/
+  plan/search/method/pre-registration/topic/paper render generically in Plan 1.
+  Plan 2 authors their templates + per-kind required-section tests.
 - **Plan 2 — Validation & legacy checks:** the five new checks (location
   coherence, filename conformance, frontmatter completeness, number hygiene,
   stray-file); repoint `discussions.py`, `document_structure.py`, `papers.py`,
