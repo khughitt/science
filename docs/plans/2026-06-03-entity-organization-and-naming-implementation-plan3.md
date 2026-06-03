@@ -318,6 +318,44 @@ def test_plan_preserves_already_conformant_numbers(tmp_path: Path) -> None:
     _write(tmp_path, "specs/hypotheses/0003-x.md", '---\nid: "hypothesis:0003-x"\ntype: hypothesis\n---\n')
     plan = plan_migration(tmp_path)
     assert plan.moves[0].new_id == "hypothesis:0003-x"
+
+
+def test_plan_date_prefixed_slug_drops_the_date(tmp_path: Path) -> None:
+    _write(tmp_path, "doc/interpretations/2026-05-23-foo-bar.md",
+           '---\nid: "interpretation:2026-05-23-foo-bar"\ntype: interpretation\ncreated: "2026-05-23"\n---\n')
+    plan = plan_migration(tmp_path)
+    # slug is "foo-bar", NOT "05-23-foo-bar"
+    assert plan.moves[0].new_id == "interpretation:0001-foo-bar"
+
+
+def test_plan_uses_synthesized_created_for_frontmatterless(tmp_path: Path) -> None:
+    # No frontmatter: created must come from the prose **Date:** header so ordering is right.
+    _write_raw = (tmp_path / "doc/interpretations/early.md")
+    _write_raw.parent.mkdir(parents=True, exist_ok=True)
+    _write_raw.write_text("# Early result\n\n**Date:** 2026-01-01\n", encoding="utf-8")
+    _write(tmp_path, "doc/interpretations/2026-12-31-late.md",
+           '---\nid: "interpretation:2026-12-31-late"\ntype: interpretation\ncreated: "2026-12-31"\n---\n')
+    plan = plan_migration(tmp_path)
+    paths = {m.new_rel_path for m in plan.moves}
+    # The prose-dated file (2026-01-01) sorts first → 0001.
+    assert "entities/interpretations/0001-early-result.md" in paths
+
+
+def test_plan_detects_duplicate_target_collision(tmp_path: Path) -> None:
+    # Two papers with the same citekey from the two legacy paper homes.
+    _write(tmp_path, "doc/papers/Adams2025.md", '---\nid: "paper:Adams2025"\ntype: paper\n---\n')
+    _write(tmp_path, "doc/background/papers/Adams2025.md", '---\nid: "paper:Adams2025"\ntype: paper\n---\n')
+    plan = plan_migration(tmp_path)
+    assert plan.collisions  # non-empty: same new_rel_path / new_id
+
+
+def test_plan_relocates_singletons(tmp_path: Path) -> None:
+    _write(tmp_path, "specs/research-question.md", '---\nid: "rq:x"\ntitle: RQ\nstatus: active\n---\n')
+    (tmp_path / "specs/claim-registry.yaml").write_text("claims: []\n", encoding="utf-8")
+    plan = plan_migration(tmp_path)
+    targets = {s.new_rel_path for s in plan.singletons}
+    assert "entities/research-question.md" in targets
+    assert "entities/claim-registry.yaml" in targets
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -330,10 +368,18 @@ Expected: FAIL — `plan_migration` not defined.
 Append to `science/src/science_tool/entity_layout_migration.py`:
 
 ```python
-from science_tool.entities import derive_slug, local_part_conforms, resolve_path_policy
+from science_tool.entities import derive_slug, local_part_conforms, resolve_path_policy, singleton_path
 
-_LEGACY_LOCAL_RE = re.compile(r"^(?:[A-Za-z]+)?(\d+)-(.*)$")  # h01-foo, q5-foo, 0003-foo
+# IMPORTANT: date prefix is tried BEFORE the numeric prefix, so 2026-05-23-foo
+# yields slug "foo" (not "05-23-foo" from the numeric regex matching "2026").
 _DATE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-(.*)$")     # 2026-05-23-foo
+_LEGACY_LOCAL_RE = re.compile(r"^(?:[A-Za-z]+)?(\d+)-(.*)$")  # h01-foo, q5-foo, 0003-foo
+
+# Known legacy locations of the two singletons (no per-kind dir / no type field).
+_SINGLETON_LEGACY_PATHS: dict[str, tuple[str, ...]] = {
+    "research-question": ("specs/research-question.md", "doc/research-question.md"),
+    "claim-registry": ("specs/claim-registry.yaml",),
+}
 
 
 @dataclass(frozen=True)
@@ -345,31 +391,42 @@ class Move:
     kind: str
 
 
+@dataclass(frozen=True)
+class SingletonMove:
+    old_rel_path: str
+    new_rel_path: str
+
+
 @dataclass
 class MigrationPlan:
     moves: list[Move] = field(default_factory=list)
+    singletons: list[SingletonMove] = field(default_factory=list)
     id_map: dict[str, str] = field(default_factory=dict)  # old_id -> new_id
+    collisions: list[dict] = field(default_factory=list)  # blocking; reported
 
 
-def _slug_from_legacy(entity: LegacyEntity) -> str:
+def _slug_from_legacy(entity: "LegacyEntity", frontmatter: dict) -> str:
     stem = Path(entity.rel_path).stem
-    for pattern in (_LEGACY_LOCAL_RE, _DATE_PREFIX_RE):
+    for pattern in (_DATE_PREFIX_RE, _LEGACY_LOCAL_RE):  # date first — see note above
         match = pattern.match(stem)
-        if match is not None:
-            return match.groups()[-1]
-    # No recognizable prefix → derive from the title (or the stem itself).
-    title = entity.frontmatter.get("title")
+        if match is not None and match.groups()[-1]:
+            return derive_slug(match.groups()[-1])
+    # No recognizable prefix → derive from the (synthesized) title, else the stem.
+    title = frontmatter.get("title")
     return derive_slug(str(title)) if title else derive_slug(stem)
 
 
-def _created_key(entity: LegacyEntity) -> str:
-    value = entity.frontmatter.get("created")
-    return str(value) if value else "9999-99-99"  # undated sort last; caller backfills
-
-
 def plan_migration(project_root: Path) -> MigrationPlan:
-    entities = discover_legacy_entities(project_root)
     plan = MigrationPlan()
+    _plan_singletons(project_root, plan)
+
+    entities = discover_legacy_entities(project_root)
+    # Synthesize complete frontmatter BEFORE planning so created/title/slug are
+    # correct even for prose-header (frontmatterless) files.
+    normalized: dict[str, dict] = {
+        e.rel_path: ensure_frontmatter(e, fallback_created=str(e.frontmatter.get("created") or "9999-99-99"))
+        for e in entities
+    }
     by_kind: dict[str, list[LegacyEntity]] = {}
     for entity in entities:
         by_kind.setdefault(entity.kind, []).append(entity)
@@ -379,16 +436,10 @@ def plan_migration(project_root: Path) -> MigrationPlan:
         if policy.strategy == "citekey":
             for entity in items:
                 local = Path(entity.rel_path).stem
-                new_id = f"{kind}:{local}"
-                plan.moves.append(
-                    Move(entity.rel_path, f"{policy.root.as_posix()}/{local}.md", entity.old_id, new_id, kind)
-                )
-                if entity.old_id:
-                    plan.id_map[entity.old_id] = new_id
+                _add_move(plan, entity, f"{policy.root.as_posix()}/{local}.md", f"{kind}:{local}", kind)
             continue
-
         # numeric: preserve conformant numbers; assign the rest in created order.
-        ordered = sorted(items, key=lambda e: (_created_key(e), e.rel_path))
+        ordered = sorted(items, key=lambda e: (str(normalized[e.rel_path]["created"]), e.rel_path))
         taken: set[int] = set()
         deferred: list[LegacyEntity] = []
         provisional: dict[str, int] = {}
@@ -396,8 +447,8 @@ def plan_migration(project_root: Path) -> MigrationPlan:
             stem = Path(entity.rel_path).stem
             if local_part_conforms(kind, stem):
                 number = int(stem.split("-", 1)[0])
-                taken.add(number)
                 provisional[entity.rel_path] = number
+                taken.add(number)  # NB: two pre-conformant 0003-* both keep 3 → collision (detected below)
             else:
                 deferred.append(entity)
         nxt = 1
@@ -409,15 +460,40 @@ def plan_migration(project_root: Path) -> MigrationPlan:
             nxt += 1
         for entity in ordered:
             number = provisional[entity.rel_path]
-            slug = _slug_from_legacy(entity)
-            local = f"{number:04d}-{slug}"
-            new_id = f"{kind}:{local}"
-            plan.moves.append(
-                Move(entity.rel_path, f"{policy.root.as_posix()}/{local}.md", entity.old_id, new_id, kind)
-            )
-            if entity.old_id:
-                plan.id_map[entity.old_id] = new_id
+            local = f"{number:04d}-{_slug_from_legacy(entity, normalized[entity.rel_path])}"
+            _add_move(plan, entity, f"{policy.root.as_posix()}/{local}.md", f"{kind}:{local}", kind)
+
+    _detect_collisions(plan)
     return plan
+
+
+def _add_move(plan: MigrationPlan, entity: "LegacyEntity", new_rel: str, new_id: str, kind: str) -> None:
+    plan.moves.append(Move(entity.rel_path, new_rel, entity.old_id, new_id, kind))
+    if entity.old_id:
+        plan.id_map[entity.old_id] = new_id
+
+
+def _plan_singletons(project_root: Path, plan: MigrationPlan) -> None:
+    for kind, candidates in _SINGLETON_LEGACY_PATHS.items():
+        target = singleton_path(kind).as_posix()
+        for rel in candidates:
+            if (project_root / rel).is_file():
+                plan.singletons.append(SingletonMove(old_rel_path=rel, new_rel_path=target))
+                break  # first existing candidate wins
+
+
+def _detect_collisions(plan: MigrationPlan) -> None:
+    by_path: dict[str, list[str]] = {}
+    by_id: dict[str, list[str]] = {}
+    for move in plan.moves:
+        by_path.setdefault(move.new_rel_path, []).append(move.old_rel_path)
+        by_id.setdefault(move.new_id, []).append(move.old_rel_path)
+    for target, sources in sorted(by_path.items()):
+        if len(sources) > 1:
+            plan.collisions.append({"kind": "path", "target": target, "sources": sorted(sources)})
+    for new_id, sources in sorted(by_id.items()):
+        if len(sources) > 1:
+            plan.collisions.append({"kind": "id", "new_id": new_id, "sources": sorted(sources)})
 ```
 
 - [ ] **Step 4: Run to verify pass**
@@ -604,34 +680,51 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     rewritten: dict[str, str] = {}  # new_rel_path -> file text (pre ref-rewrite)
     for move in plan.moves:
         entity = entities[move.old_rel_path]
-        fm = ensure_frontmatter(entity, fallback_created=str(entity.frontmatter.get("created") or "2026-01-01"))
+        fm = ensure_frontmatter(entity, fallback_created=str(entity.frontmatter.get("created") or "9999-99-99"))
         fm["id"] = move.new_id
         rewritten[move.new_rel_path] = _render(fm, entity.body)
 
-    # 2. Reference rewrite across every migrated file; collect unresolved tokens.
+    # 2. Reference rewrite across every migrated entity, both singletons, and any
+    #    task files that reference entity ids. Collect unresolved tokens per file.
+    singleton_text: dict[str, str] = {}
+    for sm in plan.singletons:
+        singleton_text[sm.new_rel_path] = (project_root / sm.old_rel_path).read_text(encoding="utf-8")
+    task_files = {p.relative_to(project_root).as_posix(): p.read_text(encoding="utf-8")
+                  for p in sorted((project_root / "tasks").rglob("*.md"))} if (project_root / "tasks").is_dir() else {}
+
     all_unresolved: dict[str, list[str]] = {}
-    for new_rel, text in list(rewritten.items()):
-        out, unresolved = rewrite_references(text, plan.id_map)
-        rewritten[new_rel] = out
-        if unresolved:
-            all_unresolved[new_rel] = unresolved
+    for bucket in (rewritten, singleton_text, task_files):
+        for rel, text in list(bucket.items()):
+            out, unresolved = rewrite_references(text, plan.id_map)
+            bucket[rel] = out
+            if unresolved:
+                all_unresolved[rel] = unresolved
 
     report = {
         "moves": [vars(m) for m in plan.moves],
+        "singletons": [vars(s) for s in plan.singletons],
         "id_map": plan.id_map,
+        "collisions": plan.collisions,
         "unresolved_references": all_unresolved,
         "applied": apply,
     }
 
     if not apply:
         return report
+    if plan.collisions:
+        raise ValueError(f"collisions block --apply: {plan.collisions}")
     if all_unresolved:
         raise ValueError(f"unresolved references block --apply: {all_unresolved}")
 
-    # 3. git mv + write rewritten content + bump layout_version.
+    # 3. git mv + write rewritten content (entities, singletons, tasks) + bump version.
     for move in plan.moves:
         _git_mv(project_root, move.old_rel_path, move.new_rel_path)
         (project_root / move.new_rel_path).write_text(rewritten[move.new_rel_path], encoding="utf-8")
+    for sm in plan.singletons:
+        _git_mv(project_root, sm.old_rel_path, sm.new_rel_path)
+        (project_root / sm.new_rel_path).write_text(singleton_text[sm.new_rel_path], encoding="utf-8")
+    for rel, text in task_files.items():
+        (project_root / rel).write_text(text, encoding="utf-8")
     manifest_path = project_root / "science.yaml"
     manifest = _yaml_mod.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
     manifest["layout_version"] = 3
@@ -639,21 +732,20 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     return report
 ```
 
-> **Claim-registry & task-graph refs:** `migrate_layout` rewrites all `*.md`
-> entities. `entities/claim-registry.yaml` (a YAML file, already moved by Plan 3's
-> migrate because it is a singleton — handle it explicitly here if discovery does
-> not cover `.yaml`) and any `tasks/**/*.md` that reference entity ids must ALSO
-> be passed through `rewrite_references` with the same `id_map`. Add a follow-up
-> step in this task to (a) `git mv specs/claim-registry.yaml entities/` if present,
-> and (b) rewrite-references over `tasks/**/*.md` and `entities/claim-registry.yaml`.
-> Cover both with a test before implementing.
+> **Singletons & task refs are handled above:** `research-question.md` and
+> `claim-registry.yaml` are relocated via `plan.singletons` (planned by
+> `_plan_singletons`, including the non-`.md` registry that discovery skips) and
+> their bodies are ref-rewritten; `tasks/**/*.md` are ref-rewritten in place
+> (not moved — tasks remain adapter-backed per the design). Singletons keep their
+> own ids unchanged (relocation only), so they add nothing to `id_map`.
 
-- [ ] **Step 4: Implement claim-registry + task-ref rewriting (per the note)**
+- [ ] **Step 4: Add tests for singletons, tasks, and collision-blocking**
 
-Add to `migrate_layout` (before the manifest bump): move `specs/claim-registry.yaml`
-→ `entities/claim-registry.yaml` if present, and apply `rewrite_references` to that
-file's text and to every `tasks/**/*.md`. Add a test asserting a `tasks/t001.md`
-containing `hypothesis:h01-x` is rewritten to `hypothesis:0001-x`.
+Append tests asserting: (a) `tasks/t001.md` containing `hypothesis:h01-x` is
+rewritten to `hypothesis:0001-x`; (b) `specs/claim-registry.yaml` referencing
+`hypothesis:h01-x` lands at `entities/claim-registry.yaml` with the ref rewritten;
+(c) a project with two `Adams2025.md` paper sources raises `ValueError` under
+`apply=True` and lists the collision in the dry-run report.
 
 - [ ] **Step 5: Run to verify pass**
 
@@ -855,8 +947,9 @@ point only at the `entities/` locations.
 
 - [ ] **Step 5: Conformance checks promote to ERROR**
 
-In `entity_conformance.py`, replace the literal `Severity.WARN` in the five checks
-with a gated severity helper, and use it:
+Plan 2 already routes every conformance yield through the `_severity(ctx)` helper
+in `entity_conformance.py`. The cutover only changes that helper's **body** to
+gate on `layout_version` (no call-site edits needed):
 
 ```python
 def _severity(ctx: ValidateContext) -> Severity:
@@ -864,7 +957,8 @@ def _severity(ctx: ValidateContext) -> Severity:
     return Severity.ERROR if isinstance(version, int) and version >= 3 else Severity.WARN
 ```
 
-(Replace each `Severity.WARN` yield with `_severity(ctx)`.)
+(The stranded-file branch in `check_entity_location_coherence` keeps emitting
+`Severity.WARN` directly — a file in `doc/` is advisory, not a v3 violation.)
 
 - [ ] **Step 6: Update tests to steady-state expectations**
 
@@ -888,13 +982,18 @@ git commit -m "feat: entities/ hard cutover — drop legacy fallbacks, enforce l
 
 ## Self-review (coverage against the design)
 
-- `science entities migrate` (synthesis → id-map → raw rewrite → git mv → bump) → Tasks 1–6. ✅
+- `science entities migrate` (synthesis-first → id-map → raw rewrite → git mv → bump) → Tasks 1–6. ✅
+- **Synthesis feeds planning** (created/title/slug come from synthesized frontmatter, so prose-header files sort and slug correctly) → Task 3 (`normalized` in `plan_migration`). ✅
+- **Singletons** (`research-question.md`, `claim-registry.yaml`) relocated by explicit by-path branch, not kind inference → Task 3 (`_plan_singletons`) + Task 5 (singleton rewrite/move). ✅
+- **Date-prefixed slugs** drop the date (regex ordered date-first) → Task 3 (`_slug_from_legacy`). ✅
+- **Collision detection** (duplicate target path / new id) as a blocking report → Task 3 (`_detect_collisions`) + Task 5 (raises under `--apply`). ✅
 - Reference-rewrite completeness + fail-loud on unresolved → Task 4 (`unresolved` reporting) + Task 5 (blocks `--apply`). ✅
-- Claim-registry + task-graph ref rewriting → Task 5 Step 4. ✅
+- Claim-registry + task-graph ref rewriting → Task 5 (singleton + `tasks/**/*.md` buckets). ✅
 - Migration guide → Task 7. ✅
 - Pilot before cutover → Task 8. ✅
 - No-fallback cutover (scan roots, singletons, `_ALLOWED_EXPLICIT_ROOTS`, legacy
-  semantic-check fallbacks) + `layout_version: 3` ERROR + WARN→ERROR → Task 9. ✅
+  semantic-check fallbacks) + `layout_version: 3` ERROR + WARN→ERROR (one-body
+  change to the Plan 2 `_severity` helper) → Task 9. ✅
 
 **Known limitations (documented, not silent):**
 - YAML re-render via `yaml.safe_dump` does not preserve comments/key-ordering
