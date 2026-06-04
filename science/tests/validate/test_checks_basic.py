@@ -815,3 +815,15 @@ def test_context_rejects_non_list_code_roots(tmp_path: Path) -> None:
     _write_manifest(tmp_path, extra="code_roots: code")
     with pytest.raises(ValidateContextError, match="must be a list of strings"):
         ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
+
+
+def test_layout_version_below_3_warns(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text(
+        "name: t\ncreated: 2026-01-01\nlast_modified: 2026-01-01\nstatus: active\n"
+        "summary: s\nprofile: research\nlayout_version: 2\nknowledge_profiles: {local: local}\n",
+        encoding="utf-8",
+    )
+    ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
+    from science_tool.validate.checks.manifest import check_manifest
+    results = list(check_manifest(ctx))
+    assert any(r.severity is Severity.WARN and "layout_version" in r.message for r in results)

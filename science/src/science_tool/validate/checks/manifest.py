@@ -27,6 +27,13 @@ def check_manifest(ctx: ValidateContext) -> Iterator[Result]:
         else:
             yield _result(Severity.INFO, f"  {field}: present")
 
+    layout_version = ctx.manifest.get("layout_version")
+    if isinstance(layout_version, int) and layout_version < 3:
+        yield _result(
+            Severity.WARN,
+            "science.yaml: layout_version < 3 — run `science entities migrate` to adopt the entities/ layout",
+        )
+
     profiles = ctx.manifest.get("knowledge_profiles")
     if not isinstance(profiles, dict):
         yield _result(Severity.ERROR, "science.yaml missing required knowledge_profiles section")
