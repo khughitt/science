@@ -25,8 +25,8 @@ def _result(severity: Severity, path: str | None, message: str) -> Result:
 def check_papers(ctx: ValidateContext) -> Iterator[Result]:
     yield _result(
         Severity.INFO,
-        "doc/background/papers",
-        "Paper summary structure is checked in doc/background/papers/",
+        "entities/papers",
+        "Paper summary structure is checked in entities/papers/",
     )
     yield from _check_paper_dataset_refs(ctx)
 
