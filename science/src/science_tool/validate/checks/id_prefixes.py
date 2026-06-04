@@ -93,26 +93,27 @@ import os
 from pathlib import Path
 import re
 
+from science_tool.entities import markdown_entity_kinds
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
-PREFIX_RULES = {
-    "hypothesis": "hypothesis:",
-    "question": "question:",
-    "paper": "paper:",
-    "interpretation": "interpretation:",
-    "report": "report:",
-    "discussion": "discussion:",
-    "plan": "plan:",
-    "spec": "spec:",
-    "topic": "topic:",
-    "concept": "concept:",
-    "dataset": "dataset:",
-    "method": "method:",
-    "synthesis": "synthesis:",
-    "pre-registration": "pre-registration:",
-}
+# Reference/operational kinds NOT governed by the markdown policy table but
+# still subject to id-prefix conformance. These must be every kind the static
+# PREFIX_RULES covered that is absent from _BUILTIN_MARKDOWN_POLICIES — today
+# that is concept, dataset, and spec. (paper IS in the policy table, so it is
+# intentionally NOT listed here.) Dropping any of these silently reduces
+# validation coverage in repos with concept:/dataset:/spec: records.
+_EXTRA_PREFIX_KINDS = ("concept", "dataset", "spec")
+
+
+def prefix_rules() -> dict[str, str]:
+    kinds = set(markdown_entity_kinds()) | set(_EXTRA_PREFIX_KINDS)
+    kinds -= {"research-question", "claim-registry"}  # singletons
+    return {kind: f"{kind}:" for kind in sorted(kinds)}
+
+
+PREFIX_RULES = prefix_rules()
 
 QUOTE = "[\"']?"
 FRONTMATTER = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
@@ -144,7 +145,7 @@ def check_id_prefixes(ctx: ValidateContext) -> Iterator[Result]:
         return
 
     violations: list[str] = []
-    for root in (ctx.doc_dir, ctx.specs_dir):
+    for root in (ctx.project_root / "entities", ctx.doc_dir, ctx.specs_dir):
         if not root.is_dir():
             continue
         for path in sorted(root.rglob("*.md")):

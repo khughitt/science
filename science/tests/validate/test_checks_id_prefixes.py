@@ -142,6 +142,41 @@ def test_read_encoding_errors_propagate(tmp_path: Path) -> None:
         list(check_id_prefixes(_ctx(tmp_path)))
 
 
+def test_prefix_rules_cover_every_markdown_kind() -> None:
+    from science_tool.entities import markdown_entity_kinds
+    from science_tool.validate.checks.id_prefixes import prefix_rules
+
+    rules = prefix_rules()
+    for kind in markdown_entity_kinds():
+        if kind in {"research-question", "claim-registry"}:
+            continue  # singletons validated elsewhere
+        assert rules.get(kind) == f"{kind}:", f"{kind} missing/incorrect prefix rule"
+
+
+def test_prefix_rules_retain_nonpolicy_kinds() -> None:
+    # Regression guard: deriving rules from the policy table must NOT drop
+    # non-policy kinds the static PREFIX_RULES used to cover. `concept` and
+    # `dataset` are not markdown entity kinds (absent from the policy table)
+    # but still carry typed `concept:`/`dataset:` ids that need conformance.
+    from science_tool.validate.checks.id_prefixes import prefix_rules
+
+    rules = prefix_rules()
+    for kind in ("concept", "dataset", "spec"):
+        assert rules.get(kind) == f"{kind}:", f"{kind} prefix rule was dropped"
+
+
+def test_id_prefixes_scans_entities_dir(tmp_path) -> None:
+    # a type/id mismatch under entities/ must be detected
+    (tmp_path / "science.yaml").write_text("name: t\nlayout_version: 3\n", encoding="utf-8")
+    d = tmp_path / "entities" / "questions"
+    d.mkdir(parents=True)
+    (d / "0001-x.md").write_text('---\ntype: question\nid: "hypothesis:0001-x"\n---\n', encoding="utf-8")
+    from science_tool.validate.context import ValidateContext
+    from science_tool.validate.checks.id_prefixes import check_id_prefixes
+    ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
+    assert any(r.severity is Severity.WARN for r in check_id_prefixes(ctx))
+
+
 def test_loader_registry_includes_id_prefixes_after_tasks_at_order_19() -> None:
     import science_tool.validate.checks.id_prefixes as id_prefixes
     import science_tool.validate.checks.tasks as tasks
