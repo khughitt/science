@@ -151,12 +151,12 @@ def test_entity_create_evidence_line_writes_template(tmp_path: Path) -> None:
         result = runner.invoke(
             main,
             ["entity", "create", "evidence-line", "My first evidence line",
-             "--id", "evidence-line:e01-first"],
+             "--id", "evidence-line:0001-first"],
         )
         assert result.exit_code == 0, f"entity create failed:\n{result.output}"
-        assert "evidence-line:e01-first" in result.output
+        assert "evidence-line:0001-first" in result.output
 
-        dest = root / "doc" / "evidence-lines" / "e01-first.md"
+        dest = root / "entities" / "evidence-lines" / "0001-first.md"
         assert dest.is_file(), f"Expected file at {dest}"
         text = dest.read_text(encoding="utf-8")
         # Template should seed stance, target, independence.

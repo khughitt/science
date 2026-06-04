@@ -15,9 +15,9 @@ from science_tool.graph.materialize import materialize_graph
 
 def _setup_project_with_hypothesis(tmp_path: Path) -> Path:
     root = tmp_path / "demo"
-    (root / "specs" / "hypotheses").mkdir(parents=True)
+    (root / "entities" / "hypotheses").mkdir(parents=True)
     (root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: core\n")
-    (root / "specs" / "hypotheses" / "h1.md").write_text(
+    (root / "entities" / "hypotheses" / "h1.md").write_text(
         dedent(
             """
             ---
@@ -41,7 +41,7 @@ def test_entity_review_sets_last_reviewed(tmp_path: Path, monkeypatch):
     result = runner.invoke(cli_main, ["entity", "review", "hypothesis:h1"])
     assert result.exit_code == 0, result.output
 
-    text = (root / "specs" / "hypotheses" / "h1.md").read_text()
+    text = (root / "entities" / "hypotheses" / "h1.md").read_text()
     today = date.today().isoformat()
     assert "review_state:" in text
     assert (
@@ -56,7 +56,7 @@ def test_entity_review_records_note(tmp_path: Path, monkeypatch):
     result = runner.invoke(cli_main, ["entity", "review", "hypothesis:h1", "--note", "Re-checked after Lee2026"])
     assert result.exit_code == 0, result.output
 
-    text = (root / "specs" / "hypotheses" / "h1.md").read_text()
+    text = (root / "entities" / "hypotheses" / "h1.md").read_text()
     assert "last_review_note" in text
     assert "Re-checked after Lee2026" in text
 
@@ -66,9 +66,9 @@ def test_entity_review_idempotent(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(root)
     runner = CliRunner()
     runner.invoke(cli_main, ["entity", "review", "hypothesis:h1"])
-    text_first = (root / "specs" / "hypotheses" / "h1.md").read_text()
+    text_first = (root / "entities" / "hypotheses" / "h1.md").read_text()
     runner.invoke(cli_main, ["entity", "review", "hypothesis:h1"])
-    text_second = (root / "specs" / "hypotheses" / "h1.md").read_text()
+    text_second = (root / "entities" / "hypotheses" / "h1.md").read_text()
     assert text_first == text_second
 
 
@@ -84,7 +84,7 @@ def test_entity_review_unknown_id_errors(tmp_path: Path, monkeypatch):
 def test_entity_review_preserves_existing_review_horizon_days(tmp_path: Path, monkeypatch):
     """Reviewing must not clobber other review_state fields."""
     root = _setup_project_with_hypothesis(tmp_path)
-    h_path = root / "specs" / "hypotheses" / "h1.md"
+    h_path = root / "entities" / "hypotheses" / "h1.md"
     h_path.write_text(
         dedent(
             """
@@ -115,7 +115,7 @@ def test_entity_review_preserves_existing_review_horizon_days(tmp_path: Path, mo
 def test_entity_review_preserves_existing_note_when_no_note_passed(tmp_path: Path, monkeypatch):
     """Reviewing without --note keeps any pre-existing last_review_note."""
     root = _setup_project_with_hypothesis(tmp_path)
-    h_path = root / "specs" / "hypotheses" / "h1.md"
+    h_path = root / "entities" / "hypotheses" / "h1.md"
     h_path.write_text(
         dedent(
             """
@@ -141,7 +141,7 @@ def test_entity_review_preserves_existing_note_when_no_note_passed(tmp_path: Pat
 
 def test_entity_review_replaces_existing_note_when_new_note_passed(tmp_path: Path, monkeypatch):
     root = _setup_project_with_hypothesis(tmp_path)
-    h_path = root / "specs" / "hypotheses" / "h1.md"
+    h_path = root / "entities" / "hypotheses" / "h1.md"
     h_path.write_text(
         dedent(
             """
@@ -169,7 +169,7 @@ def test_entity_review_replaces_existing_note_when_new_note_passed(tmp_path: Pat
 def test_entity_review_clears_existing_note_when_empty_string_passed(tmp_path: Path, monkeypatch):
     """Passing --note '' clears any pre-existing last_review_note."""
     root = _setup_project_with_hypothesis(tmp_path)
-    h_path = root / "specs" / "hypotheses" / "h1.md"
+    h_path = root / "entities" / "hypotheses" / "h1.md"
     h_path.write_text(
         dedent(
             """
@@ -262,9 +262,9 @@ def test_entity_needs_review_empty_when_all_fresh(tmp_path: Path, monkeypatch):
 def _setup_project_with_dataset(tmp_path: Path) -> Path:
     """Project with a dataset entity placed under the hypotheses root so find_entity can load it.
 
-    _load_markdown_entities scans policy-rooted directories but includes any
+    _load_markdown_entities scans policy-rooted directories (entities/) and includes any
     entity whose frontmatter has a valid id/kind — so a file with kind:dataset
-    placed in specs/hypotheses/ is discoverable by find_entity("dataset:d1").
+    placed in entities/hypotheses/ is discoverable by find_entity("dataset:d1").
 
     Scope: this exercises the registry-gate logic in review_entity(). It does
     not prove the gate fires when a dataset is discovered via its canonical
@@ -273,9 +273,9 @@ def _setup_project_with_dataset(tmp_path: Path) -> Path:
     adapters like DatapackageAdapter).
     """
     root = tmp_path / "demo"
-    (root / "specs" / "hypotheses").mkdir(parents=True)
+    (root / "entities" / "hypotheses").mkdir(parents=True)
     (root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: core\n")
-    (root / "specs" / "hypotheses" / "d1.md").write_text(
+    (root / "entities" / "hypotheses" / "d1.md").write_text(
         dedent(
             """
             ---
