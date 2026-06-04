@@ -2,19 +2,25 @@
 id: "finding:{{nn}}-{{slug}}"
 type: "finding"
 title: "{{title}}"
+status: "active"
 propositions: []
 observations: []
 related: []
 source_refs: []
+created: "{{YYYY-MM-DD}}"
+updated: "{{YYYY-MM-DD}}"
 _template:
   frontmatter:
     id: { from: entity_id }
     type: { default: "finding" }
     title: { from: title }
+    status: { from: status }
     propositions: { default: [] }
     observations: { default: [] }
     related: { from: related }
     source_refs: { from: source_refs }
+    created: { from: created }
+    updated: { from: updated }
   sections:
     - { key: summary, name: "Summary", required: true }
     - { key: observations, name: "Observations", required: true }

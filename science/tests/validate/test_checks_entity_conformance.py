@@ -4,6 +4,9 @@ from pathlib import Path
 
 import yaml
 
+import pytest
+
+from science_tool.entities import create_entity
 from science_tool.validate.checks.entity_conformance import (
     check_entity_filename_conformance,
     check_entity_frontmatter_completeness,
@@ -117,6 +120,28 @@ def test_number_hygiene_passes_for_distinct_numbers(tmp_path: Path) -> None:
     _write(tmp_path, "entities/questions/0002-b.md", {"id": "question:0002-b", "type": "question"})
     ctx = _ctx(tmp_path)
     assert not [r for r in check_entity_number_hygiene(ctx) if r.severity is Severity.WARN]
+
+
+@pytest.mark.parametrize("kind", ["finding", "synthesis", "hypothesis", "method", "paper", "inquiry"])
+def test_freshly_created_entity_has_complete_required_frontmatter(tmp_path: Path, kind: str) -> None:
+    # Regression: the real create code path (templates -> renderer) must emit
+    # every _REQUIRED_FRONTMATTER field. finding/synthesis previously omitted
+    # status/created/updated, so a freshly-created entity tripped the
+    # completeness check. Exercise the real create path, not a synthetic fixture.
+    (tmp_path / "science.yaml").write_text(
+        "name: t\nlayout_version: 3\nprofile: research\nknowledge_profiles: {local: local}\n",
+        encoding="utf-8",
+    )
+    # paper uses a citekey id strategy and requires an explicit --id.
+    entity_id = "paper:Smoke2026" if kind == "paper" else None
+    create_entity(tmp_path, kind, f"Smoke {kind}", entity_id=entity_id)
+    ctx = _ctx(tmp_path)
+    missing = [
+        r
+        for r in check_entity_frontmatter_completeness(ctx)
+        if "missing frontmatter fields" in r.message
+    ]
+    assert not missing, [r.message for r in missing]
 
 
 def test_stray_files_ignores_reservation_sentinel(tmp_path: Path) -> None:
