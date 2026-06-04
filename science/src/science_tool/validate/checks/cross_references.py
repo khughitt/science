@@ -268,6 +268,7 @@ LOCAL_KINDS = {
     "report",
     "source",
     "story",
+    "synthesis",
     "task",
     "theme",
     "topic",

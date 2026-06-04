@@ -148,9 +148,10 @@ def _load_registry(path: Path) -> IndexedClaimRegistry:
 def _discover_ancestor_registry(path: Path) -> Path | None:
     current = path.parent
     for _ in range(_MAX_ANCESTOR_REGISTRY_LEVELS + 1):
-        candidate = current / "specs" / "claim-registry.yaml"
-        if candidate.is_file():
-            return candidate
+        for rel in ("entities/claim-registry.yaml", "specs/claim-registry.yaml"):
+            candidate = current / rel
+            if candidate.is_file():
+                return candidate
         if current.parent == current:
             return None
         current = current.parent

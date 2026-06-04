@@ -103,6 +103,7 @@ _LOCAL_ENTITY_KINDS = frozenset(
         "question",
         "report",
         "source",
+        "synthesis",
         "story",
         "task",
         "theme",

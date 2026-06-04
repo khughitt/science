@@ -99,6 +99,7 @@ class EntityType(StrEnum):
     PAPER = "paper"
     SEARCH = "search"
     REPORT = "report"
+    SYNTHESIS = "synthesis"
     VALIDATION_REPORT = "validation-report"
     TASK = "task"
     SPEC = "spec"
@@ -191,6 +192,7 @@ _DISALLOWED_MECHANISM_PARTICIPANT_KINDS = frozenset(
         EntityType.PAPER.value,
         EntityType.SEARCH.value,
         EntityType.REPORT.value,
+        EntityType.SYNTHESIS.value,
         EntityType.VALIDATION_REPORT.value,
         EntityType.TASK.value,
         EntityType.SPEC.value,
