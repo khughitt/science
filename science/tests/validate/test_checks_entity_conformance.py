@@ -66,3 +66,11 @@ def test_filename_conformance_passes_for_padded(tmp_path: Path) -> None:
     _write(tmp_path, "entities/questions/0001-x.md", {"id": "question:0001-x", "type": "question"})
     ctx = _ctx(tmp_path)
     assert not [r for r in check_entity_filename_conformance(ctx) if r.severity is Severity.WARN]
+
+
+def test_location_coherence_flags_id_kind_in_wrong_dir(tmp_path: Path) -> None:
+    # correct type, but the id's kind prefix disagrees with the directory
+    _write(tmp_path, "entities/questions/0001-x.md", {"id": "hypothesis:0001-x", "type": "question"})
+    ctx = _ctx(tmp_path)
+    results = list(check_entity_location_coherence(ctx))
+    assert any(r.severity is Severity.WARN and "id kind" in r.message for r in results)

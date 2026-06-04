@@ -8,9 +8,6 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
-import re
-
-import yaml
 
 from science_tool.entities import (
     is_markdown_entity_kind,
@@ -22,7 +19,6 @@ from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
-_FRONTMATTER = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
 _LEGACY_ROOTS = ("doc", "specs")
 
 
@@ -30,19 +26,8 @@ def _result(severity: Severity, path: Path | None, message: str) -> Result:
     return Result(severity, path, None, message, "entity-conformance", None)
 
 
-def _frontmatter_dict(ctx: ValidateContext, path: Path) -> dict:
-    match = _FRONTMATTER.match(ctx.read_text_cached(path))
-    if match is None:
-        return {}
-    try:
-        data = yaml.safe_load(match.group(1)) or {}
-    except yaml.YAMLError:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
 def _entity_type(ctx: ValidateContext, path: Path) -> str | None:
-    data = _frontmatter_dict(ctx, path)
+    data = ctx.frontmatter(path)
     value = data.get("type") or data.get("kind")
     return str(value) if value else None
 
@@ -88,7 +73,7 @@ def check_entity_location_coherence(ctx: ValidateContext) -> Iterator[Result]:
         if not directory.is_dir():
             continue
         for path in sorted(directory.glob("*.md")):
-            data = _frontmatter_dict(ctx, path)
+            data = ctx.frontmatter(path)
             ftype = data.get("type") or data.get("kind")
             if ftype and str(ftype) != kind:
                 yield _result(_severity(ctx), _rel(ctx, path), f"type {ftype!r} in {kind}/ directory (expected {kind})")
@@ -113,7 +98,8 @@ def check_entity_filename_conformance(ctx: ValidateContext) -> Iterator[Result]:
                 yield _result(
                     _severity(ctx), _rel(ctx, path), f"non-conforming {kind} filename {path.name!r} (strategy={policy.strategy})"
                 )
-            _, id_local = _id_kind_and_local(_frontmatter_dict(ctx, path).get("id"))
+            data = ctx.frontmatter(path)
+            _, id_local = _id_kind_and_local(data.get("id"))
             if id_local is not None and id_local != path.stem:
                 yield _result(
                     _severity(ctx), _rel(ctx, path), f"filename stem {path.stem!r} != id local-part {id_local!r}"
