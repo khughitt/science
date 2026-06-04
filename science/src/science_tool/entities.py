@@ -17,7 +17,9 @@ from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
 
-EntityFilenamePolicy = Literal["local-part", "date-local-part"]
+EntityFilenameStrategy = Literal["numeric", "citekey", "singleton"]
+
+LOCAL_PART_WIDTH = 4
 
 
 class EntityCommandError(ValueError):
@@ -27,20 +29,37 @@ class EntityCommandError(ValueError):
 @dataclass(frozen=True)
 class EntityPathPolicy:
     root: Path
-    filename: EntityFilenamePolicy
+    strategy: EntityFilenameStrategy
 
 
 _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
-    "evidence-line": EntityPathPolicy(root=Path("doc/evidence-lines"), filename="local-part"),
-    "question": EntityPathPolicy(root=Path("doc/questions"), filename="local-part"),
-    "hypothesis": EntityPathPolicy(root=Path("specs/hypotheses"), filename="local-part"),
-    "discussion": EntityPathPolicy(root=Path("doc/discussions"), filename="date-local-part"),
-    "interpretation": EntityPathPolicy(root=Path("doc/interpretations"), filename="date-local-part"),
-    "theme": EntityPathPolicy(root=Path("doc/themes"), filename="local-part"),
-    "proposition": EntityPathPolicy(root=Path("specs/propositions"), filename="local-part"),
+    "question": EntityPathPolicy(Path("entities/questions"), "numeric"),
+    "hypothesis": EntityPathPolicy(Path("entities/hypotheses"), "numeric"),
+    "proposition": EntityPathPolicy(Path("entities/propositions"), "numeric"),
+    "interpretation": EntityPathPolicy(Path("entities/interpretations"), "numeric"),
+    "discussion": EntityPathPolicy(Path("entities/discussions"), "numeric"),
+    "finding": EntityPathPolicy(Path("entities/findings"), "numeric"),
+    "inquiry": EntityPathPolicy(Path("entities/inquiries"), "numeric"),
+    "theme": EntityPathPolicy(Path("entities/themes"), "numeric"),
+    "topic": EntityPathPolicy(Path("entities/topics"), "numeric"),
+    "evidence-line": EntityPathPolicy(Path("entities/evidence-lines"), "numeric"),
+    "observation": EntityPathPolicy(Path("entities/observations"), "numeric"),
+    "mechanism": EntityPathPolicy(Path("entities/mechanisms"), "numeric"),
+    "synthesis": EntityPathPolicy(Path("entities/synthesis"), "numeric"),
+    "report": EntityPathPolicy(Path("entities/reports"), "numeric"),
+    "plan": EntityPathPolicy(Path("entities/plans"), "numeric"),
+    "search": EntityPathPolicy(Path("entities/searches"), "numeric"),
+    "method": EntityPathPolicy(Path("entities/methods"), "numeric"),
+    "pre-registration": EntityPathPolicy(Path("entities/pre-registrations"), "numeric"),
+    "paper": EntityPathPolicy(Path("entities/papers"), "citekey"),
+    # Singletons: `root` is the file path itself, not a directory.
+    "research-question": EntityPathPolicy(Path("entities/research-question.md"), "singleton"),
+    "claim-registry": EntityPathPolicy(Path("entities/claim-registry.yaml"), "singleton"),
 }
 _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 _LOCAL_PART_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+_CITEKEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9.-]*$")
+_NUMERIC_LOCAL_PART_RE = re.compile(r"^\d{4}-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 _ID_PREFIX_RE = re.compile(r"^(?P<prefix>[a-z]?)(?P<number>\d+)-", re.IGNORECASE)
 _SHORTFORM_REF_RE = re.compile(r"^(?P<prefix>[A-Za-z])(?P<number>\d+)(?P<suffix>(?:[.-].*)?)$")
 _NOTES_HEADING_RE = re.compile(r"^##\s+Notes\s*$")
@@ -118,6 +137,13 @@ def resolve_path_policy(kind: str) -> EntityPathPolicy:
         raise EntityCommandError(f"Unsupported source-authored entity kind: {kind}") from exc
 
 
+def singleton_path(kind: str) -> Path:
+    policy = resolve_path_policy(kind)
+    if policy.strategy != "singleton":
+        raise EntityCommandError(f"{kind} is not a singleton kind")
+    return policy.root
+
+
 def truncate_slug_on_word_boundary(slug: str, max_length: int) -> str:
     """Cap a kebab-case slug at ``max_length`` without cutting mid-word.
 
@@ -180,7 +206,7 @@ def generate_entity_id(
         return validate_entity_id(kind, entity_id)
 
     slug_value = validate_slug(slug) if slug is not None else derive_slug(title)
-    if resolve_path_policy(kind).filename == "date-local-part":
+    if resolve_path_policy(kind).strategy == "date-local-part":  # dead path post-Task-1; rewritten in Task 2
         date_value = today or date.today()
         return f"{kind}:{date_value.isoformat()}-{slug_value}"
     siblings = _existing_local_parts(project_root, kind)
