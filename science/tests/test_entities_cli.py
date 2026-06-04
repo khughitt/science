@@ -64,14 +64,14 @@ def test_questions_show_rejects_other_entity_kinds() -> None:
         seed_project(root)
         write_markdown_entity(
             root,
-            "specs/hypotheses/h01-alpha.md",
-            {"id": "hypothesis:h01-alpha", "type": "hypothesis", "title": "Alpha", "status": "proposed"},
+            "entities/hypotheses/0001-alpha.md",
+            {"id": "hypothesis:0001-alpha", "type": "hypothesis", "title": "Alpha", "status": "proposed"},
         )
 
-        result = runner.invoke(main, ["questions", "show", "h01"])
+        result = runner.invoke(main, ["questions", "show", "h1"])
 
         assert result.exit_code != 0
-        assert "Expected question entity, got hypothesis:h01-alpha" in result.output
+        assert "Expected question entity, got hypothesis:0001-alpha" in result.output
 
 
 def test_questions_show_accepts_q_shortform_for_numbered_question_id() -> None:
@@ -81,14 +81,14 @@ def test_questions_show_accepts_q_shortform_for_numbered_question_id() -> None:
         seed_project(root)
         write_markdown_entity(
             root,
-            "doc/questions/q01-alpha.md",
-            {"id": "question:01-alpha", "type": "question", "title": "Alpha", "status": "active"},
+            "entities/questions/0001-alpha.md",
+            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "active"},
         )
 
-        result = runner.invoke(main, ["questions", "show", "q01"])
+        result = runner.invoke(main, ["questions", "show", "q1"])
 
         assert result.exit_code == 0, result.output
-        assert "question:01-alpha" in result.output
+        assert "question:0001-alpha" in result.output
         assert "Alpha" in result.output
 
 
@@ -99,37 +99,37 @@ def test_plural_entity_list_and_show_commands() -> None:
         seed_project(root)
         write_markdown_entity(
             root,
-            "doc/questions/q01-alpha.md",
-            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "active"},
+            "entities/questions/0001-alpha.md",
+            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "active"},
             "# Alpha\n\n## Summary\n\nBody content.\n",
         )
         write_markdown_entity(
             root,
-            "specs/hypotheses/h01-beta.md",
-            {"id": "hypothesis:h01-beta", "type": "hypothesis", "title": "Beta", "status": "proposed"},
+            "entities/hypotheses/0001-beta.md",
+            {"id": "hypothesis:0001-beta", "type": "hypothesis", "title": "Beta", "status": "proposed"},
         )
         write_markdown_entity(
             root,
-            "doc/discussions/2026-06-01-gamma.md",
+            "entities/discussions/0001-gamma.md",
             {
-                "id": "discussion:2026-06-01-gamma",
+                "id": "discussion:0001-gamma",
                 "type": "discussion",
                 "title": "Gamma",
                 "status": "active",
             },
         )
 
-        questions_show = runner.invoke(main, ["questions", "show", "q01"])
+        questions_show = runner.invoke(main, ["questions", "show", "q1"])
         hypotheses_list = runner.invoke(main, ["hypotheses", "list", "--format", "json"])
         discussions_list = runner.invoke(main, ["discussions", "list"])
 
         assert questions_show.exit_code == 0, questions_show.output
-        assert "question:q01-alpha" in questions_show.output
+        assert "question:0001-alpha" in questions_show.output
         assert "Body content." in questions_show.output
         assert hypotheses_list.exit_code == 0, hypotheses_list.output
-        assert [row["id"] for row in json.loads(hypotheses_list.output)["rows"]] == ["hypothesis:h01-beta"]
+        assert [row["id"] for row in json.loads(hypotheses_list.output)["rows"]] == ["hypothesis:0001-beta"]
         assert discussions_list.exit_code == 0, discussions_list.output
-        assert "discussion:2026-06-01-gamma" in discussions_list.output
+        assert "discussion:0001-gamma" in discussions_list.output
 
 
 def test_plural_entity_list_uses_shared_color_styles() -> None:
@@ -198,14 +198,14 @@ def test_entity_show_finds_source_entity_by_shorthand() -> None:
         seed_project(root)
         write_markdown_entity(
             root,
-            "doc/questions/q01-alpha.md",
-            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            "entities/questions/0001-alpha.md",
+            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
         )
 
-        result = runner.invoke(main, ["entity", "show", "q01"])
+        result = runner.invoke(main, ["entity", "show", "q1"])
 
         assert result.exit_code == 0, result.output
-        assert "question:q01-alpha" in result.output
+        assert "question:0001-alpha" in result.output
         assert "Alpha" in result.output
 
 
@@ -216,12 +216,12 @@ def test_entity_show_emits_body_content() -> None:
         seed_project(root)
         write_markdown_entity(
             root,
-            "doc/questions/q01-alpha.md",
-            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            "entities/questions/0001-alpha.md",
+            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
             "# Alpha\n\n## Summary\n\nBody content.\n",
         )
 
-        result = runner.invoke(main, ["entity", "show", "q01"])
+        result = runner.invoke(main, ["entity", "show", "q1"])
 
         assert result.exit_code == 0, result.output
         assert "## Summary" in result.output
@@ -235,20 +235,20 @@ def test_entity_show_json_outputs_machine_readable_payload() -> None:
         seed_project(root)
         write_markdown_entity(
             root,
-            "doc/questions/q01-alpha.md",
-            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            "entities/questions/0001-alpha.md",
+            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
         )
 
-        result = runner.invoke(main, ["entity", "show", "q01", "--format", "json"])
+        result = runner.invoke(main, ["entity", "show", "q1", "--format", "json"])
 
         assert result.exit_code == 0, result.output
         payload = json.loads(result.output)
         assert payload == {
-            "id": "question:q01-alpha",
+            "id": "question:0001-alpha",
             "kind": "question",
             "title": "Alpha",
             "status": "open",
-            "path": "doc/questions/q01-alpha.md",
+            "path": "entities/questions/0001-alpha.md",
             "related": [],
             "source_refs": [],
             "body": "",
@@ -262,9 +262,9 @@ def test_entity_edit_adds_related_without_replacing_existing() -> None:
         seed_project(root)
         path = write_markdown_entity(
             root,
-            "doc/questions/q01-alpha.md",
+            "entities/questions/0001-alpha.md",
             {
-                "id": "question:q01-alpha",
+                "id": "question:0001-alpha",
                 "type": "question",
                 "title": "Alpha",
                 "status": "open",
@@ -272,7 +272,7 @@ def test_entity_edit_adds_related_without_replacing_existing() -> None:
             },
         )
 
-        result = runner.invoke(main, ["entity", "edit", "q01", "--related", "hypothesis:h02"])
+        result = runner.invoke(main, ["entity", "edit", "q1", "--related", "hypothesis:h02"])
 
         assert result.exit_code == 0, result.output
         assert "WARNING" in result.output
@@ -288,15 +288,15 @@ def test_entity_note_adds_dated_note() -> None:
         seed_project(root)
         path = write_markdown_entity(
             root,
-            "doc/questions/q01-alpha.md",
-            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            "entities/questions/0001-alpha.md",
+            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
             "# Alpha\n",
         )
 
-        result = runner.invoke(main, ["entity", "note", "q01", "Clarified.", "--date", "2026-04-28"])
+        result = runner.invoke(main, ["entity", "note", "q1", "Clarified.", "--date", "2026-04-28"])
 
         assert result.exit_code == 0, result.output
-        assert "Added note to question:q01-alpha (2026-04-28)" in result.output
+        assert "Added note to question:0001-alpha (2026-04-28)" in result.output
         assert "- 2026-04-28: Clarified." in path.read_text(encoding="utf-8")
 
 
@@ -1125,16 +1125,16 @@ def test_entity_neighbors_source_only_warns_and_returns_no_rows() -> None:
         seed_project(root)
         write_markdown_entity(
             root,
-            "doc/questions/q01-alpha.md",
-            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            "entities/questions/0001-alpha.md",
+            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
         )
         graph = Path("knowledge/graph.trig")
         graph.parent.mkdir(parents=True)
         graph.write_text("@prefix sci: <http://example.org/science/vocab/> .\n", encoding="utf-8")
         os.utime(graph, (1, 1))
-        os.utime(Path("doc/questions/q01-alpha.md"), (2, 2))
+        os.utime(Path("entities/questions/0001-alpha.md"), (2, 2))
 
-        result = runner.invoke(main, ["entity", "neighbors", "question:q01-alpha", "--format", "json"])
+        result = runner.invoke(main, ["entity", "neighbors", "question:0001-alpha", "--format", "json"])
 
         assert result.exit_code == 0, result.output
         payload = json.loads(result.stdout)
@@ -1150,11 +1150,11 @@ def test_entity_neighbors_missing_graph_fails_cleanly() -> None:
         seed_project(root)
         write_markdown_entity(
             root,
-            "doc/questions/q01-alpha.md",
-            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            "entities/questions/0001-alpha.md",
+            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
         )
 
-        result = runner.invoke(main, ["entity", "neighbors", "question:q01-alpha"])
+        result = runner.invoke(main, ["entity", "neighbors", "question:0001-alpha"])
 
         assert result.exit_code != 0
         assert "Graph file not found: knowledge/graph.trig" in result.output
@@ -1169,15 +1169,15 @@ def test_entity_note_without_date_prints_today() -> None:
         seed_project(root)
         write_markdown_entity(
             root,
-            "doc/questions/q01-alpha.md",
-            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            "entities/questions/0001-alpha.md",
+            {"id": "question:0001-alpha", "type": "question", "title": "Alpha", "status": "open"},
             "# Alpha\n",
         )
 
-        result = runner.invoke(main, ["entity", "note", "q01", "Clarified."])
+        result = runner.invoke(main, ["entity", "note", "q1", "Clarified."])
 
         assert result.exit_code == 0, result.output
-        assert f"Added note to question:q01-alpha ({date.today().isoformat()})" in result.output
+        assert f"Added note to question:0001-alpha ({date.today().isoformat()})" in result.output
 
 
 def test_discussion_create_without_id_uses_today() -> None:
@@ -1318,3 +1318,33 @@ def test_entity_create_newly_added_kind_uses_generic_scaffold() -> None:
         assert fm["id"] == "finding:0001-a-finding"
         assert fm["type"] == "finding"
         assert {"title", "status", "created", "updated"} <= set(fm)
+
+
+def test_entities_dir_is_discovered_by_graph() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "entities/questions/0001-loadable.md",
+            {"id": "question:0001-loadable", "type": "question", "title": "Loadable", "status": "active"},
+        )
+        sources = load_project_sources(root)
+        ids = {doc.frontmatter.get("id") for doc in sources.markdown_documents}
+        assert "question:0001-loadable" in ids
+
+
+def test_entity_show_resolves_shortform() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "entities/questions/0005-granularity.md",
+            {"id": "question:0005-granularity", "type": "question", "title": "Granularity", "status": "active"},
+        )
+        result = runner.invoke(main, ["entity", "show", "q5"])
+        assert result.exit_code == 0, result.output
+        assert "question:0005-granularity" in result.output
