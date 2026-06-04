@@ -57,10 +57,10 @@ _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
     "claim-registry": EntityPathPolicy(Path("entities/claim-registry.yaml"), "singleton"),
 }
 _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
-_LOCAL_PART_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _CITEKEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9.-]*$")
 _NUMERIC_LOCAL_PART_RE = re.compile(r"^\d{4}-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 _ID_PREFIX_RE = re.compile(r"^(?P<prefix>[a-z]?)(?P<number>\d+)-", re.IGNORECASE)
+_NUMERIC_SCAN_RE = re.compile(r"^(?:[A-Za-z])?(\d+)")
 _SHORTFORM_REF_RE = re.compile(r"^(?P<prefix>[A-Za-z])(?P<number>\d+)(?P<suffix>(?:[.-].*)?)$")
 _NOTES_HEADING_RE = re.compile(r"^##\s+Notes\s*$")
 _SHORTFORM_ENTITY_KINDS: dict[str, str] = {
@@ -189,9 +189,31 @@ def validate_entity_id(kind: str, entity_id: str) -> str:
     if not entity_id.startswith(prefix):
         raise EntityCommandError(f"Entity id must use prefix {prefix}")
     local_part = entity_id[len(prefix) :]
-    if not _LOCAL_PART_RE.fullmatch(local_part):
-        raise EntityCommandError(f"Invalid local entity id: {entity_id}")
+    strategy = resolve_path_policy(kind).strategy
+    if strategy == "singleton":
+        raise EntityCommandError(f"{kind} is a singleton and has no per-instance id")
+    if strategy == "citekey":
+        if not _CITEKEY_RE.fullmatch(local_part):
+            raise EntityCommandError(f"Invalid citekey local part: {entity_id}")
+        return entity_id
+    # numeric: an explicit --id must already be canonical, so it cannot
+    # reintroduce drift (e.g. question:q01-... or question:5-...).
+    if not _NUMERIC_LOCAL_PART_RE.fullmatch(local_part):
+        raise EntityCommandError(
+            f"Non-canonical numeric id {entity_id!r}; expected <kind>:NNNN-slug (4-digit number)"
+        )
     return entity_id
+
+
+def _next_numeric_local_part(project_root: Path, kind: str, slug: str) -> str:
+    root = project_root / resolve_path_policy(kind).root
+    max_n = 0
+    if root.is_dir():
+        for path in root.glob("*.md"):
+            match = _NUMERIC_SCAN_RE.match(path.stem)
+            if match is not None:
+                max_n = max(max_n, int(match.group(1)))
+    return f"{max_n + 1:0{LOCAL_PART_WIDTH}d}-{slug}"
 
 
 def generate_entity_id(
@@ -202,34 +224,18 @@ def generate_entity_id(
     slug: str | None,
     today: date | None = None,
 ) -> str:
+    del today  # dates live in frontmatter, not the id
     if entity_id is not None:
         return validate_entity_id(kind, entity_id)
 
+    strategy = resolve_path_policy(kind).strategy
+    if strategy == "citekey":
+        raise EntityCommandError(f"{kind} requires an explicit --id (citekey), e.g. {kind}:Adams2025")
+    if strategy == "singleton":
+        raise EntityCommandError(f"{kind} is a singleton; it is not created via this path")
+
     slug_value = validate_slug(slug) if slug is not None else derive_slug(title)
-    if resolve_path_policy(kind).strategy == "date-local-part":  # dead path post-Task-1; rewritten in Task 2
-        date_value = today or date.today()
-        return f"{kind}:{date_value.isoformat()}-{slug_value}"
-    siblings = _existing_local_parts(project_root, kind)
-    if not siblings:
-        raise EntityCommandError(f"No existing {kind} siblings; provide --id for the first source-authored entity")
-
-    conventions: dict[str, tuple[str, int, int]] = {}
-    for local_part in siblings:
-        match = _ID_PREFIX_RE.match(local_part)
-        if match is None:
-            continue
-        prefix = match.group("prefix").lower()
-        number = int(match.group("number"))
-        conventions[prefix] = (
-            prefix,
-            max(number, conventions.get(prefix, (prefix, 0, 0))[1]),
-            len(match.group("number")),
-        )
-
-    if len(conventions) != 1:
-        raise EntityCommandError(f"Mixed ID conventions for {kind}; provide --id explicitly")
-    prefix, max_number, width = next(iter(conventions.values()))
-    return f"{kind}:{prefix}{max_number + 1:0{width}d}-{slug_value}"
+    return f"{kind}:{_next_numeric_local_part(project_root, kind, slug_value)}"
 
 
 def path_for_entity(kind: str, entity_id: str, today: date) -> Path:
@@ -733,13 +739,6 @@ def _format_new_warning(row: Mapping[str, object]) -> str:
 
 def _format_blocking_row(row: Mapping[str, object]) -> str:
     return f"{row.get('check')} on {row.get('source')}{_format_ref_location(row)}: {row.get('details')}"
-
-
-def _existing_local_parts(project_root: Path, kind: str) -> list[str]:
-    local_parts: list[str] = []
-    for entity in _load_markdown_entities(project_root, kind=kind):
-        local_parts.append(entity["id"].split(":", 1)[1])
-    return local_parts
 
 
 def _load_markdown_entities(project_root: Path, kind: str | None = None) -> list[dict[str, Any]]:
