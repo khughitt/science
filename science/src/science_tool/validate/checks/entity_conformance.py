@@ -13,6 +13,8 @@ from pathlib import Path
 import yaml
 
 from science_tool.entities import (
+    EntityPathPolicy,
+    LOCAL_PART_WIDTH,
     is_markdown_entity_kind,
     local_part_conforms,
     markdown_entity_kinds,
@@ -46,6 +48,24 @@ def _rel(ctx: ValidateContext, path: Path) -> Path:
     return path.relative_to(ctx.project_root)
 
 
+def _entity_dirs(
+    ctx: ValidateContext, *, strategy: str | None = None
+) -> Iterator[tuple[str, EntityPathPolicy, Path]]:
+    """Yield (kind, policy, directory) for every non-singleton markdown entity
+    kind whose entities/<kind>/ directory exists. With ``strategy`` set, only
+    kinds of that strategy are yielded."""
+    for kind in markdown_entity_kinds():
+        policy = resolve_path_policy(kind)
+        if policy.strategy == "singleton":
+            continue
+        if strategy is not None and policy.strategy != strategy:
+            continue
+        directory = ctx.project_root / policy.root
+        if not directory.is_dir():
+            continue
+        yield kind, policy, directory
+
+
 @Check(section="entity location coherence...", order=37)
 def check_entity_location_coherence(ctx: ValidateContext) -> Iterator[Result]:
     """(a) Flag entity files stranded in doc/specs; (b) flag files under
@@ -68,13 +88,7 @@ def check_entity_location_coherence(ctx: ValidateContext) -> Iterator[Result]:
                 f"{kind} entity outside its home; expected under {resolve_path_policy(kind).root}/",
             )
     # (b) miscategorized within entities/<kind>/
-    for kind in markdown_entity_kinds():
-        policy = resolve_path_policy(kind)
-        if policy.strategy == "singleton":
-            continue
-        directory = ctx.project_root / policy.root
-        if not directory.is_dir():
-            continue
+    for kind, policy, directory in _entity_dirs(ctx):
         for path in sorted(directory.glob("*.md")):
             data = ctx.frontmatter(path)
             ftype = data.get("type") or data.get("kind")
@@ -89,13 +103,7 @@ def check_entity_location_coherence(ctx: ValidateContext) -> Iterator[Result]:
 def check_entity_filename_conformance(ctx: ValidateContext) -> Iterator[Result]:
     """Flag files in entities/<kind>/ whose name violates the kind's strategy
     OR whose stem != the id's local-part."""
-    for kind in markdown_entity_kinds():
-        policy = resolve_path_policy(kind)
-        if policy.strategy == "singleton":
-            continue
-        directory = ctx.project_root / policy.root
-        if not directory.is_dir():
-            continue
+    for kind, policy, directory in _entity_dirs(ctx):
         for path in sorted(directory.glob("*.md")):
             if not local_part_conforms(kind, path.stem):
                 yield _result(
@@ -117,18 +125,12 @@ def _severity(ctx: ValidateContext) -> Severity:
 
 
 _REQUIRED_FRONTMATTER = ("id", "type", "title", "status", "created", "updated")
-_NUMBER_RE = re.compile(r"^(\d{4})-")
+_NUMBER_RE = re.compile(rf"^(\d{{{LOCAL_PART_WIDTH}}})-")
 
 
 @Check(section="entity frontmatter completeness...", order=39)
 def check_entity_frontmatter_completeness(ctx: ValidateContext) -> Iterator[Result]:
-    for kind in markdown_entity_kinds():
-        policy = resolve_path_policy(kind)
-        if policy.strategy == "singleton":
-            continue
-        directory = ctx.project_root / policy.root
-        if not directory.is_dir():
-            continue
+    for kind, policy, directory in _entity_dirs(ctx):
         for path in sorted(directory.glob("*.md")):
             text = ctx.read_text_cached(path)
             if not text.startswith("---\n"):
@@ -148,13 +150,7 @@ def check_entity_frontmatter_completeness(ctx: ValidateContext) -> Iterator[Resu
 
 @Check(section="entity number hygiene...", order=40)
 def check_entity_number_hygiene(ctx: ValidateContext) -> Iterator[Result]:
-    for kind in markdown_entity_kinds():
-        policy = resolve_path_policy(kind)
-        if policy.strategy != "numeric":
-            continue
-        directory = ctx.project_root / policy.root
-        if not directory.is_dir():
-            continue
+    for kind, policy, directory in _entity_dirs(ctx, strategy="numeric"):
         seen: dict[str, list[str]] = {}
         for path in sorted(directory.glob("*.md")):
             match = _NUMBER_RE.match(path.stem)
@@ -170,13 +166,7 @@ def check_entity_number_hygiene(ctx: ValidateContext) -> Iterator[Result]:
 
 @Check(section="entity stray files...", order=41)
 def check_entity_stray_files(ctx: ValidateContext) -> Iterator[Result]:
-    for kind in markdown_entity_kinds():
-        policy = resolve_path_policy(kind)
-        if policy.strategy == "singleton":
-            continue
-        directory = ctx.project_root / policy.root
-        if not directory.is_dir():
-            continue
+    for kind, policy, directory in _entity_dirs(ctx):
         for path in sorted(directory.iterdir()):
             if path.is_dir():
                 yield _result(_severity(ctx), _rel(ctx, path), f"unexpected subdirectory in {policy.root}/")

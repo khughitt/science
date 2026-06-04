@@ -103,3 +103,17 @@ def test_stray_file_flagged(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     results = list(check_entity_stray_files(ctx))
     assert any(r.severity is Severity.WARN for r in results)
+
+
+def test_stray_subdirectory_flagged(tmp_path: Path) -> None:
+    (tmp_path / "entities" / "questions" / "attachments").mkdir(parents=True)
+    ctx = _ctx(tmp_path)
+    results = list(check_entity_stray_files(ctx))
+    assert any(r.severity is Severity.WARN and "subdirectory" in r.message for r in results)
+
+
+def test_number_hygiene_passes_for_distinct_numbers(tmp_path: Path) -> None:
+    _write(tmp_path, "entities/questions/0001-a.md", {"id": "question:0001-a", "type": "question"})
+    _write(tmp_path, "entities/questions/0002-b.md", {"id": "question:0002-b", "type": "question"})
+    ctx = _ctx(tmp_path)
+    assert not [r for r in check_entity_number_hygiene(ctx) if r.severity is Severity.WARN]
