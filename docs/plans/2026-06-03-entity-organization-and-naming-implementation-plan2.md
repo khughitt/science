@@ -14,9 +14,9 @@
 **Severity policy:** Every new check in this plan emits **WARN** (or INFO), never ERROR. The WARN→ERROR promotion and `layout_version: 3` enforcement happen at cutover in Plan 3.
 
 **Carryover follow-ups from Plan 1 (surfaced by the final holistic review of the foundation):**
-Plan 1 promoted `synthesis` to a core EPISTEMIC kind in the entity registry, but several *downstream consumers* of the kind list were intentionally not updated (Plan 1 was registry + create + discovery only). Fold these into the relevant Plan 2 tasks (most fit the "repoint legacy semantic checks" / template work):
+Plan 1 promoted `synthesis` to a core EPISTEMIC kind in the entity registry, but several *downstream consumers* of the kind list were intentionally not updated (Plan 1 was registry + create + discovery only). **These are implemented as concrete, test-backed steps in [Task 11](#task-11-carryover-parity-synthesis-consumers--verdict-ancestor-discovery) below** (do not treat this list as optional prose — Task 11 is a required checkbox task):
 - **`synthesis` parity in kind-aware modules** — add `synthesis` alongside `report` in: `science/src/science_tool/refs.py` `_LOCAL_ENTITY_KINDS` (so body-prose refs like `synthesis:0001-foo` are recognized by the cross-reference scanner), the embedded kind set in `science/src/science_tool/validate/checks/cross_references.py`, and `ENTITY_KIND_STYLES` in `styles.py` (cosmetic — otherwise synthesis falls through to default styling). Without the first two, synthesis references won't resolve in validation.
-- **`science_model` `EntityType` enum** — `synthesis` is registered generically via `ProjectEntity` (correct for now) but is absent from the `EntityType` enum in `science/model/src/science_model/entities.py`; adding `SYNTHESIS = "synthesis"` would align the model layer. Verify whether any check enumerates `EntityType` and would benefit.
+- **`science_model` `EntityType` enum** — `synthesis` is registered generically via `ProjectEntity` (correct for now) but is absent from the `EntityType` enum in `science/model/src/science_model/entities.py` (which has `REPORT` at ~:101); add `SYNTHESIS = "synthesis"` to align the model layer. **`EntityType` is enumerated in two places with different consequences:** `_CORE_KIND_TO_TYPE` (~:156) is a comprehension over `EntityType` and auto-includes the new member, but `_DISALLOWED_MECHANISM_PARTICIPANT_KINDS` (`entities.py:164-194`) **hardcodes** member values (it lists `EntityType.REPORT.value` at ~:193) and will *not* pick up `SYNTHESIS` automatically. Since synthesis is a document/output kind like `report`, also add `EntityType.SYNTHESIS.value` to that frozenset to mirror `report` (otherwise synthesis would silently be allowed as a mechanism participant while report is not).
 - **`verdict/cli.py` `_discover_ancestor_registry`** — the `verdict parse` ancestor-walk auto-discovery still looks only for `specs/claim-registry.yaml`; align it with the `entities/`-first lookup added to `has_registry`/`_load_registry_for_rollup` in Plan 1. (Low impact; no explicit `--registry` + `entities/`-based project is the only affected path.)
 - **(Plan 3, not here)** the `date_prefix` strip branch in `build_entity_markdown` (`entities.py`) is unreachable for new numeric ids; remove it once legacy date-prefixed files are migrated.
 
@@ -523,6 +523,18 @@ def test_prefix_rules_cover_every_markdown_kind() -> None:
         if kind in {"research-question", "claim-registry"}:
             continue  # singletons validated elsewhere
         assert rules.get(kind) == f"{kind}:", f"{kind} missing/incorrect prefix rule"
+
+
+def test_prefix_rules_retain_nonpolicy_kinds() -> None:
+    # Regression guard: deriving rules from the policy table must NOT drop
+    # non-policy kinds the static PREFIX_RULES used to cover. `concept` and
+    # `dataset` are not markdown entity kinds (absent from the policy table)
+    # but still carry typed `concept:`/`dataset:` ids that need conformance.
+    from science_tool.validate.checks.id_prefixes import prefix_rules
+
+    rules = prefix_rules()
+    for kind in ("concept", "dataset", "spec"):
+        assert rules.get(kind) == f"{kind}:", f"{kind} prefix rule was dropped"
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -539,9 +551,13 @@ call, keeping the non-markdown reference kinds that the policy table does not ow
 ```python
 from science_tool.entities import markdown_entity_kinds
 
-# Reference/operational kinds not governed by the markdown policy table but
-# still subject to id-prefix conformance.
-_EXTRA_PREFIX_KINDS = ("paper", "spec")
+# Reference/operational kinds NOT governed by the markdown policy table but
+# still subject to id-prefix conformance. These must be every kind the static
+# PREFIX_RULES covered that is absent from _BUILTIN_MARKDOWN_POLICIES — today
+# that is concept, dataset, and spec. (paper IS in the policy table, so it is
+# intentionally NOT listed here.) Dropping any of these silently reduces
+# validation coverage in repos with concept:/dataset:/spec: records.
+_EXTRA_PREFIX_KINDS = ("concept", "dataset", "spec")
 
 
 def prefix_rules() -> dict[str, str]:
@@ -552,6 +568,15 @@ def prefix_rules() -> dict[str, str]:
 
 PREFIX_RULES = prefix_rules()
 ```
+
+> **Coverage audit before editing:** diff the *current* static `PREFIX_RULES`
+> keys against `markdown_entity_kinds()`. Every static key absent from the policy
+> table MUST appear in `_EXTRA_PREFIX_KINDS`. As of this writing the static dict
+> covers `concept, dataset, plan, spec, topic` beyond the obvious policy kinds;
+> of those only `concept, dataset, spec` are non-policy (`plan`/`topic` are now
+> in the table), which is why the tuple is `("concept", "dataset", "spec")`. If
+> the static dict has drifted, re-derive the tuple from the actual diff — do not
+> copy this list blindly.
 
 - [ ] **Step 4: Repoint `check_id_prefixes`'s scan roots to include `entities/`**
 
@@ -919,6 +944,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from science_tool.entities import LOCAL_PART_WIDTH
 from science_tool.entity_reservation import reserve_entity
 
 
@@ -941,7 +967,42 @@ def test_reserve_tolerates_legacy_letter_siblings(tmp_path: Path) -> None:
     (d / "h03-legacy.md").write_text("x", encoding="utf-8")
     res = reserve_entity(tmp_path, "hypothesis", "next")
     assert res.entity_id == "hypothesis:0004-next"
+
+
+def test_reserve_is_atomic_across_concurrent_distinct_slugs(tmp_path: Path) -> None:
+    # The regression that a slugged-filename lock misses: many reservers racing
+    # with DIFFERENT slugs must still receive DISTINCT numbers (no two share NNNN).
+    import threading
+
+    n_workers = 12
+    barrier = threading.Barrier(n_workers)
+    results: list[str] = []
+    lock = threading.Lock()
+
+    def worker(i: int) -> None:
+        barrier.wait()  # maximize interleaving around the os.open claim
+        res = reserve_entity(tmp_path, "finding", f"topic-{i}")
+        with lock:
+            results.append(res.entity_id)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(n_workers)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    numbers = sorted(int(rid.split(":")[1][:LOCAL_PART_WIDTH]) for rid in results)
+    assert numbers == list(range(1, n_workers + 1)), f"duplicate/non-contiguous numbers: {numbers}"
+    # every committed file is present and uniquely numbered
+    files = sorted(p.name for p in (tmp_path / "entities" / "findings").glob("*.md"))
+    assert len(files) == n_workers
+    assert len({name[:LOCAL_PART_WIDTH] for name in files}) == n_workers
 ```
+
+> The threaded barrier test exercises the race in-process. If the suite's
+> conventions favor true parallelism, promote it to `multiprocessing` (processes
+> defeat the GIL and stress the `O_EXCL` syscall harder); the assertion is
+> identical.
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -953,11 +1014,24 @@ Expected: FAIL — module does not exist.
 Create `science/src/science_tool/entity_reservation.py`, lifting the
 `O_CREAT|O_EXCL` loop pattern from `questions.py:175`:
 
+> **Atomicity correctness — do NOT lock on the slugged filename.** The naive
+> design (`O_CREAT|O_EXCL` on `NNNN-slug.md`) is **not** atomic per-number: two
+> concurrent reservers that compute the same `next_n` but derive *different*
+> slugs each succeed (`0001-alpha.md` and `0001-beta.md`), producing duplicate
+> numbers — exactly the parallel-subagent collision the feature exists to
+> prevent. The exclusive create must be keyed on the **number alone**. Use a
+> per-number sentinel claimed via `O_CREAT|O_EXCL`, and make the max-number scan
+> observe in-flight sentinels so a losing reserver advances instead of livelocking.
+
 ```python
 """Atomic, kind-agnostic id reservation for numeric entity kinds.
 
-Generalizes questions.reserve_question: the destination file itself is the
-lock (O_CREAT|O_EXCL), so concurrent agents cannot claim the same NNNN.
+Generalizes questions.reserve_question. The reservation unit is the NUMBER:
+a per-number sentinel (".NNNN.reserving") is created with O_CREAT|O_EXCL, so
+two concurrent agents can never claim the same NNNN even when their slugs
+differ. The sentinel is removed once the committed "NNNN-slug.md" backs the
+number (the .md then satisfies future scans). Crash-leaked sentinels only
+cause skipped numbers (gaps), never collisions — non-contiguous ids are fine.
 """
 
 from __future__ import annotations
@@ -975,7 +1049,8 @@ from science_tool.entities import (
     validate_slug,
 )
 
-_NUMERIC_SCAN_RE = re.compile(r"^(?:[A-Za-z])?(\d+)")
+_NUMERIC_SCAN_RE = re.compile(r"^(?:[A-Za-z])?(\d+)")          # committed NNNN-slug.md (tolerates legacy hNN)
+_SENTINEL_RE = re.compile(r"^\.(\d+)\.reserving$")            # in-flight number claim
 
 
 @dataclass(frozen=True)
@@ -985,10 +1060,15 @@ class Reservation:
 
 
 def _max_number(directory: Path) -> int:
+    """Highest number backed by either a committed .md OR an in-flight sentinel,
+    so concurrent reservers see each other's claims and never reuse a number."""
     max_n = 0
     if directory.is_dir():
-        for entry in directory.glob("*.md"):
-            match = _NUMERIC_SCAN_RE.match(entry.stem)
+        for entry in directory.iterdir():
+            if entry.suffix == ".md":
+                match = _NUMERIC_SCAN_RE.match(entry.stem)
+            else:
+                match = _SENTINEL_RE.match(entry.name)
             if match is not None:
                 max_n = max(max_n, int(match.group(1)))
     return max_n
@@ -1012,14 +1092,19 @@ def reserve_entity(
 
     for _ in range(max_attempts):
         next_n = _max_number(directory) + 1
+        # Atomically claim the NUMBER (slug-independent) — the only correct lock unit.
+        sentinel = directory / f".{next_n:0{LOCAL_PART_WIDTH}d}.reserving"
+        try:
+            os.close(os.open(sentinel, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644))
+        except FileExistsError:
+            continue  # another reserver owns this number; recompute (will now see the sentinel)
         local_part = f"{next_n:0{LOCAL_PART_WIDTH}d}-{slug_value}"
         path = directory / f"{local_part}.md"
         try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-        except FileExistsError:
-            continue
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(stub)
+            with open(path, "x", encoding="utf-8") as handle:  # "x" == O_CREAT|O_EXCL belt-and-suspenders
+                handle.write(stub)
+        finally:
+            sentinel.unlink(missing_ok=True)  # committed .md now backs the number
         return Reservation(entity_id=f"{kind}:{local_part}", path=path)
 
     raise EntityCommandError(f"could not reserve a {kind} number after {max_attempts} attempts")
@@ -1032,19 +1117,47 @@ Expected: PASS.
 
 - [ ] **Step 5: Delegate `reserve_question` and keep its test green**
 
-In `science/src/science_tool/questions.py`, reimplement `reserve_question` to call
-`reserve_entity(project_root, "question", title, slug=slug, stub=<rendered stub>)`,
-keeping its richer stub rendering (`_render_stub`) by passing it as `stub`. Run
-the existing question reservation tests:
+> **Delegation is NOT a drop-in — three mismatches must be reconciled.** Verify each
+> against the current code before editing:
+> 1. **Directory vs. project-root signature.** `reserve_question(questions_dir, slug, ...)`
+>    takes a *directory* (`questions.py:138`); `reserve_entity(project_root, "question", ...)`
+>    takes a *project root* and derives `entities/questions/` from the policy table. The CLI
+>    `question reserve` command defaults `--questions-dir` to `doc/questions` (`cli.py:4232`),
+>    and all 14 `reserve_question(tmp_path, ...)` call sites in `tests/test_questions.py` pass
+>    the directory positionally. Delegating relocates new questions to `entities/questions/` and
+>    changes the filename from `q{padded}-{slug}.md` to `NNNN-slug.md` (dropping the `q` prefix
+>    and the dynamic width) — this is the intended end-state, but it is a **behavior change** for
+>    the `--questions-dir` flag and the command's "reserve the next q-number / default
+>    doc/questions" docstring + help text.
+> 2. **Return type.** `questions.Reservation` carries `number, padded, slug, id, path`;
+>    `reserve_entity`'s `Reservation` carries only `entity_id, path`. The CLI prints
+>    `reservation.number/padded/slug/id` (`cli.py:4289-4293`), so a naive delegation breaks the
+>    `--json` output. Keep `questions.Reservation` (or adapt the CLI) so the printed fields
+>    survive — derive `number`/`padded` from the reserved local-part.
+> 3. **Stub rendering.** Preserve `_render_stub` by passing the rendered body as `reserve_entity`'s
+>    `stub=` argument.
 
-Run: `cd science && uv run pytest tests/test_questions.py -v`
-Expected: PASS. If a test asserts the old `q##` filename, update it to the
-`NNNN-slug` form (the reservation now uses the canonical numeric strategy).
+Reimplement `reserve_question` to delegate to
+`reserve_entity(project_root, "question", title, slug=slug, stub=<rendered stub>)` while
+honoring the three points above. Decide and apply ONE of:
+- **(preferred) switch the public contract to project-root + entities/ home:** change
+  `reserve_question`/the CLI to take a project root (or keep `--questions-dir` only as a
+  deprecated override), update the `question reserve` docstring/help to drop the `q-number`
+  framing and point at `entities/questions/`, and reconstruct the `number`/`padded`/`slug`
+  CLI fields from the reserved id; **or**
+- **keep `questions_dir` as an explicit override** that, when omitted, resolves to
+  `entities/questions/` under the project root — but still update the default and help text.
+
+Run: `cd science && uv run pytest tests/test_questions.py tests/test_entity_reservation.py -v`
+and exercise the CLI path (`tests` covering `question reserve`, if any).
+Expected: PASS. Update any test asserting the old `q##`/`doc/questions` shape to the
+`entities/questions/NNNN-slug` form (the reservation now uses the canonical numeric
+strategy) — update assertions, do not weaken them.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science/src/science_tool/entity_reservation.py science/src/science_tool/questions.py science/tests/test_entity_reservation.py science/tests/test_questions.py
+git add science/src/science_tool/entity_reservation.py science/src/science_tool/questions.py science/src/science_tool/cli.py science/tests/test_entity_reservation.py science/tests/test_questions.py
 git commit -m "feat(entities): kind-agnostic atomic reservation; questions delegates"
 ```
 
@@ -1055,8 +1168,24 @@ git commit -m "feat(entities): kind-agnostic atomic reservation; questions deleg
 **Files:**
 - Modify: `science/model/src/science_model/templates/{finding,inquiry,method,paper,pre-registration,synthesis}.md` (and others as the audit finds)
 - Modify: `science/model/src/science_model/templates.py:14` (`MIGRATED_KINDS`)
-- Modify: `science/model/src/science_model/templates/hypothesis.md` (fix the literal `h{{nn}}` placeholder)
+- Modify: `science/model/src/science_model/templates/hypothesis.md` (fix the literal `h{{nn}}` placeholder — confirmed still `id: "hypothesis:h{{nn}}-{{slug}}"` at `:2`)
 - Test: `science/model/tests/` template tests + a render assertion
+
+> **`topic` is OUT OF SCOPE for this plan — leave it generic.** The renderer
+> resolves a kind to its template by `f"{kind}.md"` with **no alias map**
+> (`Renderer._read_template`, `templates.py:149-150`). There is no `topic.md`;
+> the only topic-ish file is `background-topic.md`, which the renderer can load
+> for *neither* `topic` *nor* `background-topic` (the latter isn't a kind). So:
+> - Do **not** add `topic` to `MIGRATED_KINDS` here — `render("topic", ...)` would
+>   then raise `EntityTemplateError: Packaged template not found: …/topic.md`.
+> - Do **not** edit `background-topic.md` expecting it to take effect — the
+>   renderer never reads it.
+> - Migrating `topic` is a separate task that must first create `topic.md` (with a
+>   `_template` block) **or** add an explicit kind→filename mapping to the
+>   renderer. Note it as deferred; do not attempt it in Task 10.
+>
+> Note also that `hypothesis` and `question` are **already** in `MIGRATED_KINDS`;
+> the others in the list above are not.
 
 - [ ] **Step 1: Audit which kinds have a usable template**
 
@@ -1100,9 +1229,11 @@ the numeric strategy. In `hypothesis.md`, change the literal
 
 Add migrated kinds to `MIGRATED_KINDS` in `science/model/src/science_model/templates.py:14`.
 
-> Kinds with no template file (e.g. report/plan/search/observation/mechanism per
-> the audit) are intentionally left on the generic scaffold; do NOT fabricate
-> domain sections for them here — that is a separate content task.
+> Kinds with no usable `<kind>.md` template (e.g. report/plan/search/observation/
+> mechanism per the audit, **and `topic`** — whose only file `background-topic.md`
+> the renderer cannot load; see the filename note above) are intentionally left on
+> the generic scaffold; do NOT fabricate domain sections or add them to
+> `MIGRATED_KINDS` here — that is a separate content task.
 
 - [ ] **Step 5: Run to verify pass + full suite**
 
@@ -1118,7 +1249,95 @@ git commit -m "feat(templates): numeric local-part placeholders; migrate new-kin
 
 ---
 
-## Task 11: Full suite + lint
+## Task 11: Carryover parity (synthesis consumers + verdict ancestor discovery)
+
+Makes the "Carryover follow-ups from Plan 1" executable. Each sub-step is
+verify-then-fix: confirm the current state (the gap may already be partly closed)
+before editing. All changes are additive parity for `synthesis` plus one
+`entities/`-first lookup; none promote severity.
+
+**Files:**
+- Modify: `science/src/science_tool/refs.py` (`_LOCAL_ENTITY_KINDS`)
+- Modify: `science/src/science_tool/validate/checks/cross_references.py` (`LOCAL_KINDS`)
+- Modify: `science/src/science_tool/styles.py` (`ENTITY_KIND_STYLES`)
+- Modify: `science/model/src/science_model/entities.py` (`EntityType`, `_DISALLOWED_MECHANISM_PARTICIPANT_KINDS`)
+- Modify: `science/src/science_tool/verdict/cli.py` (`_discover_ancestor_registry`)
+- Test: `science/tests/test_refs.py` (or the existing refs test module), `science/tests/validate/` (cross-references), `science/model/tests/` (EntityType), `science/tests/` verdict module
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# science_tool side — body-prose synthesis refs must resolve + be styled
+def test_synthesis_is_a_local_entity_kind() -> None:
+    from science_tool.refs import _LOCAL_ENTITY_KINDS
+    from science_tool.styles import ENTITY_KIND_STYLES
+    from science_tool.validate.checks.cross_references import LOCAL_KINDS
+
+    assert "synthesis" in _LOCAL_ENTITY_KINDS
+    assert "synthesis" in LOCAL_KINDS
+    assert "synthesis" in ENTITY_KIND_STYLES
+
+
+# verdict ancestor walk must find entities/claim-registry.yaml (not only specs/)
+def test_discover_ancestor_registry_prefers_entities(tmp_path) -> None:
+    from science_tool.verdict.cli import _discover_ancestor_registry
+
+    (tmp_path / "entities").mkdir()
+    reg = tmp_path / "entities" / "claim-registry.yaml"
+    reg.write_text("version: 1\nclaims: []\n", encoding="utf-8")
+    nested = tmp_path / "entities" / "syntheses" / "0001-x.md"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("x", encoding="utf-8")
+    assert _discover_ancestor_registry(nested) == reg
+```
+
+```python
+# model side (science/model/tests/) — EntityType parity + mechanism-participant rule
+def test_entity_type_has_synthesis_and_is_not_a_mechanism_participant() -> None:
+    from science_model.entities import EntityType, _DISALLOWED_MECHANISM_PARTICIPANT_KINDS
+
+    assert EntityType.SYNTHESIS.value == "synthesis"
+    # synthesis is a document/output kind like report → must be barred as a
+    # mechanism participant exactly as report is.
+    assert EntityType.SYNTHESIS.value in _DISALLOWED_MECHANISM_PARTICIPANT_KINDS
+    assert EntityType.REPORT.value in _DISALLOWED_MECHANISM_PARTICIPANT_KINDS  # guard the mirror
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `cd science && uv run pytest tests/ -k "synthesis_is_a_local or discover_ancestor_registry_prefers" -v && (cd model && uv run pytest -k entity_type_has_synthesis -v)`
+Expected: FAIL.
+
+- [ ] **Step 3: Apply the parity edits**
+
+1. `refs.py` — add `"synthesis"` to `_LOCAL_ENTITY_KINDS` (alongside `"report"`).
+2. `cross_references.py` — add `"synthesis"` to `LOCAL_KINDS` (alongside `"report"`).
+3. `styles.py` — add a `"synthesis"` entry to `ENTITY_KIND_STYLES`; reuse a sensible
+   pair (e.g. mirror `report`'s `("bold bright_green", "bright_green")` or pick an
+   unused color) so synthesis refs don't fall through to default styling.
+4. `science_model/entities.py` — add `SYNTHESIS = "synthesis"` to `EntityType`, **and**
+   add `EntityType.SYNTHESIS.value` to the hardcoded `_DISALLOWED_MECHANISM_PARTICIPANT_KINDS`
+   frozenset (it lists `EntityType.REPORT.value` ~:193; the comprehension `_CORE_KIND_TO_TYPE`
+   picks up the new member automatically, but this frozenset does not).
+5. `verdict/cli.py` `_discover_ancestor_registry` — at each ancestor level check
+   `current / "entities" / "claim-registry.yaml"` **before** `current / "specs" / "claim-registry.yaml"`,
+   mirroring the `entities/`-first order already in `_load_registry_for_rollup` and `has_registry`.
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `cd science && uv run pytest tests/ -k "synthesis_is_a_local or discover_ancestor_registry_prefers" -v && (cd model && uv run pytest -k entity_type_has_synthesis -v)`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add science/src/science_tool/refs.py science/src/science_tool/validate/checks/cross_references.py science/src/science_tool/styles.py science/src/science_tool/verdict/cli.py science/model/src/science_model/entities.py science/tests/ science/model/tests/
+git commit -m "feat: synthesis parity in refs/cross-refs/styles/EntityType; verdict entities/-first ancestor lookup"
+```
+
+---
+
+## Task 12: Full suite + lint
 
 - [ ] **Step 1: Run everything**
 
@@ -1146,8 +1365,14 @@ git commit -m "test: align suites with Plan 2 validation + reservation + templat
 - `id_prefixes` derived from policy table → Task 4. ✅
 - Repoint `hypotheses` (drop `h*` glob), `discussions`+`synthesis`, `document_structure` (topics/papers), `papers` → Tasks 5, 6, 7. ✅
 - `layout_version` awareness (WARN) → Task 8. ✅
-- Atomic reservation generalized (design §290) → Task 9. ✅
-- Domain templates for new kinds + fix letter-prefix placeholder → Task 10. ✅
+- Atomic reservation generalized (design §290), truly atomic **per-number** via a
+  slug-independent sentinel + concurrency test → Task 9. ✅
+- Domain templates for new kinds + fix letter-prefix placeholder (`topic` deferred —
+  renderer has no `topic.md` / alias map) → Task 10. ✅
+- Carryover parity (`synthesis` in refs/cross-refs/styles/`EntityType` +
+  `_DISALLOWED_MECHANISM_PARTICIPANT_KINDS`; verdict `entities/`-first ancestor
+  discovery) → Task 11. ✅
+- Full suite + lint → Task 12. ✅
 
 **Still deferred to Plan 3 (cutover):**
 - Remove `doc/`/`specs/` fallbacks added in Plan 1 (discovery scan roots, singleton
