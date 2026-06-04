@@ -10,6 +10,7 @@ from typing import Any
 from click.testing import CliRunner
 import pytest
 
+from _copy_filters import oversized_payload_names
 from science_tool.cli import main
 from test_parity_canonical_body import (
     DiagnosticItem,
@@ -40,7 +41,7 @@ def sidecar_included_copy(tmp_path: Path) -> CopyProject:
     return copy_project
 
 
-def _ignore_transient_paths(_directory: str, names: list[str]) -> set[str]:
+def _ignore_transient_paths(directory: str, names: list[str]) -> set[str]:
     ignored_names = {
         ".git",
         ".mypy_cache",
@@ -52,7 +53,8 @@ def _ignore_transient_paths(_directory: str, names: list[str]) -> set[str]:
         "__pycache__",
         "node_modules",
     }
-    return {name for name in names if name in ignored_names}
+    transient = {name for name in names if name in ignored_names}
+    return transient | oversized_payload_names(directory, names)
 
 
 def _synthetic_project(root: Path, *, severity: str) -> Path:
@@ -142,6 +144,7 @@ def test_synthetic_legacy_sidecars_report_phase3_hard_error(
     ]
 
 
+@pytest.mark.real_projects
 def test_real_downstream_projects_with_sidecars_report_phase3_hard_error(
     sidecar_included_copy: CopyProject,
     tmp_path: Path,

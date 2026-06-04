@@ -434,6 +434,7 @@ def test_combined_fixture_matches_bash_validate_semantics(
     _assert_semantic_parity(bash_items, python_items, label="combined fixture")
 
 
+@pytest.mark.real_projects
 def test_real_downstream_projects_match_bash_validate_semantics(
     isolated_copy: Callable[[Path], Path],
     tmp_path: Path,

@@ -27,10 +27,11 @@ requires = ["hatchling>=1.24"]
 build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
-addopts = "-q -m 'not snapshot'"
+addopts = "-q -m 'not snapshot and not real_projects'"
 testpaths = ["tests"]
 markers = [
   "snapshot: formatter snapshots are reviewer-gating and run explicitly with -m snapshot",
+  "real_projects: stages real downstream projects into tmp_path; heavy, run explicitly with -m real_projects",
 ]
 
 [tool.ruff]
