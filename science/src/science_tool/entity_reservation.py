@@ -2,13 +2,17 @@
 
 Generalizes questions.reserve_question. The reservation unit is the NUMBER:
 a per-number sentinel (".NNNN.reserving") is created with O_CREAT|O_EXCL, so
-two concurrent agents can never claim the same NNNN even when their slugs
+two concurrent agents can never claim the NNNN even when their slugs
 differ. After grabbing the sentinel the reserver re-confirms no committed
 "NNNN-slug.md" already backs the number (closing the window where a reserver
 holding a stale next_n re-claims a number whose sentinel was just released);
 the sentinel is removed once the committed "NNNN-slug.md" backs the number
 (the .md then satisfies future scans). Crash-leaked sentinels only cause
 skipped numbers (gaps), never collisions — non-contiguous ids are fine.
+
+Sentinels are hidden dotfiles; directory scanners that enumerate non-``.md``
+files in an entity kind's directory must skip names starting with ``"."`` to
+avoid false stray-file reports.
 """
 
 from __future__ import annotations

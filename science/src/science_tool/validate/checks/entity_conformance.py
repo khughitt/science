@@ -168,6 +168,10 @@ def check_entity_number_hygiene(ctx: ValidateContext) -> Iterator[Result]:
 def check_entity_stray_files(ctx: ValidateContext) -> Iterator[Result]:
     for kind, policy, directory in _entity_dirs(ctx):
         for path in sorted(directory.iterdir()):
+            if path.name.startswith("."):
+                # Skip hidden dotfiles: reservation sentinels (.NNNN.reserving,
+                # see entity_reservation.py) and OS/editor cruft are not entities.
+                continue
             if path.is_dir():
                 yield _result(_severity(ctx), _rel(ctx, path), f"unexpected subdirectory in {policy.root}/")
             elif path.suffix != ".md":

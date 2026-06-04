@@ -117,3 +117,13 @@ def test_number_hygiene_passes_for_distinct_numbers(tmp_path: Path) -> None:
     _write(tmp_path, "entities/questions/0002-b.md", {"id": "question:0002-b", "type": "question"})
     ctx = _ctx(tmp_path)
     assert not [r for r in check_entity_number_hygiene(ctx) if r.severity is Severity.WARN]
+
+
+def test_stray_files_ignores_reservation_sentinel(tmp_path: Path) -> None:
+    d = tmp_path / "entities" / "questions"
+    d.mkdir(parents=True)
+    (d / ".0001.reserving").write_text("", encoding="utf-8")
+    (d / "0001-x.md").write_text("---\nid: question:0001-x\ntype: question\n---\n", encoding="utf-8")
+    ctx = _ctx(tmp_path)
+    results = list(check_entity_stray_files(ctx))
+    assert not [r for r in results if r.severity is Severity.WARN]
