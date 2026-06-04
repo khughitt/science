@@ -9,6 +9,9 @@ from science_tool.entities import (
     _STATUS_VALUES,
     _entity_ref_matches,
     generate_entity_id,
+    is_markdown_entity_kind,
+    local_part_conforms,
+    markdown_entity_kinds,
     path_for_entity,
     resolve_path_policy,
 )
@@ -122,3 +125,19 @@ def test_every_policy_kind_has_status_config() -> None:
         assert kind in _DEFAULT_STATUS, f"{kind} missing default status"
         assert kind in _STATUS_VALUES, f"{kind} missing status values"
         assert _DEFAULT_STATUS[kind] in _STATUS_VALUES[kind]
+
+
+def test_markdown_entity_kinds_includes_synthesis_excludes_task() -> None:
+    kinds = markdown_entity_kinds()
+    assert "synthesis" in kinds and "question" in kinds
+    assert "task" not in kinds and "dataset" not in kinds
+    assert is_markdown_entity_kind("hypothesis")
+    assert not is_markdown_entity_kind("task")
+
+
+def test_local_part_conforms_by_strategy() -> None:
+    assert local_part_conforms("question", "0005-granularity")
+    assert not local_part_conforms("question", "q05-granularity")
+    assert not local_part_conforms("question", "5-granularity")
+    assert local_part_conforms("paper", "Adams2025")
+    assert not local_part_conforms("paper", "0001-not-a-citekey?")

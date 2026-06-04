@@ -161,6 +161,25 @@ def resolve_path_policy(kind: str) -> EntityPathPolicy:
         raise EntityCommandError(f"Unsupported source-authored entity kind: {kind}") from exc
 
 
+def markdown_entity_kinds() -> tuple[str, ...]:
+    """All kinds the policy table governs (markdown entity kinds)."""
+    return tuple(_BUILTIN_MARKDOWN_POLICIES)
+
+
+def is_markdown_entity_kind(kind: str) -> bool:
+    return kind in _BUILTIN_MARKDOWN_POLICIES
+
+
+def local_part_conforms(kind: str, local_part: str) -> bool:
+    """True iff ``local_part`` matches the kind's filename strategy."""
+    strategy = resolve_path_policy(kind).strategy
+    if strategy == "numeric":
+        return bool(_NUMERIC_LOCAL_PART_RE.fullmatch(local_part))
+    if strategy == "citekey":
+        return bool(_CITEKEY_RE.fullmatch(local_part))
+    return False  # singletons have no per-instance local part
+
+
 def singleton_path(kind: str) -> Path:
     policy = resolve_path_policy(kind)
     if policy.strategy != "singleton":
