@@ -56,17 +56,26 @@ load-bearing (epistemic) entity types**, not just hypotheses?
 - **B — Prose-vs-implementation drift.** Prose asserts a fact about what code/pipeline does
   (e.g. "covers del(1p)") that an authoritative manifest contradicts. Mechanically checkable
   against a declared manifest source.
-- **C — Weakly-bound / under-attended questions.** Questions that bear on an entity accumulate
-  open/parked without ever being folded into its claims. Computable as per-entity
-  "open-question debt" over existing `bears_on` edges + question `status`.
+- **C — Weakly-bound / under-attended questions.** Questions that pertain to an entity
+  accumulate without ever being folded into its claims. Computable as per-entity "open-question
+  debt" — but over the **`related:` + theme/tag** connectivity layer, **not** `bears_on`:
+  `bears_on` is derived only from typed predicates (`graph/freshness.py:70`), so the
+  related-only/unlinked questions that drive this failure are invisible to it. A debt metric over
+  `bears_on` would inherit the same blind spot. Debt statuses are the canonical question
+  vocabulary `active` / `partially-answered` / `deferred` (`entities.py:97`), excluding
+  `answered` / `retired`.
 
 ## Current Evidence
 
 - The model already supports `review_state.last_reviewed` and
   `review_state.review_horizon_days`, a full freshness engine (`fresh`/`stale`/`needs-review`)
-  with `bears_on` upstream propagation, and attention weighting (3× needs-review, 2× stale).
-  So the *review-state substrate* exists; what is missing is (i) population of it, (ii) a skill
-  that performs the review, and (iii) checks for failure modes A and B.
+  with `bears_on` upstream propagation (and `bears_on` derives **only** from typed edges, not
+  `related:` — `graph/freshness.py:70`), and attention weighting (3× needs-review, 2× stale). A
+  `science entity review` command already *populates* `review_state.last_reviewed`
+  (`entity_review.py:39`, `cli.py:494`). So the substrate and a populator both exist; what is
+  missing is (i) that the existing command permits a **bare timestamp bump** with no artifact —
+  the real gap is artifact-guarded review, i.e. hardening that command, not building population;
+  (ii) a skill that performs the actual scrutiny; and (iii) checks for failure modes A and B.
 - `EntityClass` already separates EPISTEMIC / OPERATIONAL / REFERENCE, so any review machinery
   can be entity-type-agnostic with type-specific rubrics rather than hypothesis-only.
 - Adjacent commands (`bias-audit`, `discuss`, `curate`, `dag-audit`, `next-steps`) cover parts

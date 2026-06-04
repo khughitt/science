@@ -40,12 +40,28 @@ None of these were caught by existing machinery, and each is a distinct failure 
 
 ### Why the current engine misses them
 
-- **Freshness is event- and horizon-driven.** It fires when an upstream `bears_on` source
-  changed, or when `review_horizon_days` elapses. An entity that was over-scoped from the start
-  and never touched is `fresh`. High confidence actively signals the opposite of "look here."
+- **Freshness fires only on `bears_on`, and `bears_on` comes only from *typed* edges.**
+  `derive_bears_on_from_typed_edges` (`graph/freshness.py:70`) derives `bears_on` from
+  `sci:tests`, `cito:supports`, `cito:disputes`, `sci:grounds`, `sci:synthesizes`,
+  `sci:hasProposition`, `sci:hasParticipant`, plus chain/pre-reg/provenance/code derivers. A
+  plain `related:` edge produces **no** `bears_on`. The needs-review test then only inspects
+  `bears_on` sources whose `updated`/`created` post-dates the target baseline
+  (`freshness.py:352`).
+- **The H2 fixture had no `bears_on`-producing edge at all.** The gap-flagging questions
+  (`q01`/`q06`/`q35`/`q38`) were not even in H2's `related:` list — a task (t2431) merely
+  *proposed* to "bulk-bind" them. So there was nothing upstream to change, and freshness
+  correctly stayed silent. Even had they been `related:`, that edge type is invisible to
+  `bears_on`. **Freshness is working as designed; the scope debt simply lives below the
+  `bears_on` layer.** This is the load-bearing fact the rest of the plan must respect: a debt
+  metric that queries `bears_on` would inherit the exact blind spot it is meant to fix.
+- **Even properly-typed scoping questions only fire once, on creation.** A question that
+  *did* type a `tests`/scoping edge to H2 would trigger `needs-review` when created (its
+  `created` post-dates H2's baseline), then go quiet after the next review bumps H2's
+  `last_reviewed` — without anything forcing the *claims* to actually narrow. Freshness flags
+  "look here once"; it does not track "this question is still unincorporated."
 - **Orphan detection is structural.** `no_outbound_links`, unresolved refs, and `graph validate`
-  orphaned nodes catch *disconnection*. The H2 gap-flagging questions were *connected*; the miss
-  was that connection ≠ scope pressure.
+  orphaned nodes catch *disconnection*. The miss here was *semantic under-attention* of
+  related-or-weaker links, not disconnection.
 - **No check inspects prose-vs-code.** `graph diff` checks prose↔graph sync. Nothing checks a
   prose coverage claim against a code manifest.
 
@@ -65,8 +81,15 @@ None of these were caught by existing machinery, and each is a distinct failure 
 - A validate check registry with a decorator/section pattern
   (`science/src/science_tool/validate/checks/__init__.py:63`) — adding a check is cheap.
 
-So the missing pieces are narrow: (i) **nobody populates `review_state`**, (ii) **no skill
-performs the review**, and (iii) **no checks exist for failure modes A and B**.
+- A working `science entity review <ref> [--note]` command that already mutates
+  `review_state.last_reviewed` (and optional `last_review_note`), preserving other review-state
+  fields (`science/src/science_tool/entity_review.py:39`, `cli.py:494`).
+
+So the missing pieces are narrow and **not** "population from scratch": (i) the existing
+`entity review` command **permits a bare timestamp bump** (the note is optional and no artifact
+is required), so M1 is to *harden/wrap* it into artifact-guarded review rather than build a new
+populator; (ii) **no skill performs the actual scrutiny** that should precede the bump; and
+(iii) **no checks exist for failure modes A and B**.
 
 ## Goals / Non-goals
 
@@ -96,29 +119,59 @@ operationalized_by:
                    "t_11_14", "t_14_16", "myc_r"]
 ```
 
-A new `validate` check (`checks/operationalization.py`) then:
+A new `validate` check (`checks/operationalization.py`) then splits cleanly by claim
+structuredness, because only structured claims are deterministic enough to hard-fail a build:
 
 - Resolves the named manifest from code/config (a small adapter per manifest kind — e.g. parse
-  a Python `Final[list[str]]`, a YAML key, a datapackage resource list).
-- **Fails** when prose coverage assertions (`covers X`, `operationalizes X`, "n/m panel")
-  reference items absent from the manifest (mode B), using a lightweight claim-extraction pass
-  over the entity body + linked decision/paper notes.
-- **Warns** when the declared `claims_scope` is narrower than the entity's prose scope language,
-  prompting a scope qualification (mode A).
+  a Python `Final[list[str]]`, a YAML key, a datapackage resource list). Fail *closed* (warn,
+  skip) when a manifest is unparseable rather than hard-erroring.
+- **HARD-FAIL only on structured claims.** The structured `claims_scope:` list (and any future
+  structured `coverage_claims:` syntax) is compared set-wise against the resolved manifest; a
+  declared item absent from the manifest is an unambiguous contradiction (mode B) → build
+  failure. This is genuinely deterministic — no NLP.
+- **WARN on free prose.** A lightweight pass over the entity body and linked paper/decision notes
+  for assertions like `covers X` / `operationalizes X` / "n/m panel" is heuristic and *cannot*
+  be deterministic without a constrained claim grammar, so it only ever emits warnings (mode B
+  prose + mode A scope-language-exceeds-`claims_scope`). It nudges authors to either qualify the
+  prose or promote the claim into structured `claims_scope`.
 
-This is deterministic and would have failed the build on both the D5 "9/11" miscount and the
-Lu2025 "covers del(1p)" claim. Start with an explicit allowlist of manifest adapters; expand as
-needed.
+Honest scope on the H2 fixture: a hard-fail would have fired **only if** D5/H2 had declared a
+structured `claims_scope` (e.g. listing del(1p)/t(14;20) as covered) contradicting
+`cytogenetics:EVENTS`. The actual Lu2025/D5 errors were free prose, so they would have surfaced
+as *warnings*, not build failures — still caught, but the determinism claim must not be
+oversold. The structured path is what gates the build; the prose path is an advisory net. Start
+with an explicit allowlist of manifest adapters; expand as needed.
 
 ### 2. Open-question-debt attention term (graph; targets C) — would have caught H2
 
-Add a term to `compute_attention_candidates` (`graph/attention.py`): for each epistemic entity,
-compute **open-question debt** = a function of (count of `bears_on` questions with
-`status ∈ {open, active, proposed, parked}`, their age, and whether any have been incorporated —
-heuristic: question post-dates the entity's last `updated`). Surface it in `next-steps`/`status`
-as "entities carrying the most unincorporated questions." H2 would have ranked at the top.
+**Crucial design constraint (from finding 1): this term must NOT query `bears_on`.** The whole
+failure is that scoping questions sit on `related:` edges or weaker (or are unlinked), which
+never become `bears_on`. A debt metric over `bears_on` would reproduce the freshness blind spot.
 
-No new storage — it is a query over existing `bears_on` edges + question `status`.
+Add a term to `compute_attention_candidates` (`graph/attention.py`) that operates over the
+**broader connectivity layer**: for each epistemic entity, compute **open-question debt** from
+
+- questions linked via `related:` (either direction), **plus**
+- questions sharing a `theme`/`tag`/`group` with the entity (theme co-membership), to catch the
+  H2 case where the questions were not even on H2's `related:` list;
+
+weighted by question age and an "unincorporated" heuristic (question `created`/`updated`
+post-dates the entity's last `last_reviewed`). Count only **debt statuses** — using the
+canonical question vocabulary (`entities.py:97`): `active`, `partially-answered`, and
+`deferred`. Exclude `answered` and `retired` (resolved) — they are not debt.
+
+Surface in `next-steps`/`status` as "entities carrying the most unincorporated questions." H2
+would have ranked at the top via theme co-membership even with zero `related:` edges.
+
+No new storage — it is a query over existing `related:` edges, theme/tag membership, and
+question `status`.
+
+**Complementary authoring fix.** Encourage a *typed* question→entity relation (e.g. a
+`scopes`/`refines`/`tests` predicate) for scoping questions, so that properly-typed ones also
+enter the `bears_on` freshness engine and fire `needs-review` on creation. The debt term is the
+backstop for the under-typed/unlinked majority; typing is the upgrade path for the ones that
+earn it. (Whether to add a new scoping predicate to the `bears_on` deriver is itself an open
+design question — see Open questions.)
 
 ### 3. Generalized `review` skill + review-state population (agentic; targets A residue)
 
@@ -131,8 +184,15 @@ One entity-type-agnostic skill (`codex-skills/science-review/`) that:
     crisp; confidence justified by current evidence.
   - *proposition*: claim layer + identification still accurate; evidence stance current.
   - *interpretation*: do conclusions still match the cited evidence and effect sizes?
-  - *decision*: still in force? contradicted by code or a later decision?
   - *report*: do headline claims still match the entities they summarize?
+  - *decision*: still in force? contradicted by code or a later decision? **Caveat:**
+    `decision` is **not** a registered entity kind (`_CORE_KIND_CLASSES`,
+    `graph/entity_registry.py:50`) — decisions live as parsed `##` sections in
+    `core/decisions.md`, not as frontmatter entities with their own `review_state`. So
+    decisions are *out of scope for entity-level review in M1*. Bringing them in requires a
+    deliberate choice (Open questions): either (a) register a `decision` entity kind and migrate
+    `core/decisions.md` to per-decision frontmatter, or (b) build a separate section-level review
+    ledger keyed by decision heading. Do not assume entity-review machinery applies to them.
 - **Writes guarded `review_state`**: a review must emit a concrete artifact — a finding, a
   prose diff, a created task, or an explicit reasoned "no change" — before `last_reviewed` is
   set. A bare timestamp bump is disallowed by the skill's own checklist (the `dag-audit`/`curate`
@@ -158,26 +218,38 @@ instinct `bias-audit` encodes as "too settled," made quantitative.
 - **Review-theater** — mitigate with the artifact-required guard.
 - **Manifest-adapter brittleness** — start with a tiny allowlist (Python list constant, YAML key,
   datapackage resources); fail closed (warn, don't hard-error) on unparseable manifests.
-- **Claim-extraction false positives** in the coverage check — keep mode-A as a *warning* and
-  mode-B (manifest contradiction) as the only hard failure, since B is unambiguous.
+- **Claim-extraction false positives** in the coverage check — hard-fail is reserved for
+  *structured* `claims_scope` contradictions (unambiguous, set-wise); all free-prose extraction
+  (mode A scope-language and mode B prose assertions) is warning-only. See mechanism 1.
 
 ## Staged rollout
 
 1. **M1 (smallest thing that would have prevented this):** open-question-debt attention term
-   (mechanism 2) + a minimal `review` skill (mechanism 3) writing guarded `review_state`. Use
-   `multiple-myeloma` H2 as a regression fixture.
-2. **M2:** operationalization-coverage check (mechanism 1), mode-B (manifest contradiction)
-   first, with a Python-constant and YAML-key adapter.
-3. **M3:** mode-A scope-language warning + per-kind rubrics fleshed out + horizon backstop for
-   `supported`/high-confidence entities.
+   (mechanism 2, over `related:`/theme membership — explicitly **not** `bears_on`) + **harden the
+   existing `science entity review` command** (mechanism 3) so it refuses a bare timestamp bump
+   without a recorded artifact, and add the per-kind rubric to the backing skill. This is a
+   wrap/hardening of `entity_review.py` + `cli.py`'s `entity review`, not a new populator. Use
+   `multiple-myeloma` H2 (related-only/unlinked scoping questions; over-scoped supported
+   hypothesis) as the regression fixture.
+2. **M2:** operationalization-coverage check (mechanism 1) — structured `claims_scope` hard-fail
+   first, with a Python-constant and YAML-key manifest adapter; free-prose warnings second.
+3. **M3:** per-kind rubrics fleshed out + horizon backstop for "settled" entities (e.g.
+   hypothesis `supported`/`partially-supported`) + decision-review path (register a `decision`
+   kind *or* a section-level ledger; see Open questions) + optional typed scoping predicate.
 
 ## Open questions
 
 - Tracked in `science-meta:question:15-claim-operationalization-drift`.
 - How much of the real drift landscape is mechanically detectable vs needs agentic review?
   (Parallels `question:05-source-dependence-detection`.)
-- Should `operationalized_by:` be a first-class model field or an annotation? (Model field if it
-  is to gate validation.)
+- Should `operationalized_by:` / `claims_scope:` be first-class model fields or annotations?
+  (Model fields if they are to gate validation.)
+- **Should a typed scoping predicate (`scopes`/`refines`) be added to the `bears_on` deriver?**
+  Doing so would route properly-typed scoping questions into the freshness engine — but widening
+  `bears_on` has propagation/attention side effects that need their own review.
+- **How should decisions enter review?** Register a `decision` entity kind + migrate
+  `core/decisions.md` to per-decision frontmatter, or build a section-level review ledger? The
+  former unifies machinery; the latter avoids a migration. (Finding 4.)
 - Relationship to `question:14-adaptive-project-topology`: that question asks how topology should
   *adapt* to evidence/uncertainty/decay; this design is the *detection* half — the signals that
   should drive such adaptation.
