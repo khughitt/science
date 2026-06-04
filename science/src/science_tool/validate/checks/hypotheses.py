@@ -29,9 +29,11 @@ def _result(severity: Severity, path: str | None, message: str) -> Result:
 
 @Check(section="hypotheses...", order=5)
 def check_hypotheses(ctx: ValidateContext) -> Iterator[Result]:
-    hypotheses_dir = ctx.specs_dir / "hypotheses"
-    if hypotheses_dir.is_dir():
-        for path in sorted(hypotheses_dir.glob("h*.md")):
+    roots = (ctx.project_root / "entities" / "hypotheses", ctx.specs_dir / "hypotheses")
+    for target in roots:
+        if not target.is_dir():
+            continue
+        for path in sorted(target.glob("*.md")):  # was specs-only + h*.md; numeric names have no letter
             if path.is_file():
                 yield from _check_hypothesis(ctx, path)
 
