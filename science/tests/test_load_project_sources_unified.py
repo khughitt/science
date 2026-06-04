@@ -719,10 +719,10 @@ def test_load_project_sources_skips_invalid_repo_local_profile_entity(tmp_path: 
                 "strictness": "typed-extension",
                 "entity_kinds": [
                     {
-                        "name": "synthesis",
-                        "canonical_prefix": "synthesis",
+                        "name": "labnote",
+                        "canonical_prefix": "labnote",
                         "layer": "layer/local",
-                        "description": "Project-local synthesis document kind.",
+                        "description": "Project-local lab note kind.",
                     }
                 ],
                 "relation_kinds": [],
@@ -731,9 +731,9 @@ def test_load_project_sources_skips_invalid_repo_local_profile_entity(tmp_path: 
         ),
         encoding="utf-8",
     )
-    (tmp_path / "doc" / "reports").mkdir(parents=True)
-    (tmp_path / "doc" / "reports" / "synthesis.md").write_text(
-        '---\nid: "synthesis:rollup"\ntype: "synthesis"\n---\n',
+    (tmp_path / "doc" / "notes").mkdir(parents=True)
+    (tmp_path / "doc" / "notes" / "labnote.md").write_text(
+        '---\nid: "labnote:rollup"\ntype: "labnote"\n---\n',
         encoding="utf-8",
     )
     (tmp_path / "doc" / "hypotheses").mkdir(parents=True)
@@ -746,7 +746,7 @@ def test_load_project_sources_skips_invalid_repo_local_profile_entity(tmp_path: 
     by_id = {entity.canonical_id: entity for entity in sources.entities}
 
     assert "hypothesis:h1" in by_id
-    assert "synthesis:rollup" not in by_id
+    assert "labnote:rollup" not in by_id
 
 
 def test_load_project_sources_raises_when_repo_local_manifest_shadows_catalog_kind(tmp_path: Path) -> None:
