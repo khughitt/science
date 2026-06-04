@@ -3,7 +3,15 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from science_tool.entities import _entity_ref_matches, generate_entity_id, path_for_entity, resolve_path_policy
+from science_tool.entities import (
+    _BUILTIN_MARKDOWN_POLICIES,
+    _DEFAULT_STATUS,
+    _STATUS_VALUES,
+    _entity_ref_matches,
+    generate_entity_id,
+    path_for_entity,
+    resolve_path_policy,
+)
 
 
 def test_question_policy_is_entities_numeric() -> None:
@@ -105,3 +113,12 @@ def test_shortform_resolves_zero_padded_id() -> None:
 def test_shortform_still_matches_legacy_unpadded_id() -> None:
     # during transition, legacy ids like question:5-foo must still resolve
     assert _entity_ref_matches("question:5-foo", "q5")
+
+
+def test_every_policy_kind_has_status_config() -> None:
+    for kind, policy in _BUILTIN_MARKDOWN_POLICIES.items():
+        if policy.strategy == "singleton":
+            continue
+        assert kind in _DEFAULT_STATUS, f"{kind} missing default status"
+        assert kind in _STATUS_VALUES, f"{kind} missing status values"
+        assert _DEFAULT_STATUS[kind] in _STATUS_VALUES[kind]

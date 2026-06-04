@@ -79,6 +79,18 @@ _DEFAULT_STATUS: dict[str, str] = {
     "interpretation": "active",
     "theme": "active",
     "proposition": "draft",
+    "finding": "active",
+    "inquiry": "active",
+    "topic": "active",
+    "observation": "active",
+    "mechanism": "active",
+    "synthesis": "active",
+    "report": "active",
+    "plan": "active",
+    "search": "active",
+    "method": "active",
+    "pre-registration": "active",
+    "paper": "active",
 }
 _STATUS_VALUES: dict[str, frozenset[str]] = {
     "evidence-line": frozenset({"draft", "active", "retired"}),
@@ -107,6 +119,18 @@ _STATUS_VALUES: dict[str, frozenset[str]] = {
             "superseded",
         }
     ),
+    "finding": frozenset({"active", "superseded", "retired"}),
+    "inquiry": frozenset({"active", "complete", "superseded"}),
+    "topic": frozenset({"active", "superseded", "retired"}),
+    "observation": frozenset({"active", "superseded", "retired"}),
+    "mechanism": frozenset({"active", "superseded", "retired"}),
+    "synthesis": frozenset({"active", "superseded", "retired"}),
+    "report": frozenset({"active", "superseded", "retired"}),
+    "plan": frozenset({"active", "complete", "superseded", "retired"}),
+    "search": frozenset({"active", "complete", "retired"}),
+    "method": frozenset({"active", "superseded", "retired"}),
+    "pre-registration": frozenset({"active", "amended", "superseded", "retired"}),
+    "paper": frozenset({"active", "retired"}),
 }
 _ALLOWED_EXPLICIT_ROOTS = (Path("doc"), Path("specs"), Path("research/packages"))
 
