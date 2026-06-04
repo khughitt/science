@@ -38,6 +38,13 @@ def test_has_registry_false_when_missing(tmp_path: Path) -> None:
     assert has_registry(tmp_path) is False
 
 
+def test_has_registry_finds_claim_registry_in_entities(tmp_path: Path) -> None:
+    entities_dir = tmp_path / "entities"
+    entities_dir.mkdir()
+    entities_dir.joinpath("claim-registry.yaml").write_text("version: 1\nproject: test\nclaims: []\n", encoding="utf-8")
+    assert has_registry(tmp_path) is True
+
+
 def _write_registry(tmp_path: Path, content: str) -> Path:
     path = tmp_path / "claim-registry.yaml"
     path.write_text(content, encoding="utf-8")

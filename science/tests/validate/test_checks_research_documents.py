@@ -259,6 +259,18 @@ def test_synthesis_frontmatter_gates_on_type_and_validates_report_kind(tmp_path:
     assert "doc/reports/synthesis/invalid-kind.md: missing source_commit" not in messages
 
 
+def test_research_question_found_in_entities(tmp_path: Path) -> None:
+    from science_tool.validate.checks.research_scope import check_research_scope
+
+    ctx = _ctx(tmp_path)
+    entities_dir = tmp_path / "entities"
+    entities_dir.mkdir(parents=True)
+    entities_dir.joinpath("research-question.md").write_text("# Research Question\n", encoding="utf-8")
+
+    results = list(check_research_scope(ctx))
+    assert not any(r.severity is Severity.ERROR and "research-question" in r.message for r in results)
+
+
 def test_synthesis_frontmatter_requires_per_kind_fields(tmp_path: Path) -> None:
     from science_tool.validate.checks.discussions import check_discussions
 

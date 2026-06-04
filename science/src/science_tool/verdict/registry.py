@@ -119,4 +119,6 @@ def has_registry(
     root = Path(project_root)
     if alt_filename is not None:
         return (root / alt_filename).is_file()
-    return (root / "specs" / "claim-registry.yaml").is_file()
+    return (root / "entities" / "claim-registry.yaml").is_file() or (
+        root / "specs" / "claim-registry.yaml"
+    ).is_file()

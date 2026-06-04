@@ -128,8 +128,11 @@ def _load_registry_for_parse(file: Path, registry_path: Path | None) -> IndexedC
 def _load_registry_for_rollup(root: Path, registry_path: Path | None) -> IndexedClaimRegistry | None:
     path = registry_path
     if path is None:
-        candidate = root / "specs" / "claim-registry.yaml"
-        path = candidate if candidate.is_file() else None
+        for rel in ("entities/claim-registry.yaml", "specs/claim-registry.yaml"):
+            candidate = root / rel
+            if candidate.is_file():
+                path = candidate
+                break
     if path is None:
         return None
     return _load_registry(path)

@@ -288,8 +288,8 @@ def test_research_scope_requires_research_question_for_research_profile(tmp_path
     assert [(result.severity, result.path, result.message) for result in results] == [
         (
             Severity.ERROR,
-            Path("specs/research-question.md"),
-            "specs/research-question.md not found — every project needs a research question",
+            Path("entities/research-question.md"),
+            "research-question.md not found — every project needs a research question",
         )
     ]
 
@@ -326,7 +326,7 @@ def test_research_scope_defaults_missing_profile_to_research(tmp_path: Path) -> 
 
     assert (
         Severity.ERROR,
-        "specs/research-question.md not found — every project needs a research question",
+        "research-question.md not found — every project needs a research question",
     ) in [(result.severity, result.message) for result in results]
 
 
