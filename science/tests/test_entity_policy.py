@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from science_tool.entities import generate_entity_id, path_for_entity, resolve_path_policy
+from science_tool.entities import _entity_ref_matches, generate_entity_id, path_for_entity, resolve_path_policy
 
 
 def test_question_policy_is_entities_numeric() -> None:
@@ -94,3 +94,14 @@ def test_path_for_entity_uses_policy_root(tmp_path) -> None:
     assert p == Path("entities/questions/0008-new-one.md")
     pp = path_for_entity("paper", "paper:Adams2025", date(2026, 6, 3))
     assert pp == Path("entities/papers/Adams2025.md")
+
+
+def test_shortform_resolves_zero_padded_id() -> None:
+    assert _entity_ref_matches("question:0005-model-granularity", "q5")
+    assert _entity_ref_matches("hypothesis:0003-attractor", "h3")
+    assert not _entity_ref_matches("question:0005-model-granularity", "h5")  # wrong kind
+
+
+def test_shortform_still_matches_legacy_unpadded_id() -> None:
+    # during transition, legacy ids like question:5-foo must still resolve
+    assert _entity_ref_matches("question:5-foo", "q5")

@@ -261,10 +261,20 @@ def resolve_entity_ref(project_root: Path, ref: str) -> str:
     return matches[0]
 
 
+def _numeric_variants(token: str) -> set[str]:
+    """Return {token, zero-padded-to-width(token)} when token starts with digits."""
+    match = re.match(r"^(\d+)(.*)$", token)
+    if match is None:
+        return {token}
+    digits, rest = match.group(1), match.group(2)
+    return {token, f"{int(digits):0{LOCAL_PART_WIDTH}d}{rest}"}
+
+
 def _entity_ref_matches(entity_id: str, ref: str) -> bool:
     kind, local_part = entity_id.split(":", 1)
-    if local_part == ref or local_part.startswith(f"{ref}-"):
-        return True
+    for variant in _numeric_variants(ref):
+        if local_part == variant or local_part.startswith(f"{variant}-"):
+            return True
 
     shortform = _SHORTFORM_REF_RE.fullmatch(ref)
     if shortform is None:
@@ -273,7 +283,10 @@ def _entity_ref_matches(entity_id: str, ref: str) -> bool:
         return False
 
     unprefixed_ref = shortform.group("number") + shortform.group("suffix")
-    return local_part == unprefixed_ref or local_part.startswith(f"{unprefixed_ref}-")
+    for variant in _numeric_variants(unprefixed_ref):
+        if local_part == variant or local_part.startswith(f"{variant}-"):
+            return True
+    return False
 
 
 def find_entity(project_root: Path, ref: str) -> EntityLocation:
