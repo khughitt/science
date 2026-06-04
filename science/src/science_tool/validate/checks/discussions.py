@@ -46,8 +46,10 @@ def _result(severity: Severity, path: str | None, message: str) -> Result:
 
 @Check(section="discussion documents...", order=11)
 def check_discussions(ctx: ValidateContext) -> Iterator[Result]:
-    discussions_dir = ctx.doc_dir / "discussions"
-    if discussions_dir.is_dir():
+    roots = (ctx.project_root / "entities" / "discussions", ctx.doc_dir / "discussions")
+    for discussions_dir in roots:
+        if not discussions_dir.is_dir():
+            continue
         for path in sorted(discussions_dir.glob("*.md")):
             if path.is_file():
                 relative = path.relative_to(ctx.project_root).as_posix()
@@ -75,8 +77,10 @@ def _check_discussion(ctx: ValidateContext, path: Path, relative: str) -> Iterat
 
 
 def _check_synthesis_frontmatter(ctx: ValidateContext) -> Iterator[Result]:
-    synthesis_dir = ctx.doc_dir / "reports" / "synthesis"
-    candidates = [*sorted(synthesis_dir.glob("*.md")), ctx.doc_dir / "reports" / "synthesis.md"]
+    synth_roots = (ctx.project_root / "entities" / "synthesis", ctx.doc_dir / "reports" / "synthesis")
+    candidates = [p for root in synth_roots if root.is_dir() for p in sorted(root.glob("*.md"))]
+    # v2: also scan the legacy singleton file (dropped at cutover, Plan 3 Task 9).
+    candidates.append(ctx.doc_dir / "reports" / "synthesis.md")
     for path in candidates:
         if not path.is_file():
             continue
