@@ -13,6 +13,13 @@
 
 **Severity policy:** Every new check in this plan emits **WARN** (or INFO), never ERROR. The WARN→ERROR promotion and `layout_version: 3` enforcement happen at cutover in Plan 3.
 
+**Carryover follow-ups from Plan 1 (surfaced by the final holistic review of the foundation):**
+Plan 1 promoted `synthesis` to a core EPISTEMIC kind in the entity registry, but several *downstream consumers* of the kind list were intentionally not updated (Plan 1 was registry + create + discovery only). Fold these into the relevant Plan 2 tasks (most fit the "repoint legacy semantic checks" / template work):
+- **`synthesis` parity in kind-aware modules** — add `synthesis` alongside `report` in: `science/src/science_tool/refs.py` `_LOCAL_ENTITY_KINDS` (so body-prose refs like `synthesis:0001-foo` are recognized by the cross-reference scanner), the embedded kind set in `science/src/science_tool/validate/checks/cross_references.py`, and `ENTITY_KIND_STYLES` in `styles.py` (cosmetic — otherwise synthesis falls through to default styling). Without the first two, synthesis references won't resolve in validation.
+- **`science_model` `EntityType` enum** — `synthesis` is registered generically via `ProjectEntity` (correct for now) but is absent from the `EntityType` enum in `science/model/src/science_model/entities.py`; adding `SYNTHESIS = "synthesis"` would align the model layer. Verify whether any check enumerates `EntityType` and would benefit.
+- **`verdict/cli.py` `_discover_ancestor_registry`** — the `verdict parse` ancestor-walk auto-discovery still looks only for `specs/claim-registry.yaml`; align it with the `entities/`-first lookup added to `has_registry`/`_load_registry_for_rollup` in Plan 1. (Low impact; no explicit `--registry` + `entities/`-based project is the only affected path.)
+- **(Plan 3, not here)** the `date_prefix` strip branch in `build_entity_markdown` (`entities.py`) is unreachable for new numeric ids; remove it once legacy date-prefixed files are migrated.
+
 ---
 
 ## File structure
