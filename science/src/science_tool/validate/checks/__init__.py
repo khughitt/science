@@ -44,6 +44,7 @@ CANONICAL_CHECK_MODULES = (
     "graph",
     "tasks",
     "id_prefixes",
+    "entity_conformance",
     "cross_references",
     "reference_collections",
     "identity_context",

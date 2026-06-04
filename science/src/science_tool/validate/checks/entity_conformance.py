@@ -1,0 +1,127 @@
+"""Entity-conformance health checks driven by the policy table.
+
+All checks emit WARN during the transition (layout_version 2→3). The
+WARN→ERROR promotion is Plan 3 (cutover).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from pathlib import Path
+import re
+
+import yaml
+
+from science_tool.entities import (
+    is_markdown_entity_kind,
+    local_part_conforms,
+    markdown_entity_kinds,
+    resolve_path_policy,
+)
+from science_tool.validate.checks import Check
+from science_tool.validate.context import ValidateContext
+from science_tool.validate.result import Result, Severity
+
+_FRONTMATTER = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
+_LEGACY_ROOTS = ("doc", "specs")
+
+
+def _result(severity: Severity, path: Path | None, message: str) -> Result:
+    return Result(severity, path, None, message, "entity-conformance", None)
+
+
+def _frontmatter_dict(ctx: ValidateContext, path: Path) -> dict:
+    match = _FRONTMATTER.match(ctx.read_text_cached(path))
+    if match is None:
+        return {}
+    try:
+        data = yaml.safe_load(match.group(1)) or {}
+    except yaml.YAMLError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _entity_type(ctx: ValidateContext, path: Path) -> str | None:
+    data = _frontmatter_dict(ctx, path)
+    value = data.get("type") or data.get("kind")
+    return str(value) if value else None
+
+
+def _id_kind_and_local(entity_id: object) -> tuple[str | None, str | None]:
+    if isinstance(entity_id, str) and ":" in entity_id:
+        kind, local = entity_id.split(":", 1)
+        return kind, local
+    return None, None
+
+
+def _rel(ctx: ValidateContext, path: Path) -> Path:
+    return path.relative_to(ctx.project_root)
+
+
+@Check(section="entity location coherence...", order=37)
+def check_entity_location_coherence(ctx: ValidateContext) -> Iterator[Result]:
+    """(a) Flag entity files stranded in doc/specs; (b) flag files under
+    entities/<kind>/ whose frontmatter type or id-kind disagrees with the
+    directory (directory/type/id coherence)."""
+    # (a) stranded in legacy roots
+    for root_name in _LEGACY_ROOTS:
+        root = ctx.project_root / root_name
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*.md")):
+            if "templates" in path.relative_to(ctx.project_root).parts:
+                continue
+            kind = _entity_type(ctx, path)
+            if kind is None or not is_markdown_entity_kind(kind):
+                continue  # prose / non-entity markdown is ignored
+            yield _result(
+                _severity(ctx),
+                _rel(ctx, path),
+                f"{kind} entity outside its home; expected under {resolve_path_policy(kind).root}/",
+            )
+    # (b) miscategorized within entities/<kind>/
+    for kind in markdown_entity_kinds():
+        policy = resolve_path_policy(kind)
+        if policy.strategy == "singleton":
+            continue
+        directory = ctx.project_root / policy.root
+        if not directory.is_dir():
+            continue
+        for path in sorted(directory.glob("*.md")):
+            data = _frontmatter_dict(ctx, path)
+            ftype = data.get("type") or data.get("kind")
+            if ftype and str(ftype) != kind:
+                yield _result(_severity(ctx), _rel(ctx, path), f"type {ftype!r} in {kind}/ directory (expected {kind})")
+            id_kind, _ = _id_kind_and_local(data.get("id"))
+            if id_kind is not None and id_kind != kind:
+                yield _result(_severity(ctx), _rel(ctx, path), f"id kind {id_kind!r} in {kind}/ directory (expected {kind})")
+
+
+@Check(section="entity filename conformance...", order=38)
+def check_entity_filename_conformance(ctx: ValidateContext) -> Iterator[Result]:
+    """Flag files in entities/<kind>/ whose name violates the kind's strategy
+    OR whose stem != the id's local-part."""
+    for kind in markdown_entity_kinds():
+        policy = resolve_path_policy(kind)
+        if policy.strategy == "singleton":
+            continue
+        directory = ctx.project_root / policy.root
+        if not directory.is_dir():
+            continue
+        for path in sorted(directory.glob("*.md")):
+            if not local_part_conforms(kind, path.stem):
+                yield _result(
+                    _severity(ctx), _rel(ctx, path), f"non-conforming {kind} filename {path.name!r} (strategy={policy.strategy})"
+                )
+            _, id_local = _id_kind_and_local(_frontmatter_dict(ctx, path).get("id"))
+            if id_local is not None and id_local != path.stem:
+                yield _result(
+                    _severity(ctx), _rel(ctx, path), f"filename stem {path.stem!r} != id local-part {id_local!r}"
+                )
+
+
+def _severity(ctx: ValidateContext) -> Severity:
+    # Plan 2 emits WARN; Plan 3 cutover swaps the body for a layout_version gate
+    # (ERROR when layout_version >= 3). Single-spot change.
+    del ctx
+    return Severity.WARN
