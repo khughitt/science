@@ -25,15 +25,15 @@ def test_entity_create_question_writes_source() -> None:
         seed_project(root)
         write_markdown_entity(
             root,
-            "doc/questions/q01-existing.md",
-            {"id": "question:q01-existing", "type": "question", "title": "Existing", "status": "open"},
+            "entities/questions/0001-existing.md",
+            {"id": "question:0001-existing", "type": "question", "title": "Existing", "status": "open"},
         )
 
         result = runner.invoke(main, ["entity", "create", "question", "New Question"])
 
         assert result.exit_code == 0, result.output
-        assert "question:q02-new-question" in result.output
-        assert Path("doc/questions/q02-new-question.md").is_file()
+        assert "question:0002-new-question" in result.output
+        assert Path("entities/questions/0002-new-question.md").is_file()
 
 
 def test_questions_create_uses_plural_group_and_singular_is_removed() -> None:
@@ -43,16 +43,16 @@ def test_questions_create_uses_plural_group_and_singular_is_removed() -> None:
         seed_project(root)
         write_markdown_entity(
             root,
-            "doc/questions/q01-existing.md",
-            {"id": "question:q01-existing", "type": "question", "title": "Existing", "status": "active"},
+            "entities/questions/0001-existing.md",
+            {"id": "question:0001-existing", "type": "question", "title": "Existing", "status": "active"},
         )
 
         result = runner.invoke(main, ["questions", "create", "New Question"])
         removed = runner.invoke(main, ["question", "--help"])
 
         assert result.exit_code == 0, result.output
-        assert "question:q02-new-question" in result.output
-        assert Path("doc/questions/q02-new-question.md").is_file()
+        assert "question:0002-new-question" in result.output
+        assert Path("entities/questions/0002-new-question.md").is_file()
         assert removed.exit_code != 0
         assert "No such command 'question'" in removed.output
 
@@ -163,16 +163,14 @@ def test_entity_create_theme_cli_round_trips() -> None:
                 "create",
                 "theme",
                 "Transportability Across Cancer Types",
-                "--id",
-                "theme:transportability-across-cancer-types",
             ],
         )
 
         assert result.exit_code == 0, result.output
-        path = Path("doc/themes/transportability-across-cancer-types.md")
+        path = Path("entities/themes/0001-transportability-across-cancer-types.md")
         assert path.exists()
         text = path.read_text(encoding="utf-8")
-        assert "theme:transportability-across-cancer-types" in text
+        assert "theme:0001-transportability-across-cancer-types" in text
         assert "## Definition" in text
 
 
@@ -183,8 +181,8 @@ def test_entity_create_with_unresolved_related_prints_warning() -> None:
         seed_project(root)
         write_markdown_entity(
             root,
-            "doc/questions/q01-existing.md",
-            {"id": "question:q01-existing", "type": "question", "title": "Existing", "status": "open"},
+            "entities/questions/0001-existing.md",
+            {"id": "question:0001-existing", "type": "question", "title": "Existing", "status": "open"},
         )
 
         result = runner.invoke(main, ["entity", "create", "question", "New Question", "--related", "hypothesis:h01"])
@@ -905,15 +903,15 @@ def test_question_create_wrapper_delegates_to_entity_create() -> None:
         seed_project(root)
         write_markdown_entity(
             root,
-            "doc/questions/q01-existing.md",
-            {"id": "question:q01-existing", "type": "question", "title": "Existing", "status": "open"},
+            "entities/questions/0001-existing.md",
+            {"id": "question:0001-existing", "type": "question", "title": "Existing", "status": "open"},
         )
 
         result = runner.invoke(main, ["questions", "create", "Wrapper Question", "--slug", "wrapper"])
 
         assert result.exit_code == 0, result.output
-        assert "question:q02-wrapper" in result.output
-        assert Path("doc/questions/q02-wrapper.md").is_file()
+        assert "question:0002-wrapper" in result.output
+        assert Path("entities/questions/0002-wrapper.md").is_file()
 
 
 def test_discussion_focus_maps_to_related() -> None:
@@ -929,14 +927,14 @@ def test_discussion_focus_maps_to_related() -> None:
                 "create",
                 "Planning",
                 "--id",
-                "discussion:2026-04-28-planning",
+                "discussion:0001-planning",
                 "--focus",
                 "question:q01-alpha",
             ],
         )
 
         assert result.exit_code == 0, result.output
-        assert "question:q01-alpha" in Path("doc/discussions/2026-04-28-planning.md").read_text(encoding="utf-8")
+        assert "question:q01-alpha" in Path("entities/discussions/0001-planning.md").read_text(encoding="utf-8")
 
 
 def test_interpretation_input_maps_to_source_refs() -> None:
@@ -952,14 +950,14 @@ def test_interpretation_input_maps_to_source_refs() -> None:
                 "create",
                 "Result",
                 "--id",
-                "interpretation:2026-04-28-result",
+                "interpretation:0001-result",
                 "--input",
                 "results/run-1",
             ],
         )
 
         assert result.exit_code == 0, result.output
-        assert "results/run-1" in Path("doc/interpretations/2026-04-28-result.md").read_text(encoding="utf-8")
+        assert "results/run-1" in Path("entities/interpretations/0001-result.md").read_text(encoding="utf-8")
 
 
 def test_graph_add_question_mentions_entity_create() -> None:
@@ -1001,13 +999,13 @@ def test_proposition_create_writes_source() -> None:
                 "create",
                 "Cadence shapes recovered switch history",
                 "--id",
-                "proposition:p01-cadence-shapes-switch-history",
+                "proposition:0001-cadence-shapes-switch-history",
             ],
         )
 
         assert result.exit_code == 0, result.output
-        assert "proposition:p01-cadence-shapes-switch-history" in result.output
-        path = Path("specs/propositions/p01-cadence-shapes-switch-history.md")
+        assert "proposition:0001-cadence-shapes-switch-history" in result.output
+        path = Path("entities/propositions/0001-cadence-shapes-switch-history.md")
         assert path.is_file()
         text = path.read_text(encoding="utf-8")
         assert "type: proposition" in text or 'type: "proposition"' in text
@@ -1183,8 +1181,6 @@ def test_entity_note_without_date_prints_today() -> None:
 
 
 def test_discussion_create_without_id_uses_today() -> None:
-    from datetime import date
-
     runner = CliRunner()
     with runner.isolated_filesystem():
         root = Path.cwd()
@@ -1193,14 +1189,11 @@ def test_discussion_create_without_id_uses_today() -> None:
         result = runner.invoke(main, ["discussions", "create", "Planning"])
 
         assert result.exit_code == 0, result.output
-        today = date.today().isoformat()
-        assert f"discussion:{today}-planning" in result.output
-        assert Path(f"doc/discussions/{today}-planning.md").is_file()
+        assert "discussion:0001-planning" in result.output
+        assert Path("entities/discussions/0001-planning.md").is_file()
 
 
 def test_discussion_create_with_optional_section_includes_addendum() -> None:
-    from datetime import date
-
     runner = CliRunner()
     with runner.isolated_filesystem():
         root = Path.cwd()
@@ -1209,8 +1202,7 @@ def test_discussion_create_with_optional_section_includes_addendum() -> None:
         result = runner.invoke(main, ["discussions", "create", "Test discussion", "--with", "double-blind-addendum"])
 
         assert result.exit_code == 0, result.output
-        today = date.today().isoformat()
-        path = Path(f"doc/discussions/{today}-test-discussion.md")
+        path = Path("entities/discussions/0001-test-discussion.md")
         assert path.is_file()
         assert "## Double-Blind Addendum" in path.read_text(encoding="utf-8")
 
@@ -1223,11 +1215,12 @@ def test_hypothesis_create_phase_candidate_sets_field_and_includes_promotion_cri
 
         result = runner.invoke(
             main,
-            ["hypotheses", "create", "Trial framing", "--id", "hypothesis:h01-trial-framing", "--phase", "candidate"],
+            ["hypotheses", "create", "Trial framing", "--id", "hypothesis:0001-trial-framing", "--phase", "candidate"],
         )
 
         assert result.exit_code == 0, result.output
-        path = next(Path("specs/hypotheses").glob("*-trial-framing.md"))
+        path = Path("entities/hypotheses/0001-trial-framing.md")
+        assert path.is_file()
         text = path.read_text(encoding="utf-8")
         assert "phase: candidate" in text
         assert "## Promotion criteria" in text
@@ -1240,19 +1233,18 @@ def test_hypothesis_create_defaults_phase_active_without_promotion_criteria() ->
         seed_project(root)
 
         result = runner.invoke(
-            main, ["hypotheses", "create", "Committed frame", "--id", "hypothesis:h01-committed-frame"]
+            main, ["hypotheses", "create", "Committed frame", "--id", "hypothesis:0001-committed-frame"]
         )
 
         assert result.exit_code == 0, result.output
-        path = next(Path("specs/hypotheses").glob("*-committed-frame.md"))
+        path = Path("entities/hypotheses/0001-committed-frame.md")
+        assert path.is_file()
         text = path.read_text(encoding="utf-8")
         assert "phase: active" in text
         assert "## Promotion criteria" not in text
 
 
 def test_discussion_create_no_hints_strips_html_comments() -> None:
-    from datetime import date
-
     runner = CliRunner()
     with runner.isolated_filesystem():
         root = Path.cwd()
@@ -1261,8 +1253,8 @@ def test_discussion_create_no_hints_strips_html_comments() -> None:
         result = runner.invoke(main, ["discussions", "create", "Test discussion", "--no-hints"])
 
         assert result.exit_code == 0, result.output
-        today = date.today().isoformat()
-        path = Path(f"doc/discussions/{today}-test-discussion.md")
+        path = Path("entities/discussions/0001-test-discussion.md")
+        assert path.is_file()
         text = path.read_text(encoding="utf-8")
         assert "<!--" not in text
 
@@ -1297,3 +1289,32 @@ def test_discussion_create_unknown_section_key_errors() -> None:
         assert result.exit_code != 0
         assert "bogus" in result.output
         assert "double-blind-addendum" in result.output
+
+
+def test_entity_create_paper_uses_citekey() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        result = runner.invoke(
+            main, ["entity", "create", "paper", "Some Paper", "--id", "paper:Adams2025"]
+        )
+        assert result.exit_code == 0, result.output
+        assert Path("entities/papers/Adams2025.md").is_file()
+
+
+def test_entity_create_newly_added_kind_uses_generic_scaffold() -> None:
+    # A non-MIGRATED_KIND (no domain template) must still create successfully
+    # with valid required frontmatter (generic scaffold).
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        result = runner.invoke(main, ["entity", "create", "finding", "A Finding"])
+        assert result.exit_code == 0, result.output
+        path = Path("entities/findings/0001-a-finding.md")
+        assert path.is_file()
+        fm = yaml.safe_load(path.read_text().split("---")[1])
+        assert fm["id"] == "finding:0001-a-finding"
+        assert fm["type"] == "finding"
+        assert {"title", "status", "created", "updated"} <= set(fm)
