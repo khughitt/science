@@ -6,8 +6,11 @@ WARN→ERROR promotion is Plan 3 (cutover).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from pathlib import Path
+
+import yaml
 
 from science_tool.entities import (
     is_markdown_entity_kind,
@@ -111,3 +114,71 @@ def _severity(ctx: ValidateContext) -> Severity:
     # (ERROR when layout_version >= 3). Single-spot change.
     del ctx
     return Severity.WARN
+
+
+_REQUIRED_FRONTMATTER = ("id", "type", "title", "status", "created", "updated")
+_NUMBER_RE = re.compile(r"^(\d{4})-")
+
+
+@Check(section="entity frontmatter completeness...", order=39)
+def check_entity_frontmatter_completeness(ctx: ValidateContext) -> Iterator[Result]:
+    for kind in markdown_entity_kinds():
+        policy = resolve_path_policy(kind)
+        if policy.strategy == "singleton":
+            continue
+        directory = ctx.project_root / policy.root
+        if not directory.is_dir():
+            continue
+        for path in sorted(directory.glob("*.md")):
+            text = ctx.read_text_cached(path)
+            if not text.startswith("---\n"):
+                yield _result(_severity(ctx), _rel(ctx, path), f"{path.name}: no YAML frontmatter")
+                continue
+            try:
+                data = ctx.frontmatter(path)
+            except yaml.YAMLError:
+                yield _result(_severity(ctx), _rel(ctx, path), f"{path.name}: invalid YAML frontmatter")
+                continue
+            missing = [field for field in _REQUIRED_FRONTMATTER if field not in data]
+            if missing:
+                yield _result(
+                    _severity(ctx), _rel(ctx, path), f"{path.name}: missing frontmatter fields: {', '.join(missing)}"
+                )
+
+
+@Check(section="entity number hygiene...", order=40)
+def check_entity_number_hygiene(ctx: ValidateContext) -> Iterator[Result]:
+    for kind in markdown_entity_kinds():
+        policy = resolve_path_policy(kind)
+        if policy.strategy != "numeric":
+            continue
+        directory = ctx.project_root / policy.root
+        if not directory.is_dir():
+            continue
+        seen: dict[str, list[str]] = {}
+        for path in sorted(directory.glob("*.md")):
+            match = _NUMBER_RE.match(path.stem)
+            if match is None:
+                continue
+            seen.setdefault(match.group(1), []).append(path.name)
+        for number, names in sorted(seen.items()):
+            if len(names) > 1:
+                yield _result(
+                    _severity(ctx), policy.root, f"duplicate {kind} number {number}: {', '.join(sorted(names))}"
+                )
+
+
+@Check(section="entity stray files...", order=41)
+def check_entity_stray_files(ctx: ValidateContext) -> Iterator[Result]:
+    for kind in markdown_entity_kinds():
+        policy = resolve_path_policy(kind)
+        if policy.strategy == "singleton":
+            continue
+        directory = ctx.project_root / policy.root
+        if not directory.is_dir():
+            continue
+        for path in sorted(directory.iterdir()):
+            if path.is_dir():
+                yield _result(_severity(ctx), _rel(ctx, path), f"unexpected subdirectory in {policy.root}/")
+            elif path.suffix != ".md":
+                yield _result(_severity(ctx), _rel(ctx, path), f"non-entity file in {policy.root}/: {path.name}")

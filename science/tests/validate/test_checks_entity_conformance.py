@@ -6,7 +6,10 @@ import yaml
 
 from science_tool.validate.checks.entity_conformance import (
     check_entity_filename_conformance,
+    check_entity_frontmatter_completeness,
     check_entity_location_coherence,
+    check_entity_number_hygiene,
+    check_entity_stray_files,
 )
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Severity
@@ -74,3 +77,29 @@ def test_location_coherence_flags_id_kind_in_wrong_dir(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     results = list(check_entity_location_coherence(ctx))
     assert any(r.severity is Severity.WARN and "id kind" in r.message for r in results)
+
+
+def test_frontmatter_completeness_flags_missing_fields(tmp_path: Path) -> None:
+    # prose-header style: file with no frontmatter at all
+    p = tmp_path / "entities" / "interpretations" / "0001-x.md"
+    p.parent.mkdir(parents=True)
+    p.write_text("**Date:** 2026-05-23\n\nbody\n", encoding="utf-8")
+    ctx = _ctx(tmp_path)
+    results = list(check_entity_frontmatter_completeness(ctx))
+    assert any(r.severity is Severity.WARN for r in results)
+
+
+def test_number_hygiene_flags_duplicate(tmp_path: Path) -> None:
+    _write(tmp_path, "entities/questions/0001-a.md", {"id": "question:0001-a", "type": "question"})
+    _write(tmp_path, "entities/questions/0001-b.md", {"id": "question:0001-b", "type": "question"})
+    ctx = _ctx(tmp_path)
+    results = list(check_entity_number_hygiene(ctx))
+    assert any(r.severity is Severity.WARN and "0001" in r.message for r in results)
+
+
+def test_stray_file_flagged(tmp_path: Path) -> None:
+    (tmp_path / "entities" / "questions").mkdir(parents=True)
+    (tmp_path / "entities" / "questions" / "README.txt").write_text("notes", encoding="utf-8")
+    ctx = _ctx(tmp_path)
+    results = list(check_entity_stray_files(ctx))
+    assert any(r.severity is Severity.WARN for r in results)
