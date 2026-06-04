@@ -65,73 +65,63 @@ def _read_frontmatter(path: Path) -> dict[str, object]:
     return yaml.safe_load(text[4:end])
 
 
+def _questions_dir(project_root: Path) -> Path:
+    return project_root / "entities" / "questions"
+
+
 class TestReserveQuestion:
     def test_first_reservation_in_empty_dir(self, tmp_path: Path) -> None:
         result = reserve_question(tmp_path, "first thing")
         assert isinstance(result, Reservation)
         assert result.number == 1
-        assert result.padded == "01"
+        assert result.padded == "0001"
         assert result.slug == "first-thing"
-        assert result.id == "question:01-first-thing"
-        assert result.path == tmp_path / "q01-first-thing.md"
+        assert result.id == "question:0001-first-thing"
+        assert result.path == _questions_dir(tmp_path) / "0001-first-thing.md"
         assert result.path.is_file()
 
     def test_increments_past_existing_files(self, tmp_path: Path) -> None:
-        (tmp_path / "q01-foo.md").write_text("# foo\n")
-        (tmp_path / "q02-bar.md").write_text("# bar\n")
+        d = _questions_dir(tmp_path)
+        d.mkdir(parents=True)
+        (d / "0001-foo.md").write_text("# foo\n")
+        (d / "0002-bar.md").write_text("# bar\n")
         result = reserve_question(tmp_path, "baz")
         assert result.number == 3
-        assert result.padded == "03"
+        assert result.padded == "0003"
 
     def test_gap_tolerant_uses_max_plus_one(self, tmp_path: Path) -> None:
         """Retired numbers stay retired so historical references don't shift."""
-        (tmp_path / "q01-foo.md").write_text("# foo\n")
-        (tmp_path / "q05-baz.md").write_text("# baz\n")
+        d = _questions_dir(tmp_path)
+        d.mkdir(parents=True)
+        (d / "0001-foo.md").write_text("# foo\n")
+        (d / "0005-baz.md").write_text("# baz\n")
         result = reserve_question(tmp_path, "qux")
         assert result.number == 6  # max+1, not gap-fill at 02
 
-    def test_padding_inferred_from_widest_existing(self, tmp_path: Path) -> None:
-        (tmp_path / "q001-foo.md").write_text("# foo\n")
+    def test_counts_legacy_prefixed_files(self, tmp_path: Path) -> None:
+        """Legacy ``qNN``/``hNN`` style names still count in the next-number scan."""
+        d = _questions_dir(tmp_path)
+        d.mkdir(parents=True)
+        (d / "q03-legacy.md").write_text("# legacy\n")
         result = reserve_question(tmp_path, "bar")
-        assert result.padded == "002"
-        assert result.path.name == "q002-bar.md"
+        assert result.number == 4
+        assert result.path.name == "0004-bar.md"
 
-    def test_collision_retries_until_free(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Pre-create the path the first attempt would pick; reserve must bump and retry."""
-        (tmp_path / "q03-other.md").write_text("# other\n")
-        # Pre-create the slot the next-attempt scan would target after seeing q03 (i.e. q04)
-        # — but with a different slug, so the destination filename differs and O_EXCL passes.
-        # To force a true collision we need the SAME filename to exist already; so we
-        # simulate that by pre-creating exactly the path reserve would attempt first.
-        from science_tool import questions as q_mod
-
-        original_scan = q_mod._scan_existing
-        calls = {"n": 0}
-
-        def fake_scan(d: Path) -> tuple[int, int]:
-            # First call returns max=3 (so reserve tries q04). After reserve writes q04
-            # we still need the second attempt to see something different — so we
-            # simulate a competing process by pre-creating q04 *before* reserve writes,
-            # forcing the EEXIST branch on its first try.
-            calls["n"] += 1
-            if calls["n"] == 1:
-                # Plant the conflict before reserve's open() runs.
-                (tmp_path / "q04-target.md").write_text("# competitor\n")
-                return 3, 2
-            return original_scan(d)
-
-        monkeypatch.setattr(q_mod, "_scan_existing", fake_scan)
-        result = reserve_question(tmp_path, "target")
-        assert result.number == 5  # bumped past the planted collision
-        assert result.path.name == "q05-target.md"
-        assert calls["n"] >= 2  # retry occurred
+    def test_questions_dir_override(self, tmp_path: Path) -> None:
+        """The deprecated --questions-dir override writes to that dir verbatim."""
+        override = tmp_path / "custom" / "qs"
+        result = reserve_question(tmp_path, "first", questions_dir=override)
+        assert result.path == override / "0001-first.md"
+        assert result.path.is_file()
+        # Nothing was written under the default entities/questions home.
+        assert not _questions_dir(tmp_path).exists()
 
     def test_frontmatter_filled(self, tmp_path: Path) -> None:
         result = reserve_question(
             tmp_path,
             "metadata test",
             title="Does X drive Y?",
-            related=["question:01-prior", "hypothesis:h1"],
+            related=["question:0001-prior", "hypothesis:h1"],
             ontology_terms=["GO:0006915", "process/apoptosis"],
             source_refs=["doi:10.1234/foo", "Smith2024"],
             datasets=["geo:GSE123456"],
@@ -141,7 +131,7 @@ class TestReserveQuestion:
         assert fm["type"] == "question"
         assert fm["title"] == "Does X drive Y?"
         assert fm["status"] == "active"
-        assert fm["related"] == ["question:01-prior", "hypothesis:h1"]
+        assert fm["related"] == ["question:0001-prior", "hypothesis:h1"]
         assert fm["ontology_terms"] == ["GO:0006915", "process/apoptosis"]
         assert fm["source_refs"] == ["doi:10.1234/foo", "Smith2024"]
         assert fm["datasets"] == ["geo:GSE123456"]
@@ -163,35 +153,40 @@ class TestReserveQuestion:
         assert body.strip() == "# T\n\nCustom"
 
     def test_missing_dir_is_created(self, tmp_path: Path) -> None:
-        nested = tmp_path / "doc" / "questions"
+        nested = _questions_dir(tmp_path)
         assert not nested.exists()
-        reserve_question(nested, "first")
+        reserve_question(tmp_path, "first")
         assert nested.is_dir()
 
     def test_counts_create_style_unprefixed_files(self, tmp_path: Path) -> None:
-        """`science questions create` writes NN-slug.md (no q prefix). reserve must
+        """`science questions create` writes NNNN-slug.md (no prefix). reserve must
         count those when picking the next number, or it silently reissues a number
         that create already used."""
-        (tmp_path / "02-foo.md").write_text("# foo\n")
-        (tmp_path / "03-bar.md").write_text("# bar\n")
+        d = _questions_dir(tmp_path)
+        d.mkdir(parents=True)
+        (d / "0002-foo.md").write_text("# foo\n")
+        (d / "0003-bar.md").write_text("# bar\n")
         result = reserve_question(tmp_path, "baz")
         assert result.number == 4
 
     def test_counts_mixed_prefixed_and_unprefixed(self, tmp_path: Path) -> None:
-        (tmp_path / "q01-foo.md").write_text("# foo\n")
-        (tmp_path / "04-bar.md").write_text("# bar\n")  # higher number, no q prefix
+        d = _questions_dir(tmp_path)
+        d.mkdir(parents=True)
+        (d / "q01-foo.md").write_text("# foo\n")  # legacy single-letter prefix
+        (d / "0004-bar.md").write_text("# bar\n")  # higher number, canonical
         result = reserve_question(tmp_path, "baz")
         assert result.number == 5
 
     def test_unrelated_files_ignored_in_scan(self, tmp_path: Path) -> None:
-        (tmp_path / "README.md").write_text("readme\n")
-        (tmp_path / "q-not-numbered.md").write_text("# no number\n")
-        (tmp_path / "Q07-uppercase.md").write_text("# wrong case\n")
+        d = _questions_dir(tmp_path)
+        d.mkdir(parents=True)
+        (d / "README.md").write_text("readme\n")
+        (d / "not-numbered.md").write_text("# no number\n")
         result = reserve_question(tmp_path, "x")
-        assert result.number == 1  # nothing matched the pattern
+        assert result.number == 1  # nothing matched the numeric pattern
 
 
-def test_question_reserve_accepts_format_json(tmp_path: Path) -> None:
+def test_question_reserve_writes_under_entities_questions(tmp_path: Path) -> None:
     runner = CliRunner()
 
     result = runner.invoke(
@@ -201,7 +196,7 @@ def test_question_reserve_accepts_format_json(tmp_path: Path) -> None:
             "reserve",
             "--slug",
             "why-things",
-            "--questions-dir",
+            "--project-root",
             str(tmp_path),
             "--format",
             "json",
@@ -210,5 +205,9 @@ def test_question_reserve_accepts_format_json(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["id"] == "question:01-why-things"
+    assert payload["id"] == "question:0001-why-things"
+    assert payload["number"] == 1
+    assert payload["padded"] == "0001"
     assert payload["slug"] == "why-things"
+    assert payload["path"] == str(tmp_path / "entities" / "questions" / "0001-why-things.md")
+    assert (tmp_path / "entities" / "questions" / "0001-why-things.md").is_file()

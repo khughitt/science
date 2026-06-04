@@ -4228,10 +4228,17 @@ def _split_csv(value: str | None) -> list[str]:
 @click.option("--source-refs", default=None, help="Comma-separated source refs, e.g. cite:Smith2024 or paper:Smith2024")
 @click.option("--datasets", default=None, help="Comma-separated dataset IDs")
 @click.option(
+    "--project-root",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path.cwd(),
+    show_default=True,
+    help="Project root; questions are written under entities/questions/.",
+)
+@click.option(
     "--questions-dir",
-    default="doc/questions",
+    default=None,
     type=click.Path(path_type=Path),
-    help="Directory holding question files (default: doc/questions)",
+    help="Deprecated override: write to this directory verbatim instead of <root>/entities/questions.",
 )
 @click.option(
     "--template",
@@ -4255,17 +4262,19 @@ def question_reserve_cmd(
     ontology: str | None,
     source_refs: str | None,
     datasets: str | None,
-    questions_dir: Path,
+    project_root: Path,
+    questions_dir: Path | None,
     template: Path | None,
     as_json: bool,
     output_format: str,
 ) -> None:
-    """Atomically reserve the next q-number and write a stub question file.
+    """Atomically reserve the next question number and write a stub file.
 
-    Designed for parallel subagents: the destination file itself is the
-    lock (O_CREAT|O_EXCL), so concurrent reserves never collide. Returns
-    the assigned path so the caller can write the body without re-querying
-    the directory.
+    Writes ``entities/questions/NNNN-slug.md`` under the project root.
+    Designed for parallel subagents: reservation locks on the NUMBER (via a
+    per-number sentinel), so concurrent reserves with different slugs never
+    collide on a number. Returns the assigned path so the caller can write
+    the body without re-querying the directory.
     """
     import json as _json
 
@@ -4273,7 +4282,7 @@ def question_reserve_cmd(
 
     template_body = template.read_text(encoding="utf-8") if template else None
     reservation = reserve_question(
-        questions_dir,
+        project_root,
         slug,
         title=title,
         related=_split_csv(related),
@@ -4281,6 +4290,7 @@ def question_reserve_cmd(
         source_refs=_split_csv(source_refs),
         datasets=_split_csv(datasets),
         template_body=template_body,
+        questions_dir=questions_dir,
     )
     if as_json or output_format == "json":
         click.echo(
