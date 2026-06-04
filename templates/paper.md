@@ -1,28 +1,50 @@
 ---
-id: "paper:{{bibtex_key}}"
+id: "paper:{{nn}}-{{slug}}"
 type: "paper"
-title: "{{Title}}"
+title: "{{title}}"
 status: "active"
 ontology_terms: []
-# datasets: strings only — a quoted free-text name ("TCGA-BRCA cohort") or a
-# "dataset:<slug>" ref to a registered dataset entity. Do NOT use mapping items
-# like {name:, label:, type:}; they fail the paper schema and abort validate.
+dataset_usage: []
+# Transition input only; prefer dataset_usage above.
 datasets: []
-source_refs:
-  - "cite:{{bibtex_key}}"
+source_refs: []
 related: []
 created: "{{YYYY-MM-DD}}"
 updated: "{{YYYY-MM-DD}}"
+_template:
+  frontmatter:
+    id: { from: entity_id }
+    type: { default: "paper" }
+    title: { from: title }
+    status: { from: status }
+    ontology_terms: { default: [] }
+    dataset_usage: { default: [] }
+    datasets: { default: [] }
+    source_refs: { from: source_refs }
+    related: { from: related }
+    created: { from: created }
+    updated: { from: updated }
+  sections:
+    - { key: key-contribution, name: "Key Contribution", required: true }
+    - { key: methods, name: "Methods", required: true }
+    - { key: key-findings, name: "Key Findings", required: true }
+    - { key: relevance, name: "Relevance", required: true }
+    - { key: project-framework-mapping, name: "Project Framework Mapping", required: true }
+    - { key: limitations, name: "Limitations", required: true }
+    - { key: model-tool-availability, name: "Model / Tool Availability", required: true }
+    - { key: follow-up, name: "Follow-up", required: true }
 ---
 
-# {{Title}}
+# {{title}}
 
-- **Authors:** {{authors}}
-- **Year:** {{year}}
-- **Journal:** {{journal}}
-- **DOI/URL:** {{url}}
-- **BibTeX key:** {{bibtex_key}}
+<!--
+- **Authors:** <authors>
+- **Year:** <year>
+- **Journal:** <journal>
+- **DOI/URL:** <url>
+- **BibTeX key:** <bibtex-key>
 - **Source:** LLM knowledge | web search | PDF
+-->
 
 ## Key Contribution
 

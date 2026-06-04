@@ -1,13 +1,13 @@
 """Port of validate.sh discussion document and synthesis frontmatter blocks.
 
-for discussion_file in "$DOC_DIR/discussions/"*.md; do
-    # skip comparison-* and require discussion sections
-    # double-blind mode requires addendum sections
-done
+Checks discussion files under both ``entities/discussions/`` (new layout) and
+the legacy ``$DOC_DIR/discussions/`` root, skipping comparison-* files and
+requiring discussion sections; double-blind mode requires addendum sections.
 
-for f in "$DOC_DIR/reports/synthesis"/*.md "$DOC_DIR/reports/synthesis.md"; do
-    # only type: synthesis files are checked for report_kind and kind fields
-done
+Checks synthesis frontmatter under both ``entities/synthesis/`` (new layout)
+and the legacy ``$DOC_DIR/reports/synthesis/`` dir (plus the singleton
+``$DOC_DIR/reports/synthesis.md``), validating report_kind and related fields
+for files with ``type: synthesis``.
 """
 
 from __future__ import annotations

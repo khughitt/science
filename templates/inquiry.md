@@ -1,20 +1,38 @@
 ---
-id: "inquiry:{{slug}}"
+id: "inquiry:{{nn}}-{{slug}}"
 type: "inquiry"
-title: "{{label}}"
-status: "{{status}}"
+title: "{{title}}"
+status: "active"
 source_refs: []
 related: []
-created: "{{created}}"
-updated: "{{created}}"
-target: "{{target_id}}"
+created: "{{YYYY-MM-DD}}"
+updated: "{{YYYY-MM-DD}}"
+target: ""
+_template:
+  frontmatter:
+    id: { from: entity_id }
+    type: { default: "inquiry" }
+    title: { from: title }
+    status: { from: status }
+    source_refs: { from: source_refs }
+    related: { from: related }
+    created: { from: created }
+    updated: { from: updated }
+    target: { default: "" }
+  sections:
+    - { key: summary, name: "Summary", required: true }
+    - { key: variables, name: "Variables", required: true }
+    - { key: data-flow, name: "Data Flow", required: true }
+    - { key: assumptions, name: "Assumptions", required: true }
+    - { key: unknowns, name: "Unknowns", required: true }
+    - { key: parameters, name: "Parameters", required: true }
 ---
 
-# Inquiry: {{label}}
+# Inquiry: {{title}}
 
 ## Summary
 
-{{description}}
+<!-- Short description of what this inquiry investigates. -->
 
 ## Variables
 
@@ -22,38 +40,39 @@ target: "{{target_id}}"
 
 | Variable | Type | Provenance |
 |---|---|---|
-{{boundary_in_rows}}
+<!-- one row per given variable -->
 
 ### Boundary Out (Produces)
 
 | Variable | Type | Validation |
 |---|---|---|
-{{boundary_out_rows}}
+<!-- one row per produced variable -->
 
 ### Interior
 
 | Variable | Type | Notes |
 |---|---|---|
-{{interior_rows}}
+<!-- one row per interior variable -->
 
 ## Data Flow
 
-{{edge_list}}
+<!-- edge list describing how variables flow through the inquiry -->
 
 ## Assumptions
 
 | Assumption | Evidence |
 |---|---|
-{{assumption_rows}}
+<!-- one row per assumption -->
 
 ## Unknowns
 
 | Unknown | Notes |
 |---|---|
-{{unknown_rows}}
+<!-- one row per unknown -->
 
 ## Parameters
 
 | Parameter | Value | Source | References | Note |
 |---|---|---|---|---|
-{{param_rows}}
+<!-- one row per parameter -->
+

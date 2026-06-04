@@ -1,9 +1,8 @@
 """Port of validate.sh "Checking paper summaries..." block.
 
-# ─── 7. Paper summary template conformance ───────────────────────
-echo ""
-echo "Checking paper summaries..."
-info "Paper summary structure is checked in $DOC_DIR/background/papers/"
+Checks paper entities under both ``entities/papers/`` (new layout) and the
+legacy ``$DOC_DIR/background/papers/`` root for template section conformance
+and dataset-ref validity.
 """
 
 from __future__ import annotations
@@ -11,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+from science_tool.entities import resolve_path_policy
 from science_tool.validate._helpers import entity_frontmatters
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -23,10 +23,11 @@ def _result(severity: Severity, path: str | None, message: str) -> Result:
 
 @Check(section="paper summaries...", order=7)
 def check_papers(ctx: ValidateContext) -> Iterator[Result]:
+    papers_root = resolve_path_policy("paper").root
     yield _result(
         Severity.INFO,
-        "entities/papers",
-        "Paper summary structure is checked in entities/papers/",
+        papers_root.as_posix(),
+        f"Paper summary structure is checked in {papers_root.as_posix()}/",
     )
     yield from _check_paper_dataset_refs(ctx)
 

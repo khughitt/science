@@ -1,8 +1,9 @@
 """Port of validate.sh "Checking document structure..." block.
 
-Checks direct markdown files under:
-- "$DOC_DIR/background/topics/"*.md
-- "$DOC_DIR/background/papers/"*.md
+Checks direct markdown files under both new-layout entity roots and legacy
+``$DOC_DIR`` paths:
+- ``entities/topics/`` and ``$DOC_DIR/background/topics/``
+- ``entities/papers/`` and ``$DOC_DIR/background/papers/``
 
 and warns when required template sections are absent.
 """

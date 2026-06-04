@@ -1,8 +1,9 @@
 """Port of validate.sh "Checking hypotheses..." and review horizon blocks.
 
-Checks direct "$SPECS_DIR/hypotheses/"h*.md hypothesis files for
-Falsifiability, Status, and phase shape, then scans "$DOC_DIR" and
-"$SPECS_DIR" markdown frontmatter for non-positive review horizons.
+Checks hypothesis files under both ``entities/hypotheses/`` (new layout)
+and the legacy ``$SPECS_DIR/hypotheses/`` root for Falsifiability, Status,
+and phase shape, then scans ``$DOC_DIR`` and ``$SPECS_DIR`` markdown
+frontmatter for non-positive review horizons.
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ def check_hypotheses(ctx: ValidateContext) -> Iterator[Result]:
     for target in roots:
         if not target.is_dir():
             continue
-        for path in sorted(target.glob("*.md")):  # was specs-only + h*.md; numeric names have no letter
+        for path in sorted(target.glob("*.md")):  # *.md covers legacy h-prefixed and new numeric names
             if path.is_file():
                 yield from _check_hypothesis(ctx, path)
 

@@ -10,7 +10,7 @@ import yaml
 from science_model.entities import EvidenceLineEntity
 from science_model.frontmatter import parse_entity_file
 from science_model.reasoning import EvidenceStance
-from science_model.templates import EntityTemplateError, Renderer
+from science_model.templates import EntityTemplateError, MIGRATED_KINDS, Renderer
 
 
 def _fields(kind: str = "discussion") -> dict[str, object]:
@@ -187,7 +187,7 @@ Body.
         Renderer(template_root=tmp_path, today=date(2026, 5, 3)).render("bad-null", fields=_fields("bad-null"))
 
 
-@pytest.mark.parametrize("kind", ["hypothesis", "question", "interpretation", "discussion", "theme"])
+@pytest.mark.parametrize("kind", sorted(MIGRATED_KINDS))
 def test_root_and_packaged_migrated_templates_match(kind: str) -> None:
     root_template = Path(__file__).parents[3] / "templates" / f"{kind}.md"
     packaged_template = Path(__file__).parents[1] / "src" / "science_model" / "templates" / f"{kind}.md"

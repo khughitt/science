@@ -2,19 +2,25 @@
 id: "synthesis:{{nn}}-{{slug}}"    # synthesis:<hyp-id> | synthesis:rollup | synthesis:emergent-threads
 type: "synthesis"
 title: "{{title}}"
+status: "active"
 report_kind: "hypothesis-synthesis"   # hypothesis-synthesis | synthesis-rollup | emergent-threads
 generated_at: "{{YYYY-MM-DD}}"
 source_commit: ""                  # 40-char sha
 phase: "active"
+created: "{{YYYY-MM-DD}}"
+updated: "{{YYYY-MM-DD}}"
 _template:
   frontmatter:
     id: { from: entity_id }
     type: { default: "synthesis" }
     title: { from: title }
+    status: { from: status }
     report_kind: { default: "hypothesis-synthesis" }
     generated_at: { from: created }
     source_commit: { default: "" }
     phase: { from: phase, default: "active" }
+    created: { from: created }
+    updated: { from: updated }
   sections:
     - { key: tldr, name: "TL;DR", required: true }
     - { key: state, name: "State", required: true }
