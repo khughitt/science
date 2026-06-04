@@ -1,16 +1,37 @@
 ---
-id: "pre-registration:{{slug}}"
+id: "pre-registration:{{nn}}-{{slug}}"
 type: "pre-registration"
-title: "{{Short Title}}"
+title: "{{title}}"
 status: "committed"
 committed: "{{YYYY-MM-DD}}"
 spec: ""  # optional path to design/spec doc, e.g. doc/specs/2026-04-25-<slug>-design.md
 related: []  # hypothesis IDs, inquiry slugs, or task IDs this pre-reg covers
 created: "{{YYYY-MM-DD}}"
 updated: "{{YYYY-MM-DD}}"
+_template:
+  frontmatter:
+    id: { from: entity_id }
+    type: { default: "pre-registration" }
+    title: { from: title }
+    status: { from: status }
+    committed: { from: created }
+    spec: { default: "" }
+    related: { from: related }
+    created: { from: created }
+    updated: { from: updated }
+  sections:
+    - { key: hypotheses-under-test, name: "Hypotheses Under Test", required: true }
+    - { key: expected-outcomes, name: "Expected Outcomes", required: true }
+    - { key: decision-criteria, name: "Decision Criteria", required: true }
+    - { key: null-result-plan, name: "Null Result Plan", required: true }
+    - { key: suspicious-unexpected-result-plan, name: "Suspicious/Unexpected Result Plan", required: true }
+    - { key: known-limitations, name: "Known Limitations", required: true }
+    - { key: metric-selection-rationale, name: "Metric Selection Rationale", required: true }
+    - { key: exploratory-vs-confirmatory, name: "Exploratory vs. Confirmatory", required: true }
+    - { key: total-comparison-count, name: "Total Comparison Count", required: true }
 ---
 
-# Pre-registration: {{Short Title}}
+# Pre-registration: {{title}}
 
 ## Hypotheses Under Test
 

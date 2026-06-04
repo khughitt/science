@@ -1310,13 +1310,13 @@ def test_entity_create_newly_added_kind_uses_generic_scaffold() -> None:
     with runner.isolated_filesystem():
         root = Path.cwd()
         seed_project(root)
-        result = runner.invoke(main, ["entity", "create", "finding", "A Finding"])
+        result = runner.invoke(main, ["entity", "create", "observation", "An Observation"])
         assert result.exit_code == 0, result.output
-        path = Path("entities/findings/0001-a-finding.md")
+        path = Path("entities/observations/0001-an-observation.md")
         assert path.is_file()
         fm = yaml.safe_load(path.read_text().split("---")[1])
-        assert fm["id"] == "finding:0001-a-finding"
-        assert fm["type"] == "finding"
+        assert fm["id"] == "observation:0001-an-observation"
+        assert fm["type"] == "observation"
         assert {"title", "status", "created", "updated"} <= set(fm)
 
 

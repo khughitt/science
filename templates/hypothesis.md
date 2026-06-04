@@ -1,5 +1,5 @@
 ---
-id: "hypothesis:h{{nn}}-{{slug}}"
+id: "hypothesis:{{nn}}-{{slug}}"
 type: "hypothesis"
 title: "{{title}}"
 status: "proposed"

@@ -1,21 +1,39 @@
 ---
-id: "method:<slug>"
+id: "method:{{nn}}-{{slug}}"
 type: "method"
-title: "<Method Name>"
+title: "{{title}}"
 status: "active"
 ontology_terms: []
 datasets: []
 source_refs: []
 related: []
-created: "<YYYY-MM-DD>"
-updated: "<YYYY-MM-DD>"
+created: "{{YYYY-MM-DD}}"
+updated: "{{YYYY-MM-DD}}"
+_template:
+  frontmatter:
+    id: { from: entity_id }
+    type: { default: "method" }
+    title: { from: title }
+    status: { from: status }
+    ontology_terms: { default: [] }
+    datasets: { default: [] }
+    source_refs: { from: source_refs }
+    related: { from: related }
+    created: { from: created }
+    updated: { from: updated }
+  sections:
+    - { key: summary, name: "Summary", required: true }
+    - { key: inputs-and-outputs, name: "Inputs and Outputs", required: true }
+    - { key: thoughts, name: "Thoughts", required: true }
+    - { key: connections-to-project, name: "Connections to Project", required: true }
+    - { key: related, name: "Related", required: true }
 ---
 
-# <Method Name>
+# {{title}}
 
 ## Summary
 
-<What this method does, typical use cases, and assumptions.>
+<!-- What this method does, typical use cases, and assumptions. -->
 
 ## Inputs and Outputs
 

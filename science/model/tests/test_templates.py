@@ -262,3 +262,59 @@ def test_evidence_line_template_round_trip(tmp_path: Path) -> None:
     assert isinstance(entity, EvidenceLineEntity)
     assert entity.stance == EvidenceStance.SUPPORTS
     assert entity.target == "proposition:CHANGEME"
+
+
+# ---------------------------------------------------------------------------
+# new-kind domain templates (finding, inquiry, method, paper,
+# pre-registration, synthesis)
+# ---------------------------------------------------------------------------
+
+# Matches a raw, unfilled placeholder like {{nn}}, {{slug}}, or {{title}}.
+_RAW_PLACEHOLDER_RE = re.compile(r"\{\{[^{}]+\}\}")
+
+
+@pytest.mark.parametrize(
+    "kind",
+    ["finding", "inquiry", "method", "paper", "pre-registration", "synthesis"],
+)
+def test_new_kind_template_is_migrated(kind: str) -> None:
+    from science_model.templates import MIGRATED_KINDS
+
+    assert kind in MIGRATED_KINDS
+
+
+def test_finding_template_renders_id_without_raw_placeholders() -> None:
+    text = Renderer(today=date(2026, 5, 3)).render("finding", fields=_fields("finding"))
+    frontmatter = _frontmatter(text)
+    assert frontmatter["id"] == "finding:2026-05-03-example"
+    assert frontmatter["type"] == "finding"
+    assert "_template" not in frontmatter
+    # No raw / unfilled placeholders survive in the rendered output.
+    assert not _RAW_PLACEHOLDER_RE.search(text), _RAW_PLACEHOLDER_RE.search(text).group(0)
+    assert "h{{nn}}" not in text
+
+
+def test_synthesis_template_renders_id_without_raw_placeholders() -> None:
+    text = Renderer(today=date(2026, 5, 3)).render("synthesis", fields=_fields("synthesis"))
+    frontmatter = _frontmatter(text)
+    assert frontmatter["id"] == "synthesis:2026-05-03-example"
+    assert frontmatter["type"] == "synthesis"
+    assert "_template" not in frontmatter
+    assert not _RAW_PLACEHOLDER_RE.search(text), _RAW_PLACEHOLDER_RE.search(text).group(0)
+
+
+def test_paper_template_renders_id_without_raw_placeholders() -> None:
+    text = Renderer(today=date(2026, 5, 3)).render("paper", fields=_fields("paper"))
+    frontmatter = _frontmatter(text)
+    assert frontmatter["id"] == "paper:2026-05-03-example"
+    assert frontmatter["type"] == "paper"
+    assert "_template" not in frontmatter
+    assert not _RAW_PLACEHOLDER_RE.search(text), _RAW_PLACEHOLDER_RE.search(text).group(0)
+
+
+def test_hypothesis_id_has_no_legacy_h_prefix_placeholder() -> None:
+    text = Renderer(today=date(2026, 5, 3)).render("hypothesis", fields=_fields("hypothesis"))
+    frontmatter = _frontmatter(text)
+    assert frontmatter["id"] == "hypothesis:2026-05-03-example"
+    assert "h{{nn}}" not in text
+    assert not _RAW_PLACEHOLDER_RE.search(text), _RAW_PLACEHOLDER_RE.search(text).group(0)

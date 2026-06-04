@@ -559,7 +559,7 @@ def test_big_picture_synthesis_frontmatter_includes_profile_required_title() -> 
 
     for path in ("templates/synthesis.md", "science/model/src/science_model/templates/synthesis.md"):
         text = _read(path)
-        assert 'title: "{{Short Title}}"' in text
+        assert 'title: "{{title}}"' in text
 
 
 def test_bias_audit_commit_step_is_conditional() -> None:

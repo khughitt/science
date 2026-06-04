@@ -1,32 +1,31 @@
 ---
-id: "synthesis:{{slug}}"           # synthesis:<hyp-id> | synthesis:rollup | synthesis:emergent-threads
+id: "synthesis:{{nn}}-{{slug}}"    # synthesis:<hyp-id> | synthesis:rollup | synthesis:emergent-threads
 type: "synthesis"
-title: "{{Short Title}}"
-report_kind: "{{kind}}"            # hypothesis-synthesis | synthesis-rollup | emergent-threads
-generated_at: "{{ISO 8601}}"
-source_commit: "{{40-char sha}}"
-
-# Required only when report_kind == synthesis-rollup:
-synthesized_from:                  # cross-hypothesis sha-tracked source-of-truth list
-  - hypothesis: "hypothesis:<slug>"
-    file: "specs/hypotheses/<slug>.md"
-    sha: "{{40-char sha}}"
-emergent_threads_sha: "{{40-char sha}}"   # rollup links to its companion threads file
-
-# Required only when report_kind == hypothesis-synthesis:
-hypothesis: "hypothesis:<slug>"
-provenance_coverage: "{{full|partial|none}}"
-
-# Required only when report_kind == emergent-threads:
-orphan_question_count: 0
-orphan_interpretation_count: 0
-orphan_ids: []                     # full list per the scaling rule in the agent file
-
-# Optional, all kinds:
+title: "{{title}}"
+report_kind: "hypothesis-synthesis"   # hypothesis-synthesis | synthesis-rollup | emergent-threads
+generated_at: "{{YYYY-MM-DD}}"
+source_commit: ""                  # 40-char sha
 phase: "active"
+_template:
+  frontmatter:
+    id: { from: entity_id }
+    type: { default: "synthesis" }
+    title: { from: title }
+    report_kind: { default: "hypothesis-synthesis" }
+    generated_at: { from: created }
+    source_commit: { default: "" }
+    phase: { from: phase, default: "active" }
+  sections:
+    - { key: tldr, name: "TL;DR", required: true }
+    - { key: state, name: "State", required: true }
+    - { key: arc, name: "Arc", required: true }
+    - { key: research-fronts, name: "Research fronts", required: true }
+    - { key: candidate-frames, name: "Candidate frames", required: true }
+    - { key: knowledge-gaps, name: "Knowledge Gaps", required: true }
+    - { key: emergent-threads, name: "Emergent threads", required: true }
 ---
 
-# Synthesis: {{Short Title}}
+# Synthesis: {{title}}
 
 <!--
   Body skeleton — `science:big-picture` writes these procedurally. Hand-edits

@@ -12,7 +12,21 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 MIGRATED_KINDS: frozenset[str] = frozenset(
-    {"hypothesis", "question", "interpretation", "discussion", "theme", "proposition", "evidence-line"}
+    {
+        "hypothesis",
+        "question",
+        "interpretation",
+        "discussion",
+        "theme",
+        "proposition",
+        "evidence-line",
+        "finding",
+        "inquiry",
+        "method",
+        "paper",
+        "pre-registration",
+        "synthesis",
+    }
 )
 VALID_FIELD_NAMES: frozenset[str] = frozenset(
     {
