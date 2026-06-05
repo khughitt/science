@@ -267,3 +267,14 @@ def test_rewrite_leaves_external_and_conformant_tokens_alone() -> None:
     text = "Canonical question:0002-keep and external doi:10.1/x and url https://e.org.\n"
     out, unresolved = rewrite_references(text, id_map)
     assert unresolved == []
+
+
+def test_rewrite_handles_kind_qualified_wikilink() -> None:
+    # A kind-qualified wikilink [[question:...]] is handled by token replacement /
+    # branch (a), NOT the bare-wikilink branch. A MAPPED one is rewritten; an
+    # UNMAPPED non-conformant one is reported as unresolved.
+    id_map = {"question:q1-a": "question:0001-a"}
+    out, unresolved = rewrite_references("See [[question:q1-a]] and [[question:q9-ghost]].\n", id_map)
+    assert "[[question:0001-a]]" in out          # mapped wikilink rewritten in place
+    assert "question:q9-ghost" in unresolved     # unmapped, non-conformant → reported
+    assert "[[question:q9-ghost]]" not in unresolved  # reported as the token, not the bare-link form

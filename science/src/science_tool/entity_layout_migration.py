@@ -444,6 +444,7 @@ def _detect_collisions(plan: MigrationPlan) -> None:
 # A reference token: <kind>:<local-part>. Legacy local parts may carry a letter
 # prefix (q1, h09) or a date (2026-05-23); canonical are NNNN or a citekey.
 _REF_TOKEN_RE = re.compile(r"\b([a-z][a-z-]*):([A-Za-z0-9][A-Za-z0-9_.-]*)\b")
+# Bare-wikilink shape guard (distinct from _LEGACY_LOCAL_RE, which parses file stems in discovery).
 _LEGACY_LOCAL_SHAPE = re.compile(r"^(?:[A-Za-z]+\d+|\d{4}-\d{2}-\d{2})(?:-|$)")
 _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 
