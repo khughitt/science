@@ -186,6 +186,9 @@ class MigrationPlan:
     singletons: list[SingletonMove] = field(default_factory=list)
     id_map: dict[str, str] = field(default_factory=dict)  # old_id -> new_id
     collisions: list[dict] = field(default_factory=list)  # blocking; reported
+    # Tracks stem-alias keys added to id_map so alias-vs-alias conflicts can be
+    # detected without confusing them with real old_id mappings (which always win).
+    _stem_alias_sources: dict[str, str] = field(default_factory=dict)  # alias -> new_id that claimed it
 
 
 def _is_fallback_title(title: str, kind: str) -> bool:
@@ -245,10 +248,8 @@ def _slug_from_legacy(entity: "LegacyEntity", frontmatter: dict) -> str:
     except _ECE:
         pass
 
-    # 5. Last resort: the "Untitled <kind>" fallback title.
-    if title:
-        return derive_slug(str(title))
-    raise ValueError(f"Cannot derive slug for {entity.rel_path!r}")
+    # Final fallback: the synthesized title is always present and >= 2 chars.
+    return derive_slug(str(title)) if title else derive_slug(f"untitled-{entity.kind}")
 
 
 def plan_migration(project_root: Path) -> MigrationPlan:
@@ -369,11 +370,36 @@ def _add_move(plan: MigrationPlan, entity: "LegacyEntity", new_rel: str, new_id:
     # still point at them by their old filename stem (e.g. a link to
     # `interpretation:2026-05-23-foo` for a file with no `id:`). Map a
     # filename-derived alias `<kind>:<old-stem>` -> new_id so those refs rewrite
-    # instead of being reported unresolved. `setdefault` never clobbers a real
-    # `old_id` mapping; stems are unique within a kind's directory, so aliases
-    # never collide.
+    # instead of being reported unresolved.
+    #
+    # Safety rules:
+    #   - A real old_id mapping always wins; setdefault ensures we never clobber it.
+    #   - When TWO stem-alias entries disagree (two legacy scan roots yield the same
+    #     stem under the same kind), the alias is AMBIGUOUS: remove it from id_map
+    #     entirely and record a blocking collision so Task 4 reports the ref as
+    #     UNRESOLVED rather than silently rewriting to the wrong target.
     stem_alias = f"{kind}:{Path(entity.rel_path).stem}"
-    plan.id_map.setdefault(stem_alias, new_id)
+    if stem_alias in plan.id_map:
+        # Key already present. Was it set by a prior stem alias or by a real old_id?
+        if stem_alias in plan._stem_alias_sources:
+            prior_new_id = plan._stem_alias_sources[stem_alias]
+            if prior_new_id != new_id:
+                # Two stem aliases disagree → ambiguous; remove to force UNRESOLVED.
+                plan.id_map.pop(stem_alias)
+                plan._stem_alias_sources.pop(stem_alias)
+                plan.collisions.append({
+                    "kind": "alias",
+                    "alias": stem_alias,
+                    "sources": sorted([entity.rel_path,
+                                       next(m.old_rel_path for m in plan.moves
+                                            if f"{m.kind}:{Path(m.old_rel_path).stem}" == stem_alias
+                                            and m.new_id == prior_new_id)]),
+                })
+            # else: same alias already maps to the same new_id (idempotent) — leave it.
+        # else: a real old_id owns this key — leave it as-is (real mapping wins).
+    else:
+        plan.id_map[stem_alias] = new_id
+        plan._stem_alias_sources[stem_alias] = new_id
 
 
 def _plan_singletons(project_root: Path, plan: MigrationPlan) -> None:
@@ -407,4 +433,5 @@ def _detect_collisions(plan: MigrationPlan) -> None:
             plan.collisions.append({"kind": "id", "new_id": new_id, "sources": sorted(sources)})
     for (kind, number), sources in sorted(by_kind_number.items()):
         if len(sources) > 1:
-            plan.collisions.append({"kind": "number", "entity_kind": kind, "number": number, "sources": sorted(sources)})
+            plan.collisions.append({"kind": "number", "entity_kind": kind, "number": number,
+                                    "sources": sorted(sources), "occupied_by": None})

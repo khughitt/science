@@ -120,6 +120,22 @@ def test_plan_maps_frontmatterless_stem_alias(tmp_path: Path) -> None:
     assert plan.id_map["interpretation:early"] == "interpretation:0001-early-result"
 
 
+def test_plan_ambiguous_stem_alias_not_silently_mis_mapped(tmp_path: Path) -> None:
+    # Two frontmatterless files with the same stem under the same kind but from
+    # two different legacy scan roots (doc/ and specs/) both want alias
+    # `interpretation:foo`.  The plan must NOT keep a wrong mapping; it must
+    # remove the alias from id_map and record a blocking alias collision.
+    body = "# Foo\n\n**Date:** 2026-01-01\n"
+    _write(tmp_path, "doc/interpretations/foo.md", body)
+    _write(tmp_path, "specs/interpretations/foo.md", body)
+    plan = plan_migration(tmp_path)
+    # The ambiguous alias must be absent from id_map.
+    assert "interpretation:foo" not in plan.id_map
+    # A blocking alias collision must be recorded.
+    assert any(c.get("kind") == "alias" and c.get("alias") == "interpretation:foo"
+               for c in plan.collisions)
+
+
 def test_plan_detects_duplicate_target_collision(tmp_path: Path) -> None:
     # Two papers with the same citekey from the two legacy paper homes.
     _write(tmp_path, "doc/papers/Adams2025.md", '---\nid: "paper:Adams2025"\ntype: paper\n---\n')
