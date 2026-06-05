@@ -30,8 +30,8 @@ def _result(severity: Severity, path: str | None, message: str) -> Result:
 def check_prereg(ctx: ValidateContext) -> Iterator[Result]:
     entities_root = ctx.project_root / resolve_path_policy("pre-registration").root
     paths = [
-        *sorted((ctx.doc_dir / "meta").glob("pre-registration-*.md")),
-        *sorted((ctx.doc_dir / "pre-registrations").glob("*.md")),
+        *sorted((ctx.doc_dir / "meta").glob("pre-registration-*.md")),  # Legacy root (doc/meta/pre-registration-*.md); removed in the Task 10 cutover.
+        *sorted((ctx.doc_dir / "pre-registrations").glob("*.md")),      # Legacy root (doc/pre-registrations/*.md); removed in the Task 10 cutover.
         *(sorted(entities_root.glob("*.md")) if entities_root.is_dir() else []),
     ]
     for path in paths:

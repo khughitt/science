@@ -45,7 +45,7 @@ _B2_DEPENDENCE_ROLES = frozenset({"analyzed", "set_definition_source", "training
 def _ev_lines(ctx: ValidateContext) -> list[tuple[Path, dict]]:
     """Return (path, frontmatter) pairs for every evidence-line file."""
     ev_dirs = [
-        ctx.doc_dir / "evidence-lines",
+        ctx.doc_dir / "evidence-lines",  # Legacy root (doc/evidence-lines); removed in the Task 10 cutover.
         ctx.project_root / resolve_path_policy("evidence-line").root,
     ]
     result: list[tuple[Path, dict]] = []
@@ -102,7 +102,7 @@ def check_evidence_lines_unstanced(ctx: ValidateContext) -> Iterator[Result]:
             covered.add((str(target), str(source)))
 
     prop_dirs = [
-        ctx.doc_dir / "propositions",
+        ctx.doc_dir / "propositions",  # Legacy root (doc/propositions); removed in the Task 10 cutover.
         ctx.project_root / resolve_path_policy("proposition").root,
     ]
     seen_props: set[Path] = set()

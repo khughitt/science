@@ -23,6 +23,7 @@ def check_directory_structure(ctx: ValidateContext) -> Iterator[Result]:
     is_v3 = isinstance(layout_version, int) and layout_version >= 3
 
     # specs/ is required for layout_version < 3; entities/ replaces it at v3+.
+    # Version-gated; no Task 10 cutover edit needed here (setting layout_version:3 flips it automatically).
     entity_layout_dirs: list[tuple[str, Path]] = (
         [("entities", ctx.project_root / "entities")]
         if is_v3

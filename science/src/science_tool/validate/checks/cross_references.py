@@ -419,10 +419,19 @@ def check_cross_references(ctx: ValidateContext) -> Iterator[Result]:
     refs_by_file: dict[Path, list[str]] = {}
 
     entities_dir = ctx.project_root / "entities"
-    for search_dir in (ctx.specs_dir, ctx.doc_dir, entities_dir):
+    seen: set[Path] = set()
+    for search_dir in (
+        ctx.specs_dir,  # Legacy root (doc/specs); removed in the Task 10 cutover.
+        ctx.doc_dir,    # Legacy root (doc/specs); removed in the Task 10 cutover.
+        entities_dir,
+    ):
         if not search_dir.is_dir():
             continue
         for path in sorted(search_dir.rglob("*.md")):
+            resolved = path.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
             doc_id, related = _extract_frontmatter(ctx, path)
             if doc_id:
                 all_ids.add(doc_id)
