@@ -248,7 +248,35 @@ def query_attention_sample(
         sample = reason_aware_sample_candidates(candidates, limit=limit, seed=seed)
     else:
         sample = weighted_sample_without_replacement(candidates, limit=limit, seed=seed)
+    return _rows_with_belief(graph_path, dataset, sample)
 
+
+def query_attention_ranked(
+    graph_path: Path,
+    *,
+    limit: int | None = None,
+    today: date | None = None,
+    kinds: set[str] | None = None,
+    epsilon: float = DEFAULT_EPSILON,
+) -> list[dict[str, Any]]:
+    """Load a materialized graph and return all candidates ranked by weight desc.
+
+    Deterministic (no sampling): ties break by entity_id. This is the review-queue
+    surface — `graph attention-rank` — distinct from the weighted-random
+    `attention-sample`.
+    """
+    dataset = Dataset()
+    dataset.parse(source=str(graph_path), format="trig")
+    candidates = compute_attention_candidates(dataset, today=today, kinds=kinds, epsilon=epsilon)
+    ranked = sorted(candidates, key=lambda candidate: (-candidate.weight, candidate.entity_id))
+    if limit is not None:
+        ranked = ranked[:limit]
+    return _rows_with_belief(graph_path, dataset, ranked)
+
+
+def _rows_with_belief(
+    graph_path: Path, dataset: Dataset, candidates: Sequence[AttentionCandidate]
+) -> list[dict[str, Any]]:
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
     enabled = belief_scalar_enabled(project_root_from_graph_path(graph_path))
@@ -262,7 +290,7 @@ def query_attention_sample(
         result = aggregate_belief(units)
         return format_belief_weight(result, belief_scalar(result))
 
-    return [format_attention_candidate(c, belief_weight=_belief_weight(c)) for c in sample]
+    return [format_attention_candidate(c, belief_weight=_belief_weight(c)) for c in candidates]
 
 
 def format_attention_candidate(

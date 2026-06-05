@@ -209,6 +209,23 @@ def test_format_attention_candidate_exposes_open_question_debt() -> None:
     assert any(r["code"] == "open_question_debt" for r in row["reasons"])
 
 
+def test_query_attention_ranked_is_deterministic_by_weight(tmp_path: Path) -> None:
+    from science_tool.graph.attention import query_attention_ranked
+    from science_tool.graph.io import save_canonical_graph_dataset
+
+    graph_path = tmp_path / "graph.trig"
+    save_canonical_graph_dataset(_debt_fixture(), graph_path)
+
+    rows = query_attention_ranked(graph_path, today=date(2026, 5, 1))
+    ids = [row["id"] for row in rows]
+    # h_scope (debt 2) outranks h_other (debt 1); both carry the debt field.
+    assert ids.index("hypothesis:h_scope") < ids.index("hypothesis:h_other")
+    assert rows[0]["open_question_debt"] == "2"
+
+    top1 = query_attention_ranked(graph_path, today=date(2026, 5, 1), limit=1)
+    assert [row["id"] for row in top1] == ["hypothesis:h_scope"]
+
+
 def test_attention_weight_uses_observable_graph_features() -> None:
     candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1))
     by_id = {candidate.entity_id: candidate for candidate in candidates}
