@@ -1,8 +1,19 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
-from science_tool.entity_layout_migration import LegacyEntity, discover_legacy_entities
+import pytest as _pytest
+import yaml
+
+from science_tool.entities import valid_statuses
+from science_tool.entity_layout_migration import (
+    discover_legacy_entities,
+    migrate_layout,
+    plan_migration,
+    rewrite_references,
+    synthesize_frontmatter,
+)
 
 
 def _write(root: Path, rel: str, text: str) -> None:
@@ -52,13 +63,6 @@ def test_frontmatterless_file_under_unknown_parent_dir_is_skipped(tmp_path: Path
     _write(tmp_path, "doc/misc/foo.md", "Some prose.\n")
     found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
     assert "doc/misc/foo.md" not in found
-
-
-from science_tool.entity_layout_migration import synthesize_frontmatter
-from science_tool.entity_layout_migration import plan_migration
-
-
-from science_tool.entities import valid_statuses
 
 
 def test_plan_assigns_numeric_in_created_order(tmp_path: Path) -> None:
@@ -223,9 +227,6 @@ def test_synthesize_uses_fallback_when_no_headers() -> None:
     assert fm["status"] in valid_statuses("finding")
 
 
-from science_tool.entity_layout_migration import rewrite_references
-
-
 def test_rewrite_replaces_full_ids_not_prefix_collisions() -> None:
     id_map = {"question:q1-a": "question:0001-a", "question:q10-b": "question:0010-b"}
     text = "See question:q1-a and question:q10-b and related: [question:q1-a]\n"
@@ -284,10 +285,6 @@ def test_rewrite_handles_kind_qualified_wikilink() -> None:
 # Task 5: migrate_layout orchestrator tests
 # ---------------------------------------------------------------------------
 
-import subprocess
-
-from science_tool.entity_layout_migration import migrate_layout
-
 
 def _git_init(root: Path) -> None:
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
@@ -310,13 +307,12 @@ def test_migrate_apply_moves_and_rewrites(tmp_path: Path) -> None:
     _write(tmp_path, "specs/hypotheses/h01-alpha.md", '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
     _write(tmp_path, "doc/questions/q01-beta.md", '---\nid: "question:q01-beta"\ntype: question\ncreated: "2026-01-02"\ntitle: Beta\nstatus: active\nupdated: "2026-01-02"\nrelated: ["hypothesis:h01-alpha"]\n---\nSee hypothesis:h01-alpha.\n')
     _git_init(tmp_path)
-    report = migrate_layout(tmp_path, apply=True)
+    _ = migrate_layout(tmp_path, apply=True)
     assert (tmp_path / "entities/hypotheses/0001-alpha.md").is_file()
     q = (tmp_path / "entities/questions/0001-beta.md").read_text()
     assert "hypothesis:0001-alpha" in q          # related + inline ref rewritten
     assert "hypothesis:h01-alpha" not in q
-    import yaml as _yaml
-    manifest = _yaml.safe_load((tmp_path / "science.yaml").read_text())
+    manifest = yaml.safe_load((tmp_path / "science.yaml").read_text())
     assert manifest["layout_version"] == 3
 
 
@@ -326,7 +322,7 @@ def test_migrate_apply_rewrites_tasks_inplace(tmp_path: Path) -> None:
     _write(tmp_path, "specs/hypotheses/h01-alpha.md", '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
     _write(tmp_path, "tasks/t001.md", "---\nid: task:t001\ntype: task\nstatus: active\ncreated: \"2026-01-03\"\ntitle: Check\nupdated: \"2026-01-03\"\n---\nDepends on hypothesis:h01-alpha.\n")
     _git_init(tmp_path)
-    report = migrate_layout(tmp_path, apply=True)
+    _ = migrate_layout(tmp_path, apply=True)
     task_text = (tmp_path / "tasks/t001.md").read_text()
     assert "hypothesis:0001-alpha" in task_text
     assert "hypothesis:h01-alpha" not in task_text
@@ -340,7 +336,7 @@ def test_migrate_apply_rewrites_singleton_yaml(tmp_path: Path) -> None:
         "claims:\n  - id: hypothesis:h01-alpha\n    note: tracked\n", encoding="utf-8"
     )
     _git_init(tmp_path)
-    report = migrate_layout(tmp_path, apply=True)
+    _ = migrate_layout(tmp_path, apply=True)
     assert (tmp_path / "entities/claim-registry.yaml").is_file()
     content = (tmp_path / "entities/claim-registry.yaml").read_text()
     assert "hypothesis:0001-alpha" in content
@@ -355,8 +351,7 @@ def test_migrate_collision_blocks_apply(tmp_path: Path) -> None:
     _git_init(tmp_path)
     dry = migrate_layout(tmp_path, apply=False)
     assert dry["collisions"]
-    import pytest
-    with pytest.raises(ValueError, match="collisions"):
+    with _pytest.raises(ValueError, match="collisions"):
         migrate_layout(tmp_path, apply=True)
 
 
@@ -368,7 +363,7 @@ def test_migrate_apply_rewrites_inplace_prose_doc(tmp_path: Path) -> None:
     _write(tmp_path, "specs/hypotheses/h01-alpha.md", '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
     _write(tmp_path, "doc/context/summary.md", "See hypothesis:h01-alpha and [[hypothesis:h01-alpha]] for details.\n")
     _git_init(tmp_path)
-    report = migrate_layout(tmp_path, apply=True)
+    _ = migrate_layout(tmp_path, apply=True)
     summary = (tmp_path / "doc/context/summary.md").read_text()
     assert "hypothesis:0001-alpha" in summary
     assert "hypothesis:h01-alpha" not in summary
@@ -385,16 +380,13 @@ def test_migrate_unresolved_ref_blocks_apply(tmp_path: Path) -> None:
     dry = migrate_layout(tmp_path, apply=False)
     assert dry["unresolved_references"]
     assert any("hypothesis:h99-ghost" in tokens for tokens in dry["unresolved_references"].values())
-    import pytest
-    with pytest.raises(ValueError, match="unresolved"):
+    with _pytest.raises(ValueError, match="unresolved"):
         migrate_layout(tmp_path, apply=True)
 
 
 # ---------------------------------------------------------------------------
 # Fix A/B/C lock-in tests
 # ---------------------------------------------------------------------------
-
-import pytest as _pytest
 
 
 def test_migrate_undated_entity_blocks_apply_and_is_reported(tmp_path: Path) -> None:
@@ -451,13 +443,11 @@ def test_migrate_version_not_bumped_when_audit_fails(tmp_path: Path) -> None:
     )
     _git_init(tmp_path)
 
-    import yaml as _yaml
-
     with _pytest.raises(ValueError, match="working tree"):
         migrate_layout(tmp_path, apply=True)
 
     # layout_version must NOT have been bumped.
-    manifest = _yaml.safe_load((tmp_path / "science.yaml").read_text())
+    manifest = yaml.safe_load((tmp_path / "science.yaml").read_text())
     assert manifest.get("layout_version") == 2
 
 
@@ -478,9 +468,7 @@ def test_migrate_apply_is_idempotent(tmp_path: Path) -> None:
     report1 = migrate_layout(tmp_path, apply=True)
     assert report1["moves"]
 
-    import yaml as _yaml
-
-    assert _yaml.safe_load((tmp_path / "science.yaml").read_text())["layout_version"] == 3
+    assert yaml.safe_load((tmp_path / "science.yaml").read_text())["layout_version"] == 3
 
     # Stage and commit the migrated state so git mv on the second run can succeed
     # (or, more precisely, so the second plan sees no legacy entities to move).
@@ -494,4 +482,4 @@ def test_migrate_apply_is_idempotent(tmp_path: Path) -> None:
     # Second apply — no legacy entities remain, so moves == [].
     report2 = migrate_layout(tmp_path, apply=True)
     assert report2["moves"] == []
-    assert _yaml.safe_load((tmp_path / "science.yaml").read_text())["layout_version"] == 3
+    assert yaml.safe_load((tmp_path / "science.yaml").read_text())["layout_version"] == 3

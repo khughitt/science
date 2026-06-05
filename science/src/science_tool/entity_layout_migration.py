@@ -6,6 +6,7 @@ orchestrator. Dry-run by default; `--apply` performs git mv + writes.
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 import re
@@ -13,6 +14,7 @@ import re
 import yaml
 
 from science_tool.entities import (
+    EntityCommandError,
     EntityPathPolicy,
     default_status,
     derive_slug,
@@ -217,8 +219,6 @@ def _slug_from_legacy(entity: "LegacyEntity", frontmatter: dict) -> str:
     NOTE: this function is NOT called for conformant stems (0003-x, 0005-foo-bar);
     those keep their existing stem verbatim via ``_local_from_conformant_stem``.
     """
-    from science_tool.entities import EntityCommandError as _ECE
-
     stem = Path(entity.rel_path).stem
     # 1. Date prefix — must be tried before legacy-number because "2026-05-23-foo"
     #    has "2026" which the LEGACY_LOCAL_RE would mis-parse as a sequence number.
@@ -226,7 +226,7 @@ def _slug_from_legacy(entity: "LegacyEntity", frontmatter: dict) -> str:
     if m is not None and m.group(1):
         try:
             return derive_slug(m.group(1))
-        except _ECE:
+        except EntityCommandError:
             pass  # remainder too short — fall through
 
     # 2. Legacy numeric/letter prefix (h01-foo, q5-foo).
@@ -234,7 +234,7 @@ def _slug_from_legacy(entity: "LegacyEntity", frontmatter: dict) -> str:
     if m is not None and m.group(2):
         try:
             return derive_slug(m.group(2))
-        except _ECE:
+        except EntityCommandError:
             pass  # remainder too short — fall through
 
     # 3. Real synthesized/merged title (H1 header found in body).
@@ -242,13 +242,13 @@ def _slug_from_legacy(entity: "LegacyEntity", frontmatter: dict) -> str:
     if title and not _is_fallback_title(str(title), entity.kind):
         try:
             return derive_slug(str(title))
-        except _ECE:
+        except EntityCommandError:
             pass
 
     # 4. Stem itself (aging-early, new-one, etc.).
     try:
         return derive_slug(stem)
-    except _ECE:
+    except EntityCommandError:
         pass
 
     # Final fallback: the synthesized title is always present and >= 2 chars.
@@ -503,10 +503,6 @@ def rewrite_references(text: str, id_map: dict[str, str]) -> tuple[str, list[str
 # Orchestrator
 # ---------------------------------------------------------------------------
 
-import subprocess
-
-import yaml as _yaml_mod
-
 
 def _git_mv(project_root: Path, old_rel: str, new_rel: str) -> None:
     dest = project_root / new_rel
@@ -515,7 +511,7 @@ def _git_mv(project_root: Path, old_rel: str, new_rel: str) -> None:
 
 
 def _render(frontmatter: dict, body: str) -> str:
-    return "---\n" + _yaml_mod.safe_dump(frontmatter, sort_keys=False) + "---\n" + body
+    return "---\n" + yaml.safe_dump(frontmatter, sort_keys=False) + "---\n" + body
 
 
 def migrate_layout(project_root: Path, *, apply: bool) -> dict:
@@ -638,8 +634,8 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
 
     # 5. Only after a clean audit: bump layout_version to 3.
     manifest_path = project_root / "science.yaml"
-    manifest = _yaml_mod.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
     manifest["layout_version"] = 3
-    manifest_path.write_text(_yaml_mod.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
     report["graph_validation"] = "passed"
     return report
