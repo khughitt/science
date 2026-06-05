@@ -1348,3 +1348,19 @@ def test_entity_show_resolves_shortform() -> None:
         result = runner.invoke(main, ["entity", "show", "q5"])
         assert result.exit_code == 0, result.output
         assert "question:0005-granularity" in result.output
+
+
+def test_entities_migrate_dry_run_emits_report() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        (root / "science.yaml").write_text("name: t\nlayout_version: 2\n", encoding="utf-8")
+        write_markdown_entity(
+            root, "specs/hypotheses/h01-alpha.md",
+            {"id": "hypothesis:h01-alpha", "type": "hypothesis", "title": "Alpha", "status": "proposed",
+             "created": "2026-01-01", "updated": "2026-01-01"},
+        )
+        result = runner.invoke(main, ["entities", "migrate"])
+        assert result.exit_code == 0, result.output
+        assert "hypothesis:0001-alpha" in result.output  # report shows planned id
+        assert Path("specs/hypotheses/h01-alpha.md").is_file()  # dry run: unchanged
