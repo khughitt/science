@@ -1276,6 +1276,47 @@ git add -A && git commit -m "fix(migrate): handle <case> found in cycles pilot"
 
 ---
 
+## Task 9 — Pilot results (cycles, 2026-06-05)
+
+Piloted on a faithful copy of `~/d/health/processes/cycles` (layout_version 2; 403
+doc + 14 specs markdown, papers under `doc/papers` + `doc/background/papers`).
+Outcome: **371 moves, 0 collisions; `--apply` succeeded with `graph_validation:
+passed`; `science validate` PASSES on the migrated v3 tree** (68 warnings, all
+pre-existing scientific-content — zero migration/location/conformance errors).
+
+The pilot surfaced and fixed **five real tool gaps** (all with regression tests;
+module tests 38 → 48, full suite green, ruff clean):
+
+1. **Singleton-kind synthesis crash** (`0d76cafa`): a `type: research-question`
+   file (singleton, no status vocab) hit `KeyError` in synthesis because
+   `plan_migration` synthesized *all* discovered entities before the singleton
+   skip. Fixed by excluding singleton-strategy kinds from the move-planning set.
+2. **Filename-date fallback** (`a1ac9a6e`): frontmatterless date-prefixed files
+   (`doc/plans/2026-05-30-…md`, no `created`/`**Date:**`) now take the filename
+   `YYYY-MM-DD` as the `created` fallback instead of being blocked as undated.
+3. **Shortform reference rewriting** (`a1ac9a6e`): prose shortforms `question:01`,
+   `hypothesis:h01` are rewritten to the new numbering (`question:0001`,
+   `hypothesis:0001`) so refs survive renumbering (decision: rewrite shortforms).
+4. **Scope unresolved-detection to migrated kinds** (`a1ac9a6e`): refs to kinds
+   stored outside the markdown model (`observation:*` in `observations.yaml`) are
+   no longer false-flagged (decision: don't flag non-migrated kinds).
+5. **Rewrite refs in YAML registries + `knowledge/`** (`7cc984a6`): the in-place
+   rewrite walked only `*.md`, so `doc/observations/observations.yaml` and
+   `knowledge/sources/local/*.yaml` kept old ids and broke the post-move graph
+   audit (caught fail-loud, exactly as designed). Now walks `*.md`/`*.yaml`/`*.yml`
+   across content roots incl. `knowledge/`; manifest `science.yaml` and the moved
+   claim-registry singleton remain excluded.
+
+Residual report items were genuine **source-data** issues an operator resolves via
+the dry-run report (the documented workflow), not tool defects: 5 genuinely
+date-less synthesis docs, dangling topic refs (topics not present as entities), an
+informal `question:NN.datasets` field-access notation, and a `question:NN`
+placeholder in a YAML comment. Non-entity doc types (`type: spec`, `type:
+paper-review`) are correctly left in place (not in the entity policy). The pilot
+copy lives at `/mnt/ssd/scratch/cycles-migrate` (throwaway).
+
+---
+
 ## Task 10: CUTOVER — remove fallbacks, promote WARN→ERROR (IRREVERSIBLE; do last)
 
 **Files:** discovery + validation modules listed below.
