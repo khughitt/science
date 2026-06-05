@@ -597,7 +597,7 @@ def test_load_project_sources_pulls_commons_referenced_topic(tmp_path: Path, mon
     manifest_path = project_root / "knowledge" / "sources" / "local" / "manifest.yaml"
     manifest_path.parent.mkdir(parents=True)
     manifest_path.write_text("", encoding="utf-8")
-    hypothesis_path = project_root / "doc" / "hypotheses" / "h1.md"
+    hypothesis_path = project_root / "entities" / "hypotheses" / "h1.md"
     hypothesis_path.parent.mkdir(parents=True)
     hypothesis_path.write_text(
         """---
@@ -631,7 +631,7 @@ def test_load_project_sources_pulls_commons_dataset_usage_ref(
     manifest_path = project_root / "knowledge" / "sources" / "local" / "manifest.yaml"
     manifest_path.parent.mkdir(parents=True)
     manifest_path.write_text("", encoding="utf-8")
-    paper_path = project_root / "doc" / "papers" / "Adams2025.md"
+    paper_path = project_root / "entities" / "papers" / "Adams2025.md"
     paper_path.parent.mkdir(parents=True)
     paper_path.write_text(
         """---
@@ -673,7 +673,7 @@ def test_load_project_sources_pulls_transitive_commons_dataset_usage_ref(
     manifest_path = project_root / "knowledge" / "sources" / "local" / "manifest.yaml"
     manifest_path.parent.mkdir(parents=True)
     manifest_path.write_text("", encoding="utf-8")
-    hypothesis_path = project_root / "doc" / "hypotheses" / "h1.md"
+    hypothesis_path = project_root / "entities" / "hypotheses" / "h1.md"
     hypothesis_path.parent.mkdir(parents=True)
     hypothesis_path.write_text(
         """---

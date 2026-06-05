@@ -145,7 +145,7 @@ def check_id_prefixes(ctx: ValidateContext) -> Iterator[Result]:
         return
 
     violations: list[str] = []
-    for root in (ctx.project_root / "entities", ctx.doc_dir, ctx.specs_dir):
+    for root in (ctx.project_root / "entities",):
         if not root.is_dir():
             continue
         for path in sorted(root.rglob("*.md")):

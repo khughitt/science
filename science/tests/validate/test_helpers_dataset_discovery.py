@@ -48,8 +48,8 @@ def test_entity_frontmatters_discovers_papers_and_datapackage_datasets(tmp_path:
     from science_tool.validate._helpers import entity_frontmatters
 
     (tmp_path / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
-    (tmp_path / "doc" / "papers").mkdir(parents=True)
-    (tmp_path / "doc" / "papers" / "Adams2025.md").write_text(
+    (tmp_path / "entities" / "papers").mkdir(parents=True)
+    (tmp_path / "entities" / "papers" / "Adams2025.md").write_text(
         "---\n"
         "id: paper:Adams2025\n"
         "type: paper\n"
@@ -76,7 +76,7 @@ def test_entity_frontmatters_discovers_papers_and_datapackage_datasets(tmp_path:
     rows = entity_frontmatters(_ctx(tmp_path))  # type: ignore[arg-type]
 
     by_id = {row["id"]: row for row in rows}
-    assert by_id["paper:Adams2025"]["_path"] == "doc/papers/Adams2025.md"
+    assert by_id["paper:Adams2025"]["_path"] == "entities/papers/Adams2025.md"
     assert by_id["dataset:gtex-v8"]["_path"] == "data/gtex/datapackage.yaml"
 
 

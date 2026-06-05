@@ -35,12 +35,12 @@ def _result(severity: Severity, path: str | None, message: str) -> Result:
 
 @Check(section="document structure...", order=4)
 def check_document_structure(ctx: ValidateContext) -> Iterator[Result]:
-    for topics_dir in (ctx.project_root / "entities" / "topics", ctx.doc_dir / "background" / "topics"):
-        if topics_dir.is_dir():
-            yield from _check_documents(ctx, topics_dir, _TOPIC_SECTIONS)
-    for papers_dir in (ctx.project_root / "entities" / "papers", ctx.doc_dir / "background" / "papers"):
-        if papers_dir.is_dir():
-            yield from _check_documents(ctx, papers_dir, _PAPER_SECTIONS)
+    topics_dir = ctx.project_root / "entities" / "topics"
+    if topics_dir.is_dir():
+        yield from _check_documents(ctx, topics_dir, _TOPIC_SECTIONS)
+    papers_dir = ctx.project_root / "entities" / "papers"
+    if papers_dir.is_dir():
+        yield from _check_documents(ctx, papers_dir, _PAPER_SECTIONS)
 
 
 def _check_documents(ctx: ValidateContext, directory: Path, sections: tuple[str, ...]) -> Iterator[Result]:

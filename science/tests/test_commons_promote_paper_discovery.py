@@ -15,7 +15,7 @@ def _resolver(monkeypatch) -> None:
 
 
 def test_paper_discover_walks_background_papers(monkeypatch) -> None:
-    """Discovery walks both doc/papers/ and doc/background/papers/."""
+    """Discovery walks both entities/papers/ and doc/background/papers/."""
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, discover_candidates
 
     _resolver(monkeypatch)

@@ -110,15 +110,13 @@ def has_registry(
     *,
     alt_filename: str | None = None,
 ) -> bool:
-    """Return True iff `<project_root>/specs/claim-registry.yaml` exists.
+    """Return True iff `<project_root>/entities/claim-registry.yaml` exists.
 
     If `alt_filename` is provided, look for that filename inside the
-    project_root directly (used by test fixtures that don't have a
-    `specs/` subdir).
+    project_root directly (used by test fixtures that don't have an
+    `entities/` subdir).
     """
     root = Path(project_root)
     if alt_filename is not None:
         return (root / alt_filename).is_file()
-    return (root / "entities" / "claim-registry.yaml").is_file() or (
-        root / "specs" / "claim-registry.yaml"
-    ).is_file()
+    return (root / "entities" / "claim-registry.yaml").is_file()

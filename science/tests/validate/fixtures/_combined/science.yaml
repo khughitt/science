@@ -5,7 +5,7 @@ last_modified: 2026-05-20
 status: active
 summary: Synthetic project for validate parity corpus tests.
 profile: research
-layout_version: 1
+layout_version: 3
 knowledge_profiles:
   local: local
   curated: []

@@ -40,7 +40,7 @@ def _write_entity_md(
     deprecated_ids: list[str] | None = None,
     taxon: str | None = None,
 ) -> None:
-    doc_dir = project_root / "doc"
+    doc_dir = project_root / "entities"
     doc_dir.mkdir(parents=True, exist_ok=True)
     rel = related or []
     ont = ontology_terms or []

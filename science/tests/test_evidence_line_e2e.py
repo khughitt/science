@@ -66,7 +66,7 @@ def _write_proposition(root: Path, id_suffix: str = "p1") -> str:
     entity_id = f"proposition:{id_suffix}"
     _write(
         root,
-        f"doc/propositions/{id_suffix}.md",
+        f"entities/propositions/{id_suffix}.md",
         "\n".join([
             "---",
             f"id: {entity_id!r}",
@@ -90,7 +90,7 @@ def _write_paper(root: Path, id_suffix: str = "x") -> str:
     entity_id = f"paper:{id_suffix}"
     _write(
         root,
-        f"doc/papers/{id_suffix}.md",
+        f"entities/papers/{id_suffix}.md",
         "\n".join([
             "---",
             f"id: {entity_id!r}",
@@ -131,7 +131,7 @@ def _write_evidence_line(root: Path, *, id_suffix: str = "e1", **extra: object) 
         "shared_dataset": "ds:gse100",
     }
     fields.update(extra)
-    path = root / f"doc/evidence-lines/{id_suffix}.md"
+    path = root / f"entities/evidence-lines/{id_suffix}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("---\n" + yaml.safe_dump(fields, sort_keys=False) + "---\n", encoding="utf-8")
     return path

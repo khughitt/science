@@ -44,20 +44,11 @@ _B2_DEPENDENCE_ROLES = frozenset({"analyzed", "set_definition_source", "training
 
 def _ev_lines(ctx: ValidateContext) -> list[tuple[Path, dict]]:
     """Return (path, frontmatter) pairs for every evidence-line file."""
-    ev_dirs = [
-        ctx.doc_dir / "evidence-lines",  # Legacy root (doc/evidence-lines); removed in the Task 10 cutover.
-        ctx.project_root / resolve_path_policy("evidence-line").root,
-    ]
+    ev_dir = ctx.project_root / resolve_path_policy("evidence-line").root
     result: list[tuple[Path, dict]] = []
-    seen: set[Path] = set()
-    for ev_dir in ev_dirs:
-        if not ev_dir.is_dir():
-            continue
+    if ev_dir.is_dir():
         for path in sorted(ev_dir.glob("*.md")):
-            resolved = path.resolve()
-            if resolved not in seen:
-                seen.add(resolved)
-                result.append((path, ctx.frontmatter(path)))
+            result.append((path, ctx.frontmatter(path)))
     return result
 
 
@@ -101,19 +92,8 @@ def check_evidence_lines_unstanced(ctx: ValidateContext) -> Iterator[Result]:
         if target and source:
             covered.add((str(target), str(source)))
 
-    prop_dirs = [
-        ctx.doc_dir / "propositions",  # Legacy root (doc/propositions); removed in the Task 10 cutover.
-        ctx.project_root / resolve_path_policy("proposition").root,
-    ]
-    seen_props: set[Path] = set()
-    prop_paths: list[Path] = []
-    for prop_dir in prop_dirs:
-        if not prop_dir.is_dir():
-            continue
-        for prop_path in sorted(prop_dir.glob("*.md")):
-            if prop_path.resolve() not in seen_props:
-                seen_props.add(prop_path.resolve())
-                prop_paths.append(prop_path)
+    prop_dir = ctx.project_root / resolve_path_policy("proposition").root
+    prop_paths: list[Path] = sorted(prop_dir.glob("*.md")) if prop_dir.is_dir() else []
     for prop_path in prop_paths:
         pfm = ctx.frontmatter(prop_path)
         prop_id = pfm.get("id", "")

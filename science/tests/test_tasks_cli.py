@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
@@ -641,35 +642,30 @@ def test_tasks_list_filter_by_aspect(tmp_path, monkeypatch):
 # Typed-blocker CLI tests (Task 8)
 # ---------------------------------------------------------------------------
 
-from _fixtures.entity_helpers import seed_project, write_markdown_entity  # noqa: E402
+from _fixtures.entity_helpers import seed_project  # noqa: E402
+
+
+def _write_dp(tmp_path: Path, slug: str) -> None:
+    dp_dir = tmp_path / "data" / slug
+    dp_dir.mkdir(parents=True, exist_ok=True)
+    (dp_dir / "datapackage.yaml").write_text(
+        "profiles: [science-pkg-entity-1.0]\n"
+        f"id: dataset:{slug}\n"
+        "type: dataset\n"
+        f"title: {slug.capitalize()}\n"
+        "status: active\n"
+        "origin: external\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n"
+        "access: {level: public, verified: true}\n",
+        encoding="utf-8",
+    )
 
 
 def _setup(tmp_path):
     seed_project(tmp_path)
-    write_markdown_entity(
-        tmp_path,
-        "doc/datasets/foo.md",
-        {
-            "id": "dataset:foo",
-            "type": "dataset",
-            "title": "Foo",
-            "status": "active",
-            "origin": "external",
-            "access": {"level": "public", "verified": True},
-        },
-    )
-    write_markdown_entity(
-        tmp_path,
-        "doc/datasets/bar.md",
-        {
-            "id": "dataset:bar",
-            "type": "dataset",
-            "title": "Bar",
-            "status": "active",
-            "origin": "external",
-            "access": {"level": "public", "verified": True},
-        },
-    )
+    _write_dp(tmp_path, "foo")
+    _write_dp(tmp_path, "bar")
     runner = CliRunner()
     runner.invoke(
         main,
@@ -777,18 +773,7 @@ def test_tasks_fix_blockers_lists_legacy(tmp_path, monkeypatch):
 def test_tasks_fix_blockers_retypes_with_input(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     seed_project(tmp_path)
-    write_markdown_entity(
-        tmp_path,
-        "doc/datasets/foo.md",
-        {
-            "id": "dataset:foo",
-            "type": "dataset",
-            "title": "Foo",
-            "status": "active",
-            "origin": "external",
-            "access": {"level": "public", "verified": True},
-        },
-    )
+    _write_dp(tmp_path, "foo")
     (tmp_path / "tasks").mkdir(exist_ok=True)
     (tmp_path / "tasks" / "active.md").write_text(
         "## [t001] Old\n"
@@ -854,33 +839,21 @@ def test_tasks_list_shows_blocker_summary(tmp_path, monkeypatch):
 def test_tasks_list_shows_mixed_blocker_states(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     seed_project(tmp_path)
-    write_markdown_entity(
-        tmp_path,
-        "doc/datasets/foo.md",
-        {
-            "id": "dataset:foo",
-            "type": "dataset",
-            "title": "Foo",
-            "status": "active",
-            "origin": "external",
-            "access": {"level": "public", "verified": True},
-        },
-    )
-    write_markdown_entity(
-        tmp_path,
-        "doc/datasets/bar.md",
-        {
-            "id": "dataset:bar",
-            "type": "dataset",
-            "title": "Bar",
-            "status": "active",
-            "origin": "external",
-            "access": {
-                "level": "controlled",
-                "verified": False,
-                "availability": "embargoed",
-            },
-        },
+    _write_dp(tmp_path, "foo")
+    # bar: embargoed/controlled dataset
+    dp_dir = tmp_path / "data" / "bar"
+    dp_dir.mkdir(parents=True)
+    (dp_dir / "datapackage.yaml").write_text(
+        "profiles: [science-pkg-entity-1.0]\n"
+        "id: dataset:bar\n"
+        "type: dataset\n"
+        "title: Bar\n"
+        "status: active\n"
+        "origin: external\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n"
+        "access: {level: controlled, verified: false, availability: embargoed}\n",
+        encoding="utf-8",
     )
     runner = CliRunner()
     runner.invoke(main, ["tasks", "add", "T", "--priority", "P2"])
@@ -911,26 +884,31 @@ def test_tasks_list_json_includes_blocker_readiness(tmp_path, monkeypatch):
     assert readiness[0]["ready"] is True
 
 
+def _write_embargoed_dp(tmp_path: Path) -> None:
+    dp_dir = tmp_path / "data" / "embargoed"
+    dp_dir.mkdir(parents=True, exist_ok=True)
+    (dp_dir / "datapackage.yaml").write_text(
+        "profiles: [science-pkg-entity-1.0]\n"
+        "id: dataset:embargoed\n"
+        "type: dataset\n"
+        "title: E\n"
+        "status: active\n"
+        "origin: external\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n"
+        "access:\n"
+        "  level: controlled\n"
+        "  verified: false\n"
+        "  availability: embargoed\n"
+        "  available_after: 2026-Q3\n",
+        encoding="utf-8",
+    )
+
+
 def test_tasks_show_renders_per_blocker_readiness(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     seed_project(tmp_path)
-    write_markdown_entity(
-        tmp_path,
-        "doc/datasets/embargoed.md",
-        {
-            "id": "dataset:embargoed",
-            "type": "dataset",
-            "title": "E",
-            "status": "active",
-            "origin": "external",
-            "access": {
-                "level": "controlled",
-                "verified": False,
-                "availability": "embargoed",
-                "available_after": "2026-Q3",
-            },
-        },
-    )
+    _write_embargoed_dp(tmp_path)
     runner = CliRunner()
     runner.invoke(main, ["tasks", "add", "T", "--priority", "P2"])
     runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:embargoed"])
@@ -944,23 +922,7 @@ def test_tasks_show_renders_per_blocker_readiness(tmp_path, monkeypatch):
 def test_tasks_show_accepts_format_json(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     seed_project(tmp_path)
-    write_markdown_entity(
-        tmp_path,
-        "doc/datasets/embargoed.md",
-        {
-            "id": "dataset:embargoed",
-            "type": "dataset",
-            "title": "E",
-            "status": "active",
-            "origin": "external",
-            "access": {
-                "level": "controlled",
-                "verified": False,
-                "availability": "embargoed",
-                "available_after": "2026-Q3",
-            },
-        },
-    )
+    _write_embargoed_dp(tmp_path)
     runner = CliRunner()
     runner.invoke(main, ["tasks", "add", "T", "--priority", "P2"])
     runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:embargoed"])

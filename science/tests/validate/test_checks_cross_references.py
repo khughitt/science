@@ -50,8 +50,8 @@ def _messages(results: Iterable[Result], severity: Severity | None = None) -> li
 def test_passing_local_related_refs_emit_exact_info(tmp_path: Path) -> None:
     from science_tool.validate.checks.cross_references import check_cross_references
 
-    _write(tmp_path / "specs" / "a.md", "---\nid: question:a\nrelated: [report:b]\n---\n")
-    _write(tmp_path / "doc" / "b.md", "---\nid: report:b\n---\n")
+    _write(tmp_path / "entities" / "questions" / "0001-a.md", "---\nid: question:a\nrelated: [report:b]\n---\n")
+    _write(tmp_path / "entities" / "reports" / "0001-b.md", "---\nid: report:b\n---\n")
 
     results = list(check_cross_references(_ctx(tmp_path)))
 
@@ -62,7 +62,7 @@ def test_passing_local_related_refs_emit_exact_info(tmp_path: Path) -> None:
 def test_broken_related_ref_warns_with_basename_only(tmp_path: Path) -> None:
     from science_tool.validate.checks.cross_references import check_cross_references
 
-    _write(tmp_path / "doc" / "nested" / "a.md", "---\nid: report:a\nrelated: [missing:ref]\n---\n")
+    _write(tmp_path / "entities" / "reports" / "a.md", "---\nid: report:a\nrelated: [missing:ref]\n---\n")
 
     results = list(check_cross_references(_ctx(tmp_path)))
 
@@ -72,12 +72,12 @@ def test_broken_related_ref_warns_with_basename_only(tmp_path: Path) -> None:
 def test_inline_and_block_related_parsing_ignores_templates(tmp_path: Path) -> None:
     from science_tool.validate.checks.cross_references import check_cross_references
 
-    _write(tmp_path / "specs" / "a.md", "---\nid: question:a\nrelated: ['report:b', \"topic:c\"]\n---\n")
+    _write(tmp_path / "entities" / "questions" / "a.md", "---\nid: question:a\nrelated: ['report:b', \"topic:c\"]\n---\n")
     _write(
-        tmp_path / "doc" / "b.md",
+        tmp_path / "entities" / "reports" / "b.md",
         "---\nid: report:b\nrelated:\n  - topic:c\n  - '{{ template }}'\nother: value\n---\n",
     )
-    _write(tmp_path / "doc" / "c.md", "---\nid: topic:c\n---\n")
+    _write(tmp_path / "entities" / "topics" / "c.md", "---\nid: topic:c\n---\n")
 
     assert _messages(check_cross_references(_ctx(tmp_path))) == ["All frontmatter cross-references valid"]
 
@@ -86,7 +86,7 @@ def test_tasks_entities_and_terms_ids_resolve_refs(tmp_path: Path) -> None:
     from science_tool.validate.checks.cross_references import check_cross_references
 
     _write(
-        tmp_path / "doc" / "a.md",
+        tmp_path / "entities" / "reports" / "a.md",
         "---\nid: report:a\nrelated: [task:t001, task:t099, entity:one, term:one]\n---\n",
     )
     _write(tmp_path / "tasks" / "active.md", "## [t001] Active task\n")
@@ -101,7 +101,7 @@ def test_unknown_namespace_errors_and_known_cross_project_ref_is_ignored(tmp_pat
     from science_tool.validate.checks.cross_references import check_cross_references
 
     _write(
-        tmp_path / "doc" / "a.md",
+        tmp_path / "entities" / "reports" / "a.md",
         "---\nid: report:a\nrelated: [unknown:question:x, peer-project:question:y]\n---\n",
     )
 
@@ -117,7 +117,7 @@ def test_unknown_namespace_errors_and_known_cross_project_ref_is_ignored(tmp_pat
 def test_known_two_part_legacy_project_ref_warns_without_all_valid_info(tmp_path: Path) -> None:
     from science_tool.validate.checks.cross_references import check_cross_references
 
-    _write(tmp_path / "doc" / "a.md", "---\nid: report:a\nrelated: [peer-project:slug]\n---\n")
+    _write(tmp_path / "entities" / "reports" / "a.md", "---\nid: report:a\nrelated: [peer-project:slug]\n---\n")
 
     results = list(check_cross_references(_ctx(tmp_path)))
 
@@ -131,7 +131,7 @@ def test_known_two_part_legacy_project_ref_warns_without_all_valid_info(tmp_path
 def test_unknown_two_part_non_local_kind_ref_remains_local_and_can_be_broken(tmp_path: Path) -> None:
     from science_tool.validate.checks.cross_references import check_cross_references
 
-    _write(tmp_path / "doc" / "a.md", "---\nid: report:a\nrelated: [customkind:slug]\n---\n")
+    _write(tmp_path / "entities" / "reports" / "a.md", "---\nid: report:a\nrelated: [customkind:slug]\n---\n")
 
     assert _messages(check_cross_references(_ctx(tmp_path)), Severity.WARN) == [
         "Broken reference in a.md: related ID 'customkind:slug' not found"
@@ -170,7 +170,7 @@ def test_loader_registry_includes_cross_references_after_id_prefixes_at_order_20
 def test_read_encoding_errors_on_scanned_markdown_propagate(tmp_path: Path) -> None:
     from science_tool.validate.checks.cross_references import check_cross_references
 
-    path = tmp_path / "doc" / "bad.md"
+    path = tmp_path / "entities" / "reports" / "bad.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"---\nid: report:\xff\n---\n")
 

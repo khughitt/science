@@ -15,14 +15,14 @@ def _build_project_with_stale_hypothesis(tmp_path: Path) -> Path:
 
     Uses a `task` fixture (not workflow-run) because materialize.py converts
     `related: [hypothesis:foo]` to sci:tests only when the source kind is
-    `task`. The hypothesis lives under `specs/hypotheses/` per the project's
+    `task`. The hypothesis lives under `entities/hypotheses/` per the project's
     _BUILTIN_MARKDOWN_POLICIES.
     """
     root = tmp_path / "demo"
-    (root / "specs" / "hypotheses").mkdir(parents=True)
-    (root / "doc" / "tasks").mkdir(parents=True)
+    (root / "entities" / "hypotheses").mkdir(parents=True)
+    (root / "entities" / "tasks").mkdir(parents=True)
     (root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: core\n")
-    (root / "specs" / "hypotheses" / "h1.md").write_text(
+    (root / "entities" / "hypotheses" / "h1.md").write_text(
         dedent(
             """
             ---
@@ -36,7 +36,7 @@ def _build_project_with_stale_hypothesis(tmp_path: Path) -> Path:
             """
         ).lstrip()
     )
-    (root / "doc" / "tasks" / "t1.md").write_text(
+    (root / "entities" / "tasks" / "t1.md").write_text(
         dedent(
             """
             ---
@@ -78,7 +78,7 @@ def test_propagate_freshness_does_not_write_graph(tmp_path: Path, monkeypatch):
 def test_propagate_freshness_does_not_mutate_entity_files(tmp_path: Path, monkeypatch):
     root = _build_project_with_stale_hypothesis(tmp_path)
     monkeypatch.chdir(root)
-    h_path = root / "specs" / "hypotheses" / "h1.md"
+    h_path = root / "entities" / "hypotheses" / "h1.md"
     before_mtime = h_path.stat().st_mtime_ns
 
     runner = CliRunner()
@@ -90,9 +90,9 @@ def test_propagate_freshness_does_not_mutate_entity_files(tmp_path: Path, monkey
 def _build_project_with_unresolved_ref(tmp_path: Path) -> Path:
     """Project where the hypothesis cites a non-existent paper."""
     root = tmp_path / "demo"
-    (root / "specs" / "hypotheses").mkdir(parents=True)
+    (root / "entities" / "hypotheses").mkdir(parents=True)
     (root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: core\n")
-    (root / "specs" / "hypotheses" / "h1.md").write_text(
+    (root / "entities" / "hypotheses" / "h1.md").write_text(
         dedent(
             """
             ---

@@ -79,7 +79,7 @@ reason.
 
 ## Output
 
-Save to `doc/plans/YYYY-MM-DD-<slug>-analysis-plan.md` unless the user explicitly requests terminal-only output.
+Save to `entities/plans/YYYY-MM-DD-<slug>-analysis-plan.md` unless the user explicitly requests terminal-only output.
 
 Use this frontmatter:
 

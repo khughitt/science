@@ -582,8 +582,8 @@ def _write_dataset_influence_project(
     root: Path, *, local_dataset: bool = False, usage_ref: str = "dataset:gtex-v8"
 ) -> Path:
     root.joinpath("science.yaml").write_text(_DATASET_INFLUENCE_MANIFEST, encoding="utf-8")
-    (root / "doc" / "papers").mkdir(parents=True)
-    (root / "doc" / "papers" / "Adams2025.md").write_text(
+    (root / "entities" / "papers").mkdir(parents=True)
+    (root / "entities" / "papers" / "Adams2025.md").write_text(
         "---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndataset_usage:\n"
         f"  - ref: {usage_ref}\n    role: analyzed\n---\n",
         encoding="utf-8",

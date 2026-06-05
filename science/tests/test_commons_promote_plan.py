@@ -548,7 +548,7 @@ def test_plan_promote_invokes_resolver_on_conflict(tmp_path) -> None:
             slug_normalized="dang2023",
             project_slug=slug,
             project_root=Path("/tmp") / slug,
-            overlay_source_path=Path("/tmp") / slug / "doc/papers/Dang2023.md",
+            overlay_source_path=Path("/tmp") / slug / "entities/papers/Dang2023.md",
             canonical_fields={},
             project_only_fields={},
             canonical_body={},

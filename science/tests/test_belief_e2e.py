@@ -116,10 +116,10 @@ def _diagnostic_dispute_line() -> str:
 
 def _scaffold(root: Path, dispute_fn) -> None:
     _manifest(root)
-    _write(root, "doc/propositions/p.md", _prop("well_supported"))
-    _write(root, "doc/evidence-lines/sup1.md", _supporting_line("sup1", "g1"))
-    _write(root, "doc/evidence-lines/sup2.md", _supporting_line("sup2", "g2"))
-    _write(root, "doc/evidence-lines/dis.md", dispute_fn())
+    _write(root, "entities/propositions/p.md", _prop("well_supported"))
+    _write(root, "entities/evidence-lines/sup1.md", _supporting_line("sup1", "g1"))
+    _write(root, "entities/evidence-lines/sup2.md", _supporting_line("sup2", "g2"))
+    _write(root, "entities/evidence-lines/dis.md", dispute_fn())
 
 
 def _build_and_load(root: Path):

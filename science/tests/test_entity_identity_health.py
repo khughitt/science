@@ -31,18 +31,18 @@ def test_identity_health_resolves_markdown_manual_aliases(tmp_path) -> None:
 
 def test_identity_health_reports_baselined_missing_id_through_real_health_flow(tmp_path) -> None:
     project = tmp_path / "project"
-    (project / "doc").mkdir(parents=True)
+    (project / "entities" / "findings").mkdir(parents=True)
     (project / "knowledge").mkdir(parents=True)
     (project / "science.yaml").write_text("id: missing-id-project\n", encoding="utf-8")
     (project / "knowledge" / "entity-identity-baseline.yaml").write_text(
         """
 records:
-  - path: doc/finding.md
+  - path: entities/findings/finding.md
     accepted_at: "2026-05-12T10:00:00Z"
 """.strip(),
         encoding="utf-8",
     )
-    (project / "doc" / "finding.md").write_text(
+    (project / "entities" / "findings" / "finding.md").write_text(
         "---\nkind: finding\ntitle: Legacy\n---\n",
         encoding="utf-8",
     )
@@ -56,9 +56,9 @@ records:
 
 def test_identity_health_reports_unbaselined_missing_id_as_error_through_real_health_flow(tmp_path) -> None:
     project = tmp_path / "project"
-    (project / "doc").mkdir(parents=True)
+    (project / "entities" / "findings").mkdir(parents=True)
     (project / "science.yaml").write_text("id: missing-id-project\n", encoding="utf-8")
-    (project / "doc" / "finding.md").write_text(
+    (project / "entities" / "findings" / "finding.md").write_text(
         "---\nkind: finding\ntitle: Current\n---\n",
         encoding="utf-8",
     )

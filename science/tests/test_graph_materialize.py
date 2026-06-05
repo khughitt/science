@@ -45,8 +45,8 @@ def _write_demo_project(
         ),
         encoding="utf-8",
     )
-    (project_root / "specs" / "hypotheses").mkdir(parents=True)
-    (project_root / "doc" / "questions").mkdir(parents=True)
+    (project_root / "entities" / "hypotheses").mkdir(parents=True)
+    (project_root / "entities" / "questions").mkdir(parents=True)
     (project_root / "tasks").mkdir(parents=True)
 
     related = '["question:q01-demo", "GO:0008150"]'
@@ -55,7 +55,7 @@ def _write_demo_project(
     if include_case_distinct_urls:
         related = '["question:q01-demo", "https://Example.org/MixedCase", "https://example.org/mixedcase"]'
 
-    (project_root / "specs" / "hypotheses" / "h01-demo.md").write_text(
+    (project_root / "entities" / "hypotheses" / "h01-demo.md").write_text(
         "\n".join(
             [
                 "---",
@@ -77,7 +77,7 @@ def _write_demo_project(
         encoding="utf-8",
     )
 
-    (project_root / "doc" / "questions" / "q01-demo.md").write_text(
+    (project_root / "entities" / "questions" / "q01-demo.md").write_text(
         "\n".join(
             [
                 "---",
@@ -100,7 +100,7 @@ def _write_demo_project(
     )
 
     if include_alias_collision:
-        (project_root / "specs" / "hypotheses" / "h02-demo.md").write_text(
+        (project_root / "entities" / "hypotheses" / "h02-demo.md").write_text(
             "\n".join(
                 [
                     "---",
@@ -215,7 +215,7 @@ def test_materialize_emits_inquiry_target_from_frontmatter(tmp_path: Path) -> No
     project = tmp_path / "demo"
     _write_demo_project(project)
     _write_minimal_entity(
-        project / "doc" / "inquiries" / "demo-inquiry.md",
+        project / "entities" / "inquiries" / "demo-inquiry.md",
         "inquiry:demo-inquiry",
         "inquiry",
         "Demo inquiry",
@@ -266,7 +266,7 @@ def test_materialize_with_commons_topic_emits_scope_and_dual_provenance(
     manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
     manifest_path.parent.mkdir(parents=True)
     manifest_path.write_text("", encoding="utf-8")
-    hypothesis_path = project / "doc" / "hypotheses" / "h1.md"
+    hypothesis_path = project / "entities" / "hypotheses" / "h1.md"
     hypothesis_path.parent.mkdir(parents=True)
     hypothesis_path.write_text(
         """---
@@ -399,7 +399,7 @@ def test_materialize_graph_writes_bridge_layer_for_external_terms(tmp_path: Path
 def test_source_refs_with_cross_project_address_still_fails(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    question = project / "doc" / "questions" / "q01-demo.md"
+    question = project / "entities" / "questions" / "q01-demo.md"
     question.write_text(
         question.read_text(encoding="utf-8").replace(
             'source_refs: ["hypothesis:h01-demo"]',
@@ -415,7 +415,7 @@ def test_source_refs_with_cross_project_address_still_fails(tmp_path: Path) -> N
 def test_evidence_refs_with_cross_project_address_materializes_provenance(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    question = project / "doc" / "questions" / "q01-demo.md"
+    question = project / "entities" / "questions" / "q01-demo.md"
     question.write_text(
         question.read_text(encoding="utf-8").replace(
             'source_refs: ["hypothesis:h01-demo"]',
@@ -444,7 +444,7 @@ def test_evidence_refs_with_cross_project_address_materializes_provenance(tmp_pa
 def test_evidence_refs_with_local_ref_materializes_provenance(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    question = project / "doc" / "questions" / "q01-demo.md"
+    question = project / "entities" / "questions" / "q01-demo.md"
     question.write_text(
         question.read_text(encoding="utf-8").replace(
             'source_refs: ["hypothesis:h01-demo"]',
@@ -473,7 +473,7 @@ def test_evidence_refs_with_local_ref_materializes_provenance(tmp_path: Path) ->
 def test_bibliography_source_refs_do_not_materialize_provenance_edges(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    question = project / "doc" / "questions" / "q01-demo.md"
+    question = project / "entities" / "questions" / "q01-demo.md"
     question.write_text(
         question.read_text(encoding="utf-8").replace(
             'source_refs: ["hypothesis:h01-demo"]',
@@ -495,7 +495,7 @@ def test_bibliography_source_refs_do_not_materialize_provenance_edges(tmp_path: 
 def test_evidence_refs_with_unknown_local_ref_still_fails(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    question = project / "doc" / "questions" / "q01-demo.md"
+    question = project / "entities" / "questions" / "q01-demo.md"
     question.write_text(
         question.read_text(encoding="utf-8").replace(
             'source_refs: ["hypothesis:h01-demo"]',
@@ -516,7 +516,7 @@ def test_evidence_refs_with_unknown_local_ref_still_fails(tmp_path: Path) -> Non
 def test_materialize_graph_allows_tag_refs_in_related_without_emitting_edges(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    hypothesis_path = project / "specs" / "hypotheses" / "h01-demo.md"
+    hypothesis_path = project / "entities" / "hypotheses" / "h01-demo.md"
     hypothesis_path.write_text(
         hypothesis_path.read_text(encoding="utf-8").replace(
             'related: ["question:q01-demo", "GO:0008150"]',
@@ -673,8 +673,8 @@ def test_materialize_graph_emits_mechanism_participants_and_propositions(tmp_pat
 def test_materialize_graph_emits_theme_node_and_related_edges(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    (project / "doc" / "themes").mkdir(parents=True)
-    (project / "doc" / "themes" / "transportability.md").write_text(
+    (project / "entities" / "themes").mkdir(parents=True)
+    (project / "entities" / "themes" / "transportability.md").write_text(
         "\n".join(
             [
                 "---",
@@ -792,7 +792,7 @@ def test_materialize_graph_resolves_cross_kind_slug_reference(tmp_path: Path) ->
         ),
         encoding="utf-8",
     )
-    hypothesis_path = project / "specs" / "hypotheses" / "h01-demo.md"
+    hypothesis_path = project / "entities" / "hypotheses" / "h01-demo.md"
     hypothesis_path.write_text(
         hypothesis_path.read_text(encoding="utf-8").replace(
             'related: ["question:q01-demo", "GO:0008150"]',
@@ -830,7 +830,7 @@ def test_materialize_graph_loads_lightweight_terms_yaml(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
-    hypothesis_path = project / "specs" / "hypotheses" / "h01-demo.md"
+    hypothesis_path = project / "entities" / "hypotheses" / "h01-demo.md"
     hypothesis_path.write_text(
         hypothesis_path.read_text(encoding="utf-8").replace(
             'related: ["question:q01-demo", "GO:0008150"]',
@@ -898,7 +898,7 @@ def test_materialize_graph_applies_structured_relations_with_internal_targets(tm
 def test_materialize_graph_applies_source_entity_relations(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    interpretations = project / "doc" / "interpretations"
+    interpretations = project / "entities" / "interpretations"
     interpretations.mkdir(parents=True)
     (interpretations / "old.md").write_text(
         "\n".join(
@@ -957,13 +957,13 @@ def test_materialize_graph_accepts_conclusion_amends_and_supersedes(tmp_path: Pa
     project = tmp_path / "demo"
     _write_demo_project(project)
     _write_minimal_entity(
-        project / "doc" / "interpretations" / "old.md",
+        project / "entities" / "interpretations" / "old.md",
         "interpretation:old",
         "interpretation",
         "Old interpretation",
     )
     _write_minimal_entity(
-        project / "doc" / "interpretations" / "new.md",
+        project / "entities" / "interpretations" / "new.md",
         "interpretation:new",
         "interpretation",
         "New interpretation",
@@ -988,9 +988,9 @@ def test_materialize_graph_accepts_conclusion_amends_and_supersedes(tmp_path: Pa
 def test_materialize_graph_preserves_workflow_run_supersedes(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    _write_minimal_entity(project / "doc" / "runs" / "old.md", "workflow-run:old-run", "workflow-run", "Old run")
+    _write_minimal_entity(project / "entities" / "runs" / "old.md", "workflow-run:old-run", "workflow-run", "Old run")
     _write_minimal_entity(
-        project / "doc" / "runs" / "new.md",
+        project / "entities" / "runs" / "new.md",
         "workflow-run:new-run",
         "workflow-run",
         "New run",
@@ -1013,12 +1013,12 @@ def test_materialize_graph_rejects_invalid_supersedes_pair(tmp_path: Path) -> No
     project = tmp_path / "demo"
     _write_demo_project(project)
     _write_minimal_entity(
-        project / "doc" / "interpretations" / "new.md",
+        project / "entities" / "interpretations" / "new.md",
         "interpretation:new",
         "interpretation",
         "New interpretation",
     )
-    _write_minimal_entity(project / "doc" / "runs" / "old.md", "workflow-run:old-run", "workflow-run", "Old run")
+    _write_minimal_entity(project / "entities" / "runs" / "old.md", "workflow-run:old-run", "workflow-run", "Old run")
     local_sources = project / "knowledge" / "sources" / "local"
     local_sources.mkdir(parents=True)
     (local_sources / "relations.yaml").write_text(
@@ -1045,9 +1045,9 @@ def test_materialize_graph_rejects_invalid_supersedes_pair(tmp_path: Path) -> No
 def test_materialize_graph_rejects_invalid_amends_pair(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    _write_minimal_entity(project / "doc" / "runs" / "old.md", "workflow-run:old-run", "workflow-run", "Old run")
+    _write_minimal_entity(project / "entities" / "runs" / "old.md", "workflow-run:old-run", "workflow-run", "Old run")
     _write_minimal_entity(
-        project / "doc" / "runs" / "new.md",
+        project / "entities" / "runs" / "new.md",
         "workflow-run:new-run",
         "workflow-run",
         "New run",
@@ -1069,7 +1069,7 @@ def test_materialize_graph_rejects_self_supersedes(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
     _write_minimal_entity(
-        project / "doc" / "interpretations" / "same.md",
+        project / "entities" / "interpretations" / "same.md",
         "interpretation:same",
         "interpretation",
         "Self replacement",
@@ -1088,7 +1088,7 @@ def test_materialize_graph_rejects_amendment_cycle(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
     _write_minimal_entity(
-        project / "doc" / "interpretations" / "a.md",
+        project / "entities" / "interpretations" / "a.md",
         "interpretation:a",
         "interpretation",
         "A",
@@ -1099,7 +1099,7 @@ def test_materialize_graph_rejects_amendment_cycle(tmp_path: Path) -> None:
         ],
     )
     _write_minimal_entity(
-        project / "doc" / "interpretations" / "b.md",
+        project / "entities" / "interpretations" / "b.md",
         "interpretation:b",
         "interpretation",
         "B",
@@ -1121,7 +1121,7 @@ def test_materialize_graph_rejects_mixed_amends_supersedes_cycle(tmp_path: Path)
     project = tmp_path / "demo"
     _write_demo_project(project)
     _write_minimal_entity(
-        project / "doc" / "interpretations" / "a.md",
+        project / "entities" / "interpretations" / "a.md",
         "interpretation:a",
         "interpretation",
         "A",
@@ -1132,7 +1132,7 @@ def test_materialize_graph_rejects_mixed_amends_supersedes_cycle(tmp_path: Path)
         ],
     )
     _write_minimal_entity(
-        project / "doc" / "interpretations" / "b.md",
+        project / "entities" / "interpretations" / "b.md",
         "interpretation:b",
         "interpretation",
         "B",
@@ -1198,7 +1198,7 @@ def test_materialize_graph_applies_structured_relations_with_external_targets(tm
 def test_materialize_graph_accepts_bare_ontology_terms(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    hypothesis_path = project / "specs" / "hypotheses" / "h01-demo.md"
+    hypothesis_path = project / "entities" / "hypotheses" / "h01-demo.md"
     hypothesis_path.write_text(
         hypothesis_path.read_text(encoding="utf-8").replace(
             "ontology_terms: [GO:0008150]", "ontology_terms: [functor]"
@@ -1227,8 +1227,8 @@ def test_materialize_graph_emits_skos_exact_match_for_same_as_external(tmp_path:
     """
     project = tmp_path / "demo"
     _write_demo_project(project)
-    (project / "doc" / "topics").mkdir(parents=True)
-    (project / "doc" / "topics" / "phf19.md").write_text(
+    (project / "entities" / "topics").mkdir(parents=True)
+    (project / "entities" / "topics" / "phf19.md").write_text(
         "\n".join(
             [
                 "---",
@@ -1408,8 +1408,8 @@ def _write_skip_project(project: Path) -> None:
     (project / "science.yaml").write_text(
         "name: skip-demo\nknowledge_profiles: {local: local}\n", encoding="utf-8"
     )
-    (project / "doc").mkdir(parents=True)
-    (project / "doc" / "audit-note.md").write_text(
+    (project / "entities").mkdir(parents=True)
+    (project / "entities" / "audit-note.md").write_text(
         "---\n"
         'id: "audit:a01-some-review"\n'
         'type: "audit"\n'
@@ -1433,9 +1433,9 @@ def test_load_project_sources_records_schema_validation_skip(tmp_path: Path) -> 
     (tmp_path / "science.yaml").write_text(
         "name: skip-demo\nknowledge_profiles: {local: local}\n", encoding="utf-8"
     )
-    (tmp_path / "specs" / "hypotheses").mkdir(parents=True)
+    (tmp_path / "entities" / "hypotheses").mkdir(parents=True)
     # A core-kind doc missing only its identity (no id) is skipped silently today.
-    (tmp_path / "specs" / "hypotheses" / "broken.md").write_text(
+    (tmp_path / "entities" / "hypotheses" / "broken.md").write_text(
         "---\n"
         'type: "hypothesis"\n'
         'title: "Missing id"\n'
@@ -1575,8 +1575,8 @@ def test_source_authored_hypothesis_and_graph_added_hypothesis_do_not_double_cou
         "name: materialize-entities\nknowledge_profiles: {local: local}\n",
         encoding="utf-8",
     )
-    (tmp_path / "specs" / "hypotheses").mkdir(parents=True)
-    (tmp_path / "specs" / "hypotheses" / "h01-source.md").write_text(
+    (tmp_path / "entities" / "hypotheses").mkdir(parents=True)
+    (tmp_path / "entities" / "hypotheses" / "h01-source.md").write_text(
         "---\n"
         'id: "hypothesis:h01-source"\n'
         'type: "hypothesis"\n'

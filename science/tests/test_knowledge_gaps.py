@@ -53,7 +53,7 @@ def test_load_papers_finds_both_prefix_styles() -> None:
 def test_duplicate_topic_ids_across_topic_directories_raise(tmp_path: Path) -> None:
     shutil.copytree(FIXTURE, tmp_path / "p")
     project = tmp_path / "p"
-    # Place a duplicate topic in doc/topics/ (second scanned root).
+    # Place a duplicate topic in entities/topics/ (second scanned root).
     (project / "doc" / "topics").mkdir(parents=True)
     (project / "doc" / "topics" / "t01-covered.md").write_text(
         '---\nid: "topic:t01-covered"\ntype: "topic"\nrelated: []\n---\n'

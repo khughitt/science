@@ -595,7 +595,7 @@ def test_discover_candidates_theme_malformed_scope_is_failed_candidate(tmp_path,
 
 
 def test_discover_candidates_same_project_intra_kind_collision(tmp_path, monkeypatch) -> None:
-    """A slug appearing in BOTH doc/topics/ and doc/background/topics/ within
+    """A slug appearing in BOTH entities/topics/ and doc/background/topics/ within
     the same project is a hard failure (cannot resolve canonical source)."""
     from science_tool.commons.promote import PROMOTE_KIND_TOPIC, discover_candidates
 

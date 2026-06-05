@@ -24,7 +24,7 @@ def _paper() -> PaperEntity:
         related=[],
         source_refs=[],
         content_preview="",
-        file_path="doc/papers/Adams2025.md",
+        file_path="entities/papers/Adams2025.md",
         datasets=["dataset:gtex-v8", "dataset:encode-v4"],
         dataset_usage=[DatasetUsage(ref="dataset:gtex-v8", role="cited")],
     )
@@ -44,7 +44,7 @@ def test_entity_usage_records_are_universal_for_authored_dataset_usage() -> None
         related=[],
         source_refs=[],
         content_preview="",
-        file_path="doc/observations/o1.md",
+        file_path="entities/observations/o1.md",
         dataset_usage=[DatasetUsage(ref="dataset:gtex-v8", role="validation_source", overlap="partial")],
     )
 
@@ -80,7 +80,7 @@ def test_paper_legacy_datasets_duplicate_refs_emit_once() -> None:
         related=[],
         source_refs=[],
         content_preview="",
-        file_path="doc/papers/Adams2025.md",
+        file_path="entities/papers/Adams2025.md",
         datasets=["dataset:encode-v4", "dataset:encode-v4"],
         dataset_usage=[],
     )
@@ -240,7 +240,7 @@ def test_usage_node_uri_is_deterministic_for_record_payload() -> None:
         role="validation_source",
         overlap="partial",
         source="authored",
-        source_path="doc/observations/o1.md",
+        source_path="entities/observations/o1.md",
     )
     same_record = DatasetUsageRecord(
         consumer_id="observation:o1",
@@ -248,7 +248,7 @@ def test_usage_node_uri_is_deterministic_for_record_payload() -> None:
         role="validation_source",
         overlap="partial",
         source="authored",
-        source_path="doc/observations/o1.md",
+        source_path="entities/observations/o1.md",
     )
     changed_role = DatasetUsageRecord(
         consumer_id="observation:o1",
@@ -256,7 +256,7 @@ def test_usage_node_uri_is_deterministic_for_record_payload() -> None:
         role="analyzed",
         overlap="partial",
         source="authored",
-        source_path="doc/observations/o1.md",
+        source_path="entities/observations/o1.md",
     )
 
     assert usage_node_uri(record) == usage_node_uri(same_record)
@@ -316,7 +316,7 @@ def test_materialize_graph_emits_entity_usage_nodes(tmp_path):
         "  inputs:\n"
         "    - dataset:gtex-v8\n",
     )
-    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir = tmp_path / "entities" / "papers"
     paper_dir.mkdir(parents=True)
     (paper_dir / "Adams2025.md").write_text(
         "---\n"
@@ -369,7 +369,7 @@ def test_materialize_graph_emits_dataset_independence_commitment(tmp_path) -> No
         "  level: public\n"
         "  verified: true\n",
     )
-    prop_dir = tmp_path / "doc" / "propositions"
+    prop_dir = tmp_path / "entities" / "propositions"
     prop_dir.mkdir(parents=True)
     (prop_dir / "p1.md").write_text(
         "---\n"
@@ -385,7 +385,7 @@ def test_materialize_graph_emits_dataset_independence_commitment(tmp_path) -> No
         "---\n",
         encoding="utf-8",
     )
-    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir = tmp_path / "entities" / "papers"
     paper_dir.mkdir(parents=True)
     for slug in ("p1", "p2"):
         (paper_dir / f"{slug}.md").write_text(
@@ -403,7 +403,7 @@ def test_materialize_graph_emits_dataset_independence_commitment(tmp_path) -> No
             "---\n",
             encoding="utf-8",
         )
-    evidence_dir = tmp_path / "doc" / "evidence-lines"
+    evidence_dir = tmp_path / "entities" / "evidence-lines"
     evidence_dir.mkdir(parents=True)
     for slug, paper in (("a", "p1"), ("b", "p2")):
         (evidence_dir / f"{slug}.md").write_text(
@@ -456,7 +456,7 @@ def test_materialize_graph_rejects_unresolved_paper_usage_refs(tmp_path, frontma
     from science_tool.graph.materialize import materialize_graph
 
     _write_project(tmp_path)
-    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir = tmp_path / "entities" / "papers"
     paper_dir.mkdir(parents=True)
     (paper_dir / "Adams2025.md").write_text(
         "---\n"
@@ -524,7 +524,7 @@ def test_materialize_graph_canonicalizes_authored_usage_alias(tmp_path):
         "  level: public\n"
         "  verified: true\n",
     )
-    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir = tmp_path / "entities" / "papers"
     paper_dir.mkdir(parents=True)
     (paper_dir / "Adams2025.md").write_text(
         "---\n"
@@ -567,7 +567,7 @@ def test_materialize_graph_rejects_legacy_paper_dataset_bare_alias(tmp_path):
         "  level: public\n"
         "  verified: true\n",
     )
-    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir = tmp_path / "entities" / "papers"
     paper_dir.mkdir(parents=True)
     (paper_dir / "Adams2025.md").write_text(
         "---\n"
@@ -675,7 +675,7 @@ def test_materialize_graph_audits_paper_usage_refs_as_dataset_only(tmp_path, fro
     from science_tool.graph.materialize import materialization_audit, materialize_graph
 
     _write_project(tmp_path)
-    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir = tmp_path / "entities" / "papers"
     paper_dir.mkdir(parents=True)
     (paper_dir / "Smith2024.md").write_text(
         "---\n"
@@ -725,7 +725,7 @@ def test_materialize_graph_audits_derivation_inputs_as_dataset_only(tmp_path):
     from science_tool.graph.materialize import materialization_audit, materialize_graph
 
     _write_project(tmp_path)
-    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir = tmp_path / "entities" / "papers"
     paper_dir.mkdir(parents=True)
     (paper_dir / "Smith2024.md").write_text(
         "---\n"
@@ -992,7 +992,7 @@ def test_materialize_graph_emits_commons_geneset_row_usage_nodes(tmp_path, monke
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
     monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
     _write_project(tmp_path)
-    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir = tmp_path / "entities" / "papers"
     paper_dir.mkdir(parents=True)
     (paper_dir / "Adams2025.md").write_text(
         "---\n"
@@ -1045,7 +1045,7 @@ def test_materialization_audit_reports_non_dataset_geneset_row_usage_refs(tmp_pa
     from science_tool.graph.materialize import materialization_audit
 
     _write_project(tmp_path)
-    paper_dir = tmp_path / "doc" / "papers"
+    paper_dir = tmp_path / "entities" / "papers"
     paper_dir.mkdir(parents=True)
     (paper_dir / "Smith2024.md").write_text(
         "---\n"

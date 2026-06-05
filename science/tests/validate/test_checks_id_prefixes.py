@@ -47,7 +47,7 @@ def _messages(results: Iterable[Result], severity: Severity | None = None) -> li
 def test_matching_prefixes_emit_info(tmp_path: Path) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
-    _write(tmp_path / "doc" / "reports" / "a.md", "---\ntype: report\nid: report:a\n---\n")
+    _write(tmp_path / "entities" / "reports" / "a.md", "---\ntype: report\nid: report:a\n---\n")
 
     results = list(check_id_prefixes(_ctx(tmp_path)))
 
@@ -55,37 +55,35 @@ def test_matching_prefixes_emit_info(tmp_path: Path) -> None:
     assert [result.severity for result in results] == [Severity.INFO]
 
 
-def test_mismatched_report_id_under_doc_warns_exactly(tmp_path: Path) -> None:
+def test_mismatched_report_id_under_entities_warns_exactly(tmp_path: Path) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
-    _write(tmp_path / "doc" / "reports" / "a.md", "---\ntype: report\nid: doc:a\n---\n")
+    _write(tmp_path / "entities" / "reports" / "a.md", "---\ntype: report\nid: doc:a\n---\n")
 
     results = list(check_id_prefixes(_ctx(tmp_path)))
 
     assert _messages(results, Severity.WARN) == [
-        "id-prefix mismatch: doc/reports/a.md: type=report but id=doc:a (expected prefix 'report:')"
+        "id-prefix mismatch: entities/reports/a.md: type=report but id=doc:a (expected prefix 'report:')"
     ]
 
 
-def test_scans_doc_and_specs_in_deterministic_order(tmp_path: Path) -> None:
+def test_scans_entities_in_deterministic_order(tmp_path: Path) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
-    _write(tmp_path / "doc" / "z.md", "---\ntype: report\nid: doc:z\n---\n")
-    _write(tmp_path / "doc" / "a.md", "---\ntype: question\nid: doc:a\n---\n")
-    _write(tmp_path / "specs" / "b.md", "---\ntype: spec\nid: report:b\n---\n")
+    _write(tmp_path / "entities" / "reports" / "z.md", "---\ntype: report\nid: doc:z\n---\n")
+    _write(tmp_path / "entities" / "questions" / "a.md", "---\ntype: question\nid: doc:a\n---\n")
 
     assert _messages(check_id_prefixes(_ctx(tmp_path)), Severity.WARN) == [
-        "id-prefix mismatch: doc/a.md: type=question but id=doc:a (expected prefix 'question:')",
-        "id-prefix mismatch: doc/z.md: type=report but id=doc:z (expected prefix 'report:')",
-        "id-prefix mismatch: specs/b.md: type=spec but id=report:b (expected prefix 'spec:')",
+        "id-prefix mismatch: entities/questions/a.md: type=question but id=doc:a (expected prefix 'question:')",
+        "id-prefix mismatch: entities/reports/z.md: type=report but id=doc:z (expected prefix 'report:')",
     ]
 
 
 def test_skips_templates_path(tmp_path: Path) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
-    _write(tmp_path / "doc" / "templates" / "a.md", "---\ntype: report\nid: doc:a\n---\n")
-    _write(tmp_path / "specs" / "nested" / "templates" / "b.md", "---\ntype: spec\nid: report:b\n---\n")
+    _write(tmp_path / "entities" / "templates" / "a.md", "---\ntype: report\nid: doc:a\n---\n")
+    _write(tmp_path / "entities" / "nested" / "templates" / "b.md", "---\ntype: report\nid: doc:b\n---\n")
 
     assert _messages(check_id_prefixes(_ctx(tmp_path))) == ["  all type/id prefixes conform"]
 
@@ -94,20 +92,20 @@ def test_templates_ancestor_outside_project_does_not_skip_project_files(tmp_path
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
     project_root = tmp_path / "templates" / "project"
-    _write(project_root / "doc" / "reports" / "a.md", "---\ntype: report\nid: doc:a\n---\n")
+    _write(project_root / "entities" / "reports" / "a.md", "---\ntype: report\nid: doc:a\n---\n")
 
     assert _messages(check_id_prefixes(_ctx(project_root)), Severity.WARN) == [
-        "id-prefix mismatch: doc/reports/a.md: type=report but id=doc:a (expected prefix 'report:')"
+        "id-prefix mismatch: entities/reports/a.md: type=report but id=doc:a (expected prefix 'report:')"
     ]
 
 
 def test_ignores_missing_frontmatter_missing_fields_and_unknown_type(tmp_path: Path) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
-    _write(tmp_path / "doc" / "body.md", "type: report\nid: doc:a\n")
-    _write(tmp_path / "doc" / "missing-type.md", "---\nid: doc:a\n---\n")
-    _write(tmp_path / "doc" / "missing-id.md", "---\ntype: report\n---\n")
-    _write(tmp_path / "doc" / "unknown.md", "---\ntype: custom\nid: doc:a\n---\n")
+    _write(tmp_path / "entities" / "reports" / "body.md", "type: report\nid: doc:a\n")
+    _write(tmp_path / "entities" / "reports" / "missing-type.md", "---\nid: doc:a\n---\n")
+    _write(tmp_path / "entities" / "reports" / "missing-id.md", "---\ntype: report\n---\n")
+    _write(tmp_path / "entities" / "reports" / "unknown.md", "---\ntype: custom\nid: doc:a\n---\n")
 
     assert _messages(check_id_prefixes(_ctx(tmp_path))) == ["  all type/id prefixes conform"]
 
@@ -115,10 +113,10 @@ def test_ignores_missing_frontmatter_missing_fields_and_unknown_type(tmp_path: P
 def test_handles_quoted_type_and_id_like_bash_regex(tmp_path: Path) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
-    _write(tmp_path / "doc" / "a.md", "---\ntype: 'report'\nid: \"doc:a\"\n---\n")
+    _write(tmp_path / "entities" / "reports" / "a.md", "---\ntype: 'report'\nid: \"doc:a\"\n---\n")
 
     assert _messages(check_id_prefixes(_ctx(tmp_path)), Severity.WARN) == [
-        "id-prefix mismatch: doc/a.md: type=report but id=doc:a (expected prefix 'report:')"
+        "id-prefix mismatch: entities/reports/a.md: type=report but id=doc:a (expected prefix 'report:')"
     ]
 
 
@@ -126,7 +124,7 @@ def test_skip_environment_emits_no_results(tmp_path: Path, monkeypatch) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
     monkeypatch.setenv("SCIENCE_VALIDATE_SKIP_ID_PREFIX", "1")
-    _write(tmp_path / "doc" / "a.md", "---\ntype: report\nid: doc:a\n---\n")
+    _write(tmp_path / "entities" / "reports" / "a.md", "---\ntype: report\nid: doc:a\n---\n")
 
     assert list(check_id_prefixes(_ctx(tmp_path))) == []
 
@@ -134,7 +132,7 @@ def test_skip_environment_emits_no_results(tmp_path: Path, monkeypatch) -> None:
 def test_read_encoding_errors_propagate(tmp_path: Path) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
 
-    path = tmp_path / "doc" / "bad.md"
+    path = tmp_path / "entities" / "reports" / "bad.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"---\ntype: report\nid: report:\xff\n---\n")
 

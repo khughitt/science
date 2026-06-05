@@ -143,7 +143,7 @@ def test_plan_analysis_command_defines_methodology_readiness_workflow() -> None:
     expected_strings = (
         "${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md",
         "${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md",
-        "doc/plans/YYYY-MM-DD-<slug>-analysis-plan.md",
+        "entities/plans/YYYY-MM-DD-<slug>-analysis-plan.md",
         "type: analysis-plan",
         "skills_loaded:",
         "Readiness Decision",
@@ -181,7 +181,7 @@ def test_plan_analysis_is_integrated_with_neighbor_commands() -> None:
         ),
         "commands/pre-register.md": (
             "analysis-plan:<slug>",
-            "doc/plans/*-analysis-plan.md",
+            "entities/plans/*-analysis-plan.md",
             "/science:plan-analysis",
         ),
         "commands/status.md": (
@@ -190,7 +190,7 @@ def test_plan_analysis_is_integrated_with_neighbor_commands() -> None:
         ),
         "commands/next-steps.md": (
             "analysis-plan:<slug>",
-            "doc/plans/*-analysis-plan.md",
+            "entities/plans/*-analysis-plan.md",
             "/science:plan-analysis",
         ),
     }
@@ -573,7 +573,7 @@ def test_sketch_model_documents_existing_inquiry_upgrade() -> None:
     text = _read("commands/sketch-model.md")
     expected_strings = (
         "Existing Inquiry Upgrade",
-        "doc/inquiries/<slug>.md",
+        "entities/inquiries/<slug>.md",
         "preserve its existing slug and frontmatter",
         "Register the existing inquiry before adding graph nodes or edges",
     )

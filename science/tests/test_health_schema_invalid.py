@@ -19,7 +19,7 @@ def _project_with_bad_dataset(tmp_path: Path) -> Path:
     """A minimal project with one dataset that is source_class=derived but omits
     the conditionally-required derived_kind (the feedback's exact repro)."""
     (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
-    dataset = tmp_path / "doc" / "datasets" / "t007-cohort.md"
+    dataset = tmp_path / "entities" / "datasets" / "t007-cohort.md"
     dataset.parent.mkdir(parents=True, exist_ok=True)
     dataset.write_text(
         "---\n"

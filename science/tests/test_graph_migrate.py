@@ -23,8 +23,8 @@ def test_audit_project_graph_reports_unresolved_related_refs(tmp_path: Path) -> 
     root = tmp_path / "project"
     root.mkdir()
     (root / "science.yaml").write_text("name: demo\n", encoding="utf-8")
-    (root / "specs" / "hypotheses").mkdir(parents=True)
-    (root / "specs" / "hypotheses" / "h01-demo.md").write_text(
+    (root / "entities" / "hypotheses").mkdir(parents=True)
+    (root / "entities" / "hypotheses" / "h01-demo.md").write_text(
         "\n".join(
             [
                 "---",
@@ -82,8 +82,8 @@ def test_audit_project_graph_allows_tag_refs_in_related(tmp_path: Path) -> None:
 def _write_paper_dataset_project(root: Path, *, conflict: bool = False) -> Path:
     root.mkdir()
     (root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
-    (root / "doc" / "papers").mkdir(parents=True)
-    paper = root / "doc" / "papers" / "smith.md"
+    (root / "entities" / "papers").mkdir(parents=True)
+    paper = root / "entities" / "papers" / "smith.md"
     if conflict:
         paper.write_text(
             "\n".join(
@@ -91,6 +91,7 @@ def _write_paper_dataset_project(root: Path, *, conflict: bool = False) -> Path:
                     "---",
                     "id: paper:smith",
                     "type: paper",
+                    "title: Smith",
                     "dataset_usage:",
                     "  - ref: dataset:gtex-v8",
                     "    role: cited",
@@ -111,6 +112,7 @@ def _write_paper_dataset_project(root: Path, *, conflict: bool = False) -> Path:
                     "---",
                     "id: paper:smith",
                     "type: paper",
+                    "title: Smith",
                     "datasets:",
                     "  - dataset:gtex-v8",
                     "---",
@@ -193,8 +195,8 @@ def test_audit_project_graph_rejects_tag_refs_in_same_as(tmp_path: Path) -> None
     root = tmp_path / "project"
     root.mkdir()
     (root / "science.yaml").write_text("name: demo\n", encoding="utf-8")
-    (root / "doc" / "topics").mkdir(parents=True)
-    (root / "doc" / "topics" / "evaluation.md").write_text(
+    (root / "entities" / "topics").mkdir(parents=True)
+    (root / "entities" / "topics" / "evaluation.md").write_text(
         "\n".join(
             [
                 "---",
@@ -239,8 +241,8 @@ def test_audit_project_graph_suggests_aliases_from_question_file_stems(tmp_path:
     root = tmp_path / "project"
     root.mkdir()
     (root / "science.yaml").write_text("name: demo\n", encoding="utf-8")
-    (root / "doc" / "questions").mkdir(parents=True)
-    (root / "doc" / "questions" / "q16-demo.md").write_text(
+    (root / "entities" / "questions").mkdir(parents=True)
+    (root / "entities" / "questions" / "q16-demo.md").write_text(
         "\n".join(
             [
                 "---",
@@ -583,8 +585,8 @@ def test_audit_project_graph_accepts_declared_gene_entities(tmp_path: Path) -> N
     root = tmp_path / "project"
     root.mkdir()
     (root / "science.yaml").write_text("name: demo\nontologies: [biology]\n", encoding="utf-8")
-    (root / "doc" / "genes").mkdir(parents=True)
-    (root / "doc" / "genes" / "tp53.md").write_text(
+    (root / "entities" / "genes").mkdir(parents=True)
+    (root / "entities" / "genes" / "tp53.md").write_text(
         "\n".join(
             [
                 "---",
@@ -597,8 +599,8 @@ def test_audit_project_graph_accepts_declared_gene_entities(tmp_path: Path) -> N
         ),
         encoding="utf-8",
     )
-    (root / "specs" / "hypotheses").mkdir(parents=True)
-    (root / "specs" / "hypotheses" / "h01-demo.md").write_text(
+    (root / "entities" / "hypotheses").mkdir(parents=True)
+    (root / "entities" / "hypotheses" / "h01-demo.md").write_text(
         "\n".join(
             [
                 "---",
@@ -773,8 +775,8 @@ def test_graph_migrate_command_is_dry_run_by_default(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
-    (root / "specs" / "hypotheses").mkdir(parents=True)
-    (root / "specs" / "hypotheses" / "h01-demo.md").write_text(
+    (root / "entities" / "hypotheses").mkdir(parents=True)
+    (root / "entities" / "hypotheses" / "h01-demo.md").write_text(
         "\n".join(
             [
                 "---",
@@ -874,8 +876,8 @@ def test_graph_migrate_command_rewrites_alias_refs_and_writes_report_with_apply(
         ),
         encoding="utf-8",
     )
-    (root / "specs" / "hypotheses").mkdir(parents=True)
-    (root / "specs" / "hypotheses" / "h01-demo.md").write_text(
+    (root / "entities" / "hypotheses").mkdir(parents=True)
+    (root / "entities" / "hypotheses" / "h01-demo.md").write_text(
         "\n".join(
             [
                 "---",
@@ -962,8 +964,8 @@ def test_graph_migrate_command_uses_configured_local_profile_paths(tmp_path: Pat
         ),
         encoding="utf-8",
     )
-    (root / "specs" / "hypotheses").mkdir(parents=True)
-    (root / "specs" / "hypotheses" / "h01-demo.md").write_text(
+    (root / "entities" / "hypotheses").mkdir(parents=True)
+    (root / "entities" / "hypotheses" / "h01-demo.md").write_text(
         "\n".join(
             [
                 "---",
@@ -1053,7 +1055,7 @@ def test_audit_unresolved_topic_includes_commons_hint(tmp_path: Path, monkeypatc
     manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
     manifest_path.parent.mkdir(parents=True)
     manifest_path.write_text("", encoding="utf-8")
-    hypothesis_path = project / "doc" / "hypotheses" / "h1.md"
+    hypothesis_path = project / "entities" / "hypotheses" / "h1.md"
     hypothesis_path.parent.mkdir(parents=True)
     hypothesis_path.write_text(
         """---
@@ -1086,7 +1088,7 @@ def _scaffold_project_with_related(project: Path, related: str) -> None:
     manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
     manifest_path.parent.mkdir(parents=True)
     manifest_path.write_text("", encoding="utf-8")
-    hypothesis_path = project / "doc" / "hypotheses" / "h1.md"
+    hypothesis_path = project / "entities" / "hypotheses" / "h1.md"
     hypothesis_path.parent.mkdir(parents=True)
     hypothesis_path.write_text(
         f"""---
@@ -1148,7 +1150,7 @@ def test_audit_unresolved_dataset_includes_dataset_commons_hint(tmp_path: Path, 
     manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
     manifest_path.parent.mkdir(parents=True)
     manifest_path.write_text("", encoding="utf-8")
-    hypothesis_path = project / "doc" / "hypotheses" / "h1.md"
+    hypothesis_path = project / "entities" / "hypotheses" / "h1.md"
     hypothesis_path.parent.mkdir(parents=True)
     hypothesis_path.write_text(
         """---

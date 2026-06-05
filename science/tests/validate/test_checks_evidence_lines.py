@@ -56,7 +56,7 @@ def test_unstanced_clean_line_emits_no_results(tmp_path: Path) -> None:
 
     _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:x\n---\n",
     )
 
@@ -70,7 +70,7 @@ def test_unstanced_missing_stance_emits_warn(tmp_path: Path) -> None:
 
     p = _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\ntarget: proposition:p1\nsource: paper:x\n---\n",
     )
 
@@ -89,7 +89,7 @@ def test_unstanced_missing_target_emits_warn(tmp_path: Path) -> None:
 
     p = _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\nsource: paper:x\n---\n",
     )
 
@@ -108,7 +108,7 @@ def test_unstanced_empty_target_emits_warn(tmp_path: Path) -> None:
 
     p = _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\ntarget: ''\nsource: paper:x\n---\n",
     )
 
@@ -130,12 +130,12 @@ def test_unstanced_counted_source_ref_emits_no_results(tmp_path: Path) -> None:
 
     _write(
         tmp_path,
-        "doc/propositions/p1.md",
+        "entities/propositions/p1.md",
         "---\nid: proposition:p1\nsource_refs:\n  - paper:x\n---\n",
     )
     _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:x\n---\n",
     )
 
@@ -149,13 +149,13 @@ def test_unstanced_uncounted_source_ref_emits_warn(tmp_path: Path) -> None:
 
     prop = _write(
         tmp_path,
-        "doc/propositions/p1.md",
+        "entities/propositions/p1.md",
         "---\nid: proposition:p1\nsource_refs:\n  - paper:x\n  - paper:y\n---\n",
     )
     # Only paper:x has a matching evidence-line; paper:y is uncounted.
     _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:x\n---\n",
     )
 
@@ -174,7 +174,7 @@ def test_unstanced_cite_prefix_source_ref_is_skipped(tmp_path: Path) -> None:
 
     _write(
         tmp_path,
-        "doc/propositions/p1.md",
+        "entities/propositions/p1.md",
         "---\nid: proposition:p1\nsource_refs:\n  - cite:jones2020\n---\n",
     )
 
@@ -193,7 +193,7 @@ def test_ungrouped_collapse_shared_source_without_group_errors(tmp_path: Path) -
 
     p = _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:x\nindependence: shared-source\n---\n",
     )
 
@@ -211,7 +211,7 @@ def test_ungrouped_collapse_circular_without_group_errors(tmp_path: Path) -> Non
 
     p = _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:x\nindependence: circular\n---\n",
     )
 
@@ -229,7 +229,7 @@ def test_ungrouped_collapse_shared_source_with_group_is_clean(tmp_path: Path) ->
 
     _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:x\nindependence: shared-source\nindependence_group: grp-a\n---\n",
     )
 
@@ -243,7 +243,7 @@ def test_ungrouped_collapse_independent_is_always_clean(tmp_path: Path) -> None:
 
     _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:x\nindependence: independent\n---\n",
     )
 
@@ -261,12 +261,12 @@ def test_suspect_circular_two_independent_sharing_dataset_warns(tmp_path: Path) 
 
     _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:x\nindependence: independent\nshared_dataset: gse100\n---\n",
     )
     _write(
         tmp_path,
-        "doc/evidence-lines/el02.md",
+        "entities/evidence-lines/el02.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:y\nindependence: independent\nshared_dataset: gse100\n---\n",
     )
 
@@ -285,12 +285,12 @@ def test_suspect_circular_two_independent_sharing_group_warns(tmp_path: Path) ->
 
     _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:x\nindependence: independent\nindependence_group: grp-a\n---\n",
     )
     _write(
         tmp_path,
-        "doc/evidence-lines/el02.md",
+        "entities/evidence-lines/el02.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:y\nindependence: independent\nindependence_group: grp-a\n---\n",
     )
 
@@ -305,7 +305,7 @@ def test_suspect_circular_single_line_emits_no_results(tmp_path: Path) -> None:
 
     _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:x\nindependence: independent\nshared_dataset: ds:alpha\n---\n",
     )
 
@@ -319,12 +319,12 @@ def test_suspect_circular_genuinely_independent_lines_emit_no_results(tmp_path: 
 
     _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:x\nindependence: independent\n---\n",
     )
     _write(
         tmp_path,
-        "doc/evidence-lines/el02.md",
+        "entities/evidence-lines/el02.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:y\nindependence: independent\n---\n",
     )
 
@@ -339,12 +339,12 @@ def test_suspect_circular_different_targets_do_not_trigger(tmp_path: Path) -> No
     # Same shared_dataset but DIFFERENT targets — should not trigger.
     _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:x\nindependence: independent\nshared_dataset: gse100\n---\n",
     )
     _write(
         tmp_path,
-        "doc/evidence-lines/el02.md",
+        "entities/evidence-lines/el02.md",
         "---\nstance: supports\ntarget: proposition:p2\nsource: paper:y\nindependence: independent\nshared_dataset: gse100\n---\n",
     )
 
@@ -362,7 +362,7 @@ def test_strength_implausible_strong_background_constraint_warns(tmp_path: Path)
 
     p = _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:x\nstrength: strong\nevidence_role: background_constraint\n---\n",
     )
 
@@ -380,7 +380,7 @@ def test_strength_implausible_strong_direct_test_is_clean(tmp_path: Path) -> Non
 
     _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:x\nstrength: strong\nevidence_role: direct_test\n---\n",
     )
 
@@ -394,7 +394,7 @@ def test_strength_implausible_moderate_background_constraint_is_clean(tmp_path: 
 
     _write(
         tmp_path,
-        "doc/evidence-lines/el01.md",
+        "entities/evidence-lines/el01.md",
         "---\nstance: supports\ntarget: proposition:p1\nsource: paper:x\nstrength: moderate\nevidence_role: background_constraint\n---\n",
     )
 
@@ -410,7 +410,7 @@ def test_strength_implausible_moderate_background_constraint_is_clean(tmp_path: 
 def test_unscored_line_warns_for_unrecognized_type(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
 
-    _write(tmp_path, "doc/evidence-lines/el01.md",
+    _write(tmp_path, "entities/evidence-lines/el01.md",
            "---\nstance: supports\ntarget: proposition:p1\n"
            "evidence_type: made_up\nevidence_role: direct_test\nstrength: strong\n---\n")
     results = list(check_evidence_unscored_line(_ctx(tmp_path)))
@@ -420,7 +420,7 @@ def test_unscored_line_warns_for_unrecognized_type(tmp_path: Path):
 def test_unscored_line_clean_for_fully_specified(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
 
-    _write(tmp_path, "doc/evidence-lines/el01.md",
+    _write(tmp_path, "entities/evidence-lines/el01.md",
            "---\nstance: supports\ntarget: proposition:p1\n"
            "evidence_type: empirical_data\nevidence_role: direct_test\nstrength: strong\n---\n")
     assert list(check_evidence_unscored_line(_ctx(tmp_path))) == []
@@ -430,7 +430,7 @@ def test_unscored_line_skips_diagnostic_roles(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
 
     # model_criticism is recognized-but-non-massed: outside EVIDENCE_ROLE_RANK, never flagged.
-    _write(tmp_path, "doc/evidence-lines/el01.md",
+    _write(tmp_path, "entities/evidence-lines/el01.md",
            "---\nstance: disputes\ntarget: proposition:p1\nevidence_role: model_criticism\n---\n")
     assert list(check_evidence_unscored_line(_ctx(tmp_path))) == []
 

@@ -37,7 +37,7 @@ def _build_min_project(tmp_path: Path) -> Path:
     )
     _write(root / "knowledge" / "graph.trig", "")
     _write(
-        root / "doc" / "hypotheses" / "h1.md",
+        root / "entities" / "hypotheses" / "h1.md",
         """
         ---
         id: "hypothesis:h1"
@@ -50,7 +50,7 @@ def _build_min_project(tmp_path: Path) -> Path:
     """,
     )
     _write(
-        root / "doc" / "tasks" / "t1.md",
+        root / "entities" / "tasks" / "t1.md",
         """
         ---
         id: "task:t1"
@@ -104,7 +104,7 @@ def test_materialize_emits_freshness_state(tmp_path: Path):
 
 def test_materialize_does_not_mutate_entity_files(tmp_path: Path):
     root = _build_min_project(tmp_path)
-    h_path = root / "doc" / "hypotheses" / "h1.md"
+    h_path = root / "entities" / "hypotheses" / "h1.md"
     before = h_path.read_text()
     before_mtime = h_path.stat().st_mtime_ns
 
@@ -118,8 +118,8 @@ def test_materialize_rejects_hand_authored_bears_on_to_non_epistemic_target(tmp_
     """A hand-authored sci:bearsOn pointing at a dataset (operational) is invalid."""
     root = _build_min_project(tmp_path)
     # Inject a structured relation that points bears_on at a dataset.
-    (root / "doc" / "datasets").mkdir(parents=True, exist_ok=True)
-    (root / "doc" / "datasets" / "d1.md").write_text(
+    (root / "entities" / "datasets").mkdir(parents=True, exist_ok=True)
+    (root / "entities" / "datasets" / "d1.md").write_text(
         dedent(
             """
             ---
@@ -170,7 +170,7 @@ def test_materialize_emits_closure_bears_on_through_observation(tmp_path: Path):
     """,
     )
     _write(
-        root / "doc" / "propositions" / "p1.md",
+        root / "entities" / "propositions" / "p1.md",
         """
         ---
         id: "proposition:p1"
@@ -183,7 +183,7 @@ def test_materialize_emits_closure_bears_on_through_observation(tmp_path: Path):
     """,
     )
     _write(
-        root / "doc" / "observations" / "o1.md",
+        root / "entities" / "observations" / "o1.md",
         """
         ---
         id: "observation:o1"
@@ -211,7 +211,7 @@ def test_materialize_emits_closure_bears_on_through_observation(tmp_path: Path):
     """,
     )
     _write(
-        root / "doc" / "workflow-runs" / "wfr1.md",
+        root / "entities" / "workflow-runs" / "wfr1.md",
         """
         ---
         id: "workflow-run:wfr1"
@@ -244,7 +244,7 @@ def test_materialize_emits_closure_bears_on_through_observation(tmp_path: Path):
 
 def test_pre_registration_related_epistemic_targets_derive_bears_on_by_default(tmp_path: Path):
     root = _build_min_project(tmp_path)
-    _write(root / "doc" / "pre-registrations" / "p1.md", """
+    _write(root / "entities" / "pre-registrations" / "p1.md", """
         ---
         id: "pre-registration:p1"
         type: "pre-registration"
@@ -271,7 +271,7 @@ def test_pre_registration_related_epistemic_targets_derive_bears_on_by_default(t
 
 def test_pre_registration_commits_to_overrides_related_for_bears_on_derivation(tmp_path: Path):
     root = _build_min_project(tmp_path)
-    _write(root / "doc" / "hypotheses" / "h2.md", """
+    _write(root / "entities" / "hypotheses" / "h2.md", """
         ---
         id: "hypothesis:h2"
         kind: "hypothesis"
@@ -281,7 +281,7 @@ def test_pre_registration_commits_to_overrides_related_for_bears_on_derivation(t
         ---
         Body.
     """)
-    _write(root / "doc" / "pre-registrations" / "p1.md", """
+    _write(root / "entities" / "pre-registrations" / "p1.md", """
         ---
         id: "pre-registration:p1"
         type: "pre-registration"
@@ -309,7 +309,7 @@ def test_pre_registration_commits_to_overrides_related_for_bears_on_derivation(t
 
 def test_pre_registration_empty_commits_to_suppresses_related_fallback(tmp_path: Path):
     root = _build_min_project(tmp_path)
-    _write(root / "doc" / "pre-registrations" / "p1.md", """
+    _write(root / "entities" / "pre-registrations" / "p1.md", """
         ---
         id: "pre-registration:p1"
         type: "pre-registration"
@@ -333,7 +333,7 @@ def test_pre_registration_empty_commits_to_suppresses_related_fallback(tmp_path:
 
 def test_pre_registration_commits_to_unresolved_ref_blocks_materialization(tmp_path: Path):
     root = _build_min_project(tmp_path)
-    _write(root / "doc" / "pre-registrations" / "p1.md", """
+    _write(root / "entities" / "pre-registrations" / "p1.md", """
         ---
         id: "pre-registration:p1"
         type: "pre-registration"
@@ -360,7 +360,7 @@ def test_pre_registration_can_bear_on_inquiry_after_reclassification(tmp_path: P
         knowledge_profiles:
           local: core
     """)
-    _write(root / "doc" / "inquiries" / "i1.md", """
+    _write(root / "entities" / "inquiries" / "i1.md", """
         ---
         id: "inquiry:i1"
         kind: "inquiry"
@@ -370,7 +370,7 @@ def test_pre_registration_can_bear_on_inquiry_after_reclassification(tmp_path: P
         ---
         Body.
     """)
-    _write(root / "doc" / "pre-registrations" / "p1.md", """
+    _write(root / "entities" / "pre-registrations" / "p1.md", """
         ---
         id: "pre-registration:p1"
         type: "pre-registration"
@@ -398,7 +398,7 @@ def test_commits_to_does_not_lock_target_against_other_upstream_changes(tmp_path
         knowledge_profiles:
           local: core
     """)
-    _write(root / "doc" / "hypotheses" / "h1.md", """
+    _write(root / "entities" / "hypotheses" / "h1.md", """
         ---
         id: "hypothesis:h1"
         kind: "hypothesis"
@@ -410,7 +410,7 @@ def test_commits_to_does_not_lock_target_against_other_upstream_changes(tmp_path
         ---
         Body.
     """)
-    _write(root / "doc" / "observations" / "o1.md", """
+    _write(root / "entities" / "observations" / "o1.md", """
         ---
         id: "observation:o1"
         kind: "observation"
@@ -420,7 +420,7 @@ def test_commits_to_does_not_lock_target_against_other_upstream_changes(tmp_path
         ---
         Body.
     """)
-    _write(root / "doc" / "pre-registrations" / "p1.md", """
+    _write(root / "entities" / "pre-registrations" / "p1.md", """
         ---
         id: "pre-registration:p1"
         type: "pre-registration"
@@ -481,7 +481,7 @@ def test_provenance_plus_closure_end_to_end(tmp_path: Path):
     )
     # Paper entity — scanned automatically because markdown adapter covers doc/
     _write(
-        root / "doc" / "papers" / "p1.md",
+        root / "entities" / "papers" / "p1.md",
         """
         ---
         id: "paper:p1"
@@ -497,7 +497,7 @@ def test_provenance_plus_closure_end_to_end(tmp_path: Path):
     # hypothesis:h1 prov:wasDerivedFrom paper:p1, which the freshness engine
     # converts to paper:p1 bears_on hypothesis:h1 (depth 1).
     _write(
-        root / "specs" / "hypotheses" / "h1.md",
+        root / "entities" / "hypotheses" / "h1.md",
         """
         ---
         id: "hypothesis:h1"
@@ -512,7 +512,7 @@ def test_provenance_plus_closure_end_to_end(tmp_path: Path):
     )
     # Story entity — scanned automatically because markdown adapter covers doc/
     _write(
-        root / "doc" / "stories" / "s1.md",
+        root / "entities" / "stories" / "s1.md",
         """
         ---
         id: "story:s1"
@@ -604,7 +604,7 @@ def test_audit_gate_runs_even_when_freshness_disabled(tmp_path: Path):
     """,
     )
     _write(
-        root / "specs" / "hypotheses" / "h1.md",
+        root / "entities" / "hypotheses" / "h1.md",
         """
         ---
         id: "hypothesis:h1"

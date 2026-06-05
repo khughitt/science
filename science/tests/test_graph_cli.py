@@ -2775,7 +2775,7 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
     runner = CliRunner()
 
     # Phase 1: belief (and therefore the `contested` signal) is derived ONLY from
-    # evidence-line ENTITY cito edges materialized from `doc/evidence-lines/*.md`, not
+    # evidence-line ENTITY cito edges materialized from `entities/evidence-lines/*.md`, not
     # from bare cito edges authored by `graph add evidence`. So the contested cluster's
     # contestedness must be authored as real evidence-line markdown and materialized via
     # `graph build`. The cross-cluster adjacency (`cito:discusses` -> shared hypothesis)
@@ -2823,7 +2823,7 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
         _write("science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
 
         _write(
-            "doc/hypotheses/hcluster.md",
+            "entities/hypotheses/hcluster.md",
             "---\n"
             "id: hypothesis:hcluster\n"
             "kind: hypothesis\n"
@@ -2841,9 +2841,9 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
         # dispute (model_criticism + scoped). A diagnostic/scoped dispute sets contested
         # WITHOUT capping or eliminating belief -> "fragile (contested)". This is the
         # cleanest "contested but not refuted" shape (mirrors test_belief_store_integration).
-        _write("doc/propositions/cluster_a.md", _proposition("cluster_a", "Contested local claim A"))
+        _write("entities/propositions/cluster_a.md", _proposition("cluster_a", "Contested local claim A"))
         _write(
-            "doc/evidence-lines/cluster-a-support.md",
+            "entities/evidence-lines/cluster-a-support.md",
             _evidence_line(
                 "cluster-a-support",
                 "Literature support for contested local claim A",
@@ -2859,7 +2859,7 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
             ),
         )
         _write(
-            "doc/evidence-lines/cluster-a-dispute.md",
+            "entities/evidence-lines/cluster-a-dispute.md",
             _evidence_line(
                 "cluster-a-dispute",
                 "Negative result for contested local claim A",
@@ -2876,9 +2876,9 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
         # FRAGILE (NOT contested) contrast cluster: a single supporting evidence-line, no
         # dispute. Shares hypothesis:hcluster with cluster_a so the contested claim's
         # neighborhood is "connected" rather than isolated.
-        _write("doc/propositions/cluster_b.md", _proposition("cluster_b", "Fragile local claim B"))
+        _write("entities/propositions/cluster_b.md", _proposition("cluster_b", "Fragile local claim B"))
         _write(
-            "doc/evidence-lines/cluster-b-support.md",
+            "entities/evidence-lines/cluster-b-support.md",
             _evidence_line(
                 "cluster-b-support",
                 "Single-source support for fragile local claim B",
@@ -2896,9 +2896,9 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
 
         # ISOLATED, well-supported, non-contested claim: two independent empirical
         # direct-test supports, no hypothesis link -> isolated neighborhood, risk 0.
-        _write("doc/propositions/isolated_good.md", _proposition("isolated_good", "Isolated well-supported claim"))
+        _write("entities/propositions/isolated_good.md", _proposition("isolated_good", "Isolated well-supported claim"))
         _write(
-            "doc/evidence-lines/isolated-support-1.md",
+            "entities/evidence-lines/isolated-support-1.md",
             _evidence_line(
                 "isolated-support-1",
                 "Empirical support one for isolated claim",
@@ -2914,7 +2914,7 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
             ),
         )
         _write(
-            "doc/evidence-lines/isolated-support-2.md",
+            "entities/evidence-lines/isolated-support-2.md",
             _evidence_line(
                 "isolated-support-2",
                 "Empirical support two for isolated claim",

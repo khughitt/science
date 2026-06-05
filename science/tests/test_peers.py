@@ -366,8 +366,8 @@ research_question: "..."
             encoding="utf-8",
         )
         # Place a minimal hypothesis entity in the peer so the index isn't empty.
-        (peer / "specs" / "hypotheses").mkdir(parents=True)
-        (peer / "specs" / "hypotheses" / "h01-test.md").write_text(
+        (peer / "entities" / "hypotheses").mkdir(parents=True)
+        (peer / "entities" / "hypotheses" / "h01-test.md").write_text(
             """---
 id: hypothesis:h01-test
 kind: hypothesis

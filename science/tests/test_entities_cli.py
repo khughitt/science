@@ -139,7 +139,7 @@ def test_plural_entity_list_uses_shared_color_styles() -> None:
         seed_project(root)
         write_markdown_entity(
             root,
-            "doc/questions/q01-alpha.md",
+            "entities/questions/q01-alpha.md",
             {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "active"},
         )
 
@@ -307,12 +307,12 @@ def test_entity_list_filters_exact_status() -> None:
         seed_project(root)
         write_markdown_entity(
             root,
-            "doc/questions/q01-alpha.md",
+            "entities/questions/q01-alpha.md",
             {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
         )
         write_markdown_entity(
             root,
-            "doc/questions/q02-beta.md",
+            "entities/questions/q02-beta.md",
             {"id": "question:q02-beta", "type": "question", "title": "Beta", "status": "answered"},
         )
 
@@ -332,7 +332,7 @@ def test_entity_list_filters_related_refs_with_alias_resolution() -> None:
         seed_project(root)
         write_markdown_entity(
             root,
-            "specs/hypotheses/h01-anchor.md",
+            "entities/hypotheses/h01-anchor.md",
             {
                 "id": "hypothesis:h01-anchor",
                 "type": "hypothesis",
@@ -343,7 +343,7 @@ def test_entity_list_filters_related_refs_with_alias_resolution() -> None:
         )
         write_markdown_entity(
             root,
-            "doc/questions/q01-alpha.md",
+            "entities/questions/q01-alpha.md",
             {
                 "id": "question:q01-alpha",
                 "type": "question",
@@ -354,7 +354,7 @@ def test_entity_list_filters_related_refs_with_alias_resolution() -> None:
         )
         write_markdown_entity(
             root,
-            "doc/questions/q02-beta.md",
+            "entities/questions/q02-beta.md",
             {
                 "id": "question:q02-beta",
                 "type": "question",
@@ -373,9 +373,9 @@ def test_entity_list_filters_related_refs_with_alias_resolution() -> None:
 
 def test_entities_inventory_cli_outputs_contract_json(tmp_path) -> None:
     project = tmp_path / "project"
-    (project / "doc").mkdir(parents=True)
+    (project / "entities" / "findings").mkdir(parents=True)
     (project / "science.yaml").write_text("id: cli-project\n", encoding="utf-8")
-    (project / "doc" / "finding.md").write_text(
+    (project / "entities" / "findings" / "finding.md").write_text(
         "---\nkind: finding\nid: finding:f001\ntitle: Finding\n---\n",
         encoding="utf-8",
     )
@@ -393,9 +393,9 @@ def test_entities_inventory_cli_outputs_contract_json(tmp_path) -> None:
 def test_entities_inventory_cli_writes_contract_json_to_output_file(tmp_path) -> None:
     project = tmp_path / "project"
     output = tmp_path / "inventory.json"
-    (project / "doc").mkdir(parents=True)
+    (project / "entities" / "findings").mkdir(parents=True)
     (project / "science.yaml").write_text("id: cli-output-project\n", encoding="utf-8")
-    (project / "doc" / "finding.md").write_text(
+    (project / "entities" / "findings" / "finding.md").write_text(
         "---\nkind: finding\nid: finding:f001\ntitle: Finding\n---\n",
         encoding="utf-8",
     )
@@ -548,12 +548,12 @@ def test_entities_register_kind_errors_on_changed_semantics(tmp_path) -> None:
 
 def test_entities_register_kind_makes_markdown_kind_loadable(tmp_path) -> None:
     project = tmp_path / "project"
-    (project / "doc").mkdir(parents=True)
+    (project / "entities" / "critiques").mkdir(parents=True)
     (project / "science.yaml").write_text(
         "id: kind-project\nknowledge_profiles: {local: local}\n",
         encoding="utf-8",
     )
-    (project / "doc" / "critique.md").write_text(
+    (project / "entities" / "critiques" / "critique.md").write_text(
         "---\nkind: critique\nid: critique:c001\ntitle: Critique\n---\nBody.\n",
         encoding="utf-8",
     )
@@ -572,12 +572,12 @@ def test_entities_register_kind_makes_markdown_kind_loadable(tmp_path) -> None:
 
 def test_entities_register_kind_uses_legacy_profiles_local_fallback(tmp_path) -> None:
     project = tmp_path / "project"
-    (project / "doc").mkdir(parents=True)
+    (project / "entities" / "critiques").mkdir(parents=True)
     (project / "science.yaml").write_text(
         "id: kind-project\nprofiles: {local: lab}\n",
         encoding="utf-8",
     )
-    (project / "doc" / "critique.md").write_text(
+    (project / "entities" / "critiques" / "critique.md").write_text(
         "---\nkind: critique\nid: critique:c001\ntitle: Critique\n---\nBody.\n",
         encoding="utf-8",
     )

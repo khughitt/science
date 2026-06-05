@@ -56,7 +56,7 @@ def _init_commons(tmp_path: Path) -> Path:
 
 
 def test_topic_apply_flatten_unlinks_background_source(tmp_path, monkeypatch) -> None:
-    """A topic sourced from doc/background/topics/ is flattened to doc/topics/."""
+    """A topic sourced from doc/background/topics/ is flattened to entities/topics/."""
     from science_tool.commons.promote import (
         PROMOTE_KIND_TOPIC,
         apply_promote,

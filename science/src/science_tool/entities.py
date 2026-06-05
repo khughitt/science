@@ -132,7 +132,7 @@ _STATUS_VALUES: dict[str, frozenset[str]] = {
     "pre-registration": frozenset({"active", "amended", "superseded", "retired"}),
     "paper": frozenset({"active", "retired"}),
 }
-_ALLOWED_EXPLICIT_ROOTS = (Path("doc"), Path("specs"), Path("research/packages"))
+_ALLOWED_EXPLICIT_ROOTS = (Path("entities"),)
 
 
 def default_status(kind: str) -> str:
@@ -728,7 +728,7 @@ def _resolve_destination_rel_path(
     if not resolved.is_relative_to(project_root):
         raise EntityCommandError("--path must stay within the project root")
     if not any(explicit_path == root or explicit_path.is_relative_to(root) for root in _ALLOWED_EXPLICIT_ROOTS):
-        raise EntityCommandError("--path must be under doc, specs, or research/packages")
+        raise EntityCommandError("--path must be under entities/")
     return explicit_path
 
 

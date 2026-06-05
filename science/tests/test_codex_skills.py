@@ -112,7 +112,7 @@ def test_plan_analysis_generated_skill_mentions_index_and_readiness() -> None:
     expected_strings = (
         "name: science-plan-analysis",
         "skills/INDEX.md",
-        "doc/plans/YYYY-MM-DD-<slug>-analysis-plan.md",
+        "entities/plans/YYYY-MM-DD-<slug>-analysis-plan.md",
         "Readiness Decision",
         "science feedback add",
     )

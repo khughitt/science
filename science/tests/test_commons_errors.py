@@ -139,12 +139,12 @@ def test_project_directory_missing_error_carries_project_and_path() -> None:
 def test_overlay_validation_error_carries_cause() -> None:
     cause = ValueError("schema boom")
     exc = OverlayValidationError(
-        Path("/p/doc/papers/Adams2025.md"),
+        Path("/p/entities/papers/Adams2025.md"),
         canonical_id="paper:Adams2025",
         cause=cause,
     )
     assert isinstance(exc, CommonsError)
-    assert exc.overlay_path == Path("/p/doc/papers/Adams2025.md")
+    assert exc.overlay_path == Path("/p/entities/papers/Adams2025.md")
     assert exc.canonical_id == "paper:Adams2025"
     assert exc.cause is cause
     assert "schema boom" in str(exc)

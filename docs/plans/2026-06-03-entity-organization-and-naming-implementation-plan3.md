@@ -1326,13 +1326,30 @@ copy lives at `/mnt/ssd/scratch/cycles-migrate` (throwaway).
 > `entities/` the only supported layout; un-migrated (`layout_version: 2`)
 > projects will fail validation by design (design §11).
 
-- [ ] **Step 1: Discovery scans `entities/` only**
+- [x] **Step 1: Discovery scans `entities/` only**
 
 `science/src/science_tool/graph/storage_adapters/markdown.py`:
 
 ```python
         self._scan_roots = scan_roots or ["entities", "research/packages"]
 ```
+
+> **Refinement found during cutover execution (2026-06-05):** the `markdown.py`
+> *default* now scans `entities/` + `research/packages` for the 21 layout kinds,
+> but the **main graph build** (`graph/sources.py`) must ALSO scan the
+> datapackage/workflow family's existing markdown roots — `doc/datasets`,
+> `doc/workflows`, `doc/workflow-runs`. Those kinds (`dataset`, `workflow`,
+> `workflow-run`) are *not* in `markdown_entity_kinds()`, were never migrated to
+> `entities/`, and are the only discoverer of that family's markdown (cf.
+> `validate/_helpers.py`, `dataset_promotion_contract.py`, `commons/promote.py`).
+> Dropping `doc/` wholesale orphaned them for *every* project (the cycles pilot
+> didn't author that markdown, so it wasn't caught). Fix: pass explicit
+> `scan_roots=["entities","research/packages","doc/datasets","doc/workflows","doc/workflow-runs"]`
+> at the `sources.py` call site; the default stays `entities/`-only. `doc/` is a
+> **transitional** home for this family — promoting `dataset` (and reconsidering
+> `workflow`/`workflow-run`) to first-class `entities/` kinds, with dataset↔claim
+> epistemic edges, is deferred to a dedicated follow-up plan
+> (`docs/plans/2026-06-05-dataset-first-class-entity-design.md`).
 
 - [ ] **Step 2: Drop singleton fallbacks**
 

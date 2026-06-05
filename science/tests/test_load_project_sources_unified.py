@@ -35,8 +35,8 @@ def _seed(root: Path) -> None:
 
 def test_load_produces_typed_entity_instances(tmp_path: Path) -> None:
     _seed(tmp_path)
-    (tmp_path / "doc" / "hypotheses").mkdir(parents=True)
-    (tmp_path / "doc" / "hypotheses" / "h1.md").write_text(
+    (tmp_path / "entities" / "hypotheses").mkdir(parents=True)
+    (tmp_path / "entities" / "hypotheses" / "h1.md").write_text(
         '---\nid: "hypothesis:h1"\ntype: "hypothesis"\ntitle: "H1"\n---\n',
         encoding="utf-8",
     )
@@ -189,8 +189,8 @@ def test_load_produces_dataset_entity_for_datapackage(tmp_path: Path) -> None:
 
 def test_global_identity_collision_across_adapters(tmp_path: Path) -> None:
     _seed(tmp_path)
-    (tmp_path / "doc" / "datasets").mkdir(parents=True)
-    (tmp_path / "doc" / "datasets" / "x.md").write_text(
+    (tmp_path / "entities" / "datasets").mkdir(parents=True)
+    (tmp_path / "entities" / "datasets" / "x.md").write_text(
         '---\nid: "dataset:x"\ntype: "dataset"\ntitle: "X md"\n'
         'origin: "external"\n'
         'access:\n  level: "public"\n  verified: false\n---\n',
@@ -228,8 +228,8 @@ def test_all_entities_inherit_from_entity(tmp_path: Path) -> None:
 
 def test_load_project_sources_includes_research_question_with_rq_prefix(tmp_path: Path) -> None:
     _seed(tmp_path)
-    (tmp_path / "specs").mkdir()
-    (tmp_path / "specs" / "research-question.md").write_text(
+    (tmp_path / "entities").mkdir()
+    (tmp_path / "entities" / "research-question.md").write_text(
         "\n".join(
             [
                 "---",
@@ -340,8 +340,8 @@ def test_load_project_sources_returns_typed_mechanism_entity(tmp_path: Path) -> 
 
 def test_load_project_sources_returns_typed_theme_entity(tmp_path: Path) -> None:
     _seed(tmp_path)
-    (tmp_path / "doc" / "themes").mkdir(parents=True)
-    (tmp_path / "doc" / "themes" / "transportability.md").write_text(
+    (tmp_path / "entities" / "themes").mkdir(parents=True)
+    (tmp_path / "entities" / "themes" / "transportability.md").write_text(
         "\n".join(
             [
                 "---",
@@ -362,8 +362,8 @@ def test_load_project_sources_returns_typed_theme_entity(tmp_path: Path) -> None
         ),
         encoding="utf-8",
     )
-    (tmp_path / "doc" / "questions").mkdir(parents=True)
-    (tmp_path / "doc" / "questions" / "q001-recurring.md").write_text(
+    (tmp_path / "entities" / "questions").mkdir(parents=True)
+    (tmp_path / "entities" / "questions" / "q001-recurring.md").write_text(
         "\n".join(
             [
                 "---",
@@ -392,8 +392,8 @@ def test_load_project_sources_returns_typed_theme_entity(tmp_path: Path) -> None
 
 def test_load_project_sources_rejects_invalid_reasoning_enum(tmp_path: Path) -> None:
     _seed(tmp_path)
-    (tmp_path / "specs" / "propositions").mkdir(parents=True)
-    (tmp_path / "specs" / "propositions" / "p1.md").write_text(
+    (tmp_path / "entities" / "propositions").mkdir(parents=True)
+    (tmp_path / "entities" / "propositions" / "p1.md").write_text(
         "\n".join(
             [
                 "---",
@@ -421,8 +421,8 @@ def test_load_project_sources_preserves_markdown_identity_fields(tmp_path: Path)
         "name: unified\nprofile: research\nprofiles: {local: local}\nontologies: [biology]\n",
         encoding="utf-8",
     )
-    (tmp_path / "doc" / "genes").mkdir(parents=True)
-    (tmp_path / "doc" / "genes" / "EZH2.md").write_text(
+    (tmp_path / "entities" / "genes").mkdir(parents=True)
+    (tmp_path / "entities" / "genes" / "EZH2.md").write_text(
         "\n".join(
             [
                 "---",
@@ -540,8 +540,8 @@ def test_load_project_sources_preserves_aggregate_identity_fields(tmp_path: Path
 
 def test_load_normalizes_legacy_parameter_kind(tmp_path: Path) -> None:
     _seed(tmp_path)
-    (tmp_path / "doc" / "parameters").mkdir(parents=True)
-    (tmp_path / "doc" / "parameters" / "p1.md").write_text(
+    (tmp_path / "entities" / "parameters").mkdir(parents=True)
+    (tmp_path / "entities" / "parameters" / "p1.md").write_text(
         '---\nid: "parameter:kcat"\ntype: "parameter"\ntitle: "kcat"\n---\n',
         encoding="utf-8",
     )
@@ -557,13 +557,13 @@ def test_load_project_sources_accepts_local_gene_entity_when_biology_declared(tm
         "name: unified\nprofile: research\nprofiles: {local: local}\nontologies: [biology]\n",
         encoding="utf-8",
     )
-    (tmp_path / "doc" / "genes").mkdir(parents=True)
-    (tmp_path / "doc" / "genes" / "phf19.md").write_text(
+    (tmp_path / "entities" / "genes").mkdir(parents=True)
+    (tmp_path / "entities" / "genes" / "phf19.md").write_text(
         '---\nid: "gene:phf19"\ntype: "gene"\ntitle: "PHF19"\nrelated: ["question:q01"]\n---\n',
         encoding="utf-8",
     )
-    (tmp_path / "doc" / "questions").mkdir(parents=True)
-    (tmp_path / "doc" / "questions" / "q01.md").write_text(
+    (tmp_path / "entities" / "questions").mkdir(parents=True)
+    (tmp_path / "entities" / "questions" / "q01.md").write_text(
         '---\nid: "question:q01"\ntype: "question"\ntitle: "Question"\n---\n',
         encoding="utf-8",
     )
@@ -591,8 +591,8 @@ def test_load_project_sources_skips_local_gene_entity_without_declared_ontology(
 
 def test_load_project_sources_preserves_legacy_unknown_type(tmp_path: Path) -> None:
     _seed(tmp_path)
-    (tmp_path / "doc").mkdir(exist_ok=True)
-    (tmp_path / "doc" / "legacy.md").write_text(
+    (tmp_path / "entities").mkdir(exist_ok=True)
+    (tmp_path / "entities" / "legacy.md").write_text(
         '---\nid: "unknown:legacy-record"\ntype: "unknown"\ntitle: "Legacy unknown"\n---\n',
         encoding="utf-8",
     )
@@ -689,8 +689,8 @@ def test_load_project_sources_reads_repo_local_profile_manifest(tmp_path: Path) 
         ),
         encoding="utf-8",
     )
-    (tmp_path / "doc" / "meta").mkdir(parents=True)
-    (tmp_path / "doc" / "meta" / "next-steps.md").write_text(
+    (tmp_path / "entities" / "meta").mkdir(parents=True)
+    (tmp_path / "entities" / "meta" / "next-steps.md").write_text(
         '---\nid: "meta:next-steps"\ntype: "meta"\ntitle: "Next steps"\n---\n',
         encoding="utf-8",
     )
@@ -731,13 +731,13 @@ def test_load_project_sources_skips_invalid_repo_local_profile_entity(tmp_path: 
         ),
         encoding="utf-8",
     )
-    (tmp_path / "doc" / "notes").mkdir(parents=True)
-    (tmp_path / "doc" / "notes" / "labnote.md").write_text(
+    (tmp_path / "entities" / "notes").mkdir(parents=True)
+    (tmp_path / "entities" / "notes" / "labnote.md").write_text(
         '---\nid: "labnote:rollup"\ntype: "labnote"\n---\n',
         encoding="utf-8",
     )
-    (tmp_path / "doc" / "hypotheses").mkdir(parents=True)
-    (tmp_path / "doc" / "hypotheses" / "h1.md").write_text(
+    (tmp_path / "entities" / "hypotheses").mkdir(parents=True)
+    (tmp_path / "entities" / "hypotheses" / "h1.md").write_text(
         '---\nid: "hypothesis:h1"\ntype: "hypothesis"\ntitle: "H1"\n---\n',
         encoding="utf-8",
     )

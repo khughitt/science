@@ -27,7 +27,7 @@ def _project_with_dangling_chain_link(tmp_path: Path) -> Path:
     # mechanism:a exists; mechanism:b does NOT -- this is the dangling ref.
     _write(
         tmp_path,
-        "doc/mechanisms/a.md",
+        "entities/mechanisms/a.md",
         """---
 id: mechanism:a
 kind: mechanism
@@ -47,7 +47,7 @@ propositions:
     )
     _write(
         tmp_path,
-        "doc/chains/ab.md",
+        "entities/chains/ab.md",
         """---
 id: chain:ab
 kind: structural-chain
@@ -83,7 +83,7 @@ def test_registered_chain_schema_error_fails_audit(tmp_path: Path) -> None:
     _write(tmp_path, "science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
     _write(
         tmp_path,
-        "doc/chains/a.md",
+        "entities/chains/a.md",
         """---
 id: chain:a
 kind: structural-chain
@@ -99,7 +99,7 @@ chain:
     )
 
     with pytest.raises(
-        ValueError, match="schema validation failed.*structural-chain.*doc/chains/a.md.*at least two links"
+        ValueError, match="schema validation failed.*structural-chain.*entities/chains/a.md.*at least two links"
     ):
         materialization_audit(tmp_path)
 
@@ -108,7 +108,7 @@ def test_dangling_audits_ref_surfaces(tmp_path: Path) -> None:
     _write(tmp_path, "science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
     _write(
         tmp_path,
-        "doc/audits/x.md",
+        "entities/audits/x.md",
         """---
 id: chain-audit:x
 kind: chain-audit
@@ -146,7 +146,7 @@ def test_dangling_proposition_ref_in_chain_audit_surfaces(tmp_path: Path) -> Non
     _write(tmp_path, "science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
     _write(
         tmp_path,
-        "doc/chains/abc.md",
+        "entities/chains/abc.md",
         """---
 id: chain:abc
 kind: structural-chain
@@ -164,7 +164,7 @@ chain:
     for slug in ("a", "b"):
         _write(
             tmp_path,
-            f"doc/mechanisms/{slug}.md",
+            f"entities/mechanisms/{slug}.md",
             f"""---
 id: mechanism:{slug}
 kind: mechanism
@@ -184,7 +184,7 @@ propositions:
         )
     _write(
         tmp_path,
-        "doc/audits/abc.md",
+        "entities/audits/abc.md",
         """---
 id: chain-audit:abc
 kind: chain-audit

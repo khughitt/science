@@ -202,8 +202,8 @@ def _setup_with_built_graph(tmp_path: Path) -> Path:
     `task` — see materialize.py:220 and T9's integration test fixture.
     """
     root = _setup_project_with_hypothesis(tmp_path)
-    (root / "doc" / "tasks").mkdir(parents=True)
-    (root / "doc" / "tasks" / "t1.md").write_text(
+    (root / "entities" / "tasks").mkdir(parents=True)
+    (root / "entities" / "tasks" / "t1.md").write_text(
         dedent(
             """
             ---

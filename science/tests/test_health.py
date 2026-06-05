@@ -15,7 +15,7 @@ def _write_identity_policy_project(tmp_path: Path) -> Path:
         "name: test\nprofile: research\nprofiles: {local: local}\nontologies: [biology]\n",
         encoding="utf-8",
     )
-    genes_dir = tmp_path / "doc" / "genes"
+    genes_dir = tmp_path / "entities" / "genes"
     genes_dir.mkdir(parents=True)
     (genes_dir / "ezh2.md").write_text(
         "\n".join(
@@ -96,8 +96,8 @@ def _write_identity_policy_project(tmp_path: Path) -> Path:
         ),
         encoding="utf-8",
     )
-    (tmp_path / "doc" / "questions").mkdir(parents=True)
-    (tmp_path / "doc" / "questions" / "q01.md").write_text(
+    (tmp_path / "entities" / "questions").mkdir(parents=True)
+    (tmp_path / "entities" / "questions" / "q01.md").write_text(
         "\n".join(
             [
                 "---",
@@ -119,7 +119,7 @@ def _write_identity_policy_project(tmp_path: Path) -> Path:
 
 def _write_layered_claim_project(tmp_path: Path) -> Path:
     (tmp_path / "science.yaml").write_text("name: test\n")
-    propositions_dir = tmp_path / "specs" / "propositions"
+    propositions_dir = tmp_path / "entities" / "propositions"
     propositions_dir.mkdir(parents=True)
     (propositions_dir / "p01.md").write_text(
         "\n".join(
@@ -171,7 +171,7 @@ class TestCollectUnresolvedRefs:
         from science_tool.graph.health import collect_unresolved_refs
 
         (tmp_path / "science.yaml").write_text("name: test\n")
-        spec = tmp_path / "specs" / "hypotheses"
+        spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         # Two hypotheses both reference topic:foo (which doesn't exist)
         (spec / "h01.md").write_text(
@@ -214,7 +214,7 @@ class TestCollectUnresolvedRefs:
         from science_tool.graph.health import collect_unresolved_refs
 
         (tmp_path / "science.yaml").write_text("name: test\n")
-        spec = tmp_path / "specs" / "hypotheses"
+        spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
             '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
@@ -230,7 +230,7 @@ class TestCollectUnresolvedRefs:
         from science_tool.graph.health import collect_unresolved_refs
 
         (tmp_path / "science.yaml").write_text("name: test\n")
-        spec = tmp_path / "specs" / "hypotheses"
+        spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
             '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
@@ -297,11 +297,19 @@ class TestBuildHealthReport:
         from science_tool.graph.health import build_health_report
 
         (tmp_path / "science.yaml").write_text("name: test\n")
-        spec = tmp_path / "specs" / "hypotheses"
+        spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
             '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
-            'status: "proposed"\ntags: [legacy]\nrelated: [topic:foo]\n'
+            'status: "proposed"\nrelated: [topic:foo]\n'
+            'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
+        )
+        # Lingering-tags is a legacy-cleanup check that still scans doc/specs.
+        legacy = tmp_path / "doc" / "hypotheses"
+        legacy.mkdir(parents=True)
+        (legacy / "h02.md").write_text(
+            '---\nid: "hypothesis:h02"\ntype: "hypothesis"\ntitle: "H2"\n'
+            'status: "proposed"\ntags: [legacy]\nrelated: []\n'
             'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
         )
 
@@ -392,7 +400,7 @@ class TestBuildHealthReport:
         from science_tool.graph.health import build_health_report
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
-        doc = tmp_path / "doc" / "questions"
+        doc = tmp_path / "entities" / "questions"
         doc.mkdir(parents=True)
         (doc / "q01.md").write_text(
             "---\n"
@@ -561,7 +569,7 @@ class TestBuildHealthReport:
         from science_tool.graph.health import build_health_report
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
-        doc = tmp_path / "doc" / "questions"
+        doc = tmp_path / "entities" / "questions"
         doc.mkdir(parents=True)
         (doc / "q01.md").write_text(
             "---\n"
@@ -585,14 +593,14 @@ class TestBuildHealthReport:
                 "field": "related",
                 "mention_count": 1,
                 "refs": ["decision:d1"],
-                "sources": ["doc/questions/q01.md"],
+                "sources": ["entities/questions/q01.md"],
             },
             {
                 "kind": "latent",
                 "field": "commits_to",
                 "mention_count": 1,
                 "refs": ["latent:l1"],
-                "sources": ["doc/questions/q01.md"],
+                "sources": ["entities/questions/q01.md"],
             },
         ]
         assert any(row["target"] == "hypothesis:h01" for row in report["unresolved_refs"])
@@ -731,7 +739,7 @@ class TestHealthCLI:
         from science_tool.cli import main
 
         (tmp_path / "science.yaml").write_text("name: test\n")
-        spec = tmp_path / "specs" / "hypotheses"
+        spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
             '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
@@ -752,7 +760,7 @@ class TestHealthCLI:
         from science_tool.cli import main
 
         (tmp_path / "science.yaml").write_text("name: test\n")
-        spec = tmp_path / "specs" / "hypotheses"
+        spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
             '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
@@ -787,7 +795,7 @@ class TestHealthCLI:
         from science_tool.cli import main
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
-        spec = tmp_path / "specs" / "hypotheses"
+        spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
             '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
@@ -809,7 +817,7 @@ class TestHealthCLI:
         from science_tool.cli import main
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
-        doc = tmp_path / "doc" / "questions"
+        doc = tmp_path / "entities" / "questions"
         doc.mkdir(parents=True)
         (doc / "q01.md").write_text(
             "---\n"
@@ -1105,7 +1113,7 @@ class TestHealthCLI:
         from science_tool.cli import main
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
-        doc = tmp_path / "doc"
+        doc = tmp_path / "entities"
         doc.mkdir(parents=True)
         (doc / "summary.md").write_text("This cites [[h999]] in prose.\n", encoding="utf-8")
 

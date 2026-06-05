@@ -1373,7 +1373,7 @@ def _seed_with_dataset(tmp_path: Path) -> Path:
     seed_project(tmp_path)
     write_markdown_entity(
         tmp_path,
-        "doc/datasets/foo.md",
+        "entities/datasets/foo.md",
         {
             "id": "dataset:foo",
             "type": "dataset",
@@ -1443,7 +1443,7 @@ def test_block_task_multiple_blockers(tmp_path: Path):
     root = _seed_with_dataset(tmp_path)
     write_markdown_entity(
         root,
-        "doc/datasets/bar.md",
+        "entities/datasets/bar.md",
         {
             "id": "dataset:bar",
             "type": "dataset",

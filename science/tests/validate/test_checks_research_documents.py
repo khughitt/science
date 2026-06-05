@@ -113,29 +113,29 @@ def test_discussions_warn_for_missing_sections_and_skip_comparison_docs(tmp_path
     from science_tool.validate.checks.discussions import check_discussions
 
     ctx = _ctx(tmp_path)
-    discussions_dir = tmp_path / "doc" / "discussions"
+    discussions_dir = tmp_path / "entities" / "discussions"
     discussions_dir.mkdir(parents=True)
-    discussions_dir.joinpath("topic.md").write_text("## Focus\n", encoding="utf-8")
+    discussions_dir.joinpath("0001-topic.md").write_text("## Focus\n", encoding="utf-8")
     discussions_dir.joinpath("comparison-topic.md").write_text("", encoding="utf-8")
 
     messages = _messages(check_discussions(ctx))
 
-    assert "Checking doc/discussions/topic.md..." in messages
-    assert "Checking doc/discussions/comparison-topic.md..." not in messages
-    assert "doc/discussions/topic.md missing section: ## Current Position" in messages
-    assert "doc/discussions/topic.md missing section: ## Critical Analysis" in messages
-    assert "doc/discussions/topic.md missing section: ## Evidence Needed" in messages
-    assert "doc/discussions/topic.md missing section: ## Prioritized Follow-Ups" in messages
-    assert "doc/discussions/topic.md missing section: ## Synthesis" in messages
+    assert "Checking entities/discussions/0001-topic.md..." in messages
+    assert "Checking entities/discussions/comparison-topic.md..." not in messages
+    assert "entities/discussions/0001-topic.md missing section: ## Current Position" in messages
+    assert "entities/discussions/0001-topic.md missing section: ## Critical Analysis" in messages
+    assert "entities/discussions/0001-topic.md missing section: ## Evidence Needed" in messages
+    assert "entities/discussions/0001-topic.md missing section: ## Prioritized Follow-Ups" in messages
+    assert "entities/discussions/0001-topic.md missing section: ## Synthesis" in messages
 
 
 def test_discussions_double_blind_mode_requires_addendum_sections(tmp_path: Path) -> None:
     from science_tool.validate.checks.discussions import check_discussions
 
     ctx = _ctx(tmp_path)
-    discussions_dir = tmp_path / "doc" / "discussions"
+    discussions_dir = tmp_path / "entities" / "discussions"
     discussions_dir.mkdir(parents=True)
-    discussions_dir.joinpath("double.md").write_text(
+    discussions_dir.joinpath("0001-double.md").write_text(
         "\n".join(
             [
                 'mode: "double-blind"',
@@ -154,28 +154,26 @@ def test_discussions_double_blind_mode_requires_addendum_sections(tmp_path: Path
     messages = _messages(check_discussions(ctx))
 
     assert (
-        "doc/discussions/double.md double-blind mode missing section: ## Double-Blind Addendum (If mode = double-blind)"
+        "entities/discussions/0001-double.md double-blind mode missing section: ## Double-Blind Addendum (If mode = double-blind)"
         in messages
     )
-    assert "doc/discussions/double.md double-blind mode missing section: ### Agent Independent Draft" in messages
-    assert "doc/discussions/double.md double-blind mode missing section: ### User Independent Draft" in messages
-    assert "doc/discussions/double.md double-blind mode missing section: ### Comparison" in messages
-    assert "doc/discussions/double.md double-blind mode missing section: ### Combined Synthesis" not in messages
+    assert "entities/discussions/0001-double.md double-blind mode missing section: ### Agent Independent Draft" in messages
+    assert "entities/discussions/0001-double.md double-blind mode missing section: ### User Independent Draft" in messages
+    assert "entities/discussions/0001-double.md double-blind mode missing section: ### Comparison" in messages
+    assert "entities/discussions/0001-double.md double-blind mode missing section: ### Combined Synthesis" not in messages
 
 
 def test_prereg_warns_for_missing_sections_and_required_frontmatter_fields(tmp_path: Path) -> None:
     from science_tool.validate.checks.prereg import check_prereg
 
     ctx = _ctx(tmp_path)
-    meta_dir = tmp_path / "doc" / "meta"
-    prereg_dir = tmp_path / "doc" / "pre-registrations"
-    meta_dir.mkdir(parents=True)
+    prereg_dir = tmp_path / "entities" / "pre-registrations"
     prereg_dir.mkdir(parents=True)
-    meta_dir.joinpath("pre-registration-a.md").write_text(
+    prereg_dir.joinpath("0001-a.md").write_text(
         "---\ntype: 'pre-registration'\n---\n## Hypotheses Under Test\n",
         encoding="utf-8",
     )
-    prereg_dir.joinpath("b.md").write_text(
+    prereg_dir.joinpath("0002-b.md").write_text(
         "\n".join(
             [
                 "---",
@@ -194,33 +192,34 @@ def test_prereg_warns_for_missing_sections_and_required_frontmatter_fields(tmp_p
 
     messages = _messages(check_prereg(ctx))
 
-    assert "Pre-registration doc/meta/pre-registration-a.md missing section: Expected Outcomes" in messages
-    assert "Pre-registration doc/meta/pre-registration-a.md missing section: Decision Criteria" in messages
-    assert "Pre-registration doc/meta/pre-registration-a.md missing section: Null Result Plan" in messages
+    assert "Pre-registration entities/pre-registrations/0001-a.md missing section: Expected Outcomes" in messages
+    assert "Pre-registration entities/pre-registrations/0001-a.md missing section: Decision Criteria" in messages
+    assert "Pre-registration entities/pre-registrations/0001-a.md missing section: Null Result Plan" in messages
     assert (
-        "doc/meta/pre-registration-a.md type 'pre-registration' should declare a 'committed:' date in frontmatter"
+        "entities/pre-registrations/0001-a.md type 'pre-registration' should declare a 'committed:' date in frontmatter"
         in messages
     )
     assert (
-        "doc/meta/pre-registration-a.md type 'pre-registration' should declare a 'spec:' field (empty string is OK if no paired design doc)"
+        "entities/pre-registrations/0001-a.md type 'pre-registration' should declare a 'spec:' field (empty string is OK if no paired design doc)"
         in messages
     )
-    assert not any(message.startswith("Pre-registration doc/pre-registrations/b.md") for message in messages)
+    assert not any(message.startswith("Pre-registration entities/pre-registrations/0002-b.md") for message in messages)
 
 
 def test_hypothesis_comparisons_warn_for_missing_sections(tmp_path: Path) -> None:
     from science_tool.validate.checks.hypothesis_comparisons import check_hypothesis_comparisons
 
     ctx = _ctx(tmp_path)
-    comparisons_dir = tmp_path / "doc" / "discussions"
+    comparisons_dir = tmp_path / "entities" / "discussions"
     comparisons_dir.mkdir(parents=True)
-    comparisons_dir.joinpath("comparison-a.md").write_text("## Hypotheses Compared\n", encoding="utf-8")
+    # Marker-based detection (entities layout — no filename prefix required)
+    comparisons_dir.joinpath("0001-comparison-a.md").write_text("## Hypotheses Compared\n", encoding="utf-8")
 
     messages = _messages(check_hypothesis_comparisons(ctx))
 
-    assert "Comparison doc/discussions/comparison-a.md missing section: Evidence Inventory" in messages
-    assert "Comparison doc/discussions/comparison-a.md missing section: Discriminating Predictions" in messages
-    assert "Comparison doc/discussions/comparison-a.md missing section: Current Verdict" in messages
+    assert "Comparison entities/discussions/0001-comparison-a.md missing section: Evidence Inventory" in messages
+    assert "Comparison entities/discussions/0001-comparison-a.md missing section: Discriminating Predictions" in messages
+    assert "Comparison entities/discussions/0001-comparison-a.md missing section: Current Verdict" in messages
 
 
 # ---------------------------------------------------------------------------
@@ -290,18 +289,20 @@ def test_hypothesis_comparisons_entities_plain_discussion_not_flagged(tmp_path: 
     assert not any("0002-notes.md" in m for m in messages), messages
 
 
-def test_hypothesis_comparisons_legacy_filename_glob_still_works(tmp_path: Path) -> None:
-    """Legacy doc/discussions/comparison-*.md files are still flagged (behavior preserved)."""
+def test_hypothesis_comparisons_entities_marker_no_legacy_doc_scan(tmp_path: Path) -> None:
+    """After cutover, doc/discussions/comparison-*.md files are NOT scanned.
+    Only entities/discussions/*.md files with the marker are checked."""
     from science_tool.validate.checks.hypothesis_comparisons import check_hypothesis_comparisons
 
     ctx = _ctx(tmp_path)
+    # Legacy location: should produce no results
     legacy_dir = tmp_path / "doc" / "discussions"
     legacy_dir.mkdir(parents=True)
     legacy_dir.joinpath("comparison-old.md").write_text("## Hypotheses Compared\n", encoding="utf-8")
 
     messages = _messages(check_hypothesis_comparisons(ctx))
 
-    assert any("comparison-old.md" in m and "Evidence Inventory" in m for m in messages), messages
+    assert not any("comparison-old.md" in m for m in messages), messages
 
 
 def test_bias_audits_warn_for_missing_sections(tmp_path: Path) -> None:
@@ -322,7 +323,7 @@ def test_synthesis_frontmatter_gates_on_type_and_validates_report_kind(tmp_path:
     from science_tool.validate.checks.discussions import check_discussions
 
     ctx = _ctx(tmp_path)
-    synthesis_dir = tmp_path / "doc" / "reports" / "synthesis"
+    synthesis_dir = tmp_path / "entities" / "synthesis"
     synthesis_dir.mkdir(parents=True)
     synthesis_dir.joinpath("ignored.md").write_text("type: report\n", encoding="utf-8")
     synthesis_dir.joinpath("missing-kind.md").write_text("type: synthesis\n", encoding="utf-8")
@@ -333,11 +334,11 @@ def test_synthesis_frontmatter_gates_on_type_and_validates_report_kind(tmp_path:
 
     messages = _messages(check_discussions(ctx))
 
-    assert "doc/reports/synthesis/ignored.md: missing report_kind" not in messages
-    assert "doc/reports/synthesis/missing-kind.md: missing report_kind" in messages
-    assert "doc/reports/synthesis/missing-kind.md: missing source_commit" in messages
-    assert "doc/reports/synthesis/invalid-kind.md: invalid report_kind 'other'" in messages
-    assert "doc/reports/synthesis/invalid-kind.md: missing source_commit" not in messages
+    assert "entities/synthesis/ignored.md: missing report_kind" not in messages
+    assert "entities/synthesis/missing-kind.md: missing report_kind" in messages
+    assert "entities/synthesis/missing-kind.md: missing source_commit" in messages
+    assert "entities/synthesis/invalid-kind.md: invalid report_kind 'other'" in messages
+    assert "entities/synthesis/invalid-kind.md: missing source_commit" not in messages
 
 
 def test_research_question_found_in_entities(tmp_path: Path) -> None:
@@ -356,8 +357,7 @@ def test_synthesis_frontmatter_requires_per_kind_fields(tmp_path: Path) -> None:
     from science_tool.validate.checks.discussions import check_discussions
 
     ctx = _ctx(tmp_path)
-    reports_dir = tmp_path / "doc" / "reports"
-    synthesis_dir = reports_dir / "synthesis"
+    synthesis_dir = tmp_path / "entities" / "synthesis"
     synthesis_dir.mkdir(parents=True)
     synthesis_dir.joinpath("rollup.md").write_text(
         "\n".join(["type: synthesis", "report_kind: synthesis-rollup", "source_commit: abc"]),
@@ -367,15 +367,15 @@ def test_synthesis_frontmatter_requires_per_kind_fields(tmp_path: Path) -> None:
         "\n".join(["type: synthesis", "report_kind: hypothesis-synthesis", "source_commit: abc", "hypothesis: h1"]),
         encoding="utf-8",
     )
-    reports_dir.joinpath("synthesis.md").write_text(
+    synthesis_dir.joinpath("emergent.md").write_text(
         "\n".join(["type: synthesis", "report_kind: emergent-threads", "source_commit: abc", "orphan_ids: []"]),
         encoding="utf-8",
     )
 
     messages = _messages(check_discussions(ctx))
 
-    assert "doc/reports/synthesis/rollup.md: missing synthesized_from" in messages
-    assert "doc/reports/synthesis/hypothesis.md: missing provenance_coverage" in messages
-    assert "doc/reports/synthesis.md: missing orphan_question_count" in messages
-    assert "doc/reports/synthesis.md: missing orphan_interpretation_count" in messages
-    assert "doc/reports/synthesis.md: missing orphan_ids" not in messages
+    assert "entities/synthesis/rollup.md: missing synthesized_from" in messages
+    assert "entities/synthesis/hypothesis.md: missing provenance_coverage" in messages
+    assert "entities/synthesis/emergent.md: missing orphan_question_count" in messages
+    assert "entities/synthesis/emergent.md: missing orphan_interpretation_count" in messages
+    assert "entities/synthesis/emergent.md: missing orphan_ids" not in messages

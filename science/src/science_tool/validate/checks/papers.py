@@ -1,8 +1,7 @@
 """Port of validate.sh "Checking paper summaries..." block.
 
-Checks paper entities under both ``entities/papers/`` (new layout) and the
-legacy ``$DOC_DIR/background/papers/`` root for template section conformance
-and dataset-ref validity.
+Checks paper entities under ``entities/papers/`` for template section
+conformance and dataset-ref validity.
 """
 
 from __future__ import annotations

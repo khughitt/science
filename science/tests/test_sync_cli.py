@@ -33,7 +33,7 @@ def _write_entity_md(
     primary_external_id: ExternalId | None = None,
     scope: str | None = None,
 ) -> None:
-    doc_dir = project_root / "doc"
+    doc_dir = project_root / "entities"
     doc_dir.mkdir(parents=True, exist_ok=True)
     primary_block = ""
     if primary_external_id is not None:

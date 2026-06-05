@@ -22,7 +22,8 @@ knowledge_profiles:
 """.strip(),
         encoding="utf-8",
     )
-    (project / "doc" / "finding.md").write_text(
+    (project / "entities" / "findings").mkdir(parents=True)
+    (project / "entities" / "findings" / "finding.md").write_text(
         """
 ---
 kind: finding
@@ -145,9 +146,9 @@ def test_build_inventory_preserves_task_dsl_type_in_data(tmp_path) -> None:
 
 def test_build_inventory_fails_when_entity_source_adapter_mapping_is_missing(tmp_path, monkeypatch) -> None:
     project = tmp_path / "project"
-    (project / "doc").mkdir(parents=True)
+    (project / "entities" / "findings").mkdir(parents=True)
     (project / "science.yaml").write_text("id: adapter-project\n", encoding="utf-8")
-    (project / "doc" / "finding.md").write_text(
+    (project / "entities" / "findings" / "finding.md").write_text(
         "---\nkind: finding\nid: finding:f001\ntitle: Finding\n---\n",
         encoding="utf-8",
     )
@@ -226,9 +227,9 @@ def test_build_inventory_promotes_targets_without_duplicating_them_in_data(tmp_p
 
 def test_build_inventory_schema_version_2_returns_v2_payload_with_empty_overlays(tmp_path) -> None:
     project = tmp_path / "project"
-    (project / "doc").mkdir(parents=True)
+    (project / "entities" / "findings").mkdir(parents=True)
     (project / "science.yaml").write_text("id: v2-project\n", encoding="utf-8")
-    (project / "doc" / "finding.md").write_text(
+    (project / "entities" / "findings" / "finding.md").write_text(
         "---\nkind: finding\nid: finding:f001\ntitle: Finding\n---\n",
         encoding="utf-8",
     )
@@ -246,13 +247,14 @@ def test_build_inventory_schema_version_2_returns_v2_payload_with_empty_overlays
 
 def test_build_inventory_v2_excludes_project_authored_shared_entities_and_aliases(tmp_path) -> None:
     project = tmp_path / "project"
-    (project / "doc").mkdir(parents=True)
+    (project / "entities" / "findings").mkdir(parents=True)
+    (project / "entities" / "methods").mkdir(parents=True)
     (project / "science.yaml").write_text("id: mixed-scope-project\n", encoding="utf-8")
-    (project / "doc" / "local.md").write_text(
+    (project / "entities" / "findings" / "local.md").write_text(
         "---\nkind: finding\nid: finding:local\ntitle: Local finding\n---\n",
         encoding="utf-8",
     )
-    (project / "doc" / "shared.md").write_text(
+    (project / "entities" / "methods" / "shared.md").write_text(
         "---\nkind: method\nid: method:shared\ntitle: Shared method\nscope: shared\naliases: [shared-method]\n---\n",
         encoding="utf-8",
     )
@@ -335,9 +337,9 @@ def test_build_inventory_v2_overlay_validation_error_becomes_warning(tmp_path) -
 
 def test_build_inventory_v2_treats_project_paper_as_entity_not_overlay(tmp_path) -> None:
     project = tmp_path / "project"
-    (project / "doc" / "papers").mkdir(parents=True)
+    (project / "entities" / "papers").mkdir(parents=True)
     (project / "science.yaml").write_text("id: project-paper\n", encoding="utf-8")
-    paper_path = project / "doc" / "papers" / "Adams2025.md"
+    paper_path = project / "entities" / "papers" / "Adams2025.md"
     paper_path.write_text(
         "---\nkind: paper\nid: paper:Adams2025\ntitle: Adams 2025\n---\n\nProject-authored paper note.\n",
         encoding="utf-8",
@@ -349,13 +351,13 @@ def test_build_inventory_v2_treats_project_paper_as_entity_not_overlay(tmp_path)
     paper = next(entity for entity in inventory.entities if entity.id == "paper:Adams2025")
     assert paper.kind == "paper"
     assert paper.title == "Adams 2025"
-    assert paper.source.path == "doc/papers/Adams2025.md"
+    assert paper.source.path == "entities/papers/Adams2025.md"
     assert [
         warning
         for warning in inventory.warnings
         if warning.code == "overlay-invalid"
         and warning.path is not None
-        and warning.path.endswith("doc/papers/Adams2025.md")
+        and warning.path.endswith("entities/papers/Adams2025.md")
     ] == []
 
 

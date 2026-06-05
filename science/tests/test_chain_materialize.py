@@ -31,7 +31,7 @@ def _minimal_project(tmp_path: Path) -> Path:
     for slug in ("a", "b", "c"):
         _write(
             tmp_path,
-            f"doc/mechanisms/{slug}.md",
+            f"entities/mechanisms/{slug}.md",
             f"""---
 id: mechanism:{slug}
 kind: mechanism
@@ -53,7 +53,7 @@ updated: 2026-05-01
         )
     _write(
         tmp_path,
-        "doc/chains/abc.md",
+        "entities/chains/abc.md",
         """---
 id: chain:abc
 kind: structural-chain
@@ -73,7 +73,7 @@ chain:
     )
     _write(
         tmp_path,
-        "doc/audits/abc-2026-05.md",
+        "entities/audits/abc-2026-05.md",
         """---
 id: chain-audit:abc-2026-05
 kind: chain-audit
@@ -150,7 +150,7 @@ def test_chain_rejects_disallowed_link_kind(tmp_path: Path) -> None:
     project = _minimal_project(tmp_path)
     _write(
         project,
-        "doc/tasks/t1.md",
+        "entities/tasks/t1.md",
         """---
 id: task:t1
 kind: task
@@ -166,7 +166,7 @@ updated: 2026-05-01
     )
     _write(
         project,
-        "doc/chains/abc.md",
+        "entities/chains/abc.md",
         """---
 id: chain:abc
 kind: structural-chain
@@ -193,7 +193,7 @@ def test_chain_audit_rejects_non_chain_audits_target(tmp_path: Path) -> None:
     project = _minimal_project(tmp_path)
     _write(
         project,
-        "doc/audits/abc-2026-05.md",
+        "entities/audits/abc-2026-05.md",
         """---
 id: chain-audit:abc-2026-05
 kind: chain-audit
@@ -228,7 +228,7 @@ def test_registered_chain_audit_schema_error_fails_materialize(tmp_path: Path) -
     project = _minimal_project(tmp_path)
     _write(
         project,
-        "doc/audits/abc-2026-05.md",
+        "entities/audits/abc-2026-05.md",
         """---
 id: chain-audit:abc-2026-05
 kind: chain-audit
@@ -257,7 +257,7 @@ verdict:
 
     with pytest.raises(
         ValueError,
-        match="schema validation failed.*chain-audit.*doc/audits/abc-2026-05.md.*verdict.composite.*inconsistent",
+        match="schema validation failed.*chain-audit.*entities/audits/abc-2026-05.md.*verdict.composite.*inconsistent",
     ):
         materialize_graph(project)
 
@@ -267,7 +267,7 @@ def _project_with_chain_order(tmp_path: Path, order: list[str]) -> Path:
     for slug in ("a", "b", "c"):
         _write(
             tmp_path,
-            f"doc/mechanisms/{slug}.md",
+            f"entities/mechanisms/{slug}.md",
             f"""---
 id: mechanism:{slug}
 kind: mechanism
@@ -290,7 +290,7 @@ updated: 2026-05-01
     chain_yaml = "\n".join(f"  - {ref}" for ref in order)
     _write(
         tmp_path,
-        "doc/chains/abc.md",
+        "entities/chains/abc.md",
         f"""---
 id: chain:abc
 kind: structural-chain

@@ -17,7 +17,7 @@ class MarkdownAdapter(StorageAdapter):
 
     def __init__(self, scan_roots: list[str] | None = None, virtual_files: dict[str, str] | None = None) -> None:
         # Roots relative to project_root. Defaults mirror the previous MarkdownProvider.
-        self._scan_roots = scan_roots or ["entities", "doc", "specs", "research/packages"]
+        self._scan_roots = scan_roots or ["entities", "research/packages"]
         self._virtual_files = dict(virtual_files or {})
 
     @property

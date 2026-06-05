@@ -31,7 +31,7 @@ def _ctx(root: Path) -> ValidateContext:
 
 
 def _write_paper(root: Path, slug: str, datasets: list[str]) -> None:
-    papers_dir = root / "doc" / "background" / "papers"
+    papers_dir = root / "entities" / "papers"
     papers_dir.mkdir(parents=True, exist_ok=True)
     ds = "\n".join(f"  - {entry!r}" for entry in datasets)
     papers_dir.joinpath(f"{slug}.md").write_text(

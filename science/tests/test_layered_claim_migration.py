@@ -61,7 +61,7 @@ def _write_scan_project(root: Path, propositions: Sequence[Mapping[str, object]]
         encoding="utf-8",
     )
 
-    prop_dir = root / "specs" / "propositions"
+    prop_dir = root / "entities" / "propositions"
     prop_dir.mkdir(parents=True, exist_ok=True)
     for proposal in propositions:
         proposition_id = str(proposal["id"])
@@ -122,7 +122,7 @@ def _write_project(root: Path, *, with_layered_metadata: bool) -> Path:
         encoding="utf-8",
     )
 
-    prop_dir = root / "specs" / "propositions"
+    prop_dir = root / "entities" / "propositions"
     prop_dir.mkdir(parents=True, exist_ok=True)
     frontmatter_lines = [
         "---",

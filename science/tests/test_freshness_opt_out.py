@@ -25,7 +25,7 @@ def _build_minimal_project(tmp_path: Path, *, freshness_enabled: bool | None) ->
         yaml += f"freshness:\n  enabled: {'true' if freshness_enabled else 'false'}\n"
     _write(root / "science.yaml", yaml)
     _write(
-        root / "specs" / "hypotheses" / "h1.md",
+        root / "entities" / "hypotheses" / "h1.md",
         """
         ---
         id: "hypothesis:h1"
@@ -38,7 +38,7 @@ def _build_minimal_project(tmp_path: Path, *, freshness_enabled: bool | None) ->
     """,
     )
     _write(
-        root / "doc" / "tasks" / "t1.md",
+        root / "entities" / "tasks" / "t1.md",
         """
         ---
         id: "task:t1"

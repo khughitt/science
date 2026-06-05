@@ -65,14 +65,14 @@ def _write_minimal_software_project(root: Path) -> None:
         "status: active\n"
         "summary: smoke fixture\n"
         "profile: software\n"
-        "layout_version: 1\n"
+        "layout_version: 3\n"
         "knowledge_profiles:\n"
         "  local: local\n",
         encoding="utf-8",
     )
     (root / "CLAUDE.md").write_text("# Smoke\n", encoding="utf-8")
     (root / "AGENTS.md").write_text("# Smoke\n", encoding="utf-8")
-    for d in ("doc", "specs", "tasks", "knowledge", "src"):
+    for d in ("doc", "specs", "tasks", "knowledge", "src", "entities"):
         (root / d).mkdir()
     (root / "tasks" / "active.md").write_text("# x\n", encoding="utf-8")
 

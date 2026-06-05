@@ -16,7 +16,7 @@ def _project_with_one_support_one_diagnostic_dispute(tmp_path: Path) -> Path:
 
     _write(
         tmp_path,
-        "doc/propositions/p.md",
+        "entities/propositions/p.md",
         """---
 id: proposition:p
 kind: proposition
@@ -34,7 +34,7 @@ updated: 2026-05-01
     # ONE clean supporting evidence-line.
     _write(
         tmp_path,
-        "doc/evidence-lines/sup.md",
+        "entities/evidence-lines/sup.md",
         """---
 id: evidence-line:sup
 kind: evidence-line
@@ -58,7 +58,7 @@ independence_group: g1
     # ONE diagnostic disputing evidence-line (model_criticism + scoped) -> contested but not capping.
     _write(
         tmp_path,
-        "doc/evidence-lines/dis.md",
+        "entities/evidence-lines/dis.md",
         """---
 id: evidence-line:dis
 kind: evidence-line

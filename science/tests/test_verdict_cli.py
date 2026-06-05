@@ -185,11 +185,11 @@ def test_rollup_claim_tally_uses_claim_polarity_not_document_composite() -> None
     assert group["tally"]["[⌀]"] == 0
 
 
-def test_rollup_claim_auto_discovers_registry_under_root_specs(tmp_path: Path) -> None:
-    specs_dir = tmp_path / "specs"
-    specs_dir.mkdir()
+def test_rollup_claim_auto_discovers_registry_under_root_entities(tmp_path: Path) -> None:
+    entities_dir = tmp_path / "entities"
+    entities_dir.mkdir()
     shutil.copy(FIXTURE_DIR / "doc_and.md", tmp_path / "doc_and.md")
-    shutil.copy(REGISTRY_PATH, specs_dir / "claim-registry.yaml")
+    shutil.copy(REGISTRY_PATH, entities_dir / "claim-registry.yaml")
 
     result = CliRunner().invoke(
         verdict_group,
@@ -320,20 +320,3 @@ def test_rollup_non_strict_unresolved_warns_to_stderr_and_keeps_stdout_json(tmp_
     assert payload["groups"]["all"]["n"] == 1
     assert payload["groups"]["all"]["documents"] == ["interpretation:fixture-unresolved"]
     assert "unresolved" in result.stderr.lower()
-
-
-def test_rollup_claim_auto_discovers_registry_under_root_entities(tmp_path: Path) -> None:
-    entities_dir = tmp_path / "entities"
-    entities_dir.mkdir()
-    shutil.copy(FIXTURE_DIR / "doc_and.md", tmp_path / "doc_and.md")
-    shutil.copy(REGISTRY_PATH, entities_dir / "claim-registry.yaml")
-
-    result = CliRunner().invoke(
-        verdict_group,
-        ["rollup", "--scope", "claim", "--root", str(tmp_path), "--output", "json"],
-    )
-
-    assert result.exit_code == 0, result.output
-    payload = json.loads(result.stdout)
-    assert payload["scope"] == "claim"
-    assert payload["groups"]["h1#edge5-ifn-arm"]["documents"] == ["interpretation:fixture-and"]

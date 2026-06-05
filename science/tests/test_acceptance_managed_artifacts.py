@@ -46,7 +46,7 @@ def _write_full_science_yaml(project: Path, name: str = "acceptance") -> None:
                 "status: active",
                 "summary: Acceptance test fixture.",
                 "profile: software",
-                "layout_version: 1",
+                "layout_version: 3",
                 "knowledge_profiles:",
                 "  local: local",
                 "",
@@ -60,7 +60,7 @@ def _scaffold_software_project(project: Path) -> None:
     """Create the directory layout that validate.sh expects for a software profile."""
     project.joinpath("AGENTS.md").write_text("# Acceptance\n", encoding="utf-8")
     project.joinpath("CLAUDE.md").write_text("# Acceptance\n", encoding="utf-8")
-    for d in ("doc", "specs", "tasks", "knowledge", "src"):
+    for d in ("doc", "specs", "tasks", "knowledge", "src", "entities"):
         project.joinpath(d).mkdir(exist_ok=True)
     project.joinpath("tasks", "active.md").write_text("# active\n", encoding="utf-8")
 

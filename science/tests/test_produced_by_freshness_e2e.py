@@ -40,7 +40,7 @@ def test_code_edit_flips_finding_to_needs_review(tmp_path: Path) -> None:
     # Markdown entities are scanned under doc/ (MarkdownAdapter default roots:
     # ["doc", "specs", "research/packages"]) — NOT knowledge/local, which is for
     # aggregate YAML sources.
-    findings = tmp_path / "doc" / "findings"
+    findings = tmp_path / "entities" / "findings"
     findings.mkdir(parents=True)
     (findings / "f1.md").write_text(
         "---\nid: finding:f1\nkind: finding\ntitle: F1\nstatus: active\n"

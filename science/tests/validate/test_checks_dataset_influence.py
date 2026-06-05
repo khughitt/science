@@ -25,7 +25,7 @@ def _fm(**extra):
     return {
         "id": "paper:Adams2025",
         "type": "paper",
-        "_path": "doc/papers/Adams2025.md",
+        "_path": "entities/papers/Adams2025.md",
         **extra,
     }
 
@@ -35,8 +35,8 @@ def _write_project(root: Path) -> None:
 
 
 def _write_dataset_usage_paper(root: Path, ref: str = "dataset:gtex-v8") -> None:
-    (root / "doc" / "papers").mkdir(parents=True)
-    (root / "doc" / "papers" / "Adams2025.md").write_text(
+    (root / "entities" / "papers").mkdir(parents=True)
+    (root / "entities" / "papers" / "Adams2025.md").write_text(
         f"---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndataset_usage:\n"
         f"  - ref: {ref}\n    role: analyzed\n---\n",
         encoding="utf-8",
@@ -363,8 +363,8 @@ def test_check_dataset_influence_legacy_paper_datasets_bare_alias_errors(
         "origin: external\n"
         "access: {level: public, verified: true}\n",
     )
-    (tmp_path / "doc" / "papers").mkdir(parents=True)
-    (tmp_path / "doc" / "papers" / "Adams2025.md").write_text(
+    (tmp_path / "entities" / "papers").mkdir(parents=True)
+    (tmp_path / "entities" / "papers" /"Adams2025.md").write_text(
         "---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndatasets: [gtex]\n---\n",
         encoding="utf-8",
     )
@@ -405,8 +405,8 @@ def test_check_dataset_influence_manual_alias_to_non_dataset_errors(
     mappings = tmp_path / "knowledge" / "sources" / "local" / "mappings.yaml"
     mappings.parent.mkdir(parents=True)
     mappings.write_text('aliases:\n  "dataset:gtex": "paper:Adams2025"\n', encoding="utf-8")
-    (tmp_path / "doc" / "papers").mkdir(parents=True)
-    (tmp_path / "doc" / "papers" / "Adams2025.md").write_text(
+    (tmp_path / "entities" / "papers").mkdir(parents=True)
+    (tmp_path / "entities" / "papers" /"Adams2025.md").write_text(
         "---\n"
         "id: paper:Adams2025\n"
         "type: paper\n"
@@ -433,8 +433,8 @@ def test_check_dataset_influence_paper_datasets_alias_to_non_dataset_errors(
     mappings = tmp_path / "knowledge" / "sources" / "local" / "mappings.yaml"
     mappings.parent.mkdir(parents=True)
     mappings.write_text('aliases:\n  "dataset:gtex": "paper:Smith2024"\n', encoding="utf-8")
-    (tmp_path / "doc" / "papers").mkdir(parents=True)
-    (tmp_path / "doc" / "papers" / "Adams2025.md").write_text(
+    (tmp_path / "entities" / "papers").mkdir(parents=True)
+    (tmp_path / "entities" / "papers" /"Adams2025.md").write_text(
         "---\n"
         "id: paper:Adams2025\n"
         "type: paper\n"
@@ -443,7 +443,7 @@ def test_check_dataset_influence_paper_datasets_alias_to_non_dataset_errors(
         "---\n",
         encoding="utf-8",
     )
-    (tmp_path / "doc" / "papers" / "Smith2024.md").write_text(
+    (tmp_path / "entities" / "papers" / "Smith2024.md").write_text(
         "---\n"
         "id: paper:Smith2024\n"
         "type: paper\n"
@@ -480,8 +480,8 @@ def test_check_dataset_influence_derivation_input_alias_to_non_dataset_errors(
         "  inputs:\n"
         "    - dataset:gtex\n",
     )
-    (tmp_path / "doc" / "papers").mkdir(parents=True)
-    (tmp_path / "doc" / "papers" / "Smith2024.md").write_text(
+    (tmp_path / "entities" / "papers").mkdir(parents=True)
+    (tmp_path / "entities" / "papers" /"Smith2024.md").write_text(
         "---\n"
         "id: paper:Smith2024\n"
         "type: paper\n"

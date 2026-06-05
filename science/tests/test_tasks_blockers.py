@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from _fixtures.entity_helpers import seed_project, write_markdown_entity
+from _fixtures.entity_helpers import seed_project
 from science_model.entities import DatasetEntity
 from science_tool.entities import load_local_entity_ids, load_local_entity_index
 from science_tool.tasks_blockers import (
@@ -17,17 +17,19 @@ from science_tool.tasks_blockers import (
 
 def _setup_project_with_dataset(tmp_path: Path) -> Path:
     seed_project(tmp_path)
-    write_markdown_entity(
-        tmp_path,
-        "doc/datasets/foo.md",
-        {
-            "id": "dataset:foo",
-            "type": "dataset",
-            "title": "Foo",
-            "status": "active",
-            "origin": "external",
-            "access": {"level": "public", "verified": True},
-        },
+    dp_dir = tmp_path / "data" / "foo"
+    dp_dir.mkdir(parents=True)
+    (dp_dir / "datapackage.yaml").write_text(
+        "profiles: [science-pkg-entity-1.0]\n"
+        "id: dataset:foo\n"
+        "type: dataset\n"
+        "title: Foo\n"
+        "status: active\n"
+        "origin: external\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n"
+        "access: {level: public, verified: true}\n",
+        encoding="utf-8",
     )
     return tmp_path
 

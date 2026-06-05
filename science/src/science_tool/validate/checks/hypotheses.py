@@ -30,7 +30,7 @@ def _result(severity: Severity, path: str | None, message: str) -> Result:
 
 @Check(section="hypotheses...", order=5)
 def check_hypotheses(ctx: ValidateContext) -> Iterator[Result]:
-    roots = (ctx.project_root / "entities" / "hypotheses", ctx.specs_dir / "hypotheses")
+    roots = (ctx.project_root / "entities" / "hypotheses",)
     for target in roots:
         if not target.is_dir():
             continue

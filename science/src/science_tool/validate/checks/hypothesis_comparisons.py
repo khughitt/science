@@ -34,14 +34,8 @@ def _check_comparison_sections(ctx: ValidateContext, path: Path) -> Iterator[Res
 
 @Check(section="discussion documents...", order=13)
 def check_hypothesis_comparisons(ctx: ValidateContext) -> Iterator[Result]:
-    # Legacy: doc/discussions/comparison-*.md — identified by filename glob.
-    for path in sorted((ctx.doc_dir / "discussions").glob("comparison-*.md")):
-        if not path.is_file():
-            continue
-        yield from _check_comparison_sections(ctx, path)
-
-    # Entities: entities/discussions/*.md — identified by the '## Hypotheses Compared' marker,
-    # because migrated filenames are NNNN-slug.md (no 'comparison-' prefix).
+    # entities/discussions/*.md — identified by the '## Hypotheses Compared' marker,
+    # because filenames are NNNN-slug.md (no 'comparison-' prefix).
     entities_discussions = ctx.project_root / resolve_path_policy("discussion").root
     if entities_discussions.is_dir():
         for path in sorted(entities_discussions.glob("*.md")):

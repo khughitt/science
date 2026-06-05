@@ -85,10 +85,10 @@ def _rules(results) -> set[str]:
 
 def test_single_source_ceiling_fires_with_one_support(tmp_path: Path) -> None:
     _manifest(tmp_path)
-    _write(tmp_path, "doc/propositions/p.md", _prop(belief_state="supported"))
+    _write(tmp_path, "entities/propositions/p.md", _prop(belief_state="supported"))
     _write(
         tmp_path,
-        "doc/evidence-lines/sup.md",
+        "entities/evidence-lines/sup.md",
         _evidence_line(
             eid="sup",
             stance="supports",
@@ -102,10 +102,10 @@ def test_single_source_ceiling_fires_with_one_support(tmp_path: Path) -> None:
 
 def test_single_source_ceiling_silent_with_two_independent_supports(tmp_path: Path) -> None:
     _manifest(tmp_path)
-    _write(tmp_path, "doc/propositions/p.md", _prop(belief_state="supported"))
+    _write(tmp_path, "entities/propositions/p.md", _prop(belief_state="supported"))
     _write(
         tmp_path,
-        "doc/evidence-lines/sup1.md",
+        "entities/evidence-lines/sup1.md",
         _evidence_line(
             eid="sup1",
             stance="supports",
@@ -114,7 +114,7 @@ def test_single_source_ceiling_silent_with_two_independent_supports(tmp_path: Pa
     )
     _write(
         tmp_path,
-        "doc/evidence-lines/sup2.md",
+        "entities/evidence-lines/sup2.md",
         _evidence_line(
             eid="sup2",
             stance="supports",
@@ -134,11 +134,11 @@ def test_single_source_ceiling_silent_with_two_independent_supports(tmp_path: Pa
 
 def test_refutation_masked_fires_with_decisive_dispute(tmp_path: Path) -> None:
     _manifest(tmp_path)
-    _write(tmp_path, "doc/propositions/p.md", _prop(belief_state="supported"))
+    _write(tmp_path, "entities/propositions/p.md", _prop(belief_state="supported"))
     # Two independent supports so the masked-refutation arm is the live signal.
     _write(
         tmp_path,
-        "doc/evidence-lines/sup1.md",
+        "entities/evidence-lines/sup1.md",
         _evidence_line(
             eid="sup1",
             stance="supports",
@@ -147,7 +147,7 @@ def test_refutation_masked_fires_with_decisive_dispute(tmp_path: Path) -> None:
     )
     _write(
         tmp_path,
-        "doc/evidence-lines/sup2.md",
+        "entities/evidence-lines/sup2.md",
         _evidence_line(
             eid="sup2",
             stance="supports",
@@ -157,7 +157,7 @@ def test_refutation_masked_fires_with_decisive_dispute(tmp_path: Path) -> None:
     # Decisive refutation: independent + strong + direct_test + whole_claim (default scope).
     _write(
         tmp_path,
-        "doc/evidence-lines/dis.md",
+        "entities/evidence-lines/dis.md",
         _evidence_line(
             eid="dis",
             stance="disputes",
@@ -171,10 +171,10 @@ def test_refutation_masked_fires_with_decisive_dispute(tmp_path: Path) -> None:
 
 def test_refutation_masked_silent_for_scoped_diagnostic_dispute(tmp_path: Path) -> None:
     _manifest(tmp_path)
-    _write(tmp_path, "doc/propositions/p.md", _prop(belief_state="supported"))
+    _write(tmp_path, "entities/propositions/p.md", _prop(belief_state="supported"))
     _write(
         tmp_path,
-        "doc/evidence-lines/sup1.md",
+        "entities/evidence-lines/sup1.md",
         _evidence_line(
             eid="sup1",
             stance="supports",
@@ -183,7 +183,7 @@ def test_refutation_masked_silent_for_scoped_diagnostic_dispute(tmp_path: Path) 
     )
     _write(
         tmp_path,
-        "doc/evidence-lines/sup2.md",
+        "entities/evidence-lines/sup2.md",
         _evidence_line(
             eid="sup2",
             stance="supports",
@@ -194,7 +194,7 @@ def test_refutation_masked_silent_for_scoped_diagnostic_dispute(tmp_path: Path) 
     # diagnostic and scoped, never decisive.
     _write(
         tmp_path,
-        "doc/evidence-lines/dis.md",
+        "entities/evidence-lines/dis.md",
         _evidence_line(
             eid="dis",
             stance="disputes",
@@ -214,10 +214,10 @@ def test_refutation_masked_silent_for_scoped_diagnostic_dispute(tmp_path: Path) 
 def test_inflated_fires_when_authored_exceeds_computed(tmp_path: Path) -> None:
     _manifest(tmp_path)
     # Authored well_supported, but only ONE clean support -> computed fragile.
-    _write(tmp_path, "doc/propositions/p.md", _prop(belief_state="well_supported"))
+    _write(tmp_path, "entities/propositions/p.md", _prop(belief_state="well_supported"))
     _write(
         tmp_path,
-        "doc/evidence-lines/sup.md",
+        "entities/evidence-lines/sup.md",
         _evidence_line(
             eid="sup",
             stance="supports",
@@ -238,10 +238,10 @@ def test_inflated_fires_when_authored_exceeds_computed(tmp_path: Path) -> None:
 
 def test_proxy_ungated_fires_for_indirect_direct_test_without_measurement_model(tmp_path: Path) -> None:
     _manifest(tmp_path)
-    _write(tmp_path, "doc/propositions/p.md", _prop(belief_state=None))
+    _write(tmp_path, "entities/propositions/p.md", _prop(belief_state=None))
     _write(
         tmp_path,
-        "doc/evidence-lines/sup.md",
+        "entities/evidence-lines/sup.md",
         _evidence_line(
             eid="sup",
             stance="supports",

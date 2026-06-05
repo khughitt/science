@@ -33,9 +33,9 @@ def _add_provenance(dataset: Dataset, *, entity_uri: URIRef, source_path: str) -
 def test_source_path_for_returns_relative_path() -> None:
     dataset = Dataset()
     entity = _entity_uri("hypothesis/h1")
-    _add_provenance(dataset, entity_uri=entity, source_path="doc/hypotheses/h1.md")
+    _add_provenance(dataset, entity_uri=entity, source_path="entities/hypotheses/h1.md")
 
-    assert source_path_for(entity, dataset) == "doc/hypotheses/h1.md"
+    assert source_path_for(entity, dataset) == "entities/hypotheses/h1.md"
 
 
 def test_source_path_for_returns_none_when_no_provenance() -> None:

@@ -128,11 +128,9 @@ def _load_registry_for_parse(file: Path, registry_path: Path | None) -> IndexedC
 def _load_registry_for_rollup(root: Path, registry_path: Path | None) -> IndexedClaimRegistry | None:
     path = registry_path
     if path is None:
-        for rel in ("entities/claim-registry.yaml", "specs/claim-registry.yaml"):
-            candidate = root / rel
-            if candidate.is_file():
-                path = candidate
-                break
+        candidate = root / "entities" / "claim-registry.yaml"
+        if candidate.is_file():
+            path = candidate
     if path is None:
         return None
     return _load_registry(path)
@@ -148,10 +146,9 @@ def _load_registry(path: Path) -> IndexedClaimRegistry:
 def _discover_ancestor_registry(path: Path) -> Path | None:
     current = path.parent
     for _ in range(_MAX_ANCESTOR_REGISTRY_LEVELS + 1):
-        for rel in ("entities/claim-registry.yaml", "specs/claim-registry.yaml"):
-            candidate = current / rel
-            if candidate.is_file():
-                return candidate
+        candidate = current / "entities" / "claim-registry.yaml"
+        if candidate.is_file():
+            return candidate
         if current.parent == current:
             return None
         current = current.parent

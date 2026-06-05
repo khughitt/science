@@ -9,8 +9,8 @@ from science_model.entities import EntityType
 
 def _seed_two_entity_types(root: Path) -> None:
     (root / "science.yaml").write_text("project: test\n", encoding="utf-8")
-    (root / "doc" / "datasets").mkdir(parents=True)
-    (root / "doc" / "datasets" / "ds1.md").write_text(
+    (root / "entities" / "datasets").mkdir(parents=True)
+    (root / "entities" / "datasets" / "ds1.md").write_text(
         '---\nid: "dataset:ds1"\ntype: "dataset"\ntitle: "DS1"\norigin: "external"\n'
         'access: {level: "public", verified: false}\n---\n',
         encoding="utf-8",
@@ -36,7 +36,7 @@ def test_health_surfaces_research_package(tmp_path: Path) -> None:
     """Health module sees research-package entities (e.g., for asymmetric-edge invariant)."""
     _seed_two_entity_types(tmp_path)
     # The dataset claims to be displayed by rp1; rp1's displays lists the dataset → symmetric → no anomaly.
-    (tmp_path / "doc" / "datasets" / "ds1.md").write_text(
+    (tmp_path / "entities" / "datasets" / "ds1.md").write_text(
         '---\nid: "dataset:ds1"\ntype: "dataset"\ntitle: "DS1"\norigin: "external"\n'
         'access: {level: "public", verified: false}\n'
         'consumed_by: ["research-package:rp1"]\n---\n',

@@ -29,7 +29,7 @@ def _minimal_project(tmp_path: Path) -> Path:
 
     _write(
         tmp_path,
-        "doc/propositions/p.md",
+        "entities/propositions/p.md",
         """---
 id: proposition:p
 kind: proposition

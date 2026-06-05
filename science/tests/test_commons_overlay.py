@@ -175,8 +175,8 @@ def test_overlay_adapter_scan_yields_errors_for_broken_files() -> None:
 
     root = _OVERLAYS / "proj-broken"
     items = list(OverlayAdapter(root, "proj-broken").scan())
-    # proj-broken/doc/papers/Adams2025.md fails the overlay schema;
-    # proj-broken/doc/topics/nonexistent-topic.md is schema-valid here
+    # proj-broken/entities/papers/Adams2025.md fails the overlay schema;
+    # proj-broken/entities/topics/nonexistent-topic.md is schema-valid here
     # (the dangling overlay_of check belongs to validate_project_overlays).
     errors = [i for i in items if isinstance(i, OverlayValidationError)]
     records = [i for i in items if isinstance(i, OverlayRecord)]

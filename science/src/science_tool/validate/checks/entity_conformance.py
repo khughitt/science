@@ -118,10 +118,8 @@ def check_entity_filename_conformance(ctx: ValidateContext) -> Iterator[Result]:
 
 
 def _severity(ctx: ValidateContext) -> Severity:
-    # Plan 2 emits WARN; Plan 3 cutover swaps the body for a layout_version gate
-    # (ERROR when layout_version >= 3). Single-spot change.
-    del ctx
-    return Severity.WARN
+    version = ctx.manifest.get("layout_version")
+    return Severity.ERROR if isinstance(version, int) and version >= 3 else Severity.WARN
 
 
 _REQUIRED_FRONTMATTER = ("id", "type", "title", "status", "created", "updated")

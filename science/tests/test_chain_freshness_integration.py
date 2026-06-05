@@ -33,7 +33,7 @@ def _project_with_chain_audit(tmp_path: Path, *, fp_updated: str, audit_reviewed
     for slug, updated in (("a", "2026-05-01"), ("b", fp_updated), ("c", "2026-05-01")):
         _write(
             tmp_path,
-            f"doc/mechanisms/{slug}.md",
+            f"entities/mechanisms/{slug}.md",
             f"""---
 id: mechanism:{slug}
 kind: mechanism
@@ -55,7 +55,7 @@ updated: {updated}
         )
     _write(
         tmp_path,
-        "doc/chains/abc.md",
+        "entities/chains/abc.md",
         """---
 id: chain:abc
 kind: structural-chain
@@ -75,7 +75,7 @@ chain:
     )
     _write(
         tmp_path,
-        "doc/audits/abc-2026-05.md",
+        "entities/audits/abc-2026-05.md",
         f"""---
 id: chain-audit:abc-2026-05
 kind: chain-audit
@@ -153,7 +153,7 @@ def test_validate_flags_dangling_chain_link(tmp_path: Path) -> None:
     _write(tmp_path, "science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
     _write(
         tmp_path,
-        "doc/mechanisms/a.md",
+        "entities/mechanisms/a.md",
         """---
 id: mechanism:a
 kind: mechanism
@@ -173,7 +173,7 @@ propositions:
     )
     _write(
         tmp_path,
-        "doc/chains/ab.md",
+        "entities/chains/ab.md",
         """---
 id: chain:ab
 kind: structural-chain

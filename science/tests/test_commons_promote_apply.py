@@ -253,7 +253,7 @@ def test_rollback_step5_restores_re_promote_file(tmp_path) -> None:
 
 
 def _build_project(tmp_path: Path, name: str, papers: dict[str, str]) -> Path:
-    """Create a project repo at `tmp_path/<name>` with paper files at `doc/papers/`."""
+    """Create a project repo at `tmp_path/<name>` with paper files at `entities/papers/`."""
     root = tmp_path / name
     (root / "doc" / "papers").mkdir(parents=True)
     for filename, content in papers.items():
@@ -1994,7 +1994,7 @@ def test_commons_is_clean_checks_kind_commons_subdir(tmp_path) -> None:
 
 
 def test_project_target_files_clean_checks_kind_overlay_dest_subdir(tmp_path) -> None:
-    """_project_target_files_clean hardcoded "doc/papers/{name}". After de-hardcoding,
+    """_project_target_files_clean hardcoded "entities/papers/{name}". After de-hardcoding,
     kind.overlay_dest_subdir is used. For topic, also scans kind.source_subdirs
     so a dirty doc/background/topics/foo.md is reported (the flatten case)."""
     from science_tool.commons.promote import (

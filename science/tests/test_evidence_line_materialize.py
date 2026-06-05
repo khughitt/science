@@ -34,7 +34,7 @@ def _minimal_project(tmp_path: Path) -> Path:
     # Target proposition
     _write(
         tmp_path,
-        "doc/propositions/p.md",
+        "entities/propositions/p.md",
         """---
 id: proposition:p
 kind: proposition
@@ -52,7 +52,7 @@ updated: 2026-05-01
     # Source paper (resolves the `source:` ref on the evidence-line)
     _write(
         tmp_path,
-        "doc/papers/x.md",
+        "entities/papers/x.md",
         """---
 id: paper:x
 kind: paper
@@ -70,7 +70,7 @@ updated: 2026-05-01
     # Evidence-line entity
     _write(
         tmp_path,
-        "doc/evidence-lines/e.md",
+        "entities/evidence-lines/e.md",
         """---
 id: evidence-line:e
 kind: evidence-line
@@ -210,7 +210,7 @@ def test_evidence_line_supports_stance_emits_cito_supports(tmp_path: Path) -> No
     _write(tmp_path, "science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
     _write(
         tmp_path,
-        "doc/propositions/p.md",
+        "entities/propositions/p.md",
         """---
 id: proposition:p
 kind: proposition
@@ -226,7 +226,7 @@ updated: 2026-05-01
     )
     _write(
         tmp_path,
-        "doc/evidence-lines/sup.md",
+        "entities/evidence-lines/sup.md",
         """---
 id: evidence-line:sup
 kind: evidence-line
@@ -266,7 +266,7 @@ def test_dataset_source_class_emitted_and_line_derives_from_same_uri(tmp_path: P
     # Target proposition
     _write(
         tmp_path,
-        "doc/propositions/p.md",
+        "entities/propositions/p.md",
         """---
 id: proposition:p
 kind: proposition
@@ -301,7 +301,7 @@ updated: 2026-05-01
     # Evidence-line entity whose source is the dataset
     _write(
         tmp_path,
-        "doc/evidence-lines/el-ref.md",
+        "entities/evidence-lines/el-ref.md",
         """---
 id: evidence-line:el-ref
 kind: evidence-line
@@ -343,7 +343,7 @@ def test_evidence_line_evidence_type_in_provenance(tmp_path: Path) -> None:
     _write(tmp_path, "science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
     _write(
         tmp_path,
-        "doc/propositions/p.md",
+        "entities/propositions/p.md",
         """---
 id: proposition:p
 kind: proposition
@@ -359,7 +359,7 @@ updated: 2026-05-01
     )
     _write(
         tmp_path,
-        "doc/evidence-lines/et.md",
+        "entities/evidence-lines/et.md",
         """---
 id: evidence-line:et
 kind: evidence-line

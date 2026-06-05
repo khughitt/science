@@ -334,8 +334,8 @@ def test_document_structure_warns_for_missing_topic_and_paper_sections(tmp_path:
     from science_tool.validate.checks.document_structure import check_document_structure
 
     ctx = _ctx(tmp_path)
-    topics_dir = tmp_path / "doc" / "background" / "topics"
-    papers_dir = tmp_path / "doc" / "background" / "papers"
+    topics_dir = tmp_path / "entities" / "topics"
+    papers_dir = tmp_path / "entities" / "papers"
     topics_dir.mkdir(parents=True)
     papers_dir.mkdir(parents=True)
     topics_dir.joinpath("topic.md").write_text("## Summary\n\nBody\n", encoding="utf-8")
@@ -344,23 +344,23 @@ def test_document_structure_warns_for_missing_topic_and_paper_sections(tmp_path:
     results = list(check_document_structure(ctx))
     messages = _messages(results)
 
-    assert "Checking doc/background/topics/topic.md..." in messages
-    assert "doc/background/topics/topic.md missing section: ## Key Concepts" in messages
-    assert "doc/background/topics/topic.md missing section: ## Current State of Knowledge" in messages
-    assert "doc/background/topics/topic.md missing section: ## Relevance to This Project" in messages
-    assert "doc/background/topics/topic.md missing section: ## Key References" in messages
-    assert "Checking doc/background/papers/paper.md..." in messages
-    assert "doc/background/papers/paper.md missing section: ## Key Contribution" in messages
-    assert "doc/background/papers/paper.md missing section: ## Key Findings" in messages
-    assert "doc/background/papers/paper.md missing section: ## Relevance" in messages
+    assert "Checking entities/topics/topic.md..." in messages
+    assert "entities/topics/topic.md missing section: ## Key Concepts" in messages
+    assert "entities/topics/topic.md missing section: ## Current State of Knowledge" in messages
+    assert "entities/topics/topic.md missing section: ## Relevance to This Project" in messages
+    assert "entities/topics/topic.md missing section: ## Key References" in messages
+    assert "Checking entities/papers/paper.md..." in messages
+    assert "entities/papers/paper.md missing section: ## Key Contribution" in messages
+    assert "entities/papers/paper.md missing section: ## Key Findings" in messages
+    assert "entities/papers/paper.md missing section: ## Relevance" in messages
 
 
 def test_document_structure_complete_docs_have_no_missing_section_warnings(tmp_path: Path) -> None:
     from science_tool.validate.checks.document_structure import check_document_structure
 
     ctx = _ctx(tmp_path)
-    topics_dir = tmp_path / "doc" / "background" / "topics"
-    papers_dir = tmp_path / "doc" / "background" / "papers"
+    topics_dir = tmp_path / "entities" / "topics"
+    papers_dir = tmp_path / "entities" / "papers"
     topics_dir.mkdir(parents=True)
     papers_dir.mkdir(parents=True)
     topics_dir.joinpath("topic.md").write_text(
@@ -389,7 +389,7 @@ def test_document_structure_requires_exact_h2_headings(tmp_path: Path) -> None:
     from science_tool.validate.checks.document_structure import check_document_structure
 
     ctx = _ctx(tmp_path)
-    topics_dir = tmp_path / "doc" / "background" / "topics"
+    topics_dir = tmp_path / "entities" / "topics"
     topics_dir.mkdir(parents=True)
     topics_dir.joinpath("topic.md").write_text(
         "\n".join(
@@ -406,14 +406,14 @@ def test_document_structure_requires_exact_h2_headings(tmp_path: Path) -> None:
 
     messages = _messages(check_document_structure(ctx))
 
-    assert "doc/background/topics/topic.md missing section: ## Summary" in messages
+    assert "entities/topics/topic.md missing section: ## Summary" in messages
 
 
 def test_document_structure_rejects_indented_h2_heading(tmp_path: Path) -> None:
     from science_tool.validate.checks.document_structure import check_document_structure
 
     ctx = _ctx(tmp_path)
-    topics_dir = tmp_path / "doc" / "background" / "topics"
+    topics_dir = tmp_path / "entities" / "topics"
     topics_dir.mkdir(parents=True)
     topics_dir.joinpath("topic.md").write_text(
         "\n".join(
@@ -430,14 +430,14 @@ def test_document_structure_rejects_indented_h2_heading(tmp_path: Path) -> None:
 
     messages = _messages(check_document_structure(ctx))
 
-    assert "doc/background/topics/topic.md missing section: ## Summary" in messages
+    assert "entities/topics/topic.md missing section: ## Summary" in messages
 
 
 def test_document_structure_rejects_fenced_h2_heading(tmp_path: Path) -> None:
     from science_tool.validate.checks.document_structure import check_document_structure
 
     ctx = _ctx(tmp_path)
-    topics_dir = tmp_path / "doc" / "background" / "topics"
+    topics_dir = tmp_path / "entities" / "topics"
     topics_dir.mkdir(parents=True)
     topics_dir.joinpath("topic.md").write_text(
         "\n".join(
@@ -456,14 +456,14 @@ def test_document_structure_rejects_fenced_h2_heading(tmp_path: Path) -> None:
 
     messages = _messages(check_document_structure(ctx))
 
-    assert "doc/background/topics/topic.md missing section: ## Summary" in messages
+    assert "entities/topics/topic.md missing section: ## Summary" in messages
 
 
 def test_document_structure_rejects_tilde_fenced_h2_heading(tmp_path: Path) -> None:
     from science_tool.validate.checks.document_structure import check_document_structure
 
     ctx = _ctx(tmp_path)
-    topics_dir = tmp_path / "doc" / "background" / "topics"
+    topics_dir = tmp_path / "entities" / "topics"
     topics_dir.mkdir(parents=True)
     topics_dir.joinpath("topic.md").write_text(
         "\n".join(
@@ -482,14 +482,14 @@ def test_document_structure_rejects_tilde_fenced_h2_heading(tmp_path: Path) -> N
 
     messages = _messages(check_document_structure(ctx))
 
-    assert "doc/background/topics/topic.md missing section: ## Summary" in messages
+    assert "entities/topics/topic.md missing section: ## Summary" in messages
 
 
 def test_hypotheses_missing_falsifiability_errors(tmp_path: Path) -> None:
     from science_tool.validate.checks.hypotheses import check_hypotheses
 
     ctx = _ctx(tmp_path)
-    hypotheses_dir = tmp_path / "specs" / "hypotheses"
+    hypotheses_dir = tmp_path / "entities" / "hypotheses"
     hypotheses_dir.mkdir(parents=True)
     hypotheses_dir.joinpath("h1.md").write_text("- **Status:** active\n", encoding="utf-8")
 
@@ -497,7 +497,7 @@ def test_hypotheses_missing_falsifiability_errors(tmp_path: Path) -> None:
 
     assert (
         Severity.ERROR,
-        "specs/hypotheses/h1.md missing ## Falsifiability section",
+        "entities/hypotheses/h1.md missing ## Falsifiability section",
     ) in [(result.severity, result.message) for result in results]
 
 
@@ -505,7 +505,7 @@ def test_hypotheses_requires_exact_h2_falsifiability_heading(tmp_path: Path) -> 
     from science_tool.validate.checks.hypotheses import check_hypotheses
 
     ctx = _ctx(tmp_path)
-    hypotheses_dir = tmp_path / "specs" / "hypotheses"
+    hypotheses_dir = tmp_path / "entities" / "hypotheses"
     hypotheses_dir.mkdir(parents=True)
     hypotheses_dir.joinpath("h1.md").write_text("- **Status:** active\n### Falsifiability\nContent\n", encoding="utf-8")
 
@@ -513,7 +513,7 @@ def test_hypotheses_requires_exact_h2_falsifiability_heading(tmp_path: Path) -> 
 
     assert (
         Severity.ERROR,
-        "specs/hypotheses/h1.md missing ## Falsifiability section",
+        "entities/hypotheses/h1.md missing ## Falsifiability section",
     ) in [(result.severity, result.message) for result in results]
 
 
@@ -521,7 +521,7 @@ def test_hypotheses_rejects_indented_h2_falsifiability_heading(tmp_path: Path) -
     from science_tool.validate.checks.hypotheses import check_hypotheses
 
     ctx = _ctx(tmp_path)
-    hypotheses_dir = tmp_path / "specs" / "hypotheses"
+    hypotheses_dir = tmp_path / "entities" / "hypotheses"
     hypotheses_dir.mkdir(parents=True)
     hypotheses_dir.joinpath("h1.md").write_text(
         "- **Status:** active\n    ## Falsifiability\nContent\n", encoding="utf-8"
@@ -531,7 +531,7 @@ def test_hypotheses_rejects_indented_h2_falsifiability_heading(tmp_path: Path) -
 
     assert (
         Severity.ERROR,
-        "specs/hypotheses/h1.md missing ## Falsifiability section",
+        "entities/hypotheses/h1.md missing ## Falsifiability section",
     ) in [(result.severity, result.message) for result in results]
 
 
@@ -539,7 +539,7 @@ def test_hypotheses_rejects_fenced_h2_falsifiability_heading(tmp_path: Path) -> 
     from science_tool.validate.checks.hypotheses import check_hypotheses
 
     ctx = _ctx(tmp_path)
-    hypotheses_dir = tmp_path / "specs" / "hypotheses"
+    hypotheses_dir = tmp_path / "entities" / "hypotheses"
     hypotheses_dir.mkdir(parents=True)
     hypotheses_dir.joinpath("h1.md").write_text(
         "\n".join(["- **Status:** active", "```markdown", "## Falsifiability", "```", "Content"]),
@@ -550,7 +550,7 @@ def test_hypotheses_rejects_fenced_h2_falsifiability_heading(tmp_path: Path) -> 
 
     assert (
         Severity.ERROR,
-        "specs/hypotheses/h1.md missing ## Falsifiability section",
+        "entities/hypotheses/h1.md missing ## Falsifiability section",
     ) in [(result.severity, result.message) for result in results]
 
 
@@ -558,7 +558,7 @@ def test_hypotheses_rejects_indented_fenced_h2_falsifiability_heading(tmp_path: 
     from science_tool.validate.checks.hypotheses import check_hypotheses
 
     ctx = _ctx(tmp_path)
-    hypotheses_dir = tmp_path / "specs" / "hypotheses"
+    hypotheses_dir = tmp_path / "entities" / "hypotheses"
     hypotheses_dir.mkdir(parents=True)
     hypotheses_dir.joinpath("h1.md").write_text(
         "\n".join(["- **Status:** active", "   ```markdown", "## Falsifiability", "   ```", "Content"]),
@@ -569,7 +569,7 @@ def test_hypotheses_rejects_indented_fenced_h2_falsifiability_heading(tmp_path: 
 
     assert (
         Severity.ERROR,
-        "specs/hypotheses/h1.md missing ## Falsifiability section",
+        "entities/hypotheses/h1.md missing ## Falsifiability section",
     ) in [(result.severity, result.message) for result in results]
 
 
@@ -577,7 +577,7 @@ def test_hypotheses_empty_falsifiability_warns_but_content_passes(tmp_path: Path
     from science_tool.validate.checks.hypotheses import check_hypotheses
 
     ctx = _ctx(tmp_path)
-    hypotheses_dir = tmp_path / "specs" / "hypotheses"
+    hypotheses_dir = tmp_path / "entities" / "hypotheses"
     hypotheses_dir.mkdir(parents=True)
     hypotheses_dir.joinpath("h1.md").write_text(
         "\n".join(["- **Status:** active", "## Falsifiability", "<!-- fill this in -->", "", "## Evidence"]),
@@ -590,15 +590,15 @@ def test_hypotheses_empty_falsifiability_warns_but_content_passes(tmp_path: Path
 
     messages = _messages(check_hypotheses(ctx))
 
-    assert "specs/hypotheses/h1.md has empty Falsifiability section" in messages
-    assert "specs/hypotheses/h2.md has empty Falsifiability section" not in messages
+    assert "entities/hypotheses/h1.md has empty Falsifiability section" in messages
+    assert "entities/hypotheses/h2.md has empty Falsifiability section" not in messages
 
 
 def test_hypotheses_subheading_and_multiline_comment_only_falsifiability_warns(tmp_path: Path) -> None:
     from science_tool.validate.checks.hypotheses import check_hypotheses
 
     ctx = _ctx(tmp_path)
-    hypotheses_dir = tmp_path / "specs" / "hypotheses"
+    hypotheses_dir = tmp_path / "entities" / "hypotheses"
     hypotheses_dir.mkdir(parents=True)
     hypotheses_dir.joinpath("h1.md").write_text(
         "\n".join(
@@ -617,14 +617,14 @@ def test_hypotheses_subheading_and_multiline_comment_only_falsifiability_warns(t
 
     messages = _messages(check_hypotheses(ctx))
 
-    assert "specs/hypotheses/h1.md has empty Falsifiability section" in messages
+    assert "entities/hypotheses/h1.md has empty Falsifiability section" in messages
 
 
 def test_hypotheses_status_can_be_frontmatter_or_inline(tmp_path: Path) -> None:
     from science_tool.validate.checks.hypotheses import check_hypotheses
 
     ctx = _ctx(tmp_path)
-    hypotheses_dir = tmp_path / "specs" / "hypotheses"
+    hypotheses_dir = tmp_path / "entities" / "hypotheses"
     hypotheses_dir.mkdir(parents=True)
     hypotheses_dir.joinpath("h1.md").write_text("## Falsifiability\nContent\n", encoding="utf-8")
     hypotheses_dir.joinpath("h2.md").write_text(
@@ -636,29 +636,29 @@ def test_hypotheses_status_can_be_frontmatter_or_inline(tmp_path: Path) -> None:
 
     messages = _messages(check_hypotheses(ctx))
 
-    assert "specs/hypotheses/h1.md missing Status field" in messages
-    assert "specs/hypotheses/h2.md missing Status field" not in messages
-    assert "specs/hypotheses/h3.md missing Status field" not in messages
+    assert "entities/hypotheses/h1.md missing Status field" in messages
+    assert "entities/hypotheses/h2.md missing Status field" not in messages
+    assert "entities/hypotheses/h3.md missing Status field" not in messages
 
 
 def test_hypotheses_raw_top_level_status_line_satisfies_status(tmp_path: Path) -> None:
     from science_tool.validate.checks.hypotheses import check_hypotheses
 
     ctx = _ctx(tmp_path)
-    hypotheses_dir = tmp_path / "specs" / "hypotheses"
+    hypotheses_dir = tmp_path / "entities" / "hypotheses"
     hypotheses_dir.mkdir(parents=True)
     hypotheses_dir.joinpath("h1.md").write_text("status: active\n## Falsifiability\nContent\n", encoding="utf-8")
 
     messages = _messages(check_hypotheses(ctx))
 
-    assert "specs/hypotheses/h1.md missing Status field" not in messages
+    assert "entities/hypotheses/h1.md missing Status field" not in messages
 
 
 def test_hypotheses_phase_validation(tmp_path: Path) -> None:
     from science_tool.validate.checks.hypotheses import check_hypotheses
 
     ctx = _ctx(tmp_path)
-    hypotheses_dir = tmp_path / "specs" / "hypotheses"
+    hypotheses_dir = tmp_path / "entities" / "hypotheses"
     hypotheses_dir.mkdir(parents=True)
     hypotheses_dir.joinpath("h1.md").write_text(
         "---\nstatus: active\nphase: proposed # template comment\n---\n## Falsifiability\nContent\n",
@@ -675,7 +675,7 @@ def test_hypotheses_phase_validation(tmp_path: Path) -> None:
 
     messages = _messages(check_hypotheses(ctx))
 
-    assert "specs/hypotheses/h1.md has invalid phase 'proposed' (must be 'candidate' or 'active')" in messages
+    assert "entities/hypotheses/h1.md has invalid phase 'proposed' (must be 'candidate' or 'active')" in messages
     assert "specs/hypotheses/h2.md has invalid phase 'candidate' (must be 'candidate' or 'active')" not in messages
     assert "specs/hypotheses/h3.md has invalid phase 'active' (must be 'candidate' or 'active')" not in messages
 
@@ -749,7 +749,7 @@ def test_hypotheses_ignores_malformed_frontmatter_in_hypothesis_file(tmp_path: P
     from science_tool.validate.checks.hypotheses import check_hypotheses
 
     ctx = _ctx(tmp_path)
-    hypotheses_dir = tmp_path / "specs" / "hypotheses"
+    hypotheses_dir = tmp_path / "entities" / "hypotheses"
     hypotheses_dir.mkdir(parents=True)
     hypotheses_dir.joinpath("h1.md").write_text(
         "\n".join(["---", "status: [", "---", "- **Status:** active", "## Falsifiability", "Content"]),
@@ -758,7 +758,7 @@ def test_hypotheses_ignores_malformed_frontmatter_in_hypothesis_file(tmp_path: P
 
     results = list(check_hypotheses(ctx))
 
-    assert "Checking specs/hypotheses/h1.md..." in _messages(results)
+    assert "Checking entities/hypotheses/h1.md..." in _messages(results)
 
 
 def test_declared_code_root_not_flagged_as_legacy(tmp_path: Path) -> None:
@@ -817,7 +817,7 @@ def test_context_rejects_non_list_code_roots(tmp_path: Path) -> None:
         ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
 
 
-def test_layout_version_below_3_warns(tmp_path: Path) -> None:
+def test_layout_version_below_3_errors(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text(
         "name: t\ncreated: 2026-01-01\nlast_modified: 2026-01-01\nstatus: active\n"
         "summary: s\nprofile: research\nlayout_version: 2\nknowledge_profiles: {local: local}\n",
@@ -826,7 +826,7 @@ def test_layout_version_below_3_warns(tmp_path: Path) -> None:
     ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
     from science_tool.validate.checks.manifest import check_manifest
     results = list(check_manifest(ctx))
-    assert any(r.severity is Severity.WARN and "layout_version" in r.message for r in results)
+    assert any(r.severity is Severity.ERROR and "layout_version" in r.message for r in results)
 
 
 # ---------------------------------------------------------------------------

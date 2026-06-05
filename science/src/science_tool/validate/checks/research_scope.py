@@ -27,9 +27,7 @@ def check_research_scope(ctx: ValidateContext) -> Iterator[Result]:
 
     from science_tool.entities import singleton_path
 
-    entities_rq = ctx.project_root / singleton_path("research-question")
-    legacy_rq = ctx.specs_dir / "research-question.md"
-    research_question = entities_rq if entities_rq.is_file() else legacy_rq
+    research_question = ctx.project_root / singleton_path("research-question")
     if not research_question.is_file():
         yield _result(
             Severity.ERROR,
