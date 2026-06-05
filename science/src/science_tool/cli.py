@@ -496,13 +496,22 @@ def entity_neighbors(ref: str, hops: int, output_format: str) -> None:
 
 @entity_group.command("review")
 @click.argument("ref")
-@click.option("--note", default=None, help="Optional note recorded with the review.")
+@click.option(
+    "--note",
+    default=None,
+    help="Required review artifact: the finding, prose diff, created task, or a "
+    "reasoned 'no change'. A review without a recorded artifact is rejected.",
+)
 def entity_review(ref: str, note: str | None) -> None:
-    """Mark an epistemic entity as reviewed-as-of today."""
+    """Mark an epistemic entity as reviewed-as-of today.
+
+    A review must record an artifact via --note; a bare timestamp bump is
+    rejected to prevent review-theater (see epistemic-drift-detection design M1).
+    """
     from science_tool.entity_review import ReviewError, review_entity
 
     try:
-        path, changed = review_entity(Path.cwd(), ref, note=note)
+        path, changed = review_entity(Path.cwd(), ref, note=note, require_artifact=True)
     except ReviewError as exc:
         raise click.ClickException(str(exc)) from exc
     rel = path.relative_to(Path.cwd())
@@ -1734,6 +1743,50 @@ def graph_attention_sample(
             ("label", "Label"),
         ],
         rows=table_rows,
+    )
+
+
+@graph.command("attention-rank")
+@click.option("--limit", type=int, default=None, help="Cap the number of ranked rows (default: all).")
+@click.option("--kind", "kinds", multiple=True, help="Restrict candidates to one or more entity kinds.")
+@click.option("--epsilon", type=float, default=0.05, show_default=True, help="Positive weight floor.")
+@click.option("--today", type=click.DateTime(formats=["%Y-%m-%d"]), default=None, help="Date for age weighting.")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_attention_rank(
+    limit: int | None,
+    kinds: tuple[str, ...],
+    epsilon: float,
+    today: datetime | None,
+    output_format: str,
+    graph_path: Path,
+) -> None:
+    """Rank epistemic entities by graph-derived attention weight (deterministic)."""
+    from science_tool.graph.attention import query_attention_ranked
+
+    if limit is not None and limit < 0:
+        raise click.ClickException("--limit must be >= 0")
+    rank_date: date | None = today.date() if today is not None else None
+    rows = query_attention_ranked(
+        graph_path=graph_path,
+        limit=limit,
+        today=rank_date,
+        kinds=set(kinds) if kinds else None,
+        epsilon=epsilon,
+    )
+    emit_query_rows(
+        output_format=output_format,
+        title="Attention ranking",
+        columns=[
+            ("id", "ID"),
+            ("kind", "Kind"),
+            ("freshness_state", "Freshness"),
+            ("attention_weight", "Weight"),
+            ("open_question_debt", "Q-Debt"),
+        ],
+        rows=rows,
     )
 
 

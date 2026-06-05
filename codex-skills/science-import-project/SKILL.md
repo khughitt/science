@@ -331,6 +331,14 @@ Ensure the project ignores:
 
 Add profile-specific ignores only when they match the project's actual layout.
 
+Never exclude a directory wholesale when it also holds version-controlled
+sources. A bare `models/` entry is a trap: git won't descend into a
+fully-excluded directory, so child negations silently fail and `git add`
+commits nothing. `models/` holds causal DAG sources (`.dot`/`.json`) that must
+stay tracked — if it also holds regenerable dumps, use `models/*` plus
+`!models/*.dot` / `!models/*.json` negations, or write dumps to a separate
+ignored directory.
+
 ## Step 6: Verify
 
 Run:

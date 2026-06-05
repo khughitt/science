@@ -10,6 +10,7 @@ from textwrap import dedent
 from click.testing import CliRunner
 
 from science_tool.cli import main as cli_main
+from science_tool.entity_review import review_entity
 from science_tool.graph.materialize import materialize_graph
 
 
@@ -38,7 +39,7 @@ def test_entity_review_sets_last_reviewed(tmp_path: Path, monkeypatch):
     root = _setup_project_with_hypothesis(tmp_path)
     monkeypatch.chdir(root)
     runner = CliRunner()
-    result = runner.invoke(cli_main, ["entity", "review", "hypothesis:h1"])
+    result = runner.invoke(cli_main, ["entity", "review", "hypothesis:h1", "--note", "checked"])
     assert result.exit_code == 0, result.output
 
     text = (root / "entities" / "hypotheses" / "h1.md").read_text()
@@ -65,9 +66,9 @@ def test_entity_review_idempotent(tmp_path: Path, monkeypatch):
     root = _setup_project_with_hypothesis(tmp_path)
     monkeypatch.chdir(root)
     runner = CliRunner()
-    runner.invoke(cli_main, ["entity", "review", "hypothesis:h1"])
+    runner.invoke(cli_main, ["entity", "review", "hypothesis:h1", "--note", "checked"])
     text_first = (root / "entities" / "hypotheses" / "h1.md").read_text()
-    runner.invoke(cli_main, ["entity", "review", "hypothesis:h1"])
+    runner.invoke(cli_main, ["entity", "review", "hypothesis:h1", "--note", "checked"])
     text_second = (root / "entities" / "hypotheses" / "h1.md").read_text()
     assert text_first == text_second
 
@@ -103,7 +104,7 @@ def test_entity_review_preserves_existing_review_horizon_days(tmp_path: Path, mo
     )
     monkeypatch.chdir(root)
     runner = CliRunner()
-    result = runner.invoke(cli_main, ["entity", "review", "hypothesis:h1"])
+    result = runner.invoke(cli_main, ["entity", "review", "hypothesis:h1", "--note", "horizon check"])
     assert result.exit_code == 0, result.output
 
     text = h_path.read_text()
@@ -112,8 +113,8 @@ def test_entity_review_preserves_existing_review_horizon_days(tmp_path: Path, mo
     assert today in text
 
 
-def test_entity_review_preserves_existing_note_when_no_note_passed(tmp_path: Path, monkeypatch):
-    """Reviewing without --note keeps any pre-existing last_review_note."""
+def test_review_entity_preserves_existing_note_when_note_is_none(tmp_path: Path):
+    """review_entity(note=None) keeps any pre-existing last_review_note."""
     root = _setup_project_with_hypothesis(tmp_path)
     h_path = root / "entities" / "hypotheses" / "h1.md"
     h_path.write_text(
@@ -132,11 +133,8 @@ def test_entity_review_preserves_existing_note_when_no_note_passed(tmp_path: Pat
             """
         ).lstrip()
     )
-    monkeypatch.chdir(root)
-    runner = CliRunner()
-    runner.invoke(cli_main, ["entity", "review", "hypothesis:h1"])
-    text = h_path.read_text()
-    assert "Original note" in text
+    review_entity(root, "hypothesis:h1", note=None)
+    assert "Original note" in h_path.read_text()
 
 
 def test_entity_review_replaces_existing_note_when_new_note_passed(tmp_path: Path, monkeypatch):
@@ -166,8 +164,8 @@ def test_entity_review_replaces_existing_note_when_new_note_passed(tmp_path: Pat
     assert "New note" in text
 
 
-def test_entity_review_clears_existing_note_when_empty_string_passed(tmp_path: Path, monkeypatch):
-    """Passing --note '' clears any pre-existing last_review_note."""
+def test_review_entity_clears_note_on_empty_string(tmp_path: Path):
+    """review_entity(note="") clears any pre-existing last_review_note."""
     root = _setup_project_with_hypothesis(tmp_path)
     h_path = root / "entities" / "hypotheses" / "h1.md"
     h_path.write_text(
@@ -186,9 +184,7 @@ def test_entity_review_clears_existing_note_when_empty_string_passed(tmp_path: P
             """
         ).lstrip()
     )
-    monkeypatch.chdir(root)
-    runner = CliRunner()
-    runner.invoke(cli_main, ["entity", "review", "hypothesis:h1", "--note", ""])
+    review_entity(root, "hypothesis:h1", note="")
     text = h_path.read_text()
     assert "last_review_note" not in text
     assert "Original note" not in text
@@ -252,7 +248,7 @@ def test_entity_needs_review_empty_when_all_fresh(tmp_path: Path, monkeypatch):
     root = _setup_project_with_hypothesis(tmp_path)
     monkeypatch.chdir(root)
     runner = CliRunner()
-    runner.invoke(cli_main, ["entity", "review", "hypothesis:h1"])
+    runner.invoke(cli_main, ["entity", "review", "hypothesis:h1", "--note", "reviewed for freshness"])
     materialize_graph(root)
     result = runner.invoke(cli_main, ["entity", "needs-review"])
     assert result.exit_code == 0, result.output
@@ -299,3 +295,49 @@ def test_entity_review_rejects_non_epistemic_target(tmp_path: Path, monkeypatch)
     result = runner.invoke(cli_main, ["entity", "review", "dataset:d1"])
     assert result.exit_code != 0, result.output
     assert "non-epistemic" in result.output.lower() or "operational" in result.output.lower()
+
+
+def test_entity_review_requires_artifact(tmp_path: Path, monkeypatch):
+    """A bare `entity review` (no --note) is review-theater and must be refused."""
+    root = _setup_project_with_hypothesis(tmp_path)
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    result = runner.invoke(cli_main, ["entity", "review", "hypothesis:h1"])
+    assert result.exit_code != 0
+    assert "artifact" in result.output.lower() or "note" in result.output.lower()
+    # frontmatter must be untouched
+    text = (root / "entities" / "hypotheses" / "h1.md").read_text()
+    assert "review_state:" not in text
+
+
+def test_entity_review_rejects_blank_note(tmp_path: Path, monkeypatch):
+    root = _setup_project_with_hypothesis(tmp_path)
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    result = runner.invoke(cli_main, ["entity", "review", "hypothesis:h1", "--note", "   "])
+    assert result.exit_code != 0
+    assert "artifact" in result.output.lower() or "note" in result.output.lower()
+
+
+def test_entity_review_succeeds_with_artifact(tmp_path: Path, monkeypatch):
+    root = _setup_project_with_hypothesis(tmp_path)
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    result = runner.invoke(
+        cli_main,
+        ["entity", "review", "hypothesis:h1", "--note", "scope re-checked vs constants.py::EVENTS; no change"],
+    )
+    assert result.exit_code == 0, result.output
+    text = (root / "entities" / "hypotheses" / "h1.md").read_text()
+    assert "scope re-checked" in text
+
+
+def test_entity_review_unknown_id_errors_even_without_note(tmp_path: Path, monkeypatch):
+    """Unknown id with no --note must still report 'not found', not 'needs artifact'."""
+    root = _setup_project_with_hypothesis(tmp_path)
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    result = runner.invoke(cli_main, ["entity", "review", "hypothesis:nonexistent"])
+    assert result.exit_code != 0
+    assert "not found" in result.output.lower() or "unknown" in result.output.lower()
+    assert "artifact" not in result.output.lower()

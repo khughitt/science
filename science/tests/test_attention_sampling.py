@@ -10,10 +10,12 @@ from rdflib.namespace import RDF, SKOS, XSD
 
 from science_tool.cli import main
 from science_tool.graph.attention import (
+    AttentionReason,
     compute_attention_candidates,
     format_attention_candidate,
     reason_aware_sample_candidates,
     weighted_sample_without_replacement,
+    _open_question_debt,
 )
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, save_canonical_graph_dataset
 
@@ -107,6 +109,123 @@ def _reason_fixture() -> Dataset:
     return dataset
 
 
+def _debt_fixture() -> Dataset:
+    """An entity with: 1 directly-related active question, 1 related-but-answered
+    question (not debt), 1 question reachable only via a shared theme, and 1
+    deferred question related to a *different* entity (must not count)."""
+    dataset = Dataset()
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    h = _u("hypothesis/h_scope")
+    other = _u("hypothesis/h_other")
+    theme = _u("theme/cyto_scope")
+    q_direct = _u("question/q_direct")        # active, related -> h  (debt)
+    q_answered = _u("question/q_answered")    # answered, related -> h (NOT debt)
+    q_theme = _u("question/q_theme")          # partially-answered, theme co-member (debt)
+    q_elsewhere = _u("question/q_elsewhere")  # deferred, related -> other only (NOT debt for h)
+
+    for uri, label in (
+        (h, "Scoped hypothesis"),
+        (other, "Unrelated hypothesis"),
+    ):
+        knowledge.add((uri, RDF.type, SCI_NS.Hypothesis))
+        knowledge.add((uri, SKOS.prefLabel, Literal(label)))
+        knowledge.add((uri, SCI_NS.freshnessState, Literal("fresh")))
+        knowledge.add((uri, SCI_NS.lastReviewed, Literal("2026-04-30", datatype=XSD.date)))
+
+    knowledge.add((theme, RDF.type, SCI_NS.Theme))
+    knowledge.add((h, SKOS.related, theme))
+
+    # direction matters: questions author the related: edge -> question is subject
+    knowledge.add((q_direct, SKOS.related, h))
+    knowledge.add((q_direct, SCI_NS.projectStatus, Literal("active")))
+
+    knowledge.add((q_answered, SKOS.related, h))
+    knowledge.add((q_answered, SCI_NS.projectStatus, Literal("answered")))
+
+    knowledge.add((q_theme, SKOS.related, theme))
+    knowledge.add((q_theme, SCI_NS.projectStatus, Literal("partially-answered")))
+
+    knowledge.add((q_elsewhere, SKOS.related, other))
+    knowledge.add((q_elsewhere, SCI_NS.projectStatus, Literal("deferred")))
+
+    return dataset
+
+
+def test_open_question_debt_counts_related_and_theme_comembers() -> None:
+    dataset = _debt_fixture()
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    h = URIRef(PROJECT_NS["hypothesis/h_scope"])
+    other = URIRef(PROJECT_NS["hypothesis/h_other"])
+
+    # h: q_direct (active, direct) + q_theme (partially-answered, via theme) = 2
+    #    q_answered excluded (resolved); q_elsewhere excluded (not connected to h)
+    assert _open_question_debt(knowledge, h) == 2
+    # other: only q_elsewhere (deferred, direct) = 1
+    assert _open_question_debt(knowledge, other) == 1
+    # q_theme is a theme co-member of itself; it must not count itself as debt.
+    q_theme = URIRef(PROJECT_NS["question/q_theme"])
+    assert _open_question_debt(knowledge, q_theme) == 0
+
+
+def test_open_question_debt_raises_weight_and_emits_reason() -> None:
+    candidates = compute_attention_candidates(_debt_fixture(), today=date(2026, 5, 1))
+    by_id = {candidate.entity_id: candidate for candidate in candidates}
+
+    indebted = by_id["hypothesis:h_scope"]   # debt 2
+    light = by_id["hypothesis:h_other"]       # debt 1
+
+    assert indebted.components["open_question_debt"] == 2.0
+    assert light.components["open_question_debt"] == 1.0
+    # both fresh, same review date, no evidence/bears_on -> debt is the only
+    # differentiator, so more debt must mean strictly more weight.
+    assert indebted.weight > light.weight
+
+    debt_reasons = [r for r in indebted.reasons if r.code == "open_question_debt"]
+    assert debt_reasons == [
+        AttentionReason(
+            code="open_question_debt",
+            direction="increase_attention",
+            strength="moderate",
+            provenance="derived:open_question_debt(related+theme,2)",
+            next_action="incorporate_or_answer_open_questions",
+        )
+    ]
+
+
+def test_zero_debt_emits_no_debt_reason() -> None:
+    candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1))
+    by_id = {candidate.entity_id: candidate for candidate in candidates}
+    for candidate in by_id.values():
+        assert all(r.code != "open_question_debt" for r in candidate.reasons)
+        assert candidate.components["open_question_debt"] == 0.0
+
+
+def test_format_attention_candidate_exposes_open_question_debt() -> None:
+    candidates = compute_attention_candidates(_debt_fixture(), today=date(2026, 5, 1))
+    by_id = {candidate.entity_id: candidate for candidate in candidates}
+    row = format_attention_candidate(by_id["hypothesis:h_scope"])
+    assert row["open_question_debt"] == "2"
+    assert any(r["code"] == "open_question_debt" for r in row["reasons"])
+
+
+def test_query_attention_ranked_is_deterministic_by_weight(tmp_path: Path) -> None:
+    from science_tool.graph.attention import query_attention_ranked
+    from science_tool.graph.io import save_canonical_graph_dataset
+
+    graph_path = tmp_path / "graph.trig"
+    save_canonical_graph_dataset(_debt_fixture(), graph_path)
+
+    rows = query_attention_ranked(graph_path, today=date(2026, 5, 1))
+    ids = [row["id"] for row in rows]
+    # h_scope (debt 2) outranks h_other (debt 1); both carry the debt field.
+    assert ids.index("hypothesis:h_scope") < ids.index("hypothesis:h_other")
+    assert rows[0]["open_question_debt"] == "2"
+
+    top1 = query_attention_ranked(graph_path, today=date(2026, 5, 1), limit=1)
+    assert [row["id"] for row in top1] == ["hypothesis:h_scope"]
+
+
 def test_attention_weight_uses_observable_graph_features() -> None:
     candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1))
     by_id = {candidate.entity_id: candidate for candidate in candidates}
@@ -123,6 +242,7 @@ def test_attention_weight_uses_observable_graph_features() -> None:
         "dispute_count": 1.0,
         "evidence_source_count": 2.0,
         "evidence_balance_factor": 2.0,
+        "open_question_debt": 0.0,
         "epsilon": 0.05,
     }
 

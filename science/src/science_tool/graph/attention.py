@@ -20,6 +20,10 @@ DEFAULT_EPSILON = 0.05
 NEEDS_REVIEW_MULTIPLIER = 3.0
 STALE_MULTIPLIER = 2.0
 NEVER_REVIEWED_DAYS = 365.0
+OPEN_QUESTION_DEBT_WEIGHT = 0.5
+# Canonical question debt statuses (science_model entities.py); resolved
+# states (answered/retired) are deliberately excluded — they are not debt.
+DEBT_QUESTION_STATUSES = frozenset({"active", "partially-answered", "deferred"})
 
 
 @dataclass(frozen=True)
@@ -101,13 +105,19 @@ def compute_attention_candidates(
         evidence_source_count = support_count + dispute_count
         evidence_balance_factor = _evidence_balance_factor(support_count, dispute_count)
         freshness_multiplier = _freshness_multiplier(freshness_state)
+        open_question_debt = _open_question_debt(knowledge, entity_uri)
 
         weight = (
             (1.0 + incoming_bears_on)
             * (1.0 + (days_since_last_review / 30.0))
             * freshness_multiplier
             * evidence_balance_factor
+            * (1.0 + OPEN_QUESTION_DEBT_WEIGHT * open_question_debt)
         ) + epsilon
+
+        reasons = list(_derive_phase1_reasons(kind, support_count, dispute_count))
+        if open_question_debt > 0:
+            reasons.append(_open_question_debt_reason(open_question_debt))
 
         candidates.append(
             AttentionCandidate(
@@ -125,9 +135,10 @@ def compute_attention_candidates(
                     "dispute_count": float(dispute_count),
                     "evidence_source_count": float(evidence_source_count),
                     "evidence_balance_factor": float(evidence_balance_factor),
+                    "open_question_debt": float(open_question_debt),
                     "epsilon": float(epsilon),
                 },
-                reasons=_derive_phase1_reasons(kind, support_count, dispute_count),
+                reasons=reasons,
             )
         )
 
@@ -237,7 +248,35 @@ def query_attention_sample(
         sample = reason_aware_sample_candidates(candidates, limit=limit, seed=seed)
     else:
         sample = weighted_sample_without_replacement(candidates, limit=limit, seed=seed)
+    return _rows_with_belief(graph_path, dataset, sample)
 
+
+def query_attention_ranked(
+    graph_path: Path,
+    *,
+    limit: int | None = None,
+    today: date | None = None,
+    kinds: set[str] | None = None,
+    epsilon: float = DEFAULT_EPSILON,
+) -> list[dict[str, Any]]:
+    """Load a materialized graph and return all candidates ranked by weight desc.
+
+    Deterministic (no sampling): ties break by entity_id. This is the review-queue
+    surface — `graph attention-rank` — distinct from the weighted-random
+    `attention-sample`.
+    """
+    dataset = Dataset()
+    dataset.parse(source=str(graph_path), format="trig")
+    candidates = compute_attention_candidates(dataset, today=today, kinds=kinds, epsilon=epsilon)
+    ranked = sorted(candidates, key=lambda candidate: (-candidate.weight, candidate.entity_id))
+    if limit is not None:
+        ranked = ranked[:limit]
+    return _rows_with_belief(graph_path, dataset, ranked)
+
+
+def _rows_with_belief(
+    graph_path: Path, dataset: Dataset, candidates: Sequence[AttentionCandidate]
+) -> list[dict[str, Any]]:
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
     enabled = belief_scalar_enabled(project_root_from_graph_path(graph_path))
@@ -251,7 +290,7 @@ def query_attention_sample(
         result = aggregate_belief(units)
         return format_belief_weight(result, belief_scalar(result))
 
-    return [format_attention_candidate(c, belief_weight=_belief_weight(c)) for c in sample]
+    return [format_attention_candidate(c, belief_weight=_belief_weight(c)) for c in candidates]
 
 
 def format_attention_candidate(
@@ -273,8 +312,25 @@ def format_attention_candidate(
         "dispute_count": str(int(components["dispute_count"])),
         "evidence_source_count": str(int(components["evidence_source_count"])),
         "evidence_balance_factor": f"{components['evidence_balance_factor']:.2f}",
+        "open_question_debt": str(int(components["open_question_debt"])),
         "reasons": [reason.as_dict() for reason in candidate.reasons],
     }
+
+
+def _open_question_debt_reason(debt: int) -> AttentionReason:
+    if debt >= 3:
+        strength = "high"
+    elif debt == 2:
+        strength = "moderate"
+    else:
+        strength = "low"
+    return AttentionReason(
+        code="open_question_debt",
+        direction="increase_attention",
+        strength=strength,
+        provenance=f"derived:open_question_debt(related+theme,{debt})",
+        next_action="incorporate_or_answer_open_questions",
+    )
 
 
 def _derive_phase1_reasons(kind: str, support_count: int, dispute_count: int) -> list[AttentionReason]:
@@ -362,6 +418,64 @@ def _count_uri_objects(triples: Iterable[tuple[object, object, object]]) -> int:
         if isinstance(obj, URIRef):
             count += 1
     return count
+
+
+def _entity_kind_of(uri: URIRef) -> str | None:
+    canonical_id = canonical_id_from_entity_uri(str(uri))
+    if canonical_id is None:
+        return None
+    return canonical_id.partition(":")[0]
+
+
+def _related_neighbors(knowledge, uri: URIRef) -> set[URIRef]:
+    """All entities joined to ``uri`` by a skos:related edge, either direction.
+
+    `related:` is materialized subject=authoring-entity (materialize.py:353), so a
+    question that lists an entity in its `related:` shows up as an *incoming* edge.
+    """
+    neighbors: set[URIRef] = set()
+    for obj in knowledge.objects(uri, SKOS.related):
+        if isinstance(obj, URIRef):
+            neighbors.add(obj)
+    for subj in knowledge.subjects(SKOS.related, uri):
+        if isinstance(subj, URIRef):
+            neighbors.add(subj)
+    return neighbors
+
+
+def _open_question_debt(knowledge, entity_uri: URIRef) -> int:
+    """Count debt-status questions bearing on ``entity_uri`` via the connectivity
+    layer freshness ignores: direct skos:related (either direction) plus theme
+    co-membership (entity and question both related to the same theme node).
+
+    Intentionally does NOT use bears_on: scoping questions sit on related: edges
+    or weaker, which never become bears_on (freshness.py:70), so a bears_on-based
+    metric would inherit the exact blind spot this term exists to cover. Question
+    age is not weighted here because created/updated are not emitted as graph
+    triples (see plan grounding facts); age weighting is deferred past M1.
+    """
+    neighbors = _related_neighbors(knowledge, entity_uri)
+    question_uris: set[URIRef] = set()
+    for neighbor in neighbors:
+        kind = _entity_kind_of(neighbor)
+        if kind == "question":
+            question_uris.add(neighbor)
+        elif kind == "theme":
+            for theme_neighbor in _related_neighbors(knowledge, neighbor):
+                if _entity_kind_of(theme_neighbor) == "question":
+                    question_uris.add(theme_neighbor)
+
+    # A question is itself an attention candidate (it carries freshnessState) and a
+    # question→theme edge makes the question a theme co-member of itself. Never let
+    # an entity count itself as its own debt.
+    question_uris.discard(entity_uri)
+
+    debt = 0
+    for question_uri in question_uris:
+        status_literal = next(knowledge.objects(question_uri, SCI_NS.projectStatus), None)
+        if status_literal is not None and str(status_literal) in DEBT_QUESTION_STATUSES:
+            debt += 1
+    return debt
 
 
 def _days_since_last_review(knowledge, entity_uri: URIRef, today: date) -> float:

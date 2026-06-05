@@ -42,6 +42,7 @@ def review_entity(
     *,
     note: str | None = None,
     today: date | None = None,
+    require_artifact: bool = False,
 ) -> tuple[Path, bool]:
     """Set review_state.last_reviewed = today on the entity's frontmatter.
 
@@ -49,8 +50,14 @@ def review_entity(
     keeps any existing `last_review_note`; `note=""` clears it; a non-empty
     string replaces it.
 
+    When `require_artifact` is True, a missing/blank `note` is rejected (the
+    review-theater guard): the review must record a concrete artifact. The check
+    runs only after the entity resolves and passes the epistemic-kind gate, so
+    lookup and kind errors still take precedence.
+
     Returns (path, changed) — `changed` is True iff the file was rewritten.
-    Raises ReviewError on lookup failure.
+    Raises ReviewError on lookup failure, non-epistemic target, or (when
+    require_artifact) a missing artifact.
     """
     today = today or date.today()
     try:
@@ -67,6 +74,13 @@ def review_entity(
         raise ReviewError(
             f"entity {entity_ref!r} has kind {location.kind!r} "
             f"({kind_class.value}); review_state is only meaningful on epistemic entities"
+        )
+
+    if require_artifact and (note is None or not note.strip()):
+        raise ReviewError(
+            "review requires a recorded artifact: pass a note with the finding, "
+            "prose diff, created task, or a reasoned 'no change'. "
+            "A bare timestamp bump is not a review."
         )
 
     path = project_root / location.rel_path
