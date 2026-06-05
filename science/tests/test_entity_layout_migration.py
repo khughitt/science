@@ -495,3 +495,125 @@ def test_migrate_apply_is_idempotent(tmp_path: Path) -> None:
     report2 = migrate_layout(tmp_path, apply=True)
     assert report2["moves"] == []
     assert yaml.safe_load((tmp_path / "science.yaml").read_text())["layout_version"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Pilot-driven fixes (FIX 1, FIX 2, FIX 3)
+# ---------------------------------------------------------------------------
+
+
+# FIX 1: rewrite numeric/prefixed shortform references -------------------
+
+
+def test_plan_registers_numeric_shortform_alias(tmp_path: Path) -> None:
+    """FIX 1: a question file with stem '01-foo-bar' (id question:01-foo-bar) must
+    produce an id_map entry question:01 -> question:0001 so prose shortform
+    references like 'question:01' are rewritten to the new number."""
+    _write(tmp_path, "doc/questions/01-foo-bar.md",
+           '---\nid: "question:01-foo-bar"\ntype: question\ncreated: "2026-01-01"\n---\n')
+    plan = plan_migration(tmp_path)
+    assert plan.id_map.get("question:01") == "question:0001", (
+        f"expected question:01 -> question:0001 in id_map; got {plan.id_map}"
+    )
+
+
+def test_plan_registers_prefixed_shortform_alias(tmp_path: Path) -> None:
+    """FIX 1: a hypothesis file with stem 'h03-baz' (id hypothesis:h03-baz) must
+    produce id_map entry hypothesis:h03 -> hypothesis:0001 (the assigned number)."""
+    _write(tmp_path, "specs/hypotheses/h03-baz.md",
+           '---\nid: "hypothesis:h03-baz"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+           'status: proposed\ntitle: Baz\n---\n')
+    plan = plan_migration(tmp_path)
+    assert plan.id_map.get("hypothesis:h03") == "hypothesis:0001", (
+        f"expected hypothesis:h03 -> hypothesis:0001 in id_map; got {plan.id_map}"
+    )
+
+
+def test_rewrite_rewrites_numeric_shortform(tmp_path: Path) -> None:
+    """FIX 1: with id_map built from plan, rewrite_references rewrites both the
+    shortform 'question:01' and the full id 'question:01-foo-bar' to the new form;
+    no unresolved refs remain."""
+    _write(tmp_path, "doc/questions/01-foo-bar.md",
+           '---\nid: "question:01-foo-bar"\ntype: question\ncreated: "2026-01-01"\n---\n')
+    plan = plan_migration(tmp_path)
+    text = "See question:01 and question:01-foo-bar."
+    out, unresolved = rewrite_references(text, plan.id_map)
+    assert "question:0001" in out, f"shortform not rewritten in: {out!r}"
+    assert "question:0001-foo-bar" in out, f"full id not rewritten in: {out!r}"
+    assert "question:01" not in out, f"old shortform still present in: {out!r}"
+    assert unresolved == [], f"unexpected unresolved: {unresolved}"
+
+
+def test_plan_no_shortform_alias_for_non_shortform_topic(tmp_path: Path) -> None:
+    """FIX 1 guard: a topic 'topic:foo-bar' must NOT produce a bogus alias
+    'topic:foo' — the old_token 'foo' is pure letters, not a shortform shape."""
+    _write(tmp_path, "doc/topics/foo-bar.md",
+           '---\nid: "topic:foo-bar"\ntype: topic\ncreated: "2026-01-01"\n'
+           'status: active\ntitle: Foo Bar\n---\n')
+    plan = plan_migration(tmp_path)
+    assert "topic:foo" not in plan.id_map, (
+        f"spurious shortform alias 'topic:foo' must not appear; id_map={plan.id_map}"
+    )
+
+
+# FIX 2: scope unresolved policing to migrated kinds ----------------------
+
+
+def test_migrate_does_not_flag_unmigrated_kind(tmp_path: Path) -> None:
+    """FIX 2: a reference to 'observation:swan-foo' in a doc file must NOT appear
+    in unresolved_references when there are no observation markdown files in the
+    project (observation stored in YAML registry, not markdown).
+
+    Contrast: a reference to a non-existent question 'question:99-ghost' (a kind
+    that IS migrated as markdown) MUST still be reported."""
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "doc/questions/q01-myq.md",
+           '---\nid: "question:q01-myq"\ntype: question\ncreated: "2026-01-01"\n'
+           'title: My Q\nstatus: active\nupdated: "2026-01-01"\n---\nBody.\n')
+    # doc/context/ is not in _DIR_TO_KIND, so this file is not mis-discovered as an entity.
+    _write(tmp_path, "doc/context/notes.md",
+           "See observation:swan-foo and question:99-ghost for context.\n")
+    _git_init(tmp_path)
+    report = migrate_layout(tmp_path, apply=False)
+    all_unresolved_tokens: list[str] = [
+        token
+        for tokens in report["unresolved_references"].values()
+        for token in tokens
+    ]
+    assert "observation:swan-foo" not in all_unresolved_tokens, (
+        "observation:swan-foo must not be flagged (observation not a migrated markdown kind)"
+    )
+    assert "question:99-ghost" in all_unresolved_tokens, (
+        "question:99-ghost must be flagged (question IS a migrated kind with no mapping)"
+    )
+
+
+# FIX 3: filename-date fallback for `created` -----------------------------
+
+
+def test_plan_filename_date_fallback_for_plan_file(tmp_path: Path) -> None:
+    """FIX 3: a plan file 'doc/plans/2026-05-30-paper-triage-manifest.md' with no
+    frontmatter and no **Date:** header must use 2026-05-30 (from the filename) as
+    its created date — NOT fall back to the undated sentinel."""
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "doc/plans/2026-05-30-paper-triage-manifest.md",
+           "# Paper Triage Manifest\n\ntext\n")
+    _git_init(tmp_path)
+    report = migrate_layout(tmp_path, apply=False)
+    assert report["undated_entities"] == [], (
+        f"filename-dated plan must not appear in undated_entities; got {report['undated_entities']}"
+    )
+
+
+def test_plan_truly_undated_non_date_filename_is_still_reported(tmp_path: Path) -> None:
+    """FIX 3 complement: a plan file 'doc/plans/misc-notes.md' with no frontmatter,
+    no **Date:** header, and a non-date filename must still be reported as undated."""
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "doc/plans/misc-notes.md",
+           "# Misc Notes\n\nSome prose with no date.\n")
+    _git_init(tmp_path)
+    report = migrate_layout(tmp_path, apply=False)
+    old_paths = [d["old_rel_path"] for d in report["undated_entities"]]
+    assert "doc/plans/misc-notes.md" in old_paths, (
+        "truly undated file (no frontmatter, no **Date:**, non-date filename) must be reported undated"
+    )

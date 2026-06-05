@@ -117,6 +117,24 @@ _DIR_TO_KIND: dict[str, str] = {
 _DATE_HEADER_RE = re.compile(r"^\*\*Date:\*\*\s*(\d{4}-\d{2}-\d{2})", re.MULTILINE)
 _STATUS_HEADER_RE = re.compile(r"^\*\*Status:\*\*\s*(.+)$", re.MULTILINE)
 _H1_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
+# FIX 3: captures a leading YYYY-MM-DD date from a filename stem so that files
+# like `2026-05-30-paper-triage-manifest.md` can supply their own `created` date
+# even when no frontmatter `created` field and no `**Date:**` prose header exist.
+_DATE_PREFIX_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:[-.]|$)")
+
+
+def _fallback_created(entity: "LegacyEntity") -> str:
+    """created fallback: frontmatter created -> filename YYYY-MM-DD prefix -> sentinel.
+
+    (synthesize_frontmatter still prefers a body **Date:** header over this fallback.)
+    """
+    fm_created = entity.frontmatter.get("created")
+    if fm_created:
+        return str(fm_created)
+    m = _DATE_PREFIX_DATE_RE.match(Path(entity.rel_path).stem)
+    if m:
+        return m.group(1)
+    return _UNDATED_SENTINEL
 
 
 def synthesize_frontmatter(*, kind: str, body: str, fallback_created: str) -> dict:
@@ -268,7 +286,7 @@ def plan_migration(project_root: Path) -> MigrationPlan:
     # Synthesize complete frontmatter BEFORE planning so created/title/slug are
     # correct even for prose-header (frontmatterless) files.
     normalized: dict[str, dict] = {
-        e.rel_path: ensure_frontmatter(e, fallback_created=str(e.frontmatter.get("created") or _UNDATED_SENTINEL))
+        e.rel_path: ensure_frontmatter(e, fallback_created=_fallback_created(e))
         for e in movable
     }
     by_kind: dict[str, list[LegacyEntity]] = {}
@@ -409,6 +427,19 @@ def _add_move(plan: MigrationPlan, entity: "LegacyEntity", new_rel: str, new_id:
         plan.id_map[stem_alias] = new_id
         plan._stem_alias_sources[stem_alias] = new_id
 
+    # FIX 1: numeric shortform alias — prose references a numbered entity by its
+    # leading token (question:01, hypothesis:h03). Renumbering changes the number,
+    # so map the OLD shortform token -> the NEW numeric shortform (question:0001)
+    # so prose refs are rewritten consistently. Only for genuine shortform shapes
+    # ([letters]+digits), so slug fragments like topic:foo are never mistaken for one.
+    new_local = new_id.split(":", 1)[1]
+    new_num_match = re.match(r"^(\d{4})$|^(\d{4})-", new_local)
+    if entity.old_id and ":" in entity.old_id and new_num_match:
+        new_num = new_num_match.group(1) or new_num_match.group(2)
+        old_token = entity.old_id.split(":", 1)[1].split("-", 1)[0]
+        if re.fullmatch(r"[A-Za-z]*\d+", old_token) and old_token != new_num:
+            plan.id_map.setdefault(f"{kind}:{old_token}", f"{kind}:{new_num}")
+
 
 def _plan_singletons(project_root: Path, plan: MigrationPlan) -> None:
     for kind, candidates in _SINGLETON_LEGACY_PATHS.items():
@@ -457,13 +488,23 @@ _LEGACY_LOCAL_SHAPE = re.compile(r"^(?:[A-Za-z]+\d+|\d{4}-\d{2}-\d{2})(?:-|$)")
 _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 
 
-def rewrite_references(text: str, id_map: dict[str, str]) -> tuple[str, list[str]]:
+def rewrite_references(
+    text: str,
+    id_map: dict[str, str],
+    *,
+    policed_kinds: set[str] | None = None,
+) -> tuple[str, list[str]]:
     """Replace every mapped old id with its new id (longest-first to avoid prefix
     collisions). Returns (rewritten_text, unresolved_legacy_tokens).
 
     A token that *looks* legacy-shaped but has no mapping is reported in
     `unresolved` rather than left to rot into a dead link. This covers both
     `<kind>:<local>` tokens AND bare `[[<local>]]` wiki-links (no colon).
+
+    `policed_kinds`: when provided, only flag tokens whose kind appears in this
+    set as unresolved. Kinds absent from the set (e.g. observation, stored in a
+    YAML registry rather than markdown files) are silently skipped. Default None
+    preserves existing behaviour (police all managed markdown kinds).
     """
     # Replace longest keys first so question:q10-b is handled before question:q1-b.
     # Lookbehind: don't match mid-token (e.g. inside "question:0001-aging-early").
@@ -488,6 +529,8 @@ def rewrite_references(text: str, id_map: dict[str, str]) -> tuple[str, list[str
             continue  # already canonical (a freshly-written new id)
         if not is_markdown_entity_kind(kind):
             continue  # external prefix / url / kind we do not govern
+        if policed_kinds is not None and kind not in policed_kinds:
+            continue  # kind not migrated as markdown (e.g. stored in a YAML registry) — out of scope
         if resolve_path_policy(kind).strategy == "singleton":
             continue  # singletons carry no per-instance local part
         if local_part_conforms(kind, local):
@@ -521,14 +564,20 @@ def _render(frontmatter: dict, body: str) -> str:
 
 def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     plan = plan_migration(project_root)
-    entities = {e.rel_path: e for e in discover_legacy_entities(project_root)}
+    legacy_entities = list(discover_legacy_entities(project_root))
+    entities = {e.rel_path: e for e in legacy_entities}
+    # FIX 2: restrict unresolved-flagging to kinds actually migrated as markdown.
+    # Kinds stored outside markdown (e.g. observation in observations.yaml) produce
+    # false positives when prose references them — they are never in the id_map but
+    # also cannot be moved, so they should not be policed.
+    policed_kinds: set[str] = {e.kind for e in legacy_entities}
 
     # 1. Frontmatter synthesis (build complete frontmatter per file, with new id).
     rewritten: dict[str, str] = {}  # new_rel_path -> file text (pre ref-rewrite)
     synthesized_fm: dict[str, dict] = {}  # new_rel_path -> fm dict (for undated check)
     for move in plan.moves:
         entity = entities[move.old_rel_path]
-        fm = ensure_frontmatter(entity, fallback_created=str(entity.frontmatter.get("created") or _UNDATED_SENTINEL))
+        fm = ensure_frontmatter(entity, fallback_created=_fallback_created(entity))
         fm["id"] = move.new_id
         rewritten[move.new_rel_path] = _render(fm, entity.body)
         synthesized_fm[move.new_rel_path] = fm
@@ -576,7 +625,7 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     all_unresolved: dict[str, list[str]] = {}
     for bucket in (rewritten, singleton_text, inplace_text):
         for rel, text in list(bucket.items()):
-            out, unresolved = rewrite_references(text, plan.id_map)
+            out, unresolved = rewrite_references(text, plan.id_map, policed_kinds=policed_kinds)
             bucket[rel] = out
             if unresolved:
                 all_unresolved[rel] = unresolved
