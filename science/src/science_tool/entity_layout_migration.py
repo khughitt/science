@@ -494,3 +494,121 @@ def rewrite_references(text: str, id_map: dict[str, str]) -> tuple[str, list[str
         if _LEGACY_LOCAL_SHAPE.match(inner):
             unresolved.append(f"[[{inner}]]")
     return text, sorted(set(unresolved))
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator
+# ---------------------------------------------------------------------------
+
+import subprocess
+
+import yaml as _yaml_mod
+
+
+def _git_mv(project_root: Path, old_rel: str, new_rel: str) -> None:
+    dest = project_root / new_rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "mv", old_rel, new_rel], cwd=project_root, check=True)
+
+
+def _render(frontmatter: dict, body: str) -> str:
+    return "---\n" + _yaml_mod.safe_dump(frontmatter, sort_keys=False) + "---\n" + body
+
+
+def migrate_layout(project_root: Path, *, apply: bool) -> dict:
+    plan = plan_migration(project_root)
+    entities = {e.rel_path: e for e in discover_legacy_entities(project_root)}
+
+    # 1. Frontmatter synthesis (build complete frontmatter per file, with new id).
+    rewritten: dict[str, str] = {}  # new_rel_path -> file text (pre ref-rewrite)
+    for move in plan.moves:
+        entity = entities[move.old_rel_path]
+        fm = ensure_frontmatter(entity, fallback_created=str(entity.frontmatter.get("created") or "9999-99-99"))
+        fm["id"] = move.new_id
+        rewritten[move.new_rel_path] = _render(fm, entity.body)
+
+    # 2. Reference rewrite across EVERY project markdown file that can carry an
+    #    entity id — not only the moved entities. References live in non-entity
+    #    prose too (reports, notes, research/packages, tasks). The final graph
+    #    audit (step 4) only inspects STRUCTURED sources (entity frontmatter /
+    #    relations / bindings), so raw inline `<kind>:local` and `[[…]]` links in
+    #    bodies would slip through unrewritten. This project-wide pass — plus the
+    #    unresolved-token report it produces — is that safety net.
+    singleton_text: dict[str, str] = {}
+    for sm in plan.singletons:
+        singleton_text[sm.new_rel_path] = (project_root / sm.old_rel_path).read_text(encoding="utf-8")
+
+    # In-place files: every *.md under the project's content roots that is NOT
+    # being moved (moved sources are in `rewritten`, keyed by NEW path; singletons
+    # in `singleton_text`). Covers pre-existing entities/ files, doc/ prose,
+    # research/packages, and tasks. Templates and .git are skipped.
+    moved_sources = {m.old_rel_path for m in plan.moves} | {s.old_rel_path for s in plan.singletons}
+    inplace_text: dict[str, str] = {}
+    for root_name in ("entities", "doc", "specs", "tasks", "research"):
+        root = project_root / root_name
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*.md")):
+            if "templates" in path.parts:
+                continue
+            rel = path.relative_to(project_root).as_posix()
+            if rel in moved_sources:
+                continue  # handled via `rewritten` at its new path
+            inplace_text[rel] = path.read_text(encoding="utf-8")
+
+    all_unresolved: dict[str, list[str]] = {}
+    for bucket in (rewritten, singleton_text, inplace_text):
+        for rel, text in list(bucket.items()):
+            out, unresolved = rewrite_references(text, plan.id_map)
+            bucket[rel] = out
+            if unresolved:
+                all_unresolved[rel] = unresolved
+
+    report = {
+        "moves": [vars(m) for m in plan.moves],
+        "singletons": [vars(s) for s in plan.singletons],
+        "id_map": plan.id_map,
+        "collisions": plan.collisions,
+        "unresolved_references": all_unresolved,
+        "applied": apply,
+    }
+
+    if not apply:
+        return report
+    if plan.collisions:
+        raise ValueError(f"collisions block --apply: {plan.collisions}")
+    if all_unresolved:
+        raise ValueError(f"unresolved references block --apply: {all_unresolved}")
+
+    # 3. git mv + write rewritten content (entities, singletons, tasks) + bump version.
+    for move in plan.moves:
+        _git_mv(project_root, move.old_rel_path, move.new_rel_path)
+        (project_root / move.new_rel_path).write_text(rewritten[move.new_rel_path], encoding="utf-8")
+    for sm in plan.singletons:
+        _git_mv(project_root, sm.old_rel_path, sm.new_rel_path)
+        (project_root / sm.new_rel_path).write_text(singleton_text[sm.new_rel_path], encoding="utf-8")
+    for rel, text in inplace_text.items():
+        (project_root / rel).write_text(text, encoding="utf-8")
+
+    # 4. Final graph validation — token rewriting can miss semantic references, so
+    #    load the migrated tree and audit it. Fail loud (do NOT bump layout_version)
+    #    if anything fails to resolve. The working tree is left modified for
+    #    inspection; `git restore`/branch reset rolls back the uncommitted changes.
+    from science_tool.graph.migrate import audit_project_sources
+    from science_tool.graph.sources import load_project_sources
+
+    rows, failed = audit_project_sources(load_project_sources(project_root))
+    if failed:
+        bad = [r for r in rows if r.get("status") == "fail"]
+        raise ValueError(
+            f"post-migration graph validation failed with {len(bad)} issue(s); "
+            f"working tree left modified (git restore to roll back). First issues: {bad[:10]}"
+        )
+
+    # 5. Only after a clean audit: bump layout_version to 3.
+    manifest_path = project_root / "science.yaml"
+    manifest = _yaml_mod.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    manifest["layout_version"] = 3
+    manifest_path.write_text(_yaml_mod.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+    report["graph_validation"] = "passed"
+    return report

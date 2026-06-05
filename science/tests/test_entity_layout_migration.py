@@ -278,3 +278,113 @@ def test_rewrite_handles_kind_qualified_wikilink() -> None:
     assert "[[question:0001-a]]" in out          # mapped wikilink rewritten in place
     assert "question:q9-ghost" in unresolved     # unmapped, non-conformant → reported
     assert "[[question:q9-ghost]]" not in unresolved  # reported as the token, not the bare-link form
+
+
+# ---------------------------------------------------------------------------
+# Task 5: migrate_layout orchestrator tests
+# ---------------------------------------------------------------------------
+
+import subprocess
+
+from science_tool.entity_layout_migration import migrate_layout
+
+
+def _git_init(root: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"], cwd=root, check=True)
+
+
+def test_migrate_dry_run_makes_no_changes(tmp_path: Path) -> None:
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "specs/hypotheses/h01-alpha.md", '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
+    _git_init(tmp_path)
+    report = migrate_layout(tmp_path, apply=False)
+    assert report["moves"]
+    assert (tmp_path / "specs/hypotheses/h01-alpha.md").exists()  # untouched
+    assert not (tmp_path / "entities/hypotheses").exists()
+
+
+def test_migrate_apply_moves_and_rewrites(tmp_path: Path) -> None:
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "specs/hypotheses/h01-alpha.md", '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
+    _write(tmp_path, "doc/questions/q01-beta.md", '---\nid: "question:q01-beta"\ntype: question\ncreated: "2026-01-02"\ntitle: Beta\nstatus: active\nupdated: "2026-01-02"\nrelated: ["hypothesis:h01-alpha"]\n---\nSee hypothesis:h01-alpha.\n')
+    _git_init(tmp_path)
+    report = migrate_layout(tmp_path, apply=True)
+    assert (tmp_path / "entities/hypotheses/0001-alpha.md").is_file()
+    q = (tmp_path / "entities/questions/0001-beta.md").read_text()
+    assert "hypothesis:0001-alpha" in q          # related + inline ref rewritten
+    assert "hypothesis:h01-alpha" not in q
+    import yaml as _yaml
+    manifest = _yaml.safe_load((tmp_path / "science.yaml").read_text())
+    assert manifest["layout_version"] == 3
+
+
+def test_migrate_apply_rewrites_tasks_inplace(tmp_path: Path) -> None:
+    """(a) tasks/t001.md containing hypothesis:h01-alpha is rewritten to hypothesis:0001-alpha."""
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "specs/hypotheses/h01-alpha.md", '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
+    _write(tmp_path, "tasks/t001.md", "---\nid: task:t001\ntype: task\nstatus: active\ncreated: \"2026-01-03\"\ntitle: Check\nupdated: \"2026-01-03\"\n---\nDepends on hypothesis:h01-alpha.\n")
+    _git_init(tmp_path)
+    report = migrate_layout(tmp_path, apply=True)
+    task_text = (tmp_path / "tasks/t001.md").read_text()
+    assert "hypothesis:0001-alpha" in task_text
+    assert "hypothesis:h01-alpha" not in task_text
+
+
+def test_migrate_apply_rewrites_singleton_yaml(tmp_path: Path) -> None:
+    """(b) specs/claim-registry.yaml referencing hypothesis:h01-alpha lands at entities/claim-registry.yaml with ref rewritten."""
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "specs/hypotheses/h01-alpha.md", '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
+    (tmp_path / "specs/claim-registry.yaml").write_text(
+        "claims:\n  - id: hypothesis:h01-alpha\n    note: tracked\n", encoding="utf-8"
+    )
+    _git_init(tmp_path)
+    report = migrate_layout(tmp_path, apply=True)
+    assert (tmp_path / "entities/claim-registry.yaml").is_file()
+    content = (tmp_path / "entities/claim-registry.yaml").read_text()
+    assert "hypothesis:0001-alpha" in content
+    assert "hypothesis:h01-alpha" not in content
+
+
+def test_migrate_collision_blocks_apply(tmp_path: Path) -> None:
+    """(c) A project with two Adams2025.md paper sources raises ValueError under apply=True and lists the collision in the dry-run report."""
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "doc/papers/Adams2025.md", '---\nid: "paper:Adams2025"\ntype: paper\ncreated: "2026-01-01"\ntitle: Adams 2025\nupdated: "2026-01-01"\n---\n')
+    _write(tmp_path, "doc/background/papers/Adams2025.md", '---\nid: "paper:Adams2025"\ntype: paper\ncreated: "2026-01-01"\ntitle: Adams 2025\nupdated: "2026-01-01"\n---\n')
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)
+    assert dry["collisions"]
+    import pytest
+    with pytest.raises(ValueError, match="collisions"):
+        migrate_layout(tmp_path, apply=True)
+
+
+def test_migrate_apply_rewrites_inplace_prose_doc(tmp_path: Path) -> None:
+    """(d) A prose doc file containing hypothesis:h01-alpha and [[hypothesis:h01-alpha]] is rewritten in place.
+    Uses doc/context/ — a directory not in _DIR_TO_KIND — so the file is not
+    misclassified as a legacy entity; it exercises the in-place-text code path."""
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "specs/hypotheses/h01-alpha.md", '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
+    _write(tmp_path, "doc/context/summary.md", "See hypothesis:h01-alpha and [[hypothesis:h01-alpha]] for details.\n")
+    _git_init(tmp_path)
+    report = migrate_layout(tmp_path, apply=True)
+    summary = (tmp_path / "doc/context/summary.md").read_text()
+    assert "hypothesis:0001-alpha" in summary
+    assert "hypothesis:h01-alpha" not in summary
+
+
+def test_migrate_unresolved_ref_blocks_apply(tmp_path: Path) -> None:
+    """(e) A prose doc file containing a dead hypothesis:h99-ghost token causes apply=True to raise ValueError
+    and dry-run lists it under unresolved_references.
+    Uses doc/context/ — not in _DIR_TO_KIND — so it is not mis-discovered as an entity."""
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "specs/hypotheses/h01-alpha.md", '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
+    _write(tmp_path, "doc/context/summary.md", "See hypothesis:h99-ghost which is dead.\n")
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)
+    assert dry["unresolved_references"]
+    assert any("hypothesis:h99-ghost" in tokens for tokens in dry["unresolved_references"].values())
+    import pytest
+    with pytest.raises(ValueError, match="unresolved"):
+        migrate_layout(tmp_path, apply=True)
