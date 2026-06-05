@@ -496,13 +496,22 @@ def entity_neighbors(ref: str, hops: int, output_format: str) -> None:
 
 @entity_group.command("review")
 @click.argument("ref")
-@click.option("--note", default=None, help="Optional note recorded with the review.")
+@click.option(
+    "--note",
+    default=None,
+    help="Required review artifact: the finding, prose diff, created task, or a "
+    "reasoned 'no change'. A review without a recorded artifact is rejected.",
+)
 def entity_review(ref: str, note: str | None) -> None:
-    """Mark an epistemic entity as reviewed-as-of today."""
+    """Mark an epistemic entity as reviewed-as-of today.
+
+    A review must record an artifact via --note; a bare timestamp bump is
+    rejected to prevent review-theater (see epistemic-drift-detection design M1).
+    """
     from science_tool.entity_review import ReviewError, review_entity
 
     try:
-        path, changed = review_entity(Path.cwd(), ref, note=note)
+        path, changed = review_entity(Path.cwd(), ref, note=note, require_artifact=True)
     except ReviewError as exc:
         raise click.ClickException(str(exc)) from exc
     rel = path.relative_to(Path.cwd())

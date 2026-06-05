@@ -299,3 +299,49 @@ def test_entity_review_rejects_non_epistemic_target(tmp_path: Path, monkeypatch)
     result = runner.invoke(cli_main, ["entity", "review", "dataset:d1"])
     assert result.exit_code != 0, result.output
     assert "non-epistemic" in result.output.lower() or "operational" in result.output.lower()
+
+
+def test_entity_review_requires_artifact(tmp_path: Path, monkeypatch):
+    """A bare `entity review` (no --note) is review-theater and must be refused."""
+    root = _setup_project_with_hypothesis(tmp_path)
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    result = runner.invoke(cli_main, ["entity", "review", "hypothesis:h1"])
+    assert result.exit_code != 0
+    assert "artifact" in result.output.lower() or "note" in result.output.lower()
+    # frontmatter must be untouched
+    text = (root / "entities" / "hypotheses" / "h1.md").read_text()
+    assert "review_state:" not in text
+
+
+def test_entity_review_rejects_blank_note(tmp_path: Path, monkeypatch):
+    root = _setup_project_with_hypothesis(tmp_path)
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    result = runner.invoke(cli_main, ["entity", "review", "hypothesis:h1", "--note", "   "])
+    assert result.exit_code != 0
+    assert "artifact" in result.output.lower() or "note" in result.output.lower()
+
+
+def test_entity_review_succeeds_with_artifact(tmp_path: Path, monkeypatch):
+    root = _setup_project_with_hypothesis(tmp_path)
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    result = runner.invoke(
+        cli_main,
+        ["entity", "review", "hypothesis:h1", "--note", "scope re-checked vs constants.py::EVENTS; no change"],
+    )
+    assert result.exit_code == 0, result.output
+    text = (root / "entities" / "hypotheses" / "h1.md").read_text()
+    assert "scope re-checked" in text
+
+
+def test_entity_review_unknown_id_errors_even_without_note(tmp_path: Path, monkeypatch):
+    """Unknown id with no --note must still report 'not found', not 'needs artifact'."""
+    root = _setup_project_with_hypothesis(tmp_path)
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    result = runner.invoke(cli_main, ["entity", "review", "hypothesis:nonexistent"])
+    assert result.exit_code != 0
+    assert "not found" in result.output.lower() or "unknown" in result.output.lower()
+    assert "artifact" not in result.output.lower()
