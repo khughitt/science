@@ -221,3 +221,49 @@ def test_synthesize_uses_fallback_when_no_headers() -> None:
     assert fm["created"] == "2026-02-02"
     assert fm["type"] == "finding"
     assert fm["status"] in valid_statuses("finding")
+
+
+from science_tool.entity_layout_migration import rewrite_references
+
+
+def test_rewrite_replaces_full_ids_not_prefix_collisions() -> None:
+    id_map = {"question:q1-a": "question:0001-a", "question:q10-b": "question:0010-b"}
+    text = "See question:q1-a and question:q10-b and related: [question:q1-a]\n"
+    out, unresolved = rewrite_references(text, id_map)
+    assert "question:0001-a" in out and "question:0010-b" in out
+    assert "question:q1-a" not in out  # q1 not corrupted by q10 replacement
+    assert unresolved == []
+
+
+def test_rewrite_reports_unmapped_legacy_tokens() -> None:
+    # A legacy-shaped reference with no mapping must be reported, never silently kept.
+    id_map = {"question:q1-a": "question:0001-a"}
+    text = "Depends on hypothesis:h9-ghost which no longer exists.\n"
+    out, unresolved = rewrite_references(text, id_map)
+    assert "hypothesis:h9-ghost" in unresolved
+
+
+def test_rewrite_reports_bare_wikilink() -> None:
+    # A bare [[q01-foo]] (no kind prefix) cannot be auto-rewritten; it must be
+    # surfaced as unresolved rather than silently left as a dead link.
+    out, unresolved = rewrite_references("See [[q01-foo]] for context.\n", {})
+    assert "[[q01-foo]]" in unresolved
+
+
+def test_rewrite_reports_unmapped_plain_slug_reference() -> None:
+    # A stale ref to a deleted entity by its OLD plain slug (no q##-/date shape).
+    # It is unmapped and does not conform to the numeric policy, so it must be
+    # reported — the legacy-shape-only heuristic would have silently kept it.
+    id_map = {"question:aging-early": "question:0001-aging-early"}
+    text = "Mapped question:aging-early. Dangling question:old-slug stays.\n"
+    out, unresolved = rewrite_references(text, id_map)
+    assert "question:0001-aging-early" in out
+    assert "question:old-slug" in unresolved
+
+
+def test_rewrite_leaves_external_and_conformant_tokens_alone() -> None:
+    # A conformant id and an external/unmanaged prefix must NOT be flagged.
+    id_map = {"question:q1-a": "question:0001-a"}
+    text = "Canonical question:0002-keep and external doi:10.1/x and url https://e.org.\n"
+    out, unresolved = rewrite_references(text, id_map)
+    assert unresolved == []

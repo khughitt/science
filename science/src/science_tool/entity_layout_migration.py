@@ -435,3 +435,61 @@ def _detect_collisions(plan: MigrationPlan) -> None:
         if len(sources) > 1:
             plan.collisions.append({"kind": "number", "entity_kind": kind, "number": number,
                                     "sources": sorted(sources), "occupied_by": None})
+
+
+# ---------------------------------------------------------------------------
+# Reference-rewriting layer
+# ---------------------------------------------------------------------------
+
+# A reference token: <kind>:<local-part>. Legacy local parts may carry a letter
+# prefix (q1, h09) or a date (2026-05-23); canonical are NNNN or a citekey.
+_REF_TOKEN_RE = re.compile(r"\b([a-z][a-z-]*):([A-Za-z0-9][A-Za-z0-9_.-]*)\b")
+_LEGACY_LOCAL_SHAPE = re.compile(r"^(?:[A-Za-z]+\d+|\d{4}-\d{2}-\d{2})(?:-|$)")
+_WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
+
+
+def rewrite_references(text: str, id_map: dict[str, str]) -> tuple[str, list[str]]:
+    """Replace every mapped old id with its new id (longest-first to avoid prefix
+    collisions). Returns (rewritten_text, unresolved_legacy_tokens).
+
+    A token that *looks* legacy-shaped but has no mapping is reported in
+    `unresolved` rather than left to rot into a dead link. This covers both
+    `<kind>:<local>` tokens AND bare `[[<local>]]` wiki-links (no colon).
+    """
+    # Replace longest keys first so question:q10-b is handled before question:q1-b.
+    # Lookbehind: don't match mid-token (e.g. inside "question:0001-aging-early").
+    # Lookahead: don't match when followed by word chars or hyphen (i.e. the token
+    # continues), but DO allow a trailing period (sentence boundary).
+    for old_id in sorted(id_map, key=len, reverse=True):
+        new_id = id_map[old_id]
+        text = re.sub(rf"(?<![\w:.-]){re.escape(old_id)}(?![\w-])", new_id, text)
+
+    unresolved: list[str] = []
+    new_ids = set(id_map.values())
+    # (a) kind-qualified tokens (covers id:, related:, inline, and [[kind:local]]).
+    #     For a kind WE MANAGE, any local part that (1) was not rewritten to a new
+    #     id and (2) does not conform to the kind's filename policy is a
+    #     stale/dangling reference — this catches plain slugs like
+    #     `question:old-slug` that the old legacy-shape heuristic (q##-/date only)
+    #     silently kept. External / unmanaged prefixes (urls, ontology ids) and
+    #     already-conformant ids are left untouched.
+    for match in _REF_TOKEN_RE.finditer(text):
+        token, kind, local = match.group(0), match.group(1), match.group(2)
+        if token in new_ids:
+            continue  # already canonical (a freshly-written new id)
+        if not is_markdown_entity_kind(kind):
+            continue  # external prefix / url / kind we do not govern
+        if resolve_path_policy(kind).strategy == "singleton":
+            continue  # singletons carry no per-instance local part
+        if local_part_conforms(kind, local):
+            continue  # already a valid local part for this kind
+        unresolved.append(token)
+    # (b) bare wiki-links with NO kind prefix, e.g. [[q01-foo]] / [[2026-05-23-x]].
+    #     These cannot be disambiguated to a kind, so they are reported, not rewritten.
+    for match in _WIKILINK_RE.finditer(text):
+        inner = match.group(1).strip()
+        if ":" in inner:
+            continue  # kind-qualified — handled by (a)/token replacement above
+        if _LEGACY_LOCAL_SHAPE.match(inner):
+            unresolved.append(f"[[{inner}]]")
+    return text, sorted(set(unresolved))
