@@ -91,7 +91,7 @@ Example dry-run output (abbreviated):
   ],
   "id_map": {
     "hypothesis:h01-aging-early": "hypothesis:0001-aging-early",
-    "hypothesis:h01-aging-early": "hypothesis:0001-aging-early"
+    "question:q05-aging": "question:0002-aging"
   },
   "collisions": [],
   "unresolved_references": {},
@@ -162,7 +162,8 @@ and each value is a list of legacy-shaped tokens in that file that could not
 be automatically rewritten to a canonical id.
 
 The reference rewriter scans **all project markdown** — not just the moved
-entities — including `doc/` prose, `research/packages/`, and `tasks/`. Any
+entities — including `entities/` (pre-existing files not being moved),
+`doc/`, `specs/`, `tasks/`, and the full `research/` subtree. Any
 token that looks like a legacy reference but has no mapping in `id_map` is
 reported here rather than left as a silent dead link. The dry-run report is
 complete: if a token does not appear in `unresolved_references`, the rewriter
