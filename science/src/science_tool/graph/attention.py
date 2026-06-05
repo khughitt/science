@@ -20,6 +20,10 @@ DEFAULT_EPSILON = 0.05
 NEEDS_REVIEW_MULTIPLIER = 3.0
 STALE_MULTIPLIER = 2.0
 NEVER_REVIEWED_DAYS = 365.0
+OPEN_QUESTION_DEBT_WEIGHT = 0.5
+# Canonical question debt statuses (science_model entities.py); resolved
+# states (answered/retired) are deliberately excluded — they are not debt.
+DEBT_QUESTION_STATUSES = frozenset({"active", "partially-answered", "deferred"})
 
 
 @dataclass(frozen=True)
@@ -362,6 +366,64 @@ def _count_uri_objects(triples: Iterable[tuple[object, object, object]]) -> int:
         if isinstance(obj, URIRef):
             count += 1
     return count
+
+
+def _entity_kind_of(uri: URIRef) -> str | None:
+    canonical_id = canonical_id_from_entity_uri(str(uri))
+    if canonical_id is None:
+        return None
+    return canonical_id.partition(":")[0]
+
+
+def _related_neighbors(knowledge, uri: URIRef) -> set[URIRef]:
+    """All entities joined to ``uri`` by a skos:related edge, either direction.
+
+    `related:` is materialized subject=authoring-entity (materialize.py:353), so a
+    question that lists an entity in its `related:` shows up as an *incoming* edge.
+    """
+    neighbors: set[URIRef] = set()
+    for obj in knowledge.objects(uri, SKOS.related):
+        if isinstance(obj, URIRef):
+            neighbors.add(obj)
+    for subj in knowledge.subjects(SKOS.related, uri):
+        if isinstance(subj, URIRef):
+            neighbors.add(subj)
+    return neighbors
+
+
+def _open_question_debt(knowledge, entity_uri: URIRef) -> int:
+    """Count debt-status questions bearing on ``entity_uri`` via the connectivity
+    layer freshness ignores: direct skos:related (either direction) plus theme
+    co-membership (entity and question both related to the same theme node).
+
+    Intentionally does NOT use bears_on: scoping questions sit on related: edges
+    or weaker, which never become bears_on (freshness.py:70), so a bears_on-based
+    metric would inherit the exact blind spot this term exists to cover. Question
+    age is not weighted here because created/updated are not emitted as graph
+    triples (see plan grounding facts); age weighting is deferred past M1.
+    """
+    neighbors = _related_neighbors(knowledge, entity_uri)
+    question_uris: set[URIRef] = set()
+    for neighbor in neighbors:
+        kind = _entity_kind_of(neighbor)
+        if kind == "question":
+            question_uris.add(neighbor)
+        elif kind == "theme":
+            for theme_neighbor in _related_neighbors(knowledge, neighbor):
+                if _entity_kind_of(theme_neighbor) == "question":
+                    question_uris.add(theme_neighbor)
+
+    # A question is itself an attention candidate (it carries freshnessState) and a
+    # question→theme edge makes the question a theme co-member of itself. Never let
+    # an entity count itself as its own debt.
+    question_uris.discard(entity_uri)
+
+    debt = 0
+    for question_uri in question_uris:
+        status_literal = next(knowledge.objects(question_uri, SCI_NS.projectStatus), None)
+        if status_literal is not None and str(status_literal) in DEBT_QUESTION_STATUSES:
+            debt += 1
+    return debt
 
 
 def _days_since_last_review(knowledge, entity_uri: URIRef, today: date) -> float:

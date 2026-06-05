@@ -14,6 +14,7 @@ from science_tool.graph.attention import (
     format_attention_candidate,
     reason_aware_sample_candidates,
     weighted_sample_without_replacement,
+    _open_question_debt,
 )
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, save_canonical_graph_dataset
 
@@ -105,6 +106,65 @@ def _reason_fixture() -> Dataset:
     knowledge.add((dispute_c, CITO_NS.disputes, p3))
 
     return dataset
+
+
+def _debt_fixture() -> Dataset:
+    """An entity with: 1 directly-related active question, 1 related-but-answered
+    question (not debt), 1 question reachable only via a shared theme, and 1
+    deferred question related to a *different* entity (must not count)."""
+    dataset = Dataset()
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    h = _u("hypothesis/h_scope")
+    other = _u("hypothesis/h_other")
+    theme = _u("theme/cyto_scope")
+    q_direct = _u("question/q_direct")        # active, related -> h  (debt)
+    q_answered = _u("question/q_answered")    # answered, related -> h (NOT debt)
+    q_theme = _u("question/q_theme")          # partially-answered, theme co-member (debt)
+    q_elsewhere = _u("question/q_elsewhere")  # deferred, related -> other only (NOT debt for h)
+
+    for uri, label in (
+        (h, "Scoped hypothesis"),
+        (other, "Unrelated hypothesis"),
+    ):
+        knowledge.add((uri, RDF.type, SCI_NS.Hypothesis))
+        knowledge.add((uri, SKOS.prefLabel, Literal(label)))
+        knowledge.add((uri, SCI_NS.freshnessState, Literal("fresh")))
+        knowledge.add((uri, SCI_NS.lastReviewed, Literal("2026-04-30", datatype=XSD.date)))
+
+    knowledge.add((theme, RDF.type, SCI_NS.Theme))
+    knowledge.add((h, SKOS.related, theme))
+
+    # direction matters: questions author the related: edge -> question is subject
+    knowledge.add((q_direct, SKOS.related, h))
+    knowledge.add((q_direct, SCI_NS.projectStatus, Literal("active")))
+
+    knowledge.add((q_answered, SKOS.related, h))
+    knowledge.add((q_answered, SCI_NS.projectStatus, Literal("answered")))
+
+    knowledge.add((q_theme, SKOS.related, theme))
+    knowledge.add((q_theme, SCI_NS.projectStatus, Literal("partially-answered")))
+
+    knowledge.add((q_elsewhere, SKOS.related, other))
+    knowledge.add((q_elsewhere, SCI_NS.projectStatus, Literal("deferred")))
+
+    return dataset
+
+
+def test_open_question_debt_counts_related_and_theme_comembers() -> None:
+    dataset = _debt_fixture()
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    h = URIRef(PROJECT_NS["hypothesis/h_scope"])
+    other = URIRef(PROJECT_NS["hypothesis/h_other"])
+
+    # h: q_direct (active, direct) + q_theme (partially-answered, via theme) = 2
+    #    q_answered excluded (resolved); q_elsewhere excluded (not connected to h)
+    assert _open_question_debt(knowledge, h) == 2
+    # other: only q_elsewhere (deferred, direct) = 1
+    assert _open_question_debt(knowledge, other) == 1
+    # q_theme is a theme co-member of itself; it must not count itself as debt.
+    q_theme = URIRef(PROJECT_NS["question/q_theme"])
+    assert _open_question_debt(knowledge, q_theme) == 0
 
 
 def test_attention_weight_uses_observable_graph_features() -> None:
