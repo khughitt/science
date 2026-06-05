@@ -12,7 +12,17 @@ import re
 
 import yaml
 
-from science_tool.entities import default_status, is_markdown_entity_kind, markdown_entity_kinds, resolve_path_policy, valid_statuses
+from science_tool.entities import (
+    EntityPathPolicy,
+    default_status,
+    derive_slug,
+    is_markdown_entity_kind,
+    local_part_conforms,
+    markdown_entity_kinds,
+    resolve_path_policy,
+    singleton_path,
+    valid_statuses,
+)
 
 _FRONTMATTER = re.compile(r"^---\n(.*?)\n?---\n?(.*)$", re.DOTALL)
 # Roots scanned for legacy entities. entities/ is intentionally excluded.
@@ -137,3 +147,264 @@ def ensure_frontmatter(entity: "LegacyEntity", *, fallback_created: str) -> dict
     base["type"] = entity.kind  # canonicalize: type wins over legacy `kind`
     base.pop("kind", None)
     return base
+
+
+# ---------------------------------------------------------------------------
+# Planning layer: assign target paths and build the old→new id map
+# ---------------------------------------------------------------------------
+
+# IMPORTANT: date prefix is tried BEFORE the numeric prefix, so 2026-05-23-foo
+# yields slug "foo" (not "05-23-foo" from the numeric regex matching "2026").
+_DATE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-(.*)$")     # 2026-05-23-foo
+_LEGACY_LOCAL_RE = re.compile(r"^(?:[A-Za-z]+)?(\d+)-(.*)$")  # h01-foo, q5-foo, 0003-foo
+
+# Known legacy locations of the two singletons (no per-kind dir / no type field).
+_SINGLETON_LEGACY_PATHS: dict[str, tuple[str, ...]] = {
+    "research-question": ("specs/research-question.md", "doc/research-question.md"),
+    "claim-registry": ("specs/claim-registry.yaml",),
+}
+
+
+@dataclass(frozen=True)
+class Move:
+    old_rel_path: str
+    new_rel_path: str
+    old_id: str | None
+    new_id: str
+    kind: str
+
+
+@dataclass(frozen=True)
+class SingletonMove:
+    old_rel_path: str
+    new_rel_path: str
+
+
+@dataclass
+class MigrationPlan:
+    moves: list[Move] = field(default_factory=list)
+    singletons: list[SingletonMove] = field(default_factory=list)
+    id_map: dict[str, str] = field(default_factory=dict)  # old_id -> new_id
+    collisions: list[dict] = field(default_factory=list)  # blocking; reported
+
+
+def _is_fallback_title(title: str, kind: str) -> bool:
+    """True iff `title` is the synthesized fallback produced when no H1 is found."""
+    return title == f"Untitled {kind}"
+
+
+def _slug_from_legacy(entity: "LegacyEntity", frontmatter: dict) -> str:
+    """Derive a canonical slug for a legacy entity.
+
+    Priority:
+    1. Strip a date prefix (2026-05-23-foo → "foo").
+    2. Strip a legacy numeric/letter prefix (h01-foo, q5-foo → "foo"), provided
+       the remainder is long enough to make a valid slug.
+    3. Synthesized/merged title when it is a REAL title (not the "Untitled <kind>"
+       fallback produced when the file has no H1 heading).
+    4. Filename stem directly (aging-early, new-one → as-is).
+    5. "Untitled <kind>" fallback title (last resort).
+
+    `derive_slug` raises EntityCommandError for slugs shorter than 2 chars; we
+    guard against that by falling through to the next candidate.
+
+    NOTE: this function is NOT called for conformant stems (0003-x, 0005-foo-bar);
+    those keep their existing stem verbatim via ``_local_from_conformant_stem``.
+    """
+    from science_tool.entities import EntityCommandError as _ECE
+
+    stem = Path(entity.rel_path).stem
+    # 1. Date prefix — must be tried before legacy-number because "2026-05-23-foo"
+    #    has "2026" which the LEGACY_LOCAL_RE would mis-parse as a sequence number.
+    m = _DATE_PREFIX_RE.match(stem)
+    if m is not None and m.group(1):
+        try:
+            return derive_slug(m.group(1))
+        except _ECE:
+            pass  # remainder too short — fall through
+
+    # 2. Legacy numeric/letter prefix (h01-foo, q5-foo).
+    m = _LEGACY_LOCAL_RE.match(stem)
+    if m is not None and m.group(2):
+        try:
+            return derive_slug(m.group(2))
+        except _ECE:
+            pass  # remainder too short — fall through
+
+    # 3. Real synthesized/merged title (H1 header found in body).
+    title = frontmatter.get("title")
+    if title and not _is_fallback_title(str(title), entity.kind):
+        try:
+            return derive_slug(str(title))
+        except _ECE:
+            pass
+
+    # 4. Stem itself (aging-early, new-one, etc.).
+    try:
+        return derive_slug(stem)
+    except _ECE:
+        pass
+
+    # 5. Last resort: the "Untitled <kind>" fallback title.
+    if title:
+        return derive_slug(str(title))
+    raise ValueError(f"Cannot derive slug for {entity.rel_path!r}")
+
+
+def plan_migration(project_root: Path) -> MigrationPlan:
+    plan = MigrationPlan()
+    _plan_singletons(project_root, plan)
+
+    entities = discover_legacy_entities(project_root)
+    # Synthesize complete frontmatter BEFORE planning so created/title/slug are
+    # correct even for prose-header (frontmatterless) files.
+    normalized: dict[str, dict] = {
+        e.rel_path: ensure_frontmatter(e, fallback_created=str(e.frontmatter.get("created") or "9999-99-99"))
+        for e in entities
+    }
+    by_kind: dict[str, list[LegacyEntity]] = {}
+    for entity in entities:
+        by_kind.setdefault(entity.kind, []).append(entity)
+
+    for kind, items in by_kind.items():
+        policy = resolve_path_policy(kind)
+        if policy.strategy == "singleton":
+            # Singleton kinds (research-question, claim-registry) are relocated by
+            # _plan_singletons via explicit by-path rules, never numbered. Skip them
+            # here so a stray `type: research-question` file is not mis-numbered.
+            continue
+        if policy.strategy == "citekey":
+            for entity in items:
+                local = Path(entity.rel_path).stem
+                _add_move(plan, entity, f"{policy.root.as_posix()}/{local}.md", f"{kind}:{local}", kind)
+            continue
+        # numeric: preserve conformant numbers; assign the rest in created order.
+        ordered = sorted(items, key=lambda e: (str(normalized[e.rel_path]["created"]), e.rel_path))
+        taken: set[int] = set()
+        # Seed `taken` with numbers ALREADY committed under entities/<kind>/ so a
+        # PARTIALLY-migrated project (entities created additively before/after a
+        # prior run) never reassigns an occupied number. These pre-existing files
+        # are not moves; they only reserve their slots.
+        existing_numbers = _existing_entity_numbers(project_root, policy)
+        taken |= existing_numbers
+        deferred: list[LegacyEntity] = []
+        provisional: dict[str, int] = {}
+        for entity in ordered:
+            stem = Path(entity.rel_path).stem
+            # A date-prefixed stem (2026-05-23-foo) technically matches
+            # _NUMERIC_LOCAL_PART_RE because "2026" is 4 digits, but it is a
+            # calendar date, NOT a sequence number. Always treat such stems as
+            # non-conformant so they get assigned a proper NNNN sequence number.
+            is_date_stem = _DATE_PREFIX_RE.match(stem) is not None
+            if not is_date_stem and local_part_conforms(kind, stem):
+                number = int(stem.split("-", 1)[0])
+                if number in existing_numbers:
+                    # A conformant legacy file wants a number an entities/ file
+                    # already holds → blocking number collision (manual fix).
+                    plan.collisions.append(
+                        {"kind": "number", "entity_kind": kind, "number": f"{number:04d}",
+                         "sources": [entity.rel_path], "occupied_by": "entities/"}
+                    )
+                provisional[entity.rel_path] = number
+                taken.add(number)  # NB: two pre-conformant 0003-* both keep 3 → collision (detected below)
+            else:
+                deferred.append(entity)
+        nxt = 1
+        for entity in deferred:
+            while nxt in taken:
+                nxt += 1
+            provisional[entity.rel_path] = nxt
+            taken.add(nxt)
+            nxt += 1
+        for entity in ordered:
+            number = provisional[entity.rel_path]
+            stem = Path(entity.rel_path).stem
+            is_date_stem = _DATE_PREFIX_RE.match(stem) is not None
+            if not is_date_stem and local_part_conforms(kind, stem):
+                # Conformant stem (e.g. "0003-foo-bar"): keep it verbatim as the
+                # local part so IDs and slugs remain stable across re-runs.
+                local = stem
+            else:
+                local = f"{number:04d}-{_slug_from_legacy(entity, normalized[entity.rel_path])}"
+            _add_move(plan, entity, f"{policy.root.as_posix()}/{local}.md", f"{kind}:{local}", kind)
+
+    _detect_collisions(plan)
+    _detect_disk_collisions(project_root, plan)
+    return plan
+
+
+def _existing_entity_numbers(project_root: Path, policy: EntityPathPolicy) -> set[int]:
+    """Numbers already committed under entities/<kind>/ (NNNN-*.md)."""
+    directory = project_root / policy.root
+    numbers: set[int] = set()
+    if directory.is_dir():
+        for path in directory.glob("*.md"):
+            match = re.match(r"^(\d{4})-", path.name)
+            if match is not None:
+                numbers.add(int(match.group(1)))
+    return numbers
+
+
+def _detect_disk_collisions(project_root: Path, plan: MigrationPlan) -> None:
+    """Flag any planned target path already occupied on disk by a file we are not
+    moving (e.g. a pre-existing entities/papers/<citekey>.md or NNNN-*.md). This
+    catches partial-migration / re-run cases that the moves-only collision pass
+    cannot see."""
+    moved_sources = {m.old_rel_path for m in plan.moves} | {s.old_rel_path for s in plan.singletons}
+    for new_rel, old_rel in (
+        *[(m.new_rel_path, m.old_rel_path) for m in plan.moves],
+        *[(s.new_rel_path, s.old_rel_path) for s in plan.singletons],
+    ):
+        if new_rel in moved_sources:
+            continue  # a swap among the files we are moving — handled by path/id checks
+        if (project_root / new_rel).exists():
+            plan.collisions.append({"kind": "disk", "target": new_rel, "sources": [old_rel]})
+
+
+def _add_move(plan: MigrationPlan, entity: "LegacyEntity", new_rel: str, new_id: str, kind: str) -> None:
+    plan.moves.append(Move(entity.rel_path, new_rel, entity.old_id, new_id, kind))
+    if entity.old_id:
+        plan.id_map[entity.old_id] = new_id
+    # Frontmatterless / prose-header files carry no `old_id`, yet references may
+    # still point at them by their old filename stem (e.g. a link to
+    # `interpretation:2026-05-23-foo` for a file with no `id:`). Map a
+    # filename-derived alias `<kind>:<old-stem>` -> new_id so those refs rewrite
+    # instead of being reported unresolved. `setdefault` never clobbers a real
+    # `old_id` mapping; stems are unique within a kind's directory, so aliases
+    # never collide.
+    stem_alias = f"{kind}:{Path(entity.rel_path).stem}"
+    plan.id_map.setdefault(stem_alias, new_id)
+
+
+def _plan_singletons(project_root: Path, plan: MigrationPlan) -> None:
+    for kind, candidates in _SINGLETON_LEGACY_PATHS.items():
+        target = singleton_path(kind).as_posix()
+        for rel in candidates:
+            if (project_root / rel).is_file():
+                plan.singletons.append(SingletonMove(old_rel_path=rel, new_rel_path=target))
+                break  # first existing candidate wins
+
+
+def _detect_collisions(plan: MigrationPlan) -> None:
+    by_path: dict[str, list[str]] = {}
+    by_id: dict[str, list[str]] = {}
+    by_kind_number: dict[tuple[str, str], list[str]] = {}
+    for move in plan.moves:
+        by_path.setdefault(move.new_rel_path, []).append(move.old_rel_path)
+        by_id.setdefault(move.new_id, []).append(move.old_rel_path)
+        # number-hygiene collision: two files keep the SAME number within a kind
+        # (e.g. pre-conformant 0003-a.md + 0003-b.md → different ids/paths, but a
+        # duplicate number, which by_path/by_id alone would miss).
+        local = move.new_id.split(":", 1)[1]
+        number_match = re.match(r"^(\d{4})-", local)
+        if number_match is not None:
+            by_kind_number.setdefault((move.kind, number_match.group(1)), []).append(move.old_rel_path)
+    for target, sources in sorted(by_path.items()):
+        if len(sources) > 1:
+            plan.collisions.append({"kind": "path", "target": target, "sources": sorted(sources)})
+    for new_id, sources in sorted(by_id.items()):
+        if len(sources) > 1:
+            plan.collisions.append({"kind": "id", "new_id": new_id, "sources": sorted(sources)})
+    for (kind, number), sources in sorted(by_kind_number.items()):
+        if len(sources) > 1:
+            plan.collisions.append({"kind": "number", "entity_kind": kind, "number": number, "sources": sorted(sources)})
