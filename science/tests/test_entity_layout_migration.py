@@ -617,3 +617,85 @@ def test_plan_truly_undated_non_date_filename_is_still_reported(tmp_path: Path) 
     assert "doc/plans/misc-notes.md" in old_paths, (
         "truly undated file (no frontmatter, no **Date:**, non-date filename) must be reported undated"
     )
+
+
+# ---------------------------------------------------------------------------
+# YAML registry in-place rewrite (pilot: observations.yaml broke graph audit)
+# ---------------------------------------------------------------------------
+
+
+def test_migrate_rewrites_yaml_registry_inplace(tmp_path: Path) -> None:
+    """A YAML file under doc/ containing an entity reference must have that
+    reference rewritten in place after apply=True.
+
+    Uses doc/notes.yaml (a plain YAML file, not a graph-audited registry) to
+    isolate the in-place-yaml-rewrite behaviour without triggering the
+    observations-schema graph loader.  The file stays at its original path; only
+    its contents change.
+    """
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-alpha.md",
+        '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+        'title: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
+    # A plain YAML file in doc/ that references the hypothesis by old id.
+    _write(
+        tmp_path,
+        "doc/notes.yaml",
+        "related:\n  - hypothesis:h01-alpha\n",
+    )
+    _git_init(tmp_path)
+    migrate_layout(tmp_path, apply=True)
+    content = (tmp_path / "doc/notes.yaml").read_text()
+    assert "hypothesis:0001-alpha" in content, f"old id not rewritten; content: {content!r}"
+    assert "hypothesis:h01-alpha" not in content, f"old id still present; content: {content!r}"
+
+
+def test_migrate_rewrites_knowledge_yaml_inplace(tmp_path: Path) -> None:
+    """A YAML file under knowledge/ containing an entity reference must be
+    rewritten in place — confirms that the knowledge/ root is walked.
+    """
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-alpha.md",
+        '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+        'title: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
+    # A plain YAML file in knowledge/sources/local/ that references the hypothesis.
+    _write(
+        tmp_path,
+        "knowledge/sources/local/relations.yaml",
+        "relations:\n  - source: hypothesis:h01-alpha\n    target: other:foo\n",
+    )
+    _git_init(tmp_path)
+    migrate_layout(tmp_path, apply=True)
+    content = (tmp_path / "knowledge/sources/local/relations.yaml").read_text()
+    assert "hypothesis:0001-alpha" in content, f"old id not rewritten; content: {content!r}"
+    assert "hypothesis:h01-alpha" not in content, f"old id still present; content: {content!r}"
+
+
+def test_migrate_leaves_manifest_science_yaml_unrewritten_as_ref(tmp_path: Path) -> None:
+    """science.yaml at the project root is NOT in the in-place walk; it is only
+    touched by the version bump (layout_version: 3).  A value that resembles
+    nothing like an entity id must survive unchanged; layout_version must be 3.
+    """
+    _write(
+        tmp_path,
+        "science.yaml",
+        "name: my-project\nlayout_version: 2\ncustom_field: some-plain-value\n",
+    )
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-alpha.md",
+        '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+        'title: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
+    _git_init(tmp_path)
+    migrate_layout(tmp_path, apply=True)
+    manifest = yaml.safe_load((tmp_path / "science.yaml").read_text())
+    assert manifest["layout_version"] == 3, "layout_version must be bumped to 3"
+    assert manifest["name"] == "my-project", "name field must survive unchanged"
+    assert manifest.get("custom_field") == "some-plain-value", "unrelated fields must survive"

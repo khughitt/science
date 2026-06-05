@@ -29,6 +29,10 @@ from science_tool.entities import (
 _FRONTMATTER = re.compile(r"^---\n(.*?)\n?---\n?(.*)$", re.DOTALL)
 # Roots scanned for legacy entities. entities/ is intentionally excluded.
 _LEGACY_SCAN_ROOTS = ("doc", "specs")
+# Roots walked for in-place reference rewriting (markdown + yaml).
+_INPLACE_ROOTS = ("entities", "doc", "specs", "tasks", "research", "knowledge")
+# Glob patterns used in the in-place walk (all three are scanned per root).
+_INPLACE_GLOBS = ("*.md", "*.yaml", "*.yml")
 # Sentinel for "no date derivable" — used as a sort-last key and blocking guard.
 # Never written to disk: date-less entities block --apply before any mutation.
 _UNDATED_SENTINEL = "9999-99-99"
@@ -610,11 +614,12 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     # research/packages, and tasks. Templates and .git are skipped.
     moved_sources = {m.old_rel_path for m in plan.moves} | {s.old_rel_path for s in plan.singletons}
     inplace_text: dict[str, str] = {}
-    for root_name in ("entities", "doc", "specs", "tasks", "research"):
+    for root_name in _INPLACE_ROOTS:
         root = project_root / root_name
         if not root.is_dir():
             continue
-        for path in sorted(root.rglob("*.md")):
+        paths = sorted(p for g in _INPLACE_GLOBS for p in root.rglob(g))
+        for path in paths:
             if "templates" in path.parts:
                 continue
             rel = path.relative_to(project_root).as_posix()
