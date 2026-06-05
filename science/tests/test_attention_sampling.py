@@ -201,6 +201,14 @@ def test_zero_debt_emits_no_debt_reason() -> None:
         assert candidate.components["open_question_debt"] == 0.0
 
 
+def test_format_attention_candidate_exposes_open_question_debt() -> None:
+    candidates = compute_attention_candidates(_debt_fixture(), today=date(2026, 5, 1))
+    by_id = {candidate.entity_id: candidate for candidate in candidates}
+    row = format_attention_candidate(by_id["hypothesis:h_scope"])
+    assert row["open_question_debt"] == "2"
+    assert any(r["code"] == "open_question_debt" for r in row["reasons"])
+
+
 def test_attention_weight_uses_observable_graph_features() -> None:
     candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1))
     by_id = {candidate.entity_id: candidate for candidate in candidates}

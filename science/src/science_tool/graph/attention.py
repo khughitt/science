@@ -284,6 +284,7 @@ def format_attention_candidate(
         "dispute_count": str(int(components["dispute_count"])),
         "evidence_source_count": str(int(components["evidence_source_count"])),
         "evidence_balance_factor": f"{components['evidence_balance_factor']:.2f}",
+        "open_question_debt": str(int(components["open_question_debt"])),
         "reasons": [reason.as_dict() for reason in candidate.reasons],
     }
 
