@@ -680,65 +680,67 @@ def test_hypotheses_phase_validation(tmp_path: Path) -> None:
     assert "specs/hypotheses/h3.md has invalid phase 'active' (must be 'candidate' or 'active')" not in messages
 
 
-def test_hypotheses_warns_for_non_positive_review_horizon_under_doc_and_specs(tmp_path: Path) -> None:
+def test_hypotheses_warns_for_non_positive_review_horizon_under_entities(tmp_path: Path) -> None:
     from science_tool.validate.checks.hypotheses import check_hypotheses
 
     ctx = _ctx(tmp_path)
-    doc_dir = tmp_path / "doc"
-    specs_dir = tmp_path / "specs"
-    doc_dir.mkdir()
-    specs_dir.mkdir()
-    doc_dir.joinpath("bad.md").write_text(
+    hyp_dir = tmp_path / "entities" / "hypotheses"
+    find_dir = tmp_path / "entities" / "findings"
+    hyp_dir.mkdir(parents=True)
+    find_dir.mkdir(parents=True)
+    hyp_dir.joinpath("bad.md").write_text(
         "---\nreview_state:\n  review_horizon_days: 0\n---\nBody\n",
         encoding="utf-8",
     )
-    specs_dir.joinpath("bad.md").write_text(
+    find_dir.joinpath("bad.md").write_text(
         "---\nreview_state:\n  review_horizon_days: -2\n---\nBody\n",
         encoding="utf-8",
     )
-    specs_dir.joinpath("good.md").write_text(
+    find_dir.joinpath("good.md").write_text(
         "---\nreview_state:\n  review_horizon_days: 1\n---\nBody\n",
         encoding="utf-8",
     )
 
     messages = _messages(check_hypotheses(ctx))
 
-    assert "doc/bad.md: review_state.review_horizon_days must be positive (got 0)" in messages
-    assert "specs/bad.md: review_state.review_horizon_days must be positive (got -2)" in messages
-    assert "specs/good.md: review_state.review_horizon_days must be positive (got 1)" not in messages
+    assert "entities/hypotheses/bad.md: review_state.review_horizon_days must be positive (got 0)" in messages
+    assert "entities/findings/bad.md: review_state.review_horizon_days must be positive (got -2)" in messages
+    assert "entities/findings/good.md: review_state.review_horizon_days must be positive (got 1)" not in messages
 
 
 def test_hypotheses_warns_for_quoted_numeric_review_horizon(tmp_path: Path) -> None:
     from science_tool.validate.checks.hypotheses import check_hypotheses
 
     ctx = _ctx(tmp_path)
-    doc_dir = tmp_path / "doc"
-    doc_dir.mkdir()
-    doc_dir.joinpath("bad.md").write_text(
+    hyp_dir = tmp_path / "entities" / "hypotheses"
+    hyp_dir.mkdir(parents=True)
+    hyp_dir.joinpath("bad.md").write_text(
         '---\nreview_state:\n  review_horizon_days: "0"\n---\nBody\n',
         encoding="utf-8",
     )
-    doc_dir.joinpath("ignored.md").write_text(
+    hyp_dir.joinpath("ignored.md").write_text(
         "---\nreview_state:\n  review_horizon_days: soon\n---\nBody\n",
         encoding="utf-8",
     )
 
     messages = _messages(check_hypotheses(ctx))
 
-    assert "doc/bad.md: review_state.review_horizon_days must be positive (got 0)" in messages
-    assert not any(message.startswith("doc/ignored.md: review_state.review_horizon_days") for message in messages)
+    assert "entities/hypotheses/bad.md: review_state.review_horizon_days must be positive (got 0)" in messages
+    assert not any(
+        message.startswith("entities/hypotheses/ignored.md: review_state.review_horizon_days") for message in messages
+    )
 
 
 def test_hypotheses_ignores_malformed_frontmatter_during_review_horizon_scan(tmp_path: Path) -> None:
     from science_tool.validate.checks.hypotheses import check_hypotheses
 
     ctx = _ctx(tmp_path)
-    doc_dir = tmp_path / "doc"
-    specs_dir = tmp_path / "specs"
-    doc_dir.mkdir()
-    specs_dir.mkdir()
-    doc_dir.joinpath("broken.md").write_text("---\nreview_state: [\n---\nBody\n", encoding="utf-8")
-    specs_dir.joinpath("broken.md").write_text("---\nreview_state: [\n---\nBody\n", encoding="utf-8")
+    # Under entities/findings (not entities/hypotheses) so only the review_horizon
+    # scan inspects it — the structural hypotheses-dir check would flag a broken
+    # hypothesis file regardless of horizon.
+    find_dir = tmp_path / "entities" / "findings"
+    find_dir.mkdir(parents=True)
+    find_dir.joinpath("broken.md").write_text("---\nreview_state: [\n---\nBody\n", encoding="utf-8")
 
     results = list(check_hypotheses(ctx))
 

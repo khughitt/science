@@ -136,7 +136,9 @@ def _phase_value(frontmatter: dict[str, Any], lines: list[str]) -> str | None:
 
 
 def _check_review_horizon_days(ctx: ValidateContext) -> Iterator[Result]:
-    for root in (ctx.doc_dir, ctx.specs_dir):
+    # review_state lives only on epistemic entities, which the Plan 3 cutover
+    # relocated to entities/. Scan there (the legacy doc/specs roots are gone).
+    for root in (ctx.project_root / "entities",):
         if not root.is_dir():
             continue
         for path in sorted(root.rglob("*.md")):
