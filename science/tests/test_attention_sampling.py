@@ -10,6 +10,7 @@ from rdflib.namespace import RDF, SKOS, XSD
 
 from science_tool.cli import main
 from science_tool.graph.attention import (
+    AttentionReason,
     compute_attention_candidates,
     format_attention_candidate,
     reason_aware_sample_candidates,
@@ -167,6 +168,39 @@ def test_open_question_debt_counts_related_and_theme_comembers() -> None:
     assert _open_question_debt(knowledge, q_theme) == 0
 
 
+def test_open_question_debt_raises_weight_and_emits_reason() -> None:
+    candidates = compute_attention_candidates(_debt_fixture(), today=date(2026, 5, 1))
+    by_id = {candidate.entity_id: candidate for candidate in candidates}
+
+    indebted = by_id["hypothesis:h_scope"]   # debt 2
+    light = by_id["hypothesis:h_other"]       # debt 1
+
+    assert indebted.components["open_question_debt"] == 2.0
+    assert light.components["open_question_debt"] == 1.0
+    # both fresh, same review date, no evidence/bears_on -> debt is the only
+    # differentiator, so more debt must mean strictly more weight.
+    assert indebted.weight > light.weight
+
+    debt_reasons = [r for r in indebted.reasons if r.code == "open_question_debt"]
+    assert debt_reasons == [
+        AttentionReason(
+            code="open_question_debt",
+            direction="increase_attention",
+            strength="moderate",
+            provenance="derived:open_question_debt(related+theme,2)",
+            next_action="incorporate_or_answer_open_questions",
+        )
+    ]
+
+
+def test_zero_debt_emits_no_debt_reason() -> None:
+    candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1))
+    by_id = {candidate.entity_id: candidate for candidate in candidates}
+    for candidate in by_id.values():
+        assert all(r.code != "open_question_debt" for r in candidate.reasons)
+        assert candidate.components["open_question_debt"] == 0.0
+
+
 def test_attention_weight_uses_observable_graph_features() -> None:
     candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1))
     by_id = {candidate.entity_id: candidate for candidate in candidates}
@@ -183,6 +217,7 @@ def test_attention_weight_uses_observable_graph_features() -> None:
         "dispute_count": 1.0,
         "evidence_source_count": 2.0,
         "evidence_balance_factor": 2.0,
+        "open_question_debt": 0.0,
         "epsilon": 0.05,
     }
 

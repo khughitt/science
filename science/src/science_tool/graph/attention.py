@@ -105,13 +105,19 @@ def compute_attention_candidates(
         evidence_source_count = support_count + dispute_count
         evidence_balance_factor = _evidence_balance_factor(support_count, dispute_count)
         freshness_multiplier = _freshness_multiplier(freshness_state)
+        open_question_debt = _open_question_debt(knowledge, entity_uri)
 
         weight = (
             (1.0 + incoming_bears_on)
             * (1.0 + (days_since_last_review / 30.0))
             * freshness_multiplier
             * evidence_balance_factor
+            * (1.0 + OPEN_QUESTION_DEBT_WEIGHT * open_question_debt)
         ) + epsilon
+
+        reasons = list(_derive_phase1_reasons(kind, support_count, dispute_count))
+        if open_question_debt > 0:
+            reasons.append(_open_question_debt_reason(open_question_debt))
 
         candidates.append(
             AttentionCandidate(
@@ -129,9 +135,10 @@ def compute_attention_candidates(
                     "dispute_count": float(dispute_count),
                     "evidence_source_count": float(evidence_source_count),
                     "evidence_balance_factor": float(evidence_balance_factor),
+                    "open_question_debt": float(open_question_debt),
                     "epsilon": float(epsilon),
                 },
-                reasons=_derive_phase1_reasons(kind, support_count, dispute_count),
+                reasons=reasons,
             )
         )
 
@@ -279,6 +286,22 @@ def format_attention_candidate(
         "evidence_balance_factor": f"{components['evidence_balance_factor']:.2f}",
         "reasons": [reason.as_dict() for reason in candidate.reasons],
     }
+
+
+def _open_question_debt_reason(debt: int) -> AttentionReason:
+    if debt >= 3:
+        strength = "high"
+    elif debt == 2:
+        strength = "moderate"
+    else:
+        strength = "low"
+    return AttentionReason(
+        code="open_question_debt",
+        direction="increase_attention",
+        strength=strength,
+        provenance=f"derived:open_question_debt(related+theme,{debt})",
+        next_action="incorporate_or_answer_open_questions",
+    )
 
 
 def _derive_phase1_reasons(kind: str, support_count: int, dispute_count: int) -> list[AttentionReason]:
