@@ -14,7 +14,7 @@ import yaml
 
 from science_tool.entities import is_markdown_entity_kind, markdown_entity_kinds, resolve_path_policy
 
-_FRONTMATTER = re.compile(r"^---\n(.*?)\n---\n?(.*)$", re.DOTALL)
+_FRONTMATTER = re.compile(r"^---\n(.*?)\n?---\n?(.*)$", re.DOTALL)
 # Roots scanned for legacy entities. entities/ is intentionally excluded.
 _LEGACY_SCAN_ROOTS = ("doc", "specs")
 
@@ -35,7 +35,7 @@ def _split_frontmatter(text: str) -> tuple[dict | None, str]:
     try:
         data = yaml.safe_load(match.group(1)) or {}
     except yaml.YAMLError:
-        return None, text
+        return None, match.group(2)   # body without fences, not the full text
     return (data if isinstance(data, dict) else None), match.group(2)
 
 

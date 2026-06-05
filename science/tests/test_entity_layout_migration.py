@@ -36,3 +36,19 @@ def test_infers_synthesis_singleton_by_path(tmp_path: Path) -> None:
     raw.write_text("# Synthesis\n\nText.\n", encoding="utf-8")
     found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
     assert found["doc/reports/synthesis.md"].kind == "synthesis"
+
+
+def test_unrecognized_frontmatter_type_is_skipped(tmp_path: Path) -> None:
+    # A file whose frontmatter type is not a known markdown entity kind (e.g.
+    # "concept") must be silently excluded from discovery results.
+    _write(tmp_path, "doc/concepts/foo.md", "---\ntype: concept\n---\nBody.\n")
+    found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
+    assert "doc/concepts/foo.md" not in found
+
+
+def test_frontmatterless_file_under_unknown_parent_dir_is_skipped(tmp_path: Path) -> None:
+    # A frontmatterless file whose parent directory cannot be mapped to a known
+    # entity kind must produce no discovery result.
+    _write(tmp_path, "doc/misc/foo.md", "Some prose.\n")
+    found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
+    assert "doc/misc/foo.md" not in found
