@@ -7,11 +7,11 @@
 
 **Goal:** Ship `science entities migrate [--apply]` (with frontmatter synthesis → id-map → raw reference rewrite → `git mv` → re-validate), write the migration guide, pilot it on a real project, then perform the irreversible **no-fallback cutover** that makes `entities/` the only supported layout.
 
-**Architecture:** A new pure-function library `entity_layout_migration.py` does all the work (discover → synthesize → plan → rewrite), so every step is unit-testable on `tmp_path`. A thin CLI command orchestrates it: dry-run by default (returns a report), `--apply` performs `git mv` + writes + sets `layout_version: 3`. Reference rewriting is **full-id token replacement** (robust, formatting-preserving) plus `related:` canonicalization via the graph `ReferenceResolver`; any token it cannot confidently rewrite is **reported for manual review, never silently dropped**, and a final graph re-validation **fails loud** on unresolved references. The cutover (last task) reverses every `doc/`/`specs/` fallback added in Plans 1–2 and promotes the conformance WARNs to ERROR.
+**Architecture:** A new pure-function library `entity_layout_migration.py` does all the work (discover → synthesize → plan → rewrite), so every step is unit-testable on `tmp_path`. A thin CLI command orchestrates it: dry-run by default (returns a report), `--apply` performs `git mv` + writes + sets `layout_version: 3`. Reference rewriting is **full-id token replacement** (robust, formatting-preserving) applied across **every project markdown file** that can carry an entity id (moved entities, singletons, pre-existing `entities/`, `doc/` prose/reports, `research/packages`, `tasks/`) — not just the files being moved — because raw body links would otherwise be missed by the structured-only graph audit. Any token it cannot confidently rewrite is **reported for manual review, never silently dropped**, and a final graph re-validation **fails loud** on unresolved references. The cutover (last task) reverses every `doc/`/`specs/` fallback added in Plans 1–2 — including several entity checks Plan 2 left scanning legacy roots only, which Task 8 first repoints additively — and promotes the conformance WARNs to ERROR.
 
 **Tech Stack:** Python 3.13, pytest, Click, PyYAML, git. Tests run from `science/`: `cd science && uv run pytest`.
 
-**Ordering invariant:** Tasks 1–8 keep the repo and downstream projects working (the migrate command is additive; nothing is forced). **Task 9 is the only irreversible step and must be done last**, after the pilot (Task 8) confirms a real project migrates cleanly.
+**Ordering invariant:** Tasks 1–9 keep the repo and downstream projects working (the migrate command is additive; nothing is forced). **Task 10 is the only irreversible step and must be done last**, after the pilot (Task 9) confirms a real project migrates cleanly.
 
 ---
 
@@ -28,6 +28,9 @@
 | `science/src/science_tool/validate/checks/manifest.py` | Cutover: `layout_version < 3` → ERROR | Modify |
 | `science/src/science_tool/validate/checks/entity_conformance.py` | Cutover: WARN → severity gated on `layout_version` | Modify |
 | `science/src/science_tool/validate/checks/{hypotheses,discussions,document_structure,papers}.py` | Cutover: drop legacy-dir fallback | Modify |
+| `science/src/science_tool/validate/checks/{prereg,evidence_lines,hypothesis_comparisons}.py` | Additive dual-root (Task 8); cutover: drop legacy | Modify |
+| `science/src/science_tool/validate/checks/cross_references.py` | Additive: include `entities/` in id scan (Task 8); cutover: drop legacy | Modify |
+| `science/src/science_tool/validate/checks/directory_structure.py` | Additive: version-gate required dirs — `specs/` for v2, `entities/` for v3 (Task 8) | Modify |
 | `docs/entity-layout-migration-guide.md` | Migration guide | Create |
 | `science/tests/test_entity_layout_migration.py` | Library unit tests | Create |
 
@@ -71,6 +74,17 @@ def test_discovers_specs_and_doc_legacy_locations(tmp_path: Path) -> None:
 def test_ignores_already_migrated_entities_dir(tmp_path: Path) -> None:
     _write(tmp_path, "entities/questions/0001-x.md", '---\nid: "question:0001-x"\ntype: question\n---\n')
     assert discover_legacy_entities(tmp_path) == []
+
+
+def test_infers_synthesis_singleton_by_path(tmp_path: Path) -> None:
+    # Frontmatterless legacy synthesis singleton: parent dir is "reports", which
+    # the derived map would call `report`. The by-path override must classify it
+    # as synthesis (matching discussions.py's legacy treatment).
+    raw = tmp_path / "doc/reports/synthesis.md"
+    raw.parent.mkdir(parents=True, exist_ok=True)
+    raw.write_text("# Synthesis\n\nText.\n", encoding="utf-8")
+    found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
+    assert found["doc/reports/synthesis.md"].kind == "synthesis"
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -97,7 +111,7 @@ import re
 
 import yaml
 
-from science_tool.entities import is_markdown_entity_kind
+from science_tool.entities import is_markdown_entity_kind, markdown_entity_kinds, resolve_path_policy
 
 _FRONTMATTER = re.compile(r"^---\n(.*?)\n---\n?(.*)$", re.DOTALL)
 # Roots scanned for legacy entities. entities/ is intentionally excluded.
@@ -149,33 +163,46 @@ def discover_legacy_entities(project_root: Path) -> list[LegacyEntity]:
     return results
 
 
+# Specific legacy file paths whose kind cannot be inferred from the parent dir.
+# `doc/reports/synthesis.md` is the legacy synthesis singleton: its parent dir is
+# "reports", which the generic map would misclassify as `report`. Validation
+# already treats this exact path as synthesis (discussions.py), so the migrator
+# must agree.
+_PATH_KIND_OVERRIDES: dict[str, str] = {
+    "doc/reports/synthesis.md": "synthesis",
+}
+
+
 def _infer_kind(rel_path: str, frontmatter: dict | None) -> str | None:
     if frontmatter is not None:
         value = frontmatter.get("type") or frontmatter.get("kind")
         if isinstance(value, str) and value:
             return value
-    # Frontmatterless file: infer from the parent directory name (singularized).
+    # Frontmatterless file: explicit by-path override first, then the parent
+    # directory name (singularized) via the derived map.
+    if rel_path in _PATH_KIND_OVERRIDES:
+        return _PATH_KIND_OVERRIDES[rel_path]
     parent = Path(rel_path).parent.name
     return _DIR_TO_KIND.get(parent)
 
 
-# Legacy directory name → kind, for frontmatterless files.
+# Legacy directory name → kind, for frontmatterless files. DERIVED from the
+# policy table (SSOT) so EVERY numeric/citekey kind's plural directory is covered
+# — including evidence-lines, reports, plans, searches, methods, and
+# pre-registrations that a hand-written map would silently omit (and thereby
+# strand valid legacy entities through cutover). Singletons have no per-kind dir,
+# so they are excluded.
 _DIR_TO_KIND: dict[str, str] = {
-    "questions": "question",
-    "hypotheses": "hypothesis",
-    "propositions": "proposition",
-    "interpretations": "interpretation",
-    "discussions": "discussion",
-    "findings": "finding",
-    "inquiries": "inquiry",
-    "themes": "theme",
-    "topics": "topic",
-    "observations": "observation",
-    "mechanisms": "mechanism",
-    "synthesis": "synthesis",
-    "papers": "paper",
+    resolve_path_policy(kind).root.name: kind
+    for kind in markdown_entity_kinds()
+    if resolve_path_policy(kind).strategy != "singleton"
 }
 ```
+
+> Deriving `_DIR_TO_KIND` from `resolve_path_policy(...).root.name` keeps the
+> directory→kind map in lockstep with the policy table: a new numeric kind added
+> to `_BUILTIN_MARKDOWN_POLICIES` is covered automatically, with no second list
+> to maintain. (`papers` → `paper`, `evidence-lines` → `evidence-line`, etc.)
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -195,6 +222,7 @@ git commit -m "feat(migrate): discover legacy doc/specs entities"
 
 **Files:**
 - Modify: `science/src/science_tool/entity_layout_migration.py`
+- Modify: `science/src/science_tool/entities.py` (expose status accessors)
 - Test: same test module (extend)
 
 - [ ] **Step 1: Write the failing test**
@@ -205,19 +233,35 @@ Append to `science/tests/test_entity_layout_migration.py`:
 from science_tool.entity_layout_migration import synthesize_frontmatter
 
 
+from science_tool.entities import valid_statuses
+
+
 def test_synthesize_from_prose_headers() -> None:
     body = "# h01 phase-1 results\n\n**Date:** 2026-05-23\n**Status:** First real-run\n\nText.\n"
     fm = synthesize_frontmatter(kind="interpretation", body=body, fallback_created="2026-01-01")
     assert fm["type"] == "interpretation"
     assert fm["created"] == "2026-05-23"   # parsed from **Date:**
-    assert fm["status"]                      # populated (parsed or default)
+    # "First real-run" is NOT a controlled interpretation status → falls back to
+    # the per-kind default. Synthesized status must always be a valid value.
+    assert fm["status"] in valid_statuses("interpretation")
     assert "title" in fm and fm["title"]
+
+
+def test_synthesize_uses_controlled_default_status_per_kind() -> None:
+    # Defaults are per-kind controlled values (NOT a blanket "active"):
+    # hypothesis → "proposed", proposition → "draft".
+    h = synthesize_frontmatter(kind="hypothesis", body="Just text.\n", fallback_created="2026-02-02")
+    assert h["status"] in valid_statuses("hypothesis")
+    assert h["status"] == "proposed"
+    p = synthesize_frontmatter(kind="proposition", body="Just text.\n", fallback_created="2026-02-02")
+    assert p["status"] == "draft"
 
 
 def test_synthesize_uses_fallback_when_no_headers() -> None:
     fm = synthesize_frontmatter(kind="finding", body="Just text.\n", fallback_created="2026-02-02")
     assert fm["created"] == "2026-02-02"
     assert fm["type"] == "finding"
+    assert fm["status"] in valid_statuses("finding")
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -225,9 +269,28 @@ def test_synthesize_uses_fallback_when_no_headers() -> None:
 Run: `cd science && uv run pytest tests/test_entity_layout_migration.py -k synthesize -v`
 Expected: FAIL — `synthesize_frontmatter` not defined.
 
-- [ ] **Step 3: Implement synthesis**
+- [ ] **Step 3a: Expose status accessors from `entities.py`**
 
-Append to `science/src/science_tool/entity_layout_migration.py`:
+`_DEFAULT_STATUS` and `_STATUS_VALUES` are module-private. Add thin public
+accessors next to them so the migrator (and any other caller) reads the
+controlled vocabulary from the SSOT instead of duplicating it:
+
+```python
+def default_status(kind: str) -> str:
+    """The per-kind default status (e.g. hypothesis → 'proposed')."""
+    return _DEFAULT_STATUS[kind]
+
+
+def valid_statuses(kind: str) -> frozenset[str]:
+    """The controlled set of valid statuses for `kind`."""
+    return _STATUS_VALUES[kind]
+```
+
+- [ ] **Step 3b: Implement synthesis**
+
+Append to `science/src/science_tool/entity_layout_migration.py` (add
+`default_status, valid_statuses` to the `from science_tool.entities import ...`
+line):
 
 ```python
 _DATE_HEADER_RE = re.compile(r"^\*\*Date:\*\*\s*(\d{4}-\d{2}-\d{2})", re.MULTILINE)
@@ -243,8 +306,13 @@ def synthesize_frontmatter(*, kind: str, body: str, fallback_created: str) -> di
     """
     date_match = _DATE_HEADER_RE.search(body)
     created = date_match.group(1) if date_match else fallback_created
+    # Status: accept a prose **Status:** value ONLY if it is in the kind's
+    # controlled vocabulary; otherwise use the per-kind default (NOT a blanket
+    # "active", which is invalid for hypothesis/proposition/evidence-line). The
+    # original prose line stays in the body, so nothing is lost.
     status_match = _STATUS_HEADER_RE.search(body)
-    status = status_match.group(1).strip() if status_match else "active"
+    parsed_status = status_match.group(1).strip() if status_match else ""
+    status = parsed_status if parsed_status in valid_statuses(kind) else default_status(kind)
     title_match = _H1_RE.search(body)
     title = title_match.group(1).strip() if title_match else f"Untitled {kind}"
     return {
@@ -273,7 +341,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/entity_layout_migration.py science/tests/test_entity_layout_migration.py
+git add science/src/science_tool/entity_layout_migration.py science/src/science_tool/entities.py science/tests/test_entity_layout_migration.py
 git commit -m "feat(migrate): synthesize frontmatter from prose headers"
 ```
 
@@ -376,6 +444,39 @@ def test_plan_relocates_singletons(tmp_path: Path) -> None:
     targets = {s.new_rel_path for s in plan.singletons}
     assert "entities/research-question.md" in targets
     assert "entities/claim-registry.yaml" in targets
+
+
+def test_plan_reserves_numbers_already_under_entities(tmp_path: Path) -> None:
+    # Partial migration: entities/questions/0001-* already exists (created
+    # additively). A new legacy question must take 0002, NOT collide on 0001.
+    _write(tmp_path, "entities/questions/0001-existing.md",
+           '---\nid: "question:0001-existing"\ntype: question\n---\n')
+    _write(tmp_path, "doc/questions/new-one.md",
+           '---\nid: "question:new-one"\ntype: question\ncreated: "2026-01-01"\n---\n')
+    plan = plan_migration(tmp_path)
+    move = next(m for m in plan.moves if m.old_id == "question:new-one")
+    assert move.new_id == "question:0002-new-one"
+
+
+def test_plan_reports_disk_collision_for_citekey(tmp_path: Path) -> None:
+    # entities/papers/Adams2025.md already on disk; a legacy paper would land on
+    # the same path → blocking disk collision.
+    _write(tmp_path, "entities/papers/Adams2025.md", '---\nid: "paper:Adams2025"\ntype: paper\n---\n')
+    _write(tmp_path, "doc/background/papers/Adams2025.md", '---\nid: "paper:Adams2025"\ntype: paper\n---\n')
+    plan = plan_migration(tmp_path)
+    assert any(c["kind"] == "disk" and c["target"] == "entities/papers/Adams2025.md" for c in plan.collisions)
+
+
+def test_plan_reports_conformant_number_taken_under_entities(tmp_path: Path) -> None:
+    # A conformant legacy hypothesis 0003-x wants to keep 0003, but entities/
+    # already holds a different 0003 → blocking number collision.
+    _write(tmp_path, "entities/hypotheses/0003-other.md",
+           '---\nid: "hypothesis:0003-other"\ntype: hypothesis\n---\n')
+    _write(tmp_path, "specs/hypotheses/0003-x.md",
+           '---\nid: "hypothesis:0003-x"\ntype: hypothesis\n---\n')
+    plan = plan_migration(tmp_path)
+    assert any(c.get("kind") == "number" and c.get("number") == "0003"
+               and c.get("occupied_by") == "entities/" for c in plan.collisions)
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -453,6 +554,11 @@ def plan_migration(project_root: Path) -> MigrationPlan:
 
     for kind, items in by_kind.items():
         policy = resolve_path_policy(kind)
+        if policy.strategy == "singleton":
+            # Singleton kinds (research-question, claim-registry) are relocated by
+            # _plan_singletons via explicit by-path rules, never numbered. Skip them
+            # here so a stray `type: research-question` file is not mis-numbered.
+            continue
         if policy.strategy == "citekey":
             for entity in items:
                 local = Path(entity.rel_path).stem
@@ -461,12 +567,25 @@ def plan_migration(project_root: Path) -> MigrationPlan:
         # numeric: preserve conformant numbers; assign the rest in created order.
         ordered = sorted(items, key=lambda e: (str(normalized[e.rel_path]["created"]), e.rel_path))
         taken: set[int] = set()
+        # Seed `taken` with numbers ALREADY committed under entities/<kind>/ so a
+        # PARTIALLY-migrated project (entities created additively before/after a
+        # prior run) never reassigns an occupied number. These pre-existing files
+        # are not moves; they only reserve their slots.
+        existing_numbers = _existing_entity_numbers(project_root, policy)
+        taken |= existing_numbers
         deferred: list[LegacyEntity] = []
         provisional: dict[str, int] = {}
         for entity in ordered:
             stem = Path(entity.rel_path).stem
             if local_part_conforms(kind, stem):
                 number = int(stem.split("-", 1)[0])
+                if number in existing_numbers:
+                    # A conformant legacy file wants a number an entities/ file
+                    # already holds → blocking number collision (manual fix).
+                    plan.collisions.append(
+                        {"kind": "number", "entity_kind": kind, "number": f"{number:04d}",
+                         "sources": [entity.rel_path], "occupied_by": "entities/"}
+                    )
                 provisional[entity.rel_path] = number
                 taken.add(number)  # NB: two pre-conformant 0003-* both keep 3 → collision (detected below)
             else:
@@ -484,7 +603,36 @@ def plan_migration(project_root: Path) -> MigrationPlan:
             _add_move(plan, entity, f"{policy.root.as_posix()}/{local}.md", f"{kind}:{local}", kind)
 
     _detect_collisions(plan)
+    _detect_disk_collisions(project_root, plan)
     return plan
+
+
+def _existing_entity_numbers(project_root: Path, policy) -> set[int]:
+    """Numbers already committed under entities/<kind>/ (NNNN-*.md)."""
+    directory = project_root / policy.root
+    numbers: set[int] = set()
+    if directory.is_dir():
+        for path in directory.glob("*.md"):
+            match = re.match(r"^(\d{4})-", path.name)
+            if match is not None:
+                numbers.add(int(match.group(1)))
+    return numbers
+
+
+def _detect_disk_collisions(project_root: Path, plan: MigrationPlan) -> None:
+    """Flag any planned target path already occupied on disk by a file we are not
+    moving (e.g. a pre-existing entities/papers/<citekey>.md or NNNN-*.md). This
+    catches partial-migration / re-run cases that the moves-only collision pass
+    cannot see."""
+    moved_sources = {m.old_rel_path for m in plan.moves} | {s.old_rel_path for s in plan.singletons}
+    for new_rel, old_rel in (
+        *[(m.new_rel_path, m.old_rel_path) for m in plan.moves],
+        *[(s.new_rel_path, s.old_rel_path) for s in plan.singletons],
+    ):
+        if new_rel in moved_sources:
+            continue  # a swap among the files we are moving — handled by path/id checks
+        if (project_root / new_rel).exists():
+            plan.collisions.append({"kind": "disk", "target": new_rel, "sources": [old_rel]})
 
 
 def _add_move(plan: MigrationPlan, entity: "LegacyEntity", new_rel: str, new_id: str, kind: str) -> None:
@@ -586,6 +734,25 @@ def test_rewrite_reports_bare_wikilink() -> None:
     # surfaced as unresolved rather than silently left as a dead link.
     out, unresolved = rewrite_references("See [[q01-foo]] for context.\n", {})
     assert "[[q01-foo]]" in unresolved
+
+
+def test_rewrite_reports_unmapped_plain_slug_reference() -> None:
+    # A stale ref to a deleted entity by its OLD plain slug (no q##-/date shape).
+    # It is unmapped and does not conform to the numeric policy, so it must be
+    # reported — the legacy-shape-only heuristic would have silently kept it.
+    id_map = {"question:aging-early": "question:0001-aging-early"}
+    text = "Mapped question:aging-early. Dangling question:old-slug stays.\n"
+    out, unresolved = rewrite_references(text, id_map)
+    assert "question:0001-aging-early" in out
+    assert "question:old-slug" in unresolved
+
+
+def test_rewrite_leaves_external_and_conformant_tokens_alone() -> None:
+    # A conformant id and an external/unmanaged prefix must NOT be flagged.
+    id_map = {"question:q1-a": "question:0001-a"}
+    text = "Canonical question:0002-keep and external doi:10.1/x and url https://e.org.\n"
+    out, unresolved = rewrite_references(text, id_map)
+    assert unresolved == []
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -619,13 +786,25 @@ def rewrite_references(text: str, id_map: dict[str, str]) -> tuple[str, list[str
         text = re.sub(rf"(?<![\w:.-]){re.escape(old_id)}(?![\w.-])", new_id, text)
 
     unresolved: list[str] = []
+    new_ids = set(id_map.values())
     # (a) kind-qualified tokens (covers id:, related:, inline, and [[kind:local]]).
+    #     For a kind WE MANAGE, any local part that (1) was not rewritten to a new
+    #     id and (2) does not conform to the kind's filename policy is a
+    #     stale/dangling reference — this catches plain slugs like
+    #     `question:old-slug` that the old legacy-shape heuristic (q##-/date only)
+    #     silently kept. External / unmanaged prefixes (urls, ontology ids) and
+    #     already-conformant ids are left untouched.
     for match in _REF_TOKEN_RE.finditer(text):
-        token, local = match.group(0), match.group(2)
-        if token in id_map.values():
+        token, kind, local = match.group(0), match.group(1), match.group(2)
+        if token in new_ids:
             continue  # already canonical (a freshly-written new id)
-        if _LEGACY_LOCAL_SHAPE.match(local):
-            unresolved.append(token)
+        if not is_markdown_entity_kind(kind):
+            continue  # external prefix / url / kind we do not govern
+        if resolve_path_policy(kind).strategy == "singleton":
+            continue  # singletons carry no per-instance local part
+        if local_part_conforms(kind, local):
+            continue  # already a valid local part for this kind
+        unresolved.append(token)
     # (b) bare wiki-links with NO kind prefix, e.g. [[q01-foo]] / [[2026-05-23-x]].
     #     These cannot be disambiguated to a kind, so they are reported, not rewritten.
     for match in _WIKILINK_RE.finditer(text):
@@ -639,11 +818,16 @@ def rewrite_references(text: str, id_map: dict[str, str]) -> tuple[str, list[str
 
 > `rewrite_references` operates on a single file's full text (frontmatter + body),
 > covering `id:`, `related:`, inline `<kind>:…`, and `[[<kind>:…]]` uniformly
-> (same token shape). Bare wiki-links **without** a kind prefix (`[[q01-foo]]`)
-> are caught by the dedicated `_WIKILINK_RE` scan and surfaced via `unresolved`
-> for manual handling — they cannot be safely disambiguated to a kind. The
-> orchestrator (Task 5) treats a non-empty `unresolved` as a blocking error under
-> `--apply`.
+> (same token shape). Unresolved detection is **policy-conformance based**, not a
+> narrow legacy-shape heuristic: for any kind in the policy table, a remaining
+> `<kind>:<local>` token whose `<local>` does not satisfy `local_part_conforms`
+> (and was not rewritten to a new id) is reported — so a stale ref to a deleted
+> entity by its plain old slug (`question:old-slug`) is caught, not just
+> `q##-`/date-shaped ones. Bare wiki-links **without** a kind prefix
+> (`[[q01-foo]]`) are caught by the dedicated `_WIKILINK_RE` scan and surfaced via
+> `unresolved` for manual handling — they cannot be safely disambiguated to a
+> kind. The orchestrator (Task 5) treats a non-empty `unresolved` as a blocking
+> error under `--apply`.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -743,16 +927,37 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
         fm["id"] = move.new_id
         rewritten[move.new_rel_path] = _render(fm, entity.body)
 
-    # 2. Reference rewrite across every migrated entity, both singletons, and any
-    #    task files that reference entity ids. Collect unresolved tokens per file.
+    # 2. Reference rewrite across EVERY project markdown file that can carry an
+    #    entity id — not only the moved entities. References live in non-entity
+    #    prose too (reports, notes, research/packages, tasks). The final graph
+    #    audit (step 4) only inspects STRUCTURED sources (entity frontmatter /
+    #    relations / bindings), so raw inline `<kind>:local` and `[[…]]` links in
+    #    bodies would slip through unrewritten. This project-wide pass — plus the
+    #    unresolved-token report it produces — is that safety net.
     singleton_text: dict[str, str] = {}
     for sm in plan.singletons:
         singleton_text[sm.new_rel_path] = (project_root / sm.old_rel_path).read_text(encoding="utf-8")
-    task_files = {p.relative_to(project_root).as_posix(): p.read_text(encoding="utf-8")
-                  for p in sorted((project_root / "tasks").rglob("*.md"))} if (project_root / "tasks").is_dir() else {}
+
+    # In-place files: every *.md under the project's content roots that is NOT
+    # being moved (moved sources are in `rewritten`, keyed by NEW path; singletons
+    # in `singleton_text`). Covers pre-existing entities/ files, doc/ prose,
+    # research/packages, and tasks. Templates and .git are skipped.
+    moved_sources = {m.old_rel_path for m in plan.moves} | {s.old_rel_path for s in plan.singletons}
+    inplace_text: dict[str, str] = {}
+    for root_name in ("entities", "doc", "specs", "tasks", "research"):
+        root = project_root / root_name
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*.md")):
+            if "templates" in path.parts:
+                continue
+            rel = path.relative_to(project_root).as_posix()
+            if rel in moved_sources:
+                continue  # handled via `rewritten` at its new path
+            inplace_text[rel] = path.read_text(encoding="utf-8")
 
     all_unresolved: dict[str, list[str]] = {}
-    for bucket in (rewritten, singleton_text, task_files):
+    for bucket in (rewritten, singleton_text, inplace_text):
         for rel, text in list(bucket.items()):
             out, unresolved = rewrite_references(text, plan.id_map)
             bucket[rel] = out
@@ -782,7 +987,7 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     for sm in plan.singletons:
         _git_mv(project_root, sm.old_rel_path, sm.new_rel_path)
         (project_root / sm.new_rel_path).write_text(singleton_text[sm.new_rel_path], encoding="utf-8")
-    for rel, text in task_files.items():
+    for rel, text in inplace_text.items():
         (project_root / rel).write_text(text, encoding="utf-8")
 
     # 4. Final graph validation — token rewriting can miss semantic references, so
@@ -809,20 +1014,29 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     return report
 ```
 
-> **Singletons & task refs are handled above:** `research-question.md` and
+> **Singletons & in-place refs are handled above:** `research-question.md` and
 > `claim-registry.yaml` are relocated via `plan.singletons` (planned by
 > `_plan_singletons`, including the non-`.md` registry that discovery skips) and
-> their bodies are ref-rewritten; `tasks/**/*.md` are ref-rewritten in place
-> (not moved — tasks remain adapter-backed per the design). Singletons keep their
-> own ids unchanged (relocation only), so they add nothing to `id_map`.
+> their bodies are ref-rewritten; every other in-scope `*.md` (pre-existing
+> `entities/`, `doc/` prose/reports, `research/packages`, `tasks/**`) is
+> ref-rewritten **in place** (not moved). Singletons keep their own ids unchanged
+> (relocation only), so they add nothing to `id_map`. The non-`.md`
+> `claim-registry.yaml` is rewritten via the singleton bucket (the in-place pass
+> only walks `*.md`).
 
-- [ ] **Step 4: Add tests for singletons, tasks, and collision-blocking**
+- [ ] **Step 4: Add tests for in-place refs, singletons, and collision-blocking**
 
 Append tests asserting: (a) `tasks/t001.md` containing `hypothesis:h01-x` is
 rewritten to `hypothesis:0001-x`; (b) `specs/claim-registry.yaml` referencing
 `hypothesis:h01-x` lands at `entities/claim-registry.yaml` with the ref rewritten;
 (c) a project with two `Adams2025.md` paper sources raises `ValueError` under
-`apply=True` and lists the collision in the dry-run report.
+`apply=True` and lists the collision in the dry-run report; (d) **a non-entity
+file** `doc/reports/summary.md` containing both `hypothesis:h01-x` and a
+`[[hypothesis:h01-x]]` link is rewritten **in place** to `hypothesis:0001-x`
+(proving refs outside moved entities are not stranded); (e) a `doc/reports/`
+file containing a dead `hypothesis:h99-ghost` token causes `apply=True` to raise
+`ValueError` (unresolved-reference blocking) and the dry-run report lists it under
+`unresolved_references`.
 
 - [ ] **Step 5: Run to verify pass**
 
@@ -878,14 +1092,22 @@ that command at line 263), add:
 ```python
 @entities_group.command("migrate")
 @click.option("--apply", "apply_changes", is_flag=True, help="Apply the migration (default: dry run).")
-@click.option("--project-path", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path("."))
-def entities_migrate_command(apply_changes: bool, project_path: Path) -> None:
+@click.option("--project-root", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path("."))
+def entities_migrate_command(apply_changes: bool, project_root: Path) -> None:
     """Migrate a project's doc/specs entity layout into entities/ (v2 → v3)."""
     from science_tool.entity_layout_migration import migrate_layout
 
-    report = migrate_layout(project_path, apply=apply_changes)
+    try:
+        report = migrate_layout(project_root, apply=apply_changes)
+    except ValueError as exc:  # collisions / unresolved refs block --apply
+        raise click.ClickException(str(exc)) from exc
     click.echo(json.dumps(report, indent=2))
 ```
+
+> Use `--project-root` (not `--project-path`): it matches `science validate`
+> (`validate/cli.py`) and the dominant convention across the CLI. Wrap the
+> `ValueError` from `migrate_layout` (raised on blocking collisions / unresolved
+> references under `--apply`) as a `ClickException`, mirroring `migrate-identifiers`.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -915,13 +1137,13 @@ Create `docs/entity-layout-migration-guide.md` covering, concretely:
    `entities/research-question.md`, `entities/claim-registry.yaml`;
    `layout_version` 2 → 3.
 2. **Preconditions:** clean git working tree; on a branch; Plans 1–2 shipped.
-3. **Dry run:** `science entities migrate --project-path <proj>` → review the JSON
+3. **Dry run:** `science entities migrate --project-root <proj>` → review the JSON
    report: `moves`, `id_map`, and especially `unresolved_references`.
 4. **Resolve `unresolved_references`:** these are legacy-shaped tokens with no
    mapping (renamed/deleted targets, bare `[[q01-…]]` wiki-links without a kind).
    Fix each by hand (point to the correct id or remove the dead link) and re-run
    the dry run until `unresolved_references` is empty.
-5. **Apply:** `science entities migrate --apply --project-path <proj>` (performs
+5. **Apply:** `science entities migrate --apply --project-root <proj>` (performs
    `git mv`, rewrites refs, sets `layout_version: 3`).
 6. **Verify:** `science validate` → expect green; spot-check that
    `science entity show q5`-style shortforms still resolve.
@@ -941,7 +1163,73 @@ git commit -m "docs: entity layout migration guide"
 
 ---
 
-## Task 8: Pilot on a real project (verification)
+## Task 8: Additive repoint of entity checks Plan 2 missed (dual-root)
+
+> Plan 2 repointed the main semantic checks to scan **both** `entities/` and the
+> legacy roots, but three **active** entity-kind checks were left scanning `doc/`
+> only, and two id/structure checks still hard-code the legacy roots. Until they
+> are dual-rooted, a freshly *migrated* project (Tasks 1–6 set `layout_version: 3`
+> and move files into `entities/`) would silently skip these checks — and the
+> pilot (Task 9) would report a **false green**. This task makes them additive
+> (`entities/` **and** legacy), exactly as Plan 2 did for the others; the legacy
+> root is dropped in the Task 10 cutover.
+>
+> The affected checks (all in `CANONICAL_CHECK_MODULES`) and their policy roots:
+> - `prereg.py` scans `doc/meta/pre-registration-*.md` + `doc/pre-registrations/*.md`; policy root is `entities/pre-registrations`.
+> - `evidence_lines.py` scans `doc/evidence-lines` + `doc/propositions`; roots are `entities/evidence-lines` + `entities/propositions`.
+> - `hypothesis_comparisons.py` identifies comparison docs purely by the `comparison-*.md` **filename** under `doc/discussions`. Migration canonicalizes discussion filenames to `NNNN-slug.md`, so that glob will never match a migrated comparison — detection must move to a body/frontmatter marker.
+> - `cross_references.py` builds its known-id set from `(specs_dir, doc_dir)` only (≈ line 421) — ids defined in `entities/**/*.md` are absent, so refs to them can register as unknown.
+> - `directory_structure.py` lists `specs/` and `doc/` as **required** dirs (ERROR if missing) and does not know about `entities/`. A migrated v3 project (entities under `entities/`, `specs/` empty or gone) would wrongly ERROR on a missing `specs/`, and a v3 project missing `entities/` would not be flagged at all. (There is no generic "unexpected dir" check, so `entities/` is not otherwise flagged today.)
+
+**Files:**
+- Modify: `science/src/science_tool/validate/checks/prereg.py`
+- Modify: `science/src/science_tool/validate/checks/evidence_lines.py`
+- Modify: `science/src/science_tool/validate/checks/hypothesis_comparisons.py`
+- Modify: `science/src/science_tool/validate/checks/cross_references.py`
+- Modify: `science/src/science_tool/validate/checks/directory_structure.py`
+- Test: the matching `tests/validate/test_checks_*.py` modules (extend)
+
+- [ ] **Step 1: Write the failing tests**
+
+For each check, add a test that places the entity under its `entities/` policy
+root and asserts the check still finds/validates it:
+- `prereg`: `entities/pre-registrations/0001-x.md` is discovered.
+- `evidence_lines`: `entities/evidence-lines/0001-x.md` and `entities/propositions/0001-y.md` are discovered.
+- `hypothesis_comparisons`: a migrated comparison doc at the CONFORMANT path `entities/discussions/0001-comparison-h1-vs-h2.md` containing the `## Hypotheses Compared` marker (filename is `NNNN-slug`, so the legacy `comparison-*.md` glob no longer matches) is still recognized and section-checked; a plain non-comparison discussion `entities/discussions/0002-notes.md` is NOT flagged.
+- `cross_references`: an id defined in `entities/questions/0001-x.md` joins the known-id set (a `related:` ref to it is NOT flagged unknown).
+- `directory_structure`: a `layout_version: 3` project with `entities/` but **no** `specs/` does NOT error on a missing `specs/`; a `layout_version: 3` project **missing** `entities/` IS flagged; a `layout_version: 2` project still requires `specs/` (additive — v2 behavior unchanged).
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `cd science && uv run pytest tests/validate -k "prereg or evidence or comparison or cross_ref or directory" -v`
+Expected: the new assertions FAIL (entities/ locations not yet scanned).
+
+- [ ] **Step 3: Repoint each check additively**
+
+- `prereg.py`: also scan `resolve_path_policy("pre-registration").root` (keep the two legacy `doc/` globs for now).
+- `evidence_lines.py`: also scan `entities/evidence-lines` and `entities/propositions`.
+- `hypothesis_comparisons.py`: do **not** rely on the `comparison-*.md` filename for migrated docs — after migration discussion filenames are `NNNN-slug.md`. Instead, scan all `entities/discussions/*.md` and treat a file as a comparison when its body contains the distinguishing `## Hypotheses Compared` marker (the first of `_SECTIONS`), then require the remaining sections. Keep the legacy `doc/discussions/comparison-*.md` filename glob for un-migrated projects (a legacy comparison file without the marker is still flagged for the missing section, preserving today's behavior).
+- `cross_references.py`: add `ctx.project_root / "entities"` to the `(ctx.specs_dir, ctx.doc_dir)` id-collection scan so `entities/**/*.md` ids join `all_ids`.
+- `directory_structure.py`: **version-gate** the entity-layout required dirs on `ctx.manifest.get("layout_version")` (mirroring how `entity_conformance`/`manifest` already gate on version). Require `specs/` only when `layout_version < 3`; require `entities/` when `layout_version >= 3`. Leave `doc/`, `knowledge/`, `tasks/`, and the code/research dirs required in both eras. This is additive (v2 projects are unaffected) **and** simultaneously makes a migrated v3 project validate cleanly while flagging a v3 project that is missing `entities/` — so no further cutover edit to this file is needed in Task 10.
+
+Prefer `resolve_path_policy(<kind>).root` over hard-coded `"entities/<plural>"`
+strings so the policy table stays the single source of truth.
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `cd science && uv run pytest tests/validate -k "prereg or evidence or comparison or cross_ref or directory" -v`
+Expected: PASS (both legacy and `entities/` locations are scanned).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add science/src/science_tool/validate/checks/ science/tests/validate/
+git commit -m "feat(validate): dual-root the entity checks Plan 2 missed (prereg, evidence-lines, comparisons, xref, dir-structure)"
+```
+
+---
+
+## Task 9: Pilot on a real project (verification)
 
 **Files:** none (verification task; operates on a throwaway copy)
 
@@ -953,13 +1241,23 @@ repo, `git init` the copy and commit first.)
 
 - [ ] **Step 2: Dry run and inspect**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run science entities migrate --project-path /tmp/cycles-migrate`
+Run: `cd /mnt/ssd/Dropbox/science/science && uv run science entities migrate --project-root /tmp/cycles-migrate`
 Review `unresolved_references` in the JSON. If non-empty, this is real signal —
 record what the dead/ambiguous refs are (they inform guide refinements).
 
+> **Residual-risk check — paper `article:` mentions.** `rewrite_references` only
+> touches kinds in the markdown policy table; `article:<bibkey>` is *not* one of
+> them, so raw `article:` mentions pass through untouched. That is fine if
+> paper-prefix cleanup stays owned by the existing refs/identifier migration — but
+> the pilot must confirm it. After the dry run, grep the scratch copy for any
+> surviving legacy `article:` tokens (`grep -rn 'article:' /tmp/cycles-migrate`)
+> and record whether any remain post-migration. If the layout migration is
+> expected to leave them for the refs migration, note that explicitly; if they
+> should have been rewritten, file it back into Task 4 before cutover.
+
 - [ ] **Step 3: Apply on the copy and validate**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run science entities migrate --apply --project-path /tmp/cycles-migrate && uv run science validate --project-path /tmp/cycles-migrate` (use the validate command's actual flag for project root)
+Run: `cd /mnt/ssd/Dropbox/science/science && uv run science entities migrate --apply --project-root /tmp/cycles-migrate && uv run science validate --project-root /tmp/cycles-migrate`
 Expected: migration completes; validate is green (no location/filename/frontmatter
 conformance WARNs remain). Note the `cycles` questions were the known `NN-`/`q##-`
 mix — confirm they all become `entities/questions/NNNN-…`.
@@ -978,12 +1276,12 @@ git add -A && git commit -m "fix(migrate): handle <case> found in cycles pilot"
 
 ---
 
-## Task 9: CUTOVER — remove fallbacks, promote WARN→ERROR (IRREVERSIBLE; do last)
+## Task 10: CUTOVER — remove fallbacks, promote WARN→ERROR (IRREVERSIBLE; do last)
 
 **Files:** discovery + validation modules listed below.
 **Test:** update the corresponding tests to expect the steady-state behavior.
 
-> Do not start this task until Task 8's pilot is green. This task makes
+> Do not start this task until Task 9's pilot is green. This task makes
 > `entities/` the only supported layout; un-migrated (`layout_version: 2`)
 > projects will fail validation by design (design §11).
 
@@ -1016,18 +1314,34 @@ In `id_prefixes.py`, narrow the scan roots from
 `(ctx.project_root / "entities", ctx.doc_dir, ctx.specs_dir)` (Plan 2) to
 `(ctx.project_root / "entities",)` so the check no longer inspects legacy roots.
 
+Drop the legacy roots added additively in **Task 8** as well: `prereg.py`
+(remove the `doc/meta/pre-registration-*.md` + `doc/pre-registrations` globs),
+`evidence_lines.py` (remove the `doc/evidence-lines` + `doc/propositions`
+scans), `hypothesis_comparisons.py` (remove the legacy `doc/discussions/comparison-*.md`
+filename glob, leaving the marker-based `entities/discussions/*.md` scan), and
+`cross_references.py` (remove `ctx.specs_dir`/`ctx.doc_dir` from the
+id-collection scan, leaving `entities/` only). `directory_structure.py` needs
+**no** cutover edit — Task 8 already version-gated its required dirs, so setting
+`layout_version: 3` automatically drops the `specs/` requirement and enforces
+`entities/`.
+
 - [ ] **Step 4: `layout_version < 3` becomes ERROR**
 
-`manifest.py`: change the Plan 2 WARN to:
+`manifest.py`: flip the existing Plan 2 `< 3` WARN to ERROR:
 
 ```python
     layout_version = ctx.manifest.get("layout_version")
-    if not isinstance(layout_version, int) or layout_version < 3:
+    if isinstance(layout_version, int) and layout_version < 3:
         yield _result(
             Severity.ERROR,
             "science.yaml: layout_version must be >= 3 — run `science entities migrate`",
         )
 ```
+
+A *missing* `layout_version` is already an ERROR via `_REQUIRED_FIELDS` (it lists
+`"layout_version"`), so do **not** add a `not isinstance(...)` arm — it would
+double-report the missing case. Flipping the existing `< 3` branch from WARN to
+ERROR is sufficient.
 
 - [ ] **Step 5: Conformance checks promote to ERROR**
 
@@ -1074,15 +1388,32 @@ git commit -m "feat: entities/ hard cutover — drop legacy fallbacks, enforce l
 - **Singletons** (`research-question.md`, `claim-registry.yaml`) relocated by explicit by-path branch, not kind inference → Task 3 (`_plan_singletons`) + Task 5 (singleton rewrite/move). ✅
 - **Date-prefixed slugs** drop the date (regex ordered date-first) → Task 3 (`_slug_from_legacy`). ✅
 - **Collision detection** (duplicate target path / new id) as a blocking report → Task 3 (`_detect_collisions`) + Task 5 (raises under `--apply`). ✅
-- Reference-rewrite completeness + fail-loud on unresolved → Task 4 (`<kind>:local` tokens **and** bare `[[local]]` wiki-links via `_WIKILINK_RE`) + Task 5 (blocks `--apply`). ✅
+- **Partial-migration safety** (numbers/paths already committed under `entities/` are reserved, not reassigned; disk + existing-number collisions reported) → Task 3 (`_existing_entity_numbers`, `_detect_disk_collisions`). ✅
+- **All legacy kinds covered for frontmatterless files** (`_DIR_TO_KIND` derived from the policy table, so evidence-lines/reports/plans/searches/methods/pre-registrations are not stranded) → Task 1. ✅
+- **Synthesized status is a controlled per-kind value** (prose `**Status:**` accepted only if valid, else per-kind default; never a blanket invalid `"active"`) → Task 2 (`default_status`/`valid_statuses` accessors). ✅
+- Reference-rewrite completeness + fail-loud on unresolved → Task 4 (`<kind>:local` tokens **and** bare `[[local]]` wiki-links via `_WIKILINK_RE`) + Task 5 (rewrites **all** project markdown — entities, singletons, prose/reports, research/packages, tasks — and blocks `--apply` on any unresolved token, the safety net the structured-only graph audit cannot provide). ✅
+- **Comparison docs survive filename canonicalization** (detected by the `## Hypotheses Compared` body marker, not a `comparison-*.md` filename) → Task 8 (additive) + Task 10 (cutover). ✅
 - **Final graph validation before success** (`audit_project_sources` after writes; no `layout_version` bump if it fails) → Task 5 step 4. ✅
 - **Number-hygiene collisions** (two files sharing a number within a kind) detected, not just path/id dupes → Task 3 (`_detect_collisions` `(kind, number)`). ✅
 - Claim-registry + task-graph ref rewriting → Task 5 (singleton + `tasks/**/*.md` buckets). ✅
+- **Singleton-strategy kinds never numbered** (a stray `type: research-question`
+  file is skipped in `plan_migration`, not mis-numbered) → Task 3 (strategy
+  guard) + `_plan_singletons`. ✅
 - Migration guide → Task 7. ✅
-- Pilot before cutover → Task 8. ✅
+- **Entity checks Plan 2 left scanning legacy roots only** (prereg, evidence-lines,
+  propositions, hypothesis-comparisons) + `cross_references` id scan → repointed
+  additively in Task 8, legacy dropped in the Task 10 cutover. ✅
+- **`directory_structure` required dirs version-gated** (`specs/` for v2,
+  `entities/` for v3) so migrated projects validate during the additive window and
+  a v3 project missing `entities/` is flagged — no separate cutover edit → Task 8. ✅
+- **Frontmatterless synthesis singleton classified correctly** (`doc/reports/synthesis.md`
+  → synthesis via by-path override, not `report` from its parent dir) → Task 1. ✅
+- **Stale plain-slug references caught** (unresolved detection is policy-conformance
+  based, not a `q##-`/date-shape heuristic, so `question:old-slug` is reported) → Task 4. ✅
+- Pilot before cutover → Task 9. ✅
 - No-fallback cutover (scan roots, singletons, `_ALLOWED_EXPLICIT_ROOTS`, legacy
-  semantic-check fallbacks) + `layout_version: 3` ERROR + WARN→ERROR (one-body
-  change to the Plan 2 `_severity` helper) → Task 9. ✅
+  semantic-check fallbacks incl. the Task 8 stragglers) + `layout_version: 3`
+  ERROR + WARN→ERROR (one-body change to the Plan 2 `_severity` helper) → Task 10. ✅
 
 **Known limitations (documented, not silent):**
 - YAML re-render via `yaml.safe_dump` does not preserve comments/key-ordering
@@ -1094,7 +1425,9 @@ git commit -m "feat: entities/ hard cutover — drop legacy fallbacks, enforce l
   `unresolved` for manual fixing rather than auto-rewritten — by design, since
   they cannot be disambiguated to a kind safely.
 
-**Verify-before-coding notes:** confirm the `validate` CLI's project-root flag
-name (Task 8 Step 3); confirm `discover_legacy_entities` should also walk
-`doc/reports/synthesis/` explicitly if synthesis files there lack a `synthesis`
-parent dir (extend `_LEGACY_SCAN_ROOTS`/`_DIR_TO_KIND` if the pilot shows misses).
+**Verify-before-coding notes:** the `validate` CLI flag is `--project-root`
+(confirmed in `science/src/science_tool/validate/cli.py`); the new `entities
+migrate` command uses the same name (Task 6, Task 9 Step 3). Confirm
+`discover_legacy_entities` should also walk `doc/reports/synthesis/` explicitly if
+synthesis files there lack a `synthesis` parent dir (extend
+`_LEGACY_SCAN_ROOTS`/`_DIR_TO_KIND` if the pilot shows misses).
