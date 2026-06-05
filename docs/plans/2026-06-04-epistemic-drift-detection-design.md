@@ -1,13 +1,17 @@
 # Epistemic drift detection: claim-vs-operationalization — design
 
 **Date:** 2026-06-04
-**Status:** Proposed
-**Scope:** `science` tool (model, validation, graph attention) + a new entity-type-agnostic `review` skill + a downstream authoring convention (`operationalized_by:`)
+**Status:** Revised 2026-06-05 after entity-layout hard cutover and dataset-kind review
+**Scope:** `science` tool (model, validation, graph attention) + a new epistemic-entity `review` skill + a downstream authoring convention (`operationalized_by:`)
 **Anchor question:** `science-meta:question:15-claim-operationalization-drift`
 
 > Paths are relative to the repo root (`~/d/science`, canonically
 > `/mnt/ssd/Dropbox/science`). The tool lives under `science/src/science_tool/`
 > and the model under `science/model/src/science_model/`.
+> Source-authored entities now live under `entities/` after the Plan 3 hard cutover;
+> the graph loader still explicitly scans `research/packages`, `doc/datasets`,
+> `doc/workflows`, and `doc/workflow-runs` until the dataset/workflow migration
+> decisions are finished.
 
 ## Problem
 
@@ -77,13 +81,21 @@ None of these were caught by existing machinery, and each is a distinct failure 
   never-reviewed-in-365-days floor (`science/src/science_tool/graph/attention.py:19`), already
   consumed by `curate`, `next-steps`, `wander`.
 - `EntityClass` separating EPISTEMIC / OPERATIONAL / REFERENCE
-  (`entities.py:111`) — so review machinery can be entity-type-agnostic.
+  (`science/model/src/science_model/entities.py:111`) — so review machinery can be
+  epistemic-kind-aware while still sharing one review command.
 - A validate check registry with a decorator/section pattern
   (`science/src/science_tool/validate/checks/__init__.py:63`) — adding a check is cheap.
 
 - A working `science entity review <ref> [--note]` command that already mutates
   `review_state.last_reviewed` (and optional `last_review_note`), preserving other review-state
   fields (`science/src/science_tool/entity_review.py:39`, `cli.py:494`).
+- The 2026-06-05 entity-system changes make `dataset`, `paper`, `workflow`,
+  `workflow-run`, `research-package`, `task`, `plan`, `pre-registration`, and similar kinds
+  operational, not epistemic (`science/src/science_tool/graph/entity_registry.py`). The base
+  entity model rejects `review_state` on known non-epistemic kinds
+  (`science/model/src/science_model/entities.py`). M1 review hardening must therefore target
+  epistemic entities only; operational entities may be inspected as manifests/evidence, but
+  should not be stamped with `entity review`.
 
 So the missing pieces are narrow and **not** "population from scratch": (i) the existing
 `entity review` command **permits a bare timestamp bump** (the note is optional and no artifact
@@ -95,8 +107,8 @@ populator; (ii) **no skill performs the actual scrutiny** that should precede th
 
 **Goals**
 - Detect failure modes A, B, C — mechanically where possible, agentically for the residue.
-- Be entity-type-agnostic from the start (hypotheses, propositions, interpretations, decisions,
-  reports), with type-specific rubrics.
+- Be kind-aware across epistemic entities from the start (hypotheses, propositions,
+  interpretations, reports, inquiries/questions where useful), with type-specific rubrics.
 - Reuse the existing review-state + freshness + attention substrate.
 - Avoid review-theater (timestamp bumps with no scrutiny) and horizon busywork.
 
@@ -157,7 +169,8 @@ Add a term to `compute_attention_candidates` (`graph/attention.py`) that operate
 
 weighted by question age and an "unincorporated" heuristic (question `created`/`updated`
 post-dates the entity's last `last_reviewed`). Count only **debt statuses** — using the
-canonical question vocabulary (`entities.py:97`): `active`, `partially-answered`, and
+canonical question vocabulary (`science/model/src/science_model/entities.py:97`): `active`,
+`partially-answered`, and
 `deferred`. Exclude `answered` and `retired` (resolved) — they are not debt.
 
 Surface in `next-steps`/`status` as "entities carrying the most unincorporated questions." H2
@@ -173,9 +186,9 @@ backstop for the under-typed/unlinked majority; typing is the upgrade path for t
 earn it. (Whether to add a new scoping predicate to the `bears_on` deriver is itself an open
 design question — see Open questions.)
 
-### 3. Generalized `review` skill + review-state population (agentic; targets A residue)
+### 3. Generalized epistemic `review` skill + review-state population (agentic; targets A residue)
 
-One entity-type-agnostic skill (`codex-skills/science-review/`) that:
+One epistemic-entity review skill (`codex-skills/science-review/`) that:
 
 - Selects targets from the attention ranking (top-k overdue/indebted), runnable in parallel per
   entity (mirrors `big-picture`'s per-hypothesis fan-out).
@@ -197,6 +210,14 @@ One entity-type-agnostic skill (`codex-skills/science-review/`) that:
   prose diff, a created task, or an explicit reasoned "no change" — before `last_reviewed` is
   set. A bare timestamp bump is disallowed by the skill's own checklist (the `dag-audit`/`curate`
   ledger discipline).
+
+**Dataset/workflow/paper drift note.** The recent dataset-first-class work does not change M1's
+review target set: `dataset` remains an operational entity, and `paper` is operational in the
+registry even when its prose participates in epistemic drift. The review skill may follow links
+into those entities to verify manifests, coverage claims, provenance, and evidence context, but
+the artifact-guarded `entity review` stamp belongs on the epistemic entity whose claim was
+reviewed. If an operational entity itself needs recency or health checks, use the dataset/pipeline
+health machinery rather than `review_state`.
 
 ## Prioritization model
 
