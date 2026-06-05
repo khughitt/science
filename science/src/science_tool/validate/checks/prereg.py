@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from pathlib import Path
 import re
 
+from science_tool.entities import resolve_path_policy
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -27,9 +28,11 @@ def _result(severity: Severity, path: str | None, message: str) -> Result:
 
 @Check(section="discussion documents...", order=12)
 def check_prereg(ctx: ValidateContext) -> Iterator[Result]:
+    entities_root = ctx.project_root / resolve_path_policy("pre-registration").root
     paths = [
         *sorted((ctx.doc_dir / "meta").glob("pre-registration-*.md")),
         *sorted((ctx.doc_dir / "pre-registrations").glob("*.md")),
+        *(sorted(entities_root.glob("*.md")) if entities_root.is_dir() else []),
     ]
     for path in paths:
         if not path.is_file():

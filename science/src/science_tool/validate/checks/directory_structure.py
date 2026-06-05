@@ -19,9 +19,18 @@ def _result(severity: Severity, path: str | None, message: str) -> Result:
 def check_directory_structure(ctx: ValidateContext) -> Iterator[Result]:
     paths = resolve_paths(ctx.project_root)
     profile = paths.profile
+    layout_version = ctx.manifest.get("layout_version")
+    is_v3 = isinstance(layout_version, int) and layout_version >= 3
+
+    # specs/ is required for layout_version < 3; entities/ replaces it at v3+.
+    entity_layout_dirs: list[tuple[str, Path]] = (
+        [("entities", ctx.project_root / "entities")]
+        if is_v3
+        else [("specs", paths.specs_dir)]
+    )
 
     required_dirs = [
-        ("specs", paths.specs_dir),
+        *entity_layout_dirs,
         ("doc", paths.doc_dir),
         ("knowledge", paths.knowledge_dir),
         ("tasks", paths.tasks_dir),

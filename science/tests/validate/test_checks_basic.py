@@ -10,7 +10,7 @@ from science_tool.validate import Result, Severity, ValidateContext
 from science_tool.validate.checks import CANONICAL_CHECKS, clear_checks_for_tests
 
 
-def _write_manifest(root: Path, *, profile: str = "research", extra: str = "") -> None:
+def _write_manifest(root: Path, *, profile: str = "research", extra: str = "", layout_version: int = 1) -> None:
     root.joinpath("science.yaml").write_text(
         "\n".join(
             [
@@ -20,7 +20,7 @@ def _write_manifest(root: Path, *, profile: str = "research", extra: str = "") -
                 "status: active",
                 "summary: Demo project",
                 f"profile: {profile}",
-                "layout_version: 1",
+                f"layout_version: {layout_version}",
                 "knowledge_profiles:",
                 "  local: knowledge/local",
                 extra,
@@ -30,8 +30,8 @@ def _write_manifest(root: Path, *, profile: str = "research", extra: str = "") -
     )
 
 
-def _ctx(root: Path, *, profile: str = "research", extra_manifest: str = "") -> ValidateContext:
-    _write_manifest(root, profile=profile, extra=extra_manifest)
+def _ctx(root: Path, *, profile: str = "research", extra_manifest: str = "", layout_version: int = 1) -> ValidateContext:
+    _write_manifest(root, profile=profile, extra=extra_manifest, layout_version=layout_version)
     return ValidateContext.from_project_root(root, strict=False, verbose=False)
 
 
@@ -827,3 +827,51 @@ def test_layout_version_below_3_warns(tmp_path: Path) -> None:
     from science_tool.validate.checks.manifest import check_manifest
     results = list(check_manifest(ctx))
     assert any(r.severity is Severity.WARN and "layout_version" in r.message for r in results)
+
+
+# ---------------------------------------------------------------------------
+# Task 8: directory_structure version-gating tests
+# ---------------------------------------------------------------------------
+
+def test_directory_structure_v3_no_error_for_missing_specs(tmp_path: Path) -> None:
+    """layout_version: 3 project with entities/ but no specs/ must NOT error on missing specs/."""
+    from science_tool.validate.checks.directory_structure import check_directory_structure
+
+    ctx = _ctx(tmp_path, profile="research", layout_version=3)
+    for dirname in ("doc", "knowledge", "tasks", "code", "entities"):
+        tmp_path.joinpath(dirname).mkdir()
+
+    results = list(check_directory_structure(ctx))
+    messages = _messages(results)
+
+    assert "Required directory missing: specs/" not in messages
+
+
+def test_directory_structure_v3_errors_when_entities_missing(tmp_path: Path) -> None:
+    """layout_version: 3 project with NO entities/ IS flagged as an error."""
+    from science_tool.validate.checks.directory_structure import check_directory_structure
+
+    ctx = _ctx(tmp_path, profile="research", layout_version=3)
+    for dirname in ("doc", "knowledge", "tasks", "code"):
+        tmp_path.joinpath(dirname).mkdir()
+    # entities/ intentionally absent
+
+    results = list(check_directory_structure(ctx))
+    messages = _messages(results)
+
+    assert "Required directory missing: entities/" in messages
+
+
+def test_directory_structure_v2_still_requires_specs(tmp_path: Path) -> None:
+    """layout_version: 2 (< 3) project still requires specs/ (additive — v2 behavior unchanged)."""
+    from science_tool.validate.checks.directory_structure import check_directory_structure
+
+    ctx = _ctx(tmp_path, profile="research", layout_version=2)
+    for dirname in ("doc", "knowledge", "tasks", "code"):
+        tmp_path.joinpath(dirname).mkdir()
+    # specs/ intentionally absent
+
+    results = list(check_directory_structure(ctx))
+    messages = _messages(results)
+
+    assert "Required directory missing: specs/" in messages

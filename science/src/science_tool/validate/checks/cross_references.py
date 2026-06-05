@@ -418,7 +418,8 @@ def check_cross_references(ctx: ValidateContext) -> Iterator[Result]:
     all_ids: set[str] = set()
     refs_by_file: dict[Path, list[str]] = {}
 
-    for search_dir in (ctx.specs_dir, ctx.doc_dir):
+    entities_dir = ctx.project_root / "entities"
+    for search_dir in (ctx.specs_dir, ctx.doc_dir, entities_dir):
         if not search_dir.is_dir():
             continue
         for path in sorted(search_dir.rglob("*.md")):

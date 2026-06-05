@@ -223,6 +223,87 @@ def test_hypothesis_comparisons_warn_for_missing_sections(tmp_path: Path) -> Non
     assert "Comparison doc/discussions/comparison-a.md missing section: Current Verdict" in messages
 
 
+# ---------------------------------------------------------------------------
+# Task 8: dual-root tests — entities/ locations are discovered (prereg)
+# ---------------------------------------------------------------------------
+
+def test_prereg_discovers_entities_pre_registrations(tmp_path: Path) -> None:
+    """entities/pre-registrations/0001-x.md is found and section-checked."""
+    from science_tool.validate.checks.prereg import check_prereg
+
+    ctx = _ctx(tmp_path)
+    ent_dir = tmp_path / "entities" / "pre-registrations"
+    ent_dir.mkdir(parents=True)
+    # Only has one section → should warn for the missing three
+    ent_dir.joinpath("0001-x.md").write_text(
+        "---\ntype: pre-registration\ncommitted: 2026-01-01\nspec: ''\n---\n"
+        "## Hypotheses Under Test\n",
+        encoding="utf-8",
+    )
+
+    messages = _messages(check_prereg(ctx))
+
+    assert any("0001-x.md" in m and "Expected Outcomes" in m for m in messages), messages
+    assert any("0001-x.md" in m and "Decision Criteria" in m for m in messages), messages
+    assert any("0001-x.md" in m and "Null Result Plan" in m for m in messages), messages
+
+
+# ---------------------------------------------------------------------------
+# Task 8: dual-root tests — entities/ locations are discovered (comparisons)
+# ---------------------------------------------------------------------------
+
+def test_hypothesis_comparisons_entities_marker_based_detection(tmp_path: Path) -> None:
+    """A migrated comparison at entities/discussions/NNNN-slug.md with the
+    '## Hypotheses Compared' marker is recognized and section-checked."""
+    from science_tool.validate.checks.hypothesis_comparisons import check_hypothesis_comparisons
+
+    ctx = _ctx(tmp_path)
+    ent_dir = tmp_path / "entities" / "discussions"
+    ent_dir.mkdir(parents=True)
+    # Marker present but remaining three sections absent → three warnings
+    ent_dir.joinpath("0001-comparison-h1-vs-h2.md").write_text(
+        "---\nid: discussion:0001-comparison-h1-vs-h2\n---\n## Hypotheses Compared\n",
+        encoding="utf-8",
+    )
+
+    messages = _messages(check_hypothesis_comparisons(ctx))
+
+    assert any("0001-comparison-h1-vs-h2.md" in m and "Evidence Inventory" in m for m in messages), messages
+    assert any("0001-comparison-h1-vs-h2.md" in m and "Discriminating Predictions" in m for m in messages), messages
+    assert any("0001-comparison-h1-vs-h2.md" in m and "Current Verdict" in m for m in messages), messages
+
+
+def test_hypothesis_comparisons_entities_plain_discussion_not_flagged(tmp_path: Path) -> None:
+    """A plain discussion without the marker is NOT treated as a comparison."""
+    from science_tool.validate.checks.hypothesis_comparisons import check_hypothesis_comparisons
+
+    ctx = _ctx(tmp_path)
+    ent_dir = tmp_path / "entities" / "discussions"
+    ent_dir.mkdir(parents=True)
+    ent_dir.joinpath("0002-notes.md").write_text(
+        "---\nid: discussion:0002-notes\n---\n## Background\n",
+        encoding="utf-8",
+    )
+
+    messages = _messages(check_hypothesis_comparisons(ctx))
+
+    assert not any("0002-notes.md" in m for m in messages), messages
+
+
+def test_hypothesis_comparisons_legacy_filename_glob_still_works(tmp_path: Path) -> None:
+    """Legacy doc/discussions/comparison-*.md files are still flagged (behavior preserved)."""
+    from science_tool.validate.checks.hypothesis_comparisons import check_hypothesis_comparisons
+
+    ctx = _ctx(tmp_path)
+    legacy_dir = tmp_path / "doc" / "discussions"
+    legacy_dir.mkdir(parents=True)
+    legacy_dir.joinpath("comparison-old.md").write_text("## Hypotheses Compared\n", encoding="utf-8")
+
+    messages = _messages(check_hypothesis_comparisons(ctx))
+
+    assert any("comparison-old.md" in m and "Evidence Inventory" in m for m in messages), messages
+
+
 def test_bias_audits_warn_for_missing_sections(tmp_path: Path) -> None:
     from science_tool.validate.checks.bias_audits import check_bias_audits
 

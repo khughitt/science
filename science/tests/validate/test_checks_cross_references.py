@@ -176,3 +176,21 @@ def test_read_encoding_errors_on_scanned_markdown_propagate(tmp_path: Path) -> N
 
     with pytest.raises(UnicodeDecodeError):
         list(check_cross_references(_ctx(tmp_path)))
+
+
+# ---------------------------------------------------------------------------
+# Task 8: dual-root — entities/**/*.md ids join the known-id set
+# ---------------------------------------------------------------------------
+
+def test_entities_dir_id_resolves_cross_references(tmp_path: Path) -> None:
+    """An id defined in entities/questions/0001-x.md is known; a ref to it is NOT broken."""
+    from science_tool.validate.checks.cross_references import check_cross_references
+
+    _write(tmp_path / "entities" / "questions" / "0001-x.md", "---\nid: question:0001-x\n---\n")
+    _write(tmp_path / "doc" / "a.md", "---\nid: report:a\nrelated: [question:0001-x]\n---\n")
+
+    results = list(check_cross_references(_ctx(tmp_path)))
+
+    messages = [r.message for r in results]
+    assert not any("question:0001-x" in m and "not found" in m for m in messages), messages
+    assert _messages(results) == ["All frontmatter cross-references valid"]

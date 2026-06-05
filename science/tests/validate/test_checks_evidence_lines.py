@@ -606,3 +606,39 @@ def test_reference_basis_no_graph_is_silent(tmp_path: Path) -> None:
     results = list(check_reference_basis_no_identification_strength(_ctx(tmp_path)))
     rules = [r.rule for r in results]
     assert "evidence.reference-basis-no-identification-strength" not in rules
+
+
+# ---------------------------------------------------------------------------
+# Task 8: dual-root — entities/evidence-lines and entities/propositions
+# ---------------------------------------------------------------------------
+
+def test_entities_evidence_line_is_discovered(tmp_path: Path) -> None:
+    """entities/evidence-lines/0001-x.md is found and checked for stance/target."""
+    from science_tool.validate.checks.evidence_lines import check_evidence_lines_unstanced
+
+    _write(
+        tmp_path,
+        "entities/evidence-lines/0001-x.md",
+        "---\ntarget: proposition:p1\nsource: paper:x\n---\n",  # missing stance
+    )
+
+    results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
+
+    rules = [r.rule for r in results]
+    assert "evidence.unstanced" in rules, results
+
+
+def test_entities_proposition_source_ref_is_checked(tmp_path: Path) -> None:
+    """entities/propositions/0001-y.md source_refs are checked for coverage."""
+    from science_tool.validate.checks.evidence_lines import check_evidence_lines_unstanced
+
+    _write(
+        tmp_path,
+        "entities/propositions/0001-y.md",
+        "---\nid: proposition:p1\nsource_refs:\n  - paper:missing\n---\n",
+    )
+    # No evidence-line covers paper:missing → should warn
+    results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
+
+    rules = [r.rule for r in results]
+    assert "evidence.unstanced" in rules, results
