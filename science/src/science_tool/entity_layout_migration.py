@@ -12,7 +12,7 @@ import re
 
 import yaml
 
-from science_tool.entities import is_markdown_entity_kind, markdown_entity_kinds, resolve_path_policy
+from science_tool.entities import default_status, is_markdown_entity_kind, markdown_entity_kinds, resolve_path_policy, valid_statuses
 
 _FRONTMATTER = re.compile(r"^---\n(.*?)\n?---\n?(.*)$", re.DOTALL)
 # Roots scanned for legacy entities. entities/ is intentionally excluded.
@@ -98,3 +98,42 @@ _DIR_TO_KIND: dict[str, str] = {
     for kind in markdown_entity_kinds()
     if resolve_path_policy(kind).strategy != "singleton"
 }
+
+_DATE_HEADER_RE = re.compile(r"^\*\*Date:\*\*\s*(\d{4}-\d{2}-\d{2})", re.MULTILINE)
+_STATUS_HEADER_RE = re.compile(r"^\*\*Status:\*\*\s*(.+)$", re.MULTILINE)
+_H1_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
+
+
+def synthesize_frontmatter(*, kind: str, body: str, fallback_created: str) -> dict:
+    """Build a minimal valid frontmatter dict from prose headers + fallbacks.
+
+    Used for legacy files that have no (or partial) YAML frontmatter so they
+    become loadable before reference rewriting.
+    """
+    date_match = _DATE_HEADER_RE.search(body)
+    created = date_match.group(1) if date_match else fallback_created
+    # Status: accept a prose **Status:** value ONLY if it is in the kind's
+    # controlled vocabulary; otherwise use the per-kind default (NOT a blanket
+    # "active", which is invalid for hypothesis/proposition/evidence-line). The
+    # original prose line stays in the body, so nothing is lost.
+    status_match = _STATUS_HEADER_RE.search(body)
+    parsed_status = status_match.group(1).strip() if status_match else ""
+    status = parsed_status if parsed_status in valid_statuses(kind) else default_status(kind)
+    title_match = _H1_RE.search(body)
+    title = title_match.group(1).strip() if title_match else f"Untitled {kind}"
+    return {
+        "type": kind,
+        "title": title,
+        "status": status,
+        "created": created,
+        "updated": created,
+    }
+
+
+def ensure_frontmatter(entity: "LegacyEntity", *, fallback_created: str) -> dict:
+    """Return a complete frontmatter dict, synthesizing missing fields."""
+    base = synthesize_frontmatter(kind=entity.kind, body=entity.body, fallback_created=fallback_created)
+    base.update({k: v for k, v in entity.frontmatter.items() if v not in (None, "")})
+    base["type"] = entity.kind  # canonicalize: type wins over legacy `kind`
+    base.pop("kind", None)
+    return base

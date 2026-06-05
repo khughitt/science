@@ -135,6 +135,16 @@ _STATUS_VALUES: dict[str, frozenset[str]] = {
 _ALLOWED_EXPLICIT_ROOTS = (Path("doc"), Path("specs"), Path("research/packages"))
 
 
+def default_status(kind: str) -> str:
+    """The per-kind default status (e.g. hypothesis → 'proposed')."""
+    return _DEFAULT_STATUS[kind]
+
+
+def valid_statuses(kind: str) -> frozenset[str]:
+    """The controlled set of valid statuses for `kind`."""
+    return _STATUS_VALUES[kind]
+
+
 @dataclass(frozen=True)
 class EntityWriteResult:
     entity_id: str

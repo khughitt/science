@@ -52,3 +52,37 @@ def test_frontmatterless_file_under_unknown_parent_dir_is_skipped(tmp_path: Path
     _write(tmp_path, "doc/misc/foo.md", "Some prose.\n")
     found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
     assert "doc/misc/foo.md" not in found
+
+
+from science_tool.entity_layout_migration import synthesize_frontmatter
+
+
+from science_tool.entities import valid_statuses
+
+
+def test_synthesize_from_prose_headers() -> None:
+    body = "# h01 phase-1 results\n\n**Date:** 2026-05-23\n**Status:** First real-run\n\nText.\n"
+    fm = synthesize_frontmatter(kind="interpretation", body=body, fallback_created="2026-01-01")
+    assert fm["type"] == "interpretation"
+    assert fm["created"] == "2026-05-23"   # parsed from **Date:**
+    # "First real-run" is NOT a controlled interpretation status → falls back to
+    # the per-kind default. Synthesized status must always be a valid value.
+    assert fm["status"] in valid_statuses("interpretation")
+    assert "title" in fm and fm["title"]
+
+
+def test_synthesize_uses_controlled_default_status_per_kind() -> None:
+    # Defaults are per-kind controlled values (NOT a blanket "active"):
+    # hypothesis → "proposed", proposition → "draft".
+    h = synthesize_frontmatter(kind="hypothesis", body="Just text.\n", fallback_created="2026-02-02")
+    assert h["status"] in valid_statuses("hypothesis")
+    assert h["status"] == "proposed"
+    p = synthesize_frontmatter(kind="proposition", body="Just text.\n", fallback_created="2026-02-02")
+    assert p["status"] == "draft"
+
+
+def test_synthesize_uses_fallback_when_no_headers() -> None:
+    fm = synthesize_frontmatter(kind="finding", body="Just text.\n", fallback_created="2026-02-02")
+    assert fm["created"] == "2026-02-02"
+    assert fm["type"] == "finding"
+    assert fm["status"] in valid_statuses("finding")
