@@ -273,7 +273,7 @@ def entities_migrate_identifiers_command(project_path: Path, apply_changes: bool
 
 @entities_group.command("migrate")
 @click.option("--apply", "apply_changes", is_flag=True, help="Apply the migration (default: dry run).")
-@click.option("--project-root", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path("."))
+@click.option("--project-root", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path("."), help="Project root (default: current directory).")
 def entities_migrate_command(apply_changes: bool, project_root: Path) -> None:
     """Migrate a project's doc/specs entity layout into entities/ (v2 → v3)."""
     from science_tool.entity_layout_migration import migrate_layout
