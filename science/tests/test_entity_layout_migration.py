@@ -451,6 +451,18 @@ def test_migrate_version_not_bumped_when_audit_fails(tmp_path: Path) -> None:
     assert manifest.get("layout_version") == 2
 
 
+def test_plan_does_not_crash_on_typed_singleton(tmp_path: Path) -> None:
+    # Real-project case: specs/research-question.md carries `type: research-question`
+    # (a singleton kind with NO status vocabulary). It must be relocated via the
+    # singleton path rule, NOT synthesized/numbered (which would KeyError).
+    _write(tmp_path, "specs/research-question.md",
+           '---\nid: "research-question:main"\ntype: research-question\ntitle: RQ\nstatus: active\n---\nBody.\n')
+    plan = plan_migration(tmp_path)
+    # relocated as a singleton, not a numbered move
+    assert any(s.new_rel_path == "entities/research-question.md" for s in plan.singletons)
+    assert all(m.kind != "research-question" for m in plan.moves)
+
+
 def test_migrate_apply_is_idempotent(tmp_path: Path) -> None:
     """Fix C: running migrate_layout(apply=True) twice on a fully-migrated project
     is safe: the second call returns moves==[] and does not raise, and

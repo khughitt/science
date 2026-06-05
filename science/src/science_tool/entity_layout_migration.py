@@ -260,14 +260,19 @@ def plan_migration(project_root: Path) -> MigrationPlan:
     _plan_singletons(project_root, plan)
 
     entities = discover_legacy_entities(project_root)
+    # Singleton-kind files (research-question, claim-registry) are relocated by
+    # _plan_singletons via explicit paths — never numbered or frontmatter-synthesized
+    # here. They also have no status vocabulary, so synthesize_frontmatter would
+    # KeyError on them. Exclude them from the move-planning set entirely.
+    movable = [e for e in entities if resolve_path_policy(e.kind).strategy != "singleton"]
     # Synthesize complete frontmatter BEFORE planning so created/title/slug are
     # correct even for prose-header (frontmatterless) files.
     normalized: dict[str, dict] = {
         e.rel_path: ensure_frontmatter(e, fallback_created=str(e.frontmatter.get("created") or _UNDATED_SENTINEL))
-        for e in entities
+        for e in movable
     }
     by_kind: dict[str, list[LegacyEntity]] = {}
-    for entity in entities:
+    for entity in movable:
         by_kind.setdefault(entity.kind, []).append(entity)
 
     for kind, items in by_kind.items():
