@@ -388,3 +388,110 @@ def test_migrate_unresolved_ref_blocks_apply(tmp_path: Path) -> None:
     import pytest
     with pytest.raises(ValueError, match="unresolved"):
         migrate_layout(tmp_path, apply=True)
+
+
+# ---------------------------------------------------------------------------
+# Fix A/B/C lock-in tests
+# ---------------------------------------------------------------------------
+
+import pytest as _pytest
+
+
+def test_migrate_undated_entity_blocks_apply_and_is_reported(tmp_path: Path) -> None:
+    """Fix A: a legacy entity with no **Date:** and no frontmatter created is
+    reported under undated_entities in the dry-run and blocks apply=True BEFORE
+    any mutation (the source file must still exist after the failed apply call)."""
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    # Frontmatterless entity with no **Date:** header — no date is derivable.
+    _write(tmp_path, "doc/questions/no-date.md", "# No date question\n\nText.\n")
+    _git_init(tmp_path)
+
+    # Dry-run: undated_entities is populated.
+    dry = migrate_layout(tmp_path, apply=False)
+    assert "undated_entities" in dry
+    assert dry["undated_entities"], "dry-run must list the undated entity"
+    old_paths = [d["old_rel_path"] for d in dry["undated_entities"]]
+    assert "doc/questions/no-date.md" in old_paths
+
+    # apply=True: raises ValueError mentioning "undated" — no files moved.
+    with _pytest.raises(ValueError, match="undated"):
+        migrate_layout(tmp_path, apply=True)
+
+    # Source file must still exist (no git mv happened).
+    assert (tmp_path / "doc/questions/no-date.md").exists()
+    assert not (tmp_path / "entities").exists()
+
+
+def test_migrate_version_not_bumped_when_audit_fails(tmp_path: Path) -> None:
+    """Fix B: when the graph audit fails post-move, layout_version must NOT be
+    bumped to 3 and the error must carry rollback guidance.
+
+    Audit failure mechanism: after migration the question's `related` list
+    contains `hypothesis:9999-nope`, which conforms to the numeric local-part
+    policy (so rewrite_references does NOT flag it as unresolved) but points at
+    a nonexistent entity, causing audit_project_sources to return failed=True
+    with an 'unresolved_reference' row."""
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    # The hypothesis has no related dangling ref — it migrates cleanly.
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-alpha.md",
+        '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+        'title: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
+    # The question has a valid date (not blocked by Fix A) and a related ref that
+    # is conformant-shaped but points to a nonexistent entity, triggering the
+    # graph audit to fail after the files are moved.
+    _write(
+        tmp_path,
+        "doc/questions/q01-myq.md",
+        '---\nid: "question:q01-myq"\ntype: question\ncreated: "2026-01-02"\n'
+        'title: My Q\nstatus: active\nupdated: "2026-01-02"\n'
+        'related: ["hypothesis:9999-nope"]\n---\nBody.\n',
+    )
+    _git_init(tmp_path)
+
+    import yaml as _yaml
+
+    with _pytest.raises(ValueError, match="working tree"):
+        migrate_layout(tmp_path, apply=True)
+
+    # layout_version must NOT have been bumped.
+    manifest = _yaml.safe_load((tmp_path / "science.yaml").read_text())
+    assert manifest.get("layout_version") == 2
+
+
+def test_migrate_apply_is_idempotent(tmp_path: Path) -> None:
+    """Fix C: running migrate_layout(apply=True) twice on a fully-migrated project
+    is safe: the second call returns moves==[] and does not raise, and
+    layout_version is still 3."""
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-alpha.md",
+        '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+        'title: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
+    _git_init(tmp_path)
+
+    # First apply.
+    report1 = migrate_layout(tmp_path, apply=True)
+    assert report1["moves"]
+
+    import yaml as _yaml
+
+    assert _yaml.safe_load((tmp_path / "science.yaml").read_text())["layout_version"] == 3
+
+    # Stage and commit the migrated state so git mv on the second run can succeed
+    # (or, more precisely, so the second plan sees no legacy entities to move).
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "post-migrate"],
+        cwd=tmp_path,
+        check=True,
+    )
+
+    # Second apply — no legacy entities remain, so moves == [].
+    report2 = migrate_layout(tmp_path, apply=True)
+    assert report2["moves"] == []
+    assert _yaml.safe_load((tmp_path / "science.yaml").read_text())["layout_version"] == 3

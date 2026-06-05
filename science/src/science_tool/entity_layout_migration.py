@@ -27,6 +27,9 @@ from science_tool.entities import (
 _FRONTMATTER = re.compile(r"^---\n(.*?)\n?---\n?(.*)$", re.DOTALL)
 # Roots scanned for legacy entities. entities/ is intentionally excluded.
 _LEGACY_SCAN_ROOTS = ("doc", "specs")
+# Sentinel for "no date derivable" — used as a sort-last key and blocking guard.
+# Never written to disk: date-less entities block --apply before any mutation.
+_UNDATED_SENTINEL = "9999-99-99"
 
 
 @dataclass(frozen=True)
@@ -260,7 +263,7 @@ def plan_migration(project_root: Path) -> MigrationPlan:
     # Synthesize complete frontmatter BEFORE planning so created/title/slug are
     # correct even for prose-header (frontmatterless) files.
     normalized: dict[str, dict] = {
-        e.rel_path: ensure_frontmatter(e, fallback_created=str(e.frontmatter.get("created") or "9999-99-99"))
+        e.rel_path: ensure_frontmatter(e, fallback_created=str(e.frontmatter.get("created") or _UNDATED_SENTINEL))
         for e in entities
     }
     by_kind: dict[str, list[LegacyEntity]] = {}
@@ -521,19 +524,32 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
 
     # 1. Frontmatter synthesis (build complete frontmatter per file, with new id).
     rewritten: dict[str, str] = {}  # new_rel_path -> file text (pre ref-rewrite)
+    synthesized_fm: dict[str, dict] = {}  # new_rel_path -> fm dict (for undated check)
     for move in plan.moves:
         entity = entities[move.old_rel_path]
-        fm = ensure_frontmatter(entity, fallback_created=str(entity.frontmatter.get("created") or "9999-99-99"))
+        fm = ensure_frontmatter(entity, fallback_created=str(entity.frontmatter.get("created") or _UNDATED_SENTINEL))
         fm["id"] = move.new_id
         rewritten[move.new_rel_path] = _render(fm, entity.body)
+        synthesized_fm[move.new_rel_path] = fm
 
-    # 2. Reference rewrite across EVERY project markdown file that can carry an
-    #    entity id — not only the moved entities. References live in non-entity
-    #    prose too (reports, notes, research/packages, tasks). The final graph
-    #    audit (step 4) only inspects STRUCTURED sources (entity frontmatter /
-    #    relations / bindings), so raw inline `<kind>:local` and `[[…]]` links in
-    #    bodies would slip through unrewritten. This project-wide pass — plus the
-    #    unresolved-token report it produces — is that safety net.
+    # 2. Collect undated entities (created == _UNDATED_SENTINEL — no date derivable).
+    #    These must be reported in the dry-run and block --apply BEFORE any mutation.
+    undated_entities = sorted(
+        [
+            {"old_rel_path": move.old_rel_path, "new_rel_path": move.new_rel_path}
+            for move in plan.moves
+            if str(synthesized_fm[move.new_rel_path].get("created")) == _UNDATED_SENTINEL
+        ],
+        key=lambda d: d["old_rel_path"],
+    )
+
+    # Reference rewrite across EVERY project markdown file that can carry an
+    # entity id — not only the moved entities. References live in non-entity
+    # prose too (reports, notes, research/packages, tasks). The final graph
+    # audit (step 4) only inspects STRUCTURED sources (entity frontmatter /
+    # relations / bindings), so raw inline `<kind>:local` and `[[…]]` links in
+    # bodies would slip through unrewritten. This project-wide pass — plus the
+    # unresolved-token report it produces — is that safety net.
     singleton_text: dict[str, str] = {}
     for sm in plan.singletons:
         singleton_text[sm.new_rel_path] = (project_root / sm.old_rel_path).read_text(encoding="utf-8")
@@ -570,40 +586,55 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
         "id_map": plan.id_map,
         "collisions": plan.collisions,
         "unresolved_references": all_unresolved,
+        "undated_entities": undated_entities,
         "applied": apply,
     }
 
     if not apply:
         return report
+
+    # Pre-mutation guards — raise cleanly with no tree modification.
     if plan.collisions:
         raise ValueError(f"collisions block --apply: {plan.collisions}")
     if all_unresolved:
         raise ValueError(f"unresolved references block --apply: {all_unresolved}")
-
-    # 3. git mv + write rewritten content (entities, singletons, tasks) + bump version.
-    for move in plan.moves:
-        _git_mv(project_root, move.old_rel_path, move.new_rel_path)
-        (project_root / move.new_rel_path).write_text(rewritten[move.new_rel_path], encoding="utf-8")
-    for sm in plan.singletons:
-        _git_mv(project_root, sm.old_rel_path, sm.new_rel_path)
-        (project_root / sm.new_rel_path).write_text(singleton_text[sm.new_rel_path], encoding="utf-8")
-    for rel, text in inplace_text.items():
-        (project_root / rel).write_text(text, encoding="utf-8")
-
-    # 4. Final graph validation — token rewriting can miss semantic references, so
-    #    load the migrated tree and audit it. Fail loud (do NOT bump layout_version)
-    #    if anything fails to resolve. The working tree is left modified for
-    #    inspection; `git restore`/branch reset rolls back the uncommitted changes.
-    from science_tool.graph.migrate import audit_project_sources
-    from science_tool.graph.sources import load_project_sources
-
-    rows, failed = audit_project_sources(load_project_sources(project_root))
-    if failed:
-        bad = [r for r in rows if r.get("status") == "fail"]
+    if undated_entities:
         raise ValueError(
-            f"post-migration graph validation failed with {len(bad)} issue(s); "
-            f"working tree left modified (git restore to roll back). First issues: {bad[:10]}"
+            f"undated entities block --apply (add a **Date:** header or frontmatter "
+            f"created: to each, then re-run): {undated_entities}"
         )
+
+    # 3+4. git mv + writes + graph validation — wrapped so ANY post-mutation failure
+    #      carries uniform rollback guidance.
+    try:
+        # 3. git mv + write rewritten content (entities, singletons, inplace).
+        for move in plan.moves:
+            _git_mv(project_root, move.old_rel_path, move.new_rel_path)
+            (project_root / move.new_rel_path).write_text(rewritten[move.new_rel_path], encoding="utf-8")
+        for sm in plan.singletons:
+            _git_mv(project_root, sm.old_rel_path, sm.new_rel_path)
+            (project_root / sm.new_rel_path).write_text(singleton_text[sm.new_rel_path], encoding="utf-8")
+        for rel, text in inplace_text.items():
+            (project_root / rel).write_text(text, encoding="utf-8")
+
+        # 4. Final graph validation — token rewriting can miss semantic references, so
+        #    load the migrated tree and audit it. Fail loud (do NOT bump layout_version)
+        #    if anything fails to resolve.
+        from science_tool.graph.migrate import audit_project_sources
+        from science_tool.graph.sources import load_project_sources
+
+        rows, failed = audit_project_sources(load_project_sources(project_root))
+        if failed:
+            bad = [r for r in rows if r.get("status") == "fail"]
+            raise ValueError(
+                f"post-migration graph validation failed with {len(bad)} issue(s): {bad[:10]}"
+            )
+    except Exception as exc:
+        raise ValueError(
+            "science entities migrate --apply failed after the working tree was modified; "
+            "run `git restore .` (and `git restore --staged .`) or reset the branch to roll back. "
+            f"Cause: {exc}"
+        ) from exc
 
     # 5. Only after a clean audit: bump layout_version to 3.
     manifest_path = project_root / "science.yaml"
