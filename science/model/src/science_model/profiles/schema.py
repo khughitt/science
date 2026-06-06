@@ -15,6 +15,12 @@ class EntityKind(BaseModel):
     layer: str
     description: str
     entity_class: str | None = None  # "epistemic" | "operational" | "reference"; None defaults to caller's choice
+    # Layout/status overrides for project-local markdown kinds (v3 layout). All
+    # optional; defaults derive name->entities/<name>/, numeric strategy, "active".
+    home: str | None = None
+    strategy: str | None = None  # "numeric" | "citekey" (singleton is core-only)
+    default_status: str | None = None
+    statuses: list[str] | None = None
 
 
 class RelationEndpointPair(BaseModel):
