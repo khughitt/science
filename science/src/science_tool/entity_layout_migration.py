@@ -9,10 +9,14 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 import datetime
 import re
 
 import yaml
+
+if TYPE_CHECKING:
+    from science_tool.graph.sources import ProjectSources
 
 from science_tool.entities import (
     EntityCommandError,
@@ -789,7 +793,7 @@ def _simulated_postmove_audit_failures(
     return audit_fails + _dangling_alias_targets(sources, mappings_aliases)
 
 
-def _dangling_alias_targets(sources, mappings_aliases: dict[str, str]) -> list[dict]:
+def _dangling_alias_targets(sources: "ProjectSources", mappings_aliases: dict[str, str]) -> list[dict]:
     """Alias targets the graph audit silently accepts but that resolve to no
     entity. `audit_project_sources` passes manual_aliases into the resolver but
     never proves each target exists; this closes that gap. Targets are resolved
@@ -818,6 +822,7 @@ def _dangling_alias_targets(sources, mappings_aliases: dict[str, str]) -> list[d
                     "source": alias,
                     "field": "aliases",
                     "target": target,
+                    "details": f"mappings.yaml alias {alias!r} points to {target!r}, which does not resolve to any entity",
                 }
             )
     return fails
@@ -901,8 +906,9 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
             out, _ = rewrite_references(text, plan.id_map, policed_kinds=policed_kinds, project_root=project_root)
             bucket[rel] = out
             if rel.endswith("mappings.yaml"):
-                continue  # Unit E: alias source keys are definitions, not refs;
-                # alias TARGETS are validated separately (see _dangling_alias_targets)
+                # Rewrite already applied above; alias SOURCE keys are definitions,
+                # not refs. Alias TARGETS are validated separately (see _dangling_alias_targets).
+                continue
             _, warn_tokens = rewrite_references(
                 _strip_code_spans(text), plan.id_map, policed_kinds=policed_kinds, project_root=project_root
             )
