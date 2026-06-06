@@ -904,6 +904,16 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
     }
 
 
+def resolve_local_profile_name(project_root: Path) -> str:
+    """Return the active local knowledge-profile name for the project at *project_root*.
+
+    Prefers the value at ``knowledge_profiles.local`` in the project config;
+    falls back to the legacy ``profiles.local`` key if the newer key is absent;
+    defaults to ``"local"`` when neither key is present.
+    """
+    return str(_read_project_config(project_root)["knowledge_profiles"]["local"])
+
+
 def _load_manual_aliases(project_root: Path, *, local_profile: str) -> dict[str, str]:
     return load_manual_aliases(project_root, local_profile=local_profile)
 
