@@ -2,7 +2,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from science_model.profiles.schema import EntityKind
+from science_tool.entities import (
+    EntityCommandError,
+    EntityPathPolicy,
+    default_status,
+    is_markdown_entity_kind,
+    load_local_entity_policies,
+    markdown_entity_kinds,
+    resolve_path_policy,
+    valid_statuses,
+)
 from science_tool.graph.sources import resolve_local_profile_name
 
 
@@ -51,17 +63,6 @@ def test_resolve_local_profile_name_defaults_to_local(tmp_path: Path) -> None:
     _write(tmp_path, "science.yaml", "name: t\n")
     assert resolve_local_profile_name(tmp_path) == "local"
 
-
-import pytest
-
-from science_tool.entities import (
-    EntityCommandError,
-    EntityPathPolicy,
-    is_markdown_entity_kind,
-    load_local_entity_policies,
-    markdown_entity_kinds,
-    resolve_path_policy,
-)
 
 _LOCAL_MANIFEST = """\
 name: t-local
@@ -171,9 +172,6 @@ def test_strategy_override_accepts_known_values(tmp_path: Path) -> None:
 def test_no_local_profile_is_empty(tmp_path: Path) -> None:
     _write(tmp_path, "science.yaml", "name: t\n")
     assert load_local_entity_policies(tmp_path) == {}
-
-
-from science_tool.entities import default_status, valid_statuses
 
 
 def test_status_accessors_core_unchanged() -> None:

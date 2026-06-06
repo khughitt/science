@@ -9,7 +9,6 @@ import yaml
 from science_tool.entities import valid_statuses
 from science_tool.entity_layout_migration import (
     discover_legacy_entities,
-    ensure_frontmatter,
     migrate_layout,
     plan_migration,
     rewrite_references,

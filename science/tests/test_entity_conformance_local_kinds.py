@@ -65,18 +65,24 @@ def test_local_kind_stranded_severity_is_version_gated(tmp_path: Path) -> None:
 def test_local_kind_nonconforming_filename_flagged(tmp_path: Path) -> None:
     # A numeric-strategy local kind whose file is not NNNN-slug must be flagged.
     _seed_profile(tmp_path, layout_version=3)
-    _write(tmp_path, "entities/design/bad.md",
-           '---\nid: "design:bad"\ntype: design\ntitle: Bad\nstatus: active\n'
-           'created: "2026-01-01"\nupdated: "2026-01-01"\n---\nb\n')
+    _write(
+        tmp_path,
+        "entities/design/bad.md",
+        '---\nid: "design:bad"\ntype: design\ntitle: Bad\nstatus: active\n'
+        'created: "2026-01-01"\nupdated: "2026-01-01"\n---\nb\n',
+    )
     msgs = [r.message for r in check_entity_filename_conformance(_ctx(tmp_path))]
     assert any("non-conforming design filename 'bad.md'" in m for m in msgs)
 
 
 def test_local_kind_conforming_filename_is_clean(tmp_path: Path) -> None:
     _seed_profile(tmp_path, layout_version=3)
-    _write(tmp_path, "entities/design/0001-good.md",
-           '---\nid: "design:0001-good"\ntype: design\ntitle: Good\nstatus: active\n'
-           'created: "2026-01-01"\nupdated: "2026-01-01"\n---\nb\n')
+    _write(
+        tmp_path,
+        "entities/design/0001-good.md",
+        '---\nid: "design:0001-good"\ntype: design\ntitle: Good\nstatus: active\n'
+        'created: "2026-01-01"\nupdated: "2026-01-01"\n---\nb\n',
+    )
     msgs = [r.message for r in check_entity_filename_conformance(_ctx(tmp_path))]
     assert not any("non-conforming design" in m for m in msgs)
 
