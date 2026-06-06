@@ -148,6 +148,17 @@ def test_home_override_must_be_relative_under_entities(tmp_path: Path, bad_home:
         load_local_entity_policies(tmp_path)
 
 
+def test_home_override_may_not_collide_with_core_directory(tmp_path: Path) -> None:
+    # A local kind whose home directory name matches a core kind's directory
+    # (here: entities/hypotheses) must be rejected — otherwise the dir->kind
+    # inference map would shadow the core kind.
+    manifest = _LOCAL_MANIFEST.replace("    home: entities/gizmos\n", "    home: entities/hypotheses\n")
+    _write(tmp_path, "science.yaml", "name: t\nknowledge_profiles:\n  local: local\n")
+    _write(tmp_path, "knowledge/sources/local/manifest.yaml", manifest)
+    with pytest.raises(EntityCommandError):
+        load_local_entity_policies(tmp_path)
+
+
 @pytest.mark.parametrize("bad_strategy", ["banana", "singleton"])
 def test_strategy_override_must_be_known(tmp_path: Path, bad_strategy: str) -> None:
     manifest = _LOCAL_MANIFEST.replace(

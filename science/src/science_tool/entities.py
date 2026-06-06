@@ -76,6 +76,15 @@ _LOCAL_MANIFEST_CACHE: dict[tuple[str, int], ProfileManifest | None] = {}
 # would be accepted, discovered, then never moved. Forbid it fail-loud here.
 _VALID_STRATEGIES: frozenset[str] = frozenset({"numeric", "citekey"})
 
+# Set of directory (or file) names that belong to core kinds' homes.  A local
+# kind whose resolved home has the same final path component would silently
+# overwrite the core entry in the dir→kind inference map built by the migrator
+# (_project_dir_to_kind in entity_layout_migration.py).  Computed once at
+# import time from the authoritative builtin table.
+_CORE_HOME_DIR_NAMES: frozenset[str] = frozenset(
+    policy.root.name for policy in _BUILTIN_MARKDOWN_POLICIES.values()
+)
+
 
 def _resolve_local_home(name: str, home: str | None) -> Path:
     """Resolve (and validate) a local kind's home directory.
@@ -135,6 +144,11 @@ def load_local_entity_policies(project_root: Path) -> dict[str, EntityPathPolicy
                     f"{sorted(_VALID_STRATEGIES)}"
                 )
             root = _resolve_local_home(ek.name, ek.home)
+            if root.name in _CORE_HOME_DIR_NAMES:
+                raise EntityCommandError(
+                    f"local kind {ek.name!r} home {root!r} collides with a core entity "
+                    f"directory ({root.name!r}); choose a different home"
+                )
             strategy = cast(EntityFilenameStrategy, ek.strategy or "numeric")
             policies[ek.name] = EntityPathPolicy(root, strategy)
     _LOCAL_POLICY_CACHE[cache_key] = policies

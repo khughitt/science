@@ -54,7 +54,7 @@ def _entity_dirs(
     """Yield (kind, policy, directory) for every non-singleton markdown entity
     kind whose entities/<kind>/ directory exists. With ``strategy`` set, only
     kinds of that strategy are yielded."""
-    for kind in markdown_entity_kinds(ctx.project_root):
+    for kind in markdown_entity_kinds(project_root=ctx.project_root):
         policy = resolve_path_policy(kind, project_root=ctx.project_root)
         if policy.strategy == "singleton":
             continue
