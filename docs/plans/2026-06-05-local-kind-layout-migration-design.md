@@ -39,6 +39,15 @@ have no markdown files, already load regardless of layout, and are a no-op here.
 3. **Home:** derived as `entities/<kind-name-verbatim>/` (singular, no
    pluralization guessing) with the **`numeric`** strategy, plus an **optional
    per-kind manifest override** (`home:` / `strategy:`).
+4. **Kind identity:** the `EntityKind.name` *is* the kind, the id prefix, and the
+   directory segment. `canonical_prefix` is required to equal `name` (the
+   registry keys on `name` — `graph/sources.py:218,229` — and `register-kind`
+   always writes them equal). The policy loader **validates `name ==
+   canonical_prefix` and fails loud** on divergence rather than guessing which
+   one is authoritative.
+5. **Status:** local kinds **default to `active`** and accept any status unless
+   the manifest declares a controlled set. Optional per-kind manifest metadata
+   `default_status:` / `statuses:` overrides this.
 
 ## Current state (investigation, 2026-06-05)
 
@@ -64,6 +73,28 @@ have no markdown files, already load regardless of layout, and are a no-op here.
   `doc/plans/` would be read as `plan`). Verified counts: `design` 14,
   `analysis-plan` 16, `meta` 8, `paper-synthesis` 3, `critique` 3, `review` 2,
   plus singletons.
+- **Status accessors are core-only and crash on local kinds.**
+  `default_status(kind)` and `valid_statuses(kind)` (`entities.py:138,143`)
+  directly index `_DEFAULT_STATUS[kind]` / `_STATUS_VALUES[kind]`, so they raise
+  `KeyError` for any local kind. `synthesize_frontmatter`
+  (`entity_layout_migration.py:158`) calls both, so a frontmatterless local-kind
+  file (prose-only `design`/`analysis-plan`/…) crashes the migrator before any
+  move. This must be fixed for the "synthesize frontmatter for prose files"
+  decision to hold.
+- **`rewrite_references` is core-only too.** Its unresolved-token scan
+  (`entity_layout_migration.py:534`) skips any `kind` failing core-only
+  `is_markdown_entity_kind`, and calls `resolve_path_policy` / `local_part_conforms`
+  (`:538,:540`) without project context. Mapped local-kind ids still rewrite (via
+  `id_map`), but an **unmapped stale** `design:old-slug` is treated as external
+  and slips past the dry-run `unresolved_references` gate — only to fail the
+  post-move audit. A `policed_kinds` parameter already exists and is the hook to
+  extend.
+- **Profile resolution has a legacy fallback the loader must reuse.**
+  `_read_project_config` (`graph/sources.py:872`) reads
+  `knowledge_profiles.local`, falls back to legacy `profiles: {local: …}`, and
+  defaults to `"local"`. A new policy loader that parses `science.yaml` directly
+  would silently miss local kinds on older projects while graph loading still
+  sees them.
 - **Conformance checks are core-only.** `_entity_dirs`
   (`validate/checks/entity_conformance.py:51`) iterates `markdown_entity_kinds()`;
   the stranded-in-`doc`/`specs` scan filters on `is_markdown_entity_kind`. Local
@@ -84,7 +115,8 @@ have no markdown files, already load regardless of layout, and are a no-op here.
 - **The `EntityKind` schema is small and extensible.**
   `model/src/science_model/profiles/schema.py:10` —
   `name, canonical_prefix, layer, description, entity_class?`. Adding optional
-  `home`/`strategy` fields is a clean, backward-compatible addition.
+  `home`, `strategy`, `default_status`, `statuses` fields (all `None`-defaulted)
+  is a clean, backward-compatible addition.
 
 ## Design
 
@@ -96,14 +128,20 @@ project with no local kinds.
 
 - New `EntityPathPolicy` is reused as-is (`root: Path`, `strategy`).
 - New `load_local_entity_policies(project_root) -> dict[str, EntityPathPolicy]`:
-  1. read `science.yaml` → `knowledge_profiles.local`;
+  1. resolve the active local profile by **reusing `_read_project_config`'s
+     normalization** (`graph/sources.py:872`) — `knowledge_profiles.local`, the
+     legacy `profiles: {local: …}` fallback, and the `"local"` default — rather
+     than re-parsing `science.yaml`. (Refactor `_read_project_config`, or its
+     profile-name resolution, into a shared helper both call.)
   2. load that manifest via `load_profile_manifest(local_profile_sources_dir(...) /
      "manifest.yaml")`;
-  3. for each `entity_kinds` entry: `root = Path(entry.home or
+  3. **validate `entry.name == entry.canonical_prefix`** per Decision 4; raise a
+     clear error on divergence;
+  4. for each `entity_kinds` entry: `root = Path(entry.home or
      f"entities/{entry.name}")`, `strategy = entry.strategy or "numeric"`;
-  4. **drop any kind already in `_BUILTIN_MARKDOWN_POLICIES`** (core kinds win;
+  5. **drop any kind already in `_BUILTIN_MARKDOWN_POLICIES`** (core kinds win;
      a local kind may never shadow a builtin);
-  5. cache per `project_root` (cheap; manifest is small).
+  6. cache per `project_root` (cheap; manifest is small).
 - Project-aware accessors (preferred shape — an explicit resolver object to avoid
   re-reading the manifest on every call):
   - `entity_policies(project_root=None) -> Mapping[str, EntityPathPolicy]` returns
@@ -117,6 +155,15 @@ project with no local kinds.
 Local kinds get **verbatim singular dirs** (`entities/design/`,
 `entities/analysis-plan/`) so there is no pluralization rule to get wrong; core
 kinds keep their existing plural dirs untouched.
+
+**Status policy (also project-aware).** `default_status` / `valid_statuses`
+gain the same optional `project_root` and consult the local profile. For a local
+kind: `default_status` returns the manifest `default_status` if set, else
+`"active"`; `valid_statuses` returns the manifest `statuses` set if declared,
+else an **open set** (any status accepted — local kinds are not forced into a
+controlled vocabulary unless the project opts in). `synthesize_frontmatter` and
+`ensure_frontmatter` thread `project_root` so prose-only local-kind files
+synthesize a valid `status` instead of raising `KeyError`.
 
 ### B. Migrator threads project context
 
@@ -136,6 +183,14 @@ into kind resolution:
   ids now change, their refs enter `id_map` and `rewrite_references` rewrites
   them across **all** project markdown **and** the YAML registries already in
   scope (`knowledge/sources/<profile>/*.yaml`, etc.).
+- **`rewrite_references` becomes project-aware.** It takes `project_root` (or a
+  resolved policy set) so its unresolved-token scan uses
+  `is_markdown_entity_kind` / `resolve_path_policy` / `local_part_conforms` over
+  `core ∪ local`, and `policed_kinds` includes the migrated local kinds.
+  Consequence: an **unmapped** stale local-kind ref (`design:old-slug` with no
+  `id_map` entry, in markdown or YAML) is correctly reported in
+  `unresolved_references` and **blocks `--apply`** at the dry-run gate instead of
+  failing the post-move audit.
 - Existing gates apply unchanged to local kinds: `collisions`,
   `undated_entities`, `unresolved_references`, then post-move graph audit, then
   the `layout_version: 3` bump on a clean audit only.
@@ -177,12 +232,12 @@ audit → bump `layout_version: 3` on clean audit only.
   ERRORs. This is correct under the "registration = entity" semantics; v2
   projects only see WARN (severity is `layout_version`-gated). Rollout note, not
   a blocker.
-- **Profiles other than `local`.** `knowledge_profiles` may name a non-`local`
-  profile or import shared profiles. `load_local_entity_policies` resolves the
-  *active* local profile; shared/imported profile kinds that are core remain
-  core. (Confirm during implementation that shared-profile non-core kinds, if
-  any, are intended to be markdown-homed — out of scope unless a project uses
-  them.)
+- **Profile resolution variants.** The active local profile may be named via
+  `knowledge_profiles.local`, the legacy `profiles: {local: …}`, or defaulted to
+  `"local"` — all handled by reusing the shared `_read_project_config` resolver
+  (Design A.1). Shared/imported profiles whose kinds are core remain core;
+  shared-profile *non-core* kinds being markdown-homed is out of scope unless a
+  project uses them (confirm during implementation).
 - **`research/packages`** (the other cutover scan root) is unaffected.
 
 ## Backward compatibility
@@ -196,10 +251,17 @@ unaffected. The only behavior change is for projects that register local
 
 - **Unit (`tmp_path`):** project-aware `resolve_path_policy` (local kind →
   `entities/<name>`; `home`/`strategy` override honored; core kind never
-  shadowed; unknown kind still raises). `load_local_entity_policies` parsing.
-- **Migrator:** discovery/plan/rewrite for a local kind, including a prose-only
-  (frontmatterless) file → synthesized frontmatter + numeric id; reference
-  rewrite of an old local-kind id across a markdown body and a YAML registry.
+  shadowed; unknown kind still raises). `load_local_entity_policies` parsing,
+  **including a manifest with `name != canonical_prefix` → raises**, and a
+  **legacy `profiles: {local: …}`** manifest resolving correctly.
+- **Status:** project-aware `default_status`/`valid_statuses` for a local kind →
+  `active` default and open set; manifest `default_status`/`statuses` override
+  honored.
+- **Migrator:** discovery/plan/rewrite for a local kind, including a **prose-only
+  (frontmatterless)** file → synthesized frontmatter (valid `status`, no
+  `KeyError`) + numeric id; reference rewrite of an old local-kind id across a
+  markdown body and a YAML registry; an **unmapped `design:old-slug`** is
+  reported in `unresolved_references` and **blocks `--apply`**.
   **Kind inference:** a local-kind file with `id:` prefix but no `type:` in a
   *foreign* directory (e.g. `doc/plans/x.md` with `id: design:x`) resolves to
   `design`, not `plan`; an explicit `type:` still wins over a divergent `id:`
