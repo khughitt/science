@@ -144,9 +144,10 @@ def test_plan_maps_frontmatterless_stem_alias(tmp_path: Path) -> None:
 
 
 def test_plan_ambiguous_stem_alias_not_silently_mis_mapped(tmp_path: Path) -> None:
-    # Two type:-only files with the same stem under the same kind but from
-    # two different legacy scan roots (doc/ and specs/) both want alias
-    # `interpretation:foo`.  The plan must NOT keep a wrong mapping; it must
+    # Two type:-only files with the same stem, both resolve to `interpretation`
+    # (one from the legacy root doc/interpretations/ via dir-fallback; one from
+    # specs/interpretations/ via explicit type:), both want alias `interpretation:foo`.
+    # The plan must NOT keep a wrong mapping; it must
     # remove the alias from id_map and record a blocking alias collision.
     body = "---\ntype: interpretation\n---\n# Foo\n\n**Date:** 2026-01-01\n"
     _write(tmp_path, "doc/interpretations/foo.md", body)

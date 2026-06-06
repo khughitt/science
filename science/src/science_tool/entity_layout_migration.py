@@ -109,7 +109,8 @@ _PATH_KIND_OVERRIDES: dict[str, str] = {
 
 
 def _has_entity_signal(frontmatter: dict | None) -> bool:
-    """True iff the frontmatter carries an entity signal: id/type/kind."""
+    """True iff the frontmatter carries a non-empty entity signal (id/type/kind).
+    Empty strings, None, and other falsy values are not considered signals."""
     if not frontmatter:
         return False
     return any(frontmatter.get(k) for k in ("id", "type", "kind"))
@@ -161,6 +162,10 @@ def _project_dir_to_kind(project_root: Path) -> dict[str, str]:
 # One entry per numeric/citekey core kind, derived from the pre-v3 layout.
 # NOTE: synthesis appears here defensively (strategy=numeric); in practice it is
 # discovered exclusively via _PATH_KIND_OVERRIDES (doc/reports/synthesis.md).
+# If a new core kind is added: add its pre-v3 legacy root here ONLY if it
+# existed on disk under doc/ or specs/ before the v3 migration; new kinds
+# introduced after migration don't need a legacy entry (_DEST_ROOT_TO_KIND
+# covers their entities/ home automatically via the SSOT derivation).
 _LEGACY_ROOT_TO_KIND: dict[str, str] = {
     "doc/papers": "paper",
     "doc/questions": "question",
@@ -178,6 +183,10 @@ _LEGACY_ROOT_TO_KIND: dict[str, str] = {
     "doc/inquiries": "inquiry",
     "doc/observations": "observation",
     "doc/mechanisms": "mechanism",
+    # synthesis appears here defensively (strategy=numeric); in practice it is
+    # discovered exclusively via _PATH_KIND_OVERRIDES (doc/reports/synthesis.md).
+    # Under the entity-signal gate, a stray doc/synthesis/<foo>.md with no id/type
+    # lands in skipped_untyped, not swept in as an entity.
     "doc/synthesis": "synthesis",
     "specs/hypotheses": "hypothesis",
     "specs/propositions": "proposition",
