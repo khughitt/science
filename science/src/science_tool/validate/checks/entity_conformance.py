@@ -73,6 +73,8 @@ def check_local_kind_manifest(ctx: ValidateContext) -> Iterator[Result]:
     canonical_prefix/home/strategy, or home colliding with a core directory) as
     warnings, so a vestigial kind is visible without aborting validation."""
     for kind, reason in local_kind_warnings(ctx.project_root):
+        # Always WARN: a vestigial/malformed manifest kind has no v3 entity to
+        # migrate, so it does not promote to ERROR at cutover like the other checks.
         yield _result(Severity.WARN, None, f"local kind {kind!r} skipped during load: {reason}")
 
 

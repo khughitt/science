@@ -113,7 +113,7 @@ def _load_local_policies_and_warnings(
     project_root: Path,
 ) -> tuple[dict[str, EntityPathPolicy], list[tuple[str, str]]]:
     """Load local markdown-kind policies, skipping (not raising on) malformed
-    kinds. Returns (policies, warnings) where warnings is a list of
+    kinds. Returns (policies, kind_warnings) where kind_warnings is a list of
     (kind_name, reason) for every kind dropped during validation. Cached on the
     manifest mtime exactly as the prior single-dict implementation was."""
     profile_name = resolve_local_profile_name(project_root)
@@ -126,34 +126,34 @@ def _load_local_policies_and_warnings(
         return cached
     manifest = load_profile_manifest(manifest_path)
     policies: dict[str, EntityPathPolicy] = {}
-    warnings: list[tuple[str, str]] = []
+    kind_warnings: list[tuple[str, str]] = []
     if manifest is not None:
         for ek in manifest.entity_kinds:
             if ek.name != ek.canonical_prefix:
-                warnings.append(
+                kind_warnings.append(
                     (ek.name, f"canonical_prefix {ek.canonical_prefix!r} != name {ek.name!r}; skipped")
                 )
                 continue
             if ek.name in _BUILTIN_MARKDOWN_POLICIES:
                 continue  # a local kind may not shadow a core kind (silent, core wins)
             if ek.strategy is not None and ek.strategy not in _VALID_STRATEGIES:
-                warnings.append(
+                kind_warnings.append(
                     (ek.name, f"strategy {ek.strategy!r} not one of {sorted(_VALID_STRATEGIES)}; skipped")
                 )
                 continue
             try:
                 root = _resolve_local_home(ek.name, ek.home)
             except EntityCommandError as exc:
-                warnings.append((ek.name, f"{exc}; skipped"))
+                kind_warnings.append((ek.name, f"{exc}; skipped"))
                 continue
             if root.name in _CORE_HOME_DIR_NAMES:
-                warnings.append(
+                kind_warnings.append(
                     (ek.name, f"home {root!r} collides with core entity directory {root.name!r}; skipped")
                 )
                 continue
             strategy = cast(EntityFilenameStrategy, ek.strategy or "numeric")
             policies[ek.name] = EntityPathPolicy(root, strategy)
-    result = (policies, warnings)
+    result = (policies, kind_warnings)
     _LOCAL_POLICY_CACHE[cache_key] = result
     return result
 

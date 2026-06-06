@@ -115,5 +115,5 @@ def test_local_kind_warning_is_surfaced_as_validate_warning(tmp_path: Path) -> N
 
     ctx = _ctx(tmp_path)  # use the module's existing ValidateContext factory
     results = list(check_local_kind_manifest(ctx))
-    assert any("gadget" in r.message for r in results)
+    assert any("gadget" in r.message and "skipped" in r.message for r in results)
     assert all(r.severity is Severity.WARN for r in results)
