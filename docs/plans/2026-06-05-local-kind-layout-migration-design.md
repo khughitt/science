@@ -49,10 +49,14 @@ to v3.
 3. **Home:** derived as `entities/<kind-name-verbatim>/` (singular, no
    pluralization guessing) with the **`numeric`** strategy, plus an **optional
    per-kind manifest override** (`home:` / `strategy:`). Overrides are
-   **validated fail-loud**: `home` must be a *relative* path rooted at
-   `entities/` with no `..` traversal (a malformed value must not redirect
-   migration writes outside the entity tree), and `strategy` must be one of
-   `numeric` / `citekey` / `singleton`.
+   **validated fail-loud**: `home` must be a *relative* path of at least two
+   segments rooted at `entities/` (i.e. `entities/<segment>/…`) with no `..`
+   traversal — a malformed value, or the bare `entities` root (which would make
+   the kind scan top-level `entities/*.md` and swallow core singleton markdown),
+   is rejected. `strategy` must be `numeric` or `citekey`; **`singleton` is
+   core-only** and forbidden for local kinds (the migrator has no
+   local-singleton move semantics — `_plan_singletons` is hard-coded to the two
+   core singleton paths).
 4. **Kind identity:** the `EntityKind.name` *is* the kind, the id prefix, and the
    directory segment. `canonical_prefix` is required to equal `name` (the
    registry keys on `name` — `graph/sources.py:218,229` — and `register-kind`
@@ -267,9 +271,9 @@ unaffected. The only behavior change is for projects that register local
   `entities/<name>`; `home`/`strategy` override honored; core kind never
   shadowed; unknown kind still raises). `load_local_entity_policies` parsing,
   **including a manifest with `name != canonical_prefix` → raises**, an invalid
-  **`home`** (absolute / `../` / non-`entities/`) → raises, an invalid
-  **`strategy`** → raises, and a **legacy `profiles: {local: …}`** manifest
-  resolving correctly.
+  **`home`** (absolute / `../` / non-`entities/` / bare `entities`) → raises, an
+  invalid or **`singleton`** `strategy` → raises, and a **legacy
+  `profiles: {local: …}`** manifest resolving correctly.
 - **Status:** project-aware `default_status`/`valid_statuses` for a local kind →
   `active` default and open set; manifest `default_status`/`statuses` override
   honored.

@@ -111,7 +111,7 @@ class EntityKind(BaseModel):
     # Layout/status overrides for project-local markdown kinds (v3 layout). All
     # optional; defaults derive name->entities/<name>/, numeric strategy, "active".
     home: str | None = None
-    strategy: str | None = None  # "numeric" | "citekey" | "singleton"
+    strategy: str | None = None  # "numeric" | "citekey" (singleton is core-only)
     default_status: str | None = None
     statuses: list[str] | None = None
 ```
@@ -305,6 +305,7 @@ def test_name_must_equal_canonical_prefix(tmp_path: Path) -> None:
         "../outside/design",      # parent traversal
         "doc/design",             # not under entities/
         "entities/../escape",     # traversal after entities/
+        "entities",               # bare root: would scan top-level entities/*.md
     ],
 )
 def test_home_override_must_be_relative_under_entities(tmp_path: Path, bad_home: str) -> None:
@@ -315,9 +316,12 @@ def test_home_override_must_be_relative_under_entities(tmp_path: Path, bad_home:
         load_local_entity_policies(tmp_path)
 
 
-def test_strategy_override_must_be_known(tmp_path: Path) -> None:
+@pytest.mark.parametrize("bad_strategy", ["banana", "singleton"])
+def test_strategy_override_must_be_known(tmp_path: Path, bad_strategy: str) -> None:
+    # `singleton` is a *known core* strategy but is forbidden for local kinds:
+    # the migrator has no local-singleton move semantics.
     manifest = _LOCAL_MANIFEST.replace(
-        "    home: entities/gizmos\n", "    home: entities/gizmos\n    strategy: banana\n"
+        "    home: entities/gizmos\n", f"    home: entities/gizmos\n    strategy: {bad_strategy}\n"
     )
     _write(tmp_path, "science.yaml", "name: t\nknowledge_profiles:\n  local: local\n")
     _write(tmp_path, "knowledge/sources/local/manifest.yaml", manifest)
@@ -369,26 +373,32 @@ Add, just below `_BUILTIN_MARKDOWN_POLICIES` (after line 58):
 # still picking up edits (important for tests that rewrite the manifest).
 _LOCAL_POLICY_CACHE: dict[tuple[str, int], dict[str, EntityPathPolicy]] = {}
 
-# Strategies a local kind may declare. Mirrors the core policy strategies.
-_VALID_STRATEGIES: frozenset[str] = frozenset({"numeric", "citekey", "singleton"})
+# Strategies a local kind may declare. `singleton` is intentionally excluded:
+# the migrator's singleton handling (`_plan_singletons`) is hard-coded to the two
+# core singleton paths and has no local-singleton semantics, so a local singleton
+# would be accepted, discovered, then never moved. Forbid it fail-loud here.
+_VALID_STRATEGIES: frozenset[str] = frozenset({"numeric", "citekey"})
 
 
 def _resolve_local_home(name: str, home: str | None) -> Path:
     """Resolve (and validate) a local kind's home directory.
 
     Default is ``entities/<name>``. An explicit ``home`` override must be a
-    *relative* path rooted at ``entities/`` with no parent traversal — anything
-    else (absolute, ``../``, a non-``entities/`` root) is rejected fail-loud, so a
-    malformed manifest cannot redirect migration writes outside the entity tree.
+    *relative* path of at least two segments rooted at ``entities/`` with no
+    parent traversal — anything else (absolute, ``../``, a non-``entities/``
+    root, or the bare ``entities`` root itself) is rejected fail-loud. This keeps
+    migration writes inside a dedicated ``entities/<segment>/`` subdirectory and
+    prevents a kind's home from scanning top-level ``entities/*.md`` (which would
+    swallow core singleton markdown).
     """
     if not home:
         return Path(f"entities/{name}")
     candidate = Path(home)
     parts = candidate.parts
-    if candidate.is_absolute() or ".." in parts or not parts or parts[0] != "entities":
+    if candidate.is_absolute() or ".." in parts or len(parts) < 2 or parts[0] != "entities":
         raise EntityCommandError(
-            f"local kind {name!r} home {home!r} must be a relative path under 'entities/' "
-            "with no parent traversal"
+            f"local kind {name!r} home {home!r} must be a relative path of the form "
+            "'entities/<segment>/...' with no parent traversal"
         )
     return candidate
 
@@ -1351,9 +1361,11 @@ Expected: clean. Fix any findings and re-run.
 
 - [ ] **Step 3: Final commit (if lint required changes)**
 
-`ruff format` only rewrites the files this plan touched. Stage them explicitly —
-**never `git add -A`** (the worktree is shared and may hold unrelated changes).
-First inspect what changed, then add only the files from this plan that are dirty:
+`ruff format`/`ruff check --fix` may rewrite **any** file this plan touched —
+sources, the new tests, or the docs. Stage them explicitly — **never
+`git add -A`** (the worktree is shared and may hold unrelated changes). First
+inspect what changed, then add only the files from this plan's "File structure"
+table that are dirty:
 
 ```bash
 cd ~/d/science
@@ -1363,7 +1375,12 @@ git add \
   science/src/science_tool/entities.py \
   science/src/science_tool/entity_layout_migration.py \
   science/src/science_tool/graph/sources.py \
-  science/src/science_tool/validate/checks/entity_conformance.py
+  science/src/science_tool/validate/checks/entity_conformance.py \
+  science/tests/test_entities_local_policies.py \
+  science/tests/test_entity_layout_migration.py \
+  science/tests/test_entity_conformance_local_kinds.py \
+  science/tests/test_migrate_local_kinds_integration.py \
+  docs/entity-layout-migration-guide.md
 git commit -m "chore: lint/format local-kind migration changes"
 ```
 
