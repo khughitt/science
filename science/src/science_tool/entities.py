@@ -64,7 +64,7 @@ _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
 # Cache local-policy reads keyed by (project_root, manifest mtime_ns) so repeated
 # resolve_path_policy calls during a migration don't re-parse the manifest, while
 # still picking up edits (important for tests that rewrite the manifest).
-_LOCAL_POLICY_CACHE: dict[tuple[str, int], dict[str, EntityPathPolicy]] = {}
+_LOCAL_POLICY_CACHE: dict[tuple[str, int], tuple[dict[str, EntityPathPolicy], list[tuple[str, str]]]] = {}
 
 # Parsed-manifest cache (mtime-keyed, mirrors _LOCAL_POLICY_CACHE) so the status
 # accessors don't re-parse the manifest on every call during synthesis.
@@ -109,50 +109,68 @@ def _resolve_local_home(name: str, home: str | None) -> Path:
     return candidate
 
 
-def load_local_entity_policies(project_root: Path) -> dict[str, EntityPathPolicy]:
-    """Path policies for the project's registered local markdown kinds.
-
-    Reads the active local profile manifest. Each kind maps to
-    ``entities/<name>/`` (numeric) unless the manifest declares ``home``/
-    ``strategy`` overrides. Kinds shadowing a core kind are dropped (core wins).
-    Validates ``name == canonical_prefix`` (Decision 4), that any ``home`` is a
-    relative path under ``entities/``, and that any ``strategy`` is known; raises
-    on divergence.
-    """
+def _load_local_policies_and_warnings(
+    project_root: Path,
+) -> tuple[dict[str, EntityPathPolicy], list[tuple[str, str]]]:
+    """Load local markdown-kind policies, skipping (not raising on) malformed
+    kinds. Returns (policies, warnings) where warnings is a list of
+    (kind_name, reason) for every kind dropped during validation. Cached on the
+    manifest mtime exactly as the prior single-dict implementation was."""
     profile_name = resolve_local_profile_name(project_root)
     manifest_path = local_profile_sources_dir(project_root, local_profile=profile_name) / "manifest.yaml"
     if not manifest_path.is_file():
-        return {}
+        return {}, []
     cache_key = (str(manifest_path), manifest_path.stat().st_mtime_ns)
     cached = _LOCAL_POLICY_CACHE.get(cache_key)
     if cached is not None:
         return cached
     manifest = load_profile_manifest(manifest_path)
     policies: dict[str, EntityPathPolicy] = {}
+    warnings: list[tuple[str, str]] = []
     if manifest is not None:
         for ek in manifest.entity_kinds:
             if ek.name != ek.canonical_prefix:
-                raise EntityCommandError(
-                    f"local kind {ek.name!r} has canonical_prefix {ek.canonical_prefix!r}; "
-                    "they must be equal (the kind name is the id prefix)"
+                warnings.append(
+                    (ek.name, f"canonical_prefix {ek.canonical_prefix!r} != name {ek.name!r}; skipped")
                 )
+                continue
             if ek.name in _BUILTIN_MARKDOWN_POLICIES:
-                continue  # a local kind may not shadow a core kind
+                continue  # a local kind may not shadow a core kind (silent, core wins)
             if ek.strategy is not None and ek.strategy not in _VALID_STRATEGIES:
-                raise EntityCommandError(
-                    f"local kind {ek.name!r} strategy {ek.strategy!r} must be one of "
-                    f"{sorted(_VALID_STRATEGIES)}"
+                warnings.append(
+                    (ek.name, f"strategy {ek.strategy!r} not one of {sorted(_VALID_STRATEGIES)}; skipped")
                 )
-            root = _resolve_local_home(ek.name, ek.home)
+                continue
+            try:
+                root = _resolve_local_home(ek.name, ek.home)
+            except EntityCommandError as exc:
+                warnings.append((ek.name, f"{exc}; skipped"))
+                continue
             if root.name in _CORE_HOME_DIR_NAMES:
-                raise EntityCommandError(
-                    f"local kind {ek.name!r} home {root!r} collides with a core entity "
-                    f"directory ({root.name!r}); choose a different home"
+                warnings.append(
+                    (ek.name, f"home {root!r} collides with core entity directory {root.name!r}; skipped")
                 )
+                continue
             strategy = cast(EntityFilenameStrategy, ek.strategy or "numeric")
             policies[ek.name] = EntityPathPolicy(root, strategy)
-    _LOCAL_POLICY_CACHE[cache_key] = policies
-    return policies
+    result = (policies, warnings)
+    _LOCAL_POLICY_CACHE[cache_key] = result
+    return result
+
+
+def load_local_entity_policies(project_root: Path) -> dict[str, EntityPathPolicy]:
+    """Path policies for the project's registered local markdown kinds.
+
+    Malformed kinds (bad canonical_prefix/home/strategy, or a home colliding with
+    a core directory) are skipped; see `local_kind_warnings` for the reasons. This
+    preserves the dict signature every caller relies on (notably `entity_policies`,
+    which splats `{**load_local_entity_policies(...), **builtins}`)."""
+    return _load_local_policies_and_warnings(project_root)[0]
+
+
+def local_kind_warnings(project_root: Path) -> list[tuple[str, str]]:
+    """The (kind_name, reason) pairs for local kinds skipped during policy load."""
+    return _load_local_policies_and_warnings(project_root)[1]
 
 
 def entity_policies(project_root: Path | None = None) -> dict[str, EntityPathPolicy]:

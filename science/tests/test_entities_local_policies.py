@@ -11,6 +11,7 @@ from science_tool.entities import (
     default_status,
     is_markdown_entity_kind,
     load_local_entity_policies,
+    local_kind_warnings,
     markdown_entity_kinds,
     resolve_path_policy,
     valid_statuses,
@@ -122,52 +123,55 @@ def test_local_kind_may_not_shadow_core(tmp_path: Path) -> None:
     assert "hypothesis" not in policies
 
 
-def test_name_must_equal_canonical_prefix(tmp_path: Path) -> None:
+def test_name_not_equal_canonical_prefix_is_skipped_with_warning(tmp_path: Path) -> None:
     manifest = _LOCAL_MANIFEST.replace("canonical_prefix: design", "canonical_prefix: dsgn")
     _write(tmp_path, "science.yaml", "name: t\nknowledge_profiles:\n  local: local\n")
     _write(tmp_path, "knowledge/sources/local/manifest.yaml", manifest)
-    with pytest.raises(EntityCommandError):
-        load_local_entity_policies(tmp_path)
+    policies = load_local_entity_policies(tmp_path)
+    assert "design" not in policies  # malformed kind dropped, not crashed
+    assert "gadget" in policies  # the valid sibling kind still loads
+    warned = {kind for kind, _ in local_kind_warnings(tmp_path)}
+    assert "design" in warned
 
 
 @pytest.mark.parametrize(
     "bad_home",
-    [
-        "/abs/entities/design",
-        "../outside/design",
-        "doc/design",
-        "entities/../escape",
-        "entities",
-    ],
+    ["/abs/entities/design", "../outside/design", "doc/design", "entities/../escape", "entities"],
 )
-def test_home_override_must_be_relative_under_entities(tmp_path: Path, bad_home: str) -> None:
+def test_home_override_invalid_is_skipped_with_warning(tmp_path: Path, bad_home: str) -> None:
     manifest = _LOCAL_MANIFEST.replace("    home: entities/gizmos\n", f"    home: {bad_home}\n")
     _write(tmp_path, "science.yaml", "name: t\nknowledge_profiles:\n  local: local\n")
     _write(tmp_path, "knowledge/sources/local/manifest.yaml", manifest)
-    with pytest.raises(EntityCommandError):
-        load_local_entity_policies(tmp_path)
+    policies = load_local_entity_policies(tmp_path)
+    assert "gadget" not in policies  # the kind with the bad home is dropped
+    assert "design" in policies  # the valid sibling kind still loads
+    assert "gadget" in {kind for kind, _ in local_kind_warnings(tmp_path)}
 
 
-def test_home_override_may_not_collide_with_core_directory(tmp_path: Path) -> None:
-    # A local kind whose home directory name matches a core kind's directory
-    # (here: entities/hypotheses) must be rejected — otherwise the dir->kind
-    # inference map would shadow the core kind.
+def test_home_override_core_collision_is_skipped_with_warning(tmp_path: Path) -> None:
     manifest = _LOCAL_MANIFEST.replace("    home: entities/gizmos\n", "    home: entities/hypotheses\n")
     _write(tmp_path, "science.yaml", "name: t\nknowledge_profiles:\n  local: local\n")
     _write(tmp_path, "knowledge/sources/local/manifest.yaml", manifest)
-    with pytest.raises(EntityCommandError):
-        load_local_entity_policies(tmp_path)
+    policies = load_local_entity_policies(tmp_path)
+    assert "gadget" not in policies
+    assert "gadget" in {kind for kind, _ in local_kind_warnings(tmp_path)}
 
 
 @pytest.mark.parametrize("bad_strategy", ["banana", "singleton"])
-def test_strategy_override_must_be_known(tmp_path: Path, bad_strategy: str) -> None:
+def test_strategy_override_unknown_is_skipped_with_warning(tmp_path: Path, bad_strategy: str) -> None:
     manifest = _LOCAL_MANIFEST.replace(
         "    home: entities/gizmos\n", f"    home: entities/gizmos\n    strategy: {bad_strategy}\n"
     )
     _write(tmp_path, "science.yaml", "name: t\nknowledge_profiles:\n  local: local\n")
     _write(tmp_path, "knowledge/sources/local/manifest.yaml", manifest)
-    with pytest.raises(EntityCommandError):
-        load_local_entity_policies(tmp_path)
+    policies = load_local_entity_policies(tmp_path)
+    assert "gadget" not in policies
+    assert "gadget" in {kind for kind, _ in local_kind_warnings(tmp_path)}
+
+
+def test_valid_manifest_has_no_local_kind_warnings(tmp_path: Path) -> None:
+    root = _project_with_local_kinds(tmp_path)
+    assert local_kind_warnings(root) == []
 
 
 def test_strategy_override_accepts_known_values(tmp_path: Path) -> None:
