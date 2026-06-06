@@ -576,7 +576,11 @@ _INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
 
 def _strip_code_spans(text: str) -> str:
     """Remove fenced code blocks and inline-code spans so example ids inside
-    documentation do not generate reference warnings."""
+    documentation do not generate reference warnings.
+
+    Note: an *unterminated* fenced block is not stripped, so legacy-shaped tokens
+    inside it may produce (harmless, non-blocking) warnings.
+    """
     text = _FENCE_RE.sub("", text)
     return _INLINE_CODE_RE.sub("", text)
 
@@ -705,6 +709,8 @@ def _simulated_postmove_audit_failures(
     try:
         sources = load_project_sources(project_root, overrides)
     except Exception as exc:
+        # An unexpected (non-schema) exception is also intentionally converted to a
+        # blocker so --apply never proceeds on an unloadable simulated tree.
         return [
             {
                 "check": "schema_load_failure",
@@ -712,6 +718,7 @@ def _simulated_postmove_audit_failures(
                 "source": "(project sources)",
                 "field": "frontmatter",
                 "target": str(exc),
+                "details": str(exc),
             }
         ]
     sources = sources.model_copy(update={"manual_aliases": {**sources.manual_aliases, **plan.id_map}})

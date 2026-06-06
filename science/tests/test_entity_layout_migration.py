@@ -1109,3 +1109,20 @@ def test_accepted_external_and_bibliography_refs_do_not_block(tmp_path: Path) ->
     dry = migrate_layout(tmp_path, apply=False)
     assert dry["unresolved_references"] == {}
     migrate_layout(tmp_path, apply=True)  # does not raise
+
+
+def test_inline_code_token_is_suppressed_from_warnings(tmp_path: Path) -> None:
+    # A legacy-shaped token inside an inline-code span must NOT appear in warnings.
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-a.md",
+        '---\nid: "hypothesis:h01-a"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+        'title: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\n'
+        "Inline `hypothesis:ghost-ref` example only.\n",
+    )
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)
+    flat_warn = [t for toks in dry["unresolved_warnings"].values() for t in toks]
+    assert "hypothesis:ghost-ref" not in flat_warn
+    assert dry["unresolved_references"] == {}
