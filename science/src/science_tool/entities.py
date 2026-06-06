@@ -7,14 +7,19 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import yaml
 
 from science_model.entities import ProjectEntity
+from science_model.profiles import load_profile_manifest
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
-from science_tool.graph.sources import load_project_sources
+from science_tool.graph.sources import (
+    load_project_sources,
+    local_profile_sources_dir,
+    resolve_local_profile_name,
+)
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
 
 EntityFilenameStrategy = Literal["numeric", "citekey", "singleton"]
@@ -56,6 +61,90 @@ _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
     "research-question": EntityPathPolicy(Path("entities/research-question.md"), "singleton"),
     "claim-registry": EntityPathPolicy(Path("entities/claim-registry.yaml"), "singleton"),
 }
+# Cache local-policy reads keyed by (project_root, manifest mtime_ns) so repeated
+# resolve_path_policy calls during a migration don't re-parse the manifest, while
+# still picking up edits (important for tests that rewrite the manifest).
+_LOCAL_POLICY_CACHE: dict[tuple[str, int], dict[str, EntityPathPolicy]] = {}
+
+# Strategies a local kind may declare. `singleton` is intentionally excluded:
+# the migrator's singleton handling (`_plan_singletons`) is hard-coded to the two
+# core singleton paths and has no local-singleton semantics, so a local singleton
+# would be accepted, discovered, then never moved. Forbid it fail-loud here.
+_VALID_STRATEGIES: frozenset[str] = frozenset({"numeric", "citekey"})
+
+
+def _resolve_local_home(name: str, home: str | None) -> Path:
+    """Resolve (and validate) a local kind's home directory.
+
+    Default is ``entities/<name>``. An explicit ``home`` override must be a
+    *relative* path of at least two segments rooted at ``entities/`` with no
+    parent traversal — anything else (absolute, ``../``, a non-``entities/``
+    root, or the bare ``entities`` root itself) is rejected fail-loud. This keeps
+    migration writes inside a dedicated ``entities/<segment>/`` subdirectory and
+    prevents a kind's home from scanning top-level ``entities/*.md`` (which would
+    swallow core singleton markdown).
+    """
+    if not home:
+        return Path(f"entities/{name}")
+    candidate = Path(home)
+    parts = candidate.parts
+    if candidate.is_absolute() or ".." in parts or len(parts) < 2 or parts[0] != "entities":  # len(parts) < 2 rejects the bare "entities" root (would scan top-level entities/*.md)
+        raise EntityCommandError(
+            f"local kind {name!r} home {home!r} must be a relative path of the form "
+            "'entities/<segment>/...' with no parent traversal"
+        )
+    return candidate
+
+
+def load_local_entity_policies(project_root: Path) -> dict[str, EntityPathPolicy]:
+    """Path policies for the project's registered local markdown kinds.
+
+    Reads the active local profile manifest. Each kind maps to
+    ``entities/<name>/`` (numeric) unless the manifest declares ``home``/
+    ``strategy`` overrides. Kinds shadowing a core kind are dropped (core wins).
+    Validates ``name == canonical_prefix`` (Decision 4), that any ``home`` is a
+    relative path under ``entities/``, and that any ``strategy`` is known; raises
+    on divergence.
+    """
+    profile_name = resolve_local_profile_name(project_root)
+    manifest_path = local_profile_sources_dir(project_root, local_profile=profile_name) / "manifest.yaml"
+    if not manifest_path.is_file():
+        return {}
+    cache_key = (str(manifest_path), manifest_path.stat().st_mtime_ns)
+    cached = _LOCAL_POLICY_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    manifest = load_profile_manifest(manifest_path)
+    policies: dict[str, EntityPathPolicy] = {}
+    if manifest is not None:
+        for ek in manifest.entity_kinds:
+            if ek.name != ek.canonical_prefix:
+                raise EntityCommandError(
+                    f"local kind {ek.name!r} has canonical_prefix {ek.canonical_prefix!r}; "
+                    "they must be equal (the kind name is the id prefix)"
+                )
+            if ek.name in _BUILTIN_MARKDOWN_POLICIES:
+                continue  # a local kind may not shadow a core kind
+            if ek.strategy is not None and ek.strategy not in _VALID_STRATEGIES:
+                raise EntityCommandError(
+                    f"local kind {ek.name!r} strategy {ek.strategy!r} must be one of "
+                    f"{sorted(_VALID_STRATEGIES)}"
+                )
+            root = _resolve_local_home(ek.name, ek.home)
+            strategy = cast(EntityFilenameStrategy, ek.strategy or "numeric")
+            policies[ek.name] = EntityPathPolicy(root, strategy)
+    _LOCAL_POLICY_CACHE[cache_key] = policies
+    return policies
+
+
+def entity_policies(project_root: Path | None = None) -> dict[str, EntityPathPolicy]:
+    """Return the path-policy table: core builtins only, or builtins ∪ local kinds
+    when *project_root* is supplied. Builtins always win on name collision."""
+    if project_root is None:
+        return dict(_BUILTIN_MARKDOWN_POLICIES)
+    return {**load_local_entity_policies(project_root), **_BUILTIN_MARKDOWN_POLICIES}
+
+
 _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 _CITEKEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9.-]*$")
 _NUMERIC_LOCAL_PART_RE = re.compile(r"^\d{4}-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
@@ -164,25 +253,25 @@ class EntityLocation:
     body: str
 
 
-def resolve_path_policy(kind: str) -> EntityPathPolicy:
+def resolve_path_policy(kind: str, *, project_root: Path | None = None) -> EntityPathPolicy:
     try:
-        return _BUILTIN_MARKDOWN_POLICIES[kind]
+        return entity_policies(project_root)[kind]
     except KeyError as exc:
         raise EntityCommandError(f"Unsupported source-authored entity kind: {kind}") from exc
 
 
-def markdown_entity_kinds() -> tuple[str, ...]:
-    """All kinds the policy table governs (markdown entity kinds)."""
-    return tuple(_BUILTIN_MARKDOWN_POLICIES)
+def markdown_entity_kinds(project_root: Path | None = None) -> tuple[str, ...]:
+    """All kinds the policy table governs (core, plus local when project-scoped)."""
+    return tuple(entity_policies(project_root))
 
 
-def is_markdown_entity_kind(kind: str) -> bool:
-    return kind in _BUILTIN_MARKDOWN_POLICIES
+def is_markdown_entity_kind(kind: str, *, project_root: Path | None = None) -> bool:
+    return kind in entity_policies(project_root)
 
 
-def local_part_conforms(kind: str, local_part: str) -> bool:
+def local_part_conforms(kind: str, local_part: str, *, project_root: Path | None = None) -> bool:
     """True iff ``local_part`` matches the kind's filename strategy."""
-    strategy = resolve_path_policy(kind).strategy
+    strategy = resolve_path_policy(kind, project_root=project_root).strategy
     if strategy == "numeric":
         return bool(_NUMERIC_LOCAL_PART_RE.fullmatch(local_part))
     if strategy == "citekey":
