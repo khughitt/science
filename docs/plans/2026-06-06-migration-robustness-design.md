@@ -30,12 +30,22 @@ mechanical set, and the two crashes are eliminated.
 ## Approved decisions (keystones)
 
 1. **Blocking model — only structural refs block.** Unresolved references in **structural
-   positions** (entity frontmatter `related:`/`source_refs:`, `.edges.yaml` evidence/anchor refs,
-   `mappings.yaml` alias *targets*) block `--apply`. Unresolved tokens in **prose body**
-   (including code fences, inline code, `[[wikilinks]]`, cross-project mentions, short-forms,
-   placeholders) become **non-fatal warnings**, reported but not blocking. Rationale: the layout
-   migration moves files and rewrites *resolvable* ids; dead prose links are pre-existing content
-   issues the graph validator already reports separately, and must not gate a mechanical move.
+   positions** block `--apply`; unresolved tokens in **prose body** (including code fences, inline
+   code, `[[wikilinks]]`, cross-project mentions, short-forms, placeholders) become **non-fatal
+   warnings**, reported but not blocking. Rationale: the layout migration moves files and rewrites
+   *resolvable* ids; dead prose links are pre-existing content issues the graph validator already
+   reports separately, and must not gate a mechanical move.
+
+   **Structural positions** are exactly the fields the post-mutation graph audit validates, so
+   that the pre-mutation blocking set mirrors the post-mutation backstop (no ref can pass the
+   guard and then fail the audit). They are:
+   - entity-markdown frontmatter `related:` and `source_refs:` lists;
+   - **task** structured fields `related:` and `blocked_by:` (tasks are graph entities —
+     `graph/storage_adapters/task.py` — audited by `graph/migrate.py`; their refs MUST block, else
+     `--apply` could mutate the tree and then fail the unchanged post-mutation audit, breaking the
+     pre-mutation-guard promise);
+   - `.edges.yaml` `evidence:`/`anchor:` interpretation refs;
+   - `mappings.yaml` alias **targets** (RHS).
 2. **Manifest loading — graceful skip.** A malformed/vestigial local entity kind is skipped with
    an accumulated warning instead of aborting the whole migration. Validation logic is unchanged;
    only the failure mode changes (raise → skip+warn).
@@ -70,18 +80,27 @@ generation (Unit F).
 **What:** stop treating every non-conforming token anywhere in a file as a `--apply` blocker.
 
 **How:**
-- Add a structural-reference extractor. For each markdown entity, parse its frontmatter and
-  collect ref tokens from `related:` and `source_refs:` list values; for `.edges.yaml` collect
-  `evidence:`/`anchor:` interpretation refs; for `mappings.yaml` collect alias *target* values
-  (Unit E). These are the **blocking** ref set.
-- `rewrite_references` keeps performing the whole-text old→new rewrite (unchanged), but its
-  unresolved output is reclassified: a leftover token is **blocking** only if it also appears in
-  the structural set for that file; otherwise it goes to a **warnings** bucket.
+- Add a structural-reference extractor that reads the **structural positions** enumerated in
+  decision 1: entity-markdown frontmatter `related:`/`source_refs:`; task `related:`/`blocked_by:`
+  (parsed via the task adapter, including the aggregated `tasks/active.md` form, not plain
+  frontmatter); `.edges.yaml` `evidence:`/`anchor:`; `mappings.yaml` alias targets.
+- **Resolve each structural ref directly against the final identity set** — the set of post-move
+  canonical ids **plus** all back-compat aliases (`plan.id_map` values ∪ generated aliases) — and
+  block any structural ref whose (rewritten) target is not in that set. Do **not** derive the
+  blocking set by intersecting `rewrite_references` leftovers: `rewrite_references` deliberately
+  skips already-*conformant* tokens (`local_part_conforms`, `entity_layout_migration.py:576`), so
+  a dangling-but-conformant ref like `hypothesis:9999-nope` never appears as a leftover. That case
+  is today caught only by the **post-mutation** graph audit
+  (`tests/test_entity_layout_migration.py:417`); resolving structural refs directly moves that
+  check **pre-mutation**, honoring the guard promise.
+- `rewrite_references` keeps performing the whole-text old→new rewrite (unchanged). Its leftover
+  tokens that are **not** in any structural position feed the **warnings** bucket only.
 - When building the warnings bucket, strip fenced code blocks (```` ``` ````) and inline code
   spans (`` ` ``) from the text first, so example ids in documentation don't generate noise.
-- `migrate_layout` report: `unresolved_references` carries **blocking** refs only (preserving its
-  existing "this blocks `--apply`" meaning); add `unresolved_warnings: dict[str, list[str]]` for
-  the prose tail. The pre-mutation guard raises only on `unresolved_references`.
+- `migrate_layout` report: `unresolved_references` carries **blocking** structural refs only
+  (preserving its existing "this blocks `--apply`" meaning); add
+  `unresolved_warnings: dict[str, list[str]]` for the prose tail. The pre-mutation guard raises
+  only on `unresolved_references`.
 
 **Effect:** wikilinks (G1), code-fence/inline examples (G2/G3), placeholders (G4), cross-project
 pointers (G5), and bare short-forms in prose (G6) no longer block — provided they are not also
@@ -92,11 +111,20 @@ still blocks, as it should.
 
 **What:** one malformed local kind must not abort the entire migration.
 
-**How:** `load_local_entity_policies` collects `(kind_name, reason)` warnings for kinds that fail
-validation (`name != canonical_prefix`, home collides with a core directory, bad strategy, bad
-home) and **skips** them, returning the valid policies plus the warning list. `migrate_layout`
-and the conformance check surface these warnings in their reports. The existing validation
-predicates are unchanged — only `raise EntityCommandError` becomes `warn + continue`.
+**How (API-stable):** keep `load_local_entity_policies(project_root) -> dict[str, EntityPathPolicy]`
+exactly as-is in signature and caching, so its callers — notably `entity_policies`, which splats
+`{**load_local_entity_policies(...), **builtins}` (`entities.py:158`) — are untouched. Change only
+the failure mode: a kind that fails a validation predicate (`name != canonical_prefix`, home
+collides with a core directory, bad strategy, bad home) is **skipped** instead of raising
+`EntityCommandError`. Factor the validation pass into an internal
+`_load_local_policies_and_warnings(project_root) -> tuple[dict, list[tuple[str, str]]]` (cached);
+`load_local_entity_policies` returns its dict half, and a new public
+`local_kind_warnings(project_root) -> list[tuple[str, str]]` returns the `(kind, reason)` half for
+`migrate_layout`/conformance reports. The validation predicates themselves are unchanged.
+
+The four existing "must raise" tests
+(`tests/test_entities_local_policies.py`: name≠prefix, bad-home, core-dir collision, bad-strategy)
+are rewritten to assert **skip + warning** instead of `pytest.raises`, reflecting decision 2.
 
 **Companion project-side fixes (separate, outside the science-tool change):**
 - natural-systems `knowledge/sources/project_specific/manifest.yaml`: `meta` kind
@@ -110,10 +138,25 @@ predicates are unchanged — only `raise EntityCommandError` becomes `warn + con
 
 **How:** the dir→kind fallback in `_infer_kind` currently keys on `Path(rel_path).parent.name`
 (bare segment), so `doc/background/papers/X.md` matches `papers`→`paper`. Replace with an
-exact-relative-path map: build `{root_path: kind}` from each kind's policy root
-(`resolve_path_policy(kind).root`, e.g. `doc/papers`, `entities/papers`) and local-kind homes,
-and match `Path(rel_path).parent` against those full paths. Files whose parent path is not a
-registered root are not entities (left in place).
+exact-relative-**path** map and match `Path(rel_path).parent` against full paths.
+
+The map must enumerate both **legacy source roots** and **destination roots** per kind, because
+policy roots are the *new* `entities/<kind>` destinations — `resolve_path_policy(kind).root` yields
+`entities/questions`, **not** the `doc/questions` the migrator scans (`_INPLACE_ROOTS` covers
+`doc/`, `specs/`; `entity_layout_migration.py:34,62`). Keying only off policy roots would discover
+**zero** legacy core entities. So build:
+- an explicit **legacy-root → kind** map for the pre-v3 source locations: `doc/papers`→paper,
+  `doc/questions`→question, `doc/topics`→topic, `doc/interpretations`→interpretation,
+  `doc/reports`→report, `doc/methods`→method, `doc/plans`→plan,
+  `doc/pre-registrations`→pre-registration, `specs/hypotheses`→hypothesis,
+  `specs/propositions`→proposition, … (one entry per numeric/citekey core kind, derived from the
+  pre-v3 layout, **separate** from destination policies);
+- plus the **destination** `entities/<dir>`→kind paths (for re-running on a partly-migrated tree);
+- plus each **local kind's declared home** path.
+
+Match `Path(rel_path).parent` against the union of those full paths; a file whose parent path is
+not in the set is not an entity (left in place). `id`-prefix and explicit `type:`/`kind:`
+inference (which run before the dir fallback) are unchanged.
 
 **Effect:** 3d-attention-bias `doc/background/papers|topics` + `doc/discussions`, seq-feats
 `doc/background/**`, and pan-disease's non-entity `specs/hypotheses/*` prose docs are no longer
@@ -126,6 +169,13 @@ discovered as undated entities.
 **How:** `_fallback_created` chain becomes `frontmatter.created` → `frontmatter.generated_at` →
 `frontmatter.committed` → (body `**Date:**` header, already handled in `synthesize_frontmatter`)
 → filename `YYYY-MM-DD` prefix → `_UNDATED_SENTINEL`. Sentinel still blocks (decision 3).
+
+**Normalize to a date.** `generated_at:` is an ISO **timestamp**
+(`2026-04-28T12:00:00Z`, per big-picture output), but entity `created:` is modeled as a **date**
+(`science_model/entities.py`). Each non-`created:` source must have its leading `YYYY-MM-DD`
+component extracted and validated as a real date before use; if a candidate value has no parseable
+leading date, fall through to the next link rather than copying the raw string. (`created:` and the
+filename prefix are already date-shaped.)
 
 **Effect:** `/science:big-picture` synthesis files (`generated_at:`) across protein-landscape,
 science-meta, pan-disease, health-cycles, cancer-therapeutics, cbioportal stop reading as undated;
@@ -165,10 +215,13 @@ under Unit A.
 ## Error handling
 
 - Blocking guards (`collisions`, structural `unresolved_references`, `undated_entities`) still
-  raise pre-mutation with no tree modification, exactly as today.
+  raise pre-mutation with no tree modification, exactly as today. The structural
+  `unresolved_references` set now resolves refs **directly against the final identity+alias set**
+  (Unit A) and spans the same field surface (entity + task + edges + mappings) the post-mutation
+  audit validates — so a ref can no longer pass the pre-mutation guard and then fail the audit.
 - Local-kind warnings and prose-ref warnings are **reported, never raised**.
-- Post-mutation graph audit (Unit-A-independent) is unchanged: it still runs after `--apply` and
-  blocks the `layout_version` bump on any structured-source failure.
+- Post-mutation graph audit is unchanged and remains the backstop: it still runs after `--apply`
+  and blocks the `layout_version` bump on any structured-source failure.
 
 ## Testing
 
@@ -178,6 +231,11 @@ TDD per unit against a synthetic fixture project exercising every seam:
 - a `[[Wikilink]]` to an existing `paper:` (Unit A: warn, not block);
 - a cross-project `hypothesis:h00-working-model` in prose (Unit A: warn) **and** a genuinely
   dangling ref in a frontmatter `related:` list (Unit A: still **blocks**);
+- a **conformant-but-dangling** structural ref (`hypothesis:9999-nope` in a `related:` list):
+  must block **pre-mutation** via direct identity-set resolution — the case `rewrite_references`
+  leftovers can't see (regression guard for High-finding #1);
+- a **task** (in `tasks/active.md`) whose `related:`/`blocked_by:` points to a dangling id
+  (Unit A: **blocks**) vs one pointing at a migrated id (rewritten, does not block);
 - a frontmatter-less file under `doc/background/papers` (Unit C: not discovered as an entity);
 - a synthesis file with only `generated_at:` (Unit D: not undated) and a truly date-less file
   (Unit D: still blocks);
@@ -192,14 +250,20 @@ populated but non-blocking. seq-feats remains blocked on its genuine content deb
 
 ## Affected files (science/)
 
-- `science/src/science_tool/entity_layout_migration.py` — Units A, C, D, F, G (discovery,
-  date fallback, ref classification, alias generation, report keys).
-- `science/src/science_tool/entities.py` — Unit B (`load_local_entity_policies` skip+warn).
+- `science/src/science_tool/entity_layout_migration.py` — Units A, C, D, F, G (legacy+destination
+  root map, date fallback + normalization, structural-ref resolution against the final identity
+  set, prose-warning classification with code-span stripping, alias generation, report keys).
+- `science/src/science_tool/entities.py` — Unit B: `load_local_entity_policies` keeps its dict
+  signature; add internal `_load_local_policies_and_warnings` + public `local_kind_warnings`.
+- `science/src/science_tool/graph/storage_adapters/task.py` (read-only reuse) — the structural-ref
+  extractor parses task `related:`/`blocked_by:` via the existing task adapter rather than
+  re-implementing task parsing.
 - `science/src/science_tool/validate/checks/entity_conformance.py` — surface local-kind warnings;
   align with the position-aware model where it inspects refs.
-- Possibly a small new helper module for structural-ref extraction + code-span stripping if
-  `entity_layout_migration.py` grows unwieldy.
-- Tests under `science/tests/` (per-unit) + the multi-project integration check.
+- A small new helper module for structural-ref extraction + code-span stripping is expected, to
+  keep `entity_layout_migration.py` focused.
+- Tests under `science/tests/` (per-unit) + the multi-project integration check. The four
+  "must raise" tests in `tests/test_entities_local_policies.py` are rewritten to assert skip+warn.
 
 ## Remediation order (matches plan task order)
 
