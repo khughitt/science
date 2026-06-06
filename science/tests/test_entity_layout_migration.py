@@ -9,6 +9,7 @@ import yaml
 from science_tool.entities import valid_statuses
 from science_tool.entity_layout_migration import (
     discover_legacy_entities,
+    ensure_frontmatter,
     migrate_layout,
     plan_migration,
     rewrite_references,
@@ -758,3 +759,55 @@ def test_unknown_id_prefix_does_not_classify(tmp_path) -> None:
            '---\nid: "widget:w"\ncreated: "2026-01-01"\n---\nbody\n')
     found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
     assert found["doc/plans/w.md"].kind == "plan"
+
+
+# ---------------------------------------------------------------------------
+# Task 6: project-aware frontmatter synthesis for local (prose) kinds
+# ---------------------------------------------------------------------------
+
+
+def test_synthesize_local_kind_prose_status_defaults_active(tmp_path) -> None:
+    _with_local_profile(tmp_path)
+    body = "# A design\n\n**Date:** 2026-02-02\n\nText.\n"
+    fm = synthesize_frontmatter(kind="design", body=body, fallback_created="2026-01-01",
+                                project_root=tmp_path)
+    assert fm["type"] == "design"
+    assert fm["created"] == "2026-02-02"
+    assert fm["status"] == "active"   # open-set local kind, no prose status
+    assert fm["title"] == "A design"
+
+
+def test_synthesize_local_kind_keeps_valid_prose_status(tmp_path) -> None:
+    _with_local_profile(tmp_path)
+    body = "# A design\n\n**Status:** retired\n"
+    fm = synthesize_frontmatter(kind="design", body=body, fallback_created="2026-01-01",
+                                project_root=tmp_path)
+    assert fm["status"] == "retired"  # open set accepts any prose status
+
+
+def test_synthesize_local_kind_closed_set_invalid_status_uses_default(tmp_path) -> None:
+    # A local kind that DECLARES a controlled status set: an out-of-vocabulary
+    # prose status must fall back to the kind's default, not be kept.
+    manifest = _LOCAL_PROFILE.replace(
+        "    description: Design.\n",
+        "    description: Design.\n    default_status: draft\n    statuses: [draft, final]\n",
+    )
+    _write(tmp_path, "science.yaml", "name: t\nknowledge_profiles:\n  local: local\n")
+    _write(tmp_path, "knowledge/sources/local/manifest.yaml", manifest)
+    body = "# A design\n\n**Status:** bogus\n"
+    fm = synthesize_frontmatter(kind="design", body=body, fallback_created="2026-01-01",
+                                project_root=tmp_path)
+    assert fm["status"] == "draft"  # invalid prose status → declared default
+
+
+def test_synthesize_local_kind_closed_set_keeps_valid_status(tmp_path) -> None:
+    manifest = _LOCAL_PROFILE.replace(
+        "    description: Design.\n",
+        "    description: Design.\n    default_status: draft\n    statuses: [draft, final]\n",
+    )
+    _write(tmp_path, "science.yaml", "name: t\nknowledge_profiles:\n  local: local\n")
+    _write(tmp_path, "knowledge/sources/local/manifest.yaml", manifest)
+    body = "# A design\n\n**Status:** final\n"
+    fm = synthesize_frontmatter(kind="design", body=body, fallback_created="2026-01-01",
+                                project_root=tmp_path)
+    assert fm["status"] == "final"  # in-vocabulary prose status kept

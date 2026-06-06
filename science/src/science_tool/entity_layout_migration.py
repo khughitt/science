@@ -164,7 +164,9 @@ def _fallback_created(entity: "LegacyEntity") -> str:
     return _UNDATED_SENTINEL
 
 
-def synthesize_frontmatter(*, kind: str, body: str, fallback_created: str) -> dict:
+def synthesize_frontmatter(
+    *, kind: str, body: str, fallback_created: str, project_root: Path | None = None
+) -> dict:
     """Build a minimal valid frontmatter dict from prose headers + fallbacks.
 
     Used for legacy files that have no (or partial) YAML frontmatter so they
@@ -172,13 +174,19 @@ def synthesize_frontmatter(*, kind: str, body: str, fallback_created: str) -> di
     """
     date_match = _DATE_HEADER_RE.search(body)
     created = date_match.group(1) if date_match else fallback_created
-    # Status: accept a prose **Status:** value ONLY if it is in the kind's
-    # controlled vocabulary; otherwise use the per-kind default (NOT a blanket
-    # "active", which is invalid for hypothesis/proposition/evidence-line). The
-    # original prose line stays in the body, so nothing is lost.
     status_match = _STATUS_HEADER_RE.search(body)
     parsed_status = status_match.group(1).strip() if status_match else ""
-    status = parsed_status if parsed_status in valid_statuses(kind) else default_status(kind)
+    allowed = valid_statuses(kind, project_root=project_root)
+    if allowed is None:
+        # Open set (local kind, no declared vocabulary): accept any prose status,
+        # else the per-kind default.
+        status = parsed_status or default_status(kind, project_root=project_root)
+    else:
+        # Closed set: accept a prose **Status:** value ONLY if it is in the kind's
+        # controlled vocabulary; otherwise use the per-kind default (NOT a blanket
+        # "active", which is invalid for hypothesis/proposition/evidence-line). The
+        # original prose line stays in the body, so nothing is lost.
+        status = parsed_status if parsed_status in allowed else default_status(kind, project_root=project_root)
     title_match = _H1_RE.search(body)
     title = title_match.group(1).strip() if title_match else f"Untitled {kind}"
     return {
@@ -190,9 +198,13 @@ def synthesize_frontmatter(*, kind: str, body: str, fallback_created: str) -> di
     }
 
 
-def ensure_frontmatter(entity: "LegacyEntity", *, fallback_created: str) -> dict:
+def ensure_frontmatter(
+    entity: "LegacyEntity", *, fallback_created: str, project_root: Path | None = None
+) -> dict:
     """Return a complete frontmatter dict, synthesizing missing fields."""
-    base = synthesize_frontmatter(kind=entity.kind, body=entity.body, fallback_created=fallback_created)
+    base = synthesize_frontmatter(
+        kind=entity.kind, body=entity.body, fallback_created=fallback_created, project_root=project_root
+    )
     base.update({k: v for k, v in entity.frontmatter.items() if v not in (None, "")})
     base["type"] = entity.kind  # canonicalize: type wins over legacy `kind`
     base.pop("kind", None)
@@ -313,7 +325,7 @@ def plan_migration(project_root: Path) -> MigrationPlan:
     # Synthesize complete frontmatter BEFORE planning so created/title/slug are
     # correct even for prose-header (frontmatterless) files.
     normalized: dict[str, dict] = {
-        e.rel_path: ensure_frontmatter(e, fallback_created=_fallback_created(e))
+        e.rel_path: ensure_frontmatter(e, fallback_created=_fallback_created(e), project_root=project_root)
         for e in movable
     }
     by_kind: dict[str, list[LegacyEntity]] = {}
@@ -604,7 +616,7 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     synthesized_fm: dict[str, dict] = {}  # new_rel_path -> fm dict (for undated check)
     for move in plan.moves:
         entity = entities[move.old_rel_path]
-        fm = ensure_frontmatter(entity, fallback_created=_fallback_created(entity))
+        fm = ensure_frontmatter(entity, fallback_created=_fallback_created(entity), project_root=project_root)
         fm["id"] = move.new_id
         rewritten[move.new_rel_path] = _render(fm, entity.body)
         synthesized_fm[move.new_rel_path] = fm
