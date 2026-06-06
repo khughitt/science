@@ -61,8 +61,9 @@ def _split_frontmatter(text: str) -> tuple[dict | None, str]:
     return (data if isinstance(data, dict) else None), match.group(2)
 
 
-def discover_legacy_entities(project_root: Path) -> list[LegacyEntity]:
+def _discover_with_skips(project_root: Path) -> tuple[list[LegacyEntity], list[str]]:
     results: list[LegacyEntity] = []
+    skipped_untyped: list[str] = []
     known = set(markdown_entity_kinds(project_root=project_root))
     dir_to_kind = _project_dir_to_kind(project_root)
     for root_name in _LEGACY_SCAN_ROOTS:
@@ -75,8 +76,13 @@ def discover_legacy_entities(project_root: Path) -> list[LegacyEntity]:
                 continue
             text = path.read_text(encoding="utf-8")
             frontmatter, body = _split_frontmatter(text)
-            kind = _infer_kind(rel, frontmatter, known_kinds=known, dir_to_kind=dir_to_kind)
-            if kind is None or not is_markdown_entity_kind(kind, project_root=project_root):
+            kind, needs_signal = _infer_kind(rel, frontmatter, known_kinds=known, dir_to_kind=dir_to_kind)
+            if kind is None:
+                continue
+            if needs_signal and not _has_entity_signal(frontmatter):
+                skipped_untyped.append(rel)  # prose doc at a real root, no id/type — not an entity
+                continue
+            if not is_markdown_entity_kind(kind, project_root=project_root):
                 continue
             old_id = None
             if frontmatter is not None:
@@ -85,7 +91,11 @@ def discover_legacy_entities(project_root: Path) -> list[LegacyEntity]:
             results.append(
                 LegacyEntity(rel_path=rel, kind=kind, old_id=old_id, frontmatter=frontmatter or {}, body=body)
             )
-    return results
+    return results, sorted(skipped_untyped)
+
+
+def discover_legacy_entities(project_root: Path) -> list[LegacyEntity]:
+    return _discover_with_skips(project_root)[0]
 
 
 # Specific legacy file paths whose kind cannot be inferred from the parent dir.
@@ -98,47 +108,86 @@ _PATH_KIND_OVERRIDES: dict[str, str] = {
 }
 
 
+def _has_entity_signal(frontmatter: dict | None) -> bool:
+    """True iff the frontmatter carries an entity signal: id/type/kind."""
+    if not frontmatter:
+        return False
+    return any(frontmatter.get(k) for k in ("id", "type", "kind"))
+
+
 def _infer_kind(
     rel_path: str,
     frontmatter: dict | None,
     *,
     known_kinds: set[str],
     dir_to_kind: dict[str, str],
-) -> str | None:
+) -> tuple[str | None, bool]:
+    """Return (kind, needs_signal). needs_signal is True only for the directory
+    fallback path; explicit type/kind/known-id-prefix and the by-path override
+    are authoritative and need no extra signal."""
     if frontmatter is not None:
         value = frontmatter.get("type") or frontmatter.get("kind")
         if isinstance(value, str) and value:
-            return value  # explicit type wins
+            return value, False  # explicit type wins
         raw_id = frontmatter.get("id")
         if isinstance(raw_id, str) and ":" in raw_id:
             prefix = raw_id.split(":", 1)[0]
             if prefix in known_kinds:
-                return prefix  # id-prefix beats directory name for foreign-dir files
-    # Path/dir fallback (no usable type/kind or known id-prefix): by-path override
-    # first, then the parent directory name via the derived map.
+                return prefix, False  # id-prefix beats directory name for foreign-dir files
     if rel_path in _PATH_KIND_OVERRIDES:
-        return _PATH_KIND_OVERRIDES[rel_path]
-    parent = Path(rel_path).parent.name
-    return dir_to_kind.get(parent)
+        return _PATH_KIND_OVERRIDES[rel_path], False  # synthesis singleton by path
+    parent = Path(rel_path).parent.as_posix()
+    dir_kind = dir_to_kind.get(parent)
+    if dir_kind is not None:
+        return dir_kind, True  # dir fallback: requires an entity signal (decision 4)
+    return None, False
 
 
 def _project_dir_to_kind(project_root: Path) -> dict[str, str]:
-    """Directory-name → kind for core ∪ local non-singleton kinds."""
-    mapping = dict(_DIR_TO_KIND)  # core base (module-level constant)
+    """Full relative parent-path -> kind for the directory-name discovery fallback.
+
+    Unions: pre-v3 legacy source roots, entities/<dir> destination roots (re-run
+    safety), and each local kind's declared home. Keyed on the FULL relative path
+    (not the bare segment) so nested dirs that merely share a name are not matched."""
+    mapping = {**_LEGACY_ROOT_TO_KIND, **_DEST_ROOT_TO_KIND}
     for kind, policy in load_local_entity_policies(project_root).items():
         if policy.strategy != "singleton":
-            mapping[policy.root.name] = kind
+            mapping[policy.root.as_posix()] = kind
     return mapping
 
 
-# Legacy directory name → kind, for frontmatterless files. DERIVED from the
-# policy table (SSOT) so EVERY numeric/citekey kind's plural directory is covered
-# — including evidence-lines, reports, plans, searches, methods, and
-# pre-registrations that a hand-written map would silently omit (and thereby
-# strand valid legacy entities through cutover). Singletons have no per-kind dir,
-# so they are excluded.
-_DIR_TO_KIND: dict[str, str] = {
-    resolve_path_policy(kind).root.name: kind
+# Pre-v3 legacy source roots -> kind, keyed on the FULL relative parent path so a
+# nested dir whose bare name happens to match (doc/background/papers) is NOT swept.
+# One entry per numeric/citekey core kind, derived from the pre-v3 layout.
+# NOTE: synthesis appears here defensively (strategy=numeric); in practice it is
+# discovered exclusively via _PATH_KIND_OVERRIDES (doc/reports/synthesis.md).
+_LEGACY_ROOT_TO_KIND: dict[str, str] = {
+    "doc/papers": "paper",
+    "doc/questions": "question",
+    "doc/topics": "topic",
+    "doc/interpretations": "interpretation",
+    "doc/reports": "report",
+    "doc/methods": "method",
+    "doc/plans": "plan",
+    "doc/pre-registrations": "pre-registration",
+    "doc/discussions": "discussion",
+    "doc/themes": "theme",
+    "doc/searches": "search",
+    "doc/evidence-lines": "evidence-line",
+    "doc/findings": "finding",
+    "doc/inquiries": "inquiry",
+    "doc/observations": "observation",
+    "doc/mechanisms": "mechanism",
+    "doc/synthesis": "synthesis",
+    "specs/hypotheses": "hypothesis",
+    "specs/propositions": "proposition",
+}
+
+# Destination roots (entities/<dir>) -> kind, for re-running on a partly-migrated
+# tree. Derived from the policy table (SSOT) so every numeric/citekey kind's home
+# is covered; singletons (no per-kind dir) are excluded.
+_DEST_ROOT_TO_KIND: dict[str, str] = {
+    resolve_path_policy(kind).root.as_posix(): kind
     for kind in markdown_entity_kinds()
     if resolve_path_policy(kind).strategy != "singleton"
 }
@@ -737,7 +786,7 @@ def _audit_failures_to_report(rows: list[dict]) -> dict[str, list[str]]:
 
 def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     plan = plan_migration(project_root)
-    legacy_entities = list(discover_legacy_entities(project_root))
+    legacy_entities, skipped_untyped = _discover_with_skips(project_root)
     entities = {e.rel_path: e for e in legacy_entities}
     # FIX 2: restrict unresolved-flagging to kinds actually migrated as markdown.
     # Kinds stored outside markdown (e.g. observation in observations.yaml) produce
@@ -829,6 +878,7 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
         "unresolved_references": _audit_failures_to_report(structural_failures),
         "unresolved_warnings": unresolved_warnings,
         "local_kind_warnings": local_kind_warnings(project_root),
+        "skipped_untyped": skipped_untyped,
         "undated_entities": undated_entities,
         "applied": apply,
     }

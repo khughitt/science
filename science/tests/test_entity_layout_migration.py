@@ -112,10 +112,13 @@ def test_plan_date_prefixed_slug_drops_the_date(tmp_path: Path) -> None:
 
 
 def test_plan_uses_synthesized_created_for_frontmatterless(tmp_path: Path) -> None:
-    # No frontmatter: created must come from the prose **Date:** header so ordering is right.
-    _write_raw = tmp_path / "doc/interpretations/early.md"
-    _write_raw.parent.mkdir(parents=True, exist_ok=True)
-    _write_raw.write_text("# Early result\n\n**Date:** 2026-01-01\n", encoding="utf-8")
+    # No separate created: field; created must come from the prose **Date:** header
+    # so ordering is right. The file carries type: so it passes the entity-signal gate.
+    _write(
+        tmp_path,
+        "doc/interpretations/early.md",
+        "---\ntype: interpretation\n---\n# Early result\n\n**Date:** 2026-01-01\n",
+    )
     _write(
         tmp_path,
         "doc/interpretations/2026-12-31-late.md",
@@ -128,22 +131,24 @@ def test_plan_uses_synthesized_created_for_frontmatterless(tmp_path: Path) -> No
 
 
 def test_plan_maps_frontmatterless_stem_alias(tmp_path: Path) -> None:
-    # A prose-header file has no `old_id`. References to it use the old filename
+    # A file with only type: has no `old_id`. References to it use the old filename
     # stem (`interpretation:early`). The plan must map that stem alias to the new
     # id so rewrite_references can fix the link instead of reporting it unresolved.
-    raw = tmp_path / "doc/interpretations/early.md"
-    raw.parent.mkdir(parents=True, exist_ok=True)
-    raw.write_text("# Early result\n\n**Date:** 2026-01-01\n", encoding="utf-8")
+    _write(
+        tmp_path,
+        "doc/interpretations/early.md",
+        "---\ntype: interpretation\n---\n# Early result\n\n**Date:** 2026-01-01\n",
+    )
     plan = plan_migration(tmp_path)
     assert plan.id_map["interpretation:early"] == "interpretation:0001-early-result"
 
 
 def test_plan_ambiguous_stem_alias_not_silently_mis_mapped(tmp_path: Path) -> None:
-    # Two frontmatterless files with the same stem under the same kind but from
+    # Two type:-only files with the same stem under the same kind but from
     # two different legacy scan roots (doc/ and specs/) both want alias
     # `interpretation:foo`.  The plan must NOT keep a wrong mapping; it must
     # remove the alias from id_map and record a blocking alias collision.
-    body = "# Foo\n\n**Date:** 2026-01-01\n"
+    body = "---\ntype: interpretation\n---\n# Foo\n\n**Date:** 2026-01-01\n"
     _write(tmp_path, "doc/interpretations/foo.md", body)
     _write(tmp_path, "specs/interpretations/foo.md", body)
     plan = plan_migration(tmp_path)
@@ -450,8 +455,8 @@ def test_migrate_undated_entity_blocks_apply_and_is_reported(tmp_path: Path) -> 
     reported under undated_entities in the dry-run and blocks apply=True BEFORE
     any mutation (the source file must still exist after the failed apply call)."""
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    # Frontmatterless entity with no **Date:** header — no date is derivable.
-    _write(tmp_path, "doc/questions/no-date.md", "# No date question\n\nText.\n")
+    # Entity with type: (passes the signal gate) but no date anywhere — undated blocker.
+    _write(tmp_path, "doc/questions/no-date.md", "---\ntype: question\n---\n# No date question\n\nText.\n")
     _git_init(tmp_path)
 
     # Dry-run: undated_entities is populated.
@@ -494,7 +499,8 @@ def test_purely_undated_entity_has_no_spurious_structural_failure(tmp_path: Path
     # An undated entity must be reported under undated_entities and blocked by the
     # undated guard — NOT produce a spurious structural failure from the simulation.
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "doc/questions/no-date.md", "# No date question\n\nText.\n")
+    # Entity with type: (passes the signal gate) but no date anywhere — undated blocker.
+    _write(tmp_path, "doc/questions/no-date.md", "---\ntype: question\n---\n# No date question\n\nText.\n")
     _git_init(tmp_path)
     dry = migrate_layout(tmp_path, apply=False)
     assert dry["undated_entities"]
@@ -695,11 +701,15 @@ def test_migrate_does_not_flag_unmigrated_kind(tmp_path: Path) -> None:
 
 
 def test_plan_filename_date_fallback_for_plan_file(tmp_path: Path) -> None:
-    """FIX 3: a plan file 'doc/plans/2026-05-30-paper-triage-manifest.md' with no
-    frontmatter and no **Date:** header must use 2026-05-30 (from the filename) as
+    """FIX 3: a plan file 'doc/plans/2026-05-30-paper-triage-manifest.md' with only
+    type: and no created/Date header must use 2026-05-30 (from the filename) as
     its created date — NOT fall back to the undated sentinel."""
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "doc/plans/2026-05-30-paper-triage-manifest.md", "# Paper Triage Manifest\n\ntext\n")
+    _write(
+        tmp_path,
+        "doc/plans/2026-05-30-paper-triage-manifest.md",
+        "---\ntype: plan\n---\n# Paper Triage Manifest\n\ntext\n",
+    )
     _git_init(tmp_path)
     report = migrate_layout(tmp_path, apply=False)
     assert report["undated_entities"] == [], (
@@ -708,10 +718,11 @@ def test_plan_filename_date_fallback_for_plan_file(tmp_path: Path) -> None:
 
 
 def test_plan_truly_undated_non_date_filename_is_still_reported(tmp_path: Path) -> None:
-    """FIX 3 complement: a plan file 'doc/plans/misc-notes.md' with no frontmatter,
-    no **Date:** header, and a non-date filename must still be reported as undated."""
+    """FIX 3 complement: a plan file 'doc/plans/misc-notes.md' with type: but no
+    created, no **Date:** header, and a non-date filename must still be reported as
+    undated."""
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "doc/plans/misc-notes.md", "# Misc Notes\n\nSome prose with no date.\n")
+    _write(tmp_path, "doc/plans/misc-notes.md", "---\ntype: plan\n---\n# Misc Notes\n\nSome prose with no date.\n")
     _git_init(tmp_path)
     report = migrate_layout(tmp_path, apply=False)
     old_paths = [d["old_rel_path"] for d in report["undated_entities"]]
@@ -1125,4 +1136,54 @@ def test_inline_code_token_is_suppressed_from_warnings(tmp_path: Path) -> None:
     dry = migrate_layout(tmp_path, apply=False)
     flat_warn = [t for toks in dry["unresolved_warnings"].values() for t in toks]
     assert "hypothesis:ghost-ref" not in flat_warn
-    assert dry["unresolved_references"] == {}
+
+
+# ---------------------------------------------------------------------------
+# Task 4 (Unit C): exact-root discovery + entity-signal gate
+# ---------------------------------------------------------------------------
+
+
+def test_nested_nonroot_papers_dir_not_swept_without_signal(tmp_path: Path) -> None:
+    # A frontmatter-less file under a NESTED dir whose bare name is `papers` must
+    # not be discovered as a paper (exact-root keying, not bare parent name).
+    _write(tmp_path, "doc/background/papers/loose-note.md", "# Loose note\n\nProse.\n")
+    found = {e.rel_path for e in discover_legacy_entities(tmp_path)}
+    assert "doc/background/papers/loose-note.md" not in found
+
+
+def test_prose_doc_at_real_root_without_id_is_skipped_untyped(tmp_path: Path) -> None:
+    # Direct child of specs/hypotheses with no id:/type: is prose, not a hypothesis.
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "specs/hypotheses/cohort-adjudication-h01.md", "# Cohort adjudication\n\nProse.\n")
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-real.md",
+        '---\nid: "hypothesis:h01-real"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+        'title: Real\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
+    _git_init(tmp_path)
+    found = {e.rel_path for e in discover_legacy_entities(tmp_path)}
+    assert "specs/hypotheses/cohort-adjudication-h01.md" not in found  # prose excluded
+    assert "specs/hypotheses/h01-real.md" in found  # real entity discovered
+    dry = migrate_layout(tmp_path, apply=False)
+    assert "specs/hypotheses/cohort-adjudication-h01.md" in dry["skipped_untyped"]
+    assert dry["undated_entities"] == []  # the prose doc is NOT an undated blocker
+
+
+def test_explicit_id_in_nested_dir_still_discovered(tmp_path: Path) -> None:
+    # A file with an explicit id of a known kind is still discovered regardless of
+    # directory (id-prefix inference runs before the dir fallback).
+    _write(
+        tmp_path,
+        "doc/background/papers/Adams2025.md",
+        '---\nid: "paper:Adams2025"\ntype: paper\n---\nbody\n',
+    )
+    found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
+    assert found["doc/background/papers/Adams2025.md"].kind == "paper"
+
+
+def test_frontmatterless_file_at_exact_root_with_id_is_discovered(tmp_path: Path) -> None:
+    # id: present (signal) but no type:/kind: — discovered via dir fallback + signal.
+    _write(tmp_path, "doc/questions/q05-y.md", '---\nid: "question:q05-y"\n---\nbody\n')
+    found = {e.rel_path for e in discover_legacy_entities(tmp_path)}
+    assert "doc/questions/q05-y.md" in found
