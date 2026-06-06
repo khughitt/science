@@ -644,7 +644,10 @@ _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 
 _FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
 _INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
-_PLACEHOLDER_LOCAL_RE = re.compile(r"^(?:[A-Za-z]NN|\d+-\d+|<.*>|[*…])$")
+# Placeholder local parts: literal three-char schema markers (hNN, qNN — "N" is the
+# placeholder char, not a digit), all-numeric ranges (198-210; canonical local parts
+# always start NNNN-<letter>, so no real id matches), angle-bracket placeholders, wildcards.
+_PLACEHOLDER_LOCAL_RE = re.compile(r"^(?:[A-Za-z]NN|\d+-\d+|<[^>]*>|[*…])$")
 
 
 def _strip_code_spans(text: str) -> str:

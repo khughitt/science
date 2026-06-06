@@ -1280,6 +1280,9 @@ def test_same_date_different_path_bare_kind_word_records_collision_not_crash(tmp
         "report:198-210",
         "topic:*",
         "topic:…",
+        "*",
+        "…",
+        "<id>",
     ],
 )
 def test_placeholder_tokens_are_filtered_from_warnings(token: str) -> None:
