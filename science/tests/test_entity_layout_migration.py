@@ -699,3 +699,62 @@ def test_migrate_leaves_manifest_science_yaml_unrewritten_as_ref(tmp_path: Path)
     assert manifest["layout_version"] == 3, "layout_version must be bumped to 3"
     assert manifest["name"] == "my-project", "name field must survive unchanged"
     assert manifest.get("custom_field") == "some-plain-value", "unrelated fields must survive"
+
+
+# ---------------------------------------------------------------------------
+# Task 5: local-kind discovery + id-prefix kind inference
+# ---------------------------------------------------------------------------
+
+_LOCAL_PROFILE = """\
+name: t-local
+imports:
+  - core
+strictness: typed-extension
+entity_kinds:
+  - name: design
+    canonical_prefix: design
+    layer: layer/local
+    description: Design.
+relation_kinds: []
+"""
+
+
+def _with_local_profile(root) -> None:
+    _write(root, "science.yaml", "name: t\nknowledge_profiles:\n  local: local\n")
+    _write(root, "knowledge/sources/local/manifest.yaml", _LOCAL_PROFILE)
+
+
+def test_discovers_local_kind_by_type(tmp_path) -> None:
+    _with_local_profile(tmp_path)
+    _write(tmp_path, "doc/design/x.md",
+           '---\nid: "design:x"\ntype: design\ncreated: "2026-01-01"\n---\nbody\n')
+    found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
+    assert found["doc/design/x.md"].kind == "design"
+
+
+def test_infers_local_kind_from_id_prefix_in_foreign_dir(tmp_path) -> None:
+    # No `type:`, file lives under doc/plans/ — dir-name fallback would say "plan".
+    # The `id:` prefix (design) must win.
+    _with_local_profile(tmp_path)
+    _write(tmp_path, "doc/plans/y.md",
+           '---\nid: "design:y"\ncreated: "2026-01-01"\n---\nbody\n')
+    found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
+    assert found["doc/plans/y.md"].kind == "design"
+
+
+def test_explicit_type_wins_over_divergent_id_prefix(tmp_path) -> None:
+    _with_local_profile(tmp_path)
+    _write(tmp_path, "doc/plans/z.md",
+           '---\nid: "design:z"\ntype: plan\ncreated: "2026-01-01"\n---\nbody\n')
+    found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
+    assert found["doc/plans/z.md"].kind == "plan"
+
+
+def test_unknown_id_prefix_does_not_classify(tmp_path) -> None:
+    # No kind "widget" is registered — id "widget:w" must not win; the file falls
+    # through to the dir-name fallback ("plan" for doc/plans/).
+    _with_local_profile(tmp_path)
+    _write(tmp_path, "doc/plans/w.md",
+           '---\nid: "widget:w"\ncreated: "2026-01-01"\n---\nbody\n')
+    found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
+    assert found["doc/plans/w.md"].kind == "plan"

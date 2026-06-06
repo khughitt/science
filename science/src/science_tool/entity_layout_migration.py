@@ -19,6 +19,7 @@ from science_tool.entities import (
     default_status,
     derive_slug,
     is_markdown_entity_kind,
+    load_local_entity_policies,
     local_part_conforms,
     markdown_entity_kinds,
     resolve_path_policy,
@@ -60,6 +61,8 @@ def _split_frontmatter(text: str) -> tuple[dict | None, str]:
 
 def discover_legacy_entities(project_root: Path) -> list[LegacyEntity]:
     results: list[LegacyEntity] = []
+    known = set(markdown_entity_kinds(project_root=project_root))
+    dir_to_kind = _project_dir_to_kind(project_root)
     for root_name in _LEGACY_SCAN_ROOTS:
         root = project_root / root_name
         if not root.is_dir():
@@ -70,8 +73,8 @@ def discover_legacy_entities(project_root: Path) -> list[LegacyEntity]:
                 continue
             text = path.read_text(encoding="utf-8")
             frontmatter, body = _split_frontmatter(text)
-            kind = _infer_kind(rel, frontmatter)
-            if kind is None or not is_markdown_entity_kind(kind):
+            kind = _infer_kind(rel, frontmatter, known_kinds=known, dir_to_kind=dir_to_kind)
+            if kind is None or not is_markdown_entity_kind(kind, project_root=project_root):
                 continue
             old_id = None
             if frontmatter is not None:
@@ -93,17 +96,37 @@ _PATH_KIND_OVERRIDES: dict[str, str] = {
 }
 
 
-def _infer_kind(rel_path: str, frontmatter: dict | None) -> str | None:
+def _infer_kind(
+    rel_path: str,
+    frontmatter: dict | None,
+    *,
+    known_kinds: set[str],
+    dir_to_kind: dict[str, str],
+) -> str | None:
     if frontmatter is not None:
         value = frontmatter.get("type") or frontmatter.get("kind")
         if isinstance(value, str) and value:
-            return value
-    # Frontmatterless file: explicit by-path override first, then the parent
-    # directory name (singularized) via the derived map.
+            return value  # explicit type wins
+        raw_id = frontmatter.get("id")
+        if isinstance(raw_id, str) and ":" in raw_id:
+            prefix = raw_id.split(":", 1)[0]
+            if prefix in known_kinds:
+                return prefix  # id-prefix beats directory name for foreign-dir files
+    # Path/dir fallback (no usable type/kind or known id-prefix): by-path override
+    # first, then the parent directory name via the derived map.
     if rel_path in _PATH_KIND_OVERRIDES:
         return _PATH_KIND_OVERRIDES[rel_path]
     parent = Path(rel_path).parent.name
-    return _DIR_TO_KIND.get(parent)
+    return dir_to_kind.get(parent)
+
+
+def _project_dir_to_kind(project_root: Path) -> dict[str, str]:
+    """Directory-name → kind for core ∪ local non-singleton kinds."""
+    mapping = dict(_DIR_TO_KIND)  # core base (module-level constant)
+    for kind, policy in load_local_entity_policies(project_root).items():
+        if policy.strategy != "singleton":
+            mapping[policy.root.name] = kind
+    return mapping
 
 
 # Legacy directory name → kind, for frontmatterless files. DERIVED from the
