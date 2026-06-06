@@ -1265,3 +1265,7 @@ def test_same_date_different_path_bare_kind_word_records_collision_not_crash(tmp
     alias_collisions = [c for c in plan.collisions if c.get("kind") == "alias"]
     assert len(alias_collisions) == 1
     assert alias_collisions[0]["alias"] == "interpretation:2026-05-14-interpretation"
+    assert set(alias_collisions[0]["sources"]) == {
+        "doc/probes/2026-05-14/interpretation.md",
+        "doc/other/2026-05-14/interpretation.md",
+    }

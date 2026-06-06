@@ -540,6 +540,8 @@ def _add_move(plan: MigrationPlan, entity: "LegacyEntity", new_rel: str, new_id:
         # date dirs. Scope it by the date-prefixed parent dir so each is distinct.
         parent_name = Path(entity.rel_path).parent.name
         date_m = _DATE_PREFIX_DATE_RE.match(parent_name)
+        # No date prefix on the parent dir → plain stem; two such bare-kind-word
+        # files from non-date dirs still collide, but that is pre-existing behaviour.
         alias_local = f"{date_m.group(1)}-{stem}" if date_m else stem
     else:
         alias_local = stem
@@ -559,6 +561,9 @@ def _add_move(plan: MigrationPlan, entity: "LegacyEntity", new_rel: str, new_id:
                         "sources": sorted(
                             [
                                 entity.rel_path,
+                                # new_id is unique among plan.moves here: an equal new_id implies
+                                # the same stem_alias, which routes to the idempotent branch above
+                                # and never reaches this lookup — so this is the prior claimer.
                                 next(m.old_rel_path for m in plan.moves if m.new_id == prior_new_id),
                             ]
                         ),
