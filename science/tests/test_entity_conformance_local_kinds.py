@@ -5,6 +5,7 @@ from pathlib import Path
 from science_tool.validate.checks.entity_conformance import (
     check_entity_filename_conformance,
     check_entity_location_coherence,
+    check_local_kind_manifest,
 )
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Severity
@@ -96,3 +97,23 @@ def test_core_and_local_stranded_both_flagged(tmp_path: Path) -> None:
     msgs = [r.message for r in check_entity_location_coherence(_ctx(tmp_path))]
     assert any("design entity outside its home" in m for m in msgs)
     assert any("question entity outside its home" in m for m in msgs)
+
+
+def test_local_kind_warning_is_surfaced_as_validate_warning(tmp_path: Path) -> None:
+    # A manifest with one malformed local kind must produce a WARN result from the
+    # conformance layer, not crash validation.
+    manifest = (
+        "name: t-local\nimports: [core]\nstrictness: typed-extension\n"
+        "entity_kinds:\n"
+        "  - name: gadget\n    canonical_prefix: WRONG\n    layer: layer/local\n    description: x\n"
+        "relation_kinds: []\n"
+    )
+    (tmp_path / "science.yaml").write_text("name: t\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    p = tmp_path / "knowledge/sources/local/manifest.yaml"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(manifest, encoding="utf-8")
+
+    ctx = _ctx(tmp_path)  # use the module's existing ValidateContext factory
+    results = list(check_local_kind_manifest(ctx))
+    assert any("gadget" in r.message for r in results)
+    assert all(r.severity is Severity.WARN for r in results)

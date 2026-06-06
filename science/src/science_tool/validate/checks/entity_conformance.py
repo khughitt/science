@@ -16,6 +16,7 @@ from science_tool.entities import (
     EntityPathPolicy,
     LOCAL_PART_WIDTH,
     is_markdown_entity_kind,
+    local_kind_warnings,
     local_part_conforms,
     markdown_entity_kinds,
     resolve_path_policy,
@@ -64,6 +65,15 @@ def _entity_dirs(
         if not directory.is_dir():
             continue
         yield kind, policy, directory
+
+
+@Check(section="local entity kind manifest...", order=36)
+def check_local_kind_manifest(ctx: ValidateContext) -> Iterator[Result]:
+    """Surface local entity kinds skipped during policy loading (bad
+    canonical_prefix/home/strategy, or home colliding with a core directory) as
+    warnings, so a vestigial kind is visible without aborting validation."""
+    for kind, reason in local_kind_warnings(ctx.project_root):
+        yield _result(Severity.WARN, None, f"local kind {kind!r} skipped during load: {reason}")
 
 
 @Check(section="entity location coherence...", order=37)
