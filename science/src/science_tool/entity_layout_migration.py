@@ -826,9 +826,17 @@ def _dangling_alias_targets(sources: "ProjectSources", mappings_aliases: dict[st
     rewrite tokens, not authoritative references, and must not be validated here.
     """
     from science_tool.graph.reference_resolution import ReferenceResolver
-    from science_tool.graph.sources import is_external_reference, is_metadata_reference
+    from science_tool.graph.sources import AliasCollisionError, is_external_reference, is_metadata_reference
 
-    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
+    try:
+        resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
+    except AliasCollisionError:
+        # A colliding alias map is already reported as a blocking fail row by
+        # audit_project_sources (which runs before this helper and catches the same
+        # error). Target validation can't run without a resolver, so return [] and
+        # let the audit's ambiguous_alias row be the blocker — never propagate, or
+        # the dry-run aborts with no JSON.
+        return []
     fails: list[dict] = []
     for alias, target in mappings_aliases.items():
         if is_external_reference(target) or is_metadata_reference(target):

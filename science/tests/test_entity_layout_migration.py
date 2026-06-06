@@ -1296,3 +1296,26 @@ def test_real_tokens_are_not_filtered(token: str) -> None:
     from science_tool.entity_layout_migration import _is_placeholder_token
 
     assert _is_placeholder_token(token) is False
+
+
+# ---------------------------------------------------------------------------
+# Unit E defect fix: alias collision must not abort dry-run (GitHub issue)
+# ---------------------------------------------------------------------------
+
+
+def test_colliding_entity_aliases_block_without_aborting_dry_run(tmp_path: Path) -> None:
+    # Two entities declaring the same alias make the simulated-audit resolver raise
+    # AliasCollisionError. The dry-run must REPORT it as a blocker and still return a
+    # report dict (emit JSON) — not propagate the exception and abort.
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    for stem in ("a", "b"):
+        _write(
+            tmp_path,
+            f"specs/hypotheses/h01-{stem}.md",
+            f'---\nid: "hypothesis:h01-{stem}"\ntype: hypothesis\ncreated: "2026-01-0{1 if stem == "a" else 2}"\n'
+            f'title: H {stem}\nstatus: proposed\nupdated: "2026-01-01"\n'
+            'aliases: ["hypothesis:shared-alias"]\n---\nbody\n',
+        )
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)  # MUST NOT raise
+    assert dry["unresolved_references"]  # the alias collision is surfaced as a blocker
