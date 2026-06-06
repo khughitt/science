@@ -171,3 +171,35 @@ def test_strategy_override_accepts_known_values(tmp_path: Path) -> None:
 def test_no_local_profile_is_empty(tmp_path: Path) -> None:
     _write(tmp_path, "science.yaml", "name: t\n")
     assert load_local_entity_policies(tmp_path) == {}
+
+
+from science_tool.entities import default_status, valid_statuses
+
+
+def test_status_accessors_core_unchanged() -> None:
+    assert default_status("hypothesis") == "proposed"
+    assert "supported" in valid_statuses("hypothesis")
+
+
+def test_local_kind_status_defaults_open(tmp_path: Path) -> None:
+    root = _project_with_local_kinds(tmp_path)
+    assert default_status("design", project_root=root) == "active"
+    assert valid_statuses("design", project_root=root) is None  # open set
+
+
+def test_local_kind_status_manifest_override(tmp_path: Path) -> None:
+    manifest = _LOCAL_MANIFEST.replace(
+        "    description: Design.\n",
+        "    description: Design.\n    default_status: draft\n    statuses: [draft, active]\n",
+    )
+    _write(tmp_path, "science.yaml", "name: t\nknowledge_profiles:\n  local: local\n")
+    _write(tmp_path, "knowledge/sources/local/manifest.yaml", manifest)
+    assert default_status("design", project_root=tmp_path) == "draft"
+    assert valid_statuses("design", project_root=tmp_path) == frozenset({"draft", "active"})
+
+
+def test_status_unknown_kind_raises() -> None:
+    with pytest.raises(KeyError):
+        default_status("nonexistent-kind")
+    with pytest.raises(KeyError):
+        valid_statuses("nonexistent-kind")

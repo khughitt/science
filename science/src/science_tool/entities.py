@@ -12,7 +12,7 @@ from typing import Any, Literal, cast
 import yaml
 
 from science_model.entities import ProjectEntity
-from science_model.profiles import load_profile_manifest
+from science_model.profiles import EntityKind, ProfileManifest, load_profile_manifest
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
@@ -65,6 +65,10 @@ _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
 # resolve_path_policy calls during a migration don't re-parse the manifest, while
 # still picking up edits (important for tests that rewrite the manifest).
 _LOCAL_POLICY_CACHE: dict[tuple[str, int], dict[str, EntityPathPolicy]] = {}
+
+# Parsed-manifest cache (mtime-keyed, mirrors _LOCAL_POLICY_CACHE) so the status
+# accessors don't re-parse the manifest on every call during synthesis.
+_LOCAL_MANIFEST_CACHE: dict[tuple[str, int], ProfileManifest | None] = {}
 
 # Strategies a local kind may declare. `singleton` is intentionally excluded:
 # the migrator's singleton handling (`_plan_singletons`) is hard-coded to the two
@@ -224,14 +228,42 @@ _STATUS_VALUES: dict[str, frozenset[str]] = {
 _ALLOWED_EXPLICIT_ROOTS = (Path("entities"),)
 
 
-def default_status(kind: str) -> str:
+def _local_entity_kind(project_root: Path, kind: str) -> EntityKind | None:
+    """Return the manifest EntityKind for a local kind, or None."""
+    profile_name = resolve_local_profile_name(project_root)
+    manifest_path = local_profile_sources_dir(project_root, local_profile=profile_name) / "manifest.yaml"
+    if not manifest_path.is_file():
+        return None
+    cache_key = (str(manifest_path), manifest_path.stat().st_mtime_ns)
+    if cache_key not in _LOCAL_MANIFEST_CACHE:
+        _LOCAL_MANIFEST_CACHE[cache_key] = load_profile_manifest(manifest_path)
+    manifest = _LOCAL_MANIFEST_CACHE[cache_key]
+    if manifest is None:
+        return None
+    return next((ek for ek in manifest.entity_kinds if ek.name == kind), None)
+
+
+def default_status(kind: str, *, project_root: Path | None = None) -> str:
     """The per-kind default status (e.g. hypothesis → 'proposed')."""
-    return _DEFAULT_STATUS[kind]
+    if kind in _DEFAULT_STATUS:
+        return _DEFAULT_STATUS[kind]
+    if project_root is not None:
+        ek = _local_entity_kind(project_root, kind)
+        if ek is not None:
+            return ek.default_status or "active"
+    raise KeyError(kind)
 
 
-def valid_statuses(kind: str) -> frozenset[str]:
-    """The controlled set of valid statuses for `kind`."""
-    return _STATUS_VALUES[kind]
+def valid_statuses(kind: str, *, project_root: Path | None = None) -> frozenset[str] | None:
+    """The controlled status set for `kind`, or None for a local kind with no
+    declared vocabulary (an open set — any status accepted)."""
+    if kind in _STATUS_VALUES:
+        return _STATUS_VALUES[kind]
+    if project_root is not None:
+        ek = _local_entity_kind(project_root, kind)
+        if ek is not None:
+            return frozenset(ek.statuses) if ek.statuses else None
+    raise KeyError(kind)
 
 
 @dataclass(frozen=True)
