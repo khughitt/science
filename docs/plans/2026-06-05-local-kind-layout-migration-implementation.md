@@ -12,6 +12,20 @@
 
 **Branch:** `feat/local-kind-layout-migration` (already created in `~/d/science`).
 
+## Scope / non-goals
+
+This plan makes **migration and conformance** local-kind-aware. It deliberately
+does **not** touch the interactive entity-creation path:
+`generate_entity_id` / `validate_entity_id` (`entities.py:245,284`) and
+`create_entity` (`entities.py:459-707`) still call the no-context policy/status
+accessors, so `science entities create --kind <local-kind>` remains unsupported
+and continues to raise `Unsupported source-authored entity kind`. That is
+intentional and sufficient for the goal (migrate an existing project to v3): local
+kinds are authored as markdown and relocated by the migrator, not minted through
+`create`. Making `create` local-kind-aware is a clean follow-up — it would reuse
+the same project-aware accessors built here by threading `project_root` through
+those three functions — but it is out of scope and has no task below.
+
 ---
 
 ## File structure
@@ -284,6 +298,43 @@ def test_name_must_equal_canonical_prefix(tmp_path: Path) -> None:
         load_local_entity_policies(tmp_path)
 
 
+@pytest.mark.parametrize(
+    "bad_home",
+    [
+        "/abs/entities/design",   # absolute path
+        "../outside/design",      # parent traversal
+        "doc/design",             # not under entities/
+        "entities/../escape",     # traversal after entities/
+    ],
+)
+def test_home_override_must_be_relative_under_entities(tmp_path: Path, bad_home: str) -> None:
+    manifest = _LOCAL_MANIFEST.replace("    home: entities/gizmos\n", f"    home: {bad_home}\n")
+    _write(tmp_path, "science.yaml", "name: t\nknowledge_profiles:\n  local: local\n")
+    _write(tmp_path, "knowledge/sources/local/manifest.yaml", manifest)
+    with pytest.raises(EntityCommandError):
+        load_local_entity_policies(tmp_path)
+
+
+def test_strategy_override_must_be_known(tmp_path: Path) -> None:
+    manifest = _LOCAL_MANIFEST.replace(
+        "    home: entities/gizmos\n", "    home: entities/gizmos\n    strategy: banana\n"
+    )
+    _write(tmp_path, "science.yaml", "name: t\nknowledge_profiles:\n  local: local\n")
+    _write(tmp_path, "knowledge/sources/local/manifest.yaml", manifest)
+    with pytest.raises(EntityCommandError):
+        load_local_entity_policies(tmp_path)
+
+
+def test_strategy_override_accepts_known_values(tmp_path: Path) -> None:
+    manifest = _LOCAL_MANIFEST.replace(
+        "    home: entities/gizmos\n", "    home: entities/gizmos\n    strategy: citekey\n"
+    )
+    _write(tmp_path, "science.yaml", "name: t\nknowledge_profiles:\n  local: local\n")
+    _write(tmp_path, "knowledge/sources/local/manifest.yaml", manifest)
+    policies = load_local_entity_policies(tmp_path)
+    assert policies["gadget"] == EntityPathPolicy(Path("entities/gizmos"), "citekey")
+
+
 def test_no_local_profile_is_empty(tmp_path: Path) -> None:
     _write(tmp_path, "science.yaml", "name: t\n")
     assert load_local_entity_policies(tmp_path) == {}
@@ -318,6 +369,29 @@ Add, just below `_BUILTIN_MARKDOWN_POLICIES` (after line 58):
 # still picking up edits (important for tests that rewrite the manifest).
 _LOCAL_POLICY_CACHE: dict[tuple[str, int], dict[str, EntityPathPolicy]] = {}
 
+# Strategies a local kind may declare. Mirrors the core policy strategies.
+_VALID_STRATEGIES: frozenset[str] = frozenset({"numeric", "citekey", "singleton"})
+
+
+def _resolve_local_home(name: str, home: str | None) -> Path:
+    """Resolve (and validate) a local kind's home directory.
+
+    Default is ``entities/<name>``. An explicit ``home`` override must be a
+    *relative* path rooted at ``entities/`` with no parent traversal — anything
+    else (absolute, ``../``, a non-``entities/`` root) is rejected fail-loud, so a
+    malformed manifest cannot redirect migration writes outside the entity tree.
+    """
+    if not home:
+        return Path(f"entities/{name}")
+    candidate = Path(home)
+    parts = candidate.parts
+    if candidate.is_absolute() or ".." in parts or not parts or parts[0] != "entities":
+        raise EntityCommandError(
+            f"local kind {name!r} home {home!r} must be a relative path under 'entities/' "
+            "with no parent traversal"
+        )
+    return candidate
+
 
 def load_local_entity_policies(project_root: Path) -> dict[str, EntityPathPolicy]:
     """Path policies for the project's registered local markdown kinds.
@@ -325,7 +399,9 @@ def load_local_entity_policies(project_root: Path) -> dict[str, EntityPathPolicy
     Reads the active local profile manifest. Each kind maps to
     ``entities/<name>/`` (numeric) unless the manifest declares ``home``/
     ``strategy`` overrides. Kinds shadowing a core kind are dropped (core wins).
-    Validates ``name == canonical_prefix`` (Decision 4); raises on divergence.
+    Validates ``name == canonical_prefix`` (Decision 4), that any ``home`` is a
+    relative path under ``entities/``, and that any ``strategy`` is known; raises
+    on divergence.
     """
     profile_name = resolve_local_profile_name(project_root)
     manifest_path = local_profile_sources_dir(project_root, local_profile=profile_name) / "manifest.yaml"
@@ -346,7 +422,12 @@ def load_local_entity_policies(project_root: Path) -> dict[str, EntityPathPolicy
                 )
             if ek.name in _BUILTIN_MARKDOWN_POLICIES:
                 continue  # a local kind may not shadow a core kind
-            root = Path(ek.home) if ek.home else Path(f"entities/{ek.name}")
+            if ek.strategy is not None and ek.strategy not in _VALID_STRATEGIES:
+                raise EntityCommandError(
+                    f"local kind {ek.name!r} strategy {ek.strategy!r} must be one of "
+                    f"{sorted(_VALID_STRATEGIES)}"
+                )
+            root = _resolve_local_home(ek.name, ek.home)
             strategy: EntityFilenameStrategy = ek.strategy or "numeric"  # type: ignore[assignment]
             policies[ek.name] = EntityPathPolicy(root, strategy)
     _LOCAL_POLICY_CACHE[cache_key] = policies
@@ -975,8 +1056,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from science_tool.validate.checks.entity_conformance import check_entity_location_coherence
+from science_tool.validate.checks.entity_conformance import (
+    check_entity_filename_conformance,
+    check_entity_location_coherence,
+)
 from science_tool.validate.context import ValidateContext
+from science_tool.validate.result import Severity
 
 _LOCAL_PROFILE = """\
 name: t-local
@@ -1002,18 +1087,58 @@ def _ctx(root: Path) -> ValidateContext:
     return ValidateContext.from_project_root(root, strict=False, verbose=False)
 
 
+def _seed_profile(root: Path, *, layout_version: int) -> None:
+    _write(
+        root,
+        "science.yaml",
+        f"name: t\nlayout_version: {layout_version}\nknowledge_profiles:\n  local: local\n",
+    )
+    _write(root, "knowledge/sources/local/manifest.yaml", _LOCAL_PROFILE)
+
+
 def test_local_kind_stranded_in_doc_is_flagged(tmp_path: Path) -> None:
-    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 3\nknowledge_profiles:\n  local: local\n")
-    _write(tmp_path, "knowledge/sources/local/manifest.yaml", _LOCAL_PROFILE)
+    _seed_profile(tmp_path, layout_version=3)
     _write(tmp_path, "doc/design/x.md", '---\nid: "design:x"\ntype: design\n---\nb\n')
     results = list(check_entity_location_coherence(_ctx(tmp_path)))
     msgs = [r.message for r in results]
     assert any("design entity outside its home" in m for m in msgs)
+
+
+def test_local_kind_stranded_severity_is_version_gated(tmp_path: Path) -> None:
+    # v2 → WARN (transition); v3 → ERROR (cutover). Same stranded file.
+    _seed_profile(tmp_path, layout_version=2)
+    _write(tmp_path, "doc/design/x.md", '---\nid: "design:x"\ntype: design\n---\nb\n')
+    warn = [r for r in check_entity_location_coherence(_ctx(tmp_path)) if "outside its home" in r.message]
+    assert warn and all(r.severity is Severity.WARN for r in warn)
+
+    _seed_profile(tmp_path, layout_version=3)
+    err = [r for r in check_entity_location_coherence(_ctx(tmp_path)) if "outside its home" in r.message]
+    assert err and all(r.severity is Severity.ERROR for r in err)
+
+
+def test_local_kind_nonconforming_filename_flagged(tmp_path: Path) -> None:
+    # A numeric-strategy local kind whose file is not NNNN-slug must be flagged.
+    _seed_profile(tmp_path, layout_version=3)
+    _write(tmp_path, "entities/design/bad.md",
+           '---\nid: "design:bad"\ntype: design\ntitle: Bad\nstatus: active\n'
+           'created: "2026-01-01"\nupdated: "2026-01-01"\n---\nb\n')
+    msgs = [r.message for r in check_entity_filename_conformance(_ctx(tmp_path))]
+    assert any("non-conforming design filename 'bad.md'" in m for m in msgs)
+
+
+def test_local_kind_conforming_filename_is_clean(tmp_path: Path) -> None:
+    _seed_profile(tmp_path, layout_version=3)
+    _write(tmp_path, "entities/design/0001-good.md",
+           '---\nid: "design:0001-good"\ntype: design\ntitle: Good\nstatus: active\n'
+           'created: "2026-01-01"\nupdated: "2026-01-01"\n---\nb\n')
+    msgs = [r.message for r in check_entity_filename_conformance(_ctx(tmp_path))]
+    assert not any("non-conforming design" in m for m in msgs)
 ```
 
-> `ValidateContext.from_project_root` loads `science.yaml`; the fixture writes
-> `layout_version: 3` so the stranded-file result is an ERROR (the message text is
-> what the assertion checks).
+> `ValidateContext.from_project_root` loads `science.yaml`; the `layout_version`
+> the fixture writes drives `_severity` (WARN at 2, ERROR at 3). The conforming
+> `0001-good.md` case proves the check does not false-positive on valid local-kind
+> files.
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -1226,11 +1351,24 @@ Expected: clean. Fix any findings and re-run.
 
 - [ ] **Step 3: Final commit (if lint required changes)**
 
+`ruff format` only rewrites the files this plan touched. Stage them explicitly —
+**never `git add -A`** (the worktree is shared and may hold unrelated changes).
+First inspect what changed, then add only the files from this plan that are dirty:
+
 ```bash
 cd ~/d/science
-git add -A
+git status --short   # confirm only this plan's files are modified
+git add \
+  model/src/science_model/profiles/schema.py \
+  science/src/science_tool/entities.py \
+  science/src/science_tool/entity_layout_migration.py \
+  science/src/science_tool/graph/sources.py \
+  science/src/science_tool/validate/checks/entity_conformance.py
 git commit -m "chore: lint/format local-kind migration changes"
 ```
+
+If `git status --short` shows any file *not* in the list above, do not stage it —
+investigate first; it is unrelated work that must not ride this commit.
 
 ---
 
@@ -1242,6 +1380,8 @@ git commit -m "chore: lint/format local-kind migration changes"
 - Design "Migrator threads project context" (plan/rewrite) → Tasks 7, 8. — covered
 - Design "rewrite_references project-aware / unmapped blocks apply" → Tasks 8, 10. — covered
 - Design "name == canonical_prefix validation" → Task 3. — covered
+- Design "home/strategy override validation (fail-loud)" → Task 3. — covered
+- Design "entity creation is out of scope" → Scope/non-goals section (no task). — covered
 - Design "profile fallback reuse" → Task 2. — covered
 - Design "Conformance threads project context" → Task 9. — covered
 - Design "Adapter: no change" → no task (intentional). — covered

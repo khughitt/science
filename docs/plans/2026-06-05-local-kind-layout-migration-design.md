@@ -27,6 +27,16 @@ Out of scope: structurally-defined local entities (declared in
 `knowledge/sources/<profile>/entities.yaml`, e.g. MM30's `latent:` nodes). These
 have no markdown files, already load regardless of layout, and are a no-op here.
 
+Also out of scope: the **interactive entity-creation path**
+(`science entities create --kind <local-kind>`). `generate_entity_id`,
+`validate_entity_id`, and `create_entity` keep using the no-context policy/status
+accessors, so creating a *new* local-kind entity through `create` stays
+unsupported. This design only needs migration + conformance to be local-kind
+aware; local kinds are authored as markdown and relocated by the migrator, not
+minted by `create`. Making `create` local-kind aware is a clean follow-up (it
+reuses the same project-aware accessors) but is not required to migrate a project
+to v3.
+
 ## Decisions (settled with the user, 2026-06-05)
 
 1. **Identity:** migrated local-kind entities are **renumbered to `NNNN-slug`**,
@@ -38,7 +48,11 @@ have no markdown files, already load regardless of layout, and are a no-op here.
    prose-only files (reusing the existing synthesis path).
 3. **Home:** derived as `entities/<kind-name-verbatim>/` (singular, no
    pluralization guessing) with the **`numeric`** strategy, plus an **optional
-   per-kind manifest override** (`home:` / `strategy:`).
+   per-kind manifest override** (`home:` / `strategy:`). Overrides are
+   **validated fail-loud**: `home` must be a *relative* path rooted at
+   `entities/` with no `..` traversal (a malformed value must not redirect
+   migration writes outside the entity tree), and `strategy` must be one of
+   `numeric` / `citekey` / `singleton`.
 4. **Kind identity:** the `EntityKind.name` *is* the kind, the id prefix, and the
    directory segment. `canonical_prefix` is required to equal `name` (the
    registry keys on `name` — `graph/sources.py:218,229` — and `register-kind`
@@ -252,8 +266,10 @@ unaffected. The only behavior change is for projects that register local
 - **Unit (`tmp_path`):** project-aware `resolve_path_policy` (local kind →
   `entities/<name>`; `home`/`strategy` override honored; core kind never
   shadowed; unknown kind still raises). `load_local_entity_policies` parsing,
-  **including a manifest with `name != canonical_prefix` → raises**, and a
-  **legacy `profiles: {local: …}`** manifest resolving correctly.
+  **including a manifest with `name != canonical_prefix` → raises**, an invalid
+  **`home`** (absolute / `../` / non-`entities/`) → raises, an invalid
+  **`strategy`** → raises, and a **legacy `profiles: {local: …}`** manifest
+  resolving correctly.
 - **Status:** project-aware `default_status`/`valid_statuses` for a local kind →
   `active` default and open set; manifest `default_status`/`statuses` override
   honored.
@@ -267,9 +283,10 @@ unaffected. The only behavior change is for projects that register local
   `design`, not `plan`; an explicit `type:` still wins over a divergent `id:`
   prefix.
 - **Conformance:** fixture project with a local profile — a stranded
-  `doc/<x>.md` of a local kind is flagged; a conforming
+  `doc/<x>.md` of a local kind is flagged; a non-conforming
+  `entities/<kind>/bad.md` filename is flagged while a conforming
   `entities/<kind>/NNNN-*.md` is clean; severity flips WARN→ERROR with
-  `layout_version`.
+  `layout_version` (assert `Severity.WARN` at v2, `Severity.ERROR` at v3).
 - **Integration:** migrate a fixture project containing one core + one local
   kind end-to-end → files moved & renumbered, refs rewritten, post-move audit
   green, `layout_version` bumped to 3.
