@@ -8,6 +8,7 @@ import yaml
 
 from science_tool.entities import valid_statuses
 from science_tool.entity_layout_migration import (
+    _fallback_created,
     discover_legacy_entities,
     migrate_layout,
     plan_migration,
@@ -852,3 +853,40 @@ def test_rewrite_flags_unmapped_local_kind_ref(tmp_path) -> None:
     assert "design:old-slug" in unresolved      # unmapped non-conforming ref flagged
     assert "design:mapped" not in unresolved    # mapped ref is not flagged
     assert "design:0001-existing" not in unresolved  # conforming numbered ref not flagged
+
+
+# ---------------------------------------------------------------------------
+# Task 2 (Unit D): date-fallback extension (G9)
+# ---------------------------------------------------------------------------
+
+
+def _legacy(rel_path: str, frontmatter: dict) -> "LegacyEntity":
+    from science_tool.entity_layout_migration import LegacyEntity
+    return LegacyEntity(rel_path=rel_path, kind="report", old_id=None, frontmatter=frontmatter, body="")
+
+
+def test_fallback_created_reads_generated_at_timestamp() -> None:
+    # big-picture synthesis files carry an ISO timestamp under generated_at:.
+    e = _legacy("doc/reports/synthesis.md", {"generated_at": "2026-04-28T12:00:00Z"})
+    assert _fallback_created(e) == "2026-04-28"
+
+
+def test_fallback_created_reads_committed_date() -> None:
+    e = _legacy("doc/pre-registrations/foo.md", {"committed": "2026-03-15"})
+    assert _fallback_created(e) == "2026-03-15"
+
+
+def test_fallback_created_prefers_created_over_other_keys() -> None:
+    e = _legacy("doc/reports/x.md", {"created": "2026-01-01", "generated_at": "2026-04-28T00:00:00Z"})
+    assert _fallback_created(e) == "2026-01-01"
+
+
+def test_fallback_created_unparseable_date_key_falls_through_to_sentinel() -> None:
+    from science_tool.entity_layout_migration import _UNDATED_SENTINEL
+    e = _legacy("doc/reports/x.md", {"generated_at": "not-a-date"})
+    assert _fallback_created(e) == _UNDATED_SENTINEL
+
+
+def test_fallback_created_filename_prefix_still_wins_over_nothing() -> None:
+    e = _legacy("doc/reports/2026-05-30-triage.md", {})
+    assert _fallback_created(e) == "2026-05-30"

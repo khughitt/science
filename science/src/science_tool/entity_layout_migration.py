@@ -9,6 +9,7 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+import datetime
 import re
 
 import yaml
@@ -148,16 +149,39 @@ _H1_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 # like `2026-05-30-paper-triage-manifest.md` can supply their own `created` date
 # even when no frontmatter `created` field and no `**Date:**` prose header exist.
 _DATE_PREFIX_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:[-.]|$)")
+_LEADING_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
+
+
+def _leading_date(value: object) -> str | None:
+    """Extract and validate a leading YYYY-MM-DD from a date or ISO-timestamp.
+
+    `created:` is modeled as a date, but `generated_at:` is an ISO *timestamp*
+    (2026-04-28T12:00:00Z). Take the leading date component and confirm it is a
+    real calendar date; return None (fall through) when there is none."""
+    if not value:
+        return None
+    m = _LEADING_DATE_RE.match(str(value))
+    if m is None:
+        return None
+    try:
+        datetime.date.fromisoformat(m.group(1))
+    except ValueError:
+        return None
+    return m.group(1)
 
 
 def _fallback_created(entity: "LegacyEntity") -> str:
-    """created fallback: frontmatter created -> filename YYYY-MM-DD prefix -> sentinel.
+    """created fallback: frontmatter created -> generated_at -> committed ->
+    filename YYYY-MM-DD prefix -> sentinel. Each frontmatter source is normalized
+    to a real date via `_leading_date`; a value with no parseable leading date is
+    skipped rather than copied raw.
 
     (synthesize_frontmatter still prefers a body **Date:** header over this fallback.)
     """
-    fm_created = entity.frontmatter.get("created")
-    if fm_created:
-        return str(fm_created)
+    for key in ("created", "generated_at", "committed"):
+        candidate = _leading_date(entity.frontmatter.get(key))
+        if candidate:
+            return candidate
     m = _DATE_PREFIX_DATE_RE.match(Path(entity.rel_path).stem)
     if m:
         return m.group(1)
