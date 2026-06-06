@@ -216,10 +216,17 @@ science-meta, pan-disease, health-cycles, cancer-therapeutics, cbioportal stop r
 
 **How:** parse `mappings.yaml` structurally rather than scanning it as free text. The alias
 *source* (LHS key) is a definition and is never a ref. The alias *target* (RHS value) is a
-structural ref that must resolve (feeds Unit A's blocking set). Comments and graph-only
-`entities.yaml` id definitions are not refs. Under the Unit A model, any remaining YAML-body
-tokens are non-structural → warnings, so this unit mainly ensures alias *targets* are still
-checked while alias *sources* are exempt.
+structural ref that must resolve. **Caveat (corrected):** the graph audit does **not** validate
+alias targets — `audit_project_sources` only loads `manual_aliases` into the resolver
+(`graph/migrate.py:146`), and `ReferenceResolver.resolve()` accepts any alias-map *key* as
+resolved without proving its target exists (`graph/reference_resolution.py:63`). So the Unit A
+simulated audit alone would let a dangling alias target pass. This unit therefore adds an
+**explicit alias-target check** (`_dangling_alias_targets`) that resolves each target through the
+simulated post-move alias map (a valid target by old id resolves via the injected `id_map`) and
+emits a structural blocker for any unresolved target; external/`meta:*` targets are exempt,
+mirroring the audit's acceptance exceptions. Comments and graph-only `entities.yaml` id
+definitions are not refs. Remaining YAML-body tokens are non-structural → warnings; alias
+*sources* are exempt from the warning scan.
 
 ### Unit F — Date-dir-scoped alias generation (G-novel collisions)
 

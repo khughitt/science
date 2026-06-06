@@ -11,9 +11,11 @@
 **Design spec:** `~/d/science/docs/plans/2026-06-06-migration-robustness-design.md`
 **Readiness audit:** `~/d/science/docs/audits/2026-06-06-layout-v3-migration-readiness-audit.md`
 
+**Shell convention:** all commands below are run through the `rtk` token-proxy per repo convention (`rtk uv …`, `rtk git …`, `rtk rg …`). The Claude Code hook auto-rewrites bare commands transparently, but the snippets show `rtk` explicitly so workers without the hook stay compliant.
+
 **Test command (run from the library subdir):**
 ```bash
-cd ~/d/science/science && uv run --frozen pytest <path>::<test> -v
+cd ~/d/science/science && rtk uv run --frozen pytest <path>::<test> -v
 ```
 
 **Task order matches the design's remediation order:** B (unblock crashes) → D (clears most "undated") → A (keystone) → C/E/F/G → companions → integration.
@@ -93,7 +95,7 @@ Remove the now-obsolete `test_name_must_equal_canonical_prefix`, `test_home_over
 
 - [ ] **Step 2: Run the new tests to verify they fail**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entities_local_policies.py -v`
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entities_local_policies.py -v`
 Expected: FAIL — `ImportError: cannot import name 'local_kind_warnings'` (it does not exist yet).
 
 - [ ] **Step 3: Refactor `load_local_entity_policies` into a skip+warn core**
@@ -169,28 +171,28 @@ The `_LOCAL_POLICY_CACHE` now stores a `tuple[dict, list]` instead of a bare dic
 
 - [ ] **Step 4: Run the policy tests to verify they pass**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entities_local_policies.py -v`
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entities_local_policies.py -v`
 Expected: PASS (all skip+warn tests + the existing unchanged tests).
 
 - [ ] **Step 5: Verify no regression in dependent callers**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entity_layout_migration.py -v`
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_layout_migration.py -v`
 Expected: PASS (the migrator imports `load_local_entity_policies`; its dict contract is unchanged).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd ~/d/science && git add science/src/science_tool/entities.py science/tests/test_entities_local_policies.py
-git commit -m "feat(migrate): skip+warn on malformed local entity kinds (Unit B, G7)"
+cd ~/d/science && rtk git add science/src/science_tool/entities.py science/tests/test_entities_local_policies.py
+rtk git commit -m "feat(migrate): skip+warn on malformed local entity kinds (Unit B, G7)"
 ```
 
 - [ ] **Step 7: Write the failing conformance-surfacing test**
 
 First locate the conformance test module:
 ```bash
-cd ~/d/science/science && grep -rln "check_entity_location_coherence\|entity_conformance" tests/
+cd ~/d/science/science && rtk rg -l "check_entity_location_coherence|entity_conformance" tests/
 ```
-Add to that module (call it `tests/test_entity_conformance.py` below — use the real path the grep returns):
+Add to that module (call it `tests/test_entity_conformance.py` below — use the real path the `rtk rg` command returns):
 
 ```python
 def test_local_kind_warning_is_surfaced_as_validate_warning(tmp_path: Path) -> None:
@@ -218,7 +220,7 @@ If the test module has no `_make_ctx`/`ValidateContext` factory, follow the cons
 
 - [ ] **Step 8: Run it to verify it fails**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entity_conformance.py::test_local_kind_warning_is_surfaced_as_validate_warning -v`
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_conformance.py::test_local_kind_warning_is_surfaced_as_validate_warning -v`
 Expected: FAIL — `ImportError`/`AttributeError`: `check_local_kind_manifest` does not exist.
 
 - [ ] **Step 9: Add the surfacing check**
@@ -239,14 +241,14 @@ def check_local_kind_manifest(ctx: ValidateContext) -> Iterator[Result]:
 
 - [ ] **Step 10: Run the conformance test to verify it passes**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entity_conformance.py -v`
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_conformance.py -v`
 Expected: PASS.
 
 - [ ] **Step 11: Commit**
 
 ```bash
-cd ~/d/science && git add science/src/science_tool/validate/checks/entity_conformance.py science/tests/test_entity_conformance.py
-git commit -m "feat(validate): surface skipped local kinds as warnings (Unit B)"
+cd ~/d/science && rtk git add science/src/science_tool/validate/checks/entity_conformance.py science/tests/test_entity_conformance.py
+rtk git commit -m "feat(validate): surface skipped local kinds as warnings (Unit B)"
 ```
 
 ---
@@ -298,7 +300,7 @@ def test_fallback_created_filename_prefix_still_wins_over_nothing() -> None:
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entity_layout_migration.py -k fallback_created -v`
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_layout_migration.py -k fallback_created -v`
 Expected: FAIL — `generated_at`/`committed` are ignored today, so those return the sentinel.
 
 - [ ] **Step 3: Add `_leading_date` and extend the fallback chain**
@@ -350,19 +352,19 @@ def _fallback_created(entity: "LegacyEntity") -> str:
 
 - [ ] **Step 4: Run the fallback tests to verify they pass**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entity_layout_migration.py -k fallback_created -v`
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_layout_migration.py -k fallback_created -v`
 Expected: PASS.
 
 - [ ] **Step 5: Run the full migration test module (regression)**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entity_layout_migration.py -v`
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_layout_migration.py -v`
 Expected: PASS (the undated-blocking test still blocks a genuinely date-less file).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd ~/d/science && git add science/src/science_tool/entity_layout_migration.py science/tests/test_entity_layout_migration.py
-git commit -m "feat(migrate): read generated_at/committed date keys for created fallback (Unit D, G9)"
+cd ~/d/science && rtk git add science/src/science_tool/entity_layout_migration.py science/tests/test_entity_layout_migration.py
+rtk git commit -m "feat(migrate): read generated_at/committed date keys for created fallback (Unit D, G9)"
 ```
 
 ---
@@ -486,7 +488,7 @@ def test_accepted_external_and_bibliography_refs_do_not_block(tmp_path: Path) ->
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entity_layout_migration.py -k "warn_not_block or warns_not or structural or audited_field or external_and_bibliography" -v`
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_layout_migration.py -k "warn_not_block or warns_not or structural or audited_field or external_and_bibliography" -v`
 Expected: FAIL — `KeyError: 'unresolved_warnings'` (key does not exist) and the structural-block tests raise the old "working tree" post-mutation error or do not block at all.
 
 - [ ] **Step 3: Add the code-span stripper, placeholder-token stub, and the simulated-audit helpers**
@@ -642,14 +644,14 @@ Also scan the rest of the module for any test asserting on `unresolved_reference
 
 - [ ] **Step 6: Run the Unit A tests + full module**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entity_layout_migration.py -v`
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_layout_migration.py -v`
 Expected: PASS. If any pre-existing test fails because a prose token moved from `unresolved_references` to `unresolved_warnings`, update that assertion per Step 5 (the migration behavior is correct; the test's expectation was the position-blind one).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd ~/d/science && git add science/src/science_tool/entity_layout_migration.py science/tests/test_entity_layout_migration.py
-git commit -m "feat(migrate): block on simulated post-move audit; prose refs warn (Unit A, G1-G6)"
+cd ~/d/science && rtk git add science/src/science_tool/entity_layout_migration.py science/tests/test_entity_layout_migration.py
+rtk git commit -m "feat(migrate): block on simulated post-move audit; prose refs warn (Unit A, G1-G6)"
 ```
 
 ---
@@ -707,7 +709,7 @@ def test_frontmatterless_file_at_exact_root_with_id_is_discovered(tmp_path: Path
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entity_layout_migration.py -k "nested_nonroot or skipped_untyped or explicit_id_in_nested or exact_root_with_id" -v`
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_layout_migration.py -k "nested_nonroot or skipped_untyped or explicit_id_in_nested or exact_root_with_id" -v`
 Expected: FAIL — today `doc/background/papers/loose-note.md` is swept in (bare `papers` parent), `skipped_untyped` is not a report key, and the prose doc is discovered as an undated entity.
 
 - [ ] **Step 3: Replace the bare-name dir map with exact-relative-path maps**
@@ -749,7 +751,7 @@ _DEST_ROOT_TO_KIND: dict[str, str] = {
 }
 ```
 
-> **Verify the legacy-root list:** run `cd ~/d/science/science && uv run --frozen python -c "from science_tool.entities import markdown_entity_kinds, resolve_path_policy; [print(k, resolve_path_policy(k).root) for k in sorted(markdown_entity_kinds()) if resolve_path_policy(k).strategy != 'singleton']"` and confirm every non-singleton kind has a `_LEGACY_ROOT_TO_KIND` entry whose value matches. Add any missing kind (the destination map is auto-derived; the legacy map is hand-written and must stay complete).
+> **Verify the legacy-root list:** run `cd ~/d/science/science && rtk uv run --frozen python -c "from science_tool.entities import markdown_entity_kinds, resolve_path_policy; [print(k, resolve_path_policy(k).root) for k in sorted(markdown_entity_kinds()) if resolve_path_policy(k).strategy != 'singleton']"` and confirm every non-singleton kind has a `_LEGACY_ROOT_TO_KIND` entry whose value matches. Add any missing kind (the destination map is auto-derived; the legacy map is hand-written and must stay complete).
 
 - [ ] **Step 4: Rewrite `_project_dir_to_kind` to return full-path keys**
 
@@ -865,47 +867,71 @@ and add `"skipped_untyped": skipped_untyped,` to the `report` dict (next to `unr
 
 - [ ] **Step 8: Run the discovery tests + full module**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entity_layout_migration.py -v`
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_layout_migration.py -v`
 Expected: PASS. The existing `test_discovers_specs_and_doc_legacy_locations` still passes (`doc/background/papers/Adams2025.md` carries explicit `id:`/`type:` → discovered via id-prefix, not the dir fallback). `test_frontmatterless_file_under_unknown_parent_dir_is_skipped` still passes (no map entry → `kind is None`).
 
 - [ ] **Step 9: Commit**
 
 ```bash
-cd ~/d/science && git add science/src/science_tool/entity_layout_migration.py science/tests/test_entity_layout_migration.py
-git commit -m "feat(migrate): exact-root discovery + entity-signal gate (Unit C, G8)"
+cd ~/d/science && rtk git add science/src/science_tool/entity_layout_migration.py science/tests/test_entity_layout_migration.py
+rtk git commit -m "feat(migrate): exact-root discovery + entity-signal gate (Unit C, G8)"
 ```
 
 ---
 
 ## Task 5: Unit E — Knowledge-source `mappings.yaml` handling (G10)
 
-`mappings.yaml` alias *source* keys are definitions, never references — they must not generate prose-ref warnings. Alias *targets* are structural and are already validated by the Unit A simulated audit (the audit loads `mappings.yaml` into the alias map). So this unit only exempts `mappings.yaml` from the free-text warning scan, while still rewriting old→new ids inside it for the `--apply` write.
+`mappings.yaml` alias *source* keys are definitions, never references — they must not generate prose-ref warnings. Alias *targets* are structural and **must** resolve, but the graph audit does **not** validate them: `audit_project_sources` only feeds `manual_aliases` into the resolver (`graph/migrate.py:146`), and `ReferenceResolver.resolve()` treats any alias-map *key* as resolved without proving its target exists (`graph/reference_resolution.py:63`). A dangling alias target therefore passes the Unit A simulated audit silently. So this unit does two things: (1) exempt `mappings.yaml` from the free-text warning scan; (2) add **explicit alias-target validation** that resolves each target *through* the simulated post-move alias map (so a valid target by old id still passes via the injected `id_map`) and emits a structural blocker for a dangling target.
+
+> Verified empirically: `aliases: {hypothesis:legacy-name: hypothesis:9999-nope}` yields `audit_project_sources(...) -> failed=False`; the explicit `_dangling_alias_targets` check below flags it, while a target that resolves (directly, or by old id via `id_map`) is not flagged.
+
+`mappings.yaml` lives at `knowledge/sources/<local-profile>/mappings.yaml` with a top-level `aliases:` block (`commons/aliases.py:10-23`) — tests must use that real schema, not a bare top-level key.
 
 **Files:**
-- Modify: `science/src/science_tool/entity_layout_migration.py` (`migrate_layout` warning loop)
+- Modify: `science/src/science_tool/entity_layout_migration.py` (`migrate_layout` warning loop; new `_dangling_alias_targets`; extend `_simulated_postmove_audit_failures`)
 - Test: `science/tests/test_entity_layout_migration.py`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests (real `aliases:` schema)**
 
 ```python
 def test_mappings_yaml_alias_source_key_is_not_a_warning(tmp_path: Path) -> None:
-    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\nknowledge_profiles:\n  local: local\n")
     _write(tmp_path, "specs/hypotheses/h01-a.md",
            '---\nid: "hypothesis:h01-a"\ntype: hypothesis\ncreated: "2026-01-01"\n'
            'title: A\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
-    # An alias whose SOURCE key looks like a ref token must not be flagged.
+    # Real mappings.yaml schema: a top-level `aliases:` block whose SOURCE key
+    # looks like a ref token must not be flagged as a warning.
     _write(tmp_path, "knowledge/sources/local/mappings.yaml",
-           "hypothesis:legacy-name: hypothesis:h01-a\n")
+           "aliases:\n  hypothesis:legacy-name: hypothesis:h01-a\n")
     _git_init(tmp_path)
     dry = migrate_layout(tmp_path, apply=False)
     flat_warn = [t for toks in dry["unresolved_warnings"].values() for t in toks]
-    assert "hypothesis:legacy-name" not in flat_warn
+    assert "hypothesis:legacy-name" not in flat_warn  # source key is a definition
+    assert dry["unresolved_references"] == {}  # the target (h01-a) resolves → no blocker
+    migrate_layout(tmp_path, apply=True)  # clean project applies
+
+
+def test_mappings_yaml_dangling_alias_target_blocks(tmp_path: Path) -> None:
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\nknowledge_profiles:\n  local: local\n")
+    _write(tmp_path, "specs/hypotheses/h01-a.md",
+           '---\nid: "hypothesis:h01-a"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+           'title: A\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
+    # Alias TARGET points at a nonexistent entity — the audit would not catch it,
+    # so the explicit alias-target check must block --apply.
+    _write(tmp_path, "knowledge/sources/local/mappings.yaml",
+           "aliases:\n  hypothesis:legacy-name: hypothesis:9999-nope\n")
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)
+    assert dry["unresolved_references"]  # dangling target surfaced as a structural blocker
+    with _pytest.raises(ValueError, match="structural"):
+        migrate_layout(tmp_path, apply=True)
+    assert not (tmp_path / "entities").exists()
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [ ] **Step 2: Run them to verify they fail**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entity_layout_migration.py::test_mappings_yaml_alias_source_key_is_not_a_warning -v`
-Expected: FAIL — the free-text scan flags `hypothesis:legacy-name` as an unresolved warning.
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_layout_migration.py -k "mappings_yaml" -v`
+Expected: FAIL — the free-text scan flags the source key, and the dangling target does **not** block (the audit misses it).
 
 - [ ] **Step 3: Exempt `mappings.yaml` from the warning scan**
 
@@ -920,7 +946,7 @@ In `migrate_layout`'s warning loop (added in Task 3, Step 4), skip the warning c
             bucket[rel] = out
             if rel.endswith("mappings.yaml"):
                 continue  # Unit E: alias source keys are definitions, not refs;
-                          # alias targets are validated by the simulated audit (Unit A)
+                          # alias TARGETS are validated separately (see _dangling_alias_targets)
             _, warn_tokens = rewrite_references(
                 _strip_code_spans(text), plan.id_map, policed_kinds=policed_kinds, project_root=project_root
             )
@@ -929,16 +955,60 @@ In `migrate_layout`'s warning loop (added in Task 3, Step 4), skip the warning c
                 unresolved_warnings[rel] = warn_tokens
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 4: Add `_dangling_alias_targets` and call it from the simulated-audit helper**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entity_layout_migration.py::test_mappings_yaml_alias_source_key_is_not_a_warning -v`
-Expected: PASS.
+Add the helper near `_simulated_postmove_audit_failures` (Task 3) in `entity_layout_migration.py`:
 
-- [ ] **Step 5: Commit**
+```python
+def _dangling_alias_targets(sources) -> list[dict]:
+    """Alias targets the graph audit silently accepts but that resolve to no
+    entity. `audit_project_sources` passes manual_aliases into the resolver but
+    never proves each target exists; this closes that gap. Targets are resolved
+    THROUGH the simulated alias map, so a valid target referenced by its OLD id
+    (rewritten to a new identity via the injected id_map) is accepted. External
+    (URL/path/go:/mesh:/doi:) and meta:* targets are exempt, matching the audit's
+    own acceptance exceptions."""
+    from science_tool.graph.reference_resolution import ReferenceResolver
+    from science_tool.graph.sources import is_external_reference, is_metadata_reference
+
+    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
+    fails: list[dict] = []
+    for alias, target in sources.manual_aliases.items():
+        if is_external_reference(target) or is_metadata_reference(target):
+            continue
+        if resolver.resolve(target).status != "resolved":
+            fails.append(
+                {"check": "dangling_alias_target", "status": "fail",
+                 "source": alias, "field": "aliases", "target": target}
+            )
+    return fails
+```
+
+Then extend `_simulated_postmove_audit_failures` (Task 3) so it appends these rows. Change its tail from:
+
+```python
+    rows, failed = audit_project_sources(sources)
+    return [r for r in rows if r.get("status") == "fail"] if failed else []
+```
+to:
+```python
+    rows, failed = audit_project_sources(sources)
+    audit_fails = [r for r in rows if r.get("status") == "fail"] if failed else []
+    return audit_fails + _dangling_alias_targets(sources)
+```
+
+`sources` here is the simulated post-move `ProjectSources` whose `manual_aliases` is `real_mappings ∪ plan.id_map`; the injected `id_map` entries always target real moved-entity new ids, so they never false-positive.
+
+- [ ] **Step 5: Run the tests to verify they pass**
+
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_layout_migration.py -k "mappings_yaml" -v`
+Expected: PASS — source key not warned; dangling target blocks; valid target applies.
+
+- [ ] **Step 6: Commit**
 
 ```bash
-cd ~/d/science && git add science/src/science_tool/entity_layout_migration.py science/tests/test_entity_layout_migration.py
-git commit -m "feat(migrate): exempt mappings.yaml alias sources from ref warnings (Unit E, G10)"
+cd ~/d/science && rtk git add science/src/science_tool/entity_layout_migration.py science/tests/test_entity_layout_migration.py
+rtk git commit -m "feat(migrate): exempt mappings sources + block dangling alias targets (Unit E, G10)"
 ```
 
 ---
@@ -970,7 +1040,7 @@ def test_date_dir_scoped_alias_avoids_bare_kind_word_collision(tmp_path: Path) -
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entity_layout_migration.py::test_date_dir_scoped_alias_avoids_bare_kind_word_collision -v`
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_layout_migration.py::test_date_dir_scoped_alias_avoids_bare_kind_word_collision -v`
 Expected: FAIL — both files produce alias `interpretation:interpretation`, recorded as an `alias` collision.
 
 - [ ] **Step 3: Scope the stem alias by date-dir when the stem is a bare kind word**
@@ -995,14 +1065,14 @@ The rest of the stem-alias block (the `if stem_alias in plan.id_map:` ambiguity 
 
 - [ ] **Step 4: Run the test + full module**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entity_layout_migration.py -v`
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_layout_migration.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd ~/d/science && git add science/src/science_tool/entity_layout_migration.py science/tests/test_entity_layout_migration.py
-git commit -m "feat(migrate): date-dir-scoped aliases for bare-kind-word stems (Unit F)"
+cd ~/d/science && rtk git add science/src/science_tool/entity_layout_migration.py science/tests/test_entity_layout_migration.py
+rtk git commit -m "feat(migrate): date-dir-scoped aliases for bare-kind-word stems (Unit F)"
 ```
 
 ---
@@ -1044,7 +1114,7 @@ def test_real_tokens_are_not_filtered(token: str) -> None:
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entity_layout_migration.py -k "placeholder_tokens or real_tokens" -v`
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_layout_migration.py -k "placeholder_tokens or real_tokens" -v`
 Expected: FAIL — the stub returns `False` for everything, so the placeholder cases fail.
 
 - [ ] **Step 3: Implement the placeholder filter**
@@ -1068,14 +1138,14 @@ def _is_placeholder_token(token: str) -> bool:
 
 - [ ] **Step 4: Run the tests + full module**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_entity_layout_migration.py -v`
+Run: `cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_layout_migration.py -v`
 Expected: PASS. Also re-run the Task 3 `test_code_fenced_and_inline_example_ids_warn_not_block` — `hypothesis:hNN` is now filtered from warnings too (it was already absent via code-span stripping; this is belt-and-suspenders).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd ~/d/science && git add science/src/science_tool/entity_layout_migration.py science/tests/test_entity_layout_migration.py
-git commit -m "feat(migrate): filter placeholder tokens from ref warnings (Unit G)"
+cd ~/d/science && rtk git add science/src/science_tool/entity_layout_migration.py science/tests/test_entity_layout_migration.py
+rtk git commit -m "feat(migrate): filter placeholder tokens from ref warnings (Unit G)"
 ```
 
 ---
@@ -1091,7 +1161,7 @@ These are edits in **other project repos** (not the `~/d/science` branch). With 
 - [ ] **Step 1: Locate the two project roots and their local manifests**
 
 ```bash
-grep -nA2 "natural-systems\|protein-landscape" ~/.config/science/config.yaml
+rtk rg -n -A2 "natural-systems|protein-landscape" ~/.config/science/config.yaml
 ```
 For each, the local manifest is `<root>/knowledge/sources/<local-profile>/manifest.yaml` where `<local-profile>` is the `knowledge_profiles.local` value in `<root>/science.yaml` (default `local`).
 
@@ -1105,7 +1175,7 @@ In natural-systems' local manifest, change the `meta` kind's `canonical_prefix` 
     ...
 ```
 
-Verify: `cd <natural-systems-root> && uv run --frozen --project ~/d/science/science python -c "from pathlib import Path; from science_tool.entities import local_kind_warnings; print(local_kind_warnings(Path('.')))"` — expect `[]` for the `meta` kind.
+Verify: `cd <natural-systems-root> && rtk uv run --frozen --project ~/d/science/science python -c "from pathlib import Path; from science_tool.entities import local_kind_warnings; print(local_kind_warnings(Path('.')))"` — expect `[]` for the `meta` kind.
 
 - [ ] **Step 3: Remove protein-landscape's vestigial kinds**
 
@@ -1119,16 +1189,16 @@ Expect "No such file or directory" (or empty) before deleting the kinds.
 - [ ] **Step 4: Dry-run both projects to confirm clean readiness**
 
 ```bash
-cd <natural-systems-root> && uv run --frozen --project ~/d/science/science science entities migrate --project-root . > /tmp/migration-audit/natural-systems.json
-cd <protein-landscape-root> && uv run --frozen --project ~/d/science/science science entities migrate --project-root . > /tmp/migration-audit/protein-landscape.json
+cd <natural-systems-root> && rtk uv run --frozen --project ~/d/science/science science entities migrate --project-root . > /tmp/migration-audit/natural-systems.json
+cd <protein-landscape-root> && rtk uv run --frozen --project ~/d/science/science science entities migrate --project-root . > /tmp/migration-audit/protein-landscape.json
 ```
 Expect: no crash; `collisions: []`, `unresolved_references: {}`, `undated_entities: []` in each (warnings may be populated).
 
 - [ ] **Step 5: Commit each project repo separately**
 
 ```bash
-cd <natural-systems-root> && git add knowledge/sources && git commit -m "fix(manifest): meta kind canonical_prefix doc->meta for v3 migration"
-cd <protein-landscape-root> && git add knowledge/sources && git commit -m "fix(manifest): drop vestigial methods/paper-synthesis kinds for v3 migration"
+cd <natural-systems-root> && rtk git add knowledge/sources && rtk git commit -m "fix(manifest): meta kind canonical_prefix doc->meta for v3 migration"
+cd <protein-landscape-root> && rtk git add knowledge/sources && rtk git commit -m "fix(manifest): drop vestigial methods/paper-synthesis kinds for v3 migration"
 ```
 
 ---
@@ -1144,7 +1214,7 @@ Re-run the readiness audit's dry-run across all 19 registered projects and confi
 - [ ] **Step 1: Run the full test suite once more**
 
 ```bash
-cd ~/d/science/science && uv run --frozen pytest tests/test_entity_layout_migration.py tests/test_entities_local_policies.py tests/test_entity_conformance.py -v
+cd ~/d/science/science && rtk uv run --frozen pytest tests/test_entity_layout_migration.py tests/test_entities_local_policies.py tests/test_entity_conformance.py -v
 ```
 Expected: all PASS.
 
@@ -1153,7 +1223,7 @@ Expected: all PASS.
 For each project root in `~/.config/science/config.yaml`, run the migrator dry-run and capture JSON. This may be dispatched as parallel sub-agents (one per project) writing to `/tmp/migration-audit/<name>.json`, mirroring the original audit. Per project:
 
 ```bash
-cd <project-root> && uv run --frozen --project ~/d/science/science science entities migrate --project-root . > /tmp/migration-audit/<name>.json 2>/tmp/migration-audit/<name>.err
+cd <project-root> && rtk uv run --frozen --project ~/d/science/science science entities migrate --project-root . > /tmp/migration-audit/<name>.json 2>/tmp/migration-audit/<name>.err
 ```
 
 - [ ] **Step 3: Assert the success criteria**
@@ -1173,8 +1243,8 @@ For cancer-ovarian, cancer-head-and-neck, cancer-prostate, cancer-breast, and he
 Append a "Post-implementation re-run (YYYY-MM-DD)" section to `~/d/science/docs/audits/2026-06-06-layout-v3-migration-readiness-audit.md` recording the new readiness table (expected: 18 ready / 1 blocked on content), and commit:
 
 ```bash
-cd ~/d/science && git add docs/audits/2026-06-06-layout-v3-migration-readiness-audit.md
-git commit -m "doc(audit): record post-robustness 19-project re-run results"
+cd ~/d/science && rtk git add docs/audits/2026-06-06-layout-v3-migration-readiness-audit.md
+rtk git commit -m "doc(audit): record post-robustness 19-project re-run results"
 ```
 
 - [ ] **Step 6: Final review handoff**
@@ -1187,5 +1257,6 @@ After all tasks pass, dispatch the final whole-implementation code review (per s
 
 - **Spec coverage:** Unit A → Task 3; Unit B → Task 1; Unit C → Task 4; Unit D → Task 2; Unit E → Task 5; Unit F → Task 6; Unit G → Task 7; companion manifest fixes → Task 8; integration gate → Task 9. All seven units + companions + integration are covered.
 - **Keystone fidelity:** Task 3 implements blocking as `audit_project_sources` over a simulated post-move `ProjectSources` (markdown_overrides inject moved entities at new paths; `manual_aliases` augmented with `plan.id_map` for disk-resident non-markdown sources). This inherits the entire audited field surface and acceptance exceptions with no field enumeration — matching the thrice-reviewed design and the post-mutation backstop by construction.
+- **Alias-target gap (review fix):** the graph audit does not validate `manual_aliases` targets (`graph/migrate.py:146` + `reference_resolution.py:63` — any alias-map key resolves without proving its target exists). Task 5 closes this with an explicit `_dangling_alias_targets` check that resolves each target through the simulated alias map (valid old-id targets resolve via the injected `id_map`; external/`meta:*` exempt) and feeds the structural blocker set. Verified empirically before writing the task.
 - **API stability:** `load_local_entity_policies` (Task 1) and `discover_legacy_entities` (Task 4) keep their existing signatures; new behavior is exposed through sibling functions (`local_kind_warnings`, `_discover_with_skips`), so no caller breaks.
 - **Type consistency:** `_is_placeholder_token` is introduced as a stub in Task 3 and given its real body in Task 7 (same signature). `_simulated_postmove_audit_failures` returns `list[dict]`; `_audit_failures_to_report` adapts it to the report's `dict[str, list[str]]` contract.
