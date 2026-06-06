@@ -26,6 +26,25 @@ citekey stem (e.g. `Smith2024.md` → `entities/papers/Smith2024.md`).
 The `specs/` directory is retired. Singletons (`research-question.md`,
 `claim-registry.yaml`) move to `entities/` at their canonical paths.
 
+### Project-local kinds
+
+Kinds registered under `entity_kinds:` in your local knowledge profile
+(`knowledge/sources/<profile>/manifest.yaml`) are migrated exactly like core
+kinds: each markdown file moves to `entities/<kind>/NNNN-slug.md` with a
+zero-padded sequence number, and all references are rewritten. Prose-only files
+get synthesized frontmatter (`title` from the first H1, `created` from a
+`**Date:**` header, `status` defaulting to `active` (or the kind's declared `default_status:`)).
+
+The kind `name` must equal its `canonical_prefix` (the name is the id prefix
+and the directory segment). By default the home is `entities/<name>/` with
+`numeric` numbering; override per kind in the manifest with optional `home:` /
+`strategy:` fields (`numeric` or `citekey`; `singleton` is not permitted for
+local kinds), and constrain status with `default_status:` / `statuses:`.
+
+Structurally-defined local entities (declared in
+`knowledge/sources/<profile>/entities.yaml`, not as markdown files) are not
+affected — they load regardless of layout.
+
 ## Preconditions
 
 1. **Clean working tree.** Run `git status` and commit or stash any changes
