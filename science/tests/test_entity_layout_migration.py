@@ -811,3 +811,24 @@ def test_synthesize_local_kind_closed_set_keeps_valid_status(tmp_path) -> None:
     fm = synthesize_frontmatter(kind="design", body=body, fallback_created="2026-01-01",
                                 project_root=tmp_path)
     assert fm["status"] == "final"  # in-vocabulary prose status kept
+
+
+# ---------------------------------------------------------------------------
+# Task 7: plan_migration threads project_root for local kinds
+# ---------------------------------------------------------------------------
+
+
+def test_plan_numbers_and_homes_local_kind(tmp_path) -> None:
+    _with_local_profile(tmp_path)
+    _write(tmp_path, "doc/design/early.md",
+           '---\nid: "design:early"\ntype: design\ncreated: "2026-01-01"\ntitle: Early\nstatus: active\n---\nb\n')
+    _write(tmp_path, "doc/design/late.md",
+           '---\nid: "design:late"\ntype: design\ncreated: "2026-02-01"\ntitle: Late\nstatus: active\n---\nb\n')
+    plan = plan_migration(tmp_path)
+    by_old = {m.old_id: m for m in plan.moves}
+    assert by_old["design:early"].new_id == "design:0001-early"
+    assert by_old["design:early"].new_rel_path == "entities/design/0001-early.md"
+    assert by_old["design:late"].new_id == "design:0002-late"
+    assert plan.id_map["design:early"] == "design:0001-early"
+    assert by_old["design:late"].new_rel_path == "entities/design/0002-late.md"
+    assert plan.id_map["design:late"] == "design:0002-late"

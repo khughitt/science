@@ -321,7 +321,7 @@ def plan_migration(project_root: Path) -> MigrationPlan:
     # _plan_singletons via explicit paths — never numbered or frontmatter-synthesized
     # here. They also have no status vocabulary, so synthesize_frontmatter would
     # KeyError on them. Exclude them from the move-planning set entirely.
-    movable = [e for e in entities if resolve_path_policy(e.kind).strategy != "singleton"]
+    movable = [e for e in entities if resolve_path_policy(e.kind, project_root=project_root).strategy != "singleton"]
     # Synthesize complete frontmatter BEFORE planning so created/title/slug are
     # correct even for prose-header (frontmatterless) files.
     normalized: dict[str, dict] = {
@@ -333,7 +333,7 @@ def plan_migration(project_root: Path) -> MigrationPlan:
         by_kind.setdefault(entity.kind, []).append(entity)
 
     for kind, items in by_kind.items():
-        policy = resolve_path_policy(kind)
+        policy = resolve_path_policy(kind, project_root=project_root)
         if policy.strategy == "singleton":
             # Singleton kinds (research-question, claim-registry) are relocated by
             # _plan_singletons via explicit by-path rules, never numbered. Skip them
@@ -362,7 +362,7 @@ def plan_migration(project_root: Path) -> MigrationPlan:
             # calendar date, NOT a sequence number. Always treat such stems as
             # non-conformant so they get assigned a proper NNNN sequence number.
             is_date_stem = _DATE_PREFIX_RE.match(stem) is not None
-            if not is_date_stem and local_part_conforms(kind, stem):
+            if not is_date_stem and local_part_conforms(kind, stem, project_root=project_root):
                 number = int(stem.split("-", 1)[0])
                 if number in existing_numbers:
                     # A conformant legacy file wants a number an entities/ file
@@ -386,7 +386,7 @@ def plan_migration(project_root: Path) -> MigrationPlan:
             number = provisional[entity.rel_path]
             stem = Path(entity.rel_path).stem
             is_date_stem = _DATE_PREFIX_RE.match(stem) is not None
-            if not is_date_stem and local_part_conforms(kind, stem):
+            if not is_date_stem and local_part_conforms(kind, stem, project_root=project_root):
                 # Conformant stem (e.g. "0003-foo-bar"): keep it verbatim as the
                 # local part so IDs and slugs remain stable across re-runs.
                 local = stem
