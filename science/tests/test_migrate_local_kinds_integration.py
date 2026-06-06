@@ -106,6 +106,8 @@ def test_migrate_dry_run_surfaces_unmapped_local_ref(tmp_path: Path) -> None:
     _git_init(tmp_path)
 
     report = migrate_layout(tmp_path, apply=False)
-    # unresolved_references is dict[str, list[str]]: file_rel -> [token, ...]
-    flat = [t for toks in report["unresolved_references"].values() for t in toks]
+    # Under Unit A a dangling ref in a prose BODY is a non-blocking warning, surfaced
+    # in unresolved_warnings (dict[str, list[str]]: file_rel -> [token, ...]); only
+    # structural (audited-field) dangling refs go to unresolved_references.
+    flat = [t for toks in report["unresolved_warnings"].values() for t in toks]
     assert "design:ghost" in flat  # dry-run surfaces the unmapped local-kind ref

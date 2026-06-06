@@ -371,19 +371,20 @@ def test_migrate_apply_rewrites_inplace_prose_doc(tmp_path: Path) -> None:
     assert "hypothesis:h01-alpha" not in summary
 
 
-def test_migrate_unresolved_ref_blocks_apply(tmp_path: Path) -> None:
-    """(e) A prose doc file containing a dead hypothesis:h99-ghost token causes apply=True to raise ValueError
-    and dry-run lists it under unresolved_references.
+def test_migrate_unresolved_prose_ref_warns_not_blocks(tmp_path: Path) -> None:
+    """(e) Under Unit A a dead hypothesis:h99-ghost token in a prose body is a
+    non-blocking warning (unresolved_warnings), not a structural blocker: the dry-run
+    lists it under unresolved_warnings (NOT unresolved_references) and --apply succeeds.
     Uses doc/context/ — not in _DIR_TO_KIND — so it is not mis-discovered as an entity."""
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
     _write(tmp_path, "specs/hypotheses/h01-alpha.md", '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
     _write(tmp_path, "doc/context/summary.md", "See hypothesis:h99-ghost which is dead.\n")
     _git_init(tmp_path)
     dry = migrate_layout(tmp_path, apply=False)
-    assert dry["unresolved_references"]
-    assert any("hypothesis:h99-ghost" in tokens for tokens in dry["unresolved_references"].values())
-    with _pytest.raises(ValueError, match="unresolved"):
-        migrate_layout(tmp_path, apply=True)
+    assert dry["unresolved_references"] == {}  # prose body ref is not structural
+    flat_warn = [t for toks in dry["unresolved_warnings"].values() for t in toks]
+    assert "hypothesis:h99-ghost" in flat_warn
+    migrate_layout(tmp_path, apply=True)  # prose ghost ref does not block
 
 
 # ---------------------------------------------------------------------------
@@ -445,10 +446,12 @@ def test_migrate_version_not_bumped_when_audit_fails(tmp_path: Path) -> None:
     )
     _git_init(tmp_path)
 
-    with _pytest.raises(ValueError, match="working tree"):
+    with _pytest.raises(ValueError, match="structural"):
         migrate_layout(tmp_path, apply=True)
 
-    # layout_version must NOT have been bumped.
+    # Caught pre-mutation: no files moved, version untouched.
+    assert (tmp_path / "specs/hypotheses/h01-alpha.md").exists()
+    assert not (tmp_path / "entities").exists()
     manifest = yaml.safe_load((tmp_path / "science.yaml").read_text())
     assert manifest.get("layout_version") == 2
 
@@ -567,7 +570,9 @@ def test_migrate_does_not_flag_unmigrated_kind(tmp_path: Path) -> None:
     project (observation stored in YAML registry, not markdown).
 
     Contrast: a reference to a non-existent question 'question:99-ghost' (a kind
-    that IS migrated as markdown) MUST still be reported."""
+    that IS migrated as markdown) MUST still be reported. Under Unit A this prose
+    body token is a non-blocking warning (unresolved_warnings), not a structural
+    blocker."""
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
     _write(tmp_path, "doc/questions/q01-myq.md",
            '---\nid: "question:q01-myq"\ntype: question\ncreated: "2026-01-01"\n'
@@ -577,16 +582,19 @@ def test_migrate_does_not_flag_unmigrated_kind(tmp_path: Path) -> None:
            "See observation:swan-foo and question:99-ghost for context.\n")
     _git_init(tmp_path)
     report = migrate_layout(tmp_path, apply=False)
-    all_unresolved_tokens: list[str] = [
+    all_warn_tokens: list[str] = [
         token
-        for tokens in report["unresolved_references"].values()
+        for tokens in report["unresolved_warnings"].values()
         for token in tokens
     ]
-    assert "observation:swan-foo" not in all_unresolved_tokens, (
+    assert "observation:swan-foo" not in all_warn_tokens, (
         "observation:swan-foo must not be flagged (observation not a migrated markdown kind)"
     )
-    assert "question:99-ghost" in all_unresolved_tokens, (
+    assert "question:99-ghost" in all_warn_tokens, (
         "question:99-ghost must be flagged (question IS a migrated kind with no mapping)"
+    )
+    assert report["unresolved_references"] == {}, (
+        "a prose body ref is not a structural blocker under Unit A"
     )
 
 
@@ -890,3 +898,109 @@ def test_fallback_created_unparseable_date_key_falls_through_to_sentinel() -> No
 def test_fallback_created_filename_prefix_still_wins_over_nothing() -> None:
     e = _legacy("doc/reports/2026-05-30-triage.md", {})
     assert _fallback_created(e) == "2026-05-30"
+
+
+# ---------------------------------------------------------------------------
+# Unit A: position-aware blocking via simulated post-move audit
+# ---------------------------------------------------------------------------
+
+
+def test_code_fenced_and_inline_example_ids_warn_not_block(tmp_path: Path) -> None:
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(
+        tmp_path, "specs/hypotheses/h01-alpha.md",
+        '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+        'title: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\n'
+        "See `hypothesis:hNN` and:\n```markdown\nhypothesis:disease-label-misalignment\n```\n",
+    )
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)
+    # Code-fence / inline-code example ids do not appear in either bucket.
+    flat_warn = [t for toks in dry["unresolved_warnings"].values() for t in toks]
+    assert "hypothesis:disease-label-misalignment" not in flat_warn
+    assert "hypothesis:hNN" not in flat_warn
+    assert dry["unresolved_references"] == {}  # nothing structural dangling
+    # apply must succeed (clean project, only example ids in prose).
+    migrate_layout(tmp_path, apply=True)
+    assert (tmp_path / "entities/hypotheses/0001-alpha.md").exists()
+
+
+def test_cross_project_prose_pointer_warns_not_blocks(tmp_path: Path) -> None:
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(
+        tmp_path, "specs/hypotheses/h01-a.md",
+        '---\nid: "hypothesis:h01-a"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+        'title: A\nstatus: proposed\nupdated: "2026-01-01"\n---\n'
+        "Builds on hypothesis:h00-working-model from the parent project.\n",
+    )
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)
+    flat_warn = [t for toks in dry["unresolved_warnings"].values() for t in toks]
+    assert "hypothesis:h00-working-model" in flat_warn  # reported...
+    assert dry["unresolved_references"] == {}  # ...but not blocking
+    migrate_layout(tmp_path, apply=True)  # does not raise
+
+
+def test_wikilink_to_existing_paper_warns_not_blocks(tmp_path: Path) -> None:
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "doc/background/papers/Adams2025.md",
+           '---\nid: "paper:Adams2025"\ntype: paper\ncreated: "2026-01-01"\n'
+           'title: Adams\nstatus: active\nupdated: "2026-01-01"\n---\nbody\n')
+    _write(tmp_path, "doc/reports/2026-01-02-note.md",
+           '---\nid: "report:2026-01-02-note"\ntype: report\ncreated: "2026-01-02"\n'
+           'title: Note\nstatus: active\nupdated: "2026-01-02"\n---\nSee [[Adams2025]].\n')
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)
+    flat_warn = [t for toks in dry["unresolved_warnings"].values() for t in toks]
+    assert "[[Adams2025]]" in flat_warn
+    assert dry["unresolved_references"] == {}
+
+
+def test_dangling_structural_related_ref_blocks_pre_mutation(tmp_path: Path) -> None:
+    # A conformant-but-dangling ref in a `related:` list (the case rewrite_references
+    # leftovers cannot see) must block --apply BEFORE any git mv.
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "specs/hypotheses/h01-alpha.md",
+           '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+           'title: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
+    _write(tmp_path, "doc/questions/q01-myq.md",
+           '---\nid: "question:q01-myq"\ntype: question\ncreated: "2026-01-02"\n'
+           'title: My Q\nstatus: active\nupdated: "2026-01-02"\n'
+           'related: ["hypothesis:9999-nope"]\n---\nBody.\n')
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)
+    assert dry["unresolved_references"]  # structural blocker present in dry-run
+    with _pytest.raises(ValueError, match="structural"):
+        migrate_layout(tmp_path, apply=True)
+    assert not (tmp_path / "entities").exists()  # no mutation occurred
+    assert (tmp_path / "doc/questions/q01-myq.md").exists()
+
+
+def test_dangling_ref_in_non_related_audited_field_blocks(tmp_path: Path) -> None:
+    # Proves the blocking surface tracks the WHOLE graph audit, not just `related:`.
+    # A proposition `commits_to:` (audited) pointing at a dangling id must block.
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "specs/propositions/p01-claim.md",
+           '---\nid: "proposition:p01-claim"\ntype: proposition\ncreated: "2026-01-01"\n'
+           'title: Claim\nstatus: draft\nupdated: "2026-01-01"\n'
+           'commits_to: ["hypothesis:9999-nope"]\n---\nbody\n')
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)
+    assert dry["unresolved_references"]
+    with _pytest.raises(ValueError, match="structural"):
+        migrate_layout(tmp_path, apply=True)
+
+
+def test_accepted_external_and_bibliography_refs_do_not_block(tmp_path: Path) -> None:
+    # cite:* in source_refs, external go:/path refs, and meta:* are accepted by the
+    # graph audit without resolution — they must NOT block.
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "specs/hypotheses/h01-a.md",
+           '---\nid: "hypothesis:h01-a"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+           'title: A\nstatus: proposed\nupdated: "2026-01-01"\n'
+           'source_refs: ["cite:Adams2025"]\nrelated: ["meta:big-picture-2026"]\n'
+           'evidence_refs: ["go:0008150", "./data/x.parquet"]\n---\nbody\n')
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)
+    assert dry["unresolved_references"] == {}
+    migrate_layout(tmp_path, apply=True)  # does not raise

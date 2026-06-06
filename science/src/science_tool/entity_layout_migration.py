@@ -21,6 +21,7 @@ from science_tool.entities import (
     derive_slug,
     is_markdown_entity_kind,
     load_local_entity_policies,
+    local_kind_warnings,
     local_part_conforms,
     markdown_entity_kinds,
     resolve_path_policy,
@@ -552,6 +553,22 @@ _REF_TOKEN_RE = re.compile(r"\b([a-z][a-z-]*):([A-Za-z0-9][A-Za-z0-9_.-]*)\b")
 _LEGACY_LOCAL_SHAPE = re.compile(r"^(?:[A-Za-z]+\d+|\d{4}-\d{2}-\d{2})(?:-|$)")
 _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 
+_FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
+_INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
+
+
+def _strip_code_spans(text: str) -> str:
+    """Remove fenced code blocks and inline-code spans so example ids inside
+    documentation do not generate reference warnings."""
+    text = _FENCE_RE.sub("", text)
+    return _INLINE_CODE_RE.sub("", text)
+
+
+def _is_placeholder_token(token: str) -> bool:
+    """Stub — Unit G replaces this with the real placeholder filter. Returns
+    False so every prose token is kept as a warning until Unit G lands."""
+    return False
+
 
 def rewrite_references(
     text: str,
@@ -628,6 +645,59 @@ def _render(frontmatter: dict, body: str) -> str:
     return "---\n" + yaml.safe_dump(frontmatter, sort_keys=False) + "---\n" + body
 
 
+def _simulated_postmove_audit_failures(
+    project_root: Path,
+    plan: MigrationPlan,
+    rewritten: dict[str, str],
+    singleton_text: dict[str, str],
+    inplace_text: dict[str, str],
+) -> list[dict]:
+    """Graph-audit-equivalent validation over a simulated post-move source set.
+
+    Reproduces the post-mutation backstop (migrate_layout step 4) BEFORE any disk
+    mutation, with no disk writes:
+
+    - markdown_overrides inject every post-move markdown file at its NEW path, so
+      the MarkdownAdapter discovers moved entities under entities/<kind>/ (their
+      legacy doc/specs homes are never scanned) carrying their rewritten, new-id
+      content. (`MarkdownAdapter.discover` adds any `.md` rel-path in virtual_files
+      even when absent from disk; `load_raw` reads the override content.)
+    - manual_aliases is augmented with plan.id_map (old_id/stem/shortform ->
+      new_id) so disk-resident sources the override channel cannot reach — tasks,
+      datapackages, relations/bindings on disk — still resolve old ids to their
+      new identity exactly as they would after the in-place rewrite on --apply.
+
+    Returns the audit's `fail` rows. Inherits the audit's full field surface and
+    its acceptance exceptions (cite:* in source_refs/evidence_refs, external
+    URLs/paths/go:/mesh:/doi:, meta:*) with zero re-implementation.
+    """
+    from science_tool.graph.migrate import audit_project_sources
+    from science_tool.graph.sources import load_project_sources
+
+    merged = {**rewritten, **singleton_text, **inplace_text}
+    overrides = {rel: text for rel, text in merged.items() if rel.endswith(".md")}
+    # strict_core_schema=False: a synthesized entity can carry the undated sentinel
+    # (created: 9999-99-99), which fails core-date schema validation. The dry-run
+    # must never crash — undated entities are surfaced and blocked by the separate
+    # undated guard, so here we tolerate them as SkippedEntity (warn, not fail)
+    # instead of letting load_project_sources raise mid-simulation.
+    sources = load_project_sources(project_root, markdown_overrides=overrides, strict_core_schema=False)
+    sources = sources.model_copy(
+        update={"manual_aliases": {**sources.manual_aliases, **plan.id_map}}
+    )
+    rows, failed = audit_project_sources(sources)
+    return [r for r in rows if r.get("status") == "fail"] if failed else []
+
+
+def _audit_failures_to_report(rows: list[dict]) -> dict[str, list[str]]:
+    """Shape audit fail rows into {source -> sorted unique targets} for the
+    report's `unresolved_references` (preserving its dict-of-lists contract)."""
+    out: dict[str, list[str]] = {}
+    for row in rows:
+        out.setdefault(str(row.get("source", "?")), []).append(str(row.get("target", "?")))
+    return {source: sorted(set(targets)) for source, targets in out.items()}
+
+
 def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     plan = plan_migration(project_root)
     legacy_entities = list(discover_legacy_entities(project_root))
@@ -689,20 +759,36 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
                 continue  # handled via `rewritten` at its new path
             inplace_text[rel] = path.read_text(encoding="utf-8")
 
-    all_unresolved: dict[str, list[str]] = {}
+    # Full-text rewrite (produces the content --apply will write) + a separate
+    # code-stripped pass that feeds the non-blocking prose-warning bucket.
+    unresolved_warnings: dict[str, list[str]] = {}
     for bucket in (rewritten, singleton_text, inplace_text):
         for rel, text in list(bucket.items()):
-            out, unresolved = rewrite_references(text, plan.id_map, policed_kinds=policed_kinds, project_root=project_root)
+            out, _ = rewrite_references(
+                text, plan.id_map, policed_kinds=policed_kinds, project_root=project_root
+            )
             bucket[rel] = out
-            if unresolved:
-                all_unresolved[rel] = unresolved
+            _, warn_tokens = rewrite_references(
+                _strip_code_spans(text), plan.id_map, policed_kinds=policed_kinds, project_root=project_root
+            )
+            warn_tokens = [t for t in warn_tokens if not _is_placeholder_token(t)]
+            if warn_tokens:
+                unresolved_warnings[rel] = warn_tokens
+
+    # Blocking is graph-audit-equivalent validation over the simulated post-move
+    # source set — the SAME check the post-mutation backstop runs, moved earlier.
+    structural_failures = _simulated_postmove_audit_failures(
+        project_root, plan, rewritten, singleton_text, inplace_text
+    )
 
     report = {
         "moves": [vars(m) for m in plan.moves],
         "singletons": [vars(s) for s in plan.singletons],
         "id_map": plan.id_map,
         "collisions": plan.collisions,
-        "unresolved_references": all_unresolved,
+        "unresolved_references": _audit_failures_to_report(structural_failures),
+        "unresolved_warnings": unresolved_warnings,
+        "local_kind_warnings": local_kind_warnings(project_root),
         "undated_entities": undated_entities,
         "applied": apply,
     }
@@ -713,8 +799,11 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     # Pre-mutation guards — raise cleanly with no tree modification.
     if plan.collisions:
         raise ValueError(f"collisions block --apply: {plan.collisions}")
-    if all_unresolved:
-        raise ValueError(f"unresolved references block --apply: {all_unresolved}")
+    if structural_failures:
+        raise ValueError(
+            f"unresolved structural references block --apply "
+            f"(simulated post-move graph audit): {structural_failures[:10]}"
+        )
     if undated_entities:
         raise ValueError(
             f"undated entities block --apply (add a **Date:** header or frontmatter "
