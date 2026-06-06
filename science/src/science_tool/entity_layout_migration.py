@@ -779,9 +779,48 @@ def _simulated_postmove_audit_failures(
                 "details": str(exc),
             }
         ]
+    # Capture the real mappings.yaml aliases BEFORE injecting plan.id_map so that
+    # _dangling_alias_targets only validates project-authored alias entries; plan
+    # shortform/stem entries are rewrite tokens, not authoritative references.
+    mappings_aliases = dict(sources.manual_aliases)
     sources = sources.model_copy(update={"manual_aliases": {**sources.manual_aliases, **plan.id_map}})
     rows, failed = audit_project_sources(sources)
-    return [r for r in rows if r.get("status") == "fail"] if failed else []
+    audit_fails = [r for r in rows if r.get("status") == "fail"] if failed else []
+    return audit_fails + _dangling_alias_targets(sources, mappings_aliases)
+
+
+def _dangling_alias_targets(sources, mappings_aliases: dict[str, str]) -> list[dict]:
+    """Alias targets the graph audit silently accepts but that resolve to no
+    entity. `audit_project_sources` passes manual_aliases into the resolver but
+    never proves each target exists; this closes that gap. Targets are resolved
+    THROUGH the simulated alias map (sources.manual_aliases, which includes
+    plan.id_map), so a valid target referenced by its OLD id (rewritten to a new
+    identity via the injected id_map) is accepted. External (URL/path/go:/mesh:/doi:)
+    and meta:* targets are exempt, matching the audit's own acceptance exceptions.
+
+    Only `mappings_aliases` (the real project mappings.yaml entries, before
+    plan.id_map injection) are validated — plan.id_map shortform/stem entries are
+    rewrite tokens, not authoritative references, and must not be validated here.
+    """
+    from science_tool.graph.reference_resolution import ReferenceResolver
+    from science_tool.graph.sources import is_external_reference, is_metadata_reference
+
+    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
+    fails: list[dict] = []
+    for alias, target in mappings_aliases.items():
+        if is_external_reference(target) or is_metadata_reference(target):
+            continue
+        if resolver.resolve(target).status != "resolved":
+            fails.append(
+                {
+                    "check": "dangling_alias_target",
+                    "status": "fail",
+                    "source": alias,
+                    "field": "aliases",
+                    "target": target,
+                }
+            )
+    return fails
 
 
 def _audit_failures_to_report(rows: list[dict]) -> dict[str, list[str]]:
@@ -861,6 +900,9 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
         for rel, text in list(bucket.items()):
             out, _ = rewrite_references(text, plan.id_map, policed_kinds=policed_kinds, project_root=project_root)
             bucket[rel] = out
+            if rel.endswith("mappings.yaml"):
+                continue  # Unit E: alias source keys are definitions, not refs;
+                # alias TARGETS are validated separately (see _dangling_alias_targets)
             _, warn_tokens = rewrite_references(
                 _strip_code_spans(text), plan.id_map, policed_kinds=policed_kinds, project_root=project_root
             )

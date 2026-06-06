@@ -1188,3 +1188,48 @@ def test_frontmatterless_file_at_exact_root_with_id_is_discovered(tmp_path: Path
     _write(tmp_path, "doc/questions/q05-y.md", '---\nid: "question:q05-y"\n---\nbody\n')
     found = {e.rel_path for e in discover_legacy_entities(tmp_path)}
     assert "doc/questions/q05-y.md" in found
+
+
+# ---------------------------------------------------------------------------
+# Task 5 (Unit E): mappings.yaml handling + alias-target validation
+# ---------------------------------------------------------------------------
+
+
+def test_mappings_yaml_alias_source_key_is_not_a_warning(tmp_path: Path) -> None:
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\nknowledge_profiles:\n  local: local\n")
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-a.md",
+        '---\nid: "hypothesis:h01-a"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+        'title: A\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
+    # Real mappings.yaml schema: a top-level `aliases:` block whose SOURCE key
+    # looks like a ref token must not be flagged as a warning.
+    _write(tmp_path, "knowledge/sources/local/mappings.yaml", "aliases:\n  hypothesis:legacy-name: hypothesis:h01-a\n")
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)
+    flat_warn = [t for toks in dry["unresolved_warnings"].values() for t in toks]
+    assert "hypothesis:legacy-name" not in flat_warn  # source key is a definition
+    assert dry["unresolved_references"] == {}  # the target (h01-a) resolves → no blocker
+    migrate_layout(tmp_path, apply=True)  # clean project applies
+
+
+def test_mappings_yaml_dangling_alias_target_blocks(tmp_path: Path) -> None:
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\nknowledge_profiles:\n  local: local\n")
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-a.md",
+        '---\nid: "hypothesis:h01-a"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+        'title: A\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
+    # Alias TARGET points at a nonexistent entity — the audit would not catch it,
+    # so the explicit alias-target check must block --apply.
+    _write(
+        tmp_path, "knowledge/sources/local/mappings.yaml", "aliases:\n  hypothesis:legacy-name: hypothesis:9999-nope\n"
+    )
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)
+    assert dry["unresolved_references"]  # dangling target surfaced as a structural blocker
+    with _pytest.raises(ValueError, match="structural"):
+        migrate_layout(tmp_path, apply=True)
+    assert not (tmp_path / "entities").exists()
