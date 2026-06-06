@@ -393,8 +393,15 @@ def _slug_from_legacy(entity: "LegacyEntity", frontmatter: dict) -> str:
     except EntityCommandError:
         pass
 
-    # Final fallback: the synthesized title is always present and >= 2 chars.
-    return derive_slug(str(title)) if title else derive_slug(f"untitled-{entity.kind}")
+    # Final fallback. A real H1 title may itself be unsluggable (e.g. normalizes
+    # to <2 chars), so try it but fall through to the always-valid untitled-<kind>
+    # slug rather than letting derive_slug raise and abort plan_migration.
+    if title:
+        try:
+            return derive_slug(str(title))
+        except EntityCommandError:
+            pass
+    return derive_slug(f"untitled-{entity.kind}")
 
 
 def plan_migration(project_root: Path) -> MigrationPlan:
