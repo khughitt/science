@@ -52,10 +52,18 @@ mechanical set, and the two crashes are eliminated.
 3. **Undated fallback — explicit keys only, still blocks.** Extend the creation-date fallback to
    consult `generated_at:` and `committed:`, but a file with genuinely no date anywhere still
    blocks (preserves the "entities must be dated" forcing function). No git-date fallback.
-4. **Entity discovery — exact-root-path match.** A file is a migratable entity only if its parent
-   path equals a registered entity root (`doc/papers`, `doc/questions`, `specs/hypotheses`,
-   `entities/<kind>`, and each local kind's declared home). Nested non-root dirs
-   (`doc/background/**`, `doc/archive/**`, …) are left in place, not swept in.
+4. **Entity discovery — exact-root path AND an entity signal; else skip+warn.** A file is a
+   migratable entity only if (a) its parent path equals a registered entity root (`doc/papers`,
+   `doc/questions`, `specs/hypotheses`, `entities/<kind>`, and each local kind's declared home),
+   **and** (b) it carries an entity signal: frontmatter `id:`, or explicit `type:`/`kind:`. A file
+   at a root lacking the signal is **skipped with a warning** (non-silent) — not discovered as an
+   entity, not a blocker. Exact-root alone is insufficient: direct-child prose docs at a real root
+   (pan-disease's `specs/hypotheses/cohort-adjudication-h01.md`, `h01-cohort.md`) have no `id:` and
+   must not be treated as hypotheses. Empirically safe: every real entity sampled (MM30 466/466,
+   pan-disease papers 56/56, real hypotheses 5/5) carries `id:`; only genuinely un-typed prose
+   lacks it. (Note: a file with an explicit `id:`/`type:` of a known kind is still discovered via
+   the existing id-prefix / type inference regardless of directory — the exact-root requirement
+   governs only the directory-name fallback path.)
 
 ## Architecture
 
@@ -93,6 +101,17 @@ generation (Unit F).
   is today caught only by the **post-mutation** graph audit
   (`tests/test_entity_layout_migration.py:417`); resolving structural refs directly moves that
   check **pre-mutation**, honoring the guard promise.
+- **Reuse the graph audit's acceptance semantics — do not reinvent them.** `_audit_reference`
+  (`graph/migrate.py:806`) accepts several structural refs *without* identity-map resolution, and
+  the pre-mutation check must mirror this exactly or it will invent **new** false blockers:
+  - `cite:*` bibliography refs in `source_refs`/`evidence_refs` (`is_bibliography_reference`);
+  - external refs — URLs, filesystem paths, and declared external prefixes `go:`/`mesh:`/`doi:`/…
+    (`is_external_reference`, `graph/sources.py:492`);
+  - `meta:*` metadata refs (`is_metadata_reference`).
+  The structural resolver therefore reuses the same `ReferenceResolver` + these three predicates
+  (ideally by running the existing `_audit_reference` against a simulated post-move identity/alias
+  set) so the pre- and post-mutation checks cannot diverge. A structural ref only blocks when
+  `_audit_reference` would `fail` on the post-move graph.
 - `rewrite_references` keeps performing the whole-text old→new rewrite (unchanged). Its leftover
   tokens that are **not** in any structural position feed the **warnings** bucket only.
 - When building the warnings bucket, strip fenced code blocks (```` ``` ````) and inline code
@@ -154,13 +173,23 @@ policy roots are the *new* `entities/<kind>` destinations — `resolve_path_poli
 - plus the **destination** `entities/<dir>`→kind paths (for re-running on a partly-migrated tree);
 - plus each **local kind's declared home** path.
 
-Match `Path(rel_path).parent` against the union of those full paths; a file whose parent path is
-not in the set is not an entity (left in place). `id`-prefix and explicit `type:`/`kind:`
-inference (which run before the dir fallback) are unchanged.
+Match `Path(rel_path).parent` against the union of those full paths. `id`-prefix and explicit
+`type:`/`kind:` inference (which run before the dir fallback) are unchanged — a file with an
+explicit id/type is still discovered regardless of directory.
+
+**Entity-signal gate (decision 4).** For files that reach the directory-name fallback (no explicit
+`type:`/`kind:`, no known id-prefix), require an entity signal — frontmatter `id:` (or `type:`/
+`kind:`) — in addition to the exact-root match. A file at a root **without** the signal is
+**skipped with a warning** (added to a `skipped_untyped` report list), not discovered as an entity.
+This is what excludes pan-disease's `specs/hypotheses/{cohort-adjudication-h01,h01-cohort}.md`
+(no `id:`), which exact-root alone cannot (`h01-cohort` is id-shaped by filename). It is safe for
+real entities, which universally carry `id:`.
 
 **Effect:** 3d-attention-bias `doc/background/papers|topics` + `doc/discussions`, seq-feats
-`doc/background/**`, and pan-disease's non-entity `specs/hypotheses/*` prose docs are no longer
-discovered as undated entities.
+`doc/background/**` (excluded by exact-root), and pan-disease's non-entity `specs/hypotheses/*`
+prose docs (excluded by the entity-signal gate) are no longer discovered as undated entities. Note
+the cats `doc/plans/kg-project-migration-guide.md` (no frontmatter) is now `skipped_untyped` rather
+than an undated blocker — the project adds frontmatter to include it.
 
 ### Unit D — Date-fallback extension (G9)
 
@@ -236,7 +265,13 @@ TDD per unit against a synthetic fixture project exercising every seam:
   leftovers can't see (regression guard for High-finding #1);
 - a **task** (in `tasks/active.md`) whose `related:`/`blocked_by:` points to a dangling id
   (Unit A: **blocks**) vs one pointing at a migrated id (rewritten, does not block);
-- a frontmatter-less file under `doc/background/papers` (Unit C: not discovered as an entity);
+- structural refs the graph audit accepts without resolution — `cite:Key2024` in `source_refs:`,
+  an external `go:0008150` / `./data/x.parquet` path, and a `meta:*` ref — must **not** block
+  (Unit A acceptance-semantics parity with `_audit_reference`);
+- a frontmatter-less file under `doc/background/papers` (Unit C: excluded by exact-root) **and** a
+  frontmatter-less prose doc directly under `specs/hypotheses` (Unit C: excluded by the
+  entity-signal gate → `skipped_untyped`, not an entity, not a blocker), vs a sibling with `id:`
+  (discovered normally);
 - a synthesis file with only `generated_at:` (Unit D: not undated) and a truly date-less file
   (Unit D: still blocks);
 - a `mappings.yaml` with an alias whose source key looks like a ref (Unit E: source exempt,
@@ -245,8 +280,12 @@ TDD per unit against a synthetic fixture project exercising every seam:
 
 **Integration check:** re-run the live 19-project dry-run from the audit. Expected: natural-systems
 and protein-landscape no longer crash; every project except seq-feats reaches `ready` (0
-collisions, 0 structural-unresolved, 0 undated) with **zero project-side edits**; warnings are
-populated but non-blocking. seq-feats remains blocked on its genuine content debt.
+collisions, 0 structural-unresolved, 0 undated) with **zero project-side edits**; warnings
+(`unresolved_warnings`, local-kind warnings, `skipped_untyped`) are populated but non-blocking.
+**Regression guard:** the 5 currently-clean leaf projects (cancer-ovarian/-head-and-neck/-prostate/
+-breast, health-immunity) must still migrate every entity — none of their real entities may land in
+`skipped_untyped` (confirms the entity-signal gate drops nothing real). seq-feats remains blocked on
+its genuine content debt.
 
 ## Affected files (science/)
 
