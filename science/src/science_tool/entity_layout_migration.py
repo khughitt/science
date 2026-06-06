@@ -644,6 +644,7 @@ _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 
 _FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
 _INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
+_PLACEHOLDER_LOCAL_RE = re.compile(r"^(?:[A-Za-z]NN|\d+-\d+|<.*>|[*…])$")
 
 
 def _strip_code_spans(text: str) -> str:
@@ -658,9 +659,14 @@ def _strip_code_spans(text: str) -> str:
 
 
 def _is_placeholder_token(token: str) -> bool:
-    """Stub — Unit G replaces this with the real placeholder filter. Returns
-    False so every prose token is kept as a warning until Unit G lands."""
-    return False
+    """True for tokens that are obviously not real ids: schema placeholders
+    (hNN/qNN), angle-bracket placeholders (<id>), numeric line ranges
+    (report:198-210), and wildcards (*, …). Used to keep prose warnings
+    signal-rich; these are already non-blocking under Unit A."""
+    if ":" not in token:
+        return token in {"*", "…"} or token.startswith("<")
+    _, local = token.split(":", 1)
+    return _PLACEHOLDER_LOCAL_RE.match(local) is not None
 
 
 def rewrite_references(

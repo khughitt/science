@@ -1269,3 +1269,27 @@ def test_same_date_different_path_bare_kind_word_records_collision_not_crash(tmp
         "doc/probes/2026-05-14/interpretation.md",
         "doc/other/2026-05-14/interpretation.md",
     }
+
+
+@_pytest.mark.parametrize(
+    "token",
+    [
+        "hypothesis:hNN",
+        "question:qNN",
+        "hypothesis:<id>",
+        "report:198-210",
+        "topic:*",
+        "topic:…",
+    ],
+)
+def test_placeholder_tokens_are_filtered_from_warnings(token: str) -> None:
+    from science_tool.entity_layout_migration import _is_placeholder_token
+
+    assert _is_placeholder_token(token) is True
+
+
+@_pytest.mark.parametrize("token", ["hypothesis:h00-working-model", "paper:Adams2025", "question:0001-aging"])
+def test_real_tokens_are_not_filtered(token: str) -> None:
+    from science_tool.entity_layout_migration import _is_placeholder_token
+
+    assert _is_placeholder_token(token) is False
