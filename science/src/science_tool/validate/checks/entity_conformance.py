@@ -54,8 +54,8 @@ def _entity_dirs(
     """Yield (kind, policy, directory) for every non-singleton markdown entity
     kind whose entities/<kind>/ directory exists. With ``strategy`` set, only
     kinds of that strategy are yielded."""
-    for kind in markdown_entity_kinds():
-        policy = resolve_path_policy(kind)
+    for kind in markdown_entity_kinds(ctx.project_root):
+        policy = resolve_path_policy(kind, project_root=ctx.project_root)
         if policy.strategy == "singleton":
             continue
         if strategy is not None and policy.strategy != strategy:
@@ -80,12 +80,13 @@ def check_entity_location_coherence(ctx: ValidateContext) -> Iterator[Result]:
             if "templates" in path.relative_to(ctx.project_root).parts:
                 continue
             kind = _entity_type(ctx, path)
-            if kind is None or not is_markdown_entity_kind(kind):
+            if kind is None or not is_markdown_entity_kind(kind, project_root=ctx.project_root):
                 continue  # prose / non-entity markdown is ignored
             yield _result(
                 _severity(ctx),
                 _rel(ctx, path),
-                f"{kind} entity outside its home; expected under {resolve_path_policy(kind).root}/",
+                f"{kind} entity outside its home; expected under "
+                f"{resolve_path_policy(kind, project_root=ctx.project_root).root}/",
             )
     # (b) miscategorized within entities/<kind>/
     for kind, policy, directory in _entity_dirs(ctx):
@@ -105,7 +106,7 @@ def check_entity_filename_conformance(ctx: ValidateContext) -> Iterator[Result]:
     OR whose stem != the id's local-part."""
     for kind, policy, directory in _entity_dirs(ctx):
         for path in sorted(directory.glob("*.md")):
-            if not local_part_conforms(kind, path.stem):
+            if not local_part_conforms(kind, path.stem, project_root=ctx.project_root):
                 yield _result(
                     _severity(ctx), _rel(ctx, path), f"non-conforming {kind} filename {path.name!r} (strategy={policy.strategy})"
                 )
