@@ -533,7 +533,17 @@ def _add_move(plan: MigrationPlan, entity: "LegacyEntity", new_rel: str, new_id:
     #     stem under the same kind), the alias is AMBIGUOUS: remove it from id_map
     #     entirely and record a blocking collision so Task 4 reports the ref as
     #     UNRESOLVED rather than silently rewriting to the wrong target.
-    stem_alias = f"{kind}:{Path(entity.rel_path).stem}"
+    stem = Path(entity.rel_path).stem
+    if stem == kind:
+        # Bare kind-word stem (interpretation.md under doc/probes/<date>/): the
+        # plain alias `interpretation:interpretation` collides across sibling
+        # date dirs. Scope it by the date-prefixed parent dir so each is distinct.
+        parent_name = Path(entity.rel_path).parent.name
+        date_m = _DATE_PREFIX_DATE_RE.match(parent_name)
+        alias_local = f"{date_m.group(1)}-{stem}" if date_m else stem
+    else:
+        alias_local = stem
+    stem_alias = f"{kind}:{alias_local}"
     if stem_alias in plan.id_map:
         # Key already present. Was it set by a prior stem alias or by a real old_id?
         if stem_alias in plan._stem_alias_sources:

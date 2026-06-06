@@ -1233,3 +1233,19 @@ def test_mappings_yaml_dangling_alias_target_blocks(tmp_path: Path) -> None:
     with _pytest.raises(ValueError, match="structural"):
         migrate_layout(tmp_path, apply=True)
     assert not (tmp_path / "entities").exists()
+
+
+def test_date_dir_scoped_alias_avoids_bare_kind_word_collision(tmp_path: Path) -> None:
+    # Two files named interpretation.md under distinct date dirs must NOT collide
+    # on the alias interpretation:interpretation.
+    for day in ("2026-05-14", "2026-05-20"):
+        _write(
+            tmp_path,
+            f"doc/probes/{day}/interpretation.md",
+            f'---\ntype: interpretation\ncreated: "{day}"\ntitle: Probe {day}\nstatus: active\n---\nbody\n',
+        )
+    plan = plan_migration(tmp_path)
+    alias_collisions = [c for c in plan.collisions if c.get("kind") == "alias"]
+    assert alias_collisions == []  # date-scoping made the two aliases distinct
+    assert "interpretation:2026-05-14-interpretation" in plan.id_map
+    assert "interpretation:2026-05-20-interpretation" in plan.id_map
