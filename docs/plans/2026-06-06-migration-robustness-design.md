@@ -36,16 +36,19 @@ mechanical set, and the two crashes are eliminated.
    *resolvable* ids; dead prose links are pre-existing content issues the graph validator already
    reports separately, and must not gate a mechanical move.
 
-   **Structural positions** are exactly the fields the post-mutation graph audit validates, so
-   that the pre-mutation blocking set mirrors the post-mutation backstop (no ref can pass the
-   guard and then fail the audit). They are:
-   - entity-markdown frontmatter `related:` and `source_refs:` lists;
-   - **task** structured fields `related:` and `blocked_by:` (tasks are graph entities —
-     `graph/storage_adapters/task.py` — audited by `graph/migrate.py`; their refs MUST block, else
-     `--apply` could mutate the tree and then fail the unchanged post-mutation audit, breaking the
-     pre-mutation-guard promise);
-   - `.edges.yaml` `evidence:`/`anchor:` interpretation refs;
-   - `mappings.yaml` alias **targets** (RHS).
+   **Structural positions = whatever the graph audit validates.** Rather than hand-enumerate
+   audited fields (a brittle list that drifts), the pre-mutation blocking check **runs
+   graph-audit-equivalent validation over a *simulated post-move* `ProjectSources`** (see Unit A):
+   apply the planned moves + id rewrites in-memory, then call the existing
+   `audit_project_sources` and block on any `fail` row. This mirrors the post-mutation backstop by
+   construction — no ref can pass the guard and then fail the audit — and automatically covers the
+   **entire** audited surface, which includes (non-exhaustively) entity `related`, `source_refs`,
+   `evidence_refs`, `commits_to`, `blocked_by`, `dataset_usage`, paper `datasets`,
+   `derivation.inputs`, `chain`, `audits`, `proposition_refs`, `same_as`; **task** `related`/
+   `blocked_by` (tasks are graph entities — `graph/storage_adapters/task.py`); **relation** and
+   **binding** endpoints; `.edges.yaml` `evidence:`/`anchor:`; and `mappings.yaml` alias targets
+   (`graph/migrate.py:398,634`). The graph audit only inspects **structured** sources, never free
+   prose body — so body tokens are inherently outside the blocking set and become warnings.
 2. **Manifest loading — graceful skip.** A malformed/vestigial local entity kind is skipped with
    an accumulated warning instead of aborting the whole migration. Validation logic is unchanged;
    only the failure mode changes (raise → skip+warn).
@@ -71,8 +74,10 @@ The migrator keeps its current shape (`discover_legacy_entities` → `plan_migra
 `migrate_layout`, with `rewrite_references` doing the id rewrite). Changes are localized to four
 seams, each an independently-testable unit:
 
-- **Reference classification** (`rewrite_references` + a new structural-ref extractor in
-  `migrate_layout`): partition leftovers into blocking (structural) vs warning (prose).
+- **Reference classification** (`migrate_layout`): blocking is decided by running
+  graph-audit-equivalent validation over a *simulated post-move* `ProjectSources` (Unit A) — **not**
+  by partitioning `rewrite_references` leftovers. `rewrite_references` still rewrites resolvable
+  ids whole-text; its prose-body leftovers (the surface the audit never inspects) become warnings.
 - **Local-kind loading** (`entities.py::load_local_entity_policies`): skip+warn vs raise.
 - **Discovery** (`entity_layout_migration.py::_infer_kind` / `_project_dir_to_kind` /
   `_DIR_TO_KIND`): exact-root-path keying.
@@ -88,32 +93,27 @@ generation (Unit F).
 **What:** stop treating every non-conforming token anywhere in a file as a `--apply` blocker.
 
 **How:**
-- Add a structural-reference extractor that reads the **structural positions** enumerated in
-  decision 1: entity-markdown frontmatter `related:`/`source_refs:`; task `related:`/`blocked_by:`
-  (parsed via the task adapter, including the aggregated `tasks/active.md` form, not plain
-  frontmatter); `.edges.yaml` `evidence:`/`anchor:`; `mappings.yaml` alias targets.
-- **Resolve each structural ref directly against the final identity set** — the set of post-move
-  canonical ids **plus** all back-compat aliases (`plan.id_map` values ∪ generated aliases) — and
-  block any structural ref whose (rewritten) target is not in that set. Do **not** derive the
-  blocking set by intersecting `rewrite_references` leftovers: `rewrite_references` deliberately
-  skips already-*conformant* tokens (`local_part_conforms`, `entity_layout_migration.py:576`), so
-  a dangling-but-conformant ref like `hypothesis:9999-nope` never appears as a leftover. That case
-  is today caught only by the **post-mutation** graph audit
-  (`tests/test_entity_layout_migration.py:417`); resolving structural refs directly moves that
-  check **pre-mutation**, honoring the guard promise.
-- **Reuse the graph audit's acceptance semantics — do not reinvent them.** `_audit_reference`
-  (`graph/migrate.py:806`) accepts several structural refs *without* identity-map resolution, and
-  the pre-mutation check must mirror this exactly or it will invent **new** false blockers:
-  - `cite:*` bibliography refs in `source_refs`/`evidence_refs` (`is_bibliography_reference`);
-  - external refs — URLs, filesystem paths, and declared external prefixes `go:`/`mesh:`/`doi:`/…
-    (`is_external_reference`, `graph/sources.py:492`);
-  - `meta:*` metadata refs (`is_metadata_reference`).
-  The structural resolver therefore reuses the same `ReferenceResolver` + these three predicates
-  (ideally by running the existing `_audit_reference` against a simulated post-move identity/alias
-  set) so the pre- and post-mutation checks cannot diverge. A structural ref only blocks when
-  `_audit_reference` would `fail` on the post-move graph.
+- **Blocking = graph-audit-equivalent validation over a simulated post-move source set.** This is
+  the primary mechanism, not an enumerated field list. Steps:
+  1. Build a simulated post-move `ProjectSources`: load the project sources and apply the planned
+     moves + id rewrites (`plan.id_map`) and generated aliases in-memory, so every structured
+     source carries its post-migration identity. (No disk mutation — the same transform `--apply`
+     will perform, computed in memory.)
+  2. Run the existing `audit_project_sources` on that simulated set and **block on any `fail`
+     row**. This inherits the audit's *entire* field surface (entity `related`/`source_refs`/
+     `evidence_refs`/`commits_to`/`blocked_by`/`dataset_usage`/`datasets`/`derivation.inputs`/
+     `chain`/`audits`/`proposition_refs`/`same_as`, task `related`/`blocked_by`, relation & binding
+     endpoints, edges, mappings) **and** its acceptance exceptions (`is_bibliography_reference` for
+     `source_refs`/`evidence_refs`, `is_external_reference` for URLs/paths/`go:`/`mesh:`/`doi:`,
+     `is_metadata_reference` for `meta:*`) — with zero re-implementation and zero drift.
+  - Why not intersect `rewrite_references` leftovers: it deliberately skips already-*conformant*
+    tokens (`local_part_conforms`, `entity_layout_migration.py:576`), so a dangling-but-conformant
+    ref like `hypothesis:9999-nope` never surfaces as a leftover. Today that case is caught only by
+    the **post-mutation** audit (`tests/test_entity_layout_migration.py:417`); running the audit on
+    the simulated post-move set moves the identical check **pre-mutation**, honoring the guard.
 - `rewrite_references` keeps performing the whole-text old→new rewrite (unchanged). Its leftover
-  tokens that are **not** in any structural position feed the **warnings** bucket only.
+  tokens — which live in **prose body**, the surface the graph audit never inspects — feed the
+  **warnings** bucket only (they are non-structural by definition).
 - When building the warnings bucket, strip fenced code blocks (```` ``` ````) and inline code
   spans (`` ` ``) from the text first, so example ids in documentation don't generate noise.
 - `migrate_layout` report: `unresolved_references` carries **blocking** structural refs only
@@ -261,8 +261,11 @@ TDD per unit against a synthetic fixture project exercising every seam:
 - a cross-project `hypothesis:h00-working-model` in prose (Unit A: warn) **and** a genuinely
   dangling ref in a frontmatter `related:` list (Unit A: still **blocks**);
 - a **conformant-but-dangling** structural ref (`hypothesis:9999-nope` in a `related:` list):
-  must block **pre-mutation** via direct identity-set resolution — the case `rewrite_references`
-  leftovers can't see (regression guard for High-finding #1);
+  must block **pre-mutation** via the simulated post-move audit — the case `rewrite_references`
+  leftovers can't see (regression guard for round-1 High finding);
+- a dangling ref in a **non-`related` audited field** (e.g. proposition `commits_to:` or paper
+  `datasets:`): must also block — proving the blocking surface tracks the *whole* graph audit, not
+  an enumerated subset (regression guard for round-3 High finding);
 - a **task** (in `tasks/active.md`) whose `related:`/`blocked_by:` points to a dangling id
   (Unit A: **blocks**) vs one pointing at a migrated id (rewritten, does not block);
 - structural refs the graph audit accepts without resolution — `cite:Key2024` in `source_refs:`,
@@ -294,13 +297,15 @@ its genuine content debt.
   set, prose-warning classification with code-span stripping, alias generation, report keys).
 - `science/src/science_tool/entities.py` — Unit B: `load_local_entity_policies` keeps its dict
   signature; add internal `_load_local_policies_and_warnings` + public `local_kind_warnings`.
-- `science/src/science_tool/graph/storage_adapters/task.py` (read-only reuse) — the structural-ref
-  extractor parses task `related:`/`blocked_by:` via the existing task adapter rather than
-  re-implementing task parsing.
+- `science/src/science_tool/graph/migrate.py` + `graph/sources.py` (read-only reuse) — the
+  pre-mutation blocking check builds a simulated post-move `ProjectSources` (`load_project_sources`
+  + in-memory move/id-rewrite) and runs the existing `audit_project_sources`; no bespoke per-field
+  structural extractor is written, so task/relation/binding/edge/mapping surfaces and acceptance
+  exceptions are inherited, not re-implemented.
 - `science/src/science_tool/validate/checks/entity_conformance.py` — surface local-kind warnings;
   align with the position-aware model where it inspects refs.
-- A small new helper module for structural-ref extraction + code-span stripping is expected, to
-  keep `entity_layout_migration.py` focused.
+- A small new helper for the simulated-post-move transform + code-span stripping (for the prose
+  warnings bucket) is expected, to keep `entity_layout_migration.py` focused.
 - Tests under `science/tests/` (per-unit) + the multi-project integration check. The four
   "must raise" tests in `tests/test_entities_local_policies.py` are rewritten to assert skip+warn.
 
