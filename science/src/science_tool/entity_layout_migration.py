@@ -149,6 +149,8 @@ _H1_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 # like `2026-05-30-paper-triage-manifest.md` can supply their own `created` date
 # even when no frontmatter `created` field and no `**Date:**` prose header exist.
 _DATE_PREFIX_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:[-.]|$)")
+# Frontmatter values: accept plain dates AND ISO timestamps (no suffix required),
+# unlike _DATE_PREFIX_DATE_RE which anchors on filename-stem date prefixes.
 _LEADING_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
 
 

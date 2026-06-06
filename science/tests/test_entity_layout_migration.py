@@ -8,6 +8,7 @@ import yaml
 
 from science_tool.entities import valid_statuses
 from science_tool.entity_layout_migration import (
+    LegacyEntity,
     _fallback_created,
     discover_legacy_entities,
     migrate_layout,
@@ -860,8 +861,7 @@ def test_rewrite_flags_unmapped_local_kind_ref(tmp_path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _legacy(rel_path: str, frontmatter: dict) -> "LegacyEntity":
-    from science_tool.entity_layout_migration import LegacyEntity
+def _legacy(rel_path: str, frontmatter: dict) -> LegacyEntity:
     return LegacyEntity(rel_path=rel_path, kind="report", old_id=None, frontmatter=frontmatter, body="")
 
 
