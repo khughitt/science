@@ -532,6 +532,7 @@ def rewrite_references(
     id_map: dict[str, str],
     *,
     policed_kinds: set[str] | None = None,
+    project_root: Path | None = None,
 ) -> tuple[str, list[str]]:
     """Replace every mapped old id with its new id (longest-first to avoid prefix
     collisions). Returns (rewritten_text, unresolved_legacy_tokens).
@@ -566,13 +567,13 @@ def rewrite_references(
         token, kind, local = match.group(0), match.group(1), match.group(2)
         if token in new_ids:
             continue  # already canonical (a freshly-written new id)
-        if not is_markdown_entity_kind(kind):
+        if not is_markdown_entity_kind(kind, project_root=project_root):
             continue  # external prefix / url / kind we do not govern
         if policed_kinds is not None and kind not in policed_kinds:
             continue  # kind not migrated as markdown (e.g. stored in a YAML registry) — out of scope
-        if resolve_path_policy(kind).strategy == "singleton":
+        if resolve_path_policy(kind, project_root=project_root).strategy == "singleton":
             continue  # singletons carry no per-instance local part
-        if local_part_conforms(kind, local):
+        if local_part_conforms(kind, local, project_root=project_root):
             continue  # already a valid local part for this kind
         unresolved.append(token)
     # (b) bare wiki-links with NO kind prefix, e.g. [[q01-foo]] / [[2026-05-23-x]].
@@ -665,7 +666,7 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     all_unresolved: dict[str, list[str]] = {}
     for bucket in (rewritten, singleton_text, inplace_text):
         for rel, text in list(bucket.items()):
-            out, unresolved = rewrite_references(text, plan.id_map, policed_kinds=policed_kinds)
+            out, unresolved = rewrite_references(text, plan.id_map, policed_kinds=policed_kinds, project_root=project_root)
             bucket[rel] = out
             if unresolved:
                 all_unresolved[rel] = unresolved

@@ -832,3 +832,24 @@ def test_plan_numbers_and_homes_local_kind(tmp_path) -> None:
     assert plan.id_map["design:early"] == "design:0001-early"
     assert by_old["design:late"].new_rel_path == "entities/design/0002-late.md"
     assert plan.id_map["design:late"] == "design:0002-late"
+
+
+# ---------------------------------------------------------------------------
+# Task 8: rewrite_references project-aware unresolved detection
+# ---------------------------------------------------------------------------
+
+
+def test_rewrite_flags_unmapped_local_kind_ref(tmp_path) -> None:
+    _with_local_profile(tmp_path)
+    id_map = {"design:mapped": "design:0001-mapped"}
+    text = (
+        "See design:mapped, stale design:old-slug, "
+        "and already-good design:0001-existing here.\n"
+    )
+    out, unresolved = rewrite_references(
+        text, id_map, policed_kinds={"design"}, project_root=tmp_path
+    )
+    assert "design:0001-mapped" in out          # mapped ref rewritten
+    assert "design:old-slug" in unresolved      # unmapped non-conforming ref flagged
+    assert "design:mapped" not in unresolved    # mapped ref is not flagged
+    assert "design:0001-existing" not in unresolved  # conforming numbered ref not flagged
