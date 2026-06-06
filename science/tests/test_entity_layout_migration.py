@@ -68,10 +68,16 @@ def test_frontmatterless_file_under_unknown_parent_dir_is_skipped(tmp_path: Path
 
 
 def test_plan_assigns_numeric_in_created_order(tmp_path: Path) -> None:
-    _write(tmp_path, "doc/questions/q05-late.md",
-           '---\nid: "question:q05-late"\ntype: question\ncreated: "2026-02-01"\n---\n')
-    _write(tmp_path, "doc/questions/aging-early.md",
-           '---\nid: "question:aging-early"\ntype: question\ncreated: "2026-01-01"\n---\n')
+    _write(
+        tmp_path,
+        "doc/questions/q05-late.md",
+        '---\nid: "question:q05-late"\ntype: question\ncreated: "2026-02-01"\n---\n',
+    )
+    _write(
+        tmp_path,
+        "doc/questions/aging-early.md",
+        '---\nid: "question:aging-early"\ntype: question\ncreated: "2026-01-01"\n---\n',
+    )
     plan = plan_migration(tmp_path)
     # earliest created gets 0001
     by_old = {m.old_id: m for m in plan.moves}
@@ -95,8 +101,11 @@ def test_plan_preserves_already_conformant_numbers(tmp_path: Path) -> None:
 
 
 def test_plan_date_prefixed_slug_drops_the_date(tmp_path: Path) -> None:
-    _write(tmp_path, "doc/interpretations/2026-05-23-foo-bar.md",
-           '---\nid: "interpretation:2026-05-23-foo-bar"\ntype: interpretation\ncreated: "2026-05-23"\n---\n')
+    _write(
+        tmp_path,
+        "doc/interpretations/2026-05-23-foo-bar.md",
+        '---\nid: "interpretation:2026-05-23-foo-bar"\ntype: interpretation\ncreated: "2026-05-23"\n---\n',
+    )
     plan = plan_migration(tmp_path)
     # slug is "foo-bar", NOT "05-23-foo-bar"
     assert plan.moves[0].new_id == "interpretation:0001-foo-bar"
@@ -104,11 +113,14 @@ def test_plan_date_prefixed_slug_drops_the_date(tmp_path: Path) -> None:
 
 def test_plan_uses_synthesized_created_for_frontmatterless(tmp_path: Path) -> None:
     # No frontmatter: created must come from the prose **Date:** header so ordering is right.
-    _write_raw = (tmp_path / "doc/interpretations/early.md")
+    _write_raw = tmp_path / "doc/interpretations/early.md"
     _write_raw.parent.mkdir(parents=True, exist_ok=True)
     _write_raw.write_text("# Early result\n\n**Date:** 2026-01-01\n", encoding="utf-8")
-    _write(tmp_path, "doc/interpretations/2026-12-31-late.md",
-           '---\nid: "interpretation:2026-12-31-late"\ntype: interpretation\ncreated: "2026-12-31"\n---\n')
+    _write(
+        tmp_path,
+        "doc/interpretations/2026-12-31-late.md",
+        '---\nid: "interpretation:2026-12-31-late"\ntype: interpretation\ncreated: "2026-12-31"\n---\n',
+    )
     plan = plan_migration(tmp_path)
     paths = {m.new_rel_path for m in plan.moves}
     # The prose-dated file (2026-01-01) sorts first → 0001.
@@ -138,8 +150,7 @@ def test_plan_ambiguous_stem_alias_not_silently_mis_mapped(tmp_path: Path) -> No
     # The ambiguous alias must be absent from id_map.
     assert "interpretation:foo" not in plan.id_map
     # A blocking alias collision must be recorded.
-    assert any(c.get("kind") == "alias" and c.get("alias") == "interpretation:foo"
-               for c in plan.collisions)
+    assert any(c.get("kind") == "alias" and c.get("alias") == "interpretation:foo" for c in plan.collisions)
 
 
 def test_plan_detects_duplicate_target_collision(tmp_path: Path) -> None:
@@ -171,10 +182,12 @@ def test_plan_relocates_singletons(tmp_path: Path) -> None:
 def test_plan_reserves_numbers_already_under_entities(tmp_path: Path) -> None:
     # Partial migration: entities/questions/0001-* already exists (created
     # additively). A new legacy question must take 0002, NOT collide on 0001.
-    _write(tmp_path, "entities/questions/0001-existing.md",
-           '---\nid: "question:0001-existing"\ntype: question\n---\n')
-    _write(tmp_path, "doc/questions/new-one.md",
-           '---\nid: "question:new-one"\ntype: question\ncreated: "2026-01-01"\n---\n')
+    _write(tmp_path, "entities/questions/0001-existing.md", '---\nid: "question:0001-existing"\ntype: question\n---\n')
+    _write(
+        tmp_path,
+        "doc/questions/new-one.md",
+        '---\nid: "question:new-one"\ntype: question\ncreated: "2026-01-01"\n---\n',
+    )
     plan = plan_migration(tmp_path)
     move = next(m for m in plan.moves if m.old_id == "question:new-one")
     assert move.new_id == "question:0002-new-one"
@@ -192,20 +205,20 @@ def test_plan_reports_disk_collision_for_citekey(tmp_path: Path) -> None:
 def test_plan_reports_conformant_number_taken_under_entities(tmp_path: Path) -> None:
     # A conformant legacy hypothesis 0003-x wants to keep 0003, but entities/
     # already holds a different 0003 → blocking number collision.
-    _write(tmp_path, "entities/hypotheses/0003-other.md",
-           '---\nid: "hypothesis:0003-other"\ntype: hypothesis\n---\n')
-    _write(tmp_path, "specs/hypotheses/0003-x.md",
-           '---\nid: "hypothesis:0003-x"\ntype: hypothesis\n---\n')
+    _write(tmp_path, "entities/hypotheses/0003-other.md", '---\nid: "hypothesis:0003-other"\ntype: hypothesis\n---\n')
+    _write(tmp_path, "specs/hypotheses/0003-x.md", '---\nid: "hypothesis:0003-x"\ntype: hypothesis\n---\n')
     plan = plan_migration(tmp_path)
-    assert any(c.get("kind") == "number" and c.get("number") == "0003"
-               and c.get("occupied_by") == "entities/" for c in plan.collisions)
+    assert any(
+        c.get("kind") == "number" and c.get("number") == "0003" and c.get("occupied_by") == "entities/"
+        for c in plan.collisions
+    )
 
 
 def test_synthesize_from_prose_headers() -> None:
     body = "# h01 phase-1 results\n\n**Date:** 2026-05-23\n**Status:** First real-run\n\nText.\n"
     fm = synthesize_frontmatter(kind="interpretation", body=body, fallback_created="2026-01-01")
     assert fm["type"] == "interpretation"
-    assert fm["created"] == "2026-05-23"   # parsed from **Date:**
+    assert fm["created"] == "2026-05-23"  # parsed from **Date:**
     # "First real-run" is NOT a controlled interpretation status → falls back to
     # the per-kind default. Synthesized status must always be a valid value.
     assert fm["status"] in valid_statuses("interpretation")
@@ -278,8 +291,8 @@ def test_rewrite_handles_kind_qualified_wikilink() -> None:
     # UNMAPPED non-conformant one is reported as unresolved.
     id_map = {"question:q1-a": "question:0001-a"}
     out, unresolved = rewrite_references("See [[question:q1-a]] and [[question:q9-ghost]].\n", id_map)
-    assert "[[question:0001-a]]" in out          # mapped wikilink rewritten in place
-    assert "question:q9-ghost" in unresolved     # unmapped, non-conformant → reported
+    assert "[[question:0001-a]]" in out  # mapped wikilink rewritten in place
+    assert "question:q9-ghost" in unresolved  # unmapped, non-conformant → reported
     assert "[[question:q9-ghost]]" not in unresolved  # reported as the token, not the bare-link form
 
 
@@ -296,7 +309,11 @@ def _git_init(root: Path) -> None:
 
 def test_migrate_dry_run_makes_no_changes(tmp_path: Path) -> None:
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "specs/hypotheses/h01-alpha.md", '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-alpha.md",
+        '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
     _git_init(tmp_path)
     report = migrate_layout(tmp_path, apply=False)
     assert report["moves"]
@@ -306,13 +323,21 @@ def test_migrate_dry_run_makes_no_changes(tmp_path: Path) -> None:
 
 def test_migrate_apply_moves_and_rewrites(tmp_path: Path) -> None:
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "specs/hypotheses/h01-alpha.md", '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
-    _write(tmp_path, "doc/questions/q01-beta.md", '---\nid: "question:q01-beta"\ntype: question\ncreated: "2026-01-02"\ntitle: Beta\nstatus: active\nupdated: "2026-01-02"\nrelated: ["hypothesis:h01-alpha"]\n---\nSee hypothesis:h01-alpha.\n')
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-alpha.md",
+        '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
+    _write(
+        tmp_path,
+        "doc/questions/q01-beta.md",
+        '---\nid: "question:q01-beta"\ntype: question\ncreated: "2026-01-02"\ntitle: Beta\nstatus: active\nupdated: "2026-01-02"\nrelated: ["hypothesis:h01-alpha"]\n---\nSee hypothesis:h01-alpha.\n',
+    )
     _git_init(tmp_path)
     _ = migrate_layout(tmp_path, apply=True)
     assert (tmp_path / "entities/hypotheses/0001-alpha.md").is_file()
     q = (tmp_path / "entities/questions/0001-beta.md").read_text()
-    assert "hypothesis:0001-alpha" in q          # related + inline ref rewritten
+    assert "hypothesis:0001-alpha" in q  # related + inline ref rewritten
     assert "hypothesis:h01-alpha" not in q
     manifest = yaml.safe_load((tmp_path / "science.yaml").read_text())
     assert manifest["layout_version"] == 3
@@ -321,8 +346,16 @@ def test_migrate_apply_moves_and_rewrites(tmp_path: Path) -> None:
 def test_migrate_apply_rewrites_tasks_inplace(tmp_path: Path) -> None:
     """(a) tasks/t001.md containing hypothesis:h01-alpha is rewritten to hypothesis:0001-alpha."""
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "specs/hypotheses/h01-alpha.md", '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
-    _write(tmp_path, "tasks/t001.md", "---\nid: task:t001\ntype: task\nstatus: active\ncreated: \"2026-01-03\"\ntitle: Check\nupdated: \"2026-01-03\"\n---\nDepends on hypothesis:h01-alpha.\n")
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-alpha.md",
+        '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
+    _write(
+        tmp_path,
+        "tasks/t001.md",
+        '---\nid: task:t001\ntype: task\nstatus: active\ncreated: "2026-01-03"\ntitle: Check\nupdated: "2026-01-03"\n---\nDepends on hypothesis:h01-alpha.\n',
+    )
     _git_init(tmp_path)
     _ = migrate_layout(tmp_path, apply=True)
     task_text = (tmp_path / "tasks/t001.md").read_text()
@@ -333,7 +366,11 @@ def test_migrate_apply_rewrites_tasks_inplace(tmp_path: Path) -> None:
 def test_migrate_apply_rewrites_singleton_yaml(tmp_path: Path) -> None:
     """(b) specs/claim-registry.yaml referencing hypothesis:h01-alpha lands at entities/claim-registry.yaml with ref rewritten."""
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "specs/hypotheses/h01-alpha.md", '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-alpha.md",
+        '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
     (tmp_path / "specs/claim-registry.yaml").write_text(
         "claims:\n  - id: hypothesis:h01-alpha\n    note: tracked\n", encoding="utf-8"
     )
@@ -348,8 +385,16 @@ def test_migrate_apply_rewrites_singleton_yaml(tmp_path: Path) -> None:
 def test_migrate_collision_blocks_apply(tmp_path: Path) -> None:
     """(c) A project with two Adams2025.md paper sources raises ValueError under apply=True and lists the collision in the dry-run report."""
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "doc/papers/Adams2025.md", '---\nid: "paper:Adams2025"\ntype: paper\ncreated: "2026-01-01"\ntitle: Adams 2025\nupdated: "2026-01-01"\n---\n')
-    _write(tmp_path, "doc/background/papers/Adams2025.md", '---\nid: "paper:Adams2025"\ntype: paper\ncreated: "2026-01-01"\ntitle: Adams 2025\nupdated: "2026-01-01"\n---\n')
+    _write(
+        tmp_path,
+        "doc/papers/Adams2025.md",
+        '---\nid: "paper:Adams2025"\ntype: paper\ncreated: "2026-01-01"\ntitle: Adams 2025\nupdated: "2026-01-01"\n---\n',
+    )
+    _write(
+        tmp_path,
+        "doc/background/papers/Adams2025.md",
+        '---\nid: "paper:Adams2025"\ntype: paper\ncreated: "2026-01-01"\ntitle: Adams 2025\nupdated: "2026-01-01"\n---\n',
+    )
     _git_init(tmp_path)
     dry = migrate_layout(tmp_path, apply=False)
     assert dry["collisions"]
@@ -362,7 +407,11 @@ def test_migrate_apply_rewrites_inplace_prose_doc(tmp_path: Path) -> None:
     Uses doc/context/ — a directory not in _DIR_TO_KIND — so the file is not
     misclassified as a legacy entity; it exercises the in-place-text code path."""
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "specs/hypotheses/h01-alpha.md", '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-alpha.md",
+        '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
     _write(tmp_path, "doc/context/summary.md", "See hypothesis:h01-alpha and [[hypothesis:h01-alpha]] for details.\n")
     _git_init(tmp_path)
     _ = migrate_layout(tmp_path, apply=True)
@@ -377,7 +426,11 @@ def test_migrate_unresolved_prose_ref_warns_not_blocks(tmp_path: Path) -> None:
     lists it under unresolved_warnings (NOT unresolved_references) and --apply succeeds.
     Uses doc/context/ — not in _DIR_TO_KIND — so it is not mis-discovered as an entity."""
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "specs/hypotheses/h01-alpha.md", '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-alpha.md",
+        '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
     _write(tmp_path, "doc/context/summary.md", "See hypothesis:h99-ghost which is dead.\n")
     _git_init(tmp_path)
     dry = migrate_layout(tmp_path, apply=False)
@@ -415,6 +468,39 @@ def test_migrate_undated_entity_blocks_apply_and_is_reported(tmp_path: Path) -> 
     # Source file must still exist (no git mv happened).
     assert (tmp_path / "doc/questions/no-date.md").exists()
     assert not (tmp_path / "entities").exists()
+
+
+def test_schema_invalid_nonundated_core_entity_blocks_pre_mutation(tmp_path: Path) -> None:
+    # A legacy entity with a malformed (out-of-range) created date is schema-invalid
+    # but NOT undated (ensure_frontmatter copies the legacy value verbatim). It must
+    # block --apply PRE-mutation — parity with the post-mutation backstop — and the
+    # dry-run must not crash.
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-bad.md",
+        '---\nid: "hypothesis:h01-bad"\ntype: hypothesis\ncreated: "2026-13-45"\n'
+        'title: Bad Date\nstatus: proposed\nupdated: "2026-13-45"\n---\nbody\n',
+    )
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)  # must not raise
+    assert dry["unresolved_references"]  # schema failure surfaced as a blocker
+    with _pytest.raises(ValueError):
+        migrate_layout(tmp_path, apply=True)
+    assert not (tmp_path / "entities").exists()  # no tree mutation
+
+
+def test_purely_undated_entity_has_no_spurious_structural_failure(tmp_path: Path) -> None:
+    # An undated entity must be reported under undated_entities and blocked by the
+    # undated guard — NOT produce a spurious structural failure from the simulation.
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(tmp_path, "doc/questions/no-date.md", "# No date question\n\nText.\n")
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)
+    assert dry["undated_entities"]
+    assert dry["unresolved_references"] == {}  # placeholder-date sim → no false structural fail
+    with _pytest.raises(ValueError, match="undated"):
+        migrate_layout(tmp_path, apply=True)
 
 
 def test_migrate_version_not_bumped_when_audit_fails(tmp_path: Path) -> None:
@@ -460,8 +546,11 @@ def test_plan_does_not_crash_on_typed_singleton(tmp_path: Path) -> None:
     # Real-project case: specs/research-question.md carries `type: research-question`
     # (a singleton kind with NO status vocabulary). It must be relocated via the
     # singleton path rule, NOT synthesized/numbered (which would KeyError).
-    _write(tmp_path, "specs/research-question.md",
-           '---\nid: "research-question:main"\ntype: research-question\ntitle: RQ\nstatus: active\n---\nBody.\n')
+    _write(
+        tmp_path,
+        "specs/research-question.md",
+        '---\nid: "research-question:main"\ntype: research-question\ntitle: RQ\nstatus: active\n---\nBody.\n',
+    )
     plan = plan_migration(tmp_path)
     # relocated as a singleton, not a numbered move
     assert any(s.new_rel_path == "entities/research-question.md" for s in plan.singletons)
@@ -514,8 +603,11 @@ def test_plan_registers_numeric_shortform_alias(tmp_path: Path) -> None:
     """FIX 1: a question file with stem '01-foo-bar' (id question:01-foo-bar) must
     produce an id_map entry question:01 -> question:0001 so prose shortform
     references like 'question:01' are rewritten to the new number."""
-    _write(tmp_path, "doc/questions/01-foo-bar.md",
-           '---\nid: "question:01-foo-bar"\ntype: question\ncreated: "2026-01-01"\n---\n')
+    _write(
+        tmp_path,
+        "doc/questions/01-foo-bar.md",
+        '---\nid: "question:01-foo-bar"\ntype: question\ncreated: "2026-01-01"\n---\n',
+    )
     plan = plan_migration(tmp_path)
     assert plan.id_map.get("question:01") == "question:0001", (
         f"expected question:01 -> question:0001 in id_map; got {plan.id_map}"
@@ -525,9 +617,11 @@ def test_plan_registers_numeric_shortform_alias(tmp_path: Path) -> None:
 def test_plan_registers_prefixed_shortform_alias(tmp_path: Path) -> None:
     """FIX 1: a hypothesis file with stem 'h03-baz' (id hypothesis:h03-baz) must
     produce id_map entry hypothesis:h03 -> hypothesis:0001 (the assigned number)."""
-    _write(tmp_path, "specs/hypotheses/h03-baz.md",
-           '---\nid: "hypothesis:h03-baz"\ntype: hypothesis\ncreated: "2026-01-01"\n'
-           'status: proposed\ntitle: Baz\n---\n')
+    _write(
+        tmp_path,
+        "specs/hypotheses/h03-baz.md",
+        '---\nid: "hypothesis:h03-baz"\ntype: hypothesis\ncreated: "2026-01-01"\nstatus: proposed\ntitle: Baz\n---\n',
+    )
     plan = plan_migration(tmp_path)
     assert plan.id_map.get("hypothesis:h03") == "hypothesis:0001", (
         f"expected hypothesis:h03 -> hypothesis:0001 in id_map; got {plan.id_map}"
@@ -538,8 +632,11 @@ def test_rewrite_rewrites_numeric_shortform(tmp_path: Path) -> None:
     """FIX 1: with id_map built from plan, rewrite_references rewrites both the
     shortform 'question:01' and the full id 'question:01-foo-bar' to the new form;
     no unresolved refs remain."""
-    _write(tmp_path, "doc/questions/01-foo-bar.md",
-           '---\nid: "question:01-foo-bar"\ntype: question\ncreated: "2026-01-01"\n---\n')
+    _write(
+        tmp_path,
+        "doc/questions/01-foo-bar.md",
+        '---\nid: "question:01-foo-bar"\ntype: question\ncreated: "2026-01-01"\n---\n',
+    )
     plan = plan_migration(tmp_path)
     text = "See question:01 and question:01-foo-bar."
     out, unresolved = rewrite_references(text, plan.id_map)
@@ -552,13 +649,13 @@ def test_rewrite_rewrites_numeric_shortform(tmp_path: Path) -> None:
 def test_plan_no_shortform_alias_for_non_shortform_topic(tmp_path: Path) -> None:
     """FIX 1 guard: a topic 'topic:foo-bar' must NOT produce a bogus alias
     'topic:foo' — the old_token 'foo' is pure letters, not a shortform shape."""
-    _write(tmp_path, "doc/topics/foo-bar.md",
-           '---\nid: "topic:foo-bar"\ntype: topic\ncreated: "2026-01-01"\n'
-           'status: active\ntitle: Foo Bar\n---\n')
-    plan = plan_migration(tmp_path)
-    assert "topic:foo" not in plan.id_map, (
-        f"spurious shortform alias 'topic:foo' must not appear; id_map={plan.id_map}"
+    _write(
+        tmp_path,
+        "doc/topics/foo-bar.md",
+        '---\nid: "topic:foo-bar"\ntype: topic\ncreated: "2026-01-01"\nstatus: active\ntitle: Foo Bar\n---\n',
     )
+    plan = plan_migration(tmp_path)
+    assert "topic:foo" not in plan.id_map, f"spurious shortform alias 'topic:foo' must not appear; id_map={plan.id_map}"
 
 
 # FIX 2: scope unresolved policing to migrated kinds ----------------------
@@ -574,28 +671,24 @@ def test_migrate_does_not_flag_unmigrated_kind(tmp_path: Path) -> None:
     body token is a non-blocking warning (unresolved_warnings), not a structural
     blocker."""
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "doc/questions/q01-myq.md",
-           '---\nid: "question:q01-myq"\ntype: question\ncreated: "2026-01-01"\n'
-           'title: My Q\nstatus: active\nupdated: "2026-01-01"\n---\nBody.\n')
+    _write(
+        tmp_path,
+        "doc/questions/q01-myq.md",
+        '---\nid: "question:q01-myq"\ntype: question\ncreated: "2026-01-01"\n'
+        'title: My Q\nstatus: active\nupdated: "2026-01-01"\n---\nBody.\n',
+    )
     # doc/context/ is not in _DIR_TO_KIND, so this file is not mis-discovered as an entity.
-    _write(tmp_path, "doc/context/notes.md",
-           "See observation:swan-foo and question:99-ghost for context.\n")
+    _write(tmp_path, "doc/context/notes.md", "See observation:swan-foo and question:99-ghost for context.\n")
     _git_init(tmp_path)
     report = migrate_layout(tmp_path, apply=False)
-    all_warn_tokens: list[str] = [
-        token
-        for tokens in report["unresolved_warnings"].values()
-        for token in tokens
-    ]
+    all_warn_tokens: list[str] = [token for tokens in report["unresolved_warnings"].values() for token in tokens]
     assert "observation:swan-foo" not in all_warn_tokens, (
         "observation:swan-foo must not be flagged (observation not a migrated markdown kind)"
     )
     assert "question:99-ghost" in all_warn_tokens, (
         "question:99-ghost must be flagged (question IS a migrated kind with no mapping)"
     )
-    assert report["unresolved_references"] == {}, (
-        "a prose body ref is not a structural blocker under Unit A"
-    )
+    assert report["unresolved_references"] == {}, "a prose body ref is not a structural blocker under Unit A"
 
 
 # FIX 3: filename-date fallback for `created` -----------------------------
@@ -606,8 +699,7 @@ def test_plan_filename_date_fallback_for_plan_file(tmp_path: Path) -> None:
     frontmatter and no **Date:** header must use 2026-05-30 (from the filename) as
     its created date — NOT fall back to the undated sentinel."""
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "doc/plans/2026-05-30-paper-triage-manifest.md",
-           "# Paper Triage Manifest\n\ntext\n")
+    _write(tmp_path, "doc/plans/2026-05-30-paper-triage-manifest.md", "# Paper Triage Manifest\n\ntext\n")
     _git_init(tmp_path)
     report = migrate_layout(tmp_path, apply=False)
     assert report["undated_entities"] == [], (
@@ -619,8 +711,7 @@ def test_plan_truly_undated_non_date_filename_is_still_reported(tmp_path: Path) 
     """FIX 3 complement: a plan file 'doc/plans/misc-notes.md' with no frontmatter,
     no **Date:** header, and a non-date filename must still be reported as undated."""
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "doc/plans/misc-notes.md",
-           "# Misc Notes\n\nSome prose with no date.\n")
+    _write(tmp_path, "doc/plans/misc-notes.md", "# Misc Notes\n\nSome prose with no date.\n")
     _git_init(tmp_path)
     report = migrate_layout(tmp_path, apply=False)
     old_paths = [d["old_rel_path"] for d in report["undated_entities"]]
@@ -736,8 +827,7 @@ def _with_local_profile(root) -> None:
 
 def test_discovers_local_kind_by_type(tmp_path) -> None:
     _with_local_profile(tmp_path)
-    _write(tmp_path, "doc/design/x.md",
-           '---\nid: "design:x"\ntype: design\ncreated: "2026-01-01"\n---\nbody\n')
+    _write(tmp_path, "doc/design/x.md", '---\nid: "design:x"\ntype: design\ncreated: "2026-01-01"\n---\nbody\n')
     found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
     assert found["doc/design/x.md"].kind == "design"
 
@@ -746,16 +836,14 @@ def test_infers_local_kind_from_id_prefix_in_foreign_dir(tmp_path) -> None:
     # No `type:`, file lives under doc/plans/ — dir-name fallback would say "plan".
     # The `id:` prefix (design) must win.
     _with_local_profile(tmp_path)
-    _write(tmp_path, "doc/plans/y.md",
-           '---\nid: "design:y"\ncreated: "2026-01-01"\n---\nbody\n')
+    _write(tmp_path, "doc/plans/y.md", '---\nid: "design:y"\ncreated: "2026-01-01"\n---\nbody\n')
     found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
     assert found["doc/plans/y.md"].kind == "design"
 
 
 def test_explicit_type_wins_over_divergent_id_prefix(tmp_path) -> None:
     _with_local_profile(tmp_path)
-    _write(tmp_path, "doc/plans/z.md",
-           '---\nid: "design:z"\ntype: plan\ncreated: "2026-01-01"\n---\nbody\n')
+    _write(tmp_path, "doc/plans/z.md", '---\nid: "design:z"\ntype: plan\ncreated: "2026-01-01"\n---\nbody\n')
     found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
     assert found["doc/plans/z.md"].kind == "plan"
 
@@ -764,8 +852,7 @@ def test_unknown_id_prefix_does_not_classify(tmp_path) -> None:
     # No kind "widget" is registered — id "widget:w" must not win; the file falls
     # through to the dir-name fallback ("plan" for doc/plans/).
     _with_local_profile(tmp_path)
-    _write(tmp_path, "doc/plans/w.md",
-           '---\nid: "widget:w"\ncreated: "2026-01-01"\n---\nbody\n')
+    _write(tmp_path, "doc/plans/w.md", '---\nid: "widget:w"\ncreated: "2026-01-01"\n---\nbody\n')
     found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
     assert found["doc/plans/w.md"].kind == "plan"
 
@@ -778,19 +865,17 @@ def test_unknown_id_prefix_does_not_classify(tmp_path) -> None:
 def test_synthesize_local_kind_prose_status_defaults_active(tmp_path) -> None:
     _with_local_profile(tmp_path)
     body = "# A design\n\n**Date:** 2026-02-02\n\nText.\n"
-    fm = synthesize_frontmatter(kind="design", body=body, fallback_created="2026-01-01",
-                                project_root=tmp_path)
+    fm = synthesize_frontmatter(kind="design", body=body, fallback_created="2026-01-01", project_root=tmp_path)
     assert fm["type"] == "design"
     assert fm["created"] == "2026-02-02"
-    assert fm["status"] == "active"   # open-set local kind, no prose status
+    assert fm["status"] == "active"  # open-set local kind, no prose status
     assert fm["title"] == "A design"
 
 
 def test_synthesize_local_kind_keeps_valid_prose_status(tmp_path) -> None:
     _with_local_profile(tmp_path)
     body = "# A design\n\n**Status:** retired\n"
-    fm = synthesize_frontmatter(kind="design", body=body, fallback_created="2026-01-01",
-                                project_root=tmp_path)
+    fm = synthesize_frontmatter(kind="design", body=body, fallback_created="2026-01-01", project_root=tmp_path)
     assert fm["status"] == "retired"  # open set accepts any prose status
 
 
@@ -804,8 +889,7 @@ def test_synthesize_local_kind_closed_set_invalid_status_uses_default(tmp_path) 
     _write(tmp_path, "science.yaml", "name: t\nknowledge_profiles:\n  local: local\n")
     _write(tmp_path, "knowledge/sources/local/manifest.yaml", manifest)
     body = "# A design\n\n**Status:** bogus\n"
-    fm = synthesize_frontmatter(kind="design", body=body, fallback_created="2026-01-01",
-                                project_root=tmp_path)
+    fm = synthesize_frontmatter(kind="design", body=body, fallback_created="2026-01-01", project_root=tmp_path)
     assert fm["status"] == "draft"  # invalid prose status → declared default
 
 
@@ -817,8 +901,7 @@ def test_synthesize_local_kind_closed_set_keeps_valid_status(tmp_path) -> None:
     _write(tmp_path, "science.yaml", "name: t\nknowledge_profiles:\n  local: local\n")
     _write(tmp_path, "knowledge/sources/local/manifest.yaml", manifest)
     body = "# A design\n\n**Status:** final\n"
-    fm = synthesize_frontmatter(kind="design", body=body, fallback_created="2026-01-01",
-                                project_root=tmp_path)
+    fm = synthesize_frontmatter(kind="design", body=body, fallback_created="2026-01-01", project_root=tmp_path)
     assert fm["status"] == "final"  # in-vocabulary prose status kept
 
 
@@ -829,10 +912,16 @@ def test_synthesize_local_kind_closed_set_keeps_valid_status(tmp_path) -> None:
 
 def test_plan_numbers_and_homes_local_kind(tmp_path) -> None:
     _with_local_profile(tmp_path)
-    _write(tmp_path, "doc/design/early.md",
-           '---\nid: "design:early"\ntype: design\ncreated: "2026-01-01"\ntitle: Early\nstatus: active\n---\nb\n')
-    _write(tmp_path, "doc/design/late.md",
-           '---\nid: "design:late"\ntype: design\ncreated: "2026-02-01"\ntitle: Late\nstatus: active\n---\nb\n')
+    _write(
+        tmp_path,
+        "doc/design/early.md",
+        '---\nid: "design:early"\ntype: design\ncreated: "2026-01-01"\ntitle: Early\nstatus: active\n---\nb\n',
+    )
+    _write(
+        tmp_path,
+        "doc/design/late.md",
+        '---\nid: "design:late"\ntype: design\ncreated: "2026-02-01"\ntitle: Late\nstatus: active\n---\nb\n',
+    )
     plan = plan_migration(tmp_path)
     by_old = {m.old_id: m for m in plan.moves}
     assert by_old["design:early"].new_id == "design:0001-early"
@@ -851,16 +940,11 @@ def test_plan_numbers_and_homes_local_kind(tmp_path) -> None:
 def test_rewrite_flags_unmapped_local_kind_ref(tmp_path) -> None:
     _with_local_profile(tmp_path)
     id_map = {"design:mapped": "design:0001-mapped"}
-    text = (
-        "See design:mapped, stale design:old-slug, "
-        "and already-good design:0001-existing here.\n"
-    )
-    out, unresolved = rewrite_references(
-        text, id_map, policed_kinds={"design"}, project_root=tmp_path
-    )
-    assert "design:0001-mapped" in out          # mapped ref rewritten
-    assert "design:old-slug" in unresolved      # unmapped non-conforming ref flagged
-    assert "design:mapped" not in unresolved    # mapped ref is not flagged
+    text = "See design:mapped, stale design:old-slug, and already-good design:0001-existing here.\n"
+    out, unresolved = rewrite_references(text, id_map, policed_kinds={"design"}, project_root=tmp_path)
+    assert "design:0001-mapped" in out  # mapped ref rewritten
+    assert "design:old-slug" in unresolved  # unmapped non-conforming ref flagged
+    assert "design:mapped" not in unresolved  # mapped ref is not flagged
     assert "design:0001-existing" not in unresolved  # conforming numbered ref not flagged
 
 
@@ -891,6 +975,7 @@ def test_fallback_created_prefers_created_over_other_keys() -> None:
 
 def test_fallback_created_unparseable_date_key_falls_through_to_sentinel() -> None:
     from science_tool.entity_layout_migration import _UNDATED_SENTINEL
+
     e = _legacy("doc/reports/x.md", {"generated_at": "not-a-date"})
     assert _fallback_created(e) == _UNDATED_SENTINEL
 
@@ -908,7 +993,8 @@ def test_fallback_created_filename_prefix_still_wins_over_nothing() -> None:
 def test_code_fenced_and_inline_example_ids_warn_not_block(tmp_path: Path) -> None:
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
     _write(
-        tmp_path, "specs/hypotheses/h01-alpha.md",
+        tmp_path,
+        "specs/hypotheses/h01-alpha.md",
         '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\n'
         'title: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\n'
         "See `hypothesis:hNN` and:\n```markdown\nhypothesis:disease-label-misalignment\n```\n",
@@ -928,7 +1014,8 @@ def test_code_fenced_and_inline_example_ids_warn_not_block(tmp_path: Path) -> No
 def test_cross_project_prose_pointer_warns_not_blocks(tmp_path: Path) -> None:
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
     _write(
-        tmp_path, "specs/hypotheses/h01-a.md",
+        tmp_path,
+        "specs/hypotheses/h01-a.md",
         '---\nid: "hypothesis:h01-a"\ntype: hypothesis\ncreated: "2026-01-01"\n'
         'title: A\nstatus: proposed\nupdated: "2026-01-01"\n---\n'
         "Builds on hypothesis:h00-working-model from the parent project.\n",
@@ -943,12 +1030,18 @@ def test_cross_project_prose_pointer_warns_not_blocks(tmp_path: Path) -> None:
 
 def test_wikilink_to_existing_paper_warns_not_blocks(tmp_path: Path) -> None:
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "doc/background/papers/Adams2025.md",
-           '---\nid: "paper:Adams2025"\ntype: paper\ncreated: "2026-01-01"\n'
-           'title: Adams\nstatus: active\nupdated: "2026-01-01"\n---\nbody\n')
-    _write(tmp_path, "doc/reports/2026-01-02-note.md",
-           '---\nid: "report:2026-01-02-note"\ntype: report\ncreated: "2026-01-02"\n'
-           'title: Note\nstatus: active\nupdated: "2026-01-02"\n---\nSee [[Adams2025]].\n')
+    _write(
+        tmp_path,
+        "doc/background/papers/Adams2025.md",
+        '---\nid: "paper:Adams2025"\ntype: paper\ncreated: "2026-01-01"\n'
+        'title: Adams\nstatus: active\nupdated: "2026-01-01"\n---\nbody\n',
+    )
+    _write(
+        tmp_path,
+        "doc/reports/2026-01-02-note.md",
+        '---\nid: "report:2026-01-02-note"\ntype: report\ncreated: "2026-01-02"\n'
+        'title: Note\nstatus: active\nupdated: "2026-01-02"\n---\nSee [[Adams2025]].\n',
+    )
     _git_init(tmp_path)
     dry = migrate_layout(tmp_path, apply=False)
     flat_warn = [t for toks in dry["unresolved_warnings"].values() for t in toks]
@@ -960,13 +1053,19 @@ def test_dangling_structural_related_ref_blocks_pre_mutation(tmp_path: Path) -> 
     # A conformant-but-dangling ref in a `related:` list (the case rewrite_references
     # leftovers cannot see) must block --apply BEFORE any git mv.
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "specs/hypotheses/h01-alpha.md",
-           '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\n'
-           'title: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n')
-    _write(tmp_path, "doc/questions/q01-myq.md",
-           '---\nid: "question:q01-myq"\ntype: question\ncreated: "2026-01-02"\n'
-           'title: My Q\nstatus: active\nupdated: "2026-01-02"\n'
-           'related: ["hypothesis:9999-nope"]\n---\nBody.\n')
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-alpha.md",
+        '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+        'title: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
+    _write(
+        tmp_path,
+        "doc/questions/q01-myq.md",
+        '---\nid: "question:q01-myq"\ntype: question\ncreated: "2026-01-02"\n'
+        'title: My Q\nstatus: active\nupdated: "2026-01-02"\n'
+        'related: ["hypothesis:9999-nope"]\n---\nBody.\n',
+    )
     _git_init(tmp_path)
     dry = migrate_layout(tmp_path, apply=False)
     assert dry["unresolved_references"]  # structural blocker present in dry-run
@@ -980,10 +1079,13 @@ def test_dangling_ref_in_non_related_audited_field_blocks(tmp_path: Path) -> Non
     # Proves the blocking surface tracks the WHOLE graph audit, not just `related:`.
     # A proposition `commits_to:` (audited) pointing at a dangling id must block.
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "specs/propositions/p01-claim.md",
-           '---\nid: "proposition:p01-claim"\ntype: proposition\ncreated: "2026-01-01"\n'
-           'title: Claim\nstatus: draft\nupdated: "2026-01-01"\n'
-           'commits_to: ["hypothesis:9999-nope"]\n---\nbody\n')
+    _write(
+        tmp_path,
+        "specs/propositions/p01-claim.md",
+        '---\nid: "proposition:p01-claim"\ntype: proposition\ncreated: "2026-01-01"\n'
+        'title: Claim\nstatus: draft\nupdated: "2026-01-01"\n'
+        'commits_to: ["hypothesis:9999-nope"]\n---\nbody\n',
+    )
     _git_init(tmp_path)
     dry = migrate_layout(tmp_path, apply=False)
     assert dry["unresolved_references"]
@@ -995,11 +1097,14 @@ def test_accepted_external_and_bibliography_refs_do_not_block(tmp_path: Path) ->
     # cite:* in source_refs, external go:/path refs, and meta:* are accepted by the
     # graph audit without resolution — they must NOT block.
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
-    _write(tmp_path, "specs/hypotheses/h01-a.md",
-           '---\nid: "hypothesis:h01-a"\ntype: hypothesis\ncreated: "2026-01-01"\n'
-           'title: A\nstatus: proposed\nupdated: "2026-01-01"\n'
-           'source_refs: ["cite:Adams2025"]\nrelated: ["meta:big-picture-2026"]\n'
-           'evidence_refs: ["go:0008150", "./data/x.parquet"]\n---\nbody\n')
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-a.md",
+        '---\nid: "hypothesis:h01-a"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+        'title: A\nstatus: proposed\nupdated: "2026-01-01"\n'
+        'source_refs: ["cite:Adams2025"]\nrelated: ["meta:big-picture-2026"]\n'
+        'evidence_refs: ["go:0008150", "./data/x.parquet"]\n---\nbody\n',
+    )
     _git_init(tmp_path)
     dry = migrate_layout(tmp_path, apply=False)
     assert dry["unresolved_references"] == {}

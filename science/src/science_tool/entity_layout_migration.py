@@ -57,7 +57,7 @@ def _split_frontmatter(text: str) -> tuple[dict | None, str]:
     try:
         data = yaml.safe_load(match.group(1)) or {}
     except yaml.YAMLError:
-        return None, match.group(2)   # body without fences, not the full text
+        return None, match.group(2)  # body without fences, not the full text
     return (data if isinstance(data, dict) else None), match.group(2)
 
 
@@ -191,9 +191,7 @@ def _fallback_created(entity: "LegacyEntity") -> str:
     return _UNDATED_SENTINEL
 
 
-def synthesize_frontmatter(
-    *, kind: str, body: str, fallback_created: str, project_root: Path | None = None
-) -> dict:
+def synthesize_frontmatter(*, kind: str, body: str, fallback_created: str, project_root: Path | None = None) -> dict:
     """Build a minimal valid frontmatter dict from prose headers + fallbacks.
 
     Used for legacy files that have no (or partial) YAML frontmatter so they
@@ -225,9 +223,7 @@ def synthesize_frontmatter(
     }
 
 
-def ensure_frontmatter(
-    entity: "LegacyEntity", *, fallback_created: str, project_root: Path | None = None
-) -> dict:
+def ensure_frontmatter(entity: "LegacyEntity", *, fallback_created: str, project_root: Path | None = None) -> dict:
     """Return a complete frontmatter dict, synthesizing missing fields."""
     base = synthesize_frontmatter(
         kind=entity.kind, body=entity.body, fallback_created=fallback_created, project_root=project_root
@@ -244,7 +240,7 @@ def ensure_frontmatter(
 
 # IMPORTANT: date prefix is tried BEFORE the numeric prefix, so 2026-05-23-foo
 # yields slug "foo" (not "05-23-foo" from the numeric regex matching "2026").
-_DATE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-(.*)$")     # 2026-05-23-foo
+_DATE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-(.*)$")  # 2026-05-23-foo
 _LEGACY_LOCAL_RE = re.compile(r"^(?:[A-Za-z]+)?(\d+)-(.*)$")  # h01-foo, q5-foo, 0003-foo
 
 # Known legacy locations of the two singletons (no per-kind dir / no type field).
@@ -395,8 +391,13 @@ def plan_migration(project_root: Path) -> MigrationPlan:
                     # A conformant legacy file wants a number an entities/ file
                     # already holds → blocking number collision (manual fix).
                     plan.collisions.append(
-                        {"kind": "number", "entity_kind": kind, "number": f"{number:04d}",
-                         "sources": [entity.rel_path], "occupied_by": "entities/"}
+                        {
+                            "kind": "number",
+                            "entity_kind": kind,
+                            "number": f"{number:04d}",
+                            "sources": [entity.rel_path],
+                            "occupied_by": "entities/",
+                        }
                     )
                 provisional[entity.rel_path] = number
                 taken.add(number)  # NB: two pre-conformant 0003-* both keep 3 → collision (detected below)
@@ -479,14 +480,23 @@ def _add_move(plan: MigrationPlan, entity: "LegacyEntity", new_rel: str, new_id:
                 # Two stem aliases disagree → ambiguous; remove to force UNRESOLVED.
                 plan.id_map.pop(stem_alias)
                 plan._stem_alias_sources.pop(stem_alias)
-                plan.collisions.append({
-                    "kind": "alias",
-                    "alias": stem_alias,
-                    "sources": sorted([entity.rel_path,
-                                       next(m.old_rel_path for m in plan.moves
-                                            if f"{m.kind}:{Path(m.old_rel_path).stem}" == stem_alias
-                                            and m.new_id == prior_new_id)]),
-                })
+                plan.collisions.append(
+                    {
+                        "kind": "alias",
+                        "alias": stem_alias,
+                        "sources": sorted(
+                            [
+                                entity.rel_path,
+                                next(
+                                    m.old_rel_path
+                                    for m in plan.moves
+                                    if f"{m.kind}:{Path(m.old_rel_path).stem}" == stem_alias
+                                    and m.new_id == prior_new_id
+                                ),
+                            ]
+                        ),
+                    }
+                )
             # else: same alias already maps to the same new_id (idempotent) — leave it.
         # else: a real old_id owns this key — leave it as-is (real mapping wins).
     else:
@@ -538,8 +548,15 @@ def _detect_collisions(plan: MigrationPlan) -> None:
             plan.collisions.append({"kind": "id", "new_id": new_id, "sources": sorted(sources)})
     for (kind, number), sources in sorted(by_kind_number.items()):
         if len(sources) > 1:
-            plan.collisions.append({"kind": "number", "entity_kind": kind, "number": number,
-                                    "sources": sorted(sources), "occupied_by": None})
+            plan.collisions.append(
+                {
+                    "kind": "number",
+                    "entity_kind": kind,
+                    "number": number,
+                    "sources": sorted(sources),
+                    "occupied_by": None,
+                }
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -645,46 +662,59 @@ def _render(frontmatter: dict, body: str) -> str:
     return "---\n" + yaml.safe_dump(frontmatter, sort_keys=False) + "---\n" + body
 
 
+_SIM_PLACEHOLDER_DATE = "2000-01-01"  # simulation-only stand-in for the undated sentinel
+
+
 def _simulated_postmove_audit_failures(
     project_root: Path,
     plan: MigrationPlan,
     rewritten: dict[str, str],
     singleton_text: dict[str, str],
     inplace_text: dict[str, str],
+    undated_new_paths: set[str],
 ) -> list[dict]:
     """Graph-audit-equivalent validation over a simulated post-move source set.
 
-    Reproduces the post-mutation backstop (migrate_layout step 4) BEFORE any disk
-    mutation, with no disk writes:
+    Builds the simulated post-move ProjectSources in-memory (markdown_overrides
+    inject moved entities at their new entities/<kind>/ paths; manual_aliases is
+    augmented with plan.id_map so disk-resident non-markdown sources resolve
+    old->new) and runs the existing audit_project_sources, returning its fail rows.
 
-    - markdown_overrides inject every post-move markdown file at its NEW path, so
-      the MarkdownAdapter discovers moved entities under entities/<kind>/ (their
-      legacy doc/specs homes are never scanned) carrying their rewritten, new-id
-      content. (`MarkdownAdapter.discover` adds any `.md` rel-path in virtual_files
-      even when absent from disk; `load_raw` reads the override content.)
-    - manual_aliases is augmented with plan.id_map (old_id/stem/shortform ->
-      new_id) so disk-resident sources the override channel cannot reach — tasks,
-      datapackages, relations/bindings on disk — still resolve old ids to their
-      new identity exactly as they would after the in-place rewrite on --apply.
-
-    Returns the audit's `fail` rows. Inherits the audit's full field surface and
-    its acceptance exceptions (cite:* in source_refs/evidence_refs, external
-    URLs/paths/go:/mesh:/doi:, meta:*) with zero re-implementation.
+    Loads under strict core schema (the SAME strictness as the post-mutation
+    backstop) to preserve parity. Two special cases keep that faithful without
+    crashing the dry-run:
+      - Undated entities carry the 9999-99-99 sentinel (invalid date) but are
+        blocked independently by the undated guard; they are given a valid
+        placeholder date in the simulation ONLY, so the post-move set loads and
+        inbound refs to them still resolve.
+      - A genuinely schema-invalid core entity raises here under strict schema —
+        exactly as the post-mutation backstop would. That is surfaced as a
+        pre-mutation blocker (no tree mutation) rather than crashing the dry-run.
     """
     from science_tool.graph.migrate import audit_project_sources
     from science_tool.graph.sources import load_project_sources
 
     merged = {**rewritten, **singleton_text, **inplace_text}
-    overrides = {rel: text for rel, text in merged.items() if rel.endswith(".md")}
-    # strict_core_schema=False: a synthesized entity can carry the undated sentinel
-    # (created: 9999-99-99), which fails core-date schema validation. The dry-run
-    # must never crash — undated entities are surfaced and blocked by the separate
-    # undated guard, so here we tolerate them as SkippedEntity (warn, not fail)
-    # instead of letting load_project_sources raise mid-simulation.
-    sources = load_project_sources(project_root, markdown_overrides=overrides, strict_core_schema=False)
-    sources = sources.model_copy(
-        update={"manual_aliases": {**sources.manual_aliases, **plan.id_map}}
-    )
+    overrides: dict[str, str] = {}
+    for rel, text in merged.items():
+        if not rel.endswith(".md"):
+            continue
+        if rel in undated_new_paths:
+            text = text.replace(_UNDATED_SENTINEL, _SIM_PLACEHOLDER_DATE)
+        overrides[rel] = text
+    try:
+        sources = load_project_sources(project_root, overrides)
+    except Exception as exc:
+        return [
+            {
+                "check": "schema_load_failure",
+                "status": "fail",
+                "source": "(project sources)",
+                "field": "frontmatter",
+                "target": str(exc),
+            }
+        ]
+    sources = sources.model_copy(update={"manual_aliases": {**sources.manual_aliases, **plan.id_map}})
     rows, failed = audit_project_sources(sources)
     return [r for r in rows if r.get("status") == "fail"] if failed else []
 
@@ -764,9 +794,7 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     unresolved_warnings: dict[str, list[str]] = {}
     for bucket in (rewritten, singleton_text, inplace_text):
         for rel, text in list(bucket.items()):
-            out, _ = rewrite_references(
-                text, plan.id_map, policed_kinds=policed_kinds, project_root=project_root
-            )
+            out, _ = rewrite_references(text, plan.id_map, policed_kinds=policed_kinds, project_root=project_root)
             bucket[rel] = out
             _, warn_tokens = rewrite_references(
                 _strip_code_spans(text), plan.id_map, policed_kinds=policed_kinds, project_root=project_root
@@ -778,7 +806,12 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     # Blocking is graph-audit-equivalent validation over the simulated post-move
     # source set — the SAME check the post-mutation backstop runs, moved earlier.
     structural_failures = _simulated_postmove_audit_failures(
-        project_root, plan, rewritten, singleton_text, inplace_text
+        project_root,
+        plan,
+        rewritten,
+        singleton_text,
+        inplace_text,
+        {d["new_rel_path"] for d in undated_entities},
     )
 
     report = {
@@ -832,9 +865,7 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
         rows, failed = audit_project_sources(load_project_sources(project_root))
         if failed:
             bad = [r for r in rows if r.get("status") == "fail"]
-            raise ValueError(
-                f"post-migration graph validation failed with {len(bad)} issue(s): {bad[:10]}"
-            )
+            raise ValueError(f"post-migration graph validation failed with {len(bad)} issue(s): {bad[:10]}")
     except Exception as exc:
         raise ValueError(
             "science entities migrate --apply failed after the working tree was modified; "
