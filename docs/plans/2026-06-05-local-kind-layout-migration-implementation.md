@@ -1371,7 +1371,7 @@ table that are dirty:
 cd ~/d/science
 git status --short   # confirm only this plan's files are modified
 git add \
-  model/src/science_model/profiles/schema.py \
+  science/model/src/science_model/profiles/schema.py \
   science/src/science_tool/entities.py \
   science/src/science_tool/entity_layout_migration.py \
   science/src/science_tool/graph/sources.py \
