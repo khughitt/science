@@ -559,12 +559,7 @@ def _add_move(plan: MigrationPlan, entity: "LegacyEntity", new_rel: str, new_id:
                         "sources": sorted(
                             [
                                 entity.rel_path,
-                                next(
-                                    m.old_rel_path
-                                    for m in plan.moves
-                                    if f"{m.kind}:{Path(m.old_rel_path).stem}" == stem_alias
-                                    and m.new_id == prior_new_id
-                                ),
+                                next(m.old_rel_path for m in plan.moves if m.new_id == prior_new_id),
                             ]
                         ),
                     }

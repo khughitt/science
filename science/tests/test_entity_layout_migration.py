@@ -1249,3 +1249,19 @@ def test_date_dir_scoped_alias_avoids_bare_kind_word_collision(tmp_path: Path) -
     assert alias_collisions == []  # date-scoping made the two aliases distinct
     assert "interpretation:2026-05-14-interpretation" in plan.id_map
     assert "interpretation:2026-05-20-interpretation" in plan.id_map
+
+
+def test_same_date_different_path_bare_kind_word_records_collision_not_crash(tmp_path: Path) -> None:
+    # Two bare-kind-word files sharing a date prefix but under different parent
+    # paths scope to the SAME alias -> a genuine collision must be RECORDED, not
+    # crash plan_migration with StopIteration.
+    for parent in ("doc/probes/2026-05-14", "doc/other/2026-05-14"):
+        _write(
+            tmp_path,
+            f"{parent}/interpretation.md",
+            '---\ntype: interpretation\ncreated: "2026-05-14"\ntitle: Probe\nstatus: active\n---\nbody\n',
+        )
+    plan = plan_migration(tmp_path)  # must not raise
+    alias_collisions = [c for c in plan.collisions if c.get("kind") == "alias"]
+    assert len(alias_collisions) == 1
+    assert alias_collisions[0]["alias"] == "interpretation:2026-05-14-interpretation"
