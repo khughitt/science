@@ -1330,3 +1330,104 @@ def test_unsluggable_title_and_stem_do_not_abort_planning(tmp_path: Path) -> Non
     topic_moves = [m for m in plan.moves if m.kind == "topic"]
     assert len(topic_moves) == 1
     assert topic_moves[0].new_id == "topic:0001-untitled-topic"
+
+
+# ---------------------------------------------------------------------------
+# Substrate 1.4b Task 1: deprecation-aware identity-collision gate (§B3/§C4)
+# ---------------------------------------------------------------------------
+
+
+def _decl(cid, mode, scope="demo", *, adapter="markdown", deprecated=False):
+    from science_model.source_ref import SourceRef
+    from science_tool.graph.identity_table import IdentityDeclaration
+
+    return IdentityDeclaration(
+        canonical_id=cid,
+        participation_mode=mode,
+        owner_scope=scope,
+        adapter=adapter,
+        source_ref=SourceRef(adapter_name=adapter, path=f"{adapter}/{cid}.md"),
+        deprecated=deprecated,
+    )
+
+
+def test_identity_collision_rows_blocks_two_real_owners() -> None:
+    from science_tool.entity_layout_migration import _identity_collision_rows
+    from science_tool.graph.identity_table import IdentityTable, ParticipationMode
+
+    table = IdentityTable(
+        rows=[
+            _decl("hypothesis:0001", ParticipationMode.OWNER, adapter="markdown"),
+            _decl("hypothesis:0001", ParticipationMode.OWNER, adapter="markdown"),
+        ]
+    )
+    blockers, warnings = _identity_collision_rows(table)
+    assert [r["check"] for r in blockers] == ["identity_collision"]
+    assert blockers[0]["status"] == "fail" and blockers[0]["source"] == "hypothesis:0001"
+    assert warnings == []
+
+
+def test_identity_collision_rows_carries_transitional_shadow_as_warning() -> None:
+    from science_tool.entity_layout_migration import _identity_collision_rows
+    from science_tool.graph.identity_table import IdentityTable, ParticipationMode
+
+    table = IdentityTable(
+        rows=[
+            _decl("hypothesis:0001", ParticipationMode.OWNER, adapter="markdown"),
+            _decl("hypothesis:0001", ParticipationMode.OWNER, adapter="aggregate", deprecated=True),
+        ]
+    )
+    blockers, warnings = _identity_collision_rows(table)
+    assert blockers == []
+    assert [r["check"] for r in warnings] == ["identity_collision"]
+    assert warnings[0]["status"] == "warn"
+
+
+def test_identity_collision_rows_ignores_borrower() -> None:
+    from science_tool.entity_layout_migration import _identity_collision_rows
+    from science_tool.graph.identity_table import IdentityTable, ParticipationMode
+
+    table = IdentityTable(
+        rows=[
+            _decl("topic:scfm", ParticipationMode.OWNER, scope="demo", adapter="markdown"),
+            _decl("topic:scfm", ParticipationMode.BORROWER, scope="commons", adapter="overlay"),
+        ]
+    )
+    blockers, warnings = _identity_collision_rows(table)
+    assert blockers == [] and warnings == []
+
+
+def _seed_markdown_owner_and_aggregate_stub(project_root: Path, canonical_id: str) -> None:
+    """Seed a REAL markdown owner of ``canonical_id`` plus an entities.yaml aggregate
+    STUB declaring the same id (a deprecated=True transitional owner row).
+
+    The markdown owner is placed under entities/ (already-migrated layout) so the
+    post-move compile sees it in-place; the aggregate stub lives under
+    knowledge/sources/<local_profile>/entities.yaml — the shape AggregateAdapter
+    discovers — so the two share (project_name, canonical_id) and collide via
+    IdentityTable.collisions() with exactly one deprecated owner."""
+    kind, local = canonical_id.split(":", 1)
+    _write(
+        project_root,
+        f"entities/hypotheses/{local}.md",
+        f'---\nid: "{canonical_id}"\ntype: {kind}\ncreated: "2026-01-01"\n'
+        f'title: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
+    _write(
+        project_root,
+        "knowledge/sources/local/entities.yaml",
+        f'entities:\n  - canonical_id: "{canonical_id}"\n    kind: "{kind}"\n'
+        f'    title: "Alpha"\n    created: "2026-01-01"\n    status: "proposed"\n'
+        f'    updated: "2026-01-01"\n    profile: "local"\n',
+    )
+
+
+def test_aggregate_stub_shadowing_markdown_owner_does_not_block_apply(tmp_path: Path) -> None:
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\nknowledge_profiles:\n  local: local\n")
+    _seed_markdown_owner_and_aggregate_stub(tmp_path, "hypothesis:0001-alpha")
+    _git_init(tmp_path)
+    report = migrate_layout(tmp_path, apply=False)
+    assert any("hypothesis:0001-alpha" in str(c) for c in report["transitional_owner_collisions"])
+    assert all(
+        "hypothesis:0001-alpha" not in t for targets in report["unresolved_references"].values() for t in targets
+    )

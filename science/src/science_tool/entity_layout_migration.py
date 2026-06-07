@@ -16,6 +16,7 @@ import re
 import yaml
 
 if TYPE_CHECKING:
+    from science_tool.graph.identity_table import IdentityTable
     from science_tool.graph.sources import ProjectSources
 
 from science_tool.entities import (
@@ -754,7 +755,65 @@ def _render(frontmatter: dict, body: str) -> str:
     return "---\n" + yaml.safe_dump(frontmatter, sort_keys=False) + "---\n" + body
 
 
-_SIM_PLACEHOLDER_DATE = "2000-01-01"  # simulation-only stand-in for the undated sentinel
+def _identity_collision_rows(table: "IdentityTable") -> tuple[list[dict], list[dict]]:
+    """Split identity-table collisions into hard blockers vs transitional carries (§B3/§C4).
+
+    A collision is a HARD blocker only when >= 2 NON-deprecated owner rows share the
+    (owner_scope, canonical_id) key — a genuine duplicate of a real owner. A collision
+    that involves a transitional owner (deprecated=True, e.g. an entities.yaml aggregate
+    STUB shadowing a real markdown owner) is NOT blocked: §C4 carries transitional owners
+    as-is until §B5 retirement. Such a collision is returned as a non-blocking warning so
+    the shadow debt is surfaced (never silently dropped), not as an apply blocker.
+
+    Note: IdentityTable.collisions()/owners() already excludes BORROWER + external rows,
+    so a borrower of an id never appears here (the §B3 "41 phantom collisions" fix).
+    """
+    blockers: list[dict] = []
+    warnings: list[dict] = []
+    for collision in table.collisions():
+        paths = [(r.source_ref.path if r.source_ref else "<unknown>") for r in collision.rows]
+        real_owners = sum(1 for r in collision.rows if not r.deprecated)
+        row = {
+            "check": "identity_collision",
+            "status": "fail" if real_owners >= 2 else "warn",
+            "source": collision.canonical_id,
+            "field": "owner_scope",
+            "target": collision.owner_scope,
+            "details": "owned by " + " and ".join(paths),
+        }
+        (blockers if real_owners >= 2 else warnings).append(row)
+    return blockers, warnings
+
+
+def _schema_invalid_blockers(sources: "ProjectSources", undated_new_paths: set[str]) -> list[dict]:
+    """Re-surface malformed-core entities as pre-mutation blockers (strict-parity).
+
+    Under the non-strict post-move compile, a core-kind entity whose schema validation
+    fails is recorded as a SkippedEntity(reason="core_schema_validation_failed") instead
+    of crashing the load — so we must re-flag it to keep parity with the strict
+    post-mutation backstop. EXCEPT undated entities: they carry the 9999-99-99 sentinel
+    (which also fails the date schema) but are blocked by the dedicated undated guard, so
+    re-flagging them here would be a spurious double-block. (The missing-identity reason
+    "entity_schema_validation_failed" is deliberately NOT triaged here — it is skipped
+    even under strict load and is not a malformed-core failure.)
+    """
+    fails: list[dict] = []
+    for skipped in sources.skipped_entities:
+        if skipped.reason != "core_schema_validation_failed":
+            continue
+        if skipped.path in undated_new_paths:
+            continue
+        fails.append(
+            {
+                "check": "schema_load_failure",
+                "status": "fail",
+                "source": skipped.path,
+                "field": "frontmatter",
+                "target": skipped.reason,
+                "details": skipped.details,
+            }
+        )
+    return fails
 
 
 def _simulated_postmove_audit_failures(
@@ -764,59 +823,69 @@ def _simulated_postmove_audit_failures(
     singleton_text: dict[str, str],
     inplace_text: dict[str, str],
     undated_new_paths: set[str],
-) -> list[dict]:
+) -> tuple[list[dict], list[dict]]:
     """Graph-audit-equivalent validation over a simulated post-move source set.
 
     Builds the simulated post-move ProjectSources in-memory (markdown_overrides
     inject moved entities at their new entities/<kind>/ paths; manual_aliases is
     augmented with plan.id_map so disk-resident non-markdown sources resolve
-    old->new) and runs the existing audit_project_sources, returning its fail rows.
+    old->new) and runs the existing audit_project_sources, returning its fail rows
+    plus deprecation-aware identity-collision blockers and schema-triage blockers.
 
-    Loads under strict core schema (the SAME strictness as the post-mutation
-    backstop) to preserve parity. Two special cases keep that faithful without
-    crashing the dry-run:
-      - Undated entities carry the 9999-99-99 sentinel (invalid date) but are
-        blocked independently by the undated guard; they are given a valid
-        placeholder date in the simulation ONLY, so the post-move set loads and
-        inbound refs to them still resolve.
-      - A genuinely schema-invalid core entity raises here under strict schema —
-        exactly as the post-mutation backstop would. That is surfaced as a
-        pre-mutation blocker (no tree mutation) rather than crashing the dry-run.
+    Returns ``(blockers, transitional_owner_collisions)``: hard pre-mutation
+    blockers and the non-blocking transitional-shadow warnings (§C4) surfaced in
+    the report.
     """
+    from science_tool.graph.identity_table import build_identity_table
     from science_tool.graph.migrate import audit_project_sources
     from science_tool.graph.sources import load_project_sources
 
     merged = {**rewritten, **singleton_text, **inplace_text}
-    overrides: dict[str, str] = {}
-    for rel, text in merged.items():
-        if not rel.endswith(".md"):
-            continue
-        if rel in undated_new_paths:
-            text = text.replace(_UNDATED_SENTINEL, _SIM_PLACEHOLDER_DATE)
-        overrides[rel] = text
+    overrides = {rel: text for rel, text in merged.items() if rel.endswith(".md")}
     try:
-        sources = load_project_sources(project_root, overrides)
+        # Compile the post-move model through the canonical loader (moved entities as
+        # virtual files at their new paths). Non-strict so a duplicate (owner_scope,
+        # canonical_id) records BOTH owner rows for IdentityTable.collisions() to
+        # report (deprecation-aware, below) instead of raising
+        # EntityIdentityCollisionError, and so the 9999-99-99 undated sentinel no
+        # longer crashes the load (no date-mask needed — undated entities are blocked
+        # by their own guard; malformed-core failures are re-surfaced below).
+        sources = load_project_sources(project_root, overrides, strict_core_schema=False, strict_identity=False)
     except Exception as exc:
         # An unexpected (non-schema) exception is also intentionally converted to a
         # blocker so --apply never proceeds on an unloadable simulated tree.
-        return [
-            {
-                "check": "schema_load_failure",
-                "status": "fail",
-                "source": "(project sources)",
-                "field": "frontmatter",
-                "target": str(exc),
-                "details": str(exc),
-            }
-        ]
+        return (
+            [
+                {
+                    "check": "schema_load_failure",
+                    "status": "fail",
+                    "source": "(project sources)",
+                    "field": "frontmatter",
+                    "target": str(exc),
+                    "details": str(exc),
+                }
+            ],
+            [],
+        )
     # Capture the real mappings.yaml aliases BEFORE injecting plan.id_map so that
     # _dangling_alias_targets only validates project-authored alias entries; plan
     # shortform/stem entries are rewrite tokens, not authoritative references.
     mappings_aliases = dict(sources.manual_aliases)
     sources = sources.model_copy(update={"manual_aliases": {**sources.manual_aliases, **plan.id_map}})
     rows, failed = audit_project_sources(sources)
-    audit_fails = [r for r in rows if r.get("status") == "fail"] if failed else []
-    return audit_fails + _dangling_alias_targets(sources, mappings_aliases)
+    # Drop the audit's deprecation-blind identity_collision fails; we recompute them
+    # deprecation-aware below (a transitional shadow must not hard-block, design §C4).
+    audit_fails = (
+        [r for r in rows if r.get("status") == "fail" and r.get("check") != "identity_collision"] if failed else []
+    )
+    collision_blockers, transitional_warnings = _identity_collision_rows(build_identity_table(sources))
+    blockers = (
+        audit_fails
+        + collision_blockers
+        + _schema_invalid_blockers(sources, undated_new_paths)
+        + _dangling_alias_targets(sources, mappings_aliases)
+    )
+    return blockers, transitional_warnings
 
 
 def _dangling_alias_targets(sources: "ProjectSources", mappings_aliases: dict[str, str]) -> list[dict]:
@@ -952,7 +1021,7 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
 
     # Blocking is graph-audit-equivalent validation over the simulated post-move
     # source set — the SAME check the post-mutation backstop runs, moved earlier.
-    structural_failures = _simulated_postmove_audit_failures(
+    structural_failures, transitional_owner_collisions = _simulated_postmove_audit_failures(
         project_root,
         plan,
         rewritten,
@@ -967,6 +1036,7 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
         "id_map": plan.id_map,
         "collisions": plan.collisions,
         "unresolved_references": _audit_failures_to_report(structural_failures),
+        "transitional_owner_collisions": transitional_owner_collisions,
         "unresolved_warnings": unresolved_warnings,
         "local_kind_warnings": local_kind_warnings(project_root),
         "skipped_untyped": skipped_untyped,
