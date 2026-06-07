@@ -191,7 +191,7 @@ def check_entity_stray_files(ctx: ValidateContext) -> Iterator[Result]:
                 yield _result(_severity(ctx), _rel(ctx, path), f"non-entity file in {policy.root}/: {path.name}")
 
 
-@Check(section="overlay_of in owner root...", order=42)
+@Check(section="entity overlay_of in owner root...", order=42)
 def check_overlay_of_in_owner_root(ctx: ValidateContext) -> Iterator[Result]:
     """An overlay (`overlay_of:` frontmatter) is a borrow attachment and belongs
     under doc/<type>/, never under the framework owner root entities/. A file with
@@ -211,7 +211,7 @@ def check_overlay_of_in_owner_root(ctx: ValidateContext) -> Iterator[Result]:
         try:
             data = ctx.frontmatter(path)
         except yaml.YAMLError:
-            continue  # invalid YAML is reported by check_entity_frontmatter_completeness
+            continue  # invalid YAML in registered-kind dirs is reported by check_entity_frontmatter_completeness
         if "overlay_of" in data:
             yield _result(
                 _severity(ctx),
