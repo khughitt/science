@@ -816,7 +816,7 @@ def _schema_invalid_blockers(sources: "ProjectSources", undated_new_paths: set[s
     return fails
 
 
-def _simulated_postmove_audit_failures(
+def _postmove_audit_failures(
     project_root: Path,
     plan: MigrationPlan,
     rewritten: dict[str, str],
@@ -824,17 +824,14 @@ def _simulated_postmove_audit_failures(
     inplace_text: dict[str, str],
     undated_new_paths: set[str],
 ) -> tuple[list[dict], list[dict]]:
-    """Graph-audit-equivalent validation over a simulated post-move source set.
+    """Graph-audit-equivalent validation over the COMPILED post-move model (design §C4).
 
-    Builds the simulated post-move ProjectSources in-memory (markdown_overrides
-    inject moved entities at their new entities/<kind>/ paths; manual_aliases is
-    augmented with plan.id_map so disk-resident non-markdown sources resolve
-    old->new) and runs the existing audit_project_sources, returning its fail rows
-    plus deprecation-aware identity-collision blockers and schema-triage blockers.
-
-    Returns ``(blockers, transitional_owner_collisions)``: hard pre-mutation
-    blockers and the non-blocking transitional-shadow warnings (§C4) surfaced in
-    the report.
+    Compiles the post-move ProjectSources via the canonical loader (moved entities as
+    virtual files at their new paths) and returns ``(blockers, transitional_owner_collisions)``:
+    blockers are pre-mutation fail rows — deprecation-aware identity_collision (two real
+    owners), reference, ambiguous_alias, malformed-core schema, and dangling-alias-target;
+    transitional_owner_collisions are non-blocking warnings for transitional-owner shadows
+    carried per §C4 until §B5 retirement. No simulate-and-mask.
     """
     from science_tool.graph.identity_table import build_identity_table
     from science_tool.graph.migrate import audit_project_sources
@@ -853,7 +850,7 @@ def _simulated_postmove_audit_failures(
         sources = load_project_sources(project_root, overrides, strict_core_schema=False, strict_identity=False)
     except Exception as exc:
         # An unexpected (non-schema) exception is also intentionally converted to a
-        # blocker so --apply never proceeds on an unloadable simulated tree.
+        # blocker so --apply never proceeds on an unloadable compiled post-move tree.
         return (
             [
                 {
@@ -889,17 +886,23 @@ def _simulated_postmove_audit_failures(
 
 
 def _dangling_alias_targets(sources: "ProjectSources", mappings_aliases: dict[str, str]) -> list[dict]:
-    """Alias targets the graph audit silently accepts but that resolve to no
-    entity. `audit_project_sources` passes manual_aliases into the resolver but
-    never proves each target exists; this closes that gap. Targets are resolved
-    THROUGH the simulated alias map (sources.manual_aliases, which includes
-    plan.id_map), so a valid target referenced by its OLD id (rewritten to a new
-    identity via the injected id_map) is accepted. External (URL/path/go:/mesh:/doi:)
-    and meta:* targets are exempt, matching the audit's own acceptance exceptions.
+    """Validate that every project-authored mappings.yaml alias TARGET resolves to a real entity.
 
-    Only `mappings_aliases` (the real project mappings.yaml entries, before
-    plan.id_map injection) are validated — plan.id_map shortform/stem entries are
-    rewrite tokens, not authoritative references, and must not be validated here.
+    ``audit_project_sources`` passes manual_aliases into the resolver but never proves each
+    target exists; this helper closes that gap. Targets are resolved through the compiled
+    alias map (sources.manual_aliases, which includes plan.id_map), so a target referenced
+    by its OLD id (rewritten to a new identity via the injected id_map) is accepted.
+    External (URL/path/go:/mesh:/doi:) and meta:* targets are exempt, matching the audit's
+    own acceptance exceptions.
+
+    Only ``mappings_aliases`` (the real project mappings.yaml entries, captured before
+    plan.id_map injection) are validated — plan.id_map shortform/stem entries are rewrite
+    tokens, not authoritative references, and must not be validated here.
+
+    Duplicate OWNERSHIP of the same canonical id is now reported as a deprecation-aware
+    ``identity_collision`` row by ``_identity_collision_rows`` (reading the compiled
+    IdentityTable). This helper's sole retained role is validating that real mappings.yaml
+    alias TARGETS resolve — it is NOT the ownership-collision detector.
     """
     from science_tool.graph.reference_resolution import ReferenceResolver
     from science_tool.graph.sources import AliasCollisionError, is_external_reference, is_metadata_reference
@@ -907,11 +910,11 @@ def _dangling_alias_targets(sources: "ProjectSources", mappings_aliases: dict[st
     try:
         resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
     except AliasCollisionError:
-        # A colliding alias map is already reported as a blocking fail row by
-        # audit_project_sources (which runs before this helper and catches the same
-        # error). Target validation can't run without a resolver, so return [] and
-        # let the audit's ambiguous_alias row be the blocker — never propagate, or
-        # the dry-run aborts with no JSON.
+        # A colliding alias map is already reported as a blocking ``ambiguous_alias`` fail
+        # row by audit_project_sources (which runs before this helper and catches the same
+        # error). Target validation cannot run without a resolver, so return [] and let the
+        # audit's ambiguous_alias row be the blocker — never propagate, or the dry-run
+        # aborts with no JSON.
         return []
     fails: list[dict] = []
     for alias, target in mappings_aliases.items():
@@ -1019,9 +1022,9 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
             if warn_tokens:
                 unresolved_warnings[rel] = warn_tokens
 
-    # Blocking is graph-audit-equivalent validation over the simulated post-move
-    # source set — the SAME check the post-mutation backstop runs, moved earlier.
-    structural_failures, transitional_owner_collisions = _simulated_postmove_audit_failures(
+    # Blocking pre-mutation gate: compile the post-move model and run the graph
+    # audit equivalent (the SAME check the post-mutation backstop runs, moved earlier).
+    structural_failures, transitional_owner_collisions = _postmove_audit_failures(
         project_root,
         plan,
         rewritten,
@@ -1053,7 +1056,7 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     if structural_failures:
         raise ValueError(
             f"unresolved structural references block --apply "
-            f"(simulated post-move graph audit): {structural_failures[:10]}"
+            f"(compiled post-move graph audit): {structural_failures[:10]}"
         )
     if undated_entities:
         raise ValueError(

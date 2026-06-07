@@ -998,7 +998,7 @@ def test_fallback_created_filename_prefix_still_wins_over_nothing() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Unit A: position-aware blocking via simulated post-move audit
+# Unit A: position-aware blocking via the compiled post-move audit
 # ---------------------------------------------------------------------------
 
 
@@ -1304,7 +1304,7 @@ def test_real_tokens_are_not_filtered(token: str) -> None:
 
 
 def test_colliding_entity_aliases_block_without_aborting_dry_run(tmp_path: Path) -> None:
-    # Two entities declaring the same alias make the simulated-audit resolver raise
+    # Two entities declaring the same alias make the compiled-audit resolver raise
     # AliasCollisionError. The dry-run must REPORT it as a blocker and still return a
     # report dict (emit JSON) — not propagate the exception and abort.
     _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
@@ -1431,3 +1431,46 @@ def test_aggregate_stub_shadowing_markdown_owner_does_not_block_apply(tmp_path: 
     assert all(
         "hypothesis:0001-alpha" not in t for targets in report["unresolved_references"].values() for t in targets
     )
+
+
+# ---------------------------------------------------------------------------
+# Substrate 1.4b Task 2: retire simulation-mask framing; prove ambiguous_alias
+# ---------------------------------------------------------------------------
+
+
+def _postmove_audit_failures_for(project_root: Path) -> tuple[list[dict], list[dict]]:
+    """Mirror the migrator's pre-gate setup for a project with NO legacy moves.
+
+    Entities placed under entities/ are already in the post-move layout, so
+    plan.moves == [] and rewritten/singleton_text/inplace_text are all empty.
+    This lets us call _postmove_audit_failures directly without replicating the
+    full migrate_layout build loop.
+    """
+    from science_tool.entity_layout_migration import _postmove_audit_failures, plan_migration
+
+    plan = plan_migration(project_root)
+    return _postmove_audit_failures(project_root, plan, {}, {}, {}, set())
+
+
+def _seed_conflicting_aliases(project_root: Path) -> None:
+    """Write two entities under entities/ that share one alias string but map to
+    different canonical ids, triggering AliasCollisionError in the resolver and
+    the ambiguous_alias blocker row from audit_project_sources."""
+    for stem in ("a", "b"):
+        _write(
+            project_root,
+            f"entities/hypotheses/h01-{stem}.md",
+            f'---\nid: "hypothesis:h01-{stem}"\ntype: hypothesis\ncreated: "2026-01-01"\n'
+            f'title: H {stem}\nstatus: proposed\nupdated: "2026-01-01"\n'
+            'aliases: ["hypothesis:shared-alias"]\n---\nbody\n',
+        )
+
+
+def test_genuine_alias_clash_still_reports_ambiguous_alias(tmp_path: Path) -> None:
+    # Retiring the duplicate-ownership PROXY must not retire the legitimate
+    # ambiguous_alias check: two DIFFERENT ids sharing one alias still blocks via
+    # ambiguous_alias (emitted by audit_project_sources, surfaced as a gate blocker).
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _seed_conflicting_aliases(tmp_path)  # two entities, same alias -> different ids
+    blockers, _transitional = _postmove_audit_failures_for(tmp_path)
+    assert any(r["check"] == "ambiguous_alias" for r in blockers)
