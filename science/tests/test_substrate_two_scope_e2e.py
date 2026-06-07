@@ -4,12 +4,16 @@ import shutil
 from pathlib import Path
 
 import pytest
+from rdflib import Dataset
+from rdflib.namespace import SKOS
 
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.registry import RegistryBuilder
 from science_tool.graph.identity_table import build_identity_table
+from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.sources import load_project_sources
+from science_tool.graph.store import PROJECT_NS
 
 _COMMONS_FIXTURE = Path(__file__).parent / "fixtures" / "commons" / "valid"
 _SHARED_ID = "topic:single-cell-foundation-models"
@@ -70,3 +74,64 @@ def test_audit_emits_ambiguous_reference_for_two_scope_bare_ref(
     assert len(ambiguous) == 1
     assert ambiguous[0]["target"] == _SHARED_ID
     assert ambiguous[0]["source"] == "hypothesis:h1"
+
+
+def _project_with_scoped_ref(tmp_path: Path) -> Path:
+    project_root = _project_owning_and_referencing_shared_id(tmp_path)
+    # Re-author the hypothesis to use the scoped form -> unambiguous, must materialize.
+    hyp = project_root / "entities" / "hypotheses" / "h1.md"
+    hyp.write_text(
+        f'---\nid: "hypothesis:h1"\ntype: "hypothesis"\ntitle: "H1"\nrelated: ["commons:{_SHARED_ID}"]\n---\n',
+        encoding="utf-8",
+    )
+    return project_root
+
+
+def _entity_uri(canonical_id: str):
+    kind, slug = canonical_id.split(":", 1)
+    return PROJECT_NS[f"{kind}/{slug.lower()}"]
+
+
+def _has_hypothesis_topic_edge(trig_path: Path) -> bool:
+    """True iff the materialized graph links hypothesis:h1 -> topic:single-cell-foundation-models.
+
+    Loads the written TriG (rdflib Dataset / trig format) and checks the knowledge
+    layer for a skos:related edge between the two entity URIs (same predicate +
+    URI scheme the materializer emits for a `related:` ref). The local topic NODE
+    is always present, so this edge check — not a node/substring check — is what
+    discriminates a resolved scoped ref from a dropped one.
+    """
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    subject = _entity_uri("hypothesis:h1")
+    target = _entity_uri(_SHARED_ID)
+    return target in set(knowledge.objects(subject, SKOS.related))
+
+
+def test_materialize_graph_refuses_two_scope_bare_ref(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = _project_owning_and_referencing_shared_id(tmp_path)
+
+    with pytest.raises(ValueError) as excinfo:
+        materialize_graph(project_root)
+    assert _SHARED_ID in str(excinfo.value)
+
+
+def test_scoped_ref_resolves_and_materializes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = _project_with_scoped_ref(tmp_path)
+
+    # Audit clean (scoped form disambiguates) ...
+    sources = load_project_sources(project_root)
+    rows, _ = audit_project_sources(sources)
+    assert [r for r in rows if r["check"] == "ambiguous_reference"] == []
+    # ... and the build resolves the scoped ref into a real edge between
+    # hypothesis:h1 and topic:single-cell-foundation-models.
+    trig_path = materialize_graph(project_root)
+    assert trig_path.exists()
+    assert _has_hypothesis_topic_edge(trig_path)

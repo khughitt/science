@@ -43,6 +43,7 @@ from science_tool.graph.freshness import (
     derive_bears_on_from_typed_edges,
     derive_freshness,
 )
+from science_tool.graph.identity_table import build_identity_table
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
@@ -88,7 +89,9 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     dataset.graph(PROJECT_NS["graph/causal"])
     dataset.graph(PROJECT_NS["graph/datasets"])
 
-    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
+    resolver = ReferenceResolver.from_entities(
+        sources.entities, manual_aliases=sources.manual_aliases, identity_table=build_identity_table(sources)
+    )
     entity_index = {entity.canonical_id: entity for entity in sources.entities}
     ext_prefixes = _EXTERNAL_PREFIXES | external_prefixes(sources.ontology_catalogs)
 
