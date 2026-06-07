@@ -1075,3 +1075,104 @@ def test_materialization_audit_reports_non_dataset_geneset_row_usage_refs(tmp_pa
         and row["target"] == "dataset:smith"
         for row in rows
     )
+
+
+def _write_promoted_geneset_collection(root):
+    """Markdown owner at entities/datasets/reactome-v89.md shadowing geneset datapackage.
+
+    This exercises the §B4 promoted-owner path: the markdown entity wins the owner
+    column (adapter tag "markdown"), and the geneset resource metadata lives in the
+    deferred datapackage.  Member extraction must still find the members CSV.
+    """
+    ds_dir = root / "entities" / "datasets"
+    ds_dir.mkdir(parents=True, exist_ok=True)
+    (ds_dir / "reactome-v89.md").write_text(
+        "---\n"
+        "id: dataset:reactome-v89\n"
+        "type: dataset\n"
+        "title: Reactome\n"
+        "status: active\n"
+        "origin: external\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n"
+        "datapackage: data/reactome/datapackage.yaml\n"
+        "created: '2026-01-01'\n"
+        "updated: '2026-01-01'\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    dp_dir = root / "data" / "reactome"
+    dp_dir.mkdir(parents=True, exist_ok=True)
+    (dp_dir / "datapackage.yaml").write_text(
+        "profiles: [science-pkg-entity-1.0]\n"
+        "id: dataset:reactome-v89\n"
+        "type: dataset\n"
+        "title: Reactome\n"
+        "status: active\n"
+        "origin: external\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n"
+        "schema_profile: science-entity-base/1.0+dataset/1.0+bio.geneset/1.0\n"
+        "source_class: reference\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n"
+        "member_key_column: set_key\n"
+        "members_resource: sets\n"
+        "n_sets: 1\n"
+        "set_size_summary: {min: 2, median: 2, max: 2}\n"
+        "identifier_space: {tier: gene, namespace: hgnc_id, resolution_status: declared_unresolved}\n"
+        "resources:\n"
+        "  - name: sets\n"
+        "    path: sets.csv\n",
+        encoding="utf-8",
+    )
+    (dp_dir / "sets.csv").write_text(
+        "set_key,name,member_ids,dataset_usage\n"
+        'R-HSA-1,Cell cycle,HGNC:1;HGNC:2,"[{""ref"":""dataset:gtex-v8"",""role"":""set_definition_source"",""overlap"":""full""}]"\n',
+        encoding="utf-8",
+    )
+
+
+def test_materialize_graph_emits_geneset_row_usage_nodes_for_promoted_markdown_owner(tmp_path):
+    """Regression guard for footgun-a: geneset members must not silently disappear when
+    the dataset entity has a markdown owner (adapter tag "markdown") that shadows the
+    geneset datapackage.  Previously the adapter-tag gate skipped all such entities."""
+    from science_tool.graph import materialize
+    from science_tool.graph.materialize import materialize_graph
+    from science_tool.graph.reference_resolution import ReferenceResolver
+    from science_tool.graph.sources import load_project_sources
+
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path / "data" / "gtex" / "datapackage.yaml",
+        "gtex-v8",
+        "origin: external\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n",
+    )
+    _write_promoted_geneset_collection(tmp_path)
+
+    # (1) Member edge must be present — same assertion as the orphan-datapackage test.
+    trig = materialize_graph(tmp_path)
+    graph = _load_trig(trig).graph(PROJECT_NS["graph/provenance"])
+
+    row_uri = PROJECT_NS["virtual/geneset-member/reactome-v89/R-HSA-1"]
+    nodes = list(graph.objects(row_uri, SCI_NS.hasDatasetUsage))
+
+    assert len(nodes) == 1
+    assert (nodes[0], SCI_NS.dataset, PROJECT_NS["dataset/gtex-v8"]) in graph
+    assert (nodes[0], SCI_NS.usageRole, Literal("set_definition_source")) in graph
+    assert (nodes[0], SCI_NS.usageOverlap, Literal("full")) in graph
+    assert (nodes[0], SCI_NS.usageSource, Literal("geneset.members_resource")) in graph
+
+    # (2) Provenance must cite the datapackage, not the markdown owner file.
+    sources = load_project_sources(tmp_path)
+    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases={})
+    records = list(materialize._geneset_usage_records(sources, resolver=resolver))
+
+    assert len(records) == 1
+    assert records[0].source_path == "data/reactome/datapackage.yaml"
+    assert records[0].source_path != "entities/datasets/reactome-v89.md"

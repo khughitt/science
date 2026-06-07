@@ -22,7 +22,7 @@ from science_tool.addressing import is_address, parse_address
 from science_tool.bibliography import is_bibliography_reference
 from science_tool.code.lifecycle import ORPHAN_GATING_EXEMPT_STATUSES
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
-from science_tool.commons.geneset_resources import geneset_resource_frontmatter, read_member_rows
+from science_tool.commons.geneset_resources import dataset_geneset_frontmatter, read_member_rows
 from science_tool.graph.dataset_usage import (
     add_usage_record_to_graph,
     usage_records_for_entity,
@@ -668,9 +668,12 @@ def _geneset_usage_records(sources: ProjectSources, *, resolver: ReferenceResolv
     for entity in sources.entities:
         if entity.kind != "dataset":
             continue
-        if sources.entity_source_adapters.get(entity.canonical_id) not in {"datapackage", "commons-merged"}:
-            continue
-        fm = geneset_resource_frontmatter(project_root, entity.file_path)
+        fm = dataset_geneset_frontmatter(
+            project_root,
+            entity.file_path,
+            entity_adapter=sources.entity_source_adapters.get(entity.canonical_id),
+            datapackage_rel=sources.dataset_datapackages.get(entity.canonical_id),
+        )
         if fm is None:
             continue
         raw_rows = read_member_rows(project_root, fm)
@@ -684,7 +687,10 @@ def _geneset_usage_records(sources: ProjectSources, *, resolver: ReferenceResolv
             raise RuntimeError(f"{entity.canonical_id}: members_resource malformed: {exc}") from exc
         yield from usage_records_for_geneset_rows(
             collection_id=entity.canonical_id,
-            source_path=entity.file_path,
+            # Cite the resource's real source (the datapackage), not whichever owner
+            # won the column — fm["_path"] is the datapackage for a promoted owner and
+            # is identical to entity.file_path for an orphan datapackage (no change).
+            source_path=str(fm["_path"]),
             rows=rows,
             resolve_dataset_ref=lambda raw_ref: _resolve_dataset_usage_ref(raw_ref, resolver),
         )

@@ -7,6 +7,60 @@ from science_tool.commons.geneset import (
     GenesetCollectionError,
     parse_geneset_rows,
 )
+from science_tool.commons.geneset_resources import dataset_geneset_frontmatter
+
+
+def _write_geneset_datapackage(path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        'profiles: ["science-pkg-entity-1.0"]\n'
+        'id: "dataset:gs"\n'
+        'type: "dataset"\n'
+        'title: "GS"\n'
+        'status: "active"\n'
+        'origin: "external"\n'
+        'access:\n'
+        '  level: "public"\n'
+        '  verified: true\n'
+        'schema_profile: "science-entity-base/1.0+dataset/1.0+bio.geneset/1.0"\n'
+        'member_key_column: "set_key"\n'
+        'members_resource: "sets"\n'
+        'resources:\n'
+        '  - name: "sets"\n'
+        '    path: "sets.csv"\n',
+        encoding="utf-8",
+    )
+
+
+def test_dataset_geneset_frontmatter_orphan_reads_entity_path(tmp_path):
+    dp = tmp_path / "data/gs/datapackage.yaml"
+    _write_geneset_datapackage(dp)
+    fm = dataset_geneset_frontmatter(
+        tmp_path, "data/gs/datapackage.yaml",
+        entity_adapter="datapackage", datapackage_rel=None,
+    )
+    assert fm is not None
+    assert fm["members_resource"] == "sets"
+    assert fm["_path"] == "data/gs/datapackage.yaml"
+
+
+def test_dataset_geneset_frontmatter_promoted_reads_datapackage_rel(tmp_path):
+    _write_geneset_datapackage(tmp_path / "data/gs/datapackage.yaml")
+    fm = dataset_geneset_frontmatter(
+        tmp_path, "entities/datasets/gs.md",
+        entity_adapter="markdown", datapackage_rel="data/gs/datapackage.yaml",
+    )
+    assert fm is not None
+    assert fm["members_resource"] == "sets"
+    assert fm["_path"] == "data/gs/datapackage.yaml"
+
+
+def test_dataset_geneset_frontmatter_no_datapackage_returns_none(tmp_path):
+    fm = dataset_geneset_frontmatter(
+        tmp_path, "entities/datasets/plain.md",
+        entity_adapter="markdown", datapackage_rel=None,
+    )
+    assert fm is None
 
 
 def test_member_key_column_constant() -> None:

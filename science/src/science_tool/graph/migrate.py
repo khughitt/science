@@ -14,7 +14,7 @@ from science_model.frontmatter import parse_frontmatter
 from science_tool.addressing import is_address
 from science_tool.bibliography import is_bibliography_reference
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
-from science_tool.commons.geneset_resources import geneset_resource_frontmatter, read_member_rows
+from science_tool.commons.geneset_resources import dataset_geneset_frontmatter, read_member_rows
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
     AliasCollisionError,
@@ -228,9 +228,12 @@ def _audit_geneset_row_dataset_usage(
     for entity in sources.entities:
         if entity.kind != "dataset":
             continue
-        if sources.entity_source_adapters.get(entity.canonical_id) not in {"datapackage", "commons-merged"}:
-            continue
-        fm = geneset_resource_frontmatter(project_root, entity.file_path)
+        fm = dataset_geneset_frontmatter(
+            project_root,
+            entity.file_path,
+            entity_adapter=sources.entity_source_adapters.get(entity.canonical_id),
+            datapackage_rel=sources.dataset_datapackages.get(entity.canonical_id),
+        )
         if fm is None:
             continue
         raw_rows = read_member_rows(project_root, fm)

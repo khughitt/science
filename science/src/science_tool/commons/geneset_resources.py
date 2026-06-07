@@ -33,6 +33,35 @@ def geneset_resource_frontmatter(project_root: Path, entity_path: str | Path) ->
     return fm
 
 
+def dataset_geneset_frontmatter(
+    project_root: Path,
+    entity_path: str | Path,
+    *,
+    entity_adapter: str | None,
+    datapackage_rel: str | None,
+) -> dict[str, Any] | None:
+    """Geneset resource frontmatter for a dataset entity, independent of which
+    adapter won the owner column (design §B4).
+
+    A datapackage's geneset resource metadata stays in the datapackage; a promoted
+    markdown owner does not duplicate it. So member extraction reads the geneset
+    shape from the datapackage:
+
+    - the entity IS the datapackage (orphan) or a commons-merged dataset → read from
+      the entity's own source path (preserves prior behavior);
+    - a real owner with a deferred datapackage attachment → read from the recorded
+      datapackage path (``datapackage_rel``);
+    - no datapackage attachment → ``None`` (not a geneset dataset).
+    """
+    if entity_adapter in {"datapackage", "commons-merged"}:
+        source: str | Path = entity_path
+    elif datapackage_rel is not None:
+        source = datapackage_rel
+    else:
+        return None
+    return geneset_resource_frontmatter(project_root, source)
+
+
 def resource_path_for_members(project_root: Path, fm: dict[str, Any]) -> Path | Exception | None:
     rel = fm.get("_path")
     resource_name = fm.get("members_resource")
