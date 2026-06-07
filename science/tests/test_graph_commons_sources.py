@@ -77,7 +77,7 @@ def _load_commons(
     project_entities: list[Entity] | None = None,
     identity_table: dict[str, SourceRef] | None = None,
 ) -> tuple[list[tuple[Entity, SourceRef]], dict[str, str]]:
-    return _load_commons_referenced_entities(
+    loaded, overlay_paths, _collisions = _load_commons_referenced_entities(
         project_root=project_root,
         project_slug="demo",
         project_entities=project_entities or [],
@@ -88,6 +88,7 @@ def _load_commons(
         active_kinds=frozenset({"dataset", "paper", "theme", "topic"}),
         ontology_catalogs=[],
     )
+    return loaded, overlay_paths
 
 
 def test_collect_referenced_commons_ids_returns_empty_set_for_no_references() -> None:
@@ -619,9 +620,7 @@ related: ["topic:single-cell-foundation-models"]
     assert sources.commons_overlay_paths == {}
 
 
-def test_load_project_sources_pulls_commons_dataset_usage_ref(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_load_project_sources_pulls_commons_dataset_usage_ref(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     commons_root = _build_commons(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
     monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
@@ -660,7 +659,7 @@ def test_load_project_sources_pulls_transitive_commons_dataset_usage_ref(
     paper_path.write_text(
         paper_text.replace(
             "\n---\n\n#",
-            "\ndataset_usage:\n  - ref: \"dataset:rnaseq-example\"\n    role: analyzed\n---\n\n#",
+            '\ndataset_usage:\n  - ref: "dataset:rnaseq-example"\n    role: analyzed\n---\n\n#',
         ),
         encoding="utf-8",
     )
@@ -795,9 +794,7 @@ def test_pinned_overlay_matching_commons_version_does_not_warn(
     assert pin_records == []
 
 
-def test_pinned_overlay_rejects_commons_version_drift(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_pinned_overlay_rejects_commons_version_drift(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     commons_root = _build_commons(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
     monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
@@ -814,3 +811,43 @@ def test_pinned_overlay_rejects_commons_version_drift(
 
     assert excinfo.value.canonical_id == "paper:Adams2025"
     assert "pins 9.9.9 but commons canonical is 1.0.0" in str(excinfo.value)
+
+
+def test_commons_owner_of_locally_owned_referenced_id_is_reported_as_collision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+
+    # The project locally owns topic:single-cell-foundation-models (seeded in
+    # identity_table) AND references it; commons also owns it.
+    cid = "topic:single-cell-foundation-models"
+    loaded, overlay_paths, commons_owner_collisions = _load_commons_referenced_entities(
+        project_root=project_root,
+        project_slug="demo",
+        project_entities=[_entity("topic:local", related=[cid])],
+        project_relations=[],
+        project_bindings=[],
+        identity_table={cid: SourceRef(adapter_name="markdown", path="entities/topics/x.md")},
+        registry=EntityRegistry.with_core_types(),
+        active_kinds=frozenset({"dataset", "paper", "theme", "topic"}),
+        ontology_catalogs=[],
+    )
+
+    # NOT materialized as a project entity (no duplicate Entity), but reported as a
+    # cross-scope commons owner so the caller can record the second owner row.
+    assert loaded == []
+    assert overlay_paths == {}
+    assert [ref.adapter_name for _cid, ref in commons_owner_collisions] == ["commons-merged"]
+    assert [c for c, _ref in commons_owner_collisions] == [cid]
+
+
+def test_collect_referenced_commons_ids_collects_inner_id_from_scoped_ref() -> None:
+    # The Phase-1.3 scoped form commons:<kind>:<slug> must collect the underlying
+    # commons id, else a scoped ref could never pull/record its commons owner.
+    assert _collect(entities=[_entity("topic:local", related=["commons:topic:phf19"])]) == {"topic:phf19"}
+    # A non-commons inner kind is still ignored.
+    assert _collect(entities=[_entity("topic:local", related=["commons:hypothesis:h1"])]) == set()

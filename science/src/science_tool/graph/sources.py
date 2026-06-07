@@ -470,7 +470,7 @@ def load_project_sources(
     if include_commons:
         from science_tool.graph.commons_sources import _load_commons_referenced_entities
 
-        commons_loaded, commons_overlay_paths = _load_commons_referenced_entities(
+        commons_loaded, commons_overlay_paths, commons_owner_collisions = _load_commons_referenced_entities(
             project_root=project_root,
             project_slug=project_slug,
             project_entities=entities,
@@ -481,6 +481,22 @@ def load_project_sources(
             active_kinds=active_kinds,
             ontology_catalogs=ontology_catalogs,
         )
+        for collision_id, collision_ref in commons_owner_collisions:
+            owner_scope, deprecated = classify_owner_scope(collision_ref.adapter_name, project_name=project_name)
+            identity_declarations.append(
+                IdentityDeclaration(
+                    canonical_id=collision_id,
+                    participation_mode=ParticipationMode.OWNER,
+                    owner_scope=owner_scope,
+                    adapter=collision_ref.adapter_name,
+                    source_ref=collision_ref,
+                    deprecated=deprecated,
+                )
+            )
+            # Deliberately do NOT add to `entities` / `identity_table`: the local owner
+            # remains the single materialized entity; the second owner row exists only
+            # so reference resolution (once scope-aware) flags the bare ref as
+            # ambiguous (design §B3a). No strict raise — cross-scope is not a collision.
         for entity, ref in commons_loaded:
             owner_scope, deprecated = classify_owner_scope(ref.adapter_name, project_name=project_name)
             identity_declarations.append(

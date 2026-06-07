@@ -70,7 +70,7 @@ def _load_commons_referenced_entities(
     registry: EntityRegistry,
     active_kinds: frozenset[str],
     ontology_catalogs: list[OntologyCatalog],
-) -> tuple[list[tuple[Entity, SourceRef]], dict[str, str]]:
+) -> tuple[list[tuple[Entity, SourceRef]], dict[str, str], list[tuple[str, SourceRef]]]:
     overlays = {}
     if (project_root / "doc").exists():
         for item in OverlayAdapter(project_root, project_slug).scan():
@@ -84,11 +84,37 @@ def _load_commons_referenced_entities(
         project_relations=project_relations,
         project_bindings=project_bindings,
     )
+    # Locally-owned ids that are referenced AND owned by commons are a cross-scope
+    # situation (design §B3): record commons' owner row, but do NOT load a duplicate
+    # entity. Everything else loads as before.
+    locally_owned = set(identity_table)
+    referenced_local = referenced_ids & locally_owned
     referenced_ids.difference_update(identity_table)
 
     pending_ids = referenced_ids | (set(overlays) - set(identity_table))
+
+    commons_owner_collisions: list[tuple[str, SourceRef]] = []
+    if referenced_local:
+        # Resolve commons root lazily only when there is something to check.
+        commons_root = resolve_commons_root()
+        if commons_root.is_dir():
+            query = CommonsQuery(commons_root, warn_stale=False)
+            for cid in sorted(referenced_local):
+                try:
+                    record = query.show(cid)
+                except CommonsEntityError:
+                    continue  # commons does not own it -> not a cross-scope owner
+                commons_owner_collisions.append(
+                    (
+                        cid,
+                        SourceRef(
+                            adapter_name="commons-merged", path=_commons_source_ref_path(record.type, record.slug)
+                        ),
+                    )
+                )
+
     if not pending_ids:
-        return [], {}
+        return [], {}, commons_owner_collisions
 
     commons_root = resolve_commons_root()
     if not commons_root.is_dir():
@@ -143,7 +169,7 @@ def _load_commons_referenced_entities(
         )
         pending_ids.update(transitive_ids - resolved_ids - seen_ids)
 
-    return loaded, overlay_paths
+    return loaded, overlay_paths, commons_owner_collisions
 
 
 def collect_referenced_commons_ids(
@@ -260,8 +286,15 @@ def _maybe_add(found: set[str], raw: object) -> None:
     if ":" not in raw:
         return
     prefix, value = raw.split(":", 1)
-    if prefix not in _COMMONS_TYPES:
+    if prefix in _COMMONS_TYPES:
+        if value:
+            found.add(raw)
         return
-    if not value:
-        return
-    found.add(raw)
+    # Scoped reference form commons:<kind>:<slug> (design §B3a): strip the leading
+    # "commons" scope and collect the underlying commons id, so a scoped ref pulls
+    # and records its commons owner. (Only the "commons" scope is recognized here;
+    # project-name and federated scopes are out of scope until t068.)
+    if prefix == "commons" and ":" in value:
+        inner_prefix, inner_value = value.split(":", 1)
+        if inner_prefix in _COMMONS_TYPES and inner_value:
+            found.add(value)
