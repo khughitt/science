@@ -52,6 +52,7 @@ CANONICAL_CHECK_MODULES = (
     "dataset_metadata",
     "dataset_promotion_contract",
     "orphan_datapackage_owner",
+    "identity_collision",
     "variant_identity",
     "genesets",
     "reference_graphs",
