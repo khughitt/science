@@ -32,6 +32,14 @@ class ReferenceResolver:
     slug_index: dict[str, frozenset[str]]
     owner_scopes: dict[str, frozenset[str]] = field(default_factory=dict)
     scope_names: frozenset[str] = frozenset()
+    # canonical_id -> union-find root; lets the scope-ambiguity check reconcile the
+    # two id bases the resolution paths return (alias path -> the id's own
+    # canonical_id; slug-index cross-kind path -> the same_as cluster root).
+    identity_map: dict[str, str] = field(default_factory=dict)
+    # union-find root -> union of owner scopes across every id in its same_as
+    # cluster. Keyed on the root so the slug-index path (which returns the root)
+    # surfaces ambiguity owned by a merged secondary id.
+    owner_scopes_by_root: dict[str, frozenset[str]] = field(default_factory=dict)
 
     @classmethod
     def from_entities(
@@ -54,15 +62,27 @@ class ReferenceResolver:
 
         owner_scopes: dict[str, frozenset[str]] = {}
         scope_names: frozenset[str] = frozenset()
+        owner_scopes_by_root: dict[str, frozenset[str]] = {}
         if identity_table is not None:
             owner_scopes = identity_table.owner_scopes_by_id()
             scope_names = frozenset(scope for scopes in owner_scopes.values() for scope in scopes)
+            # Fold each id's owner scopes onto its same_as cluster root so the
+            # slug-index cross-kind path (which returns the root) still sees scopes
+            # owned by a merged secondary id. Keep per-id owner_scopes intact for the
+            # alias path, which returns the id's own canonical_id.
+            by_root: dict[str, set[str]] = {}
+            for canonical_id, scopes in owner_scopes.items():
+                root = identity_map.get(canonical_id, canonical_id)
+                by_root.setdefault(root, set()).update(scopes)
+            owner_scopes_by_root = {root: frozenset(scopes) for root, scopes in by_root.items()}
 
         return cls(
             alias_map=alias_map,
             slug_index={slug: frozenset(sorted(ids)) for slug, ids in slug_index.items()},
             owner_scopes=owner_scopes,
             scope_names=scope_names,
+            identity_map=identity_map,
+            owner_scopes_by_root=owner_scopes_by_root,
         )
 
     def resolve(
@@ -85,19 +105,33 @@ class ReferenceResolver:
             if (
                 inner_res.status == "resolved"
                 and inner_res.canonical_id is not None
-                and scope in self.owner_scopes.get(inner_res.canonical_id, frozenset())
+                and scope in self._owning_scopes(inner_res.canonical_id)
             ):
                 return ReferenceResolution(status="resolved", raw=raw, canonical_id=inner_res.canonical_id)
             return ReferenceResolution(status="unresolved", raw=raw)
 
         resolution = self._resolve_unscoped(raw, allow_cross_kind_fallback=allow_cross_kind_fallback)
         if resolution.status == "resolved" and resolution.canonical_id is not None:
-            scopes = self.owner_scopes.get(resolution.canonical_id, frozenset())
+            scopes = self._owning_scopes(resolution.canonical_id)
             if len(scopes) > 1:
                 # bare id owned by an owner in >1 loaded scope -> refuse; a scoped
                 # form is required (the search chain never shadows owner ambiguity).
                 return ReferenceResolution(status="scope_ambiguous", raw=raw, candidates=tuple(sorted(scopes)))
         return resolution
+
+    def _owning_scopes(self, canonical_id: str) -> frozenset[str]:
+        """Owner scopes for a resolved id, reconciled across both id bases.
+
+        The alias path returns an id's own canonical_id (a 1:1 owner_scopes key),
+        while the slug-index cross-kind path returns the same_as cluster root. Union
+        the per-id scopes with the cluster-root scopes so the scope-ambiguity check
+        fires no matter which basis the resolution returned — including when a merged
+        secondary id is the one owned in >1 scope.
+        """
+        per_id = self.owner_scopes.get(canonical_id, frozenset())
+        root = self.identity_map.get(canonical_id, canonical_id)
+        by_root = self.owner_scopes_by_root.get(root, frozenset())
+        return per_id | by_root
 
     def _split_scope(self, raw: str) -> tuple[str | None, str]:
         """Split <scope>:<kind>:<slug> into (scope, <kind>:<slug>); (None, raw) if bare.

@@ -10,7 +10,14 @@ from science_tool.graph.identity_table import (
 from science_tool.graph.reference_resolution import ReferenceResolver
 
 
-def _entity(cid: str, kind: str, etype: EntityType, *, related: list[str] | None = None) -> Entity:
+def _entity(
+    cid: str,
+    kind: str,
+    etype: EntityType,
+    *,
+    related: list[str] | None = None,
+    same_as: list[str] | None = None,
+) -> Entity:
     k, _slug = cid.split(":", 1)
     return Entity(
         id=cid,
@@ -21,6 +28,7 @@ def _entity(cid: str, kind: str, etype: EntityType, *, related: list[str] | None
         project="proj",
         ontology_terms=[],
         related=related or [],
+        same_as=same_as or [],
         source_refs=[],
         content_preview="",
         file_path=f"entities/{k}/{_slug}.md",
@@ -98,6 +106,32 @@ def test_kind_qualified_bare_ref_not_misparsed_as_scope() -> None:
     res = ReferenceResolver.from_entities(entities, identity_table=table).resolve("topic:bayesian")
     assert res.status == "resolved"
     assert res.canonical_id == "topic:bayesian"
+
+
+def test_same_as_secondary_two_scopes_cross_kind_is_scope_ambiguous() -> None:
+    # Regression: a same_as-merged SECONDARY id owned in two scopes must surface
+    # scope_ambiguous even via the slug-index cross-kind path. topic:zzz has
+    # same_as topic:aaa -> they merge with union-find root topic:aaa (alpha-first).
+    # The cross-kind lookup of "other:zzz" returns the root topic:aaa, but the
+    # owner_scopes table records the two scopes under the SECONDARY id topic:zzz,
+    # so the len(scopes) > 1 guard must still fire on the root's cluster.
+    entities = [
+        _entity("topic:aaa", "topic", EntityType.TOPIC),
+        _entity("topic:zzz", "topic", EntityType.TOPIC, same_as=["topic:aaa"]),
+    ]
+    table = IdentityTable(rows=[_owner("topic:zzz", "proj"), _owner("topic:zzz", "commons")])
+    resolver = ReferenceResolver.from_entities(entities, identity_table=table)
+
+    # Alias path on the secondary's own id already fires (returns topic:zzz, a 1:1
+    # owner_scopes key) — guard this stays correct.
+    alias_res = resolver.resolve("topic:zzz")
+    assert alias_res.status == "scope_ambiguous"
+
+    # Cross-kind / slug-index path: returns the union-find root topic:aaa. Before
+    # the fix this resolved silently, bypassing scope ambiguity.
+    cross_res = resolver.resolve("other:zzz", allow_cross_kind_fallback=True)
+    assert cross_res.status == "scope_ambiguous"
+    assert cross_res.candidates == ("commons", "proj")
 
 
 def test_backward_compatible_without_identity_table() -> None:
