@@ -164,8 +164,11 @@ def audit_identity_table(table: IdentityTable) -> list[dict]:
 def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool]:
     """Validate that structured project sources resolve canonically."""
     rows: list[AuditRow] = []
+    identity_table = build_identity_table(sources)
     try:
-        resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
+        resolver = ReferenceResolver.from_entities(
+            sources.entities, manual_aliases=sources.manual_aliases, identity_table=identity_table
+        )
     except AliasCollisionError as exc:
         # Alias collision short-circuits the reference checks (no resolver), but we
         # still fall through to the additive identity-table audit below so an alias
@@ -207,7 +210,7 @@ def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool
             )
 
     # Additive identity-table audit (design §C2): consume the compiled model.
-    rows.extend(audit_identity_table(build_identity_table(sources)))
+    rows.extend(audit_identity_table(identity_table))
 
     rows.sort(key=lambda row: (row["source"], row["target"]))
     has_failures = any(row["status"] == "fail" for row in rows)
