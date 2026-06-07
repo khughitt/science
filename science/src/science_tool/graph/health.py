@@ -103,13 +103,17 @@ def collect_unresolved_refs(project_root: Path, *, sources: ProjectSources | Non
     Meta: refs are excluded (they're intentional metadata, not unresolved).
     """
     if sources is None:
-        sources = load_project_sources(project_root.resolve())
+        sources = load_project_sources(project_root.resolve(), strict_identity=False)
     rows, _ = audit_project_sources(sources)
 
     # Group fail rows by target
     by_target: dict[str, list[str]] = defaultdict(list)
     for row in rows:
         if row["status"] != "fail":
+            continue
+        if row["check"] == "identity_collision":
+            # An identity_collision row's `target` is the owner scope (e.g.
+            # "proj"), not an unresolved reference. Do not mislabel it.
             continue
         target = row["target"]
         source = row["source"]
@@ -568,7 +572,7 @@ def build_health_report(
         # surface the dropped entities as `schema_invalid` findings below.
         context.sources = context.run(
             "load_project_sources",
-            lambda: load_project_sources(project_root, strict_core_schema=False),
+            lambda: load_project_sources(project_root, strict_core_schema=False, strict_identity=False),
         )
     check_results = _empty_check_results(project_root)
     check_results.update(_run_health_checks(context))

@@ -209,7 +209,7 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
 
 def materialization_audit(project_root: Path) -> tuple[list[dict[str, str]], bool]:
     """Audit a project root for unresolved canonical references."""
-    rows, has_failures = audit_project_sources(load_project_sources(project_root.resolve()))
+    rows, has_failures = audit_project_sources(load_project_sources(project_root.resolve(), strict_identity=False))
     audit_rows = [
         {
             "check": row["check"],
@@ -635,9 +635,7 @@ def _add_produced_by_edges(
             target = entity_index.get(ref)
             if target is None or target.kind != "code-file":
                 continue
-            knowledge.add(
-                (_entity_uri(entity.canonical_id), SCI_NS.producedBy, _entity_uri(target.canonical_id))
-            )
+            knowledge.add((_entity_uri(entity.canonical_id), SCI_NS.producedBy, _entity_uri(target.canonical_id)))
 
 
 def _add_dataset_usage_edges(sources: ProjectSources, *, resolver: ReferenceResolver, provenance) -> None:
@@ -656,7 +654,9 @@ def _resolve_dataset_usage_ref(raw_ref: str, resolver: ReferenceResolver) -> str
     if resolution.status != "resolved" or resolution.canonical_id is None:
         raise ValueError(f"unresolved dataset usage reference: {raw_ref}")
     if not resolution.canonical_id.startswith("dataset:"):
-        raise ValueError(f"dataset usage reference resolved to non-dataset entity: {raw_ref} -> {resolution.canonical_id}")
+        raise ValueError(
+            f"dataset usage reference resolved to non-dataset entity: {raw_ref} -> {resolution.canonical_id}"
+        )
     return resolution.canonical_id
 
 
