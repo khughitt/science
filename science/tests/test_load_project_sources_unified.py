@@ -879,3 +879,71 @@ def test_load_project_sources_raises_when_repo_local_manifest_shadows_catalog_ki
 
     with pytest.raises(EntityKindShadowError, match="gene"):
         load_project_sources(tmp_path)
+
+
+def test_dataset_datapackages_records_deferred_datapackage_path(tmp_path: Path) -> None:
+    # A real markdown dataset owner + a same-id datapackage.yaml. The datapackage
+    # defers (§B4); its path must be recorded on ProjectSources.dataset_datapackages
+    # so the geneset member gate can find it after the markdown owner wins.
+    _seed(tmp_path)
+    (tmp_path / "entities" / "datasets").mkdir(parents=True)
+    (tmp_path / "entities" / "datasets" / "x.md").write_text(
+        "---\n"
+        'id: "dataset:x"\n'
+        'type: "dataset"\n'
+        'title: "X md"\n'
+        'status: "active"\n'
+        'origin: "external"\n'
+        "access:\n"
+        '  level: "public"\n'
+        "  verified: false\n"
+        'created: "2026-01-01"\n'
+        'updated: "2026-01-01"\n'
+        "---\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "data" / "x").mkdir(parents=True)
+    (tmp_path / "data" / "x" / "datapackage.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "profiles": ["science-pkg-entity-1.0"],
+                "id": "dataset:x",
+                "type": "dataset",
+                "title": "X dp",
+                "status": "active",
+                "origin": "external",
+                "access": {"level": "public", "verified": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    # Non-strict mirrors the diagnostic load the orphan-check / promotion consumers
+    # use; deferral happens in the adapter loop regardless of strictness.
+    sources = load_project_sources(tmp_path, include_commons=False, strict_core_schema=False, strict_identity=False)
+    assert sources.dataset_datapackages == {"dataset:x": "data/x/datapackage.yaml"}
+    assert sources.entity_source_adapters["dataset:x"] == "markdown"
+
+
+def test_dataset_datapackages_excludes_true_orphan(tmp_path: Path) -> None:
+    # A datapackage with no entity-file owner IS the owner (a true orphan). It is
+    # not "deferred", so it must NOT appear in dataset_datapackages.
+    _seed(tmp_path)
+    (tmp_path / "data" / "y").mkdir(parents=True)
+    (tmp_path / "data" / "y" / "datapackage.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "profiles": ["science-pkg-entity-1.0"],
+                "id": "dataset:y",
+                "type": "dataset",
+                "title": "Y dp",
+                "status": "active",
+                "origin": "external",
+                "access": {"level": "public", "verified": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    # Non-strict mirrors the diagnostic load the orphan-check / promotion consumers use.
+    sources = load_project_sources(tmp_path, include_commons=False, strict_core_schema=False, strict_identity=False)
+    assert "dataset:y" not in sources.dataset_datapackages
+    assert sources.entity_source_adapters["dataset:y"] == "datapackage"

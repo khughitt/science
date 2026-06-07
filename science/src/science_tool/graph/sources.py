@@ -148,6 +148,10 @@ class ProjectSources(BaseModel):
     profiles: KnowledgeProfiles
     entities: list[Entity]
     entity_source_adapters: dict[str, str] = Field(default_factory=dict)
+    # §B4: id -> rel path of a datapackage.yaml that DEFERRED to an existing owner.
+    # The owner won the owner column, but member-resource resolution still needs the
+    # datapackage path (the geneset member CSV lives there, not in the owner file).
+    dataset_datapackages: dict[str, str] = Field(default_factory=dict)
     relations: list[SourceRelation] = Field(default_factory=list)
     bindings: list[BindingSource] = Field(default_factory=list)
     manual_aliases: dict[str, str] = Field(default_factory=dict)
@@ -271,6 +275,7 @@ def load_project_sources(
     identity_declarations: list[IdentityDeclaration] = []
     entities: list[Entity] = []
     entity_source_adapters: dict[str, str] = {}
+    dataset_datapackages: dict[str, str] = {}
     markdown_documents: list[MarkdownSourceDocument] = []
     skipped_entities: list[SkippedEntity] = []
 
@@ -394,6 +399,9 @@ def load_project_sources(
                     # an aggregate stub rides that stub; §B5 retirement carries the
                     # debt. Only a TRUE orphan (id not yet owned) synthesizes the
                     # deprecated transitional owner below.
+                    # Record its path so the geneset member gate can still locate the
+                    # datapackage's resources after the owner (markdown) wins the column.
+                    dataset_datapackages[entity.canonical_id] = ref.path
                     continue
                 identity_declarations.append(
                     IdentityDeclaration(
@@ -549,6 +557,7 @@ def load_project_sources(
         profiles=profiles,
         entities=entities,
         entity_source_adapters=entity_source_adapters,
+        dataset_datapackages=dataset_datapackages,
         relations=relations,
         bindings=bindings,
         manual_aliases=_load_manual_aliases(project_root, local_profile=local_profile),
