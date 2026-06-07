@@ -384,6 +384,17 @@ def load_project_sources(
                     )
                     continue
                 owner_scope, deprecated = classify_owner_scope(adapter.name, project_name=project_name)
+                if isinstance(adapter, DatapackageAdapter) and entity.canonical_id in identity_table:
+                    # §B4: a datapackage is attached resource metadata, not a second
+                    # owner. Its id already has an owner recorded this load (a real
+                    # markdown owner OR a transitional entities.yaml aggregate stub —
+                    # both adapters precede DatapackageAdapter), so it DEFERS: emit no
+                    # competing owner declaration and no duplicate entity (it never
+                    # collides, under strict or non-strict). A datapackage shadowed by
+                    # an aggregate stub rides that stub; §B5 retirement carries the
+                    # debt. Only a TRUE orphan (id not yet owned) synthesizes the
+                    # deprecated transitional owner below.
+                    continue
                 identity_declarations.append(
                     IdentityDeclaration(
                         canonical_id=entity.canonical_id,

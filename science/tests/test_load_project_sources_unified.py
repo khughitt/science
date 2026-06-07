@@ -23,6 +23,7 @@ from science_model.source_contracts import BindingSource
 
 from science_tool.graph.entity_registry import EntityKindShadowError
 from science_tool.graph.errors import EntityIdentityCollisionError
+from science_tool.graph.identity_table import build_identity_table
 from science_tool.graph.sources import load_project_sources
 
 
@@ -187,7 +188,39 @@ def test_load_produces_dataset_entity_for_datapackage(tmp_path: Path) -> None:
     assert ds.origin == "external"
 
 
-def test_global_identity_collision_across_adapters(tmp_path: Path) -> None:
+def test_orphan_datapackage_synthesizes_deprecated_owner(tmp_path: Path) -> None:
+    # An orphan datapackage (no owner of the same id) keeps loading as a deprecated,
+    # transitional owner (design §B4 rollout) so datapackage-only datasets are not
+    # dropped before migration.
+    _seed(tmp_path)
+    (tmp_path / "data" / "ds1").mkdir(parents=True)
+    (tmp_path / "data" / "ds1" / "datapackage.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "profiles": ["science-pkg-entity-1.0"],
+                "name": "ds1",
+                "id": "dataset:ds1",
+                "type": "dataset",
+                "title": "DS1",
+                "origin": "external",
+                "access": {"level": "public", "verified": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    sources = load_project_sources(tmp_path)
+    ds = next(e for e in sources.entities if e.canonical_id == "dataset:ds1")
+    assert isinstance(ds, DatasetEntity)
+    owners = [d for d in sources.identity_declarations if d.canonical_id == "dataset:ds1"]
+    assert len(owners) == 1
+    assert owners[0].adapter == "datapackage"
+    assert owners[0].deprecated is True
+
+
+def test_datapackage_defers_to_markdown_owner(tmp_path: Path) -> None:
+    # §B4: a datapackage is attached resource metadata, NOT a second owner. With a
+    # real markdown owner of the same id, the datapackage DEFERS — markdown wins,
+    # no competing owner row, no collision (this scenario used to raise).
     _seed(tmp_path)
     (tmp_path / "entities" / "datasets").mkdir(parents=True)
     (tmp_path / "entities" / "datasets" / "x.md").write_text(
@@ -209,6 +242,73 @@ def test_global_identity_collision_across_adapters(tmp_path: Path) -> None:
                 "access": {"level": "public", "verified": False},
             }
         ),
+        encoding="utf-8",
+    )
+    sources = load_project_sources(tmp_path)  # must NOT raise
+    ds = next(e for e in sources.entities if e.canonical_id == "dataset:x")
+    assert ds.title == "X md"  # the markdown owner won
+    owners = [d for d in sources.identity_declarations if d.canonical_id == "dataset:x"]
+    assert len(owners) == 1
+    assert owners[0].adapter == "markdown" and owners[0].deprecated is False
+    assert build_identity_table(sources).collisions() == []
+
+
+def test_datapackage_defers_to_aggregate_stub_owner(tmp_path: Path) -> None:
+    # §B4: a datapackage defers to ANY existing same-scope owner, including a
+    # transitional entities.yaml aggregate stub. This previously strict-crashed
+    # (EntityIdentityCollisionError); now the aggregate stub remains the (deprecated)
+    # owner, the datapackage defers, nothing collides, and §B5 retires the stub later.
+    _seed(tmp_path)
+    (tmp_path / "knowledge" / "sources" / "local").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "knowledge" / "sources" / "local" / "entities.yaml").write_text(
+        "entities:\n"
+        '  - canonical_id: "dataset:x"\n'
+        '    kind: "dataset"\n'
+        '    title: "X agg"\n'
+        '    origin: "external"\n'
+        "    access:\n"
+        '      level: "public"\n'
+        "      verified: false\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "data" / "x").mkdir(parents=True)
+    (tmp_path / "data" / "x" / "datapackage.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "profiles": ["science-pkg-entity-1.0"],
+                "name": "x",
+                "id": "dataset:x",
+                "type": "dataset",
+                "title": "X dp",
+                "origin": "external",
+                "access": {"level": "public", "verified": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    sources = load_project_sources(tmp_path)  # must NOT raise (was a strict crash)
+    owners = [d for d in sources.identity_declarations if d.canonical_id == "dataset:x"]
+    assert len(owners) == 1
+    assert owners[0].adapter == "aggregate" and owners[0].deprecated is True  # stub owns; dp deferred
+    assert build_identity_table(sources).collisions() == []
+
+
+def test_global_identity_collision_two_markdown_owners(tmp_path: Path) -> None:
+    # Two REAL markdown owners of one id are a genuine duplicate identity
+    # declaration and still raise under strict (the §B4 datapackage deferral does
+    # not apply — only DatapackageAdapter defers).
+    _seed(tmp_path)
+    (tmp_path / "entities" / "datasets").mkdir(parents=True)
+    (tmp_path / "entities" / "datasets" / "x.md").write_text(
+        '---\nid: "dataset:x"\ntype: "dataset"\ntitle: "X md"\n'
+        'origin: "external"\n'
+        'access:\n  level: "public"\n  verified: false\n---\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "entities" / "datasets" / "x2.md").write_text(
+        '---\nid: "dataset:x"\ntype: "dataset"\ntitle: "X md 2"\n'
+        'origin: "external"\n'
+        'access:\n  level: "public"\n  verified: false\n---\n',
         encoding="utf-8",
     )
     with pytest.raises(EntityIdentityCollisionError, match="dataset:x"):
