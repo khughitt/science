@@ -27,6 +27,7 @@ from science_tool.graph.sources import (
     load_project_sources,
     local_profile_sources_dir,
 )
+from science_tool.graph.identity_table import IdentityTable
 from science_tool.graph.store import PROJECT_ENTITY_PREFIXES
 from science_tool.paths import resolve_paths
 
@@ -140,6 +141,24 @@ def _commons_hint_for(target: str) -> str:
         f"run `{promote_command}` if {target} "
         f"should be promoted, or check the ref's spelling)"
     )
+
+
+def audit_identity_table(table: IdentityTable) -> list[dict]:
+    """Turn identity-table collisions into graph-audit rows (design §B3, §C2)."""
+    rows: list[dict] = []
+    for collision in table.collisions():
+        paths = [(r.source_ref.path if r.source_ref else "<unknown>") for r in collision.rows]
+        rows.append(
+            {
+                "check": "identity_collision",
+                "status": "fail",
+                "source": collision.canonical_id,
+                "field": "owner_scope",
+                "target": collision.owner_scope,
+                "details": "owned by " + " and ".join(paths),
+            }
+        )
+    return rows
 
 
 def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool]:
