@@ -13,6 +13,7 @@ from science_tool.validate.checks.entity_conformance import (
     check_entity_location_coherence,
     check_entity_number_hygiene,
     check_entity_stray_files,
+    check_overlay_of_in_owner_root,
 )
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Severity
@@ -40,7 +41,18 @@ def test_location_coherence_flags_stranded_entity(tmp_path: Path) -> None:
 
 
 def test_location_coherence_passes_for_correct_home(tmp_path: Path) -> None:
-    _write(tmp_path, "entities/questions/0001-x.md", {"id": "question:0001-x", "type": "question", "title": "X", "status": "active", "created": "2026-01-01", "updated": "2026-01-01"})
+    _write(
+        tmp_path,
+        "entities/questions/0001-x.md",
+        {
+            "id": "question:0001-x",
+            "type": "question",
+            "title": "X",
+            "status": "active",
+            "created": "2026-01-01",
+            "updated": "2026-01-01",
+        },
+    )
     ctx = _ctx(tmp_path)
     assert not [r for r in check_entity_location_coherence(ctx) if r.severity is Severity.ERROR]
 
@@ -136,11 +148,7 @@ def test_freshly_created_entity_has_complete_required_frontmatter(tmp_path: Path
     entity_id = "paper:Smoke2026" if kind == "paper" else None
     create_entity(tmp_path, kind, f"Smoke {kind}", entity_id=entity_id)
     ctx = _ctx(tmp_path)
-    missing = [
-        r
-        for r in check_entity_frontmatter_completeness(ctx)
-        if "missing frontmatter fields" in r.message
-    ]
+    missing = [r for r in check_entity_frontmatter_completeness(ctx) if "missing frontmatter fields" in r.message]
     assert not missing, [r.message for r in missing]
 
 
@@ -152,3 +160,71 @@ def test_stray_files_ignores_reservation_sentinel(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     results = list(check_entity_stray_files(ctx))
     assert not [r for r in results if r.severity is Severity.ERROR]
+
+
+def test_overlay_of_in_owner_root_flagged_as_error_at_v3(tmp_path: Path) -> None:
+    # an overlay file mistakenly placed under the owner root entities/
+    _write(
+        tmp_path,
+        "entities/topics/0001-x.md",
+        {"id": "topic:0001-x", "type": "topic", "overlay_of": "topic:0001-x"},
+    )
+    ctx = _ctx(tmp_path)  # _ctx writes layout_version: 3 -> ERROR
+    results = list(check_overlay_of_in_owner_root(ctx))
+    assert any(
+        r.severity is Severity.ERROR and "overlay_of" in r.message and "entities/topics/0001-x.md" in str(r.path)
+        for r in results
+    )
+
+
+def test_overlay_under_doc_is_not_flagged(tmp_path: Path) -> None:
+    # the legitimate location for an overlay; the owner-root check must ignore it
+    _write(tmp_path, "doc/topics/bayesian.md", {"overlay_of": "topic:bayesian"})
+    ctx = _ctx(tmp_path)
+    assert list(check_overlay_of_in_owner_root(ctx)) == []
+
+
+def test_clean_owner_entity_is_not_flagged(tmp_path: Path) -> None:
+    _write(
+        tmp_path,
+        "entities/topics/0001-x.md",
+        {
+            "id": "topic:0001-x",
+            "type": "topic",
+            "title": "X",
+            "status": "active",
+            "created": "2026-01-01",
+            "updated": "2026-01-01",
+        },
+    )
+    ctx = _ctx(tmp_path)
+    assert list(check_overlay_of_in_owner_root(ctx)) == []
+
+
+def test_overlay_of_in_owner_root_warns_during_transition(tmp_path: Path) -> None:
+    # layout_version 2 -> WARN, consistent with the sibling entity-conformance checks
+    (tmp_path / "science.yaml").write_text(
+        "name: t\nlayout_version: 2\nprofile: research\nknowledge_profiles: {local: local}\n",
+        encoding="utf-8",
+    )
+    _write(
+        tmp_path,
+        "entities/topics/0001-x.md",
+        {"id": "topic:0001-x", "type": "topic", "overlay_of": "topic:0001-x"},
+    )
+    ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
+    results = list(check_overlay_of_in_owner_root(ctx))
+    assert results
+    assert all(r.severity is Severity.WARN for r in results)
+
+
+def test_overlay_of_under_entities_templates_is_ignored(tmp_path: Path) -> None:
+    # template scaffolds under entities/**/templates/ are not entities and must be
+    # skipped (mirrors the templates guard in check_entity_location_coherence)
+    _write(
+        tmp_path,
+        "entities/questions/templates/example.md",
+        {"id": "question:example", "type": "question", "overlay_of": "question:example"},
+    )
+    ctx = _ctx(tmp_path)
+    assert list(check_overlay_of_in_owner_root(ctx)) == []

@@ -49,9 +49,7 @@ def _rel(ctx: ValidateContext, path: Path) -> Path:
     return path.relative_to(ctx.project_root)
 
 
-def _entity_dirs(
-    ctx: ValidateContext, *, strategy: str | None = None
-) -> Iterator[tuple[str, EntityPathPolicy, Path]]:
+def _entity_dirs(ctx: ValidateContext, *, strategy: str | None = None) -> Iterator[tuple[str, EntityPathPolicy, Path]]:
     """Yield (kind, policy, directory) for every non-singleton markdown entity
     kind whose entities/<kind>/ directory exists. With ``strategy`` set, only
     kinds of that strategy are yielded."""
@@ -109,7 +107,9 @@ def check_entity_location_coherence(ctx: ValidateContext) -> Iterator[Result]:
                 yield _result(_severity(ctx), _rel(ctx, path), f"type {ftype!r} in {kind}/ directory (expected {kind})")
             id_kind, _ = _id_kind_and_local(data.get("id"))
             if id_kind is not None and id_kind != kind:
-                yield _result(_severity(ctx), _rel(ctx, path), f"id kind {id_kind!r} in {kind}/ directory (expected {kind})")
+                yield _result(
+                    _severity(ctx), _rel(ctx, path), f"id kind {id_kind!r} in {kind}/ directory (expected {kind})"
+                )
 
 
 @Check(section="entity filename conformance...", order=38)
@@ -120,7 +120,9 @@ def check_entity_filename_conformance(ctx: ValidateContext) -> Iterator[Result]:
         for path in sorted(directory.glob("*.md")):
             if not local_part_conforms(kind, path.stem, project_root=ctx.project_root):
                 yield _result(
-                    _severity(ctx), _rel(ctx, path), f"non-conforming {kind} filename {path.name!r} (strategy={policy.strategy})"
+                    _severity(ctx),
+                    _rel(ctx, path),
+                    f"non-conforming {kind} filename {path.name!r} (strategy={policy.strategy})",
                 )
             data = ctx.frontmatter(path)
             _, id_local = _id_kind_and_local(data.get("id"))
@@ -187,3 +189,33 @@ def check_entity_stray_files(ctx: ValidateContext) -> Iterator[Result]:
                 yield _result(_severity(ctx), _rel(ctx, path), f"unexpected subdirectory in {policy.root}/")
             elif path.suffix != ".md":
                 yield _result(_severity(ctx), _rel(ctx, path), f"non-entity file in {policy.root}/: {path.name}")
+
+
+@Check(section="overlay_of in owner root...", order=42)
+def check_overlay_of_in_owner_root(ctx: ValidateContext) -> Iterator[Result]:
+    """An overlay (`overlay_of:` frontmatter) is a borrow attachment and belongs
+    under doc/<type>/, never under the framework owner root entities/. A file with
+    overlay_of in entities/ would be silently minted as a spurious OWNER by
+    MarkdownAdapter (design §B2/§C3: the owner root holds owner declarations only;
+    OverlayAdapter is the sole borrower reader). Flag it as a conformance
+    violation — WARN during the v2->v3 transition, ERROR at layout_version >= 3."""
+    root = ctx.project_root / "entities"
+    if not root.is_dir():
+        return
+    for path in sorted(root.rglob("*.md")):
+        if "templates" in path.relative_to(ctx.project_root).parts:
+            continue
+        text = ctx.read_text_cached(path)
+        if not text.startswith("---\n"):
+            continue  # no frontmatter -> cannot declare overlay_of
+        try:
+            data = ctx.frontmatter(path)
+        except yaml.YAMLError:
+            continue  # invalid YAML is reported by check_entity_frontmatter_completeness
+        if "overlay_of" in data:
+            yield _result(
+                _severity(ctx),
+                _rel(ctx, path),
+                f"{path.name}: overlay_of in owner root entities/ "
+                "(overlays belong under doc/<type>/; entities/ holds owner declarations only)",
+            )
