@@ -59,6 +59,18 @@ class IdentityTable:
                 grouped[(row.owner_scope, row.canonical_id)].append(row)
         return dict(grouped)
 
+    def owner_scopes_by_id(self) -> dict[str, frozenset[str]]:
+        """canonical_id -> the owner scopes that own it across all loaded scopes.
+
+        Derived from owner rows only (borrowers/external-refs do not own). Used by
+        the reference resolver to detect a bare id owned in >1 loaded scope
+        (design §B3a) and to enumerate valid scope-prefix names.
+        """
+        grouped: dict[str, set[str]] = defaultdict(set)
+        for scope, cid in self.owners():
+            grouped[cid].add(scope)
+        return {cid: frozenset(scopes) for cid, scopes in grouped.items()}
+
     def collisions(self) -> list[IdentityCollision]:
         """Every (owner_scope, canonical_id) claimed by more than one owner row."""
         return [

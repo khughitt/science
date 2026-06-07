@@ -104,3 +104,32 @@ def test_build_identity_table_wraps_declarations_and_finds_collisions():
     assert len(table.rows) == 3
     cols = table.collisions()
     assert [c.canonical_id for c in cols] == ["question:q1"]
+
+
+def test_owner_scopes_by_id_groups_scopes_per_canonical_id() -> None:
+    def owner(cid: str, scope: str) -> IdentityDeclaration:
+        return IdentityDeclaration(
+            canonical_id=cid,
+            participation_mode=ParticipationMode.OWNER,
+            owner_scope=scope,
+            adapter="markdown",
+            source_ref=None,
+        )
+
+    table = IdentityTable(
+        rows=[
+            owner("topic:bayesian", "proj"),
+            owner("topic:bayesian", "commons"),  # same id, two scopes
+            owner("hypothesis:h1", "proj"),
+            IdentityDeclaration(  # a borrower row must NOT count as an owning scope
+                canonical_id="topic:bayesian",
+                participation_mode=ParticipationMode.BORROWER,
+                owner_scope="commons",
+                adapter="overlay",
+                source_ref=None,
+            ),
+        ]
+    )
+    index = table.owner_scopes_by_id()
+    assert index["topic:bayesian"] == frozenset({"proj", "commons"})
+    assert index["hypothesis:h1"] == frozenset({"proj"})
