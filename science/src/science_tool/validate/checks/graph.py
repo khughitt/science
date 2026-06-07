@@ -180,6 +180,12 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
         yield _result(Severity.INFO, "graph audit: all canonical references resolved")
     else:
         for row in audit_rows:
+            if row["check"] == "identity_collision":
+                # Owned by the dedicated forbidden-second-declaration conformance
+                # check (deprecation-aware, design §B1/§B4). materialization_audit
+                # still computes the row for has_failures (the build gate); we just
+                # do not double-report it here with a contradictory severity.
+                continue
             status = _status(row, context="graph audit", accepted={"fail", "warn"})
             severity = Severity.ERROR if status == "fail" else Severity.WARN
             yield _result(

@@ -449,6 +449,32 @@ def test_inquiry_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, tmp_path
         list(graph.check_graph(_ctx(tmp_path)))
 
 
+def _write_duplicate_markdown_owners(root: Path) -> None:
+    # Two markdown files declaring the SAME id -> two owner rows -> an identity
+    # collision in the compiled table. Pre-2b-Task-3, check_graph surfaced it as a
+    # `graph audit: identity_collision ...` ERROR; now the dedicated
+    # forbidden-second-declaration check owns that diagnostic, so check_graph must
+    # not emit it.
+    d = root / "entities" / "datasets"
+    d.mkdir(parents=True, exist_ok=True)
+    for fname in ("x.md", "x-dup.md"):
+        (d / fname).write_text(
+            '---\nid: "dataset:x"\ntype: "dataset"\ntitle: "x"\n'
+            'origin: "external"\n'
+            'access:\n  level: "public"\n  verified: false\n---\n',
+            encoding="utf-8",
+        )
+
+
+def test_check_graph_does_not_emit_identity_collision(tmp_path: Path) -> None:
+    from science_tool.validate.checks import graph
+
+    ctx = _ctx(tmp_path)
+    _write_duplicate_markdown_owners(tmp_path)
+    messages = _messages(list(graph.check_graph(ctx)))
+    assert not any("identity_collision" in m for m in messages)
+
+
 def test_registry_loads_graph_after_notes_at_order_17() -> None:
     from science_tool.validate.checks import CANONICAL_CHECKS, clear_checks_for_tests
     import science_tool.validate.checks.graph as graph
