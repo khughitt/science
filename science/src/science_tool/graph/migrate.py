@@ -853,6 +853,22 @@ def _audit_reference(
                 ),
             }
         ]
+    if resolution.status == "scope_ambiguous":
+        scopes = ", ".join(resolution.candidates)
+        suggestion = f"{resolution.candidates[0]}:{raw_target}" if resolution.candidates else raw_target
+        return [
+            {
+                "check": "ambiguous_reference",
+                "status": "fail",
+                "source": entity.canonical_id,
+                "field": field_name,
+                "target": raw_target,
+                "details": (
+                    f"{entity.file_path} reference '{raw_target}' is owned in multiple loaded scopes "
+                    f"({scopes}); disambiguate with a scoped form, e.g. {suggestion}"
+                ),
+            }
+        ]
     if resolution.status == "unresolved":
         if allow_cross_project_address and _is_cross_project_address(raw_target):
             return []
