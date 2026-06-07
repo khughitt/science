@@ -1018,6 +1018,18 @@ def test_materialize_graph_emits_commons_geneset_row_usage_nodes(tmp_path, monke
     assert (nodes[0], SCI_NS.dataset, PROJECT_NS["dataset/rnaseq-example"]) in graph
     assert (nodes[0], SCI_NS.usageSource, Literal("geneset.members_resource")) in graph
 
+    # §B4 provenance: a commons-merged geneset cites the datapackage (where the member
+    # CSV lives), not the commons entity.md — locks the source_path=fm["_path"] behavior.
+    from science_tool.graph import materialize as _materialize_mod
+    from science_tool.graph.reference_resolution import ReferenceResolver
+    from science_tool.graph.sources import load_project_sources
+
+    sources = load_project_sources(tmp_path)
+    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases={})
+    records = list(_materialize_mod._geneset_usage_records(sources, resolver=resolver))
+    assert records
+    assert all(r.source_path.endswith("datapackage.yaml") for r in records)
+
 
 def test_materialization_audit_reports_unresolved_geneset_row_usage_refs(tmp_path):
     from science_tool.graph.materialize import materialization_audit
@@ -1176,3 +1188,93 @@ def test_materialize_graph_emits_geneset_row_usage_nodes_for_promoted_markdown_o
     assert len(records) == 1
     assert records[0].source_path == "data/reactome/datapackage.yaml"
     assert records[0].source_path != "entities/datasets/reactome-v89.md"
+
+
+def _write_orphan_geneset_collection(root):
+    """Orphan geneset datapackage (no entity-file owner) + members CSV.
+
+    Same datapackage as _write_promoted_geneset_collection but WITHOUT a markdown
+    owner, and carrying created/updated so the promoter writes a dated (non-sentinel)
+    owner that strict-loads. This is the pre-promotion state the real promoter acts on.
+    """
+    dp_dir = root / "data" / "reactome"
+    dp_dir.mkdir(parents=True, exist_ok=True)
+    (dp_dir / "datapackage.yaml").write_text(
+        "profiles: [science-pkg-entity-1.0]\n"
+        "id: dataset:reactome-v89\n"
+        "type: dataset\n"
+        "title: Reactome\n"
+        "status: active\n"
+        "origin: external\n"
+        "tier: use-now\n"
+        "schema_profile: science-entity-base/1.0+dataset/1.0+bio.geneset/1.0\n"
+        "source_class: reference\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n"
+        "member_key_column: set_key\n"
+        "members_resource: sets\n"
+        "n_sets: 1\n"
+        "set_size_summary: {min: 2, median: 2, max: 2}\n"
+        "identifier_space: {tier: gene, namespace: hgnc_id, resolution_status: declared_unresolved}\n"
+        "created: '2026-01-01'\n"
+        "updated: '2026-01-01'\n"
+        "resources:\n"
+        "  - name: sets\n"
+        "    path: sets.csv\n",
+        encoding="utf-8",
+    )
+    (dp_dir / "sets.csv").write_text(
+        "set_key,name,member_ids,dataset_usage\n"
+        'R-HSA-1,Cell cycle,HGNC:1;HGNC:2,"[{""ref"":""dataset:gtex-v8"",""role"":""set_definition_source"",""overlap"":""full""}]"\n',
+        encoding="utf-8",
+    )
+
+
+def test_promote_orphans_then_materialize_preserves_geneset_members_end_to_end(tmp_path):
+    """End-to-end cross-task guard: an ORPHAN geneset datapackage driven through the
+    REAL promoter must still yield geneset member edges (provenance = datapackage) after
+    re-materialization under the synthesized markdown owner. This exercises the seam the
+    three Phase-2a tasks create — the per-task tests hand-build the post-promotion state;
+    this one runs the actual promoter."""
+    from science_tool.datapackage_promote import plan_orphan_promotions, promote_orphan_datapackages
+    from science_tool.graph import materialize
+    from science_tool.graph.materialize import materialize_graph
+    from science_tool.graph.reference_resolution import ReferenceResolver
+    from science_tool.graph.sources import load_project_sources
+
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path / "data" / "gtex" / "datapackage.yaml",
+        "gtex-v8",
+        "origin: external\naccess:\n  level: public\n  verified: true\n"
+        "created: '2026-01-01'\nupdated: '2026-01-01'\n",
+    )
+    _write_orphan_geneset_collection(tmp_path)
+
+    row_uri = PROJECT_NS["virtual/geneset-member/reactome-v89/R-HSA-1"]
+
+    # Before promotion: the orphan datapackage owns the id; members extract.
+    graph0 = _load_trig(materialize_graph(tmp_path)).graph(PROJECT_NS["graph/provenance"])
+    assert list(graph0.objects(row_uri, SCI_NS.hasDatasetUsage))
+
+    # Run the REAL promoter (gtex-v8 is also an orphan datapackage here, so both promote).
+    report = promote_orphan_datapackages(tmp_path, apply=True)
+    promoted = [p.canonical_id for p in report["promotions"]]
+    assert "dataset:reactome-v89" in promoted
+    assert (tmp_path / "entities" / "datasets" / "reactome-v89.md").exists()
+    # Idempotent: every datapackage now defers, so nothing remains to promote.
+    assert plan_orphan_promotions(tmp_path) == []
+
+    # After promotion: the markdown owner wins; members must STILL extract.
+    graph1 = _load_trig(materialize_graph(tmp_path)).graph(PROJECT_NS["graph/provenance"])
+    nodes = list(graph1.objects(row_uri, SCI_NS.hasDatasetUsage))
+    assert len(nodes) == 1
+    assert (nodes[0], SCI_NS.dataset, PROJECT_NS["dataset/gtex-v8"]) in graph1
+
+    sources = load_project_sources(tmp_path)
+    assert sources.entity_source_adapters["dataset:reactome-v89"] == "markdown"
+    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases={})
+    records = list(materialize._geneset_usage_records(sources, resolver=resolver))
+    assert len(records) == 1
+    assert records[0].source_path == "data/reactome/datapackage.yaml"

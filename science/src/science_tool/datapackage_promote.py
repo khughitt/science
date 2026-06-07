@@ -7,6 +7,12 @@ transitional) owner of its id. Promotion lifts the datapackage's identity/projec
 metadata into a real markdown owner and adds a `datapackage:` pointer back to the
 datapackage, which stays in place as the attachment holding resource metadata. On
 the next load the datapackage DEFERS to the new owner.
+
+Promotion is a one-shot migration, NOT a sync: once an owner exists the datapackage
+defers, so a later `promote-orphans` run skips that id (the scan returns no
+`adapter == "datapackage"` declaration for it) and never reconciles drift between the
+datapackage's identity fields and the owner. Identity lives in the owner, resource
+metadata in the datapackage (§B4); reconciling the two is out of scope here.
 """
 
 from __future__ import annotations
