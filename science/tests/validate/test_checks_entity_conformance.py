@@ -228,3 +228,34 @@ def test_overlay_of_under_entities_templates_is_ignored(tmp_path: Path) -> None:
     )
     ctx = _ctx(tmp_path)
     assert list(check_overlay_of_in_owner_root(ctx)) == []
+
+
+def test_overlay_of_check_registered_via_canonical_loader() -> None:
+    import sys
+
+    from science_tool.validate.checks import (
+        CANONICAL_CHECKS,
+        _load_canonical_checks,
+        clear_checks_for_tests,
+    )
+
+    original_entries = list(CANONICAL_CHECKS)  # snapshot process-global registry
+    module_name = "science_tool.validate.checks.entity_conformance"
+    original_module = sys.modules.get(module_name)
+    try:
+        clear_checks_for_tests()
+        # Drop the cached module so _load_canonical_checks() must re-import it
+        # from the CANONICAL_CHECK_MODULES tuple. If entity_conformance were ever
+        # dropped from that tuple, the module's @Check decorators would not re-run
+        # and this assertion would fail — that is what makes this a true wiring test.
+        sys.modules.pop(module_name, None)
+        _load_canonical_checks()
+        entries = [e for e in CANONICAL_CHECKS if e.fn.__name__ == "check_overlay_of_in_owner_root"]
+        assert len(entries) == 1
+        assert entries[0].order == 42
+    finally:
+        CANONICAL_CHECKS[:] = original_entries  # restore for later in-process tests
+        if original_module is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = original_module
