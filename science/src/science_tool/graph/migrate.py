@@ -855,7 +855,9 @@ def _audit_reference(
         ]
     if resolution.status == "scope_ambiguous":
         scopes = ", ".join(resolution.candidates)
-        suggestion = f"{resolution.candidates[0]}:{raw_target}" if resolution.candidates else raw_target
+        # candidates is sorted and always has >=2 entries here (scope_ambiguous fires
+        # only on multi-scope ownership); suggest the alphabetically-first scope.
+        suggestion = f"{resolution.candidates[0]}:{raw_target}"
         return [
             {
                 "check": "ambiguous_reference",

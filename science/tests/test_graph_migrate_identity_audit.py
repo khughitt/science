@@ -162,6 +162,7 @@ def test_audit_reference_emits_ambiguous_reference_row() -> None:
     assert row["field"] == "related"
     assert row["target"] == "topic:bayesian"
     assert "commons" in row["details"]
+    assert "proj" in row["details"]  # both owning scopes are listed
     assert "commons:topic:bayesian" in row["details"]  # suggested scoped form
 
 
