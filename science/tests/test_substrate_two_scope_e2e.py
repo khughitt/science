@@ -135,3 +135,43 @@ def test_scoped_ref_resolves_and_materializes(tmp_path: Path, monkeypatch: pytes
     trig_path = materialize_graph(project_root)
     assert trig_path.exists()
     assert _has_hypothesis_topic_edge(trig_path)
+
+
+def _project_scoped_ref_no_local_owner(tmp_path: Path) -> Path:
+    """A project that references commons:topic:x via the scoped form WITHOUT locally owning it.
+
+    This is the natural real-world scoped-ref usage and a distinct loader path from the
+    collision channel: the commons topic is pulled through the normal commons-load path
+    (not recorded as a cross-scope owner), so `commons` lands in `scope_names` via the
+    loaded commons entity rather than via a recorded second owner row.
+    """
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    (project_root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    manifest = project_root / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("", encoding="utf-8")
+    # No local topic owner — only a scoped reference into commons.
+    hyp = project_root / "entities" / "hypotheses" / "h1.md"
+    hyp.parent.mkdir(parents=True)
+    hyp.write_text(
+        f'---\nid: "hypothesis:h1"\ntype: "hypothesis"\ntitle: "H1"\nrelated: ["commons:{_SHARED_ID}"]\n---\n',
+        encoding="utf-8",
+    )
+    return project_root
+
+
+def test_wholly_scoped_no_local_owner_materializes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = _project_scoped_ref_no_local_owner(tmp_path)
+
+    sources = load_project_sources(project_root)
+    # Single-scope ownership (commons only); audit clean; scoped ref still resolves to a real edge.
+    assert build_identity_table(sources).owner_scopes_by_id()[_SHARED_ID] == frozenset({"commons"})
+    rows, _ = audit_project_sources(sources)
+    assert [r for r in rows if r["check"] == "ambiguous_reference"] == []
+    trig_path = materialize_graph(project_root)
+    assert trig_path.exists()
+    assert _has_hypothesis_topic_edge(trig_path)
