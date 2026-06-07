@@ -37,6 +37,11 @@ from science_tool.bibliography import is_bibliography_reference as _is_bibliogra
 from science_tool.commons.aliases import load_manual_aliases
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.errors import EntityIdentityCollisionError
+from science_tool.graph.identity_table import (
+    IdentityDeclaration,
+    ParticipationMode,
+    classify_owner_scope,
+)
 from science_tool.graph.storage_adapters.aggregate import AggregateAdapter
 from science_tool.graph.storage_adapters.base import StorageAdapter
 from science_tool.graph.storage_adapters.code import CodeAdapter
@@ -151,6 +156,7 @@ class ProjectSources(BaseModel):
     markdown_documents: list[MarkdownSourceDocument] = Field(default_factory=list)
     skipped_entities: list[SkippedEntity] = Field(default_factory=list)
     commons_overlay_paths: dict[str, str] = Field(default_factory=dict)
+    identity_declarations: list[IdentityDeclaration] = Field(default_factory=list)
     freshness_enabled: bool = True
 
 
@@ -175,6 +181,7 @@ def load_project_sources(
     *,
     include_commons: bool = True,
     strict_core_schema: bool = True,
+    strict_identity: bool = True,
 ) -> ProjectSources:
     """Load all project entities through the unified registry + adapters flow.
 
@@ -259,7 +266,9 @@ def load_project_sources(
     ]
 
     project_slug = project_root.name
+    project_name = str(config["name"])
     identity_table: dict[str, SourceRef] = {}
+    identity_declarations: list[IdentityDeclaration] = []
     entities: list[Entity] = []
     entity_source_adapters: dict[str, str] = {}
     markdown_documents: list[MarkdownSourceDocument] = []
@@ -374,9 +383,22 @@ def load_project_sources(
                         )
                     )
                     continue
+                owner_scope, deprecated = classify_owner_scope(adapter.name, project_name=project_name)
+                identity_declarations.append(
+                    IdentityDeclaration(
+                        canonical_id=entity.canonical_id,
+                        participation_mode=ParticipationMode.OWNER,
+                        owner_scope=owner_scope,
+                        adapter=adapter.name,
+                        source_ref=ref,
+                        deprecated=deprecated,
+                    )
+                )
                 existing = identity_table.get(entity.canonical_id)
                 if existing is not None:
-                    raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
+                    if strict_identity:
+                        raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
+                    continue
                 identity_table[entity.canonical_id] = ref
                 entities.append(entity)
                 entity_source_adapters[entity.canonical_id] = adapter.name
@@ -395,9 +417,22 @@ def load_project_sources(
         ontology_catalogs=ontology_catalogs,
         typed_record_cache=typed_record_cache,
     ):
+        owner_scope, deprecated = classify_owner_scope(ref.adapter_name, project_name=project_name)
+        identity_declarations.append(
+            IdentityDeclaration(
+                canonical_id=entity.canonical_id,
+                participation_mode=ParticipationMode.OWNER,
+                owner_scope=owner_scope,
+                adapter=ref.adapter_name,
+                source_ref=ref,
+                deprecated=deprecated,
+            )
+        )
         existing = identity_table.get(entity.canonical_id)
         if existing is not None:
-            raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
+            if strict_identity:
+                raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
+            continue
         identity_table[entity.canonical_id] = ref
         entities.append(entity)
         entity_source_adapters[entity.canonical_id] = ref.adapter_name
@@ -447,9 +482,34 @@ def load_project_sources(
             ontology_catalogs=ontology_catalogs,
         )
         for entity, ref in commons_loaded:
+            owner_scope, deprecated = classify_owner_scope(ref.adapter_name, project_name=project_name)
+            identity_declarations.append(
+                IdentityDeclaration(
+                    canonical_id=entity.canonical_id,
+                    participation_mode=ParticipationMode.OWNER,
+                    owner_scope=owner_scope,
+                    adapter=ref.adapter_name,
+                    source_ref=ref,
+                    deprecated=deprecated,
+                )
+            )
+            overlay_path = commons_overlay_paths.get(entity.canonical_id)
+            if overlay_path:
+                identity_declarations.append(
+                    IdentityDeclaration(
+                        canonical_id=entity.canonical_id,
+                        participation_mode=ParticipationMode.BORROWER,
+                        owner_scope=owner_scope,
+                        adapter="overlay",
+                        source_ref=SourceRef(adapter_name="overlay", path=overlay_path),
+                        deprecated=False,
+                    )
+                )
             existing = identity_table.get(entity.canonical_id)
             if existing is not None:
-                raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
+                if strict_identity:
+                    raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
+                continue
             identity_table[entity.canonical_id] = ref
             entities.append(entity)
             entity_source_adapters[entity.canonical_id] = ref.adapter_name
@@ -470,6 +530,7 @@ def load_project_sources(
         markdown_documents=markdown_documents,
         skipped_entities=skipped_entities,
         commons_overlay_paths=commons_overlay_paths,
+        identity_declarations=identity_declarations,
         freshness_enabled=freshness_enabled,
     )
 
