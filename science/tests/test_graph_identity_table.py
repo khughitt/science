@@ -1,8 +1,11 @@
+import pytest
+
 from science_model.source_ref import SourceRef
 from science_tool.graph.identity_table import (
     IdentityDeclaration,
     IdentityTable,
     ParticipationMode,
+    classify_owner_scope,
 )
 
 
@@ -57,3 +60,24 @@ def test_no_collision_across_scopes_or_for_borrower():
     )
     # commons owner + commons borrower + proj owner => no key has >1 OWNER row
     assert table.collisions() == []
+
+
+_COMMONS = "commons"
+
+
+def test_classify_owner_scope():
+    # aggregate AND datapackage are transitional deprecated owners (design §B4/§C3):
+    # in the target state datapackages are attachments, not owners, so any datapackage
+    # currently emitting an entity is an orphan/transitional owner to be migrated.
+    assert classify_owner_scope("aggregate", project_name="proj") == ("proj", True)
+    assert classify_owner_scope("datapackage", project_name="proj") == ("proj", True)
+    # commons-merged is owned by the commons scope, not deprecated
+    assert classify_owner_scope("commons-merged", project_name="proj") == (_COMMONS, False)
+    # everything else (markdown/task/workflow-run/code-file/legacy-*) is a plain owner
+    for adapter in ("markdown", "task", "workflow-run", "code-file", "legacy-model", "legacy-parameter"):
+        assert classify_owner_scope(adapter, project_name="proj") == ("proj", False)
+
+
+def test_classify_owner_scope_rejects_empty_adapter():
+    with pytest.raises(ValueError):
+        classify_owner_scope("", project_name="proj")

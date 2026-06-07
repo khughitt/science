@@ -65,3 +65,24 @@ class IdentityTable:
             for (scope, cid), rows in self.owners().items()
             if len(rows) > 1
         ]
+
+
+_COMMONS_SCOPE = "commons"
+
+
+def classify_owner_scope(adapter: str, *, project_name: str) -> tuple[str, bool]:
+    """Return (owner_scope, deprecated) for an owner declaration from `adapter`.
+
+    Fails loud on an empty adapter (review: missing provenance must not silently
+    become a project markdown owner).
+    """
+    if not adapter:
+        raise ValueError("identity declaration requires a non-empty adapter name")
+    if adapter == "commons-merged":
+        return (_COMMONS_SCOPE, False)
+    # aggregate (entities.yaml) and datapackage are transitional deprecated owners:
+    # the target substrate retires entities.yaml (§B5) and treats datapackages as
+    # attachments, not owners (§B4). Flag them so later phases can find them.
+    if adapter in ("aggregate", "datapackage"):
+        return (project_name, True)
+    return (project_name, False)
