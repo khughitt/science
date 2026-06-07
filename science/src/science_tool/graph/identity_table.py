@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Protocol
 
 from science_model.source_ref import SourceRef
 
@@ -86,3 +87,12 @@ def classify_owner_scope(adapter: str, *, project_name: str) -> tuple[str, bool]
     if adapter in ("aggregate", "datapackage"):
         return (project_name, True)
     return (project_name, False)
+
+
+class _DeclaredSources(Protocol):
+    identity_declarations: list[IdentityDeclaration]
+
+
+def build_identity_table(sources: _DeclaredSources) -> IdentityTable:
+    """Compile the IdentityTable from a project's collected declarations (§C1)."""
+    return IdentityTable(rows=list(sources.identity_declarations))
