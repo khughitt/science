@@ -27,7 +27,7 @@ from science_tool.graph.sources import (
     load_project_sources,
     local_profile_sources_dir,
 )
-from science_tool.graph.identity_table import IdentityTable
+from science_tool.graph.identity_table import IdentityTable, build_identity_table
 from science_tool.graph.store import PROJECT_ENTITY_PREFIXES
 from science_tool.paths import resolve_paths
 
@@ -163,47 +163,51 @@ def audit_identity_table(table: IdentityTable) -> list[dict]:
 
 def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool]:
     """Validate that structured project sources resolve canonically."""
+    rows: list[AuditRow] = []
     try:
         resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
     except AliasCollisionError as exc:
-        return (
-            [
-                {
-                    "check": "ambiguous_alias",
-                    "status": "fail",
-                    "source": exc.first_canonical_id,
-                    "field": "aliases",
-                    "target": exc.alias,
-                    "details": f"conflicts with {exc.second_canonical_id}",
-                }
-            ],
-            True,
-        )
-    rows: list[AuditRow] = []
-    ext_prefixes = external_prefixes(sources.ontology_catalogs)
-
-    for entity in sources.entities:
-        rows.extend(_audit_entity(entity, resolver, ext_prefixes=ext_prefixes))
-    rows.extend(_audit_geneset_row_dataset_usage(sources, resolver, ext_prefixes=ext_prefixes))
-    for relation in sources.relations:
-        rows.extend(_audit_relation(relation, resolver, ext_prefixes=ext_prefixes))
-    for binding in sources.bindings:
-        rows.extend(_audit_binding(binding, resolver, ext_prefixes=ext_prefixes))
-
-    # Surface entities dropped during load (unknown kind, failed schema validation)
-    # as warn rows so they are visible to graph audit / validate instead of only
-    # being logged. status=warn keeps them from flipping the build to failed.
-    for skipped in sources.skipped_entities:
+        # Alias collision short-circuits the reference checks (no resolver), but we
+        # still fall through to the additive identity-table audit below so an alias
+        # collision and an identity collision can both surface in one report.
         rows.append(
             {
-                "check": skipped.reason,
-                "status": "warn",
-                "source": skipped.path,
-                "field": "kind",
-                "target": skipped.kind,
-                "details": skipped.details,
+                "check": "ambiguous_alias",
+                "status": "fail",
+                "source": exc.first_canonical_id,
+                "field": "aliases",
+                "target": exc.alias,
+                "details": f"conflicts with {exc.second_canonical_id}",
             }
         )
+    else:
+        ext_prefixes = external_prefixes(sources.ontology_catalogs)
+
+        for entity in sources.entities:
+            rows.extend(_audit_entity(entity, resolver, ext_prefixes=ext_prefixes))
+        rows.extend(_audit_geneset_row_dataset_usage(sources, resolver, ext_prefixes=ext_prefixes))
+        for relation in sources.relations:
+            rows.extend(_audit_relation(relation, resolver, ext_prefixes=ext_prefixes))
+        for binding in sources.bindings:
+            rows.extend(_audit_binding(binding, resolver, ext_prefixes=ext_prefixes))
+
+        # Surface entities dropped during load (unknown kind, failed schema validation)
+        # as warn rows so they are visible to graph audit / validate instead of only
+        # being logged. status=warn keeps them from flipping the build to failed.
+        for skipped in sources.skipped_entities:
+            rows.append(
+                {
+                    "check": skipped.reason,
+                    "status": "warn",
+                    "source": skipped.path,
+                    "field": "kind",
+                    "target": skipped.kind,
+                    "details": skipped.details,
+                }
+            )
+
+    # Additive identity-table audit (design §C2): consume the compiled model.
+    rows.extend(audit_identity_table(build_identity_table(sources)))
 
     rows.sort(key=lambda row: (row["source"], row["target"]))
     has_failures = any(row["status"] == "fail" for row in rows)
