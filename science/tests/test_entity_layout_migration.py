@@ -268,6 +268,21 @@ def test_plan_keeps_slug_for_concepts_without_numbering(tmp_path: Path) -> None:
     assert move.new_rel_path == "entities/concepts/1q-gain.md"
 
 
+def test_migrator_preserves_verbatim_decision_stem(tmp_path: Path) -> None:
+    """A `verbatim` (decision) entity keeps its exact stem; never renumbered."""
+    legacy = tmp_path / "doc" / "decisions"
+    legacy.mkdir(parents=True)
+    (legacy / "D1.md").write_text(
+        "---\nid: decision:D1\ntype: decision\ntitle: First\nstatus: active\ncreated: 2026-01-01\n---\nbody\n",
+        encoding="utf-8",
+    )
+
+    plan = plan_migration(tmp_path)
+    moves = {m.new_rel_path: m.new_id for m in plan.moves}
+    assert "entities/decision/D1.md" in moves
+    assert moves["entities/decision/D1.md"] == "decision:D1"
+
+
 def test_rewrite_reports_unmapped_legacy_tokens() -> None:
     # A legacy-shaped reference with no mapping must be reported, never silently kept.
     id_map = {"question:q1-a": "question:0001-a"}

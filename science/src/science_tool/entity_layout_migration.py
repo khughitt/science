@@ -437,9 +437,10 @@ def plan_migration(project_root: Path) -> MigrationPlan:
                 local = Path(entity.rel_path).stem
                 _add_move(plan, entity, f"{policy.root.as_posix()}/{local}.md", f"{kind}:{local}", kind)
             continue
-        if policy.strategy == "slug":
-            # Slug kinds preserve their kebab id; never numbered. Without this branch
-            # a stem like "1q-gain" reaches the numeric branch and int("1q") crashes.
+        if policy.strategy in ("slug", "verbatim"):
+            # Slug and verbatim kinds preserve their stem; never numbered. Without
+            # this branch a stem like "1q-gain" or "D1" reaches the numeric branch
+            # and int() crashes.
             for entity in items:
                 local = Path(entity.rel_path).stem
                 _add_move(plan, entity, f"{policy.root.as_posix()}/{local}.md", f"{kind}:{local}", kind)
