@@ -83,18 +83,26 @@ legacy_relation_label: "<free text from legacy edge>"  # NON-computational, audi
 is the single vocabulary this facet introduces; everything else reuses an existing authority. Seed set
 (finalized empirically against the corpus during migration, §8):
 
-`affects` · `regulates` · `associates_with` · `binds` · `is_proxy_for` · `mediates_effect_of` ·
+`affects` · `regulates` · `associates_with` · `binds` · `is_proxy_for` ·
 `induces_state` / `transitions_to` · `subtype_of` / `part_of`
 
-A `predicate` value may later be **promoted to a first-class relation-type reference entity** (the
-umbrella's deferred "relation-type entities" option) with no change to proposition identity or
-evidence targeting.
+All v1 predicates are **strictly binary**: `subject` and `object` are entity IRIs (§3). A `predicate`
+value may later be **promoted to a first-class relation-type reference entity** (the umbrella's
+deferred "relation-type entities" option) with no change to proposition identity or evidence
+targeting.
 
 **Graph roles are derived, not predicates.** `mediator` / `confounder` describe a proposition's
 *position in a patch relative to a focal effect* (the `X→A→B→Y` topology), so they are **derived from
-patch structure + the query**, never authored on the proposition. The exception is when mediation /
-confounding is *itself* the assertion ("A mediates the effect of X on Y") — then it is a distinct
-higher-order proposition with predicate `mediates_effect_of`, grounded by evidence like any other.
+patch structure + the query**, never authored on the proposition. In v1 they are *always* derived.
+
+**Higher-order mediation is deferred.** A claim where mediation/confounding is *itself* the assertion
+("A mediates the effect of X on Y") is genuinely **n-ary** and does not fit the binary subject/object
+shape. The clean extension — out of v1 scope — is a higher-order proposition whose `object` is an
+**effect-proposition IRI** (since propositions are IRI-addressable, `object` could range over
+proposition IRIs as well as entity IRIs). v1 does **not** mint `mediates_effect_of`; the corpus's
+"mediator" relations are graph-roles (derived) rather than authored mediation claims. If a genuine
+authored mediation claim surfaces during migration, it is a curation case escalated under this
+extension, not silently coerced into a binary edge.
 
 ### 2.2 `polarity` — the sole sign carrier
 
@@ -211,9 +219,12 @@ an editable normalized projection over the entity layer, kept honest by an idemp
 `claim_layer`; `identification_strength`; t034 payload (`epistemic_role`); inline evidence authoring
 stubs that compile to evidence-line entities.
 
-**Forbidden fields:** `edge_status`; authored belief; posterior-as-status; support arrays that remain
-embedded after compile; anything the belief engine or renderer would consume directly instead of
-consuming compiled entities.
+**Forbidden fields:** `edge_status`; authored belief; `posterior`-*as-status*; support arrays that
+remain embedded after compile; anything the belief engine or renderer would consume directly instead
+of consuming compiled entities. (A *quantitative* posterior result — effect estimate / interval / sign
+probability — is legitimate **evidence substance**: it is authored only via an evidence stub that
+lifts to an evidence-line entity and appears at rest as a reference, per §8 step 5 — never as edge
+status on the proposition row.)
 
 **Layout** (pixel positions, etc.) is non-epistemic presentation state and lives in a **sibling
 disposable view/layout file**, never in the workbench (so the §5 round-trip stays a clean equality)
@@ -247,10 +258,14 @@ plus `derived_edge_status_reason` (its basis). It is computed from the canonical
 documented projection (first match wins; thresholds bind to `belief.py` magnitude bands):
 
 1. **`eliminated`** — the decisive-refutation cap has fired (§7).
-2. **`structural`** — `claim_layer == structural_claim` (a scaffold/definitional assertion; flagged
-   structurally regardless of magnitude — the channels still carry its real belief).
-3. **`unknown`** — no evidence-lines, or only below-threshold ones (belief `speculative` with empty
-   support); the edge exists as a drawn hypothesis but is `not_yet_tested`.
+2. **`unknown`** — no evidence-lines, or only below-threshold ones (belief `speculative` with empty
+   support); the edge exists as a drawn hypothesis but is `not_yet_tested`. **Ordered before
+   `structural`** so an *ungrounded* `structural_claim` surfaces as `unknown`, never hidden behind a
+   "structural" label (structural assertions are belief-carrying and must not escape summary filters
+   just because they are definitional).
+3. **`structural`** — `claim_layer == structural_claim` **and** it has grounding evidence (passed the
+   `unknown` test); a scaffold/definitional assertion, flagged structurally regardless of magnitude —
+   the channels still carry its real belief.
 4. **`supported`** — belief magnitude ∈ {`supported`, `well_supported`}.
 5. **`tentative`** — otherwise (belief magnitude ∈ {`speculative`, `fragile`} with some evidence).
 
@@ -310,12 +325,23 @@ Per-edge migration:
 4. **Lift evidence**: each `data_support` / `lit_support` item → an evidence-line targeting the
    proposition (`cito:supports` / `cito:disputes`), with `evidence_type` (canonical enum) + `stance` +
    `strength`. **Dataset binding (`dataset_usage`, `task → dataset` resolution) is the
-   `dataset-evidence-flow` facet's responsibility** (§9); this facet creates the evidence-line and its
-   stance/type, leaving the dataset link to be populated by that facet.
-5. **Map elimination** (§7): `eliminated` / `eliminated_by` → `cito:disputes` evidence-line + decisive
+   `dataset-evidence-flow` facet's responsibility** (§9). An **empirical** evidence-line whose
+   `dataset_usage` is not yet resolved is created as a **migration staging artifact, excluded from the
+   compiled graph and the belief engine** — `dataset_usage` is a precondition for *compiling* an
+   empirical evidence-line, so the umbrella's mandatory-`dataset_usage` invariant always holds in the
+   compiled graph and belief never aggregates ungrounded empirical evidence. Literature / expert
+   evidence-lines (no dataset requirement) compile immediately.
+5. **Preserve quantitative posterior payload**: the legacy `posterior` block (`beta`, `HDI`,
+   `prob_sign`) is *fitted quantitative evidence*, not status. It migrates onto the relevant
+   evidence-line as a **quantitative result** (effect estimate + interval + sign probability) feeding
+   the continuous scalar-belief input (`belief_scalar.py` `massed_support` / `massed_dispute`), or onto
+   a linked analysis/result artifact where the posterior is a separate fitted object. It is **not**
+   dropped — only `posterior`-*as-authored-status* is (step 7).
+6. **Map elimination** (§7): `eliminated` / `eliminated_by` → `cito:disputes` evidence-line + decisive
    refutation.
-6. **Drop authored status**: `edge_status` / `posterior`-as-status are not written into entities; they
-   are derived (§6).
+7. **Drop authored status only**: `edge_status` and `posterior`-*as-status* are not written into
+   entities; they are derived (§6). This drops the authored **status interpretation**, never the
+   quantitative posterior payload preserved in step 5.
 
 Execution: subagent-driven, with the loud-fail gates as hard stops; mechanical items batched,
 curation items surfaced explicitly.
@@ -334,10 +360,12 @@ cleanly at the **evidence-line**:
   empirical evidence-lines), the `task → dataset` resolution against `mm30.v8.yml`, independence
   surfacing (A1/A2/B1/B2), and dataset-entity migration.
 
-Sequencing (umbrella §7): `epistemic-edges` is substrate-orthogonal and can lead; the evidence-lines it
-creates have their dataset binding **filled in by `dataset-evidence-flow`**. The migration plan must
-not block proposition/evidence-line creation on dataset resolution, but must leave the binding slot
-explicit so the sibling facet can populate it without rework.
+Sequencing (umbrella §7): `epistemic-edges` is substrate-orthogonal and can lead. Propositions and
+literature/expert evidence-lines compile immediately; **empirical evidence-lines awaiting
+`dataset_usage` are staged and excluded from the compiled graph/belief engine** (§8 step 4) until
+`dataset-evidence-flow` resolves their dataset binding — at which point they compile and enter belief.
+So proposition/evidence-line *creation* is never blocked, but empirical evidence never reaches belief
+ungrounded; the mandatory-`dataset_usage` invariant holds in the compiled graph at all times.
 
 ---
 
@@ -372,5 +400,9 @@ explicit so the sibling facet can populate it without rework.
 5. **Workbench round-trip fidelity.** Canonical serialization must be lossless over the workbench's
    scope (structure + references); comments / hand-formatting do not survive `compile` (accepted cost
    of drift-proofing).
-6. **Cross-facet seam** (§9): evidence-lines created here with empty dataset bindings must validate as
-   incomplete-but-legal until `dataset-evidence-flow` populates them.
+6. **Cross-facet seam / staging discipline** (§9): empirical evidence-lines awaiting `dataset_usage`
+   are staging artifacts the compiler must reliably **exclude** from the graph/belief engine until
+   `dataset-evidence-flow` grounds them. The risk is a staging leak — a staged empirical evidence-line
+   slipping into compilation ungrounded — so the compiler needs an explicit staged/excluded state and a
+   validation gate that rejects empirical evidence-lines lacking `dataset_usage` from the *compiled*
+   graph (they remain legal only as staging artifacts).
