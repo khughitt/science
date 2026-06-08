@@ -273,7 +273,12 @@ def entities_migrate_identifiers_command(project_path: Path, apply_changes: bool
 
 @entities_group.command("migrate")
 @click.option("--apply", "apply_changes", is_flag=True, help="Apply the migration (default: dry run).")
-@click.option("--project-root", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path("."), help="Project root (default: current directory).")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path("."),
+    help="Project root (default: current directory).",
+)
 def entities_migrate_command(apply_changes: bool, project_root: Path) -> None:
     """Migrate a project's doc/specs entity layout into entities/ (v2 → v3)."""
     from science_tool.entity_layout_migration import migrate_layout
@@ -293,40 +298,109 @@ def entities_migrate_command(apply_changes: bool, project_root: Path) -> None:
     help="Project root (default: current directory).",
 )
 @click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text")
-def entities_triage_aggregate_command(project_root: Path, output_format: str) -> None:
-    """Triage aggregate (entities.yaml) rows for §B5 retirement (read-only)."""
+@click.option("--promote-coined", is_flag=True, help="Promote `coined` rows to owner files.")
+@click.option("--delete-cruft", is_flag=True, help="Delete `cruft` (migration:*) rows.")
+@click.option("--delete-shadow", is_flag=True, help="Delete `shadow` rows (id already has a real owner).")
+@click.option("--apply", "apply_changes", is_flag=True, help="Execute the plan (default: dry-run).")
+def entities_triage_aggregate_command(
+    project_root: Path,
+    output_format: str,
+    promote_coined: bool,
+    delete_cruft: bool,
+    delete_shadow: bool,
+    apply_changes: bool,
+) -> None:
+    """Triage (and, with bucket flags, retire) aggregate (entities.yaml) rows (§B5)."""
     from collections import Counter
 
+    from science_tool.graph.aggregate_retire import apply_retirement, plan_retirement
     from science_tool.graph.aggregate_triage import classify_aggregate_rows
     from science_tool.graph.sources import load_project_sources
 
-    sources = load_project_sources(
-        project_root, include_commons=False, strict_core_schema=False, strict_identity=False
-    )
+    sources = load_project_sources(project_root, include_commons=False, strict_core_schema=False, strict_identity=False)
     rows = classify_aggregate_rows(sources)
-    if output_format == "json":
-        payload = [
-            {
-                "canonical_id": r.canonical_id,
-                "kind": r.kind,
-                "source_path": r.source_path,
-                "has_real_owner": r.has_real_owner,
-                "bucket": r.bucket.value,
-                "evidence": r.evidence,
-            }
-            for r in rows
-        ]
-        click.echo(json.dumps(payload, indent=2))
+    any_bucket = promote_coined or delete_cruft or delete_shadow
+
+    # No bucket flags → the unchanged 3a read-only report.
+    if not any_bucket:
+        if apply_changes:
+            raise click.UsageError("--apply requires at least one of --promote-coined/--delete-cruft/--delete-shadow.")
+        if output_format == "json":
+            click.echo(
+                json.dumps(
+                    [
+                        {
+                            "canonical_id": r.canonical_id,
+                            "kind": r.kind,
+                            "source_path": r.source_path,
+                            "has_real_owner": r.has_real_owner,
+                            "bucket": r.bucket.value,
+                            "evidence": r.evidence,
+                        }
+                        for r in rows
+                    ],
+                    indent=2,
+                )
+            )
+            return
+        counts = Counter(r.bucket.value for r in rows)
+        click.echo(f"{len(rows)} aggregate rows:")
+        for bucket in sorted(counts):
+            click.echo(f"  {bucket}: {counts[bucket]}")
+        for r in rows:
+            click.echo(
+                f"  [{r.bucket.value}] {r.canonical_id} (kind={r.kind}, source_path={r.source_path}) -- {r.evidence}"
+            )
         return
-    counts = Counter(r.bucket.value for r in rows)
-    click.echo(f"{len(rows)} aggregate rows:")
-    for bucket in sorted(counts):
-        click.echo(f"  {bucket}: {counts[bucket]}")
-    for r in rows:
+
+    # Retirement plan/apply path. --apply is v3-gated.
+    if apply_changes:
+        import yaml as _yaml
+
+        _manifest = _yaml.safe_load((project_root / "science.yaml").read_text(encoding="utf-8")) or {}
+        _v = _manifest.get("layout_version")
+        version = _v if isinstance(_v, int) else None
+        if version is None or version < 3:
+            raise click.ClickException(
+                f"promotion needs an `entities/` owner root; this project is layout_version {version} — "
+                "complete the v2->v3 migration (`science entities migrate`) first."
+            )
+
+    plan = plan_retirement(
+        project_root,
+        sources,
+        rows,
+        promote_coined=promote_coined,
+        delete_cruft=delete_cruft,
+        delete_shadow=delete_shadow,
+    )
+    report = apply_retirement(project_root, plan, dry_run=not apply_changes)
+    if output_format == "json":
         click.echo(
-            f"  [{r.bucket.value}] {r.canonical_id} "
-            f"(kind={r.kind}, source_path={r.source_path}) -- {r.evidence}"
+            json.dumps(
+                {
+                    "dry_run": report.dry_run,
+                    "promoted": list(report.promoted),
+                    "deleted": list(report.deleted),
+                    "rejected": [list(p) for p in report.rejected],
+                    "skipped": [list(p) for p in report.skipped],
+                    "files_rewritten": list(report.files_rewritten),
+                },
+                indent=2,
+            )
         )
+        return
+    head = "PLAN (dry-run)" if report.dry_run else "APPLIED"
+    click.echo(
+        f"{head}: {len(report.promoted)} promoted, {len(report.deleted)} deleted, "
+        f"{len(report.rejected)} rejected, {len(report.skipped)} skipped"
+    )
+    for cid in report.promoted:
+        click.echo(f"  promote {cid}")
+    for cid in report.deleted:
+        click.echo(f"  delete  {cid}")
+    for cid, reason in (*report.rejected, *report.skipped):
+        click.echo(f"  skip    {cid} -- {reason}")
 
 
 @entities_group.command("register-kind")
@@ -2482,7 +2556,10 @@ def belief_group() -> None:
 
 @belief_group.command("snapshot")
 @click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True,
+    "--path",
+    "graph_path",
+    default=str(DEFAULT_GRAPH_PATH),
+    show_default=True,
     type=click.Path(path_type=Path),
 )
 @click.option("--as-of", "as_of", default=None, help="Snapshot date YYYY-MM-DD (default: today).")
@@ -5043,8 +5120,7 @@ def data_package_list_cmd(project_root: Path | None) -> None:
 
 
 @data_package_group.command(name="promote-orphans")
-@click.option("--apply", "apply_changes", is_flag=True, default=False,
-              help="Write owner files (default: dry-run).")
+@click.option("--apply", "apply_changes", is_flag=True, default=False, help="Write owner files (default: dry-run).")
 @click.option(
     "--project-root",
     type=click.Path(exists=True, file_okay=False, path_type=Path),

@@ -52,11 +52,12 @@ def test_infers_synthesis_singleton_by_path(tmp_path: Path) -> None:
 
 
 def test_unrecognized_frontmatter_type_is_skipped(tmp_path: Path) -> None:
-    # A file whose frontmatter type is not a known markdown entity kind (e.g.
-    # "concept") must be silently excluded from discovery results.
-    _write(tmp_path, "doc/concepts/foo.md", "---\ntype: concept\n---\nBody.\n")
+    # A file whose frontmatter type is not a known markdown entity kind must be
+    # silently excluded from discovery results. (`concept` is now a recognized
+    # core slug kind, so use a type that is registered nowhere.)
+    _write(tmp_path, "doc/glossary/foo.md", "---\ntype: glossary-entry\n---\nBody.\n")
     found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
-    assert "doc/concepts/foo.md" not in found
+    assert "doc/glossary/foo.md" not in found
 
 
 def test_frontmatterless_file_under_unknown_parent_dir_is_skipped(tmp_path: Path) -> None:
@@ -255,6 +256,16 @@ def test_rewrite_replaces_full_ids_not_prefix_collisions() -> None:
     assert "question:0001-a" in out and "question:0010-b" in out
     assert "question:q1-a" not in out  # q1 not corrupted by q10 replacement
     assert unresolved == []
+
+
+def test_plan_keeps_slug_for_concepts_without_numbering(tmp_path: Path) -> None:
+    # A slug-strategy kind (concept) with a kebab stem must plan an id-preserving
+    # move — never numbered — and must NOT crash the numeric branch on int("1q").
+    _write(tmp_path, "doc/concepts/1q-gain.md", '---\nid: "concept:1q-gain"\ntype: concept\n---\nBody.\n')
+    plan = plan_migration(tmp_path)
+    move = next(m for m in plan.moves if m.old_id == "concept:1q-gain")
+    assert move.new_id == "concept:1q-gain"
+    assert move.new_rel_path == "entities/concepts/1q-gain.md"
 
 
 def test_rewrite_reports_unmapped_legacy_tokens() -> None:
