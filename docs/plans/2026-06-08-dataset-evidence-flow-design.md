@@ -34,9 +34,14 @@ into the v3 entity layout** — then the existing machinery does the rest.
 | `dataset` entity | first-class **operational** `DatasetEntity` (`origin ∈ {external, derived}`) | `entity_registry.py:111`; `science_model/entities.py:594` |
 
 **The only gaps** (this facet's scope):
-1. `EvidenceLineEntity` does not yet carry `dataset_usage` (it has only `shared_dataset`/`shared_lab`/…
-   observability tokens); the current convention authors usage on *paper* entities and derives line
-   independence post-hoc. The umbrella locks the **line** as the carrier (§2).
+1. **Line-level `dataset_usage` is not yet *used* or *enforced*.** The field already lives on the base
+   `Entity` (`entities.py:333`) and B1 already iterates *all* entities' `dataset_usage`, so an
+   evidence-line can technically carry it today; the current *convention* authors usage on *paper*
+   entities and derives line independence post-hoc (`EvidenceLineEntity` surfaces only
+   `shared_dataset`/`shared_lab`/… tokens). So the gap is narrow: (a) a **belief-eligibility validation
+   rule** for empirical lines, (b) template/schema **surfacing** of `dataset_usage` on the line as
+   needed, (c) MM30 **authoring/migration population**. The umbrella locks the **line** as the carrier
+   (§2).
 2. No `task → dataset` mapping exists anywhere — `data_support` is `{task, description}`, datasets live
    only in prose (§3).
 3. The 30 `mm30.v8.yml` datasets are not yet `entities/datasets/` files (no path policy; §4).
@@ -44,9 +49,9 @@ into the v3 entity layout** — then the existing machinery does the rest.
 ### 1.2 The seam to `epistemic-edges`
 
 `epistemic-edges` migration creates each empirical evidence-line in a **staged** state
-(`compiled=False`), excluded from the compiled graph/belief, precisely *because* `dataset_usage` is
-unresolved. **This facet resolves `dataset_usage`, which flips those lines to `compiled=True` and
-admits them to belief.** The two facets divide at the evidence-line: `epistemic-edges` owns the
+(`belief_eligible=False`), excluded from belief materialization, precisely *because* `dataset_usage` is
+unresolved. **This facet resolves `dataset_usage`, which flips those lines to `belief_eligible=True`
+and admits them to belief.** The two facets divide at the evidence-line: `epistemic-edges` owns the
 proposition + the line's stance/type/quantitative-result; this facet owns the line's dataset grounding.
 
 ---
@@ -58,14 +63,20 @@ proposition + the line's stance/type/quantitative-result; this facet owns the li
   on `EvidenceLineEntity`). The line — not a paper, not a task — is the single subject whose dataset
   usage grounds belief. This makes MM30 the first project to author line-level `dataset_usage`, which
   the framework already supports.
-- **Required for compilation of empirical lines.** An empirical evidence-line
+- **Required for belief-eligibility of empirical lines.** An empirical evidence-line
   (`evidence_type == empirical_data_evidence`) with empty `dataset_usage` is a **staging artifact,
-  excluded from the compiled graph/belief** (the `compiled=False` gate from `epistemic-edges` §8.4).
-  Resolving `dataset_usage` is the precondition that compiles it. Literature/expert lines need no
-  `dataset_usage` and compile immediately.
+  `belief_eligible=False`, excluded from belief** (the gate from `epistemic-edges` §8.4 / plan Task
+  1c–3b). Resolving `dataset_usage` flips it to `belief_eligible=True`. Literature/expert lines need no
+  `dataset_usage` and are belief-eligible immediately.
 - **`role` defaults to `analyzed`**; non-`analyzed` roles (`validation_source`, `set_definition_source`,
-  `cited`) are curated exceptions recorded in the resolution table (§3). `overlap` defaults to
-  `unknown` unless the resolver can establish `full`/`partial`.
+  `cited`) are curated exceptions recorded in the resolution table (§3).
+- **`overlap` must be curated to `full` when a task analyzed the named dataset as a whole** — do **not**
+  default it to `unknown`. This is load-bearing for the §5 payoff: B2 only emits a *committed*
+  shared-source group for direct dependence at `overlap=full`; `unknown` degrades to a *candidate* and
+  `reduce_units` will **not** collapse repeated analyses of the same dataset. Reserve `unknown` for
+  genuinely unresolved overlap (and surface those as candidates for review), and use `partial` only for
+  true sub-cohort/subset analyses. The resolver seeds `full` for whole-dataset analyses; the loud-fail
+  curation pass confirms it.
 - **Reuse, don't fork.** B1 materializes the line's `dataset_usage`; B2 derives `independence_group`;
   A2 down-weights reference-backed lines — all **verbatim**. No new aggregation logic.
 
@@ -114,19 +125,26 @@ datasets live only in `mm30.v8.yml` (operational SSOT: paths, phenotypes, identi
 - **Generated projection (the 30 pipeline datasets).** `mm30.v8.yml` stays the operational SSOT.
   `entities/datasets/<slug>.md` `DatasetEntity` files are **generated from it** (a compile step), with:
   - **identity** `dataset:<config-key slug>` (`GSE19784 → dataset:gse19784`; `MMRF → dataset:mmrf`);
-  - **`source_class`** (+ `derived_kind`) added **minimally to the registry** (or a sibling) and
-    projected onto each entity — GEO/MMRF cohorts → `observational`; pipeline-derived artifacts
-    (fmap/meta/coex) → `derived` + `derived_kind`; external reference sets (MSigDB/annotables) →
-    `reference`;
+  - **two orthogonal axes, both populated** (a generated entity that only sets `source_class` would
+    satisfy `dataset_usage` identity while being operationally under-specified):
+    - **`source_class`** (epistemic taxonomy) + `derived_kind` — GEO/MMRF cohorts → `observational`;
+      pipeline-derived artifacts (fmap/meta/coex) → `derived` + `derived_kind`; external reference sets
+      (MSigDB/annotables) → `reference`;
+    - **`origin`** (provenance, `DatasetEntity` invariant `∈ {external, derived}`) **+ its required
+      origin-specific provenance shape** — GEO/MMRF raw cohorts → `origin: external` + access /
+      accessions (the `mm30.v8.yml` key/source); pipeline artifacts → `origin: derived` +
+      derivation / `produced_by` (the producing stage/rule). The generator must emit the provenance
+      block the chosen `origin` requires, not just the taxonomy.
+  - these axes are added **minimally to the registry** (or a sibling) and projected onto each entity;
   - a **drift-check gate** (the workbench fixpoint pattern): committed `entities/datasets/` must equal
     the projection of the registry; CI regenerates and diffs.
   This adds the missing `dataset` entry to `_BUILTIN_MARKDOWN_POLICIES` (`slug` strategy). One
   operational SSOT, one generated epistemic projection — no parallel dataset registry.
 - **External datasets (beyond the 30).** Evidence that re-analyzes a dataset *not* in `mm30.v8.yml`
-  (e.g. `t124`'s Ren-2019 `GSE136410`) gets a `DatasetEntity` with **`origin: external`**, registered
-  as needed (not generated from the registry). Gate 2 forces their creation rather than letting the
-  dataset grain vanish. The dataset-entity universe = **30 generated pipeline datasets + externals
-  analyzed by evidence**.
+  (e.g. `t124`'s Ren-2019 `GSE136410`) gets a `DatasetEntity` with **`origin: external`** + accessions,
+  `source_class: observational`, registered as needed (not generated from the registry). Gate 2 forces
+  their creation rather than letting the dataset grain vanish. The dataset-entity universe = **30
+  generated pipeline datasets + externals analyzed by evidence**.
 
 ---
 
@@ -152,9 +170,9 @@ not designed here (see §9).
 ## 6. Framework vs MM30 split (mirrors `epistemic-edges`)
 
 - **Framework (`~/d/science`):** surface `dataset_usage` on `EvidenceLineEntity` + the
-  required-for-compiled-empirical rule; add the `dataset` path policy; generic dataset-from-registry
+  required-`dataset_usage`-for-belief-eligible-empirical rule; add the `dataset` path policy; generic dataset-from-registry
   **generation + drift-check** tooling; the two **resolver loud-fail gates** as validation checks; the
-  `prov:wasDerivedFrom` task-trace wiring. (Much of the staging/compiled plumbing is shared with the
+  `prov:wasDerivedFrom` task-trace wiring. (Much of the `belief_eligible` staging plumbing is shared with the
   `epistemic-edges` framework plan — see that plan's Tasks 1c/2c/3b; this facet's framework plan adds
   the dataset-specific pieces and avoids duplicating them.)
 - **MM30 (`~/d/r/mm30`):** the curated `task → dataset` resolution table data; the `source_class`
@@ -170,8 +188,8 @@ not designed here (see §9).
 2. **Seed** the `task → dataset` table automatically; **curate**; enforce loud-fail gate 1 (every
    empirical `data_support` task resolves) and gate 2 (every resolved dataset has a canonical entity,
    registering externals with `origin: external`).
-3. **Write** `dataset_usage` onto each empirical evidence-line + the `prov:wasDerivedFrom task:<id>`
-   trace; flip resolved lines `compiled=False → True`.
+3. **Write** `dataset_usage` (with curated `overlap`, §2) onto each empirical evidence-line + the
+   `prov:wasDerivedFrom task:<id>` trace; flip resolved lines `belief_eligible=False → True`.
 4. **Materialize + derive** (B1/B2 automatic); verify independence grouping on a spot-check set
    (e.g. all MMRF-only lines collapse to one winner; cross-GEO lines stay independent).
 5. **No silent drops**; subagent-driven; the resolution table committed as an auditable lockfile.
@@ -187,8 +205,8 @@ not designed here (see §9).
 - **Prime directive:** the resolution table is a migration input (lockfile-like), not a parallel store;
   `mm30.v8.yml` stays the single operational dataset SSOT with one generated projection; the task key
   is provenance, never belief.
-- **`epistemic-edges` seam:** this facet flips staged empirical lines to compiled; the mandatory-
-  `dataset_usage`-for-compiled invariant holds at all times.
+- **`epistemic-edges` seam:** this facet flips staged empirical lines to `belief_eligible=True`; the
+  mandatory-`dataset_usage`-for-belief-eligible invariant holds at all times.
 
 ---
 
@@ -200,9 +218,14 @@ not designed here (see §9).
 2. **External-dataset sprawl.** Re-analyses cite external datasets (`GSE136410`, …) needing `origin:
    external` entities; the count is unknown until seeding runs. Gate 2 surfaces them; ensure the plan
    has a lightweight external-registration path so they don't become a bottleneck.
-3. **`role`/`overlap` accuracy.** Defaulting `role=analyzed`, `overlap=unknown` is safe but coarse;
-   wrong `overlap`/`role` mis-feeds B2 (e.g. a `set_definition_source` mis-tagged `analyzed` could
-   fabricate independence). Curate roles for non-`analyzed` cases; spot-check B2 output (§7.4).
+3. **`role`/`overlap` accuracy is load-bearing for the §5 payoff.** `overlap` must be **curated to
+   `full`** for whole-dataset analyses (not left `unknown`) — otherwise B2 emits only a *candidate*,
+   not a committed shared-source group, and `reduce_units` fails to collapse repeated analyses of the
+   same dataset (the promised independence reduction silently no-ops). `unknown` is reserved for
+   genuinely unresolved overlap (surfaced as review candidates); `partial` for true sub-cohorts.
+   Symmetrically, a `set_definition_source`/`cited` line mis-tagged `analyzed` could *fabricate*
+   independence. Curate `role` for non-`analyzed` cases and `overlap` for whole-dataset cases;
+   spot-check B2 output (§7.4) in both directions (under- and over-collapse).
 4. **Intra-line multi-dataset breadth → strength** (§5) is unresolved at the belief-engine level: a
    5-dataset single line and a 1-dataset single line currently differ only in `dataset_usage` length,
    which B2 (inter-line) does not reward. If single-line breadth should raise strength, that is a
@@ -211,4 +234,4 @@ not designed here (see §9).
    sibling) must not perturb the pipeline that reads the registry; prefer an additive sibling/section
    the pipeline ignores. Confirm against the config loader before implementing.
 6. **v3 timing.** Like `epistemic-edges`, implementation is gated on v3 (entity layout for
-   `entities/datasets/`, compiled-graph contract for staging). Planning proceeds; implementation holds.
+   `entities/datasets/`, belief-materialization contract for `belief_eligible` staging). Planning proceeds; implementation holds.
