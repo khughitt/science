@@ -43,6 +43,10 @@ class PlannedRow:
 class RetirementPlan:
     promote: tuple[PlannedRow, ...]
     delete: tuple[PlannedRow, ...]
+    # A SHADOW row may appear in BOTH reconcile AND delete when promote_coined and
+    # delete_shadow are both set. This is intentional: reconcile is marker-gated
+    # crash-recovery; delete is unconditional. The executor deduplicates (source_path,
+    # line) via a set, so the aggregate entry is only dropped once.
     reconcile: tuple[PlannedRow, ...]  # shadow rows to marker-check (promote_coined only); §3.5 step 2
     rejected: tuple[tuple[AggregateRowTriage, str], ...]
 
