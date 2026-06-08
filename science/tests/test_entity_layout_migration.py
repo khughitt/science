@@ -52,11 +52,12 @@ def test_infers_synthesis_singleton_by_path(tmp_path: Path) -> None:
 
 
 def test_unrecognized_frontmatter_type_is_skipped(tmp_path: Path) -> None:
-    # A file whose frontmatter type is not a known markdown entity kind (e.g.
-    # "concept") must be silently excluded from discovery results.
-    _write(tmp_path, "doc/concepts/foo.md", "---\ntype: concept\n---\nBody.\n")
+    # A file whose frontmatter type is not a known markdown entity kind must be
+    # silently excluded from discovery results. (`concept` is now a recognized
+    # core slug kind, so use a type that is registered nowhere.)
+    _write(tmp_path, "doc/glossary/foo.md", "---\ntype: glossary-entry\n---\nBody.\n")
     found = {e.rel_path: e for e in discover_legacy_entities(tmp_path)}
-    assert "doc/concepts/foo.md" not in found
+    assert "doc/glossary/foo.md" not in found
 
 
 def test_frontmatterless_file_under_unknown_parent_dir_is_skipped(tmp_path: Path) -> None:

@@ -22,7 +22,7 @@ from science_tool.graph.sources import (
 )
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
 
-EntityFilenameStrategy = Literal["numeric", "citekey", "singleton"]
+EntityFilenameStrategy = Literal["numeric", "citekey", "singleton", "slug"]
 
 LOCAL_PART_WIDTH = 4
 
@@ -56,6 +56,7 @@ _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
     "search": EntityPathPolicy(Path("entities/searches"), "numeric"),
     "method": EntityPathPolicy(Path("entities/methods"), "numeric"),
     "pre-registration": EntityPathPolicy(Path("entities/pre-registrations"), "numeric"),
+    "concept": EntityPathPolicy(Path("entities/concepts"), "slug"),
     "paper": EntityPathPolicy(Path("entities/papers"), "citekey"),
     # Singletons: `root` is the file path itself, not a directory.
     "research-question": EntityPathPolicy(Path("entities/research-question.md"), "singleton"),
@@ -74,7 +75,7 @@ _LOCAL_MANIFEST_CACHE: dict[tuple[str, int], ProfileManifest | None] = {}
 # the migrator's singleton handling (`_plan_singletons`) is hard-coded to the two
 # core singleton paths and has no local-singleton semantics, so a local singleton
 # would be accepted, discovered, then never moved. Forbid it fail-loud here.
-_VALID_STRATEGIES: frozenset[str] = frozenset({"numeric", "citekey"})
+_VALID_STRATEGIES: frozenset[str] = frozenset({"numeric", "citekey", "slug"})
 
 # Set of directory (or file) names that belong to core kinds' homes.  A local
 # kind whose resolved home has the same final path component would silently
@@ -216,6 +217,7 @@ _DEFAULT_STATUS: dict[str, str] = {
     "method": "active",
     "pre-registration": "active",
     "paper": "active",
+    "concept": "active",
 }
 _STATUS_VALUES: dict[str, frozenset[str]] = {
     "evidence-line": frozenset({"draft", "active", "retired"}),
@@ -256,6 +258,7 @@ _STATUS_VALUES: dict[str, frozenset[str]] = {
     "method": frozenset({"active", "superseded", "retired"}),
     "pre-registration": frozenset({"active", "amended", "superseded", "retired"}),
     "paper": frozenset({"active", "retired"}),
+    "concept": frozenset({"active", "deprecated"}),
 }
 _ALLOWED_EXPLICIT_ROOTS = (Path("entities"),)
 
@@ -340,6 +343,8 @@ def local_part_conforms(kind: str, local_part: str, *, project_root: Path | None
         return bool(_NUMERIC_LOCAL_PART_RE.fullmatch(local_part))
     if strategy == "citekey":
         return bool(_CITEKEY_RE.fullmatch(local_part))
+    if strategy == "slug":
+        return bool(_SLUG_RE.fullmatch(local_part))
     return False  # singletons have no per-instance local part
 
 
@@ -402,6 +407,10 @@ def validate_entity_id(kind: str, entity_id: str) -> str:
         if not _CITEKEY_RE.fullmatch(local_part):
             raise EntityCommandError(f"Invalid citekey local part: {entity_id}")
         return entity_id
+    if strategy == "slug":
+        if not _SLUG_RE.fullmatch(local_part):
+            raise EntityCommandError(f"Invalid slug local part: {entity_id}")
+        return entity_id
     # numeric: an explicit --id must already be canonical, so it cannot
     # reintroduce drift (e.g. question:q01-... or question:5-...).
     if not _NUMERIC_LOCAL_PART_RE.fullmatch(local_part):
@@ -441,6 +450,8 @@ def generate_entity_id(
         raise EntityCommandError(f"{kind} is a singleton; it is not created via this path")
 
     slug_value = validate_slug(slug) if slug is not None else derive_slug(title)
+    if strategy == "slug":
+        return f"{kind}:{slug_value}"
     return f"{kind}:{_next_numeric_local_part(project_root, kind, slug_value)}"
 
 
