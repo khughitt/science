@@ -463,10 +463,13 @@ def plan_retirement(
         except EntityCommandError:
             rejected.append((triage, f"no path policy for kind {kind!r}"))
             continue
-        if policy.strategy != "slug" and not local_part_conforms(kind, local_part, project_root=project_root):
+        # Conformance ALWAYS runs — including for slug kinds: a slug-strategy id must
+        # still be a valid slug (_SLUG_RE rejects e.g. `bad_slug`, `Trailing-`). 3b is
+        # id-preserving, so a non-conforming id is rejected, never renumbered.
+        if not local_part_conforms(kind, local_part, project_root=project_root):
             rejected.append((triage, f"id {meta.canonical_id!r} does not conform to {policy.strategy} strategy"))
             continue
-        if not _is_safe_slug(local_part):
+        if not _is_safe_slug(local_part):  # path-safety belt (no `..`); redundant for slug but cheap
             rejected.append((triage, "unsafe slug"))
             continue
         target = (policy.root / f"{local_part}.md").as_posix()
@@ -507,8 +510,14 @@ from pathlib import Path
 
 import yaml
 
-from science_tool.graph.aggregate_retire import apply_retirement, plan_retirement
-from science_tool.graph.aggregate_triage import classify_aggregate_rows
+from science_tool.graph.aggregate_retire import (
+    PlannedRow,
+    RetireAction,
+    RetirementPlan,
+    apply_retirement,
+    plan_retirement,
+)
+from science_tool.graph.aggregate_triage import AggregateBucket, AggregateRowTriage, classify_aggregate_rows
 from science_tool.graph.sources import load_project_sources
 
 _MANIFEST = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 3\n"
@@ -573,8 +582,19 @@ def test_dry_run_writes_nothing(tmp_path: Path) -> None:
 
 
 def test_missing_title_is_rejected_entry_retained(tmp_path: Path) -> None:
+    # The loader VALIDATES entities before emitting metadata (Entity.title is required),
+    # so a title-less row is skipped at load and never reaches the planner. The executor's
+    # missing-field guard reads the RAW entry, so drive it directly with a synthetic plan
+    # over a raw file (not loader-driven).
     _write_entities(tmp_path, [{"canonical_id": "concept:no-title", "kind": "concept", "source_path": _AGG_REL}])
-    report = _run(tmp_path, dry_run=False, promote_coined=True, delete_cruft=False, delete_shadow=False)
+    triage = AggregateRowTriage("concept:no-title", "concept", _AGG_REL, False, AggregateBucket.COINED, "x")
+    plan = RetirementPlan(
+        promote=(PlannedRow(triage, RetireAction.PROMOTE, _AGG_REL, 0, "entities/concepts/no-title.md"),),
+        delete=(),
+        reconcile=(),
+        rejected=(),
+    )
+    report = apply_retirement(tmp_path, plan, dry_run=False)
     assert report.promoted == ()
     assert any(cid == "concept:no-title" for cid, _ in report.rejected)
     assert _entities_on_disk(tmp_path) == ["concept:no-title"]
@@ -1056,8 +1076,8 @@ Expected: all pass.
 
 - [ ] **Read-only smoke on MM30 (still v2 — must REFUSE apply, must dry-run-plan):**
 
-Run: `cd ~/d/science/science && uv run --frozen science entities triage-aggregate --project-root ~/d/cancer/cancer-types/multiple-myeloma --promote-coined --delete-cruft --format json | head -30`
-Expected: a dry-run plan listing ~134 `promoted` (concept/latent) + ~26 `deleted` (cruft) with `dry_run: true`, writing nothing.
+Run: `cd ~/d/science/science && uv run --frozen science entities triage-aggregate --project-root ~/d/cancer/cancer-types/multiple-myeloma --promote-coined --delete-cruft --format json | python3 -c "import sys,json; d=json.load(sys.stdin); print({k: len(v) for k,v in d.items() if isinstance(v,list)}, 'dry_run=', d['dry_run'])"`
+Expected: `dry_run=True`, ~130 `promoted` (the **concept** rows — `concept` is the only coined kind this plan gives a `slug` policy), ~4 `rejected` (the **latent** rows — `latent` is still a local *numeric* kind here; its kebab ids do not conform, so they are rejected rather than renumbered — registering `latent` as `slug` is part of MM30's eventual v3 cutover per design §3.0 item 8), ~26 `deleted` (cruft). Nothing is written (dry-run).
 Run: `cd ~/d/science/science && uv run --frozen science entities triage-aggregate --project-root ~/d/cancer/cancer-types/multiple-myeloma --promote-coined --apply; echo "exit=$?"`
 Expected: refusal mentioning `layout_version` (exit 1) — MM30 is v2; nothing mutated.
 

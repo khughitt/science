@@ -276,13 +276,15 @@ declares the kinds without any aggregate state on disk.
   - `resolve_path_policy(kind)` raises (kind has no policy — e.g. a coined kind
     the project never registered with a `slug` strategy) — reason
     `"no path policy for kind <k>"`;
-  - the kind's strategy is not `slug` **and** the id's `local_part` does not
-    satisfy `local_part_conforms(kind, local_part)` — reason
-    `"id <id> does not conform to <strategy> strategy"`. (3b promotes
-    **id-preserving**; it never renumbers. A coined kind must be `slug`-strategy,
-    or carry an already-conforming id, to be promoted.)
-  - the local part fails `validate_slug` / the **2a `_is_safe_slug` firewall**
-    (`^[a-z0-9][a-z0-9._-]*$`, reject `..`) — reason `"unsafe slug"`.
+  - the id's `local_part` does not satisfy `local_part_conforms(kind, local_part)`
+    — reason `"id <id> does not conform to <strategy> strategy"`. This check
+    runs **for every strategy, including `slug`**: a slug-strategy id must still be
+    a valid slug (`_SLUG_RE` rejects `bad_slug`, `Trailing-`, etc.). 3b promotes
+    **id-preserving**; it never renumbers, so a non-conforming id is rejected.
+  - the local part fails the **2a `_is_safe_slug` firewall**
+    (`^[a-z0-9][a-z0-9._-]*$`, reject `..`) — reason `"unsafe slug"`. (A
+    path-safety belt after conformance; redundant for slug kinds, whose `_SLUG_RE`
+    already excludes `.`/`..`, but kept so a future non-slug promote stays safe.)
 - Crash-recovery of a *prior* promotion is an impure executor concern (§3.5),
   deliberately kept out of the planner.
 
