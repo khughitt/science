@@ -143,8 +143,13 @@ this prerequisite:
    local part, move to `policy.root/<stem>.md`, id `f"{kind}:{stem}"`, **never
    numbered**. This guards a partly-migrated tree even though §D3 keeps structural
    aggregate kinds out of scope and 3b owns their retirement.
-7. `_CORE_POLICIES`: add `"concept": EntityPathPolicy(Path("entities/concepts"), "slug")`
-   — `concept` is a core kind, so its policy belongs in the core table.
+7. `_BUILTIN_MARKDOWN_POLICIES` (the real name; the design earlier called it
+   `_CORE_POLICIES`): add `"concept": EntityPathPolicy(Path("entities/concepts"), "slug")`
+   — `concept` is a core kind, so its policy belongs in the core table. **Also**
+   register its status vocabulary (`_DEFAULT_STATUS["concept"] = "active"`,
+   `_STATUS_VALUES["concept"] = {"active", "deprecated"}`): once `concept` is a
+   recognized kind, the migrator's `synthesize_frontmatter` →
+   `default_status`/`valid_statuses` raises `KeyError` for it without one.
 8. A v3 project that retires its aggregate registers its other coined kinds
    (`latent`, and later `decision`) with `strategy: slug` in
    `knowledge/sources/<profile>/manifest.yaml`. (The MM30 manifest update is part

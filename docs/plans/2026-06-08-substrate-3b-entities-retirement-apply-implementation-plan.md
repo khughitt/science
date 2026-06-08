@@ -45,10 +45,12 @@ import pytest
 
 from science_tool.entities import (
     EntityCommandError,
+    default_status,
     generate_entity_id,
     local_part_conforms,
     path_for_entity,
     resolve_path_policy,
+    valid_statuses,
     validate_entity_id,
 )
 
@@ -57,6 +59,14 @@ def test_concept_is_a_core_slug_policy() -> None:
     policy = resolve_path_policy("concept")
     assert policy.strategy == "slug"
     assert policy.root == Path("entities/concepts")
+
+
+def test_concept_has_a_status_vocabulary() -> None:
+    # A core kind without a status entry makes plan_migration -> synthesize_frontmatter
+    # -> default_status/valid_statuses raise KeyError mid-migration (Task 2 depends on this).
+    assert default_status("concept") == "active"
+    assert valid_statuses("concept") is not None
+    assert "active" in valid_statuses("concept")
 
 
 def test_slug_local_part_conforms() -> None:
@@ -104,12 +114,27 @@ In `src/science_tool/entities.py`:
 - Line 25: `EntityFilenameStrategy = Literal["numeric", "citekey", "singleton", "slug"]`
 - Line 77: `_VALID_STRATEGIES: frozenset[str] = frozenset({"numeric", "citekey", "slug"})`
 
-- [ ] **Step 4: Register `concept` as a core slug policy**
+- [ ] **Step 4: Register `concept`'s policy AND status vocabulary**
 
 In `_BUILTIN_MARKDOWN_POLICIES` (after the `pre-registration` entry, before the singleton comment), add:
 
 ```python
     "concept": EntityPathPolicy(Path("entities/concepts"), "slug"),
+```
+
+`concept` is now a recognized core kind, so the migrator's frontmatter synthesis
+(`plan_migration → ensure_frontmatter → synthesize_frontmatter → default_status`/
+`valid_statuses`) will look it up and **raise `KeyError`** unless it has a status
+entry. In `_DEFAULT_STATUS` (line ~199) add:
+
+```python
+    "concept": "active",
+```
+
+In `_STATUS_VALUES` (line ~220) add:
+
+```python
+    "concept": frozenset({"active", "deprecated"}),
 ```
 
 - [ ] **Step 5: Teach the three strategy switches about `slug`**
@@ -341,6 +366,17 @@ def test_ambiguous_rows_are_never_acted(tmp_path: Path) -> None:
     plan = _plan(tmp_path, promote_coined=True, delete_cruft=True, delete_shadow=True)
     assert plan.promote == ()
     assert plan.delete == ()
+
+
+def test_slug_id_failing_conformance_is_rejected_not_promoted(tmp_path: Path) -> None:
+    # A coined `concept` (slug kind) whose local part is not a valid slug (underscore)
+    # must be REJECTED by conformance, never promoted into a policy-violating file.
+    # (canonical_id has no load-time format validator, so the row reaches the planner.)
+    _write_entities(tmp_path, [{"canonical_id": "concept:bad_slug", "kind": "concept", "title": "x",
+                                "source_path": "knowledge/sources/local/entities.yaml"}])
+    plan = _plan(tmp_path, promote_coined=True, delete_cruft=False, delete_shadow=False)
+    assert plan.promote == ()
+    assert any(t.canonical_id == "concept:bad_slug" for t, _ in plan.rejected)
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
