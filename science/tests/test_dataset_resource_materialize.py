@@ -70,6 +70,42 @@ def test_orphan_datapackage_resources_materialize_as_dcat(tmp_path: Path) -> Non
     assert any(int(o) == 12345678 for o in g.objects(r, DCAT_NS.byteSize))
 
 
+def test_non_url_source_materializes_as_dcterms_source(tmp_path: Path) -> None:
+    # A resource whose source is non-url (here `local`) must emit dcterms:source as a
+    # "type:ref" literal and MUST NOT emit dcat:downloadURL (the url-only branch).
+    _seed(tmp_path)
+    pkg = tmp_path / "data" / "ds_local"
+    pkg.mkdir(parents=True, exist_ok=True)
+    doc = {
+        "profiles": ["science-pkg-entity-1.0"],
+        "name": "ds_local",
+        "id": "dataset:ds_local",
+        "type": "dataset",
+        "title": "dataset:ds_local",
+        "origin": "external",
+        "access": {"level": "public", "verified": False},
+        "resources": [
+            {
+                "name": "counts",
+                "path": "results/x.parquet",
+                "hash": _GOOD_HASH,
+                "bytes": 12345678,
+                "format": "parquet",
+                "source": {"type": "local", "ref": "${OUTPUT_ROOT}/results/x.parquet"},
+            }
+        ],
+    }
+    (pkg / "datapackage.yaml").write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+    g = _datasets_graph(tmp_path)
+
+    dataset_uri = _entity_uri("dataset:ds_local")
+    distributions = list(g.objects(dataset_uri, DCAT_NS.distribution))
+    assert len(distributions) == 1
+    r = distributions[0]
+    assert (r, DCTERMS_NS["source"], Literal("local:${OUTPUT_ROOT}/results/x.parquet")) in g
+    assert list(g.objects(r, DCAT_NS.downloadURL)) == []
+
+
 def test_deferred_owner_datapackage_resources_materialize(tmp_path: Path) -> None:
     # a real markdown owner + a sibling datapackage that DEFERS to it (Phase 1.5):
     # resources still materialize about the dataset entity.
