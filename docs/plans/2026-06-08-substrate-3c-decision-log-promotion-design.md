@@ -256,9 +256,15 @@ Tests:
 - **generator** — deterministic natural-id order (`D1 < D2 < D10`); the
   `decision_log.py` generated-view banner (not the append-only template header);
   `## <local_id>. <title>` renders with no duplicated id; section separators.
-- **round-trip fidelity** — `decisions.md → parse → write owners → generate ≈
-  original` (modulo normalized inter-section whitespace). The headline safety
-  test.
+- **round-trip fidelity (semantic, not byte-equal)** — the headline safety
+  test, asserted on **content**, not the whole file. The regenerated file
+  deliberately carries the new `decision_log.py` banner instead of the
+  original/MM30 header, so whole-file equality is wrong by construction. The
+  contract is: `parse(original).sections == parse(rendered).sections`, i.e. the
+  same set of `canonical_id`s, and for each section the **`title`, `date`,
+  `status`, and opaque `body` are preserved**. Header and inter-section
+  formatting (banner, blank lines, `---` separators) are explicitly excluded
+  from the comparison (the parser already strips them).
 - **filename strategy** — `verbatim` conformance (accepts `D1`,
   `D2-treatment-response-category`; rejects slashes / leading dot / `..`);
   `generate_entity_id` raises without an explicit id; migrator `verbatim`
