@@ -30,9 +30,14 @@ from science_tool.graph.store import (
     set_treatment_outcome,
     SCI_NS,
 )
+from science_tool.graph.io import DCAT_NS
+from science_tool.graph.materialize import _build_dataset_from_sources
+from science_tool.graph.sources import load_project_sources
 from rdflib import URIRef
 from rdflib import Literal
 from rdflib.namespace import PROV, RDF, SKOS
+
+import yaml
 
 
 class CausalEdgeOverlay(TypedDict):
@@ -470,3 +475,43 @@ def test_export_graph_payload_skips_missing_claim_refs_with_warning(graph_path: 
     payload = export_graph_payload(graph_path, overlays=["evidence"])
 
     assert any("missing claim ref" in warning for warning in payload.warnings)
+
+
+def test_dcat_downloadurl_is_metadata_not_an_edge(tmp_path: Path) -> None:
+    # dcat:distribution is a real dataset->resource edge; dcat:downloadURL is metadata
+    # about the distribution and must NOT become a spurious exported edge to the URL.
+    (tmp_path / "science.yaml").write_text(
+        "name: proj\nprofile: research\nprofiles: {local: local}\n", encoding="utf-8"
+    )
+    pkg = tmp_path / "data" / "ds1"
+    pkg.mkdir(parents=True)
+    (pkg / "datapackage.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "profiles": ["science-pkg-entity-1.0"],
+                "name": "ds1",
+                "id": "dataset:ds1",
+                "type": "dataset",
+                "title": "DS1",
+                "origin": "external",
+                "access": {"level": "public", "verified": False},
+                "resources": [
+                    {
+                        "name": "counts",
+                        "path": "counts.parquet",
+                        "source": {"type": "url", "ref": "https://example.org/counts.parquet"},
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    dataset = _build_dataset_from_sources(load_project_sources(tmp_path, include_commons=False))
+    graph_path = tmp_path / "graph.trig"
+    _save_dataset(dataset, graph_path)
+
+    edge_predicates = {edge.predicate for edge in export_graph_payload(graph_path).edges}
+    assert str(DCAT_NS.distribution) in edge_predicates
+    assert str(DCAT_NS.downloadURL) not in edge_predicates

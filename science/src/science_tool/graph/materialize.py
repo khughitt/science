@@ -22,7 +22,12 @@ from science_tool.addressing import is_address, parse_address
 from science_tool.bibliography import is_bibliography_reference
 from science_tool.code.lifecycle import ORPHAN_GATING_EXEMPT_STATUSES
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
-from science_tool.commons.geneset_resources import dataset_geneset_frontmatter, read_member_rows
+from science_tool.commons.datapackage import DatasetResource, read_dataset_resources
+from science_tool.commons.geneset_resources import (
+    dataset_datapackage_path,
+    dataset_geneset_frontmatter,
+    read_member_rows,
+)
 from science_tool.graph.dataset_usage import (
     add_usage_record_to_graph,
     usage_records_for_entity,
@@ -56,7 +61,7 @@ from science_tool.graph.sources import (
     is_metadata_reference,
     load_project_sources,
 )
-from science_tool.graph.io import CITO_NS
+from science_tool.graph.io import CITO_NS, DCAT_NS, DCTERMS_NS
 from science_tool.graph.store import (
     CURIE_PREFIXES,
     DEFAULT_GRAPH_PATH,
@@ -87,7 +92,7 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     bridge = dataset.graph(PROJECT_NS["graph/bridge"])
     provenance = dataset.graph(PROJECT_NS["graph/provenance"])
     dataset.graph(PROJECT_NS["graph/causal"])
-    dataset.graph(PROJECT_NS["graph/datasets"])
+    datasets = dataset.graph(PROJECT_NS["graph/datasets"])
 
     resolver = ReferenceResolver.from_entities(
         sources.entities, manual_aliases=sources.manual_aliases, identity_table=build_identity_table(sources)
@@ -117,6 +122,7 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
 
     _add_produced_by_edges(sources, entity_index=entity_index, knowledge=knowledge)
     _add_dataset_usage_edges(sources, resolver=resolver, provenance=provenance)
+    _add_dataset_resource_edges(sources, datasets=datasets)
 
     kind_class = _classify_entities(sources)
     pre_registration_targets = _pre_registration_commitment_targets(
@@ -650,6 +656,57 @@ def _add_dataset_usage_edges(sources: ProjectSources, *, resolver: ReferenceReso
             add_usage_record_to_graph(record, provenance)
     for record in _geneset_usage_records(sources, resolver=resolver):
         add_usage_record_to_graph(record, provenance)
+
+
+def _resource_uri(dataset_canonical_id: str, resource: DatasetResource) -> URIRef:
+    """A deterministic distribution URI under the dataset entity (§B4 resource node)."""
+    slug = resource.name or resource.path
+    return URIRef(f"{_entity_uri(dataset_canonical_id)}/resource/{quote(slug, safe='')}")
+
+
+def _add_dataset_resource_edges(sources: ProjectSources, *, datasets) -> None:
+    """Materialize each dataset datapackage's `resources` as DCAT distributions about the
+    dataset entity (design §B4): the datapackage compiles into resource/prov triples, never
+    a second owner. Resource nodes are dual-typed dcat:Distribution + prov:Entity and live
+    in the `datasets` named graph. The reader is lenient on absence (a dataset with no
+    datapackage, or a datapackage with no/hash-less resources, contributes no distributions
+    / a distribution without a hash) but strict on malformation: a declared-but-broken
+    resource raises DatasetResourceError, which propagates to fail the build (fail early).
+    """
+    project_root = Path(sources.project_root)
+    for entity in sources.entities:
+        if entity.kind != "dataset":
+            continue
+        rel = dataset_datapackage_path(
+            entity_adapter=sources.entity_source_adapters.get(entity.canonical_id),
+            entity_path=entity.file_path,
+            datapackage_rel=sources.dataset_datapackages.get(entity.canonical_id),
+        )
+        if rel is None:
+            continue
+        dp_path = rel if rel.is_absolute() else project_root / rel
+        if not dp_path.is_file():
+            continue
+        dataset_uri = _entity_uri(entity.canonical_id)
+        for resource in read_dataset_resources(dp_path):
+            r_uri = _resource_uri(entity.canonical_id, resource)
+            datasets.add((dataset_uri, DCAT_NS.distribution, r_uri))
+            datasets.add((r_uri, RDF.type, DCAT_NS.Distribution))
+            datasets.add((r_uri, RDF.type, PROV.Entity))
+            datasets.add((r_uri, DCTERMS_NS.identifier, Literal(resource.name or resource.path)))
+            if resource.format:
+                # NB: DCTERMS_NS.format would resolve to str.format (Namespace subclasses
+                # str), so use item access to get the URIRef predicate.
+                datasets.add((r_uri, DCTERMS_NS["format"], Literal(resource.format)))
+            if resource.bytes is not None:
+                datasets.add((r_uri, DCAT_NS.byteSize, Literal(resource.bytes, datatype=XSD.nonNegativeInteger)))
+            if resource.hash:
+                datasets.add((r_uri, SCI_NS.resourceHash, Literal(resource.hash)))
+            if resource.source is not None:
+                if resource.source.type == "url":
+                    datasets.add((r_uri, DCAT_NS.downloadURL, URIRef(resource.source.ref)))
+                else:
+                    datasets.add((r_uri, DCTERMS_NS.source, Literal(f"{resource.source.type}:{resource.source.ref}")))
 
 
 def _resolve_dataset_usage_ref(raw_ref: str, resolver: ReferenceResolver) -> str:

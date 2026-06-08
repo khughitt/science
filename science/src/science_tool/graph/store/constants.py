@@ -10,6 +10,7 @@ from science_model.profiles.schema import RelationKind
 from science_tool.graph.io import (
     BIOLINK_NS,
     CITO_NS,
+    DCAT_NS,
     DCTERMS_NS,
     PROJECT_NS as PROJECT_NS,
     REVISION_URI as REVISION_URI,
@@ -96,6 +97,9 @@ GRAPH_EXPORT_EDGE_METADATA_PREDICATES: frozenset[URIRef] = frozenset(
         CITO_NS.supports,
         CITO_NS.disputes,
         CITO_NS.discusses,
+        # dcat:downloadURL has a URIRef object (the URL) but is distribution METADATA,
+        # not a node-to-node edge; dcat:distribution stays the real dataset->resource edge.
+        DCAT_NS.downloadURL,
     }
 )
 
