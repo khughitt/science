@@ -57,8 +57,18 @@ entities/decision/*.md ──render_decisions_view──▶ core/decisions.md   
 
 **Preflight failure mode (the injection payoff):** an `entities.yaml` row says
 `decision:D7` but the index has no `D7` section → the planner **rejects** the
-row before anything is written. This is how the heterogeneous bucket is handled
-safely (see below).
+row before anything is written.
+
+**Decision rows are governed by `kind`, not by the triage bucket.** The triage
+classifier (`aggregate_triage._bucket`) returns `CRUFT` for *any* `migration:*`
+source **before** the decision-log rule fires. MM30 has real, prose-backed
+decisions (`decision:D9`, `decision:D10`) whose rows carry
+`source_path: migration:audit` and would therefore be bucketed `CRUFT` — yet
+they have genuine `## D9` / `## D10` headings in `core/decisions.md`. If the
+executor keyed off the `decision-log` bucket alone it would miss them, and
+`delete_cruft` would **destroy a real decision**. The executor therefore treats
+the **injected index as the authority for any `kind == "decision"` row**,
+independent of the bucket label (see *Executor hook* below).
 
 ## `graph/decision_log.py`
 
@@ -88,7 +98,11 @@ safely (see below).
   - `## D1. Z-score normalization … (2026-03-31)` (MM30, no dash)
   - `## D-001: Scaffold the meta-project …` (science meta)
   - `local_id` = the leading token up to the first `.`, `:`, or whitespace;
-    `canonical_id = f"decision:{local_id}"`; `title` = the remainder.
+    `canonical_id = f"decision:{local_id}"`; `title` = the remainder **with the
+    `local_id` token and its trailing `.`/`:` separator stripped** (so the id is
+    not duplicated when the view re-emits `## <local_id>. <title>`). For
+    `## D1. Z-score … (2026-03-31)`, `title` is
+    `Z-score … (2026-03-31)`, **not** `D1. Z-score …`.
 - **Metadata extraction** supports **both** label forms and is
   case-insensitive on the label:
   - bulleted: `- **Date:** 2026-03-31`, `- **Status:** active`
@@ -108,9 +122,16 @@ safely (see below).
 - **Sort deterministically by natural-numeric `local_id`**: `D1 < D2 < D9 <
   D10 < D18` (the append-only sequential numbering; no reliance on `date`
   presence). Non-numeric suffixes sort after the bare number, lexically.
-- Emits: the canonical header comment (from `templates/core-decisions.md`) +
-  `# Decisions` + for each owner `## <local_id>. <title>` + the opaque body +
-  a `---` separator between sections.
+- Emits a **generated-view header constant defined in `decision_log.py`** — a
+  `<!-- GENERATED — do not edit. Source: entities/decision/*.md. Regenerate:
+  science entities generate-decisions -->` banner. It deliberately does **not**
+  reuse `templates/core-decisions.md`, whose header declares the file
+  append-only / "Do not rewrite" / 150-line-capped — semantics that directly
+  contradict a render-only artifact. (Updating that template to describe the
+  generated view is a live-migration follow-on, not 3c tooling.)
+- After the banner: `# Decisions` + for each owner `## <local_id>. <title>`
+  (the `title` frontmatter already excludes the id) + the opaque body + a `---`
+  separator between sections.
 - **Round-trips against `parse_decision_log`**: render → parse yields the same
   `DecisionLogIndex` content (modulo normalized inter-section whitespace).
 
@@ -120,7 +141,7 @@ safely (see below).
 ---
 id: decision:D1
 type: decision
-title: "D1. Z-score normalization before metafor effect-size meta-analysis (2026-03-31)"
+title: "Z-score normalization before metafor effect-size meta-analysis (2026-03-31)"
 date: 2026-03-31
 status: active
 source_path: core/decisions.md
@@ -141,8 +162,14 @@ MM30's decision local parts (`D1`, `D10`, `D2-treatment-response-category`) are
 Decision ids are **sequence identities**, not derived slugs, so they need an
 id-preserving strategy.
 
-- Add `"verbatim"` to `EntityFilenameStrategy` and `_VALID_STRATEGIES`
-  (`entities.py`).
+- Add `"verbatim"` to the `EntityFilenameStrategy` Literal (`entities.py`) but
+  **not** to `_VALID_STRATEGIES`. This mirrors `singleton`, which is already
+  builtin-only (absent from `_VALID_STRATEGIES`): `_VALID_STRATEGIES` gates
+  which strategies a **local manifest** kind may declare, and builtin policies
+  are trusted without that check. Keeping `verbatim` out of it reserves the
+  strategy for the builtin `decision` kind and prevents arbitrary local kinds
+  from minting path-safe-but-unstructured ids. A test asserts a local manifest
+  declaring `strategy: verbatim` is rejected.
 - `_BUILTIN_MARKDOWN_POLICIES["decision"] = EntityPathPolicy(Path("entities/decision"), "verbatim")`.
 - Status vocabulary (required so the migrator/conformance don't `KeyError`, per
   the 3b `concept` precedent):
@@ -172,20 +199,29 @@ policy **even when the local manifest still declares `decision`**.
 
 - New `plan_retirement(..., promote_decisions: bool, decision_index: DecisionLogIndex)`
   and `apply_retirement(..., decision_index: DecisionLogIndex)` params.
-- **Per `decision-log` row:**
-  - if `promote_decisions` and `decision_index.get(cid)` is present → plan a
-    `PROMOTE` to `entities/decision/<local>.md`; owner content is built from the
-    `DecisionSection` (frontmatter + opaque body), **not** a stub.
-  - if `promote_decisions` and the index has **no** section for `cid` →
-    **reject** (reason `"no decision-log section for <cid>"`); the row is
-    retained in `entities.yaml`, never written or deleted. This is how the
-    heterogeneous bucket is handled: `decision:D10` and
-    `decision:D2-treatment-response-category` (`source_path: migration:audit`,
-    no heading in `core/decisions.md`) are rejected for human cleanup.
-  - if `promote_decisions` is `False` → decision-log rows are **untouched**
-    (preserves 3b behavior exactly; 3b never acted this bucket).
-- Reuses 3b primitives unchanged: `promoted_from` marker, reconcile sweep,
-  one-rewrite-per-file drop-by-index.
+- **Decision-kind precedence (the High-finding fix).** Because the triage
+  classifier sends any `migration:*`-sourced row to `CRUFT` before the
+  decision-log rule, the executor must decide **by `kind`, not by bucket**. For
+  every row with `kind == "decision"`, when `promote_decisions` is set the
+  injected index is the sole authority and takes precedence over the row's
+  bucket label:
+  - index **hit** → plan a `PROMOTE` to `entities/decision/<local>.md`; owner
+    content is built from the `DecisionSection` (frontmatter + opaque body),
+    **not** a stub. This is what rescues `decision:D9` / `decision:D10` (bucketed
+    `CRUFT` by `migration:audit` source, but real prose-backed decisions).
+  - index **miss** → **reject** (reason `"no decision-log section for <cid>"`);
+    the row is retained in `entities.yaml`, never written or deleted. Genuinely
+    heading-less rows like `decision:D2-treatment-response-category` land here,
+    left for human cleanup.
+- **`delete_cruft` never deletes a `kind == "decision"` row** — an invariant,
+  independent of `promote_decisions`. A decision row classified `CRUFT` (because
+  of a `migration:*` source) may still carry real prose in `core/decisions.md`;
+  deleting it would lose the record before it can be promoted. Decision rows are
+  governed exclusively by the decision path above: promote (index hit) or retain
+  (index miss / `promote_decisions` off). When `promote_decisions` is `False`,
+  decision rows are simply **untouched** (3b parity — 3b never acted them).
+- Reuses 3b primitives unchanged for the promote path: `promoted_from` marker,
+  reconcile sweep, one-rewrite-per-file drop-by-index.
 
 ## CLI surface (`cli.py`)
 
@@ -206,28 +242,36 @@ Synthetic fixtures (no live MM30 mutation):
 - a `core/decisions.md` fixture with **both** heading styles, **both** metadata
   label forms, and a D5-like section containing an intentional internal `---`
   plus an "Amendment" subsection;
-- an `entities.yaml` fixture with decision rows: some backed by a section, some
-  `migration:audit` stubs with no section.
+- an `entities.yaml` fixture with decision rows spanning all three cases: a
+  `core/decisions.md`-sourced row with a section; a **`migration:audit`-sourced
+  row that nonetheless has a real heading** (the D9/D10 case → must promote, not
+  be deleted as cruft); and a `migration:audit` row with **no** heading (must be
+  rejected/retained).
 
 Tests:
 
 - **parser** — heading variants; dual metadata label forms; opaque-body
-  preservation incl. internal `---`; missing `date`/`status`.
-- **generator** — deterministic natural-id order (`D1 < D2 < D10`); canonical
-  header; section separators.
+  preservation incl. internal `---`; missing `date`/`status`; `title` excludes
+  the leading id token.
+- **generator** — deterministic natural-id order (`D1 < D2 < D10`); the
+  `decision_log.py` generated-view banner (not the append-only template header);
+  `## <local_id>. <title>` renders with no duplicated id; section separators.
 - **round-trip fidelity** — `decisions.md → parse → write owners → generate ≈
   original` (modulo normalized inter-section whitespace). The headline safety
   test.
 - **filename strategy** — `verbatim` conformance (accepts `D1`,
   `D2-treatment-response-category`; rejects slashes / leading dot / `..`);
   `generate_entity_id` raises without an explicit id; migrator `verbatim`
-  branch preserves stem.
+  branch preserves stem; a **local manifest declaring `strategy: verbatim` is
+  rejected** (builtin-only).
 - **builtin-overrides-local** — `resolve_path_policy("decision", …)` returns the
   builtin even with a local-manifest `decision`.
-- **executor** — promote-decisions plan (hit → promote, miss → reject); apply
-  writes owner content from the section (not a stub); crash-recovery marker +
-  reconcile; v3 gate refuses on v2; no-flag run leaves decision-log rows
-  untouched (3b parity).
+- **executor** — decision-kind precedence: a `migration:audit` decision row with
+  an index hit is **promoted** (not cruft-deleted); `delete_cruft` together with
+  `promote_decisions` never deletes any `kind == "decision"` row; index-miss
+  decision row is rejected/retained; apply writes owner content from the section
+  (not a stub); crash-recovery marker + reconcile; v3 gate refuses on v2;
+  no-flag run leaves decision rows untouched (3b parity).
 - **CLI** — `--promote-decisions --apply` on a v3 fixture; `generate-decisions`
   dry-run + `--write`.
 
@@ -242,7 +286,7 @@ Run: `cd ~/d/science/science && uv run --frozen pytest`. Lint:
 | Live MM30 decision prose migration + regenerating MM30's real `core/decisions.md` | project Task #30 (v3 cutover) |
 | Clearing AGENTS.md `_Digest pending_` live | follows the MM30 generator run; tooling-only here |
 | `terms.yaml` / external-ref / ambiguous bucket retirement | Phase 4 |
-| Reconciling the `migration:audit` decision stubs | human cleanup after they are rejected |
+| Reconciling heading-less decision rows (e.g. `decision:D2-treatment-response-category`) | human cleanup after they are rejected/retained |
 
 ## Acceptance
 
@@ -251,6 +295,8 @@ Run: `cd ~/d/science/science && uv run --frozen pytest`. Lint:
 - `core/decisions.md` is produced solely by `render_decisions_view`; the
   round-trip test proves no prose is lost.
 - `decision` is a core `verbatim` kind; builtins override local manifests.
-- The executor promotes backed decision rows and rejects stubs without writing.
+- The executor promotes any index-hit decision row (even one bucketed `CRUFT`
+  by a `migration:*` source) and rejects heading-less rows without writing;
+  `delete_cruft` never deletes a decision-kind row.
 - `--apply` and `generate-decisions` are v3-gated; the suite is green and the
   3b ruff baseline is unchanged.
