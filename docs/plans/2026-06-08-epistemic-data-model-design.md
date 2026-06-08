@@ -24,21 +24,21 @@ This spec conforms to and reuses, without replacing:
   (federated patchwork of patches; the ladder L0–L4; provenance-as-axes). This doc makes h00
   *precise*; it does not overrule it.
 - **`meta/core/decisions.md` D-005** — *Reuse t034 verbatim as the sole causal/edge-typing
-  substrate; h00 net-new rides the t022 evidence-payload extension contract.* The "Claim" abstraction
-  introduced here is **not** a new edge vocabulary — it is a grouping/view over t034 payloads
-  (governed by D-006), and its belief/uncertainty payload is a t022 extension. No second CPDAG/PAG/
-  edge-role vocabulary is created.
+  substrate; h00 net-new rides the t022 evidence-payload extension contract.* A **proposition's
+  relational rendering** (the causal-DAG edge) is **not** a new edge vocabulary — it rides t034
+  edge-as-node payloads (governed by D-006), and the proposition's belief/uncertainty payload is a
+  t022 extension. No second CPDAG/PAG/edge-role vocabulary is created.
 - **`meta/core/decisions.md` D-006** — *W3C-native substrate (RDF/TriG named graphs + PROV-O +
-  edge-as-node reification); a patch is a named graph.* Claim renderings ride the existing
-  edge-as-node reification; patches are named graphs.
+  edge-as-node reification); a patch is a named graph.* A relational proposition's edge rendering
+  rides the existing edge-as-node reification; patches are named graphs.
 - **`docs/proposition-and-evidence-model.md`** — the canonical claim/evidence vocabulary
   (`claim_layer`, `identification_strength`, authored-vs-derived split, the rule that conclusions must
   not hide inside one manual status field). Retained as the field-level authority.
 - **`meta/doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md`** — the RFC that
   D-005/D-006 resolved (t034 reuse + W3C-native substrate). Parent of the model precisified here.
 - **t034 causal/edge-typing substrate** — `graph_object_type`, the `epistemic_role` taxonomy, the
-  payload stages, and promotion-by-reference. Reused **verbatim and untouched** (D-005). The Claim's
-  graphical rendering rides t034; **`edge_status` retirement is NOT a t034 change.**
+  payload stages, and promotion-by-reference. Reused **verbatim and untouched** (D-005). A relational
+  proposition's edge rendering rides t034; **`edge_status` retirement is NOT a t034 change.**
 - **DAG two-axis / rendering tooling** (`references/dag-two-axis-evidence-model.md`,
   `science/src/science_tool/dag/schema.py`) — a *separate* layer owning the canonical **5-value
   `edge_status` + `identification` two-axis enum** and the DAG-figure renderer. Reused, but its
@@ -83,67 +83,78 @@ Three orthogonal classes, registry-enforced (reused from the epistemic-dependenc
 **epistemic** (belief-carrying, freshness-tracked), **operational** (no belief/freshness),
 **reference** (names external things). Every registered kind has exactly one class.
 
-### 2.2 Claim — the one truth-apt unit
-- **Claim** = the abstract, truth-apt assertion. It is the **single locus of belief**. *Claim is the
-  abstract concept; its current entity realization is usually a `proposition`* — the canonical kind
-  name in `proposition-and-evidence-model.md` stays. We do not rename `proposition`; we name the
-  abstraction it realizes so that a non-prose realization is expressible.
-- A claim has up to two **renderings of the same assertion**, sharing **one belief**:
-  - **prose rendering** = a `proposition` entity;
-  - **graphical rendering** = a t034 edge-as-node in a patch (a causal-DAG / patch edge).
-- **Conformance:** per D-005 the graphical rendering uses t034's edge typing (`epistemic_role`,
+### 2.2 Proposition — the one truth-apt unit
+- **Proposition** = the atomic, truth-apt assertion (the canonical kind in
+  `proposition-and-evidence-model.md`). It is the **single locus of belief**. A proposition is an
+  *assertion*, not a sentence: it carries a structured form (subject · relation · object, e.g.
+  `A —causal-influence→ B`, possibly n-ary) and an optional prose statement. There is **no separate
+  `Claim` entity** — `proposition` already is the abstract truth-apt unit, so a redundant abstraction
+  layer is not introduced. *(This collapses the earlier draft's `Claim`/`proposition` split into one
+  kind — a parsimony correction folded back from the `epistemic-edges` facet, 2026-06-08.)*
+- A proposition has up to two **renderings of the same assertion**, sharing the proposition's **one
+  belief**. Renderings are *views*, not entities:
+  - **prose rendering** = the proposition's statement text;
+  - **graphical rendering** = a t034 edge-as-node in a patch (a causal-DAG / patch edge), emitted
+    only when the proposition is **relational** (binary/n-ary). Non-relational propositions (e.g.
+    "gene X is overexpressed in MM") have no edge rendering.
+- **Conformance:** per D-005 the edge rendering uses t034's edge typing (`epistemic_role`,
   `graph_object_type`) — no new edge vocabulary. Per D-006 it is an edge-as-node IRI in a named-graph
-  patch. The claim is a grouping/view over those payloads, not a competing structure.
+  patch. The edge is the proposition's relational *projection into the graph*, not a competing object.
+- **Cross-source identity (deferred).** When two propositions paraphrase the same assertion
+  (e.g. a paper's reported claim vs. ours under test), they stay **distinct propositions linked by
+  evidence**, preserving *who asserted it*. A canonical "same assertion" merge is YAGNI now; if ever
+  needed it is a `same_assertion` / `paraphrase_of` **relation between propositions**, not a new kind.
 
-### 2.3 Edge taxonomy — claim-edges vs non-claim plumbing
-A precise **two-way distinction** — claim vs non-claim (correcting the earlier loose "structural =
-no belief"):
+### 2.3 Edge taxonomy — proposition-edges vs plumbing edges
+A precise **two-way distinction** — proposition vs non-proposition (correcting the earlier loose
+"structural = no belief"):
 
-1. **Claim-edges** — truth-apt, belief-carrying graphical renderings of claims. This **includes
-   `claim_layer: structural_claim`**: definitional, benchmark, and model-structure assertions are
-   *still claims* and still carry belief. `structural_claim` is a `claim_layer`, **not** a synonym
-   for plumbing.
-2. **Non-claim plumbing edges** — **not** truth-apt, **no** belief:
+1. **Proposition-edges** — truth-apt, belief-carrying edge renderings of relational propositions.
+   This **includes `claim_layer: structural_claim`**: definitional, benchmark, and model-structure
+   assertions are *still propositions* and still carry belief. `structural_claim` is a `claim_layer`,
+   **not** a synonym for plumbing.
+2. **Plumbing edges** — **not** truth-apt, **no** belief:
    - **organizational links** (containment, grouping, "see also", patch membership);
    - **measurement-model plumbing** (the proxy/latent wiring described by `measurement_model`
      sidecar metadata — the link itself is structure, not an assertion under test).
 
 The test is truth-aptitude, not the word "structural." A measurement *proxy assertion* ("X is a valid
-proxy for latent Y") is a `structural_claim` (a claim); the *wiring* that attaches the proxy to the
+proxy for latent Y") is a `structural_claim` proposition; the *wiring* that attaches the proxy to the
 observation node is plumbing.
 
 ### 2.4 Evidence-line — the atomic grounding unit
 An **evidence-line** (epistemic entity, already built and registered) is the single subject of
-`cito:supports` / `cito:disputes` edges into a claim. It carries:
+`cito:supports` / `cito:disputes` edges into a proposition. It carries:
 `stance` (supports/disputes), `strength`, `evidence_type` (canonical enum: `empirical_data_evidence`,
 `literature_evidence`, `simulation_evidence`, `benchmark_evidence`, `expert_judgment`),
 `independence` (+ `independence_group`, `shared_dataset`/`shared_lab`/…), and
 **`dataset_usage`** (which datasets it analyzed, with role + overlap). It is the **only** thing that
-grounds a claim. Background material that is not an evidence-line does not enter belief.
+grounds a proposition. Background material that is not an evidence-line does not enter belief.
 
 ### 2.5 Belief — derived, never authored
 Belief is computed by the **one** belief engine (`science/src/science_tool/graph/belief.py` +
-`belief_scalar.py`) from a claim's evidence-lines, with independence-aware reduction:
+`belief_scalar.py`) from a proposition's evidence-lines, with independence-aware reduction:
 - **ordinal magnitude** `speculative < fragile < supported < well_supported`,
 - orthogonal **`contested`** boolean,
 - optional **continuous log-odds** `(massed_support, massed_dispute)` pair with an adversarially-swept
   robustness band (never a bare net; suppressed when not robust).
 
-No belief is authored. There is exactly one belief engine and one belief result per claim — shared by
-both renderings. This is the anti-parallel guarantee: the edge does not get its own belief mechanism.
+No belief is authored. There is exactly one belief engine and one belief result per proposition —
+shared by both renderings. This is the anti-parallel guarantee: the edge does not get its own belief
+mechanism.
 
 ### 2.6 Datasets — ground evidence-lines, one path
 Datasets are **operational** entities (no belief of their own). The single grounding path is
-`dataset →(dataset_usage)→ evidence-line →(cito:supports/disputes)→ claim`. Per-dataset influence and
+`dataset →(dataset_usage)→ evidence-line →(cito:supports/disputes)→ proposition`. Per-dataset influence and
 the *N-independent-datasets vs N-analyses-of-one* distinction are resolved by the already-built
 independence machinery (A1 `source_class`/`dataset_usage`, A2 reference down-weight, B1 usage
-materialization, B2 independence derivation). **No direct dataset→claim edge** — that would be a
+materialization, B2 independence derivation). **No direct dataset→proposition edge** — that would be a
 second grounding path, i.e. the parallel system we are ruling out.
 
 ### 2.7 Patches, ladder, provenance (from h00, reused)
-- **Patches** — claims live in patches (named-graph subgraphs around a hypothesis/question); the graph
-  is a federated patchwork (h00 R1; D-006).
-- **Ladder L0–L4** + **identification** axis on claim-edges — the causal-role progression (typed edge
+- **Patches** — propositions live in patches (named-graph subgraphs around a hypothesis/question); the
+  graph is a federated patchwork (h00 R1; D-006).
+- **Ladder L0–L4** + **identification** axis on proposition-edges — the causal-role progression (typed edge
   → belief+provenance → assoc/causal-role → partial-causal CPDAG/PAG/ADMG → full PGM/SCM). Honest
   default L0–L2; L3–L4 local and earned.
 - **Provenance = orthogonal axes**, not one tier: `ProvenanceType`, dataset `source_class`, evidence
@@ -163,9 +174,9 @@ because MM30 does not run `science dag validate`). The fix is not to bless 23 va
 **decompose the legacy families onto the axes the model already separates** during migration, and to
 make the displayed edge status a **projection**, not an authored field.
 
-**Retire authored `edge_status` as source-of-truth.** A claim-edge's displayed status becomes a
-**derived projection** of: its claim's **belief** (magnitude + contested + scalar) × **identification**
-× **lifecycle/freshness**.
+**Retire authored `edge_status` as source-of-truth.** A proposition-edge's displayed status becomes a
+**derived projection** of: its proposition's **belief** (magnitude + contested + scalar) ×
+**identification** × **lifecycle/freshness**.
 
 **Decomposition of the MM30 legacy families:**
 
@@ -175,12 +186,12 @@ make the displayed edge status a **projection**, not an authored field.
 | `falsified` / `refuted` / `null_after_adjustment` / `unsupported_current_vehicles` / `eliminated` | **disputing** evidence-lines → derived refutation (decisive-refutation rule) |
 | `literature_strongly_supported` / `supported_observational_proxy` / `literature_supported_but_cross_section_null` | **identification** axis + **evidence_type** on the evidence-lines |
 | `not_yet_tested` / `probe` / `closed` / `addressed` / `conditional` | **freshness / lifecycle** state (or task state) — not belief |
-| `structural` / `absorbed` / `mixed` | **claim-edge vs plumbing** distinction + claim relation (`structural` → `claim_layer: structural_claim` where truth-apt) |
+| `structural` / `absorbed` / `mixed` | **proposition-edge vs plumbing** distinction (`structural` → `claim_layer: structural_claim` where truth-apt) |
 
 **Preserve `eliminated_by` semantics.** `eliminated` does **not** become a lost enum value. It becomes
-an explicit **disputing/refutation evidence-line carrying the eliminating provenance** (the t034
-`eliminated_by` ref → a `cito:disputes` evidence-line with that provenance). The decisive-refutation
-rule in `belief.py` (independent + strong + direct-test + whole-claim) already caps belief accordingly;
+an explicit **disputing/refutation evidence-line carrying the eliminating provenance** (the DAG
+two-axis `eliminated_by` ref → a `cito:disputes` evidence-line with that provenance). The decisive-refutation
+rule in `belief.py` (independent + strong + direct-test + whole-proposition) already caps belief accordingly;
 the migration maps `eliminated`/`eliminated_by` onto that path so the provenance survives and the
 refutation is *derived*, not asserted by a vanished label.
 
@@ -203,12 +214,12 @@ refutation is *derived*, not asserted by a vanished label.
 
 ## 5. The two facets & division of labour
 
-**Shared spine — owned by this umbrella:** Claim (+ renderings), evidence-line, the one belief engine,
-entity classes, patches, ladder, provenance axes. Both facets reuse these; neither forks a parallel
-mechanism.
+**Shared spine — owned by this umbrella:** proposition (+ renderings), evidence-line, the one belief
+engine, entity classes, patches, ladder, provenance axes. Both facets reuse these; neither forks a
+parallel mechanism.
 
-- **`epistemic-edges` (design + plan)** — claim unification (proposition + causal-edge as renderings
-  of one claim, conforming to t034/D-005/D-006); claim-edge vs plumbing; belief→edge projection;
+- **`epistemic-edges` (design + plan)** — the causal-DAG edge as a relational proposition's rendering
+  (conforming to t034/D-005/D-006); proposition-edge vs plumbing; belief→edge projection;
   `edge_status` retirement + the §3 legacy-decomposition migration; `eliminated_by` → disputing
   provenance; ladder/identification on edges; edge rendering for consumers.
 - **`dataset-evidence-flow` (design + plan)** — evidence-line↔dataset first-class/required;
@@ -223,7 +234,7 @@ Full end-to-end (per approved scope):
 1. This umbrella design (SSOT).
 2. `epistemic-edges` design + plan.
 3. `dataset-evidence-flow` design + plan.
-4. Framework implementation of the model changes (claim unification, edge_status→derived,
+4. Framework implementation of the model changes (edge-as-proposition rendering, edge_status→derived,
    evidence-line↔dataset first-class, task→dataset resolution).
 5. **Full MM30 corpus migration** — migrate all ~356 `*.edges.yaml` edges' `data_support[]` /
    `lit_support[]` items into evidence-line entities with resolved dataset links; create the dataset
@@ -274,9 +285,11 @@ Full end-to-end (per approved scope):
 
 ## 9. Risks & open questions
 
-1. **Claim unification is a deep kind-reconciliation.** Reconciling `proposition` and causal-edge as
-   renderings of one claim, while conforming to t034/D-005, is the highest-risk modeling move; the
-   `epistemic-edges` design must show it rides t034 payloads (grouping/view), not a new structure.
+1. **Edge-as-proposition-rendering is a deep reconciliation.** Realizing a relational `proposition`
+   as a t034 edge-as-node (one unit, edge is a view), while conforming to t034/D-005, is the
+   highest-risk modeling move; the `epistemic-edges` design must show it rides t034 payloads (a
+   projection/view), not a new structure — including whether the edge-node IRI is the proposition's
+   own IRI or a `realized_as`-linked one.
 2. **Legacy `task → dataset` resolvability.** MM30 tasks record datasets only in prose; some links
    will need manual curation against `mm30.v8.yml`. The migration must fail loudly where a dataset
    can't be resolved rather than silently dropping the grain.
@@ -289,5 +302,5 @@ Full end-to-end (per approved scope):
 5. **Substrate timing coupling.** Implementation is gated on v3; the schedule depends on the parallel
    substrate migration landing and being confirmed.
 6. **`structural_claim` vs plumbing boundary** must be drawn crisply per-edge during migration; a
-   wrong call either inflates belief (plumbing treated as a claim) or loses a real assertion (claim
-   treated as plumbing).
+   wrong call either inflates belief (plumbing treated as a proposition) or loses a real assertion
+   (proposition treated as plumbing).
