@@ -22,7 +22,7 @@ from science_tool.graph.sources import (
 )
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
 
-EntityFilenameStrategy = Literal["numeric", "citekey", "singleton", "slug"]
+EntityFilenameStrategy = Literal["numeric", "citekey", "singleton", "slug", "verbatim"]
 
 LOCAL_PART_WIDTH = 4
 
@@ -57,6 +57,7 @@ _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
     "method": EntityPathPolicy(Path("entities/methods"), "numeric"),
     "pre-registration": EntityPathPolicy(Path("entities/pre-registrations"), "numeric"),
     "concept": EntityPathPolicy(Path("entities/concepts"), "slug"),
+    "decision": EntityPathPolicy(Path("entities/decision"), "verbatim"),
     "paper": EntityPathPolicy(Path("entities/papers"), "citekey"),
     # Singletons: `root` is the file path itself, not a directory.
     "research-question": EntityPathPolicy(Path("entities/research-question.md"), "singleton"),
@@ -82,9 +83,7 @@ _VALID_STRATEGIES: frozenset[str] = frozenset({"numeric", "citekey", "slug"})
 # overwrite the core entry in the dir→kind inference map built by the migrator
 # (_project_dir_to_kind in entity_layout_migration.py).  Computed once at
 # import time from the authoritative builtin table.
-_CORE_HOME_DIR_NAMES: frozenset[str] = frozenset(
-    policy.root.name for policy in _BUILTIN_MARKDOWN_POLICIES.values()
-)
+_CORE_HOME_DIR_NAMES: frozenset[str] = frozenset(policy.root.name for policy in _BUILTIN_MARKDOWN_POLICIES.values())
 
 
 def _resolve_local_home(name: str, home: str | None) -> Path:
@@ -102,7 +101,9 @@ def _resolve_local_home(name: str, home: str | None) -> Path:
         return Path(f"entities/{name}")
     candidate = Path(home)
     parts = candidate.parts
-    if candidate.is_absolute() or ".." in parts or len(parts) < 2 or parts[0] != "entities":  # len(parts) < 2 rejects the bare "entities" root (would scan top-level entities/*.md)
+    if (
+        candidate.is_absolute() or ".." in parts or len(parts) < 2 or parts[0] != "entities"
+    ):  # len(parts) < 2 rejects the bare "entities" root (would scan top-level entities/*.md)
         raise EntityCommandError(
             f"local kind {name!r} home {home!r} must be a relative path of the form "
             "'entities/<segment>/...' with no parent traversal"
@@ -183,6 +184,10 @@ def entity_policies(project_root: Path | None = None) -> dict[str, EntityPathPol
 
 
 _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
+# `verbatim` preserves a sequence-style local part exactly (e.g. decision ids
+# D1, D2-treatment-response-category). Unlike `slug` it is case-preserving and
+# never derived. Path-safety: no slash, no leading dot, no `..`.
+_VERBATIM_RE = re.compile(r"^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._-]*$")
 _CITEKEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9.-]*$")
 _NUMERIC_LOCAL_PART_RE = re.compile(r"^\d{4}-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 _ID_PREFIX_RE = re.compile(r"^(?P<prefix>[a-z]?)(?P<number>\d+)-", re.IGNORECASE)
@@ -218,6 +223,7 @@ _DEFAULT_STATUS: dict[str, str] = {
     "pre-registration": "active",
     "paper": "active",
     "concept": "active",
+    "decision": "active",
 }
 _STATUS_VALUES: dict[str, frozenset[str]] = {
     "evidence-line": frozenset({"draft", "active", "retired"}),
@@ -259,6 +265,7 @@ _STATUS_VALUES: dict[str, frozenset[str]] = {
     "pre-registration": frozenset({"active", "amended", "superseded", "retired"}),
     "paper": frozenset({"active", "retired"}),
     "concept": frozenset({"active", "deprecated"}),
+    "decision": frozenset({"active", "superseded", "abandoned"}),
 }
 _ALLOWED_EXPLICIT_ROOTS = (Path("entities"),)
 
@@ -345,6 +352,8 @@ def local_part_conforms(kind: str, local_part: str, *, project_root: Path | None
         return bool(_CITEKEY_RE.fullmatch(local_part))
     if strategy == "slug":
         return bool(_SLUG_RE.fullmatch(local_part))
+    if strategy == "verbatim":
+        return bool(_VERBATIM_RE.fullmatch(local_part))
     return False  # singletons have no per-instance local part
 
 
@@ -411,12 +420,14 @@ def validate_entity_id(kind: str, entity_id: str) -> str:
         if not _SLUG_RE.fullmatch(local_part):
             raise EntityCommandError(f"Invalid slug local part: {entity_id}")
         return entity_id
+    if strategy == "verbatim":
+        if not _VERBATIM_RE.fullmatch(local_part):
+            raise EntityCommandError(f"Invalid verbatim local part: {entity_id}")
+        return entity_id
     # numeric: an explicit --id must already be canonical, so it cannot
     # reintroduce drift (e.g. question:q01-... or question:5-...).
     if not _NUMERIC_LOCAL_PART_RE.fullmatch(local_part):
-        raise EntityCommandError(
-            f"Non-canonical numeric id {entity_id!r}; expected <kind>:NNNN-slug (4-digit number)"
-        )
+        raise EntityCommandError(f"Non-canonical numeric id {entity_id!r}; expected <kind>:NNNN-slug (4-digit number)")
     return entity_id
 
 
@@ -448,6 +459,8 @@ def generate_entity_id(
         raise EntityCommandError(f"{kind} requires an explicit --id (citekey), e.g. {kind}:Adams2025")
     if strategy == "singleton":
         raise EntityCommandError(f"{kind} is a singleton; it is not created via this path")
+    if strategy == "verbatim":
+        raise EntityCommandError(f"{kind} requires an explicit --id; sequence identities are not derived from a title")
 
     slug_value = validate_slug(slug) if slug is not None else derive_slug(title)
     if strategy == "slug":
@@ -658,7 +671,7 @@ def create_entity(
             warnings.insert(
                 0,
                 f"Title truncated to derive id slug '{used_slug}' "
-                f"(dropped '{full_slug[len(used_slug):].lstrip('-')}'). "
+                f"(dropped '{full_slug[len(used_slug) :].lstrip('-')}'). "
                 f"The id is {entity_id_value}; pass --slug to choose a different one.",
             )
 
