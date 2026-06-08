@@ -36,11 +36,14 @@ This spec conforms to and reuses, without replacing:
   not hide inside one manual status field). Retained as the field-level authority.
 - **`meta/doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md`** — the RFC that
   D-005/D-006 resolved (t034 reuse + W3C-native substrate). Parent of the model precisified here.
-- **t034 two-axis edge model** (`references/dag-two-axis-evidence-model.md` + the t034
-  `epistemic_role` / `graph_object_type` substrate) — the canonical edge-typing + the canonical
-  **5-value `edge_status` / identification two-axis enum**. Reused; its *role* shifts from authored
-  source-of-truth to derived projection (§3), but the vocabulary and rendering semantics are reused,
-  not replaced.
+- **t034 causal/edge-typing substrate** — `graph_object_type`, the `epistemic_role` taxonomy, the
+  payload stages, and promotion-by-reference. Reused **verbatim and untouched** (D-005). The Claim's
+  graphical rendering rides t034; **`edge_status` retirement is NOT a t034 change.**
+- **DAG two-axis / rendering tooling** (`references/dag-two-axis-evidence-model.md`,
+  `science/src/science_tool/dag/schema.py`) — a *separate* layer owning the canonical **5-value
+  `edge_status` + `identification` two-axis enum** and the DAG-figure renderer. Reused, but its
+  *role* shifts from authored source-of-truth to a **derived projection** (§3). This — not t034 — is
+  the layer `edge_status` retirement touches.
 
 ### 1.2 Superseded / folded in (this doc becomes their successor)
 Each gets a "superseded by → this doc" banner; their still-valid content is absorbed below or routed
@@ -93,7 +96,8 @@ Three orthogonal classes, registry-enforced (reused from the epistemic-dependenc
   patch. The claim is a grouping/view over those payloads, not a competing structure.
 
 ### 2.3 Edge taxonomy — claim-edges vs non-claim plumbing
-A precise three-way distinction (correcting the earlier loose "structural = no belief"):
+A precise **two-way distinction** — claim vs non-claim (correcting the earlier loose "structural =
+no belief"):
 
 1. **Claim-edges** — truth-apt, belief-carrying graphical renderings of claims. This **includes
    `claim_layer: structural_claim`**: definitional, benchmark, and model-structure assertions are
@@ -111,8 +115,9 @@ observation node is plumbing.
 ### 2.4 Evidence-line — the atomic grounding unit
 An **evidence-line** (epistemic entity, already built and registered) is the single subject of
 `cito:supports` / `cito:disputes` edges into a claim. It carries:
-`stance` (supports/disputes), `strength`, `evidence_type` (empirical / literature / simulation /
-benchmark / expert), `independence` (+ `independence_group`, `shared_dataset`/`shared_lab`/…), and
+`stance` (supports/disputes), `strength`, `evidence_type` (canonical enum: `empirical_data_evidence`,
+`literature_evidence`, `simulation_evidence`, `benchmark_evidence`, `expert_judgment`),
+`independence` (+ `independence_group`, `shared_dataset`/`shared_lab`/…), and
 **`dataset_usage`** (which datasets it analyzed, with role + overlap). It is the **only** thing that
 grounds a claim. Background material that is not an evidence-line does not enter belief.
 
@@ -148,9 +153,11 @@ second grounding path, i.e. the parallel system we are ruling out.
 
 ## 3. Resolving Issue 2 — `edge_status` misalignment
 
-**Canonical vs legacy.** The canonical framework `edge_status` is the **t034 5-value two-axis enum**
-(`supported / tentative / structural / unknown / eliminated`, paired with `identification`
-∈ `interventional / longitudinal / observational / structural / none`). The **23-value vocabulary in
+**Canonical vs legacy.** The canonical `edge_status` is the **DAG two-axis enum**
+(`references/dag-two-axis-evidence-model.md` / `dag/schema.py` — the rendering tooling, *distinct
+from* the t034 causal substrate): `supported / tentative / structural / unknown / eliminated`, paired
+with `identification` ∈ `interventional / longitudinal / observational / structural / none`. The
+**23-value vocabulary in
 MM30's `*.edges.yaml` is MM30 legacy status/status-family drift** (it never conformed to the enum
 because MM30 does not run `science dag validate`). The fix is not to bless 23 values — it is to
 **decompose the legacy families onto the axes the model already separates** during migration, and to
@@ -247,7 +254,8 @@ Full end-to-end (per approved scope):
 | `meta/core/decisions.md` D-005 / D-006 | **reused authority** | t034-reuse + W3C-native substrate constraints |
 | `docs/proposition-and-evidence-model.md` | **reused authority** | `claim_layer`, `identification_strength`, authored-vs-derived |
 | `meta/doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md` | **reused authority** | parent RFC (t022 extension contract) |
-| `references/dag-two-axis-evidence-model.md` + t034 | **reused authority** | canonical 5-value edge_status + identification; role → derived (§3) |
+| t034 (`graph_object_type` / `epistemic_role` / payload / promotion) | **reused authority** | causal/edge-typing substrate — reused verbatim, untouched |
+| DAG two-axis / rendering tooling (`dag-two-axis-evidence-model.md`, `dag/schema.py`) | **reused authority** | 5-value edge_status + identification; role → derived projection (§3) |
 | `2026-05-22-evidence-aggregation-and-belief-design.md` (+ phase0/1 plans) | **superseded — folded** | evidence-line, belief engine, independence → §2.4–2.6 |
 | `2026-05-24-evidence-aggregation-phase2-design.md` | **superseded — folded** | continuous log-odds scalar → §2.5 |
 | `2026-06-06-knowledge-meta-model-and-substrate-design.md` (Part A only) | **superseded — folded** | epistemic-model consolidation → §2; Part B/C stays with substrate |
