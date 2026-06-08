@@ -24,18 +24,30 @@ that retires the two fully-unblocked dispositions:
 ### 1.1 The real inventory (verified against MM30, the only live aggregate set)
 
 The project's `knowledge/sources/local/` holds **two** aggregate files the
-`AggregateAdapter` loads, and they already separate the concerns:
+`AggregateAdapter` loads. The **per-file** bucket split, measured empirically
+during 3b implementation (`classify_aggregate_rows` joined to each row's source
+file, 2026-06-08), is:
 
-| File | Entries | Buckets | 3b disposition |
+| File | Entries | Buckets (verified per-file) | 3b disposition |
 |---|---|---|---|
-| `entities.yaml` | 176 | `coined` 134 (concept 130, latent 4) · `cruft` 26 (`migration:*`) · `decision-log` 16 (`decision` from `core/decisions.md`) | **the 3b target** (minus decision-log) |
-| `terms.yaml` | 189 | `external-ref` 93 (article/paper + `.bib`) · `ambiguous` 96 (disease/drug/gene/protein/method/topic) | **untouched** — Phase 4 |
+| `entities.yaml` | 176 | `coined` 26 (concept 22, latent 4) · `cruft` 26 (`migration:*`) · `decision-log` 16 (`decision` from `core/decisions.md`) · `external-ref` 93 · `ambiguous` 15 | **the 3b target**: promote 22 conforming concepts, **reject** 4 latent (numeric local kind — kebab id nonconforming, retained not deleted), delete 26 cruft; external-ref/ambiguous → Phase 4, decision-log → 3c |
+| `terms.yaml` | 189 | `coined` 108 (concept) · `ambiguous` 81 | **untouched** — Phase 4 |
 
-The `ambiguous` 96 are overwhelmingly **external-standard-vocabulary** kinds
-(`disease:multiple-myeloma`, `protein:*`, `gene:*`, `drug:*`), not coined-or-not
-judgment calls — they are Phase-4 external references the 3a heuristic could not
-yet name. Because 3b acts **only** on `coined`/`cruft`/`shadow`, it never touches
-`terms.yaml` and the misclassification blast radius is structurally contained.
+> **Correction (vs. the pre-implementation estimate).** An earlier draft of this
+> table attributed `coined` 134 (concept 130) to `entities.yaml` and put
+> `external-ref` 93 in `terms.yaml`. That mixed cross-file totals: only **22**
+> coined `concept` rows actually live in `entities.yaml`; the other **108** coined
+> `concept:*` rows live in **`terms.yaml`**, and the 93 `external-ref` rows are in
+> `entities.yaml`. The 3b firewall (act only on `entities.yaml`) makes this
+> attribution moot for 3b — but **Phase 4 must handle coinage, not just external
+> vocabulary**, because `terms.yaml` carries 108 coined concepts that still need
+> promotion. The dry-run smoke confirms the live 3b numbers: 22 promoted, 4
+> rejected (latent), 26 deleted.
+
+Because 3b acts **only** on `coined`/`cruft`/`shadow` rows **sourced from
+`entities.yaml`** (the §3.1 firewall), it never touches `terms.yaml` — neither its
+108 coined concepts nor its 81 ambiguous rows — so the misclassification blast
+radius is structurally contained.
 
 ### 1.2 Two scope-shaping facts (carried from 3a, re-confirmed)
 
@@ -53,16 +65,23 @@ yet name. Because 3b acts **only** on `coined`/`cruft`/`shadow`, it never touche
 ### 1.3 End-state staging
 
 ```
-entities.yaml: 176 ──(promote 134 coined → entities/<kind>/*.md)──▶ ──(delete 26 cruft)──▶ 16 left
-                                                                                            └─ decision-log → 3c
-terms.yaml:    189 ──────────────────────────────────────────────────────────── untouched ──▶ Phase 4
+entities.yaml: 176 ──(promote 22 coined-concept; reject 4 latent, retained)──▶ ──(delete 26 cruft)──▶ 128 left
+                                                                                ├─ decision-log 16 ──────────▶ 3c
+                                                                                ├─ external-ref 93 ──────────▶ Phase 4
+                                                                                ├─ ambiguous 15 ─────────────▶ Phase 4
+                                                                                └─ latent 4 (retained reject) ▶ MM30 v3 cutover (register `latent` slug)
+terms.yaml:    189 ───────────────────────────────────── untouched ──▶ Phase 4 (108 coined concept + 81 ambiguous)
 ```
 
-After 3b, only the 16 `decision-log` rows remain in `entities.yaml`. **3c** retires
-those (promote + make `core/decisions.md` a generated view over
-`entities/decision/*.md`) and, once no aggregate rows remain anywhere, removes the
-`AggregateAdapter` deprecated-owner mode (§C3). **Phase 4** retires `terms.yaml`
-via the external-reference authority resolver.
+After 3b's `--promote-coined --delete-cruft` apply, `entities.yaml` drops the 22
+promoted + 26 cruft = 48 acted rows, leaving **128**: 16 `decision-log`, 93
+`external-ref`, 15 `ambiguous`, and the 4 `latent` (rejected-and-retained until
+MM30 registers `latent` as a `slug` kind in its v3 cutover). **3c** retires the
+`decision-log` rows (promote + make `core/decisions.md` a generated view over
+`entities/decision/*.md`); **Phase 4** retires the `external-ref`/`ambiguous`
+rows in both files plus `terms.yaml`'s 108 coined concepts, via the
+external-reference authority resolver. Once no aggregate rows remain anywhere, 3c
+removes the `AggregateAdapter` deprecated-owner mode (§C3).
 
 ## 2. Scope
 
