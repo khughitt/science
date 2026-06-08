@@ -129,3 +129,24 @@ def test_crash_recovery_completes_stranded_promotion(tmp_path: Path) -> None:
     report = _run(tmp_path, dry_run=False, promote_coined=True, delete_cruft=False, delete_shadow=False)
     assert "concept:1q-gain" in report.promoted
     assert _entities_on_disk(tmp_path) == []  # stranded entry now removed
+
+
+def test_promote_target_exists_unmarked_is_skipped_entry_retained(tmp_path: Path) -> None:
+    # The promote loop's foreign-owner branch: target exists WITHOUT our promoted_from
+    # marker → goes to skipped, aggregate entry is retained (no clobber).
+    _write_entities(tmp_path, [_concept("concept:1q-gain")])
+    owner = tmp_path / "entities/concepts/1q-gain.md"
+    owner.parent.mkdir(parents=True, exist_ok=True)
+    owner.write_text("---\nid: concept:1q-gain\ntype: concept\ntitle: Foreign\n---\nForeign body.\n", "utf-8")
+    triage = AggregateRowTriage("concept:1q-gain", "concept", _AGG_REL, False, AggregateBucket.COINED, "x")
+    plan = RetirementPlan(
+        promote=(PlannedRow(triage, RetireAction.PROMOTE, _AGG_REL, 0, "entities/concepts/1q-gain.md"),),
+        delete=(),
+        reconcile=(),
+        rejected=(),
+    )
+    report = apply_retirement(tmp_path, plan, dry_run=False)
+    assert report.promoted == ()
+    assert "Foreign body." in owner.read_text(encoding="utf-8")  # foreign owner untouched
+    assert any(cid == "concept:1q-gain" for cid, _ in report.skipped)
+    assert _entities_on_disk(tmp_path) == ["concept:1q-gain"]  # aggregate entry retained

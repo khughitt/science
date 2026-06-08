@@ -220,7 +220,8 @@ def apply_retirement(project_root: Path, plan: RetirementPlan, *, dry_run: bool)
 
     # 3. Deletes.
     for pr in plan.delete:
-        deleted.append(pr.triage.canonical_id)
+        if pr.triage.canonical_id not in promoted:
+            deleted.append(pr.triage.canonical_id)
         drop_by_file[pr.source_path].add(pr.line)
 
     # 4. Rewrite each affected aggregate file once.
