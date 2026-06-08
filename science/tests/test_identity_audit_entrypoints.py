@@ -37,8 +37,11 @@ def _stub_shadow(root: Path) -> None:
 def test_materialization_audit_reports_collision_without_crashing(tmp_path: Path) -> None:
     _stub_shadow(tmp_path)
     rows, has_failures = materialization_audit(tmp_path)  # must not raise
-    assert has_failures is True
-    assert any(r["check"] == "identity_collision" and r["source"] == "question:q1" for r in rows)
+    # transitional stub-shadow is carried (§C4): a warn row, not a build failure
+    assert has_failures is False
+    collision = [r for r in rows if r["check"] == "identity_collision" and r["source"] == "question:q1"]
+    assert len(collision) == 1
+    assert collision[0]["status"] == "warn"
 
 
 def test_collect_unresolved_refs_excludes_identity_collision(tmp_path: Path) -> None:

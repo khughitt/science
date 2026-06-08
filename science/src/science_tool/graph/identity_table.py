@@ -44,6 +44,17 @@ class IdentityCollision:
     canonical_id: str
     rows: tuple[IdentityDeclaration, ...]
 
+    @property
+    def is_genuine(self) -> bool:
+        """True when >=2 owner rows are non-deprecated — the genuine §B1 duplicate the
+        compiler must reject. A collision involving a transitional deprecated owner (an
+        entities.yaml aggregate stub §C3, or a synthesized orphan-datapackage owner §B4)
+        shadowing a real owner is carried as rollout debt (§C4), surfaced as a non-blocking
+        WARN, not a hard error. The single source of truth for this grade across the
+        validate check, the graph audit, and the migrator.
+        """
+        return sum(1 for row in self.rows if not row.deprecated) >= 2
+
 
 @dataclass(frozen=True)
 class IdentityTable:

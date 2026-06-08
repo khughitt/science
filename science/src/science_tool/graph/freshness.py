@@ -408,7 +408,7 @@ def propagate_freshness_in_memory(project_root: Path) -> list[dict]:
     from science_tool.graph.materialize import _build_dataset_from_sources
     from science_tool.graph.migrate import audit_project_sources
 
-    sources = load_project_sources(project_root.resolve())
+    sources = load_project_sources(project_root.resolve(), strict_identity=False)
     audit_rows, has_failures = audit_project_sources(sources)
     if has_failures:
         details = "; ".join(f"{row['source']} -> {row['target']}" for row in audit_rows if row["status"] == "fail")

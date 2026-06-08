@@ -772,16 +772,15 @@ def _identity_collision_rows(table: "IdentityTable") -> tuple[list[dict], list[d
     warnings: list[dict] = []
     for collision in table.collisions():
         paths = [(r.source_ref.path if r.source_ref else "<unknown>") for r in collision.rows]
-        real_owners = sum(1 for r in collision.rows if not r.deprecated)
         row = {
             "check": "identity_collision",
-            "status": "fail" if real_owners >= 2 else "warn",
+            "status": "fail" if collision.is_genuine else "warn",
             "source": collision.canonical_id,
             "field": "owner_scope",
             "target": collision.owner_scope,
             "details": "owned by " + " and ".join(paths),
         }
-        (blockers if real_owners >= 2 else warnings).append(row)
+        (blockers if collision.is_genuine else warnings).append(row)
     return blockers, warnings
 
 
@@ -870,8 +869,11 @@ def _postmove_audit_failures(
     mappings_aliases = dict(sources.manual_aliases)
     sources = sources.model_copy(update={"manual_aliases": {**sources.manual_aliases, **plan.id_map}})
     rows, failed = audit_project_sources(sources)
-    # Drop the audit's deprecation-blind identity_collision fails; we recompute them
-    # deprecation-aware below (a transitional shadow must not hard-block, design §C4).
+    # Separate identity_collision rows from the flat audit list; we recompute them split
+    # into blockers vs transitional warnings via _identity_collision_rows below. The audit
+    # now grades them deprecation-aware too (Task 1), but returns one flat row list — the
+    # migrator needs the blocker/warning split for its own output (a transitional shadow
+    # must not hard-block, design §C4).
     audit_fails = (
         [r for r in rows if r.get("status") == "fail" and r.get("check") != "identity_collision"] if failed else []
     )

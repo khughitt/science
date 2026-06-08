@@ -40,16 +40,12 @@ from science_tool.validate.result import Result, Severity
 def graded_collisions(table: IdentityTable) -> list[tuple[Severity, IdentityCollision]]:
     """Each (owner_scope, canonical_id) collision paired with its severity.
 
-    ERROR when >=2 owner rows are non-deprecated (the genuine §B1 duplicate); WARN
-    otherwise (a deprecated transitional owner shadows a real owner — §C3 rollout
-    debt carried until §B5, visible but non-blocking).
+    ERROR for a genuine §B1 duplicate (>=2 non-deprecated owners); WARN otherwise (a
+    deprecated transitional owner shadows a real owner — §C3 rollout debt carried until
+    §B5, visible but non-blocking). Grade via IdentityCollision.is_genuine so this check,
+    the graph audit, and the migrator share one source of truth.
     """
-    graded: list[tuple[Severity, IdentityCollision]] = []
-    for collision in table.collisions():
-        non_deprecated = sum(1 for row in collision.rows if not row.deprecated)
-        severity = Severity.ERROR if non_deprecated >= 2 else Severity.WARN
-        graded.append((severity, collision))
-    return graded
+    return [(Severity.ERROR if collision.is_genuine else Severity.WARN, collision) for collision in table.collisions()]
 
 
 @Check(section="forbidden second owner declaration (identity collision)...", order=50)

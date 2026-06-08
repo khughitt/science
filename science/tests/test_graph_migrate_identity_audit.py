@@ -25,7 +25,8 @@ def _owner(cid, adapter, path, deprecated=False):
     )
 
 
-def test_audit_identity_table_reports_collision_rows():
+def test_audit_identity_table_transitional_shadow_is_warn():
+    # markdown owner + deprecated aggregate STUB shadow -> carried (warn), not a build blocker (§C4)
     table = IdentityTable(
         rows=[
             _owner("question:q1", "markdown", "entities/question/0007-q1.md"),
@@ -36,12 +37,26 @@ def test_audit_identity_table_reports_collision_rows():
     assert len(rows) == 1
     row = rows[0]
     assert row["check"] == "identity_collision"
-    assert row["status"] == "fail"
+    assert row["status"] == "warn"
     assert row["source"] == "question:q1"
     assert row["field"] == "owner_scope"
     assert row["target"] == "proj"
     assert "entities/question/0007-q1.md" in row["details"]
     assert "knowledge/sources/local/entities.yaml" in row["details"]
+
+
+def test_audit_identity_table_genuine_duplicate_is_fail():
+    # two NON-deprecated owners of one (owner_scope, canonical_id) -> genuine §B1 duplicate, fail
+    table = IdentityTable(
+        rows=[
+            _owner("question:q1", "markdown", "entities/question/a.md"),
+            _owner("question:q1", "markdown", "entities/question/b.md"),
+        ]
+    )
+    rows = audit_identity_table(table)
+    assert len(rows) == 1
+    assert rows[0]["status"] == "fail"
+    assert rows[0]["source"] == "question:q1"
 
 
 def test_audit_identity_table_clean_when_no_collisions():
@@ -86,10 +101,12 @@ def test_nonstrict_load_then_audit_reports_identity_collision(tmp_path: Path) ->
     _agg(tmp_path, "question:q1", "question")
     sources = load_project_sources(tmp_path, include_commons=False, strict_identity=False)
     rows, failed = audit_project_sources(sources)
-    assert failed is True
+    # transitional stub-shadow is carried (§C4): surfaced as a warn row, does NOT fail the build
+    assert failed is False
     collision_rows = [r for r in rows if r["check"] == "identity_collision"]
     assert len(collision_rows) == 1
     assert collision_rows[0]["source"] == "question:q1"
+    assert collision_rows[0]["status"] == "warn"
 
 
 def test_clean_project_audit_has_no_identity_collision(tmp_path: Path) -> None:

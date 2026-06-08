@@ -5,6 +5,7 @@ import pytest
 
 from science_model.source_ref import SourceRef
 from science_tool.graph.identity_table import (
+    IdentityCollision,
     IdentityDeclaration,
     IdentityTable,
     ParticipationMode,
@@ -133,3 +134,31 @@ def test_owner_scopes_by_id_groups_scopes_per_canonical_id() -> None:
     index = table.owner_scopes_by_id()
     assert index["topic:bayesian"] == frozenset({"proj", "commons"})
     assert index["hypothesis:h1"] == frozenset({"proj"})
+
+
+def _collision(*deprecations: bool) -> IdentityCollision:
+    rows = tuple(
+        IdentityDeclaration(
+            canonical_id="dataset:x",
+            participation_mode=ParticipationMode.OWNER,
+            owner_scope="proj",
+            adapter="markdown",
+            source_ref=SourceRef(adapter_name="markdown", path=f"p{i}.md"),
+            deprecated=dep,
+        )
+        for i, dep in enumerate(deprecations)
+    )
+    return IdentityCollision(owner_scope="proj", canonical_id="dataset:x", rows=rows)
+
+
+def test_is_genuine_two_real_owners() -> None:
+    assert _collision(False, False).is_genuine is True
+
+
+def test_is_genuine_transitional_shadow_is_not_genuine() -> None:
+    # one real markdown owner + one deprecated aggregate/datapackage stub -> carried, not a hard error
+    assert _collision(False, True).is_genuine is False
+
+
+def test_is_genuine_two_deprecated_owners_is_not_genuine() -> None:
+    assert _collision(True, True).is_genuine is False

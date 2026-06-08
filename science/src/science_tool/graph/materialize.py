@@ -193,7 +193,7 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
                 f"derived dataset(s) + research-package."
             )
 
-    sources = load_project_sources(project_root)
+    sources = load_project_sources(project_root, strict_identity=False)
     rows, has_failures = audit_project_sources(sources)
     if has_failures:
         details = "; ".join(
