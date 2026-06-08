@@ -285,6 +285,50 @@ def entities_migrate_command(apply_changes: bool, project_root: Path) -> None:
     click.echo(json.dumps(report, indent=2))
 
 
+@entities_group.command("triage-aggregate")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path("."),
+    help="Project root (default: current directory).",
+)
+@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text")
+def entities_triage_aggregate_command(project_root: Path, output_format: str) -> None:
+    """Triage aggregate (entities.yaml) rows for §B5 retirement (read-only)."""
+    from collections import Counter
+
+    from science_tool.graph.aggregate_triage import classify_aggregate_rows
+    from science_tool.graph.sources import load_project_sources
+
+    sources = load_project_sources(
+        project_root, include_commons=False, strict_core_schema=False, strict_identity=False
+    )
+    rows = classify_aggregate_rows(sources)
+    if output_format == "json":
+        payload = [
+            {
+                "canonical_id": r.canonical_id,
+                "kind": r.kind,
+                "source_path": r.source_path,
+                "has_real_owner": r.has_real_owner,
+                "bucket": r.bucket.value,
+                "evidence": r.evidence,
+            }
+            for r in rows
+        ]
+        click.echo(json.dumps(payload, indent=2))
+        return
+    counts = Counter(r.bucket.value for r in rows)
+    click.echo(f"{len(rows)} aggregate rows:")
+    for bucket in sorted(counts):
+        click.echo(f"  {bucket}: {counts[bucket]}")
+    for r in rows:
+        click.echo(
+            f"  [{r.bucket.value}] {r.canonical_id} "
+            f"(kind={r.kind}, source_path={r.source_path}) -- {r.evidence}"
+        )
+
+
 @entities_group.command("register-kind")
 @click.argument("kind")
 @click.option("--class", "entity_class", required=True)

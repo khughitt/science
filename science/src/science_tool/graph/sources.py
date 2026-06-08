@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar, cast
 
@@ -138,6 +139,23 @@ class SkippedEntity(BaseModel):
     details: str
 
 
+@dataclass(frozen=True, slots=True)
+class AggregateRowMeta:
+    """Row-level triage metadata for one aggregate (`entities.yaml`) entry.
+
+    Captured at load time — before non-strict dedup can drop a shadowed entry's
+    Entity (sources.py emit point) — so the §B5 triage classifier can bucket every
+    aggregate row. Joined to its IdentityDeclaration by (path, line), which
+    AggregateAdapter always populates.
+    """
+
+    path: str
+    line: int
+    canonical_id: str
+    kind: str
+    source_path: str | None
+
+
 class ProjectSources(BaseModel):
     """Structured source bundle used to materialize a project graph."""
 
@@ -161,6 +179,9 @@ class ProjectSources(BaseModel):
     skipped_entities: list[SkippedEntity] = Field(default_factory=list)
     commons_overlay_paths: dict[str, str] = Field(default_factory=dict)
     identity_declarations: list[IdentityDeclaration] = Field(default_factory=list)
+    # §B5: row-level metadata for every aggregate (entities.yaml) owner row, captured
+    # before non-strict dedup so shadowed rows (whose Entity is dropped) stay triable.
+    aggregate_rows: list[AggregateRowMeta] = Field(default_factory=list)
     freshness_enabled: bool = True
 
 
@@ -273,6 +294,7 @@ def load_project_sources(
     project_name = str(config["name"])
     identity_table: dict[str, SourceRef] = {}
     identity_declarations: list[IdentityDeclaration] = []
+    aggregate_rows: list[AggregateRowMeta] = []
     entities: list[Entity] = []
     entity_source_adapters: dict[str, str] = {}
     dataset_datapackages: dict[str, str] = {}
@@ -413,6 +435,20 @@ def load_project_sources(
                         deprecated=deprecated,
                     )
                 )
+                if adapter.name == "aggregate":
+                    assert ref.line is not None  # AggregateAdapter always sets the entry index
+                    sp_raw = raw.get("source_path")
+                    aggregate_rows.append(
+                        AggregateRowMeta(
+                            path=ref.path,
+                            line=ref.line,
+                            canonical_id=entity.canonical_id,
+                            kind=kind,
+                            # source_path is unschema'd extra metadata; normalize a
+                            # malformed (non-string) value to None so the report can't crash.
+                            source_path=sp_raw if isinstance(sp_raw, str) else None,
+                        )
+                    )
                 existing = identity_table.get(entity.canonical_id)
                 if existing is not None:
                     if strict_identity:
@@ -567,6 +603,7 @@ def load_project_sources(
         skipped_entities=skipped_entities,
         commons_overlay_paths=commons_overlay_paths,
         identity_declarations=identity_declarations,
+        aggregate_rows=aggregate_rows,
         freshness_enabled=freshness_enabled,
     )
 
