@@ -68,14 +68,23 @@ via the external-reference authority resolver.
 
 ### In scope (3b)
 
+0. A **foundation prerequisite — the `slug` filename strategy** (§3.0). The v3
+   entity-path policy substrate (`entities.py`) currently admits only `numeric`
+   and `citekey` local-part strategies; coined kinds (`concept`, `latent`) carry
+   kebab-mnemonic ids (`concept:1q-gain`) that conform to neither. §B5's
+   "coined-here lightweight node → a small file" presumes the id **is** the slug,
+   so 3b first adds a `slug` strategy and gives `concept` a core policy, enabling
+   **id-preserving** promotion (no renumber, no ref rewrite).
 1. A pure **disposition planner** that turns the 3a classifier output + per-bucket
-   opt-in flags into a `RetirementPlan` (`promote` / `delete` / `rejected`).
+   opt-in flags into a `RetirementPlan` (`promote` / `delete` / `rejected`),
+   **scoped to `entities.yaml` declarations only** (§3.1).
 2. An **executor** that writes `coined` owner files and rewrites the affected
-   aggregate file(s), removing promoted + deleted entries.
+   aggregate file(s), removing promoted + deleted entries, **crash-recoverable
+   via a promotion provenance marker** (§3.5).
 3. CLI: `--apply` + `--promote-coined` / `--delete-cruft` / `--delete-shadow`
    flags on the existing `science entities triage-aggregate` command, plus a
    `--format json` report. Dry-run by default.
-4. A **`layout_version >= 3` gate** on `--apply`.
+4. A **`layout_version >= 3` gate** on `--apply` (§3.7).
 
 ### Out of scope (deferred)
 
@@ -89,7 +98,52 @@ via the external-reference authority resolver.
 
 ## 3. Architecture
 
-### 3.1 The §C2 law: model decides *which*, file provides *content*
+### 3.0 Foundation prerequisite: the `slug` filename strategy
+
+The v3 path-policy substrate lives in `entities.py`. Verified facts that force
+this prerequisite:
+
+- `EntityFilenameStrategy = Literal["numeric", "citekey", "singleton"]`;
+  `_VALID_STRATEGIES = {"numeric", "citekey"}` (the set a *local* kind may
+  declare; `singleton` is excluded for local kinds).
+- `_CORE_POLICIES` maps each core kind to an `EntityPathPolicy(root, strategy)`.
+  It has **no `concept`, `latent`, or `decision`** — `concept` is core-*loadable*
+  (`entity_registry`) but has **no path policy**; `latent`/`decision` are local
+  kinds that default to `numeric` (`ek.strategy or "numeric"`).
+- `numeric` requires `NNNN-slug` local parts; `citekey` requires `Author2025`.
+  A coined id like `concept:1q-gain` conforms to neither.
+- Slug machinery **already exists** for title-derivation: `_SLUG_RE`,
+  `validate_slug`, `normalize_to_slug`, `derive_slug`. There is simply no `slug`
+  *strategy* that routes a kind's filename/id through it.
+
+**The addition (bounded, additive):**
+
+1. `EntityFilenameStrategy`: add `"slug"`.
+2. `_VALID_STRATEGIES`: add `"slug"` so a local kind may declare it.
+3. `local_part_conforms`: `strategy == "slug"` → `bool(_SLUG_RE.fullmatch(local_part))`.
+4. `validate_entity_id`: a `slug` branch validating the local part with `_SLUG_RE`
+   (parallel to the existing `citekey` branch).
+5. `derive_local_part`: a `slug` branch returning `derive_slug(title)` (numeric
+   renumbers, citekey/singleton raise; slug preserves the title-slug).
+6. `_CORE_POLICIES`: add `"concept": EntityPathPolicy(Path("entities/concepts"), "slug")`
+   — `concept` is a core kind, so its policy belongs in the core table.
+7. A v3 project that retires its aggregate registers its other coined kinds
+   (`latent`, and later `decision`) with `strategy: slug` in
+   `knowledge/sources/<profile>/manifest.yaml`. (The MM30 manifest update is part
+   of MM30's eventual v3 cutover, Task #30, not this framework change; the 3b
+   fixtures register a slug local kind directly.)
+
+The implementer must grep every `strategy ==` / `strategy in` switch
+(`validate_entity_id`, `derive_local_part`, `singleton_path`,
+`_next_numeric_local_part`, the migrator's numbering, the conformance checks) and
+confirm each handles or safely ignores `"slug"`. The migrator does **not** need
+slug-renumbering logic: slug ids are preserved, and §D3 already excludes
+structural aggregate kinds from the migrator (3b owns their retirement). The net
+effect of this section in isolation: a `slug`-strategy kind's owner lives at
+`<root>/<id-local-part>.md` and its id is accepted as conforming — no behavior
+change for any existing `numeric`/`citekey`/`singleton` kind.
+
+### 3.1 The §C2 law: model decides *which*, file provides *content*; scope to `entities.yaml`
 
 3b honors the architectural law (§C2: every consumer reads the compiled model,
 not raw disk) at the level that matters — **identity decisions**. Which rows are
@@ -114,12 +168,26 @@ disagree for acted buckets, because:
   sets — so the executor drops/reads entries **by index**, robust even if an id
   ever were canonicalized.
 
+**`entities.yaml`-only firewall (Finding #1).** `AggregateAdapter` loads **both**
+`entities.yaml` and `terms.yaml` as aggregate sources (`_MULTI_TYPE_FILES =
+{"entities.yaml": "entities", "terms.yaml": "terms"}`), plus single-type
+`doc/<plural>/<plural>.{json,yaml}` lists. So `classify_aggregate_rows` returns
+rows from all of them, and a future `cruft`/`shadow` row in `terms.yaml` would
+otherwise be deleted. The planner therefore considers **only** declarations whose
+`Path(source_ref.path).name == "entities.yaml"`; every other aggregate row
+(terms, single-type) is excluded from the plan up front. This is structural, not
+incidental: `terms.yaml` is the Phase-4 external-vocabulary surface (it is even
+row-normalized by `_normalize_term_row` on load) and 3b must never rewrite it. A
+test asserts a coined/cruft/shadow row sourced from `terms.yaml` is absent from
+the plan.
+
 ### 3.2 Module layout
 
 | File | Role |
 |---|---|
+| `entities.py` (extend) | the `slug` filename strategy + `concept` core policy (§3.0) — the foundation prerequisite |
 | `graph/aggregate_retire.py` (NEW) | planner + executor; keeps 3a's `aggregate_triage.py` strictly read-only |
-| `cli.py` (extend `entities_triage_aggregate_command`) | flags, dry-run/apply dispatch, report rendering |
+| `cli.py` (extend `entities_triage_aggregate_command`) | flags, dry-run/apply dispatch, `_read_layout_version`, report rendering |
 
 Keeping the destructive executor in its own module (rather than growing
 `aggregate_triage.py`) preserves the single responsibility of the 3a classifier
@@ -138,7 +206,7 @@ class PlannedRow:
     action: RetireAction
     source_path: str               # the aggregate FILE path (declaration source_ref.path)
     line: int                      # entry index within that file
-    target_path: str | None        # entities/<kind>/<slug>.md for PROMOTE; None for DELETE
+    target_path: str | None        # policy.root/<local_part>.md for PROMOTE; None for DELETE
 
 @dataclass(frozen=True, slots=True)
 class RetirementPlan:
@@ -160,29 +228,45 @@ class RetirementReport:
 
 ```python
 def plan_retirement(
+    project_root: Path,                 # for resolve_path_policy(kind, project_root=...)
     sources: ProjectSources,
     rows: list[AggregateRowTriage],
     *,
     promote_coined: bool,
     delete_cruft: bool,
     delete_shadow: bool,
-    owner_root_for: Callable[[str], str | None],   # kind -> owner dir, framework mapping
 ) -> RetirementPlan
 ```
 
+Pure over the classification: `project_root` is used only to resolve the static
+path-policy table (`resolve_path_policy` / `entity_policies`), not to read entity
+content — so the planner remains unit-testable against a fixture root that
+declares the kinds without any aggregate state on disk.
+
+- Considers **only** `entities.yaml` declarations (§3.1 firewall); every other
+  aggregate row is dropped before bucket mapping.
 - Maps each enabled bucket to its action: `coined`→`PROMOTE` (if
   `promote_coined`), `cruft`→`DELETE` (if `delete_cruft`), `shadow`→`DELETE` (if
   `delete_shadow`). `decision-log`/`external-ref`/`ambiguous` are **never** acted.
 - For each acted row, recovers `(source_path, line)` by joining the triage row
   back to its aggregate `IdentityDeclaration` / `aggregate_rows` entry (via
   `canonical_id` → declaration; `line` from `source_ref`).
-- For a `PROMOTE`, computes `target_path = <owner_root_for(kind)>/<slug>.md` where
-  `slug` is the id's local part. Rejects (does not promote) when:
-  - `owner_root_for(kind)` is `None` (kind has no owner root) — reason
-    `"no owner root for kind"`;
-  - the slug fails the **2a `_is_safe_slug` firewall** (`^[a-z0-9][a-z0-9._-]*$`,
-    reject `..`) — reason `"unsafe slug"`.
-- Pure: no I/O, fully unit-testable on synthetic `AggregateRowTriage` lists.
+- For a `PROMOTE`, the target is computed **from the path policy** (§3.0), not a
+  raw `entities/<kind>` guess: `policy = resolve_path_policy(kind,
+  project_root=...)`, `target_path = policy.root / f"{local_part}.md"`. Rejects
+  (does not promote) when:
+  - `resolve_path_policy(kind)` raises (kind has no policy — e.g. a coined kind
+    the project never registered with a `slug` strategy) — reason
+    `"no path policy for kind <k>"`;
+  - the kind's strategy is not `slug` **and** the id's `local_part` does not
+    satisfy `local_part_conforms(kind, local_part)` — reason
+    `"id <id> does not conform to <strategy> strategy"`. (3b promotes
+    **id-preserving**; it never renumbers. A coined kind must be `slug`-strategy,
+    or carry an already-conforming id, to be promoted.)
+  - the local part fails `validate_slug` / the **2a `_is_safe_slug` firewall**
+    (`^[a-z0-9][a-z0-9._-]*$`, reject `..`) — reason `"unsafe slug"`.
+- Crash-recovery of a *prior* promotion is an impure executor concern (§3.5),
+  deliberately kept out of the planner.
 
 ### 3.5 Executor
 
@@ -195,28 +279,59 @@ def apply_retirement(
 ) -> RetirementReport
 ```
 
-Order of operations (write-before-rewrite, so a crash mid-run never deletes an
-entry whose owner file was not written):
+**File I/O contract (Finding #4).** `entities.yaml` is a **mapping with a root
+key** (`{entities: [ ... ]}`), not a top-level list; `source_ref.path` is
+**project-root-relative** (the loader resolves relative refs via chdir). So every
+file touch:
+- resolves the absolute path as `project_root / ref.path`;
+- `data = yaml.safe_load(text)`; the entry list is `data["entities"]` (the root
+  key from `_MULTI_TYPE_FILES`, which 3b only ever sees as `"entities"` given the
+  §3.1 firewall);
+- indexes/drops within that list by `ref.line`; re-dumps as
+  `{"entities": survivors}` with `yaml.safe_dump(sort_keys=False)` (files carry no
+  comments, so no round-trip fidelity concern).
 
-1. **Promote.** For each `PlannedRow` in `plan.promote`, read its full entry dict
-   from `source_path[line]`; build owner-file frontmatter — `id` = `canonical_id`,
-   `type` = `kind`, `title`, `profile` (copied), **excluding** `source_path` and
-   any aggregate-only bookkeeping; body = a one-line stub
-   (`<!-- promoted from entities.yaml by substrate-3b; add definition -->`).
-   - Required fields `id`/`kind`/`title` absent → move the row to `rejected`
-     (reason `"missing required field <f>"`); its entry is **not** deleted from
-     the aggregate file. (Explicit > Defensive — fail the row, not the run.)
-   - `target_path` already exists → `skipped` (reason `"target exists"`); entry
-     **not** deleted (a real owner or a prior promotion already holds it).
-   - `dry_run`: record the intended write, touch nothing.
-2. **Rewrite aggregate files.** Collect the `(source_path, line)` of every row
-   that was *successfully* promoted **or** is a delete. Group by `source_path`.
-   For each file: `yaml.safe_load`, drop the entries at those indices, write the
-   survivors back (`yaml.safe_dump`, stable key order; the files carry no comments
-   so no round-trip fidelity concern). Rejected/skipped promotes are **not**
-   dropped, so the file stays internally consistent.
+**Promotion provenance marker.** Every promoted owner file carries a frontmatter
+field `promoted_from: <entities.yaml rel path>`. It records provenance **and** is
+the key to crash-safe recovery (below): it lets a rerun distinguish "an owner file
+*I* wrote in a prior, interrupted run" from "a real, hand-authored owner."
+
+Order of operations (write-before-rewrite, so a crash mid-run never strands an id
+with neither an owner file nor an aggregate entry):
+
+1. **Promote / reconcile.** For each `PlannedRow` in `plan.promote`, read its full
+   entry dict from `data["entities"][line]`; build owner-file frontmatter — `id` =
+   `canonical_id`, `type` = `kind`, `title`, `profile` (copied), `promoted_from`,
+   **excluding** `source_path` and aggregate-only bookkeeping; body = a one-line
+   stub (`<!-- promoted from entities.yaml by substrate-3b; add definition -->`).
+   For each row, resolve the target by existence + marker:
+   - **target absent** → write it, then mark its aggregate entry for deletion.
+   - **target exists *with* our `promoted_from == <this aggregate>` marker** → a
+     prior interrupted run already wrote it; **skip the write but still mark the
+     entry for deletion** (completes the half-done promote — the recovery path,
+     Finding #3). Reported under `promoted` (idempotent).
+   - **target exists *without* our marker** (a foreign/hand-authored owner) →
+     `skipped` (reason `"target exists (foreign owner)"`); entry **retained**; do
+     not clobber. Surfaced in the report as a conflict.
+   - Required fields `id`/`kind`/`title` absent → `rejected` (reason `"missing
+     required field <f>"`); entry **retained**.
+   - `dry_run`: classify the outcome and record the intended write, touch nothing.
+2. **Crash-recovery sweep (only when `--promote-coined`).** Because a completed
+   write flips the row's bucket from `coined` to `shadow` on the next load, a
+   stranded entry (owner written, entry not yet deleted) is no longer in
+   `plan.promote`. So, additionally, scan `shadow` rows whose owning markdown file
+   carries `promoted_from == <this aggregate>` and mark their aggregate entries for
+   deletion. This reconciles **only** our own prior promotions (marker-keyed);
+   foreign-owned shadows are untouched (that is `--delete-shadow`'s job). This
+   makes `--promote-coined` alone idempotent and crash-safe.
+3. **Rewrite aggregate files.** Collect the `(source_path, line)` of every entry
+   marked for deletion in steps 1–2 (successful/reconciled promotes) plus every
+   `plan.delete` row. Group by `source_path`. For each file: load, drop those
+   indices from `data["entities"]` in one filtering pass (collect all indices
+   first — never remove one-at-a-time, which shifts indices), write survivors back.
+   Rejected/skipped rows are **not** dropped, so the file stays consistent.
    - `dry_run`: record `files_rewritten` that *would* change, write nothing.
-3. Return the `RetirementReport`.
+4. Return the `RetirementReport`.
 
 ### 3.6 CLI surface (extends the 3a command)
 
@@ -238,10 +353,15 @@ science entities triage-aggregate
 Backward compatibility: the bare command and `--format json` with no bucket flags
 behave exactly as in 3a (a regression test pins this).
 
-### 3.7 The `layout_version` gate
+### 3.7 The `layout_version` gate (Finding #5)
 
-Read `layout_version` from the project manifest (the same field the migrator and
-`orphan_datapackage_owner` check consult). The gate applies **only** to `--apply`
+`layout_version` must be read **directly from `science.yaml`** —
+`yaml.safe_load((project_root / "science.yaml").read_text()).get("layout_version")`
+— **not** via `_read_project_config()`, which drops the field. Apply the same
+convention the validate checks use (`validate/checks/manifest.py:30`,
+`directory_structure.py:22`): treat it as v3 iff `isinstance(v, int) and v >= 3`.
+A tiny local helper (e.g. `_read_layout_version(project_root) -> int | None`) in
+the CLI module keeps this in one place. The gate applies **only** to `--apply`
 (which writes owner files into `entities/<kind>/`); dry-run planning is read-only
 and works on a v2 project as a useful preview. Refusal is a clean non-zero exit
 with an actionable message, never a stack trace.
@@ -250,16 +370,19 @@ with an actionable message, never a stack trace.
 
 | Condition | Handling |
 |---|---|
-| Unsafe slug | row → `rejected`, not written; entry retained |
-| Missing `id`/`kind`/`title` in a promote entry | row → `rejected`; entry retained |
-| Kind has no owner root | row → `rejected`; entry retained |
-| Promote target file already exists | row → `skipped`; entry retained |
+| Kind has no path policy / coined kind not registered `slug` | row → `rejected` (`"no path policy for kind"`); entry retained |
+| Id non-conforming to its kind's strategy (3b never renumbers) | row → `rejected` (`"id … does not conform"`); entry retained |
+| Unsafe slug local part | row → `rejected` (`"unsafe slug"`); entry retained |
+| Missing `id`/`kind`/`title` in a promote entry | row → `rejected` (`"missing required field"`); entry retained |
+| Promote target exists **with** our `promoted_from` marker | recovery: skip write, **delete** the stranded entry (idempotent) |
+| Promote target exists **without** our marker (foreign owner) | row → `skipped` (`"target exists (foreign owner)"`); entry retained; reported as conflict |
+| Row sourced from `terms.yaml` / a single-type aggregate | excluded from the plan entirely (§3.1 firewall) |
 | `--apply` without a bucket flag | click usage error (exit 2) |
-| `--apply` on layout_version < 3 | refuse (exit 1), actionable message |
+| `--apply` on `layout_version < 3` | refuse (exit 1), actionable message |
 | Malformed aggregate YAML (unparseable file) | the load already failed upstream; the executor never reaches a file the loader could not parse |
 
 No partial-entry mutation: an entry is removed **only** if its disposition fully
-succeeded (promoted and written, or a clean delete).
+succeeded (promoted/reconciled and written, or a clean delete).
 
 ## 5. Idempotency
 
@@ -274,6 +397,17 @@ So a second `--apply` with the same flags is a **no-op** (empty `promoted`/
 `deleted`). A round-trip test asserts this: load → apply → reload → assert the
 promoted ids resolve to markdown owners, the aggregate file shrank by exactly the
 acted count, and the 3a lone-stub WARNs for the acted ids are gone.
+
+**Crash recovery (Finding #3).** If the process dies *after* writing an owner file
+but *before* deleting its aggregate entry, the entry survives and the id now has a
+real owner — so the next load classifies it `shadow`, not `coined`. A naive
+"target exists → skip" would then strand the entry forever under `--promote-coined`
+alone. The `promoted_from` marker closes this: on rerun, step 1 treats a
+marker-matched existing target as a completed promote (delete the entry), and
+step 2's sweep reconciles any `shadow` whose owner bears our marker. A dedicated
+test simulates the crash (pre-write the marked owner file, leave the entry) and
+asserts a single `--promote-coined` rerun deletes the stranded entry and reports
+it under `promoted`, while a same-id *foreign* owner (no marker) is left intact.
 
 ## 6. Safety & reversibility
 
@@ -297,27 +431,38 @@ transactional journal. The safety model is:
 `cd ~/d/science/science && uv run --frozen pytest`; lint
 `uv run --frozen ruff check . && uv run --frozen ruff format --check .` (120-char).
 
+- **`slug`-strategy unit tests** (`tests/test_entities.py` or peer): a `slug` kind
+  accepts a kebab id (`local_part_conforms`, `validate_entity_id`); `derive_local_part`
+  returns the title-slug; `resolve_path_policy("concept").root == entities/concepts`
+  and strategy `slug`; existing `numeric`/`citekey`/`singleton` behavior unchanged
+  (regression).
 - **Planner unit tests** (`tests/graph/test_aggregate_retire.py`): pure matrix —
-  each bucket × each flag combination yields the right action or skip;
-  `decision-log`/`external-ref`/`ambiguous` never acted; unsafe slug → rejected;
-  kind with no owner root → rejected; `(source_path, line)` join is recovered
-  correctly.
-- **Executor tests** (v3 fixtures — a project with `layout_version: 3`, an
-  `entities/` root, and an aggregate stub file):
-  - promote writes `entities/<kind>/<slug>.md` with `id`/`type`/`title`/`profile`
-    frontmatter and a stub body; the source entry is removed; survivors (and a
-    second untouched file) are byte-stable except for the dropped entry.
+  each bucket × each flag yields the right action or skip;
+  `decision-log`/`external-ref`/`ambiguous` never acted; a `terms.yaml`-sourced
+  coined/cruft/shadow row is **excluded from the plan** (§3.1 firewall); kind with
+  no policy → rejected; a non-conforming id under a non-`slug` strategy → rejected
+  (never renumbered); unsafe slug → rejected; `(source_path, line)` join recovered.
+- **Executor tests** (v3 fixtures — `layout_version: 3`, an `entities/` root, a
+  local `slug` kind registered, and an `entities.yaml` stub file):
+  - promote writes `entities/concepts/<slug>.md` with `id`/`type`/`title`/`profile`/
+    `promoted_from` frontmatter and a stub body, **id preserved**; the source entry
+    is removed; survivors (and an untouched second file, e.g. `terms.yaml`) are
+    byte-stable except for the dropped entry.
   - delete removes a `cruft` entry; a `shadow` entry (id with a real markdown
     owner) is removed and the markdown owner survives.
+  - **file-shape:** the rewrite preserves the `{entities: [...]}` mapping shape and
+    resolves the project-root-relative `source_ref.path` correctly.
+  - **crash recovery:** pre-write a marked owner file + leave its entry → one
+    `--promote-coined` rerun deletes the stranded entry, reports it `promoted`; a
+    same-id foreign owner (no marker) → entry retained, reported conflict.
   - missing-`title` promote → rejected, entry retained.
-  - pre-existing target → skipped, entry retained.
   - `dry_run=True` writes nothing but reports the intended plan.
   - **idempotency:** apply twice → second run reports empty.
-  - **v2 refusal:** `--apply` against a `layout_version: 2` fixture refuses.
+  - **v2 refusal:** `--apply` against a `layout_version: 2` fixture refuses (exit 1).
 - **CLI tests** (`tests/test_cli_entities_triage_aggregate.py`, extending 3a's):
   bare command = 3a report (regression); a bucket flag alone = dry-run plan;
   `--apply` executes and the report JSON has the documented shape; `--apply`
-  without a flag is a usage error; v3 gate message on a v2 fixture.
+  without a flag is a usage error (exit 2); v3 gate message on a v2 fixture.
 - **Round-trip integration:** `load_project_sources → plan → apply → reload`,
   asserting owner resolution, file shrinkage, and lone-stub WARN clearance.
 
@@ -335,22 +480,35 @@ kinds (`concept` for coined; a `dataset`+markdown owner for shadow).
   three lowest-ambiguity buckets (`coined`/`cruft`/`shadow`), explicit per-bucket
   opt-in, dry-run default, per-row rejection, and git as rollback. The
   high-judgment buckets (`ambiguous`, `decision-log`) are never acted in 3b.
-- **Promoting an externally-owned vocabulary term.** Structurally impossible:
-  external vocab lives in `terms.yaml` as `external-ref`/`ambiguous`, never
-  `coined`; 3b only promotes `coined`.
-- **Owner file landing where the loader won't find it.** Mitigated by deriving
-  `<kind>/` from the framework's own owner-root mapping (the same one
-  `MarkdownAdapter` discovers owners through), and by the round-trip test that
-  reloads and asserts owner resolution.
+- **Touching `terms.yaml` / external vocabulary.** Doubly prevented: the §3.1
+  firewall excludes every non-`entities.yaml` declaration from the plan, **and**
+  3b only promotes `coined` (which never includes the `external-ref`/`ambiguous`
+  vocab that lives in `terms.yaml`). A test asserts a `terms.yaml` row is never
+  planned.
+- **Owner file landing where the loader won't find it / id non-conformance.**
+  Mitigated by computing the target from `resolve_path_policy(kind)` (the policy
+  the loader/conformance machinery itself uses) and the new `slug` strategy, plus
+  the round-trip test that reloads and asserts owner resolution. 3b **never
+  renumbers** — a non-conforming id is rejected, never silently relocated.
+- **The `slug`-strategy foundation change regressing existing kinds.** Mitigated
+  by an additive design (no change to `numeric`/`citekey`/`singleton` branches),
+  a grep of every `strategy ==`/`strategy in` switch, and a regression assertion
+  that existing kinds' conformance/derivation is unchanged.
+- **Crash between owner-write and entry-delete.** Mitigated by the `promoted_from`
+  marker + step-2 recovery sweep (§3.5), making `--promote-coined` idempotent and
+  crash-safe; covered by the crash-simulation test.
 - **Index drift during rewrite.** Mitigated by collecting all drop-indices per
   file up front and filtering the survivor list in one pass, rather than removing
   entries one at a time.
 
 ## 9. Success criteria
 
+- A `slug` filename strategy exists; `concept` has a core slug policy; existing
+  `numeric`/`citekey`/`singleton` kinds are unchanged (regression-pinned).
 - `science entities triage-aggregate` with bucket flags prints a correct dry-run
-  retirement plan; with `--apply` it promotes `coined` rows to owner files and
-  deletes `cruft`/`shadow` entries, idempotently.
+  retirement plan; with `--apply` it promotes `coined` rows to **id-preserving**
+  owner files (never renumbering; non-conforming ids rejected) and deletes
+  `cruft`/`shadow` entries, idempotently and crash-recoverably (`promoted_from`).
 - `--apply` refuses on `layout_version < 3` with an actionable message.
 - The bare 3a report and JSON output are unchanged (regression-pinned).
 - No `terms.yaml` entry and no `decision-log` row is ever touched by a 3b path.
