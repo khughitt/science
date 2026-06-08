@@ -273,7 +273,12 @@ def entities_migrate_identifiers_command(project_path: Path, apply_changes: bool
 
 @entities_group.command("migrate")
 @click.option("--apply", "apply_changes", is_flag=True, help="Apply the migration (default: dry run).")
-@click.option("--project-root", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path("."), help="Project root (default: current directory).")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path("."),
+    help="Project root (default: current directory).",
+)
 def entities_migrate_command(apply_changes: bool, project_root: Path) -> None:
     """Migrate a project's doc/specs entity layout into entities/ (v2 → v3)."""
     from science_tool.entity_layout_migration import migrate_layout
@@ -283,15 +288,6 @@ def entities_migrate_command(apply_changes: bool, project_root: Path) -> None:
     except ValueError as exc:  # collisions / unresolved refs block --apply
         raise click.ClickException(str(exc)) from exc
     click.echo(json.dumps(report, indent=2))
-
-
-def _read_layout_version(project_root: Path) -> int | None:
-    """layout_version straight from science.yaml (`_read_project_config` drops it)."""
-    import yaml
-
-    manifest = yaml.safe_load((project_root / "science.yaml").read_text(encoding="utf-8")) or {}
-    value = manifest.get("layout_version")
-    return value if isinstance(value, int) else None
 
 
 @entities_group.command("triage-aggregate")
@@ -321,9 +317,7 @@ def entities_triage_aggregate_command(
     from science_tool.graph.aggregate_triage import classify_aggregate_rows
     from science_tool.graph.sources import load_project_sources
 
-    sources = load_project_sources(
-        project_root, include_commons=False, strict_core_schema=False, strict_identity=False
-    )
+    sources = load_project_sources(project_root, include_commons=False, strict_core_schema=False, strict_identity=False)
     rows = classify_aggregate_rows(sources)
     any_bucket = promote_coined or delete_cruft or delete_shadow
 
@@ -332,20 +326,22 @@ def entities_triage_aggregate_command(
         if apply_changes:
             raise click.UsageError("--apply requires at least one of --promote-coined/--delete-cruft/--delete-shadow.")
         if output_format == "json":
-            click.echo(json.dumps(
-                [
-                    {
-                        "canonical_id": r.canonical_id,
-                        "kind": r.kind,
-                        "source_path": r.source_path,
-                        "has_real_owner": r.has_real_owner,
-                        "bucket": r.bucket.value,
-                        "evidence": r.evidence,
-                    }
-                    for r in rows
-                ],
-                indent=2,
-            ))
+            click.echo(
+                json.dumps(
+                    [
+                        {
+                            "canonical_id": r.canonical_id,
+                            "kind": r.kind,
+                            "source_path": r.source_path,
+                            "has_real_owner": r.has_real_owner,
+                            "bucket": r.bucket.value,
+                            "evidence": r.evidence,
+                        }
+                        for r in rows
+                    ],
+                    indent=2,
+                )
+            )
             return
         counts = Counter(r.bucket.value for r in rows)
         click.echo(f"{len(rows)} aggregate rows:")
@@ -353,14 +349,17 @@ def entities_triage_aggregate_command(
             click.echo(f"  {bucket}: {counts[bucket]}")
         for r in rows:
             click.echo(
-                f"  [{r.bucket.value}] {r.canonical_id} "
-                f"(kind={r.kind}, source_path={r.source_path}) -- {r.evidence}"
+                f"  [{r.bucket.value}] {r.canonical_id} (kind={r.kind}, source_path={r.source_path}) -- {r.evidence}"
             )
         return
 
     # Retirement plan/apply path. --apply is v3-gated.
     if apply_changes:
-        version = _read_layout_version(project_root)
+        import yaml as _yaml
+
+        _manifest = _yaml.safe_load((project_root / "science.yaml").read_text(encoding="utf-8")) or {}
+        _v = _manifest.get("layout_version")
+        version = _v if isinstance(_v, int) else None
         if version is None or version < 3:
             raise click.ClickException(
                 f"promotion needs an `entities/` owner root; this project is layout_version {version} — "
@@ -368,26 +367,34 @@ def entities_triage_aggregate_command(
             )
 
     plan = plan_retirement(
-        project_root, sources, rows,
-        promote_coined=promote_coined, delete_cruft=delete_cruft, delete_shadow=delete_shadow,
+        project_root,
+        sources,
+        rows,
+        promote_coined=promote_coined,
+        delete_cruft=delete_cruft,
+        delete_shadow=delete_shadow,
     )
     report = apply_retirement(project_root, plan, dry_run=not apply_changes)
     if output_format == "json":
-        click.echo(json.dumps(
-            {
-                "dry_run": report.dry_run,
-                "promoted": list(report.promoted),
-                "deleted": list(report.deleted),
-                "rejected": [list(p) for p in report.rejected],
-                "skipped": [list(p) for p in report.skipped],
-                "files_rewritten": list(report.files_rewritten),
-            },
-            indent=2,
-        ))
+        click.echo(
+            json.dumps(
+                {
+                    "dry_run": report.dry_run,
+                    "promoted": list(report.promoted),
+                    "deleted": list(report.deleted),
+                    "rejected": [list(p) for p in report.rejected],
+                    "skipped": [list(p) for p in report.skipped],
+                    "files_rewritten": list(report.files_rewritten),
+                },
+                indent=2,
+            )
+        )
         return
     head = "PLAN (dry-run)" if report.dry_run else "APPLIED"
-    click.echo(f"{head}: {len(report.promoted)} promoted, {len(report.deleted)} deleted, "
-               f"{len(report.rejected)} rejected, {len(report.skipped)} skipped")
+    click.echo(
+        f"{head}: {len(report.promoted)} promoted, {len(report.deleted)} deleted, "
+        f"{len(report.rejected)} rejected, {len(report.skipped)} skipped"
+    )
     for cid in report.promoted:
         click.echo(f"  promote {cid}")
     for cid in report.deleted:
@@ -2549,7 +2556,10 @@ def belief_group() -> None:
 
 @belief_group.command("snapshot")
 @click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True,
+    "--path",
+    "graph_path",
+    default=str(DEFAULT_GRAPH_PATH),
+    show_default=True,
     type=click.Path(path_type=Path),
 )
 @click.option("--as-of", "as_of", default=None, help="Snapshot date YYYY-MM-DD (default: today).")
@@ -5110,8 +5120,7 @@ def data_package_list_cmd(project_root: Path | None) -> None:
 
 
 @data_package_group.command(name="promote-orphans")
-@click.option("--apply", "apply_changes", is_flag=True, default=False,
-              help="Write owner files (default: dry-run).")
+@click.option("--apply", "apply_changes", is_flag=True, default=False, help="Write owner files (default: dry-run).")
 @click.option(
     "--project-root",
     type=click.Path(exists=True, file_okay=False, path_type=Path),

@@ -125,6 +125,30 @@ def test_apply_refused_on_v2(tmp_path: Path) -> None:
     assert "layout_version" in result.output
 
 
+def test_delete_cruft_apply_removes_entry(tmp_path: Path) -> None:
+    keep = {
+        "canonical_id": "concept:keep",
+        "kind": "concept",
+        "title": "x",
+        "source_path": "knowledge/sources/local/entities.yaml",
+    }
+    cruft = {
+        "canonical_id": "concept:drop",
+        "kind": "concept",
+        "title": "x",
+        "source_path": "migration:audit",
+    }
+    _write_v3(tmp_path, [keep, cruft])
+    result = CliRunner().invoke(
+        main,
+        ["entities", "triage-aggregate", "--project-root", str(tmp_path), "--delete-cruft", "--apply"],
+    )
+    assert result.exit_code == 0, result.output
+    data = yaml.safe_load((tmp_path / "knowledge/sources/local/entities.yaml").read_text(encoding="utf-8"))
+    assert [e["canonical_id"] for e in data["entities"]] == ["concept:keep"]
+    assert not (tmp_path / "entities/concepts/drop.md").exists()
+
+
 def test_bare_command_is_unchanged_3a_report(tmp_path: Path) -> None:
     # Regression: no bucket flags, no --apply → the original 3a triage report.
     _write_v3(
