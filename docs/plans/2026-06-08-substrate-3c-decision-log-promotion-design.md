@@ -186,14 +186,27 @@ id-preserving strategy.
   `Path(rel_path).stem`, parallel to the 3b `slug` branch) to guard against
   renumbering during a layout migration.
 
-### Builtin overrides local manifest (stated explicitly)
+### Builtin overrides local manifest — *filename policy only* (stated explicitly)
 
-MM30 currently declares `decision` in its **local** manifest. Once 3c registers
-`decision` in `_BUILTIN_MARKDOWN_POLICIES`, the builtin **shadows** the local
-kind. This is the intended behavior — `decision` becomes a first-class core
-kind with a fixed `entities/decision` root and `verbatim` strategy. A test
-asserts `resolve_path_policy("decision", project_root=…)` returns the builtin
-policy **even when the local manifest still declares `decision`**.
+There are **two independent registries**, and 3c touches only one:
+
+- **Filename-policy table** (`entities.py`): 3c registers `decision` in
+  `_BUILTIN_MARKDOWN_POLICIES`, so the builtin verbatim policy **shadows** any
+  local-manifest `decision` *policy*. This is required — `verbatim` is
+  builtin-only, so a project cannot declare it locally. A test asserts
+  `resolve_path_policy("decision", …)` returns the builtin even when the local
+  manifest still declares `decision`.
+- **Graph `EntityRegistry`** (`graph/entity_registry.py`): 3c does **not** add
+  `decision` to the core kinds. MM30's local manifest declares `decision`, and
+  `register_extension_kind` raises `EntityKindShadowError` on a core collision —
+  so core-registering it now would break MM30 graph loading. `decision`
+  therefore stays a **local registry kind**; graph-loading fixtures declare it
+  in a local `manifest.yaml` (mirroring MM30). The migrator discovers kinds via
+  the filename-policy table (`markdown_entity_kinds`), so it needs no manifest.
+
+Full graph-core registration of `decision` (+ `register_extension_kind` shadow
+handling + MM30 manifest cleanup) is **deferred to the v3 cutover (Task #30)** —
+consistent with 3c's "tooling now, live migration later" principle.
 
 ## Executor hook (`graph/aggregate_retire.py`)
 
@@ -300,7 +313,9 @@ Run: `cd ~/d/science/science && uv run --frozen pytest`. Lint:
   declared there, not in `core/decisions.md`.
 - `core/decisions.md` is produced solely by `render_decisions_view`; the
   round-trip test proves no prose is lost.
-- `decision` is a core `verbatim` kind; builtins override local manifests.
+- `decision` is a builtin `verbatim` *filename-policy* kind; the builtin policy
+  overrides local manifests. It stays a *local* graph registry kind in 3c (full
+  graph-core registration deferred to Task #30).
 - The executor promotes any index-hit decision row (even one bucketed `CRUFT`
   by a `migration:*` source) and rejects heading-less rows without writing;
   `delete_cruft` never deletes a decision-kind row.

@@ -18,7 +18,7 @@
 
 | File | Responsibility | Task |
 |---|---|---|
-| `science/src/science_tool/entities.py` (modify) | register `verbatim` strategy + `decision` core kind | 1 |
+| `science/src/science_tool/entities.py` (modify) | register `verbatim` strategy + `decision` builtin filename-policy kind | 1 |
 | `science/src/science_tool/entity_layout_migration.py` (modify) | `verbatim` migrator branch (preserve stem) | 2 |
 | `science/src/science_tool/graph/decision_log.py` (create) | parser → `DecisionLogIndex`; owner renderer; view generator | 3, 4 |
 | `science/src/science_tool/graph/aggregate_retire.py` (modify) | decision-kind branch + `delete_cruft` exclusion; inject index | 5 |
@@ -34,13 +34,13 @@ All paths below are relative to `~/d/science`. Run pytest from `~/d/science/scie
 
 ---
 
-## Task 1: `verbatim` filename strategy + `decision` core kind
+## Task 1: `verbatim` filename strategy + `decision` builtin filename-policy kind
 
 **Files:**
 - Modify: `science/src/science_tool/entities.py`
 - Test: `science/tests/test_verbatim_strategy.py` (create)
 
-Context: `verbatim` preserves a local part exactly as the filename stem (no lowercasing, no derivation). It is **builtin-only** — it follows `singleton`'s precedent of being absent from `_VALID_STRATEGIES`, so no local manifest kind may declare it. The `decision` kind is registered as a core markdown kind using `verbatim`; this means the builtin shadows any local-manifest `decision` (intended).
+Context: `verbatim` preserves a local part exactly as the filename stem (no lowercasing, no derivation). It is **builtin-only** — it follows `singleton`'s precedent of being absent from `_VALID_STRATEGIES`, so no local manifest kind may declare it. `decision` is registered as a builtin *filename-policy* kind using `verbatim`; this shadows any local-manifest `decision` **policy** (intended). Note this is the filename-policy table only — `decision` is deliberately NOT added to the graph `EntityRegistry` core kinds in 3c (see "Notes for the executor"); it stays a local registry kind so MM30 keeps loading.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -272,7 +272,7 @@ def test_migrator_preserves_verbatim_decision_stem(tmp_path: Path):
     )
 
     plan = plan_migration(proj)
-    moves = {m.new_rel: m.new_id for m in plan.moves}
+    moves = {m.new_rel_path: m.new_id for m in plan.moves}
     assert "entities/decision/D1.md" in moves
     assert moves["entities/decision/D1.md"] == "decision:D1"
 ```
@@ -810,10 +810,10 @@ from pathlib import Path
 
 import yaml
 
-from science_tool.graph.aggregate_retire import apply_retirement, plan_retirement
+from science_tool.graph.aggregate_retire import _promote_target, apply_retirement, plan_retirement
 from science_tool.graph.aggregate_triage import classify_aggregate_rows
 from science_tool.graph.decision_log import DecisionLogIndex, DecisionSection
-from science_tool.graph.sources import load_project_sources
+from science_tool.graph.sources import AggregateRowMeta, load_project_sources
 
 
 def _project(tmp_path: Path, rows: list[dict], decisions_md: str | None = None) -> Path:
@@ -823,6 +823,17 @@ def _project(tmp_path: Path, rows: list[dict], decisions_md: str | None = None) 
     )
     src = tmp_path / "knowledge" / "sources" / "local"
     src.mkdir(parents=True)
+    # `decision` is a builtin filename-policy kind but is NOT a graph-core kind in
+    # 3c (it stays a local registry kind so MM30 keeps loading). Graph loading only
+    # emits rows for registered kinds, so the fixture must declare `decision` in a
+    # local manifest exactly as MM30 does — otherwise the rows are skipped pre-triage.
+    (src / "manifest.yaml").write_text(
+        "name: t-local\nimports:\n  - core\nstrictness: typed-extension\n"
+        "entity_kinds:\n"
+        "  - name: decision\n    canonical_prefix: decision\n    layer: layer/local\n"
+        "    description: Project-local design decision.\n",
+        encoding="utf-8",
+    )
     (src / "entities.yaml").write_text(yaml.safe_dump({"entities": rows}), encoding="utf-8")
     if decisions_md is not None:
         (tmp_path / "core").mkdir()
@@ -935,6 +946,31 @@ def test_promote_decisions_off_leaves_decision_untouched(tmp_path: Path):
     report = apply_retirement(proj, plan, dry_run=False)  # decision_index defaults to empty
     assert report.promoted == ()
     assert report.deleted == ()
+
+
+def _meta(canonical_id: str) -> AggregateRowMeta:
+    return AggregateRowMeta(
+        path="knowledge/sources/local/entities.yaml",
+        line=0,
+        canonical_id=canonical_id,
+        kind="decision",
+        source_path="migration:audit",
+    )
+
+
+def test_promote_target_resolves_verbatim_and_blocks_traversal(tmp_path: Path):
+    # Directly exercise the path-safety belt: `_is_safe_slug` is lowercase-only, so
+    # the helper must special-case verbatim. D10 resolves; `D..x` is blocked by `..`.
+    (tmp_path / "science.yaml").write_text(
+        "name: t\nprofile: research\nlayout_version: 3\nknowledge:\n  local_profile: local\n",
+        encoding="utf-8",
+    )
+    target, reason = _promote_target(_meta("decision:D10"), tmp_path)
+    assert target == "entities/decision/D10.md"
+    assert reason is None
+    bad_target, bad_reason = _promote_target(_meta("decision:D..x"), tmp_path)
+    assert bad_target is None
+    assert bad_reason is not None and "unsafe" in bad_reason
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -967,8 +1003,17 @@ def _promote_target(meta: "AggregateRowMeta", project_root: Path) -> tuple[str |
         return None, f"no path policy for kind {kind!r}"
     if not local_part_conforms(kind, local_part, project_root=project_root):
         return None, f"id {meta.canonical_id!r} does not conform to {policy.strategy} strategy"
-    if not _is_safe_slug(local_part):
-        return None, "unsafe slug"
+    # Path-safety belt, policy-aware. `_is_safe_slug` is lowercase-only and would
+    # reject a verbatim id like `D10`. For verbatim, conformance (`_VERBATIM_RE`)
+    # already excludes path separators; the only residual traversal token it admits
+    # is `..` (the class permits `.`), so guard that explicitly. Other strategies
+    # keep the lowercase slug firewall.
+    if policy.strategy == "verbatim":
+        safe = ".." not in local_part
+    else:
+        safe = _is_safe_slug(local_part)
+    if not safe:
+        return None, "unsafe local part"
     return (policy.root / f"{local_part}.md").as_posix(), None
 ```
 
@@ -1118,9 +1163,15 @@ from pathlib import Path
 import yaml
 from click.testing import CliRunner
 
-from science_tool.cli import cli
-from science_tool.graph.decision_log import render_owner_file
-from science_tool.graph.decision_log import DecisionSection
+from science_tool.cli import main
+from science_tool.graph.decision_log import DecisionSection, render_owner_file
+
+_LOCAL_MANIFEST = (
+    "name: t-local\nimports:\n  - core\nstrictness: typed-extension\n"
+    "entity_kinds:\n"
+    "  - name: decision\n    canonical_prefix: decision\n    layer: layer/local\n"
+    "    description: Project-local design decision.\n"
+)
 
 
 def _v3_project(tmp_path: Path, rows: list[dict], decisions_md: str) -> Path:
@@ -1130,6 +1181,8 @@ def _v3_project(tmp_path: Path, rows: list[dict], decisions_md: str) -> Path:
     )
     src = tmp_path / "knowledge" / "sources" / "local"
     src.mkdir(parents=True)
+    # decision is a local registry kind in 3c — declare it so rows load (see Task 5).
+    (src / "manifest.yaml").write_text(_LOCAL_MANIFEST, encoding="utf-8")
     (src / "entities.yaml").write_text(yaml.safe_dump({"entities": rows}), encoding="utf-8")
     (tmp_path / "core").mkdir()
     (tmp_path / "core" / "decisions.md").write_text(decisions_md, encoding="utf-8")
@@ -1143,7 +1196,7 @@ def test_promote_decisions_apply_promotes_on_v3(tmp_path: Path):
         "# Decisions\n\n## D1. X (2026-03-31)\n\n**Date**: 2026-03-31\n**Status**: active\n\nWhy.\n",
     )
     res = CliRunner().invoke(
-        cli,
+        main,
         ["entities", "triage-aggregate", "--project-root", str(proj),
          "--promote-decisions", "--apply", "--format", "json"],
     )
@@ -1165,7 +1218,7 @@ def test_promote_decisions_apply_refused_on_v2(tmp_path: Path):
         encoding="utf-8",
     )
     res = CliRunner().invoke(
-        cli,
+        main,
         ["entities", "triage-aggregate", "--project-root", str(proj), "--promote-decisions", "--apply"],
     )
     assert res.exit_code == 1
@@ -1185,7 +1238,7 @@ def test_generate_decisions_write(tmp_path: Path):
         encoding="utf-8",
     )
     res = CliRunner().invoke(
-        cli, ["entities", "generate-decisions", "--project-root", str(tmp_path), "--write"]
+        main, ["entities", "generate-decisions", "--project-root", str(tmp_path), "--write"]
     )
     assert res.exit_code == 0, res.output
     out = (tmp_path / "core" / "decisions.md").read_text(encoding="utf-8")
@@ -1205,7 +1258,7 @@ def test_generate_decisions_dry_run_does_not_write(tmp_path: Path):
         encoding="utf-8",
     )
     res = CliRunner().invoke(
-        cli, ["entities", "generate-decisions", "--project-root", str(tmp_path)]
+        main, ["entities", "generate-decisions", "--project-root", str(tmp_path)]
     )
     assert res.exit_code == 0, res.output
     assert "## D1. First" in res.output
@@ -1346,10 +1399,29 @@ git commit -m "feat(substrate-3c): --promote-decisions flag + entities generate-
 
 ## Final verification (after all tasks)
 
-- [ ] **Full suite + lint baseline**
+- [ ] **Full suite**
 
-Run: `cd ~/d/science/science && uv run --frozen pytest -q && uv run --frozen ruff check . && uv run --frozen ruff format --check .`
-Expected: suite exit 0. Ruff: the 3c-touched files are clean; the repo's pre-existing ~174-error baseline in untouched files is unchanged (3c adds zero new lint errors). Confirm with `uv run --frozen ruff check . | tail -1` and compare to the count on `main`.
+Run: `cd ~/d/science/science && uv run --frozen pytest -q`
+Expected: exit 0.
+
+- [ ] **Lint (touched files only — the repo carries a pre-existing baseline in untouched files)**
+
+Run:
+```bash
+cd ~/d/science/science
+FILES="src/science_tool/entities.py src/science_tool/entity_layout_migration.py \
+src/science_tool/graph/decision_log.py src/science_tool/graph/aggregate_retire.py \
+src/science_tool/cli.py tests/test_verbatim_strategy.py tests/graph/test_decision_log_parse.py \
+tests/graph/test_decision_log_render.py tests/graph/test_aggregate_retire_decisions.py \
+tests/test_cli_entities_decisions.py"
+uv run --frozen ruff check $FILES && uv run --frozen ruff format --check $FILES
+```
+Expected: clean (zero errors on 3c-touched files).
+
+- [ ] **Confirm no net-new baseline errors**
+
+Run: `cd ~/d/science/science && uv run --frozen ruff check . 2>/dev/null | tail -1`
+Expected: the total error count equals the pre-3c baseline (record the count on `main` first via `git stash` if needed). 3c must add zero new errors; do **not** treat a nonzero total as a failure — only a *change* from baseline is a regression.
 
 - [ ] **Live MM30 dry-run smoke (read-only; MM30 is v2 so --apply must refuse)**
 
@@ -1360,6 +1432,7 @@ Expected: exit 1 with a `layout_version 2` message — `--apply` is v3-gated; MM
 
 ## Notes for the executor
 
+- **Two registries, deliberately split.** `decision` is registered as a builtin *filename-policy* kind in `entities.py` (Task 1) — required because `verbatim` is builtin-only and a project cannot declare it in a local manifest. It is **intentionally NOT added to the graph `EntityRegistry` core kinds.** MM30's local manifest declares `decision`, and `register_extension_kind` raises `EntityKindShadowError` on a core collision (`entity_registry.py`), so core-registering `decision` now would break MM30 graph loading. Consequently: (a) graph-loading fixtures (Tasks 5–6) declare `decision` in a local `manifest.yaml`, exactly as MM30 does; (b) the migrator (Task 2) needs no manifest — it discovers kinds via the filename-policy table (`markdown_entity_kinds`), not the graph registry. Full graph-core registration + `register_extension_kind` shadow handling + MM30 manifest cleanup is **deferred to the v3 cutover (project Task #30)**.
 - New executor params (`promote_decisions`, `decision_index`) default off/empty so every existing 3b test and call site stays green without edits.
 - The dependency direction is `aggregate_retire.py → decision_log.py` only; `decision_log.py` imports nothing from `aggregate_retire.py` (keep it that way).
 - `verbatim` is builtin-only: do **not** add it to `_VALID_STRATEGIES`.
