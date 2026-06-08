@@ -33,6 +33,47 @@ def geneset_resource_frontmatter(project_root: Path, entity_path: str | Path) ->
     return fm
 
 
+def resolve_dataset_datapackage_source(
+    *, entity_adapter: str | None, entity_path: str | Path, datapackage_rel: str | None
+) -> str | Path | None:
+    """The datapackage source for a dataset entity, independent of which adapter won the
+    owner column (design §B4):
+
+    - the entity IS the datapackage (orphan) or a commons-merged dataset → the entity's
+      own source path;
+    - a real owner with a deferred datapackage attachment → the recorded ``datapackage_rel``;
+    - no datapackage attachment → ``None``.
+    """
+    if entity_adapter in {"datapackage", "commons-merged"}:
+        return entity_path
+    if datapackage_rel is not None:
+        return datapackage_rel
+    return None
+
+
+def dataset_datapackage_path(
+    *, entity_adapter: str | None, entity_path: str | Path, datapackage_rel: str | None
+) -> Path | None:
+    """The LOCAL datapackage file for a dataset entity (design §B4), or ``None``.
+
+    Like ``resolve_dataset_datapackage_source`` but excludes ``commons-merged`` (those
+    resources are owned/materialized by the commons scope, not this project) and
+    normalizes an ``entity.md`` source to its sibling ``datapackage.yaml``. Used to
+    materialize a dataset's resources as DCAT distributions (§B4) regardless of whether
+    the datapackage is an orphan owner or a deferred attachment on a real owner.
+    """
+    if entity_adapter == "datapackage":
+        source: str | Path = entity_path
+    elif datapackage_rel is not None:
+        source = datapackage_rel
+    else:
+        return None
+    path = Path(source)
+    if path.name == "entity.md":
+        return path.parent / "datapackage.yaml"
+    return path
+
+
 def dataset_geneset_frontmatter(
     project_root: Path,
     entity_path: str | Path,
@@ -53,11 +94,10 @@ def dataset_geneset_frontmatter(
       datapackage path (``datapackage_rel``);
     - no datapackage attachment → ``None`` (not a geneset dataset).
     """
-    if entity_adapter in {"datapackage", "commons-merged"}:
-        source: str | Path = entity_path
-    elif datapackage_rel is not None:
-        source = datapackage_rel
-    else:
+    source = resolve_dataset_datapackage_source(
+        entity_adapter=entity_adapter, entity_path=entity_path, datapackage_rel=datapackage_rel
+    )
+    if source is None:
         return None
     return geneset_resource_frontmatter(project_root, source)
 

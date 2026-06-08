@@ -393,6 +393,118 @@ class ResourceSource:
     ref: str
 
 
+class DatasetResourceError(ValueError):
+    """A datapackage DECLARES a resource that is present but malformed (design §B4).
+
+    Distinct from a legitimately *absent* optional field (no `resources` list, no `hash`),
+    which `read_dataset_resources` tolerates. A declared resource with a non-mapping entry,
+    a missing/invalid logical `path`, a malformed `hash`, or a malformed `source` is a
+    concrete data bug — fail loudly (project rule: fail early / avoid silent fallbacks)
+    rather than silently dropping a broken resource. The message names the datapackage path
+    and the offending field. (This is *not* transitional identity debt — Task 1 carries
+    that; a broken resource hash is unrelated to rollout state and must be fixed.)
+    """
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetResource:
+    """A materialization view of one datapackage resource (design §B4).
+
+    Unlike `DataResource` (the strict commons-promotion view), the optional fields may be
+    *absent*: project datapackages are looser than commons ones (a resource may lack a
+    hash or bytes, a datapackage may declare no resources at all). Absence is tolerated;
+    a *present-but-malformed* integrity field (path/hash/source) is not — see
+    `read_dataset_resources`, which raises `DatasetResourceError` rather than dropping it.
+    """
+
+    path: str
+    name: str | None = None
+    hash: str | None = None
+    bytes: int | None = None
+    format: str | None = None
+    mediatype: str | None = None
+    source: ResourceSource | None = None
+
+
+def read_dataset_resources(path: Path) -> tuple[DatasetResource, ...]:
+    """Resource read for graph materialization (design §B4): lenient on absence, strict on malformation.
+
+    One `DatasetResource` per declared entry. Optional fields are included only when
+    present and well-formed; *absent* optionals are fine (no `hash` → `hash=None`).
+    Top-level absence/ambiguity — an unreadable datapackage, a non-mapping top level, or no
+    `resources` list — yields `()` ("no distributions"). But a DECLARED resource that is
+    malformed in an integrity-bearing field raises `DatasetResourceError` (fail early, no
+    silent fallback): a non-mapping entry, a missing/invalid `path`, a present-but-malformed
+    `hash`, or a malformed `source`. Descriptive-only fields (`bytes`/`format`/`mediatype`)
+    stay lenient — present-but-wrong-typed is ignored, since they carry no integrity weight.
+    """
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return ()
+    if not isinstance(raw, dict):
+        return ()
+    entries = raw.get("resources")
+    if not isinstance(entries, list):
+        return ()
+
+    out: list[DatasetResource] = []
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise DatasetResourceError(f"{path}: resource #{index} is not a mapping: {entry!r}")
+        raw_path = entry.get("path")
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            raise DatasetResourceError(f"{path}: resource #{index} has no usable 'path'")
+        try:
+            logical_path = validate_logical_path(raw_path)
+        except DataLogicalPathError as exc:
+            raise DatasetResourceError(f"{path}: resource '{raw_path}' has an invalid path: {exc}") from exc
+
+        raw_name = entry.get("name")
+        name = raw_name if isinstance(raw_name, str) and raw_name.strip() else None
+
+        raw_hash = entry.get("hash")
+        if raw_hash is None:
+            hash_ = None
+        elif isinstance(raw_hash, str):
+            try:
+                parse_resource_hash(raw_hash)
+            except ValueError as exc:
+                raise DatasetResourceError(
+                    f"{path}: resource '{logical_path}' has a malformed hash {raw_hash!r}: {exc}"
+                ) from exc
+            hash_ = raw_hash
+        else:
+            raise DatasetResourceError(
+                f"{path}: resource '{logical_path}' hash must be a string, got {type(raw_hash).__name__}"
+            )
+
+        raw_bytes = entry.get("bytes")
+        size = raw_bytes if isinstance(raw_bytes, int) and not isinstance(raw_bytes, bool) and raw_bytes >= 0 else None
+
+        raw_format = entry.get("format")
+        fmt = raw_format if isinstance(raw_format, str) and raw_format.strip() else None
+
+        raw_mediatype = entry.get("mediatype")
+        mediatype = raw_mediatype if isinstance(raw_mediatype, str) and raw_mediatype.strip() else None
+
+        raw_source = entry.get("source")
+        if raw_source is None:
+            source = None
+        else:
+            try:
+                source = validate_source(raw_source)
+            except ValueError as exc:
+                raise DatasetResourceError(f"{path}: resource '{logical_path}' has a malformed source: {exc}") from exc
+
+        out.append(
+            DatasetResource(
+                path=logical_path, name=name, hash=hash_, bytes=size, format=fmt, mediatype=mediatype, source=source
+            )
+        )
+    return tuple(out)
+
+
 @dataclass(frozen=True, slots=True)
 class DatapackageDescriptor:
     """The Phase C view of a datapackage.yaml: its source path + its resources."""

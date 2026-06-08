@@ -17,6 +17,7 @@ SCHEMA_NS = Namespace("https://schema.org/")
 BIOLINK_NS = Namespace("https://w3id.org/biolink/vocab/")
 CITO_NS = Namespace("http://purl.org/spar/cito/")
 DCTERMS_NS = Namespace("http://purl.org/dc/terms/")
+DCAT_NS = Namespace("http://www.w3.org/ns/dcat#")
 REVISION_URI = URIRef(PROJECT_NS["graph_revision"])
 
 _SERIALIZER_PREFIXES: tuple[tuple[str, str], ...] = (
@@ -30,6 +31,7 @@ _SERIALIZER_PREFIXES: tuple[tuple[str, str], ...] = (
     ("biolink", str(BIOLINK_NS)),
     ("cito", str(CITO_NS)),
     ("dcterms", str(DCTERMS_NS)),
+    ("dcat", str(DCAT_NS)),
 )
 _SAFE_PREFIX_LOCAL_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9._-]*$")
 
