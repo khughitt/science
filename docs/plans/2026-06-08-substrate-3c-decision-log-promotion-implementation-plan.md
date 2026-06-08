@@ -82,6 +82,7 @@ def test_verbatim_rejects_unsafe_local_parts():
     assert not local_part_conforms("decision", "../escape")
     assert not local_part_conforms("decision", "a/b")
     assert not local_part_conforms("decision", ".hidden")
+    assert not local_part_conforms("decision", "D..x")
     assert not local_part_conforms("decision", "")
 
 
@@ -92,6 +93,8 @@ def test_validate_entity_id_accepts_verbatim_decision():
 def test_validate_entity_id_rejects_bad_verbatim_local_part():
     with pytest.raises(EntityCommandError):
         validate_entity_id("decision", "decision:../escape")
+    with pytest.raises(EntityCommandError):
+        validate_entity_id("decision", "decision:D..x")
 
 
 def test_generate_entity_id_verbatim_requires_explicit_id():
@@ -153,7 +156,7 @@ Immediately after the `_SLUG_RE` definition (currently line 185), add:
 # `verbatim` preserves a sequence-style local part exactly (e.g. decision ids
 # D1, D2-treatment-response-category). Unlike `slug` it is case-preserving and
 # never derived. Path-safety: no slash, no leading dot, no `..`.
-_VERBATIM_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_VERBATIM_RE = re.compile(r"^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._-]*$")
 ```
 
 - [ ] **Step 4: Register the `decision` builtin policy + status vocab**
@@ -416,6 +419,13 @@ def test_missing_date_and_status_are_none():
     assert sec.date is None
     assert sec.status is None
     assert sec.local_id == "D9"
+
+
+def test_status_superseded_by_normalizes_query_copy_but_preserves_body():
+    idx = parse_decision_log("## D-001: Old choice\n\n- **Status:** superseded by D-002\n\nBody.\n")
+    sec = idx.sections["decision:D-001"]
+    assert sec.status == "superseded"
+    assert "superseded by D-002" in sec.body
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -501,6 +511,15 @@ def _split_heading(heading_text: str) -> tuple[str, str]:
     return token, title
 
 
+def _normalized_status(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    value = raw.strip()
+    if value.lower().startswith("superseded by "):
+        return "superseded"
+    return value
+
+
 def parse_decision_log(text: str) -> DecisionLogIndex:
     lines = text.splitlines()
     sections: dict[str, DecisionSection] = {}
@@ -530,7 +549,7 @@ def parse_decision_log(text: str) -> DecisionLogIndex:
                 if date is None:
                     date = _label_value(bl, "Date")
                 if status is None:
-                    status = _label_value(bl, "Status")
+                    status = _normalized_status(_label_value(bl, "Status"))
             canonical_id = f"decision:{local_id}"
             sections[canonical_id] = DecisionSection(
                 canonical_id=canonical_id,
@@ -549,7 +568,7 @@ def parse_decision_log(text: str) -> DecisionLogIndex:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd ~/d/science/science && uv run --frozen pytest tests/graph/test_decision_log_parse.py -q`
-Expected: PASS (5 passed).
+Expected: PASS (6 passed).
 
 - [ ] **Step 5: Lint**
 
@@ -1005,9 +1024,8 @@ def _promote_target(meta: "AggregateRowMeta", project_root: Path) -> tuple[str |
         return None, f"id {meta.canonical_id!r} does not conform to {policy.strategy} strategy"
     # Path-safety belt, policy-aware. `_is_safe_slug` is lowercase-only and would
     # reject a verbatim id like `D10`. For verbatim, conformance (`_VERBATIM_RE`)
-    # already excludes path separators; the only residual traversal token it admits
-    # is `..` (the class permits `.`), so guard that explicitly. Other strategies
-    # keep the lowercase slug firewall.
+    # already excludes path separators and `..`; keep the explicit check as a
+    # cheap second belt. Other strategies keep the lowercase slug firewall.
     if policy.strategy == "verbatim":
         safe = ".." not in local_part
     else:
