@@ -16,7 +16,9 @@
 - **Identity model shapes** (`src/science_tool/graph/identity_table.py`): `IdentityDeclaration` is a frozen dataclass with fields `canonical_id, participation_mode, owner_scope, adapter, source_ref, deprecated`. `IdentityTable.owners()` returns `dict[tuple[str, str], list[IdentityDeclaration]]` grouped by `(owner_scope, canonical_id)`; a group of size 1 is a lone owner, size ≥2 is a collision. `build_identity_table(sources)` builds it from `sources.identity_declarations`.
 - **`AggregateAdapter`** (`src/science_tool/graph/storage_adapters/aggregate.py`): `name == "aggregate"`; its `SourceRef` always carries `line` (the entry index, asserted in `load_raw`). `classify_owner_scope("aggregate")` yields a deprecated owner, so its declarations have `adapter == "aggregate"` and `deprecated == True`.
 - **`Result`** (`src/science_tool/validate/result.py`): dataclass `Result(severity, path, line, message, rule, task)`. `Severity.WARN`.
-- **Fixture gotcha:** `AggregateAdapter` scans `knowledge/sources/<value>/`, where `<value>` is the *value* in the profiles map. Use `profiles: {local: local}` (or `knowledge_profiles: {local: local}`) so the value `local` resolves to `knowledge/sources/local/entities.yaml`. A markdown owner under `entities/<kind>/<slug>.md` is discovered regardless of `layout_version` (proven by the Phase 2b tests). Lightweight kinds (`concept`, `decision`, `latent`, `article`, `topic`, `question`) validate from a minimal aggregate entry (`canonical_id`, `kind`, `title`, `source_path`); `dataset` additionally requires `origin` + `access`.
+- **Fixture gotcha:** `AggregateAdapter` scans `knowledge/sources/<value>/`, where `<value>` is the *value* in the profiles map. Use `profiles: {local: local}` (or `knowledge_profiles: {local: local}`) so the value `local` resolves to `knowledge/sources/local/entities.yaml`. A markdown owner under `entities/<kind>/<slug>.md` is discovered regardless of `layout_version` (proven by the Phase 2b tests).
+- **Which kinds load in a synthetic fixture:** the **core-registered** generic kinds include `concept`, `article`, `topic`, `question` (and `dataset` via its own schema) — these validate from a minimal aggregate entry (`canonical_id`, `kind`, `title`, `source_path`; `dataset` also needs `origin` + `access`). **`decision` and `latent` are NOT core** — they are local profile kinds a real project registers in `knowledge/sources/local/manifest.yaml`. An unregistered kind is skipped (`unknown_entity_kind`) and never reaches the identity table. So the synthetic tests exercise `decision`/`latent` rules only through the pure `_bucket` helper, never through the loader.
+- **`article:` → `paper:` at load:** `canonical_paper_id` (`sources.py:675`) rewrites any `article:<X>` id to `paper:<X>` unconditionally (transition-window rename); the `kind` field is left as `"article"`. So a loaded article row keys by `paper:<X>` but still trips the `kind == "article"` external-ref rule.
 
 ---
 
@@ -91,6 +93,21 @@ def test_aggregate_rows_capture_lone_and_shadowed(tmp_path: Path) -> None:
     assert by_id["concept:coined"].source_path == "knowledge/sources/local/entities.yaml"
     assert by_id["concept:coined"].path == "knowledge/sources/local/entities.yaml"
     assert by_id["dataset:shadowed"].line is not None
+
+
+def test_non_string_source_path_normalized_to_none(tmp_path: Path) -> None:
+    # source_path is extra metadata the entity schema ignores, so a malformed
+    # (non-string) value survives into `raw`. Normalize it to None at capture so the
+    # read-only report cannot crash on `.startswith()` downstream.
+    _write_project(
+        tmp_path,
+        [{"canonical_id": "concept:weird", "kind": "concept", "title": "Weird", "source_path": 123}],
+    )
+    sources = load_project_sources(
+        tmp_path, include_commons=False, strict_core_schema=False, strict_identity=False
+    )
+    by_id = {m.canonical_id: m for m in sources.aggregate_rows}
+    assert by_id["concept:weird"].source_path is None
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -145,13 +162,16 @@ In the loop, immediately **after** the `identity_declarations.append(IdentityDec
 ```python
                 if adapter.name == "aggregate":
                     assert ref.line is not None  # AggregateAdapter always sets the entry index
+                    sp_raw = raw.get("source_path")
                     aggregate_rows.append(
                         AggregateRowMeta(
                             path=ref.path,
                             line=ref.line,
                             canonical_id=entity.canonical_id,
                             kind=kind,
-                            source_path=raw.get("source_path"),
+                            # source_path is unschema'd extra metadata; normalize a
+                            # malformed (non-string) value to None so the report can't crash.
+                            source_path=sp_raw if isinstance(sp_raw, str) else None,
                         )
                     )
 ```
@@ -200,15 +220,46 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
-from science_tool.graph.aggregate_triage import AggregateBucket, classify_aggregate_rows
+from science_tool.graph.aggregate_triage import AggregateBucket, _bucket, classify_aggregate_rows
 from science_tool.graph.sources import load_project_sources
 
 _MANIFEST = "name: demo-project\nprofile: research\nprofiles: {local: local}\n"
 _AGG = "knowledge/sources/local/entities.yaml"
 
 
+# --- Pure rule-matrix unit tests (no loading, no kind registration) ----------
+# `decision`/`latent` are LOCAL profile kinds (not core-registered), so they would
+# be skipped by the synthetic loader. Test the full six-bucket matrix + precedence
+# directly on the pure _bucket helper, which takes (kind, source_path,
+# has_real_owner, self_sourced) and needs no project on disk.
+@pytest.mark.parametrize(
+    "kind,source_path,has_real_owner,self_sourced,expected",
+    [
+        ("concept", _AGG, False, True, AggregateBucket.COINED),
+        ("latent", None, False, True, AggregateBucket.COINED),
+        ("decision", "knowledge/x", False, True, AggregateBucket.COINED),  # self-sourced decision
+        ("decision", "core/decisions.md", False, False, AggregateBucket.DECISION_LOG),
+        ("article", _AGG, False, True, AggregateBucket.EXTERNAL_REF),
+        ("concept", "refs.bib", False, False, AggregateBucket.EXTERNAL_REF),  # .bib source
+        ("decision", "migration:audit", False, False, AggregateBucket.CRUFT),
+        ("concept", "migration:audit", False, True, AggregateBucket.CRUFT),  # cruft before coined
+        ("question", None, False, True, AggregateBucket.AMBIGUOUS),
+        ("topic", _AGG, False, True, AggregateBucket.AMBIGUOUS),
+        ("concept", _AGG, True, True, AggregateBucket.SHADOW),  # shadow wins over coined
+        ("decision", "core/decisions.md", True, False, AggregateBucket.SHADOW),  # shadow before decision-log
+        ("decision", "migration:audit", True, False, AggregateBucket.SHADOW),  # shadow before cruft
+    ],
+)
+def test_bucket_rule_matrix(kind, source_path, has_real_owner, self_sourced, expected) -> None:
+    bucket, evidence = _bucket(kind, source_path, has_real_owner, self_sourced)
+    assert bucket is expected
+    assert evidence  # every row carries a non-empty basis
+
+
+# --- Integration tests (load -> classify plumbing; CORE kinds only) ----------
 def _write_project(root: Path, entries: list[dict]) -> None:
     (root / "science.yaml").write_text(_MANIFEST, encoding="utf-8")
     agg = root / "knowledge" / "sources" / "local"
@@ -248,37 +299,35 @@ def _classify(root: Path):
     return {t.canonical_id: t for t in classify_aggregate_rows(sources)}
 
 
-def test_one_row_per_bucket(tmp_path: Path) -> None:
+def test_integration_core_kinds(tmp_path: Path) -> None:
+    # Uses only core-registered kinds. `article:lit` is canonicalized to `paper:lit`
+    # at load (the transition-window paper rename), while `kind` stays "article" — so
+    # the row keys by paper:lit but still buckets external-ref.
     _write_dataset_md(tmp_path, "shadowed", "dataset:shadowed")
     _write_project(
         tmp_path,
         [
             _dataset_stub("dataset:shadowed", _AGG),
             _lightweight("concept:coined", "concept", _AGG),
-            _lightweight("decision:D1", "decision", "core/decisions.md"),
             _lightweight("article:lit", "article", _AGG),
-            _lightweight("decision:D99", "decision", "migration:audit"),
-            _lightweight("question:open", "question", _AGG),
         ],
     )
     by_id = _classify(tmp_path)
     assert by_id["dataset:shadowed"].bucket is AggregateBucket.SHADOW
     assert by_id["dataset:shadowed"].has_real_owner is True
     assert by_id["concept:coined"].bucket is AggregateBucket.COINED
-    assert by_id["decision:D1"].bucket is AggregateBucket.DECISION_LOG
-    assert by_id["article:lit"].bucket is AggregateBucket.EXTERNAL_REF
-    assert by_id["decision:D99"].bucket is AggregateBucket.CRUFT
-    assert by_id["question:open"].bucket is AggregateBucket.AMBIGUOUS
     assert by_id["concept:coined"].has_real_owner is False
+    assert "article:lit" not in by_id  # canonicalized away
+    assert by_id["paper:lit"].bucket is AggregateBucket.EXTERNAL_REF
+    assert by_id["paper:lit"].kind == "article"
 
 
-def test_shadow_precedes_cruft(tmp_path: Path) -> None:
-    # A row that is BOTH migration-sourced AND shadowed must land in shadow (rule 1
-    # before rule 2).
-    _write_dataset_md(tmp_path, "both", "dataset:both")
-    _write_project(tmp_path, [_dataset_stub("dataset:both", "migration:audit")])
+def test_empty_source_path_is_self_sourced(tmp_path: Path) -> None:
+    # An explicit empty source_path must count as self-sourced (design): a coinable
+    # kind with source_path "" buckets as coined, not ambiguous.
+    _write_project(tmp_path, [_lightweight("concept:empty", "concept", "")])
     by_id = _classify(tmp_path)
-    assert by_id["dataset:both"].bucket is AggregateBucket.SHADOW
+    assert by_id["concept:empty"].bucket is AggregateBucket.COINED
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -368,7 +417,8 @@ def classify_aggregate_rows(sources: "ProjectSources") -> list[AggregateRowTriag
             kind = meta.kind if meta is not None else canonical_id.split(":", 1)[0]
             source_path = meta.source_path if meta is not None else None
             agg_path = ref.path if ref is not None else None
-            self_sourced = source_path is None or source_path == agg_path
+            # Absent OR empty source_path counts as self-sourced (design §5.2).
+            self_sourced = source_path in (None, "") or source_path == agg_path
             bucket, evidence = _bucket(kind, source_path, has_real_owner, self_sourced)
             triaged.append(
                 AggregateRowTriage(canonical_id, kind, source_path, has_real_owner, bucket, evidence)
@@ -380,7 +430,7 @@ def classify_aggregate_rows(sources: "ProjectSources") -> list[AggregateRowTriag
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd ~/d/science/science && uv run --frozen pytest tests/graph/test_aggregate_triage.py -v`
-Expected: PASS (both tests).
+Expected: PASS (the parametrized `_bucket` matrix + both integration tests).
 
 - [ ] **Step 5: Lint**
 
@@ -632,6 +682,7 @@ def _write_project(root: Path) -> None:
     entries = [
         {"canonical_id": "concept:coined", "kind": "concept", "title": "Coined",
          "source_path": "knowledge/sources/local/entities.yaml"},
+        # `article:lit` is canonicalized to `paper:lit` at load (kind stays "article").
         {"canonical_id": "article:lit", "kind": "article", "title": "Lit",
          "source_path": "knowledge/sources/local/entities.yaml"},
     ]
@@ -648,7 +699,7 @@ def test_triage_aggregate_json(tmp_path: Path) -> None:
     payload = json.loads(result.output)
     by_id = {row["canonical_id"]: row for row in payload}
     assert by_id["concept:coined"]["bucket"] == "coined"
-    assert by_id["article:lit"]["bucket"] == "external-ref"
+    assert by_id["paper:lit"]["bucket"] == "external-ref"  # article: -> paper: at load
 
 
 def test_triage_aggregate_text(tmp_path: Path) -> None:
@@ -758,4 +809,5 @@ Expected: a JSON array bucketing MM30's 176 aggregate rows (≈76 external-ref, 
 
 - **Spec coverage:** Task 1 ↔ spec §3.1 (loader prerequisite + `AggregateRowMeta`); Task 2 ↔ spec §5.1–5.2 (classifier + six buckets); Task 3 ↔ spec §4 (lone-stub check, WARN unconditional, order 51, registration test); Task 4 ↔ spec §5.3 (read-only CLI, text + json, exit 0). The single-surface split (spec §3.2) is enforced by Task 3 skipping `len(rows) != 1` and verified by `test_shadowed_stub_not_flagged_here`. Load flags (spec Finding 2) are pinned in Tasks 3 and 4 and the test helper in Task 2.
 - **Type consistency:** `AggregateRowMeta(path, line, canonical_id, kind, source_path)` is produced in Task 1 and joined by `(path, line)` in Task 2. `AggregateRowTriage(canonical_id, kind, source_path, has_real_owner, bucket, evidence)` and `AggregateBucket` values (`shadow/coined/decision-log/external-ref/cruft/ambiguous`) are consumed unchanged by Task 4's JSON/text rendering. `check_lone_aggregate_stub` order is `51` in both the decorator and the registration test.
+- **Fixture realities baked into the tests (review round 2):** `decision`/`latent` are **local** profile kinds, not core-registered, so the synthetic loader would skip them — the full six-bucket matrix is therefore unit-tested on the pure `_bucket` helper (no loading), and the load→classify integration tests use only core kinds (`concept`, `dataset`, `article`). `article:<X>` is canonicalized to `paper:<X>` at load (`sources.py:675`, transition-window paper rename) while `kind` stays `"article"`, so the integration/CLI tests key external-ref rows by `paper:lit`. Two normalizations guard the report: Task 1 coerces a non-string `source_path` to `None` at capture; Task 2 treats `source_path in (None, "")` (and `== agg_path`) as self-sourced. Both have dedicated tests.
 - **Non-destructive guarantee:** no task writes, deletes, or mutates project entities; the only writes are the new source/test files and the loader/CLI/check edits.

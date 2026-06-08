@@ -97,26 +97,29 @@ re-walk `entities.yaml`. Grounding facts (verified against the code):
   still in scope), capture the entry's triage metadata into a new field
   `ProjectSources.aggregate_rows: dict[tuple[str, int], AggregateRowMeta]` keyed
   by `(source_ref.path, source_ref.line)` — carrying `kind` and the inner
-  `source_path` (`raw.get("source_path")`). This records metadata for **both**
-  lone and shadowed rows, *before* the dedup-skip, with no second disk read and
-  no entity mutation. New dataclass (e.g. in `graph/sources.py` beside
-  `ProjectSources`):
+  `source_path`. `source_path` is unschema'd extra metadata, so a malformed
+  (non-string) value is **normalized to `None` at capture**
+  (`sp = raw.get("source_path"); sp if isinstance(sp, str) else None`) — a
+  read-only visibility tool must never crash on a bad row. This records metadata
+  for **both** lone and shadowed rows, *before* the dedup-skip, with no second
+  disk read and no entity mutation. New dataclass (e.g. in `graph/sources.py`
+  beside `ProjectSources`):
 
   ```python
   @dataclass(frozen=True, slots=True)
   class AggregateRowMeta:
       kind: str
-      source_path: str | None  # entry's inner source_path; None when absent
+      source_path: str | None  # entry's inner source_path; None when absent or non-string
   ```
 
 - `has_real_owner` is computed from the **identity table alone**: for an
   aggregate declaration's `(owner_scope, canonical_id)`, does another
   declaration exist with `adapter != "aggregate"` and `deprecated == False`? No
   `Entity` is consulted.
-- **Self-sourced** ⇔ the entry's `source_path` is `None`/absent **or** equals the
-  declaration's own `source_ref.path` (the aggregate file). In MM30 the
-  self-sourced rows carry `source_path: knowledge/sources/local/entities.yaml`
-  (the aggregate file itself).
+- **Self-sourced** ⇔ the entry's `source_path` is `None`/absent, the **empty
+  string**, **or** equals the declaration's own `source_ref.path` (the aggregate
+  file). In MM30 the self-sourced rows carry
+  `source_path: knowledge/sources/local/entities.yaml` (the aggregate file itself).
 
 ### 3.2 Single-surface split
 
@@ -249,11 +252,15 @@ external-ref"`, `"real owner at doc/papers/foo.md → shadow"`).
 `cd ~/d/science/science && uv run --frozen pytest`; lint with
 `uv run --frozen ruff check . && uv run --frozen ruff format --check .` (120-char).
 
-- **Classifier unit tests** (`tests/graph/test_aggregate_triage.py`): a fixture
-  project whose `entities.yaml` carries at least one row per bucket, plus a
-  shadowed-vs-lone pair; assert each row's `bucket` and `has_real_owner`. Cover
-  rule precedence (e.g. a `migration:`-sourced row that is also shadowed lands in
-  `shadow`, since rule 1 precedes rule 2 — and assert that ordering deliberately).
+- **Classifier tests** (`tests/graph/test_aggregate_triage.py`): the full
+  six-bucket matrix + precedence is unit-tested on the pure `_bucket` helper
+  (e.g. a `migration:`-sourced row that is also shadowed lands in `shadow`, rule 1
+  before rule 2) — this avoids the loader, since `decision`/`latent` are local
+  (not core) kinds the synthetic loader would skip. Separate **integration**
+  tests drive `load_project_sources → classify_aggregate_rows` with core kinds
+  only (`concept`→coined, `dataset`+markdown owner→shadow, `article`→external-ref
+  keyed by the canonicalized `paper:` id), plus an empty-`source_path`→self-sourced
+  case and a non-string-`source_path`→`None` case.
 - **Check tests** (`tests/validate/test_checks_aggregate_stub.py`): a lone stub
   WARNs; a shadowed stub does **not** WARN here (it is the collision check's
   surface); two real owners are untouched; the registration wiring test.
