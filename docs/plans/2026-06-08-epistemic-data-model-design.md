@@ -94,12 +94,20 @@ Three orthogonal classes, registry-enforced (reused from the epistemic-dependenc
 - A proposition has up to two **renderings of the same assertion**, sharing the proposition's **one
   belief**. Renderings are *views*, not entities:
   - **prose rendering** = the proposition's statement text;
-  - **graphical rendering** = a t034 edge-as-node in a patch (a causal-DAG / patch edge), emitted
-    only when the proposition is **relational** (binary/n-ary). Non-relational propositions (e.g.
+  - **graphical rendering** = the proposition shown as a patch edge, present only when the
+    proposition is a **relational proposition** (see below). Non-relational propositions (e.g.
     "gene X is overexpressed in MM") have no edge rendering.
-- **Conformance:** per D-005 the edge rendering uses t034's edge typing (`epistemic_role`,
-  `graph_object_type`) — no new edge vocabulary. Per D-006 it is an edge-as-node IRI in a named-graph
-  patch. The edge is the proposition's relational *projection into the graph*, not a competing object.
+- **Relational proposition** = the data-model primitive for a truth-apt DAG edge. A truth-apt edge
+  **is** a relational proposition (subject · predicate · object + `claim_layer` +
+  `identification_strength`); it is **not** linked to a separate proposition. Its **IRI is also its
+  reified edge-node IRI** for rendering and patch membership — belief and rendering address the *same*
+  node, never split across two. Identity is **per-claim, not per-pair**: multiple relational
+  propositions may share a `(subject, object)` pair.
+- **Conformance:** per D-005 the edge rendering carries t034's edge typing (`epistemic_role`,
+  `graph_object_type`) as *payload on the proposition*, not as a second edge-identity system — no new
+  edge vocabulary. Per D-006 it is an edge-as-node IRI in a named-graph patch. Content-addressed
+  edge-node IRIs remain correct for *derived/deduped plumbing* (e.g. `bears_on`), **not** for authored
+  scientific assertions, whose canonical identity is the proposition's own.
 - **Cross-source identity (deferred).** When two propositions paraphrase the same assertion
   (e.g. a paper's reported claim vs. ours under test), they stay **distinct propositions linked by
   evidence**, preserving *who asserted it*. A canonical "same assertion" merge is YAGNI now; if ever
