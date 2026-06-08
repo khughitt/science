@@ -258,6 +258,16 @@ def test_rewrite_replaces_full_ids_not_prefix_collisions() -> None:
     assert unresolved == []
 
 
+def test_plan_keeps_slug_for_concepts_without_numbering(tmp_path: Path) -> None:
+    # A slug-strategy kind (concept) with a kebab stem must plan an id-preserving
+    # move — never numbered — and must NOT crash the numeric branch on int("1q").
+    _write(tmp_path, "doc/concepts/1q-gain.md", '---\nid: "concept:1q-gain"\ntype: concept\n---\nBody.\n')
+    plan = plan_migration(tmp_path)
+    move = next(m for m in plan.moves if m.old_id == "concept:1q-gain")
+    assert move.new_id == "concept:1q-gain"
+    assert move.new_rel_path == "entities/concepts/1q-gain.md"
+
+
 def test_rewrite_reports_unmapped_legacy_tokens() -> None:
     # A legacy-shaped reference with no mapping must be reported, never silently kept.
     id_map = {"question:q1-a": "question:0001-a"}

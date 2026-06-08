@@ -437,6 +437,13 @@ def plan_migration(project_root: Path) -> MigrationPlan:
                 local = Path(entity.rel_path).stem
                 _add_move(plan, entity, f"{policy.root.as_posix()}/{local}.md", f"{kind}:{local}", kind)
             continue
+        if policy.strategy == "slug":
+            # Slug kinds preserve their kebab id; never numbered. Without this branch
+            # a stem like "1q-gain" reaches the numeric branch and int("1q") crashes.
+            for entity in items:
+                local = Path(entity.rel_path).stem
+                _add_move(plan, entity, f"{policy.root.as_posix()}/{local}.md", f"{kind}:{local}", kind)
+            continue
         # numeric: preserve conformant numbers; assign the rest in created order.
         ordered = sorted(items, key=lambda e: (str(normalized[e.rel_path]["created"]), e.rel_path))
         taken: set[int] = set()
