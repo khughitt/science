@@ -45,7 +45,8 @@ evidence-lines are **out of scope** (separate `~/d/r/mm30` migration plan, gated
 |---|---|---|
 | `science/src/science_tool/entities.py` | add `dataset` to `_BUILTIN_MARKDOWN_POLICIES` + status set | 1 |
 | `science/model/src/science_model/entities.py` | confirm/extend `DatasetEntity` `origin` + provenance shape; surface `dataset_usage` on `EvidenceLineEntity` if not inherited | 0, 2b |
-| `science/src/science_tool/validate/checks/datasets.py` *(new)* | `dataset_usage` ref integrity; `origin`-provenance well-formedness; `overlap` candidate WARN | 2 |
+| `science/src/science_tool/validate/checks/dataset_usage.py` *(new)* | `dataset_usage` ref integrity; `overlap` candidate WARN | 2 |
+| `science/src/science_tool/validate/checks/__init__.py` | register `"dataset_usage"` in `CANONICAL_CHECK_MODULES` | 2 |
 | `science/src/science_tool/graph/materialize.py` | evidence-line task key → `prov:wasDerivedFrom` (PROV-O), not belief | 3 |
 | `science/src/science_tool/graph/entity_projection.py` *(new)* | generic regeneration drift-check primitive | 4 |
 | `science/tests/...` | per-task tests | all |
@@ -89,14 +90,14 @@ evidence-lines are **out of scope** (separate `~/d/r/mm30` migration plan, gated
 - [ ] **Step 1: Write the failing test:**
 ```python
 # tests/test_dataset_path_policy.py
-from science_tool.entities import path_policy_for   # match the actual accessor in entities.py
+import pytest
+from science_tool.entities import resolve_path_policy, EntityCommandError
 def test_dataset_has_markdown_path_policy():
-    policy = path_policy_for("dataset")
-    assert policy is not None
-    assert policy.directory.as_posix().endswith("entities/datasets")
-    assert policy.naming == "slug"
+    policy = resolve_path_policy("dataset")          # raises EntityCommandError if unregistered
+    assert policy.root.as_posix().endswith("entities/datasets")
+    assert policy.strategy == "slug"
 ```
-- [ ] **Step 2: Run it; expect FAIL** (`dataset` not in policies). `cd ~/d/science/science && uv run pytest tests/test_dataset_path_policy.py -q`
+- [ ] **Step 2: Run it; expect FAIL** with `EntityCommandError: Unsupported source-authored entity kind: dataset`. `cd ~/d/science/science && uv run pytest tests/test_dataset_path_policy.py -q`
 - [ ] **Step 3: Add** `"dataset": EntityPathPolicy(Path("entities/datasets"), "slug")` to
   `_BUILTIN_MARKDOWN_POLICIES`; add a `_DEFAULT_STATUS["dataset"]`/`_STATUS_VALUES["dataset"]` of
   `{"active", "retired"}` (operational kind — no belief status).
@@ -109,39 +110,50 @@ def test_dataset_has_markdown_path_policy():
 
 ## Phase 2 — Validation
 
-### Task 2a: `DatasetEntity` `origin` + origin-specific provenance
+### Task 2a: Confirm `DatasetEntity` origin invariants (#7/#8) — characterization tests, not a model change
+
+> **Note:** `DatasetEntity` **already enforces** invariants #7/#8 (`science_model/entities.py:594`,
+> `model_validator`): `origin == "external"` requires an **`access` block** (and must *not* carry
+> `derivation`/`produced_by`); `origin == "derived"` requires a **`derivation` block and/or a non-empty
+> `produced_by`** (a **list** of code-file refs) and must *not* carry `access`/`accessions`/`local_path`.
+> So this task **characterizes** the existing contract and adds any missing tests — it does **not**
+> universally require `accessions`/`produced_by` or change the model. The design's "origin + provenance
+> shape" (§4/review L1) is satisfied by these *already-present* invariants; the *generator* (MM30 plan)
+> is what must emit a conformant `access`/`derivation` block per dataset.
 
 **Files:**
-- Modify: `science/model/src/science_model/entities.py` (`DatasetEntity` ~594; only if Task 0 found gaps)
-- Test: `science/tests/test_dataset_origin_provenance.py` *(new)*
+- Test: `science/tests/test_dataset_origin_provenance.py` *(new)* — characterization only
+- Modify: `science/model/src/science_model/entities.py` — **only if** Task 0 found a genuine gap
 
-- [ ] **Step 1: Write the failing tests** (design §4 / review L1):
+- [ ] **Step 1: Write characterization tests** matching the *current* shapes (use the real `access` /
+  `derivation` block models — read their constructors in `science_model/entities.py` first):
 ```python
-from pydantic import ValidationError
 import pytest
-from science_model.entities import DatasetEntity
+from pydantic import ValidationError
+from science_model.entities import DatasetEntity   # + the real Access / *DerivationBlock models
 
-def test_external_requires_accessions():
-    DatasetEntity(id="dataset:gse19784", origin="external", source_class="observational",
-                  accessions=["GSE19784"])                      # ok
+def test_external_requires_access_block():
     with pytest.raises(ValidationError):
-        DatasetEntity(id="dataset:gse19784", origin="external", source_class="observational")  # missing accessions
+        DatasetEntity(id="dataset:gse19784", origin="external", source_class="observational")  # no access block
+    # (a valid external entity supplies an `access=Access(...)` block — construct per the real model)
 
-def test_derived_requires_produced_by():
-    DatasetEntity(id="dataset:meta_sumz", origin="derived", source_class="derived",
-                  derived_kind="model_output", produced_by="stage:meta")   # ok
+def test_derived_requires_derivation_or_produced_by():
     with pytest.raises(ValidationError):
         DatasetEntity(id="dataset:meta_sumz", origin="derived", source_class="derived",
-                      derived_kind="model_output")             # missing produced_by
-```
-- [ ] **Step 2: Run it; expect FAIL** (whichever invariant is missing per Task 0).
-- [ ] **Step 3: Implement** the missing `model_validator` clauses on `DatasetEntity`: `origin ==
-  "external"` requires non-empty `accessions` (add the field if absent); `origin == "derived"` requires
-  `produced_by` (add if absent). Do **not** re-add invariants Task 0 found already present.
-- [ ] **Step 4: Run it; expect PASS. Step 5: Commit.**
+                      derived_kind="model_output")             # neither derivation nor produced_by
+    # produced_by is a LIST of code-file refs, e.g. produced_by=["code:workflows/stages/meta.smk"]
 
-**Acceptance:** a generated/registered dataset entity is operationally specified, not just
-taxonomy-tagged (design §4, review L1).
+def test_external_must_not_carry_produced_by():
+    with pytest.raises(ValidationError):
+        DatasetEntity(id="dataset:gse19784", origin="external", source_class="observational",
+                      access=..., produced_by=["code:x"])      # invariant #7 violation
+```
+- [ ] **Step 2: Run them; expect PASS** (the invariants already exist). If any **unexpectedly fails**,
+  that is the genuine gap Task 0 flagged — only then add the missing `model_validator` clause.
+- [ ] **Step 3: Commit** the characterization tests (`test(model): characterize DatasetEntity origin invariants`).
+
+**Acceptance:** the existing #7/#8 invariants are pinned by tests with the correct `access`/`derivation`/
+`produced_by`-list shapes; no model change unless Task 0 surfaced a real gap (design §4, review L1).
 
 ### Task 2b: surface `dataset_usage` on the evidence-line (conditional)
 
@@ -157,34 +169,51 @@ taxonomy-tagged (design §4, review L1).
 
 **Acceptance:** evidence-lines carry structured `dataset_usage` (design §2, review L2 — narrow gap).
 
-### Task 2c: `dataset_usage` reference integrity (generic gate 2)
+### Task 2c: `dataset_usage` reference integrity (generic gate 2) — **with check-module registration**
 
-**Files:** `science/src/science_tool/validate/checks/datasets.py` *(new)*; test `science/tests/validate/test_check_dataset_usage_refs.py` *(new)*
+**Files:**
+- Create: `science/src/science_tool/validate/checks/dataset_usage.py` (module name matches the sibling `dataset_taxonomy`/`dataset_metadata` checks)
+- Modify: `science/src/science_tool/validate/checks/__init__.py` (`CANONICAL_CHECK_MODULES` tuple ~25)
+- Test: `science/tests/validate/test_check_dataset_usage_refs.py` *(new)*
 
-- [ ] **Step 1: Write the failing test:** an entity carrying `dataset_usage` with `ref:
+> **Registration is load-bearing.** A new module under `validate/checks/` is **not executed by
+> `science validate`** unless its name is added to `CANONICAL_CHECK_MODULES` in
+> `validate/checks/__init__.py`. Without it, the unit tests below pass while the check never runs in
+> practice. This task registers it *and* asserts it runs at the runner level.
+
+- [ ] **Step 1: Write the failing unit test:** an entity carrying `dataset_usage` with `ref:
   dataset:nonexistent` yields `Result(severity=ERROR, rule="dataset.usage.ref_unresolved")`; a `ref`
   pointing at a registered dataset entity yields none. Follow `validate/checks/evidence_lines.py` style.
-- [ ] **Step 2: Run it; expect FAIL.**
-- [ ] **Step 3: Implement** `@Check(section="datasets", order=10) def check_dataset_usage_refs(ctx)`:
-  for every entity's `dataset_usage`, assert each `ref` resolves to a known `dataset:` entity in the
-  index; ERROR otherwise. This is the **generic form of the design §3 gate 2** (migration's
-  resolved-dataset-has-entity gate); MM30's migration relies on it.
-- [ ] **Step 4: Run it; expect PASS. Step 5: Commit.**
+- [ ] **Step 2: Run it; expect FAIL** (module doesn't exist).
+- [ ] **Step 3: Implement** `@Check(section="dataset usage", order=10) def check_dataset_usage_refs(ctx)`
+  in `dataset_usage.py`: for every entity's `dataset_usage`, assert each `ref` resolves to a known
+  `dataset:` entity in the index; ERROR otherwise. The **generic form of design §3 gate 2** (migration's
+  resolved-dataset-has-entity gate).
+- [ ] **Step 4: Register** the module — add `"dataset_usage"` to the `CANONICAL_CHECK_MODULES` tuple in
+  `validate/checks/__init__.py` (alongside `"dataset_taxonomy"`, `"dataset_metadata"`).
+- [ ] **Step 5: Write a runner-level test** asserting the check actually executes under the validate
+  runner (not just a direct call) — e.g. run the validate runner over a fixture with a bad
+  `dataset_usage.ref` and assert a `dataset.usage.ref_unresolved` result appears in the runner's output.
+  This catches an unregistered module.
+- [ ] **Step 6: Run both; expect PASS. Step 7: Commit.**
 
-**Acceptance:** no `dataset_usage` can reference a non-existent dataset entity (design §3 gate 2).
+**Acceptance:** no `dataset_usage` can reference a non-existent dataset entity (design §3 gate 2), and
+the check provably runs under `science validate` (registered + runner-tested).
 
 ### Task 2d: `overlap` candidate WARN (protects the B2 payoff)
 
-**Files:** `science/src/science_tool/validate/checks/datasets.py` (extend); same test module.
+**Files:** `science/src/science_tool/validate/checks/dataset_usage.py` (extend); same test module.
 
 - [ ] **Step 1: Write the failing test:** a `dataset_usage` with `role: analyzed` and `overlap:
   unknown` yields `Result(severity=WARN, rule="dataset.usage.overlap_unknown")`; `overlap: full` yields
   none.
 - [ ] **Step 2: Run it; expect FAIL.**
-- [ ] **Step 3: Implement** `@Check(section="datasets", order=20) def check_overlap_unknown_candidates(ctx)`:
-  WARN on `role == "analyzed"` + `overlap == "unknown"`, with a message noting that B2 will treat it as
-  a *candidate* (no shared-source collapse) until `overlap` is curated to `full` (design §2 / review
-  M2). WARN, not ERROR — `unknown` is legal but flags an un-collapsed group for review.
+- [ ] **Step 3: Implement** `@Check(section="dataset usage", order=20) def check_overlap_unknown_candidates(ctx)`
+  in the same (already-registered) module: WARN on `role == "analyzed"` + `overlap == "unknown"`, with a
+  message noting that B2 will treat it as a *candidate* (no shared-source collapse) until `overlap` is
+  curated to `full` (design §2 / review M2). WARN, not ERROR — `unknown` is legal but flags an
+  un-collapsed group for review. (No new registration — the module is already in
+  `CANONICAL_CHECK_MODULES` from Task 2c.)
 - [ ] **Step 4: Run it; expect PASS. Step 5: Commit.**
 
 **Acceptance:** the silent-no-op failure mode (unknown overlap → no B2 collapse) is surfaced at validate
@@ -261,8 +290,10 @@ projection, design §4) has a reusable, side-effect-free drift primitive; MM30 s
     **collapses** them to one winner (shared-source `independence_group`);
   - two empirical evidence-lines on *distinct* datasets (`dataset:mmrf`, `dataset:gse19784`) → stay
     **independent** (both contribute);
-  - an empirical line with empty `dataset_usage` is `belief_eligible=False` (edges-plan rule) and
-    excluded; adding `dataset_usage` flips it eligible;
+  - an empirical line with `belief_eligible=False` (empty `dataset_usage`) is **excluded** from belief;
+    a line explicitly written **with** `dataset_usage` **and** `belief_eligible=True` (as the
+    resolver/migration would write it — that flip is the MM30 plan's job, *not* this framework plan)
+    **enters** belief. (Do not assert an automatic framework flip — no task here performs one.)
   - a `dataset_usage.ref` to an unregistered dataset fails Task 2c;
   - the line's task source appears as `prov:wasDerivedFrom`, not in belief.
 - [ ] **Step 2: Run it; expect FAIL → wire any glue → PASS.**
