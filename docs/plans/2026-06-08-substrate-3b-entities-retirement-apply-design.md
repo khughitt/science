@@ -123,25 +123,42 @@ this prerequisite:
 3. `local_part_conforms`: `strategy == "slug"` → `bool(_SLUG_RE.fullmatch(local_part))`.
 4. `validate_entity_id`: a `slug` branch validating the local part with `_SLUG_RE`
    (parallel to the existing `citekey` branch).
-5. `derive_local_part`: a `slug` branch returning `derive_slug(title)` (numeric
-   renumbers, citekey/singleton raise; slug preserves the title-slug).
-6. `_CORE_POLICIES`: add `"concept": EntityPathPolicy(Path("entities/concepts"), "slug")`
+5. `generate_entity_id` (the real generated-id helper; **not** a `derive_local_part`
+   — that name does not exist): add a `slug` branch. An explicit `entity_id`
+   already routes through `validate_entity_id` (now slug-aware). For a *generated*
+   id, return `f"{kind}:{validate_slug(slug) if slug is not None else derive_slug(title)}"`
+   — i.e. use the title-slug **directly, skipping `_next_numeric_local_part`**
+   (which is the numeric-only path). `path_for_entity` needs **no** change: it is
+   `resolve_path_policy(kind).root / f"{local_part}.md"` and becomes correct for
+   slug once `validate_entity_id` accepts a slug id.
+6. **`entity_layout_migration.py` — an explicit `slug` planning branch (REQUIRED,
+   not optional).** Adding `concept` to `_CORE_POLICIES` registers `entities/concepts`
+   as a known destination, so a `slug`-kind entity can enter the migrator's
+   per-kind loop. That loop has `singleton`/`citekey`/`numeric` branches and falls
+   through to `numeric`; there, `local_part_conforms("concept", "1q-gain")` is now
+   **true** (it is a valid slug), so the numeric branch executes
+   `int(stem.split("-", 1)[0])` → `int("1q")` → **ValueError crash**
+   (`entity_layout_migration.py:458-459`). Add a `slug` branch **parallel to
+   `citekey`** (the block at `:435`): preserve `Path(entity.rel_path).stem` as the
+   local part, move to `policy.root/<stem>.md`, id `f"{kind}:{stem}"`, **never
+   numbered**. This guards a partly-migrated tree even though §D3 keeps structural
+   aggregate kinds out of scope and 3b owns their retirement.
+7. `_CORE_POLICIES`: add `"concept": EntityPathPolicy(Path("entities/concepts"), "slug")`
    — `concept` is a core kind, so its policy belongs in the core table.
-7. A v3 project that retires its aggregate registers its other coined kinds
+8. A v3 project that retires its aggregate registers its other coined kinds
    (`latent`, and later `decision`) with `strategy: slug` in
    `knowledge/sources/<profile>/manifest.yaml`. (The MM30 manifest update is part
    of MM30's eventual v3 cutover, Task #30, not this framework change; the 3b
    fixtures register a slug local kind directly.)
 
 The implementer must grep every `strategy ==` / `strategy in` switch
-(`validate_entity_id`, `derive_local_part`, `singleton_path`,
-`_next_numeric_local_part`, the migrator's numbering, the conformance checks) and
-confirm each handles or safely ignores `"slug"`. The migrator does **not** need
-slug-renumbering logic: slug ids are preserved, and §D3 already excludes
-structural aggregate kinds from the migrator (3b owns their retirement). The net
-effect of this section in isolation: a `slug`-strategy kind's owner lives at
-`<root>/<id-local-part>.md` and its id is accepted as conforming — no behavior
-change for any existing `numeric`/`citekey`/`singleton` kind.
+(`validate_entity_id`, `generate_entity_id`, `singleton_path`,
+`_next_numeric_local_part`, **the migrator's per-kind planning loop**, the
+conformance checks) and handle `"slug"` explicitly — the migrator branch above is
+load-bearing (it crashes without it), not a "safe ignore." The net effect of this
+section, for existing kinds: **no** behavior change for any `numeric`/`citekey`/
+`singleton` kind; for a `slug` kind the owner lives at `<root>/<id-local-part>.md`
+and its id is accepted as conforming and is never renumbered.
 
 ### 3.1 The §C2 law: model decides *which*, file provides *content*; scope to `entities.yaml`
 
@@ -185,7 +202,8 @@ the plan.
 
 | File | Role |
 |---|---|
-| `entities.py` (extend) | the `slug` filename strategy + `concept` core policy (§3.0) — the foundation prerequisite |
+| `entities.py` (extend) | the `slug` filename strategy (`EntityFilenameStrategy`, `_VALID_STRATEGIES`, `local_part_conforms`, `validate_entity_id`, `generate_entity_id`) + `concept` core policy (§3.0) |
+| `entity_layout_migration.py` (extend) | a `slug` planning branch parallel to `citekey` — REQUIRED to avoid a numeric-branch crash (§3.0 item 6) |
 | `graph/aggregate_retire.py` (NEW) | planner + executor; keeps 3a's `aggregate_triage.py` strictly read-only |
 | `cli.py` (extend `entities_triage_aggregate_command`) | flags, dry-run/apply dispatch, `_read_layout_version`, report rendering |
 
@@ -432,10 +450,16 @@ transactional journal. The safety model is:
 `uv run --frozen ruff check . && uv run --frozen ruff format --check .` (120-char).
 
 - **`slug`-strategy unit tests** (`tests/test_entities.py` or peer): a `slug` kind
-  accepts a kebab id (`local_part_conforms`, `validate_entity_id`); `derive_local_part`
-  returns the title-slug; `resolve_path_policy("concept").root == entities/concepts`
-  and strategy `slug`; existing `numeric`/`citekey`/`singleton` behavior unchanged
-  (regression).
+  accepts a kebab id (`local_part_conforms`, `validate_entity_id`);
+  `generate_entity_id` with no explicit id returns `kind:<derive_slug(title)>`
+  (no `NNNN-` prefix); `path_for_entity` lands it at `policy.root/<slug>.md`;
+  `resolve_path_policy("concept").root == entities/concepts` with strategy `slug`;
+  existing `numeric`/`citekey`/`singleton` behavior unchanged (regression).
+- **Migrator slug-branch test** (`tests/test_entity_layout_migration.py` or peer):
+  a legacy/partly-migrated `slug`-kind file with a kebab stem (`1q-gain.md`) plans
+  a move to `policy.root/1q-gain.md` with id `concept:1q-gain` and is **never
+  numbered** — and critically does **not** raise `ValueError` from the numeric
+  branch. (Pins the §3.0 item-6 crash guard.)
 - **Planner unit tests** (`tests/graph/test_aggregate_retire.py`): pure matrix —
   each bucket × each flag yields the right action or skip;
   `decision-log`/`external-ref`/`ambiguous` never acted; a `terms.yaml`-sourced
@@ -490,10 +514,14 @@ kinds (`concept` for coined; a `dataset`+markdown owner for shadow).
   the loader/conformance machinery itself uses) and the new `slug` strategy, plus
   the round-trip test that reloads and asserts owner resolution. 3b **never
   renumbers** — a non-conforming id is rejected, never silently relocated.
-- **The `slug`-strategy foundation change regressing existing kinds.** Mitigated
-  by an additive design (no change to `numeric`/`citekey`/`singleton` branches),
-  a grep of every `strategy ==`/`strategy in` switch, and a regression assertion
-  that existing kinds' conformance/derivation is unchanged.
+- **The `slug`-strategy foundation change regressing existing kinds — or crashing
+  the migrator.** The sharp edge is `entity_layout_migration.py`: registering
+  `concept` makes `entities/concepts` a known destination, so a slug stem can reach
+  the numeric branch and `int("1q")`-crash. Mitigated by the **required** explicit
+  slug planning branch (§3.0 item 6, pinned by a migrator test), an otherwise
+  additive design (no change to `numeric`/`citekey`/`singleton` branches), a grep
+  of every `strategy ==`/`strategy in` switch, and a regression assertion that
+  existing kinds are unchanged.
 - **Crash between owner-write and entry-delete.** Mitigated by the `promoted_from`
   marker + step-2 recovery sweep (§3.5), making `--promote-coined` idempotent and
   crash-safe; covered by the crash-simulation test.
