@@ -51,12 +51,15 @@ fully-unblocked first step, matching the 2a→2b→2c rhythm.
 
 ### In scope (3a)
 
-1. A standing **lone-aggregate-stub conformance check** (WARN, unconditional).
-2. A **read-only triage classifier + report** that buckets every aggregate row
+1. An additive **loader change** surfacing aggregate row-level metadata
+   (`ProjectSources.aggregate_rows`, §3.1) — the prerequisite that makes the
+   `shadow` and `source_path` buckets computable from the compiled model.
+2. A standing **lone-aggregate-stub conformance check** (WARN, unconditional).
+3. A **read-only triage classifier + report** that buckets every aggregate row
    with per-row evidence.
 
-Both are pure science-framework changes, fixture-tested, with **no file
-creation, no deletion, no `--apply`**.
+All three are pure science-framework changes, fixture-tested, with **no file
+creation, no deletion, no `--apply`**, and no mutation of any entity or content.
 
 ### Out of scope (deferred)
 
@@ -70,23 +73,50 @@ creation, no deletion, no `--apply`**.
 
 ## 3. Architecture
 
-### 3.1 The §C2 law
+### 3.1 The §C2 law and the row-metadata prerequisite
 
-Both deliverables **read the compiled model** — the `IdentityTable` and the
-`Entity` set produced by `load_project_sources` — and never re-walk
-`entities.yaml`. Grounding facts (verified against the code):
+Both deliverables **read the compiled model** — the `IdentityTable` plus a new
+row-level metadata map, both produced by `load_project_sources` — and never
+re-walk `entities.yaml`. Grounding facts (verified against the code):
 
 - `AggregateAdapter.name == "aggregate"`; `classify_owner_scope("aggregate")`
-  yields a deprecated owner. So aggregate rows appear in the identity table as
-  `IdentityDeclaration` rows with `adapter == "aggregate"` and
-  `deprecated == True`.
-- `AggregateAdapter.load_raw` preserves each entry's inner fields on the
-  compiled `Entity` — including `source_path` (e.g. `core/decisions.md`,
-  `migration:audit`, `papers/references.bib`, or the aggregate file itself when
-  self-sourced) and `kind` (else derived from the `canonical_id` prefix).
-- "Is there a real (non-aggregate) owner of this id?" is answered from the
-  identity table: an `IdentityDeclaration` for the same `(owner_scope,
-  canonical_id)` whose `adapter != "aggregate"` and `deprecated == False`.
+  yields a deprecated owner. Each aggregate entry appears in the identity table
+  as an `IdentityDeclaration` with `adapter == "aggregate"`,
+  `deprecated == True`, and a `source_ref` carrying the entry's `(path, line)`.
+- **The aggregate `Entity` is *not* a reliable carrier** (this is the correction
+  to the first draft). Under the non-strict load diagnostics use, a *shadowed*
+  aggregate row's `IdentityDeclaration` is appended (`sources.py:406`) but its
+  `Entity` is then skipped by the dedup guard (`sources.py:416-420`, the
+  `continue`) because a real owner already won the id — i.e. exactly the
+  `shadow` bucket has no aggregate `Entity`. Separately, `AggregateAdapter.load_raw`
+  records the aggregate *file* as `Entity.file_path`; the entry's inner
+  `source_path` is **not** surfaced as an `Entity` field. So neither
+  `has_real_owner` nor `source_path` can be read off the aggregate `Entity`.
+- **Prerequisite loader change (additive, non-destructive).** At the
+  aggregate-declaration emit point (`sources.py:~406`, where `raw` and `kind` are
+  still in scope), capture the entry's triage metadata into a new field
+  `ProjectSources.aggregate_rows: dict[tuple[str, int], AggregateRowMeta]` keyed
+  by `(source_ref.path, source_ref.line)` — carrying `kind` and the inner
+  `source_path` (`raw.get("source_path")`). This records metadata for **both**
+  lone and shadowed rows, *before* the dedup-skip, with no second disk read and
+  no entity mutation. New dataclass (e.g. in `graph/sources.py` beside
+  `ProjectSources`):
+
+  ```python
+  @dataclass(frozen=True, slots=True)
+  class AggregateRowMeta:
+      kind: str
+      source_path: str | None  # entry's inner source_path; None when absent
+  ```
+
+- `has_real_owner` is computed from the **identity table alone**: for an
+  aggregate declaration's `(owner_scope, canonical_id)`, does another
+  declaration exist with `adapter != "aggregate"` and `deprecated == False`? No
+  `Entity` is consulted.
+- **Self-sourced** ⇔ the entry's `source_path` is `None`/absent **or** equals the
+  declaration's own `source_ref.path` (the aggregate file). In MM30 the
+  self-sourced rows carry `source_path: knowledge/sources/local/entities.yaml`
+  (the aggregate file itself).
 
 ### 3.2 Single-surface split
 
@@ -103,13 +133,19 @@ established by routing `identity_collision` to a single check):
 
 ## 4. Component 1 — lone-aggregate-stub check
 
-**File:** `src/science_tool/validate/checks/aggregate_stub.py` (new), registered
-in the canonical-check tuple.
+**File:** `src/science_tool/validate/checks/aggregate_stub.py` (new). Registered
+in `CANONICAL_CHECK_MODULES` (`validate/checks/__init__.py`) in the tuple slot
+**immediately after `"identity_collision"`** (keeping the substrate-identity
+checks adjacent), and decorated `@Check(section=..., order=51)` — sequencing
+right after `identity_collision` (order 50; `orphan_datapackage_owner` is 49).
 
 **Behavior:**
 
-- Load the project non-strict, no commons (matching the orphan and
-  collision checks): a diagnostic must not abort on the condition it reports.
+- Load the project with `include_commons=False, strict_identity=False,
+  strict_core_schema=False` (matching `check_forbidden_second_declaration`,
+  `identity_collision.py:56`): a diagnostic must not abort on the condition it
+  reports, and `strict_core_schema=False` keeps a malformed aggregate/core row
+  from crashing the visibility tool before it can report.
 - Build the identity table. For each `adapter == "aggregate"`,
   `deprecated == True` owner row that is **lone** (no other owner row shares its
   `(owner_scope, canonical_id)` key), emit one `Result`.
@@ -128,7 +164,7 @@ shadowed stub *is* in a collision and is handled by `forbidden-second-declaratio
 
 **Registration test:** the real wiring pattern from 2b — `clear_checks_for_tests`
 → `sys.modules.pop` the module → `_load_canonical_checks()` → assert the
-`@Check` ran and is in `CANONICAL_CHECKS` with the expected order. Importing the
+`@Check` ran and is in `CANONICAL_CHECKS` with `order == 51`. Importing the
 check at module top would register it even if the tuple entry were missing, so
 the test proves the tuple entry, not the import.
 
@@ -160,11 +196,16 @@ def classify_aggregate_rows(sources: ProjectSources) -> list[AggregateRowTriage]
     ...
 ```
 
-The function consumes `ProjectSources` (the compiled model). It pairs each
-`adapter == "aggregate"` owner declaration with its `Entity` (for `source_path`
-and `kind`), computes `has_real_owner` from the identity table, applies the
-deterministic rules below, and returns one triage row per aggregate declaration,
-sorted by `(bucket, canonical_id)` for stable output.
+The function consumes `ProjectSources` (the compiled model). For each
+`adapter == "aggregate"` owner declaration it looks up
+`sources.aggregate_rows[(decl.source_ref.path, decl.source_ref.line)]` for
+`kind` and `source_path` (per §3.1 — **not** the aggregate `Entity`, which is
+absent for shadows), computes `has_real_owner` from the identity table, applies
+the deterministic rules below, and returns one triage row per aggregate
+declaration, sorted by `(bucket, canonical_id)` for stable output. The caller
+builds the identity table via `build_identity_table(sources)` and loads with the
+same `include_commons=False, strict_identity=False, strict_core_schema=False`
+flags as the check (§4).
 
 ### 5.2 Deterministic bucket rules
 
@@ -219,10 +260,18 @@ external-ref"`, `"real owner at doc/papers/foo.md → shadow"`).
 - **CLI tests** (`tests/test_cli_*` peer): smoke the text report and assert the
   `--format json` shape and per-bucket counts on the fixture.
 
-The deprecated `entities.yaml` aggregate stub only loads under a
-`profiles: {local: local}` manifest (the aggregate scan root), **not**
-`knowledge_profiles:` — fixtures must use the `profiles:` manifest style (the 2b
-gotcha).
+**Fixture gotcha (corrected).** `AggregateAdapter` scans
+`knowledge/sources/<local_profile>/`, where `<local_profile>` is the profile
+map's **value**. So the entry's *value* must map to the directory where
+`entities.yaml` actually lives — e.g. `knowledge_profiles: {local: local}` →
+`knowledge/sources/local/entities.yaml`. The key (`knowledge_profiles:`,
+preferred, vs legacy `profiles:`) does **not** matter; both resolve the same way
+(`_read_project_config` prefers `knowledge_profiles`, falls back to `profiles`).
+The earlier "must use `profiles:`" framing was a misattribution: the 2b general
+fixture failed to discover the stub because its value was `knowledge/local`
+(→ nonexistent `knowledge/sources/knowledge/local/`), not because of the key.
+Reuse the proven 2b pattern (`_AGG_MANIFEST` + `_write_aggregate_stub` in
+`tests/validate/test_checks_identity_collision.py`).
 
 ## 7. Risks & mitigations
 
@@ -232,9 +281,15 @@ gotcha).
 - **Double-surfacing the same debt.** Mitigated by the single-surface split
   (§3.2): the check fires only on lone stubs; shadows stay with the collision
   check.
-- **Drift from the real `AggregateAdapter` contract.** Mitigated by consuming the
-  compiled model (`adapter == "aggregate"`, `Entity.source_path`) rather than
-  re-parsing YAML, so the report tracks whatever the adapter actually emits.
+- **Drift from the real `AggregateAdapter` contract.** Mitigated by capturing the
+  row metadata at the loader's emit point (`adapter == "aggregate"`, from the same
+  `raw` the adapter built) rather than re-parsing YAML in the classifier, so the
+  report tracks whatever the adapter actually emits.
+- **`source_ref.line` is load-bearing for the join key.** The metadata map is
+  keyed by `(source_ref.path, source_ref.line)`; `AggregateAdapter` always sets
+  `line` (the entry index, asserted in `load_raw`), so the key is total over
+  aggregate rows. Non-aggregate adapters never populate `aggregate_rows`, so the
+  classifier only ever joins keys it wrote.
 
 ## 8. Success criteria
 
