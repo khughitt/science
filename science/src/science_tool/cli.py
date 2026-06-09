@@ -307,6 +307,11 @@ def entities_migrate_command(apply_changes: bool, project_root: Path) -> None:
     is_flag=True,
     help="Delete `external-ref` (paper/article) rows backed by papers/references.bib.",
 )
+@click.option(
+    "--migrate-curie-refs",
+    is_flag=True,
+    help="Migrate `curie-external-ref` rows into knowledge/sources/<profile>/external_refs.yaml, then drop them.",
+)
 @click.option("--apply", "apply_changes", is_flag=True, help="Execute the plan (default: dry-run).")
 def entities_triage_aggregate_command(
     project_root: Path,
@@ -316,6 +321,7 @@ def entities_triage_aggregate_command(
     delete_shadow: bool,
     promote_decisions: bool,
     retire_external_refs: bool,
+    migrate_curie_refs: bool,
     apply_changes: bool,
 ) -> None:
     """Triage (and, with bucket flags, retire) multi-type aggregate (entities.yaml/terms.yaml) rows (§B5)."""
@@ -329,13 +335,21 @@ def entities_triage_aggregate_command(
 
     sources = load_project_sources(project_root, include_commons=False, strict_core_schema=False, strict_identity=False)
     rows = classify_aggregate_rows(sources)
-    any_bucket = promote_coined or delete_cruft or delete_shadow or promote_decisions or retire_external_refs
+    any_bucket = (
+        promote_coined
+        or delete_cruft
+        or delete_shadow
+        or promote_decisions
+        or retire_external_refs
+        or migrate_curie_refs
+    )
 
     # No bucket flags → the unchanged 3a read-only report.
     if not any_bucket:
         if apply_changes:
             raise click.UsageError(
-                "--apply requires at least one of --promote-coined/--delete-cruft/--delete-shadow/--promote-decisions/--retire-external-refs."
+                "--apply requires at least one of --promote-coined/--delete-cruft/--delete-shadow/"
+                "--promote-decisions/--retire-external-refs/--migrate-curie-refs."
             )
         if output_format == "json":
             click.echo(
@@ -396,6 +410,7 @@ def entities_triage_aggregate_command(
         retire_external_refs=retire_external_refs,
         bib_keys=bib_keys,
         decision_index=decision_index,
+        migrate_curie_refs=migrate_curie_refs,
     )
     report = apply_retirement(project_root, plan, dry_run=not apply_changes, decision_index=decision_index)
     if output_format == "json":
@@ -404,6 +419,7 @@ def entities_triage_aggregate_command(
                 {
                     "dry_run": report.dry_run,
                     "promoted": list(report.promoted),
+                    "migrated": list(report.migrated),
                     "deleted": list(report.deleted),
                     "rejected": [list(p) for p in report.rejected],
                     "skipped": [list(p) for p in report.skipped],
@@ -415,11 +431,13 @@ def entities_triage_aggregate_command(
         return
     head = "PLAN (dry-run)" if report.dry_run else "APPLIED"
     click.echo(
-        f"{head}: {len(report.promoted)} promoted, {len(report.deleted)} deleted, "
-        f"{len(report.rejected)} rejected, {len(report.skipped)} skipped"
+        f"{head}: {len(report.promoted)} promoted, {len(report.migrated)} migrated, "
+        f"{len(report.deleted)} deleted, {len(report.rejected)} rejected, {len(report.skipped)} skipped"
     )
     for cid in report.promoted:
         click.echo(f"  promote {cid}")
+    for cid in report.migrated:
+        click.echo(f"  migrate {cid}")
     for cid in report.deleted:
         click.echo(f"  delete  {cid}")
     for cid, reason in (*report.rejected, *report.skipped):
