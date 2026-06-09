@@ -34,7 +34,8 @@ def _plan_apply(root: Path, **flags):
 
 
 def test_external_ref_backed_by_bib_is_dropped(tmp_path: Path) -> None:
-    # kind=article -> EXTERNAL_REF bucket; canonical_id canonicalizes article:->paper:.
+    # kind=article -> EXTERNAL_REF bucket. sources.py canonicalizes article:->paper: at LOAD time,
+    # so the plan/apply layer (and report.deleted) sees paper:Smith2024.
     _write(tmp_path, [{"canonical_id": "article:Smith2024", "kind": "article", "title": "S"}])
     report = _plan_apply(tmp_path, retire_external_refs=True, bib_keys=frozenset({"Smith2024"}))
     assert "paper:Smith2024" in report.deleted
@@ -47,6 +48,24 @@ def test_external_ref_unbacked_is_rejected_and_retained(tmp_path: Path) -> None:
     assert ("paper:Jones2099", "missing bibliography authority") in report.rejected
     remaining = yaml.safe_load((tmp_path / _ENT_REL).read_text())["entities"]
     assert [r["canonical_id"] for r in remaining] == ["article:Jones2099"]  # untouched
+
+
+def test_external_ref_mixed_backed_and_unbacked_routed_independently(tmp_path: Path) -> None:
+    # Two EXTERNAL_REF rows in one plan: the bib-backed one is deleted, the un-backed
+    # one is rejected and physically retained. Verifies independent routing + that the
+    # aggregate rewrite drops exactly the backed row.
+    _write(
+        tmp_path,
+        [
+            {"canonical_id": "article:Smith2024", "kind": "article", "title": "S"},
+            {"canonical_id": "article:Jones2099", "kind": "article", "title": "J"},
+        ],
+    )
+    report = _plan_apply(tmp_path, retire_external_refs=True, bib_keys=frozenset({"Smith2024"}))
+    assert "paper:Smith2024" in report.deleted
+    assert ("paper:Jones2099", "missing bibliography authority") in report.rejected
+    remaining = yaml.safe_load((tmp_path / _ENT_REL).read_text())["entities"]
+    assert [r["canonical_id"] for r in remaining] == ["article:Jones2099"]  # only unbacked kept
 
 
 def test_external_ref_untouched_without_flag(tmp_path: Path) -> None:

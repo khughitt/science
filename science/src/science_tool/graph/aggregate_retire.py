@@ -146,6 +146,7 @@ def plan_retirement(
         if triage.bucket is AggregateBucket.EXTERNAL_REF:
             if not retire_external_refs:
                 continue  # untouched unless explicitly retiring external refs
+            # EXTERNAL_REF ids always carry a prefix (paper:<key>); the no-colon arm is a defensive fallback.
             citekey = meta.canonical_id.split(":", 1)[1] if ":" in meta.canonical_id else meta.canonical_id
             if citekey in bib_keys:
                 # Backed: a replacement external-reference node provably exists, so
