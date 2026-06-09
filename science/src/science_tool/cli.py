@@ -302,6 +302,11 @@ def entities_migrate_command(apply_changes: bool, project_root: Path) -> None:
 @click.option("--delete-cruft", is_flag=True, help="Delete `cruft` (migration:*) rows.")
 @click.option("--delete-shadow", is_flag=True, help="Delete `shadow` rows (id already has a real owner).")
 @click.option("--promote-decisions", is_flag=True, help="Promote `decision` rows backed by core/decisions.md.")
+@click.option(
+    "--retire-external-refs",
+    is_flag=True,
+    help="Drop `external-ref` (paper/article) rows backed by papers/references.bib.",
+)
 @click.option("--apply", "apply_changes", is_flag=True, help="Execute the plan (default: dry-run).")
 def entities_triage_aggregate_command(
     project_root: Path,
@@ -310,11 +315,13 @@ def entities_triage_aggregate_command(
     delete_cruft: bool,
     delete_shadow: bool,
     promote_decisions: bool,
+    retire_external_refs: bool,
     apply_changes: bool,
 ) -> None:
     """Triage (and, with bucket flags, retire) multi-type aggregate (entities.yaml/terms.yaml) rows (§B5)."""
     from collections import Counter
 
+    from science_tool.bibliography import load_bib_entries
     from science_tool.graph.aggregate_retire import apply_retirement, plan_retirement
     from science_tool.graph.aggregate_triage import classify_aggregate_rows
     from science_tool.graph.decision_log import DecisionLogIndex, parse_decision_log
@@ -322,13 +329,13 @@ def entities_triage_aggregate_command(
 
     sources = load_project_sources(project_root, include_commons=False, strict_core_schema=False, strict_identity=False)
     rows = classify_aggregate_rows(sources)
-    any_bucket = promote_coined or delete_cruft or delete_shadow or promote_decisions
+    any_bucket = promote_coined or delete_cruft or delete_shadow or promote_decisions or retire_external_refs
 
     # No bucket flags → the unchanged 3a read-only report.
     if not any_bucket:
         if apply_changes:
             raise click.UsageError(
-                "--apply requires at least one of --promote-coined/--delete-cruft/--delete-shadow/--promote-decisions."
+                "--apply requires at least one of --promote-coined/--delete-cruft/--delete-shadow/--promote-decisions/--retire-external-refs."
             )
         if output_format == "json":
             click.echo(
@@ -377,6 +384,7 @@ def entities_triage_aggregate_command(
         if promote_decisions and decisions_path.is_file()
         else DecisionLogIndex({})
     )
+    bib_keys = frozenset(load_bib_entries(project_root)) if retire_external_refs else frozenset()
     plan = plan_retirement(
         project_root,
         sources,
@@ -385,6 +393,8 @@ def entities_triage_aggregate_command(
         delete_cruft=delete_cruft,
         delete_shadow=delete_shadow,
         promote_decisions=promote_decisions,
+        retire_external_refs=retire_external_refs,
+        bib_keys=bib_keys,
         decision_index=decision_index,
     )
     report = apply_retirement(project_root, plan, dry_run=not apply_changes, decision_index=decision_index)
