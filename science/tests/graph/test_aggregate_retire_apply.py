@@ -133,6 +133,25 @@ def test_crash_recovery_completes_stranded_promotion(tmp_path: Path) -> None:
     assert _entities_on_disk(tmp_path) == []  # stranded entry now removed
 
 
+def test_promote_preserves_description_as_owner_body(tmp_path: Path) -> None:
+    _write_entities(
+        tmp_path,
+        [
+            {
+                "canonical_id": "concept:apoptosis",
+                "kind": "concept",
+                "title": "Apoptosis",
+                "description": "Programmed cell death relevant to MM survival signaling.",
+                "source_path": _AGG_REL,
+            }
+        ],
+    )
+    report = _run(tmp_path, dry_run=False, promote_coined=True, delete_cruft=False, delete_shadow=False)
+    assert report.promoted == ("concept:apoptosis",)
+    body = (tmp_path / "entities/concepts/apoptosis.md").read_text(encoding="utf-8")
+    assert "Programmed cell death relevant to MM survival signaling." in body
+
+
 def test_promote_target_exists_unmarked_is_skipped_entry_retained(tmp_path: Path) -> None:
     # The promote loop's foreign-owner branch: target exists WITHOUT our promoted_from
     # marker → goes to skipped, aggregate entry is retained (no clobber).

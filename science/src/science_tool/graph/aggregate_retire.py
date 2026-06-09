@@ -173,8 +173,7 @@ class RetirementReport:
     dry_run: bool
 
 
-_STUB_BODY = "<!-- promoted from entities.yaml by substrate-3b; add definition -->\n"
-_REQUIRED_FIELDS = ("canonical_id", "kind", "title")
+_STUB_BODY = "<!-- promoted from an aggregate manifest by substrate retirement; add definition -->\n"
 
 
 def _read_entries(project_root: Path, rel: str) -> list[dict]:
@@ -192,12 +191,29 @@ def _front_matter(path: Path) -> dict:
     return yaml.safe_load(text[4:end]) or {}
 
 
-def _owner_text(entry: dict, *, promoted_from: str) -> str:
-    fm: dict[str, object] = {"id": entry["canonical_id"], "type": entry["kind"], "title": entry["title"]}
-    if entry.get("profile"):
-        fm["profile"] = entry["profile"]
+def _owner_text(
+    canonical_id: str,
+    kind: str,
+    title: str,
+    description: object,
+    profile: object,
+    *,
+    promoted_from: str,
+) -> str:
+    """Render an id-preserving owner file.
+
+    Identity (`canonical_id`/`kind`) comes from the compiled model (the caller
+    passes the triage values), not the raw aggregate row — the two multi-type
+    files differ (entities.yaml: explicit canonical_id/kind; terms.yaml: `id` +
+    inferred kind). A non-empty string `description` becomes the owner body (the
+    §B5 "line of definition"); anything else falls back to the stub body.
+    """
+    fm: dict[str, object] = {"id": canonical_id, "type": kind, "title": title}
+    if profile:
+        fm["profile"] = profile
     fm["promoted_from"] = promoted_from
-    return "---\n" + yaml.safe_dump(fm, sort_keys=False, allow_unicode=True) + "---\n\n" + _STUB_BODY
+    body = description.rstrip("\n") + "\n" if isinstance(description, str) and description else _STUB_BODY
+    return "---\n" + yaml.safe_dump(fm, sort_keys=False, allow_unicode=True) + "---\n\n" + body
 
 
 def _rewrite_aggregate(project_root: Path, rel: str, drop: set[int]) -> None:
@@ -231,9 +247,9 @@ def apply_retirement(
     # 1. Promote / reconcile-on-existing-marker.
     for pr in plan.promote:
         entry = entries(pr.source_path)[pr.line]
-        missing = next((f for f in _REQUIRED_FIELDS if not entry.get(f)), None)
-        if missing is not None:
-            rejected.append((pr.triage.canonical_id, f"missing required field {missing}"))
+        title = entry.get("title")
+        if not title:
+            rejected.append((pr.triage.canonical_id, "missing required field title"))
             continue
         assert pr.target_path is not None
         target = project_root / pr.target_path
@@ -255,7 +271,14 @@ def apply_retirement(
                     continue
                 text = render_owner_file(section, promoted_from=pr.source_path)
             else:
-                text = _owner_text(entry, promoted_from=pr.source_path)
+                text = _owner_text(
+                    pr.triage.canonical_id,
+                    pr.triage.kind,
+                    title,
+                    entry.get("description"),
+                    entry.get("profile"),
+                    promoted_from=pr.source_path,
+                )
             target.write_text(text, encoding="utf-8")
         promoted.append(pr.triage.canonical_id)
         drop_by_file[pr.source_path].add(pr.line)
