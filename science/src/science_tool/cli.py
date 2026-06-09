@@ -301,6 +301,7 @@ def entities_migrate_command(apply_changes: bool, project_root: Path) -> None:
 @click.option("--promote-coined", is_flag=True, help="Promote `coined` rows to owner files.")
 @click.option("--delete-cruft", is_flag=True, help="Delete `cruft` (migration:*) rows.")
 @click.option("--delete-shadow", is_flag=True, help="Delete `shadow` rows (id already has a real owner).")
+@click.option("--promote-decisions", is_flag=True, help="Promote `decision` rows backed by core/decisions.md.")
 @click.option("--apply", "apply_changes", is_flag=True, help="Execute the plan (default: dry-run).")
 def entities_triage_aggregate_command(
     project_root: Path,
@@ -308,6 +309,7 @@ def entities_triage_aggregate_command(
     promote_coined: bool,
     delete_cruft: bool,
     delete_shadow: bool,
+    promote_decisions: bool,
     apply_changes: bool,
 ) -> None:
     """Triage (and, with bucket flags, retire) aggregate (entities.yaml) rows (§B5)."""
@@ -315,16 +317,19 @@ def entities_triage_aggregate_command(
 
     from science_tool.graph.aggregate_retire import apply_retirement, plan_retirement
     from science_tool.graph.aggregate_triage import classify_aggregate_rows
+    from science_tool.graph.decision_log import DecisionLogIndex, parse_decision_log
     from science_tool.graph.sources import load_project_sources
 
     sources = load_project_sources(project_root, include_commons=False, strict_core_schema=False, strict_identity=False)
     rows = classify_aggregate_rows(sources)
-    any_bucket = promote_coined or delete_cruft or delete_shadow
+    any_bucket = promote_coined or delete_cruft or delete_shadow or promote_decisions
 
     # No bucket flags → the unchanged 3a read-only report.
     if not any_bucket:
         if apply_changes:
-            raise click.UsageError("--apply requires at least one of --promote-coined/--delete-cruft/--delete-shadow.")
+            raise click.UsageError(
+                "--apply requires at least one of --promote-coined/--delete-cruft/--delete-shadow/--promote-decisions."
+            )
         if output_format == "json":
             click.echo(
                 json.dumps(
@@ -366,6 +371,12 @@ def entities_triage_aggregate_command(
                 "complete the v2->v3 migration (`science entities migrate`) first."
             )
 
+    decisions_path = project_root / "core" / "decisions.md"
+    decision_index = (
+        parse_decision_log(decisions_path.read_text(encoding="utf-8"))
+        if promote_decisions and decisions_path.is_file()
+        else DecisionLogIndex({})
+    )
     plan = plan_retirement(
         project_root,
         sources,
@@ -373,8 +384,10 @@ def entities_triage_aggregate_command(
         promote_coined=promote_coined,
         delete_cruft=delete_cruft,
         delete_shadow=delete_shadow,
+        promote_decisions=promote_decisions,
+        decision_index=decision_index,
     )
-    report = apply_retirement(project_root, plan, dry_run=not apply_changes)
+    report = apply_retirement(project_root, plan, dry_run=not apply_changes, decision_index=decision_index)
     if output_format == "json":
         click.echo(
             json.dumps(
@@ -401,6 +414,44 @@ def entities_triage_aggregate_command(
         click.echo(f"  delete  {cid}")
     for cid, reason in (*report.rejected, *report.skipped):
         click.echo(f"  skip    {cid} -- {reason}")
+
+
+@entities_group.command("generate-decisions")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path("."),
+    help="Project root (default: current directory).",
+)
+@click.option("--write", "write_changes", is_flag=True, help="Write core/decisions.md (default: print).")
+def entities_generate_decisions_command(project_root: Path, write_changes: bool) -> None:
+    """Render core/decisions.md from entities/decision/*.md (generated view, §B5)."""
+    import yaml as _yaml
+
+    from science_tool.graph.decision_log import (
+        DECISIONS_REL,
+        read_decision_owners,
+        render_decisions_view,
+    )
+
+    _manifest = _yaml.safe_load((project_root / "science.yaml").read_text(encoding="utf-8")) or {}
+    _v = _manifest.get("layout_version")
+    version = _v if isinstance(_v, int) else None
+    if version is None or version < 3:
+        raise click.ClickException(
+            f"generate-decisions needs an `entities/decision/` owner root; this project is "
+            f"layout_version {version} — complete the v2->v3 migration first."
+        )
+
+    owners = read_decision_owners(project_root / "entities" / "decision")
+    rendered = render_decisions_view(owners)
+    if write_changes:
+        out = project_root / DECISIONS_REL
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(rendered, encoding="utf-8")
+        click.echo(f"wrote {DECISIONS_REL} ({len(owners)} decisions)")
+    else:
+        click.echo(rendered)
 
 
 @entities_group.command("register-kind")
