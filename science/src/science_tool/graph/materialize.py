@@ -258,6 +258,22 @@ def _add_entity(
         knowledge.add((uri, SCI_NS.sourceClass, Literal(entity.source_class)))
     if entity.kind == "dataset" and entity.license:
         knowledge.add((uri, SCI_NS.license, Literal(entity.license)))
+    if entity.kind == "paper":
+        # Phase 4b: a paper is a bibliographic external reference. The node already
+        # carries its kind-class rdf:type and skos:prefLabel=title from the shared
+        # path above; mark it additionally as prov:Entity (a reference/provenance
+        # node, per the design) and add the thin bib surface (year/doi/url, only
+        # when present) so citation/evidence edges land on an inspectable node.
+        knowledge.add((uri, RDF.type, PROV.Entity))
+        year = getattr(entity, "year", None)
+        if year:
+            knowledge.add((uri, DCTERMS_NS.date, Literal(str(year))))
+        doi = getattr(entity, "doi", "") or ""
+        if doi:
+            knowledge.add((uri, SCI_NS.doi, Literal(doi)))
+        url = getattr(entity, "url", "") or ""
+        if url:
+            knowledge.add((uri, DCAT_NS.downloadURL, URIRef(url)))
 
     source_uri = _source_uri(entity.file_path)
     provenance.add((uri, PROV.wasDerivedFrom, source_uri))
