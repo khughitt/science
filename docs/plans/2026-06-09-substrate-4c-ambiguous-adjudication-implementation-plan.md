@@ -139,7 +139,7 @@ git commit -m "feat(substrate-4c): method/topic become slug identity kinds"
 - Modify: `src/science_tool/graph/sources.py:144-157` (`AggregateRowMeta`), `:452-465` (capture site)
 - Test: `tests/graph/test_aggregate_row_primary_external_id.py` (new)
 
-**Context:** The triage classifier (T3) must see whether an aggregate row carries a `primary_external_id` to bucket it `CURIE_EXTERNAL_REF`. `AggregateRowMeta` is the row-level metadata captured at load time (before non-strict dedup drops a shadowed Entity). It currently carries `path, line, canonical_id, kind, source_path`. Add a normalized `primary_external_id` field. A well-formed value is a mapping with both `source` and `curie` (string) keys; anything else normalizes to `None` (so a half-filled mapping cannot later masquerade as backed — design §3).
+**Context:** The triage classifier (T3) must see whether an aggregate row carries a `primary_external_id` to bucket it `CURIE_EXTERNAL_REF`. `AggregateRowMeta` is the row-level metadata captured at load time (before non-strict dedup drops a shadowed Entity). It currently carries `path, line, canonical_id, kind, source_path`. Add a `primary_external_id` field captured from the **validated** entity (`entity.primary_external_id` is a typed `ExternalId`, declared on the base `Entity` model at `model/src/science_model/entities.py:248`). Critically, `ExternalId` requires **all** of `source`, `id`, `curie`, `provenance` (`identity.py:17`), and `schema.model_validate(raw)` runs at `sources.py:359` — **before** the aggregate-meta capture at `sources.py:452`. So a half-filled `primary_external_id` never reaches the capture point: it fails `ExternalId` validation and the row is skipped (`entity_schema_validation_failed`). The captured value is therefore the full `{source, id, curie, provenance}` dump or `None`, never a partial mapping (design §3).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -174,7 +174,13 @@ def test_wellformed_primary_external_id_captured(tmp_path: Path) -> None:
             {
                 "id": "protein:BCMA",
                 "title": "BCMA",
-                "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:Q02223"},
+                # Full ExternalId shape: source, id, curie, provenance are ALL required.
+                "primary_external_id": {
+                    "source": "UniProtKB",
+                    "id": "Q02223",
+                    "curie": "UniProtKB:Q02223",
+                    "provenance": "manual",
+                },
             }
         ],
     )
@@ -182,23 +188,38 @@ def test_wellformed_primary_external_id_captured(tmp_path: Path) -> None:
         tmp_path, include_commons=False, strict_core_schema=False, strict_identity=False
     )
     meta = _meta_for(sources, "protein:BCMA")
-    assert meta.primary_external_id == {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}
+    # Captured from the validated entity; model_dump(exclude_none=True) drops only `version`.
+    assert meta.primary_external_id == {
+        "source": "UniProtKB",
+        "id": "Q02223",
+        "curie": "UniProtKB:Q02223",
+        "provenance": "manual",
+    }
 
 
-def test_malformed_primary_external_id_normalizes_to_none(tmp_path: Path) -> None:
+def test_malformed_primary_external_id_row_is_skipped(tmp_path: Path) -> None:
+    # A half-filled primary_external_id fails ExternalId schema validation
+    # (source/id/curie/provenance all required) at sources.py:359, so the row is
+    # SKIPPED before the aggregate-meta capture at :452 — it never appears in
+    # aggregate_rows (not even as a None-PEI row). A row with NO primary_external_id
+    # validates fine and IS captured with primary_external_id is None. `concept` is a
+    # core kind that permits an absent primary_external_id (mirrors real terms.yaml).
     _write(
         tmp_path,
         [
-            {"id": "method:partial", "title": "Partial", "primary_external_id": {"source": "UniProt"}},  # no curie
-            {"id": "method:scalar", "title": "Scalar", "primary_external_id": "UniProt:X"},  # not a mapping
-            {"id": "method:none", "title": "None"},  # absent
+            {"id": "concept:partial", "title": "Partial",
+             "primary_external_id": {"source": "UniProtKB"}},  # missing id/curie/provenance -> skipped
+            {"id": "concept:plain", "title": "Plain"},  # no primary_external_id -> captured, None
         ],
     )
     sources = load_project_sources(
         tmp_path, include_commons=False, strict_core_schema=False, strict_identity=False
     )
-    for cid in ("method:partial", "method:scalar", "method:none"):
-        assert _meta_for(sources, cid).primary_external_id is None
+    cids = {m.canonical_id for m in sources.aggregate_rows}
+    assert "concept:partial" not in cids  # skipped at ExternalId validation
+    assert "concept:plain" in cids  # captured
+    assert _meta_for(sources, "concept:plain").primary_external_id is None
+    assert sources.skipped_entities  # the malformed row was recorded as a skip
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -216,27 +237,26 @@ In `src/science_tool/graph/sources.py`, extend the `AggregateRowMeta` dataclass 
     canonical_id: str
     kind: str
     source_path: str | None
-    # 4c: the row's external authority mapping, normalized. A well-formed value is
-    # a mapping carrying string `source` and `curie`; anything else -> None (so a
-    # half-filled mapping can't masquerade as a backed curie external-ref).
+    # 4c: the row's external authority identifier, captured from the VALIDATED
+    # entity. `entity.primary_external_id` is a typed ExternalId (or None); a
+    # malformed value never reaches capture (it fails ExternalId validation and the
+    # row is skipped). So this is the full {source, id, curie, provenance} dump or
+    # None — never a half-filled mapping that could masquerade as a backed ref.
     primary_external_id: dict[str, str] | None = None
 ```
 
 - [ ] **Step 4: Capture it at the aggregate emit point**
 
-In `src/science_tool/graph/sources.py`, inside the `if adapter.name == "aggregate":` block, add a normalizer and pass it to the `AggregateRowMeta(...)` constructor:
+In `src/science_tool/graph/sources.py`, inside the `if adapter.name == "aggregate":` block, read the validated entity's `primary_external_id` and pass it to the `AggregateRowMeta(...)` constructor:
 
 ```python
                 if adapter.name == "aggregate":
                     assert ref.line is not None  # AggregateAdapter always sets the entry index
                     sp_raw = raw.get("source_path")
-                    pei_raw = raw.get("primary_external_id")
-                    pei = None
-                    if isinstance(pei_raw, dict):
-                        source = pei_raw.get("source")
-                        curie = pei_raw.get("curie")
-                        if isinstance(source, str) and source and isinstance(curie, str) and curie:
-                            pei = {"source": source, "curie": curie}
+                    # Capture from the VALIDATED entity, not raw: entity.primary_external_id
+                    # is a typed ExternalId (already passed ExternalId validation) or None.
+                    # exclude_none drops the optional `version`, leaving the four required keys.
+                    pei = entity.primary_external_id
                     aggregate_rows.append(
                         AggregateRowMeta(
                             path=ref.path,
@@ -246,12 +266,12 @@ In `src/science_tool/graph/sources.py`, inside the `if adapter.name == "aggregat
                             # source_path is unschema'd extra metadata; normalize a
                             # malformed (non-string) value to None so the report can't crash.
                             source_path=sp_raw if isinstance(sp_raw, str) else None,
-                            primary_external_id=pei,
+                            primary_external_id=pei.model_dump(exclude_none=True) if pei is not None else None,
                         )
                     )
 ```
 
-Note: `raw` still carries `primary_external_id` here because `_enrich_raw` does not strip unknown keys; the field rides as schema-extra metadata exactly like `source_path`.
+Note: capturing from `entity.primary_external_id` (not `raw`) is deliberate — by this point the row has passed `schema.model_validate(raw)`, so a malformed `primary_external_id` has already caused the row to be skipped upstream. `entity.primary_external_id` is therefore guaranteed to be a well-formed `ExternalId` or `None`. No `ExternalId` import is needed here (we only call `.model_dump()` on the instance the entity already holds).
 
 - [ ] **Step 5: Run the test**
 
@@ -265,7 +285,7 @@ cd ~/d/science/science
 uv run --frozen ruff check src/science_tool/graph/sources.py tests/graph/test_aggregate_row_primary_external_id.py
 uv run --frozen ruff format src/science_tool/graph/sources.py tests/graph/test_aggregate_row_primary_external_id.py
 git add src/science_tool/graph/sources.py tests/graph/test_aggregate_row_primary_external_id.py
-git commit -m "feat(substrate-4c): capture normalized primary_external_id in AggregateRowMeta"
+git commit -m "feat(substrate-4c): capture validated primary_external_id in AggregateRowMeta"
 ```
 
 ---
@@ -449,7 +469,12 @@ def test_discover_one_ref_per_row_and_load_raw_shape(tmp_path: Path) -> None:
                 "id": "protein:BCMA",
                 "type": "protein",
                 "title": "BCMA",
-                "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:Q02223"},
+                "primary_external_id": {
+                    "source": "UniProtKB",
+                    "id": "Q02223",
+                    "curie": "UniProtKB:Q02223",
+                    "provenance": "manual",
+                },
                 "description": "B-cell maturation antigen.",
             }
         ],
@@ -465,7 +490,12 @@ def test_discover_one_ref_per_row_and_load_raw_shape(tmp_path: Path) -> None:
     assert raw["title"] == "BCMA"
     assert raw["same_as"] == ["UniProtKB:Q02223"]  # LIST, not frozenset
     assert raw["file_path"] == _REL
-    assert raw["primary_external_id"] == {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}
+    assert raw["primary_external_id"] == {
+        "source": "UniProtKB",
+        "id": "Q02223",
+        "curie": "UniProtKB:Q02223",
+        "provenance": "manual",
+    }
 
 
 def test_participation_mode_is_external_reference() -> None:
@@ -473,7 +503,8 @@ def test_participation_mode_is_external_reference() -> None:
 
 
 def test_title_defaults_to_id_when_absent(tmp_path: Path) -> None:
-    _write(tmp_path, [{"id": "gene:MYC", "type": "gene", "primary_external_id": {"source": "HGNC", "curie": "HGNC:7553"}}])
+    _write(tmp_path, [{"id": "gene:MYC", "type": "gene",
+                       "primary_external_id": {"source": "HGNC", "id": "7553", "curie": "HGNC:7553", "provenance": "manual"}}])
     adapter = CurieRefAdapter(local_profile="local")
     raw = adapter.load_raw(adapter.discover(tmp_path)[0])
     assert raw["title"] == "gene:MYC"
@@ -483,8 +514,10 @@ def test_duplicate_id_raises(tmp_path: Path) -> None:
     _write(
         tmp_path,
         [
-            {"id": "protein:BCMA", "type": "protein", "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}},
-            {"id": "protein:BCMA", "type": "protein", "primary_external_id": {"source": "UniProt", "curie": "UniProt:OTHER"}},
+            {"id": "protein:BCMA", "type": "protein",
+             "primary_external_id": {"source": "UniProtKB", "id": "Q02223", "curie": "UniProtKB:Q02223", "provenance": "manual"}},
+            {"id": "protein:BCMA", "type": "protein",
+             "primary_external_id": {"source": "UniProt", "id": "OTHER", "curie": "UniProt:OTHER", "provenance": "manual"}},
         ],
     )
     with pytest.raises(ValueError, match="duplicate"):
@@ -492,7 +525,9 @@ def test_duplicate_id_raises(tmp_path: Path) -> None:
 
 
 def test_malformed_primary_external_id_raises(tmp_path: Path) -> None:
-    _write(tmp_path, [{"id": "protein:X", "type": "protein", "primary_external_id": {"source": "UniProt"}}])  # no curie
+    # Missing id, curie, provenance — ExternalId requires all four, and external_refs.yaml
+    # is the durable authority, so discover() fails loud rather than skipping the row.
+    _write(tmp_path, [{"id": "protein:X", "type": "protein", "primary_external_id": {"source": "UniProt"}}])
     with pytest.raises(ValueError, match="primary_external_id"):
         CurieRefAdapter(local_profile="local").discover(tmp_path)
 
@@ -593,11 +628,15 @@ class CurieRefAdapter(StorageAdapter):
                 raise ValueError(f"{self._rel}: duplicate id {cid!r} in external-reference authority")
             seen.add(cid)
             pei = row.get("primary_external_id")
-            if not (isinstance(pei, dict) and isinstance(pei.get("source"), str) and pei.get("source")
-                    and isinstance(pei.get("curie"), str) and pei.get("curie")):
+            # Require the full ExternalId shape (source, id, curie, provenance): these
+            # rows are validated as ExternalId downstream (sources.py:359) once T6
+            # registers the adapter, and external_refs.yaml is the durable backing
+            # authority — so a partial mapping must fail loud here, not be skipped later.
+            if not (isinstance(pei, dict)
+                    and all(isinstance(pei.get(k), str) and pei.get(k) for k in ("source", "id", "curie", "provenance"))):
                 raise ValueError(
                     f"{self._rel}[{i}] ({cid}): malformed primary_external_id "
-                    "(needs string `source` and `curie`)"
+                    "(needs string `source`, `id`, `curie`, `provenance`)"
                 )
         self._rows = rows
         return [SourceRef(adapter_name=self.name, path=self._rel, line=i) for i in range(len(rows))]
@@ -738,7 +777,8 @@ def test_curie_row_synthesizes_external_reference_declaration(tmp_path: Path) ->
         yaml.safe_dump(
             {"references": [
                 {"id": "protein:BCMA", "type": "protein", "title": "BCMA",
-                 "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}}
+                 "primary_external_id": {"source": "UniProtKB", "id": "Q02223",
+                                         "curie": "UniProtKB:Q02223", "provenance": "manual"}}
             ]}
         ),
         encoding="utf-8",
@@ -765,7 +805,8 @@ def test_curie_defers_to_transitional_aggregate_stub_no_collision(tmp_path: Path
         yaml.safe_dump(
             {"references": [
                 {"id": "protein:BCMA", "type": "protein", "title": "BCMA",
-                 "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}}
+                 "primary_external_id": {"source": "UniProtKB", "id": "Q02223",
+                                         "curie": "UniProtKB:Q02223", "provenance": "manual"}}
             ]}
         ),
         encoding="utf-8",
@@ -892,7 +933,8 @@ def _project(root: Path) -> None:
         yaml.safe_dump(
             {"references": [
                 {"id": "protein:BCMA", "type": "protein", "title": "BCMA",
-                 "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}}
+                 "primary_external_id": {"source": "UniProtKB", "id": "Q02223",
+                                         "curie": "UniProtKB:Q02223", "provenance": "manual"}}
             ]}
         ),
         encoding="utf-8",
@@ -1090,7 +1132,8 @@ def test_migrate_creates_authority_row_and_drops_aggregate_row(tmp_path: Path) -
     _project(
         tmp_path,
         [{"id": "protein:BCMA", "title": "BCMA",
-          "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:Q02223"},
+          "primary_external_id": {"source": "UniProtKB", "id": "Q02223",
+                                  "curie": "UniProtKB:Q02223", "provenance": "manual"},
           "description": "B-cell maturation antigen."}],
     )
     report = _run(tmp_path)
@@ -1099,13 +1142,15 @@ def test_migrate_creates_authority_row_and_drops_aggregate_row(tmp_path: Path) -
     assert len(refs) == 1
     assert refs[0]["id"] == "protein:BCMA"
     assert refs[0]["type"] == "protein"
-    assert refs[0]["primary_external_id"] == {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}
+    # The writer copies the source row's primary_external_id verbatim — full ExternalId shape.
+    assert refs[0]["primary_external_id"] == {"source": "UniProtKB", "id": "Q02223",
+                                              "curie": "UniProtKB:Q02223", "provenance": "manual"}
     assert refs[0]["description"] == "B-cell maturation antigen."
     assert _terms(tmp_path) == []  # aggregate row dropped
 
 
 def test_migrate_is_idempotent_on_matching_curie(tmp_path: Path) -> None:
-    pei = {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}
+    pei = {"source": "UniProtKB", "id": "Q02223", "curie": "UniProtKB:Q02223", "provenance": "manual"}
     _project(
         tmp_path,
         [{"id": "protein:BCMA", "title": "BCMA", "primary_external_id": pei}],
@@ -1121,9 +1166,9 @@ def test_migrate_rejects_conflicting_curie_without_mutation(tmp_path: Path) -> N
     _project(
         tmp_path,
         [{"id": "protein:BCMA", "title": "BCMA",
-          "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:NEW"}}],
+          "primary_external_id": {"source": "UniProtKB", "id": "NEW", "curie": "UniProtKB:NEW", "provenance": "manual"}}],
         external_refs=[{"id": "protein:BCMA", "type": "protein", "title": "BCMA",
-                        "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:OLD"}}],
+                        "primary_external_id": {"source": "UniProtKB", "id": "OLD", "curie": "UniProtKB:OLD", "provenance": "manual"}}],
     )
     report = _run(tmp_path)
     assert "protein:BCMA" not in report.migrated
@@ -1331,7 +1376,8 @@ def _project(root: Path, manifest: str) -> None:
     (src / "terms.yaml").write_text(
         yaml.safe_dump(
             {"terms": [{"id": "protein:BCMA", "title": "BCMA",
-                        "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}}]}
+                        "primary_external_id": {"source": "UniProtKB", "id": "Q02223",
+                                                "curie": "UniProtKB:Q02223", "provenance": "manual"}}]}
         ),
         encoding="utf-8",
     )

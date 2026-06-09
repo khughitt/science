@@ -23,7 +23,7 @@ small residual:
 
 | Population | MM30 kinds & counts | Distinguishing evidence |
 |---|---|---|
-| **Curie-bearing biomedical refs** | protein (21 UniProt), disease (5 MONDO), drug (8 ChEMBL/ChEBI), gene (1 HGNC) = **35** | row carries `primary_external_id: {source, curie}` |
+| **Curie-bearing biomedical refs** | protein (21 UniProt), disease (5 MONDO), drug (8 ChEMBL/ChEBI), gene (1 HGNC) = **35** | row carries a `primary_external_id` (a full `ExternalId`: `source`, `id`, `curie`, `provenance`) |
 | **Bare coined vocabulary** | method (16), topic (36) = **52** | bare `id + title + description`, no external id |
 | **Epistemic question stubs** | question (7) | bare `id + title`, but `question` is an epistemic kind |
 | **True residual** | no-curie disease (1), no-curie drug (1), any unknown kind = **2** | biomedical kind, but no `primary_external_id` |
@@ -83,8 +83,8 @@ New `AggregateBucket` members:
 New terminal logic (after the existing coined check):
 
 ```
-# row carries a well-formed external authority id -> curie external ref
-if has_primary_external_id:                       # source + curie both present
+# row carries a validated external authority id -> curie external ref
+if has_primary_external_id:                       # entity.primary_external_id is not None
     return CURIE_EXTERNAL_REF, f"{kind} carries primary_external_id {curie} -> curie external ref"
 # bare epistemic question stub: visible but never auto-promoted in 4c
 if self_sourced and kind == "question":
@@ -96,14 +96,22 @@ if self_sourced and kind in _COINABLE_VOCAB_KINDS:   # {"method", "topic"}
 return AMBIGUOUS, f"{kind} without primary_external_id -> requires human identity decision"
 ```
 
-`has_primary_external_id` / `curie` require the triage to see the **raw row
-fields** (`primary_external_id`), which the current classifier does not carry.
-The 3a loader already captures per-row `AggregateRowMeta`; 4c extends that
-capture to include the row's `primary_external_id` mapping (source + curie),
-recorded at the same emit point. The classifier reads it from the joined meta.
-A malformed `primary_external_id` (missing source or curie) is treated as
-**absent** → the row falls through to residual `AMBIGUOUS`, never
-`CURIE_EXTERNAL_REF` (so a half-filled mapping cannot masquerade as backed).
+`has_primary_external_id` requires the triage to see the row's
+`primary_external_id`, which the current classifier does not carry. The 3a loader
+already captures per-row `AggregateRowMeta`; 4c extends that capture to record the
+row's `primary_external_id` — taken from the **validated entity**
+(`entity.primary_external_id`, a typed `ExternalId`) at the same emit point. The
+classifier reads it from the joined meta.
+
+Note the contract: `primary_external_id` is a real schema field of type
+`ExternalId`, which requires **all** of `source`, `id`, `curie`, `provenance`, and
+`schema.model_validate(raw)` runs **before** the aggregate-meta capture. So a
+malformed `primary_external_id` never reaches the classifier at all — it fails
+`ExternalId` validation and the whole row is **skipped**
+(`entity_schema_validation_failed`), not routed to `AMBIGUOUS`. The classifier
+therefore sees only two states: a full validated `ExternalId` (→
+`CURIE_EXTERNAL_REF`) or `None` (→ routed by kind). A half-filled mapping cannot
+masquerade as backed because it cannot load.
 
 Bucket dispositions:
 
@@ -126,8 +134,10 @@ references:
     type: protein
     title: BCMA
     primary_external_id:
-      source: UniProt
-      curie: UniProt:Q02223
+      source: UniProtKB
+      id: Q02223
+      curie: UniProtKB:Q02223
+      provenance: manual
     description: B-cell maturation antigen (TNFRSF17), the principal MM surface target...
 ```
 
@@ -158,13 +168,15 @@ New `graph/storage_adapters/curie_ref.py`, modeled on `bib.py`:
   per row. **Both integrity failures raise loudly** — never a silent skip:
   - **Intra-file duplicate id** → raise (a second row for the same `id` is a
     conflict; see §4.3).
-  - **Malformed `primary_external_id`** (missing source or curie) → raise.
-    Unlike a malformed *aggregate* row (transitional debt that triage tolerates by
-    routing to residual `AMBIGUOUS`), `external_refs.yaml` is the **durable backing
-    authority** once aggregate rows retire; a silently-skipped row would leave
-    citations unresolved or drop the curie mapping with no clear failure. Fail
-    loud (or, if a softer surface is wanted later, an explicit `SkippedEntity` /
-    validate error — but never a silent drop).
+  - **Malformed `primary_external_id`** (missing any of `source`, `id`, `curie`,
+    `provenance` — the full `ExternalId` shape) → raise. A malformed *aggregate*
+    row is skipped at schema-validation time (`entity_schema_validation_failed`)
+    and surfaced as a `SkippedEntity`, which is acceptable for transitional debt;
+    but `external_refs.yaml` is the **durable backing authority** once aggregate
+    rows retire, so the adapter validates the shape *itself* at discover time and
+    fails loud rather than deferring to a later skip — a silently-dropped authority
+    row would leave citations unresolved or lose the curie mapping with no clear
+    failure.
 - `load_raw()` → `{kind: <type>, id: <id>, title: <title|id>, primary_external_id: {...}, same_as: [<curie>], file_path: <resolved rel path>, description?: ...}`.
   - **`file_path`** is the resolved relative path of `external_refs.yaml`
     (matching `BibAdapter`, which sets `file_path=_BIB_REL`). `_enrich_raw`
@@ -285,9 +297,12 @@ later. Per `CURIE_EXTERNAL_REF` row, in one apply:
    gotcha earlier substrate plans corrected for `AggregateAdapter`).
 2. **Drop** the aggregate row (index-set rewrite, same machinery as promote/delete).
 
-**Backed-only:** a row whose `primary_external_id` is malformed/absent never
-reaches this action (it bucketed `AMBIGUOUS`), so the migration target is always
-well-formed — the exact parallel to 4b's bib-backed check.
+**Backed-only:** only `CURIE_EXTERNAL_REF` rows reach this action, and a row
+reaches that bucket only when it carries a validated full `ExternalId`. A
+*malformed* `primary_external_id` is skipped at load (never triaged); an *absent*
+one buckets by kind (never `CURIE_EXTERNAL_REF`). So the migration target always
+carries a well-formed `{source, id, curie, provenance}` — the exact parallel to
+4b's bib-backed check.
 
 **Idempotency (refinement):**
 
@@ -380,10 +395,11 @@ TDD, subagent-driven (fresh implementer + two-stage spec/quality review per task
 + final holistic). Per-task coverage:
 
 - **Bucket matrix** — unit tests on pure `_bucket`: curie-bearing → `CURIE_EXTERNAL_REF`;
-  malformed `primary_external_id` → residual `AMBIGUOUS`; bare method/topic →
+  no-`primary_external_id` biomedical kind → residual `AMBIGUOUS`; bare method/topic →
   `COINED`; bare question → `QUESTION_DEFERRED`; no-curie disease/drug → residual.
-- **Row-meta capture** — loader carries `primary_external_id` into `AggregateRowMeta`;
-  non-mapping / partial mappings normalize to absent.
+- **Row-meta capture** — loader carries the validated `primary_external_id` into
+  `AggregateRowMeta`; a malformed `primary_external_id` fails `ExternalId` validation
+  upstream, so its row is skipped (a `SkippedEntity`) and never captured.
 - **`CurieRefAdapter`** — discover → one ref per well-formed row; **intra-file
   duplicate id raises**; **malformed `primary_external_id` row raises** (durable
   authority fails loud, not silent skip); synthesized entity carries the curie in
