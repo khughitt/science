@@ -120,3 +120,26 @@ def test_mixed_entities_and_terms_each_file_rewritten_once(tmp_path: Path) -> No
     assert set(report.files_rewritten) == {_ENT_REL, _TERMS_REL}
     assert yaml.safe_load((tmp_path / _ENT_REL).read_text())["entities"] == []
     assert yaml.safe_load((tmp_path / _TERMS_REL).read_text())["terms"] == []
+
+
+def test_duplicate_id_across_files_routes_by_path_line(tmp_path: Path) -> None:
+    # Same canonical_id in both files but DIFFERENT buckets: COINED (self-sourced)
+    # in entities.yaml vs CRUFT (migration source) in terms.yaml. Correct routing
+    # promotes the entities row (owner created) and deletes the terms cruft row.
+    #
+    # Old id-keyed triage collapses both metas to ONE triage for "concept:dup":
+    # rows are sorted by (bucket, id), so the dict's last write wins = CRUFT, and
+    # BOTH metas take the delete action under --delete-cruft -> the coined row is
+    # destroyed and the owner file is never written. The owner-exists assertion
+    # below fails on the old code and passes on the (path, line)-keyed planner,
+    # independent of meta iteration order.
+    _write(
+        tmp_path,
+        entities=[{"canonical_id": "concept:dup", "kind": "concept", "title": "Coined", "source_path": _ENT_REL}],
+        terms=[{"id": "concept:dup", "title": "Cruft", "source_path": "migration:audit"}],
+    )
+    report = _run(tmp_path, promote_coined=True, delete_cruft=True, delete_shadow=False)
+    assert (tmp_path / "entities/concepts/dup.md").exists()  # entities (coined) row promoted
+    assert "concept:dup" in report.promoted
+    assert yaml.safe_load((tmp_path / _ENT_REL).read_text())["entities"] == []  # coined row removed
+    assert yaml.safe_load((tmp_path / _TERMS_REL).read_text())["terms"] == []  # cruft row deleted

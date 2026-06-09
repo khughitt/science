@@ -107,7 +107,7 @@ def plan_retirement(
     promote_decisions: bool = False,
     decision_index: DecisionLogIndex | None = None,
 ) -> RetirementPlan:
-    triage_by_id = {t.canonical_id: t for t in rows}
+    triage_by_ref = {(t.path, t.line): t for t in rows}
     action_for: dict[AggregateBucket, RetireAction | None] = {
         AggregateBucket.COINED: RetireAction.PROMOTE if promote_coined else None,
         AggregateBucket.CRUFT: RetireAction.DELETE if delete_cruft else None,
@@ -122,7 +122,7 @@ def plan_retirement(
     for meta in sources.aggregate_rows:
         if Path(meta.path).name not in MULTI_TYPE_AGGREGATE_ROOT_KEYS:
             continue  # firewall: only the multi-type files (entities.yaml/terms.yaml); never single-type aggregates
-        triage = triage_by_id.get(meta.canonical_id)
+        triage = triage_by_ref.get((meta.path, meta.line))
         if triage is None:
             continue
         # Decision rows are governed by the injected index, NOT the bucket. The
