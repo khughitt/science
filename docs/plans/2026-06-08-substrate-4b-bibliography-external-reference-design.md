@@ -69,6 +69,10 @@ any adapter or resolver.
   (`commons_sources.py:90`). Because a bib `paper:X` is in that table, a commons-owned
   `paper:X` of the same id is **not** re-materialized — the **project-local bib node
   wins**, while the commons owner row is still recorded for resolution/ambiguity
+(recorded whenever the id is *referenced* by the project — the commons owner row
+rides `collect_referenced_commons_ids`; an unreferenced commons twin that the bib
+also lists records no commons owner row, but nothing cites it, so there is no
+ambiguity to surface)
   (§B3a). This is the intended precedence (a project's own bibliography is its
   citation authority) and matches existing behavior; 4b states and tests it rather
   than re-plumbing the commons seam in a bibliography phase. Making commons-owned
