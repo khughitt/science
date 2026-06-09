@@ -128,11 +128,12 @@ def test_duplicate_id_across_files_routes_by_path_line(tmp_path: Path) -> None:
     # promotes the entities row (owner created) and deletes the terms cruft row.
     #
     # Old id-keyed triage collapses both metas to ONE triage for "concept:dup":
-    # rows are sorted by (bucket, id), so the dict's last write wins = CRUFT, and
-    # BOTH metas take the delete action under --delete-cruft -> the coined row is
-    # destroyed and the owner file is never written. The owner-exists assertion
-    # below fails on the old code and passes on the (path, line)-keyed planner,
-    # independent of meta iteration order.
+    # the classifier sorts rows by (bucket.value, canonical_id), and "coined" <
+    # "cruft", so CRUFT is the last write into {canonical_id: triage} and wins.
+    # Both metas then look up the CRUFT triage and take the DELETE action (the
+    # wrong action fires for the coined row), so the entities owner is never
+    # written. The (path, line)-keyed planner gives each meta its own triage, so
+    # the assertions below pass independent of meta iteration order.
     _write(
         tmp_path,
         entities=[{"canonical_id": "concept:dup", "kind": "concept", "title": "Coined", "source_path": _ENT_REL}],
@@ -142,4 +143,8 @@ def test_duplicate_id_across_files_routes_by_path_line(tmp_path: Path) -> None:
     assert (tmp_path / "entities/concepts/dup.md").exists()  # entities (coined) row promoted
     assert "concept:dup" in report.promoted
     assert yaml.safe_load((tmp_path / _ENT_REL).read_text())["entities"] == []  # coined row removed
-    assert yaml.safe_load((tmp_path / _TERMS_REL).read_text())["terms"] == []  # cruft row deleted
+    assert yaml.safe_load((tmp_path / _TERMS_REL).read_text())["terms"] == []  # cruft row physically dropped
+    # NOTE: "concept:dup" is NOT in report.deleted — apply_retirement's delete loop
+    # skips appending to `deleted` when the id is already in `promoted` (the dedup
+    # guard at line "if pr.triage.canonical_id not in promoted").  The physical drop
+    # above is the authoritative evidence the cruft row was deleted.
