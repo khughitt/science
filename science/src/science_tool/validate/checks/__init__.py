@@ -54,6 +54,7 @@ CANONICAL_CHECK_MODULES = (
     "orphan_datapackage_owner",
     "identity_collision",
     "aggregate_stub",
+    "aggregate_retired",
     "variant_identity",
     "genesets",
     "reference_graphs",
