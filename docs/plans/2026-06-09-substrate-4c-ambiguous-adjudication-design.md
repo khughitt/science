@@ -141,9 +141,24 @@ for `protein:BCMA` supersedes it via normal external-ref precedence.
 New `graph/storage_adapters/curie_ref.py`, modeled on `bib.py`:
 
 - `name = "curie-ref"`, `participation_mode = ParticipationMode.EXTERNAL_REFERENCE`.
-- `discover()` → one `SourceRef(adapter_name="curie-ref", path="knowledge/sources/local/external_refs.yaml", line=i)` per well-formed row.
+- **Constructor takes `local_profile`** (like `AggregateAdapter`, *unlike*
+  `BibAdapter` whose `papers/references.bib` is profile-independent). The file
+  path is resolved through the project config, **not hardcoded**:
+  `local_profile_sources_dir(project_root, local_profile=self._local_profile) / "external_refs.yaml"`.
+  `sources.py` registers `CurieRefAdapter(local_profile=local_profile)`, passing
+  the same resolved `local_profile` it gives `AggregateAdapter`.
+  `knowledge/sources/local/external_refs.yaml` is only the *common* MM30/example
+  path, not a constant.
+- `discover()` → one `SourceRef(adapter_name="curie-ref", path=<resolved rel path>, line=i)`
+  per well-formed row. **Rejects intra-file duplicate ids loudly** (raise): a
+  second row for the same `id` in `external_refs.yaml` is a conflict, never a
+  silent skip (see §4.3). Malformed `primary_external_id` (missing source/curie)
+  → the row is skipped from `discover` (not a valid authority row).
 - `load_raw()` → `{kind: <type>, id: <id>, title: <title|id>, primary_external_id: {...}, description?: ...}`.
-- Synthesizes a lightweight in-memory `Entity` per row — **never** writes owner
+- Synthesizes a lightweight in-memory `Entity` per row with its **`same_as`
+  field populated with the curie** (e.g. `same_as=frozenset({curie})`). This is
+  what drives correct materialization (§4.4) — the existing same-as path turns it
+  into a `skos:exactMatch` to a URIRef external-term node. **Never** writes owner
   files, **never** participates in owner collisions.
 - Explicit `RuntimeError` guard if `load_raw()` precedes `discover()` (no silent
   re-read), matching `BibAdapter`.
@@ -171,25 +186,66 @@ The branch says **only** "this adapter contributes external references and a
 prior declaration exists → defer." No adapter-specific knowledge. This covers
 bib *and* curie in one rule. Registration order: `CurieRefAdapter` after
 `AggregateAdapter` (so a lingering aggregate stub precedes the curie row and the
-defer fires). Owner → external-reference flip is automatic on the next load once
-the aggregate row drops.
+defer fires); the existing `# AggregateAdapter must precede …` comment at the
+registration site is updated to name the curie adapter too. Owner →
+external-reference flip is automatic on the next load once the aggregate row
+drops.
+
+**Conflict safety (review fix).** The loop-local dedup table records prior
+declarations *without* participation mode, so a generalized "defer to any prior
+declaration" would silently skip a *second* `external_refs.yaml` row for the same
+id rather than flag it. Two layers close this:
+
+1. **Adapter-level integrity (primary):** `CurieRefAdapter.discover()` rejects
+   intra-file duplicate ids loudly (§4.2). The `--migrate-curie-refs` writer
+   enforces the same at authoring time (§4.5: same curie → reconcile, different
+   curie → loud reject). So `external_refs.yaml` cannot present two conflicting
+   rows for one id in the first place.
+2. **Defer semantics:** with (1) guaranteeing at most one external-ref row per id,
+   the generic defer is only ever deferring a curie row to a *prior owner or
+   transitional aggregate stub* — its intended use. A curie id colliding with a
+   prior external-ref authority row of a *different* adapter (e.g. a `bib`
+   `paper:` row) is structurally implausible (curie kinds are
+   protein/disease/drug/gene, bib is `paper`), and (1) would catch any same-file
+   recurrence regardless.
 
 ### 4.4 Materialization
 
-4b added a `kind == "paper"` node branch (prov:Entity + bib metadata).
-Generalize to an **external-reference node** branch keyed off the synthesized
-node's participation, present-only:
+Two distinct concerns, each routed to the **correct existing contract** — not a
+new literal predicate and not a kind/curie-presence heuristic.
 
-- `(uri, RDF.type, PROV.Entity)` unconditionally.
-- When `primary_external_id` is present: `(uri, SKOS.exactMatch, Literal(curie))`.
-  `SKOS` is already imported and prefix-bound in `graph/io.py`, and no competing
-  external-id predicate exists in the graph/commons materializers, so
-  `skos:exactMatch` is the pinned choice (standards-based curie cross-reference).
-  Emit nothing when absent.
+**(a) The curie cross-reference — reuse the existing `same_as` path.**
+Materialization already turns an entity's `same_as` targets into
+`skos:exactMatch` edges to a **URIRef external-term node**, via
+`_link_same_as_external` → `_external_uri(curie)` + `_register_external_term`
+(`graph/materialize.py:410`, with the exact precedent example
+`topic:PHF19 ↔ UniProtKB:Q5T6S3`). Because `CurieRefAdapter` populates the
+synthesized entity's `same_as` with the curie (§4.2), the curie node gets a
+**correct** `skos:exactMatch` *to a URIRef* (not a literal) that connects to the
+registered external-term node — **with no new materialization code**. The
+earlier draft's `skos:exactMatch → Literal(curie)` was inconsistent RDF and is
+rejected.
 
-The paper branch (`dcterms:date` / `sci:doi` / `dcat:downloadURL`) is unchanged;
-the curie branch is additive and keyed on `primary_external_id`, so paper and
-curie nodes coexist without interference.
+**(b) The lightweight `prov:Entity` marking — gate on declared participation,
+not kind/curie.** `_add_entity` receives only an `Entity`
+(`graph/materialize.py:236`), so it cannot see participation mode on its own.
+Inferring "external reference" from `primary_external_id` presence would be
+**wrong**: a future commons-*owned* `protein:BCMA` legitimately carries a curie
+and must keep full owner treatment. Therefore:
+
+- Build `external_reference_ids: set[str]` once in `_build_dataset_from_sources`
+  from `sources.identity_declarations` (ids whose
+  `participation_mode == ParticipationMode.EXTERNAL_REFERENCE`).
+- Thread it into `_add_entity` and emit `(uri, RDF.type, PROV.Entity)` **iff**
+  `entity.canonical_id in external_reference_ids`. An owned entity carrying a
+  curie is *not* in the set → no external-ref marking, and its curie still
+  materializes via (a).
+
+This subsumes 4b's `kind == "paper"` prov:Entity marking: the implementer
+**converges** that branch onto the same `external_reference_ids` gate (papers are
+declared EXTERNAL_REFERENCE, so they remain marked), removing the kind-keyed
+special case. The paper-specific metadata (`dcterms:date` / `sci:doi` /
+`dcat:downloadURL`) stays keyed on the paper fields and is unchanged.
 
 ### 4.5 `--migrate-curie-refs` (distinct from `--retire-external-refs`)
 
@@ -206,6 +262,10 @@ later. Per `CURIE_EXTERNAL_REF` row, in one apply:
 
 1. **Append** `{id, type, title, primary_external_id, description}` to
    `external_refs.yaml` (create the file with root key `references:` if absent).
+   The writer resolves the target path through the project config —
+   `local_profile_sources_dir(project_root, local_profile=resolve_local_profile_name(project_root)) / "external_refs.yaml"`
+   — **never** a hardcoded `knowledge/sources/local/...` string (the same fixture
+   gotcha earlier substrate plans corrected for `AggregateAdapter`).
 2. **Drop** the aggregate row (index-set rewrite, same machinery as promote/delete).
 
 **Backed-only:** a row whose `primary_external_id` is malformed/absent never
@@ -307,19 +367,33 @@ TDD, subagent-driven (fresh implementer + two-stage spec/quality review per task
   `COINED`; bare question → `QUESTION_DEFERRED`; no-curie disease/drug → residual.
 - **Row-meta capture** — loader carries `primary_external_id` into `AggregateRowMeta`;
   non-mapping / partial mappings normalize to absent.
-- **`CurieRefAdapter`** — discover → one ref per well-formed row; synthesize node;
-  `RuntimeError` if load_raw precedes discover; scope `("curie-ref", False)`.
+- **`CurieRefAdapter`** — discover → one ref per well-formed row; **intra-file
+  duplicate id raises**; malformed `primary_external_id` row skipped; synthesized
+  entity carries the curie in `same_as`; `RuntimeError` if load_raw precedes
+  discover; scope `("curie-ref", False)`; **path resolved via
+  `local_profile_sources_dir`** (test with a non-`local` profile name to catch a
+  hardcoded path).
 - **Generic defer** — an EXTERNAL_REFERENCE adapter defers to a prior declaration;
   bib + curie both covered by the single branch; no strict-load collision with a
   transitional aggregate stub of the same id.
-- **Materialize** — synthesized curie node gets `prov:Entity` + the curie
-  cross-reference predicate; absent → no predicate; paper nodes unaffected.
+- **Materialize (a) curie edge** — synthesized curie node emits
+  `skos:exactMatch` to a **URIRef** external-term node (assert object is a
+  URIRef, not a Literal) and the external term is registered.
+- **Materialize (b) participation gate** — an id declared EXTERNAL_REFERENCE gets
+  `prov:Entity`; an *owned* entity carrying the same-shaped `primary_external_id`
+  does **not** get the external-ref marking yet still emits its curie via
+  `same_as`; paper nodes still `prov:Entity` through the converged gate.
 - **`--migrate-curie-refs`** — round-trip: aggregate row → `external_refs.yaml`
   row + dropped aggregate row; citation to the id still resolves after reload;
   idempotent re-run (same curie → no-op append + reconcile); conflicting curie →
-  loud reject, no mutation. v2 `--apply` refused.
+  loud reject, no mutation; writer honors a non-`local` profile dir. v2 `--apply`
+  refused.
 - **method/topic slug** — load → `--promote-coined` → reload finds owner as
   `adapter="markdown"`; numeric-shaped legacy id still conforms.
+- **method/topic creation path** — `create_entity(project_root, "method", ...)`
+  (and/or `science entities create --kind method`) generates a **slug** id/path
+  under `entities/methods/` and the rendered frontmatter id agrees — guards
+  against drift now that these are slug identity kinds going forward.
 - **v3 gate** — ERROR when residual multi-type aggregate rows remain at
   `layout_version >= 3`; silent/WARN below.
 - Full suite green; lint clean on touched files.
