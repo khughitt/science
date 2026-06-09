@@ -543,6 +543,24 @@ def test_load_raw_before_discover_raises(tmp_path: Path) -> None:
 def test_missing_file_yields_no_refs(tmp_path: Path) -> None:
     (tmp_path / "knowledge" / "sources" / "local").mkdir(parents=True)
     assert CurieRefAdapter(local_profile="local").discover(tmp_path) == []
+
+
+def test_absent_references_key_yields_no_refs(tmp_path: Path) -> None:
+    # File exists but declares no `references:` key at all -> empty authority, not an error.
+    p = tmp_path / "knowledge" / "sources" / "local"
+    p.mkdir(parents=True)
+    (p / "external_refs.yaml").write_text("other: 1\n", encoding="utf-8")
+    assert CurieRefAdapter(local_profile="local").discover(tmp_path) == []
+
+
+def test_non_list_references_raises(tmp_path: Path) -> None:
+    # A present-but-non-list `references` (here a mapping) must fail loud, NOT be
+    # silently coerced to an empty authority (durable-authority contract).
+    p = tmp_path / "knowledge" / "sources" / "local"
+    p.mkdir(parents=True)
+    (p / "external_refs.yaml").write_text("references: {}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="must be a list"):
+        CurieRefAdapter(local_profile="local").discover(tmp_path)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -614,9 +632,13 @@ class CurieRefAdapter(StorageAdapter):
         if not path.is_file():
             return []
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        rows = data.get(_ROOT_KEY) or []
+        # Use .get(key, []) — NOT `.get(key) or []`: a present-but-non-list value
+        # (references: {}, references: "", or a bare `references:` -> None) must reach
+        # the isinstance check and fail loud, not be silently coerced to "no refs".
+        # Only a genuinely absent key defaults to the empty authority.
+        rows = data.get(_ROOT_KEY, [])
         if not isinstance(rows, list):
-            raise ValueError(f"{self._rel}: `{_ROOT_KEY}` must be a list")
+            raise ValueError(f"{self._rel}: `{_ROOT_KEY}` must be a list (got {type(rows).__name__})")
         seen: set[str] = set()
         for i, row in enumerate(rows):
             if not isinstance(row, dict):
@@ -669,7 +691,7 @@ Note: the record uses `summary` (not `description`) for the prose, matching the 
 - [ ] **Step 4: Run the test**
 
 Run: `uv run --frozen pytest tests/graph/test_curie_ref_adapter.py -v`
-Expected: PASS (all 7).
+Expected: PASS (all 9).
 
 - [ ] **Step 5: Lint + commit**
 
@@ -1277,7 +1299,12 @@ Add a `migrated` accumulator and process migrate rows **before** the file-rewrit
         ext_path = ext_dir / "external_refs.yaml"
         ext_doc = yaml.safe_load(ext_path.read_text(encoding="utf-8")) if ext_path.is_file() else None
         ext_doc = ext_doc or {}
-        ext_rows: list[dict] = ext_doc.get("references") or []
+        # .get(key, []) — NOT `.get(key) or []`: a malformed existing references value
+        # must fail loud here (the migration appends/reconciles against it; silently
+        # treating it as empty would drop the conflict check). Mirror CurieRefAdapter.
+        ext_rows: list[dict] = ext_doc.get("references", [])
+        if not isinstance(ext_rows, list):
+            raise ValueError(f"{ext_path}: `references` must be a list (got {type(ext_rows).__name__})")
         existing = {r.get("id"): r for r in ext_rows if isinstance(r, dict)}
         dirty = False
         for pr in plan.migrate:
@@ -1572,6 +1599,23 @@ def test_v3_no_aggregate_rows_is_clean(tmp_path: Path) -> None:
     (tmp_path / "knowledge" / "sources" / "local").mkdir(parents=True)
     ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
     assert list(check_aggregate_retired_at_v3(ctx)) == []
+
+
+def test_v3_single_type_aggregate_stays_clean(tmp_path: Path) -> None:
+    # A single-type aggregate (doc/<plural>/<plural>.yaml is a bare LIST of rows) is
+    # ALSO discovered by AggregateAdapter and marked deprecated, but 4c only retires
+    # multi-type (entities.yaml/terms.yaml) rows -- so the v3 gate must NOT flag it.
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 3\n", encoding="utf-8"
+    )
+    (tmp_path / "knowledge" / "sources" / "local").mkdir(parents=True)
+    topics_dir = tmp_path / "doc" / "topics"
+    topics_dir.mkdir(parents=True)
+    (topics_dir / "topics.yaml").write_text(
+        yaml.safe_dump([{"id": "topic:legacy-thing", "title": "Legacy Thing"}]), encoding="utf-8"
+    )
+    ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
+    assert list(check_aggregate_retired_at_v3(ctx)) == []
 ```
 
 > Step 3/4 note: confirm how `aggregate_stub.py` is registered/discovered (read its test + the check-loader) and mirror it for `aggregate_retired.py`. `ValidateContext.from_project_root(root, *, strict, verbose)` is the real factory (`context.py:31`); the bare dataclass `ValidateContext(...)` requires many fields and must not be used.
@@ -1607,6 +1651,7 @@ import yaml
 
 from science_tool.graph.identity_table import build_identity_table
 from science_tool.graph.sources import load_project_sources
+from science_tool.graph.storage_adapters.aggregate import MULTI_TYPE_AGGREGATE_ROOT_KEYS
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -1632,18 +1677,26 @@ def check_aggregate_retired_at_v3(ctx: ValidateContext) -> Iterator[Result]:
     table = build_identity_table(sources)
     for (_scope, canonical_id), rows in sorted(table.owners().items()):
         for row in rows:
-            if row.adapter == "aggregate" and row.deprecated:
-                path = Path(row.source_ref.path) if row.source_ref else None
-                yield Result(
-                    Severity.ERROR,
-                    path,
-                    None,
-                    f"{canonical_id}: aggregate (entities.yaml/terms.yaml) row survives at "
-                    f"layout_version {version} -- retire it via `science entities triage-aggregate` "
-                    "(promote/migrate/delete) before the v2->v3 migration is considered complete.",
-                    "aggregate-not-retired-at-v3",
-                    None,
-                )
+            if not (row.adapter == "aggregate" and row.deprecated):
+                continue
+            path = Path(row.source_ref.path) if row.source_ref else None
+            # Scope to MULTI-TYPE aggregates (entities.yaml/terms.yaml) only. The
+            # AggregateAdapter ALSO discovers single-type aggregates
+            # (doc/<plural>/<plural>.{json,yaml}) and marks them deprecated, but 4c's
+            # retirement actions target only the multi-type files; flagging single-type
+            # rows here would assert an end-state 4c does not provide a path to reach.
+            if path is None or path.name not in MULTI_TYPE_AGGREGATE_ROOT_KEYS:
+                continue
+            yield Result(
+                Severity.ERROR,
+                path,
+                None,
+                f"{canonical_id}: aggregate (entities.yaml/terms.yaml) row survives at "
+                f"layout_version {version} -- retire it via `science entities triage-aggregate` "
+                "(promote/migrate/delete) before the v2->v3 migration is considered complete.",
+                "aggregate-not-retired-at-v3",
+                None,
+            )
 ```
 
 - [ ] **Step 4: Register the check**
@@ -1653,7 +1706,7 @@ Mirror how `check_lone_aggregate_stub` is registered. Inspect the check-discover
 - [ ] **Step 5: Run the test + validator self-test**
 
 Run: `uv run --frozen pytest tests/validate/test_aggregate_retired_gate.py -v`
-Expected: PASS (all 3).
+Expected: PASS (all 4).
 
 Run: `uv run --frozen pytest tests/ -k "validate and check" -q`
 Expected: PASS — the new check is discovered and does not perturb existing validate enumeration.

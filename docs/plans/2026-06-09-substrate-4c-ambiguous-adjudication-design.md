@@ -363,7 +363,11 @@ Extend the aggregate-stub conformance surface (`validate/checks/aggregate_stub.p
 or a sibling check): at `layout_version >= 3`, **ERROR** if any multi-type
 aggregate owner rows remain (i.e. `entities.yaml` / `terms.yaml` are not fully
 retired). At `layout_version < 3`, behavior is unchanged (the existing lone-stub
-WARN visibility).
+WARN visibility). The gate is scoped strictly to multi-type aggregates: the
+`AggregateAdapter` also discovers and deprecates *single-type* aggregates
+(`doc/<plural>/<plural>.{json,yaml}`), but 4c provides no retirement path for
+those, so the check filters them out (`path.name in MULTI_TYPE_AGGREGATE_ROOT_KEYS`)
+rather than asserting an end-state it cannot deliver.
 
 This makes the target state **executable and asserted** without deleting any
 adapter code. The `AggregateAdapter` class keeps loading aggregate rows (v2
