@@ -24,6 +24,8 @@ from science_tool.graph.aggregate_triage import AggregateBucket, AggregateRowTri
 from science_tool.graph.decision_log import DecisionLogIndex, render_owner_file
 from science_tool.graph.storage_adapters.aggregate import MULTI_TYPE_AGGREGATE_ROOT_KEYS, multi_type_root_key
 
+from science_tool.graph.sources import local_profile_sources_dir, resolve_local_profile_name
+
 if TYPE_CHECKING:
     from science_tool.graph.sources import AggregateRowMeta, ProjectSources
 
@@ -31,6 +33,7 @@ if TYPE_CHECKING:
 class RetireAction(str, Enum):
     PROMOTE = "promote"
     DELETE = "delete"
+    MIGRATE_EXTERNAL_REF = "migrate-external-ref"
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +55,7 @@ class RetirementPlan:
     # line) via a set, so the aggregate entry is only dropped once.
     reconcile: tuple[PlannedRow, ...]  # shadow rows to marker-check (promote_coined only); §3.5 step 2
     rejected: tuple[tuple[AggregateRowTriage, str], ...]
+    migrate: tuple[PlannedRow, ...] = ()  # 4c: CURIE_EXTERNAL_REF rows to migrate into external_refs.yaml then drop.
 
 
 def _real_owner_path(sources: "ProjectSources", canonical_id: str) -> str | None:
@@ -108,6 +112,7 @@ def plan_retirement(
     bib_keys: frozenset[str] = frozenset(),
     promote_decisions: bool = False,
     decision_index: DecisionLogIndex | None = None,
+    migrate_curie_refs: bool = False,
 ) -> RetirementPlan:
     triage_by_ref = {(t.path, t.line): t for t in rows}
     action_for: dict[AggregateBucket, RetireAction | None] = {
@@ -120,6 +125,7 @@ def plan_retirement(
     delete: list[PlannedRow] = []
     reconcile: list[PlannedRow] = []
     rejected: list[tuple[AggregateRowTriage, str]] = []
+    migrate: list[PlannedRow] = []
 
     for meta in sources.aggregate_rows:
         if Path(meta.path).name not in MULTI_TYPE_AGGREGATE_ROOT_KEYS:
@@ -155,6 +161,11 @@ def plan_retirement(
             else:
                 rejected.append((triage, "missing bibliography authority"))
             continue
+        if triage.bucket is AggregateBucket.CURIE_EXTERNAL_REF:
+            if not migrate_curie_refs:
+                continue  # untouched unless explicitly migrating curie refs
+            migrate.append(PlannedRow(triage, RetireAction.MIGRATE_EXTERNAL_REF, meta.path, meta.line, None))
+            continue
         # Recovery candidate: a shadow whose owner we may have written in a prior run.
         if promote_coined and triage.bucket is AggregateBucket.SHADOW:
             owner = _real_owner_path(sources, meta.canonical_id)
@@ -173,7 +184,7 @@ def plan_retirement(
             continue
         promote.append(PlannedRow(triage, action, meta.path, meta.line, target))
 
-    return RetirementPlan(tuple(promote), tuple(delete), tuple(reconcile), tuple(rejected))
+    return RetirementPlan(tuple(promote), tuple(delete), tuple(reconcile), tuple(rejected), tuple(migrate))
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,6 +195,7 @@ class RetirementReport:
     skipped: tuple[tuple[str, str], ...]
     files_rewritten: tuple[str, ...]
     dry_run: bool
+    migrated: tuple[str, ...] = ()
 
 
 _STUB_BODY = "<!-- promoted from an aggregate manifest by substrate retirement; add definition -->\n"
@@ -316,6 +328,60 @@ def apply_retirement(
             deleted.append(pr.triage.canonical_id)
         drop_by_file[pr.source_path].add(pr.line)
 
+    # 3b. Curie external-ref migration: append the authority row, then drop the
+    #     aggregate row. Idempotent (same curie -> reconcile-drop); conflict-loud.
+    migrated: list[str] = []
+    if plan.migrate:
+        ext_dir = local_profile_sources_dir(project_root, local_profile=resolve_local_profile_name(project_root))
+        ext_path = ext_dir / "external_refs.yaml"
+        raw_ext_doc = yaml.safe_load(ext_path.read_text(encoding="utf-8")) if ext_path.is_file() else None
+        ext_doc = {} if raw_ext_doc is None else raw_ext_doc
+        if not isinstance(ext_doc, dict):
+            raise ValueError(f"{ext_path}: document root must be a mapping (got {type(ext_doc).__name__})")
+        # .get(key, []) — NOT `.get(key) or []`: a malformed existing references value
+        # must fail loud here (the migration appends/reconciles against it; silently
+        # treating it as empty would drop the conflict check). Mirror CurieRefAdapter.
+        ext_rows: list[dict] = ext_doc.get("references", [])
+        if not isinstance(ext_rows, list):
+            raise ValueError(f"{ext_path}: `references` must be a list (got {type(ext_rows).__name__})")
+        existing = {r.get("id"): r for r in ext_rows if isinstance(r, dict)}
+        dirty = False
+        for pr in plan.migrate:
+            entry = entries(pr.source_path)[pr.line]
+            cid = pr.triage.canonical_id
+            pei = entry.get("primary_external_id")
+            curie = pei.get("curie") if isinstance(pei, dict) else None
+            if not isinstance(curie, str) or not curie:
+                rejected.append((cid, "curie-external-ref row is missing primary_external_id.curie"))
+                continue
+            prior = existing.get(cid)
+            if prior is not None:
+                prior_pei = prior.get("primary_external_id")
+                prior_curie = prior_pei.get("curie") if isinstance(prior_pei, dict) else None
+                if prior_curie != curie:
+                    rejected.append((cid, f"external_refs.yaml conflict: {cid} already mapped to a different curie"))
+                    continue
+                # Already backed with the SAME curie: reconcile by dropping the stub.
+                # Preserve the existing authority row verbatim; do not rewrite
+                # provenance/version just because the retiring aggregate row differs.
+                migrated.append(cid)
+                drop_by_file[pr.source_path].add(pr.line)
+                continue
+            new_row: dict[str, object] = {"id": cid, "type": pr.triage.kind, "title": entry.get("title") or cid}
+            new_row["primary_external_id"] = pei
+            description = entry.get("description")
+            if isinstance(description, str) and description:
+                new_row["description"] = description
+            ext_rows.append(new_row)
+            existing[cid] = new_row
+            dirty = True
+            migrated.append(cid)
+            drop_by_file[pr.source_path].add(pr.line)
+        if dirty and not dry_run:
+            ext_doc["references"] = ext_rows
+            ext_path.parent.mkdir(parents=True, exist_ok=True)
+            ext_path.write_text(yaml.safe_dump(ext_doc, sort_keys=False, allow_unicode=True), encoding="utf-8")
+
     # 4. Rewrite each affected aggregate file once.
     files_rewritten = sorted(drop_by_file)
     if not dry_run:
@@ -329,4 +395,5 @@ def apply_retirement(
         tuple(skipped),
         tuple(files_rewritten),
         dry_run,
+        tuple(migrated),
     )
