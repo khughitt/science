@@ -46,6 +46,7 @@ from science_tool.graph.identity_table import (
 from science_tool.graph.storage_adapters.aggregate import AggregateAdapter
 from science_tool.graph.storage_adapters.base import StorageAdapter
 from science_tool.graph.storage_adapters.bib import BibAdapter
+from science_tool.graph.storage_adapters.curie_ref import CurieRefAdapter
 from science_tool.graph.storage_adapters.code import CodeAdapter
 from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
@@ -287,9 +288,11 @@ def load_project_sources(
             virtual_files=markdown_overrides,
         ),
         AggregateAdapter(local_profile=local_profile),
-        # NOTE: AggregateAdapter must precede BibAdapter — the bib defer guard relies
-        # on aggregate stubs (and markdown owners) being declared first this load.
+        # NOTE: AggregateAdapter must precede the external-reference adapters
+        # (BibAdapter, CurieRefAdapter) — their defer guard relies on aggregate
+        # stubs (and markdown owners) being declared first this load.
         BibAdapter(),
+        CurieRefAdapter(local_profile=local_profile),
         DatapackageAdapter(),
         WorkflowRunAdapter(),
         TaskAdapter(),
@@ -435,15 +438,19 @@ def load_project_sources(
                     # datapackage's resources after the owner (markdown) wins the column.
                     dataset_datapackages[entity.canonical_id] = ref.path
                     continue
-                if isinstance(adapter, BibAdapter) and entity.canonical_id in identity_table:
-                    # §B3/§C3 bib defer: the bib is an external-reference authority,
-                    # not a competing owner. If a real owner OR a transitional
-                    # aggregate stub already claimed this id this load (both adapters
-                    # precede BibAdapter), bib defers — no second declaration, no
-                    # duplicate entity, no collision under strict load. The
-                    # owner→external-reference flip happens automatically on the next
-                    # load once 4b retirement drops the stub.
-                    # No side-table needed: bib entries stay held in BibAdapter._entries.
+                if (
+                    adapter.participation_mode == ParticipationMode.EXTERNAL_REFERENCE
+                    and entity.canonical_id in identity_table
+                ):
+                    # §B3/§C3 external-reference defer (generalized over bib + curie):
+                    # an external-reference adapter contributes references, not
+                    # owners. If a real owner OR a transitional aggregate stub already
+                    # claimed this id this load (all owner-ish adapters precede the
+                    # external-reference adapters), it defers — no second declaration,
+                    # no duplicate entity, no collision under strict load. The
+                    # owner->external-reference flip happens automatically on the next
+                    # load once retirement drops the stub. The branch is deliberately
+                    # adapter-agnostic; source-specific parsing stays in the adapter.
                     continue
                 identity_declarations.append(
                     IdentityDeclaration(
