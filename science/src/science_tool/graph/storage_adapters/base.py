@@ -14,6 +14,7 @@ from typing import Any
 
 from science_model.entities import Entity
 from science_model.source_ref import SourceRef
+from science_tool.graph.identity_table import ParticipationMode
 
 
 class StorageAdapter(ABC):
@@ -24,6 +25,10 @@ class StorageAdapter(ABC):
     """
 
     name: str  # human-readable adapter name; travels in SourceRef.adapter_name
+
+    # Default participation: an adapter declares owner rows. Subclasses that
+    # contribute borrower/external-reference rows override this (design §B3/§C3).
+    participation_mode: ParticipationMode = ParticipationMode.OWNER
 
     def discover(self, project_root: Path) -> list[SourceRef]:
         """Walk `project_root` and return one SourceRef per discoverable record.
