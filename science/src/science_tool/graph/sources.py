@@ -45,6 +45,7 @@ from science_tool.graph.identity_table import (
 )
 from science_tool.graph.storage_adapters.aggregate import AggregateAdapter
 from science_tool.graph.storage_adapters.base import StorageAdapter
+from science_tool.graph.storage_adapters.bib import BibAdapter
 from science_tool.graph.storage_adapters.code import CodeAdapter
 from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
@@ -280,6 +281,7 @@ def load_project_sources(
             virtual_files=markdown_overrides,
         ),
         AggregateAdapter(local_profile=local_profile),
+        BibAdapter(),
         DatapackageAdapter(),
         WorkflowRunAdapter(),
         TaskAdapter(),
@@ -425,10 +427,19 @@ def load_project_sources(
                     # datapackage's resources after the owner (markdown) wins the column.
                     dataset_datapackages[entity.canonical_id] = ref.path
                     continue
+                if isinstance(adapter, BibAdapter) and entity.canonical_id in identity_table:
+                    # §B3/§C3 bib defer: the bib is an external-reference authority,
+                    # not a competing owner. If a real owner OR a transitional
+                    # aggregate stub already claimed this id this load (both adapters
+                    # precede BibAdapter), bib defers — no second declaration, no
+                    # duplicate entity, no collision under strict load. The
+                    # owner→external-reference flip happens automatically on the next
+                    # load once 4b retirement drops the stub.
+                    continue
                 identity_declarations.append(
                     IdentityDeclaration(
                         canonical_id=entity.canonical_id,
-                        participation_mode=ParticipationMode.OWNER,
+                        participation_mode=adapter.participation_mode,
                         owner_scope=owner_scope,
                         adapter=adapter.name,
                         source_ref=ref,
