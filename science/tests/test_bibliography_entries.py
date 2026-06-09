@@ -51,3 +51,12 @@ def test_load_bib_entries_out_of_range_year_clamped_to_none(tmp_path: Path) -> N
 
 def test_load_bib_entries_absent_file_is_empty(tmp_path: Path) -> None:
     assert load_bib_entries(tmp_path) == {}
+
+
+def test_load_bib_entries_ignores_field_name_embedded_in_other_value(tmp_path: Path) -> None:
+    # A free-text note value mentioning "doi = {...}" must NOT shadow the real doi field.
+    _write_bib(
+        tmp_path,
+        "@article{Note2024,\n  note = {see doi = {10.x/fake} in the supplement},\n  doi = {10.1/real},\n}\n",
+    )
+    assert load_bib_entries(tmp_path)["Note2024"].doi == "10.1/real"

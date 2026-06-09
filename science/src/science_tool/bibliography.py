@@ -99,7 +99,11 @@ def _field_value(entry_text: str, field: str) -> str | None:
     nested braces do not truncate), the quoted form ``field = "..."``, and the
     bare form ``field = 2024``. Returns None when the field is absent.
     """
-    match = re.search(r"\b" + re.escape(field) + r"\s*=\s*", entry_text, re.IGNORECASE)
+    match = re.search(
+        r"^[ \t]*" + re.escape(field) + r"\s*=\s*",
+        entry_text,
+        re.IGNORECASE | re.MULTILINE,
+    )
     if not match:
         return None
     i = match.end()
@@ -146,7 +150,8 @@ def load_bib_entries(project_root: Path) -> dict[str, "BibEntry"]:
         # Clamp to None unless it is a valid PaperEntity.year (ge=1800, le=2200).
         # This guarantees the synthesized PaperEntity validates, so a returned key
         # always yields a node (the retirement "backed" invariant).
-        year = int(year_raw) if year_raw is not None and year_raw.isdigit() and 1800 <= int(year_raw) <= 2200 else None
+        year_int = int(year_raw) if year_raw is not None and year_raw.isdigit() else None
+        year = year_int if year_int is not None and 1800 <= year_int <= 2200 else None
         entries[key] = BibEntry(
             key=key,
             title=_field_value(block, "title"),
