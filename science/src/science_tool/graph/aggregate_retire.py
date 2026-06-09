@@ -1,4 +1,4 @@
-"""Plan + apply `entities.yaml` retirement (design §3, Phase 3b).
+"""Plan + apply aggregate-manifest retirement (design §3, Phase 3b/4a).
 
 The planner is pure over the 3a classification + the compiled model; it never
 mutates. It is scoped to the multi-type aggregate files (`entities.yaml`,

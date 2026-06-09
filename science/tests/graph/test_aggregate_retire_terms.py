@@ -4,7 +4,13 @@ from pathlib import Path
 
 import yaml
 
-from science_tool.graph.aggregate_retire import _read_entries, _rewrite_aggregate, apply_retirement, plan_retirement
+from science_tool.graph.aggregate_retire import (
+    RetirementReport,
+    _read_entries,
+    _rewrite_aggregate,
+    apply_retirement,
+    plan_retirement,
+)
 from science_tool.graph.aggregate_triage import classify_aggregate_rows
 from science_tool.graph.sources import load_project_sources
 
@@ -23,7 +29,7 @@ def _write(root: Path, *, terms: list[dict] | None = None, entities: list[dict] 
         (src / "entities.yaml").write_text(yaml.safe_dump({"entities": entities}), encoding="utf-8")
 
 
-def _run(root: Path, **flags):
+def _run(root: Path, **flags) -> RetirementReport:
     sources = load_project_sources(root, include_commons=False, strict_core_schema=False, strict_identity=False)
     plan = plan_retirement(root, sources, classify_aggregate_rows(sources), **flags)
     return apply_retirement(root, plan, dry_run=False)
