@@ -6,10 +6,10 @@
 
 **Architecture:** A new `CurieRefAdapter` (participation_mode EXTERNAL_REFERENCE) reads a new `external_refs.yaml` authority file and synthesizes lightweight `same_as`-carrying nodes — the exact mirror of 4b's `BibAdapter`. The triage classifier learns two new buckets; the retirement executor gains a `--migrate-curie-refs` action that writes the authority row then drops the aggregate row (idempotent, conflict-loud). Materialization routes the curie through the existing `same_as` → `skos:exactMatch`-to-URIRef path and gates the `prov:Entity` external-ref marking on declared participation mode.
 
-**Tech Stack:** Python 3.12, pydantic, rdflib, click, pytest. Work from `/mnt/ssd/Dropbox/science/science` (the package root: `pyproject.toml`, `src/`, `tests/`). Design doc: `docs/plans/2026-06-09-substrate-4c-ambiguous-adjudication-design.md` (repo-root `docs/`, one level up).
+**Tech Stack:** Python 3.12, pydantic, rdflib, click, pytest. Work from `~/d/science/science` (the package root: `pyproject.toml`, `src/`, `tests/`). Design doc: `docs/plans/2026-06-09-substrate-4c-ambiguous-adjudication-design.md` (repo-root `docs/`, one level up).
 
 **Conventions every task must follow:**
-- Run tests with `uv run --frozen pytest` from `/mnt/ssd/Dropbox/science/science`. The suite deselects `snapshot` and `real_projects` markers by default; 2 pre-existing `snapshot` formatter failures and ~174 baseline ruff errors in untouched files are NOT yours.
+- Run tests with `uv run --frozen pytest` from `~/d/science/science`. The suite deselects `snapshot` and `real_projects` markers by default; 2 pre-existing `snapshot` formatter failures and ~174 baseline ruff errors in untouched files are NOT yours.
 - Lint touched files only: `uv run --frozen ruff check <files>` and `uv run --frozen ruff format <files>` (120-char line limit). Use `uv`, never `pip`.
 - Branch is `substrate-4c-ambiguous-adjudication` (already created, design already committed). Do **not** stage `docs/plans/2026-06-08-epistemic-edges-plan.md` (unrelated, must stay modified-but-unstaged).
 - No "Co-Authored-By" trailer in commits.
@@ -30,7 +30,15 @@
 | `src/science_tool/cli.py` | `--migrate-curie-refs` flag | T9 |
 | `src/science_tool/validate/checks/aggregate_retired.py` (new) | v3 gate: ERROR on residual aggregate rows | T10 |
 
-Tasks are ordered so each builds on committed predecessors. T1–T5 are independent leaves; T6 depends on T4/T5; T7 is independent; T8 depends on T3; T9 depends on T8; T10 is independent.
+**Dependency order (important for subagent execution — do not parallelize across a dependency):**
+- T1, T2, T4, T5 are independent leaves. **T3 depends on T2** (`_bucket`/`classify_aggregate_rows` read the `primary_external_id` field T2 adds).
+- **T6 depends on T4 + T5** (registers `CurieRefAdapter`; needs the class and its `curie-ref` scope).
+- **T7 depends on T4 + T5 + T6** — its materialization fixture loads a project through `CurieRefAdapter`, so the adapter must be registered first.
+- **T8 depends on T2 + T3 + T6** — the curie bucket (T3), the captured `primary_external_id` (T2), and the conflict test's load-time defer (T6).
+- **T9 depends on T8** (CLI surfaces the migrate action).
+- **T10 is independent** (reads the compiled model; its fixture uses only builtin kinds).
+
+Recommended serial order: T1 → T2 → T3 → T4 → T5 → T6 → T7 → T8 → T9 → T10.
 
 ---
 
@@ -116,7 +124,7 @@ Expected: PASS. If any test pinned `method`/`topic` to `numeric`, it encoded the
 - [ ] **Step 6: Lint + commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen ruff check src/science_tool/entities.py tests/test_method_topic_slug_policy.py
 uv run --frozen ruff format src/science_tool/entities.py tests/test_method_topic_slug_policy.py
 git add src/science_tool/entities.py tests/test_method_topic_slug_policy.py
@@ -145,7 +153,7 @@ import yaml
 
 from science_tool.graph.sources import load_project_sources
 
-_MANIFEST = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 2\n"
+_MANIFEST = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 2\nontologies:\n  - biology\n"
 
 
 def _write(root: Path, terms: list[dict]) -> None:
@@ -166,7 +174,7 @@ def test_wellformed_primary_external_id_captured(tmp_path: Path) -> None:
             {
                 "id": "protein:BCMA",
                 "title": "BCMA",
-                "primary_external_id": {"source": "UniProt", "curie": "UniProt:Q02223"},
+                "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:Q02223"},
             }
         ],
     )
@@ -174,7 +182,7 @@ def test_wellformed_primary_external_id_captured(tmp_path: Path) -> None:
         tmp_path, include_commons=False, strict_core_schema=False, strict_identity=False
     )
     meta = _meta_for(sources, "protein:BCMA")
-    assert meta.primary_external_id == {"source": "UniProt", "curie": "UniProt:Q02223"}
+    assert meta.primary_external_id == {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}
 
 
 def test_malformed_primary_external_id_normalizes_to_none(tmp_path: Path) -> None:
@@ -253,7 +261,7 @@ Expected: PASS (both).
 - [ ] **Step 6: Lint + commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen ruff check src/science_tool/graph/sources.py tests/graph/test_aggregate_row_primary_external_id.py
 uv run --frozen ruff format src/science_tool/graph/sources.py tests/graph/test_aggregate_row_primary_external_id.py
 git add src/science_tool/graph/sources.py tests/graph/test_aggregate_row_primary_external_id.py
@@ -393,7 +401,7 @@ Expected: PASS. (The existing `test_aggregate_triage.py` exercises `classify_agg
 - [ ] **Step 6: Lint + commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen ruff check src/science_tool/graph/aggregate_triage.py tests/graph/test_aggregate_triage_4c_buckets.py
 uv run --frozen ruff format src/science_tool/graph/aggregate_triage.py tests/graph/test_aggregate_triage_4c_buckets.py
 git add src/science_tool/graph/aggregate_triage.py tests/graph/test_aggregate_triage_4c_buckets.py
@@ -441,7 +449,7 @@ def test_discover_one_ref_per_row_and_load_raw_shape(tmp_path: Path) -> None:
                 "id": "protein:BCMA",
                 "type": "protein",
                 "title": "BCMA",
-                "primary_external_id": {"source": "UniProt", "curie": "UniProt:Q02223"},
+                "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:Q02223"},
                 "description": "B-cell maturation antigen.",
             }
         ],
@@ -455,9 +463,9 @@ def test_discover_one_ref_per_row_and_load_raw_shape(tmp_path: Path) -> None:
     assert raw["kind"] == "protein"
     assert raw["id"] == "protein:BCMA"
     assert raw["title"] == "BCMA"
-    assert raw["same_as"] == ["UniProt:Q02223"]  # LIST, not frozenset
+    assert raw["same_as"] == ["UniProtKB:Q02223"]  # LIST, not frozenset
     assert raw["file_path"] == _REL
-    assert raw["primary_external_id"] == {"source": "UniProt", "curie": "UniProt:Q02223"}
+    assert raw["primary_external_id"] == {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}
 
 
 def test_participation_mode_is_external_reference() -> None:
@@ -475,7 +483,7 @@ def test_duplicate_id_raises(tmp_path: Path) -> None:
     _write(
         tmp_path,
         [
-            {"id": "protein:BCMA", "type": "protein", "primary_external_id": {"source": "UniProt", "curie": "UniProt:Q02223"}},
+            {"id": "protein:BCMA", "type": "protein", "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}},
             {"id": "protein:BCMA", "type": "protein", "primary_external_id": {"source": "UniProt", "curie": "UniProt:OTHER"}},
         ],
     )
@@ -535,11 +543,18 @@ import yaml
 from science_model.source_ref import SourceRef
 
 from science_tool.graph.identity_table import ParticipationMode
-from science_tool.graph.sources import local_profile_sources_dir
 from science_tool.graph.storage_adapters.base import StorageAdapter
 
 _FILE_NAME = "external_refs.yaml"
 _ROOT_KEY = "references"
+
+# NOTE: do NOT import `local_profile_sources_dir` from `science_tool.graph.sources`
+# here — Task 6 registers this adapter *inside* sources.py, so importing from
+# sources would create a circular import at module load. Build the path directly
+# from the resolved `local_profile`, exactly as AggregateAdapter does
+# (`project_root / "knowledge" / "sources" / self._local_profile`). The profile is
+# still resolved (passed in by the loader), so nothing is hardcoded except the
+# universal `knowledge/sources` structural prefix that AggregateAdapter also fixes.
 
 
 class CurieRefAdapter(StorageAdapter):
@@ -554,7 +569,8 @@ class CurieRefAdapter(StorageAdapter):
         self._rel: str | None = None
 
     def _path(self, project_root: Path) -> Path:
-        return local_profile_sources_dir(project_root, local_profile=self._local_profile) / _FILE_NAME
+        # Mirror AggregateAdapter's path construction (no sources.py import; see module note).
+        return project_root / "knowledge" / "sources" / self._local_profile / _FILE_NAME
 
     def discover(self, project_root: Path) -> list[SourceRef]:
         self._rows = []
@@ -619,7 +635,7 @@ Expected: PASS (all 7).
 - [ ] **Step 5: Lint + commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen ruff check src/science_tool/graph/storage_adapters/curie_ref.py tests/graph/test_curie_ref_adapter.py
 uv run --frozen ruff format src/science_tool/graph/storage_adapters/curie_ref.py tests/graph/test_curie_ref_adapter.py
 git add src/science_tool/graph/storage_adapters/curie_ref.py tests/graph/test_curie_ref_adapter.py
@@ -673,7 +689,7 @@ Expected: PASS.
 - [ ] **Step 5: Lint + commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen ruff check src/science_tool/graph/identity_table.py tests/graph/test_classify_owner_scope_curie.py
 uv run --frozen ruff format src/science_tool/graph/identity_table.py tests/graph/test_classify_owner_scope_curie.py
 git add src/science_tool/graph/identity_table.py tests/graph/test_classify_owner_scope_curie.py
@@ -703,7 +719,7 @@ import yaml
 from science_tool.graph.identity_table import ParticipationMode, build_identity_table
 from science_tool.graph.sources import load_project_sources
 
-_MANIFEST = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 2\n"
+_MANIFEST = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 2\nontologies:\n  - biology\n"
 
 
 def _src(root: Path) -> Path:
@@ -722,7 +738,7 @@ def test_curie_row_synthesizes_external_reference_declaration(tmp_path: Path) ->
         yaml.safe_dump(
             {"references": [
                 {"id": "protein:BCMA", "type": "protein", "title": "BCMA",
-                 "primary_external_id": {"source": "UniProt", "curie": "UniProt:Q02223"}}
+                 "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}}
             ]}
         ),
         encoding="utf-8",
@@ -734,7 +750,7 @@ def test_curie_row_synthesizes_external_reference_declaration(tmp_path: Path) ->
     assert decl.participation_mode is ParticipationMode.EXTERNAL_REFERENCE
     assert decl.adapter == "curie-ref"
     ent = next(e for e in sources.entities if e.canonical_id == "protein:BCMA")
-    assert "UniProt:Q02223" in list(ent.same_as)
+    assert "UniProtKB:Q02223" in list(ent.same_as)
 
 
 def test_curie_defers_to_transitional_aggregate_stub_no_collision(tmp_path: Path) -> None:
@@ -749,7 +765,7 @@ def test_curie_defers_to_transitional_aggregate_stub_no_collision(tmp_path: Path
         yaml.safe_dump(
             {"references": [
                 {"id": "protein:BCMA", "type": "protein", "title": "BCMA",
-                 "primary_external_id": {"source": "UniProt", "curie": "UniProt:Q02223"}}
+                 "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}}
             ]}
         ),
         encoding="utf-8",
@@ -821,7 +837,7 @@ Expected: PASS — both the new curie defer and the existing 4b bib defer (now r
 - [ ] **Step 6: Lint + commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen ruff check src/science_tool/graph/sources.py tests/graph/test_curie_external_reference_load.py
 uv run --frozen ruff format src/science_tool/graph/sources.py tests/graph/test_curie_external_reference_load.py
 git add src/science_tool/graph/sources.py tests/graph/test_curie_external_reference_load.py
@@ -848,20 +864,23 @@ from pathlib import Path
 
 import yaml
 from rdflib import Literal, URIRef
-from rdflib.namespace import PROV, SKOS
+from rdflib.namespace import PROV, RDF, SKOS
 
-from science_tool.graph.materialize import materialize_graph
+# Mirror tests/graph/test_paper_node_metadata.py (4b): build with
+# _build_dataset_from_sources and read the named knowledge graph. NOTE:
+# materialize_graph(project_root) takes a path and RETURNS a path (it writes the
+# .trig), so it is NOT what these triple assertions want.
+from science_tool.graph.materialize import PROJECT_NS, _build_dataset_from_sources, _entity_uri
 from science_tool.graph.sources import load_project_sources
 
+# `ontologies: [biology]` registers the `protein` kind (biolink:Protein, name=protein)
+# AND declares its curie prefix `UniProtKB`, so (a) the row is not skipped as an
+# unknown kind and (b) is_external_reference recognizes the curie -> the same_as
+# edge materializes. A literal inline catalog does NOT work: _read_project_config
+# coerces `ontologies` entries to strings (sources.py), so only NAMED catalogs load.
 _MANIFEST = (
-    "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 2\n"
-    # Declare UniProt as an external curie prefix so the same_as edge materializes.
-    "ontologies:\n"
-    "  - id: uniprot-cat\n"
-    "    title: UniProt\n"
-    "    entity_types:\n"
-    "      - id: protein\n"
-    "        curie_prefixes: [UniProt]\n"
+    "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 3\n"
+    "ontologies:\n  - biology\n"
 )
 
 
@@ -873,17 +892,11 @@ def _project(root: Path) -> None:
         yaml.safe_dump(
             {"references": [
                 {"id": "protein:BCMA", "type": "protein", "title": "BCMA",
-                 "primary_external_id": {"source": "UniProt", "curie": "UniProt:Q02223"}}
+                 "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}}
             ]}
         ),
         encoding="utf-8",
     )
-
-
-def _entity_uri(cid: str) -> URIRef:
-    from science_tool.graph.materialize import _entity_uri
-
-    return _entity_uri(cid)
 
 
 def test_curie_node_is_prov_entity_with_exactmatch_uriref(tmp_path: Path) -> None:
@@ -891,24 +904,49 @@ def test_curie_node_is_prov_entity_with_exactmatch_uriref(tmp_path: Path) -> Non
     sources = load_project_sources(
         tmp_path, include_commons=False, strict_core_schema=False, strict_identity=False
     )
-    ds = materialize_graph(sources)
-    g = ds.graph  # combined dataset graph; see note in Step 3 for the real accessor
+    ds = _build_dataset_from_sources(sources)
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    bridge = ds.graph(PROJECT_NS["graph/bridge"])  # same_as external-term edges land here
     uri = _entity_uri("protein:BCMA")
     # (a) prov:Entity marking via the participation gate
-    assert (uri, __import__("rdflib").RDF.type, PROV.Entity) in g
+    assert (uri, RDF.type, PROV.Entity) in knowledge
     # (b) curie cross-reference: skos:exactMatch to a URIRef (NOT a Literal)
-    objs = list(g.objects(uri, SKOS.exactMatch))
+    objs = list(bridge.objects(uri, SKOS.exactMatch))
     assert objs, "no skos:exactMatch emitted for the curie"
     assert all(isinstance(o, URIRef) for o in objs)
     assert not any(isinstance(o, Literal) for o in objs)
+
+
+def test_owned_entity_with_curie_is_not_external_ref_but_still_exactmatches(tmp_path: Path) -> None:
+    # An OWNED entity carrying the same-shaped curie must NOT get the external-ref
+    # prov:Entity marking, yet its curie still materializes via same_as. Use a
+    # `concept` owner: it has a markdown slug policy (entities/concepts), whereas
+    # `protein` has no _BUILTIN_MARKDOWN_POLICIES entry so cannot be a markdown owner.
+    (tmp_path / "science.yaml").write_text(_MANIFEST, encoding="utf-8")
+    owners = tmp_path / "entities" / "concepts"
+    owners.mkdir(parents=True, exist_ok=True)
+    (owners / "bcma-marker.md").write_text(
+        "---\nid: concept:bcma-marker\ntype: concept\ntitle: BCMA marker\n"
+        "same_as: [UniProtKB:Q02223]\n---\n\nOwned concept that asserts a curie equivalence.\n",
+        encoding="utf-8",
+    )
+    sources = load_project_sources(
+        tmp_path, include_commons=False, strict_core_schema=False, strict_identity=False
+    )
+    ds = _build_dataset_from_sources(sources)
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    bridge = ds.graph(PROJECT_NS["graph/bridge"])
+    uri = _entity_uri("concept:bcma-marker")
+    assert (uri, RDF.type, PROV.Entity) not in knowledge  # owned -> no external-ref marking
+    assert list(bridge.objects(uri, SKOS.exactMatch))  # curie still emitted via same_as
 ```
 
-> The reviewer/implementer must replace `ds.graph` and the dataset accessor with the project's real API. Inspect `materialize_graph`'s return type and how existing tests in `tests/graph/` read triples (e.g. `tests/graph/test_paper_node_metadata.py` from 4b shows the exact pattern for asserting `PROV.Entity`/`DCTERMS` on a synthesized node). Mirror that test's graph-access idiom rather than guessing.
+> Implementer note: `_build_dataset_from_sources`, `PROJECT_NS`, and `_entity_uri` are imported exactly as `tests/graph/test_paper_node_metadata.py` does. The `same_as` external-term edge is emitted into the **bridge** graph (`_link_same_as_external(... bridge=bridge ...)` at `materialize.py:414`), while `prov:Entity` lands in the **knowledge** graph — assert each on the right named graph.
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run --frozen pytest tests/graph/test_curie_node_materialization.py -v`
-Expected: FAIL — `protein:BCMA` is not marked `prov:Entity` (no gate yet); the `skos:exactMatch` assertion may also fail until the prefix-recognition fixture + gate are in place.
+Expected: FAIL — `protein:BCMA` is not marked `prov:Entity` (no participation gate yet).
 
 - [ ] **Step 3: Build `external_reference_ids` and thread it in**
 
@@ -985,7 +1023,7 @@ Expected: PASS — curie node marked + exactMatch-to-URIRef; 4b paper nodes stil
 - [ ] **Step 6: Lint + commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen ruff check src/science_tool/graph/materialize.py tests/graph/test_curie_node_materialization.py
 uv run --frozen ruff format src/science_tool/graph/materialize.py tests/graph/test_curie_node_materialization.py
 git add src/science_tool/graph/materialize.py tests/graph/test_curie_node_materialization.py
@@ -1016,7 +1054,7 @@ from science_tool.graph.aggregate_retire import apply_retirement, plan_retiremen
 from science_tool.graph.aggregate_triage import classify_aggregate_rows
 from science_tool.graph.sources import load_project_sources
 
-_MANIFEST = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 3\n"
+_MANIFEST = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 3\nontologies:\n  - biology\n"
 
 
 def _project(root: Path, terms: list[dict], external_refs: list[dict] | None = None) -> None:
@@ -1052,7 +1090,7 @@ def test_migrate_creates_authority_row_and_drops_aggregate_row(tmp_path: Path) -
     _project(
         tmp_path,
         [{"id": "protein:BCMA", "title": "BCMA",
-          "primary_external_id": {"source": "UniProt", "curie": "UniProt:Q02223"},
+          "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:Q02223"},
           "description": "B-cell maturation antigen."}],
     )
     report = _run(tmp_path)
@@ -1061,13 +1099,13 @@ def test_migrate_creates_authority_row_and_drops_aggregate_row(tmp_path: Path) -
     assert len(refs) == 1
     assert refs[0]["id"] == "protein:BCMA"
     assert refs[0]["type"] == "protein"
-    assert refs[0]["primary_external_id"] == {"source": "UniProt", "curie": "UniProt:Q02223"}
+    assert refs[0]["primary_external_id"] == {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}
     assert refs[0]["description"] == "B-cell maturation antigen."
     assert _terms(tmp_path) == []  # aggregate row dropped
 
 
 def test_migrate_is_idempotent_on_matching_curie(tmp_path: Path) -> None:
-    pei = {"source": "UniProt", "curie": "UniProt:Q02223"}
+    pei = {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}
     _project(
         tmp_path,
         [{"id": "protein:BCMA", "title": "BCMA", "primary_external_id": pei}],
@@ -1083,15 +1121,15 @@ def test_migrate_rejects_conflicting_curie_without_mutation(tmp_path: Path) -> N
     _project(
         tmp_path,
         [{"id": "protein:BCMA", "title": "BCMA",
-          "primary_external_id": {"source": "UniProt", "curie": "UniProt:NEW"}}],
+          "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:NEW"}}],
         external_refs=[{"id": "protein:BCMA", "type": "protein", "title": "BCMA",
-                        "primary_external_id": {"source": "UniProt", "curie": "UniProt:OLD"}}],
+                        "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:OLD"}}],
     )
     report = _run(tmp_path)
     assert "protein:BCMA" not in report.migrated
     assert any(cid == "protein:BCMA" and "conflict" in reason for cid, reason in report.rejected)
     assert len(_ext_refs(tmp_path)) == 1  # unchanged
-    assert _ext_refs(tmp_path)[0]["primary_external_id"]["curie"] == "UniProt:OLD"
+    assert _ext_refs(tmp_path)[0]["primary_external_id"]["curie"] == "UniProtKB:OLD"
     assert len(_terms(tmp_path)) == 1  # aggregate row NOT dropped
 ```
 
@@ -1251,7 +1289,7 @@ Expected: PASS.
 - [ ] **Step 6: Lint + commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen ruff check src/science_tool/graph/aggregate_retire.py tests/graph/test_aggregate_retire_curie_migration.py
 uv run --frozen ruff format src/science_tool/graph/aggregate_retire.py tests/graph/test_aggregate_retire_curie_migration.py
 git add src/science_tool/graph/aggregate_retire.py tests/graph/test_aggregate_retire_curie_migration.py
@@ -1282,8 +1320,8 @@ from click.testing import CliRunner
 
 from science_tool.cli import main
 
-_MANIFEST_V2 = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 2\n"
-_MANIFEST_V3 = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 3\n"
+_MANIFEST_V2 = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 2\nontologies:\n  - biology\n"
+_MANIFEST_V3 = "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 3\nontologies:\n  - biology\n"
 
 
 def _project(root: Path, manifest: str) -> None:
@@ -1293,7 +1331,7 @@ def _project(root: Path, manifest: str) -> None:
     (src / "terms.yaml").write_text(
         yaml.safe_dump(
             {"terms": [{"id": "protein:BCMA", "title": "BCMA",
-                        "primary_external_id": {"source": "UniProt", "curie": "UniProt:Q02223"}}]}
+                        "primary_external_id": {"source": "UniProtKB", "curie": "UniProtKB:Q02223"}}]}
         ),
         encoding="utf-8",
     )
@@ -1422,7 +1460,7 @@ Expected: PASS (the 3a/3b/4b CLI tests still hold; head-line text changed but th
 - [ ] **Step 6: Lint + commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen ruff check src/science_tool/cli.py tests/test_cli_triage_curie.py
 uv run --frozen ruff format src/science_tool/cli.py tests/test_cli_triage_curie.py
 git add src/science_tool/cli.py tests/test_cli_triage_curie.py
@@ -1463,7 +1501,9 @@ def _ctx(root: Path, layout_version: int, terms: list[dict]) -> ValidateContext:
     src = root / "knowledge" / "sources" / "local"
     src.mkdir(parents=True, exist_ok=True)
     (src / "terms.yaml").write_text(yaml.safe_dump({"terms": terms}), encoding="utf-8")
-    return ValidateContext(project_root=root)  # match the real constructor; see Step 3 note
+    # Real constructor: ValidateContext.from_project_root(root, *, strict, verbose)
+    # (context.py:31) — the dataclass __init__ requires many fields, so use the factory.
+    return ValidateContext.from_project_root(root, strict=False, verbose=False)
 
 
 def test_v3_residual_aggregate_row_is_error(tmp_path: Path) -> None:
@@ -1484,10 +1524,11 @@ def test_v3_no_aggregate_rows_is_clean(tmp_path: Path) -> None:
         "name: demo\nprofile: research\nprofiles: {local: local}\nlayout_version: 3\n", encoding="utf-8"
     )
     (tmp_path / "knowledge" / "sources" / "local").mkdir(parents=True)
-    assert list(check_aggregate_retired_at_v3(ValidateContext(project_root=tmp_path))) == []
+    ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
+    assert list(check_aggregate_retired_at_v3(ctx)) == []
 ```
 
-> Step 3 note: read `tests/validate/` (or wherever `aggregate_stub`'s test lives) to confirm the real `ValidateContext` constructor and how checks are registered/discovered, and mirror it. The `ValidateContext(project_root=...)` form above is the expected shape; adjust if the real one differs.
+> Step 3/4 note: confirm how `aggregate_stub.py` is registered/discovered (read its test + the check-loader) and mirror it for `aggregate_retired.py`. `ValidateContext.from_project_root(root, *, strict, verbose)` is the real factory (`context.py:31`); the bare dataclass `ValidateContext(...)` requires many fields and must not be used.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1574,7 +1615,7 @@ Expected: PASS — the new check is discovered and does not perturb existing val
 - [ ] **Step 6: Lint + commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen ruff check src/science_tool/validate/checks/aggregate_retired.py tests/validate/test_aggregate_retired_gate.py
 uv run --frozen ruff format src/science_tool/validate/checks/aggregate_retired.py tests/validate/test_aggregate_retired_gate.py
 git add src/science_tool/validate/checks/aggregate_retired.py tests/validate/test_aggregate_retired_gate.py
@@ -1588,7 +1629,7 @@ git commit -m "feat(substrate-4c): v3 conformance gate — aggregate rows must b
 
 - [ ] **Full suite green**
 
-Run: `uv run --frozen pytest -q` (from `/mnt/ssd/Dropbox/science/science`)
+Run: `uv run --frozen pytest -q` (from `~/d/science/science`)
 Expected: all pass except the 2 pre-existing `snapshot` formatter fixtures (deselected by default anyway). Confirm the count climbed from the 4b baseline (4843) by the number of new tests.
 
 - [ ] **Lint clean on all touched files**
@@ -1597,7 +1638,7 @@ Run: `uv run --frozen ruff check src/science_tool/ tests/ | grep substrate-4c` i
 
 - [ ] **Read-only MM30 smoke (still v2 — must refuse `--apply`)**
 
-From the MM30 project root (`/mnt/ssd/Dropbox/cancer/cancer-types/multiple-myeloma`), with the branch env:
+From the MM30 project root (`~/d/cancer/cancer-types/multiple-myeloma`), with the branch env:
 - `science entities triage-aggregate --format json` → buckets now show `curie-external-ref` (~35) + `question-deferred` (~7) + a smaller `ambiguous` (the no-curie disease/drug) instead of the old 96-row `ambiguous`.
 - `science entities triage-aggregate --migrate-curie-refs --apply` → **refused, exit 1, names `layout_version 2`**; MM30 stays git-clean.
 
@@ -1620,4 +1661,4 @@ Record the observed counts in the holistic-review notes.
 
 **3. Type consistency:** `_bucket` 5-arg signature (T3) matches its `classify_aggregate_rows` call (T3). `AggregateRowMeta.primary_external_id` (T2) is read by T3's `has_pei`. `RetirementPlan.migrate` / `RetirementReport.migrated` (T8) are produced by `plan_retirement(..., migrate_curie_refs=...)` and surfaced by the CLI (T9). `CurieRefAdapter(local_profile=...)` ctor (T4) matches its registration (T6). `external_reference_ids` set (T7) is built from `identity_declarations` whose EXTERNAL_REFERENCE rows are produced by T6.
 
-**Known precondition (not a task):** the curie `skos:exactMatch` edge materializes only when the curie's prefix is a declared external prefix (project ontology catalogs or `_EXTERNAL_PREFIXES`). MM30 does not currently declare UniProt/MONDO/ChEMBL/HGNC/ChEBI, so on MM30 the curie node + citations resolve but the exactMatch edge is absent until those prefixes are declared. This is an existing constraint of the `same_as` path, not new to 4c; T7's test supplies the prefix via fixture. Flag it in the holistic review for a possible follow-up (add the five biomedical prefixes to `_EXTERNAL_PREFIXES`, or to MM30's ontology catalogs).
+**Known precondition (not a task):** the curie `skos:exactMatch` edge materializes only when the curie's prefix is a declared external prefix — `_EXTERNAL_PREFIXES` ∪ the prefixes from the project's `ontologies:` catalogs (`materialize.py:101`). MM30 *does* declare `ontologies: [biology, chemistry]`, and the biology catalog declares `UniProtKB`/`MONDO`/etc. for biolink:Protein/Disease/etc. — **but MM30's `terms.yaml` rows write `UniProt:Q02223` (prefix `UniProt`), which does not match the catalog's `UniProtKB`.** So on MM30 the curie node + citations resolve, but the exactMatch edge is absent until the prefix strings align. The migration (T8) copies the curie verbatim, preserving whatever MM30 authored. Resolving the edge is an **MM30-data follow-up** (normalize `UniProt:` → `UniProtKB:` in the curies, or add a `UniProt` alias to the biology catalog) — out of scope for 4c, which only needs the framework path to work when prefixes align (T7's fixture uses the catalog-correct `UniProtKB:`). Flag for the holistic review. The node + backed-authority + citation-resolution goals hold on MM30 regardless of the edge.

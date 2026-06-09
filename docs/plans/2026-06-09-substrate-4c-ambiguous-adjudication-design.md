@@ -142,11 +142,16 @@ New `graph/storage_adapters/curie_ref.py`, modeled on `bib.py`:
 
 - `name = "curie-ref"`, `participation_mode = ParticipationMode.EXTERNAL_REFERENCE`.
 - **Constructor takes `local_profile`** (like `AggregateAdapter`, *unlike*
-  `BibAdapter` whose `papers/references.bib` is profile-independent). The file
-  path is resolved through the project config, **not hardcoded**:
-  `local_profile_sources_dir(project_root, local_profile=self._local_profile) / "external_refs.yaml"`.
-  `sources.py` registers `CurieRefAdapter(local_profile=local_profile)`, passing
-  the same resolved `local_profile` it gives `AggregateAdapter`.
+  `BibAdapter` whose `papers/references.bib` is profile-independent). The path is
+  built from the resolved profile, **not hardcoded to `local`**:
+  `project_root / "knowledge" / "sources" / self._local_profile / "external_refs.yaml"`
+  — exactly mirroring `AggregateAdapter`. **Do not import
+  `local_profile_sources_dir` from `science_tool.graph.sources` into this adapter:**
+  `sources.py` registers `CurieRefAdapter`, so importing back from sources would
+  create a circular import at module load. (The `--migrate-curie-refs` *writer* in
+  `aggregate_retire.py` — §4.5 — is not imported by `sources.py`, so it may use the
+  helper freely.) `sources.py` registers `CurieRefAdapter(local_profile=local_profile)`,
+  passing the same resolved `local_profile` it gives `AggregateAdapter`.
   `knowledge/sources/local/external_refs.yaml` is only the *common* MM30/example
   path, not a constant.
 - `discover()` → one `SourceRef(adapter_name="curie-ref", path=<resolved rel path>, line=i)`
