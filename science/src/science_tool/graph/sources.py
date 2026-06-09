@@ -155,6 +155,12 @@ class AggregateRowMeta:
     canonical_id: str
     kind: str
     source_path: str | None
+    # 4c: the row's external authority identifier, captured from the VALIDATED
+    # entity. `entity.primary_external_id` is a typed ExternalId (or None); a
+    # malformed value never reaches capture (it fails ExternalId validation and the
+    # row is skipped). So this is the full {source, id, curie, provenance} dump or
+    # None — never a half-filled mapping that could masquerade as a backed ref.
+    primary_external_id: dict[str, str] | None = None
 
 
 class ProjectSources(BaseModel):
@@ -452,6 +458,10 @@ def load_project_sources(
                 if adapter.name == "aggregate":
                     assert ref.line is not None  # AggregateAdapter always sets the entry index
                     sp_raw = raw.get("source_path")
+                    # Capture from the VALIDATED entity, not raw: entity.primary_external_id
+                    # is a typed ExternalId (already passed ExternalId validation) or None.
+                    # exclude_none drops the optional `version`, leaving the four required keys.
+                    pei = entity.primary_external_id
                     aggregate_rows.append(
                         AggregateRowMeta(
                             path=ref.path,
@@ -461,6 +471,7 @@ def load_project_sources(
                             # source_path is unschema'd extra metadata; normalize a
                             # malformed (non-string) value to None so the report can't crash.
                             source_path=sp_raw if isinstance(sp_raw, str) else None,
+                            primary_external_id=pei.model_dump(exclude_none=True) if pei is not None else None,
                         )
                     )
                 existing = identity_table.get(entity.canonical_id)
