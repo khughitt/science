@@ -104,6 +104,8 @@ def plan_retirement(
     promote_coined: bool,
     delete_cruft: bool,
     delete_shadow: bool,
+    retire_external_refs: bool = False,
+    bib_keys: frozenset[str] = frozenset(),
     promote_decisions: bool = False,
     decision_index: DecisionLogIndex | None = None,
 ) -> RetirementPlan:
@@ -140,6 +142,17 @@ def plan_retirement(
                 rejected.append((triage, reason or "unpromotable"))
                 continue
             promote.append(PlannedRow(triage, RetireAction.PROMOTE, meta.path, meta.line, target))
+            continue
+        if triage.bucket is AggregateBucket.EXTERNAL_REF:
+            if not retire_external_refs:
+                continue  # untouched unless explicitly retiring external refs
+            citekey = meta.canonical_id.split(":", 1)[1] if ":" in meta.canonical_id else meta.canonical_id
+            if citekey in bib_keys:
+                # Backed: a replacement external-reference node provably exists, so
+                # the aggregate deprecated-owner row is redundant -> drop it.
+                delete.append(PlannedRow(triage, RetireAction.DELETE, meta.path, meta.line, None))
+            else:
+                rejected.append((triage, "missing bibliography authority"))
             continue
         # Recovery candidate: a shadow whose owner we may have written in a prior run.
         if promote_coined and triage.bucket is AggregateBucket.SHADOW:
