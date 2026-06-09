@@ -33,10 +33,20 @@ _DIR_TO_KIND = {
     "models": "model",
 }
 
-_MULTI_TYPE_FILES = {
+MULTI_TYPE_AGGREGATE_ROOT_KEYS = {
     "entities.yaml": "entities",
     "terms.yaml": "terms",
 }
+
+
+def multi_type_root_key(filename: str) -> str | None:
+    """YAML root key for a multi-type aggregate file (`entities.yaml`/`terms.yaml`), or None.
+
+    The single source of truth for which aggregate files carry multiple entity
+    types and under which top-level key their rows live. Consumed by the
+    retirement executor so it never re-derives this mapping.
+    """
+    return MULTI_TYPE_AGGREGATE_ROOT_KEYS.get(filename)
 
 
 class AggregateAdapter(StorageAdapter):
@@ -58,7 +68,7 @@ class AggregateAdapter(StorageAdapter):
     def _discover_multi_type(self, project_root: Path) -> list[SourceRef]:
         refs: list[SourceRef] = []
         base = project_root / "knowledge" / "sources" / self._local_profile
-        for file_name, root_key in _MULTI_TYPE_FILES.items():
+        for file_name, root_key in MULTI_TYPE_AGGREGATE_ROOT_KEYS.items():
             path = base / file_name
             if not path.is_file():
                 continue
@@ -105,11 +115,11 @@ class AggregateAdapter(StorageAdapter):
         path = Path(ref.path)
         if not path.is_absolute():
             path = Path.cwd() / path
-        if path.name in _MULTI_TYPE_FILES:
+        if path.name in MULTI_TYPE_AGGREGATE_ROOT_KEYS:
             items = self._items_by_path.get(ref.path)
             if items is None:
                 data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-                items = data.get(_MULTI_TYPE_FILES[path.name]) or []
+                items = data.get(MULTI_TYPE_AGGREGATE_ROOT_KEYS[path.name]) or []
             raw = dict(items[ref.line])
             if path.name == "terms.yaml":
                 raw = self._normalize_term_row(raw)
