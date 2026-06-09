@@ -108,6 +108,10 @@ def classify_owner_scope(adapter: str, *, project_name: str) -> tuple[str, bool]
         # External-reference authority scope (design §B3): bib rows are never
         # owners, so this scope only labels provenance; it is non-deprecated.
         return ("bib", False)
+    if adapter == "curie-ref":
+        # External-reference authority scope (design §B3, Phase 4c): curie rows are
+        # never owners; this scope labels provenance and is non-deprecated.
+        return ("curie-ref", False)
     # aggregate (entities.yaml) and datapackage are transitional deprecated owners:
     # the target substrate retires entities.yaml (§B5) and treats datapackages as
     # attachments, not owners (§B4). Flag them so later phases can find them.
