@@ -561,6 +561,16 @@ def test_non_list_references_raises(tmp_path: Path) -> None:
     (p / "external_refs.yaml").write_text("references: {}\n", encoding="utf-8")
     with pytest.raises(ValueError, match="must be a list"):
         CurieRefAdapter(local_profile="local").discover(tmp_path)
+
+
+def test_non_mapping_document_root_raises(tmp_path: Path) -> None:
+    # A malformed document root (e.g. a YAML list) must fail loud. Only an empty file
+    # or an absent `references` key means "empty authority".
+    p = tmp_path / "knowledge" / "sources" / "local"
+    p.mkdir(parents=True)
+    (p / "external_refs.yaml").write_text("[]\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="must be a mapping"):
+        CurieRefAdapter(local_profile="local").discover(tmp_path)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -631,7 +641,10 @@ class CurieRefAdapter(StorageAdapter):
         self._rel = path.relative_to(project_root).as_posix()
         if not path.is_file():
             return []
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        raw_doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = {} if raw_doc is None else raw_doc
+        if not isinstance(data, dict):
+            raise ValueError(f"{self._rel}: document root must be a mapping (got {type(data).__name__})")
         # Use .get(key, []) — NOT `.get(key) or []`: a present-but-non-list value
         # (references: {}, references: "", or a bare `references:` -> None) must reach
         # the isinstance check and fail loud, not be silently coerced to "no refs".
@@ -691,7 +704,7 @@ Note: the record uses `summary` (not `description`) for the prose, matching the 
 - [ ] **Step 4: Run the test**
 
 Run: `uv run --frozen pytest tests/graph/test_curie_ref_adapter.py -v`
-Expected: PASS (all 9).
+Expected: PASS (all 10).
 
 - [ ] **Step 5: Lint + commit**
 
@@ -1112,6 +1125,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from science_tool.graph.aggregate_retire import apply_retirement, plan_retirement
@@ -1173,14 +1187,16 @@ def test_migrate_creates_authority_row_and_drops_aggregate_row(tmp_path: Path) -
 
 def test_migrate_is_idempotent_on_matching_curie(tmp_path: Path) -> None:
     pei = {"source": "UniProtKB", "id": "Q02223", "curie": "UniProtKB:Q02223", "provenance": "manual"}
+    backed_pei = {**pei, "provenance": "prior-migration"}
     _project(
         tmp_path,
         [{"id": "protein:BCMA", "title": "BCMA", "primary_external_id": pei}],
-        external_refs=[{"id": "protein:BCMA", "type": "protein", "title": "BCMA", "primary_external_id": pei}],
+        external_refs=[{"id": "protein:BCMA", "type": "protein", "title": "BCMA", "primary_external_id": backed_pei}],
     )
     report = _run(tmp_path)
     assert "protein:BCMA" in report.migrated
     assert len(_ext_refs(tmp_path)) == 1  # no duplicate appended
+    assert _ext_refs(tmp_path)[0]["primary_external_id"] == backed_pei  # existing authority row preserved
     assert _terms(tmp_path) == []  # aggregate row still dropped (reconciled)
 
 
@@ -1198,6 +1214,19 @@ def test_migrate_rejects_conflicting_curie_without_mutation(tmp_path: Path) -> N
     assert len(_ext_refs(tmp_path)) == 1  # unchanged
     assert _ext_refs(tmp_path)[0]["primary_external_id"]["curie"] == "UniProtKB:OLD"
     assert len(_terms(tmp_path)) == 1  # aggregate row NOT dropped
+
+
+def test_migrate_rejects_non_mapping_external_refs_root(tmp_path: Path) -> None:
+    _project(
+        tmp_path,
+        [{"id": "protein:BCMA", "title": "BCMA",
+          "primary_external_id": {"source": "UniProtKB", "id": "Q02223",
+                                  "curie": "UniProtKB:Q02223", "provenance": "manual"}}],
+    )
+    ext = tmp_path / "knowledge" / "sources" / "local" / "external_refs.yaml"
+    ext.write_text("[]\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="document root must be a mapping"):
+        _run(tmp_path)
 ```
 
 > Note: the conflict test reads an `external_refs.yaml` that already contains `protein:BCMA`; because `CurieRefAdapter` would also load it, `classify_aggregate_rows` still sees the terms.yaml row as the aggregate owner (the curie row defers via Task 6). The migration's own conflict check (Step 4) is what fires, independent of load-time dedup.
@@ -1297,8 +1326,10 @@ Add a `migrated` accumulator and process migrate rows **before** the file-rewrit
     if plan.migrate:
         ext_dir = local_profile_sources_dir(project_root, local_profile=resolve_local_profile_name(project_root))
         ext_path = ext_dir / "external_refs.yaml"
-        ext_doc = yaml.safe_load(ext_path.read_text(encoding="utf-8")) if ext_path.is_file() else None
-        ext_doc = ext_doc or {}
+        raw_ext_doc = yaml.safe_load(ext_path.read_text(encoding="utf-8")) if ext_path.is_file() else None
+        ext_doc = {} if raw_ext_doc is None else raw_ext_doc
+        if not isinstance(ext_doc, dict):
+            raise ValueError(f"{ext_path}: document root must be a mapping (got {type(ext_doc).__name__})")
         # .get(key, []) — NOT `.get(key) or []`: a malformed existing references value
         # must fail loud here (the migration appends/reconciles against it; silently
         # treating it as empty would drop the conflict check). Mirror CurieRefAdapter.
@@ -1311,12 +1342,20 @@ Add a `migrated` accumulator and process migrate rows **before** the file-rewrit
             entry = entries(pr.source_path)[pr.line]
             cid = pr.triage.canonical_id
             pei = entry.get("primary_external_id")
+            curie = pei.get("curie") if isinstance(pei, dict) else None
+            if not isinstance(curie, str) or not curie:
+                rejected.append((cid, "curie-external-ref row is missing primary_external_id.curie"))
+                continue
             prior = existing.get(cid)
             if prior is not None:
-                if prior.get("primary_external_id") != pei:
+                prior_pei = prior.get("primary_external_id")
+                prior_curie = prior_pei.get("curie") if isinstance(prior_pei, dict) else None
+                if prior_curie != curie:
                     rejected.append((cid, f"external_refs.yaml conflict: {cid} already mapped to a different curie"))
                     continue
-                # Already backed with the SAME mapping: reconcile by dropping the stub.
+                # Already backed with the SAME curie: reconcile by dropping the stub.
+                # Preserve the existing authority row verbatim; do not rewrite
+                # provenance/version just because the retiring aggregate row differs.
                 migrated.append(cid)
                 drop_by_file[pr.source_path].add(pr.line)
                 continue
@@ -1353,7 +1392,7 @@ Finally, include `migrated` in the returned report:
 - [ ] **Step 5: Run the test**
 
 Run: `uv run --frozen pytest tests/graph/test_aggregate_retire_curie_migration.py -v`
-Expected: PASS (all 3). Also run the existing retirement suite to confirm the dataclass additions didn't break positional constructors:
+Expected: PASS (all 4). Also run the existing retirement suite to confirm the dataclass additions didn't break positional constructors:
 
 Run: `uv run --frozen pytest tests/graph/ -k "aggregate_retire or retire" -q`
 Expected: PASS.
