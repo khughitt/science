@@ -281,6 +281,8 @@ def load_project_sources(
             virtual_files=markdown_overrides,
         ),
         AggregateAdapter(local_profile=local_profile),
+        # NOTE: AggregateAdapter must precede BibAdapter — the bib defer guard relies
+        # on aggregate stubs (and markdown owners) being declared first this load.
         BibAdapter(),
         DatapackageAdapter(),
         WorkflowRunAdapter(),
@@ -435,6 +437,7 @@ def load_project_sources(
                     # duplicate entity, no collision under strict load. The
                     # owner→external-reference flip happens automatically on the next
                     # load once 4b retirement drops the stub.
+                    # No side-table needed: bib entries stay held in BibAdapter._entries.
                     continue
                 identity_declarations.append(
                     IdentityDeclaration(
