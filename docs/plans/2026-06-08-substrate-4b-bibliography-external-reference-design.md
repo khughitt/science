@@ -39,7 +39,8 @@ any adapter or resolver.
   RDF graph." If `paper:X` is cited by project claims/evidence, the graph keeps a
   real target node so citation/evidence edges stay inspectable. The node carries a
   **small metadata surface** (citekey, title, year/date, doi/url when present),
-  typed as a reference / `prov:Entity`, never as an owned markdown entity. (Chosen
+  typed by its kind-class **and `prov:Entity`** as a lightweight reference/provenance
+  node, never as an owned markdown entity. (Chosen
   over resolution-only, which would retire substrate debt by deleting graph
   connectivity, and over id-only nodes, which throw away cheap, useful metadata the
   resolver already has in hand.)
@@ -62,6 +63,16 @@ any adapter or resolver.
   `materialize`/`migrate`/`health`). 4b does **not** force-migrate prose
   `paper:`→`cite:`; the converged convention (both `paper:` and `cite:` ultimately
   back to `references.bib`) is noted as future cleanup, not 4b work.
+- **Local bib outranks a commons paper owner (for materialization).** The commons
+  referenced-entity loader treats any id present in the load's `identity_table` as
+  "locally present" and does not re-materialize a commons twin
+  (`commons_sources.py:90`). Because a bib `paper:X` is in that table, a commons-owned
+  `paper:X` of the same id is **not** re-materialized — the **project-local bib node
+  wins**, while the commons owner row is still recorded for resolution/ambiguity
+  (§B3a). This is the intended precedence (a project's own bibliography is its
+  citation authority) and matches existing behavior; 4b states and tests it rather
+  than re-plumbing the commons seam in a bibliography phase. Making commons-owned
+  papers win is deferred (no MM30 commons papers today).
 - **Tooling now, live migration later.** As in 3b/3c/4a, the retirement `--apply`
   stays **v3-gated**; 4b never mutates v2 MM30's manifest. But the **BibAdapter is
   live in v2 immediately** — MM30 gets bib-backed paper nodes and resolution as
@@ -148,14 +159,15 @@ graph/reference_resolution.py  (unchanged — resolves via synthesized entity pr
         │
         ▼
 graph/materialize.py
-  minimal reference-node branch for paper / external-reference entities:
-    dcterms:title, sci:year/dcterms:date, sci:doi/dcat:downloadURL  (small surface)
+  minimal reference-node branch for kind=="paper" entities (adds to the shared
+  node, which already has its kind-class rdf:type + skos:prefLabel=title):
+    +rdf:type prov:Entity; year->dcterms:date, doi->sci:doi, url->dcat:downloadURL
         │
         ▼
 graph/aggregate_retire.py
   new external-ref bucket action (flag: --retire-external-refs):
-    citekey ∈ load_bib_keys  -> drop aggregate row   (authority covers it)
-    citekey ∉ load_bib_keys  -> rejected "missing bibliography authority", retained
+    citekey ∈ set(load_bib_entries)  -> drop aggregate row   (node-producing authority)
+    citekey ∉ set(load_bib_entries)  -> rejected "missing bibliography authority", retained
   --apply stays v3-gated; planner join already (path,line)-keyed (4a)
 cli.py
   entities triage-aggregate --retire-external-refs   (parallels --promote-coined)
@@ -176,6 +188,16 @@ Add a frozen `BibEntry` dataclass (`key`, `title`, `year`, `doi`, `url`; all but
   node exists**" — the invariant retirement relies on (see Component 5). A
   key whose block is unbalanced is **excluded** from `load_bib_entries`, so any
   aggregate row for it stays **un-backed/retained**, never dropped.
+- **Schema-loadability (the other half of "backed ⟺ node").** Brace-balance is
+  necessary but not sufficient: the synthesized `PaperEntity` must also pass
+  validation or `load_project_sources` skips it (`sources.py:355`) and no node is
+  produced. The only constrained field is `year` (`PaperEntity.year` is
+  `ge=1800, le=2200`). So `load_bib_entries` **clamps `year` to `None` unless it is a
+  4-digit integer in `[1800, 2200]`** — parsed metadata can never make the entity
+  fail validation, so a returned key always yields a node. (The entry is still
+  admitted; only the out-of-range year is dropped. All other parsed fields are
+  unconstrained strings.) Retirement therefore keys off `set(load_bib_entries(root))`
+  and "backed" is exactly "node-producing".
 - **Balanced field-value extraction (fixes nested-brace truncation).** Field values
   themselves can nest braces — `title = {The {DNA} story}`. A naive
   `field\s*=\s*\{([^}]*)\}` regex truncates at the inner `}`. So field extraction
@@ -242,15 +264,24 @@ metadata}`. No `dump` (read-only authority). Absent bib → `discover` returns `
 participation mode, and owned/commons paper entities are *also* `kind == "paper"`.
 Rather than thread an `external_reference_ids`/adapter map into the materializer,
 the metadata branch keys on **`kind == "paper"`** and applies to **all** paper
-entities, emitting a **small** node: `rdf:type` reference/`prov:Entity`,
-`dcterms:title`, and — **only when present on the entity** —
-`dcterms:date`/year and `sci:doi`/`dcat:downloadURL`. This is additive (it adds
+entities. The shared `_add_entity` path already emits the node's `rdf:type`
+(its kind-class) and `skos:prefLabel = title`; the branch **adds**, only when
+present on the entity:
+
+- `year` → `dcterms:date`
+- `doi`  → `sci:doi`
+- `url`  → `dcat:downloadURL`
+
+plus `rdf:type prov:Entity` (marking it a reference/provenance node, per the
+brainstorm's "external/reference/provenance entities"). It is additive (adds
 triples, removes none), so it is harmless on the rare owned/commons paper entity
-(which simply may lack year/doi) and is the whole node for a bib-synthesized one.
-Deliberately a thin surface — not full bibliographic modeling — sufficient for
-citation/evidence edges to land on an inspectable, metadata-bearing node. Citation
-edges (`source_refs`/`evidence_refs → paper:X`) already materialize when the target
-is in `entity_index`; synthesizing the bib entities puts them there.
+(which simply may lack year/doi/url) and is the whole metadata surface for a
+bib-synthesized one. The node therefore carries both its kind-class type and
+`prov:Entity`. Deliberately a thin surface — not
+full bibliographic modeling — sufficient for citation/evidence edges to land on an
+inspectable, metadata-bearing node. Citation edges (`source_refs`/`evidence_refs →
+paper:X`) already materialize when the target is in `entity_index`; synthesizing the
+bib entities puts them there.
 
 ### Component 5 — external-ref retirement action (`graph/aggregate_retire.py`)
 
@@ -326,7 +357,7 @@ unchanged.
    declaration is emitted.
 4. **Citation resolves; node + edge materialize.** A fixture interpretation with
    `source_refs: [paper:<key>]` → the ref resolves; the graph has a `paper:<key>`
-   node carrying `dcterms:title` and the citation edge.
+   node typed `prov:Entity` and carrying `skos:prefLabel` (title) + `dcterms:date`/`sci:doi`, plus the citation edge.
 5. **Participation-mode default preserved.** Every non-bib adapter still emits
    `owner` rows (regression: an existing markdown/aggregate fixture is unchanged).
 6. **Retire backed row.** An aggregate `paper:<key>` (or `article:<key>`) row whose
