@@ -312,7 +312,7 @@ def entities_triage_aggregate_command(
     promote_decisions: bool,
     apply_changes: bool,
 ) -> None:
-    """Triage (and, with bucket flags, retire) aggregate (entities.yaml) rows (§B5)."""
+    """Triage (and, with bucket flags, retire) multi-type aggregate (entities.yaml/terms.yaml) rows (§B5)."""
     from collections import Counter
 
     from science_tool.graph.aggregate_retire import apply_retirement, plan_retirement
