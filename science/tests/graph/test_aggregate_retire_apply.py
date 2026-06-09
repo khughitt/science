@@ -148,8 +148,11 @@ def test_promote_preserves_description_as_owner_body(tmp_path: Path) -> None:
     )
     report = _run(tmp_path, dry_run=False, promote_coined=True, delete_cruft=False, delete_shadow=False)
     assert report.promoted == ("concept:apoptosis",)
-    body = (tmp_path / "entities/concepts/apoptosis.md").read_text(encoding="utf-8")
+    text = (tmp_path / "entities/concepts/apoptosis.md").read_text(encoding="utf-8")
+    assert text.startswith("---\n")
+    _, _frontmatter, body = text.split("---\n", 2)
     assert "Programmed cell death relevant to MM survival signaling." in body
+    assert "Programmed cell death" not in _frontmatter  # definition is the BODY, not a frontmatter value
 
 
 def test_promote_target_exists_unmarked_is_skipped_entry_retained(tmp_path: Path) -> None:

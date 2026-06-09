@@ -38,3 +38,8 @@ def test_profile_included_when_present() -> None:
     text = _owner_text("concept:x", "concept", "X", "Def.", "research", promoted_from="a.yaml")
     fm, _ = _split(text)
     assert fm["profile"] == "research"
+
+
+def test_none_description_falls_back_to_stub_body() -> None:
+    text = _owner_text("concept:x", "concept", "X", None, None, promoted_from="a.yaml")
+    assert _STUB_BODY in text

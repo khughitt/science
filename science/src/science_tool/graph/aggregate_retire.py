@@ -209,7 +209,7 @@ def _owner_text(
     §B5 "line of definition"); anything else falls back to the stub body.
     """
     fm: dict[str, object] = {"id": canonical_id, "type": kind, "title": title}
-    if profile:
+    if isinstance(profile, str) and profile:
         fm["profile"] = profile
     fm["promoted_from"] = promoted_from
     body = description.rstrip("\n") + "\n" if isinstance(description, str) and description else _STUB_BODY
