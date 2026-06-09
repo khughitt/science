@@ -65,8 +65,9 @@ def test_cruft_deletes_only_when_enabled(tmp_path: Path) -> None:
     assert [p.triage.canonical_id for p in on.delete] == ["concept:treatment-benefit"]
 
 
-def test_terms_yaml_rows_are_never_planned(tmp_path: Path) -> None:
-    # A coined/cruft-looking row in terms.yaml must be excluded by the firewall.
+def test_terms_yaml_cruft_rows_are_planned(tmp_path: Path) -> None:
+    # Task 4: terms.yaml is now inside the firewall. A cruft-looking row (migration:audit
+    # source_path) in terms.yaml must be planned for deletion when delete_cruft=True.
     _write_entities(tmp_path, [_concept("concept:keep-me")])
     _write_terms(
         tmp_path,
@@ -74,8 +75,8 @@ def test_terms_yaml_rows_are_never_planned(tmp_path: Path) -> None:
     )
     plan = _plan(tmp_path, promote_coined=True, delete_cruft=True, delete_shadow=True)
     acted = {p.triage.canonical_id for p in (*plan.promote, *plan.delete)}
-    assert "concept:in-terms" not in acted
-    assert acted == {"concept:keep-me"}
+    assert "concept:in-terms" in acted
+    assert "concept:keep-me" in acted
 
 
 def test_ambiguous_rows_are_never_acted(tmp_path: Path) -> None:

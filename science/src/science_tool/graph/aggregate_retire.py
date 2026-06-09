@@ -1,11 +1,11 @@
 """Plan + apply `entities.yaml` retirement (design §3, Phase 3b).
 
 The planner is pure over the 3a classification + the compiled model; it never
-mutates. It is scoped to `entities.yaml` declarations only (the §3.1 firewall —
-`terms.yaml` and single-type aggregates are Phase-4/out of scope). Promotion is
-id-preserving: the target is computed from the entity path policy, and a
-non-conforming id is rejected, never renumbered. The executor (apply_retirement)
-lives in the same module and owns all file mutation.
+mutates. It is scoped to the multi-type aggregate files (`entities.yaml`,
+`terms.yaml`); single-type aggregates (`doc/<plural>/<plural>.{json,yaml}`) are
+out of scope. Promotion is id-preserving: the target is computed from the entity
+path policy, and a non-conforming id is rejected, never renumbered. The executor
+(apply_retirement) lives in the same module and owns all file mutation.
 """
 
 from __future__ import annotations
@@ -22,11 +22,10 @@ from science_tool.datapackage_promote import _is_safe_slug
 from science_tool.entities import EntityCommandError, local_part_conforms, resolve_path_policy
 from science_tool.graph.aggregate_triage import AggregateBucket, AggregateRowTriage
 from science_tool.graph.decision_log import DecisionLogIndex, render_owner_file
+from science_tool.graph.storage_adapters.aggregate import MULTI_TYPE_AGGREGATE_ROOT_KEYS, multi_type_root_key
 
 if TYPE_CHECKING:
     from science_tool.graph.sources import AggregateRowMeta, ProjectSources
-
-_ENTITIES_FILE = "entities.yaml"
 
 
 class RetireAction(str, Enum):
@@ -38,7 +37,7 @@ class RetireAction(str, Enum):
 class PlannedRow:
     triage: AggregateRowTriage
     action: RetireAction
-    source_path: str  # the entities.yaml file (declaration source_ref.path), project-root-relative
+    source_path: str  # the aggregate file (entities.yaml/terms.yaml) declaration source_ref.path, project-root-relative
     line: int  # entry index within that file
     target_path: str | None  # PROMOTE: policy.root/<local>.md; reconcile: the existing owner file; DELETE: None
 
@@ -121,8 +120,8 @@ def plan_retirement(
     rejected: list[tuple[AggregateRowTriage, str]] = []
 
     for meta in sources.aggregate_rows:
-        if Path(meta.path).name != _ENTITIES_FILE:
-            continue  # §3.1 firewall: never touch terms.yaml / single-type aggregates
+        if Path(meta.path).name not in MULTI_TYPE_AGGREGATE_ROOT_KEYS:
+            continue  # firewall: only the multi-type files (entities.yaml/terms.yaml); never single-type aggregates
         triage = triage_by_id.get(meta.canonical_id)
         if triage is None:
             continue
@@ -178,7 +177,9 @@ _STUB_BODY = "<!-- promoted from an aggregate manifest by substrate retirement; 
 
 def _read_entries(project_root: Path, rel: str) -> list[dict]:
     data = yaml.safe_load((project_root / rel).read_text(encoding="utf-8")) or {}
-    return data.get("entities") or []
+    root_key = multi_type_root_key(Path(rel).name)
+    assert root_key is not None, f"not a multi-type aggregate file: {rel}"
+    return data.get(root_key) or []
 
 
 def _front_matter(path: Path) -> dict:
@@ -219,8 +220,10 @@ def _owner_text(
 def _rewrite_aggregate(project_root: Path, rel: str, drop: set[int]) -> None:
     path = project_root / rel
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    items = data.get("entities") or []
-    data["entities"] = [row for i, row in enumerate(items) if i not in drop]
+    root_key = multi_type_root_key(path.name)
+    assert root_key is not None, f"not a multi-type aggregate file: {rel}"
+    items = data.get(root_key) or []
+    data[root_key] = [row for i, row in enumerate(items) if i not in drop]
     path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
 
 
