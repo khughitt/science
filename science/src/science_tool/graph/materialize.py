@@ -266,12 +266,12 @@ def _add_entity(
         # when present) so citation/evidence edges land on an inspectable node.
         knowledge.add((uri, RDF.type, PROV.Entity))
         year = getattr(entity, "year", None)
-        if year:
+        if year is not None:
             knowledge.add((uri, DCTERMS_NS.date, Literal(str(year))))
-        doi = getattr(entity, "doi", "") or ""
+        doi = getattr(entity, "doi", "")
         if doi:
             knowledge.add((uri, SCI_NS.doi, Literal(doi)))
-        url = getattr(entity, "url", "") or ""
+        url = getattr(entity, "url", "")
         if url:
             knowledge.add((uri, DCAT_NS.downloadURL, URIRef(url)))
 
