@@ -37,6 +37,8 @@ class AggregateRowTriage:
     has_real_owner: bool
     bucket: AggregateBucket
     evidence: str
+    path: str | None  # aggregate file (entities.yaml/terms.yaml), project-root-relative
+    line: int | None  # row index within that file
 
 
 _COINABLE_KINDS = frozenset({"concept", "latent"})
@@ -75,9 +77,14 @@ def classify_aggregate_rows(sources: "ProjectSources") -> list[AggregateRowTriag
             kind = meta.kind if meta is not None else canonical_id.split(":", 1)[0]
             source_path = meta.source_path if meta is not None else None
             agg_path = ref.path if ref is not None else None
+            ref_line = ref.line if ref is not None else None
             # Absent OR empty source_path counts as self-sourced (design §5.2).
             self_sourced = source_path in (None, "") or source_path == agg_path
             bucket, evidence = _bucket(kind, source_path, has_real_owner, self_sourced)
-            triaged.append(AggregateRowTriage(canonical_id, kind, source_path, has_real_owner, bucket, evidence))
+            triaged.append(
+                AggregateRowTriage(
+                    canonical_id, kind, source_path, has_real_owner, bucket, evidence, agg_path, ref_line
+                )
+            )
     triaged.sort(key=lambda t: (t.bucket.value, t.canonical_id))
     return triaged

@@ -81,7 +81,9 @@ def test_missing_title_is_rejected_entry_retained(tmp_path: Path) -> None:
     # missing-field guard reads the RAW entry, so drive it directly with a synthetic plan
     # over a raw file (not loader-driven).
     _write_entities(tmp_path, [{"canonical_id": "concept:no-title", "kind": "concept", "source_path": _AGG_REL}])
-    triage = AggregateRowTriage("concept:no-title", "concept", _AGG_REL, False, AggregateBucket.COINED, "x")
+    triage = AggregateRowTriage(
+        "concept:no-title", "concept", _AGG_REL, False, AggregateBucket.COINED, "x", _AGG_REL, 0
+    )
     plan = RetirementPlan(
         promote=(PlannedRow(triage, RetireAction.PROMOTE, _AGG_REL, 0, "entities/concepts/no-title.md"),),
         delete=(),
@@ -138,7 +140,7 @@ def test_promote_target_exists_unmarked_is_skipped_entry_retained(tmp_path: Path
     owner = tmp_path / "entities/concepts/1q-gain.md"
     owner.parent.mkdir(parents=True, exist_ok=True)
     owner.write_text("---\nid: concept:1q-gain\ntype: concept\ntitle: Foreign\n---\nForeign body.\n", "utf-8")
-    triage = AggregateRowTriage("concept:1q-gain", "concept", _AGG_REL, False, AggregateBucket.COINED, "x")
+    triage = AggregateRowTriage("concept:1q-gain", "concept", _AGG_REL, False, AggregateBucket.COINED, "x", _AGG_REL, 0)
     plan = RetirementPlan(
         promote=(PlannedRow(triage, RetireAction.PROMOTE, _AGG_REL, 0, "entities/concepts/1q-gain.md"),),
         delete=(),
