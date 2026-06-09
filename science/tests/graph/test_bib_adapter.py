@@ -32,6 +32,7 @@ def test_bib_adapter_discovers_and_loads(tmp_path: Path) -> None:
     assert raw["bibkey"] == "Smith2024"
     assert raw["year"] == 2024
     assert raw["doi"] == "10.1/x"
+    assert "url" not in raw  # absent bib field is omitted, not emitted as None
 
 
 def test_bib_adapter_title_falls_back_to_key(tmp_path: Path) -> None:

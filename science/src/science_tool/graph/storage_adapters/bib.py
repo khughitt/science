@@ -37,6 +37,8 @@ class BibAdapter(StorageAdapter):
         return [SourceRef(adapter_name=self.name, path=_BIB_REL, line=i) for i in range(len(self._keys_by_line))]
 
     def load_raw(self, ref: SourceRef) -> dict[str, Any]:
+        if not self._keys_by_line:
+            raise RuntimeError("BibAdapter.discover() must be called before load_raw()")
         assert ref.line is not None, "BibAdapter SourceRef must carry line (entry index)"
         entry = self._entries[self._keys_by_line[ref.line]]
         raw: dict[str, Any] = {
