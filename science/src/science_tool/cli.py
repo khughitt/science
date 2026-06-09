@@ -305,7 +305,7 @@ def entities_migrate_command(apply_changes: bool, project_root: Path) -> None:
 @click.option(
     "--retire-external-refs",
     is_flag=True,
-    help="Drop `external-ref` (paper/article) rows backed by papers/references.bib.",
+    help="Delete `external-ref` (paper/article) rows backed by papers/references.bib.",
 )
 @click.option("--apply", "apply_changes", is_flag=True, help="Execute the plan (default: dry-run).")
 def entities_triage_aggregate_command(

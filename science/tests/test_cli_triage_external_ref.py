@@ -47,3 +47,17 @@ def test_cli_retire_external_refs_apply_refused_on_v2(tmp_path: Path) -> None:
     assert result.exit_code != 0
     assert "layout_version 2" in result.output
     assert len(yaml.safe_load((tmp_path / _ENT_REL).read_text())["entities"]) == 1  # untouched
+
+
+def test_cli_retire_external_refs_dry_run_v3_does_not_mutate(tmp_path: Path) -> None:
+    # Default (no --apply) on a v3 project: previews, does not touch entities.yaml.
+    _write(tmp_path, layout=3, bib_key="Smith2024")
+    result = CliRunner().invoke(
+        main,
+        ["entities", "triage-aggregate", "--project-root", str(tmp_path), "--retire-external-refs"],
+    )
+    assert result.exit_code == 0, result.output
+    # entities.yaml is untouched in dry-run:
+    assert len(yaml.safe_load((tmp_path / _ENT_REL).read_text())["entities"]) == 1
+    # Verified: real dry-run output starts with this prefix:
+    assert "PLAN (dry-run)" in result.output
