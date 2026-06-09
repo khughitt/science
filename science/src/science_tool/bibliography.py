@@ -82,6 +82,82 @@ def load_bib_author_surnames(project_root: Path) -> set[str] | None:
 
 
 @dataclass(frozen=True)
+class BibEntry:
+    """One balanced bibliography entry — the subset Phase 4b materializes."""
+
+    key: str
+    title: str | None = None
+    year: int | None = None
+    doi: str | None = None
+    url: str | None = None
+
+
+def _field_value(entry_text: str, field: str) -> str | None:
+    """Extract a BibTeX field value from a single entry block, brace-aware.
+
+    Handles the brace form ``field = {The {DNA} story}`` (matched by depth so
+    nested braces do not truncate), the quoted form ``field = "..."``, and the
+    bare form ``field = 2024``. Returns None when the field is absent.
+    """
+    match = re.search(r"\b" + re.escape(field) + r"\s*=\s*", entry_text, re.IGNORECASE)
+    if not match:
+        return None
+    i = match.end()
+    if i >= len(entry_text):
+        return None
+    if entry_text[i] == "{":
+        depth = 0
+        for j in range(i, len(entry_text)):
+            if entry_text[j] == "{":
+                depth += 1
+            elif entry_text[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    return entry_text[i + 1 : j].strip()
+        return None  # unbalanced field value
+    if entry_text[i] == '"':
+        close = entry_text.find('"', i + 1)
+        return entry_text[i + 1 : close].strip() if close != -1 else None
+    bare = re.match(r"([^,\n}]*)", entry_text[i:])
+    value = bare.group(1).strip() if bare else ""
+    return value or None
+
+
+def load_bib_entries(project_root: Path) -> dict[str, "BibEntry"]:
+    """Parse ``papers/references.bib`` into balanced entries keyed by citekey.
+
+    Only entries whose braces balance (via ``_entry_span``) are admitted, so the
+    returned key set is exactly the set of entries that produce a real
+    external-reference node — the invariant the retirement backed/un-backed test
+    relies on. A truncated entry contributes no key. Missing fields are None.
+    """
+    bib_path = project_root / "papers" / "references.bib"
+    if not bib_path.is_file():
+        return {}
+    text = bib_path.read_text(encoding="utf-8")
+    entries: dict[str, BibEntry] = {}
+    for match in _BIBTEX_ENTRY_RE.finditer(text):
+        key = match.group(1)
+        span = _entry_span(text, key)
+        if span is None:
+            continue  # unbalanced/truncated — cannot be "backed", excluded
+        block = text[span[0] : span[1]]
+        year_raw = _field_value(block, "year")
+        # Clamp to None unless it is a valid PaperEntity.year (ge=1800, le=2200).
+        # This guarantees the synthesized PaperEntity validates, so a returned key
+        # always yields a node (the retirement "backed" invariant).
+        year = int(year_raw) if year_raw is not None and year_raw.isdigit() and 1800 <= int(year_raw) <= 2200 else None
+        entries[key] = BibEntry(
+            key=key,
+            title=_field_value(block, "title"),
+            year=year,
+            doi=_field_value(block, "doi"),
+            url=_field_value(block, "url"),
+        )
+    return entries
+
+
+@dataclass(frozen=True)
 class BibAddResult:
     """Outcome of an ``add_bib_entry`` call."""
 
