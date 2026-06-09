@@ -11,22 +11,32 @@
 ## Goal
 
 Extend the existing 3b/3c retirement executor to also retire the **coined
-`concept`/`latent` rows in `knowledge/sources/<profile>/terms.yaml`** — promoting
-each to an id-preserving owner file under `entities/<kind>/<slug>.md` whose
-**body preserves the row's `description`** as the definition. After 4a, the
-single largest remaining aggregate bucket (≈108 coined concepts in MM30's
-`terms.yaml`) has a clean promotion path. Everything else in `terms.yaml`
+`concept` rows in `knowledge/sources/<profile>/terms.yaml`** — promoting each to
+an id-preserving owner file under `entities/concepts/<slug>.md` (the built-in
+`concept` path policy, `entities.py:59`) whose **body preserves the row's
+`description`** as the definition. After 4a, the single largest remaining
+aggregate bucket (≈108 coined concepts in MM30's `terms.yaml`) has a clean
+promotion path. Everything else in `terms.yaml`
 (the `ambiguous` rows) and all `external-ref` rows stay untouched, deferred to
 4b/4c.
 
 ## Scope decisions (locked during brainstorming)
 
-- **`terms.yaml` coined only.** 4a admits `terms.yaml` into the executor's
-  retirement scope but promotes **only** the `coined` bucket (`concept`/`latent`
-  self-sourced rows). `ambiguous` rows (e.g. `protein:`/`method:` vocabulary
-  with external ids) are left in place — they are 4c's per-row judgment work.
-  The planner already enforces this: bucket dispatch promotes only `COINED`
-  under `--promote-coined`, leaving `AMBIGUOUS` a no-op.
+- **`terms.yaml` coined, concept in practice.** 4a admits `terms.yaml` into the
+  executor's retirement scope but promotes **only** the `coined` bucket.
+  `ambiguous` rows (e.g. `protein:`/`method:` vocabulary with external ids) are
+  left in place — they are 4c's per-row judgment work. The planner already
+  enforces this: bucket dispatch promotes only `COINED` under `--promote-coined`,
+  leaving `AMBIGUOUS` a no-op. The `COINED` bucket is `concept`/`latent`
+  (`_COINABLE_KINDS`), but the executor stays **kind-generic** — it does not
+  special-case `concept`. Promotion is gated by `_promote_target`'s path-policy
+  conformance: `concept` has a built-in `slug` policy (`entities/concepts/`), so
+  concepts promote; `latent` is a project-local kind that **defaults to the
+  `numeric` strategy** unless the project manifest declares otherwise, so a
+  `latent:<slug>` id is **rejected/retained** by `_promote_target` (never
+  renumbered) until MM30's manifest grants `latent` a conforming policy (project
+  Task #30). 4a therefore promotes the ≈108 `terms.yaml` **concepts**; any
+  `latent` rows surface as `rejected` rather than mis-promoted — no special code.
 - **One flag, spans both files.** `--promote-coined` now promotes coined rows
   from **both** `entities.yaml` and `terms.yaml` in a single pass — consistent
   semantics, no new flag. Blast radius is contained by the unchanged v3 `--apply`
@@ -194,12 +204,15 @@ could inherit the wrong bucket/action.
 ## Testing (TDD; 3b/3c fixture style — `profiles: {local: local}` + local `manifest.yaml`)
 
 1. **terms coined promotes with description body.** A `terms.yaml`
-   `concept:<slug>` with a `description` → promotes to `entities/concept/<slug>.md`;
+   `concept:<slug>` with a `description` → promotes to `entities/concepts/<slug>.md`;
    owner body equals the description (single trailing newline); `promoted_from`
    marker present; row dropped from `terms.yaml`.
 2. **Reload parity for `content_preview`.** Load the promoted owner → the loaded
    entity's body/`content` preserves the definition and `content_preview` is
-   non-empty (the `description`→`content_preview` fallback at `sources.py:701`).
+   non-empty. (The promoted definition lives in the owner **body**, not a
+   frontmatter `description`, so the operative fallback is
+   `content`→`content_preview` at `sources.py:701`, not the
+   `description`→`content_preview` arm.)
 3. **terms ambiguous untouched.** A non-self-sourced `terms.yaml` row
    (`source_path: doc/something.md`, kind not coinable) → `AMBIGUOUS`; not
    promoted, not deleted, survives the rewrite. *(The fixture must set a
