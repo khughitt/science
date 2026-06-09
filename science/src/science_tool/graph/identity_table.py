@@ -104,6 +104,10 @@ def classify_owner_scope(adapter: str, *, project_name: str) -> tuple[str, bool]
         raise ValueError("identity declaration requires a non-empty adapter name")
     if adapter == "commons-merged":
         return (_COMMONS_SCOPE, False)
+    if adapter == "bib":
+        # External-reference authority scope (design §B3): bib rows are never
+        # owners, so this scope only labels provenance; it is non-deprecated.
+        return ("bib", False)
     # aggregate (entities.yaml) and datapackage are transitional deprecated owners:
     # the target substrate retires entities.yaml (§B5) and treats datapackages as
     # attachments, not owners (§B4). Flag them so later phases can find them.
