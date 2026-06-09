@@ -72,7 +72,10 @@ def _promote_target(meta: "AggregateRowMeta", project_root: Path) -> tuple[str |
     """Resolve an id-preserving promote target, or (None, reject_reason).
 
     Conformance ALWAYS runs (3b is id-preserving; a non-conforming id is
-    rejected, never renumbered). The `_is_safe_slug` belt blocks `..`/slashes.
+    rejected, never renumbered). Path-safety is policy-aware: slug/citekey/numeric
+    ids go through the lowercase `_is_safe_slug` belt; verbatim ids (which
+    `_is_safe_slug` would wrongly reject for being uppercase) use an explicit `..`
+    traversal guard instead, since `_VERBATIM_RE` already excludes slashes.
     """
     kind = meta.kind
     local_part = meta.canonical_id.split(":", 1)[1] if ":" in meta.canonical_id else meta.canonical_id
