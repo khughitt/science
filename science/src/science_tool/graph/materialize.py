@@ -48,7 +48,7 @@ from science_tool.graph.freshness import (
     derive_bears_on_from_typed_edges,
     derive_freshness,
 )
-from science_tool.graph.identity_table import build_identity_table
+from science_tool.graph.identity_table import ParticipationMode, build_identity_table
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
@@ -99,6 +99,11 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     )
     entity_index = {entity.canonical_id: entity for entity in sources.entities}
     ext_prefixes = _EXTERNAL_PREFIXES | external_prefixes(sources.ontology_catalogs)
+    external_reference_ids = {
+        d.canonical_id
+        for d in sources.identity_declarations
+        if d.participation_mode == ParticipationMode.EXTERNAL_REFERENCE
+    }
 
     for entity in sources.entities:
         _add_entity(
@@ -106,6 +111,7 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
             knowledge=knowledge,
             provenance=provenance,
             overlay_paths=sources.commons_overlay_paths,
+            external_reference_ids=external_reference_ids,
         )
 
     for entity in sources.entities:
@@ -239,6 +245,7 @@ def _add_entity(
     knowledge,
     provenance,
     overlay_paths: dict[str, str] | None = None,
+    external_reference_ids: set[str] | None = None,
 ) -> None:
     uri = _entity_uri(entity.canonical_id)
     knowledge.add((uri, RDF.type, SCI_NS[_kind_class_name(entity.kind)]))
@@ -258,13 +265,14 @@ def _add_entity(
         knowledge.add((uri, SCI_NS.sourceClass, Literal(entity.source_class)))
     if entity.kind == "dataset" and entity.license:
         knowledge.add((uri, SCI_NS.license, Literal(entity.license)))
-    if entity.kind == "paper":
-        # Phase 4b: a paper is a bibliographic external reference. The node already
-        # carries its kind-class rdf:type and skos:prefLabel=title from the shared
-        # path above; mark it additionally as prov:Entity (a reference/provenance
-        # node, per the design) and add the thin bib surface (year/doi/url, only
-        # when present) so citation/evidence edges land on an inspectable node.
+    # Phase 4b/4c: external-reference nodes (bib papers, curie authority rows) are
+    # provenance/reference nodes, not project owners. Mark prov:Entity off the
+    # DECLARED participation mode, never off kind or curie presence — a future
+    # commons-OWNED protein with a curie must keep full owner treatment.
+    if external_reference_ids is not None and entity.canonical_id in external_reference_ids:
         knowledge.add((uri, RDF.type, PROV.Entity))
+    if entity.kind == "paper":
+        # Thin bibliographic surface (year/doi/url), emitted only when present.
         year = getattr(entity, "year", None)
         if year is not None:
             knowledge.add((uri, DCTERMS_NS.date, Literal(str(year))))
