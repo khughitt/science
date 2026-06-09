@@ -150,16 +150,28 @@ New `graph/storage_adapters/curie_ref.py`, modeled on `bib.py`:
   `knowledge/sources/local/external_refs.yaml` is only the *common* MM30/example
   path, not a constant.
 - `discover()` → one `SourceRef(adapter_name="curie-ref", path=<resolved rel path>, line=i)`
-  per well-formed row. **Rejects intra-file duplicate ids loudly** (raise): a
-  second row for the same `id` in `external_refs.yaml` is a conflict, never a
-  silent skip (see §4.3). Malformed `primary_external_id` (missing source/curie)
-  → the row is skipped from `discover` (not a valid authority row).
-- `load_raw()` → `{kind: <type>, id: <id>, title: <title|id>, primary_external_id: {...}, description?: ...}`.
-- Synthesizes a lightweight in-memory `Entity` per row with its **`same_as`
-  field populated with the curie** (e.g. `same_as=frozenset({curie})`). This is
-  what drives correct materialization (§4.4) — the existing same-as path turns it
-  into a `skos:exactMatch` to a URIRef external-term node. **Never** writes owner
-  files, **never** participates in owner collisions.
+  per row. **Both integrity failures raise loudly** — never a silent skip:
+  - **Intra-file duplicate id** → raise (a second row for the same `id` is a
+    conflict; see §4.3).
+  - **Malformed `primary_external_id`** (missing source or curie) → raise.
+    Unlike a malformed *aggregate* row (transitional debt that triage tolerates by
+    routing to residual `AMBIGUOUS`), `external_refs.yaml` is the **durable backing
+    authority** once aggregate rows retire; a silently-skipped row would leave
+    citations unresolved or drop the curie mapping with no clear failure. Fail
+    loud (or, if a softer surface is wanted later, an explicit `SkippedEntity` /
+    validate error — but never a silent drop).
+- `load_raw()` → `{kind: <type>, id: <id>, title: <title|id>, primary_external_id: {...}, same_as: [<curie>], file_path: <resolved rel path>, description?: ...}`.
+  - **`file_path`** is the resolved relative path of `external_refs.yaml`
+    (matching `BibAdapter`, which sets `file_path=_BIB_REL`). `_enrich_raw`
+    defaults a missing `file_path` to `""` → weak `prov:wasDerivedFrom`
+    provenance for the authority node, so set it explicitly.
+  - **`same_as`** is a **list** `[curie]`, *not* a `frozenset`: `_enrich_raw`
+    normalizes `same_as` only when `isinstance(vals, list)` (`sources.py:740`); a
+    non-list value is silently dropped and the curie edge would never materialize.
+- Synthesizes a lightweight in-memory `Entity` per row whose `same_as` carries the
+  curie. This drives correct materialization (§4.4) — the existing same-as path
+  turns it into a `skos:exactMatch` to a URIRef external-term node. **Never**
+  writes owner files, **never** participates in owner collisions.
 - Explicit `RuntimeError` guard if `load_raw()` precedes `discover()` (no silent
   re-read), matching `BibAdapter`.
 - Source-specific parsing/backing logic lives **inside the adapter** (and the
@@ -368,8 +380,9 @@ TDD, subagent-driven (fresh implementer + two-stage spec/quality review per task
 - **Row-meta capture** — loader carries `primary_external_id` into `AggregateRowMeta`;
   non-mapping / partial mappings normalize to absent.
 - **`CurieRefAdapter`** — discover → one ref per well-formed row; **intra-file
-  duplicate id raises**; malformed `primary_external_id` row skipped; synthesized
-  entity carries the curie in `same_as`; `RuntimeError` if load_raw precedes
+  duplicate id raises**; **malformed `primary_external_id` row raises** (durable
+  authority fails loud, not silent skip); synthesized entity carries the curie in
+  a **list** `same_as` and sets `file_path`; `RuntimeError` if load_raw precedes
   discover; scope `("curie-ref", False)`; **path resolved via
   `local_profile_sources_dir`** (test with a non-`local` profile name to catch a
   hardcoded path).
