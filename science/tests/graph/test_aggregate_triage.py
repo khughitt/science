@@ -18,25 +18,25 @@ _AGG = "knowledge/sources/local/entities.yaml"
 # directly on the pure _bucket helper, which takes (kind, source_path,
 # has_real_owner, self_sourced) and needs no project on disk.
 @pytest.mark.parametrize(
-    "kind,source_path,has_real_owner,self_sourced,expected",
+    "kind,source_path,has_real_owner,self_sourced,has_pei,expected",
     [
-        ("concept", _AGG, False, True, AggregateBucket.COINED),
-        ("latent", None, False, True, AggregateBucket.COINED),
-        ("decision", "knowledge/x", False, True, AggregateBucket.COINED),  # self-sourced decision
-        ("decision", "core/decisions.md", False, False, AggregateBucket.DECISION_LOG),
-        ("article", _AGG, False, True, AggregateBucket.EXTERNAL_REF),
-        ("concept", "refs.bib", False, False, AggregateBucket.EXTERNAL_REF),  # .bib source
-        ("decision", "migration:audit", False, False, AggregateBucket.CRUFT),
-        ("concept", "migration:audit", False, True, AggregateBucket.CRUFT),  # cruft before coined
-        ("question", None, False, True, AggregateBucket.AMBIGUOUS),
-        ("topic", _AGG, False, True, AggregateBucket.AMBIGUOUS),
-        ("concept", _AGG, True, True, AggregateBucket.SHADOW),  # shadow wins over coined
-        ("decision", "core/decisions.md", True, False, AggregateBucket.SHADOW),  # shadow before decision-log
-        ("decision", "migration:audit", True, False, AggregateBucket.SHADOW),  # shadow before cruft
+        ("concept", _AGG, False, True, False, AggregateBucket.COINED),
+        ("latent", None, False, True, False, AggregateBucket.COINED),
+        ("decision", "knowledge/x", False, True, False, AggregateBucket.COINED),  # self-sourced decision
+        ("decision", "core/decisions.md", False, False, False, AggregateBucket.DECISION_LOG),
+        ("article", _AGG, False, True, False, AggregateBucket.EXTERNAL_REF),
+        ("concept", "refs.bib", False, False, False, AggregateBucket.EXTERNAL_REF),  # .bib source
+        ("decision", "migration:audit", False, False, False, AggregateBucket.CRUFT),
+        ("concept", "migration:audit", False, True, False, AggregateBucket.CRUFT),  # cruft before coined
+        ("question", None, False, True, False, AggregateBucket.QUESTION_DEFERRED),  # 4c: bare question -> deferred
+        ("topic", _AGG, False, True, False, AggregateBucket.COINED),  # 4c: vocab kind -> coined
+        ("concept", _AGG, True, True, False, AggregateBucket.SHADOW),  # shadow wins over coined
+        ("decision", "core/decisions.md", True, False, False, AggregateBucket.SHADOW),  # shadow before decision-log
+        ("decision", "migration:audit", True, False, False, AggregateBucket.SHADOW),  # shadow before cruft
     ],
 )
-def test_bucket_rule_matrix(kind, source_path, has_real_owner, self_sourced, expected) -> None:
-    bucket, evidence = _bucket(kind, source_path, has_real_owner, self_sourced)
+def test_bucket_rule_matrix(kind, source_path, has_real_owner, self_sourced, has_pei, expected) -> None:
+    bucket, evidence = _bucket(kind, source_path, has_real_owner, self_sourced, has_pei)
     assert bucket is expected
     assert evidence  # every row carries a non-empty basis
 

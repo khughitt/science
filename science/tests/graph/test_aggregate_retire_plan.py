@@ -80,14 +80,16 @@ def test_terms_yaml_cruft_rows_are_planned(tmp_path: Path) -> None:
 
 
 def test_ambiguous_rows_are_never_acted(tmp_path: Path) -> None:
-    # A self-sourced `topic` buckets AMBIGUOUS (a never-acted bucket). Even with all
-    # three flags on, it must be neither promoted nor deleted.
+    # A self-sourced biomedical kind without a primary_external_id (e.g. `disease`)
+    # buckets AMBIGUOUS (a never-acted bucket). Even with all three flags on, it must
+    # be neither promoted nor deleted.
+    # Note: `topic` was AMBIGUOUS pre-4c but is now COINED (_COINABLE_VOCAB_KINDS).
     _write_entities(
         tmp_path,
         [
             {
-                "canonical_id": "topic:some-topic",
-                "kind": "topic",
+                "canonical_id": "disease:some-disease",
+                "kind": "disease",
                 "title": "x",
                 "source_path": "knowledge/sources/local/entities.yaml",
             }

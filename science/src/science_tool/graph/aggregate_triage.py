@@ -25,7 +25,9 @@ class AggregateBucket(str, Enum):
     COINED = "coined"
     DECISION_LOG = "decision-log"
     EXTERNAL_REF = "external-ref"
+    CURIE_EXTERNAL_REF = "curie-external-ref"
     CRUFT = "cruft"
+    QUESTION_DEFERRED = "question-deferred"
     AMBIGUOUS = "ambiguous"
 
 
@@ -43,9 +45,18 @@ class AggregateRowTriage:
 
 _COINABLE_KINDS = frozenset({"concept", "latent"})
 
+# 4c: bare project vocabulary kinds that promote as slug owners (method/topic
+# became slug identity kinds in 4c). `question` is epistemic and is NOT here —
+# it routes to QUESTION_DEFERRED for deliberate authoring.
+_COINABLE_VOCAB_KINDS = frozenset({"method", "topic"})
+
 
 def _bucket(
-    kind: str, source_path: str | None, has_real_owner: bool, self_sourced: bool
+    kind: str,
+    source_path: str | None,
+    has_real_owner: bool,
+    self_sourced: bool,
+    has_primary_external_id: bool,
 ) -> tuple[AggregateBucket, str]:
     if has_real_owner:
         return AggregateBucket.SHADOW, "a non-aggregate owner of this id exists -> shadow"
@@ -57,7 +68,14 @@ def _bucket(
         return AggregateBucket.EXTERNAL_REF, f"kind={kind} / bibliographic source -> external-ref"
     if self_sourced and (kind in _COINABLE_KINDS or kind == "decision"):
         return AggregateBucket.COINED, f"self-sourced coinable kind={kind} -> coined"
-    return AggregateBucket.AMBIGUOUS, f"self-sourced kind={kind}, no rule matched -> ambiguous"
+    # 4c terminal fan-out (replaces the old single `return AMBIGUOUS`):
+    if has_primary_external_id:
+        return AggregateBucket.CURIE_EXTERNAL_REF, f"{kind} carries primary_external_id -> curie external ref"
+    if self_sourced and kind == "question":
+        return AggregateBucket.QUESTION_DEFERRED, "bare question stub -> requires epistemic authoring (deferred)"
+    if self_sourced and kind in _COINABLE_VOCAB_KINDS:
+        return AggregateBucket.COINED, f"self-sourced vocabulary kind={kind} -> coined"
+    return AggregateBucket.AMBIGUOUS, f"{kind} without primary_external_id -> requires human identity decision"
 
 
 def classify_aggregate_rows(sources: "ProjectSources") -> list[AggregateRowTriage]:
@@ -80,7 +98,8 @@ def classify_aggregate_rows(sources: "ProjectSources") -> list[AggregateRowTriag
             ref_line = ref.line if ref is not None else None
             # Absent OR empty source_path counts as self-sourced (design §5.2).
             self_sourced = source_path in (None, "") or source_path == agg_path
-            bucket, evidence = _bucket(kind, source_path, has_real_owner, self_sourced)
+            has_pei = meta is not None and meta.primary_external_id is not None
+            bucket, evidence = _bucket(kind, source_path, has_real_owner, self_sourced, has_pei)
             triaged.append(
                 AggregateRowTriage(
                     canonical_id, kind, source_path, has_real_owner, bucket, evidence, agg_path, ref_line
