@@ -46,7 +46,7 @@ _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
     "finding": EntityPathPolicy(Path("entities/findings"), "numeric"),
     "inquiry": EntityPathPolicy(Path("entities/inquiries"), "numeric"),
     "theme": EntityPathPolicy(Path("entities/themes"), "numeric"),
-    "topic": EntityPathPolicy(Path("entities/topics"), "numeric"),
+    "topic": EntityPathPolicy(Path("entities/topics"), "slug"),  # was "numeric" (4c: slug identity kind)
     "evidence-line": EntityPathPolicy(Path("entities/evidence-lines"), "numeric"),
     "observation": EntityPathPolicy(Path("entities/observations"), "numeric"),
     "mechanism": EntityPathPolicy(Path("entities/mechanisms"), "numeric"),
@@ -54,7 +54,7 @@ _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
     "report": EntityPathPolicy(Path("entities/reports"), "numeric"),
     "plan": EntityPathPolicy(Path("entities/plans"), "numeric"),
     "search": EntityPathPolicy(Path("entities/searches"), "numeric"),
-    "method": EntityPathPolicy(Path("entities/methods"), "numeric"),
+    "method": EntityPathPolicy(Path("entities/methods"), "slug"),  # was "numeric" (4c: slug identity kind)
     "pre-registration": EntityPathPolicy(Path("entities/pre-registrations"), "numeric"),
     "concept": EntityPathPolicy(Path("entities/concepts"), "slug"),
     "decision": EntityPathPolicy(Path("entities/decision"), "verbatim"),

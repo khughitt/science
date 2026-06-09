@@ -1349,13 +1349,14 @@ def test_colliding_entity_aliases_block_without_aborting_dry_run(tmp_path: Path)
 
 def test_unsluggable_title_and_stem_do_not_abort_planning(tmp_path: Path) -> None:
     # A real H1 title that normalizes to <2 chars AND a 1-char stem make every
-    # derive_slug candidate raise. plan_migration must fall through to the
-    # always-valid untitled-<kind> slug, not abort with EntityCommandError.
+    # derive_slug candidate raise. plan_migration must fall through gracefully.
+    # With topic now a slug-identity kind (4c), the migration uses the file stem
+    # directly (slug strategy: stem → local part) rather than assigning a numeric id.
     _write(tmp_path, "doc/topics/x.md", '---\ntype: topic\ncreated: "2026-01-01"\n---\n# @@@\n')
     plan = plan_migration(tmp_path)  # must not raise
     topic_moves = [m for m in plan.moves if m.kind == "topic"]
     assert len(topic_moves) == 1
-    assert topic_moves[0].new_id == "topic:0001-untitled-topic"
+    assert topic_moves[0].new_id == "topic:x"
 
 
 # ---------------------------------------------------------------------------
