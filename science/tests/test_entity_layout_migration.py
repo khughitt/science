@@ -486,6 +486,46 @@ def test_migrate_collision_blocks_apply(tmp_path: Path) -> None:
         migrate_layout(tmp_path, apply=True)
 
 
+def test_migrate_spec_ref_does_not_block_apply(tmp_path: Path) -> None:
+    """A `spec:` ref points at a design document, not an entity — it is annotation-only
+    (is_metadata_reference) and must neither be reported in the dry-run nor block --apply.
+    Regression for the natural-systems v2→v3 apply, which failed the post-move graph
+    audit on `spec:*-design` refs to doc/plans/ design docs."""
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(
+        tmp_path,
+        "doc/questions/q01-beta.md",
+        '---\nid: "question:q01-beta"\ntype: question\ncreated: "2026-01-02"\ntitle: Beta\n'
+        'status: active\nupdated: "2026-01-02"\nrelated: ["spec:2026-01-01-some-design"]\n---\nbody\n',
+    )
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)
+    assert dry["unresolved_references"] == {}, dry["unresolved_references"]
+    report = migrate_layout(tmp_path, apply=True)
+    assert report["graph_validation"] == "passed"
+    # The spec: annotation is preserved verbatim in the migrated file.
+    assert "spec:2026-01-01-some-design" in (tmp_path / "entities/questions/0001-beta.md").read_text()
+
+
+def test_migrate_unresolvable_entity_ref_blocks_apply_premutation(tmp_path: Path) -> None:
+    """A ref to a missing entity of a real (non-annotation) kind is reported in the
+    dry-run and blocks --apply at the pre-mutation gate — the tree is never modified.
+    Pins that the spec: exemption above is narrow (annotation namespaces only)."""
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(
+        tmp_path,
+        "doc/questions/q01-beta.md",
+        '---\nid: "question:q01-beta"\ntype: question\ncreated: "2026-01-02"\ntitle: Beta\n'
+        'status: active\nupdated: "2026-01-02"\nrelated: ["report:ghost-missing"]\n---\nbody\n',
+    )
+    _git_init(tmp_path)
+    dry = migrate_layout(tmp_path, apply=False)
+    assert dry["unresolved_references"], "dry-run must flag the missing entity ref"
+    with _pytest.raises(ValueError, match="unresolved structural references"):
+        migrate_layout(tmp_path, apply=True)
+    assert not (tmp_path / "entities").exists(), "pre-mutation gate must not modify the tree"
+
+
 def test_migrate_apply_rewrites_inplace_prose_doc(tmp_path: Path) -> None:
     """(d) A prose doc file containing hypothesis:h01-alpha and [[hypothesis:h01-alpha]] is rewritten in place.
     Uses doc/context/ — a directory not in _DIR_TO_KIND — so the file is not
