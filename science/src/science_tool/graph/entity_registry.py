@@ -25,6 +25,7 @@ from science_model.entities import (
     ProjectEntity,
     ResearchPackageEntity,
     StructuralChainEntity,
+    TalkEntity,
     TaskEntity,
     ThemeEntity,
     WorkflowRunEntity,
@@ -72,6 +73,7 @@ _CORE_KIND_CLASSES: dict[str, EntityClass] = {
     "method": EntityClass.OPERATIONAL,
     "observation": EntityClass.EPISTEMIC,
     "paper": EntityClass.OPERATIONAL,
+    "talk": EntityClass.OPERATIONAL,
     "plan": EntityClass.OPERATIONAL,
     "pre-registration": EntityClass.OPERATIONAL,
     "proposition": EntityClass.EPISTEMIC,
@@ -116,6 +118,7 @@ class EntityRegistry:
         r.register_core_kind("mechanism", MechanismEntity, entity_class=_CORE_KIND_CLASSES["mechanism"])
         r.register_core_kind("theme", ThemeEntity, entity_class=_CORE_KIND_CLASSES["theme"])
         r.register_core_kind("paper", PaperEntity, entity_class=_CORE_KIND_CLASSES["paper"])
+        r.register_core_kind("talk", TalkEntity, entity_class=_CORE_KIND_CLASSES["talk"])
         r.register_core_kind(
             "structural-chain",
             StructuralChainEntity,

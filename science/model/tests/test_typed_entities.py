@@ -17,6 +17,7 @@ from science_model.entities import (
     PaperEntity,
     ProjectEntity,
     ResearchPackageEntity,
+    TalkEntity,
     TaskEntity,
     WorkflowRunEntity,
 )
@@ -85,6 +86,38 @@ def test_paper_entity_normalizes_null_identifier_strings_to_defaults() -> None:
     )
 
     assert paper.pmid == ""
+
+
+def test_talk_entity_extends_project_entity() -> None:
+    talk = TalkEntity(**_minimal(EntityType.TALK, "talk:Johri2026"))
+    assert isinstance(talk, ProjectEntity)
+
+
+def test_talk_entity_accepts_recording_fields() -> None:
+    talk = TalkEntity(
+        **_minimal(EntityType.TALK, "talk:Johri2026"),
+        speakers=["Shreya Johri", "Maha Shady"],
+        year=2026,
+        venue="MIA Seminar, Broad Institute",
+        url="https://www.youtube.com/watch?v=BCugR49h3ts",
+        transcript_path="archive/2026-06-09-talk.txt",
+        key_points=["Evaluate process, not just results"],
+    )
+
+    assert talk.speakers == ["Shreya Johri", "Maha Shady"]
+    assert talk.year == 2026
+    assert talk.url.endswith("BCugR49h3ts")
+
+
+def test_talk_entity_coerces_scalar_speaker_to_list() -> None:
+    talk = TalkEntity(**_minimal(EntityType.TALK, "talk:Solo2026"), speakers="Solo Speaker")
+    assert talk.speakers == ["Solo Speaker"]
+
+
+def test_talk_entity_normalizes_null_identifier_strings_to_defaults() -> None:
+    talk = TalkEntity(**_minimal(EntityType.TALK, "talk:Solo2026"), url=None, venue=None)
+    assert talk.url == ""
+    assert talk.venue == ""
 
 
 def test_workflow_run_entity_extends_project_entity() -> None:

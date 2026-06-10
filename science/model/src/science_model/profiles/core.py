@@ -89,6 +89,12 @@ CORE_PROFILE = ProfileManifest(
             description="Ordered composition of stories structured for communication.",
         ),
         EntityKind(
+            name="talk",
+            canonical_prefix="talk",
+            layer="layer/core",
+            description="Recorded seminar or conference presentation; an unrefereed evidence source.",
+        ),
+        EntityKind(
             name="experiment",
             canonical_prefix="experiment",
             layer="layer/core",

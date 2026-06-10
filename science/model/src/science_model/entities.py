@@ -97,6 +97,7 @@ class EntityType(StrEnum):
     THEME = "theme"
     MECHANISM = "mechanism"
     PAPER = "paper"
+    TALK = "talk"
     SEARCH = "search"
     REPORT = "report"
     SYNTHESIS = "synthesis"
@@ -562,6 +563,42 @@ class PaperEntity(ProjectEntity):
         return value
 
     @field_validator("bibkey", "venue", "doi", "pmid", "url", "methods_summary", mode="before")
+    @classmethod
+    def _coerce_nullable_strings(cls, value: object) -> object:
+        if value is None:
+            return ""
+        return value
+
+
+class TalkEntity(ProjectEntity):
+    """Talk — recorded seminar / conference presentation.
+
+    A source that *provides* evidence (like `paper`) but is not peer-reviewed and
+    carries no truth-apt claim of its own, so it is OPERATIONAL — never a
+    `bears_on`/belief target. Keeping it distinct from `paper` lets downstream
+    evidence-weighting treat an unrefereed talk differently from a published paper.
+    """
+
+    bibkey: str = ""
+    speakers: list[str] = Field(default_factory=list)
+    year: int | None = Field(default=None, ge=1800, le=2200)
+    date_presented: date | None = None
+    venue: str = ""
+    url: str = ""
+    transcript_path: str = ""
+    doi: str = ""
+    duration_minutes: int | None = Field(default=None, ge=0)
+    key_points: list[str] = Field(default_factory=list)
+    datasets: list[str] = Field(default_factory=list)
+
+    @field_validator("speakers", mode="before")
+    @classmethod
+    def _coerce_scalar_speakers(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [value]
+        return value
+
+    @field_validator("bibkey", "venue", "url", "transcript_path", "doi", mode="before")
     @classmethod
     def _coerce_nullable_strings(cls, value: object) -> object:
         if value is None:

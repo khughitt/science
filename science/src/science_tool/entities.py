@@ -59,6 +59,7 @@ _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
     "concept": EntityPathPolicy(Path("entities/concepts"), "slug"),
     "decision": EntityPathPolicy(Path("entities/decision"), "verbatim"),
     "paper": EntityPathPolicy(Path("entities/papers"), "citekey"),
+    "talk": EntityPathPolicy(Path("entities/talks"), "citekey"),
     # Singletons: `root` is the file path itself, not a directory.
     "research-question": EntityPathPolicy(Path("entities/research-question.md"), "singleton"),
     "claim-registry": EntityPathPolicy(Path("entities/claim-registry.yaml"), "singleton"),
@@ -222,6 +223,7 @@ _DEFAULT_STATUS: dict[str, str] = {
     "method": "active",
     "pre-registration": "active",
     "paper": "active",
+    "talk": "active",
     "concept": "active",
     "decision": "active",
 }
@@ -264,6 +266,7 @@ _STATUS_VALUES: dict[str, frozenset[str]] = {
     "method": frozenset({"active", "superseded", "retired"}),
     "pre-registration": frozenset({"active", "amended", "superseded", "retired"}),
     "paper": frozenset({"active", "retired"}),
+    "talk": frozenset({"active", "retired"}),
     "concept": frozenset({"active", "deprecated"}),
     "decision": frozenset({"active", "superseded", "abandoned"}),
 }
