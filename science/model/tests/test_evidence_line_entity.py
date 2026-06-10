@@ -12,6 +12,7 @@ from science_model.entities import (
     ProjectEntity,
     core_entity_type_for_kind,
 )
+from science_model.packages.schema import DatasetUsage
 from science_model.reasoning import (
     DisputeScope,
     EvidenceRole,
@@ -126,3 +127,22 @@ def test_target_required() -> None:
     del data["target"]
     with pytest.raises(ValidationError):
         EvidenceLineEntity(**data)
+
+
+# Sub-task 3: EvidenceLineEntity dataset_usage round-trip
+
+
+def test_evidence_line_entity_dataset_usage_roundtrip() -> None:
+    """EvidenceLineEntity accepts and round-trips dataset_usage via model_dump."""
+    usage = DatasetUsage(ref="dataset:mmrf", role="analyzed", overlap="full")
+    el = EvidenceLineEntity(**_minimal_evidence_line(), dataset_usage=[usage])
+    assert len(el.dataset_usage) == 1
+    assert el.dataset_usage[0].ref == "dataset:mmrf"
+    assert el.dataset_usage[0].role == "analyzed"
+    assert el.dataset_usage[0].overlap == "full"
+
+    dumped = el.model_dump()
+    el2 = EvidenceLineEntity(**dumped)
+    assert el2.dataset_usage[0].ref == "dataset:mmrf"
+    assert el2.dataset_usage[0].role == "analyzed"
+    assert el2.dataset_usage[0].overlap == "full"

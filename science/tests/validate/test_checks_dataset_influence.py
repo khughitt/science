@@ -698,3 +698,51 @@ def test_row_usage_refs_unresolved_uses_pinned_severities() -> None:
         (Severity.INFO, "dataset-influence.ref-unresolved-unavailable"),
         (Severity.WARN, "dataset-influence.ref-unresolved"),
     ]
+
+
+# Sub-task 4: severity-contract unit tests
+
+
+def test_ref_not_dataset_is_error() -> None:
+    """A dataset_usage ref that resolves to a non-dataset entity is a hard ERROR."""
+    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
+
+    results = list(
+        evaluate_dataset_influence(
+            [_fm(dataset_usage=[{"ref": "dataset:gtex-v8", "role": "analyzed"}])],
+            dataset_ref_status={"dataset:gtex-v8": "non_dataset"},
+            row_usage_refs=[],
+        )
+    )
+
+    assert _rules(results) == [(Severity.ERROR, "dataset-influence.ref-not-dataset")]
+
+
+def test_malformed_dataset_usage_bad_role_is_error() -> None:
+    """A dataset_usage entry with an unrecognised role is a hard ERROR."""
+    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
+
+    results = list(
+        evaluate_dataset_influence(
+            [_fm(dataset_usage=[{"ref": "dataset:gtex-v8", "role": "consulted"}])],
+            dataset_ref_status={"dataset:gtex-v8": "resolved"},
+            row_usage_refs=[],
+        )
+    )
+
+    assert _rules(results) == [(Severity.ERROR, "dataset-influence.dataset-usage-malformed")]
+
+
+def test_malformed_dataset_usage_bad_overlap_is_error() -> None:
+    """A dataset_usage entry with an unrecognised overlap value is a hard ERROR."""
+    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
+
+    results = list(
+        evaluate_dataset_influence(
+            [_fm(dataset_usage=[{"ref": "dataset:gtex-v8", "role": "analyzed", "overlap": "some"}])],
+            dataset_ref_status={"dataset:gtex-v8": "resolved"},
+            row_usage_refs=[],
+        )
+    )
+
+    assert _rules(results) == [(Severity.ERROR, "dataset-influence.dataset-usage-malformed")]
