@@ -638,6 +638,48 @@ def _plan_singletons(project_root: Path, plan: MigrationPlan) -> None:
                 break  # first existing candidate wins
 
 
+def _persist_rename_aliases(project_root: Path, id_map: dict[str, str]) -> int:
+    """Persist the migration's old→new id_map as project aliases (mappings.yaml).
+
+    --apply renames entity ids and rewrites every reference INSIDE the project, but a
+    reference from OUTSIDE it — a sibling project, or the commons store, whose files
+    this migration cannot touch — still points at the OLD id and would dangle the
+    moment the rename lands. Recording each old→new pair as a manual alias keeps those
+    external references resolvable. This is the SAME id_map the pre-mutation gate
+    injects in-memory (so old-id refs resolve during the dry-run); persisting it makes
+    the post-apply tree match what the gate already validated, instead of failing the
+    final audit on references the gate deemed fine.
+
+    Idempotent and non-destructive: an id_map entry never overwrites a project-authored
+    alias key, and identity mappings (old == new) are skipped. Returns the count added.
+    """
+    from science_tool.graph.sources import resolve_local_profile_name
+
+    additions = {old: new for old, new in id_map.items() if old != new}
+    if not additions:
+        return 0
+    local_profile = resolve_local_profile_name(project_root)
+    mappings_path = project_root / "knowledge" / "sources" / local_profile / "mappings.yaml"
+    data = yaml.safe_load(mappings_path.read_text(encoding="utf-8")) if mappings_path.is_file() else {}
+    if not isinstance(data, dict):
+        data = {}
+    aliases = data.get("aliases")
+    if not isinstance(aliases, dict):
+        aliases = {}
+    added = 0
+    for old_id, new_id in additions.items():
+        if old_id in aliases:
+            continue  # never clobber a project-authored alias
+        aliases[old_id] = new_id
+        added += 1
+    if not added:
+        return 0
+    data["aliases"] = dict(sorted(aliases.items()))
+    mappings_path.parent.mkdir(parents=True, exist_ok=True)
+    mappings_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    return added
+
+
 def _detect_collisions(plan: MigrationPlan) -> None:
     by_path: dict[str, list[str]] = {}
     by_id: dict[str, list[str]] = {}
@@ -1139,6 +1181,19 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
             (project_root / sm.new_rel_path).write_text(singleton_text[sm.new_rel_path], encoding="utf-8")
         for rel, text in inplace_text.items():
             (project_root / rel).write_text(text, encoding="utf-8")
+
+        # 3.5. Persist old→new ids as project aliases so references this migration could
+        #      NOT rewrite — those in external projects / the commons store — keep
+        #      resolving. Must run before the final audit (step 4), which reads
+        #      mappings.yaml as manual_aliases. Mirrors the pre-mutation gate's in-memory
+        #      id_map injection, made durable.
+        #      Use the per-move full old_id→new_id pairs (real entity targets), NOT the
+        #      whole plan.id_map: the latter also carries synthetic stem aliases
+        #      (e.g. hypothesis:h01→hypothesis:0001) whose bare-number targets resolve to
+        #      no entity and would fail the dangling-alias-target check on re-run. The
+        #      full pairs are also exactly the shape external references use.
+        rename_map = {m.old_id: m.new_id for m in plan.moves if m.old_id and m.old_id != m.new_id}
+        report["aliases_persisted"] = _persist_rename_aliases(project_root, rename_map)
 
         # 4. Final graph validation — token rewriting can miss semantic references, so
         #    load the migrated tree and audit it. Fail loud (do NOT bump layout_version)
