@@ -91,7 +91,7 @@ def test_migrate_emits_derived_dataset_entity(tmp_path: Path) -> None:
         env={"SCIENCE_PROJECT_ROOT": str(tmp_path)},
     )
     assert res.exit_code == 0, res.output
-    ds_path = tmp_path / "doc" / "datasets" / "wf-wf-r1-kappa.md"
+    ds_path = tmp_path / "doc" / "datasets" / "wf-r1-kappa.md"
     assert ds_path.exists()
     body = ds_path.read_text()
     assert 'origin: "derived"' in body
@@ -110,7 +110,7 @@ def test_migrate_emits_research_package_entity(tmp_path: Path) -> None:
     assert rp_path.exists()
     body = rp_path.read_text()
     assert 'type: "research-package"' in body
-    assert "dataset:wf-wf-r1-kappa" in body
+    assert "dataset:wf-r1-kappa" in body
 
 
 def test_migrate_marks_old_data_package_superseded(tmp_path: Path) -> None:
@@ -152,10 +152,10 @@ def test_migrate_idempotent(tmp_path: Path) -> None:
     _seed_legacy_data_package(tmp_path)
     runner = CliRunner()
     runner.invoke(science_cli, ["data-package", "migrate", "old"], env={"SCIENCE_PROJECT_ROOT": str(tmp_path)})
-    snap1 = (tmp_path / "doc" / "datasets" / "wf-wf-r1-kappa.md").read_text()
+    snap1 = (tmp_path / "doc" / "datasets" / "wf-r1-kappa.md").read_text()
     rp_snap1 = (tmp_path / "research" / "packages" / "old" / "research-package.md").read_text()
     runner.invoke(science_cli, ["data-package", "migrate", "old"], env={"SCIENCE_PROJECT_ROOT": str(tmp_path)})
-    snap2 = (tmp_path / "doc" / "datasets" / "wf-wf-r1-kappa.md").read_text()
+    snap2 = (tmp_path / "doc" / "datasets" / "wf-r1-kappa.md").read_text()
     rp_snap2 = (tmp_path / "research" / "packages" / "old" / "research-package.md").read_text()
     assert snap1 == snap2
     assert rp_snap1 == rp_snap2
@@ -173,9 +173,9 @@ def test_migrate_dry_run_writes_nothing(tmp_path: Path) -> None:
         catch_exceptions=False,
     )
     assert res.exit_code == 0
-    assert "wf-wf-r1-kappa" in res.output
+    assert "wf-r1-kappa" in res.output
     assert "research-package:old" in res.output or "old/research-package.md" in res.output
-    assert not (tmp_path / "doc" / "datasets" / "wf-wf-r1-kappa.md").exists()
+    assert not (tmp_path / "doc" / "datasets" / "wf-r1-kappa.md").exists()
     assert not (tmp_path / "research" / "packages" / "old" / "research-package.md").exists()
     body = (tmp_path / "doc" / "data-packages" / "old.md").read_text()
     assert 'status: "active"' in body or "status: active" in body

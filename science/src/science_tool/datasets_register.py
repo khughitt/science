@@ -160,8 +160,13 @@ def write_derived_dataset_entities(project_root: Path, workflow_run_id: str) -> 
     inputs = list(run_fm.get("inputs") or [])
     written: list[tuple[Path, str]] = []
     for out in outputs:
-        # entity slug uses the full run entity slug for uniqueness across workflow runs
-        slug = f"{workflow_slug}-{run_entity_slug}-{out['slug']}"
+        # Entity slug = run entity slug + output slug. run_entity_slug already begins
+        # with the workflow slug (it IS `<workflow-slug>-<run-id>`), so it provides
+        # cross-run uniqueness on its own — prepending workflow_slug again double-
+        # prefixed the id (dataset:wf-wf-r1-...). This composition also matches the
+        # per-output datapackage name (`{workflow_slug}-{run_dir}-{out_slug}`), keeping
+        # the entity id and its datapackage name in sync.
+        slug = f"{run_entity_slug}-{out['slug']}"
         ds_path = project_root / "doc" / "datasets" / f"{slug}.md"
         ds_path.parent.mkdir(parents=True, exist_ok=True)
         # path on disk uses the run dir slug (strips workflow prefix)
