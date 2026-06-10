@@ -94,6 +94,28 @@ def _evidence_line_md(eid: str, *, target: str, source: str) -> str:
     )
 
 
+def _evidence_line_with_usage_md(eid: str, *, target: str, dataset_ref: str, overlap: str = "full") -> str:
+    """Evidence-line with dataset_usage authored directly on the line (no paper intermediary)."""
+    return (
+        "---\n"
+        f"id: evidence-line:{eid}\n"
+        "type: evidence-line\n"
+        f"title: {eid}\n"
+        "status: active\n"
+        "stance: supports\n"
+        f"target: proposition:{target}\n"
+        "strength: moderate\n"
+        "evidence_type: empirical_data_evidence\n"
+        "dataset_usage:\n"
+        f"  - ref: {dataset_ref}\n"
+        "    role: analyzed\n"
+        f"    overlap: {overlap}\n"
+        "created: '2026-05-01'\n"
+        "updated: '2026-05-01'\n"
+        "---\n"
+    )
+
+
 def _dataset_dp(root: Path, slug: str) -> None:
     """Write a minimal external dataset datapackage."""
     dp = root / "data" / slug / "datapackage.yaml"
@@ -427,3 +449,85 @@ def test_task_source_lands_in_provenance_not_belief(tmp_path: Path) -> None:
     assert (line_uri, CITO_NS.supports, target_uri) in knowledge, (
         "Expected cito:supports edge from evidence-line:el-task to proposition:q in knowledge graph"
     )
+
+
+# ---------------------------------------------------------------------------
+# Point 6 — line-authored dataset_usage collapse (B2 headline mechanism)
+# ---------------------------------------------------------------------------
+
+def test_line_authored_dataset_usage_same_dataset_collapse(tmp_path: Path) -> None:
+    """Two evidence-lines with dataset_usage authored DIRECTLY on the lines
+    (no paper intermediary) both targeting the same dataset (analyzed, full)
+    must collapse identically to the paper-mediated case.
+
+    This exercises B1 (usage_records_for_entity materialises the line's own
+    dataset_usage with source='authored') and B2 (_ancestor_path returns
+    'direct' when consumer == line).
+
+    Assertions mirror test_same_dataset_two_lines_collapse_to_one_unit:
+      - exactly 1 DatasetIndependenceCommitment
+      - both lines are members of it
+      - independence_group contains the dataset slug
+      - reduce_units yields len(kept)==1, len(collapsed)==1
+    """
+    _manifest(tmp_path)
+    _dataset_dp(tmp_path, "mmrf")
+
+    _write(tmp_path, "entities/propositions/p.md", _prop_md("p"))
+
+    # Two evidence-lines that each carry dataset_usage directly — no paper
+    _write(
+        tmp_path,
+        "entities/evidence-lines/la.md",
+        _evidence_line_with_usage_md("la", target="p", dataset_ref="dataset:mmrf"),
+    )
+    _write(
+        tmp_path,
+        "entities/evidence-lines/lb.md",
+        _evidence_line_with_usage_md("lb", target="p", dataset_ref="dataset:mmrf"),
+    )
+
+    knowledge, provenance = _materialize(tmp_path)
+
+    # --- B2: one DatasetIndependenceCommitment ---
+    commitments = list(provenance.subjects(RDF.type, SCI_NS.DatasetIndependenceCommitment))
+    assert len(commitments) == 1, (
+        f"Expected exactly 1 DatasetIndependenceCommitment for line-authored usage; got {len(commitments)}"
+    )
+    commitment = commitments[0]
+
+    line_a = PROJECT_NS["evidence-line/la"]
+    line_b = PROJECT_NS["evidence-line/lb"]
+    members = set(provenance.objects(commitment, SCI_NS.independenceMember))
+    assert line_a in members, f"evidence-line:la missing from commitment members {members}"
+    assert line_b in members, f"evidence-line:lb missing from commitment members {members}"
+
+    groups = {str(o) for _, _, o in provenance.triples((commitment, SCI_NS.independenceGroup, None))}
+    assert any("mmrf" in g for g in groups), f"Expected 'mmrf' in independence group; got {groups}"
+
+    # --- reduce_units: collapse to 1 kept ---
+    from science_tool.graph.belief import collect_evidence_units, reduce_units
+
+    target_uri = URIRef(PROJECT_NS["proposition/p"])
+    units = collect_evidence_units(knowledge, provenance, [target_uri])
+    assert len(units) == 2, f"Expected 2 raw units before reduction; got {len(units)}"
+
+    groups_on_units = {u.independence_group for u in units}
+    assert None not in groups_on_units, (
+        "Both units should carry a derived independence_group; found None — "
+        "line-authored dataset_usage may not be reaching _ancestor_path"
+    )
+    assert len(groups_on_units) == 1, (
+        f"Both units must share the same independence_group; got {groups_on_units}"
+    )
+
+    reduced = reduce_units(units)
+    assert len(reduced.kept) == 1, (
+        f"Expected 1 kept unit after collapse of line-authored usage; got {len(reduced.kept)}. "
+        f"kept={[u.line_uri for u in reduced.kept]}, collapsed={[u.line_uri for u in reduced.collapsed]}"
+    )
+    assert len(reduced.collapsed) == 1, (
+        f"Expected 1 collapsed unit; got {len(reduced.collapsed)}"
+    )
+    assert reduced.flagged_ungrouped == [], "No units should be flagged as ungrouped"
+    assert reduced.excluded_circular == [], "No units should be excluded as circular"

@@ -106,6 +106,25 @@ def test_driftcheck_combined_divergences() -> None:
     assert diff["dataset:only_committed"]["status"] == "unexpected_in_committed"
 
 
+def test_driftcheck_asymmetric_field_present_only_in_expected() -> None:
+    """A field present in expected but absent from committed is reported with
+    committed=None.  This proves .get() handles asymmetric field sets correctly.
+    """
+    expected = {"dataset:x": {"a": 1, "b": 2}}
+    committed = {"dataset:x": {"a": 1}}
+
+    diff = check_projection_drift(expected, committed)
+
+    assert "dataset:x" in diff
+    field_diff = diff["dataset:x"]["fields"]
+    assert "b" in field_diff, f"Expected field 'b' in diff; got {field_diff}"
+    assert field_diff["b"] == {"expected": 2, "committed": None}, (
+        f"Expected {{expected: 2, committed: None}} for missing field; got {field_diff['b']}"
+    )
+    # Field 'a' matches — must not appear
+    assert "a" not in field_diff, f"Matching field 'a' must not appear in diff; got {field_diff}"
+
+
 def test_driftcheck_output_is_deterministic() -> None:
     """Two calls with the same inputs produce equal (and sorted-key-stable) results."""
     expected = {
