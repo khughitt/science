@@ -197,6 +197,10 @@ class ProjectSources(BaseModel):
     # before non-strict dedup so shadowed rows (whose Entity is dropped) stay triable.
     aggregate_rows: list[AggregateRowMeta] = Field(default_factory=list)
     freshness_enabled: bool = True
+    # Registered cross-project scopes (this project's id + declared peer ids). The
+    # graph audit accepts `<peer>:<kind>:<slug>` addresses to these scopes (design
+    # §B3a; federation resolution deferred to t068) instead of flagging unresolved.
+    peer_ids: frozenset[str] = Field(default_factory=frozenset)
 
 
 SourceBinding = BindingSource
@@ -655,6 +659,7 @@ def load_project_sources(
         identity_declarations=identity_declarations,
         aggregate_rows=aggregate_rows,
         freshness_enabled=freshness_enabled,
+        peer_ids=frozenset(config.get("peer_ids") or []),  # type: ignore[arg-type]
     )
 
 
@@ -1175,6 +1180,21 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
     if not isinstance(raw_freshness, dict):
         raw_freshness = {}
 
+    # Registered scopes whose `<scope>:<kind>:<slug>` addresses are recognized as
+    # cross-project references (this project's own id + declared peer ids). Used by
+    # the graph audit to accept scoped peer refs as the forward-compatible structured
+    # form (design §B3a) instead of flagging them unresolved; resolution is deferred
+    # to federation (t068, §D4). Mirrors refs.py `_load_project_ids` for tool parity.
+    peer_ids: list[str] = []
+    self_id = data.get("id")
+    if isinstance(self_id, str) and self_id:
+        peer_ids.append(self_id)
+    raw_peers = data.get("peers") or []
+    if isinstance(raw_peers, list):
+        for entry in raw_peers:
+            if isinstance(entry, dict) and isinstance(entry.get("id"), str) and entry["id"]:
+                peer_ids.append(str(entry["id"]))
+
     return {
         "name": str(data.get("name") or project_root.name),
         "knowledge_profiles": {
@@ -1182,6 +1202,7 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
         },
         "ontologies": [str(o) for o in raw_ontologies],
         "freshness": raw_freshness,
+        "peer_ids": peer_ids,
     }
 
 

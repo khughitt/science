@@ -191,9 +191,10 @@ def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool
         )
     else:
         ext_prefixes = external_prefixes(sources.ontology_catalogs)
+        peer_ids = sources.peer_ids
 
         for entity in sources.entities:
-            rows.extend(_audit_entity(entity, resolver, ext_prefixes=ext_prefixes))
+            rows.extend(_audit_entity(entity, resolver, ext_prefixes=ext_prefixes, peer_ids=peer_ids))
         rows.extend(_audit_geneset_row_dataset_usage(sources, resolver, ext_prefixes=ext_prefixes))
         for relation in sources.relations:
             rows.extend(_audit_relation(relation, resolver, ext_prefixes=ext_prefixes))
@@ -428,6 +429,7 @@ def _audit_entity(
     resolver: ReferenceResolver,
     *,
     ext_prefixes: frozenset[str],
+    peer_ids: frozenset[str] = frozenset(),
 ) -> list[AuditRow]:
     rows: list[AuditRow] = []
     for target in entity.related:
@@ -440,6 +442,7 @@ def _audit_entity(
                 ext_prefixes=ext_prefixes,
                 allow_cross_kind_fallback=True,
                 allow_tag=True,
+                peer_ids=peer_ids,
             )
         )
     for target in getattr(entity, "commits_to", None) or []:
@@ -452,11 +455,14 @@ def _audit_entity(
                 ext_prefixes=ext_prefixes,
                 allow_cross_kind_fallback=True,
                 allow_tag=True,
+                peer_ids=peer_ids,
             )
         )
     # `blocked_by` lives on ProjectEntity; defensive getattr for bare Entity instances.
     for target in getattr(entity, "blocked_by", []) or []:
-        rows.extend(_audit_reference(entity, "blocked_by", target, resolver, ext_prefixes=ext_prefixes))
+        rows.extend(
+            _audit_reference(entity, "blocked_by", target, resolver, ext_prefixes=ext_prefixes, peer_ids=peer_ids)
+        )
     for target in entity.source_refs:
         rows.extend(
             _audit_reference(
@@ -466,6 +472,7 @@ def _audit_entity(
                 resolver,
                 ext_prefixes=ext_prefixes,
                 allow_cross_kind_fallback=True,
+                peer_ids=peer_ids,
             )
         )
     for target in getattr(entity, "evidence_refs", []) or []:
@@ -478,6 +485,7 @@ def _audit_entity(
                 ext_prefixes=ext_prefixes,
                 allow_cross_kind_fallback=True,
                 allow_cross_project_address=True,
+                peer_ids=peer_ids,
             )
         )
     for usage in getattr(entity, "dataset_usage", []) or []:
@@ -528,6 +536,7 @@ def _audit_entity(
                 ext_prefixes=ext_prefixes,
                 allow_cross_kind_fallback=False,
                 allow_tag=False,
+                peer_ids=peer_ids,
             )
         )
     audits_target = getattr(entity, "audits", None)
@@ -541,6 +550,7 @@ def _audit_entity(
                 ext_prefixes=ext_prefixes,
                 allow_cross_kind_fallback=False,
                 allow_tag=False,
+                peer_ids=peer_ids,
             )
         )
     for target in getattr(entity, "proposition_refs", None) or []:
@@ -553,10 +563,11 @@ def _audit_entity(
                 ext_prefixes=ext_prefixes,
                 allow_cross_kind_fallback=False,
                 allow_tag=False,
+                peer_ids=peer_ids,
             )
         )
     for target in entity.same_as:
-        rows.extend(_audit_reference(entity, "same_as", target, resolver, ext_prefixes=ext_prefixes))
+        rows.extend(_audit_reference(entity, "same_as", target, resolver, ext_prefixes=ext_prefixes, peer_ids=peer_ids))
     return rows
 
 
@@ -837,12 +848,18 @@ def _audit_reference(
     allow_cross_kind_fallback: bool = False,
     allow_tag: bool = False,
     allow_cross_project_address: bool = False,
+    peer_ids: frozenset[str] = frozenset(),
 ) -> list[AuditRow]:
     if field_name in {"source_refs", "evidence_refs"} and is_bibliography_reference(raw_target):
         return []
     if is_external_reference(raw_target, known_prefixes=ext_prefixes):
         return []
     if is_metadata_reference(raw_target):
+        return []
+    # A scoped `<peer>:<kind>:<slug>` ref to a registered peer is the design's
+    # forward-compatible structured form (§B3a); local resolution is deferred to
+    # federation (t068, §D4), so accept it here rather than flag unresolved.
+    if _is_registered_peer_address(raw_target, peer_ids):
         return []
 
     resolution = resolver.resolve(
@@ -905,6 +922,27 @@ def _is_cross_project_address(raw_target: str) -> bool:
         return False
     prefix, _ = raw_target.split(":", 1)
     return prefix not in PROJECT_ENTITY_PREFIXES
+
+
+def _is_registered_peer_address(raw_target: str, peer_ids: frozenset[str]) -> bool:
+    """True for a `<scope>:<kind>:<slug>` address whose scope is a registered peer.
+
+    Such scoped cross-project references are the design's forward-compatible
+    structured form (§B3a); the local resolver cannot verify a cross-scope owner
+    until the federation primitive t068 lands (§D4), so the audit ACCEPTS them
+    rather than flagging `unresolved_reference`. This keeps the graph audit
+    consistent with `refs check` (classify_entity_ref accepts a peer-scoped
+    address) and with the existing `evidence_refs` cross-project allowance.
+
+    An UNREGISTERED prefix (a typo, or a project not declared in `peers:`) is not
+    accepted here — it still falls through to a genuine unresolved-reference fail.
+    """
+    if not peer_ids or not is_address(raw_target):
+        return False
+    scope, artifact = raw_target.split(":", 1)
+    # Require the `<kind>:<slug>` tail (a 3-part address), matching the design's
+    # `project:kind:slug` form; a bare `<scope>:<slug>` is not a peer entity ref.
+    return ":" in artifact and scope in peer_ids
 
 
 def _placeholder_entity(target: str, *, local_profile: str) -> dict[str, str] | None:

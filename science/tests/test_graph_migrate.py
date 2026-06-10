@@ -1123,8 +1123,8 @@ def test_audit_unresolved_nonpromotable_kind_omits_promote_hint(tmp_path: Path) 
 
 
 def test_audit_unresolved_cross_project_address_omits_promote_hint(tmp_path: Path) -> None:
-    """A peer-addressed cross-project ref in `related` must not suggest commons
-    promote (you cannot promote a peer's entity); point to prose linking."""
+    """An UNREGISTERED cross-project prefix in `related` (no matching peer) still
+    fails, and must not suggest commons promote; point to prose linking."""
     project = tmp_path / "project"
     _scaffold_project_with_related(project, '"health-meta:research-question:foo"')
 
@@ -1135,6 +1135,51 @@ def test_audit_unresolved_cross_project_address_omits_promote_hint(tmp_path: Pat
     assert bad["check"] == "unresolved_reference"
     assert "science commons promote" not in bad["details"]
     assert "prose" in bad["details"].lower()
+
+
+def _scaffold_project_with_related_and_peer(project: Path, related: str, peer_id: str) -> None:
+    project.mkdir()
+    (project / "science.yaml").write_text(
+        "name: demo\n"
+        "id: demo\n"
+        "knowledge_profiles:\n  local: local\n"
+        f"peers:\n  - id: {peer_id}\n    path: ../{peer_id}\n",
+        encoding="utf-8",
+    )
+    manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("", encoding="utf-8")
+    hypothesis_path = project / "entities" / "hypotheses" / "h1.md"
+    hypothesis_path.parent.mkdir(parents=True)
+    hypothesis_path.write_text(
+        f"""---
+id: "hypothesis:h1"
+type: "hypothesis"
+title: "H1"
+related: [{related}]
+source_refs: []
+created: "2026-03-12"
+updated: "2026-03-12"
+---
+
+Body.
+""",
+        encoding="utf-8",
+    )
+
+
+def test_audit_registered_peer_cross_project_ref_accepted(tmp_path: Path) -> None:
+    """A scoped `<peer>:<kind>:<slug>` ref whose project_id is a REGISTERED peer is
+    accepted (design §B3a forward-compatible form; local resolution deferred to
+    federation t068) — no unresolved_reference fail row, consistent with refs check."""
+    project = tmp_path / "project"
+    _scaffold_project_with_related_and_peer(project, '"cancer-meta:question:001-foo"', "cancer-meta")
+
+    sources = load_project_sources(project)
+    rows, has_failures = audit_project_sources(sources)
+
+    assert not any(row["target"] == "cancer-meta:question:001-foo" and row["status"] == "fail" for row in rows)
+    assert not has_failures
 
 
 def test_audit_unresolved_dataset_includes_dataset_commons_hint(tmp_path: Path, monkeypatch) -> None:
