@@ -287,7 +287,7 @@ def load_project_sources(
             scan_roots=["entities", "research/packages", "doc/datasets", "doc/workflows", "doc/workflow-runs"],
             virtual_files=markdown_overrides,
         ),
-        AggregateAdapter(local_profile=local_profile),
+        AggregateAdapter(local_profile=local_profile, virtual_files=markdown_overrides),
         # NOTE: AggregateAdapter must precede the external-reference adapters
         # (BibAdapter, CurieRefAdapter) — their defer guard relies on aggregate
         # stubs (and markdown owners) being declared first this load.

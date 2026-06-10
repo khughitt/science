@@ -54,9 +54,15 @@ class AggregateAdapter(StorageAdapter):
 
     name = "aggregate"
 
-    def __init__(self, local_profile: str) -> None:
+    def __init__(self, local_profile: str, virtual_files: dict[str, str] | None = None) -> None:
         self._local_profile = local_profile
         self._items_by_path: dict[str, list[Any]] = {}
+        # Optional in-memory file contents keyed by project-relative path, mirroring
+        # MarkdownAdapter's virtual_files. The layout migration passes its rewritten
+        # entities.yaml/terms.yaml here so the post-move model sees aggregate rows at
+        # their renumbered canonical_ids — otherwise a shadow row of a renamed owner
+        # keeps its stale slug id and collides with the owner (design §B5/§C4).
+        self._virtual_files = virtual_files or {}
 
     def discover(self, project_root: Path) -> list[SourceRef]:
         self._items_by_path.clear()
@@ -70,19 +76,22 @@ class AggregateAdapter(StorageAdapter):
         base = project_root / "knowledge" / "sources" / self._local_profile
         for file_name, root_key in MULTI_TYPE_AGGREGATE_ROOT_KEYS.items():
             path = base / file_name
-            if not path.is_file():
-                continue
             try:
-                data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+                rel = str(path.relative_to(project_root))
+            except ValueError:
+                rel = str(path)
+            text = self._virtual_files.get(rel)
+            if text is None:
+                if not path.is_file():
+                    continue
+                text = path.read_text(encoding="utf-8")
+            try:
+                data = yaml.safe_load(text) or {}
             except yaml.YAMLError:
                 continue
             items = data.get(root_key) or []
             if not isinstance(items, list):
                 continue
-            try:
-                rel = str(path.relative_to(project_root))
-            except ValueError:
-                rel = str(path)
             self._items_by_path[rel] = items
             for idx, raw in enumerate(items):
                 if not isinstance(raw, dict):
@@ -118,7 +127,10 @@ class AggregateAdapter(StorageAdapter):
         if path.name in MULTI_TYPE_AGGREGATE_ROOT_KEYS:
             items = self._items_by_path.get(ref.path)
             if items is None:
-                data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+                text = self._virtual_files.get(ref.path)
+                if text is None:
+                    text = path.read_text(encoding="utf-8")
+                data = yaml.safe_load(text) or {}
                 items = data.get(MULTI_TYPE_AGGREGATE_ROOT_KEYS[path.name]) or []
             raw = dict(items[ref.line])
             if path.name == "terms.yaml":
