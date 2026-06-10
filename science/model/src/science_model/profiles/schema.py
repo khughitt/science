@@ -21,6 +21,14 @@ class EntityKind(BaseModel):
     strategy: str | None = None  # "numeric" | "citekey" (singleton is core-only)
     default_status: str | None = None
     statuses: list[str] | None = None
+    # Structured-source declaration: a project-local kind whose entities are
+    # generated/maintained as rows in a single-type YAML data file under
+    # knowledge/sources/<profile>/ (NOT the multi-type entities.yaml/terms.yaml
+    # aggregate). Each row loads as an owner of this kind. `structured_source` is
+    # the filename relative to the profile sources dir; `structured_source_root_key`
+    # is the YAML root key holding the row list (defaults to the kind `name`).
+    structured_source: str | None = None
+    structured_source_root_key: str | None = None
 
 
 class RelationEndpointPair(BaseModel):

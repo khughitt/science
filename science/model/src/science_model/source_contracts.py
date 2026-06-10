@@ -13,7 +13,7 @@ Typed canonical source contracts for structured KG authoring."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AuthoredTargetedRelation(BaseModel):
@@ -48,6 +48,30 @@ class ParameterSource(BaseModel):
     source_path: str
     units: str | None = None
     quantity_group: str | None = None
+    domain: str | None = None
+    aliases: list[str] = Field(default_factory=list)
+    source_refs: list[str] = Field(default_factory=list)
+    ontology_terms: list[str] = Field(default_factory=list)
+    related: list[str] = Field(default_factory=list)
+    relations: list[AuthoredTargetedRelation] = Field(default_factory=list)
+
+
+class StructuredEntitySource(BaseModel):
+    """Generic structured-source record for a profile-declared local kind.
+
+    Loaded by science_tool's structured-source loader for any project-local kind
+    that carries a `structured_source` in its profile declaration (a single-type
+    YAML data file under knowledge/sources/<profile>/, e.g. generated
+    limit-relation / morphism-edge rows). Extra row fields (e.g. `kind`, freshness
+    `created`/`updated`) are ignored — the kind is authoritative from the manifest.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    canonical_id: str
+    title: str = ""
+    profile: str = ""
+    source_path: str = ""
     domain: str | None = None
     aliases: list[str] = Field(default_factory=list)
     source_refs: list[str] = Field(default_factory=list)

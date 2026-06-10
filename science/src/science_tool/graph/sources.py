@@ -30,7 +30,13 @@ from science_model.reasoning import (
     ProxyDirectness,
     SupportScope,
 )
-from science_model.source_contracts import AuthoredTargetedRelation, BindingSource, ModelSource, ParameterSource
+from science_model.source_contracts import (
+    AuthoredTargetedRelation,
+    BindingSource,
+    ModelSource,
+    ParameterSource,
+    StructuredEntitySource,
+)
 from science_model.source_ref import SourceRef
 
 from science_tool.big_picture.literature_prefix import canonical_paper_id
@@ -495,15 +501,27 @@ def load_project_sources(
     # Legacy model/parameter loaders from knowledge/sources/<local>/{models,parameters}.yaml.
     # Produce ProjectEntity records through the registry so they join the same pipeline.
     typed_record_cache: _TypedRecordCache = {}
-    for entity, ref in _load_legacy_records(
-        project_root,
-        registry=registry,
-        local_profile=local_profile,
-        project_slug=project_slug,
-        active_kinds=active_kinds,
-        ontology_catalogs=ontology_catalogs,
-        typed_record_cache=typed_record_cache,
-    ):
+    for entity, ref in [
+        *_load_legacy_records(
+            project_root,
+            registry=registry,
+            local_profile=local_profile,
+            project_slug=project_slug,
+            active_kinds=active_kinds,
+            ontology_catalogs=ontology_catalogs,
+            typed_record_cache=typed_record_cache,
+        ),
+        *_load_structured_source_records(
+            project_root,
+            registry=registry,
+            local_profile=local_profile,
+            local_profile_manifest=local_profile_manifest,
+            project_slug=project_slug,
+            active_kinds=active_kinds,
+            ontology_catalogs=ontology_catalogs,
+            typed_record_cache=typed_record_cache,
+        ),
+    ]:
         owner_scope, deprecated = classify_owner_scope(ref.adapter_name, project_name=project_name)
         identity_declarations.append(
             IdentityDeclaration(
@@ -903,6 +921,74 @@ def _load_legacy_records(
         entity = schema.model_validate(raw)
         out.append((entity, SourceRef(adapter_name="legacy-parameter", path=record.source_path)))
 
+    return out
+
+
+def _load_structured_source_records(
+    project_root: Path,
+    *,
+    registry: EntityRegistry,
+    local_profile: str,
+    local_profile_manifest: ProfileManifest | None,
+    project_slug: str,
+    active_kinds: frozenset[str],
+    ontology_catalogs: list[OntologyCatalog],
+    typed_record_cache: _TypedRecordCache | None = None,
+) -> list[tuple[Entity, SourceRef]]:
+    """Load owner entities for project-local kinds that declare a `structured_source`.
+
+    Generalizes the hardcoded model/parameter loaders (_load_legacy_records) to any
+    profile-local kind whose rows live in a single-type YAML data file under
+    knowledge/sources/<profile>/. Each row becomes an owner entity of that kind,
+    so generated structural kinds (e.g. limit-relation, morphism-edge) need not ride
+    the multi-type entities.yaml/terms.yaml aggregate that v3 retirement forbids.
+    """
+    out: list[tuple[Entity, SourceRef]] = []
+    if local_profile_manifest is None:
+        return out
+    for kind_decl in local_profile_manifest.entity_kinds:
+        source_file = kind_decl.structured_source
+        if not source_file:
+            continue
+        root_key = kind_decl.structured_source_root_key or kind_decl.name
+        default_path = f"knowledge/sources/{local_profile}/{source_file}"
+        records = _load_typed_records(
+            project_root,
+            local_profile=local_profile,
+            file_name=source_file,
+            root_key=root_key,
+            model=StructuredEntitySource,
+            cache=typed_record_cache,
+        )
+        schema = registry.resolve(kind_decl.name)
+        for record in records:
+            raw: dict[str, Any] = {
+                "id": record.canonical_id,
+                "canonical_id": record.canonical_id,
+                "kind": kind_decl.name,
+                "type": kind_decl.name,
+                "title": record.title or record.canonical_id,
+                "profile": record.profile or local_profile,
+                "file_path": record.source_path or default_path,
+                "related": list(record.related),
+                "source_refs": list(record.source_refs),
+                "aliases": list(record.aliases),
+                "ontology_terms": list(record.ontology_terms),
+            }
+            if record.domain is not None:
+                raw["domain"] = record.domain
+            _enrich_raw(
+                raw,
+                kind=kind_decl.name,
+                project_slug=project_slug,
+                local_profile=local_profile,
+                active_kinds=active_kinds,
+                ontology_catalogs=ontology_catalogs,
+            )
+            entity = schema.model_validate(raw)
+            out.append(
+                (entity, SourceRef(adapter_name="structured-source", path=record.source_path or default_path))
+            )
     return out
 
 
