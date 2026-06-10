@@ -20,7 +20,8 @@
 relational-proposition fields (`predicate`/`polarity`/`legacy_relation_label`) bound to canonical
 `claim_layer`/`identification_strength`/t034 axes, evidence-line quantitative-result + staging marker.
 (2) **Derivation** — `derived_edge_status` as a pure ordered projection over derived belief; posterior
-payload → scalar-belief input; staged ungrounded empirical evidence excluded from the compiled graph.
+payload → oriented scalar-belief input; staged ungrounded empirical evidence excluded from the
+compiled graph.
 (3) **Authoring** — `<patch>.workbench.yaml` as an editable normalized projection kept honest by an
 idempotent `compile`→regenerate cycle and a fixpoint CI gate.
 
@@ -36,8 +37,8 @@ out of scope (separate plan, gated on this + the `dataset-evidence-flow` facet).
 
 | File | Responsibility | Phase |
 |---|---|---|
-| `science/model/src/science_model/entities.py` | `EntityClass` membership for new kinds; `EvidenceLineEntity` quantitative-result + staging fields | 1, 1c |
-| `science/model/src/science_model/reasoning.py` | `Predicate`, `Polarity` enums; reuse `ClaimLayer`/`IdentificationStrength` | 1b |
+| `science/model/src/science_model/entities.py` | `EntityClass` membership for new kinds; `EvidenceLineEntity` quantitative-result + belief-eligibility staging fields | 1, 1c |
+| `science/model/src/science_model/reasoning.py` | `Predicate`, `Polarity` enums; reuse `ClaimLayer`; reconcile `IdentificationStrength` before binding | 0b, 1b |
 | `science/model/src/science_model/propositions.py` *(new)* | `PropositionEntity` subclass with relational fields + cross-field validators | 1b |
 | `science/src/science_tool/graph/entity_registry.py` | register `construct`/`outcome` (reference class) | 1a |
 | `science/src/science_tool/entities.py` | path policies + status sets for new kinds | 1a |
@@ -66,16 +67,43 @@ out of scope (separate plan, gated on this + the `dataset-evidence-flow` facet).
   path (`graph/materialize.py`, the store/compilation modules) and determine whether a relational
   proposition's **own IRI** can serve as its reified edge-node IRI, or whether the substrate forces a
   content-addressed edge-node (like `freshness.py`'s `bears-on-edge/<sha256>`).
-  - If proposition-IRI works directly → record "no shim"; Tasks 9/12 use the proposition IRI as the
-    edge-node IRI.
+  - If proposition-IRI works directly → record "no shim"; downstream [v3-API] tasks (3b, 5b, 5f, 6)
+    use the proposition IRI as the edge-node IRI.
   - If the substrate forces a content-addressed edge-node → record the **`realized_as` shim** contract
     (proposition IRI `sci:realizedAsEdge` content-addressed-edge-IRI; belief still keys on the
-    proposition IRI) and thread it through Tasks 9/12.
+    proposition IRI) and thread it through downstream [v3-API] tasks (3b, 5b, 5f, 6). This is a
+    **substrate exception only**, not a general compatibility layer: consumers still address the
+    proposition IRI for belief, evidence, and identity, and no other edge store is introduced.
 - [ ] **Step 3: Record the resolution** as a short note appended to the design §11 risk 4, and unblock
   the [v3-API] tasks.
 
 **Acceptance:** layout_version 3 confirmed; the edge-as-node identity decision is written down; every
 [v3-API] task below has a concrete identity contract to build against.
+
+### Task 0b: Reconcile `IdentificationStrength` before schema binding
+
+**Files:** investigation + note in this plan and, if needed, the design §2.3 before Task 1b starts.
+
+Current docs and code disagree: `docs/proposition-and-evidence-model.md` lists
+`observational|longitudinal|interventional|structural`, while the current
+`science_model.reasoning.IdentificationStrength` enum also includes `none` and `analogical`.
+Because this facet promises to bind to the canonical enum verbatim, this cannot be left to an
+implementation-time guess.
+
+- [ ] **Step 1: Inspect the confirmed v3 branch's `IdentificationStrength` enum** and current uses of
+  `none` / `analogical` in tests and project data.
+- [ ] **Step 2: Choose and record one contract before Task 1b:**
+  - **Design-strict contract:** retire `none` / `analogical` from relational propositions; legacy DAG
+    `identification: none` maps to omitted/unspecified; analogical evidence is represented on the
+    evidence-line or proxy/measurement axis, not the proposition's identification enum.
+  - **Model-current contract:** accept `none` / `analogical` as canonical `IdentificationStrength`
+    values and update the facet design §2.3 so "canonical" means the current model enum; render
+    `none` as "no claimed identification", not as positive causal leverage.
+- [ ] **Step 3: Update Task 2b's tests to match the recorded contract.** Do not write a test that both
+  rejects and accepts `none`.
+
+**Acceptance:** one canonical `IdentificationStrength` contract is recorded; Task 1b/2b use that exact
+contract; no contradictory tests remain.
 
 ---
 
@@ -179,7 +207,7 @@ def test_signless_predicate_requires_not_applicable_polarity():
 **Acceptance:** propositions carry the factored, sign-free relation model (design §2); `predicate` and
 `polarity` cannot disagree; `mediates_effect_of` is absent (v1 binary-only).
 
-### Task 1c: Evidence-line quantitative-result + staging marker
+### Task 1c: Evidence-line quantitative-result + belief-eligibility staging marker
 
 **Files:**
 - Modify: `science/model/src/science_model/entities.py` (`EvidenceLineEntity` ~725–750)
@@ -193,17 +221,19 @@ from science_model.entities import EvidenceLineEntity
 def test_quantitative_result_and_staging_fields():
     e = EvidenceLineEntity(stance="supports", target="proposition:p1", evidence_type="empirical_data_evidence",
                            quantitative_result={"beta": 0.41, "hdi": [0.2, 0.6], "prob_sign": 0.98},
-                           compiled=False)            # staged: excluded from compiled graph
+                           belief_eligible=False)     # staged: excluded from cito materialization / belief
     assert e.quantitative_result["prob_sign"] == 0.98
-    assert e.compiled is False
+    assert e.belief_eligible is False
 ```
 - [ ] **Step 2: Run it; expect FAIL.**
 - [ ] **Step 3: Add fields** to `EvidenceLineEntity`: `quantitative_result: dict | None = None` (a
   small typed sub-model `QuantitativeResult(beta, hdi, prob_sign, fit_task, model)` is preferred over a
-  bare dict — define it alongside), and `compiled: bool = True` (default compiled; staged
-  empirical-without-`dataset_usage` lines set `compiled=False`).
+  bare dict — define it alongside), and `belief_eligible: bool = True` (default eligible; staged
+  empirical-without-`dataset_usage` lines set `belief_eligible=False`). `belief_eligible=False` means
+  the authored evidence-line entity may exist, but it emits no `cito:supports` / `cito:disputes`
+  relation and cannot enter belief aggregation until the grounding requirement is complete.
 - [ ] **Step 4: Run it; expect PASS.**
-- [ ] **Step 5: Commit.** `git commit -m "feat(model): evidence-line quantitative_result + compiled/staging marker"`
+- [ ] **Step 5: Commit.** `git commit -m "feat(model): evidence-line quantitative_result + belief eligibility"`
 
 **Acceptance:** evidence-lines can carry a fitted posterior result (design §8 step 5) and a staging
 marker (design §8 step 4) without affecting their stance/target contract.
@@ -235,14 +265,19 @@ marker (design §8 step 4) without affecting their stance/target contract.
 
 **Files:** `validate/checks/propositions.py` (extend); test in same test module.
 
-- [ ] **Step 1: Write the failing test** asserting ERROR `proposition.claim_layer.canonical` for a
-  proposition with `claim_layer: mechanistic_claim` (a non-canonical name) and `proposition.identification.canonical`
-  for `identification_strength: none`; and that the legacy DAG `none` is *mapped to unspecified*, not
-  accepted as a value.
+- [ ] **Step 1: Write the failing test** against the `IdentificationStrength` contract recorded in
+  Task 0b. Always assert ERROR `proposition.claim_layer.canonical` for
+  `claim_layer: mechanistic_claim` (a non-canonical name). For identification:
+  - under the **design-strict contract**, assert ERROR `proposition.identification.canonical` for an
+    authored relational proposition with `identification_strength: none`, and assert the legacy DAG
+    importer maps `identification: none` to omitted/unspecified;
+  - under the **model-current contract**, assert `none` / `analogical` are accepted exactly because
+    they are present in `science_model.reasoning.IdentificationStrength`, while still rejecting any
+    value outside that enum.
 - [ ] **Step 2: Run it; expect FAIL.**
 - [ ] **Step 3: Implement** a check that `claim_layer` ∈ canonical `ClaimLayer` and
-  `identification_strength` ∈ canonical `IdentificationStrength` (design §2.3); treat absent/`none` as
-  unspecified (not an error, but not a new enum value).
+  `identification_strength` ∈ the Task 0b canonical `IdentificationStrength` contract (design §2.3);
+  treat absent values as unspecified, and handle `none` only according to the recorded contract.
 - [ ] **Step 4: Run it; expect PASS. Step 5: Commit.**
 
 **Acceptance:** no parallel `claim_layer`/`identification_strength` vocabulary can enter the corpus.
@@ -251,17 +286,17 @@ marker (design §8 step 4) without affecting their stance/target contract.
 
 **Files:** `science/src/science_tool/validate/checks/evidence_lines.py` (extend); `science/tests/validate/test_check_evidence_staging.py` *(new)*
 
-- [ ] **Step 1: Write the failing test:** an empirical evidence-line with `compiled: true` and no
-  `dataset_usage` yields ERROR `evidence.empirical.requires_dataset_usage`; the same line with
-  `compiled: false` (staged) yields **no** error.
+- [ ] **Step 1: Write the failing test:** an empirical evidence-line with `belief_eligible: true` and
+  no `dataset_usage` yields ERROR `evidence.empirical.requires_dataset_usage`; the same line with
+  `belief_eligible: false` (staged) yields **no** error.
 - [ ] **Step 2: Run it; expect FAIL.**
-- [ ] **Step 3: Implement** `@Check(section="evidence lines", order=30) def check_compiled_empirical_has_dataset_usage(ctx)`:
-  for `evidence_type == "empirical_data_evidence"` and `compiled is True`, require non-empty
-  `dataset_usage`; staged (`compiled=False`) lines are exempt (design §8 step 4, §11 risk 6).
+- [ ] **Step 3: Implement** `@Check(section="evidence lines", order=30) def check_belief_eligible_empirical_has_dataset_usage(ctx)`:
+  for `evidence_type == "empirical_data_evidence"` and `belief_eligible is True`, require non-empty
+  `dataset_usage`; staged (`belief_eligible=False`) lines are exempt (design §8 step 4, §11 risk 6).
 - [ ] **Step 4: Run it; expect PASS. Step 5: Commit.**
 
-**Acceptance:** the mandatory-`dataset_usage` invariant holds for any **compiled** empirical
-evidence-line; staged ones are legal but excluded.
+**Acceptance:** the mandatory-`dataset_usage` invariant holds for any **belief-eligible** empirical
+evidence-line; staged ones are legal but excluded from cito materialization / belief.
 
 ---
 
@@ -274,30 +309,39 @@ evidence-line; staged ones are legal but excluded.
 - Modify: `science/src/science_tool/graph/belief_scalar.py` (accept the result as a scalar input)
 - Test: `science/tests/test_belief_scalar_quant_result.py` *(new)*
 
-- [ ] **Step 1: Write the failing test** that an evidence-line carrying `quantitative_result`
+- [ ] **Step 1: Write the failing tests** that an evidence-line carrying `quantitative_result`
   contributes its `beta`/`prob_sign` to the scalar `(massed_support, massed_dispute)` pair for the
-  target proposition (assert the scalar shifts vs. the same line without a result).
+  target proposition (assert the scalar shifts vs. the same line without a result), and that
+  orientation is correct:
+  - positive-polarity proposition + positive `beta` + `stance=supports` → support mass;
+  - negative-polarity proposition + negative `beta` + `stance=supports` → support mass;
+  - positive-polarity proposition + negative `beta` + `stance=disputes` → dispute mass;
+  - an authored `stance=supports` whose signed `beta` opposes the proposition polarity fails unless a
+    future explicit override field is designed.
 - [ ] **Step 2: Run it; expect FAIL.**
 - [ ] **Step 3: Implement.** Emit the quantitative result onto the evidence-line in `materialize.py`
   (extend `scalar_predicates` with `SCI_NS.quantBeta`/`quantProbSign`/`quantHdiLow`/`quantHdiHigh`),
-  and read them in `belief_scalar.py` as a scalar input (a fitted effect with a sign probability maps
-  to a log-odds contribution). Keep the ordinal magnitude path unchanged.
+  and read them in `belief_scalar.py` as an **oriented** scalar input. The legacy posterior `beta` is
+  signed in the raw subject→object direction; scalar support/dispute is assigned only after comparing
+  `sign(beta)` to the proposition's authored `polarity` and the evidence-line `stance`. Use
+  `prob_sign` as confidence in the observed sign, not as an independent stance. Keep the ordinal
+  magnitude path unchanged.
 - [ ] **Step 4: Run it; expect PASS. Step 5: Commit.**
 
 **Acceptance:** fitted posteriors feed continuous scalar belief (design §8 step 5); no posterior
 payload is dropped.
 
-### Task 3b: exclude staged evidence-lines from the compiled graph **[v3-API]**
+### Task 3b: exclude staged evidence-lines from cito materialization / belief **[v3-API]**
 
 **Files:**
 - Modify: `science/src/science_tool/graph/materialize.py` (`_add_evidence_line_relations` ~536; the evidence-line iteration in `materialize_graph`)
 - Test: `science/tests/test_materialize_staging_exclusion.py` *(new)*
 
-- [ ] **Step 1: Write the failing test:** a staged evidence-line (`compiled=False`) emits **no**
+- [ ] **Step 1: Write the failing test:** a staged evidence-line (`belief_eligible=False`) emits **no**
   `cito:supports`/`disputes` triple and is **invisible** to `belief.collect_evidence_units` for its
-  target; a `compiled=True` line emits normally.
+  target; a `belief_eligible=True` line emits normally.
 - [ ] **Step 2: Run it; expect FAIL.**
-- [ ] **Step 3: Implement** the exclusion: skip `compiled=False` evidence-lines when emitting cito
+- [ ] **Step 3: Implement** the exclusion: skip `belief_eligible=False` evidence-lines when emitting cito
   relations / building the dataset for belief. *(v3-API: confirm the exact materialization entry that
   iterates evidence-lines under the confirmed v3 compilation contract.)*
 - [ ] **Step 4: Run it; expect PASS. Step 5: Commit.**
@@ -405,12 +449,12 @@ boundary (design §6 normative rules).
   back and a `PropositionEntity` created in `entities/propositions/`; (ii) an inline evidence stub
   becomes an `EvidenceLineEntity` and the row at rest holds an evidence-line **reference**, not
   substance; (iii) empirical evidence stub without `dataset_usage` produces a **staged**
-  (`compiled=False`) evidence-line.
+  (`belief_eligible=False`) evidence-line.
 - [ ] **Step 2: Run it; expect FAIL.**
 - [ ] **Step 3: Implement** `compile_workbench`: parse → for each row upsert a `PropositionEntity`
   (mint ID for id-less rows — entity layer owns identity, design §5 step 2; the proposition IRI is the
   edge-node IRI per Task 0) → lift evidence stubs to `EvidenceLineEntity` (staging empirical-without-
-  dataset_usage) → return the canonical model. *(v3-API: writing entities + edge-as-node uses the v3
+  dataset_usage as `belief_eligible=False`) → return the canonical model. *(v3-API: writing entities + edge-as-node uses the v3
   layout/identity contract from Task 0.)*
 - [ ] **Step 4: Run it; expect PASS. Step 5: Commit.**
 
