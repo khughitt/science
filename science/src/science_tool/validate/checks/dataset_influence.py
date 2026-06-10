@@ -12,6 +12,7 @@ from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsError
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
 from science_tool.commons.geneset_resources import is_geneset_frontmatter, read_member_rows
+from science_tool.graph.dataset_independence import DEPENDENCE_ROLES
 from science_tool.graph.paper_dataset_migration import is_paper_dataset_role_conflict
 from science_tool.validate._helpers import dataset_frontmatters, entity_frontmatters
 from science_tool.validate.checks import Check
@@ -102,6 +103,15 @@ def evaluate_dataset_influence(
                 )
                 continue
             refs_to_check.append((ref, ident, str(path or "")))
+            role = entry["role"]
+            if role in DEPENDENCE_ROLES and (entry.get("overlap") or "unknown") == "unknown":
+                yield _result(
+                    Severity.WARN,
+                    path,
+                    f"{ident}: dataset_usage {ref!r} has a dependence role ({role}) with overlap=unknown"
+                    " — B2 treats it as a candidate (no shared-source collapse) until overlap is curated to full",
+                    "dataset-influence.overlap-unknown-candidate",
+                )
 
         derivation = fm.get("derivation")
         if kind == "dataset" and isinstance(derivation, dict):

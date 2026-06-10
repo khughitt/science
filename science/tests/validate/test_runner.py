@@ -585,7 +585,7 @@ def _write_dataset_influence_project(
     (root / "entities" / "papers").mkdir(parents=True)
     (root / "entities" / "papers" / "Adams2025.md").write_text(
         "---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndataset_usage:\n"
-        f"  - ref: {usage_ref}\n    role: analyzed\n---\n",
+        f"  - ref: {usage_ref}\n    role: analyzed\n    overlap: full\n---\n",
         encoding="utf-8",
     )
     if local_dataset:

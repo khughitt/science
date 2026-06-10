@@ -38,7 +38,7 @@ def _write_dataset_usage_paper(root: Path, ref: str = "dataset:gtex-v8") -> None
     (root / "entities" / "papers").mkdir(parents=True)
     (root / "entities" / "papers" / "Adams2025.md").write_text(
         f"---\nid: paper:Adams2025\ntype: paper\ntitle: Adams\ndataset_usage:\n"
-        f"  - ref: {ref}\n    role: analyzed\n---\n",
+        f"  - ref: {ref}\n    role: analyzed\n    overlap: full\n---\n",
         encoding="utf-8",
     )
 
@@ -271,8 +271,8 @@ def test_unresolved_refs_use_pinned_severities() -> None:
             [
                 _fm(
                     dataset_usage=[
-                        {"ref": "dataset:unknown-a", "role": "analyzed"},
-                        {"ref": "dataset:unknown-b", "role": "training"},
+                        {"ref": "dataset:unknown-a", "role": "analyzed", "overlap": "full"},
+                        {"ref": "dataset:unknown-b", "role": "training", "overlap": "full"},
                     ]
                 )
             ],
@@ -439,6 +439,7 @@ def test_check_dataset_influence_manual_alias_to_non_dataset_errors(
         "dataset_usage:\n"
         "  - ref: dataset:gtex\n"
         "    role: analyzed\n"
+        "    overlap: full\n"
         "---\n",
         encoding="utf-8",
     )
@@ -709,7 +710,7 @@ def test_ref_not_dataset_is_error() -> None:
 
     results = list(
         evaluate_dataset_influence(
-            [_fm(dataset_usage=[{"ref": "dataset:gtex-v8", "role": "analyzed"}])],
+            [_fm(dataset_usage=[{"ref": "dataset:gtex-v8", "role": "analyzed", "overlap": "full"}])],
             dataset_ref_status={"dataset:gtex-v8": "non_dataset"},
             row_usage_refs=[],
         )
@@ -746,3 +747,105 @@ def test_malformed_dataset_usage_bad_overlap_is_error() -> None:
     )
 
     assert _rules(results) == [(Severity.ERROR, "dataset-influence.dataset-usage-malformed")]
+
+
+# Sub-task 2d: dependence-role dataset_usage with overlap=unknown warns
+
+
+@pytest.mark.parametrize("role", ["analyzed", "set_definition_source", "training", "upstream"])
+def test_dependence_role_with_overlap_unknown_warns(role: str) -> None:
+    """A dependence-role dataset_usage with overlap=unknown emits a WARN."""
+    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
+
+    results = list(
+        evaluate_dataset_influence(
+            [_fm(dataset_usage=[{"ref": "dataset:gtex-v8", "role": role, "overlap": "unknown"}])],
+            dataset_ref_status={"dataset:gtex-v8": "resolved"},
+            row_usage_refs=[],
+        )
+    )
+
+    rule_pairs = _rules(results)
+    assert (Severity.WARN, "dataset-influence.overlap-unknown-candidate") in rule_pairs
+
+
+def test_dependence_role_with_omitted_overlap_warns() -> None:
+    """A dependence-role dataset_usage with no overlap key (defaults to unknown) emits a WARN."""
+    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
+
+    results = list(
+        evaluate_dataset_influence(
+            [_fm(dataset_usage=[{"ref": "dataset:gtex-v8", "role": "analyzed"}])],
+            dataset_ref_status={"dataset:gtex-v8": "resolved"},
+            row_usage_refs=[],
+        )
+    )
+
+    rule_pairs = _rules(results)
+    assert (Severity.WARN, "dataset-influence.overlap-unknown-candidate") in rule_pairs
+
+
+def test_dependence_role_with_overlap_full_does_not_warn() -> None:
+    """A dependence-role dataset_usage with overlap=full must NOT emit the overlap-unknown WARN."""
+    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
+
+    results = list(
+        evaluate_dataset_influence(
+            [_fm(dataset_usage=[{"ref": "dataset:gtex-v8", "role": "analyzed", "overlap": "full"}])],
+            dataset_ref_status={"dataset:gtex-v8": "resolved"},
+            row_usage_refs=[],
+        )
+    )
+
+    rule_pairs = _rules(results)
+    assert (Severity.WARN, "dataset-influence.overlap-unknown-candidate") not in rule_pairs
+
+
+def test_dependence_role_with_overlap_partial_does_not_warn() -> None:
+    """A dependence-role dataset_usage with overlap=partial must NOT emit the overlap-unknown WARN."""
+    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
+
+    results = list(
+        evaluate_dataset_influence(
+            [_fm(dataset_usage=[{"ref": "dataset:gtex-v8", "role": "analyzed", "overlap": "partial"}])],
+            dataset_ref_status={"dataset:gtex-v8": "resolved"},
+            row_usage_refs=[],
+        )
+    )
+
+    rule_pairs = _rules(results)
+    assert (Severity.WARN, "dataset-influence.overlap-unknown-candidate") not in rule_pairs
+
+
+@pytest.mark.parametrize("role", ["validation_source", "cited"])
+def test_non_dependence_role_with_overlap_unknown_does_not_warn(role: str) -> None:
+    """Non-dependence roles with overlap=unknown must NOT emit the overlap-unknown WARN."""
+    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
+
+    results = list(
+        evaluate_dataset_influence(
+            [_fm(dataset_usage=[{"ref": "dataset:gtex-v8", "role": role, "overlap": "unknown"}])],
+            dataset_ref_status={"dataset:gtex-v8": "resolved"},
+            row_usage_refs=[],
+        )
+    )
+
+    rule_pairs = _rules(results)
+    assert (Severity.WARN, "dataset-influence.overlap-unknown-candidate") not in rule_pairs
+
+
+@pytest.mark.parametrize("role", ["validation_source", "cited"])
+def test_non_dependence_role_with_omitted_overlap_does_not_warn(role: str) -> None:
+    """Non-dependence roles with no overlap key must NOT emit the overlap-unknown WARN."""
+    from science_tool.validate.checks.dataset_influence import evaluate_dataset_influence
+
+    results = list(
+        evaluate_dataset_influence(
+            [_fm(dataset_usage=[{"ref": "dataset:gtex-v8", "role": role}])],
+            dataset_ref_status={"dataset:gtex-v8": "resolved"},
+            row_usage_refs=[],
+        )
+    )
+
+    rule_pairs = _rules(results)
+    assert (Severity.WARN, "dataset-influence.overlap-unknown-candidate") not in rule_pairs
