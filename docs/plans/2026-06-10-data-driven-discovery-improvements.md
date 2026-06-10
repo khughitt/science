@@ -14,14 +14,20 @@ Representation Hypothesis** (different modalities converging on a shared latent 
 joint evidence). The talk is an *unrefereed* source on ongoing work: its specific results
 are hints to verify, but its framing maps cleanly onto Science's existing machinery.
 
-**Baseline (assumed landed).** This roadmap builds *on top of* the two in-flight framework
-facets and does not re-propose what they already deliver:
-- `2026-06-08-epistemic-edges-plan.md` — relational propositions, evidence-line
-  `quantitative_result`, and the `belief_eligible` staging marker.
+**Baseline (assumed *after* these facets land — not all are in the repo yet).** This roadmap
+builds *on top of* two framework facets and does not re-propose what they deliver. Their
+status differs, and the gating is load-bearing for any spin-out:
 - `2026-06-08-dataset-evidence-flow-plan.md` — `dataset_usage` / `overlap`, dataset-entity
   origin invariants, and the A1/A2/B1/B2 dataset-**independence** machinery (same-vs-distinct
-  dataset collapse). **Evidence *independence* is already built**; the new work in Theme A is
-  *strength tiering* and *cross-modality reward*, not independence.
+  dataset collapse). This independence machinery is **already merged** — **evidence
+  *independence* is built**, so the new Theme A work is *strength tiering* and *cross-modality
+  reward*, not independence.
+- `2026-06-08-epistemic-edges-plan.md` — relational propositions, the evidence-line
+  `quantitative_result`, and the `belief_eligible` staging marker. **Not yet in the repo**
+  (verified 2026-06-10: zero `belief_eligible` / `quantitative_result` occurrences under
+  `science/`); this facet is still HELD on the v3-substrate gate and *defines* that work
+  rather than providing it. **Theme A (A1/A2) is gated on these fields landing** — a spin-out
+  must not start from fields/behavior that do not exist yet.
 
 **How to read each entry.** `talk observation → gap in Science today → sketch of the change
 → readiness tier → dependencies`.
@@ -38,16 +44,22 @@ ER-status, survival); concordance was highly variable, so a single-source signal
   single analyzed dataset, and corroboration across many as differing mostly by count, not by
   *kind* of support. *Sketch:* make source-tier an explicit, belief-weighting-relevant
   attribute — `paper-hint < single-dataset < multi-dataset < multi-modal` — layered on the
-  existing `dataset_usage` / `belief_eligible` fields. The user's long-standing stance
-  ("papers we haven't analyzed are hints; data we analyzed is better; multiple experiments
-  better still") becomes a first-class, queryable axis. *Tier:* **Near-term** (extends
-  in-flight evidence model). *Deps:* epistemic-edges, dataset-evidence-flow.
+  `dataset_usage` / `belief_eligible` fields. The user's long-standing stance ("papers we
+  haven't analyzed are hints; data we analyzed is better; multiple experiments better still")
+  becomes a first-class, queryable axis. *Tier:* **Gated** (extends the epistemic-edges
+  evidence model). *Deps:* **`belief_eligible` / `quantitative_result` must land first**
+  (epistemic-edges); then dataset-evidence-flow.
 - **A2 — Reward cross-modality corroboration.** *Gap:* nothing currently *rewards* the same
   conclusion arriving from orthogonal modalities; the independence engine collapses
   *same-source* duplicates but doesn't *up-weight* genuinely orthogonal agreement. *Sketch:*
-  treat modality as a dimension of independence and let convergence across modalities move
-  belief more than repeated same-modality signal (cf. Platonic Representation Hypothesis).
-  *Tier:* **Near-term/Mid.** *Deps:* A1, dataset-independence (B2).
+  reward cross-modality agreement **only after dataset/sample/ground-truth dependence is
+  accounted for** — modality alone is **not** independence: bulk and scRNA can share patients,
+  preprocessing, labels, or derived annotations. Orthogonal *modality* is one input to an
+  independence judgement, not a substitute for it, so this **composes with** the existing
+  `overlap` / dependence-role accounting (B2) rather than adding a parallel "modality =
+  independent" axis. The motivating case earned its weight from an independent dataset **and**
+  independent ground truth (IHC, survival), not modality alone (cf. Platonic Representation
+  Hypothesis). *Tier:* **Gated** (follows A1). *Deps:* A1, dataset-independence (B2).
 
 ## Theme B — Process quality over cookbook execution
 
@@ -56,15 +68,25 @@ never on QC / clustering resolution / parameters; they followed the canned scanp
 verbatim, while every real paper deviates for dataset-specific reasons. "No computational
 biologist one-shots the analysis."
 
-- **B1 — QA-check toolkit.** *Gap:* QA guidance is prose; there's no reusable library of
-  data-type-specific checks. *Sketch:* a growing toolkit of helper checks per data type
-  (scRNA, bulk RNA, genomics CN/SV, amplicon, …) projects can pull from. *Tier:* **Mid.**
+> **Extend the existing QA substrate, don't rediscover it.** This repo already ships
+> `docs/conventions/pipeline-qa-checkpoints.md` (QA checkpoint conventions) and
+> `docs/process/pipeline-audit-and-refactor.md` (the three-axis pipeline audit/refactor
+> playbook). B1–B3 build *on* those — their gap is missing reusable libraries / metrics
+> *behind* the conventions, not a missing convention.
+
+- **B1 — QA-check toolkit.** *Gap:* QA conventions exist as checkpoint guidance, but there is
+  no reusable *library* of data-type-specific checks operationalizing them. *Sketch:* a growing
+  toolkit of helper checks per data type (scRNA, bulk RNA, genomics CN/SV, amplicon, …) that
+  implements the checkpoint conventions, rather than rediscovering their shape. *Tier:* **Mid.**
+  *Deps:* `docs/conventions/pipeline-qa-checkpoints.md`.
 - **B2 — Quantify QA breadth/depth.** *Gap:* a project can record one shallow check and look
-  as "QA'd" as one with broad coverage. *Sketch:* a score/metric over QA coverage that flags
-  shallow or narrow checking. *Tier:* **Mid.** *Deps:* B1.
+  as "QA'd" as one with broad coverage. *Sketch:* a score/metric over QA coverage (against the
+  checkpoint conventions' expected checks) that flags shallow or narrow checking. *Tier:*
+  **Mid.** *Deps:* B1, `docs/conventions/pipeline-qa-checkpoints.md`.
 - **B3 — Flag no-iteration workflows.** *Gap:* a build→run-once→record→"truth" workflow is
   indistinguishable from a properly iterated one. *Sketch:* detect and flag analyses with zero
-  recorded iterations / re-entries. *Tier:* **Mid.**
+  recorded iterations / re-entries, surfacing them through the audit playbook. *Tier:* **Mid.**
+  *Deps:* `docs/process/pipeline-audit-and-refactor.md`.
 - **B4 — Adaptive (not rigid) pre-registration.** *Gap:* the pre-reg + gating framing imports
   a clinical-trial stance that can discourage the exploratory, data-driven iteration that
   discovery meta-analysis *needs*. *Sketch:* reframe `pre-register` as sharpening thinking +
@@ -133,21 +155,24 @@ credulity ("EMT shows up therefore EMT"), tail-hiding metrics.
 
 ## Readiness tiers (the prioritized menu)
 
-| Tier | Workstreams | Why now |
+| Tier | Workstreams | Why now / what blocks it |
 |---|---|---|
-| **Near-term** | A1, A2, B4, D1, F2 | Extend in-flight evidence model, or are skill/doc/convention changes |
-| **Mid** | B1, B2, B3, C1, D2, E2 | New mechanisms, scoped, no deep substrate change |
+| **Near-term (unblocked)** | B4, D1, F2 | Skill / doc / convention changes; no substrate dependency |
+| **Mid** | B1, B2, B3, C1, D2, E2 | New mechanisms, scoped; B1–B3 extend the existing QA conventions |
+| **Gated** | A1, A2 | Need `belief_eligible` / `quantitative_result` from epistemic-edges (not in repo yet) |
 | **Exploratory** | C2, E1, F1 | Deeper provenance/methodology; design-heavy |
 
 ## Recommended first spin-out
 
-Two strong candidates, by complementary logic:
-- **Theme A (evidence tiering + cross-modality)** — strongest grounding, and it directly
-  extends the dataset-independence work about to land, so the marginal cost is low and the
-  epistemic payoff (the user's long-emphasized hint/single/multi/multi-modal ladder, finally
-  systematic) is high.
 - **B3 + B2 (no-iteration flagging + QA-breadth quantification)** — the talk's *headline*
-  finding made real, and among the cheapest to ship.
+  finding made real, among the cheapest to ship, and **unblocked today**: it extends the
+  existing QA conventions (`docs/conventions/pipeline-qa-checkpoints.md`,
+  `docs/process/pipeline-audit-and-refactor.md`) rather than waiting on substrate work. This is
+  my lead recommendation.
+- **Theme A (evidence tiering + cross-modality)** — strongest grounding and highest epistemic
+  payoff (the user's long-emphasized hint/single/multi/multi-modal ladder, finally systematic),
+  **but gated**: it cannot start until `belief_eligible` / `quantitative_result` land via
+  epistemic-edges. Best second, or queue it behind that facet.
 
 ## Cross-cutting principle
 
