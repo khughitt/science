@@ -384,3 +384,96 @@ evidence_type: empirical_data_evidence
     assert "empirical_data_evidence" in values, (
         f"Expected sci:evidenceType 'empirical_data_evidence', got {values}"
     )
+
+
+def test_evidence_line_task_source_lands_in_provenance_not_belief(tmp_path: Path) -> None:
+    """Regression: source: task:t082 → prov:wasDerivedFrom in provenance; NEVER a cito edge.
+
+    The evidence-line's `source` field records *where the finding came from* (provenance).
+    Only the `target` field produces cito:supports/disputes (belief). A task-ref source
+    must route exclusively into provenance, never into the knowledge graph as a cito edge.
+    """
+    _write(tmp_path, "science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
+
+    # Task entity that acts as the source of the evidence-line
+    _write(
+        tmp_path,
+        "entities/tasks/t082.md",
+        """---
+id: task:t082
+kind: task
+title: "Task T082"
+project: test
+ontology_terms: []
+related: []
+source_refs: []
+created: 2026-05-01
+updated: 2026-05-01
+---
+""",
+    )
+
+    # Target proposition that receives the cito:supports edge
+    _write(
+        tmp_path,
+        "entities/propositions/q.md",
+        """---
+id: proposition:q
+kind: proposition
+title: "Proposition Q"
+project: test
+ontology_terms: []
+related: []
+source_refs: []
+created: 2026-05-01
+updated: 2026-05-01
+---
+""",
+    )
+
+    # Evidence-line: source is the task, target is the proposition
+    _write(
+        tmp_path,
+        "entities/evidence-lines/el-task.md",
+        """---
+id: evidence-line:el-task
+kind: evidence-line
+title: "EL task source supports Q"
+project: test
+ontology_terms: []
+related: []
+source_refs: []
+created: 2026-05-01
+updated: 2026-05-01
+stance: supports
+target: proposition:q
+source: task:t082
+---
+""",
+    )
+
+    rdf_dataset = _load_dataset(tmp_path)
+    knowledge = rdf_dataset.graph(PROJECT_NS["graph/knowledge"])
+    provenance = rdf_dataset.graph(PROJECT_NS["graph/provenance"])
+
+    line_uri = URIRef(PROJECT_NS["evidence-line/el-task"])
+    task_uri = URIRef(PROJECT_NS["task/t082"])
+    target_uri = URIRef(PROJECT_NS["proposition/q"])
+
+    # 1. prov:wasDerivedFrom must point at the task in the provenance graph
+    assert (line_uri, PROV.wasDerivedFrom, task_uri) in provenance, (
+        "Expected prov:wasDerivedFrom edge from evidence-line:el-task to task:t082 in provenance graph"
+    )
+
+    # 2. The task must NOT appear as the object of any cito edge (source never goes to belief)
+    assert (line_uri, CITO_NS.supports, task_uri) not in knowledge, (
+        "task:t082 must not appear as object of cito:supports — task sources belong in provenance only"
+    )
+    assert (line_uri, CITO_NS.disputes, task_uri) not in knowledge, (
+        "task:t082 must not appear as object of cito:disputes — task sources belong in provenance only"
+    )
+
+    # 3. The cito:supports edge must point at the target proposition (split is correct)
+    assert (line_uri, CITO_NS.supports, target_uri) in knowledge, (
+        "Expected cito:supports edge from evidence-line:el-task to proposition:q in knowledge graph"
+    )
