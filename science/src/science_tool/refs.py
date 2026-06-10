@@ -168,14 +168,20 @@ def _collect_markdown_files(
 
 
 def _load_hypothesis_ids(root: Path) -> dict[str, Path]:
-    """Map legacy HNN aliases (e.g. '03') to hypothesis files."""
-    hyp_dir = root / "specs" / "hypotheses"
-    if not hyp_dir.is_dir():
-        return {}
+    """Map legacy HNN aliases (e.g. '03') to hypothesis files.
+
+    Searches both the v3 layout (``entities/hypotheses/``) and the legacy v2
+    layout (``specs/hypotheses/``); both can coexist mid-migration. The v3
+    location wins on alias collision.
+    """
     result: dict[str, Path] = {}
-    for p in hyp_dir.glob("*.md"):
-        for alias in _hypothesis_aliases_from_path(p):
-            result.setdefault(alias, p)
+    for rel in ("entities/hypotheses", "specs/hypotheses"):
+        hyp_dir = root / rel
+        if not hyp_dir.is_dir():
+            continue
+        for p in sorted(hyp_dir.glob("*.md")):
+            for alias in _hypothesis_aliases_from_path(p):
+                result.setdefault(alias, p)
     return result
 
 
@@ -486,16 +492,36 @@ def _hypothesis_id_from_path(file_path: Path) -> str | None:
     return None
 
 
+def _normalize_hyp_alias(raw: str) -> str | None:
+    """Normalize a hypothesis number to its canonical 2-digit short form.
+
+    HNN prose references are exactly two digits (``H01``..``H99``), so a v3
+    numeric prefix like ``0003`` resolves to ``"03"`` and a legacy ``h3`` to
+    ``"03"``. Numbers outside 1..99 cannot be referenced via the HNN short form
+    and yield no alias.
+    """
+    try:
+        n = int(raw)
+    except ValueError:
+        return None
+    return f"{n:02d}" if 1 <= n <= 99 else None
+
+
 def _extract_hypothesis_aliases_from_id(entity_id: object) -> set[str]:
-    """Extract HNN aliases from a canonical ``hypothesis:<slug>`` id."""
+    """Extract HNN aliases from a canonical ``hypothesis:<slug>`` id.
+
+    Handles both the legacy ``h03-...`` slug and the v3 numeric prefix
+    ``0003-...`` (no ``h``), normalizing each to the 2-digit HNN short form.
+    """
     if not isinstance(entity_id, str) or not entity_id.startswith("hypothesis:"):
         return set()
 
     slug = entity_id.split(":", 1)[1]
-    match = re.match(r"h(\d+)-", slug)
+    match = re.match(r"h?(\d+)(?:-|$)", slug)
     if not match:
-        match = re.match(r"h(\d+)$", slug)
-    return {match.group(1)} if match else set()
+        return set()
+    alias = _normalize_hyp_alias(match.group(1))
+    return {alias} if alias else set()
 
 
 def _extract_hypothesis_aliases_from_heading(body: str) -> set[str]:
@@ -519,9 +545,11 @@ def _hypothesis_aliases_from_path(file_path: Path) -> set[str]:
         aliases.update(_extract_hypothesis_aliases_from_id(fm.get("id")))
         aliases.update(_extract_hypothesis_aliases_from_heading(body))
 
-    filename_match = re.match(r"h(\d+)-", file_path.name)
+    filename_match = re.match(r"h?(\d+)-", file_path.name)
     if filename_match:
-        aliases.add(filename_match.group(1))
+        alias = _normalize_hyp_alias(filename_match.group(1))
+        if alias:
+            aliases.add(alias)
 
     return aliases
 
@@ -702,7 +730,7 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
                             line=line_num,
                             ref_type="hypothesis",
                             ref_value=f"H{hyp_num}",
-                            message=f"H{hyp_num} — no matching file in specs/hypotheses/",
+                            message=f"H{hyp_num} — no matching hypothesis in entities/hypotheses/ or specs/hypotheses/",
                             suggestion=suggestion,
                         )
                     )

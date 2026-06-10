@@ -132,6 +132,55 @@ def test_slug_named_hypothesis_file_uses_heading_alias_for_self_reference() -> N
         assert hyp_issues == []
 
 
+def test_v3_hypothesis_ref_resolves_from_entities_dir_via_heading() -> None:
+    """After the v2->v3 layout migration hypotheses live in entities/hypotheses/.
+    An HNN mention resolves against a file whose heading carries the HNN label."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "specs" / "hypotheses" / "h01-test.md").unlink()
+        (root / "entities" / "hypotheses").mkdir(parents=True)
+        (root / "entities" / "hypotheses" / "0001-rhythms.md").write_text(
+            "---\n"
+            "id: hypothesis:0001-rhythms\n"
+            "type: hypothesis\n"
+            "title: Rhythms\n"
+            "---\n\n"
+            "# H01: Rhythms are control structure\n"
+        )
+        (root / "doc" / "background" / "topics" / "test.md").write_text("# Test\nThis relates to H01 strongly.\n")
+
+        issues = check_refs(root)
+        hyp_issues = [i for i in issues if i.ref_type == "hypothesis"]
+        assert hyp_issues == []
+
+
+def test_v3_hypothesis_ref_resolves_from_numeric_id_prefix_without_heading_label() -> None:
+    """The hard case: a v3 file numbered 0003 whose heading is a generic
+    '# Hypothesis: ...' (no H03 label) and whose id has no legacy 'h' prefix.
+    The HNN alias must be derived from the 4-digit numeric id/filename prefix."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "specs" / "hypotheses" / "h01-test.md").unlink()
+        (root / "entities" / "hypotheses").mkdir(parents=True)
+        (root / "entities" / "hypotheses" / "0003-menstrual-cycle.md").write_text(
+            "---\n"
+            "id: hypothesis:0003-menstrual-cycle\n"
+            "type: hypothesis\n"
+            "title: Menstrual cycle\n"
+            "---\n\n"
+            "# Hypothesis: The menstrual cycle is a systemic control rhythm\n"
+        )
+        (root / "doc" / "background" / "topics" / "test.md").write_text("# Test\nThis relates to H03 strongly.\n")
+
+        issues = check_refs(root)
+        hyp_issues = [i for i in issues if i.ref_type == "hypothesis"]
+        assert hyp_issues == []
+
+
 def test_valid_citation_ref() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem() as td:
