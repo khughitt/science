@@ -1143,13 +1143,32 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
         # 4. Final graph validation — token rewriting can miss semantic references, so
         #    load the migrated tree and audit it. Fail loud (do NOT bump layout_version)
         #    if anything fails to resolve.
+        #
+        #    Mirror the pre-mutation gate's tolerance (_postmove_audit_failures): load
+        #    non-strict and split identity collisions into blockers vs transitional via
+        #    _identity_collision_rows. A transitional-owner shadow — an aggregate manifest
+        #    row whose canonical_id this migration renumbered to match its now-renamed
+        #    markdown owner — is a benign §B5/§C4 carry cleared in aggregate retirement
+        #    (a later phase), NOT a blocker. A strict load here would raise
+        #    EntityIdentityCollisionError on exactly those shadows and abort the apply
+        #    AFTER mutating the tree, even though the dry-run gate passed the identical
+        #    plan as clean. Only genuine blockers (two real owners, unresolved references,
+        #    malformed-core schema) hard-fail.
+        from science_tool.graph.identity_table import build_identity_table
         from science_tool.graph.migrate import audit_project_sources
         from science_tool.graph.sources import load_project_sources
 
-        rows, failed = audit_project_sources(load_project_sources(project_root))
-        if failed:
-            bad = [r for r in rows if r.get("status") == "fail"]
-            raise ValueError(f"post-migration graph validation failed with {len(bad)} issue(s): {bad[:10]}")
+        sources = load_project_sources(project_root, strict_core_schema=False, strict_identity=False)
+        rows, failed = audit_project_sources(sources)
+        audit_fails = (
+            [r for r in rows if r.get("status") == "fail" and r.get("check") != "identity_collision"]
+            if failed
+            else []
+        )
+        collision_blockers, _transitional = _identity_collision_rows(build_identity_table(sources))
+        blockers = audit_fails + collision_blockers + _schema_invalid_blockers(sources, set())
+        if blockers:
+            raise ValueError(f"post-migration graph validation failed with {len(blockers)} issue(s): {blockers[:10]}")
     except Exception as exc:
         raise ValueError(
             "science entities migrate --apply failed after the working tree was modified; "
