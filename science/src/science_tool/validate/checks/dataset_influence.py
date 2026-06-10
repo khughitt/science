@@ -13,7 +13,7 @@ from science_tool.commons.errors import CommonsError
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
 from science_tool.commons.geneset_resources import is_geneset_frontmatter, read_member_rows
 from science_tool.graph.paper_dataset_migration import is_paper_dataset_role_conflict
-from science_tool.validate._helpers import entity_frontmatters
+from science_tool.validate._helpers import dataset_frontmatters, entity_frontmatters
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -202,6 +202,12 @@ def _dataset_ref_statuses(
     frontmatters: Iterable[dict[str, Any]],
 ) -> dict[str, DatasetRefStatus]:
     local_kinds = _local_entity_kinds(frontmatters)
+    # Markdown dataset descriptors (doc/datasets/) live outside the entity scan roots,
+    # so entity_frontmatters never surfaces them; fold in dataset_frontmatters (both
+    # markdown + datapackage backends) or every dataset_usage ref to a markdown-only
+    # local dataset would warn ref-unresolved despite the descriptor existing.
+    for ds_fm in _local_entity_kinds(dataset_frontmatters(ctx)).items():
+        local_kinds.setdefault(*ds_fm)
     root = resolve_commons_root()
     commons_available = _has_initialized_commons_layout(root)
     adapter = CommonsEntityAdapter(root) if commons_available else None
