@@ -985,11 +985,18 @@ def _load_structured_source_records(
                 "file_path": record.source_path or default_path,
                 "related": list(record.related),
                 "source_refs": list(record.source_refs),
+                "evidence_refs": list(record.evidence_refs),
                 "aliases": list(record.aliases),
                 "ontology_terms": list(record.ontology_terms),
             }
             if record.domain is not None:
                 raw["domain"] = record.domain
+            if record.description is not None:
+                raw["description"] = record.description
+            if record.created is not None:
+                raw["created"] = record.created
+            if record.updated is not None:
+                raw["updated"] = record.updated
             _enrich_raw(
                 raw,
                 kind=kind_name,

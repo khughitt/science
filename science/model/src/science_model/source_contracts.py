@@ -59,11 +59,14 @@ class ParameterSource(BaseModel):
 class StructuredEntitySource(BaseModel):
     """Generic structured-source record for a profile-declared local kind.
 
-    Loaded by science_tool's structured-source loader for any project-local kind
-    that carries a `structured_source` in its profile declaration (a single-type
-    YAML data file under knowledge/sources/<profile>/, e.g. generated
-    limit-relation / morphism-edge rows). Extra row fields (e.g. `kind`, freshness
-    `created`/`updated`) are ignored — the kind is authoritative from the manifest.
+    Loaded by science_tool's structured-source loader for any kind that carries a
+    `structured_source` in a profile declaration (a single-type YAML data file
+    under knowledge/sources/<profile>/, e.g. generated limit-relation /
+    morphism-edge rows, or `finding` rows from an audit). The `kind` is
+    authoritative from the manifest and ignored on the row; other unrecognized
+    fields are ignored. Reference and freshness fields (`evidence_refs`,
+    `description`, `created`, `updated`) ARE preserved so dependency edges
+    (e.g. finding bears_on via evidence_refs) and freshness propagation survive.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -73,8 +76,12 @@ class StructuredEntitySource(BaseModel):
     profile: str = ""
     source_path: str = ""
     domain: str | None = None
+    description: str | None = None
+    created: str | None = None
+    updated: str | None = None
     aliases: list[str] = Field(default_factory=list)
     source_refs: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
     ontology_terms: list[str] = Field(default_factory=list)
     related: list[str] = Field(default_factory=list)
     relations: list[AuthoredTargetedRelation] = Field(default_factory=list)

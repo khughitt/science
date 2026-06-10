@@ -106,6 +106,10 @@ finding:
     profile: t-core
     source_path: knowledge/sources/local/finding.yaml
     created: "2026-04-30"
+    description: "At least one step is not a strict parameter_limit edge."
+    evidence_refs:
+      - limit-relation:asep__burgers-equation__a
+      - limit-relation:burgers-equation__heat-equation__amplitude
   - canonical_id: finding:t291-path2-audit-bidomain__cable__hodgkin-huxley
     kind: finding
     title: "Path-2 audit: bidomain-model -> cable-equation -> hodgkin-huxley = valid"
@@ -129,6 +133,11 @@ def test_core_structured_source_rows_load_as_owner_entities(tmp_path: Path) -> N
     assert by_id[fid].kind == "finding"
     # Loaded by the structured-source adapter, not the multi-type aggregate.
     assert src.entity_source_adapters[fid] == "structured-source"
+    # evidence_refs must survive — they drive the finding's bears_on edges.
+    assert list(getattr(by_id[fid], "evidence_refs", [])) == [
+        "limit-relation:asep__burgers-equation__a",
+        "limit-relation:burgers-equation__heat-equation__amplitude",
+    ]
 
 
 def test_core_structured_source_rows_are_not_aggregate_rows(tmp_path: Path) -> None:
