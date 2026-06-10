@@ -680,13 +680,22 @@ def is_external_reference(raw: str, *, known_prefixes: frozenset[str] | None = N
     return prefix.lower() in check_set
 
 
-def is_metadata_reference(raw: str) -> bool:
-    """Return True for `meta:*` refs.
+# Annotation-only reference namespaces: pointers an author keeps in source files
+# (e.g. `meta:<phase>` process tags, `spec:<design-doc>` pointers to design
+# documents that are not first-class entities) that are intentionally NOT
+# materialized as KG edges and require no resolvable entity.
+_ANNOTATION_REF_PREFIXES = frozenset({"meta", "spec"})
 
-    Meta refs are intentional annotations preserved in source files but
-    excluded from KG materialization (no entity required, no edge created).
+
+def is_metadata_reference(raw: str) -> bool:
+    """Return True for annotation-only refs (`meta:*`, `spec:*`).
+
+    These are intentional annotations preserved in source files but excluded
+    from KG materialization (no entity required, no edge created). `spec:` joins
+    `meta:` because design-spec pointers reference plain design documents, not
+    first-class entities.
     """
-    return raw.startswith("meta:")
+    return any(raw.startswith(f"{prefix}:") for prefix in _ANNOTATION_REF_PREFIXES)
 
 
 def is_bibliography_reference(raw: str) -> bool:

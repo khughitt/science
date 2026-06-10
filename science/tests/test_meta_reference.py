@@ -21,10 +21,18 @@ class TestIsMetadataReference:
         assert is_metadata_reference("meta:cycle1") is True
         assert is_metadata_reference("meta:") is True
 
+    def test_spec_prefix_recognized(self) -> None:
+        # spec: pointers reference design documents, not entities — annotation-only.
+        assert is_metadata_reference("spec:2026-04-12-catalog-health-design") is True
+        assert is_metadata_reference("spec:scope-boundaries") is True
+        assert is_metadata_reference("spec:") is True
+
     def test_other_prefixes_not_metadata(self) -> None:
         assert is_metadata_reference("topic:genomics") is False
         assert is_metadata_reference("hypothesis:h01") is False
         assert is_metadata_reference("task:t001") is False
+        # A prefix that merely starts with "spec" (no colon boundary) must not match.
+        assert is_metadata_reference("specialization:x") is False
 
     def test_no_prefix_not_metadata(self) -> None:
         assert is_metadata_reference("genomics") is False
