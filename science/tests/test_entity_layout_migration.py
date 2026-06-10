@@ -1197,6 +1197,33 @@ def test_prose_doc_at_real_root_without_id_is_skipped_untyped(tmp_path: Path) ->
     assert dry["undated_entities"] == []  # the prose doc is NOT an undated blocker
 
 
+def test_overlay_file_is_not_migrated_and_is_reported(tmp_path: Path) -> None:
+    # A file carrying `overlay_of` is a commons borrower context-attachment (design
+    # §B2), not an owner declaration. The migrator must NOT move it into entities/;
+    # it stays in doc/ where the OverlayAdapter reads it as a borrower. It is surfaced
+    # in the report's `skipped_overlays` bucket, never in `moves`.
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(
+        tmp_path,
+        "doc/papers/Smith2025.md",
+        '---\nid: "paper:Smith2025"\noverlay_of: "paper:Smith2025"\nstatus: active\n'
+        'relevance: "project relevance"\ncreated: "2026-01-01"\nupdated: "2026-01-01"\n---\nbody\n',
+    )
+    _write(
+        tmp_path,
+        "doc/papers/Jones2025.md",
+        '---\nid: "paper:Jones2025"\ntype: paper\ntitle: Real\nstatus: active\n'
+        'created: "2026-01-01"\nupdated: "2026-01-01"\n---\nbody\n',
+    )
+    _git_init(tmp_path)
+    found = {e.rel_path for e in discover_legacy_entities(tmp_path)}
+    assert "doc/papers/Smith2025.md" not in found  # overlay excluded from owner moves
+    assert "doc/papers/Jones2025.md" in found  # real owner still discovered
+    dry = migrate_layout(tmp_path, apply=False)
+    assert "doc/papers/Smith2025.md" in dry["skipped_overlays"]
+    assert not any(m["old_rel_path"] == "doc/papers/Smith2025.md" for m in dry["moves"])
+
+
 def test_explicit_id_in_nested_dir_still_discovered(tmp_path: Path) -> None:
     # A file with an explicit id of a known kind is still discovered regardless of
     # directory (id-prefix inference runs before the dir fallback).

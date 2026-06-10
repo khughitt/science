@@ -66,9 +66,10 @@ def _split_frontmatter(text: str) -> tuple[dict | None, str]:
     return (data if isinstance(data, dict) else None), match.group(2)
 
 
-def _discover_with_skips(project_root: Path) -> tuple[list[LegacyEntity], list[str]]:
+def _discover_with_skips(project_root: Path) -> tuple[list[LegacyEntity], list[str], list[str]]:
     results: list[LegacyEntity] = []
     skipped_untyped: list[str] = []
+    skipped_overlays: list[str] = []
     known = set(markdown_entity_kinds(project_root=project_root))
     dir_to_kind = _project_dir_to_kind(project_root)
     for root_name in _LEGACY_SCAN_ROOTS:
@@ -81,6 +82,14 @@ def _discover_with_skips(project_root: Path) -> tuple[list[LegacyEntity], list[s
                 continue
             text = path.read_text(encoding="utf-8")
             frontmatter, body = _split_frontmatter(text)
+            # An `overlay_of` file is a commons borrower context-attachment (design
+            # §B2), not an owner declaration — it must stay in doc/ where the
+            # OverlayAdapter reads it as a borrower, never be relocated into
+            # entities/ (which would orphan it from the adapter and re-introduce the
+            # cross-scope owner ambiguity).
+            if frontmatter and frontmatter.get("overlay_of"):
+                skipped_overlays.append(rel)
+                continue
             kind, needs_signal = _infer_kind(rel, frontmatter, known_kinds=known, dir_to_kind=dir_to_kind)
             if kind is None:
                 continue
@@ -96,7 +105,7 @@ def _discover_with_skips(project_root: Path) -> tuple[list[LegacyEntity], list[s
             results.append(
                 LegacyEntity(rel_path=rel, kind=kind, old_id=old_id, frontmatter=frontmatter or {}, body=body)
             )
-    return results, sorted(skipped_untyped)
+    return results, sorted(skipped_untyped), sorted(skipped_overlays)
 
 
 def discover_legacy_entities(project_root: Path) -> list[LegacyEntity]:
@@ -711,9 +720,18 @@ def rewrite_references(
     # Lookbehind: don't match mid-token (e.g. inside "question:0001-aging-early").
     # Lookahead: don't match when followed by word chars or hyphen (i.e. the token
     # continues), but DO allow a trailing period (sentence boundary).
-    for old_id in sorted(id_map, key=len, reverse=True):
-        new_id = id_map[old_id]
-        text = re.sub(rf"(?<![\w:.-]){re.escape(old_id)}(?![\w-])", new_id, text)
+    # Perf: build ONE combined alternation (alternatives longest-first, so the
+    # engine still prefers question:q10-b over question:q1-b at each position) and
+    # compile it once, instead of recompiling a separate `re.sub` pattern per id
+    # per file. The per-key loop was O(files x ids) regex compilations and thrashed
+    # the stdlib re cache (512 entries) on large id maps, turning a multi-thousand
+    # file rewrite into a multi-minute spin. Single-pass replacement is also
+    # collision-safe: each position is matched at most once, so a freshly written
+    # new id can never be re-matched by another key's pattern.
+    if id_map:
+        alternation = "|".join(re.escape(k) for k in sorted(id_map, key=len, reverse=True))
+        combined = re.compile(rf"(?<![\w:.-])({alternation})(?![\w-])")
+        text = combined.sub(lambda m: id_map[m.group(1)], text)
 
     unresolved: list[str] = []
     new_ids = set(id_map.values())
@@ -845,7 +863,12 @@ def _postmove_audit_failures(
     from science_tool.graph.sources import load_project_sources
 
     merged = {**rewritten, **singleton_text, **inplace_text}
-    overrides = {rel: text for rel, text in merged.items() if rel.endswith(".md")}
+    # Include rewritten .yaml/.yml aggregate manifests (entities.yaml/terms.yaml),
+    # not just markdown: a shadow row whose canonical_id this migration renumbered
+    # must reach the loader rewritten, or its stale slug id collides with the renamed
+    # markdown owner — a benign transitional shadow (§B5/§C4) misreported as a blocking
+    # ambiguous_alias. AggregateAdapter consumes these via its virtual_files.
+    overrides = {rel: text for rel, text in merged.items() if rel.endswith((".md", ".yaml", ".yml"))}
     try:
         # Compile the post-move model through the canonical loader (moved entities as
         # virtual files at their new paths). Non-strict so a duplicate (owner_scope,
@@ -955,7 +978,7 @@ def _audit_failures_to_report(rows: list[dict]) -> dict[str, list[str]]:
 
 def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     plan = plan_migration(project_root)
-    legacy_entities, skipped_untyped = _discover_with_skips(project_root)
+    legacy_entities, skipped_untyped, skipped_overlays = _discover_with_skips(project_root)
     entities = {e.rel_path: e for e in legacy_entities}
     # FIX 2: restrict unresolved-flagging to kinds actually migrated as markdown.
     # Kinds stored outside markdown (e.g. observation in observations.yaml) produce
@@ -1053,6 +1076,7 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
         "unresolved_warnings": unresolved_warnings,
         "local_kind_warnings": local_kind_warnings(project_root),
         "skipped_untyped": skipped_untyped,
+        "skipped_overlays": skipped_overlays,
         "undated_entities": undated_entities,
         "applied": apply,
     }
