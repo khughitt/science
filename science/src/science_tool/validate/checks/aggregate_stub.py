@@ -42,11 +42,12 @@ def check_lone_aggregate_stub(ctx: ValidateContext) -> Iterator[Result]:
         if row.adapter != "aggregate" or not row.deprecated:
             continue
         path = Path(row.source_ref.path) if row.source_ref else None
+        where = path.name if path is not None else "aggregate manifest"
         yield Result(
             Severity.WARN,
             path,
             None,
-            f"{canonical_id}: lone aggregate stub (entities.yaml) sole-sources this "
+            f"{canonical_id}: lone aggregate stub ({where}) sole-sources this "
             "entity (design §B5) -- retire it to an owner file or delete it via "
             "`science entities triage-aggregate` + Phase 3b --apply; carried as WARN "
             "until then.",

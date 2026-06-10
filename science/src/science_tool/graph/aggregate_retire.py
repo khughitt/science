@@ -1,15 +1,21 @@
 """Plan + apply aggregate-manifest retirement (design §3, Phase 3b/4a).
 
 The planner is pure over the 3a classification + the compiled model; it never
-mutates. It is scoped to the multi-type aggregate files (`entities.yaml`,
-`terms.yaml`); single-type aggregates (`doc/<plural>/<plural>.{json,yaml}`) are
-out of scope. Promotion is id-preserving: the target is computed from the entity
-path policy, and a non-conforming id is rejected, never renumbered. The executor
-(apply_retirement) lives in the same module and owns all file mutation.
+mutates. It covers BOTH the multi-type aggregate files (`entities.yaml`,
+`terms.yaml`) and single-type aggregates (`doc/<plural>/<plural>.{json,yaml}`,
+e.g. `doc/observations/observations.yaml`). A single-type aggregate is, by
+construction, a list of coined-here owner entities of one kind, so its rows
+promote to owner files (or are shadows of an existing owner). Promotion is
+id-preserving: the target is computed from the entity path policy, and a
+non-conforming id is rejected, never renumbered (so a single-type kind whose
+entries carry descriptive ids must use the `slug` strategy — e.g. `observation`).
+The executor (apply_retirement) lives in the same module and owns all file
+mutation; when a single-type aggregate is fully retired it deletes the file.
 """
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
@@ -23,7 +29,7 @@ from science_tool.datapackage_promote import _is_safe_slug
 from science_tool.entities import EntityCommandError, default_status, local_part_conforms, resolve_path_policy
 from science_tool.graph.aggregate_triage import AggregateBucket, AggregateRowTriage
 from science_tool.graph.decision_log import DecisionLogIndex, render_owner_file
-from science_tool.graph.storage_adapters.aggregate import MULTI_TYPE_AGGREGATE_ROOT_KEYS, multi_type_root_key
+from science_tool.graph.storage_adapters.aggregate import multi_type_root_key
 
 from science_tool.graph.sources import local_profile_sources_dir, resolve_local_profile_name
 
@@ -129,8 +135,11 @@ def plan_retirement(
     migrate: list[PlannedRow] = []
 
     for meta in sources.aggregate_rows:
-        if Path(meta.path).name not in MULTI_TYPE_AGGREGATE_ROOT_KEYS:
-            continue  # firewall: only the multi-type files (entities.yaml/terms.yaml); never single-type aggregates
+        # Both multi-type (entities.yaml/terms.yaml) and single-type
+        # (doc/<plural>/<plural>.{yaml,json}) aggregate rows are in scope (§B5).
+        # Single-type rows only ever bucket COINED/SHADOW (see classify_aggregate_rows),
+        # so they reach the generic promote/shadow handling below and never trip the
+        # multi-type-only decision/external-ref/curie branches (kind/bucket-gated).
         triage = triage_by_ref.get((meta.path, meta.line))
         if triage is None:
             continue
@@ -203,10 +212,15 @@ _STUB_BODY = "<!-- promoted from an aggregate manifest by substrate retirement; 
 
 
 def _read_entries(project_root: Path, rel: str) -> list[dict]:
-    data = yaml.safe_load((project_root / rel).read_text(encoding="utf-8")) or {}
-    root_key = multi_type_root_key(Path(rel).name)
-    assert root_key is not None, f"not a multi-type aggregate file: {rel}"
-    return data.get(root_key) or []
+    path = project_root / rel
+    root_key = multi_type_root_key(path.name)
+    if root_key is not None:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        return data.get(root_key) or []
+    # single-type aggregate (doc/<plural>/<plural>.{yaml,json}): a top-level list.
+    text = path.read_text(encoding="utf-8")
+    data = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
+    return data if isinstance(data, list) else []
 
 
 def _front_matter(path: Path) -> dict:
@@ -217,6 +231,21 @@ def _front_matter(path: Path) -> dict:
     if end == -1:
         return {}
     return yaml.safe_load(text[4:end]) or {}
+
+
+# Reference-bearing frontmatter fields preserved verbatim on promotion so that a
+# row's structural edges (e.g. an observation's `related:`/`source_refs:` to its
+# hypotheses, interpretations, and datasets) survive into the owner file. Mirrors
+# aggregate_triage._REFERENCE_FIELDS.
+_PRESERVED_REFERENCE_FIELDS = (
+    "related",
+    "commits_to",
+    "source_refs",
+    "evidence_refs",
+    "same_as",
+    "blocked_by",
+    "consumed_by",
+)
 
 
 def _owner_text(
@@ -230,6 +259,7 @@ def _owner_text(
     created: str,
     updated: str,
     promoted_from: str,
+    extra_fm: dict[str, object] | None = None,
 ) -> str:
     """Render an id-preserving, conformant owner file.
 
@@ -247,6 +277,8 @@ def _owner_text(
     fm: dict[str, object] = {"id": canonical_id, "type": kind, "title": title, "status": status}
     fm["created"] = created
     fm["updated"] = updated
+    if extra_fm:
+        fm.update(extra_fm)
     if isinstance(profile, str) and profile:
         fm["profile"] = profile
     fm["promoted_from"] = promoted_from
@@ -256,12 +288,27 @@ def _owner_text(
 
 def _rewrite_aggregate(project_root: Path, rel: str, drop: set[int]) -> None:
     path = project_root / rel
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     root_key = multi_type_root_key(path.name)
-    assert root_key is not None, f"not a multi-type aggregate file: {rel}"
-    items = data.get(root_key) or []
-    data[root_key] = [row for i, row in enumerate(items) if i not in drop]
-    path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    if root_key is not None:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        items = data.get(root_key) or []
+        data[root_key] = [row for i, row in enumerate(items) if i not in drop]
+        path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+        return
+    # single-type aggregate: a top-level list. Drop retired rows; when nothing
+    # remains, delete the file — its sole purpose was to hold these owners, which
+    # now live as owner files under entities/<plural>/ (§B5).
+    text = path.read_text(encoding="utf-8")
+    items = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
+    items = items if isinstance(items, list) else []
+    remaining = [row for i, row in enumerate(items) if i not in drop]
+    if not remaining:
+        path.unlink()
+        return
+    if path.suffix == ".json":
+        path.write_text(json.dumps(remaining, indent=2) + "\n", encoding="utf-8")
+    else:
+        path.write_text(yaml.safe_dump(remaining, sort_keys=False, allow_unicode=True), encoding="utf-8")
 
 
 def apply_retirement(
@@ -323,6 +370,7 @@ def apply_retirement(
                     continue
                 text = render_owner_file(section, promoted_from=pr.source_path, today=stamp)
             else:
+                extra_fm = {f: entry[f] for f in _PRESERVED_REFERENCE_FIELDS if entry.get(f)}
                 text = _owner_text(
                     pr.triage.canonical_id,
                     pr.triage.kind,
@@ -333,6 +381,7 @@ def apply_retirement(
                     created=stamp,
                     updated=stamp,
                     promoted_from=pr.source_path,
+                    extra_fm=extra_fm,
                 )
             target.write_text(text, encoding="utf-8")
         promoted.append(pr.triage.canonical_id)

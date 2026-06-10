@@ -48,7 +48,7 @@ _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
     "theme": EntityPathPolicy(Path("entities/themes"), "numeric"),
     "topic": EntityPathPolicy(Path("entities/topics"), "slug"),  # was "numeric" (4c: slug identity kind)
     "evidence-line": EntityPathPolicy(Path("entities/evidence-lines"), "numeric"),
-    "observation": EntityPathPolicy(Path("entities/observations"), "numeric"),
+    "observation": EntityPathPolicy(Path("entities/observations"), "slug"),  # was "numeric": observations carry descriptive slug ids (e.g. observation:swan-stage-shift); enables id-preserving single-type aggregate retirement (§B5)
     "mechanism": EntityPathPolicy(Path("entities/mechanisms"), "numeric"),
     "synthesis": EntityPathPolicy(Path("entities/synthesis"), "numeric"),
     "report": EntityPathPolicy(Path("entities/reports"), "numeric"),

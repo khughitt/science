@@ -12,9 +12,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from science_tool.graph.identity_table import build_identity_table
+from science_tool.graph.storage_adapters.aggregate import MULTI_TYPE_AGGREGATE_ROOT_KEYS
 
 if TYPE_CHECKING:
     from science_tool.graph.sources import ProjectSources
@@ -168,7 +170,21 @@ def classify_aggregate_rows(
             self_sourced = source_path in (None, "") or source_path == agg_path
             has_pei = meta is not None and meta.primary_external_id is not None
             inbound_count = inbound.get(canonical_id, 0)
-            bucket, evidence = _bucket(kind, source_path, has_real_owner, self_sourced, has_pei, inbound_count)
+            # A single-type aggregate (doc/<plural>/<plural>.{yaml,json}) is, by
+            # construction, a list of coined-here owner entities of ONE kind — not a
+            # mixed bag needing the entities.yaml concept-vs-tag heuristics. Each row
+            # promotes to an owner file (COINED), or is a SHADOW if a real owner
+            # already exists. (§B5 single-type retirement.)
+            is_single_type = agg_path is not None and Path(agg_path).name not in MULTI_TYPE_AGGREGATE_ROOT_KEYS
+            if is_single_type:
+                bucket = AggregateBucket.SHADOW if has_real_owner else AggregateBucket.COINED
+                evidence = (
+                    "single-type aggregate row; a non-aggregate owner of this id exists -> shadow"
+                    if has_real_owner
+                    else "single-type aggregate row (coined-here owner of one kind) -> coined"
+                )
+            else:
+                bucket, evidence = _bucket(kind, source_path, has_real_owner, self_sourced, has_pei, inbound_count)
             triaged.append(
                 AggregateRowTriage(
                     canonical_id, kind, source_path, has_real_owner, bucket, evidence, agg_path, ref_line

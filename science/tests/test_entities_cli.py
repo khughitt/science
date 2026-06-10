@@ -1312,10 +1312,12 @@ def test_entity_create_newly_added_kind_uses_generic_scaffold() -> None:
         seed_project(root)
         result = runner.invoke(main, ["entity", "create", "observation", "An Observation"])
         assert result.exit_code == 0, result.output
-        path = Path("entities/observations/0001-an-observation.md")
+        # observation is a slug identity kind (descriptive ids like
+        # observation:swan-stage-shift), so the generic scaffold names it by slug.
+        path = Path("entities/observations/an-observation.md")
         assert path.is_file()
         fm = yaml.safe_load(path.read_text().split("---")[1])
-        assert fm["id"] == "observation:0001-an-observation"
+        assert fm["id"] == "observation:an-observation"
         assert fm["type"] == "observation"
         assert {"title", "status", "created", "updated"} <= set(fm)
 

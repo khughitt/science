@@ -324,7 +324,7 @@ def entities_triage_aggregate_command(
     migrate_curie_refs: bool,
     apply_changes: bool,
 ) -> None:
-    """Triage (and, with bucket flags, retire) multi-type aggregate (entities.yaml/terms.yaml) rows (§B5)."""
+    """Triage (and, with bucket flags, retire) aggregate rows — multi-type (entities.yaml/terms.yaml) and single-type (doc/<plural>/<plural>.{yaml,json}, e.g. observations.yaml) (§B5)."""
     from collections import Counter
 
     from science_tool.bibliography import load_bib_entries
