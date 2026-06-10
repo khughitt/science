@@ -329,12 +329,19 @@ def entities_triage_aggregate_command(
 
     from science_tool.bibliography import load_bib_entries
     from science_tool.graph.aggregate_retire import apply_retirement, plan_retirement
-    from science_tool.graph.aggregate_triage import classify_aggregate_rows
+    from science_tool.graph.aggregate_triage import classify_aggregate_rows, inbound_reference_counts
     from science_tool.graph.decision_log import DecisionLogIndex, parse_decision_log
     from science_tool.graph.sources import load_project_sources
 
     sources = load_project_sources(project_root, include_commons=False, strict_core_schema=False, strict_identity=False)
-    rows = classify_aggregate_rows(sources)
+    # The reference surface must be commons-INCLUSIVE: a commons entity can reference
+    # a project-owned id, and deleting that local owner would dangle the commons ref.
+    # Ownership/bucketing stays on the commons-exclusive `sources` above so commons
+    # ownership does not perturb shadow/coined classification (design §B5).
+    ref_sources = load_project_sources(
+        project_root, include_commons=True, strict_core_schema=False, strict_identity=False
+    )
+    rows = classify_aggregate_rows(sources, inbound_ref_counts=inbound_reference_counts(ref_sources))
     any_bucket = (
         promote_coined
         or delete_cruft

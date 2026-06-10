@@ -65,6 +65,28 @@ def test_cruft_deletes_only_when_enabled(tmp_path: Path) -> None:
     assert [p.triage.canonical_id for p in on.delete] == ["concept:treatment-benefit"]
 
 
+def test_referenced_migration_row_is_not_cruft_deleted(tmp_path: Path) -> None:
+    # A live entity references concept:referenced; deleting it would dangle that link.
+    # delete_cruft must skip it (REFERENCED_ORPHAN) while still deleting the orphan.
+    d = tmp_path / "entities" / "datasets"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "referrer.md").write_text(
+        '---\nid: "dataset:referrer"\ntype: "dataset"\ntitle: "referrer"\n'
+        'origin: "external"\naccess:\n  level: "public"\n  verified: false\n'
+        "related:\n  - concept:referenced\n---\n",
+        encoding="utf-8",
+    )
+    _write_entities(tmp_path, [_cruft("concept:referenced", "concept"), _cruft("concept:orphan", "concept")])
+    by_id = {t.canonical_id: t for t in classify_aggregate_rows(_load(tmp_path))}
+    assert by_id["concept:referenced"].bucket is AggregateBucket.REFERENCED_ORPHAN
+    assert by_id["concept:orphan"].bucket is AggregateBucket.CRUFT
+
+    plan = _plan(tmp_path, promote_coined=False, delete_cruft=True, delete_shadow=False)
+    deleted = {p.triage.canonical_id for p in plan.delete}
+    assert "concept:orphan" in deleted
+    assert "concept:referenced" not in deleted  # protected from deletion
+
+
 def test_terms_yaml_cruft_rows_are_planned(tmp_path: Path) -> None:
     # Task 4: terms.yaml is now inside the firewall. A cruft-looking row (migration:audit
     # source_path) in terms.yaml must be planned for deletion when delete_cruft=True.

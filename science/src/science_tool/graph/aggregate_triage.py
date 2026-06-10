@@ -27,8 +27,53 @@ class AggregateBucket(str, Enum):
     EXTERNAL_REF = "external-ref"
     CURIE_EXTERNAL_REF = "curie-external-ref"
     CRUFT = "cruft"
+    REFERENCED_ORPHAN = "referenced-orphan"
     QUESTION_DEFERRED = "question-deferred"
     AMBIGUOUS = "ambiguous"
+
+
+# Mirrors graph.health._IDENTITY_REFERENCE_FIELDS — the structural reference
+# surface whose dangling targets the validator reports as errors. Kept local so
+# this low-level classifier does not import the heavy `health` module (which sits
+# above it in the dependency order). Keep the two lists in sync.
+_REFERENCE_FIELDS = ("related", "commits_to", "source_refs", "evidence_refs", "same_as", "blocked_by", "consumed_by")
+
+
+def _reference_strings(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, (list, tuple, set)):
+        return [item for item in value if isinstance(item, str)]
+    return []
+
+
+def inbound_reference_counts(sources: "ProjectSources") -> dict[str, int]:
+    """Count distinct entities that structurally reference each id.
+
+    Walks every owner entity's reference-bearing frontmatter fields (the same
+    surface whose dangling targets the validator flags) and tallies, per target
+    id, how many distinct entities point at it. Referenced tokens are resolved
+    through `manual_aliases` so a referrer using a pre-migration id still counts
+    toward the renamed canonical id. Used to protect structurally-referenced
+    migration-audit rows from cruft deletion: deleting such a row would leave a
+    real `related:`/`source_refs:` link dangling.
+
+    Pass a commons-INCLUSIVE `sources` to capture cross-store referrers: a commons
+    entity can reference a project-owned id (e.g. a commons topic's `related:`
+    pointing at a locally-owned topic), and deleting that local owner would dangle
+    the commons reference. The caller controls the reference surface by choosing
+    how it loads `sources` here, independently of the ownership/bucketing surface.
+    """
+    aliases = sources.manual_aliases
+    referrers: dict[str, set[str]] = {}
+    for entity in sources.entities:
+        for field in _REFERENCE_FIELDS:
+            for raw in _reference_strings(getattr(entity, field, None)):
+                target = aliases.get(raw, raw)
+                referrers.setdefault(target, set()).add(entity.file_path)
+                if target != raw:
+                    referrers.setdefault(raw, set()).add(entity.file_path)
+    return {target: len(paths) for target, paths in referrers.items()}
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,11 +102,22 @@ def _bucket(
     has_real_owner: bool,
     self_sourced: bool,
     has_primary_external_id: bool,
+    inbound_ref_count: int = 0,
 ) -> tuple[AggregateBucket, str]:
     if has_real_owner:
         return AggregateBucket.SHADOW, "a non-aggregate owner of this id exists -> shadow"
     if source_path is not None and source_path.startswith("migration:"):
-        return AggregateBucket.CRUFT, f"source_path {source_path!r} is a migration artifact -> cruft"
+        # A migration artifact is only safe to delete if nothing structurally
+        # references it. When live entities point at the id (and no real owner
+        # exists to absorb them), deleting the row would dangle those references —
+        # route it to REFERENCED_ORPHAN for resolution (promote to an owner, or
+        # clean the stale refs) instead of silently deleting.
+        if inbound_ref_count > 0:
+            return (
+                AggregateBucket.REFERENCED_ORPHAN,
+                f"migration artifact with {inbound_ref_count} live referrer(s) -> resolve, do not delete",
+            )
+        return AggregateBucket.CRUFT, f"source_path {source_path!r} is a migration artifact, no referrers -> cruft"
     if kind == "decision" and source_path == "core/decisions.md":
         return AggregateBucket.DECISION_LOG, "decision sourced from core/decisions.md -> decision-log"
     if kind == "article" or (source_path is not None and source_path.endswith(".bib")):
@@ -78,10 +134,22 @@ def _bucket(
     return AggregateBucket.AMBIGUOUS, f"{kind} without primary_external_id -> requires human identity decision"
 
 
-def classify_aggregate_rows(sources: "ProjectSources") -> list[AggregateRowTriage]:
-    """Bucket every aggregate owner row, sorted by (bucket, canonical_id)."""
+def classify_aggregate_rows(
+    sources: "ProjectSources",
+    *,
+    inbound_ref_counts: dict[str, int] | None = None,
+) -> list[AggregateRowTriage]:
+    """Bucket every aggregate owner row, sorted by (bucket, canonical_id).
+
+    `inbound_ref_counts` lets the caller supply the reference surface separately
+    from the ownership surface — e.g. a commons-inclusive index that sees cross-
+    store referrers, while `sources` stays commons-exclusive so commons ownership
+    does not perturb shadow/coined bucketing. When omitted, the index is derived
+    from `sources` itself (sufficient for self-contained projects and tests).
+    """
     table = build_identity_table(sources)
     meta_by_ref = {(m.path, m.line): m for m in sources.aggregate_rows}
+    inbound = inbound_ref_counts if inbound_ref_counts is not None else inbound_reference_counts(sources)
 
     triaged: list[AggregateRowTriage] = []
     for (_scope, canonical_id), rows in table.owners().items():
@@ -99,7 +167,8 @@ def classify_aggregate_rows(sources: "ProjectSources") -> list[AggregateRowTriag
             # Absent OR empty source_path counts as self-sourced (design §5.2).
             self_sourced = source_path in (None, "") or source_path == agg_path
             has_pei = meta is not None and meta.primary_external_id is not None
-            bucket, evidence = _bucket(kind, source_path, has_real_owner, self_sourced, has_pei)
+            inbound_count = inbound.get(canonical_id, 0)
+            bucket, evidence = _bucket(kind, source_path, has_real_owner, self_sourced, has_pei, inbound_count)
             triaged.append(
                 AggregateRowTriage(
                     canonical_id, kind, source_path, has_real_owner, bucket, evidence, agg_path, ref_line
