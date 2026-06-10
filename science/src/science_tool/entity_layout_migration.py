@@ -419,11 +419,26 @@ def plan_migration(project_root: Path) -> MigrationPlan:
     _plan_singletons(project_root, plan)
 
     entities = discover_legacy_entities(project_root)
-    # Singleton-kind files (research-question, claim-registry) are relocated by
+    # Singleton files (research-question, claim-registry) are relocated by
     # _plan_singletons via explicit paths — never numbered or frontmatter-synthesized
     # here. They also have no status vocabulary, so synthesize_frontmatter would
     # KeyError on them. Exclude them from the move-planning set entirely.
-    movable = [e for e in entities if resolve_path_policy(e.kind, project_root=project_root).strategy != "singleton"]
+    #
+    # Exclude by PATH as well as by kind-strategy: a file physically at a singleton
+    # legacy path (e.g. specs/research-question.md) IS that singleton, even if its
+    # frontmatter declares a non-singleton kind (a project-local `rq:` id-prefix
+    # whose registered kind is numeric). Without the path guard such a file is BOTH
+    # numbered here AND claimed by _plan_singletons → the same source is git-mv'd
+    # twice and --apply aborts with "bad source" on the second move. The kind-based
+    # filter alone misses it because resolve_path_policy(<local numeric kind>) is not
+    # "singleton".
+    singleton_sources = {s.old_rel_path for s in plan.singletons}
+    movable = [
+        e
+        for e in entities
+        if e.rel_path not in singleton_sources
+        and resolve_path_policy(e.kind, project_root=project_root).strategy != "singleton"
+    ]
     # Synthesize complete frontmatter BEFORE planning so created/title/slug are
     # correct even for prose-header (frontmatterless) files.
     normalized: dict[str, dict] = {
@@ -627,6 +642,20 @@ def _detect_collisions(plan: MigrationPlan) -> None:
     by_path: dict[str, list[str]] = {}
     by_id: dict[str, list[str]] = {}
     by_kind_number: dict[tuple[str, str], list[str]] = {}
+    # Same-SOURCE guard: every old_rel_path must be claimed by exactly one move or
+    # singleton. by_path/by_id only catch destination clashes, so a file claimed by
+    # both a numbered move and a singleton (different destinations) would slip
+    # through here and only surface as a "bad source" git-mv failure mid --apply
+    # (the second mv runs after the first already moved the source away). Detecting
+    # it in the dry-run keeps the gate honest: a clean plan never crashes on apply.
+    by_source: dict[str, list[str]] = {}
+    for move in plan.moves:
+        by_source.setdefault(move.old_rel_path, []).append(move.new_rel_path)
+    for singleton in plan.singletons:
+        by_source.setdefault(singleton.old_rel_path, []).append(singleton.new_rel_path)
+    for source, targets in sorted(by_source.items()):
+        if len(targets) > 1:
+            plan.collisions.append({"kind": "source", "source": source, "targets": sorted(targets)})
     for move in plan.moves:
         by_path.setdefault(move.new_rel_path, []).append(move.old_rel_path)
         by_id.setdefault(move.new_id, []).append(move.old_rel_path)
