@@ -133,17 +133,26 @@ class DecisionOwner:
     body: str
 
 
-def render_owner_file(section: DecisionSection, *, promoted_from: str) -> str:
-    """Render one promoted decision owner: frontmatter + opaque body."""
+def render_owner_file(section: DecisionSection, *, promoted_from: str, today: str) -> str:
+    """Render one promoted decision owner: conformant frontmatter + opaque body.
+
+    `status`/`created`/`updated` are always emitted so the owner satisfies
+    entity_conformance._REQUIRED_FRONTMATTER. The log's parsed `Status:`/`Date:`
+    are authoritative when present; otherwise fall back to the decision default
+    status ("active", per entities._DEFAULT_STATUS) and the run date `today`.
+    The informational `date` field is preserved when the log carried one.
+    """
+    created = section.date or today
     fm: dict[str, object] = {
         "id": section.canonical_id,
         "type": "decision",
         "title": section.title,
+        "status": section.status or "active",
+        "created": created,
+        "updated": created,
     }
     if section.date is not None:
         fm["date"] = section.date
-    if section.status is not None:
-        fm["status"] = section.status
     fm["source_path"] = DECISIONS_REL
     fm["promoted_from"] = promoted_from
     front = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True)

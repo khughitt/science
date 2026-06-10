@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import date
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,7 +20,7 @@ from typing import TYPE_CHECKING
 import yaml
 
 from science_tool.datapackage_promote import _is_safe_slug
-from science_tool.entities import EntityCommandError, local_part_conforms, resolve_path_policy
+from science_tool.entities import EntityCommandError, default_status, local_part_conforms, resolve_path_policy
 from science_tool.graph.aggregate_triage import AggregateBucket, AggregateRowTriage
 from science_tool.graph.decision_log import DecisionLogIndex, render_owner_file
 from science_tool.graph.storage_adapters.aggregate import MULTI_TYPE_AGGREGATE_ROOT_KEYS, multi_type_root_key
@@ -225,17 +226,27 @@ def _owner_text(
     description: object,
     profile: object,
     *,
+    status: str,
+    created: str,
+    updated: str,
     promoted_from: str,
 ) -> str:
-    """Render an id-preserving owner file.
+    """Render an id-preserving, conformant owner file.
 
     Identity (`canonical_id`/`kind`) comes from the compiled model (the caller
     passes the triage values), not the raw aggregate row — the two multi-type
     files differ (entities.yaml: explicit canonical_id/kind; terms.yaml: `id` +
     inferred kind). A non-empty string `description` becomes the owner body (the
     §B5 "line of definition"); anything else falls back to the stub body.
+
+    `status`/`created`/`updated` are stamped by the caller so the promoted file
+    satisfies entity_conformance._REQUIRED_FRONTMATTER (a promoted owner is a
+    real entity, not a half-filled stub). The aggregate rows carry none of these,
+    so the caller resolves them from the kind's default status and the run date.
     """
-    fm: dict[str, object] = {"id": canonical_id, "type": kind, "title": title}
+    fm: dict[str, object] = {"id": canonical_id, "type": kind, "title": title, "status": status}
+    fm["created"] = created
+    fm["updated"] = updated
     if isinstance(profile, str) and profile:
         fm["profile"] = profile
     fm["promoted_from"] = promoted_from
@@ -259,8 +270,12 @@ def apply_retirement(
     *,
     dry_run: bool,
     decision_index: DecisionLogIndex | None = None,
+    today: date | None = None,
 ) -> RetirementReport:
     idx = decision_index if decision_index is not None else DecisionLogIndex({})
+    # Promoted owners are stamped created/updated with the run date (injectable for
+    # tests, mirroring create_entity). The aggregate rows carry no dates of their own.
+    stamp = (today or date.today()).isoformat()
     promoted: list[str] = []
     deleted: list[str] = []
     rejected: list[tuple[str, str]] = [(t.canonical_id, reason) for t, reason in plan.rejected]
@@ -290,6 +305,14 @@ def apply_retirement(
             else:
                 skipped.append((pr.triage.canonical_id, "target exists (foreign owner)"))
             continue
+        # Resolve the kind's default status so the promoted owner is conformant.
+        # An unknown kind (no built-in or manifest default) is rejected, not
+        # silently stamped — fail early rather than mint a bad entity.
+        try:
+            status = default_status(pr.triage.kind, project_root=project_root)
+        except KeyError:
+            rejected.append((pr.triage.canonical_id, f"no default status for kind {pr.triage.kind!r}"))
+            continue
         if not dry_run:
             target.parent.mkdir(parents=True, exist_ok=True)
             if pr.triage.kind == "decision":
@@ -298,7 +321,7 @@ def apply_retirement(
                     # Planner guaranteed a hit; be explicit rather than write a bad owner.
                     rejected.append((pr.triage.canonical_id, "decision section missing at apply time"))
                     continue
-                text = render_owner_file(section, promoted_from=pr.source_path)
+                text = render_owner_file(section, promoted_from=pr.source_path, today=stamp)
             else:
                 text = _owner_text(
                     pr.triage.canonical_id,
@@ -306,6 +329,9 @@ def apply_retirement(
                     title,
                     entry.get("description"),
                     entry.get("profile"),
+                    status=status,
+                    created=stamp,
+                    updated=stamp,
                     promoted_from=pr.source_path,
                 )
             target.write_text(text, encoding="utf-8")

@@ -88,7 +88,9 @@ def test_generate_decisions_write(tmp_path: Path):
     d.mkdir(parents=True)
     (d / "D1.md").write_text(
         render_owner_file(
-            DecisionSection("decision:D1", "D1", "First", "2026-01-01", "active", "Why.\n"), promoted_from="x"
+            DecisionSection("decision:D1", "D1", "First", "2026-01-01", "active", "Why.\n"),
+            promoted_from="x",
+            today="2026-06-09",
         ),
         encoding="utf-8",
     )
@@ -107,7 +109,9 @@ def test_generate_decisions_dry_run_does_not_write(tmp_path: Path):
     d = tmp_path / "entities" / "decision"
     d.mkdir(parents=True)
     (d / "D1.md").write_text(
-        render_owner_file(DecisionSection("decision:D1", "D1", "First", None, None, "Why.\n"), promoted_from="x"),
+        render_owner_file(
+            DecisionSection("decision:D1", "D1", "First", None, None, "Why.\n"), promoted_from="x", today="2026-06-09"
+        ),
         encoding="utf-8",
     )
     res = CliRunner().invoke(main, ["entities", "generate-decisions", "--project-root", str(tmp_path)])
