@@ -80,6 +80,17 @@ out of scope (separate plan, gated on this + the `dataset-evidence-flow` facet).
 **Acceptance:** layout_version 3 confirmed; the edge-as-node identity decision is written down; every
 [v3-API] task below has a concrete identity contract to build against.
 
+> **✅ Resolved 2026-06-10.** (1) v3 is in place — the framework code and fixtures use
+> `layout_version: 3` (gate `2ffb182f`; migration landed 2026-06-09). (2) **Edge-as-node identity = NO
+> SHIM.** A relational proposition's own canonical IRI is its reified edge-node / belief-target IRI
+> directly: `_entity_uri("proposition:<id>")` → `PROJECT_NS["proposition/<id>"]` is deterministic from
+> the canonical id (`materialize.py:1083`), and `_add_evidence_line_relations` (`materialize.py:560`)
+> already emits `cito:supports`/`cito:disputes` at that exact target IRI, with belief aggregating per
+> target. The content-addressed `bears-on-edge/<sha256>` in `freshness.py:62` is a separate `bears_on`
+> (evidence-derivation) mechanism and does **not** force propositions to be content-addressed. **All
+> [v3-API] tasks (3b, 5b, 5f, 6) use the proposition canonical IRI as the edge-node IRI; no
+> `realized_as` shim is introduced.** Recorded in design §11 risk 4.
+
 ### Task 0b: Reconcile `IdentificationStrength` before schema binding
 
 **Files:** investigation + note in this plan and, if needed, the design §2.3 before Task 1b starts.
@@ -104,6 +115,20 @@ implementation-time guess.
 
 **Acceptance:** one canonical `IdentificationStrength` contract is recorded; Task 1b/2b use that exact
 contract; no contradictory tests remain.
+
+> **✅ Resolved 2026-06-10: MODEL-CURRENT contract.** Canonical `IdentificationStrength` = the shipped
+> `science_model.reasoning.IdentificationStrength` enum: `none | structural | observational |
+> longitudinal | interventional | analogical` (6 values). It is already consumed by
+> `PropositionMetadata`, the belief engine, and the evidence-line checks (e.g.
+> `test_reference_basis_with_identification_strength`), so binding to it reuses one vocabulary; retiring
+> `none`/`analogical` would break shipped, used code and coin the parallel system the umbrella forbids.
+> **`none`** is a legal authored value meaning *"no claimed identification"* (not positive leverage);
+> **`analogical`** is off-continuum (record the analogy gap via `proxy_directness` /
+> `measurement_model`). **Task 1b** types the field as the enum verbatim. **Task 2b** asserts: all 6
+> enum values (incl. `none`/`analogical`) are accepted; any value *outside* the enum is ERROR
+> `proposition.identification.canonical`; absent = unspecified (no error). Legacy DAG `identification:
+> none` maps to the enum `none`. The stale 4-value list in `docs/proposition-and-evidence-model.md` and
+> design §2.3 have been aligned to the enum.
 
 ---
 

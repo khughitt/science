@@ -110,12 +110,16 @@ Do not auto-upgrade a proposition to `mechanistic_narrative` just because the pr
 
 ### `identification_strength`
 
-`identification_strength` records how much leverage the evidence line or proposition has:
+`identification_strength` records how much leverage the evidence line or proposition has. The
+canonical values are the `science_model.reasoning.IdentificationStrength` enum:
 
+- `none` — no claimed identification (not positive leverage)
+- `structural`
 - `observational`
 - `longitudinal`
 - `interventional`
-- `structural`
+- `analogical` — off-continuum: interventional/longitudinal in a model system but extrapolated to the
+  target only by analogy (record the gap via `proxy_directness` / `measurement_model`)
 
 This is not a confidence score.
 It answers "what kind of identification situation is this?" rather than "how much do we believe it?"
