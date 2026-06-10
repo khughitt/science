@@ -31,6 +31,25 @@ class EntityKind(BaseModel):
     structured_source_root_key: str | None = None
 
 
+class CoreStructuredSource(BaseModel):
+    """Attach a structured-source data file to an existing CORE entity kind.
+
+    Unlike `EntityKind.structured_source` (which declares a project-LOCAL kind),
+    this augments a core kind the project does not own: its rows are generated
+    into a single-type YAML file under knowledge/sources/<profile>/ and load as
+    owners of that core kind, WITHOUT registering/shadowing the core kind. Use
+    for generated bulk core entities (e.g. `finding` rows emitted by an audit)
+    that would otherwise have to ride the multi-type aggregate v3 retirement
+    forbids. `structured_source` is the filename relative to the profile sources
+    dir; `structured_source_root_key` is the YAML root key holding the row list
+    (defaults to `kind`).
+    """
+
+    kind: str
+    structured_source: str
+    structured_source_root_key: str | None = None
+
+
 class RelationEndpointPair(BaseModel):
     """One allowed source-kind / target-kind pair for a relation kind."""
 
@@ -58,3 +77,4 @@ class ProfileManifest(BaseModel):
     entity_kinds: list[EntityKind]
     relation_kinds: list[RelationKind]
     strictness: Literal["core", "curated", "typed-extension"]
+    core_structured_sources: list[CoreStructuredSource] = Field(default_factory=list)

@@ -935,22 +935,35 @@ def _load_structured_source_records(
     ontology_catalogs: list[OntologyCatalog],
     typed_record_cache: _TypedRecordCache | None = None,
 ) -> list[tuple[Entity, SourceRef]]:
-    """Load owner entities for project-local kinds that declare a `structured_source`.
+    """Load owner entities from profile-declared structured-source data files.
 
     Generalizes the hardcoded model/parameter loaders (_load_legacy_records) to any
-    profile-local kind whose rows live in a single-type YAML data file under
-    knowledge/sources/<profile>/. Each row becomes an owner entity of that kind,
-    so generated structural kinds (e.g. limit-relation, morphism-edge) need not ride
-    the multi-type entities.yaml/terms.yaml aggregate that v3 retirement forbids.
+    kind whose rows live in a single-type YAML data file under
+    knowledge/sources/<profile>/. Two declaration sites feed this: project-LOCAL
+    kinds with `structured_source` set, and CORE kinds the project augments via
+    `core_structured_sources`. Each row becomes an owner entity of that kind, so
+    generated kinds (e.g. local limit-relation/morphism-edge, or core `finding`
+    rows from an audit) need not ride the multi-type entities.yaml/terms.yaml
+    aggregate that v3 retirement forbids.
     """
     out: list[tuple[Entity, SourceRef]] = []
     if local_profile_manifest is None:
         return out
-    for kind_decl in local_profile_manifest.entity_kinds:
-        source_file = kind_decl.structured_source
-        if not source_file:
-            continue
-        root_key = kind_decl.structured_source_root_key or kind_decl.name
+    # (kind_name, source_file, root_key) specs from two sources: project-LOCAL
+    # kinds that declare their own structured_source, and CORE kinds the project
+    # augments via core_structured_sources (no registration/shadowing needed --
+    # the core kind is already in the registry).
+    specs: list[tuple[str, str, str | None]] = [
+        (kind_decl.name, kind_decl.structured_source, kind_decl.structured_source_root_key)
+        for kind_decl in local_profile_manifest.entity_kinds
+        if kind_decl.structured_source
+    ]
+    specs.extend(
+        (css.kind, css.structured_source, css.structured_source_root_key)
+        for css in local_profile_manifest.core_structured_sources
+    )
+    for kind_name, source_file, root_key_override in specs:
+        root_key = root_key_override or kind_name
         default_path = f"knowledge/sources/{local_profile}/{source_file}"
         records = _load_typed_records(
             project_root,
@@ -960,13 +973,13 @@ def _load_structured_source_records(
             model=StructuredEntitySource,
             cache=typed_record_cache,
         )
-        schema = registry.resolve(kind_decl.name)
+        schema = registry.resolve(kind_name)
         for record in records:
             raw: dict[str, Any] = {
                 "id": record.canonical_id,
                 "canonical_id": record.canonical_id,
-                "kind": kind_decl.name,
-                "type": kind_decl.name,
+                "kind": kind_name,
+                "type": kind_name,
                 "title": record.title or record.canonical_id,
                 "profile": record.profile or local_profile,
                 "file_path": record.source_path or default_path,
@@ -979,7 +992,7 @@ def _load_structured_source_records(
                 raw["domain"] = record.domain
             _enrich_raw(
                 raw,
-                kind=kind_decl.name,
+                kind=kind_name,
                 project_slug=project_slug,
                 local_profile=local_profile,
                 active_kinds=active_kinds,

@@ -6,7 +6,12 @@ import yaml
 
 from science_model.profiles.core import CORE_PROFILE
 from science_model.profiles.local import LOCAL_PROFILE
-from science_model.profiles.schema import EntityKind, ProfileManifest, RelationKind
+from science_model.profiles.schema import (
+    CoreStructuredSource,
+    EntityKind,
+    ProfileManifest,
+    RelationKind,
+)
 
 _DEFAULT_MANIFEST_PATH = Path.home() / ".config" / "science" / "registry" / "manifest.yaml"
 
@@ -31,6 +36,7 @@ def load_shared_profile(
 __all__ = [
     "CORE_PROFILE",
     "LOCAL_PROFILE",
+    "CoreStructuredSource",
     "EntityKind",
     "ProfileManifest",
     "RelationKind",
