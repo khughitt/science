@@ -160,6 +160,32 @@ def test_plan_ambiguous_stem_alias_not_silently_mis_mapped(tmp_path: Path) -> No
     assert any(c.get("kind") == "alias" and c.get("alias") == "interpretation:foo" for c in plan.collisions)
 
 
+def test_plan_no_stem_alias_for_entities_with_old_id(tmp_path: Path) -> None:
+    # Two entities that carry unique real `old_id`s but whose files share a generic
+    # filename stem (the probe-dir convention: every writeup is `interpretation.md`).
+    # The filename-stem alias exists only to catch references to *frontmatterless*
+    # files by their old stem; an entity with an explicit `id:` is referenced by that
+    # id, so no stem alias should be synthesized — and the two would otherwise collide
+    # on a shared, date-scoped alias (`interpretation:2026-05-21-interpretation`).
+    _write(
+        tmp_path,
+        "doc/probes/2026-05-21-x/interpretation.md",
+        '---\nid: "interpretation:2026-05-21-x"\ntype: interpretation\ncreated: "2026-05-21"\n---\n',
+    )
+    _write(
+        tmp_path,
+        "doc/probes/2026-05-21-y/interpretation.md",
+        '---\nid: "interpretation:2026-05-21-y"\ntype: interpretation\ncreated: "2026-05-21"\n---\n',
+    )
+    plan = plan_migration(tmp_path)
+    # No spurious stem alias, and therefore no alias collision.
+    assert "interpretation:2026-05-21-interpretation" not in plan.id_map
+    assert not any(c.get("kind") == "alias" for c in plan.collisions)
+    # The real old_ids still map.
+    assert plan.id_map["interpretation:2026-05-21-x"].startswith("interpretation:")
+    assert plan.id_map["interpretation:2026-05-21-y"].startswith("interpretation:")
+
+
 def test_plan_detects_duplicate_target_collision(tmp_path: Path) -> None:
     # Two papers with the same citekey from the two legacy paper homes.
     _write(tmp_path, "doc/papers/Adams2025.md", '---\nid: "paper:Adams2025"\ntype: paper\n---\n')
@@ -373,6 +399,32 @@ def test_migrate_apply_moves_and_rewrites(tmp_path: Path) -> None:
     assert "hypothesis:h01-alpha" not in q
     manifest = yaml.safe_load((tmp_path / "science.yaml").read_text())
     assert manifest["layout_version"] == 3
+
+
+def test_migrate_apply_blocks_on_untracked_source(tmp_path: Path) -> None:
+    """An untracked move source must fail the pre-mutation gate (git mv needs a
+    tracked source) BEFORE any mutation — never leave the tree half-migrated."""
+    import pytest
+
+    _write(tmp_path, "science.yaml", "name: t\nlayout_version: 2\n")
+    _write(
+        tmp_path,
+        "specs/hypotheses/h01-alpha.md",
+        '---\nid: "hypothesis:h01-alpha"\ntype: hypothesis\ncreated: "2026-01-01"\ntitle: Alpha\nstatus: proposed\nupdated: "2026-01-01"\n---\nbody\n',
+    )
+    _git_init(tmp_path)
+    # A second entity written AFTER the seed commit → untracked.
+    _write(
+        tmp_path,
+        "doc/questions/q01-beta.md",
+        '---\nid: "question:q01-beta"\ntype: question\ncreated: "2026-01-02"\ntitle: Beta\nstatus: active\nupdated: "2026-01-02"\n---\nbody\n',
+    )
+    with pytest.raises(ValueError, match="untracked entity files block --apply"):
+        migrate_layout(tmp_path, apply=True)
+    # Pre-mutation: nothing moved, layout_version untouched.
+    assert not (tmp_path / "entities").exists()
+    assert (tmp_path / "specs/hypotheses/h01-alpha.md").is_file()
+    assert yaml.safe_load((tmp_path / "science.yaml").read_text())["layout_version"] == 2
 
 
 def test_migrate_apply_rewrites_tasks_inplace(tmp_path: Path) -> None:
@@ -689,6 +741,27 @@ def test_plan_no_shortform_alias_for_non_shortform_topic(tmp_path: Path) -> None
     )
     plan = plan_migration(tmp_path)
     assert "topic:foo" not in plan.id_map, f"spurious shortform alias 'topic:foo' must not appear; id_map={plan.id_map}"
+
+
+def test_plan_no_shortform_alias_for_date_prefixed_id(tmp_path: Path) -> None:
+    """FIX 1 guard: a date-prefixed id (2026-06-02-foo) must NOT mint a shortform
+    alias keyed on the YEAR (discussion:2026). Two 2026-dated discussions would both
+    claim 'discussion:2026' — an ambiguous alias that silently shadows one target,
+    the latent alias-collision class this migration must never create."""
+    _write(
+        tmp_path,
+        "doc/discussions/2026-06-02-alpha.md",
+        '---\nid: "discussion:2026-06-02-alpha"\ntype: discussion\ncreated: "2026-06-02"\n---\n',
+    )
+    _write(
+        tmp_path,
+        "doc/discussions/2026-06-07-beta.md",
+        '---\nid: "discussion:2026-06-07-beta"\ntype: discussion\ncreated: "2026-06-07"\n---\n',
+    )
+    plan = plan_migration(tmp_path)
+    assert "discussion:2026" not in plan.id_map, (
+        f"date year must not become a shortform alias; id_map={plan.id_map}"
+    )
 
 
 # FIX 2: scope unresolved policing to migrated kinds ----------------------

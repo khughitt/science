@@ -567,53 +567,61 @@ def _add_move(plan: MigrationPlan, entity: "LegacyEntity", new_rel: str, new_id:
     # filename-derived alias `<kind>:<old-stem>` -> new_id so those refs rewrite
     # instead of being reported unresolved.
     #
+    # This is ONLY for files with no `old_id`: an entity that declares an explicit
+    # `id:` is referenced by that id (already mapped above), so synthesizing a
+    # filename-stem alias for it is spurious — and harmful when the stem is a
+    # generic word repeated across sibling dirs (the probe-dir convention names
+    # every writeup `interpretation.md`), which manufactures a colliding
+    # `<kind>:<stem>` alias even though each entity's real id is unique.
+    #
     # Safety rules:
     #   - A real old_id mapping always wins; setdefault ensures we never clobber it.
     #   - When TWO stem-alias entries disagree (two legacy scan roots yield the same
     #     stem under the same kind), the alias is AMBIGUOUS: remove it from id_map
     #     entirely and record a blocking collision so Task 4 reports the ref as
     #     UNRESOLVED rather than silently rewriting to the wrong target.
-    stem = Path(entity.rel_path).stem
-    if stem == kind:
-        # Bare kind-word stem (interpretation.md under doc/probes/<date>/): the
-        # plain alias `interpretation:interpretation` collides across sibling
-        # date dirs. Scope it by the date-prefixed parent dir so each is distinct.
-        parent_name = Path(entity.rel_path).parent.name
-        date_m = _DATE_PREFIX_DATE_RE.match(parent_name)
-        # No date prefix on the parent dir → plain stem; two such bare-kind-word
-        # files from non-date dirs still collide, but that is pre-existing behaviour.
-        alias_local = f"{date_m.group(1)}-{stem}" if date_m else stem
-    else:
-        alias_local = stem
-    stem_alias = f"{kind}:{alias_local}"
-    if stem_alias in plan.id_map:
-        # Key already present. Was it set by a prior stem alias or by a real old_id?
-        if stem_alias in plan._stem_alias_sources:
-            prior_new_id = plan._stem_alias_sources[stem_alias]
-            if prior_new_id != new_id:
-                # Two stem aliases disagree → ambiguous; remove to force UNRESOLVED.
-                plan.id_map.pop(stem_alias)
-                plan._stem_alias_sources.pop(stem_alias)
-                plan.collisions.append(
-                    {
-                        "kind": "alias",
-                        "alias": stem_alias,
-                        "sources": sorted(
-                            [
-                                entity.rel_path,
-                                # new_id is unique among plan.moves here: an equal new_id implies
-                                # the same stem_alias, which routes to the idempotent branch above
-                                # and never reaches this lookup — so this is the prior claimer.
-                                next(m.old_rel_path for m in plan.moves if m.new_id == prior_new_id),
-                            ]
-                        ),
-                    }
-                )
-            # else: same alias already maps to the same new_id (idempotent) — leave it.
-        # else: a real old_id owns this key — leave it as-is (real mapping wins).
-    else:
-        plan.id_map[stem_alias] = new_id
-        plan._stem_alias_sources[stem_alias] = new_id
+    if not entity.old_id:
+        stem = Path(entity.rel_path).stem
+        if stem == kind:
+            # Bare kind-word stem (interpretation.md under doc/probes/<date>/): the
+            # plain alias `interpretation:interpretation` collides across sibling
+            # date dirs. Scope it by the date-prefixed parent dir so each is distinct.
+            parent_name = Path(entity.rel_path).parent.name
+            date_m = _DATE_PREFIX_DATE_RE.match(parent_name)
+            # No date prefix on the parent dir → plain stem; two such bare-kind-word
+            # files from non-date dirs still collide, but that is pre-existing behaviour.
+            alias_local = f"{date_m.group(1)}-{stem}" if date_m else stem
+        else:
+            alias_local = stem
+        stem_alias = f"{kind}:{alias_local}"
+        if stem_alias in plan.id_map:
+            # Key already present. Was it set by a prior stem alias or by a real old_id?
+            if stem_alias in plan._stem_alias_sources:
+                prior_new_id = plan._stem_alias_sources[stem_alias]
+                if prior_new_id != new_id:
+                    # Two stem aliases disagree → ambiguous; remove to force UNRESOLVED.
+                    plan.id_map.pop(stem_alias)
+                    plan._stem_alias_sources.pop(stem_alias)
+                    plan.collisions.append(
+                        {
+                            "kind": "alias",
+                            "alias": stem_alias,
+                            "sources": sorted(
+                                [
+                                    entity.rel_path,
+                                    # new_id is unique among plan.moves here: an equal new_id implies
+                                    # the same stem_alias, which routes to the idempotent branch above
+                                    # and never reaches this lookup — so this is the prior claimer.
+                                    next(m.old_rel_path for m in plan.moves if m.new_id == prior_new_id),
+                                ]
+                            ),
+                        }
+                    )
+                # else: same alias already maps to the same new_id (idempotent) — leave it.
+            # else: a real old_id owns this key — leave it as-is (real mapping wins).
+        else:
+            plan.id_map[stem_alias] = new_id
+            plan._stem_alias_sources[stem_alias] = new_id
 
     # FIX 1: numeric shortform alias — prose references a numbered entity by its
     # leading token (question:01, hypothesis:h03). Renumbering changes the number,
@@ -623,10 +631,16 @@ def _add_move(plan: MigrationPlan, entity: "LegacyEntity", new_rel: str, new_id:
     new_local = new_id.split(":", 1)[1]
     new_num_match = re.match(r"^(\d{4})$|^(\d{4})-", new_local)
     if entity.old_id and ":" in entity.old_id and new_num_match:
-        new_num = new_num_match.group(1) or new_num_match.group(2)
-        old_token = entity.old_id.split(":", 1)[1].split("-", 1)[0]
-        if re.fullmatch(r"[A-Za-z]*\d+", old_token) and old_token != new_num:
-            plan.id_map.setdefault(f"{kind}:{old_token}", f"{kind}:{new_num}")
+        old_local = entity.old_id.split(":", 1)[1]
+        # A date-prefixed id (2026-06-02-foo) is NOT a shortform: its leading token
+        # is a 4-digit YEAR, not an entity number. Treating it as one mints an
+        # ambiguous alias (every 2026-dated discussion collapses to `discussion:2026`),
+        # which is the latent alias-collision class this migration must not create.
+        if not _DATE_PREFIX_DATE_RE.match(old_local):
+            new_num = new_num_match.group(1) or new_num_match.group(2)
+            old_token = old_local.split("-", 1)[0]
+            if re.fullmatch(r"[A-Za-z]*\d+", old_token) and old_token != new_num:
+                plan.id_map.setdefault(f"{kind}:{old_token}", f"{kind}:{new_num}")
 
 
 def _plan_singletons(project_root: Path, plan: MigrationPlan) -> None:
@@ -846,6 +860,23 @@ def _git_mv(project_root: Path, old_rel: str, new_rel: str) -> None:
     dest = project_root / new_rel
     dest.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "mv", old_rel, new_rel], cwd=project_root, check=True)
+
+
+def _untracked_sources(project_root: Path, rel_paths: list[str]) -> list[str]:
+    """Return the rel_paths git does not track. ``git mv`` requires a tracked
+    source, so an untracked move source would fail mid-apply and leave the tree
+    half-migrated. This lets the pre-mutation gate catch it before any mutation."""
+    if not rel_paths:
+        return []
+    proc = subprocess.run(
+        ["git", "ls-files", "-z", "--", *rel_paths],
+        cwd=project_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    tracked = {p for p in proc.stdout.split("\0") if p}
+    return sorted(rel for rel in rel_paths if rel not in tracked)
 
 
 def _render(frontmatter: dict, body: str) -> str:
@@ -1167,6 +1198,15 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
         raise ValueError(
             f"undated entities block --apply (add a **Date:** header or frontmatter "
             f"created: to each, then re-run): {undated_entities}"
+        )
+    untracked = _untracked_sources(
+        project_root,
+        [m.old_rel_path for m in plan.moves] + [s.old_rel_path for s in plan.singletons],
+    )
+    if untracked:
+        raise ValueError(
+            f"untracked entity files block --apply (git mv requires tracked sources; "
+            f"`git add` them, then re-run): {untracked}"
         )
 
     # 3+4. git mv + writes + graph validation — wrapped so ANY post-mutation failure
