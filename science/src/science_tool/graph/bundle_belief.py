@@ -9,9 +9,9 @@ from dataclasses import dataclass
 
 from rdflib import RDF, URIRef
 
-from science_model.reasoning import CompositionRule
-from .belief import BeliefMagnitude, BeliefResult, _MAG_ORDER
-from .belief_scalar import BeliefScalar
+from science_model.reasoning import CompositionRule, RESERVED_COMPOSITION_RULES
+from .belief import aggregate_belief, BeliefMagnitude, BeliefResult, collect_evidence_units, _MAG_ORDER
+from .belief_scalar import belief_scalar, BeliefScalar
 from .io import CITO_NS, SCI_NS
 
 _BUNDLE_TYPES: dict[str, URIRef] = {
@@ -123,3 +123,60 @@ def roll_up_weakest_link(members: list[MemberBelief], *, rule: CompositionRule) 
         contested_members=[m.member_uri for m in ordered if m.belief.contested],
         unresolved_members=[m.member_uri for m in ordered if m.belief.magnitude == BeliefMagnitude.SPECULATIVE],
     )
+
+
+class UnresolvedBundleError(ValueError):
+    """An authored bundle (or any mechanism) resolved to zero member propositions."""
+
+
+def belief_for_entity(knowledge, provenance, uri, *, scalar_enabled: bool):
+    """Dispatch: proposition → BeliefResult; hypothesis/mechanism → BundleBeliefResult.
+
+    Returns BeliefResult | BundleBeliefResult.
+    """
+    rule_literal = provenance.value(uri, SCI_NS.compositionRule)
+    authored_rule = CompositionRule(str(rule_literal)) if rule_literal is not None else None
+    if authored_rule in RESERVED_COMPOSITION_RULES:
+        # Defensive: the model layer already rejects these at parse; never silently fall back.
+        raise NotImplementedError(
+            f"composition_rule {authored_rule.value!r} is reserved and not implemented in v1 "
+            "(see docs/plans/2026-06-11-bundle-belief-rollup-design.md §4)."
+        )
+
+    kind = bundle_kind(knowledge, uri)
+    if kind is None:
+        if authored_rule is not None:
+            # Defense in depth: the model layer rejects composition_rule on non-bundle kinds,
+            # but a hand-authored graph could still carry one. Never silently ignore it.
+            raise ValueError(
+                f"{uri} carries composition_rule {authored_rule.value!r} but is not a bundle "
+                "(hypothesis/mechanism); composition_rule is meaningless on non-bundle entities."
+            )
+        return aggregate_belief(collect_evidence_units(knowledge, provenance, [uri]))
+
+    members = bundle_members(knowledge, uri)
+    if not members:
+        if authored_rule is not None or kind == "mechanism":
+            raise UnresolvedBundleError(
+                f"{uri} is a {kind} bundle with zero resolved member propositions "
+                "(dangling has_proposition / discusses links?); refusing to collapse to "
+                "direct-evidence belief."
+            )
+        return aggregate_belief(collect_evidence_units(knowledge, provenance, [uri]))
+
+    rule = authored_rule or _KIND_DEFAULT_RULE[kind]
+    member_beliefs: list[MemberBelief] = []
+    for member in members:
+        belief = aggregate_belief(collect_evidence_units(knowledge, provenance, [member]))
+        scalar = belief_scalar(belief) if scalar_enabled else None
+        reason = "speculative: no evidence" if belief.magnitude == BeliefMagnitude.SPECULATIVE else None
+        member_beliefs.append(
+            MemberBelief(
+                member_uri=str(member),
+                belief=belief,
+                scalar=scalar,
+                rank_key=member_rank_key(belief, scalar, str(member)),
+                reason=reason,
+            )
+        )
+    return roll_up_weakest_link(member_beliefs, rule=rule)
