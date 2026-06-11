@@ -9,7 +9,12 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
-from science_model.reasoning import SIGN_MEANINGFUL_PREDICATES, Polarity
+from science_model.reasoning import (
+    SIGN_MEANINGFUL_PREDICATES,
+    ClaimLayer,
+    IdentificationStrength,
+    Polarity,
+)
 from science_tool.entities import resolve_path_policy
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -22,6 +27,10 @@ _SIGNED_POLARITY_VALUES = frozenset(
 
 # String values of predicate entries that are sign-meaningful (derived from the model).
 _SIGN_MEANINGFUL_VALUES = frozenset(p.value for p in SIGN_MEANINGFUL_PREDICATES)
+
+# Allowed string values for claim_layer and identification_strength (derived from enums).
+_CLAIM_LAYER_VALUES = frozenset(v.value for v in ClaimLayer)
+_IDENTIFICATION_STRENGTH_VALUES = frozenset(v.value for v in IdentificationStrength)
 
 
 def _propositions(ctx: ValidateContext) -> list[tuple[Path, dict]]:
@@ -80,5 +89,48 @@ def check_polarity_predicate_aptitude(ctx: ValidateContext) -> Iterator[Result]:
                         f"polarity is {polarity_str!r} — must be 'not_applicable'"
                     ),
                     rule="proposition.polarity.aptitude",
+                    task=None,
+                )
+
+
+@Check(section="propositions", order=20)
+def check_canonical_enum_binding(ctx: ValidateContext) -> Iterator[Result]:
+    """Reject non-canonical claim_layer / identification_strength values (anti-drift).
+
+    Allowed values are derived from the ``ClaimLayer`` and ``IdentificationStrength``
+    enums so this check tracks the model automatically.  Absent fields are accepted
+    (unspecified ≠ invalid).
+    """
+    for path, fm in _propositions(ctx):
+        claim_layer = fm.get("claim_layer")
+        if claim_layer is not None:
+            claim_layer_str = str(claim_layer)
+            if claim_layer_str not in _CLAIM_LAYER_VALUES:
+                yield Result(
+                    severity=Severity.ERROR,
+                    path=path,
+                    line=None,
+                    message=(
+                        f"{path.name}: claim_layer '{claim_layer_str}' is not a canonical "
+                        f"ClaimLayer value — must be one of {sorted(_CLAIM_LAYER_VALUES)}"
+                    ),
+                    rule="proposition.claim_layer.canonical",
+                    task=None,
+                )
+
+        identification_strength = fm.get("identification_strength")
+        if identification_strength is not None:
+            id_str = str(identification_strength)
+            if id_str not in _IDENTIFICATION_STRENGTH_VALUES:
+                yield Result(
+                    severity=Severity.ERROR,
+                    path=path,
+                    line=None,
+                    message=(
+                        f"{path.name}: identification_strength '{id_str}' is not a canonical "
+                        f"IdentificationStrength value — must be one of "
+                        f"{sorted(_IDENTIFICATION_STRENGTH_VALUES)}"
+                    ),
+                    rule="proposition.identification.canonical",
                     task=None,
                 )

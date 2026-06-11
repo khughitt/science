@@ -1,4 +1,4 @@
-"""Tests for proposition structural QA checks — polarity/predicate sign-aptitude."""
+"""Tests for proposition structural QA checks — polarity/predicate sign-aptitude and canonical enum binding."""
 
 from __future__ import annotations
 
@@ -226,5 +226,97 @@ def test_no_propositions_dir_is_clean(tmp_path: Path) -> None:
     from science_tool.validate.checks.propositions import check_polarity_predicate_aptitude
 
     results = list(check_polarity_predicate_aptitude(_ctx(tmp_path)))
+
+    assert results == []
+
+
+# ---------------------------------------------------------------------------
+# Rule: proposition.claim_layer.canonical
+# ---------------------------------------------------------------------------
+
+
+def _write_proposition_with_enums(
+    root: Path,
+    slug: str,
+    claim_layer: str | None = None,
+    identification_strength: str | None = None,
+) -> Path:
+    lines = ["---", f"id: proposition:{slug}", "kind: proposition"]
+    if claim_layer is not None:
+        lines.append(f"claim_layer: {claim_layer}")
+    if identification_strength is not None:
+        lines.append(f"identification_strength: {identification_strength}")
+    lines.append("---")
+    return _write(root, f"entities/propositions/{slug}.md", "\n".join(lines) + "\n")
+
+
+def test_non_canonical_claim_layer_errors(tmp_path: Path) -> None:
+    """mechanistic_claim is NOT canonical; canonical is mechanistic_narrative."""
+    from science_tool.validate.checks.propositions import check_canonical_enum_binding
+
+    p = _write_proposition_with_enums(tmp_path, "p1", claim_layer="mechanistic_claim")
+
+    results = list(check_canonical_enum_binding(_ctx(tmp_path)))
+
+    assert len(results) == 1
+    r = results[0]
+    assert r.severity == Severity.ERROR
+    assert r.rule == "proposition.claim_layer.canonical"
+    assert r.path == p
+
+
+def test_canonical_claim_layer_is_clean(tmp_path: Path) -> None:
+    from science_tool.validate.checks.propositions import check_canonical_enum_binding
+
+    _write_proposition_with_enums(tmp_path, "p1", claim_layer="causal_effect")
+
+    results = list(check_canonical_enum_binding(_ctx(tmp_path)))
+
+    assert results == []
+
+
+def test_identification_strength_none_is_clean(tmp_path: Path) -> None:
+    """none is a canonical IdentificationStrength value — must NOT error."""
+    from science_tool.validate.checks.propositions import check_canonical_enum_binding
+
+    _write_proposition_with_enums(tmp_path, "p1", identification_strength="none")
+
+    results = list(check_canonical_enum_binding(_ctx(tmp_path)))
+
+    assert results == []
+
+
+def test_identification_strength_analogical_is_clean(tmp_path: Path) -> None:
+    """analogical is canonical — must NOT error."""
+    from science_tool.validate.checks.propositions import check_canonical_enum_binding
+
+    _write_proposition_with_enums(tmp_path, "p1", identification_strength="analogical")
+
+    results = list(check_canonical_enum_binding(_ctx(tmp_path)))
+
+    assert results == []
+
+
+def test_bogus_identification_strength_errors(tmp_path: Path) -> None:
+    from science_tool.validate.checks.propositions import check_canonical_enum_binding
+
+    p = _write_proposition_with_enums(tmp_path, "p1", identification_strength="bogus_value")
+
+    results = list(check_canonical_enum_binding(_ctx(tmp_path)))
+
+    assert len(results) == 1
+    r = results[0]
+    assert r.severity == Severity.ERROR
+    assert r.rule == "proposition.identification.canonical"
+    assert r.path == p
+
+
+def test_neither_field_set_emits_no_canonical_errors(tmp_path: Path) -> None:
+    """Absent claim_layer and identification_strength → no canonical error."""
+    from science_tool.validate.checks.propositions import check_canonical_enum_binding
+
+    _write_proposition_with_enums(tmp_path, "p1")
+
+    results = list(check_canonical_enum_binding(_ctx(tmp_path)))
 
     assert results == []
