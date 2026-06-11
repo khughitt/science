@@ -257,15 +257,17 @@ def compile_workbench(
     if isinstance(workbench, (str, Path)):
         import yaml
 
-        workbench = WorkbenchFile.model_validate(
+        wb = WorkbenchFile.model_validate(
             yaml.safe_load(Path(workbench).read_text(encoding="utf-8")) or {}
         )
+    else:
+        wb = workbench
 
     propositions: list[PropositionEntity] = []
     evidence_lines: list[EvidenceLineEntity] = []
     normalized_rows: list[WorkbenchRow] = []
 
-    for row in workbench.rows:
+    for row in wb.rows:
         prop = _proposition_for_row(row)
         _write_entity_file(prop, project_root=project_root)
         propositions.append(prop)
@@ -288,7 +290,7 @@ def compile_workbench(
     return CompileResult(
         propositions=propositions,
         evidence_lines=evidence_lines,
-        workbench=workbench.model_copy(update={"rows": normalized_rows}),
+        workbench=wb.model_copy(update={"rows": normalized_rows}),
     )
 
 
