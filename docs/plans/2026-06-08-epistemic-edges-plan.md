@@ -486,6 +486,21 @@ boundary (design §6 normative rules).
 **Acceptance:** compile is the only writer of proposition/evidence-line entities from the workbench;
 identity is entity-layer-owned; stubs normalize to references (design §5).
 
+> **✅ Resolved 2026-06-10 (user-approved): proposition/evidence-line identity = content-slug.** The
+> compiler mints DETERMINISTIC content slugs (`proposition:<subject>-<predicate>-<object>`;
+> `evidence-line:<proposition-slug>-ev<N>`), and the `proposition`/`evidence-line` path policies were
+> flipped from `numeric` to **`slug`** in `_BUILTIN_MARKDOWN_POLICIES`. Rationale: numeric
+> auto-increment is filesystem-positional (non-deterministic w.r.t. content; ids shift on row
+> insertion), which breaks the idempotent fixpoint (5c/5d) and the stable edge-node IRI that belief +
+> cross-refs key on (Task 0). Content slugs are deterministic and stable across edits. Blast radius:
+> only `test_entities.py` numeric assertions (updated to the slug contract) — there are **no** committed
+> `entities/propositions/` files. A slug-minted local-part passes `local_part_conforms` (test added), so
+> the 5d CI gate / 6 e2e are unblocked.
+> **Deferred to the MM30 migration plan:** typed `dataset_usage` carry — `EvidenceStub.dataset_usage` is
+> a marker string used only for the staging decision; it is not yet mapped into the typed
+> `list[DatasetUsage]` on the evidence-line (would require an explicit `role`). Belief-eligible empirical
+> lines therefore need their `dataset_usage` authored by the MM30 migration.
+
 ### Task 5c: regenerate canonical workbench + idempotence
 
 **Files:** `science/src/science_tool/dag/workbench.py` (`serialize_canonical(patch) -> str`); test `science/tests/test_workbench_idempotent.py` *(new)*
