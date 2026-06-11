@@ -145,6 +145,20 @@ gate's failure never touches the report.
   side-outputs of the transform — they count, but they cannot fail a build and govern nothing, so
   they do not discharge axis-1 QA for that table.
 
+## Reference implementation
+
+The `science-qa` distribution (`science/qa/`, command `python -m science_qa run`) executes this
+exact `qa:` schema — `unique_key`, `required_complete`, `categoricals` (`allowed` / `allowed_from`),
+`exclusive_flags`, `ranges`, `missing_sentinels` — and applies the structural/distribution severity
+split above. Modality packs (e.g. `packs: [scrna]`) add domain checks the declarative config cannot
+express. The convention remains the contract; the runner is one implementation of it.
+
+The runner also formalizes the "analyst decides at model time" step for distribution flags: it
+emits `qa_report.json` (an immutable flag ledger) and scaffolds an analyst-owned
+`qa_dispositions.yaml`. Like the report, the disposition file **must not** be a strict rule's
+declared output — it holds hand-entered data a failed-job cleanup would delete. Write it outside the
+strict gate's output set and reference it as a manifest resource (`qa_dispositions`).
+
 ## See also
 
 - [`../process/pipeline-audit-and-refactor.md`](../process/pipeline-audit-and-refactor.md) — the
