@@ -121,6 +121,7 @@ from science_tool.verdict.cli import verdict_group
 from science_tool.skills_lint import skills_group
 from science_tool.commons import commons_group
 from science_tool.wander.cli import wander_command
+from science_tool.qa_audit.cli import qa_audit_command
 
 
 @click.group()
@@ -227,6 +228,7 @@ main.add_command(prose_group)
 main.add_command(skills_group)
 main.add_command(peers_group)
 main.add_command(wander_command)
+main.add_command(qa_audit_command)
 main.add_command(commons_group)
 main.add_command(validate_cmd)
 
