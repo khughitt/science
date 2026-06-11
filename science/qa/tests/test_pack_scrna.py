@@ -45,3 +45,26 @@ def test_low_gene_count_distribution_uses_default_param():
     })
     flags = scrna.run(table, {})
     assert "scrna/threshold/n_genes_by_counts/min" in _ids(flags)
+
+
+def test_negative_counts_is_structural():
+    table = pd.DataFrame({
+        "total_counts": [1000, -5],
+        "n_genes_by_counts": [500, 500],
+        "pct_counts_mt": [5.0, 5.0],
+    })
+    flags = scrna.run(table, {})
+    neg = [f for f in flags if f.check == "non_negative"]
+    assert neg and all(f.severity == "structural" for f in neg)
+    assert "scrna/non_negative/total_counts/-" in _ids(flags)
+
+
+def test_all_zero_cell_is_structural():
+    table = pd.DataFrame({
+        "total_counts": [1000, 0],
+        "n_genes_by_counts": [500, 0],
+        "pct_counts_mt": [5.0, 0.0],
+    })
+    flags = scrna.run(table, {})
+    assert "scrna/all_zero_cell/total_counts+n_genes_by_counts/-" in _ids(flags)
+    assert all(f.severity == "structural" for f in flags if f.check == "all_zero_cell")

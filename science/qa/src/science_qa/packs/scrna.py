@@ -22,6 +22,19 @@ def run(table: pd.DataFrame, params: dict) -> list[Flag]:
     def _count(mask) -> int:
         return int(mask.sum())
 
+    # --- structural checks (run only when required columns are present) ---
+    for column in ("total_counts", "n_genes_by_counts"):
+        n = _count(table[column] < 0)
+        if n:
+            flags.append(Flag("scrna", "non_negative", column, None, SEVERITY_STRUCTURAL,
+                               str(n), "0", f"{n} cell(s) with negative {column}"))
+
+    all_zero_mask = (table["total_counts"] == 0) & (table["n_genes_by_counts"] == 0)
+    n_zero = _count(all_zero_mask)
+    if n_zero:
+        flags.append(Flag("scrna", "all_zero_cell", "total_counts+n_genes_by_counts", None,
+                          SEVERITY_STRUCTURAL, str(n_zero), "0", f"{n_zero} all-zero cell(s)"))
+
     def _gate(column: str, side: str, mask, threshold) -> None:
         n = _count(mask)
         if n:
