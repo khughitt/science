@@ -203,6 +203,8 @@ def style_for_edge(edge: dict) -> dict:  # type: ignore[type-arg]
         status = derived_status  # used for eliminated-guard below
     else:
         # Legacy mode: authored edge_status drives colour / penwidth / style.
+        # TODO(5f): transitional only — remove this branch once edges.yaml is retired
+        # as the epistemic source-of-truth (Task 5f) and all edges carry channel fields.
         status = edge.get("edge_status") or "tentative"
         base = STATUS_STYLES.get(status, STATUS_STYLES["tentative"]).copy()
         derived_status = status
