@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import difflib
 import json
 import sys as _sys
+import tempfile
 from pathlib import Path
 
 import click
@@ -378,6 +380,78 @@ def validate_cmd(
                 click.echo(f"{prefix}: [{f.rule}] {where} ({loc}): {f.message}")
 
     _sys.exit(0 if report.ok else 1)
+
+
+# ---------------------------------------------------------------------------
+# workbench
+# ---------------------------------------------------------------------------
+
+
+@dag_group.command("workbench")
+@click.option(
+    "--check",
+    "check_path",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Check that the committed workbench file is in canonical form (CI fixpoint gate).",
+)
+@click.pass_context
+def workbench_cmd(ctx: click.Context, check_path: Path | None) -> None:
+    """Workbench operations (``--check``: CI fixpoint gate on a scratch graph).
+
+    ``dag workbench --check <file>`` reads the committed workbench YAML,
+    compiles it on a throwaway scratch directory (never writes to the real
+    entities/ dir), serializes the result to canonical YAML, and diffs the
+    canonical form against the committed text.  Exits 0 if they are identical;
+    exits 1 with a unified diff if they differ.
+    """
+    if check_path is None:
+        click.echo(ctx.get_help())
+        ctx.exit(0)
+        return
+
+    from science_tool.dag.workbench import WorkbenchFile, compile_workbench, serialize_canonical
+    import yaml
+
+    committed_text = check_path.read_text(encoding="utf-8")
+
+    # Parse + compile on a scratch project root so entity files are written to
+    # a throwaway temp dir, never to the real project.
+    with tempfile.TemporaryDirectory() as scratch_str:
+        scratch = Path(scratch_str)
+        # Minimal science.yaml so the entity-layer writer resolves path policies.
+        (scratch / "science.yaml").write_text(
+            "name: workbench-check-scratch\nknowledge_profiles:\n  local: local\n",
+            encoding="utf-8",
+        )
+        try:
+            wb = WorkbenchFile.model_validate(yaml.safe_load(committed_text) or {})
+            result = compile_workbench(wb, project_root=scratch)
+        except Exception as exc:  # noqa: BLE001
+            raise click.ClickException(f"Failed to compile workbench: {exc}") from exc
+
+        canonical_text = serialize_canonical(result)
+
+    if committed_text == canonical_text:
+        click.echo("workbench --check: OK (canonical)")
+        ctx.exit(0)
+        return
+
+    # Produce a readable unified diff.
+    diff_lines = list(
+        difflib.unified_diff(
+            committed_text.splitlines(keepends=True),
+            canonical_text.splitlines(keepends=True),
+            fromfile=str(check_path),
+            tofile="<canonical>",
+        )
+    )
+    diff_text = "".join(diff_lines)
+    click.echo(
+        f"workbench --check: FAIL — committed file differs from canonical form.\n\n{diff_text}",
+        err=False,
+    )
+    ctx.exit(1)
 
 
 # ---------------------------------------------------------------------------
