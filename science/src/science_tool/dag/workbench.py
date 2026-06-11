@@ -22,7 +22,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
+import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from science_model.entities import EntityType, EvidenceLineEntity, QuantitativeResult
@@ -288,3 +290,113 @@ def compile_workbench(
         evidence_lines=evidence_lines,
         workbench=workbench.model_copy(update={"rows": normalized_rows}),
     )
+
+
+# ---------------------------------------------------------------------------
+# serialize_canonical (Task 5c)
+# ---------------------------------------------------------------------------
+
+# Canonical key order for a serialized WorkbenchRow.  Fields that are None or
+# empty-list are omitted entirely (lean output rule).  This fixed ordering
+# guarantees that two logically identical rows produce bit-identical YAML.
+_ROW_KEY_ORDER: tuple[str, ...] = (
+    "id",
+    "subject",
+    "predicate",
+    "object",
+    "patch",
+    "polarity",
+    "claim_layer",
+    "identification_strength",
+    "epistemic_role",
+    "legacy_relation_label",
+    "evidence",
+)
+
+# Canonical key order for the top-level WorkbenchFile mapping.
+_FILE_KEY_ORDER: tuple[str, ...] = ("patch", "rows")
+
+
+def _row_to_dict(row: WorkbenchRow) -> dict[str, Any]:
+    """Convert a normalized ``WorkbenchRow`` to an ordered dict for serialization.
+
+    Rules:
+    - Keys emitted in ``_ROW_KEY_ORDER`` order.
+    - None values and empty lists are omitted (lean output).
+    - ``evidence`` items must all be bare strings (refs) in the normalized row;
+      any residual ``EvidenceStub`` is skipped with an assertion to catch bugs.
+    - Evidence refs are sorted deterministically.
+    """
+    evidence_refs: list[str] = []
+    for item in row.evidence:
+        assert isinstance(item, str), (
+            f"serialize_canonical: normalized row still contains an inline EvidenceStub; "
+            f"call compile_workbench first.  Row id={row.id!r}"
+        )
+        evidence_refs.append(item)
+    evidence_refs.sort()
+
+    raw: dict[str, Any] = {
+        "id": row.id,
+        "subject": row.subject,
+        "predicate": row.predicate,
+        "object": row.object,
+        "patch": row.patch,
+        "polarity": row.polarity,
+        "claim_layer": row.claim_layer,
+        "identification_strength": row.identification_strength,
+        "epistemic_role": row.epistemic_role,
+        "legacy_relation_label": row.legacy_relation_label,
+        "evidence": evidence_refs if evidence_refs else None,
+    }
+
+    result: dict[str, Any] = {}
+    for key in _ROW_KEY_ORDER:
+        value = raw.get(key)
+        if value is None:
+            continue
+        result[key] = value
+    return result
+
+
+def serialize_canonical(result: CompileResult) -> str:
+    """Produce the canonical YAML text of a compiled workbench.
+
+    Takes a ``CompileResult`` (whose ``.workbench`` is the NORMALIZED form —
+    every row has its minted/authored id and inline stubs replaced by id
+    reference strings) and returns deterministic, lean YAML text.
+
+    Ordering rules
+    --------------
+    - Rows sorted by proposition ``id`` (lexicographic, stable).
+    - Within each row, keys emitted in ``_ROW_KEY_ORDER``; None/empty-list
+      fields omitted.
+    - Evidence refs sorted lexicographically within each row.
+    - Top-level ``patch`` header omitted when None.
+
+    Fixed-point guarantee
+    ---------------------
+    ``serialize_canonical(compile(serialize_canonical(compile(W))))``
+    is bit-identical to ``serialize_canonical(compile(W))`` because:
+    - The normalized workbench is already fully minted (no id-less rows).
+    - Evidence items are already references (no inline stubs).
+    - Sorted ordering is idempotent.
+
+    Pure: does not write any files.
+    """
+    wb = result.workbench
+
+    # Sort rows by their minted/authored proposition id.
+    sorted_rows = sorted(wb.rows, key=lambda r: (r.id or ""))
+
+    row_dicts = [_row_to_dict(row) for row in sorted_rows]
+
+    doc: dict[str, Any] = {}
+    for key in _FILE_KEY_ORDER:
+        if key == "patch":
+            if wb.patch is not None:
+                doc["patch"] = wb.patch
+        elif key == "rows":
+            doc["rows"] = row_dicts
+
+    return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
