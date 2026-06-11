@@ -23,8 +23,8 @@
 > - **Datasets are already first-class** as markdown descriptors under **`doc/datasets/*.md`** (plus
 >   datapackages), discovered by `dataset_frontmatters` (scan roots in `graph/sources.py:297`), and
 >   written idempotently by `datasets_register.py::write_derived_dataset_entities`. There is **no
->   `entities/datasets/` path policy** and none is needed. (The design doc §4 still says
->   `entities/datasets/<slug>.md`; that is stale — the real home is `doc/datasets/`.)
+>   `entities/datasets/` path policy** and none is needed. (Design doc §4 now points at
+>   `doc/datasets/<slug>.md`, the real home.)
 > - **`dataset_usage` reference integrity already ships** in `validate/checks/dataset_influence.py`
 >   (registered in `CANONICAL_CHECK_MODULES`), so the originally-planned new `dataset_usage.py` module +
 >   registration is dropped.
@@ -434,7 +434,7 @@ fixture with no MM30 data (5a, now); belief-eligibility exclusion is verified on
   loud-fail "gate 2" is delegated to the MM30 migration step; task-trace → Task 3 (confirm + regression). ✓
 - §4 dataset entities → **corrected to `doc/datasets/`** (not `entities/datasets/`): Task 1 confirms the
   layout, Task 2a pins origin/provenance, Task 4 the drift primitive; the MM30 projection is deferred.
-  **Flag: the design doc §4 still says `entities/datasets/<slug>.md` — stale; update separately.** ✓
+  Design doc §4 corrected to `doc/datasets/<slug>.md` (2026-06-10). ✓
 - §5 independence payoff → Task 5a e2e (runnable now); Task 5b (eligibility) gated on edges plan. ✓
 - §9 risks: M2 overlap (Task 2d), origin under-specification (Task 2a), `source_class` registry
   extension (MM30 plan), intra-line breadth→strength (out of scope, belief-engine owners). ✓

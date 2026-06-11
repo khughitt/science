@@ -7,6 +7,34 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 
+class Predicate(StrEnum):
+    """v1 seed-set of sign-free binary predicates for relational propositions."""
+
+    AFFECTS = "affects"
+    REGULATES = "regulates"
+    ASSOCIATES_WITH = "associates_with"
+    BINDS = "binds"
+    IS_PROXY_FOR = "is_proxy_for"
+    INDUCES_STATE = "induces_state"
+    TRANSITIONS_TO = "transitions_to"
+    SUBTYPE_OF = "subtype_of"
+    PART_OF = "part_of"
+
+
+class Polarity(StrEnum):
+    """Sign of a relational proposition (meaningful only for sign-apt predicates)."""
+
+    POSITIVE = "positive"
+    NEGATIVE = "negative"
+    UNSIGNED = "unsigned"
+    NOT_APPLICABLE = "not_applicable"
+
+
+SIGN_MEANINGFUL_PREDICATES: frozenset[Predicate] = frozenset(
+    {Predicate.AFFECTS, Predicate.REGULATES, Predicate.ASSOCIATES_WITH}
+)
+
+
 class ClaimLayer(StrEnum):
     """Authored layer for a proposition or claim."""
 

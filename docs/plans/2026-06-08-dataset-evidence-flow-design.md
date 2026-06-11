@@ -44,7 +44,7 @@ into the v3 entity layout** — then the existing machinery does the rest.
    (§2).
 2. No `task → dataset` mapping exists anywhere — `data_support` is `{task, description}`, datasets live
    only in prose (§3).
-3. The 30 `mm30.v8.yml` datasets are not yet `entities/datasets/` files (no path policy; §4).
+3. The 30 `mm30.v8.yml` datasets are not yet `doc/datasets/` descriptor files (no path policy; §4).
 
 ### 1.2 The seam to `epistemic-edges`
 
@@ -120,10 +120,10 @@ Resolution is a **migration concern**, modeled as an input transcript — never 
 
 `dataset_usage` refs point at `dataset:<slug>` entities; gate 2 (§3) requires they exist. Today the 30
 datasets live only in `mm30.v8.yml` (operational SSOT: paths, phenotypes, identifiers), and there is no
-`entities/datasets/` path policy.
+`doc/datasets/` path policy.
 
 - **Generated projection (the 30 pipeline datasets).** `mm30.v8.yml` stays the operational SSOT.
-  `entities/datasets/<slug>.md` `DatasetEntity` files are **generated from it** (a compile step), with:
+  `doc/datasets/<slug>.md` `DatasetEntity` files are **generated from it** (a compile step), with:
   - **identity** `dataset:<config-key slug>` (`GSE19784 → dataset:gse19784`; `MMRF → dataset:mmrf`);
   - **two orthogonal axes, both populated** (a generated entity that only sets `source_class` would
     satisfy `dataset_usage` identity while being operationally under-specified):
@@ -136,7 +136,7 @@ datasets live only in `mm30.v8.yml` (operational SSOT: paths, phenotypes, identi
       derivation / `produced_by` (the producing stage/rule). The generator must emit the provenance
       block the chosen `origin` requires, not just the taxonomy.
   - these axes are added **minimally to the registry** (or a sibling) and projected onto each entity;
-  - a **drift-check gate** (the workbench fixpoint pattern): committed `entities/datasets/` must equal
+  - a **drift-check gate** (the workbench fixpoint pattern): committed `doc/datasets/` must equal
     the projection of the registry; CI regenerates and diffs.
   This adds the missing `dataset` entry to `_BUILTIN_MARKDOWN_POLICIES` (`slug` strategy). One
   operational SSOT, one generated epistemic projection — no parallel dataset registry.
@@ -176,7 +176,7 @@ not designed here (see §9).
   `epistemic-edges` framework plan — see that plan's Tasks 1c/2c/3b; this facet's framework plan adds
   the dataset-specific pieces and avoids duplicating them.)
 - **MM30 (`~/d/r/mm30`):** the curated `task → dataset` resolution table data; the `source_class`
-  registry extension + generated `entities/datasets/`; external-dataset registration; and **filling
+  registry extension + generated `doc/datasets/`; external-dataset registration; and **filling
   the staged evidence-lines** `epistemic-edges` created. Deferred to the MM30 migration plan, gated on
   this facet's framework plan **and** the `epistemic-edges` framework plan landing on v3.
 
@@ -234,4 +234,4 @@ not designed here (see §9).
    sibling) must not perturb the pipeline that reads the registry; prefer an additive sibling/section
    the pipeline ignores. Confirm against the config loader before implementing.
 6. **v3 timing.** Like `epistemic-edges`, implementation is gated on v3 (entity layout for
-   `entities/datasets/`, belief-materialization contract for `belief_eligible` staging). Planning proceeds; implementation holds.
+   `doc/datasets/`, belief-materialization contract for `belief_eligible` staging). Planning proceeds; implementation holds.

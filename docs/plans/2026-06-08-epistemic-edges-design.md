@@ -122,9 +122,15 @@ parallel names (a parallel vocabulary would be exactly the parallel system the u
 
 - `claim_layer` → `proposition-and-evidence-model.md` (`empirical_regularity | causal_effect |
   mechanistic_narrative | structural_claim`).
-- `identification_strength` → `proposition-and-evidence-model.md` (`observational | longitudinal |
-  interventional | structural`). The legacy DAG renderer's extra `none` maps to **absent /
-  unspecified**, not a new value.
+- `identification_strength` → the shipped `science_model.reasoning.IdentificationStrength` enum
+  (`none | structural | observational | longitudinal | interventional | analogical`). **Canonical =
+  the model enum** (resolved 2026-06-10, plan Task 0b — *model-current contract*): the enum is already
+  consumed by `PropositionMetadata`, the belief engine, and the evidence-line checks, so binding to it
+  reuses one vocabulary rather than coining a parallel one. `none` is a legal authored value meaning
+  **"no claimed identification"** (not positive causal leverage); `analogical` is off-continuum
+  (model-system evidence extrapolated by analogy — record the gap via `proxy_directness` /
+  `measurement_model`). Legacy DAG `identification: none` maps to the enum `none`. (The prose list in
+  `proposition-and-evidence-model.md` predates `none`/`analogical` and is being aligned to the enum.)
 - `epistemic_role` → t034's verbatim taxonomy (D-005). Not a new `mediator/confounder/proxy` set.
 
 ### 2.4 Claim-edge vs plumbing (umbrella §2.3, applied)
@@ -397,6 +403,14 @@ ungrounded; the mandatory-`dataset_usage` invariant holds in the compiled graph 
 4. **Edge-node IRI = proposition IRI** must be confirmed against the v3 substrate's edge-as-node
    identity scheme (the umbrella's open substrate-adjacent question); if the substrate forces a
    content-addressed edge-node, this facet needs a `realized_as` shim — to be checked when v3 lands.
+   **Resolved 2026-06-10 (plan Task 0): NO SHIM.** A relational proposition's own canonical IRI is its
+   reified edge-node / belief-target IRI directly. `_entity_uri("proposition:<id>")` →
+   `PROJECT_NS["proposition/<id>"]` is deterministic from the canonical id (`materialize.py`), and
+   `_add_evidence_line_relations` (`materialize.py:560`) already emits `cito:supports/disputes` at that
+   exact target IRI, with belief aggregating per target. The content-addressed `bears-on-edge/<sha256>`
+   in `freshness.py` is a separate `bears_on` (evidence-derivation) mechanism and does **not** force
+   propositions to be content-addressed. Downstream [v3-API] tasks (3b, 5b, 5f, 6) use the proposition
+   canonical IRI as the edge-node IRI; no `realized_as` shim is introduced.
 5. **Workbench round-trip fidelity.** Canonical serialization must be lossless over the workbench's
    scope (structure + references); comments / hand-formatting do not survive `compile` (accepted cost
    of drift-proofing).

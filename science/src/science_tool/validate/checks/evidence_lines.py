@@ -558,6 +558,53 @@ def check_belief_nonreproducible(ctx: ValidateContext) -> Iterator[Result]:
 
 
 # ---------------------------------------------------------------------------
+# Check 10: evidence.empirical.requires_dataset_usage (ERROR, Task 2c)
+#   A belief-eligible empirical evidence-line must declare non-empty dataset_usage.
+#   Staged lines (belief_eligible: false) are exempt. Non-empirical lines unaffected.
+# ---------------------------------------------------------------------------
+
+@Check(section="evidence lines", order=31)
+def check_belief_eligible_empirical_has_dataset_usage(ctx: ValidateContext) -> Iterator[Result]:
+    """#10 A belief-eligible empirical evidence-line (evidence_type==empirical_data_evidence)
+    must declare non-empty dataset_usage. Lines with belief_eligible: false (staged) are exempt.
+    Non-empirical types are not subject to this rule."""
+    for path, fm in _ev_lines(ctx):
+        # Only applies to empirical evidence lines.
+        if fm.get("evidence_type") != "empirical_data_evidence":
+            continue
+
+        # Determine belief_eligible; missing defaults to True.
+        raw_be = fm.get("belief_eligible")
+        if raw_be is None:
+            belief_eligible = True
+        elif isinstance(raw_be, bool):
+            belief_eligible = raw_be
+        else:
+            # Handle string values ("true"/"false") produced by some YAML parsers.
+            belief_eligible = str(raw_be).strip().lower() != "false"
+
+        # Staged lines (belief_eligible: false) are exempt.
+        if not belief_eligible:
+            continue
+
+        # Check that dataset_usage is non-empty.
+        dataset_usage = fm.get("dataset_usage")
+        if not dataset_usage:
+            yield Result(
+                severity=Severity.ERROR,
+                path=path,
+                line=None,
+                message=(
+                    f"{path.name}: empirical evidence-line is belief-eligible but "
+                    f"declares no dataset_usage — add at least one dataset_usage entry "
+                    f"or set belief_eligible: false to stage it"
+                ),
+                rule="evidence.empirical.requires_dataset_usage",
+                task=None,
+            )
+
+
+# ---------------------------------------------------------------------------
 # Check 6: evidence.unscored-line (WARN)
 #   A massable (non-diagnostic) support/dispute line that cannot be scored
 #   because one or more of evidence_type, evidence_role, or strength is

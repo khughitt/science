@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import difflib
 import json
 import sys as _sys
+import tempfile
 from pathlib import Path
 
 import click
@@ -47,22 +49,44 @@ def _wants_json(*, as_json: bool, output_format: str) -> bool:
     help="Project root (default: current working directory).",
 )
 def render_cmd(slug: str | None, project_path: Path | None) -> None:
-    """Render DAG(s) to <slug>-auto.dot and <slug>-auto.png."""
+    """Render DAG(s) to <slug>-auto.dot and <slug>-auto.png.
+
+    Edge SEMANTICS are SOURCED from compiled relational propositions (the
+    epistemic source-of-truth, Task 5f) when any exist; ``edge_status`` is
+    DERIVED via ``derived_edge_status``. When no propositions are compiled, the
+    renderer falls back to the RETIRED ``<slug>.edges.yaml`` legacy-import
+    adapter (which emits a deprecation warning and is never a status SoT).
+    """
     project = (project_path or Path.cwd()).resolve()
     try:
         paths = load_dag_paths(project)
     except (FileNotFoundError, KeyError) as exc:
         raise click.ClickException(str(exc)) from exc
 
+    proposition_edges = _source_proposition_edges(project)
+
     try:
         if slug is not None:
-            render_one(paths.dag_dir, slug)
+            render_one(paths.dag_dir, slug, proposition_edges=proposition_edges)
             click.echo(f"Rendered {slug}-auto.dot")
         else:
-            render_all(paths)
+            render_all(paths, proposition_edges=proposition_edges)
             click.echo("Rendered all DAGs.")
     except Exception as exc:  # noqa: BLE001
         raise click.ClickException(str(exc)) from exc
+
+
+def _source_proposition_edges(project: Path) -> list[dict] | None:  # type: ignore[type-arg]
+    """Source channel-mode edges from compiled propositions, or None if absent.
+
+    Returns ``None`` when the project has no compiled ``PropositionEntity``
+    records, signalling render/number to fall back to the retired edges.yaml
+    legacy-import adapter (Task 5f).
+    """
+    from science_tool.dag.proposition_edges import load_proposition_edges
+
+    edges = load_proposition_edges(project)
+    return edges or None
 
 
 # ---------------------------------------------------------------------------
@@ -98,12 +122,16 @@ def number_cmd(slug: str | None, force_stubs: bool, project_path: Path | None) -
     except (FileNotFoundError, KeyError) as exc:
         raise click.ClickException(str(exc)) from exc
 
+    proposition_edges = _source_proposition_edges(project)
+
     try:
         if slug is not None:
-            number_one(paths.dag_dir, slug, force_stubs=force_stubs)
+            number_one(
+                paths.dag_dir, slug, force_stubs=force_stubs, proposition_edges=proposition_edges
+            )
             click.echo(f"Numbered {slug}-numbered.dot")
         else:
-            number_all(paths, force_stubs=force_stubs)
+            number_all(paths, force_stubs=force_stubs, proposition_edges=proposition_edges)
             click.echo("Numbered all DAGs.")
     except Exception as exc:  # noqa: BLE001
         raise click.ClickException(str(exc)) from exc
@@ -378,6 +406,78 @@ def validate_cmd(
                 click.echo(f"{prefix}: [{f.rule}] {where} ({loc}): {f.message}")
 
     _sys.exit(0 if report.ok else 1)
+
+
+# ---------------------------------------------------------------------------
+# workbench
+# ---------------------------------------------------------------------------
+
+
+@dag_group.command("workbench")
+@click.option(
+    "--check",
+    "check_path",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Check that the committed workbench file is in canonical form (CI fixpoint gate).",
+)
+@click.pass_context
+def workbench_cmd(ctx: click.Context, check_path: Path | None) -> None:
+    """Workbench operations (``--check``: CI fixpoint gate on a scratch graph).
+
+    ``dag workbench --check <file>`` reads the committed workbench YAML,
+    compiles it on a throwaway scratch directory (never writes to the real
+    entities/ dir), serializes the result to canonical YAML, and diffs the
+    canonical form against the committed text.  Exits 0 if they are identical;
+    exits 1 with a unified diff if they differ.
+    """
+    if check_path is None:
+        click.echo(ctx.get_help())
+        ctx.exit(0)
+        return
+
+    from science_tool.dag.workbench import WorkbenchFile, compile_workbench, serialize_canonical
+    import yaml
+
+    committed_text = check_path.read_text(encoding="utf-8")
+
+    # Parse + compile on a scratch project root so entity files are written to
+    # a throwaway temp dir, never to the real project.
+    with tempfile.TemporaryDirectory() as scratch_str:
+        scratch = Path(scratch_str)
+        # Minimal science.yaml so the entity-layer writer resolves path policies.
+        (scratch / "science.yaml").write_text(
+            "name: workbench-check-scratch\nknowledge_profiles:\n  local: local\n",
+            encoding="utf-8",
+        )
+        try:
+            wb = WorkbenchFile.model_validate(yaml.safe_load(committed_text) or {})
+            result = compile_workbench(wb, project_root=scratch)
+        except Exception as exc:  # noqa: BLE001
+            raise click.ClickException(f"Failed to compile workbench: {exc}") from exc
+
+        canonical_text = serialize_canonical(result)
+
+    if committed_text == canonical_text:
+        click.echo("workbench --check: OK (canonical)")
+        ctx.exit(0)
+        return
+
+    # Produce a readable unified diff.
+    diff_lines = list(
+        difflib.unified_diff(
+            committed_text.splitlines(keepends=True),
+            canonical_text.splitlines(keepends=True),
+            fromfile=str(check_path),
+            tofile="<canonical>",
+        )
+    )
+    diff_text = "".join(diff_lines)
+    click.echo(
+        f"workbench --check: FAIL — committed file differs from canonical form.\n\n{diff_text}",
+        err=False,
+    )
+    ctx.exit(1)
 
 
 # ---------------------------------------------------------------------------

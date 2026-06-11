@@ -567,7 +567,13 @@ def _add_evidence_line_relations(
     provenance,
     ext_prefixes: frozenset[str],
 ) -> None:
-    """Emit cito:supports/disputes edge (→ knowledge) and prov:wasDerivedFrom source (→ provenance)."""
+    """Emit cito:supports/disputes edge (→ knowledge) and prov:wasDerivedFrom source (→ provenance).
+
+    Staged lines (belief_eligible=False) are silently skipped — they must not enter
+    the belief/knowledge graph.
+    """
+    if not entity.belief_eligible:
+        return
     resolution = resolver.resolve(entity.target, allow_cross_kind_fallback=True)
     if resolution.status == "resolved" and resolution.canonical_id is not None:
         target_entity = entity_index.get(resolution.canonical_id)
@@ -596,7 +602,12 @@ def _add_evidence_line_metadata(*, uri: URIRef, provenance, entity: EvidenceLine
 
     Does NOT re-emit evidence_role, independence_group, or measurement_model — those
     are already handled by _add_reasoning_metadata.
+
+    Staged lines (belief_eligible=False) are silently skipped — quant scalar
+    predicates must not feed belief aggregation for ungrounded staged lines.
     """
+    if not entity.belief_eligible:
+        return
     scalar_predicates: dict[str, object] = {
         "strength": SCI_NS.evidenceStrength,
         "independence": SCI_NS.evidenceIndependence,
@@ -611,6 +622,18 @@ def _add_evidence_line_metadata(*, uri: URIRef, provenance, entity: EvidenceLine
         value = getattr(entity, field, None)
         if value is not None:
             provenance.add((uri, predicate, Literal(str(value))))
+
+    quant = getattr(entity, "quantitative_result", None)
+    if quant is not None:
+        # Typed posterior summary (Task 3a) — coerce each present sub-field to a
+        # typed Literal so the belief layer can read sign(beta) and prob_sign.
+        if quant.beta is not None:
+            provenance.add((uri, SCI_NS.quantBeta, Literal(quant.beta)))
+        if quant.prob_sign is not None:
+            provenance.add((uri, SCI_NS.quantProbSign, Literal(quant.prob_sign)))
+        if quant.hdi is not None and len(quant.hdi) == 2:
+            provenance.add((uri, SCI_NS.quantHdiLow, Literal(quant.hdi[0])))
+            provenance.add((uri, SCI_NS.quantHdiHigh, Literal(quant.hdi[1])))
 
 
 def _pre_registration_commitment_targets(
@@ -1015,6 +1038,9 @@ def _add_reasoning_metadata(*, uri: URIRef, provenance, entity: Entity) -> None:
         "supports_scope": SCI_NS.supportsScope,
         "independence_group": SCI_NS.independenceGroup,
         "evidence_role": SCI_NS.evidenceRole,
+        # Authored relational sign of a proposition (Task 3a). Present only on
+        # PropositionEntity; getattr returns None for other kinds so they skip it.
+        "polarity": SCI_NS.polarity,
     }
     for field, predicate in scalar_predicates.items():
         value = getattr(entity, field, None)

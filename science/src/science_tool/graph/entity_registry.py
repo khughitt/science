@@ -30,6 +30,7 @@ from science_model.entities import (
     ThemeEntity,
     WorkflowRunEntity,
 )
+from science_model.propositions import PropositionEntity
 
 
 class EntityKindAlreadyRegisteredError(ValueError):
@@ -62,6 +63,7 @@ _CORE_KIND_CLASSES: dict[str, EntityClass] = {
     "assumption": EntityClass.EPISTEMIC,
     "code-file": EntityClass.OPERATIONAL,
     "concept": EntityClass.REFERENCE,
+    "construct": EntityClass.REFERENCE,
     "curation-sweep": EntityClass.OPERATIONAL,
     "data-package": EntityClass.OPERATIONAL,
     "discussion": EntityClass.EPISTEMIC,
@@ -72,6 +74,7 @@ _CORE_KIND_CLASSES: dict[str, EntityClass] = {
     "interpretation": EntityClass.EPISTEMIC,
     "method": EntityClass.OPERATIONAL,
     "observation": EntityClass.EPISTEMIC,
+    "outcome": EntityClass.REFERENCE,
     "paper": EntityClass.OPERATIONAL,
     "talk": EntityClass.OPERATIONAL,
     "plan": EntityClass.OPERATIONAL,
@@ -136,13 +139,15 @@ class EntityRegistry:
             entity_class=_CORE_KIND_CLASSES["evidence-line"],
         )
         r.register_core_kind("inquiry", InquiryEntity, entity_class=_CORE_KIND_CLASSES["inquiry"])
+        r.register_core_kind("proposition", PropositionEntity, entity_class=_CORE_KIND_CLASSES["proposition"])
         # Generic project kinds → ProjectEntity.
         for kind in (
             "concept",
+            "construct",
             "hypothesis",
             "question",
-            "proposition",
             "observation",
+            "outcome",
             "research-question",
             "topic",
             "interpretation",

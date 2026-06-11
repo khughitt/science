@@ -167,28 +167,64 @@ def _emit_edge_stubs(parsed: _ParsedDag, out_path: Path, dag_slug: str) -> None:
     out_path.write_text(yaml.safe_dump(payload, sort_keys=False, width=100))
 
 
-def number_one(dag_dir: Path, slug: str, *, force_stubs: bool = False) -> None:
-    """Number edges in one DAG's .dot, sync with edges.yaml.
+def number_one(
+    dag_dir: Path,
+    slug: str,
+    *,
+    force_stubs: bool = False,
+    proposition_edges: list[dict] | None = None,  # type: ignore[type-arg]
+) -> None:
+    """Number edges in one DAG's .dot.
 
-    Writes ``<slug>-numbered.dot`` with ``[N]`` prefixed on every edge label.
-    Creates ``<slug>.edges.yaml`` if it does not exist; preserves it when
-    ``force_stubs=False`` (default).  Pass ``force_stubs=True`` to
-    intentionally reset curation.
+    Always writes ``<slug>-numbered.dot`` with ``[N]`` prefixed on every edge
+    label (edge IDs derive from DOT topology order).
+
+    When ``proposition_edges`` is supplied, compiled relational propositions are
+    the epistemic source-of-truth (Task 5f) and the RETIRED ``<slug>.edges.yaml``
+    curation stub is NOT (re)written — edge semantics no longer live there.
+
+    When ``proposition_edges`` is ``None`` (no compiled propositions), the legacy
+    edges.yaml stub behavior is preserved for backward compatibility, but
+    creating/resetting the retired file emits a ``DeprecationWarning``: it
+    creates ``<slug>.edges.yaml`` if absent, preserves it when
+    ``force_stubs=False`` (default), and resets it when ``force_stubs=True``.
     """
     dot_path = dag_dir / f"{slug}.dot"
     parsed = _parse_dag(dot_path)
     _emit_numbered_dot(dot_path, parsed, dag_dir / f"{slug}-numbered.dot")
+
+    # Propositions are the SoT — do not (re)write the retired edges.yaml stub.
+    if proposition_edges is not None:
+        return
+
     stub_path = dag_dir / f"{slug}.edges.yaml"
     if stub_path.exists() and not force_stubs:
         return
+    _warn_edges_yaml_retired()
     _emit_edge_stubs(parsed, stub_path, slug)
 
 
-def number_all(paths: DagPaths, *, force_stubs: bool = False) -> None:
+def _warn_edges_yaml_retired() -> None:
+    """Emit the edges.yaml retirement ``DeprecationWarning`` (Task 5f)."""
+    import warnings
+
+    from science_tool.dag.schema import _EDGES_YAML_DEPRECATION
+
+    warnings.warn(_EDGES_YAML_DEPRECATION, DeprecationWarning, stacklevel=3)
+
+
+def number_all(
+    paths: DagPaths,
+    *,
+    force_stubs: bool = False,
+    proposition_edges: list[dict] | None = None,  # type: ignore[type-arg]
+) -> None:
     """Number edges across every discovered DAG.
 
     Discovers slugs from ``paths.dag_dir`` when ``paths.dags`` is ``None``.
     """
     slugs = list(paths.dags) if paths.dags else _discover_slugs(paths.dag_dir)
     for slug in slugs:
-        number_one(paths.dag_dir, slug, force_stubs=force_stubs)
+        number_one(
+            paths.dag_dir, slug, force_stubs=force_stubs, proposition_edges=proposition_edges
+        )

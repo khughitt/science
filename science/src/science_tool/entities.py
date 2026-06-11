@@ -40,14 +40,14 @@ class EntityPathPolicy:
 _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
     "question": EntityPathPolicy(Path("entities/questions"), "numeric"),
     "hypothesis": EntityPathPolicy(Path("entities/hypotheses"), "numeric"),
-    "proposition": EntityPathPolicy(Path("entities/propositions"), "numeric"),
+    "proposition": EntityPathPolicy(Path("entities/propositions"), "slug"),
     "interpretation": EntityPathPolicy(Path("entities/interpretations"), "numeric"),
     "discussion": EntityPathPolicy(Path("entities/discussions"), "numeric"),
     "finding": EntityPathPolicy(Path("entities/findings"), "numeric"),
     "inquiry": EntityPathPolicy(Path("entities/inquiries"), "numeric"),
     "theme": EntityPathPolicy(Path("entities/themes"), "numeric"),
     "topic": EntityPathPolicy(Path("entities/topics"), "slug"),  # was "numeric" (4c: slug identity kind)
-    "evidence-line": EntityPathPolicy(Path("entities/evidence-lines"), "numeric"),
+    "evidence-line": EntityPathPolicy(Path("entities/evidence-lines"), "slug"),
     "observation": EntityPathPolicy(Path("entities/observations"), "slug"),  # was "numeric": observations carry descriptive slug ids (e.g. observation:swan-stage-shift); enables id-preserving single-type aggregate retirement (§B5)
     "mechanism": EntityPathPolicy(Path("entities/mechanisms"), "numeric"),
     "synthesis": EntityPathPolicy(Path("entities/synthesis"), "numeric"),
@@ -57,9 +57,11 @@ _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
     "method": EntityPathPolicy(Path("entities/methods"), "slug"),  # was "numeric" (4c: slug identity kind)
     "pre-registration": EntityPathPolicy(Path("entities/pre-registrations"), "numeric"),
     "concept": EntityPathPolicy(Path("entities/concepts"), "slug"),
+    "construct": EntityPathPolicy(Path("entities/constructs"), "slug"),
     "decision": EntityPathPolicy(Path("entities/decision"), "verbatim"),
     "paper": EntityPathPolicy(Path("entities/papers"), "citekey"),
     "talk": EntityPathPolicy(Path("entities/talks"), "citekey"),
+    "outcome": EntityPathPolicy(Path("entities/outcomes"), "slug"),
     # Singletons: `root` is the file path itself, not a directory.
     "research-question": EntityPathPolicy(Path("entities/research-question.md"), "singleton"),
     "claim-registry": EntityPathPolicy(Path("entities/claim-registry.yaml"), "singleton"),
@@ -225,7 +227,9 @@ _DEFAULT_STATUS: dict[str, str] = {
     "paper": "active",
     "talk": "active",
     "concept": "active",
+    "construct": "active",
     "decision": "active",
+    "outcome": "active",
 }
 _STATUS_VALUES: dict[str, frozenset[str]] = {
     "evidence-line": frozenset({"draft", "active", "retired"}),
@@ -268,7 +272,9 @@ _STATUS_VALUES: dict[str, frozenset[str]] = {
     "paper": frozenset({"active", "retired"}),
     "talk": frozenset({"active", "retired"}),
     "concept": frozenset({"active", "deprecated"}),
+    "construct": frozenset({"active", "retired"}),
     "decision": frozenset({"active", "superseded", "abandoned"}),
+    "outcome": frozenset({"active", "retired"}),
 }
 _ALLOWED_EXPLICIT_ROOTS = (Path("entities"),)
 
