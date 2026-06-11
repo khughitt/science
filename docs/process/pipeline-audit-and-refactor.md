@@ -205,7 +205,7 @@ refactor tasks:
 
 ## Related QA disciplines
 
-This playbook scores two related disciplines during the sweep, but keeps them distinct from data-QA:
+This playbook scores three related disciplines during the sweep, but keeps them distinct from data-QA:
 
 - **Analysis / result-QA** — validates *results*, not the input table: leave-one-out /
   dataset-dropout stability; permutation / empirical-null calibration and assumption sweeps.
