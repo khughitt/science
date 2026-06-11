@@ -164,6 +164,14 @@ def test_scan_markers_walks_doc_and_specs(tmp_path: Path) -> None:
     assert files == ["RESEARCH_PLAN.md", "a.md", "b.md"]
 
 
+def test_scan_markers_walks_entities_v3_layout(tmp_path: Path) -> None:
+    # v3 migration moves source-authored entities into entities/<kind>/; markers
+    # in those bodies must still be scanned (regression: entities/ was unscanned).
+    _write(tmp_path / "entities" / "papers" / "Foo2024.md", "claim [UNVERIFIED]\n")
+    hits = scan_markers(tmp_path, strict=False)
+    assert [h.file.name for h in hits] == ["Foo2024.md"]
+
+
 def test_scan_markers_skips_templates_and_venv(tmp_path: Path) -> None:
     _write(tmp_path / "doc" / "templates" / "skip.md", "[UNVERIFIED]\n")
     _write(tmp_path / "doc" / ".venv" / "skip.md", "[UNVERIFIED]\n")

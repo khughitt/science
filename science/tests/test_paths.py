@@ -16,6 +16,13 @@ def test_defaults_to_research_profile_when_no_yaml(tmp_path: Path) -> None:
     assert paths.tasks_dir == tmp_path / "tasks"
 
 
+def test_entities_dir_resolves_to_entities(tmp_path: Path) -> None:
+    # v3 layout stores source-authored entities under entities/<kind>/; the
+    # canonical paths must expose it so scanners (refs, markers, prose) can find it.
+    paths = resolve_paths(tmp_path)
+    assert paths.entities_dir == tmp_path / "entities"
+
+
 def test_research_profile_uses_canonical_execution_roots(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text("name: test\nstatus: active\nprofile: research\n", encoding="utf-8")
     paths = resolve_paths(tmp_path)

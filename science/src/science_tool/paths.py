@@ -10,6 +10,7 @@ ProjectProfile: TypeAlias = Literal["research", "software"]
 
 _COMMON_DEFAULTS: dict[str, str] = {
     "doc_dir": "doc",
+    "entities_dir": "entities",
     "data_dir": "data",
     "models_dir": "models",
     "specs_dir": "specs",
@@ -33,6 +34,7 @@ class ProjectPaths:
     root: Path
     profile: ProjectProfile
     doc_dir: Path
+    entities_dir: Path
     code_dir: Path
     data_dir: Path
     models_dir: Path
@@ -109,6 +111,7 @@ def resolve_paths(project_root: Path) -> ProjectPaths:
         root=project_root,
         profile=profile,
         doc_dir=project_root / _COMMON_DEFAULTS["doc_dir"],
+        entities_dir=project_root / _COMMON_DEFAULTS["entities_dir"],
         code_dir=project_root / code_root_names[0],
         data_dir=project_root / _COMMON_DEFAULTS["data_dir"],
         models_dir=project_root / _COMMON_DEFAULTS["models_dir"],

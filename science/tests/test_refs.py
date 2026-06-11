@@ -181,6 +181,24 @@ def test_v3_hypothesis_ref_resolves_from_numeric_id_prefix_without_heading_label
         assert hyp_issues == []
 
 
+def test_broken_ref_inside_entities_dir_is_scanned() -> None:
+    """After the v2->v3 migration entity bodies live under entities/<kind>/.
+    A broken cross-reference in such a body must be detected (regression: the
+    refs source scanner only walked doc/ + specs/, so entities/ bodies were
+    never scanned for broken refs)."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "entities" / "papers").mkdir(parents=True)
+        (root / "entities" / "papers" / "Foo2024.md").write_text(
+            "---\nid: paper:Foo2024\ntype: paper\ntitle: Foo\n---\n\nAs shown by [@Ghost2099], this holds.\n"
+        )
+        issues = check_refs(root)
+        cite_issues = [i for i in issues if i.ref_type == "citation" and "Foo2024.md" in i.file]
+        assert len(cite_issues) == 1
+
+
 def test_valid_citation_ref() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem() as td:

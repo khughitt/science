@@ -50,7 +50,10 @@ def test_combined_fixture_emits_intended_warn_and_error() -> None:
 
     assert result.warnings >= 1
     assert result.errors >= 1
-    assert "1 [UNVERIFIED] marker(s) found in documents" in messages
+    # Two intentional markers: doc/overview.md and entities/reports/0001-overview.md.
+    # The entities/ one was historically missed until the scanners learned the v3
+    # entities/ root; both are now correctly counted.
+    assert "2 [UNVERIFIED] marker(s) found in documents" in messages
     assert (
         "Unknown project namespace 'unknown-project' in ref 'unknown-project:question:q01'. "
         "Add it to science.yaml peers: or use a local ref."

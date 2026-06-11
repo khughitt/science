@@ -76,7 +76,7 @@ _TASK_FALSE_POSITIVE_PARENTS = (
 )
 
 # Directories/files to scan
-_SCAN_DIRS = ("doc", "specs")
+_SCAN_DIRS = ("doc", "specs", "entities")
 _SCAN_FILES = ("RESEARCH_PLAN.md",)
 # Skip directories
 _SKIP_DIRS = {"templates", ".venv", "data", ".git", "__pycache__"}
@@ -135,7 +135,7 @@ def _collect_markdown_files(
         from science_tool.paths import resolve_paths
 
         pp = resolve_paths(root)
-        scan_dirs = [pp.doc_dir, pp.specs_dir]
+        scan_dirs = [pp.doc_dir, pp.specs_dir, pp.entities_dir]
     except Exception:
         scan_dirs = [root / d for d in _SCAN_DIRS]
 

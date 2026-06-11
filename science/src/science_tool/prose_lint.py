@@ -381,7 +381,7 @@ _DETECTORS: dict[str, Callable[..., list[LintIssue]]] = {
     "frontmatter-inline-gap": detect_frontmatter_inline_gaps,
     "numeric-anchor": detect_numeric_anchor,
 }
-_SCAN_DIRS = ("doc", "specs")
+_SCAN_DIRS = ("doc", "specs", "entities")
 _SCAN_ROOT_FILES = ("README.md", "AGENTS.md", "CLAUDE.md", "RESEARCH_PLAN.md")
 _SKIP_DIRS = {".git", ".venv", "node_modules", "data", "__pycache__", "templates"}
 

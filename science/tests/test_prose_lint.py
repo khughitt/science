@@ -382,3 +382,13 @@ class TestShortFormIdsDeny:
         (tmp_path / "doc" / "a.md").write_text("Cyclin D1 effect on cells.\n")
         result = scan_root(tmp_path, short_form_ids_deny=["D1"])
         assert result["counts"].get("short-form-ids", 0) == 0
+
+    def test_scans_entities_v3_layout(self, tmp_path):
+        # v3 migration moves entity bodies into entities/<kind>/; prose there
+        # must still be linted (regression: scanner only walked doc/ + specs/).
+        (tmp_path / "entities" / "papers").mkdir(parents=True)
+        (tmp_path / "entities" / "papers" / "Foo2024.md").write_text(
+            "# Foo\n\nAs Brunton 2022 showed, the result rho = 0.168 holds.\n"
+        )
+        result = scan_root(tmp_path, checks=["bare-author-year"])
+        assert result["counts"]["bare-author-year"] == 1
