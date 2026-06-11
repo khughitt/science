@@ -86,6 +86,10 @@ reads the processed table and writes a `qa_report.md`, splitting flags into **st
 Plan the QA step as its own task wired into the default target, and prefer a *structural*
 check that regression-guards any source-level fix the pipeline already makes.
 
+Plan the QA step to emit `qa_report.{md,json}` and scaffold `qa_dispositions.yaml` (e.g. via
+`python -m science_qa run`), and record analyst decisions on distribution flags there — this is what
+`science qa-audit` reads to tell genuine QC iteration from a one-shot run.
+
 ### Additional guidance
 
 When planning computational pipelines:
@@ -107,6 +111,9 @@ Evaluate QA discipline across the pipeline:
 - **Dry run step:** Is there a "run on small/synthetic data" step before full execution? Score: PASS (present) / WARN (suggested but not planned) / FAIL (absent)
 - **Edge case coverage:** Are edge cases documented (empty inputs, missing values, extreme values)? Score: PASS (documented) / WARN (partial) / FAIL (not considered)
 - **Severity split:** Does the QA step distinguish build-fatal *structural* violations (bad key, illegal code, broken invariant) from surfaced-not-fatal *distribution* flags (extreme-but-possible values), per [`docs/conventions/pipeline-qa-checkpoints.md`](../../docs/conventions/pipeline-qa-checkpoints.md)? Score: PASS (both, structural fails the build) / WARN (single bucket) / FAIL (no QA step)
+- **Process iteration:** Did the analysis iterate in response to QA flags, or run once and record
+  the result? Run `science qa-audit`. Score: PASS (QA-RESPONSIVE) / WARN (PARTIAL or
+  RE-RAN-UNRELATED) / FAIL (SINGLE-RUN × IGNORED — ran once, flags unexamined).
 
 Include QA Coverage as an additional row in the rubric results table.
 
