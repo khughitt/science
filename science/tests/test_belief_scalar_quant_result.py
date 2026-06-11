@@ -149,6 +149,56 @@ def test_not_applicable_polarity_contributes_no_oriented_mass():
     assert s.massed_dispute_band == baseline.massed_dispute_band
 
 
+# --- (e) undetermined-sign: no raise, falls back to stance ---------------------
+
+
+def test_beta_zero_sign_meaningful_polarity_no_raise():
+    """beta==0 means no determined sign: must NOT raise even with high prob_sign.
+    Falls back to stance orientation → support mass contributed."""
+    s = _scalar(
+        *_build(stance="supports", polarity="positive", quant={"beta": 0, "prob_sign": 0.9})
+    )
+    baseline = _scalar(*_build(stance="supports", polarity="positive"))
+    # Stance-oriented support mass is added (magnitude = QUANT_MASS_STEPS * 0.9).
+    assert s.massed_support_band[0] > baseline.massed_support_band[0]
+    assert s.massed_dispute_band == baseline.massed_dispute_band
+
+
+def test_low_prob_sign_opposing_beta_no_raise():
+    """prob_sign ≤ 0.5 means sign undetermined: beta opposing polarity must NOT raise.
+    Falls back to stance orientation → small support mass contributed."""
+    s = _scalar(
+        *_build(stance="supports", polarity="positive", quant={"beta": -1.5, "prob_sign": 0.4})
+    )
+    baseline = _scalar(*_build(stance="supports", polarity="positive"))
+    # Small stance-oriented support shift (magnitude = QUANT_MASS_STEPS * 0.4).
+    assert s.massed_support_band[0] > baseline.massed_support_band[0]
+    assert s.massed_dispute_band == baseline.massed_dispute_band
+
+
+def test_prob_sign_none_with_beta_returns_zero_mass():
+    """prob_sign is None with beta set → (0.0, 0.0), no raise (early-exit guard)."""
+    knowledge, provenance = _build(
+        stance="supports", polarity="positive", quant={"beta": 2.0}
+    )
+    # quant dict has only beta, no prob_sign key, so quant_prob_sign will be None.
+    units = collect_evidence_units(knowledge, provenance, [CLAIM])
+    from science_tool.graph.belief_scalar import _oriented_quant_mass
+
+    (unit,) = units
+    assert _oriented_quant_mass(unit) == (0.0, 0.0)
+
+
+def test_genuine_contradiction_still_raises():
+    """High prob_sign (0.98) + beta confidently opposing polarity + stance=supports → ValueError."""
+    knowledge, provenance = _build(
+        stance="supports", polarity="positive", quant={"beta": -1.2, "prob_sign": 0.98}
+    )
+    units = collect_evidence_units(knowledge, provenance, [CLAIM])
+    with pytest.raises(ValueError, match="contradict"):
+        belief_scalar(aggregate_belief(units))
+
+
 # --- materialize round-trip -----------------------------------------------------
 
 

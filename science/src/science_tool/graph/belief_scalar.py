@@ -36,6 +36,17 @@ QUANT_MASS_STEPS = 2.0
 _SIGNED_POLARITIES = frozenset({"positive", "negative"})
 
 
+def _stance_oriented_mass(u: EvidenceUnit, magnitude: float) -> tuple[float, float]:
+    """Return oriented mass using the authored stance (no beta comparison).
+
+    Used for unsigned/absent polarity and for sign-meaningful polarity when the
+    observed sign is not yet determined (beta==0, prob_sign absent, or prob_sign≤0.5).
+    """
+    if u.stance == "supports":
+        return (magnitude, 0.0)
+    return (0.0, magnitude)
+
+
 def _oriented_quant_mass(u: EvidenceUnit) -> tuple[float, float]:
     """Return (support_mass, dispute_mass) the unit's posterior adds to the bands.
 
@@ -44,8 +55,14 @@ def _oriented_quant_mass(u: EvidenceUnit) -> tuple[float, float]:
     target proposition's authored polarity and the line's stance; the magnitude
     scales with ``prob_sign`` (sign confidence, NOT an independent stance).
 
-    Raises ValueError when the authored stance contradicts the observed sign
-    (supports ⇒ must match the claimed sign; disputes ⇒ must oppose it).
+    For sign-meaningful polarity (positive/negative), the contradiction check and
+    sign-oriented routing apply ONLY when the sign is determined:
+        sign_determined = beta != 0 and prob_sign > 0.5
+    When the sign is undetermined (beta==0, prob_sign absent, or prob_sign≤0.5)
+    the function falls back to stance orientation — no ValueError is raised.
+
+    Raises ValueError when the authored stance contradicts a DETERMINED observed
+    sign (supports ⇒ must match the claimed sign; disputes ⇒ must oppose it).
     """
     beta = u.quant_beta
     prob_sign = u.quant_prob_sign
@@ -56,18 +73,21 @@ def _oriented_quant_mass(u: EvidenceUnit) -> tuple[float, float]:
     polarity = u.target_polarity
 
     if polarity == "not_applicable":
-        # Sign-less proposition: a signed beta has no oriented meaning. Contribute
-        # no oriented mass (the ordinal/non-quant contribution is unchanged).
+        # Sign-less proposition: a signed beta has no oriented meaning.
         return (0.0, 0.0)
 
     if polarity not in _SIGNED_POLARITIES:
-        # unsigned (or absent): no claimed sign to compare against — orientation
-        # follows the authored stance; magnitude still scales by prob_sign.
-        if u.stance == "supports":
-            return (magnitude, 0.0)
-        return (0.0, magnitude)
+        # unsigned (or absent): no claimed sign to compare against.
+        return _stance_oriented_mass(u, magnitude)
 
-    # Sign-meaningful polarity: orientation is decided by sign(beta) vs polarity.
+    # Sign-meaningful polarity. Only act on the sign when it is genuinely determined.
+    sign_determined = (beta != 0) and (prob_sign > 0.5)
+
+    if not sign_determined:
+        # Sign is undetermined (zero beta, or prob_sign too low): fall back to stance.
+        return _stance_oriented_mass(u, magnitude)
+
+    # Determined sign: orient by sign(beta) vs polarity, raise on contradiction.
     observed_matches_claim = (beta > 0) if polarity == "positive" else (beta < 0)
     stance_asserts_match = u.stance == "supports"
     if observed_matches_claim != stance_asserts_match:
