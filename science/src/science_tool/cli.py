@@ -3935,36 +3935,22 @@ project.add_command(_artifacts_group)
 )
 def project_index(output_format: str, project_root: Path) -> None:
     """Produce a compact index of questions and hypotheses for this project."""
-    import yaml as _yaml
-
-    from science_tool.paths import resolve_paths
-
     project_root = project_root.resolve()
-    paths = resolve_paths(project_root)
 
+    # Resolve entities through the canonical project-sources loader so the index
+    # is layout-agnostic: it finds questions/hypotheses whether they live under
+    # the v3 `entities/<kind>/` home or the legacy `doc/`-`specs/` dirs.
     rows: list[dict[str, str]] = []
-
-    # Scan hypotheses
-    hyp_dir = paths.specs_dir / "hypotheses"
-    if hyp_dir.is_dir():
-        for md in sorted(hyp_dir.glob("*.md")):
-            title, status = _extract_title_status(md, _yaml)
+    for kind in ("hypothesis", "question"):
+        for entity in list_entities(project_root, kind=kind):
             rows.append(
                 {
-                    "kind": "hypothesis",
-                    "file": md.relative_to(project_root).as_posix(),
-                    "title": title,
-                    "status": status,
+                    "kind": entity["kind"],
+                    "id": entity["id"],
+                    "file": entity["path"],
+                    "title": entity["title"],
+                    "status": entity["status"],
                 }
-            )
-
-    # Scan questions
-    q_dir = paths.doc_dir / "questions"
-    if q_dir.is_dir():
-        for md in sorted(q_dir.glob("*.md")):
-            title, status = _extract_title_status(md, _yaml)
-            rows.append(
-                {"kind": "question", "file": md.relative_to(project_root).as_posix(), "title": title, "status": status}
             )
 
     emit_query_rows(
@@ -3972,6 +3958,7 @@ def project_index(output_format: str, project_root: Path) -> None:
         title="Project Index",
         columns=[
             ("kind", "Kind"),
+            ("id", "ID"),
             ("file", "File"),
             ("title", "Title"),
             ("status", "Status"),
@@ -4648,34 +4635,6 @@ def bib_add(
         click.echo(_json.dumps({"key": result.key, "action": result.action, "path": str(result.path)}))
     else:
         click.echo(f"{result.action}: {result.key} ({result.path})")
-
-
-def _extract_title_status(path: Path, _yaml: Any) -> tuple[str, str]:
-    """Extract title and status from markdown frontmatter or first heading."""
-    text = path.read_text(encoding="utf-8")
-    title = path.stem
-    status = ""
-
-    # Try frontmatter
-    if text.startswith("---"):
-        end = text.find("---", 3)
-        if end != -1:
-            try:
-                fm = _yaml.safe_load(text[3:end])
-                if isinstance(fm, dict):
-                    title = str(fm.get("title") or title)
-                    status = str(fm.get("status") or "")
-            except _yaml.YAMLError:
-                pass
-
-    # Fallback: first H1/H2 heading
-    if title == path.stem:
-        for line in text.splitlines():
-            if line.startswith("# "):
-                title = line.lstrip("# ").strip()
-                break
-
-    return title, status
 
 
 @main.group()
