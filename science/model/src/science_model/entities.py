@@ -19,6 +19,7 @@ from science_model.packages.schema import (
 )
 from science_model.reasoning import (
     ClaimLayer,
+    CompositionRule,
     DisputeScope,
     EvidenceRole,
     EvidenceStance,
@@ -27,6 +28,7 @@ from science_model.reasoning import (
     IndependenceTag,
     MeasurementModel,
     ProxyDirectness,
+    RESERVED_COMPOSITION_RULES,
     RivalModelPacket,
     SupportScope,
 )
@@ -252,6 +254,7 @@ class Entity(BaseModel):
     provisional: bool = False
     review_after: date | None = None
     review_state: EpistemicReviewState | None = None
+    composition_rule: CompositionRule | None = None
 
     @model_validator(mode="after")
     def _validate_review_state_kind(self) -> "Entity":
@@ -365,6 +368,23 @@ class Entity(BaseModel):
         for ref in self.produced_by:
             if not ref.startswith("code-file:"):
                 raise ValueError(f"produced_by entries must be code-file:<id> references, got {ref!r}")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_composition_rule(self) -> "Entity":
+        if self.composition_rule is None:
+            return self
+        if self.kind not in ("hypothesis", "mechanism"):
+            raise ValueError(
+                f"composition_rule is only meaningful on bundle kinds (hypothesis/mechanism), "
+                f"not {self.kind!r}; remove it."
+            )
+        if self.composition_rule in RESERVED_COMPOSITION_RULES:
+            raise ValueError(
+                f"composition_rule {self.composition_rule.value!r} is reserved and not "
+                "implemented in v1 (see docs/plans/2026-06-11-bundle-belief-rollup-design.md "
+                "§4); use 'all_steps' or 'conjunctive'."
+            )
         return self
 
 

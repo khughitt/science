@@ -20,6 +20,7 @@ from science_model.ontologies.schema import OntologyCatalog, OntologyPredicate, 
 from science_model.projects import Project, ProjectDetail
 from science_model.reasoning import (
     ClaimLayer,
+    CompositionRule,
     DisputeScope,
     EvidenceRole,
     EvidenceStance,
@@ -32,8 +33,10 @@ from science_model.reasoning import (
     PropositionMetadata,
     ProxyDirectness,
     RivalModelPacket,
+    RESERVED_COMPOSITION_RULES,
     SIGN_MEANINGFUL_PREDICATES,
     SupportScope,
+    WEAKEST_LINK_COMPOSITION_RULES,
 )
 from science_model.profiles import EntityKind, ProfileManifest, RelationKind
 from science_model.propositions import PropositionEntity
@@ -66,6 +69,7 @@ __all__ = [
     "ConfigUpdate",
     "DashboardConfig",
     "ClaimLayer",
+    "CompositionRule",
     "DisputeScope",
     "Entity",
     "EntityKind",
@@ -81,7 +85,9 @@ __all__ = [
     "Predicate",
     "PropositionEntity",
     "PropositionMetadata",
+    "RESERVED_COMPOSITION_RULES",
     "SIGN_MEANINGFUL_PREDICATES",
+    "WEAKEST_LINK_COMPOSITION_RULES",
     "EntityScope",
     "EntityUpdate",
     "Filters",
