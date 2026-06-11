@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from science_qa.config import QAConfig
-from science_qa.flags import SEVERITY_STRUCTURAL, Flag
+from science_qa.flags import SEVERITY_DISTRIBUTION, SEVERITY_STRUCTURAL, Flag
 
 
 class QACheckError(Exception):
@@ -77,3 +77,32 @@ def run_structural_checks(table: pd.DataFrame, config: QAConfig, *, base_dir: Pa
                                   f"{survivors} surviving missing-sentinel value(s)"))
 
     return flags
+
+
+def run_distribution_checks(table: pd.DataFrame, config: QAConfig) -> list[Flag]:
+    flags: list[Flag] = []
+    for column, bounds in config.ranges.items():
+        _require_column(table, column, clause="ranges")
+        series = pd.to_numeric(table[column], errors="coerce").dropna()
+        if "min" in bounds:
+            below = int((series < bounds["min"]).sum())
+            if below:
+                flags.append(Flag("generic", "range", column, "min", SEVERITY_DISTRIBUTION,
+                                  str(below), str(bounds["min"]), f"{below} value(s) below min"))
+        if "max" in bounds:
+            above = int((series > bounds["max"]).sum())
+            if above:
+                flags.append(Flag("generic", "range", column, "max", SEVERITY_DISTRIBUTION,
+                                  str(above), str(bounds["max"]), f"{above} value(s) above max"))
+    return flags
+
+
+def per_variable_stats(table: pd.DataFrame) -> list[dict[str, str | int]]:
+    rows: list[dict[str, str | int]] = []
+    total = len(table)
+    for column in table.columns:
+        series = table[column]
+        n = int(series.notna().sum())
+        pct_miss = round(100 * (total - n) / total, 1) if total else 0.0
+        rows.append({"variable": column, "n": n, "pct_miss": f"{pct_miss}"})
+    return rows
