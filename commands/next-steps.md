@@ -11,6 +11,20 @@ Use `$ARGUMENTS` as optional filters, for example: `dev only`, `this week`, `rel
 
 Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
+**Resolve the next-steps home (layout-aware).** Next-steps files are `type: meta`
+entities. Where they live depends on `layout_version` in `science.yaml`:
+
+- **`layout_version: 3`** → `entities/meta/`, named with a zero-padded numeric
+  prefix: `entities/meta/<NNNN>-next-steps-<YYYY-MM-DD>.md`. Pick `<NNNN>` as the
+  next free index in `entities/meta/`. The validator rejects `type: meta`
+  entities placed outside `entities/meta/`.
+- **legacy (v2 / no `layout_version`)** → `doc/meta/next-steps-<YYYY-MM-DD>.md`.
+
+Throughout this command, **`<meta-home>`** means the resolved directory above and
+**`<meta-home>/*next-steps-*.md`** matches prior analyses in either layout (the
+glob tolerates the optional `<NNNN>-` prefix). Resolve this once, up front, and
+use it for every read, scan, and write below.
+
 Additionally, read (skip any that don't exist):
 1. `tasks/active.md`
 2. Recent completed tasks: scan `tasks/done/` for the most recent file
@@ -18,13 +32,13 @@ Additionally, read (skip any that don't exist):
 4. `specs/scope-boundaries.md` — project scope
 5. `doc/topics/` or equivalent topic coverage files in the doc directory
 6. `doc/papers/` — paper coverage
-7. `doc/meta/next-steps-*.md` — prior next-steps analyses (most recent)
+7. `<meta-home>/*next-steps-*.md` — prior next-steps analyses (most recent)
 
 Also run: `git log --oneline -15 --format="%h %s (%cr)"`
 
 ## Mode Detection
 
-Check for a prior same-day analysis: scan `doc/meta/next-steps-<today's date>*.md`.
+Check for a prior same-day analysis: scan `<meta-home>/*next-steps-<today's date>*.md`.
 
 - **Full mode** (default): No same-day analysis exists, or the last analysis is >3 days old, or the user explicitly requests full analysis.
 - **Delta mode**: A same-day analysis already exists. Focus on what changed:
@@ -89,7 +103,7 @@ The Direction column (improving / stable / regressing / new) shows momentum sinc
 
 ### 3b. Status Transitions
 
-If a prior next-steps analysis exists (`doc/meta/next-steps-*.md`), compare against it and surface all three directions:
+If a prior next-steps analysis exists (`<meta-home>/*next-steps-*.md`), compare against it and surface all three directions:
 
 - **Newly unblocked:** tasks that were blocked but are now actionable. What changed to unblock them?
 - **Newly blocked:** tasks that lost a dependency or had assumptions invalidated since the last analysis.
@@ -144,7 +158,7 @@ For each match, surface the task in a short `### Status Drift` table:
 
 **Also scan recent completions, not just `active.md`.** Work shipped in the current month lives in `tasks/done/<YYYY-MM>.md`, not `active.md` — and the analysis window usually overlaps the current month. Scan `tasks/done/<current-month>.md` (and `<previous-month>.md` when the window crosses a month boundary) for tasks completed inside the window. Without this, recently-shipped work is invisible: a run can wrongly conclude "no movement" or a "stalled program" when tasks in fact completed during the window. A completion found here is *positive* signal — surface it as progress, not drift.
 
-**Cross-check the prior `next-steps` doc.** Read the previous `doc/meta/next-steps-*.md` and check each recommendation it made against subsequent commits and `tasks/done/` entries. A recommendation that has since shipped is a "recommendation shipped" win to record — the cross-check detects positive follow-through, not only stalls.
+**Cross-check the prior `next-steps` doc.** Read the previous `<meta-home>/*next-steps-*.md` and check each recommendation it made against subsequent commits and `tasks/done/` entries. A recommendation that has since shipped is a "recommendation shipped" win to record — the cross-check detects positive follow-through, not only stalls.
 
 This detection is mandatory — a `next-steps` run that does not perform it must say so explicitly. Drift between code and task status is one of the most consistent failure modes; finding it once during analysis avoids re-litigating the same recommendations across sessions.
 
@@ -198,16 +212,24 @@ For each suggestion, include:
 
 ## Writing
 
-Save output to `doc/meta/next-steps-<YYYY-MM-DD>.md`. If a file for today already exists (delta mode), append an `## Update — HH:MM` section instead of creating a new file.
+Save output to `<meta-home>/[<NNNN>-]next-steps-<YYYY-MM-DD>.md` (use the resolved
+`<meta-home>` and, under v3, the `<NNNN>-` numeric prefix). If a file for today
+already exists (delta mode), append an `## Update — HH:MM` section instead of
+creating a new file.
+
+Set the frontmatter `id` to match the filename-derived canonical id: under v3
+that is `meta:<NNNN>-next-steps-<YYYY-MM-DD>`; in the legacy layout it is
+`meta:next-steps-<YYYY-MM-DD>`.
 
 ```markdown
 ---
-id: "meta:next-steps-YYYY-MM-DD"
+id: "meta:[<NNNN>-]next-steps-YYYY-MM-DD"
 type: "meta"
 title: "Next Steps — YYYY-MM-DD"
+status: "active"
 created: "YYYY-MM-DD"
 updated: "YYYY-MM-DD"
-prior: "meta:next-steps-<predecessor-date>"  # see "Resolve prior link" below; omit if no predecessor
+prior: "meta:[<NNNN>-]next-steps-<predecessor-date>"  # canonical id of predecessor; see "Resolve prior link" below; omit if no predecessor
 related: []
 ---
 
@@ -270,7 +292,12 @@ If sync is stale, include a note in the Recommended Next Actions table:
 
 ### Resolve prior link
 
-Before writing the file, list `doc/meta/next-steps-*.md`. **Exclude any file dated today** (delta-mode appends to that file rather than creating a new one, so the predecessor must be the most recent file *strictly before* today). From the remaining files, select the one with the lexically-greatest `YYYY-MM-DD` in its filename. Set `prior: meta:next-steps-<that-date>` in the new file's frontmatter. If no predecessor exists (this is the first next-steps file in the project), omit the `prior:` field entirely.
+Before writing the file, list `<meta-home>/*next-steps-*.md`. **Exclude any file dated today** (delta-mode appends to that file rather than creating a new one, so the predecessor must be the most recent file *strictly before* today). From the remaining files, select the one with the lexically-greatest `YYYY-MM-DD` in its filename. Set `prior:` to that file's canonical id — `meta:<NNNN>-next-steps-<that-date>` under v3, or `meta:next-steps-<that-date>` in the legacy layout (read the predecessor's frontmatter `id` rather than reconstructing it). If no predecessor exists (this is the first next-steps file in the project), omit the `prior:` field entirely.
+
+> ⚠️ Under `layout_version: 3`, prior analyses live in `entities/meta/`, **not**
+> `doc/meta/`. Globbing only `doc/meta/` on a v3 project silently finds nothing
+> and the run will wrongly conclude "no predecessor / first analysis." Always
+> scan the resolved `<meta-home>`.
 
 Delta mode (append `## Update — HH:MM` to today's existing file) does **not** change the file's `prior:` — the chain link is per-file, not per-update.
 
@@ -278,7 +305,7 @@ Projects that historically use `prior_analyses: [...]` (e.g. protein-landscape) 
 
 ### Steps
 
-1. Save to `doc/meta/next-steps-<YYYY-MM-DD>.md`. In delta mode, append to the existing file rather than creating a new one — git tracks history, so overwriting the date-stamped file is acceptable.
+1. Save to `<meta-home>/[<NNNN>-]next-steps-<YYYY-MM-DD>.md`. In delta mode, append to the existing file rather than creating a new one — git tracks history, so overwriting the date-stamped file is acceptable.
 2. Offer to create tasks from recommended items: "Create tasks from these suggestions?"
    - If accepted, run `science tasks add` for each recommended task with appropriate priority, type, and related entities
 3. Cross-link relevant items in `doc/questions/`.
