@@ -722,6 +722,23 @@ class CodeFileEntity(ProjectEntity):
     task_ids: list[str] = Field(default_factory=list)
 
 
+class QuantitativeResult(BaseModel):
+    """Typed posterior / fitted-model summary carried by an evidence-line.
+
+    All fields are optional so that partial results (e.g. only ``fit_task``
+    known at staging time) are accepted without validation errors.
+
+    ``hdi`` is a two-element [low, high] credible-interval list.
+    ``fit_task`` and ``model`` record the provenance of the estimate.
+    """
+
+    beta: float | None = None
+    hdi: list[float] | None = None
+    prob_sign: float | None = None
+    fit_task: str | None = None
+    model: str | None = None
+
+
 class EvidenceLineEntity(ProjectEntity):
     """A first-class evidence-line entity linking a source to a target claim.
 
@@ -734,6 +751,14 @@ class EvidenceLineEntity(ProjectEntity):
 
     Note: ``independence_group`` and ``measurement_model`` are inherited from
     Entity; ``evidence_role`` is inherited from ProjectEntity.
+
+    ``quantitative_result`` carries a typed posterior summary (beta/hdi/
+    prob_sign/fit_task/model) when the line has an associated fitted model.
+
+    ``belief_eligible`` is a staging marker (default True). When False the
+    line may exist but emits no cito:supports/disputes and cannot enter belief
+    aggregation until grounding completes. Enforcement is deferred to tasks
+    2c/3b; this field records intent only.
     """
 
     stance: EvidenceStance
@@ -747,6 +772,8 @@ class EvidenceLineEntity(ProjectEntity):
     shared_platform: str | None = None
     shared_cohort: str | None = None
     evidence_type: str | None = None
+    quantitative_result: QuantitativeResult | None = None
+    belief_eligible: bool = True
 
 
 class InquiryEntity(ProjectEntity):
