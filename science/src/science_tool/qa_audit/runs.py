@@ -51,5 +51,5 @@ def load_runs(runs_dir: Path) -> list[RunRecord]:
 
 
 def chain_depth(runs: list[RunRecord], workflow: str) -> int:
-    """Number of runs in the workflow's supersession chain (1 == single run)."""
+    """Number of runs recorded for the workflow (its supersession chain); 1 == single run."""
     return sum(1 for r in runs if r.workflow == workflow)
