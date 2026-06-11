@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
 from science_model.entities import EvidenceLineEntity
 from science_model.frontmatter import parse_entity_file
 
@@ -23,6 +25,7 @@ from science_tool.dag.workbench import (
     WorkbenchRow,
     compile_workbench,
 )
+from science_tool.entities import local_part_conforms
 
 
 def _seed_project(root: Path) -> None:
@@ -242,3 +245,93 @@ def test_literature_evidence_is_belief_eligible(tmp_path: Path) -> None:
     )
     result = compile_workbench(wb, project_root=tmp_path)
     assert result.evidence_lines[0].belief_eligible is True
+
+
+# ---------------------------------------------------------------------------
+# (v) compile_workbench accepts a path to a .workbench.yaml file
+# ---------------------------------------------------------------------------
+
+def test_compile_workbench_accepts_path_to_yaml_file(tmp_path: Path) -> None:
+    """compile_workbench(path) loads the YAML and compiles end-to-end."""
+    _seed_project(tmp_path)
+
+    wb_data = {
+        "rows": [
+            {
+                "subject": "gene:MYC",
+                "predicate": "regulates",
+                "object": "gene:CDK4",
+                "polarity": "positive",
+                "patch": "patch-path-test",
+            }
+        ]
+    }
+    wb_path = tmp_path / "phf19.workbench.yaml"
+    wb_path.write_text(yaml.safe_dump(wb_data), encoding="utf-8")
+
+    # Pass a Path object — should load, compile, and write entity files.
+    result = compile_workbench(wb_path, project_root=tmp_path)
+
+    assert isinstance(result, CompileResult)
+    assert len(result.propositions) == 1
+    prop = result.propositions[0]
+    assert prop.id is not None and prop.id.startswith("proposition:")
+
+    slug = prop.id.split(":", 1)[1]
+    prop_path = tmp_path / "entities" / "propositions" / f"{slug}.md"
+    assert prop_path.is_file()
+
+    loaded = parse_entity_file(prop_path, "compile-test")
+    assert loaded is not None and loaded.id == prop.id
+
+    # Also accept a plain str path.
+    result2 = compile_workbench(str(wb_path), project_root=tmp_path)
+    assert result2.propositions[0].id == prop.id
+
+
+# ---------------------------------------------------------------------------
+# (vi) compiled proposition local-part conforms to the slug policy
+# ---------------------------------------------------------------------------
+
+def test_compiled_proposition_passes_slug_conformance(tmp_path: Path) -> None:
+    """A compiled proposition's minted local-part must satisfy local_part_conforms
+    under the slug policy — so entity_conformance will not flag it (Tasks 5d/6)."""
+    _seed_project(tmp_path)
+    wb = WorkbenchFile(
+        rows=[
+            WorkbenchRow(
+                subject="gene:PHF19",
+                predicate="affects",
+                object="construct:proliferation",
+                polarity="positive",
+                patch="patch-a",
+            )
+        ]
+    )
+    result = compile_workbench(wb, project_root=tmp_path)
+    prop = result.propositions[0]
+    local_part = prop.id.split(":", 1)[1]
+
+    assert local_part_conforms("proposition", local_part), (
+        f"proposition local-part {local_part!r} does not conform to the slug strategy"
+    )
+
+    # Evidence-line local-part also conforms.
+    wb2 = WorkbenchFile(
+        rows=[
+            WorkbenchRow(
+                subject="gene:PHF19",
+                predicate="affects",
+                object="construct:proliferation",
+                polarity="positive",
+                patch="patch-b",
+                evidence=[EvidenceStub(stance="supports", evidence_type="literature_evidence")],
+            )
+        ]
+    )
+    result2 = compile_workbench(wb2, project_root=tmp_path)
+    ev = result2.evidence_lines[0]
+    ev_local = ev.id.split(":", 1)[1]
+    assert local_part_conforms("evidence-line", ev_local), (
+        f"evidence-line local-part {ev_local!r} does not conform to the slug strategy"
+    )

@@ -35,7 +35,7 @@ def test_builtin_path_policy_maps_core_kinds() -> None:
     assert resolve_path_policy("interpretation").root == Path("entities/interpretations")
     assert resolve_path_policy("theme").root == Path("entities/themes")
     assert resolve_path_policy("proposition").root == Path("entities/propositions")
-    assert resolve_path_policy("proposition").strategy == "numeric"
+    assert resolve_path_policy("proposition").strategy == "slug"
 
 
 @pytest.mark.parametrize(
@@ -398,18 +398,18 @@ def test_create_entity_writes_theme_source_and_loads_it(tmp_path: Path) -> None:
 def test_create_entity_writes_proposition_source_and_loads_it(tmp_path: Path) -> None:
     seed_project(tmp_path)
 
+    # slug strategy: id is derived from title with no numeric prefix
     result = create_entity(
         project_root=tmp_path,
         kind="proposition",
         title="Treatment exposure changes under sparse PSA monitoring",
-        entity_id="proposition:0001-cadence-shapes-exposure",
         related=[],
         source_refs=[],
         today=date(2026, 5, 5),
     )
 
-    assert result.entity_id == "proposition:0001-cadence-shapes-exposure"
-    assert result.path == tmp_path / "entities/propositions/0001-cadence-shapes-exposure.md"
+    assert result.entity_id == "proposition:treatment-exposure-changes-under-sparse-psa-monitoring"
+    assert result.path == tmp_path / "entities/propositions/treatment-exposure-changes-under-sparse-psa-monitoring.md"
     assert result.warnings == []
     text = result.path.read_text(encoding="utf-8")
     assert "type: proposition" in text or 'type: "proposition"' in text or "type: 'proposition'" in text
@@ -420,7 +420,7 @@ def test_create_entity_writes_proposition_source_and_loads_it(tmp_path: Path) ->
     assert "## Caveats" in text
     sources = load_project_sources(tmp_path)
     by_id = {entity.canonical_id: entity for entity in sources.entities}
-    assert "proposition:0001-cadence-shapes-exposure" in by_id
+    assert "proposition:treatment-exposure-changes-under-sparse-psa-monitoring" in by_id
 
 
 def test_create_entity_rejects_invalid_proposition_status(tmp_path: Path) -> None:
@@ -430,7 +430,7 @@ def test_create_entity_rejects_invalid_proposition_status(tmp_path: Path) -> Non
             project_root=tmp_path,
             kind="proposition",
             title="Some claim",
-            entity_id="proposition:0001-some-claim",
+            entity_id="proposition:some-claim",
             status="speculative",  # not in the proposition status enum
             related=[],
             source_refs=[],
@@ -448,7 +448,7 @@ def test_create_entity_accepts_all_proposition_statuses(tmp_path: Path) -> None:
             project_root=project_root,
             kind="proposition",
             title=f"Claim under {status}",
-            entity_id=f"proposition:0001-claim-{status}",
+            entity_id=f"proposition:claim-{status}",
             status=status,
             related=[],
             source_refs=[],

@@ -40,14 +40,14 @@ class EntityPathPolicy:
 _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
     "question": EntityPathPolicy(Path("entities/questions"), "numeric"),
     "hypothesis": EntityPathPolicy(Path("entities/hypotheses"), "numeric"),
-    "proposition": EntityPathPolicy(Path("entities/propositions"), "numeric"),
+    "proposition": EntityPathPolicy(Path("entities/propositions"), "slug"),
     "interpretation": EntityPathPolicy(Path("entities/interpretations"), "numeric"),
     "discussion": EntityPathPolicy(Path("entities/discussions"), "numeric"),
     "finding": EntityPathPolicy(Path("entities/findings"), "numeric"),
     "inquiry": EntityPathPolicy(Path("entities/inquiries"), "numeric"),
     "theme": EntityPathPolicy(Path("entities/themes"), "numeric"),
     "topic": EntityPathPolicy(Path("entities/topics"), "slug"),  # was "numeric" (4c: slug identity kind)
-    "evidence-line": EntityPathPolicy(Path("entities/evidence-lines"), "numeric"),
+    "evidence-line": EntityPathPolicy(Path("entities/evidence-lines"), "slug"),
     "observation": EntityPathPolicy(Path("entities/observations"), "slug"),  # was "numeric": observations carry descriptive slug ids (e.g. observation:swan-stage-shift); enables id-preserving single-type aggregate retirement (§B5)
     "mechanism": EntityPathPolicy(Path("entities/mechanisms"), "numeric"),
     "synthesis": EntityPathPolicy(Path("entities/synthesis"), "numeric"),
