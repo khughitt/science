@@ -35,8 +35,9 @@ def reconcile_dispositions(report_dir: Path, distribution_flag_ids: list[str]) -
     merged: dict[str, dict] = {}
 
     for flag_id in current:
-        if flag_id in existing:
-            merged[flag_id] = existing[flag_id]
+        existing_entry = existing.get(flag_id)
+        if existing_entry is not None and existing_entry.get("disposition") != "resolved":
+            merged[flag_id] = existing_entry
             stats.unchanged += 1
         else:
             merged[flag_id] = {"flag_id": flag_id, "disposition": "open", "note": "", "change": ""}
@@ -44,8 +45,7 @@ def reconcile_dispositions(report_dir: Path, distribution_flag_ids: list[str]) -
 
     for flag_id, entry in existing.items():
         if flag_id not in current:
-            entry["disposition"] = "resolved"
-            merged[flag_id] = entry
+            merged[flag_id] = {**entry, "disposition": "resolved"}
             stats.resolved += 1
 
     report_dir.mkdir(parents=True, exist_ok=True)

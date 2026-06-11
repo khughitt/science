@@ -44,3 +44,21 @@ def test_never_overwrites_on_repeat(tmp_path):
 
 def test_valid_dispositions_set():
     assert VALID_DISPOSITIONS == {"open", "investigating", "addressed", "accepted-real", "wont-fix", "resolved"}
+
+
+def test_reemerged_resolved_flag_reopens(tmp_path):
+    path = tmp_path / "qa_dispositions.yaml"
+    _write(path, [{"flag_id": "a/b/c/-", "disposition": "resolved", "note": "was gone"}])
+    stats = reconcile_dispositions(tmp_path, ["a/b/c/-"])
+    data = {e["flag_id"]: e for e in yaml.safe_load(path.read_text())["dispositions"]}
+    assert data["a/b/c/-"]["disposition"] == "open"   # re-fired → reopened
+    assert (stats.added, stats.resolved, stats.unchanged) == (1, 0, 0)
+
+
+def test_repeat_preserves_note_and_change(tmp_path):
+    path = tmp_path / "qa_dispositions.yaml"
+    _write(path, [{"flag_id": "a/b/c/-", "disposition": "addressed", "note": "fixed", "change": "min_genes=200"}])
+    reconcile_dispositions(tmp_path, ["a/b/c/-"])
+    data = {e["flag_id"]: e for e in yaml.safe_load(path.read_text())["dispositions"]}
+    assert data["a/b/c/-"]["note"] == "fixed"
+    assert data["a/b/c/-"]["change"] == "min_genes=200"
