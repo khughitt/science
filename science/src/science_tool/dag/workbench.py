@@ -31,6 +31,53 @@ from science_model.entities import EntityType, EvidenceLineEntity, QuantitativeR
 from science_model.propositions import PropositionEntity
 
 
+# ---------------------------------------------------------------------------
+# Layout models (Task 5e) — cosmetic / non-epistemic state
+# ---------------------------------------------------------------------------
+
+
+class NodeLayout(BaseModel):
+    """Cosmetic position for a single proposition node in a DAG view.
+
+    Carries only cosmetic coordinates.  ``extra="forbid"`` prevents unknown
+    keys (e.g. color, label) from silently passing through.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    x: float = 0.0
+    y: float = 0.0
+    pinned: bool = False
+
+
+class LayoutFile(BaseModel):
+    """Top-level structure of a ``<patch>.layout.yaml`` sibling file.
+
+    Keyed by proposition id; values are node cosmetic positions.
+    This model is entirely separate from the workbench epistemic content:
+    ``compile_workbench`` and ``serialize_canonical`` do NOT read it.
+    ``extra="forbid"`` keeps the file model strict.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    nodes: dict[str, NodeLayout] = Field(default_factory=dict)
+
+
+def load_layout(path: Path | str) -> LayoutFile:
+    """Parse a ``<patch>.layout.yaml`` sibling file into a ``LayoutFile``.
+
+    Tolerates a missing file — returns an empty ``LayoutFile()`` so callers
+    need not guard for existence.  Uses the same ``yaml.safe_load`` +
+    ``model_validate`` idiom as the path-load branch of ``compile_workbench``.
+    """
+    p = Path(path)
+    if not p.exists():
+        return LayoutFile()
+    raw = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    return LayoutFile.model_validate(raw)
+
+
 class EvidenceStub(BaseModel):
     """Input-only evidence shape authored inside a WorkbenchRow.
 
