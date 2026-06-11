@@ -746,6 +746,25 @@ def test_broken_task_ref() -> None:
         assert task_issues[0].ref_value == "t99"
 
 
+def test_cross_project_scoped_task_ref_is_not_flagged_as_local() -> None:
+    """A scoped cross-project task ref like `pan-disease:task:t99` must not be
+    flagged as a missing LOCAL task. The bare-`tNNN` task check must skip a
+    match preceded by `:` (part of a `task:`/`<peer>:task:` form), mirroring the
+    typed-entity-ref scanner."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "tasks").mkdir(parents=True, exist_ok=True)
+        (root / "tasks" / "active.md").write_text("## [t05] Build pipeline\n- status: proposed\n")
+        (root / "doc" / "background" / "topics" / "x.md").write_text(
+            "# X\nCross-walk the robust core (pan-disease:task:t99 output) here.\n"
+        )
+        issues = check_refs(root)
+        task_issues = [i for i in issues if i.ref_type == "task"]
+        assert task_issues == []
+
+
 def test_task_ref_in_done_file_resolves() -> None:
     """Task IDs declared only in tasks/done/*.md should still resolve."""
     runner = CliRunner()

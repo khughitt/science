@@ -673,6 +673,11 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
             if not skip_task_check and task_ids:
                 for m in _TASK_ID_RE.finditer(scan_line):
                     task_num = m.group(1)
+                    # A `tNNN` preceded by `:` is part of a `task:`/`<peer>:task:`
+                    # form (e.g. pan-disease:task:t036) — a typed or cross-project
+                    # ref validated elsewhere, not a bare LOCAL task reference.
+                    if m.start() > 0 and scan_line[m.start() - 1] == ":":
+                        continue
                     if task_num in task_ids:
                         continue
                     issues.append(
