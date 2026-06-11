@@ -66,7 +66,7 @@ def run_structural_checks(table: pd.DataFrame, config: QAConfig, *, base_dir: Pa
                               f"{cooccur} row(s) where {pair[0]} and {pair[1]} co-occur"))
 
     if config.missing_sentinels:
-        sentinels = set(config.missing_sentinels)
+        sentinels = list(config.missing_sentinels)
         for column in table.columns:
             if not pd.api.types.is_numeric_dtype(table[column]):
                 continue
