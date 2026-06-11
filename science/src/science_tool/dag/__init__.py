@@ -3,6 +3,11 @@
 from science_tool.dag.audit import AuditReport, ProposedMutation, run_audit
 from science_tool.dag.number import number_all, number_one
 from science_tool.dag.paths import DagPaths, load_dag_paths
+from science_tool.dag.proposition_edges import (
+    edges_from_propositions,
+    load_proposition_edges,
+    proposition_to_edge,
+)
 from science_tool.dag.refs import RefResolutionError, validate_ref_entry
 from science_tool.dag.render import render_all, render_one
 from science_tool.dag.schema import (
@@ -13,6 +18,7 @@ from science_tool.dag.schema import (
     PosteriorBlock,
     RefEntry,
     SchemaError,
+    load_legacy_edges_yaml,
 )
 from science_tool.dag.staleness import (
     CandidateTask,
@@ -51,6 +57,10 @@ __all__ = [
     "EdgeRecord",
     "EdgeStatus",
     "EdgesYamlFile",
+    "load_legacy_edges_yaml",
+    "edges_from_propositions",
+    "load_proposition_edges",
+    "proposition_to_edge",
     "Identification",
     "PosteriorBlock",
     "RefEntry",

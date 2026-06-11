@@ -163,14 +163,37 @@ class EdgeRecord(BaseModel):
         return self
 
 
+_EDGES_YAML_DEPRECATION = (
+    "`*.edges.yaml` is RETIRED as an epistemic source-of-truth (Task 5f). It is "
+    "read only through this legacy-import adapter; its authored `edge_status` is "
+    "NOT consulted as the epistemic status. The DAG is now a view over compiled "
+    "relational propositions — source edges via "
+    "`science_tool.dag.proposition_edges.edges_from_propositions`, whose "
+    "`edge_status` is DERIVED via `derived_edge_status`."
+)
+
+
 class EdgesYamlFile(BaseModel):
-    """Top-level structure of a ``<slug>.edges.yaml`` file."""
+    """LEGACY-IMPORT adapter for a ``<slug>.edges.yaml`` file (Task 5f).
+
+    ``*.edges.yaml`` is retired as an epistemic source-of-truth. This model can
+    still *read* existing files (so legacy inputs load), but every parse emits a
+    ``DeprecationWarning``, and the authored ``edge_status`` field is never
+    consumed as the epistemic status — the derived status from compiled
+    propositions wins. Prefer ``proposition_edges.edges_from_propositions``.
+    """
 
     model_config = {"extra": "allow"}
 
     dag: str
     source_dot: str | None = None
     edges: list[EdgeRecord] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _warn_edges_yaml_deprecated(cls, values: object) -> object:
+        warnings.warn(_EDGES_YAML_DEPRECATION, DeprecationWarning, stacklevel=2)
+        return values
 
     @model_validator(mode="after")
     def _unique_source_target_pairs(self) -> "EdgesYamlFile":
@@ -181,3 +204,16 @@ class EdgesYamlFile(BaseModel):
                 raise SchemaError(f"duplicate edge (source={e.source!r}, target={e.target!r}) in DAG {self.dag!r}")
             seen.add(key)
         return self
+
+
+def load_legacy_edges_yaml(text: str) -> EdgesYamlFile:
+    """Parse ``<slug>.edges.yaml`` text through the LEGACY-IMPORT adapter.
+
+    Convenience wrapper around ``EdgesYamlFile.model_validate`` that documents
+    the retirement at the call site. Parsing emits a ``DeprecationWarning``
+    (see ``_warn_edges_yaml_deprecated``); the authored ``edge_status`` is never
+    consumed as the epistemic status (Task 5f).
+    """
+    import yaml
+
+    return EdgesYamlFile.model_validate(yaml.safe_load(text) or {})

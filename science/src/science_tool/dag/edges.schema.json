@@ -346,7 +346,7 @@
     }
   },
   "additionalProperties": true,
-  "description": "Top-level structure of a ``<slug>.edges.yaml`` file.",
+  "description": "LEGACY-IMPORT adapter for a ``<slug>.edges.yaml`` file (Task 5f).\n\n``*.edges.yaml`` is retired as an epistemic source-of-truth. This model can\nstill *read* existing files (so legacy inputs load), but every parse emits a\n``DeprecationWarning``, and the authored ``edge_status`` field is never\nconsumed as the epistemic status \u2014 the derived status from compiled\npropositions wins. Prefer ``proposition_edges.edges_from_propositions``.",
   "properties": {
     "dag": {
       "title": "Dag",

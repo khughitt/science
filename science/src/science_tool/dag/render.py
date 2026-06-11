@@ -203,8 +203,16 @@ def style_for_edge(edge: dict) -> dict:  # type: ignore[type-arg]
         status = derived_status  # used for eliminated-guard below
     else:
         # Legacy mode: authored edge_status drives colour / penwidth / style.
-        # TODO(5f): transitional only — remove this branch once edges.yaml is retired
-        # as the epistemic source-of-truth (Task 5f) and all edges carry channel fields.
+        # Task 5f: edges.yaml is RETIRED as the epistemic source-of-truth — the
+        # primary path sources channel-mode edges from compiled propositions
+        # (proposition_edges.edges_from_propositions). This branch survives ONLY
+        # behind the deprecated edges.yaml legacy-import adapter (render falls
+        # back to it, loudly via DeprecationWarning, when no propositions are
+        # compiled), so authored edge_status is never a status SoT for the
+        # proposition-sourced view. It is retained — not deleted — because many
+        # not-yet-migrated edges.yaml fixtures still carry authored edge_status
+        # with no channel fields; deleting it would break their backward-compatible
+        # rendering. It can be removed once every input carries channel fields.
         status = edge.get("edge_status") or "tentative"
         base = STATUS_STYLES.get(status, STATUS_STYLES["tentative"]).copy()
         derived_status = status
@@ -408,20 +416,63 @@ def _discover_slugs(dag_dir: Path) -> list[str]:
     return sorted(p.stem.replace(".edges", "") for p in dag_dir.glob("*.edges.yaml"))
 
 
-def render_one(dag_dir: Path, slug: str) -> None:
-    """Render one slug — reads <slug>.dot + <slug>.edges.yaml, writes <slug>-auto.{dot,png}."""
+def render_one(
+    dag_dir: Path,
+    slug: str,
+    *,
+    proposition_edges: list[dict] | None = None,  # type: ignore[type-arg]
+) -> None:
+    """Render one slug to <slug>-auto.{dot,png}.
+
+    Topology comes from ``<slug>.dot``. Edge SEMANTICS come from
+    ``proposition_edges`` when supplied — the compiled relational propositions
+    are the epistemic source-of-truth (Task 5f), styled in channel mode with a
+    DERIVED ``edge_status``.
+
+    When ``proposition_edges`` is ``None``, the renderer falls back to the
+    RETIRED ``<slug>.edges.yaml`` legacy-import adapter (a ``DeprecationWarning``
+    is emitted on read). The authored ``edge_status`` in that file is not the
+    epistemic status SoT; it survives only as the legacy-mode styling input.
+    """
     dot_path = dag_dir / f"{slug}.dot"
-    yaml_path = dag_dir / f"{slug}.edges.yaml"
-    data = yaml.safe_load(yaml_path.read_text())
-    edges = data["edges"]
+    if proposition_edges is None:
+        edges = _load_legacy_edges(dag_dir / f"{slug}.edges.yaml")
+    else:
+        edges = proposition_edges
     out_dot = dag_dir / f"{slug}-auto.dot"
     out_png = dag_dir / f"{slug}-auto.png"
     emit_styled_dot(dot_path, edges, out_dot)
     render_png(out_dot, out_png)
 
 
-def render_all(paths: DagPaths) -> None:
-    """Render every discovered DAG's -auto.dot + -auto.png."""
+def _load_legacy_edges(yaml_path: Path) -> list[dict]:  # type: ignore[type-arg]
+    """Read raw edge dicts from a RETIRED ``<slug>.edges.yaml`` (Task 5f).
+
+    Emits the edges.yaml retirement ``DeprecationWarning`` so that falling back
+    to the authored file is loud, never silent. Returns the raw edge dicts (the
+    render path tolerates not-yet-migrated legacy fields).
+    """
+    import warnings
+
+    from science_tool.dag.schema import _EDGES_YAML_DEPRECATION
+
+    warnings.warn(_EDGES_YAML_DEPRECATION, DeprecationWarning, stacklevel=2)
+    data = yaml.safe_load(yaml_path.read_text())
+    return data["edges"]
+
+
+def render_all(
+    paths: DagPaths,
+    *,
+    proposition_edges: list[dict] | None = None,  # type: ignore[type-arg]
+) -> None:
+    """Render every discovered DAG's -auto.dot + -auto.png.
+
+    ``proposition_edges`` (when supplied) are the compiled-proposition edges
+    shared across every slug; topology filtering per slug happens in
+    ``emit_styled_dot`` (edges whose source/target pair is absent from a DAG's
+    DOT are simply not drawn there).
+    """
     slugs = list(paths.dags) if paths.dags else _discover_slugs(paths.dag_dir)
     for slug in slugs:
-        render_one(paths.dag_dir, slug)
+        render_one(paths.dag_dir, slug, proposition_edges=proposition_edges)
