@@ -3,7 +3,9 @@ id: "workflow-run:<slug>"
 type: "workflow-run"
 title: "<Run Description>"
 status: "complete"
-workflow: "<workflow-slug>"
+workflow: "<workflow-slug>"          # materializes the executes link the audit walks
+manifest_path: "results/<workflow>/<slug>/datapackage.yaml"  # read by `science qa-audit`
+supersedes: []                       # ["workflow-run:<prior-slug>"] when re-run with changed params
 # Symmetric edges (populated by `science dataset register-run`).
 # `produces:` is the inverse of dataset.derivation.workflow_run (state invariant #9).
 # `inputs:` enumerates upstream datasets the run consumed; symmetric with each
@@ -20,7 +22,7 @@ What this run produced and why it was executed.
 
 ## Manifest
 
-- **Location:** `results/<workflow>/<slug>/datapackage.json`
+- **Location:** `results/<workflow>/<slug>/datapackage.yaml`
 - **Config snapshot:** `results/<workflow>/<slug>/config.yaml`
 
 ## Entity Cross-References
