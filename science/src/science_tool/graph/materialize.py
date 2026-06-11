@@ -567,7 +567,13 @@ def _add_evidence_line_relations(
     provenance,
     ext_prefixes: frozenset[str],
 ) -> None:
-    """Emit cito:supports/disputes edge (→ knowledge) and prov:wasDerivedFrom source (→ provenance)."""
+    """Emit cito:supports/disputes edge (→ knowledge) and prov:wasDerivedFrom source (→ provenance).
+
+    Staged lines (belief_eligible=False) are silently skipped — they must not enter
+    the belief/knowledge graph.
+    """
+    if not entity.belief_eligible:
+        return
     resolution = resolver.resolve(entity.target, allow_cross_kind_fallback=True)
     if resolution.status == "resolved" and resolution.canonical_id is not None:
         target_entity = entity_index.get(resolution.canonical_id)
@@ -596,7 +602,12 @@ def _add_evidence_line_metadata(*, uri: URIRef, provenance, entity: EvidenceLine
 
     Does NOT re-emit evidence_role, independence_group, or measurement_model — those
     are already handled by _add_reasoning_metadata.
+
+    Staged lines (belief_eligible=False) are silently skipped — quant scalar
+    predicates must not feed belief aggregation for ungrounded staged lines.
     """
+    if not entity.belief_eligible:
+        return
     scalar_predicates: dict[str, object] = {
         "strength": SCI_NS.evidenceStrength,
         "independence": SCI_NS.evidenceIndependence,
