@@ -164,11 +164,12 @@ credulity ("EMT shows up therefore EMT"), tail-hiding metrics.
 
 ## Recommended first spin-out
 
-- **B3 + B2 (no-iteration flagging + QA-breadth quantification)** — the talk's *headline*
-  finding made real, among the cheapest to ship, and **unblocked today**: it extends the
+- **B3 + B1 (no-iteration flagging + QA-check toolkit), then B2** — the talk's *headline*
+  finding made real, among the cheapest to ship, and **unblocked today**: B3 and B1 extend the
   existing QA conventions (`docs/conventions/pipeline-qa-checkpoints.md`,
-  `docs/process/pipeline-audit-and-refactor.md`) rather than waiting on substrate work. This is
-  my lead recommendation.
+  `docs/process/pipeline-audit-and-refactor.md`) rather than waiting on substrate work. B2
+  (QA-breadth quantification) follows once B1 defines the reusable check surface it scores
+  against (`B2 *Deps:* B1`). This is my lead recommendation.
 - **Theme A (evidence tiering + cross-modality)** — strongest grounding and highest epistemic
   payoff (the user's long-emphasized hint/single/multi/multi-modal ladder, finally systematic),
   **but gated**: it cannot start until `belief_eligible` / `quantitative_result` land via
