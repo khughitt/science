@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 
@@ -83,7 +84,7 @@ def run_distribution_checks(table: pd.DataFrame, config: QAConfig) -> list[Flag]
     flags: list[Flag] = []
     for column, bounds in config.ranges.items():
         _require_column(table, column, clause="ranges")
-        series = pd.to_numeric(table[column], errors="coerce").dropna()
+        series = cast("pd.Series", pd.to_numeric(table[column], errors="coerce")).dropna()
         if "min" in bounds:
             below = int((series < bounds["min"]).sum())
             if below:
