@@ -195,8 +195,9 @@ a re-run regenerates them. Therefore:
   (`"2 new flags, 1 resolved, 3 unchanged"`) and **never silently overwriting** edits. Because it
   is outside any rule's output set, no build deletes it and no re-run clobbers it.
 - **Manifest resource ≠ rule output.** The file is made discoverable by adding a **manifest
-  resource entry** with the stable name `qa_dispositions` (path-only reference), *not* by a
-  Snakemake `output:` declaration. The two concepts are deliberately decoupled.
+  resource entry** with the stable name `qa_dispositions` (or `qa_dispositions:<substrate>` for a
+  multi-substrate workflow), a path-only reference — *not* by a Snakemake `output:` declaration. The
+  two concepts are deliberately decoupled.
 
 **Entry schema:** `flag_id`, `disposition ∈ {open, investigating, addressed, accepted-real, wont-fix}`
 (`open` = untouched stub), `note`, optional `change` (what param/config moved, required when
@@ -215,13 +216,27 @@ surface?" open question):**
   `doc/workflow-runs/<slug>.md` `workflow-run` entities and their `executes` / `supersedes` edges.
   This is the source of truth for *what ran and in what chain*.
 - **QA artifacts** (`qa_report.json`, `qa_dispositions.yaml`) are located by following each run's
-  `manifest_path` to its generated **`datapackage.yaml`** and selecting resources by **stable name**
-  (`qa_report`, `qa_dispositions`). The reader handles YAML manifests (and JSON).
+  `manifest_path` to its generated **`datapackage.yaml`** and selecting resources by **stable name**.
+  A single-substrate workflow uses `qa_report` / `qa_dispositions`; a workflow that QAs multiple
+  substrates (the convention's "one QA step per substrate") uses `qa_report:<substrate>` /
+  `qa_dispositions:<substrate>`. The audit selects every resource whose name is `qa_report` or
+  matches the `qa_report:` prefix, pairs each with its `qa_dispositions[:<substrate>]` counterpart,
+  and aggregates the per-substrate flag sets into the workflow's engagement verdict. The reader
+  handles YAML manifests (and JSON).
 
 We key discovery on resource **name** rather than a `role:` tag deliberately: `role` is already a
 load-bearing field on `dataset_usage` (dependence roles — `analyzed`, `training`,
 `set_definition_source`, …), and reusing it on adjacent provenance objects would invite namespace
 confusion. Stable resource names need no schema change (resource `name` is already required).
+
+**Authoring dependency (fixes: the run template doesn't expose these fields).** The audit reads
+run topology and artifact locations from authored `workflow-run` entities, but the current
+`templates/workflow-run.md` puts the manifest location and the supersedes link in *body prose* and
+links its workflow via a `workflow:` field rather than an authored `executes` relation. So this
+spec includes a **template/authoring change** (see doc-change #4) so new runs carry `manifest_path`,
+the `executes` link, and `supersedes` as machine-readable frontmatter the audit can walk. Runs that
+predate the change, or omit these fields, surface as the per-row **ERROR** state rather than being
+silently skipped.
 
 **Two orthogonal verdicts per workflow (fixes the single-`ITERATED`-enum blur).** Re-running and
 responding-to-QA are different things; the audit reports both, each a total function over its
@@ -229,8 +244,11 @@ state space.
 
 *Iteration axis* (run chain + QA-tied change):
 
-- **QA-RESPONSIVE** — ≥ 1 flag `addressed` with a `change` (typically alongside a `supersedes`
-  re-run). The signal that actually matches the talk's finding.
+- **QA-RESPONSIVE** — a `supersedes` re-run exists **and** ≥ 1 flag is `addressed` with a `change`
+  (realized, QA-driven iteration). This is the signal that actually matches the talk's finding. A
+  change recorded *without* a re-run is **not** QA-RESPONSIVE: it stays `SINGLE-RUN` on this axis
+  and `RESPONDED` on the engagement axis (intent recorded, pipeline not re-executed) — keeping the
+  two axes consistent with Unit 3's "addressed + change alongside a supersedes re-run" evidence.
 - **RE-RAN-UNRELATED** — supersedes chain depth ≥ 2 but no QA-tied change. A *proxy*, surfaced and
   explicitly documented as "re-ran, but not demonstrably in response to QA" (could be a bug fix or
   input refresh).
@@ -270,6 +288,15 @@ explicitly), not a crash — the audit completes and **always exits 0**.
    — a new **Process iteration** row in the `review-pipeline` rubric (PASS = QA-RESPONSIVE / WARN =
    PARTIAL or RE-RAN-UNRELATED / FAIL = SINGLE-RUN × IGNORED), and a `plan-pipeline` note to emit
    dispositions.
+4. `templates/workflow-run.md` (+ the run-authoring path, `science dataset register-run`) — promote
+   the fields the audit depends on from body prose to machine-readable frontmatter: a `manifest_path`
+   pointing at the run's generated `datapackage.yaml` (populate it where `register-run` already writes
+   the symmetric `produces`/`inputs` edges), a frontmatter `supersedes:` relation (today the link is
+   prose under *Entity Cross-References*), and confirmation that the `workflow:` field materializes
+   the `executes` edge the audit walks (add `sci:executes` if it does not). Also correct the
+   template's manifest path from `datapackage.json` to `datapackage.yaml`. Without this change the
+   audit can read topology/manifests only from runs authored after it, and older runs land in the
+   per-row ERROR state.
 
 ## Error handling (fail-early, explicit — no silent fallback)
 
@@ -297,7 +324,10 @@ explicitly), not a crash — the audit completes and **always exits 0**.
 - **qa-audit:** temp graph with single-run, superseded-chain (QA-responsive and unrelated), and
   mixed-disposition fixtures → assert both axes over the full state space (QA-RESPONSIVE /
   RE-RAN-UNRELATED / SINGLE-RUN × NO-QA / NO-FLAGS / RESPONDED / IGNORED / PARTIAL / ERROR);
-  manifest read works against a YAML `datapackage.yaml`.
+  `addressed + change` *without* a re-run resolves to SINGLE-RUN × RESPONDED (not QA-RESPONSIVE);
+  multi-substrate resource discovery (`qa_report:<substrate>` pairs) aggregates correctly; a run
+  missing `manifest_path` / `supersedes` frontmatter lands in ERROR; manifest read works against a
+  YAML `datapackage.yaml`.
 - **Doc changes:** verified via existing markdown link-check / `science validate`.
 
 ## Adoption & limitations
