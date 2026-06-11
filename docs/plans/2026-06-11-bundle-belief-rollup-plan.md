@@ -75,6 +75,11 @@ def test_reserved_rules_rejected_at_model_layer(rule):
         _entity(composition_rule=rule)
 
 
+def test_composition_rule_rejected_on_non_bundle_kind():
+    with pytest.raises(ValueError, match="bundle kinds"):
+        _entity(id="proposition:p1", kind="proposition", type=EntityType.PROPOSITION, composition_rule="conjunctive")
+
+
 def test_enum_partitions_are_disjoint_and_complete():
     assert RESERVED_COMPOSITION_RULES.isdisjoint(WEAKEST_LINK_COMPOSITION_RULES)
     assert RESERVED_COMPOSITION_RULES | WEAKEST_LINK_COMPOSITION_RULES == set(CompositionRule)
@@ -130,6 +135,13 @@ Add a validator method on `Entity` (mirroring the existing `@model_validator(mod
 ```python
     @model_validator(mode="after")
     def _validate_composition_rule(self) -> "Entity":
+        if self.composition_rule is None:
+            return self
+        if self.kind not in ("hypothesis", "mechanism"):
+            raise ValueError(
+                f"composition_rule is only meaningful on bundle kinds (hypothesis/mechanism), "
+                f"not {self.kind!r}; remove it."
+            )
         if self.composition_rule in RESERVED_COMPOSITION_RULES:
             raise ValueError(
                 f"composition_rule {self.composition_rule.value!r} is reserved and not "
@@ -660,6 +672,26 @@ def test_authored_rule_with_zero_members_hard_fails():
     prov.add((HYP, SCI_NS.compositionRule, Literal("conjunctive")))
     with pytest.raises(UnresolvedBundleError):
         belief_for_entity(k, prov, HYP, scalar_enabled=False)
+
+
+def test_reserved_rule_in_graph_raises_not_implemented():
+    # Defensive engine guard: even if a reserved rule bypasses model validation and lands
+    # in the graph, the engine refuses it rather than silently treating it as weakest-link.
+    k, prov = Graph(), Graph()
+    k.add((MECH, RDF.type, SCI_NS.Mechanism))
+    k.add((PA, RDF.type, SCI_NS.Proposition))
+    k.add((MECH, SCI_NS.hasProposition, PA))
+    prov.add((MECH, SCI_NS.compositionRule, Literal("evidence_union")))
+    with pytest.raises(NotImplementedError):
+        belief_for_entity(k, prov, MECH, scalar_enabled=False)
+
+
+def test_composition_rule_on_non_bundle_in_graph_raises():
+    k, prov = Graph(), Graph()
+    k.add((PA, RDF.type, SCI_NS.Proposition))
+    prov.add((PA, SCI_NS.compositionRule, Literal("conjunctive")))
+    with pytest.raises(ValueError, match="not a bundle"):
+        belief_for_entity(k, prov, PA, scalar_enabled=False)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -700,6 +732,13 @@ def belief_for_entity(knowledge, provenance, uri, *, scalar_enabled: bool):
 
     kind = bundle_kind(knowledge, uri)
     if kind is None:
+        if authored_rule is not None:
+            # Defense in depth: the model layer rejects composition_rule on non-bundle kinds,
+            # but a hand-authored graph could still carry one. Never silently ignore it.
+            raise ValueError(
+                f"{uri} carries composition_rule {authored_rule.value!r} but is not a bundle "
+                "(hypothesis/mechanism); composition_rule is meaningless on non-bundle entities."
+            )
         return aggregate_belief(collect_evidence_units(knowledge, provenance, [uri]))
 
     members = bundle_members(knowledge, uri)
@@ -867,6 +906,7 @@ def snapshot_records(knowledge, provenance, *, scalar_enabled: bool, as_of: str)
                 "capped_by_refutation": result.capped_by_refutation,
                 "contested": result.contested,
                 "bottleneck_members": result.bottleneck_members,
+                "scalar_driver_member": (result.member_results[0].member_uri if result.member_results else None),
                 "contested_members": result.contested_members,
                 "unresolved_members": result.unresolved_members,
                 "member_count": len(member_uris),
