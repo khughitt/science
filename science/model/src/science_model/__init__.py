@@ -27,12 +27,16 @@ from science_model.reasoning import (
     IdentificationStrength,
     IndependenceTag,
     MeasurementModel,
+    Polarity,
+    Predicate,
     PropositionMetadata,
     ProxyDirectness,
     RivalModelPacket,
+    SIGN_MEANINGFUL_PREDICATES,
     SupportScope,
 )
 from science_model.profiles import EntityKind, ProfileManifest, RelationKind
+from science_model.propositions import PropositionEntity
 from science_model.provenance import EvidenceIndependence, ProvenanceType
 from science_model.relations import build_relation_registry
 from science_model.search import Filters, SearchResult
@@ -73,7 +77,11 @@ __all__ = [
     "EvidenceRole",
     "EvidenceStance",
     "EvidenceStrength",
+    "Polarity",
+    "Predicate",
+    "PropositionEntity",
     "PropositionMetadata",
+    "SIGN_MEANINGFUL_PREDICATES",
     "EntityScope",
     "EntityUpdate",
     "Filters",

@@ -29,6 +29,7 @@ from science_model.entities import (
     ThemeEntity,
     WorkflowRunEntity,
 )
+from science_model.propositions import PropositionEntity
 
 
 class EntityKindAlreadyRegisteredError(ValueError):
@@ -135,13 +136,13 @@ class EntityRegistry:
             entity_class=_CORE_KIND_CLASSES["evidence-line"],
         )
         r.register_core_kind("inquiry", InquiryEntity, entity_class=_CORE_KIND_CLASSES["inquiry"])
+        r.register_core_kind("proposition", PropositionEntity, entity_class=_CORE_KIND_CLASSES["proposition"])
         # Generic project kinds → ProjectEntity.
         for kind in (
             "concept",
             "construct",
             "hypothesis",
             "question",
-            "proposition",
             "observation",
             "outcome",
             "research-question",
