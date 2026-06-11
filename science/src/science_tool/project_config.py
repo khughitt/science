@@ -87,13 +87,13 @@ class EntityIndexSource(StrEnum):
     KNOWLEDGE_GRAPH = "knowledge_graph"
 
 
-# Doc directories whose DOI/PMID identifiers are NOT citations requiring a
-# bibliography entry. `doc/papers` notes are corpus contributors (they declare
-# DOIs), and `doc/searches` are literature-discovery logs full of candidate
-# identifiers the project has surveyed but not adopted. Both are exempt from the
-# DOI/PMID broken-ref check by default; a project may override via
-# `refs.doi_pmid_exempt_dirs`.
-DEFAULT_DOI_PMID_EXEMPT_DIRS: tuple[str, ...] = ("doc/papers", "doc/searches")
+# Directories whose DOI/PMID identifiers are NOT citations requiring a
+# bibliography entry. `doc/papers` (v2) and `entities/papers` (v3 layout) notes
+# are corpus contributors (they declare DOIs), and `doc/searches` are
+# literature-discovery logs full of candidate identifiers the project has
+# surveyed but not adopted. All are exempt from the DOI/PMID broken-ref check by
+# default; a project may override via `refs.doi_pmid_exempt_dirs`.
+DEFAULT_DOI_PMID_EXEMPT_DIRS: tuple[str, ...] = ("doc/papers", "doc/searches", "entities/papers")
 
 
 class RefsConfig(BaseModel):

@@ -1032,6 +1032,48 @@ def test_doi_check_skipped_in_doc_papers() -> None:
         assert [i for i in issues if i.ref_type == "doi"] == []
 
 
+def test_doi_check_skipped_in_entities_papers() -> None:
+    """v3: paper notes live in entities/papers/. They remain corpus contributors,
+    not consumers — a DOI in such a note must not be flagged, and a DOI it
+    declares must satisfy references to it elsewhere (regression: the corpus
+    loader and the DOI/PMID exempt-dirs only knew doc/papers/)."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold_with_bib(
+            root,
+            "@article{Smith2024,\n  title={X},\n  doi={10.1038/s41586-024-00001-1},\n}\n",
+        )
+        (root / "entities" / "papers").mkdir(parents=True, exist_ok=True)
+        (root / "entities" / "papers" / "Jones2025.md").write_text(
+            "---\nid: paper:Jones2025\ntype: paper\ntitle: Jones\n---\n\n"
+            "- DOI: 10.5281/zenodo.123456\n"
+        )
+        # A reference to the entities/papers-declared DOI from ordinary prose.
+        (root / "doc" / "background" / "topics" / "x.md").write_text(
+            "# X\nData deposited at 10.5281/zenodo.123456 by Jones.\n"
+        )
+        issues = check_refs(root)
+        assert [i for i in issues if i.ref_type == "doi"] == []
+
+
+def test_pmid_check_skipped_in_entities_papers() -> None:
+    """Same v3 fix for PMIDs: an entities/papers/ note declares the corpus."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold_with_bib(root, "@article{Smith2024,\n  title={X},\n}\n")
+        (root / "entities" / "papers").mkdir(parents=True, exist_ok=True)
+        (root / "entities" / "papers" / "Jones2025.md").write_text(
+            "---\nid: paper:Jones2025\ntype: paper\ntitle: Jones\n---\n\nPMID: 31690722\n"
+        )
+        (root / "doc" / "background" / "topics" / "x.md").write_text(
+            "# X\nSee PMID: 31690722 for details.\n"
+        )
+        issues = check_refs(root)
+        assert [i for i in issues if i.ref_type == "pmid"] == []
+
+
 def test_doi_with_internal_parentheses_is_matched() -> None:
     """Legacy Elsevier DOIs contain parens (e.g. 10.1016/0197-2456(86)90046-2);
     a prose citation must resolve against the bib, not truncate at the first ')'."""

@@ -438,8 +438,11 @@ def _load_doi_corpus(root: Path) -> set[str]:
             text = ""
         for m in _BIB_DOI_FIELD_RE.finditer(text):
             dois.add(_normalize_doi_token(m.group(1)))
-    papers_dir = root / "doc" / "papers"
-    if papers_dir.is_dir():
+    # Paper notes contribute their recorded DOIs to the corpus. They live under
+    # doc/papers/ (v2) and entities/papers/ (v3 layout); scan both.
+    for papers_dir in (root / "doc" / "papers", root / "entities" / "papers"):
+        if not papers_dir.is_dir():
+            continue
         for path in papers_dir.rglob("*.md"):
             try:
                 text = path.read_text(encoding="utf-8")
@@ -461,8 +464,10 @@ def _load_pmid_corpus(root: Path) -> set[str]:
             text = ""
         for m in _BIB_PMID_FIELD_RE.finditer(text):
             pmids.add(m.group(1))
-    papers_dir = root / "doc" / "papers"
-    if papers_dir.is_dir():
+    # Paper notes (doc/papers/ in v2, entities/papers/ in v3) contribute PMIDs.
+    for papers_dir in (root / "doc" / "papers", root / "entities" / "papers"):
+        if not papers_dir.is_dir():
+            continue
         for path in papers_dir.rglob("*.md"):
             try:
                 text = path.read_text(encoding="utf-8")
