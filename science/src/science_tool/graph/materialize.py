@@ -612,6 +612,18 @@ def _add_evidence_line_metadata(*, uri: URIRef, provenance, entity: EvidenceLine
         if value is not None:
             provenance.add((uri, predicate, Literal(str(value))))
 
+    quant = getattr(entity, "quantitative_result", None)
+    if quant is not None:
+        # Typed posterior summary (Task 3a) — coerce each present sub-field to a
+        # typed Literal so the belief layer can read sign(beta) and prob_sign.
+        if quant.beta is not None:
+            provenance.add((uri, SCI_NS.quantBeta, Literal(quant.beta)))
+        if quant.prob_sign is not None:
+            provenance.add((uri, SCI_NS.quantProbSign, Literal(quant.prob_sign)))
+        if quant.hdi is not None and len(quant.hdi) == 2:
+            provenance.add((uri, SCI_NS.quantHdiLow, Literal(quant.hdi[0])))
+            provenance.add((uri, SCI_NS.quantHdiHigh, Literal(quant.hdi[1])))
+
 
 def _pre_registration_commitment_targets(
     sources: ProjectSources,
@@ -1015,6 +1027,9 @@ def _add_reasoning_metadata(*, uri: URIRef, provenance, entity: Entity) -> None:
         "supports_scope": SCI_NS.supportsScope,
         "independence_group": SCI_NS.independenceGroup,
         "evidence_role": SCI_NS.evidenceRole,
+        # Authored relational sign of a proposition (Task 3a). Present only on
+        # PropositionEntity; getattr returns None for other kinds so they skip it.
+        "polarity": SCI_NS.polarity,
     }
     for field, predicate in scalar_predicates.items():
         value = getattr(entity, field, None)

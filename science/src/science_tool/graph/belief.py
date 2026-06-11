@@ -34,6 +34,13 @@ class EvidenceUnit:
     source: str | None
     observability_keys: tuple[str, ...]
     is_reference_dataset: bool = False
+    # Oriented posterior (Task 3a). `target_polarity` is the AUTHORED sign of the
+    # target proposition this line bears on (None when the target has no polarity);
+    # `quant_beta`/`quant_prob_sign` are the fitted posterior summary. All default
+    # to None so the ordinal magnitude path (aggregate_belief) is untouched.
+    target_polarity: str | None = None
+    quant_beta: float | None = None
+    quant_prob_sign: float | None = None
 
 
 _OBSERVABILITY = {
@@ -50,8 +57,17 @@ def _lit(graph: Graph, subject: URIRef, predicate: URIRef) -> str | None:
     return None
 
 
+def _float_lit(provenance: Graph, subject: URIRef, predicate: URIRef) -> float | None:
+    value = _lit(provenance, subject, predicate)
+    return None if value is None else float(value)
+
+
 def _read_unit(
-    provenance: Graph, line: URIRef, stance: str, reference_dataset_uris: frozenset[str]
+    provenance: Graph,
+    line: URIRef,
+    stance: str,
+    reference_dataset_uris: frozenset[str],
+    target_polarity: str | None,
 ) -> EvidenceUnit:
     obs = tuple(name for name, pred in _OBSERVABILITY.items() if _lit(provenance, line, pred))
     derived_from = {str(o) for _, _, o in provenance.triples((line, PROV.wasDerivedFrom, None))}
@@ -73,6 +89,9 @@ def _read_unit(
         # Reference detection scans ALL wasDerivedFrom objects (the set above), unlike the
         # first-wins `source` field — the reference dataset URI need not be the first object.
         is_reference_dataset=bool(derived_from & reference_dataset_uris),
+        target_polarity=target_polarity,
+        quant_beta=_float_lit(provenance, line, SCI_NS.quantBeta),
+        quant_prob_sign=_float_lit(provenance, line, SCI_NS.quantProbSign),
     )
 
 
@@ -109,6 +128,10 @@ def collect_evidence_units(
     seen: set[str] = set()
     target_set = frozenset(targets)
     for target in target_set:
+        # Authored sign of THIS target (materialized on the proposition URI). A line
+        # de-dupes to the first target that claims it, so it inherits that target's
+        # polarity for the oriented quant contribution.
+        target_polarity = _lit(provenance, target, SCI_NS.polarity)
         for predicate, stance in ((CITO_NS.supports, "supports"), (CITO_NS.disputes, "disputes")):
             for subject, _, _ in knowledge.triples((None, predicate, target)):
                 if (subject, RDF.type, EVIDENCE_LINE_CLASS) not in knowledge:
@@ -116,7 +139,9 @@ def collect_evidence_units(
                 if str(subject) in seen:
                     continue
                 seen.add(str(subject))
-                units.append(_read_unit(provenance, subject, stance, reference_dataset_uris))
+                units.append(
+                    _read_unit(provenance, subject, stance, reference_dataset_uris, target_polarity)
+                )
     derived = committed_metadata_by_line(provenance, target_set)
     return [_with_derived_commitment(unit, derived) for unit in units]
 

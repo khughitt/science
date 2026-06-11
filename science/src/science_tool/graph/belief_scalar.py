@@ -27,6 +27,64 @@ def unit_score(u: EvidenceUnit) -> int:
     return s
 
 
+# Step-equivalent weight of a maximally sign-confident posterior. One unit-score
+# "step" ~ a single qualitative strength/role/type increment; a posterior at
+# prob_sign == 1 contributes at most this many steps to the continuous band.
+QUANT_MASS_STEPS = 2.0
+
+# Polarity values that carry an authored sign to compare beta against.
+_SIGNED_POLARITIES = frozenset({"positive", "negative"})
+
+
+def _oriented_quant_mass(u: EvidenceUnit) -> tuple[float, float]:
+    """Return (support_mass, dispute_mass) the unit's posterior adds to the bands.
+
+    The posterior contributes ONLY when a fitted ``beta`` and ``prob_sign`` are
+    present. Support vs dispute is decided by comparing ``sign(beta)`` to the
+    target proposition's authored polarity and the line's stance; the magnitude
+    scales with ``prob_sign`` (sign confidence, NOT an independent stance).
+
+    Raises ValueError when the authored stance contradicts the observed sign
+    (supports ⇒ must match the claimed sign; disputes ⇒ must oppose it).
+    """
+    beta = u.quant_beta
+    prob_sign = u.quant_prob_sign
+    if beta is None or prob_sign is None:
+        return (0.0, 0.0)
+
+    magnitude = QUANT_MASS_STEPS * prob_sign
+    polarity = u.target_polarity
+
+    if polarity == "not_applicable":
+        # Sign-less proposition: a signed beta has no oriented meaning. Contribute
+        # no oriented mass (the ordinal/non-quant contribution is unchanged).
+        return (0.0, 0.0)
+
+    if polarity not in _SIGNED_POLARITIES:
+        # unsigned (or absent): no claimed sign to compare against — orientation
+        # follows the authored stance; magnitude still scales by prob_sign.
+        if u.stance == "supports":
+            return (magnitude, 0.0)
+        return (0.0, magnitude)
+
+    # Sign-meaningful polarity: orientation is decided by sign(beta) vs polarity.
+    observed_matches_claim = (beta > 0) if polarity == "positive" else (beta < 0)
+    stance_asserts_match = u.stance == "supports"
+    if observed_matches_claim != stance_asserts_match:
+        raise ValueError(
+            f"evidence-line {u.line_uri} stance={u.stance!r} contradicts its fitted "
+            f"posterior: beta={beta} runs "
+            f"{'with' if observed_matches_claim else 'against'} the target's "
+            f"{polarity!r} polarity, but stance asserts the "
+            f"{'opposite' if stance_asserts_match else 'matching'} sign. "
+            "No override field is defined; refusing to assign oriented mass."
+        )
+
+    if observed_matches_claim:
+        return (magnitude, 0.0)
+    return (0.0, magnitude)
+
+
 @dataclass(frozen=True)
 class BeliefScalar:
     massed_support_score: int
@@ -45,17 +103,29 @@ def _t(x: float) -> float:
 
 def belief_scalar(result: BeliefResult) -> BeliefScalar:
     d_lo, d_hi = DELTA_ENVELOPE
+    # Ordinal integer scores (UNCHANGED): the qualitative headline + opinion inputs.
     s_score = sum(unit_score(u) for u in result.support_units)
     d_score = sum(unit_score(u) for u in result.dispute_units)
-    net_lo = _t(d_lo * s_score - d_hi * d_score)   # support down, dispute up
-    net_hi = _t(d_hi * s_score - d_lo * d_score)   # support up, dispute down
+    # Oriented posterior contribution (Task 3a): a continuous shift of the bands
+    # only — it never moves the ordinal scores or the magnitude. Contradictory
+    # stance/beta combinations raise here, during belief computation.
+    quant_support = 0.0
+    quant_dispute = 0.0
+    for unit in (*result.support_units, *result.dispute_units):
+        qs, qd = _oriented_quant_mass(unit)
+        quant_support += qs
+        quant_dispute += qd
+    s_mass = s_score + quant_support
+    d_mass = d_score + quant_dispute
+    net_lo = _t(d_lo * s_mass - d_hi * d_mass)   # support down, dispute up
+    net_hi = _t(d_hi * s_mass - d_lo * d_mass)   # support up, dispute down
     net_robust = (net_lo > 0 and net_hi > 0) or (net_lo < 0 and net_hi < 0)
     diag_disputes = sum(1 for u in result.diagnostics if u.stance == "disputes")
     return BeliefScalar(
         massed_support_score=s_score,
         massed_dispute_score=d_score,
-        massed_support_band=(_t(d_lo * s_score), _t(d_hi * s_score)),
-        massed_dispute_band=(_t(d_lo * d_score), _t(d_hi * d_score)),
+        massed_support_band=(_t(d_lo * s_mass), _t(d_hi * s_mass)),
+        massed_dispute_band=(_t(d_lo * d_mass), _t(d_hi * d_mass)),
         net_band=(net_lo, net_hi),
         net_robust=net_robust,
         contested=result.contested,
