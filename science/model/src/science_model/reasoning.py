@@ -123,6 +123,25 @@ class DisputeScope(StrEnum):
     BOUNDARY = "boundary"
 
 
+class CompositionRule(StrEnum):
+    """How a bundle (hypothesis/mechanism) composes its member propositions.
+
+    `all_steps`/`conjunctive` share the v1 weakest-link implementation but keep
+    distinct names to preserve authored intent. `evidence_union`/`faceted_support`
+    are RESERVED — declared so the names are stable, but not implemented in v1
+    (see docs/plans/2026-06-11-bundle-belief-rollup-design.md §4).
+    """
+
+    ALL_STEPS = "all_steps"            # mechanism default — every step must hold
+    CONJUNCTIVE = "conjunctive"        # hypothesis default — sub-claims jointly assert the conjecture
+    EVIDENCE_UNION = "evidence_union"  # RESERVED
+    FACETED_SUPPORT = "faceted_support"  # RESERVED
+
+
+RESERVED_COMPOSITION_RULES = frozenset({CompositionRule.EVIDENCE_UNION, CompositionRule.FACETED_SUPPORT})
+WEAKEST_LINK_COMPOSITION_RULES = frozenset({CompositionRule.ALL_STEPS, CompositionRule.CONJUNCTIVE})
+
+
 class MeasurementModel(BaseModel):
     """A proxy-mediated mapping between an observed entity and a latent construct."""
 

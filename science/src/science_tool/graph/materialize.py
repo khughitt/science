@@ -1066,6 +1066,8 @@ def _add_reasoning_metadata(*, uri: URIRef, provenance, entity: Entity) -> None:
                 Literal(_model_to_json(rival_packet)),
             )
         )
+    if getattr(entity, "composition_rule", None) is not None:
+        provenance.add((uri, SCI_NS.compositionRule, Literal(entity.composition_rule.value)))
 
 
 def _model_to_json(value: MeasurementModel | RivalModelPacket) -> str:

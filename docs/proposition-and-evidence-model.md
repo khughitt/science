@@ -87,6 +87,20 @@ They include:
 - hypothesis roll-ups across linked propositions
 - neighborhood fragility and inquiry-level uncertainty summaries
 
+### Bundle belief roll-up (hypotheses and mechanisms)
+
+A `hypothesis` or `mechanism` with member propositions carries a **derived**
+bundle belief, computed from its members under an authored `composition_rule`
+(`all_steps` for mechanisms, `conjunctive` for hypotheses; both implemented as
+**weakest-link** — the bundle is as believed as its least-believed member).
+Refutation propagates as a separate `capped_by_refutation` flag, never a new
+ordinal. Member belief reuses the per-proposition pipeline and its independence
+reduction unchanged; weakest-link is independence-safe because `min` does not sum
+shared sources across members. The reserved rules `evidence_union` /
+`faceted_support` are not implemented and are rejected at authoring time. See
+`docs/plans/2026-06-11-bundle-belief-rollup-design.md`. The older hypothesis
+evidence-union path is an **evidence-coverage signal**, not the bundle's belief.
+
 Derived fields should be recomputed from evidence structure.
 They are interpretations of the record, not primary authored facts.
 
