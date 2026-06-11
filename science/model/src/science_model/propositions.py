@@ -59,10 +59,11 @@ class PropositionEntity(ProjectEntity):
                 )
             # Rule 2: sign-meaningful predicate → polarity must be positive/negative/unsigned.
             if self.predicate in SIGN_MEANINGFUL_PREDICATES:
-                if self.polarity == Polarity.NOT_APPLICABLE:
+                if self.polarity not in (Polarity.POSITIVE, Polarity.NEGATIVE, Polarity.UNSIGNED):
                     raise ValueError(
                         f"predicate {self.predicate!r} is sign-meaningful; "
-                        f"polarity must be positive, negative, or unsigned (not not_applicable)"
+                        f"polarity must be positive, negative, or unsigned "
+                        f"(got {self.polarity!r}; use unsigned for sign-apt but undetermined)"
                     )
             else:
                 # Rule 3: sign-less predicate → polarity must be not_applicable.

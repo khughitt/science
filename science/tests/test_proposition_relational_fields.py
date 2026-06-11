@@ -107,3 +107,21 @@ def test_identification_analogical_is_legal() -> None:
         identification_strength="analogical",
     )
     assert p.identification_strength == "analogical"
+
+
+def test_sign_meaningful_predicate_requires_explicit_polarity() -> None:
+    """sign-meaningful predicate with polarity omitted (None) must raise."""
+    with pytest.raises(ValidationError):
+        PropositionEntity(id="proposition:p10", subject="gene:A", predicate="affects", object="construct:x")
+
+
+def test_sign_meaningful_predicate_unsigned_polarity_accepted() -> None:
+    """'unsigned' is the correct value for sign-apt but undetermined cases."""
+    p = PropositionEntity(
+        id="proposition:p11",
+        subject="gene:A",
+        predicate="affects",
+        object="construct:x",
+        polarity="unsigned",
+    )
+    assert p.polarity == "unsigned"
