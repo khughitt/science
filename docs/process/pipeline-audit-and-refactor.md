@@ -210,8 +210,15 @@ This playbook scores two related disciplines during the sweep, but keeps them di
 - **Analysis / result-QA** — validates *results*, not the input table: leave-one-out /
   dataset-dropout stability; permutation / empirical-null calibration and assumption sweeps.
 - **Workflow / DAG-validation** — validates the *rule graph*, not a table; specified below.
+- **Process iteration** — validates the *process*, not a table or the rule graph: did the analysis
+  iterate (QC / clustering / parameters) in response to QA flags, or run once and record the result
+  as truth? Scored during the sweep with `science qa-audit`, which reads each workflow's
+  `workflow-run` / `sci:supersedes` chain and its QA dispositions and reports two verdicts —
+  an *iteration* axis (QA-RESPONSIVE / RE-RAN-UNRELATED / SINGLE-RUN) and a *QA-engagement* axis
+  (NO-QA / NO-FLAGS / RESPONDED / IGNORED / PARTIAL). The headline advisory is the
+  SINGLE-RUN × IGNORED workflow. Advisory only — it never fails the build.
 
-Surface both during the sweep so they are not forgotten.
+Surface all three during the sweep so they are not forgotten.
 If a project-grown check becomes broadly reusable, record it in the synthesis "convention nominations".
 
 ### Workflow / DAG-validation — single-writer / output-ownership
@@ -278,6 +285,7 @@ A machine-readable `inventory.json` mirrors the table: a list of objects with ke
   - substrates with a wired-in QA step: clean base [y/n]; <downstream substrates…> [y/n]
   - consumer-contract QA: PASS / WARN / FAIL
   - companion DAG-validation (output-ownership): PASS / WARN / FAIL
+  - process-iteration (`science qa-audit`): <iteration verdict> × <engagement verdict>
 - **Axis 2 — Consistency/quality:** PASS / WARN / FAIL — <notes>
 - **Axis 3 — Portability/commons:** PASS / WARN / FAIL — base separated [y/n]; promoted [y/n]
 
