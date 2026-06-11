@@ -136,7 +136,7 @@ def belief_for_entity(knowledge, provenance, uri, *, scalar_enabled: bool):
     """
     rule_literal = provenance.value(uri, SCI_NS.compositionRule)
     authored_rule = CompositionRule(str(rule_literal)) if rule_literal is not None else None
-    if authored_rule in RESERVED_COMPOSITION_RULES:
+    if authored_rule is not None and authored_rule in RESERVED_COMPOSITION_RULES:
         # Defensive: the model layer already rejects these at parse; never silently fall back.
         raise NotImplementedError(
             f"composition_rule {authored_rule.value!r} is reserved and not implemented in v1 "
