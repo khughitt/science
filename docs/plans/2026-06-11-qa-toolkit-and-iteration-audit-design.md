@@ -1,8 +1,8 @@
 # QA Toolkit & Iteration Audit — Design Spec
 
-> **Status:** design (brainstormed 2026-06-11). Spins out **B1 (QA-check toolkit)** and
-> **B3 (no-iteration flagging)** from the discovery-improvements umbrella
-> ([`2026-06-10-data-driven-discovery-improvements.md`](2026-06-10-data-driven-discovery-improvements.md),
+> **Status:** design (brainstormed 2026-06-11; revised after two code reviews). Spins out
+> **B1 (QA-check toolkit)** and **B3 (no-iteration flagging)** from the discovery-improvements
+> umbrella ([`2026-06-10-data-driven-discovery-improvements.md`](2026-06-10-data-driven-discovery-improvements.md),
 > Theme B). Next step after approval: `writing-plans` → implementation.
 
 ## Motivation
@@ -29,36 +29,49 @@ discipline).
 
 **Scope note — baseline.** Independent of the held `epistemic-edges` /
 `dataset-evidence-flow` substrate. The only existing machinery this relies on is the
-`computational-analysis` **run lifecycle** — `workflow-run` entities linked by `sci:supersedes`
-on re-execution with updated parameters (already defined in
+`computational-analysis` **run lifecycle** — `workflow-run` entities (authored as
+`doc/workflow-runs/<slug>.md`) linked by `sci:supersedes` on re-execution with updated
+parameters (defined in
 [`../../aspects/computational-analysis/computational-analysis.md`](../../aspects/computational-analysis/computational-analysis.md),
-*Workflow Lifecycle*).
+*Workflow Lifecycle*; `workflow-run → workflow-run` supersession is an existing blessed kind-pair
+in the core profile).
 
 ## Design decisions (locked during brainstorming)
 
 | Decision | Choice |
 | --- | --- |
 | B1 toolkit form | **Config-driven runner + modality check-packs** (hybrid). Generic checks come from config; domain checks come from importable packs. |
-| B3 iteration signal | **Run-supersession chain depth + QA-response evidence.** Reading the run chain *and* whether any distribution flag was dispositioned. |
+| B3 iteration signal | **Run-supersession chain depth + QA-response evidence.** Reading the run chain *and* whether any distribution flag was dispositioned with a change. |
 | Enforcement posture | **Advisory CLI audit.** Never fails a build or `science validate`. Surfaced via the audit playbook + `review-pipeline` rubric. |
 | First-cut scope | **Vertical slice, one pack** (scRNA). Generic runner + disposition record + B3 audit. B2 (breadth scoring) and other packs deferred. |
-| Packaging | **Standalone `science_qa` runtime package** for the runner + packs; B3 audit as a `science_tool` CLI subcommand. One-way dependency. |
+| Packaging | **Standalone `science-qa` distribution** (own pyproject, light deps) for the runner + packs; B3 audit as a `science_tool` CLI subcommand. One-way dependency. |
 
 ## Architecture
 
-Four units — one new package, one new CLI subcommand, one project artifact:
+Four units — one new distribution, one new CLI subcommand, one project artifact:
 
 | # | Unit | Home | Responsibility |
 |---|------|------|----------------|
-| 1 | QA config-runner | `science_qa` (new pkg, `science/qa/`) | Reads the `qa:` YAML + a built table → runs generic structural/distribution checks → writes `qa_report.{md,json}` |
+| 1 | QA config-runner | `science-qa` dist → `science/qa/src/science_qa/` | Reads the `qa:` YAML + a built table → runs generic structural/distribution checks → writes `qa_report.{md,json}` |
 | 2 | scRNA check-pack | `science_qa.packs.scrna` | Domain checks declarative config can't express (mito-fraction, doublet rate, gene/cell-count gates) |
-| 3 | QA-disposition record | project artifact `qa_dispositions.yaml` | Per-distribution-flag analyst response; runner emits a stub, analyst fills it, git-tracked |
-| 4 | Iteration audit (B3) | `science_tool` → `science qa-audit` | Reads workflow-run/`supersedes` chains + dispositions via run manifests → advisory process-quality report |
+| 3 | QA-disposition record | analyst-owned project artifact `qa_dispositions.yaml` | Per-distribution-flag analyst response; scaffolded-if-absent, **never a declared rule output**, git-tracked |
+| 4 | Iteration audit (B3) | `science_tool` → `science qa-audit` | Reads workflow-run/`supersedes` chains (graph) + QA artifacts (via run manifests) → advisory two-axis report |
 
-**Dependency arrow is one-way.** Project pipeline → `science_qa` (light deps: pandas / pyarrow /
-pyyaml — *not* `science_tool`). `science_tool` → reads the *artifacts* `science_qa` emits. The
-two packages never import each other. This keeps the pipeline-runtime install small and the
-graph-tooling ignorant of pipeline internals.
+### Packaging (fixes review finding: a bare `science/qa/` would ship nothing)
+
+`science/pyproject.toml` packages only `src/science_tool`, so a loose `science/qa/` subdir would
+be uninstalled and `python -m science_qa` would fail. Instead, **mirror the existing
+`science-model` precedent**: a sibling distribution at `science/qa/` with its **own
+`pyproject.toml`** (name `science-qa`, deps **pandas / pyarrow / pyyaml only** — *not*
+`science_tool`), a `src/science_qa/` package, a `__main__.py` exposing `run`, and a
+`[tool.uv.sources]` editable entry in the root config. Projects install `science-qa` in their
+pipeline environment; nothing else depends on it. This is what keeps the runtime genuinely light
+— the reason Approach A was chosen — rather than folding it into the heavy `science_tool` wheel.
+
+### Dependency direction
+
+One-way. Project pipeline → `science_qa` (light). `science_tool` → reads the *artifacts*
+`science_qa` emits. The two packages never import each other.
 
 ### Data flow
 
@@ -66,21 +79,21 @@ graph-tooling ignorant of pipeline internals.
 pipeline build (Snakemake rule)
   └─ python -m science_qa run --config qa.yaml --table analysis.parquet
        ├─ structural flag fired? → exit non-zero (build-fatal)
-       └─ writes qa_report.{md,json}  +  qa_dispositions.yaml (stub: open distribution flags)
-                                          │
-analyst reviews distribution flags ──────┘ (fills disposition + optional param change → may re-run)
+       ├─ writes qa_report.{md,json}        (regenerable rule artifacts; json = immutable flag ledger)
+       └─ scaffolds/reconciles qa_dispositions.yaml   (NOT a rule output; never deleted/overwritten)
+
+analyst reviews distribution flags in qa_report → fills qa_dispositions.yaml
+  (records disposition + optional param change → may trigger a re-run)
   re-run with changed params → new workflow-run, sci:supersedes prior run
 
 later, project-level:
   science qa-audit
-    └─ for each workflow: walk run chain + read qa_report.json / qa_dispositions.yaml (via run manifest)
-         → verdict: ITERATED / SINGLE-RUN / SINGLE-RUN-WITH-OPEN-FLAGS / NO-QA  (advisory; exits 0)
+    ├─ run identity + supersedes topology  ← entity graph (doc/workflow-runs/<slug>.md)
+    └─ QA artifacts (qa_report.json, qa_dispositions.yaml)  ← each run's manifest (datapackage.yaml),
+                                                              discovered by stable resource name
+         → two verdicts per workflow (iteration axis + QA-engagement axis); advisory; exits 0
          → referenced as an audit-playbook line + review-pipeline rubric row
 ```
-
-The disposition file is the seam between B1 and B3: a declared output of the QA rule (so it lives
-in the run manifest and B3 can find it), but its *contents* are filled in by the analyst after
-the fact.
 
 ## Unit 1 — config-runner (`science_qa run`)
 
@@ -103,23 +116,36 @@ convention.
 - **Distribution** — range exceedances, outlier counts, heavy tails, pack plausibility flags.
   *Suspicious but possibly real* → surfaced, never auto-corrected.
 
-**Outputs — two files, deterministic.**
+**Outputs — deterministic.**
 
 - `qa_report.md` — the convention's report skeleton (counts header, flags by severity,
   per-variable distribution table). Human-facing.
-- `qa_report.json` — machine-readable: every flag with a **stable `flag_id` = `f"{variable}:{check}"`**
-  (e.g. `glucose:range`, `mito_pct:scrna_mito`), plus `severity`, observed `value`, `threshold`,
-  `message`. This is what the disposition file and B3 key against.
+- `qa_report.json` — the machine-readable **immutable flag ledger**: every flag with a stable
+  `flag_id` (below), plus `severity`, observed `value`, `threshold`, `message`. A pure function
+  of `(config, table)`. This is what dispositions and the audit key against.
 
-**No wall-clock** in either file — same config + table → byte-identical output. This preserves the
-re-run-and-diff property Theme D will later depend on.
+**Flag IDs — namespaced (fixes a collision-prone `{variable}:{check}` shape).**
+`flag_id = "{source}/{check}/{subject}/{side}"`:
 
-**Exit & cleanup contract.** Run all checks, write both reports, *then* `sys.exit(1)` if any
-structural flag fired. `--no-strict` suppresses only the exit code (structural flags still run and
-still appear in the report); never wire it into the default target. Per the convention's
-failed-job-cleanup warning, the reports must **not** be declared as the strict rule's `output:` —
-projects write them outside that rule's output set, or use the two-rule split (an always-write
-report rule + a downstream strict-gate rule), so the build-fatal path never deletes the report.
+- `source` ∈ `{generic, scrna, …}` (generic = the config-runner checks; pack name otherwise).
+- `check` — the check that fired (`range`, `unique_key`, `allowed`, `exclusive_flags`,
+  `threshold`, …).
+- `subject` — the variable, or a `+`-joined tuple for table-level checks.
+- `side` ∈ `{min, max, -}` to disambiguate two-sided checks.
+
+Examples: `generic/range/glucose/max`, `generic/unique_key/SUBJECT_ID/-`,
+`generic/exclusive_flags/on_drug_a+on_drug_b/-`, `scrna/threshold/pct_counts_mt/max`.
+
+**No wall-clock** in any output — same config + table → byte-identical `qa_report.*`. This
+preserves the re-run-and-diff property Theme D will later depend on.
+
+**Exit & cleanup contract.** Run all checks, write reports, scaffold/reconcile dispositions,
+*then* `sys.exit(1)` if any structural flag fired. `--no-strict` suppresses only the exit code
+(structural flags still run and still appear in the report); never wire it into the default
+target. Per the convention's failed-job-cleanup warning, **none** of `qa_report.*` /
+`qa_dispositions.yaml` may be declared as the strict rule's `output:` — projects write them
+outside that rule's output set, or use the two-rule split (an always-write report rule + a
+downstream strict-gate rule), so the build-fatal path never deletes them.
 
 **CLI:** `python -m science_qa run --config qa.yaml --table analysis.parquet [--report-dir results/<wf>/] [--no-strict]`.
 
@@ -133,7 +159,7 @@ def run(table: DataFrame, params: dict) -> list[Flag]
 
 The runner invokes each pack named in `packs:` and merges its `Flag`s into the same
 structural/distribution buckets. Adding a pack is registering a callable — no base class. `Flag`
-is the shared dataclass the runner emits (`flag_id`, `severity`, `variable`, `value`, `threshold`,
+is the shared dataclass the runner emits (`flag_id`, `severity`, `subject`, `value`, `threshold`,
 `message`).
 
 **Substrate: the per-cell QC-metrics table** (one row per cell: `total_counts`,
@@ -156,53 +182,93 @@ The seam between B1 and B3. Distribution flags are "analyst decides at model tim
 *captures* that decision. Structural flags are build-fatal and never appear here (fix, don't
 disposition).
 
-- **Runner emits / reconciles a stub.** On each run: if the file is absent, write one open entry
-  per distribution `flag_id`; if present, **merge by `flag_id`** — preserve filled entries, add
-  stubs for new flags, mark vanished flags `resolved`. The merge is reported explicitly
-  (`"2 new flags, 1 resolved, 3 unchanged"`) and **never silently overwrites** analyst edits.
-- **Entry schema:** `flag_id`, `disposition ∈ {accepted-real, addressed, investigating, wont-fix}`,
-  `note`, optional `change` (what param/config moved, when `addressed`).
-- Declared as a QA-rule output → listed in the run manifest → discoverable by B3.
+**Ownership (fixes the rule-output conflict flagged by both reviews).** The same failed-job
+cleanup hazard the spec invokes for the report applies *more severely* here, because this file
+holds hand-entered analyst data: a failed Snakemake build deletes a rule's declared outputs, and
+a re-run regenerates them. Therefore:
 
-A flag dispositioned `addressed` with a `change`, alongside a `supersedes` re-run, is B3's positive
-evidence of genuine iteration; an untouched stub file is the "ran once, recorded as truth"
-signature.
+- The **immutable, regenerable ledger is `qa_report.json`** (a pure function of config+table) —
+  it lists every `flag_id` needing a decision.
+- `qa_dispositions.yaml` is **analyst-owned and never a declared Snakemake `output:`**. The runner
+  *scaffolds it if absent* and *reconciles by `flag_id`* (preserve filled entries, add stubs for
+  new flags, mark vanished flags `resolved`), reporting the merge explicitly
+  (`"2 new flags, 1 resolved, 3 unchanged"`) and **never silently overwriting** edits. Because it
+  is outside any rule's output set, no build deletes it and no re-run clobbers it.
+- **Manifest resource ≠ rule output.** The file is made discoverable by adding a **manifest
+  resource entry** with the stable name `qa_dispositions` (path-only reference), *not* by a
+  Snakemake `output:` declaration. The two concepts are deliberately decoupled.
+
+**Entry schema:** `flag_id`, `disposition ∈ {open, investigating, addressed, accepted-real, wont-fix}`
+(`open` = untouched stub), `note`, optional `change` (what param/config moved, required when
+`addressed`).
+
+A flag dispositioned `addressed` with a `change`, alongside a `supersedes` re-run, is the audit's
+positive evidence of genuine QA-driven iteration; an all-`open` file is the "ran once, recorded as
+truth" signature.
 
 ## Unit 4 — iteration audit (`science qa-audit`)
 
-Lives in `science_tool` (it reads the entity graph). For each `workflow` entity it walks the
-`workflow-run` chain (`executes` edges) and `supersedes` links, then locates that workflow's QA
-artifacts through each run's manifest — the runner declares `qa_report.json` and
-`qa_dispositions.yaml` as manifest resources tagged `role: qa-report` / `role: qa-dispositions`,
-so discovery is **explicit**, never path-guessing.
+Lives in `science_tool` (it reads the entity graph). **Canonical sources (fixes the "which
+surface?" open question):**
 
-**Per-workflow verdict:**
+- **Run identity + supersedes topology** come from the **entity graph** — the authored
+  `doc/workflow-runs/<slug>.md` `workflow-run` entities and their `executes` / `supersedes` edges.
+  This is the source of truth for *what ran and in what chain*.
+- **QA artifacts** (`qa_report.json`, `qa_dispositions.yaml`) are located by following each run's
+  `manifest_path` to its generated **`datapackage.yaml`** and selecting resources by **stable name**
+  (`qa_report`, `qa_dispositions`). The reader handles YAML manifests (and JSON).
 
-- **ITERATED** — supersedes chain depth ≥ 2, *or* ≥ 1 distribution flag dispositioned
-  (`addressed` / `accepted-real` / `wont-fix`). The analyst engaged.
-- **SINGLE-RUN-WITH-OPEN-FLAGS** — one run, and a QA report whose distribution flags are still
-  untouched stubs. The talk's headline pattern. Loudest advisory.
-- **SINGLE-RUN** — one run, no open flags. Possibly fine; surfaced quietly.
-- **NO-QA** — no QA artifacts at all. *Informational only*, with a pointer that **axis-1 of the
-  audit playbook owns "missing QA step."** B3 does not conflate "didn't QA" with "didn't iterate."
+We key discovery on resource **name** rather than a `role:` tag deliberately: `role` is already a
+load-bearing field on `dataset_usage` (dependence roles — `analyzed`, `training`,
+`set_definition_source`, …), and reusing it on adjacent provenance objects would invite namespace
+confusion. Stable resource names need no schema change (resource `name` is already required).
+
+**Two orthogonal verdicts per workflow (fixes the single-`ITERATED`-enum blur).** Re-running and
+responding-to-QA are different things; the audit reports both, each a total function over its
+state space.
+
+*Iteration axis* (run chain + QA-tied change):
+
+- **QA-RESPONSIVE** — ≥ 1 flag `addressed` with a `change` (typically alongside a `supersedes`
+  re-run). The signal that actually matches the talk's finding.
+- **RE-RAN-UNRELATED** — supersedes chain depth ≥ 2 but no QA-tied change. A *proxy*, surfaced and
+  explicitly documented as "re-ran, but not demonstrably in response to QA" (could be a bug fix or
+  input refresh).
+- **SINGLE-RUN** — one run, no supersession.
+
+*QA-engagement axis* (over the workflow's distribution-flag set `F`):
+
+- **NO-QA** — no `qa_report` for the workflow. *Informational only*; **axis-1 of the audit
+  playbook owns "missing QA step,"** so B3 never conflates "didn't QA" with "didn't iterate."
+- **NO-FLAGS** — report exists, `|F| = 0`.
+- **RESPONDED** — every flag dispositioned `addressed` / `accepted-real` / `wont-fix`.
+- **IGNORED** — every flag still `open` (untouched stub).
+- **PARTIAL** — any other mix; this is where `investigating` lands (engaged but unresolved), and
+  where some-open/some-resolved workflows land. `investigating` thus has a deliberate home rather
+  than falling through.
+
+**Headline advisory** = the `SINGLE-RUN × IGNORED` cell — the talk's "ran once, ignored the
+flags" pattern.
 
 **Output:** a markdown table (workflow · run count · chain depth · open/dispositioned flag counts ·
-verdict), printed and writable to the project audit area; `--json` for tooling. **Always exits 0**
-— advisory.
+iteration verdict · engagement verdict), printed and writable to the project audit area; `--json`
+for tooling. A run whose manifest is missing/unreadable becomes a per-row **ERROR** (named
+explicitly), not a crash — the audit completes and **always exits 0**.
 
 ## Doc & convention changes (extend, don't rediscover)
 
 1. [`../conventions/pipeline-qa-checkpoints.md`](../conventions/pipeline-qa-checkpoints.md) — add a
    **Reference implementation** note: `science_qa` executes this exact `qa:` schema; the
-   disposition file is the formal home of the convention's "analyst decides at model time" step.
-   The convention stays the contract; the runner is one implementation of it.
+   disposition file is the formal home of the convention's "analyst decides at model time" step,
+   and (like the report) lives outside the strict rule's deletable output set. The convention stays
+   the contract; the runner is one implementation of it.
 2. [`../process/pipeline-audit-and-refactor.md`](../process/pipeline-audit-and-refactor.md) — add
    **process-iteration** as a third entry in "Related QA disciplines" (beside analysis/result-QA
    and workflow/DAG-validation), scored during the sweep with `science qa-audit` as its tool, plus
    a findings/synthesis note.
 3. [`../../aspects/computational-analysis/computational-analysis.md`](../../aspects/computational-analysis/computational-analysis.md)
-   — a new **Process iteration** row in the `review-pipeline` rubric (PASS iterated / WARN
-   single-run-with-open-flags / FAIL ran-once-no-response), and a `plan-pipeline` note to emit
+   — a new **Process iteration** row in the `review-pipeline` rubric (PASS = QA-RESPONSIVE / WARN =
+   PARTIAL or RE-RAN-UNRELATED / FAIL = SINGLE-RUN × IGNORED), and a `plan-pipeline` note to emit
    dispositions.
 
 ## Error handling (fail-early, explicit — no silent fallback)
@@ -212,22 +278,40 @@ verdict), printed and writable to the project audit area; `--json` for tooling. 
 - Unknown pack name in `packs:` → hard error (no silent skip).
 - `--no-strict` suppresses only the exit code; structural flags still run and still appear in the
   report.
-- `qa-audit` reads many workflows: a single bad/missing run manifest becomes a per-row **ERROR
-  verdict** (named explicitly), not a crash — the audit completes and exits 0. An unknown
-  `disposition` value in a dispositions file is a hard error there (don't silently treat as open).
-- Disposition merge never overwrites filled entries; reconciliation is reported.
+- `qa-audit` reads many workflows: a single bad/missing run manifest becomes a per-row **ERROR**
+  (named explicitly), not a crash — the audit completes and exits 0. An unknown `disposition` value
+  in a dispositions file is a hard error there (don't silently treat as open).
+- Disposition reconciliation never overwrites filled entries; the merge is reported.
 
 ## Testing (TDD, red → green)
 
+- **Packaging smoke test:** `science-qa` installs with only its light deps; `python -m science_qa
+  run --help` resolves; importing `science_qa` does not import `science_tool`.
 - **Runner:** per-check unit tests (structural fires/clears, distribution surfaces, `allowed_from`
-  subset, exclusive-flags), exit-code contract, **determinism** (same config + table →
-  byte-identical `qa_report.json`), disposition stub emission + merge-preserve. Fixtures = tiny
-  parquet/csv tables with seeded defects.
+  subset, exclusive-flags), namespaced-`flag_id` shape, exit-code contract, **determinism** (same
+  config + table → byte-identical `qa_report.json`), disposition scaffold + reconcile-preserve
+  (including the failed-build-does-not-delete property). Fixtures = tiny parquet/csv tables with
+  seeded defects.
 - **scRNA pack:** synthetic per-cell QC table with known mito / gene-count / doublet violations →
   expected flag set.
-- **qa-audit:** temp graph with single-run, superseded-chain, and open-flag fixtures → assert each
-  verdict (ITERATED / SINGLE-RUN / SINGLE-RUN-WITH-OPEN-FLAGS / NO-QA / ERROR).
+- **qa-audit:** temp graph with single-run, superseded-chain (QA-responsive and unrelated), and
+  mixed-disposition fixtures → assert both axes over the full state space (QA-RESPONSIVE /
+  RE-RAN-UNRELATED / SINGLE-RUN × NO-QA / NO-FLAGS / RESPONDED / IGNORED / PARTIAL / ERROR);
+  manifest read works against a YAML `datapackage.yaml`.
 - **Doc changes:** verified via existing markdown link-check / `science validate`.
+
+## Adoption & limitations
+
+- **Manifest format.** Run manifests are `datapackage.yaml` (YAML on disk, per the runtime schema
+  title); the audit reader handles YAML and JSON. `qa_report.json` is the runner's own artifact
+  (JSON by choice); `qa_dispositions.yaml` is YAML for hand-editing.
+- **B3 coverage is gated on run-lifecycle adoption.** The audit only sees projects that register
+  `workflow` / `workflow-run` entities; a pipeline that runs Snakemake without registering runs
+  yields nothing to audit. This registration is itself project-side discipline — an adoption-rate
+  caveat, not a correctness gap.
+- **scRNA export friction.** The pack needs a flat per-cell QC table (parquet/csv). Many scanpy
+  recipes keep QC in `adata.obs` and never export it, so adopting the pack may require adding an
+  export step. Acceptable under the table-first scope, but real friction worth stating.
 
 ## Out of scope (explicit)
 
