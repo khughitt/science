@@ -28,6 +28,13 @@ from science_tool.dag.validate import (
     ValidationReport,
     validate_project,
 )
+from science_tool.dag.workbench import (
+    CompileResult,
+    EvidenceStub,
+    WorkbenchFile,
+    WorkbenchRow,
+    compile_workbench,
+)
 
 __all__ = [
     "AuditReport",
@@ -58,4 +65,9 @@ __all__ = [
     "ValidationFinding",
     "ValidationReport",
     "validate_project",
+    "CompileResult",
+    "EvidenceStub",
+    "WorkbenchFile",
+    "WorkbenchRow",
+    "compile_workbench",
 ]
