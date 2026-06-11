@@ -44,13 +44,15 @@ from __future__ import annotations
 
 import pytest
 
-from science_model.entities import Entity
+from science_model.entities import Entity, EntityType
 from science_model.reasoning import CompositionRule, RESERVED_COMPOSITION_RULES, WEAKEST_LINK_COMPOSITION_RULES
 
 
 def _entity(**kw):
+    # type MUST match core_entity_type_for_kind(kind) — Entity._validate_kind_type_consistency
+    # (entities.py:343) rejects a mismatch, so direct construction requires an explicit type=.
     base = dict(
-        id="hypothesis:h1", kind="hypothesis", title="H1", project="p",
+        id="hypothesis:h1", kind="hypothesis", type=EntityType.HYPOTHESIS, title="H1", project="p",
         ontology_terms=[], related=[], source_refs=[], content_preview="",
         file_path="x.md",
     )
@@ -169,15 +171,16 @@ from __future__ import annotations
 
 from rdflib import Literal, URIRef
 
-from science_model.entities import Entity
+from science_model.entities import Entity, EntityType
 from science_tool.graph.io import SCI_NS
 from science_tool.graph.materialize import _add_reasoning_metadata
 from rdflib import Graph
 
 
 def _entity(rule):
+    # type MUST equal core_entity_type_for_kind("mechanism") — see entities.py:343.
     return Entity(
-        id="mechanism:m1", kind="mechanism", title="M1", project="p",
+        id="mechanism:m1", kind="mechanism", type=EntityType.MECHANISM, title="M1", project="p",
         ontology_terms=[], related=[], source_refs=[], content_preview="",
         file_path="x.md", composition_rule=rule,
     )
@@ -514,12 +517,12 @@ class MemberBelief:
 @dataclass(frozen=True)
 class BundleBeliefResult:
     composition_rule: str
-    magnitude: BeliefMagnitude
+    magnitude: BeliefMagnitude          # = member_results[0].belief.magnitude (the min-rank_key member)
     capped_by_refutation: bool
     contested: bool
-    scalar: BeliefScalar | None
-    member_results: list[MemberBelief]
-    bottleneck_members: list[str]
+    scalar: BeliefScalar | None         # the min-rank_key member's band (the scalar driver = member_results[0])
+    member_results: list[MemberBelief]  # sorted ascending by rank_key; [0] drives magnitude + scalar
+    bottleneck_members: list[str]       # ORDINAL-only: members sharing the minimum magnitude (superset of the scalar driver)
     contested_members: list[str]
     unresolved_members: list[str]
 
@@ -536,6 +539,14 @@ def roll_up_weakest_link(members: list[MemberBelief], *, rule: CompositionRule) 
 
     Refutation propagates as a SEPARATE boolean axis (OR across members), never
     folded into the magnitude ordinal.
+
+    `bottleneck_members` is the ORDINAL-tied set — every member sharing the minimum
+    magnitude (the explanatory "weakest-magnitude members"). The reported `magnitude`
+    and `scalar` come from `member_results[0]` (minimum full `rank_key`), which is
+    always within that set; when several members tie on ordinal but differ in
+    net-band, `[0]` is the deterministic scalar driver and the others are still
+    listed as bottlenecks for explanation. Every member's `scalar`/`rank_key` is
+    retained in `member_results`, so the scalar driver is always identifiable.
     """
     ordered = sorted(members, key=lambda m: m.rank_key)
     bottleneck = ordered[0]
@@ -787,6 +798,25 @@ def test_snapshot_emits_mechanism_bundle_row():
     assert row["composition_rule"] == "all_steps"
     assert "bottleneck_members" in row
     assert "capped_by_refutation" in row
+    # _key()/append_snapshots contract (belief_snapshot.py:72): bundle rows MUST carry
+    # input_hashes + scalar_enabled or append raises KeyError.
+    from science_tool.graph.belief_snapshot import _key
+    assert row["input_hashes"]            # non-empty member-evidence + structure hashes
+    assert row["scalar_enabled"] is False
+    _key(row)                             # must not raise
+
+
+def test_snapshot_bundle_rows_are_appendable(tmp_path):
+    from science_tool.graph.belief_snapshot import append_snapshots
+    k, prov = Graph(), Graph()
+    k.add((MECH, RDF.type, SCI_NS.Mechanism))
+    k.add((PA, RDF.type, SCI_NS.Proposition))
+    k.add((MECH, SCI_NS.hasProposition, PA))
+    _strong(k, prov, PA, "g1")
+    rows = snapshot_records(k, prov, scalar_enabled=False, as_of="2026-06-11")
+    path = tmp_path / "snapshots.jsonl"
+    assert append_snapshots(path, rows) == len(rows)   # no KeyError; all rows written
+    assert append_snapshots(path, rows) == 0           # idempotent: same key dedupes
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -817,8 +847,17 @@ def snapshot_records(knowledge, provenance, *, scalar_enabled: bool, as_of: str)
         result = belief_for_entity(knowledge, provenance, claim, scalar_enabled=scalar_enabled)
 
         if isinstance(result, BundleBeliefResult):
-            member_uris = [m.member_uri for m in result.member_results]
+            member_uris = [URIRef(m.member_uri) for m in result.member_results]
             scalar = result.scalar
+            # Reproducibility key (_key() requires input_hashes + scalar_enabled):
+            # hashes of every member evidence-line input, PLUS a synthetic hash of
+            # (composition_rule, sorted member ids) so a membership or rule change yields
+            # a new snapshot row even when no underlying evidence line changed.
+            member_units = collect_evidence_units(knowledge, provenance, member_uris)
+            line_hashes = {_line_content_hash(knowledge, provenance, URIRef(u.line_uri)) for u in member_units}
+            structure = "\n".join([result.composition_rule, *sorted(str(u) for u in member_uris)])
+            structure_hash = "sha256:" + hashlib.sha256(structure.encode("utf-8")).hexdigest()
+            input_hashes = sorted(line_hashes | {structure_hash})
             rows.append({
                 "as_of": as_of,
                 "claim": str(claim),
@@ -831,8 +870,10 @@ def snapshot_records(knowledge, provenance, *, scalar_enabled: bool, as_of: str)
                 "contested_members": result.contested_members,
                 "unresolved_members": result.unresolved_members,
                 "member_count": len(member_uris),
+                "scalar_enabled": scalar_enabled,
                 "net_band": list(scalar.net_band) if (scalar_enabled and scalar) else None,
                 "net_robust": scalar.net_robust if (scalar_enabled and scalar) else None,
+                "input_hashes": input_hashes,
                 "config_version": CONFIG_VERSION,
             })
             continue
@@ -864,7 +905,7 @@ def snapshot_records(knowledge, provenance, *, scalar_enabled: bool, as_of: str)
     return rows
 ```
 
-Note: the proposition branch recomputes `units` for the hash/score detail. `belief_for_entity` for a non-bundle returns the same `BeliefResult` that `aggregate_belief(collect_evidence_units(... [claim]))` produces, so the magnitude is consistent. Hypotheses with members now report the **roll-up** belief, not the coverage-union — the coverage union remains available via `evidence_signals.py` for other surfaces (the design's §7 relabel: coverage is a signal, not the belief).
+Note: the plain branch is reached **only** for (a) propositions and (b) an undecomposed hypothesis that resolved to zero members. For a proposition, `_evidence_targets_for_uri` returns `[uri]` — identical to `belief_for_entity`'s non-bundle path, so `result.magnitude` and the recomputed `units` agree. For the zero-member hypothesis fallback, there are by definition no `hasProposition`/`cito:discusses` links (else `bundle_members` would be non-empty and it would take the bundle branch), so `_evidence_targets_for_uri` also returns just `[uri]` — they agree *in this case*. The equivalence is **not** general (`_evidence_targets_for_uri` expands a hypothesis with linked claims; `belief_for_entity` non-bundle does not) — it holds only because the fallback is members-empty. A hypothesis **with** members now reports the **roll-up** belief, never the coverage-union; the coverage union remains available via `evidence_signals.py` for other surfaces (design §7: coverage is a signal, not the belief).
 
 - [ ] **Step 4: Run the new test + the existing snapshot test**
 
