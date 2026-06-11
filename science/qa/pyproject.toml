@@ -1,0 +1,25 @@
+[project]
+name = "science-qa"
+version = "0.1.0"
+description = "Config-driven pipeline QA-check runtime for science projects"
+requires-python = ">=3.11"
+dependencies = [
+  "click>=8.1",
+  "pandas>=2.0",
+  "pyarrow>=24.0.0",
+  "pyyaml>=6.0",
+]
+
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/science_qa"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
