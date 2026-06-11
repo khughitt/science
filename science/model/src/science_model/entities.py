@@ -757,8 +757,10 @@ class EvidenceLineEntity(ProjectEntity):
 
     ``belief_eligible`` is a staging marker (default True). When False the
     line may exist but emits no cito:supports/disputes and cannot enter belief
-    aggregation until grounding completes. Enforcement is deferred to tasks
-    2c/3b; this field records intent only.
+    aggregation until grounding completes. Enforcement is twofold: the validate
+    check ``evidence.empirical.requires_dataset_usage`` flags belief-eligible
+    empirical lines lacking ``dataset_usage``, and materialization skips
+    ``belief_eligible=False`` lines from cito emission and the belief graph.
     """
 
     stance: EvidenceStance
