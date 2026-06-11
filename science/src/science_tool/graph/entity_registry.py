@@ -61,6 +61,7 @@ _CORE_KIND_CLASSES: dict[str, EntityClass] = {
     "assumption": EntityClass.EPISTEMIC,
     "code-file": EntityClass.OPERATIONAL,
     "concept": EntityClass.REFERENCE,
+    "construct": EntityClass.REFERENCE,
     "curation-sweep": EntityClass.OPERATIONAL,
     "data-package": EntityClass.OPERATIONAL,
     "discussion": EntityClass.EPISTEMIC,
@@ -71,6 +72,7 @@ _CORE_KIND_CLASSES: dict[str, EntityClass] = {
     "interpretation": EntityClass.EPISTEMIC,
     "method": EntityClass.OPERATIONAL,
     "observation": EntityClass.EPISTEMIC,
+    "outcome": EntityClass.REFERENCE,
     "paper": EntityClass.OPERATIONAL,
     "plan": EntityClass.OPERATIONAL,
     "pre-registration": EntityClass.OPERATIONAL,
@@ -136,10 +138,12 @@ class EntityRegistry:
         # Generic project kinds → ProjectEntity.
         for kind in (
             "concept",
+            "construct",
             "hypothesis",
             "question",
             "proposition",
             "observation",
+            "outcome",
             "research-question",
             "topic",
             "interpretation",

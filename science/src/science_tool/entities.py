@@ -57,8 +57,10 @@ _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
     "method": EntityPathPolicy(Path("entities/methods"), "slug"),  # was "numeric" (4c: slug identity kind)
     "pre-registration": EntityPathPolicy(Path("entities/pre-registrations"), "numeric"),
     "concept": EntityPathPolicy(Path("entities/concepts"), "slug"),
+    "construct": EntityPathPolicy(Path("entities/constructs"), "slug"),
     "decision": EntityPathPolicy(Path("entities/decision"), "verbatim"),
     "paper": EntityPathPolicy(Path("entities/papers"), "citekey"),
+    "outcome": EntityPathPolicy(Path("entities/outcomes"), "slug"),
     # Singletons: `root` is the file path itself, not a directory.
     "research-question": EntityPathPolicy(Path("entities/research-question.md"), "singleton"),
     "claim-registry": EntityPathPolicy(Path("entities/claim-registry.yaml"), "singleton"),
@@ -223,7 +225,9 @@ _DEFAULT_STATUS: dict[str, str] = {
     "pre-registration": "active",
     "paper": "active",
     "concept": "active",
+    "construct": "active",
     "decision": "active",
+    "outcome": "active",
 }
 _STATUS_VALUES: dict[str, frozenset[str]] = {
     "evidence-line": frozenset({"draft", "active", "retired"}),
@@ -265,7 +269,9 @@ _STATUS_VALUES: dict[str, frozenset[str]] = {
     "pre-registration": frozenset({"active", "amended", "superseded", "retired"}),
     "paper": frozenset({"active", "retired"}),
     "concept": frozenset({"active", "deprecated"}),
+    "construct": frozenset({"active", "retired"}),
     "decision": frozenset({"active", "superseded", "abandoned"}),
+    "outcome": frozenset({"active", "retired"}),
 }
 _ALLOWED_EXPLICIT_ROOTS = (Path("entities"),)
 
