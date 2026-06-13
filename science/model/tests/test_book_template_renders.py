@@ -1,8 +1,20 @@
 from __future__ import annotations
 
+import re
 from datetime import date
 
+import yaml
+
 from science_model.templates import Renderer
+
+_RAW_PLACEHOLDER_RE = re.compile(r"\{\{[^{}]+\}\}")
+
+
+def _frontmatter(text: str) -> dict[str, object]:
+    _, frontmatter_text, _ = text.split("---\n", 2)
+    loaded = yaml.safe_load(frontmatter_text)
+    assert isinstance(loaded, dict)
+    return loaded
 
 
 def test_book_template_renders_from_packaged_copy() -> None:
@@ -26,3 +38,6 @@ def test_book_template_renders_from_packaged_copy() -> None:
         "## Follow-up",
     ):
         assert section in out
+    frontmatter = _frontmatter(out)
+    assert "_template" not in frontmatter
+    assert not _RAW_PLACEHOLDER_RE.search(out), _RAW_PLACEHOLDER_RE.search(out).group(0)

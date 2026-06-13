@@ -11,6 +11,8 @@ def test_create_book_entity_writes_template(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     result = create_entity(tmp_path, "book", "Information Rate", entity_id="book:Kelly1982")
+    assert result.entity_id == "book:Kelly1982"
+    assert result.warnings == []
     written = tmp_path / "entities" / "books" / "Kelly1982.md"
     assert written.is_file()
     text = written.read_text(encoding="utf-8")
