@@ -13,15 +13,13 @@ def _project(tmp_path: Path) -> None:
     )
 
 
-def _write_book(tmp_path: Path, body: str) -> Path:
+def _write_book(tmp_path: Path, body: str) -> None:
     d = tmp_path / "entities" / "books"
     d.mkdir(parents=True, exist_ok=True)
-    p = d / "Kelly1982.md"
-    p.write_text(
+    (d / "Kelly1982.md").write_text(
         '---\nid: "book:Kelly1982"\ntype: book\nstatus: active\n---\n# Book\n' + body,
         encoding="utf-8",
     )
-    return p
 
 
 def test_book_missing_section_is_flagged(tmp_path: Path) -> None:

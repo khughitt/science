@@ -4,6 +4,7 @@ Checks direct markdown files under both new-layout entity roots and legacy
 ``$DOC_DIR`` paths:
 - ``entities/topics/`` and ``$DOC_DIR/background/topics/``
 - ``entities/papers/`` and ``$DOC_DIR/background/papers/``
+- ``entities/books/``
 
 and warns when required template sections are absent.
 """
