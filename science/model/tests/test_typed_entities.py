@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from science_model.entities import (
+    BookEntity,
     DatasetEntity,
     Entity,
     EntityType,
@@ -170,3 +171,20 @@ def test_code_file_entity_defaults_and_fields() -> None:
     )
     assert cf2.decision_bearing is True
     assert cf2.task_ids == ["t491"]
+
+
+def test_book_entity_extends_project_entity() -> None:
+    b = BookEntity(**_minimal(EntityType.BOOK, "book:Kelly1982"))
+    assert isinstance(b, ProjectEntity)
+    assert isinstance(b, Entity)
+    assert b.kind == "book"
+
+
+def test_book_entity_coerces_scalar_authors_and_null_strings() -> None:
+    b = BookEntity(
+        **_minimal(EntityType.BOOK, "book:Kelly1982"),
+        authors="Kelly, J. L.",
+        publisher=None,
+    )
+    assert b.authors == ["Kelly, J. L."]
+    assert b.publisher == ""

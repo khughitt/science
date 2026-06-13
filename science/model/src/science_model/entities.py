@@ -99,6 +99,7 @@ class EntityType(StrEnum):
     THEME = "theme"
     MECHANISM = "mechanism"
     PAPER = "paper"
+    BOOK = "book"
     TALK = "talk"
     SEARCH = "search"
     REPORT = "report"
@@ -583,6 +584,40 @@ class PaperEntity(ProjectEntity):
         return value
 
     @field_validator("bibkey", "venue", "doi", "pmid", "url", "methods_summary", mode="before")
+    @classmethod
+    def _coerce_nullable_strings(cls, value: object) -> object:
+        if value is None:
+            return ""
+        return value
+
+
+class BookEntity(ProjectEntity):
+    """Book — typed entity for a long-form monograph summarized chapter-by-chapter.
+
+    A source that *provides* evidence (like `paper`) but carries no truth-apt
+    claim of its own, so it is OPERATIONAL / non-epistemic — never a
+    `bears_on`/belief target.
+    """
+
+    bibkey: str = ""
+    authors: list[str] = Field(default_factory=list)
+    year: int | None = Field(default=None, ge=1800, le=2200)
+    publisher: str = ""
+    isbn: str = ""
+    doi: str = ""
+    url: str = ""
+    key_findings: list[str] = Field(default_factory=list)
+    themes: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+    @field_validator("authors", mode="before")
+    @classmethod
+    def _coerce_scalar_authors(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [value]
+        return value
+
+    @field_validator("bibkey", "publisher", "isbn", "doi", "url", mode="before")
     @classmethod
     def _coerce_nullable_strings(cls, value: object) -> object:
         if value is None:
