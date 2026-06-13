@@ -14,6 +14,7 @@ from science_qa.coverage import (
 )
 from science_qa.dispositions import reconcile_dispositions
 from science_qa.flags import SEVERITY_DISTRIBUTION, SEVERITY_STRUCTURAL, Flag
+from science_qa.extensions import load_project_local
 from science_qa.program import resolve_program
 from science_qa.report import write_reports
 from science_qa.selectors import resolve_columns
@@ -51,10 +52,12 @@ def _missing_required(spec: CheckSpec, inv: Invocation, table: pd.DataFrame) -> 
 def run_qa(config_path: Path, table_path: Path, report_dir: Path) -> RunResult:
     config = QAConfig.from_file(config_path)
     program = resolve_program(config.program)
+    built_in_ids = {spec.check_id for spec in program.checks}
+    checks = [*program.checks, *load_project_local(config.project_local, reserved_check_ids=built_in_ids)]
     table = _read_table(table_path)
 
     # static program <-> substrate validation, before any context is built
-    for spec in program.checks:
+    for spec in checks:
         if spec.accepts is not program.substrate:
             raise RunnerError(f"check {spec.check_id} accepts {spec.accepts.__name__}, "
                               f"program {program.name} binds {program.substrate.__name__}")
@@ -62,7 +65,7 @@ def run_qa(config_path: Path, table_path: Path, report_dir: Path) -> RunResult:
     flags: list[Flag] = []
     coverage = Coverage()
 
-    for spec in program.checks:
+    for spec in checks:
         invs = _invocations(spec, config)
         if spec.expand is not None and not invs:
             coverage.unconfigured_families.append(spec.check_id)
