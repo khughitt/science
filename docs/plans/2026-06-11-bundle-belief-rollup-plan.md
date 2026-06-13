@@ -10,6 +10,8 @@
 
 **Design doc:** `docs/plans/2026-06-11-bundle-belief-rollup-design.md` (read it; this plan implements it).
 
+**Status:** ✅ Complete — all 7 tasks implemented via subagent-driven development (each spec + quality reviewed, all approved), final holistic review = GO, merged to `main` (no-ff `1f6b7582`, 2026-06-11). Full suite green (5116 passed).
+
 **Test command (this repo):** `uv run --frozen pytest <path> -m "not snapshot and not real_projects"`. Full check: `uv run --frozen pytest science/tests -m "not snapshot and not real_projects"` then `uv run --frozen ruff check science`.
 
 ---

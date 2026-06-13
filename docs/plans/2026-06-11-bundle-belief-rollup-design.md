@@ -1,6 +1,6 @@
 # Bundle belief roll-up — design
 
-**Status:** Draft / design — approved approach, pending spec review.
+**Status:** Implemented & merged to `main` (no-ff `1f6b7582`, 2026-06-11). Built upstream before the MM30 migration consumes it; full suite green (5116 passed).
 **Created:** 2026-06-11
 **Origin:** Surfaced while planning the MM30 causal-DAG corpus migration into the
 epistemic-edges framework. Re-typing MM30's hypothesis-level synthesis claims to
