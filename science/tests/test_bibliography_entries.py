@@ -60,3 +60,14 @@ def test_load_bib_entries_ignores_field_name_embedded_in_other_value(tmp_path: P
         "@article{Note2024,\n  note = {see doi = {10.x/fake} in the supplement},\n  doi = {10.1/real},\n}\n",
     )
     assert load_bib_entries(tmp_path)["Note2024"].doi == "10.1/real"
+
+
+def test_load_bib_entries_captures_entry_type(tmp_path: Path) -> None:
+    _write_bib(
+        tmp_path,
+        "@book{Kelly1982,\n  title = {Information Rate},\n  year = {1982},\n}\n\n"
+        "@article{Smith2024,\n  title = {Cells},\n  year = {2024},\n}\n",
+    )
+    entries = load_bib_entries(tmp_path)
+    assert entries["Kelly1982"].entry_type == "book"
+    assert entries["Smith2024"].entry_type == "article"

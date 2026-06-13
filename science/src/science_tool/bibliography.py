@@ -11,6 +11,7 @@ from typing import Literal
 
 _BIBLIOGRAPHY_PREFIX = "cite:"
 _BIBTEX_ENTRY_RE = re.compile(r"@\w+\s*\{\s*([^,\s]+)\s*,")
+_BIBTEX_ENTRY_TYPED_RE = re.compile(r"@(\w+)\s*\{\s*([^,\s]+)\s*,")
 
 _BIB_HEADER = (
     "% references.bib — BibTeX database for this Science project\n"
@@ -86,6 +87,7 @@ class BibEntry:
     """One balanced bibliography entry — the subset Phase 4b materializes."""
 
     key: str
+    entry_type: str = "misc"
     title: str | None = None
     year: int | None = None
     doi: str | None = None
@@ -140,8 +142,9 @@ def load_bib_entries(project_root: Path) -> dict[str, "BibEntry"]:
         return {}
     text = bib_path.read_text(encoding="utf-8")
     entries: dict[str, BibEntry] = {}
-    for match in _BIBTEX_ENTRY_RE.finditer(text):
-        key = match.group(1)
+    for match in _BIBTEX_ENTRY_TYPED_RE.finditer(text):
+        entry_type = match.group(1).lower()
+        key = match.group(2)
         span = _entry_span(text, key)
         if span is None:
             continue  # unbalanced/truncated — cannot be "backed", excluded
@@ -154,6 +157,7 @@ def load_bib_entries(project_root: Path) -> dict[str, "BibEntry"]:
         year = year_int if year_int is not None and 1800 <= year_int <= 2200 else None
         entries[key] = BibEntry(
             key=key,
+            entry_type=entry_type,
             title=_field_value(block, "title"),
             year=year,
             doi=_field_value(block, "doi"),
