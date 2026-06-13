@@ -4447,7 +4447,7 @@ def paper_fetch_cmd(
 
 @main.command("book-split")
 @click.argument("pdf", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option("--json", "as_json", is_flag=True, default=False, help="Emit the chapter manifest as JSON.")
+@click.option("--json", "as_json", is_flag=True, help="Emit the chapter manifest as JSON.")
 def book_split_cmd(pdf: Path, as_json: bool) -> None:
     """Extract a chapter manifest from a book PDF's outline/bookmarks.
 

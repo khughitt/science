@@ -29,9 +29,30 @@ def test_book_split_cli_emits_json(tmp_path: Path) -> None:
     assert data[0]["start_page"] == 1
 
 
+def _make_pdf_with_parts(path: Path, n_pages: int) -> None:
+    writer = PdfWriter()
+    for _ in range(n_pages):
+        writer.add_blank_page(width=72, height=72)
+    p1 = writer.add_outline_item("Part I", 0)
+    writer.add_outline_item("Chapter 1", 0, parent=p1)
+    writer.add_outline_item("Chapter 2", 4, parent=p1)
+    with path.open("wb") as fh:
+        writer.write(fh)
+
+
+def test_book_split_cli_human_readable_lists_chapters_and_parts(tmp_path: Path) -> None:
+    pdf = tmp_path / "parts.pdf"
+    _make_pdf_with_parts(pdf, 10)
+    result = CliRunner().invoke(main, ["book-split", str(pdf)])  # no --json
+    assert result.exit_code == 0, result.output
+    assert "Chapter 1" in result.output
+    assert "pp. 1-" in result.output            # page-range rendering
+    assert "[Part I]" in result.output           # part suffix rendering
+
+
 def test_book_split_cli_no_outline_exits_nonzero(tmp_path: Path) -> None:
     pdf = tmp_path / "bare.pdf"
     _make_pdf(pdf, 3, [])
-    result = CliRunner().invoke(main, ["book-split", str(pdf), "--json"])
+    result = CliRunner().invoke(main, ["book-split", str(pdf)])
     assert result.exit_code != 0
     assert "no outline" in result.output.lower()
