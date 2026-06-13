@@ -216,7 +216,10 @@ This playbook scores three related disciplines during the sweep, but keeps them 
   `workflow-run` / `sci:supersedes` chain and its QA dispositions and reports two verdicts —
   an *iteration* axis (QA-RESPONSIVE / RE-RAN-UNRELATED / SINGLE-RUN) and a *QA-engagement* axis
   (NO-QA / NO-FLAGS / RESPONDED / IGNORED / PARTIAL). The headline advisory is the
-  SINGLE-RUN × IGNORED workflow. Advisory only — it never fails the build.
+  SINGLE-RUN × IGNORED workflow. Advisory only — it never fails the build. QA **breadth/coverage**
+  is read from the `science qa-audit` `breadth` column (`ran/denominator`); `empty`/`blocked`
+  invocations and declared-but-unconfigured families are the narrow-checking signal, drawn from the
+  `coverage` block in `qa_report.json`.
 
 Surface all three during the sweep so they are not forgotten.
 If a project-grown check becomes broadly reusable, record it in the synthesis "convention nominations".

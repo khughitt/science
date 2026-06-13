@@ -82,11 +82,19 @@ biologist one-shots the analysis."
   standalone **`science-qa`** distribution at `science/qa/` (config-runner over the `qa:` schema +
   scRNA pack + deterministic `qa_report.{json,md}` + analyst-owned `qa_dispositions.yaml`). See
   `docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-design.md`.
-- **B2 — Quantify QA breadth/depth.** *Gap:* a project can record one shallow check and look
-  as "QA'd" as one with broad coverage. *Sketch:* a score/metric over QA coverage (against the
-  checkpoint conventions' expected checks) that flags shallow or narrow checking. *Tier:*
-  **Mid — UNBLOCKED (B1 shipped); design in progress.** *Deps:* B1,
-  `docs/conventions/pipeline-qa-checkpoints.md`.
+- **B2 — Quantify QA breadth/depth. ✅ SHIPPED (2026-06-13).** *Gap:* a project can record one
+  shallow check and look as "QA'd" as one with broad coverage. *Sketch:* a score/metric over QA
+  coverage (against the checkpoint conventions' expected checks) that flags shallow or narrow
+  checking. *Tier:* **Mid.** *Deps:* B1, `docs/conventions/pipeline-qa-checkpoints.md`.
+  *Delivered:* composable **check-library** — checks composed as **aspects** (`general`, `tabular`,
+  `numeric-column`, `gene-expression-qc-table`, `scrna-qc-table`, `project-local`) into a named
+  **program** (`qa.program`), providing a *baseline library* of type-appropriate checks;
+  project-local extensions added via `qa.project_local`. Breadth is a program-derived coverage
+  readout: `qa_report.json` now carries a `coverage` block (executable denominator +
+  `ran`/`empty`/`blocked`/`not-applicable` per invocation + declared-but-unconfigured families);
+  `science qa-audit` surfaces a `breadth` column (`ran/denominator`). See
+  `docs/plans/2026-06-13-qa-check-library-design.md` and
+  `docs/plans/2026-06-13-qa-check-library-plan.md`.
 - **B3 — Flag no-iteration workflows. ✅ SHIPPED (2026-06-11).** *Gap:* a build→run-once→record→"truth"
   workflow is indistinguishable from a properly iterated one. *Sketch:* detect and flag analyses
   with zero recorded iterations / re-entries, surfacing them through the audit playbook. *Tier:*
@@ -163,19 +171,20 @@ credulity ("EMT shows up therefore EMT"), tail-hiding metrics.
 
 | Tier | Workstreams | Why now / what blocks it |
 |---|---|---|
-| **✅ Shipped** | B1, B3 | Merged to local `main` 2026-06-11 (`science-qa` toolkit + `science qa-audit`) |
+| **✅ Shipped** | B1, B3, B2 | B1+B3 merged to local `main` 2026-06-11 (`science-qa` toolkit + `science qa-audit`); B2 merged 2026-06-13 (composable check-library, aspects/programs, breadth coverage) |
 | **Near-term (unblocked)** | B4, D1, F2 | Skill / doc / convention changes; no substrate dependency |
-| **Mid** | B2 (next), C1, D2, E2 | New mechanisms, scoped; B2 unblocked now that B1 defines the check surface |
+| **Mid** | C1, D2, E2 | New mechanisms, scoped |
 | **Gated** | A1, A2 | Need `belief_eligible` / `quantitative_result` from epistemic-edges (not in repo yet) |
 | **Exploratory** | C2, E1, F1 | Deeper provenance/methodology; design-heavy |
 
 ## Recommended first spin-out
 
-- **B3 + B1 (no-iteration flagging + QA-check toolkit), then B2** — ✅ **B3 + B1 SHIPPED**
-  2026-06-11 (merged to local `main`; `science-qa` toolkit + `science qa-audit`; see
-  `docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-design.md` /
-  `…-plan.md`). **B2 (QA-breadth quantification) is now the active spin-out** — B1 has defined
-  the reusable check surface it scores against (`B2 *Deps:* B1`).
+- **B3 + B1 (no-iteration flagging + QA-check toolkit), then B2** — ✅ **B3 + B1 + B2 SHIPPED**
+  (B1+B3 merged to local `main` 2026-06-11; `science-qa` toolkit + `science qa-audit`; see
+  `docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-design.md` / `…-plan.md`).
+  B2 merged 2026-06-13 as a composable check-library (aspects/programs) with breadth as a
+  program-derived coverage readout; see `docs/plans/2026-06-13-qa-check-library-design.md` and
+  `docs/plans/2026-06-13-qa-check-library-plan.md`.
 - **Theme A (evidence tiering + cross-modality)** — strongest grounding and highest epistemic
   payoff (the user's long-emphasized hint/single/multi/multi-modal ladder, finally systematic),
   **but gated**: it cannot start until `belief_eligible` / `quantitative_result` land via

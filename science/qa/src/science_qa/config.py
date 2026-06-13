@@ -12,14 +12,19 @@ class QAConfigError(Exception):
 
 @dataclass
 class QAConfig:
+    program: str = ""
     unique_key: str | None = None
     required_complete: list[str] = field(default_factory=list)
     categoricals: dict[str, dict] = field(default_factory=dict)
     exclusive_flags: list[list[str]] = field(default_factory=list)
+    expected_types: dict[str, str] = field(default_factory=dict)
+    polarity: list[str] = field(default_factory=list)
     ranges: dict[str, dict] = field(default_factory=dict)
     missing_sentinels: list = field(default_factory=list)
-    packs: list[str] = field(default_factory=list)
-    pack_params: dict[str, dict] = field(default_factory=dict)
+    column_sets: dict[str, object] = field(default_factory=dict)
+    aspect_params: dict[str, dict] = field(default_factory=dict)
+    project_local: list[str] = field(default_factory=list)
+    base_dir: Path = field(default_factory=lambda: Path("."))
 
     @classmethod
     def from_file(cls, path: Path) -> "QAConfig":
@@ -29,13 +34,21 @@ class QAConfig:
         if not isinstance(data, dict) or "qa" not in data:
             raise QAConfigError(f"config {path} has no 'qa:' block")
         qa = data["qa"] or {}
+        program = qa.get("program")
+        if not program:
+            raise QAConfigError(f"config {path} has no 'program:' key (required)")
         return cls(
+            program=str(program),
             unique_key=qa.get("unique_key"),
             required_complete=list(qa.get("required_complete", []) or []),
             categoricals=dict(qa.get("categoricals", {}) or {}),
             exclusive_flags=[list(pair) for pair in (qa.get("exclusive_flags", []) or [])],
+            expected_types=dict(qa.get("expected_types", {}) or {}),
+            polarity=list(qa.get("polarity", []) or []),
             ranges=dict(qa.get("ranges", {}) or {}),
             missing_sentinels=list(qa.get("missing_sentinels", []) or []),
-            packs=list(qa.get("packs", []) or []),
-            pack_params=dict(qa.get("pack_params", {}) or {}),
+            column_sets=dict(qa.get("column_sets", {}) or {}),
+            aspect_params=dict(qa.get("aspect_params", {}) or {}),
+            project_local=list(qa.get("project_local", []) or []),
+            base_dir=path.parent,
         )

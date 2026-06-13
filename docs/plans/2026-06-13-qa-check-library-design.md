@@ -227,8 +227,11 @@ denominator and ratio, because the program legitimately declared their input opt
   covered, isn't" case — e.g. `numeric-column.low_variance` matched no numeric columns). The entry
   stays in the denominator; the check did not actually inspect anything.
 - **`blocked`** — a **required** check that could not run because a **required input column is
-  absent**. It emits a **structural flag** and stays in the denominator (counted, not dropped). This
-  is the fourth status that keeps required checks from silently vanishing when their input is missing.
+  absent**. It stays in the denominator (counted, not dropped). The absent column's **structural
+  flag is emitted once, by the aspect's owning `required_column` check** (program invariant: every
+  `requires` column has a `required_column` owner) — the blocked entry itself is coverage-only, so
+  the flag ledger carries no duplicate. This is the fourth status that keeps required checks from
+  silently vanishing when their input is missing while the build still fails on the structural flag.
 - **`not-applicable`** — a declared-**optional** input is legitimately unavailable (e.g. the
   doublet-ceiling check when the program/config declares doublet scoring optional). Excluded from the
   "should have run" count; reserved for declared-optional checks only.

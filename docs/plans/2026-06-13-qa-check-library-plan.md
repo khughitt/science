@@ -31,9 +31,10 @@ New, under `science/qa/src/science_qa/`:
 | `aspects/tabular.py` | `unique_key`, `required_complete`, `categoricals`, `exclusive_flags`, `type_conformance` (families) |
 | `aspects/numeric_column.py` | `zero_fraction`, `low_variance` (required, selector-driven); `polarity`, `ranges`, `missing_sentinels` (families) |
 | `aspects/gene_expression_qc.py` | `required_column`, `library_size_positive`, `degenerate_cell` (required) |
-| `aspects/scrna_qc.py` | `mito_ceiling`, `gene_count_gate`, `total_counts_floor`, `doublet_ceiling`, `fraction_failing` |
+| `aspects/scrna_qc.py` | `gates` (mito/gene-count/total-count thresholds) + `doublet_ceiling`; threshold flags carry failing counts |
 | `program.py` | `Program`, registry, `scrna-qc-table` program, `resolve_program` |
 | `coverage.py` | `CoverageEntry`, `Coverage`, status constants, executable-denominator |
+| `extensions.py` | `load_project_local(refs, reserved_check_ids=...)` — resolve `module:attr` → namespaced, non-colliding `CheckSpec`s |
 
 Modified:
 
@@ -58,7 +59,7 @@ Docs: `docs/conventions/pipeline-qa-checkpoints.md`, `docs/process/pipeline-audi
 - [ ] **Step 1: Create and switch to the branch**
 
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git checkout main && git pull --ff-only 2>/dev/null; git checkout -b feat/qa-check-library
 git branch --show-current
 ```
@@ -131,9 +132,9 @@ Expected: PASS (2 tests)
 - [ ] **Step 5: Lint and commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science && git branch --show-current   # must be feat/qa-check-library
+cd ~/d/science && git branch --show-current   # must be feat/qa-check-library
 cd science/qa && ruff check src tests --fix
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add science/qa/src/science_qa/context.py science/qa/tests/test_context.py
 git commit -m "feat(science-qa): substrate-typed Context + TableContext"
 ```
@@ -253,9 +254,9 @@ Expected: PASS (7 tests)
 - [ ] **Step 5: Lint and commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science && git branch --show-current
+cd ~/d/science && git branch --show-current
 cd science/qa && ruff check src tests --fix
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add science/qa/src/science_qa/selectors.py science/qa/tests/test_selectors.py
 git commit -m "feat(science-qa): standalone column-resolution selectors unit"
 ```
@@ -352,9 +353,9 @@ Expected: PASS (2 tests)
 - [ ] **Step 5: Lint and commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science && git branch --show-current
+cd ~/d/science && git branch --show-current
 cd science/qa && ruff check src tests --fix
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add science/qa/src/science_qa/aspects/__init__.py science/qa/tests/test_aspect_registry.py
 git commit -m "feat(science-qa): CheckSpec/Invocation aspect-registry types"
 ```
@@ -448,9 +449,9 @@ Expected: PASS (3 tests)
 - [ ] **Step 5: Lint and commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science && git branch --show-current
+cd ~/d/science && git branch --show-current
 cd science/qa && ruff check src tests --fix
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add science/qa/src/science_qa/aspects/general.py science/qa/tests/test_aspect_general.py
 git commit -m "feat(science-qa): general aspect (non_empty structural, missing_fraction)"
 ```
@@ -603,9 +604,9 @@ Expected: PASS (5 tests)
 - [ ] **Step 5: Lint and commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science && git branch --show-current
+cd ~/d/science && git branch --show-current
 cd science/qa && ruff check src tests --fix
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add science/qa/src/science_qa/aspects/tabular.py science/qa/tests/test_aspect_tabular.py
 git commit -m "feat(science-qa): tabular aspect (re-homed structural family checks + type_conformance)"
 ```
@@ -757,9 +758,9 @@ Expected: PASS (5 tests)
 - [ ] **Step 5: Lint and commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science && git branch --show-current
+cd ~/d/science && git branch --show-current
 cd science/qa && ruff check src tests --fix
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add science/qa/src/science_qa/aspects/numeric_column.py science/qa/tests/test_aspect_numeric_column.py
 git commit -m "feat(science-qa): numeric-column aspect (zero/variance + re-homed polarity/ranges/sentinels)"
 ```
@@ -859,9 +860,9 @@ Expected: PASS (3 tests)
 - [ ] **Step 5: Lint and commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science && git branch --show-current
+cd ~/d/science && git branch --show-current
 cd science/qa && ruff check src tests --fix
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add science/qa/src/science_qa/aspects/gene_expression_qc.py science/qa/tests/test_aspect_gene_expression_qc.py
 git commit -m "feat(science-qa): gene-expression-qc-table aspect (re-homed required_column + degenerate_cell)"
 ```
@@ -967,9 +968,9 @@ Expected: PASS (3 tests)
 - [ ] **Step 5: Lint and commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science && git branch --show-current
+cd ~/d/science && git branch --show-current
 cd science/qa && ruff check src tests --fix
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add science/qa/src/science_qa/aspects/scrna_qc.py science/qa/tests/test_aspect_scrna_qc.py
 git commit -m "feat(science-qa): scrna-qc-table aspect (re-homed distribution gates + doublet ceiling)"
 ```
@@ -1145,7 +1146,7 @@ def resolve_program(name: str) -> Program:
 
 > The `gates` required check uses `check_id` `scrna-qc-table/gates` but emits flags with `check="threshold"`. The test in Task 9 looks up `scrna-qc-table/doublet_ceiling` and `numeric-column/range` by `check_id`; confirm these `check_id`s exist. The `scrna_qc.gates` `params` come from `aspect_params` — wired in the runner (Task 12).
 >
-> **Intentional design point (do not "fix" away):** when a required QC column is absent, *two* aspects react — `gene-expression-qc-table/required_column` emits the **parity-mapped** structural flag (`gene-expression-qc-table/required_column/<col>`, the re-homed `scrna/required_column/<col>`), and `gates`/`library_size_positive`/`degenerate_cell` (which carry `requires`) are recorded `blocked` so they never `KeyError` on the absent column. The `required_column` check is what preserves B1 parity; the `blocked` entries are additive coverage facts. Both are correct; keep both.
+> **Program invariant — required-column ownership (avoids duplicate flags).** Exactly one check *owns* the structural flag for an absent required column: `gene-expression-qc-table/required_column` emits the **parity-mapped** `gene-expression-qc-table/required_column/<col>` flag (the re-homed `scrna/required_column/<col>`) for each absent column in `REQUIRED_COLUMNS`. The dependent checks `gates`/`library_size_positive`/`degenerate_cell` carry `requires` purely so the runner records them **`blocked` (coverage-only, no flag)** instead of `KeyError`-ing on the absent column. **Invariant:** every column in any check's `requires` must be covered by a `required_column`-style owner (true here: all are in `gene-expression-qc-table.REQUIRED_COLUMNS`). This is why the runner's blocked branch emits no flag — the single owner does, so the ledger has no duplicate `flag_id`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1157,9 +1158,9 @@ Expected: PASS (5 tests). (Requires `QAConfig` fields `program`, `base_dir`, `ex
 - [ ] **Step 5: Lint and commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science && git branch --show-current
+cd ~/d/science && git branch --show-current
 cd science/qa && ruff check src tests --fix
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add science/qa/src/science_qa/program.py science/qa/tests/test_program.py
 git commit -m "feat(science-qa): scrna-qc-table program + family expansion"
 ```
@@ -1281,9 +1282,9 @@ Expected: PASS (3 tests)
 - [ ] **Step 5: Lint and commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science && git branch --show-current
+cd ~/d/science && git branch --show-current
 cd science/qa && ruff check src tests --fix
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add science/qa/src/science_qa/coverage.py science/qa/tests/test_coverage.py
 git commit -m "feat(science-qa): coverage model (statuses + executable denominator + narrow signal)"
 ```
@@ -1292,7 +1293,7 @@ git commit -m "feat(science-qa): coverage model (statuses + executable denominat
 
 ## Phase E — Integration
 
-> **Execute Task 11 before Task 9's Step 4** (config fields are a test dependency). If using subagent-driven execution, run Tasks in order 0,1,2,3,4,5,6,7,8,10,11,9,12,13,14.
+> **Execute Task 11 before Task 9's Step 4** (config fields are a test dependency). If using subagent-driven execution, run Tasks in order 0,1,2,3,4,5,6,7,8,10,11,9,12,12b,13,14,15,16.
 
 ### Task 11: `config.py` — program selection + parameterization; drop `packs`
 
@@ -1415,9 +1416,9 @@ Expected: PASS
 - [ ] **Step 5: Lint and commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science && git branch --show-current
+cd ~/d/science && git branch --show-current
 cd science/qa && ruff check src tests --fix
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add science/qa/src/science_qa/config.py science/qa/tests/test_config.py
 git commit -m "refactor(science-qa): config = program selection + parameterization; drop packs"
 ```
@@ -1430,7 +1431,7 @@ git commit -m "refactor(science-qa): config = program selection + parameterizati
 - Modify: `science/qa/src/science_qa/runner.py`
 - Test: `science/qa/tests/test_runner.py` (rewrite)
 
-> The runner is the heart: static substrate validation → per-CheckSpec expansion (required = one implicit invocation; family = `spec.expand(config)`) → per-invocation column resolution → context-compat validation → `blocked`/`empty`/`ran`/`not-applicable` → flags + coverage. Absent required input resolves three ways: an `inv.optional` input → `not-applicable`; a required check's input → `blocked` + a structural `required_column` flag; a *configured* family item naming an absent column → fail early (exit 2, preserving B1's `_require_column` behavior).
+> The runner is the heart: static substrate validation → per-CheckSpec expansion (required = one implicit invocation; family = `spec.expand(config)`) → per-invocation column resolution → context-compat validation → `blocked`/`empty`/`ran`/`not-applicable` → flags + coverage. Absent required input resolves three ways: an `inv.optional` input → `not-applicable`; a built-in required check's input → `blocked` **coverage-only** because the program's `required_column` owner emits the structural flag; a *configured* family item naming an absent column → fail early (exit 2, preserving B1's `_require_column` behavior). In this slice, project-local checks may not declare `requires`; they should validate any project-specific required inputs inside the check and emit their own project-local structural flags.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1610,10 +1611,9 @@ def _run_invocation(spec: CheckSpec, inv: Invocation, table: pd.DataFrame,
         if inv.optional:
             return CoverageEntry(spec.check_id, spec.aspect, STATUS_NA, [], 0)  # declared-optional input absent
         if spec.kind == CHECK_REQUIRED:
-            for col in missing:
-                flags.append(Flag(spec.aspect, "required_column", col, None, SEVERITY_STRUCTURAL,
-                                  "absent", "present", f"required input column {col!r} missing"))
-            return CoverageEntry(spec.check_id, spec.aspect, STATUS_BLOCKED, [], len(missing))
+            # coverage-only: the absent column's structural flag is emitted by the owning
+            # required_column check (program invariant), so we DON'T flag here -> no duplicates.
+            return CoverageEntry(spec.check_id, spec.aspect, STATUS_BLOCKED, [], 0)
         # a configured family item names a column absent from the table -> fail early (exit 2), per B1
         raise RunnerError(f"{spec.check_id} references column(s) absent from table: {missing}")
 
@@ -1652,11 +1652,227 @@ Expected: PASS (4 tests). (Depends on `report.write_reports` accepting `coverage
 - [ ] **Step 5: Lint and commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science && git branch --show-current
+cd ~/d/science && git branch --show-current
 cd science/qa && ruff check src tests --fix
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add science/qa/src/science_qa/runner.py science/qa/tests/test_runner.py
 git commit -m "feat(science-qa): program-driven runner with coverage + blocked/empty/na statuses"
+```
+
+---
+
+### Task 12b: `project_local` extension loading (runtime)
+
+**Files:**
+- Create: `science/qa/src/science_qa/extensions.py`
+- Modify: `science/qa/src/science_qa/runner.py` (compose program checks + project-local checks)
+- Test: `science/qa/tests/test_extensions.py`, and append a runner test to `science/qa/tests/test_runner.py`
+
+> `project_local` is the spec's append-only extension point — it must actually run, not just live in config. Project-local specs are constrained to the `project-local` aspect namespace, must not collide with built-in or sibling project-local `check_id`s, and cannot carry `requires` in this slice. The runner composes `program.checks + load_project_local(config.project_local, reserved_check_ids={...})`; the existing static substrate validation then context-checks the project-local specs too (a wrong `accepts` → `RunnerError`).
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# science/qa/tests/test_extensions.py
+import pytest
+from science_qa.aspects import CheckSpec
+from science_qa.extensions import ProjectLocalError, load_project_local
+
+
+def test_load_resolves_checkspec_reference(tmp_path, monkeypatch):
+    (tmp_path / "myext.py").write_text(
+        "from science_qa.aspects import CHECK_REQUIRED, CheckSpec\n"
+        "from science_qa.context import TableContext\n"
+        "marker = CheckSpec('project-local', 'marker', CHECK_REQUIRED, TableContext, lambda ctx, params: [])\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    specs = load_project_local(["myext:marker"])
+    assert len(specs) == 1 and isinstance(specs[0], CheckSpec) and specs[0].check_id == "project-local/marker"
+
+
+def test_bad_ref_shape_errors():
+    with pytest.raises(ProjectLocalError, match="module:attr"):
+        load_project_local(["noseparator"])
+
+
+def test_non_checkspec_errors(tmp_path, monkeypatch):
+    (tmp_path / "badext.py").write_text("marker = 123\n")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    with pytest.raises(ProjectLocalError, match="not a CheckSpec"):
+        load_project_local(["badext:marker"])
+
+
+def test_project_local_requires_project_local_aspect(tmp_path, monkeypatch):
+    (tmp_path / "badns.py").write_text(
+        "from science_qa.aspects import CHECK_REQUIRED, CheckSpec\n"
+        "from science_qa.context import TableContext\n"
+        "marker = CheckSpec('general', 'non_empty', CHECK_REQUIRED, TableContext, lambda ctx, params: [])\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    with pytest.raises(ProjectLocalError, match="project-local aspect"):
+        load_project_local(["badns:marker"])
+
+
+def test_project_local_check_id_collision_errors(tmp_path, monkeypatch):
+    (tmp_path / "collision.py").write_text(
+        "from science_qa.aspects import CHECK_REQUIRED, CheckSpec\n"
+        "from science_qa.context import TableContext\n"
+        "marker = CheckSpec('project-local', 'marker', CHECK_REQUIRED, TableContext, lambda ctx, params: [])\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    with pytest.raises(ProjectLocalError, match="collides"):
+        load_project_local(["collision:marker"], reserved_check_ids={"project-local/marker"})
+
+
+def test_project_local_requires_owned_missing_input_policy(tmp_path, monkeypatch):
+    (tmp_path / "requires.py").write_text(
+        "from science_qa.aspects import CHECK_REQUIRED, CheckSpec\n"
+        "from science_qa.context import TableContext\n"
+        "marker = CheckSpec('project-local', 'needs_col', CHECK_REQUIRED, TableContext, "
+        "lambda ctx, params: [], requires=('x',))\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    with pytest.raises(ProjectLocalError, match="requires"):
+        load_project_local(["requires:marker"])
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `cd science/qa && python -m pytest tests/test_extensions.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'science_qa.extensions'`
+
+- [ ] **Step 3: Implement `extensions.py`**
+
+```python
+# science/qa/src/science_qa/extensions.py
+from __future__ import annotations
+
+import importlib
+
+from science_qa.aspects import CheckSpec
+
+
+class ProjectLocalError(Exception):
+    """Raised when a project_local reference cannot be imported or is not a CheckSpec."""
+
+
+def load_project_local(refs: list[str], *, reserved_check_ids: set[str] | None = None) -> list[CheckSpec]:
+    """Resolve 'module.path:attr' references to CheckSpec instances (append-only extension).
+
+    Each attr must be a CheckSpec, or a list of CheckSpecs. Fail early on a malformed ref,
+    an import error, a missing attribute, a wrong type, a non-project-local namespace,
+    a check_id collision, or a project-local `requires` clause.
+    """
+    specs: list[CheckSpec] = []
+    seen = set(reserved_check_ids or set())
+    for ref in refs:
+        module_path, sep, attr = ref.partition(":")
+        if not sep or not attr:
+            raise ProjectLocalError(f"project_local ref must be 'module:attr': {ref!r}")
+        try:
+            module = importlib.import_module(module_path)
+        except ImportError as exc:
+            raise ProjectLocalError(f"cannot import project_local module {module_path!r}: {exc}") from exc
+        if not hasattr(module, attr):
+            raise ProjectLocalError(f"project_local module {module_path!r} has no attribute {attr!r}")
+        obj = getattr(module, attr)
+        for candidate in (obj if isinstance(obj, list) else [obj]):
+            if not isinstance(candidate, CheckSpec):
+                raise ProjectLocalError(f"project_local {ref!r} resolved to {type(candidate).__name__}, not CheckSpec")
+            if candidate.aspect != "project-local":
+                raise ProjectLocalError(f"project_local {ref!r} must use the project-local aspect")
+            if candidate.check_id in seen:
+                raise ProjectLocalError(f"project_local check_id {candidate.check_id!r} collides with an existing check")
+            if candidate.requires:
+                raise ProjectLocalError(
+                    f"project_local {candidate.check_id!r} declares requires={candidate.requires!r}; "
+                    "missing-input ownership is not implemented for project-local checks"
+                )
+            seen.add(candidate.check_id)
+            specs.append(candidate)
+    return specs
+```
+
+- [ ] **Step 4: Wire the runner to compose project-local checks**
+
+Modify `science/qa/src/science_qa/runner.py`:
+
+```python
+# add import:
+from science_qa.extensions import load_project_local
+
+# in run_qa, replace the line `program = resolve_program(config.program)` block so that a combined
+# check list is built and used by BOTH the static validation loop and the run loop:
+    program = resolve_program(config.program)
+    built_in_ids = {spec.check_id for spec in program.checks}
+    checks = [*program.checks, *load_project_local(config.project_local, reserved_check_ids=built_in_ids)]
+    table = _read_table(table_path)
+
+    # static program <-> substrate validation, before any context is built
+    for spec in checks:
+        if spec.accepts is not program.substrate:
+            raise RunnerError(f"check {spec.check_id} accepts {spec.accepts.__name__}, "
+                              f"program {program.name} binds {program.substrate.__name__}")
+
+    flags: list[Flag] = []
+    coverage = Coverage()
+
+    for spec in checks:
+        invs = _invocations(spec, config)
+        ...
+```
+
+(Replace both former `for spec in program.checks:` loops with `for spec in checks:`. Nothing else in `run_qa` changes.)
+
+- [ ] **Step 5: Append a runner integration test**
+
+```python
+# science/qa/tests/test_runner.py  (append)
+import json as _json
+
+import pytest as _pytest
+
+
+def test_project_local_check_runs(tmp_path, monkeypatch):
+    (tmp_path / "ext_runs.py").write_text(
+        "from science_qa.aspects import CHECK_REQUIRED, CheckSpec\n"
+        "from science_qa.context import TableContext\n"
+        "from science_qa.flags import Flag, SEVERITY_DISTRIBUTION\n"
+        "def _fn(ctx, params):\n"
+        "    return [Flag('project-local', 'marker', 'table', None, SEVERITY_DISTRIBUTION, '1', '0', 'ran')]\n"
+        "marker = CheckSpec('project-local', 'marker', CHECK_REQUIRED, TableContext, _fn)\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    cfg = _cfg(tmp_path, "qa:\n  program: scrna-qc-table\n  project_local: ['ext_runs:marker']\n")
+    run_qa(cfg, _table(tmp_path, _good_scrna()), tmp_path)
+    ids = [f["flag_id"] for f in _json.loads((tmp_path / "qa_report.json").read_text())["flags"]]
+    assert "project-local/marker/table/-" in ids
+
+
+def test_project_local_wrong_context_rejected(tmp_path, monkeypatch):
+    from science_qa.runner import RunnerError
+    (tmp_path / "ext_bad_ctx.py").write_text(
+        "from science_qa.aspects import CHECK_REQUIRED, CheckSpec\n"
+        "class OtherContext: pass\n"
+        "marker = CheckSpec('project-local', 'marker', CHECK_REQUIRED, OtherContext, lambda c, p: [])\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    cfg = _cfg(tmp_path, "qa:\n  program: scrna-qc-table\n  project_local: ['ext_bad_ctx:marker']\n")
+    with _pytest.raises(RunnerError):
+        run_qa(cfg, _table(tmp_path, _good_scrna()), tmp_path)
+```
+
+- [ ] **Step 6: Run, lint, commit**
+
+Run: `cd science/qa && python -m pytest tests/test_extensions.py tests/test_runner.py -v`
+Expected: PASS
+
+```bash
+cd ~/d/science && git branch --show-current
+cd science/qa && ruff check src tests --fix
+cd ~/d/science
+git add science/qa/src/science_qa/extensions.py science/qa/src/science_qa/runner.py science/qa/tests/test_extensions.py science/qa/tests/test_runner.py
+git commit -m "feat(science-qa): runtime project_local append-only check extension"
 ```
 
 ---
@@ -1765,9 +1981,9 @@ Expected: PASS
 - [ ] **Step 5: Lint and commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science && git branch --show-current
+cd ~/d/science && git branch --show-current
 cd science/qa && ruff check src tests --fix
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add science/qa/src/science_qa/report.py science/qa/tests/test_report.py
 git commit -m "feat(science-qa): coverage block in qa_report.json + Coverage md section"
 ```
@@ -1794,6 +2010,7 @@ import click
 
 from science_qa.aspects.tabular import CategoricalSpecError
 from science_qa.config import QAConfigError
+from science_qa.extensions import ProjectLocalError
 from science_qa.program import ProgramError
 from science_qa.runner import RunnerError, run_qa
 from science_qa.selectors import SelectorError
@@ -1818,7 +2035,8 @@ def run_command(config_path: Path, table_path: Path, report_dir: Path, no_strict
     """
     try:
         result = run_qa(config_path, table_path, report_dir)
-    except (QAConfigError, ProgramError, SelectorError, RunnerError, CategoricalSpecError, ValueError) as exc:
+    except (QAConfigError, ProgramError, SelectorError, RunnerError, CategoricalSpecError,
+            ProjectLocalError, ValueError) as exc:
         raise click.UsageError(str(exc)) from exc
     click.echo(f"{len(result.flags)} flag(s); structural_failed={result.structural_failed}; "
                f"coverage_denominator={result.coverage.executable_denominator()}")
@@ -1827,7 +2045,7 @@ def run_command(config_path: Path, table_path: Path, report_dir: Path, no_strict
 ```
 
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git rm science/qa/src/science_qa/checks.py \
        science/qa/src/science_qa/packs/__init__.py \
        science/qa/src/science_qa/packs/scrna.py \
@@ -1836,14 +2054,27 @@ git rm science/qa/src/science_qa/checks.py \
        science/qa/tests/test_pack_scrna.py
 ```
 
-- [ ] **Step 2: Update the CLI test for the new output line**
+- [ ] **Step 2: Update the CLI fixtures — every config now needs `program:`**
+
+`program:` is required after Task 11, so every config the CLI tests write must declare it, or the
+exit-code (0/1/2) tests will return config-error 2 instead of 1/0. Update `science/qa/tests/test_cli_run.py`:
 
 ```python
-# science/qa/tests/test_cli_run.py  — update the success assertion to tolerate the coverage suffix.
-# Find the assertion on stdout and replace with:
-#     assert "structural_failed=" in result.output and "coverage_denominator=" in result.output
-# Leave the exit-code (0/1/2) tests unchanged; they still hold.
+# _setup: add program: scrna-qc-table to the written config (keeps duplicate-key structural flag).
+def _setup(tmp_path):
+    pd.DataFrame({"SUBJECT_ID": [1, 1]}).to_parquet(tmp_path / "t.parquet")
+    (tmp_path / "qa.yaml").write_text("qa:\n  program: scrna-qc-table\n  unique_key: SUBJECT_ID\n")
 ```
+
+```python
+# test_cli_run_absent_column_exits_2_with_message: add program: to the inline config too.
+    (tmp_path / "qa.yaml").write_text("qa:\n  program: scrna-qc-table\n  unique_key: SUBJECT_ID\n")
+```
+
+Exit codes still hold: duplicate `SUBJECT_ID` → structural flag → exit 1 (no-strict → 0); the
+absent-column case (table has only `OTHER`, config names `SUBJECT_ID`) now raises `RunnerError`
+(configured family naming an absent column) → exit 2. If any test asserts on stdout text, accept the
+new suffix: `assert "structural_failed=" in result.output and "coverage_denominator=" in result.output`.
 
 - [ ] **Step 3: Run the full science-qa suite**
 
@@ -1853,9 +2084,9 @@ Expected: PASS — all aspect/program/coverage/runner/report/cli/config tests gr
 - [ ] **Step 4: Lint and commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science && git branch --show-current
+cd ~/d/science && git branch --show-current
 cd science/qa && ruff check src tests --fix && python -m pytest -q
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add -A science/qa
 git commit -m "refactor(science-qa): wire CLI to programs; remove re-homed checks.py + packs/"
 ```
@@ -1869,18 +2100,18 @@ git commit -m "refactor(science-qa): wire CLI to programs; remove re-homed check
 **Files:**
 - Modify: `science/src/science_tool/qa_audit/manifest.py` (add `load_qa_coverage`, aggregating coverage from the same `qa_report` resources `load_qa_artifacts` already walks)
 - Modify: `science/src/science_tool/qa_audit/audit.py` (add a `breadth` cell to each row + a Breadth column in `render_markdown`)
-- Test: the existing `qa_audit` test module (locate with the grep in Step 1)
+- Test: `science/tests/test_qa_audit_manifest.py` (the `load_qa_coverage` tests) and `science/tests/test_qa_audit_audit.py` (the `render_markdown` test) — the qa_audit tests live under **`science/tests/`**, not `science/src/...`.
 
 > Context (verified): `audit.py:audit_workflows` discovers a run's `qa_report.json` **through the manifest** — `load_qa_artifacts(manifest_path)` selects resources named `qa_report`/`qa_report:<substrate>`. The coverage block lives in those same payloads, so the consumer adds a sibling `load_qa_coverage(manifest_path)` that walks the same resources and aggregates `ran` + `executable_denominator`. `load_qa_artifacts`'s signature is left unchanged.
 
-- [ ] **Step 1: Locate the qa_audit test module**
+- [ ] **Step 1: Confirm the qa_audit test files**
 
 Run:
 ```bash
-cd /mnt/ssd/Dropbox/science
-grep -rln "audit_workflows\|render_markdown\|load_qa_artifacts" science/src/science_tool/tests | sort -u
+cd ~/d/science
+rtk rg -l "audit_workflows|render_markdown|load_qa_artifacts" science/tests | sort -u
 ```
-Expected: the test file(s) exercising `qa_audit`. Append the new tests there (same style/dir).
+Expected: `science/tests/test_qa_audit_audit.py`, `science/tests/test_qa_audit_manifest.py`, etc. Append the new tests to those existing files (same style).
 
 - [ ] **Step 2: Write the failing test**
 
@@ -1979,16 +2210,16 @@ def render_markdown(rows: list[dict]) -> str:
 
 - [ ] **Step 4: Run the qa_audit tests**
 
-Run: `cd science && python -m pytest src/science_tool/tests -k qa_audit -v`
+Run: `cd science && python -m pytest tests -k qa_audit -v`
 Expected: PASS — new breadth tests green; existing qa_audit verdict tests unchanged.
 
 - [ ] **Step 5: Lint and commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science && git branch --show-current
-cd science && ruff check src/science_tool/qa_audit src/science_tool/tests --fix
-cd /mnt/ssd/Dropbox/science
-git add science/src/science_tool/qa_audit science/src/science_tool/tests
+cd ~/d/science && git branch --show-current
+cd science && ruff check src/science_tool/qa_audit tests --fix
+cd ~/d/science
+git add science/src/science_tool/qa_audit science/tests/test_qa_audit_manifest.py science/tests/test_qa_audit_audit.py
 git commit -m "feat(qa-audit): additive breadth column from qa_report coverage block"
 ```
 
@@ -2045,7 +2276,7 @@ program-derived coverage readout; link the design + plan docs.
 Run: `cd science && python -m science_tool.cli validate 2>/dev/null || true` (markdown link-check, if wired); otherwise visually confirm relative links resolve.
 
 ```bash
-cd /mnt/ssd/Dropbox/science && git branch --show-current
+cd ~/d/science && git branch --show-current
 git add docs/conventions/pipeline-qa-checkpoints.md docs/process/pipeline-audit-and-refactor.md \
         aspects/computational-analysis/computational-analysis.md \
         docs/plans/2026-06-10-data-driven-discovery-improvements.md
@@ -2057,9 +2288,9 @@ git commit -m "docs: QA check-library — baseline-library framing, breadth cove
 ## Final verification
 
 - [ ] **Full science-qa suite:** `cd science/qa && python -m pytest -q` → all green.
-- [ ] **science_tool qa_audit slice:** `cd science && python -m pytest src/science_tool/tests -k qa_audit -q` → all green.
-- [ ] **One-way dependency intact:** `grep -rn "science_tool" science/qa/src` → only prose/docstrings, no import; `grep -rn "import science_qa" science/src/science_tool` → none.
-- [ ] **No leftover references:** `grep -rn "science_qa.packs\|science_qa.checks" science/qa` → none.
+- [ ] **science_tool qa_audit slice:** `cd science && python -m pytest tests -k qa_audit -q` → all green.
+- [ ] **One-way dependency intact:** `rtk rg "science_tool" science/qa/src` → only prose/docstrings, no import; `rtk rg "import science_qa" science/src/science_tool` → none.
+- [ ] **No leftover references:** `rtk rg "science_qa.packs|science_qa.checks" science/qa` → none.
 - [ ] Finish with `superpowers:finishing-a-development-branch`.
 
 ---
@@ -2069,7 +2300,7 @@ git commit -m "docs: QA check-library — baseline-library framing, breadth cove
 - Substrate-typed `Context` + `TableContext` → Task 1. Selectors as a separate unit → Task 2.
 - Required-vs-family check kinds → Task 3 (`CheckSpec.kind`/`expand`), Task 9 (expanders), Task 12 (`_invocations`, unconfigured-family recording).
 - Aspect stack + re-homing (general/tabular/numeric-column/gene-expression-qc/scrna-qc) → Tasks 4–8; parity map asserted in Task 12 (`scrna-qc-table/threshold/pct_counts_mt/max`) — extend with the other mapped ids during execution.
-- Program declares *what*; config supplies thresholds/column-sets/project-local → Tasks 9 + 11; `project_local` append-only → config field (Task 11) + convention text (Task 16).
+- Program declares *what*; config supplies thresholds/column-sets/project-local → Tasks 9 + 11; `project_local` append-only extension → config field (Task 11) **+ runtime loading/validation/execution (Task 12b)** + convention text (Task 16).
 - Coverage statuses `ran`/`empty`/`blocked`/`not-applicable`; executable denominator excludes `not-applicable` → Task 10; wired in Task 12; emitted in Task 13.
 - `general.non_empty` + library-size/degenerate-cell structural → Tasks 4, 7.
 - Context-compat validated statically before context build, then per-invocation → Task 12.

@@ -70,3 +70,26 @@ def load_qa_artifacts(manifest_path: Path) -> tuple[bool, list[FlagDisposition]]
             flags.append(FlagDisposition(disposition=disposition, change=str(entry.get("change", "") or "")))
 
     return (True, flags)
+
+
+def load_qa_coverage(manifest_path: Path) -> dict | None:
+    """Aggregate the coverage block(s) from a run's qa_report resources.
+
+    Walks the same `qa_report`/`qa_report:<substrate>` resources as load_qa_artifacts and
+    sums `ran` + `executable_denominator` across substrates. Returns None when there is no
+    qa_report or no coverage block present (older reports predate the block).
+    """
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    base = manifest_path.parent
+    ran = denom = 0
+    found = False
+    for res in manifest.get("resources", []) or []:
+        if _substrate_suffix(str(res.get("name", "")), "qa_report") is None:
+            continue
+        payload = json.loads((base / res["path"]).read_text(encoding="utf-8"))
+        cov = payload.get("coverage")
+        if isinstance(cov, dict):
+            found = True
+            ran += int(cov.get("ran", 0))
+            denom += int(cov.get("executable_denominator", 0))
+    return {"ran": ran, "executable_denominator": denom} if found else None

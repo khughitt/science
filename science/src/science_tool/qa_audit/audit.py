@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from science_tool.qa_audit.manifest import load_qa_artifacts
+from science_tool.qa_audit.manifest import load_qa_artifacts, load_qa_coverage
 from science_tool.qa_audit.runs import chain_depth, load_runs
 from science_tool.qa_audit.verdicts import RESOLVED_ENGAGED, engagement_verdict, iteration_verdict
 
@@ -26,14 +26,17 @@ def audit_workflows(*, runs_dir: Path, repo_root: Path) -> list[dict]:
             if not manifest_path.exists():
                 raise FileNotFoundError(f"manifest not found: {manifest_path}")
             has_report, flags = load_qa_artifacts(manifest_path)
+            coverage = load_qa_coverage(manifest_path)
         except Exception as exc:  # noqa: BLE001 — per-row ERROR, audit must not crash
             rows.append({
                 "workflow": workflow, "runs": len(wf_runs), "chain_depth": depth,
                 "open_flags": 0, "dispositioned_flags": 0,
                 "iteration": "ERROR", "engagement": "ERROR", "detail": str(exc),
+                "breadth": "-",
             })
             continue
 
+        breadth = f"{coverage['ran']}/{coverage['executable_denominator']}" if coverage else "-"
         open_flags = sum(1 for f in flags if f.disposition == "open")
         dispositioned = sum(1 for f in flags if f.disposition in RESOLVED_ENGAGED)
         rows.append({
@@ -41,18 +44,19 @@ def audit_workflows(*, runs_dir: Path, repo_root: Path) -> list[dict]:
             "open_flags": open_flags, "dispositioned_flags": dispositioned,
             "iteration": iteration_verdict(chain_depth=depth, flags=flags),
             "engagement": engagement_verdict(has_report=has_report, flags=flags),
+            "breadth": breadth,
         })
     return rows
 
 
 def render_markdown(rows: list[dict]) -> str:
     header = (
-        "| Workflow | Runs | Chain | Open | Dispositioned | Iteration | Engagement |\n"
-        "| --- | --- | --- | --- | --- | --- | --- |"
+        "| Workflow | Runs | Chain | Open | Dispositioned | Iteration | Engagement | Breadth |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- |"
     )
     body = [
         f"| {r['workflow']} | {r['runs']} | {r['chain_depth']} | {r['open_flags']} | "
-        f"{r['dispositioned_flags']} | {r['iteration']} | {r['engagement']} |"
+        f"{r['dispositioned_flags']} | {r['iteration']} | {r['engagement']} | {r.get('breadth', '-')} |"
         for r in rows
     ]
     return "\n".join([header, *body]) + "\n"

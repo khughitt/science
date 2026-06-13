@@ -50,3 +50,11 @@ def test_render_markdown_has_header_and_rows(tmp_path):
     md = render_markdown(rows)
     assert "| Workflow |" in md
     assert "wf-a" in md
+
+
+def test_render_markdown_includes_breadth_column():
+    out = render_markdown([{
+        "workflow": "wf", "runs": 1, "chain_depth": 1, "open_flags": 0, "dispositioned_flags": 0,
+        "iteration": "SINGLE-RUN", "engagement": "NO-FLAGS", "breadth": "5/7",
+    }])
+    assert "Breadth" in out and "5/7" in out

@@ -159,6 +159,18 @@ emits `qa_report.json` (an immutable flag ledger) and scaffolds an analyst-owned
 declared output — it holds hand-entered data a failed-job cleanup would delete. Write it outside the
 strict gate's output set and reference it as a manifest resource (`qa_dispositions`).
 
+### Composable aspects & programs (baseline library + project extensions)
+
+`science_qa` composes checks as **aspects** (`general`, `tabular`, `numeric-column`,
+`gene-expression-qc-table`, `scrna-qc-table`, `project-local`) into a named **program** selected
+by `qa.program` (e.g. `scrna-qc-table`). The program is the *baseline library* of type-appropriate
+checks; project-specific, bug-driven checks remain valuable and are added via `qa.project_local`
+(an append-only extension point) plus the parameterized families (`ranges`, `categoricals`, …).
+The check list is therefore **baseline library + project extensions**, not bug-driven-only. Breadth
+is reported as a coverage block in `qa_report.json` (executable denominator + `ran`/`empty`/`blocked`/
+`not-applicable` per invocation + declared-but-unconfigured families); see
+`~/d/science/docs/plans/2026-06-13-qa-check-library-design.md`.
+
 ## See also
 
 - [`../process/pipeline-audit-and-refactor.md`](../process/pipeline-audit-and-refactor.md) — the
