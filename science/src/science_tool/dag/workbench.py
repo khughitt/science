@@ -146,12 +146,17 @@ class WorkbenchFile(BaseModel):
 
     ``patch`` is an optional file-level header (rows carry their own ``patch``
     field; the header is a convenience for single-patch files).
+    ``focal_hypothesis`` declares the bundle this workbench's propositions
+    discuss — compile stamps each minted proposition's ``discusses`` list with
+    it, and materialize emits ``cito:discusses`` to the knowledge graph so
+    ``bundle_members`` can find the edge-propositions.
     ``extra="forbid"`` keeps the file model strict too.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     patch: str | None = None
+    focal_hypothesis: str | None = None
     rows: list[WorkbenchRow] = Field(default_factory=list)
 
 
@@ -320,6 +325,8 @@ def compile_workbench(
 
     for row in wb.rows:
         prop = _proposition_for_row(row)
+        if wb.focal_hypothesis is not None:
+            prop = prop.model_copy(update={"discusses": [wb.focal_hypothesis]})
         _write_entity_file(prop, project_root=project_root)
         propositions.append(prop)
 
@@ -369,7 +376,7 @@ _ROW_KEY_ORDER: tuple[str, ...] = (
 )
 
 # Canonical key order for the top-level WorkbenchFile mapping.
-_FILE_KEY_ORDER: tuple[str, ...] = ("patch", "rows")
+_FILE_KEY_ORDER: tuple[str, ...] = ("patch", "focal_hypothesis", "rows")
 
 
 def _row_to_dict(row: WorkbenchRow) -> dict[str, Any]:
@@ -453,6 +460,9 @@ def serialize_canonical(result: CompileResult) -> str:
         if key == "patch":
             if wb.patch is not None:
                 doc["patch"] = wb.patch
+        elif key == "focal_hypothesis":
+            if wb.focal_hypothesis is not None:
+                doc["focal_hypothesis"] = wb.focal_hypothesis
         elif key == "rows":
             doc["rows"] = row_dicts
 

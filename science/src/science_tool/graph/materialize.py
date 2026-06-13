@@ -366,6 +366,17 @@ def _add_relations(
             continue
         knowledge.add((entity_uri, SCI_NS.hasProposition, _entity_uri(target.canonical_id)))
 
+    for raw_target in sorted(getattr(entity, "discusses", []) or []):
+        if is_metadata_reference(raw_target):
+            continue
+        resolution = resolver.resolve(raw_target, allow_cross_kind_fallback=True)
+        if resolution.status != "resolved" or resolution.canonical_id is None:
+            continue
+        target = entity_index.get(resolution.canonical_id)
+        if target is None:
+            continue
+        knowledge.add((entity_uri, CITO_NS.discusses, _entity_uri(target.canonical_id)))
+
     for raw_target in sorted(entity.related):
         if is_external_reference(raw_target, known_prefixes=ext_prefixes):
             _link_external_term(entity_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs)

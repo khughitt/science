@@ -49,6 +49,9 @@ class PropositionEntity(ProjectEntity):
     legacy_patch: str | None = None
     legacy_edge_id: int | None = None
 
+    # Bundle membership: focal hypothesis/mechanism this proposition discusses (→ cito:discusses).
+    discusses: list[str] = Field(default_factory=list)
+
     # Reasoning metadata
     claim_layer: ClaimLayer | None = None
     identification_strength: IdentificationStrength | None = None
