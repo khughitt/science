@@ -649,7 +649,15 @@ def entity_list(kind: str | None, status: str | None, related: str | None, outpu
 def entity_sections(kind: str, output_format: str) -> None:
     """List template sections for a source-authored entity kind."""
 
-    from science_model.templates import EntityTemplateError, Renderer
+    from science_model.templates import MIGRATED_KINDS, EntityTemplateError, Renderer
+
+    if kind not in MIGRATED_KINDS:
+        supported = ", ".join(sorted(MIGRATED_KINDS))
+        raise click.ClickException(
+            f"Kind '{kind}' has no inspectable section template. "
+            f"Kinds with declared sections: {supported}. "
+            "Other kinds are created with a fixed Summary/Notes body — use `science entity create` directly."
+        )
 
     try:
         sections = Renderer().sections(kind)
@@ -3623,6 +3631,11 @@ def tasks_archive(do_apply: bool, check: bool, output_format: str, tasks_dir: Pa
 @click.option("--aspects", "aspects", multiple=True)
 @click.option("--related", multiple=True)
 @click.option("--blocked-by", multiple=True)
+@click.option(
+    "--clear-blockers",
+    is_flag=True,
+    help="Drop all blocked-by refs (e.g. when remediating status drift). Cannot combine with --blocked-by.",
+)
 @click.option("--group", default=None)
 @click.option("--force", is_flag=True, help="Record blockers even if entity not yet known")
 def tasks_edit(
@@ -3634,6 +3647,7 @@ def tasks_edit(
     aspects: tuple[str, ...],
     related: tuple[str, ...],
     blocked_by: tuple[str, ...],
+    clear_blockers: bool,
     group: str | None,
     force: bool,
 ) -> None:
@@ -3646,6 +3660,9 @@ def tasks_edit(
     from science_tool.tasks import edit_task
     from science_tool.tasks_blockers import BlockerValidationError
 
+    if clear_blockers and blocked_by:
+        raise click.ClickException("--clear-blockers cannot be combined with --blocked-by")
+
     validated_aspects: list[str] | None = None
     if aspects:
         project_aspects = load_project_aspects(Path.cwd())
@@ -3653,6 +3670,16 @@ def tasks_edit(
             validated_aspects = validate_entity_aspects(list(aspects), project_aspects)
         except AspectValidationError as exc:
             raise click.ClickException(str(exc)) from exc
+
+    # None = leave blocked-by untouched; [] = clear it. --clear-blockers forces the
+    # empty list so a stale blocker can be dropped without hand-editing active.md.
+    blocked_by_arg: list[str] | None
+    if clear_blockers:
+        blocked_by_arg = []
+    elif blocked_by:
+        blocked_by_arg = list(blocked_by)
+    else:
+        blocked_by_arg = None
 
     try:
         task = edit_task(
@@ -3665,7 +3692,7 @@ def tasks_edit(
             status=status,
             aspects=validated_aspects,
             related=list(related) if related else None,
-            blocked_by=list(blocked_by) if blocked_by else None,
+            blocked_by=blocked_by_arg,
             group=group,
             force=force,
         )

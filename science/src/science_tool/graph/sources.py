@@ -262,8 +262,33 @@ def load_project_sources(
     active_kinds = known_kinds(extra_profiles=active_profiles, ontology_catalogs=ontology_catalogs)
 
     registry = EntityRegistry.with_core_types()
+    # A kind that a profile/local manifest declares can graduate to a core kind
+    # in a later release (e.g. `synthesis`). The registry intentionally refuses
+    # to let an extension/profile kind shadow a core one, but for a graduated kind
+    # that refusal would crash the whole load (and every command built on it) for
+    # any project whose manifest still carries the now-redundant declaration. Skip
+    # those stale declarations — the core definition wins — and record each as a
+    # SkippedEntity so `science health`/`graph audit` nudge the project to drop it.
+    graduated_kind_skips: list[SkippedEntity] = []
+
+    def _graduated_skip(kind: str, manifest_rel: str) -> None:
+        graduated_kind_skips.append(
+            SkippedEntity(
+                path=manifest_rel,
+                kind=kind,
+                reason="kind_graduated_to_core",
+                details=(
+                    f"manifest declares entity kind {kind!r}, which is now a core kind; "
+                    "the core definition supersedes it. Remove the declaration from the manifest."
+                ),
+            )
+        )
+
     for profile in profile_manifests:
         for entity_kind in profile.entity_kinds:
+            if registry.is_core_kind(entity_kind.name):
+                _graduated_skip(entity_kind.name, f"profile:{profile.name}")
+                continue
             registry.register_profile_kind(
                 entity_kind.name,
                 ProjectEntity,
@@ -274,7 +299,14 @@ def load_project_sources(
         for entity_type in catalog.entity_types:
             registry.register_catalog_kind(entity_type.name, DomainEntity, owner=catalog.ontology)
     if local_profile_manifest is not None:
+        local_manifest_rel = os.path.relpath(
+            local_profile_sources_dir(project_root, local_profile=local_profile) / "manifest.yaml",
+            project_root,
+        )
         for entity_kind in local_profile_manifest.entity_kinds:
+            if registry.is_core_kind(entity_kind.name):
+                _graduated_skip(entity_kind.name, local_manifest_rel)
+                continue
             registry.register_extension_kind(
                 entity_kind.name,
                 ProjectEntity,
@@ -322,7 +354,7 @@ def load_project_sources(
     entity_source_adapters: dict[str, str] = {}
     dataset_datapackages: dict[str, str] = {}
     markdown_documents: list[MarkdownSourceDocument] = []
-    skipped_entities: list[SkippedEntity] = []
+    skipped_entities: list[SkippedEntity] = list(graduated_kind_skips)
 
     # cwd for relative-path resolution in adapters. The StorageAdapter.load_raw()
     # contract resolves ref.path against cwd; we chdir into project_root rather

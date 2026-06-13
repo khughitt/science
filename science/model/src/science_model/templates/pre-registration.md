@@ -29,6 +29,7 @@ _template:
     - { key: metric-selection-rationale, name: "Metric Selection Rationale", required: true }
     - { key: exploratory-vs-confirmatory, name: "Exploratory vs. Confirmatory", required: true }
     - { key: total-comparison-count, name: "Total Comparison Count", required: true }
+    - { key: vehicle-admissibility-gate, name: "Vehicle-Admissibility Gate (data-gated mode)", required: false }
 ---
 
 # Pre-registration: {{title}}
@@ -101,3 +102,17 @@ If the count is high (>10), specify the correction method
 | Exploratory tests | N | method or "none (exploratory)" |
 | **Total** | **N** | |
 -->
+
+## Vehicle-Admissibility Gate (data-gated mode)
+
+<!-- Optional. Use in DATA-GATED mode: when the decision rule is committed now but
+execution is deferred until a suitable data vehicle is admissible. Omit otherwise.
+
+- State the standing verdict while gated, e.g. `[?] inconclusive-for-coverage`.
+- Enumerate the substrate-verification preconditions (G1, G2, … ) that a candidate
+  dataset/vehicle MUST satisfy before this pre-reg's confirmatory analysis may run.
+- These G-gates ARE the "Blocking Checks Before Execution" that /science:plan-analysis
+  reports for a committed pre-reg — define them once here and reference them there,
+  rather than restating the gate in both artifacts.
+
+cf. the t054/t048 coverage-suspension pattern this generalizes. -->

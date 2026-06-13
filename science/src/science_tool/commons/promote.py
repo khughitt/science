@@ -147,7 +147,7 @@ class PromoteKindConfig:
 
 PROMOTE_KIND_PAPER = PromoteKindConfig(
     kind="paper",
-    source_subdirs=("doc/papers", "doc/background/papers"),
+    source_subdirs=("entities/papers", "doc/papers", "doc/background/papers"),
     overlay_dest_subdir="doc/papers",
     commons_subdir="papers",
     id_prefix="paper:",
@@ -160,7 +160,7 @@ PROMOTE_KIND_PAPER = PromoteKindConfig(
 
 PROMOTE_KIND_TOPIC = PromoteKindConfig(
     kind="topic",
-    source_subdirs=("doc/topics", "doc/background/topics"),
+    source_subdirs=("entities/topics", "doc/topics", "doc/background/topics"),
     overlay_dest_subdir="doc/topics",
     commons_subdir="topics",
     id_prefix="topic:",
@@ -189,7 +189,7 @@ def _theme_eligibility(fm: Mapping[str, Any]) -> EligibilityVerdict:
 
 PROMOTE_KIND_THEME = PromoteKindConfig(
     kind="theme",
-    source_subdirs=("doc/themes",),
+    source_subdirs=("entities/themes", "doc/themes"),
     overlay_dest_subdir="doc/themes",
     commons_subdir="themes",
     id_prefix="theme:",

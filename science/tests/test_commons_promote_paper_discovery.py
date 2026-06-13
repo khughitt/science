@@ -26,6 +26,23 @@ def test_paper_discover_walks_background_papers(monkeypatch) -> None:
     assert "flint2026" in slugs
 
 
+def test_paper_discover_walks_v3_entities_papers(monkeypatch) -> None:
+    """Discovery finds paper entities under the layout-v3 entities/papers/ root.
+
+    Regression for fb-2026-06-11-005: v3 health projects store paper entities
+    under entities/papers/, which commons promote previously could not see.
+    """
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, discover_candidates
+
+    _resolver(monkeypatch)
+    result = discover_candidates(["proj-alpha"], PROMOTE_KIND_PAPER)
+
+    assert "brenner2026" in set(result.candidates_by_slug)
+    candidates = result.candidates_by_slug["brenner2026"]
+    assert len(candidates) == 1
+    assert "entities/papers" in str(candidates[0].overlay_source_path)
+
+
 def test_paper_background_candidate_carries_original_path(monkeypatch) -> None:
     """Background-papers candidates keep their original source path for apply."""
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, discover_candidates
