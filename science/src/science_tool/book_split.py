@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 from pypdf import PdfReader
 
@@ -24,7 +25,7 @@ class ChapterEntry:
     title: str
     start_page: int  # 1-based, inclusive
     end_page: int  # 1-based, inclusive
-    level: int
+    level: int  # 0 = top-level chapter, 1 = chapter nested under a Part/Volume
     part: str | None = None
 
     def to_dict(self) -> dict:
@@ -37,7 +38,7 @@ class ChapterEntry:
 _PART_RE = re.compile(r"^\s*(part|volume)\b", re.IGNORECASE)
 
 
-def _collect_chapters(nodes: list, reader: PdfReader, part: str | None = None) -> list[dict]:
+def _collect_chapters(nodes: list[Any], reader: PdfReader, part: str | None = None) -> list[dict]:
     """Walk the (possibly nested) outline and return chapter entries in document order.
 
     pypdf represents hierarchy as a Destination optionally followed by a list of its

@@ -80,6 +80,36 @@ def test_split_chapter_with_section_children(tmp_path: Path) -> None:
     assert all(c.level == 0 for c in chapters)
 
 
+def _make_pdf_with_volume(path: Path, n_pages: int) -> None:
+    writer = PdfWriter()
+    for _ in range(n_pages):
+        writer.add_blank_page(width=72, height=72)
+    v1 = writer.add_outline_item("Volume 1", 0)
+    writer.add_outline_item("Chapter 1", 0, parent=v1)
+    writer.add_outline_item("Chapter 2", 4, parent=v1)
+    with path.open("wb") as fh:
+        writer.write(fh)
+
+
+def test_split_detects_volume_container(tmp_path: Path) -> None:
+    pdf = tmp_path / "vol.pdf"
+    _make_pdf_with_volume(pdf, 8)
+    chapters = split_book(pdf)
+    assert [c.title for c in chapters] == ["Chapter 1", "Chapter 2"]
+    assert chapters[0].part == "Volume 1"
+    assert chapters[0].level == 1
+
+
+def test_part_without_children_is_treated_as_chapter(tmp_path: Path) -> None:
+    pdf = tmp_path / "emptypart.pdf"
+    _make_pdf(pdf, 10, [("Part I", 0), ("Chapter 1", 2)])
+    chapters = split_book(pdf)
+    # "Part I" has no children, so it is emitted as a chapter, not a container.
+    assert [c.title for c in chapters] == ["Part I", "Chapter 1"]
+    assert all(c.part is None for c in chapters)
+    assert all(c.level == 0 for c in chapters)
+
+
 def test_no_outline_raises(tmp_path: Path) -> None:
     pdf = tmp_path / "bare.pdf"
     _make_pdf(pdf, 5, [])  # pages, no outline
