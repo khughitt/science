@@ -89,6 +89,12 @@ CORE_PROFILE = ProfileManifest(
             description="Ordered composition of stories structured for communication.",
         ),
         EntityKind(
+            name="book",
+            canonical_prefix="book",
+            layer="layer/core",
+            description="Long-form monograph summarized chapter-by-chapter; an evidence source.",
+        ),
+        EntityKind(
             name="talk",
             canonical_prefix="talk",
             layer="layer/core",
