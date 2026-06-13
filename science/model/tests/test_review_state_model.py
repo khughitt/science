@@ -98,7 +98,7 @@ def test_entity_review_state_partial_block(tmp_path: Path):
     assert entity.review_state.review_horizon_days is None
 
 
-NON_EPISTEMIC_KINDS = ["task", "dataset", "workflow-run", "data-package", "paper", "experiment"]
+NON_EPISTEMIC_KINDS = ["task", "dataset", "workflow-run", "data-package", "paper", "experiment", "book"]
 
 
 def _baseline_kwargs(kind: str) -> dict:

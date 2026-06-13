@@ -268,6 +268,7 @@ class Entity(BaseModel):
             "workflow-run",
             "data-package",
             "paper",
+            "book",
             "experiment",
             "code-file",
         }
