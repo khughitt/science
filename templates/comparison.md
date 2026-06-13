@@ -57,7 +57,22 @@ What evidence would most efficiently shift belief between them?
 Be explicit about which proposition each proposed test bears on.
 -->
 
-## Current Assessment
+## Rival-Model Packet
+
+<!--
+Optional. Use when the comparison is really among bounded ALTERNATIVE MODELS of
+one phenomenon (per compare-hypotheses §3), not two standalone hypotheses. Drop
+this section otherwise.
+
+- List each rival account as a named model (e.g. {proximity-structured /
+  unstructured-exposure / metric-artifact}).
+- For each, state its core claim and the one observation that would most
+  distinguish it from the others.
+- `current_working_model` is OPTIONAL — name it only if one account is currently
+  favored; leave unset when the packet is genuinely open.
+-->
+
+## Current Verdict
 
 <!--
 Use skeptical language:

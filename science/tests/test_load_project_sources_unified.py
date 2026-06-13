@@ -849,6 +849,61 @@ def test_load_project_sources_skips_invalid_repo_local_profile_entity(tmp_path: 
     assert "labnote:rollup" not in by_id
 
 
+def test_load_project_sources_local_kind_graduated_to_core_does_not_crash(tmp_path: Path) -> None:
+    """A local manifest declaring a kind that has since become core must not crash.
+
+    `synthesis` was promoted from a project-local extension kind to a core kind.
+    Projects whose local manifest still declares it must keep loading: the core
+    definition wins, the stale declaration is skipped, and the skip is surfaced
+    as a SkippedEntity so the project can clean up its manifest.
+    """
+    (tmp_path / "science.yaml").write_text(
+        "name: unified\nprofile: research\nknowledge_profiles:\n  local: meta-local\n",
+        encoding="utf-8",
+    )
+    local_sources = tmp_path / "knowledge" / "sources" / "meta-local"
+    local_sources.mkdir(parents=True)
+    manifest_rel = "knowledge/sources/meta-local/manifest.yaml"
+    (local_sources / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "meta-local",
+                "imports": ["core"],
+                "strictness": "typed-extension",
+                "entity_kinds": [
+                    {
+                        "name": "synthesis",
+                        "canonical_prefix": "synthesis",
+                        "layer": "layer/local",
+                        "entity_class": "epistemic",
+                        "description": "Stale local declaration of a now-core kind.",
+                    }
+                ],
+                "relation_kinds": [],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "entities" / "synthesis").mkdir(parents=True)
+    (tmp_path / "entities" / "synthesis" / "rollup.md").write_text(
+        '---\nid: "synthesis:rollup"\ntype: "synthesis"\ntitle: "Rollup"\n---\n',
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(tmp_path)
+    by_id = {entity.canonical_id: entity for entity in sources.entities}
+
+    # The synthesis entity still loads, resolved against the core kind.
+    assert isinstance(by_id["synthesis:rollup"], ProjectEntity)
+    assert by_id["synthesis:rollup"].kind == "synthesis"
+    # The stale local declaration is surfaced as a skip pointing at the manifest.
+    graduated = [s for s in sources.skipped_entities if s.reason == "kind_graduated_to_core"]
+    assert len(graduated) == 1
+    assert graduated[0].kind == "synthesis"
+    assert manifest_rel in graduated[0].path
+
+
 def test_load_project_sources_raises_when_repo_local_manifest_shadows_catalog_kind(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text(
         "name: unified\nprofile: research\nknowledge_profiles:\n  local: cbioportal\nontologies: [biology]\n",

@@ -293,7 +293,7 @@ def test_promote_kind_paper_constant() -> None:
     from science_tool.commons.promote import PROMOTE_KIND_PAPER
 
     assert PROMOTE_KIND_PAPER.kind == "paper"
-    assert PROMOTE_KIND_PAPER.source_subdirs == ("doc/papers", "doc/background/papers")
+    assert PROMOTE_KIND_PAPER.source_subdirs == ("entities/papers", "doc/papers", "doc/background/papers")
     assert PROMOTE_KIND_PAPER.overlay_dest_subdir == "doc/papers"
     assert PROMOTE_KIND_PAPER.commons_subdir == "papers"
     assert PROMOTE_KIND_PAPER.id_prefix == "paper:"
@@ -306,7 +306,7 @@ def test_promote_kind_topic_constant() -> None:
     from science_tool.commons.promote import PROMOTE_KIND_TOPIC
 
     assert PROMOTE_KIND_TOPIC.kind == "topic"
-    assert PROMOTE_KIND_TOPIC.source_subdirs == ("doc/topics", "doc/background/topics")
+    assert PROMOTE_KIND_TOPIC.source_subdirs == ("entities/topics", "doc/topics", "doc/background/topics")
     assert PROMOTE_KIND_TOPIC.overlay_dest_subdir == "doc/topics"
     assert PROMOTE_KIND_TOPIC.commons_subdir == "topics"
     assert PROMOTE_KIND_TOPIC.id_prefix == "topic:"
@@ -319,7 +319,7 @@ def test_promote_kind_theme_constant() -> None:
     from science_tool.commons.promote import PROMOTE_KIND_THEME
 
     assert PROMOTE_KIND_THEME.kind == "theme"
-    assert PROMOTE_KIND_THEME.source_subdirs == ("doc/themes",)
+    assert PROMOTE_KIND_THEME.source_subdirs == ("entities/themes", "doc/themes")
     assert PROMOTE_KIND_THEME.overlay_dest_subdir == "doc/themes"
     assert PROMOTE_KIND_THEME.commons_subdir == "themes"
     assert PROMOTE_KIND_THEME.id_prefix == "theme:"

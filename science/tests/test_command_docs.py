@@ -536,6 +536,20 @@ def test_federation_docs_document_canonical_entity_refs_and_artifact_addresses()
         assert expected in text
 
 
+def test_comparison_template_satisfies_validator_sections() -> None:
+    """Both comparison template copies must carry every section the validator requires.
+
+    Regression for fb-2026-06-02-002 / fb-2026-06-11-001: the template emitted
+    'Current Assessment' while hypothesis_comparisons requires 'Current Verdict'.
+    """
+    from science_tool.validate.checks.hypothesis_comparisons import _SECTIONS
+
+    for path in ("templates/comparison.md", "science/model/src/science_model/templates/comparison.md"):
+        text = _read(path)
+        for section in _SECTIONS:
+            assert f"## {section}" in text, f"{path} missing required section: {section}"
+
+
 def test_bias_audit_templates_emit_report_not_task() -> None:
     for path in ("templates/bias-audit.md", "science/model/src/science_model/templates/bias-audit.md"):
         text = _read(path)

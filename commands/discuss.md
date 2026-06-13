@@ -51,7 +51,15 @@ Use when the user asks for independent reasoning before synthesis.
 
 ## Writing Output
 
-Create the discussion with `science discussions create`. The tool builds the canonical `discussion:<today>-<slug>` ID, places the file under `doc/discussions/`, writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`), and runs prospective validation.
+Create the discussion with `science discussions create`. The tool builds the canonical ID, writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`), runs prospective validation, and places the file in the layout-resolved discussion home: `entities/discussions/` under `layout_version: 3`, or `doc/discussions/` in the legacy layout.
+
+> ⚠️ **Fallback if the CLI errors or writes a non-canonical path.** The `discussions create`
+> CLI may be mid-refactor on some toolchains (e.g. emitting a numeric `discussion:0001-<slug>`
+> ID under `entities/discussions/` while the project convention is date-slug under
+> `doc/discussions/`). If the produced ID or path disagrees with the project's existing
+> discussions, delete the stray file and author the source file directly under the project's
+> established discussion home, using the same `discussion:<today>-<slug>` ID scheme its
+> neighbours use. This mirrors the partially-migrated fallback in `/science:interpret-results`.
 
 ```bash
 uv run science discussions create "<short title>" \

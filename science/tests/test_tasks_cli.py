@@ -746,6 +746,31 @@ def test_tasks_blockers_json_unresolved(tmp_path, monkeypatch):
     assert blocker["ready"] is False
 
 
+def test_tasks_edit_clear_blockers_drops_blocked_by(tmp_path, monkeypatch):
+    """`tasks edit --clear-blockers` removes a stale blocked-by in-CLI (fb-2026-06-10-003)."""
+    monkeypatch.chdir(tmp_path)
+    runner = _setup(tmp_path)
+    block = runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:foo"])
+    assert block.exit_code == 0, block.output
+    assert "blocked-by: [dataset:foo]" in (tmp_path / "tasks" / "active.md").read_text()
+
+    result = runner.invoke(main, ["tasks", "edit", "t001", "--clear-blockers"])
+    assert result.exit_code == 0, result.output
+    assert "blocked-by" not in (tmp_path / "tasks" / "active.md").read_text()
+
+
+def test_tasks_edit_clear_blockers_conflicts_with_blocked_by(tmp_path, monkeypatch):
+    """--clear-blockers and --blocked-by are mutually exclusive."""
+    monkeypatch.chdir(tmp_path)
+    runner = _setup(tmp_path)
+    result = runner.invoke(
+        main,
+        ["tasks", "edit", "t001", "--clear-blockers", "--blocked-by", "dataset:foo"],
+    )
+    assert result.exit_code != 0
+    assert "cannot be combined" in result.output
+
+
 def test_tasks_fix_blockers_lists_legacy(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     seed_project(tmp_path)

@@ -1268,6 +1268,22 @@ def test_entity_sections_lists_template_sections() -> None:
         assert "optional" in result.output
 
 
+def test_entity_sections_non_renderable_kind_gives_actionable_error() -> None:
+    """`entity sections topic` reports an actionable error, not a raw template-not-found.
+
+    Regression for fb-2026-06-11-005: topic is a core kind but has no declared
+    section template, so the command must name the kinds that do.
+    """
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["entity", "sections", "topic"])
+        assert result.exit_code != 0
+        assert "no inspectable section template" in result.output
+        assert "Packaged template not found" not in result.output
+        # Names a supported kind so the user knows where sections do work.
+        assert "hypothesis" in result.output
+
+
 def test_entity_sections_accepts_format_json() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():

@@ -126,11 +126,19 @@ Check explicitly: did this agent author or substantively edit any artifact under
 ## Writing
 
 Follow `.ai/templates/bias-audit.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/bias-audit.md`, and fill all sections.
-Save to `doc/meta/bias-audit-<slug>.md`.
+
+**Resolve the save path by `layout_version` in `science.yaml`.** The template emits a
+`type: report` entity (`id: report:bias-audit-<slug>`):
+
+- **`layout_version: 3`** → `entities/reports/bias-audit-<slug>.md` (the validator rejects
+  `type: report` entities outside `entities/reports/`). If the project keeps critical reviews
+  of pre-registrations under a `review` entity type (`entities/review/`) and has a precedent
+  for it, prefer that home and set the frontmatter `type`/`id` to match.
+- **legacy (v2 / no `layout_version`)** → `doc/meta/bias-audit-<slug>.md`.
 
 ## After Writing
 
-1. Save to `doc/meta/bias-audit-<slug>.md`.
+1. Save to the layout-resolved path above (v3: `entities/reports/` or `entities/review/`; legacy: `doc/meta/`).
 2. If HARKing risk is detected and no pre-registration exists, suggest `/science:pre-register`.
 3. If confirmation bias is detected, suggest `/science:compare-hypotheses` to force consideration of alternatives.
 4. If confounding is detected and no causal DAG exists, suggest `/science:sketch-model`.
