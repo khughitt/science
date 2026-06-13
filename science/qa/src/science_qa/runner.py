@@ -116,4 +116,5 @@ def _resolve(spec: CheckSpec, inv: Invocation, table: pd.DataFrame, config: QACo
         return [c for c in inv.columns if c in table.columns]
     if spec.selector is not None:
         return resolve_columns(spec.selector, table, column_sets=config.column_sets)
-    return list(table.columns)
+    # whole-table / fixed-column required checks have no column selection to record
+    return []

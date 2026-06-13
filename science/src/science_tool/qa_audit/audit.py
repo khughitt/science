@@ -26,6 +26,7 @@ def audit_workflows(*, runs_dir: Path, repo_root: Path) -> list[dict]:
             if not manifest_path.exists():
                 raise FileNotFoundError(f"manifest not found: {manifest_path}")
             has_report, flags = load_qa_artifacts(manifest_path)
+            coverage = load_qa_coverage(manifest_path)
         except Exception as exc:  # noqa: BLE001 — per-row ERROR, audit must not crash
             rows.append({
                 "workflow": workflow, "runs": len(wf_runs), "chain_depth": depth,
@@ -35,7 +36,6 @@ def audit_workflows(*, runs_dir: Path, repo_root: Path) -> list[dict]:
             })
             continue
 
-        coverage = load_qa_coverage(manifest_path)
         breadth = f"{coverage['ran']}/{coverage['executable_denominator']}" if coverage else "-"
         open_flags = sum(1 for f in flags if f.disposition == "open")
         dispositioned = sum(1 for f in flags if f.disposition in RESOLVED_ENGAGED)

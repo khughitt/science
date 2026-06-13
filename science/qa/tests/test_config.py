@@ -34,3 +34,13 @@ qa:
 def test_missing_program_key_errors(tmp_path):
     with pytest.raises(QAConfigError, match="program"):
         QAConfig.from_file(_write(tmp_path, "qa:\n  unique_key: id\n"))
+
+
+def test_missing_qa_block_is_error(tmp_path):
+    with pytest.raises(QAConfigError, match="block"):
+        QAConfig.from_file(_write(tmp_path, "other: 1\n"))
+
+
+def test_absent_file_is_error(tmp_path):
+    with pytest.raises(QAConfigError, match="not found"):
+        QAConfig.from_file(tmp_path / "nope.yaml")

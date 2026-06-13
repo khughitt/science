@@ -106,3 +106,12 @@ def test_project_local_wrong_context_rejected(tmp_path, monkeypatch):
     cfg = _cfg(tmp_path, "qa:\n  program: scrna-qc-table\n  project_local: ['ext_bad_ctx:marker']\n")
     with pytest.raises(RunnerError):
         run_qa(cfg, _table(tmp_path, _good_scrna()), tmp_path)
+
+
+def test_required_check_coverage_records_no_column_selection(tmp_path):
+    # a fixed-column required check operates on specific columns, not a selection ->
+    # its coverage entry records no resolved column selection (not the whole table)
+    run_qa(_cfg(tmp_path), _table(tmp_path, _good_scrna()), tmp_path)
+    cov = json.loads((tmp_path / "qa_report.json").read_text())["coverage"]
+    entry = next(e for e in cov["entries"] if e["check_id"] == "gene-expression-qc-table/library_size_positive")
+    assert entry["columns"] == []
