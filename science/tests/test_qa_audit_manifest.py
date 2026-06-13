@@ -3,7 +3,7 @@ from pathlib import Path
 
 import yaml
 
-from science_tool.qa_audit.manifest import load_qa_artifacts
+from science_tool.qa_audit.manifest import load_qa_artifacts, load_qa_coverage
 
 
 def _manifest(run_dir: Path, resources):
@@ -61,3 +61,24 @@ def test_open_flag_without_disposition_entry_defaults_open(tmp_path):
     has_report, flags = load_qa_artifacts(tmp_path / "datapackage.yaml")
     assert has_report is True
     assert flags[0].disposition == "open"
+
+
+def _manifest_with_report(tmp_path, payload: dict):
+    (tmp_path / "qa_report.json").write_text(json.dumps(payload))
+    manifest = tmp_path / "datapackage.yaml"
+    manifest.write_text(yaml.safe_dump({"resources": [{"name": "qa_report", "path": "qa_report.json"}]}))
+    return manifest
+
+
+def test_load_qa_coverage_aggregates_from_manifest(tmp_path):
+    manifest = _manifest_with_report(tmp_path, {
+        "flags": [],
+        "coverage": {"executable_denominator": 7, "ran": 5, "empty": 1, "blocked": 1,
+                     "not-applicable": 0, "unconfigured_families": [], "narrow_signal": [], "entries": []},
+    })
+    assert load_qa_coverage(manifest) == {"ran": 5, "executable_denominator": 7}
+
+
+def test_load_qa_coverage_absent_block_returns_none(tmp_path):
+    manifest = _manifest_with_report(tmp_path, {"flags": []})  # no coverage key
+    assert load_qa_coverage(manifest) is None
