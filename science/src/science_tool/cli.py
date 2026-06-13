@@ -4445,6 +4445,33 @@ def paper_fetch_cmd(
     click.echo(_json.dumps(result.to_dict(), indent=2))
 
 
+@main.command("book-split")
+@click.argument("pdf", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--json", "as_json", is_flag=True, default=False, help="Emit the chapter manifest as JSON.")
+def book_split_cmd(pdf: Path, as_json: bool) -> None:
+    """Extract a chapter manifest from a book PDF's outline/bookmarks.
+
+    Intended for the /review-books command: call this first; on a non-zero exit
+    with 'no outline', fall back to reading the book's table-of-contents pages.
+    """
+    import json as _json
+
+    from science_tool.book_split import BookSplitError, split_book
+
+    try:
+        chapters = split_book(pdf)
+    except BookSplitError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    payload = [c.to_dict() for c in chapters]
+    if as_json:
+        click.echo(_json.dumps(payload, indent=2))
+    else:
+        for c in chapters:
+            part = f"  [{c.part}]" if c.part else ""
+            click.echo(f"{c.n:>3}. {c.title}  (pp. {c.start_page}-{c.end_page}){part}")
+
+
 @main.group("questions")
 def question() -> None:
     """Question-file management commands."""
