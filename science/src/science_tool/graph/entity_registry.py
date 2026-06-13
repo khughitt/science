@@ -13,6 +13,7 @@ needs-review state.
 from __future__ import annotations
 
 from science_model.entities import (
+    BookEntity,
     ChainAuditEntity,
     CodeFileEntity,
     DatasetEntity,
@@ -75,6 +76,7 @@ _CORE_KIND_CLASSES: dict[str, EntityClass] = {
     "method": EntityClass.OPERATIONAL,
     "observation": EntityClass.EPISTEMIC,
     "outcome": EntityClass.REFERENCE,
+    "book": EntityClass.OPERATIONAL,
     "paper": EntityClass.OPERATIONAL,
     "talk": EntityClass.OPERATIONAL,
     "plan": EntityClass.OPERATIONAL,
@@ -120,6 +122,7 @@ class EntityRegistry:
         )
         r.register_core_kind("mechanism", MechanismEntity, entity_class=_CORE_KIND_CLASSES["mechanism"])
         r.register_core_kind("theme", ThemeEntity, entity_class=_CORE_KIND_CLASSES["theme"])
+        r.register_core_kind("book", BookEntity, entity_class=_CORE_KIND_CLASSES["book"])
         r.register_core_kind("paper", PaperEntity, entity_class=_CORE_KIND_CLASSES["paper"])
         r.register_core_kind("talk", TalkEntity, entity_class=_CORE_KIND_CLASSES["talk"])
         r.register_core_kind(
