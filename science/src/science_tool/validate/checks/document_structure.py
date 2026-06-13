@@ -26,6 +26,15 @@ _TOPIC_SECTIONS = (
     "## Key References",
 )
 _PAPER_SECTIONS = ("## Key Contribution", "## Methods", "## Key Findings", "## Relevance")
+_BOOK_SECTIONS = (
+    "## Overview",
+    "## Whole-Book Synthesis",
+    "## Chapter Map",
+    "## Key Themes",
+    "## Relevance",
+    "## Limitations",
+    "## Follow-up",
+)
 _FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 
@@ -41,6 +50,9 @@ def check_document_structure(ctx: ValidateContext) -> Iterator[Result]:
     papers_dir = ctx.project_root / "entities" / "papers"
     if papers_dir.is_dir():
         yield from _check_documents(ctx, papers_dir, _PAPER_SECTIONS)
+    books_dir = ctx.project_root / "entities" / "books"
+    if books_dir.is_dir():
+        yield from _check_documents(ctx, books_dir, _BOOK_SECTIONS)
 
 
 def _check_documents(ctx: ValidateContext, directory: Path, sections: tuple[str, ...]) -> Iterator[Result]:
