@@ -27,7 +27,9 @@ chapter-decomposition strategy lives in the command file, read by both the orche
 and the subagents.
 
 Net new upstream surface: **one core entity kind** (`book`), **one CLI subcommand**
-(`science book-split`), **one command file**, **two agent files**, **one template**.
+(`science book-split`), **one command file**, **two agent files**, **one template (in two
+packaged locations, §6)**, and a **bibliography-layer change** so `@book` entries
+materialize as `book:` nodes (§3d).
 
 ## 2. On-disk / entity model
 
@@ -128,8 +130,14 @@ Register `book` as a **core profile** kind (not a project-local kind via
 5. **Markdown-entity wiring** — ensure `book` is recognized as a markdown entity kind
    (`science/src/science_tool/entities.py`) so `is_markdown_entity_kind("book")` is true
    and `entities/books/` is treated as the kind's home.
-6. **Template packaging** — `templates/book.md` (§6) is packaged/discoverable the same way
-   `templates/paper.md` is, so the command preamble's template resolution finds it.
+6. **Non-epistemic review-state invariant** — `Entity._validate_review_state_kind`
+   (`science/model/src/science_model/entities.py`) holds a *literal closed set* of
+   non-epistemic core kinds that may not carry `review_state`; it contains `paper` but not
+   `book`. Because `book` mirrors `paper` (operational/reference, non-epistemic), **add
+   `"book"` to that set** and test that `review_state` on a `book` entity is rejected.
+7. **Template packaging** — the `book` template ships in **both** template surfaces (§6),
+   the same way `paper.md` does, so both the command preamble's resolution and the model
+   `Renderer` find it.
 
 ### 3c. Section validation
 
@@ -142,6 +150,33 @@ does NOT do section checks. So:
 - Add a `books_dir = ctx.project_root / "entities" / "books"` branch in
   `check_document_structure` that runs `_check_documents(ctx, books_dir, _BOOK_SECTIONS)`.
 - Chapters under `doc/books/` are deliberately NOT added here — they are unvalidated notes.
+
+### 3d. Bibliography-layer: materialize `@book` as a `book:` node
+
+The bib storage adapter currently materializes **every** BibTeX entry as a `paper:` node,
+regardless of entry type. In `science/src/science_tool/graph/storage_adapters/bib.py`,
+`load_raw` hard-codes `"kind": "paper"` / `"id": f"paper:{entry.key}"`; and `BibEntry`
+(`science/src/science_tool/bibliography.py`) does not even retain the entry type — the
+parse regex `@\w+\{key,` captures only the key. So `@book{Kelly1982}` would today
+materialize as `paper:Kelly1982`, colliding in kind with the `book:Kelly1982` entity.
+
+**Resolution — map `@book` → `book:<key>`:**
+
+1. Add an `entry_type: str` field to `BibEntry` and capture it in the parse
+   (`@(\w+)\{` → group 1, lowercased) in `bibliography.py`.
+2. In `bib.py` `load_raw`, derive kind from `entry.entry_type`: `"book"` → `kind="book"`,
+   `id=f"book:{key}"`; everything else keeps the current `paper` default. (Keep the map
+   small and explicit — only `book` is needed now; other types stay `paper` until a kind
+   exists for them.)
+3. This makes the bib-materialized `book:<key>` node merge with the authoritative
+   `entities/books/<key>.md` entity by shared id — exactly how `paper:` entities and their
+   bib entries already merge.
+4. **Tests:** an `@book{Kelly1982, ...}` entry materializes as `book:Kelly1982` (not
+   `paper:Kelly1982`); an `@article{...}`/`@misc{...}` entry still materializes as
+   `paper:`; and a `book:` entity file + its `@book` bib entry resolve to a single node.
+
+(The `cite:<citekey>` external-ref namespace used in entity `source_refs` is unaffected —
+this change is only about the kind/id of the *materialized bib node*.)
 
 ## 4. Command + subagents
 
@@ -214,6 +249,18 @@ Required sections on `entities/books/<citekey>.md` (must match `_BOOK_SECTIONS` 
 The template carries the `_template.frontmatter` + `_template.sections` block (mirroring
 `templates/paper.md`) so it round-trips through the entity tooling.
 
+**Two template surfaces.** As with `paper`, the book template must exist in both places:
+
+- `templates/book.md` — the command-facing template the preamble resolves (project
+  `.ai/templates/` → repo-root `templates/`).
+- `science/model/src/science_model/templates/book.md` — the **packaged** template the model
+  `Renderer._read_template` reads by default (`importlib.resources` over
+  `science_model/templates/<kind>.md`).
+
+Keep the two byte-identical (the implementation may copy one to the other in the build, but
+the spec's requirement is that both exist and agree). A test should assert
+`Renderer().render("book", ...)` succeeds against the packaged copy.
+
 ## 7. Conventions reused as-is
 
 - **Annotation tokens** — `[UNVERIFIED]` / `[INACCESSIBLE]` / `[SPECULATION]` /
@@ -252,21 +299,30 @@ per-chapter work is extraction, not judgment; synthesis — which needs the whol
    `science/src/science_tool/graph/entity_registry.py`; markdown-entity recognition in
    `science/src/science_tool/entities.py`. Add tests that `book:<citekey>` resolves and
    that `entities/books/<citekey>.md` passes location/filename/frontmatter conformance.
-2. **`templates/book.md`** (§6), packaged like `templates/paper.md`.
-3. **Section validation** (§3c): `_BOOK_SECTIONS` + `entities/books` branch in
+2. **Review-state invariant** (§3b.6): add `"book"` to the `non_epistemic` set in
+   `Entity._validate_review_state_kind` (`science/model/src/science_model/entities.py`);
+   test that `review_state` on a `book` entity is rejected.
+3. **Bibliography layer** (§3d): add `entry_type` to `BibEntry` + capture it in
+   `science/src/science_tool/bibliography.py`; map `@book` → `book:<key>` in
+   `science/src/science_tool/graph/storage_adapters/bib.py`; tests for `@book` →
+   `book:<key>`, `@article` → `paper:<key>`, and book-entity ↔ `@book`-node merge.
+4. **Templates** (§6): author **both** `templates/book.md` and
+   `science/model/src/science_model/templates/book.md` (byte-identical); test
+   `Renderer().render("book", ...)`.
+5. **Section validation** (§3c): `_BOOK_SECTIONS` + `entities/books` branch in
    `science/src/science_tool/validate/checks/document_structure.py`; test a conforming and
    a missing-section book.
-4. **Chapter-note exclusion test:** assert a `doc/books/<citekey>/chNN-*.md` file (no
+6. **Chapter-note exclusion test:** assert a `doc/books/<citekey>/chNN-*.md` file (no
    registered `type:`) raises no conformance / missing-frontmatter / location warning.
-5. **`science book-split`** (§3a): `science/src/science_tool/book_split.py` +
+7. **`science book-split`** (§3a): `science/src/science_tool/book_split.py` +
    `@main.command("book-split")` in `cli.py`; tests for outline-present, outline-absent
    (non-zero exit), and Part-hierarchy detection.
-6. **`agents/book-chapter-researcher.md`** (sonnet).
-7. **`agents/book-synthesizer.md`** (opus).
-8. **`commands/review-books.md`** — including the existing-target gate (step 4) and the
-   confirmation gate (step 5).
-9. **Smoke test** end-to-end against Kelly (1982) — this is `task:t688`, downstream of the
-   build.
+8. **`agents/book-chapter-researcher.md`** (sonnet).
+9. **`agents/book-synthesizer.md`** (opus).
+10. **`commands/review-books.md`** — including the existing-target gate (step 4) and the
+    confirmation gate (step 5).
+11. **Smoke test** end-to-end against Kelly (1982) — this is `task:t688`, downstream of the
+    build.
 
 ## 11. Resolved review items (code-review, 2026-06-13)
 
@@ -291,3 +347,16 @@ per-chapter work is extraction, not judgment; synthesis — which needs the whol
    `/research-papers`.
 6. **(Low) Package path.** Paths corrected from `src/science_tool/...` to the real
    `science/src/science_tool/...` (and `science/model/src/science_model/...`) throughout.
+
+### Second review round (2026-06-13)
+
+7. **(Medium) Bib adapter materializes everything as `paper:`.** `bib.py` `load_raw`
+   hard-codes `kind=paper`/`id=paper:<key>` and `BibEntry` drops the entry type. **Resolved:**
+   §3d adds entry-type parsing + an `@book` → `book:<key>` mapping, with merge + type tests.
+8. **(Medium) `review_state` invariant misses `book`.** The literal `non_epistemic` set in
+   `Entity._validate_review_state_kind` lists `paper` but not `book`. **Resolved:** §3b.6 +
+   checklist item 2 add `"book"` and a rejection test.
+9. **(Low) Two template surfaces, not one.** The model `Renderer` reads the packaged
+   `science_model/templates/<kind>.md` by default, separate from the command-facing
+   `templates/<kind>.md`. **Resolved:** §6 + checklist item 4 require both copies and a
+   `Renderer` test.
