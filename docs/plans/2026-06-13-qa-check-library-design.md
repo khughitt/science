@@ -43,7 +43,7 @@ its `Flag` dataclass, report/disposition machinery, and determinism property are
 | Column resolution | **A separate concern from checks.** Selectors (`dtype` / `names` / `regex` / `named-set`) resolve columns; the check receives an already-resolved context and never knows why. |
 | Context compatibility | **Declared + validated, fail-early.** Each check declares the context type it accepts; the runner hard-errors if a program binds it to the wrong substrate. No duck-typed try/skip. |
 | `packs:` replacement | **Clean replacement, no compat layer.** The flat `packs: [scrna]` key is removed; scRNA behavior comes from `program: scrna-qc-table`. |
-| Enforcement posture | **Advisory**, inherited from B1/B3. Never fails a build or `science validate`. Breadth is surfaced, not gated. |
+| Enforcement posture | **Breadth/coverage is advisory** (surfaced, never gated; no `science validate` gate). **Structural QA flags remain build-fatal per B1** (the runner still exits non-zero on a structural flag). This spec changes neither the structural/distribution severity contract nor B1's exit codes. |
 
 ## Architecture
 
@@ -66,6 +66,33 @@ The model is **substrate + aspect + program**, layered on B1's `science-qa` runt
 - **`Program`** — a named, ordered composition of aspects bound to a substrate:
   `scrna-qc-table = general + tabular + numeric-column + gene-expression-qc-table + scrna-qc-table + project-local`.
   The program *is* the breadth denominator. Registry lives in `science_qa/program.py`.
+
+### Two check kinds (the required-vs-parameterized seam)
+
+The program inventory is **not** a flat list of "checks that must all be configured." Each member of
+an aspect is one of two kinds, and the distinction is what keeps the runner, the config validator,
+and the coverage denominator from fighting:
+
+- **Required check** — the program declares it runs *unconditionally* over the substrate; it needs no
+  per-project declaration (it may take a documented default param). It contributes **exactly one**
+  entry to the denominator. If a required *input column* is absent, that is **not** silently skipped:
+  it emits a **structural flag** and the entry is recorded `blocked` (see Breadth readout). Examples:
+  `general.non_empty`, `general.missing_fraction`, `numeric-column.{missing_fraction, zero_fraction,
+  low_variance}` (one invocation over the resolved `numeric` column-set — `empty` if that set
+  resolves to zero), `gene-expression-qc-table.{library_size_positive, degenerate_cell}`,
+  `scrna-qc-table.{mito_ceiling, gene_count_gate, fraction_failing}`.
+- **Parameterized check family** — expands to **0..N concrete invocations** from config, one per
+  declared item (`ranges` → one per range; `categoricals` → one per categorical; `exclusive_flags` →
+  one per pair; `numeric-column.polarity` → one per column declared non-negative; `tabular.unique_key`
+  → 0 or 1; `missing_sentinels` → runs iff sentinels declared). Each *expanded* invocation contributes
+  one denominator entry. A family configured with **zero items legitimately expands to zero
+  invocations** — this is **not** a config error; it is reported as a **declared-but-unconfigured
+  family** (itself a narrow-checking signal). This is why a normal config does not hard-error:
+  unconfigured families simply contribute nothing.
+
+So the **missing-required-param / hard-error rule applies to *required checks* only** (a required
+input absent → structural flag; a required param absent → documented default or config error). A
+*family* with nothing configured is the normal, silent-but-reported zero case — never an error.
 
 ### Column resolution (a separate unit)
 
@@ -131,22 +158,27 @@ parameterization.**
 qa:
   program: scrna-qc-table          # WHAT runs (composed aspect/check inventory)  ← declaration
   unique_key: cell_id              # ── parameterization below ──
-  ranges:    {n_genes_by_counts: {min: 200, max: 8000}}   # generic numeric plausibility
+  ranges:                          # generic numeric plausibility (NOT the scRNA gates below)
+    pct_counts_ribo: {min: 0, max: 60}   # project-added ribosomal-% column; not a standard gate
   column_sets:                     # resolver inputs (separate concern)
     numeric:        {dtype: numeric}
     expression_qc:  [total_counts, n_genes_by_counts, pct_counts_mt]
-  aspect_params:                   # domain gates live with their aspect
+  aspect_params:                   # domain gates live with their aspect (single source per gate)
     scrna-qc-table: {max_mito_pct: 20, min_genes: 200, max_genes: 8000, max_doublet: 0.3}
   project_local:   [my_project.qa:custom_check]
 ```
 
 **Seam semantics (locked):**
 
-- `program:` declares the **aspect/check inventory** — the full set of checks that *should* run.
+- `program:` declares the **aspect/check inventory** — the required checks plus the *families*
+  available for config to expand. It does not require every family to be configured.
 - `column_sets`, `ranges`, `aspect_params`, `project_local` **only parameterize or expand** declared
-  checks. They never alter program *shape* implicitly (no hidden program assembly via config keys).
-- A declared check that requires params with **no value supplied** is either a **hard config error**
-  or uses a **documented default** — **never silently skipped**.
+  checks. They never alter program *shape* implicitly (no hidden program assembly via config keys) —
+  config expands *families* and supplies *params*, but cannot introduce a check the program didn't
+  declare (except `project_local`, the explicit extension hook).
+- **Missing-param rule applies to required checks only.** A *required* check with a required param
+  absent → **documented default or hard config error**, never silent. A *family* configured with zero
+  items → zero invocations, reported as declared-but-unconfigured (normal, not an error).
 - **No duplicate thresholds.** Generic `ranges:` is for *project-defined numeric plausibility*;
   scRNA biological gates live in `aspect_params.scrna-qc-table`. The same biological gate must not be
   expressed twice (e.g. `ranges.pct_counts_mt` *and* `aspect_params…max_mito_pct`) producing two
@@ -154,39 +186,57 @@ qa:
 
 `packs:` is **removed** (clean replacement, no compat layer). Runner flow:
 
-1. Load config → resolve `program:` to its ordered aspect→check list. **Unknown program → hard
+1. Load config → resolve `program:` to its ordered aspect→check list, then **expand families** from
+   config into concrete invocations (required checks contribute one each). **Unknown program → hard
    error, exit 2.**
-2. **Context-compat validation:** each check declares `accepts: type[Context]`; the runner asserts
-   `isinstance(context, check.accepts)` else hard error naming check + program. All slice checks
-   accept `TableContext`; the guard is built now so the matrix substrate lands safely later.
-3. **Resolve columns** via the `selectors` unit → build `TableContext(table, resolved_columns)`.
-4. Run each check with params (config or documented default) → `Flag`s.
-5. Record each invocation's **resolution result** (which columns, including zero) for the readout.
+2. **Validate program↔substrate compatibility** *before building any context*: every check in the
+   resolved program must accept the program's substrate context type (here `TableContext`), else hard
+   error naming check + program. This is the static guard that makes the matrix substrate land safely
+   later, and it needs no constructed context.
+3. **Resolve columns** per invocation via the `selectors` unit → build the concrete
+   `TableContext(table, resolved_columns)` for that invocation.
+4. **Validate the concrete context** for the invocation (`isinstance(context, check.accepts)`), then
+   run the check with params (config or documented default) → `Flag`s. A required check whose required
+   input column is absent emits a **structural flag** and is recorded `blocked` (it is not run but is
+   not dropped).
+5. Record each invocation's **status + resolution result** (which columns, including zero) for the
+   readout.
 6. Write `qa_report.{json,md}` + reconcile `qa_dispositions.yaml` — **unchanged from B1** (immutable
    ledger, analyst-owned dispositions never a rule output, determinism preserved).
 
 ## Breadth readout
 
-The denominator is the **resolved invocations** from step 5 — concrete check invocations *after*
-config resolution — not aspect membership. `numeric-column.low_variance` over five columns is a
-different coverage fact from the same check resolving to zero columns.
+**Denominator.** The denominator is **required checks (one entry each) + expanded family invocations
+(one entry per configured item)** — concrete invocations *after* config resolution, not aspect
+membership. `numeric-column.low_variance` over five columns is a different coverage fact from the
+same check resolving to zero columns. A family that expanded to **zero** invocations is *not* in the
+denominator but is reported separately as a **declared-but-unconfigured family** (a narrow-checking
+signal: e.g. "tabular.categoricals: 0 configured").
 
-**Per-invocation status (locked):**
+**Per-entry status (locked):**
 
-- **`ran`** — selector resolved to ≥1 target; executed.
-- **`empty`** — declared but the selector resolved to **0 targets** (the "looks covered, isn't"
-  case — e.g. `low_variance` matched no numeric columns). Surfaced explicitly.
-- **`not-applicable`** — an **optional** input is legitimately unavailable (e.g. the doublet-ceiling
-  check when the program/config declares doublet scoring optional).
-- **A missing *required* input is NOT `not-applicable`.** It is a **structural flag** (e.g.
-  `scrna-qc-table` missing `pct_counts_mt`) or a **config error** — never benign N/A. `not-applicable`
-  is reserved for declared-optional checks only.
+- **`ran`** — the check executed over ≥1 target.
+- **`empty`** — a *selector-driven* check whose selector resolved to **0 targets** (the "looks
+  covered, isn't" case — e.g. `numeric-column.low_variance` matched no numeric columns). The entry
+  stays in the denominator; the check did not actually inspect anything.
+- **`blocked`** — a **required** check that could not run because a **required input column is
+  absent**. It emits a **structural flag** and stays in the denominator (counted, not dropped). This
+  is the fourth status that keeps required checks from silently vanishing when their input is missing.
+- **`not-applicable`** — a declared-**optional** input is legitimately unavailable (e.g. the
+  doublet-ceiling check when the program/config declares doublet scoring optional). Excluded from the
+  "should have run" count; reserved for declared-optional checks only.
+
+A missing *required* input is therefore **`blocked` + a structural flag**, never benign
+`not-applicable`. `empty` ≠ `blocked`: `empty` is a configured selector matching zero columns (no
+flag); `blocked` is a required input absent (structural flag).
 
 **Emission.** A deterministic `coverage` block in `qa_report.json` (pure function of
 program + config + table — preserves re-run-and-diff) plus a Coverage section in `qa_report.md`:
-aspects-in-program vs aspects-with-a-`ran`-check, check counts by status, and the **shallow/narrow
-signal** = the explicit list of `empty` / `not-applicable` invocations. Descriptive coverage facts,
-not a single opaque score (an optional `ran / (ran + empty)` ratio is secondary).
+aspects-in-program vs aspects-with-a-`ran`-check, entry counts by status
+(`ran`/`empty`/`blocked`/`not-applicable`), the **declared-but-unconfigured families** list, and the
+**shallow/narrow signal** = the explicit list of `empty` / `blocked` / unconfigured-family entries.
+Descriptive coverage facts, not a single opaque score (an optional `ran / (ran + empty + blocked)`
+ratio is secondary).
 
 **Consumer.** `science qa-audit` (B3) already reads `qa_report.json` per workflow → it gains one
 **breadth column** reading this `coverage` block, so the advisory table shows iteration verdict ·
@@ -194,17 +244,31 @@ engagement verdict · coverage together. Small, since the block already exists b
 
 ## Locked semantics (summary)
 
-- `empty` = selector resolved to **zero** targets.
-- `not-applicable` = a declared-**optional** input legitimately unavailable.
-- A **missing required input** = a **structural flag** or a **config error** (never N/A).
+- **Two check kinds:** *required* (one denominator entry each; missing input → `blocked` + structural
+  flag) vs *parameterized family* (0..N invocations from config; zero configured = declared-but-
+  unconfigured, not an error).
+- Coverage statuses: `ran` / `empty` (selector → 0 targets, no flag) / `blocked` (required input
+  absent → structural flag) / `not-applicable` (declared-optional input absent).
+- A **missing required input** = `blocked` + a **structural flag** (never benign `not-applicable`).
 - `general.non_empty`, library-size positivity, and all-QC-zero cells are **structural** (post-QC
   substrate).
-- A declared check missing required params = **hard config error or documented default**, never a
-  silent skip.
+- Missing-param rule applies to **required checks only** = hard config error or documented default,
+  never silent; an unconfigured family is the normal zero case.
 - **No duplicate generic/domain thresholds** for the same gate unless explicitly configured.
 - **B1 parity:** `program: scrna-qc-table` detects the **same defects with the same severities** as
-  the prior `packs: [scrna]`; flag IDs change `source` only (re-homing remaps scrna's checks onto
-  `numeric-column` / `gene-expression-qc-table` / `scrna-qc-table`).
+  the prior `packs: [scrna]`, governed by the explicit old→new `flag_id` mapping below.
+
+**B1 → B1.5 `flag_id` re-homing map** (the parity test asserts each prior flag maps to its new id):
+
+| B1 `packs: [scrna]` flag (`source/check`) | B1.5 program flag (`source/check`) |
+|---|---|
+| `scrna/required_column/<col>` | `gene-expression-qc-table/required_column/<col>` (required-input → `blocked` + structural) |
+| `scrna/non_negative/<col>` | `numeric-column/polarity/<col>` |
+| `scrna/all_zero_cell/…` | `gene-expression-qc-table/degenerate_cell/…` |
+| `scrna/threshold/pct_counts_mt/max` | `scrna-qc-table/threshold/pct_counts_mt/max` |
+| `scrna/threshold/n_genes_by_counts/{min,max}` | `scrna-qc-table/threshold/n_genes_by_counts/{min,max}` |
+| `scrna/threshold/total_counts/min` | `scrna-qc-table/threshold/total_counts/min` |
+| `scrna/threshold/doublet_score/max` | `scrna-qc-table/threshold/doublet_score/max` |
 
 ## Doc & convention changes (extend, don't rediscover)
 
@@ -217,7 +281,8 @@ engagement verdict · coverage together. Small, since the block already exists b
    the `science qa-audit` breadth column as its readout.
 3. [`../../aspects/computational-analysis/computational-analysis.md`](../../aspects/computational-analysis/computational-analysis.md)
    — extend the `review-pipeline` *QA Coverage* rubric to reference program breadth (which aspects of
-   the declared program ran; `empty`/`not-applicable` invocations are the narrow-checking signal).
+   the declared program ran; `empty` / `blocked` invocations and declared-but-unconfigured families
+   are the narrow-checking signal).
 4. [`2026-06-10-data-driven-discovery-improvements.md`](2026-06-10-data-driven-discovery-improvements.md)
    — update the B2 entry to record the B1.5 reframing (composable check-library; breadth as a
    program-derived readout).
@@ -225,32 +290,41 @@ engagement verdict · coverage together. Small, since the block already exists b
 ## Error handling (fail-early, explicit — no silent fallback)
 
 - Unknown `program:` name → hard error, exit 2.
-- A check bound to an incompatible context type → hard error naming check + program (no try/skip).
-- A declared check whose required params are absent → hard config error (or documented default);
-  never silently skipped.
-- A program/aspect requiring a column absent from the table → **structural flag** (required) — not a
-  silent pass and not `not-applicable`.
+- A check whose `accepts` is incompatible with the program's substrate → hard error at the static
+  program↔substrate validation step, before any context is built (no try/skip).
+- A **required** check whose required *param* is absent → documented default or hard config error;
+  never silently skipped. (A *family* with nothing configured is the normal zero-invocation case.)
+- A **required** check whose required *input column* is absent → **`blocked` + a structural flag**
+  (counted in coverage) — not a silent pass and not `not-applicable`.
 - Unknown selector kind, or a `named-set` referencing an undeclared `column_sets` entry → hard error.
+- Structural QA flags remain **build-fatal** (non-zero exit); breadth/coverage never gates.
 - Disposition reconciliation and the `--no-strict` exit-code contract are inherited unchanged from B1.
 
 ## Testing (TDD, red → green)
 
 - **Selectors:** `dtype` / `names` / `regex` / `named-set` → expected resolved columns, including the
   **empty-resolution** case; undeclared named-set → error.
-- **Context compatibility:** a check declaring an incompatible `accepts` → hard error (build the
-  guard now even though all slice checks are `TableContext`).
+- **Context compatibility:** a check declaring an incompatible `accepts` → hard error at the static
+  program↔substrate step, before any context is built (build the guard now even though all slice
+  checks are `TableContext`).
+- **Check kinds:** a *required* check contributes one denominator entry and `blocked`s on a missing
+  required input; a *family* expands to N invocations and to **zero** invocations when unconfigured
+  (declared-but-unconfigured, not an error).
 - **Per-aspect checks:** each aspect's checks fire / clear on tiny seeded fixtures; severity is as
   locked (e.g. `general.non_empty` structural; library-size positivity structural).
 - **Program composition:** `scrna-qc-table` resolves to the expected ordered aspect→check inventory.
 - **B1 parity (load-bearing):** `program: scrna-qc-table` over the B1 scRNA fixtures detects the
-  **same defects with the same severities** as the previous `packs: [scrna]` — flag IDs differ only
-  in the `source` prefix (re-homing remaps scrna's checks onto `numeric-column` /
-  `gene-expression-qc-table` / `scrna-qc-table`) — proving the re-homing is behavior-preserving.
-- **Breadth readout:** `ran` / `empty` / `not-applicable` statuses; missing **required** input →
-  structural flag (not N/A); declared-**optional** missing input → `not-applicable`;
-  **determinism** (byte-identical `coverage` block for the same program+config+table).
-- **Config:** program selection; unknown program → exit 2; missing-required-param → error-or-default
-  (never silent skip); duplicate-threshold guard.
+  **same defects with the same severities** as the previous `packs: [scrna]`, asserted against the
+  explicit old→new `flag_id` re-homing map (Locked semantics) — proving the re-homing is
+  behavior-preserving.
+- **Breadth readout:** `ran` / `empty` / `blocked` / `not-applicable` statuses each exercised; a
+  missing **required** input → `blocked` + structural flag; a selector matching zero columns →
+  `empty` (no flag); a declared-**optional** missing input → `not-applicable`; an unconfigured family
+  → declared-but-unconfigured (out of denominator); **determinism** (byte-identical `coverage` block
+  for the same program+config+table).
+- **Config:** program selection; unknown program → exit 2; required-check missing-param →
+  error-or-default (never silent skip); unconfigured family → zero invocations (no error);
+  duplicate-threshold guard.
 - **qa-audit breadth column:** reads the `coverage` block; a report without it degrades gracefully
   (no crash; column blank/`-`).
 - **Doc changes:** verified via existing markdown link-check / `science validate`.
