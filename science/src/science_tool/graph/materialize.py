@@ -1068,6 +1068,10 @@ def _add_reasoning_metadata(*, uri: URIRef, provenance, entity: Entity) -> None:
         )
     if getattr(entity, "composition_rule", None) is not None:
         provenance.add((uri, SCI_NS.compositionRule, Literal(entity.composition_rule.value)))
+    if getattr(entity, "legacy_patch", None) is not None:
+        provenance.add((uri, SCI_NS.legacyPatch, Literal(entity.legacy_patch)))
+    if getattr(entity, "legacy_edge_id", None) is not None:
+        provenance.add((uri, SCI_NS.legacyEdgeId, Literal(entity.legacy_edge_id)))
 
 
 def _model_to_json(value: MeasurementModel | RivalModelPacket) -> str:

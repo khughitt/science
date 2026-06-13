@@ -131,6 +131,8 @@ class WorkbenchRow(BaseModel):
     epistemic_role: str | None = None  # t034 verbatim taxonomy (D-005)
     polarity: str | None = None  # sole sign carrier; authored axis
     legacy_relation_label: str | None = None
+    legacy_patch: str | None = None
+    legacy_edge_id: int | None = None
 
     # Evidence: authored inline as ``EvidenceStub``; after ``compile`` the
     # normalized row holds evidence-line *references* (ids) instead of inline
@@ -210,6 +212,8 @@ def _proposition_for_row(row: WorkbenchRow) -> PropositionEntity:
         predicate=row.predicate,
         polarity=row.polarity,
         legacy_relation_label=row.legacy_relation_label,
+        legacy_patch=row.legacy_patch,
+        legacy_edge_id=row.legacy_edge_id,
         claim_layer=row.claim_layer,
         identification_strength=row.identification_strength,
     )
@@ -359,6 +363,8 @@ _ROW_KEY_ORDER: tuple[str, ...] = (
     "identification_strength",
     "epistemic_role",
     "legacy_relation_label",
+    "legacy_patch",
+    "legacy_edge_id",
     "evidence",
 )
 
@@ -396,6 +402,8 @@ def _row_to_dict(row: WorkbenchRow) -> dict[str, Any]:
         "identification_strength": row.identification_strength,
         "epistemic_role": row.epistemic_role,
         "legacy_relation_label": row.legacy_relation_label,
+        "legacy_patch": row.legacy_patch,
+        "legacy_edge_id": row.legacy_edge_id,
         "evidence": evidence_refs if evidence_refs else None,
     }
 

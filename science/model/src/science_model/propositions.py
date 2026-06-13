@@ -45,6 +45,10 @@ class PropositionEntity(ProjectEntity):
     polarity: Polarity | None = None
     legacy_relation_label: str | None = None
 
+    # Migration provenance: origin patch/edge id in a legacy edges.yaml store (set during corpus migration).
+    legacy_patch: str | None = None
+    legacy_edge_id: int | None = None
+
     # Reasoning metadata
     claim_layer: ClaimLayer | None = None
     identification_strength: IdentificationStrength | None = None
