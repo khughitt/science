@@ -1705,6 +1705,7 @@ dev = [
     { name = "numpy", specifier = ">=2.4.2" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "ruff", specifier = ">=0.15.6" },
+    { name = "science-qa", editable = "../science/qa" },
     { name = "scipy", specifier = ">=1.17.1" },
 ]
 
