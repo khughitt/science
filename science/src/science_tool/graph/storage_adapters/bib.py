@@ -1,10 +1,11 @@
 """BibAdapter — the project bibliography (`papers/references.bib`) as an
 external-reference authority (design §B2/§B3a/§C3, Phase 4b).
 
-Synthesizes a lightweight `paper:<citekey>` raw record per balanced bib entry.
-These are external references, not owners: the load loop tags their identity rows
-ParticipationMode.EXTERNAL_REFERENCE (never renumbered, never a collision) and the
-materializer emits a minimal metadata node so citation edges resolve. No `dump`.
+Synthesizes a lightweight `paper:<citekey>` or `book:<citekey>` raw record per
+balanced bib entry (kind derived from entry_type: @book → book, everything else →
+paper). These are external references, not owners: the load loop tags their identity
+rows ParticipationMode.EXTERNAL_REFERENCE (never renumbered, never a collision) and
+the materializer emits a minimal metadata node so citation edges resolve. No `dump`.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ _BIB_REL = "papers/references.bib"
 
 
 class BibAdapter(StorageAdapter):
-    """Reads `papers/references.bib` into external-reference paper records."""
+    """Reads `papers/references.bib` into external-reference paper/book records."""
 
     name = "bib"
     participation_mode = ParticipationMode.EXTERNAL_REFERENCE
@@ -41,9 +42,10 @@ class BibAdapter(StorageAdapter):
             raise RuntimeError("BibAdapter.discover() must be called before load_raw()")
         assert ref.line is not None, "BibAdapter SourceRef must carry line (entry index)"
         entry = self._entries[self._keys_by_line[ref.line]]
+        kind = "book" if entry.entry_type == "book" else "paper"
         raw: dict[str, Any] = {
-            "kind": "paper",
-            "id": f"paper:{entry.key}",
+            "kind": kind,
+            "id": f"{kind}:{entry.key}",
             "title": entry.title or entry.key,
             "bibkey": entry.key,
             "file_path": _BIB_REL,

@@ -44,3 +44,18 @@ def test_bib_adapter_title_falls_back_to_key(tmp_path: Path) -> None:
 
 def test_bib_adapter_absent_bib_is_empty(tmp_path: Path) -> None:
     assert BibAdapter().discover(tmp_path) == []
+
+
+def test_bib_adapter_materializes_book_as_book_kind(tmp_path: Path) -> None:
+    _write_bib(
+        tmp_path,
+        "@book{Kelly1982,\n  title = {Information Rate},\n  year = {1982},\n}\n"
+        "@article{Smith2024,\n  title = {Cells},\n  year = {2024},\n}\n",
+    )
+    adapter = BibAdapter()
+    refs = adapter.discover(tmp_path)
+    by_key = {adapter.load_raw(r)["bibkey"]: adapter.load_raw(r) for r in refs}
+    assert by_key["Kelly1982"]["kind"] == "book"
+    assert by_key["Kelly1982"]["id"] == "book:Kelly1982"
+    assert by_key["Smith2024"]["kind"] == "paper"
+    assert by_key["Smith2024"]["id"] == "paper:Smith2024"
