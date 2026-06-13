@@ -172,10 +172,11 @@ qa:
 
 - `program:` declares the **aspect/check inventory** — the required checks plus the *families*
   available for config to expand. It does not require every family to be configured.
-- `column_sets`, `ranges`, `aspect_params`, `project_local` **only parameterize or expand** declared
-  checks. They never alter program *shape* implicitly (no hidden program assembly via config keys) —
-  config expands *families* and supplies *params*, but cannot introduce a check the program didn't
-  declare (except `project_local`, the explicit extension hook).
+- `column_sets`, `ranges`, `aspect_params` **only parameterize or expand** declared checks — they
+  expand *families* and supply *params* but **cannot alter the built-in program shape** (no hidden
+  program assembly via config keys; they cannot introduce a check the program didn't declare).
+  `project_local` is the **one explicit, append-only extension point**: it adds project-registered
+  checks to the inventory by design — additive only, never replacing or reshaping built-in aspects.
 - **Missing-param rule applies to required checks only.** A *required* check with a required param
   absent → **documented default or hard config error**, never silent. A *family* configured with zero
   items → zero invocations, reported as declared-but-unconfigured (normal, not an error).
@@ -212,6 +213,12 @@ membership. `numeric-column.low_variance` over five columns is a different cover
 same check resolving to zero columns. A family that expanded to **zero** invocations is *not* in the
 denominator but is reported separately as a **declared-but-unconfigured family** (a narrow-checking
 signal: e.g. "tabular.categoricals: 0 configured").
+
+**Every invocation is recorded as a coverage entry; the *executable denominator* (used for the
+narrow-checking signal and the optional ratio) is the entries minus `not-applicable`.** That is:
+`ran`, `empty`, and `blocked` entries count toward the executable denominator; `not-applicable`
+entries are still listed in coverage (so the optional check is visible) but excluded from the
+denominator and ratio, because the program legitimately declared their input optional.
 
 **Per-entry status (locked):**
 
@@ -255,10 +262,15 @@ engagement verdict · coverage together. Small, since the block already exists b
 - Missing-param rule applies to **required checks only** = hard config error or documented default,
   never silent; an unconfigured family is the normal zero case.
 - **No duplicate generic/domain thresholds** for the same gate unless explicitly configured.
-- **B1 parity:** `program: scrna-qc-table` detects the **same defects with the same severities** as
-  the prior `packs: [scrna]`, governed by the explicit old→new `flag_id` mapping below.
+- **B1 parity (scoped to the legacy checks):** the checks B1's `packs: [scrna]` ran map to equivalent
+  B1.5 flags with the **same defect and severity**, governed by the old→new `flag_id` map below. The
+  program *also* adds baseline checks B1 never ran (`general.non_empty`, `general.missing_fraction`,
+  `numeric-column.zero_fraction`, `numeric-column.low_variance`, …); these are **expected to add new
+  flags** on the same fixtures (e.g. low-variance on a small constant QC column) and are tested
+  separately — they are *not* part of the parity assertion.
 
-**B1 → B1.5 `flag_id` re-homing map** (the parity test asserts each prior flag maps to its new id):
+**B1 → B1.5 `flag_id` re-homing map** (the parity test asserts each prior flag maps to its new id;
+new baseline-check flags are out of scope for this map):
 
 | B1 `packs: [scrna]` flag (`source/check`) | B1.5 program flag (`source/check`) |
 |---|---|
@@ -313,10 +325,12 @@ engagement verdict · coverage together. Small, since the block already exists b
 - **Per-aspect checks:** each aspect's checks fire / clear on tiny seeded fixtures; severity is as
   locked (e.g. `general.non_empty` structural; library-size positivity structural).
 - **Program composition:** `scrna-qc-table` resolves to the expected ordered aspect→check inventory.
-- **B1 parity (load-bearing):** `program: scrna-qc-table` over the B1 scRNA fixtures detects the
-  **same defects with the same severities** as the previous `packs: [scrna]`, asserted against the
-  explicit old→new `flag_id` re-homing map (Locked semantics) — proving the re-homing is
-  behavior-preserving.
+- **B1 parity (load-bearing, scoped to legacy checks):** over the B1 scRNA fixtures, the flags from
+  the checks B1's `packs: [scrna]` ran map one-to-one to equivalent B1.5 flags with the **same defect
+  and severity**, asserted against the old→new `flag_id` re-homing map (Locked semantics) — proving
+  the re-homing is behavior-preserving. The new baseline checks (`general.*`, `numeric-column.{zero_fraction,
+  low_variance}`, …) are tested **separately** and may add flags the legacy fixtures didn't have;
+  those additions are out of the parity assertion.
 - **Breadth readout:** `ran` / `empty` / `blocked` / `not-applicable` statuses each exercised; a
   missing **required** input → `blocked` + structural flag; a selector matching zero columns →
   `empty` (no flag); a declared-**optional** missing input → `not-applicable`; an unconfigured family
