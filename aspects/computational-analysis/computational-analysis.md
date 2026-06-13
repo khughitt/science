@@ -114,6 +114,12 @@ Evaluate QA discipline across the pipeline:
 - **Process iteration:** Did the analysis iterate in response to QA flags, or run once and record
   the result? Run `science qa-audit`. Score: PASS (QA-RESPONSIVE) / WARN (PARTIAL or
   RE-RAN-UNRELATED) / FAIL (SINGLE-RUN × IGNORED — ran once, flags unexamined).
+- **Program breadth:** Does the QA step use a named program (e.g. `qa.program: scrna-qc-table`)
+  selecting the appropriate baseline check library, with few `empty`/`blocked` invocations and no
+  large pool of declared-but-unconfigured families? Read from the `coverage` block in
+  `qa_report.json` and surfaced by `science qa-audit` as the `breadth` column (`ran/denominator`).
+  Score: PASS (broad program ran, few `empty`/`blocked`) / WARN (several `empty`/`blocked` or
+  unconfigured families — narrow coverage) / FAIL (no program or coverage block absent).
 
 Include QA Coverage as an additional row in the rubric results table.
 
