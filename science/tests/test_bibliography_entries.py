@@ -71,3 +71,9 @@ def test_load_bib_entries_captures_entry_type(tmp_path: Path) -> None:
     entries = load_bib_entries(tmp_path)
     assert entries["Kelly1982"].entry_type == "book"
     assert entries["Smith2024"].entry_type == "article"
+
+
+def test_load_bib_entries_lowercases_entry_type(tmp_path: Path) -> None:
+    _write_bib(tmp_path, "@BOOK{Kelly1982,\n  title = {Information Rate},\n  year = {1982},\n}\n")
+    entries = load_bib_entries(tmp_path)
+    assert entries["Kelly1982"].entry_type == "book"

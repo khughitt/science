@@ -11,6 +11,8 @@ from typing import Literal
 
 _BIBLIOGRAPHY_PREFIX = "cite:"
 _BIBTEX_ENTRY_RE = re.compile(r"@\w+\s*\{\s*([^,\s]+)\s*,")
+# Superset of _BIBTEX_ENTRY_RE: also captures the entry type (group 1); key is group 2.
+# Kept separate so load_bib_keys / _entry_key keep their group-1 == key contract.
 _BIBTEX_ENTRY_TYPED_RE = re.compile(r"@(\w+)\s*\{\s*([^,\s]+)\s*,")
 
 _BIB_HEADER = (
