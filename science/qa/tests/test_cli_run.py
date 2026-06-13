@@ -6,7 +6,7 @@ import pandas as pd
 
 def _setup(tmp_path):
     pd.DataFrame({"SUBJECT_ID": [1, 1]}).to_parquet(tmp_path / "t.parquet")
-    (tmp_path / "qa.yaml").write_text("qa:\n  unique_key: SUBJECT_ID\n")
+    (tmp_path / "qa.yaml").write_text("qa:\n  program: scrna-qc-table\n  unique_key: SUBJECT_ID\n")
 
 
 def test_cli_run_exits_nonzero_on_structural(tmp_path):
@@ -48,7 +48,7 @@ def test_cli_run_missing_config_exits_2(tmp_path):
 
 def test_cli_run_absent_column_exits_2_with_message(tmp_path):
     pd.DataFrame({"OTHER": [1]}).to_parquet(tmp_path / "t.parquet")
-    (tmp_path / "qa.yaml").write_text("qa:\n  unique_key: SUBJECT_ID\n")
+    (tmp_path / "qa.yaml").write_text("qa:\n  program: scrna-qc-table\n  unique_key: SUBJECT_ID\n")
     result = subprocess.run(
         [sys.executable, "-m", "science_qa", "run",
          "--config", str(tmp_path / "qa.yaml"),
