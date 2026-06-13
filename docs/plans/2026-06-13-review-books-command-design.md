@@ -100,10 +100,14 @@ New click subcommand registered in `science/src/science_tool/cli.py` (alongside
 
   - `end_page` is derived as the next entry's `start_page − 1` (last chapter runs to the
     final page).
-  - **Parts** are detected from outline hierarchy: a level-0 outline entry that *contains*
-    level-1 entries is a Part; its children are the chapters. The manifest exposes `level`
-    (and a `part` grouping where a hierarchy exists) so the synthesizer can decide on
-    `part-N-*.md` rollups.
+  - **Chapters vs sections vs Parts.** The summarization unit is the *chapter*, so a
+    level-0 outline entry is a chapter **by default — even when it has sub-section children**
+    (e.g. `Chapter 1 → 1.1 → 1.2`); the section children are skipped, not emitted. A level-0
+    entry is treated as a *Part* (container, whose children become the chapters) **only when
+    its title explicitly reads as a division** (matches `^(part|volume)\b`, case-insensitive)
+    and it has children. The manifest exposes `level` and a `part` grouping so the
+    synthesizer can decide on `part-N-*.md` rollups. Ambiguous hierarchies are caught by the
+    step-5 confirmation gate before fan-out.
 - **No outline present:** exit non-zero with a clear, machine-greppable message (e.g.
   `error: no outline/bookmarks in PDF`). This is the signal that triggers the
   orchestrator's ToC-reading fallback (§5 step 3). Fail early; do not silently emit an
@@ -138,6 +142,12 @@ Register `book` as a **core profile** kind (not a project-local kind via
 7. **Template packaging** — the `book` template ships in **both** template surfaces (§6),
    the same way `paper.md` does, so both the command preamble's resolution and the model
    `Renderer` find it.
+8. **`MIGRATED_KINDS`** — add `"book"` to the `MIGRATED_KINDS` frozenset in
+   `science/model/src/science_model/templates.py`. This is what routes
+   `build_entity_markdown` / `science entity create book` / `science entity sections book`
+   through the template instead of a generic Summary/Notes fallback. (The status maps
+   `_DEFAULT_STATUS` / `_STATUS_VALUES` from item 3 are indexed directly by `create_entity`
+   — a missing entry is a `KeyError`, not a soft default.)
 
 ### 3c. Section validation
 
@@ -360,3 +370,21 @@ per-chapter work is extraction, not judgment; synthesis — which needs the whol
    `science_model/templates/<kind>.md` by default, separate from the command-facing
    `templates/<kind>.md`. **Resolved:** §6 + checklist item 4 require both copies and a
    `Renderer` test.
+
+### Third review round (2026-06-13, against the implementation plan)
+
+10. **(High) Splitter mis-handled chapter→section nesting.** The first splitter treated any
+    outline parent as a Part, so a `Chapter 1 → 1.1 → 1.2` book would dispatch *section*
+    notes. **Resolved:** §3a — level-0 entries are chapters by default (sections skipped); a
+    Part requires an explicit `^(part|volume)\b` title. Implementation plan adds a
+    chapter-with-sections test.
+11. **(Medium) `MIGRATED_KINDS` omission.** Without it, `science entity create book` falls
+    back to a generic body. **Resolved:** §3b item 8 + plan Task 6.
+12. **(Medium) Status maps indexed directly.** `create_entity` does `_DEFAULT_STATUS[kind]` /
+    `_STATUS_VALUES[kind]`; a missing entry is a `KeyError`. **Resolved:** §3b item 8 note +
+    plan Task 4 tests `default_status("book")`/`valid_statuses("book")` and Task 6 adds a
+    `create_entity` end-to-end test.
+13. **(Medium) `question reserve` ref prefix.** The CLI passes `--source-refs` through
+    unchanged, so it needs `cite:<citekey>`, not the bare key. **Resolved:** plan Task 15.
+14. **(Low) Absolute paths in the plan.** Snippets used `/home/keith/d/...`; repo convention
+    is `~/d/...`. **Resolved:** plan paths normalized to `~/d/science`.

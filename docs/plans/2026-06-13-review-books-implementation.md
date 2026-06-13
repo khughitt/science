@@ -108,7 +108,7 @@ Expected: PASS (both new tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/keith/d/science
+cd ~/d/science
 git add science/model/src/science_model/entities.py science/model/tests/test_typed_entities.py
 git commit -m "feat(model): add BOOK entity type and BookEntity typed class"
 ```
@@ -159,7 +159,7 @@ Expected: PASS (both the rejected-on and still-valid-without parametrizations fo
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/keith/d/science
+cd ~/d/science
 git add science/model/src/science_model/entities.py science/model/tests/test_review_state_model.py
 git commit -m "feat(model): reject review_state on non-epistemic book kind"
 ```
@@ -216,7 +216,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/keith/d/science
+cd ~/d/science
 git add science/model/src/science_model/profiles/core.py science/model/tests/test_core_profile_has_book.py
 git commit -m "feat(model): declare book as a core profile kind"
 ```
@@ -238,7 +238,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from science_tool.entities import is_markdown_entity_kind, resolve_path_policy
+from science_tool.entities import (
+    default_status,
+    is_markdown_entity_kind,
+    resolve_path_policy,
+    valid_statuses,
+)
 
 
 def test_book_is_markdown_entity_kind() -> None:
@@ -249,11 +254,20 @@ def test_book_path_policy_home_and_strategy() -> None:
     policy = resolve_path_policy("book")
     assert policy.root == Path("entities/books")
     assert policy.strategy == "citekey"
+
+
+def test_book_default_status_and_valid_statuses() -> None:
+    # create_entity indexes _DEFAULT_STATUS[kind] and _STATUS_VALUES[kind] directly,
+    # so both maps must carry "book" or entity creation KeyErrors.
+    assert default_status("book") == "active"
+    assert valid_statuses("book") == frozenset({"active", "retired"})
 ```
 
-> If `resolve_path_policy` is not the exact public accessor in `entities.py`, use the same
-> accessor the analogous `paper` test uses — grep `science/tests` for `resolve_path_policy`
-> or `EntityPathPolicy` to confirm the import name before writing the test.
+> `resolve_path_policy`, `default_status`, and `valid_statuses` are the real public
+> accessors in `science_tool/entities.py` (`default_status`/`valid_statuses` raise `KeyError`
+> for an unregistered kind — which is exactly the regression this test guards). Confirm the
+> `resolve_path_policy` return-attribute names (`.root`, `.strategy`) against `EntityPathPolicy`
+> before running.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -293,7 +307,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/keith/d/science
+cd ~/d/science
 git add science/src/science_tool/entities.py science/tests/test_book_entity_policy.py
 git commit -m "feat(entities): register book path policy, default status, status values"
 ```
@@ -368,7 +382,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/keith/d/science
+cd ~/d/science
 git add science/src/science_tool/graph/entity_registry.py science/tests/graph/test_book_kind_registered.py
 git commit -m "feat(graph): register book kind (BookEntity, OPERATIONAL)"
 ```
@@ -427,11 +441,28 @@ def test_book_template_renders_from_packaged_copy() -> None:
 Run: `cd science/model && uv run pytest tests/test_book_template_renders.py -v`
 Expected: FAIL — `EntityTemplateError: Packaged template not found: science_model/templates/book.md`.
 
-- [ ] **Step 3: Create the template (both copies, identical)**
+- [ ] **Step 3: Register `book` in `MIGRATED_KINDS`, then create the template (both copies)**
 
-Write this content to **both** `templates/book.md` and
+First, add `"book"` to the `MIGRATED_KINDS` frozenset in
+`science/model/src/science_model/templates.py` (after `"paper"`). Without this,
+`build_entity_markdown` / `science entity create book` / `science entity sections book` fall
+back to a generic Summary/Notes body instead of the book template:
+
+```python
+MIGRATED_KINDS: frozenset[str] = frozenset(
+    {
+        ...
+        "paper",
+        "book",
+        "pre-registration",
+        "synthesis",
+    }
+)
+```
+
+Then write this content to **both** `templates/book.md` and
 `science/model/src/science_model/templates/book.md`. Mirror the `_template` block style of
-`paper.md`; required sections must equal `_BOOK_SECTIONS` from Task 8.
+`paper.md`; required sections must equal `_BOOK_SECTIONS` from Task 7.
 
 ```markdown
 ---
@@ -514,17 +545,53 @@ After writing both, verify they are byte-identical:
 diff templates/book.md science/model/src/science_model/templates/book.md && echo IDENTICAL
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Run render test to verify it passes**
 
 Run: `cd science/model && uv run pytest tests/test_book_template_renders.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Add an end-to-end `create_entity` test (exercises policy + status maps + template)**
+
+Create `science/tests/test_create_book_entity.py` (mirrors the `create_entity` usage in
+`science/tests/validate/test_checks_entity_conformance.py`):
+
+```python
+from __future__ import annotations
+
+from pathlib import Path
+
+from science_tool.entities import create_entity
+
+
+def test_create_book_entity_writes_template(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text(
+        "name: t\nlayout_version: 3\nprofile: research\nknowledge_profiles: {local: local}\n",
+        encoding="utf-8",
+    )
+    result = create_entity(tmp_path, "book", "Information Rate", entity_id="book:Kelly1982")
+    written = tmp_path / "entities" / "books" / "Kelly1982.md"
+    assert written.is_file()
+    text = written.read_text(encoding="utf-8")
+    # MIGRATED_KINDS routing => the book template, not the generic Summary/Notes fallback.
+    assert "## Whole-Book Synthesis" in text
+    assert "type: book" in text
+```
+
+Run: `cd science && uv run pytest tests/test_create_book_entity.py -v`
+Expected: PASS. (If it raises `KeyError: 'book'`, a status map from Task 4 is missing; if it
+emits a `## Summary`/`## Notes` body instead of book sections, `MIGRATED_KINDS` was not
+updated in Step 3.)
+
+> Confirm `create_entity`'s parameter order against
+> `science/tests/validate/test_checks_entity_conformance.py` (it calls
+> `create_entity(tmp_path, kind, "Smoke {kind}", entity_id=entity_id)`).
+
+- [ ] **Step 6: Commit**
 
 ```bash
-cd /home/keith/d/science
-git add templates/book.md science/model/src/science_model/templates/book.md science/model/tests/test_book_template_renders.py
-git commit -m "feat(templates): add book template (command-facing + packaged copies)"
+cd ~/d/science
+git add templates/book.md science/model/src/science_model/templates/book.md science/model/src/science_model/templates.py science/model/tests/test_book_template_renders.py science/tests/test_create_book_entity.py
+git commit -m "feat(templates): add book template + MIGRATED_KINDS routing (both template copies)"
 ```
 
 ---
@@ -634,7 +701,7 @@ Expected: PASS (both).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/keith/d/science
+cd ~/d/science
 git add science/src/science_tool/validate/checks/document_structure.py science/tests/validate/test_checks_document_structure_book.py
 git commit -m "feat(validate): check book-overview required sections under entities/books"
 ```
@@ -707,7 +774,7 @@ over-reaching into `doc/books/`; narrow that check, then re-run.
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /home/keith/d/science
+cd ~/d/science
 git add science/tests/validate/test_book_chapter_notes_unvalidated.py
 git commit -m "test(validate): guard that book chapter notes are not entity-validated"
 ```
@@ -800,7 +867,7 @@ construction stays valid because `entry_type` has a default).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/keith/d/science
+cd ~/d/science
 git add science/src/science_tool/bibliography.py science/tests/test_bibliography_entries.py
 git commit -m "feat(bib): capture BibTeX entry_type in BibEntry"
 ```
@@ -865,7 +932,7 @@ Expected: PASS (new test + the existing `@article` → `paper:` test still green
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/keith/d/science
+cd ~/d/science
 git add science/src/science_tool/graph/storage_adapters/bib.py science/tests/graph/test_bib_adapter.py
 git commit -m "feat(graph): materialize @book bib entries as book: nodes"
 ```
@@ -884,7 +951,7 @@ git commit -m "feat(graph): materialize @book bib entries as book: nodes"
 Run:
 
 ```bash
-cd /home/keith/d/science/science && uv add pypdf
+cd ~/d/science/science && uv add pypdf
 ```
 
 Expected: `pypdf` added to `[project.dependencies]` in `science/pyproject.toml` and locked.
@@ -951,6 +1018,32 @@ def test_split_detects_parts(tmp_path: Path) -> None:
     assert chapters[0].level == 1
 
 
+def _make_pdf_with_sections(path: Path, n_pages: int) -> None:
+    writer = PdfWriter()
+    for _ in range(n_pages):
+        writer.add_blank_page(width=72, height=72)
+    c1 = writer.add_outline_item("Chapter 1", 0)
+    writer.add_outline_item("1.1 Background", 1, parent=c1)
+    writer.add_outline_item("1.2 Setup", 3, parent=c1)
+    c2 = writer.add_outline_item("Chapter 2", 6)
+    writer.add_outline_item("2.1 Method", 7, parent=c2)
+    with path.open("wb") as fh:
+        writer.write(fh)
+
+
+def test_split_chapter_with_section_children(tmp_path: Path) -> None:
+    # Chapters with sub-section bookmarks must still be dispatched as chapters,
+    # NOT replaced by their section children (the high-severity regression).
+    pdf = tmp_path / "sections.pdf"
+    _make_pdf_with_sections(pdf, 10)
+    chapters = split_book(pdf)
+    assert [c.title for c in chapters] == ["Chapter 1", "Chapter 2"]
+    assert chapters[0].start_page == 1
+    assert chapters[0].end_page == 6   # up to Chapter 2's start (7) - 1
+    assert all(c.part is None for c in chapters)
+    assert all(c.level == 0 for c in chapters)
+
+
 def test_no_outline_raises(tmp_path: Path) -> None:
     pdf = tmp_path / "bare.pdf"
     _make_pdf(pdf, 5, [])  # pages, no outline
@@ -977,6 +1070,7 @@ outline, which is the caller's signal to fall back to reading the ToC pages.
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -1000,32 +1094,44 @@ class ChapterEntry:
         return asdict(self)
 
 
-def _collect_leaves(nodes: list, reader: PdfReader, part: str | None = None) -> list[dict]:
-    """Walk the (possibly nested) outline and return leaf entries in document order.
+# A level-0 entry is a container (its children are the chapters) only when its title
+# explicitly reads as a division. Otherwise a parent entry is a *chapter* whose children
+# are sections — which must NOT be dispatched as separate chapters.
+_PART_RE = re.compile(r"^\s*(part|volume)\b", re.IGNORECASE)
 
-    pypdf represents hierarchy as: a Destination followed immediately by a list of
-    its children. Such a destination is a *Part* (container), not a chapter; its
-    children are the chapters. A destination with no following list is a chapter leaf.
+
+def _collect_chapters(nodes: list, reader: PdfReader, part: str | None = None) -> list[dict]:
+    """Walk the (possibly nested) outline and return chapter entries in document order.
+
+    pypdf represents hierarchy as a Destination optionally followed by a list of its
+    children. The summarization unit is the *chapter*:
+    - A destination is a chapter by default — even if it has section children
+      (e.g. "Chapter 1" -> "1.1", "1.2"); the section children are skipped, not emitted.
+    - A destination is treated as a *Part* (container) only when its title matches
+      ``_PART_RE`` AND it has children; then its children are the chapters and carry
+      ``part`` = the Part title.
     """
-    leaves: list[dict] = []
+    chapters: list[dict] = []
     i = 0
     while i < len(nodes):
         node = nodes[i]
         if isinstance(node, list):
-            # A list with no preceding destination at this level — recurse, same part.
-            leaves.extend(_collect_leaves(node, reader, part))
+            # A stray child list with no preceding destination at this level.
+            chapters.extend(_collect_chapters(node, reader, part))
             i += 1
             continue
         title = str(node.title).strip()
         start = reader.get_destination_page_number(node) + 1  # 0-based -> 1-based
         has_children = i + 1 < len(nodes) and isinstance(nodes[i + 1], list)
-        if has_children:
-            leaves.extend(_collect_leaves(nodes[i + 1], reader, part=title))
+        if has_children and _PART_RE.match(title):
+            # Container Part: descend; its children are the chapters.
+            chapters.extend(_collect_chapters(nodes[i + 1], reader, part=title))
             i += 2
         else:
-            leaves.append({"title": title, "start_page": start, "part": part})
-            i += 1
-    return leaves
+            # Chapter: emit it, and skip its section children (if any).
+            chapters.append({"title": title, "start_page": start, "part": part})
+            i += 2 if has_children else 1
+    return chapters
 
 
 def split_book(pdf_path: str | Path) -> list[ChapterEntry]:
@@ -1037,25 +1143,25 @@ def split_book(pdf_path: str | Path) -> list[ChapterEntry]:
     if not outline:
         raise BookSplitError("no outline/bookmarks in PDF")
 
-    leaves = _collect_leaves(outline, reader)
-    if not leaves:
+    raw = _collect_chapters(outline, reader)
+    if not raw:
         raise BookSplitError("no chapters found in outline")
 
     total_pages = len(reader.pages)
     chapters: list[ChapterEntry] = []
-    for idx, leaf in enumerate(leaves):
-        start = leaf["start_page"]
-        end = leaves[idx + 1]["start_page"] - 1 if idx + 1 < len(leaves) else total_pages
+    for idx, item in enumerate(raw):
+        start = item["start_page"]
+        end = raw[idx + 1]["start_page"] - 1 if idx + 1 < len(raw) else total_pages
         if end < start:
             end = start
         chapters.append(
             ChapterEntry(
                 n=idx + 1,
-                title=leaf["title"],
+                title=item["title"],
                 start_page=start,
                 end_page=end,
-                level=1 if leaf["part"] else 0,
-                part=leaf["part"],
+                level=1 if item["part"] else 0,
+                part=item["part"],
             )
         )
     return chapters
@@ -1069,7 +1175,7 @@ Expected: PASS (all three).
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /home/keith/d/science
+cd ~/d/science
 git add science/pyproject.toml science/uv.lock science/src/science_tool/book_split.py science/tests/test_book_split.py
 git commit -m "feat(cli): add pypdf dep and book_split outline-to-manifest module"
 ```
@@ -1174,7 +1280,7 @@ message containing "no outline").
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/keith/d/science
+cd ~/d/science
 git add science/src/science_tool/cli.py science/tests/test_book_split_cli.py
 git commit -m "feat(cli): add 'science book-split' command"
 ```
@@ -1260,14 +1366,14 @@ Return ≤120 words: the chapter number, the written `out_path`, and any `[UNVER
 
 - [ ] **Step 2: Sanity-check frontmatter**
 
-Run: `cd /home/keith/d/science && head -8 agents/book-chapter-researcher.md`
+Run: `cd ~/d/science && head -8 agents/book-chapter-researcher.md`
 Expected: a valid YAML frontmatter block with `name`, `model: claude-sonnet-4-6`, and a
 `tools:` line (no `WebFetch`/`WebSearch` — books are local PDFs).
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /home/keith/d/science
+cd ~/d/science
 git add agents/book-chapter-researcher.md
 git commit -m "feat(agents): add book-chapter-researcher subagent"
 ```
@@ -1333,13 +1439,13 @@ Return ≤120 words: the overview entity path, the list of any Part rollup paths
 
 - [ ] **Step 2: Sanity-check frontmatter**
 
-Run: `cd /home/keith/d/science && head -8 agents/book-synthesizer.md`
+Run: `cd ~/d/science && head -8 agents/book-synthesizer.md`
 Expected: valid frontmatter, `model: claude-opus-4-8`.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /home/keith/d/science
+cd ~/d/science
 git add agents/book-synthesizer.md
 git commit -m "feat(agents): add book-synthesizer subagent"
 ```
@@ -1419,8 +1525,9 @@ the synthesis (synthesizer), then report back.
      EOF
      ```
    - Reserve any new questions via `uv run science question reserve --slug "<slug>"
-     --title "<title>" --source-refs "<citekey>" --json` (never write `doc/questions/`
-     directly).
+     --title "<title>" --source-refs "cite:<citekey>" --json` (the CLI passes refs through
+     unchanged, so it needs the `cite:` namespace prefix, not the bare key; never write
+     `doc/questions/` directly).
    - Link relevant hypotheses in the overview entity's `related:`.
    - Commit: `git add -A && git commit -m "docs(books): review <citekey> — <short title>"`.
 
@@ -1445,14 +1552,14 @@ Skip if everything worked smoothly.
 
 - [ ] **Step 2: Sanity-check**
 
-Run: `cd /home/keith/d/science && head -4 commands/review-books.md`
+Run: `cd ~/d/science && head -4 commands/review-books.md`
 Expected: a `---` frontmatter block with a `description:` line (matches the other
 `commands/*.md`).
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /home/keith/d/science
+cd ~/d/science
 git add commands/review-books.md
 git commit -m "feat(commands): add /review-books orchestrator command"
 ```
@@ -1479,14 +1586,14 @@ snapshot-update pass; the default run excludes it.
 
 - [ ] **Step 3: Smoke-test the CLI against a real book**
 
-Run: `cd /home/keith/d/science && uv run science book-split ~/downloads/nature-pdfs/Kelly1982.pdf`
+Run: `cd ~/d/science && uv run science book-split ~/downloads/nature-pdfs/Kelly1982.pdf`
 Expected: a printed chapter list (or a clear "no outline" error, in which case the command's
 ToC fallback path applies). This is the live input for downstream `task:t688`.
 
 - [ ] **Step 4: Final commit (if any snapshot/lock updates were needed)**
 
 ```bash
-cd /home/keith/d/science
+cd ~/d/science
 git add -A
 git commit -m "chore(review-books): regression fixups (snapshots/lock)"
 ```
