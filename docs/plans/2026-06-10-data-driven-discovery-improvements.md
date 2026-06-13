@@ -74,19 +74,25 @@ biologist one-shots the analysis."
 > playbook). B1–B3 build *on* those — their gap is missing reusable libraries / metrics
 > *behind* the conventions, not a missing convention.
 
-- **B1 — QA-check toolkit.** *Gap:* QA conventions exist as checkpoint guidance, but there is
-  no reusable *library* of data-type-specific checks operationalizing them. *Sketch:* a growing
-  toolkit of helper checks per data type (scRNA, bulk RNA, genomics CN/SV, amplicon, …) that
-  implements the checkpoint conventions, rather than rediscovering their shape. *Tier:* **Mid.**
-  *Deps:* `docs/conventions/pipeline-qa-checkpoints.md`.
+- **B1 — QA-check toolkit. ✅ SHIPPED (2026-06-11).** *Gap:* QA conventions exist as checkpoint
+  guidance, but there is no reusable *library* of data-type-specific checks operationalizing them.
+  *Sketch:* a growing toolkit of helper checks per data type (scRNA, bulk RNA, genomics CN/SV,
+  amplicon, …) that implements the checkpoint conventions, rather than rediscovering their shape.
+  *Tier:* **Mid.** *Deps:* `docs/conventions/pipeline-qa-checkpoints.md`. *Delivered:* light
+  standalone **`science-qa`** distribution at `science/qa/` (config-runner over the `qa:` schema +
+  scRNA pack + deterministic `qa_report.{json,md}` + analyst-owned `qa_dispositions.yaml`). See
+  `docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-design.md`.
 - **B2 — Quantify QA breadth/depth.** *Gap:* a project can record one shallow check and look
   as "QA'd" as one with broad coverage. *Sketch:* a score/metric over QA coverage (against the
   checkpoint conventions' expected checks) that flags shallow or narrow checking. *Tier:*
-  **Mid.** *Deps:* B1, `docs/conventions/pipeline-qa-checkpoints.md`.
-- **B3 — Flag no-iteration workflows.** *Gap:* a build→run-once→record→"truth" workflow is
-  indistinguishable from a properly iterated one. *Sketch:* detect and flag analyses with zero
-  recorded iterations / re-entries, surfacing them through the audit playbook. *Tier:* **Mid.**
-  *Deps:* `docs/process/pipeline-audit-and-refactor.md`.
+  **Mid — UNBLOCKED (B1 shipped); design in progress.** *Deps:* B1,
+  `docs/conventions/pipeline-qa-checkpoints.md`.
+- **B3 — Flag no-iteration workflows. ✅ SHIPPED (2026-06-11).** *Gap:* a build→run-once→record→"truth"
+  workflow is indistinguishable from a properly iterated one. *Sketch:* detect and flag analyses
+  with zero recorded iterations / re-entries, surfacing them through the audit playbook. *Tier:*
+  **Mid.** *Deps:* `docs/process/pipeline-audit-and-refactor.md`. *Delivered:* **`science qa-audit`**
+  advisory CLI (`science_tool/qa_audit/`) reporting two orthogonal verdicts (iteration:
+  QA-RESPONSIVE/RE-RAN-UNRELATED/SINGLE-RUN; engagement: NO-QA/NO-FLAGS/RESPONDED/IGNORED/PARTIAL).
 - **B4 — Adaptive (not rigid) pre-registration.** *Gap:* the pre-reg + gating framing imports
   a clinical-trial stance that can discourage the exploratory, data-driven iteration that
   discovery meta-analysis *needs*. *Sketch:* reframe `pre-register` as sharpening thinking +
@@ -157,19 +163,19 @@ credulity ("EMT shows up therefore EMT"), tail-hiding metrics.
 
 | Tier | Workstreams | Why now / what blocks it |
 |---|---|---|
+| **✅ Shipped** | B1, B3 | Merged to local `main` 2026-06-11 (`science-qa` toolkit + `science qa-audit`) |
 | **Near-term (unblocked)** | B4, D1, F2 | Skill / doc / convention changes; no substrate dependency |
-| **Mid** | B1, B2, B3, C1, D2, E2 | New mechanisms, scoped; B1–B3 extend the existing QA conventions |
+| **Mid** | B2 (next), C1, D2, E2 | New mechanisms, scoped; B2 unblocked now that B1 defines the check surface |
 | **Gated** | A1, A2 | Need `belief_eligible` / `quantitative_result` from epistemic-edges (not in repo yet) |
 | **Exploratory** | C2, E1, F1 | Deeper provenance/methodology; design-heavy |
 
 ## Recommended first spin-out
 
-- **B3 + B1 (no-iteration flagging + QA-check toolkit), then B2** — the talk's *headline*
-  finding made real, among the cheapest to ship, and **unblocked today**: B3 and B1 extend the
-  existing QA conventions (`docs/conventions/pipeline-qa-checkpoints.md`,
-  `docs/process/pipeline-audit-and-refactor.md`) rather than waiting on substrate work. B2
-  (QA-breadth quantification) follows once B1 defines the reusable check surface it scores
-  against (`B2 *Deps:* B1`). This is my lead recommendation.
+- **B3 + B1 (no-iteration flagging + QA-check toolkit), then B2** — ✅ **B3 + B1 SHIPPED**
+  2026-06-11 (merged to local `main`; `science-qa` toolkit + `science qa-audit`; see
+  `docs/plans/2026-06-11-qa-toolkit-and-iteration-audit-design.md` /
+  `…-plan.md`). **B2 (QA-breadth quantification) is now the active spin-out** — B1 has defined
+  the reusable check surface it scores against (`B2 *Deps:* B1`).
 - **Theme A (evidence tiering + cross-modality)** — strongest grounding and highest epistemic
   payoff (the user's long-emphasized hint/single/multi/multi-modal ladder, finally systematic),
   **but gated**: it cannot start until `belief_eligible` / `quantitative_result` land via
