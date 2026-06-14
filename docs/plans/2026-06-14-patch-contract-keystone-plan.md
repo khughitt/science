@@ -23,11 +23,14 @@
   - Register `patch-definition` as an epistemic core kind.
 - Modify `science/src/science_tool/entities.py`
   - Add path policy and status vocabulary for `entities/patches/<slug>.md`.
+- Modify `science/src/science_tool/graph/io.py`
+  - Add the canonical project entity URI minter next to `PROJECT_NS`.
 - Create `science/src/science_tool/graph/patch_membership.py`
   - Owns pure derivation, patch-membership records, Dataset emission, and validation helpers.
   - No filesystem writes.
 - Modify `science/src/science_tool/graph/materialize.py`
   - Call patch membership derivation after `_derive_bears_on_layer(...)`.
+  - Expose a public `build_dataset_from_sources(...)` wrapper for diagnostic re-derivation.
 - Create `science/src/science_tool/patch/cli.py`
   - Owns diagnostic-only `patch explain` and `patch check`.
 - Modify `science/src/science_tool/cli.py`
@@ -395,6 +398,7 @@ git commit -m "feat(patch): add patch definition entity"
 ### Task 2: Pure Patch Membership Deriver
 
 **Files:**
+- Modify: `science/src/science_tool/graph/io.py`
 - Create: `science/src/science_tool/graph/patch_membership.py`
 - Test: `science/tests/test_patch_membership_deriver.py`
 
@@ -410,7 +414,7 @@ from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import RDF, XSD
 
 from science_model.patch_definition import PatchDefinitionEntity
-from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
+from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, entity_uri_for_ref
 from science_tool.graph.patch_membership import (
     PatchMembershipError,
     derive_patch_memberships,
@@ -418,8 +422,7 @@ from science_tool.graph.patch_membership import (
 
 
 def _uri(ref: str) -> URIRef:
-    kind, slug = ref.split(":", 1)
-    return URIRef(PROJECT_NS[f"{kind}/{slug.lower()}"])
+    return entity_uri_for_ref(ref)
 
 
 def _patch(**overrides: object) -> PatchDefinitionEntity:
@@ -542,6 +545,14 @@ def test_deriver_requires_policy_version() -> None:
         derive_patch_memberships(_dataset(), [_patch()], policy_version="")
 
 
+def test_entity_uri_for_ref_rejects_malformed_refs() -> None:
+    with pytest.raises(ValueError, match="invalid entity ref"):
+        entity_uri_for_ref(":missing-kind")
+
+    with pytest.raises(ValueError, match="invalid entity ref"):
+        entity_uri_for_ref("missing-slug:")
+
+
 def test_deriver_output_is_sorted_by_member_iri() -> None:
     result = derive_patch_memberships(_dataset(), [_patch(seeds=["proposition:p3"])], policy_version="local-closure-v1")
 
@@ -556,9 +567,23 @@ Run:
 uv run --frozen pytest science/tests/test_patch_membership_deriver.py -q
 ```
 
-Expected: FAIL with `ModuleNotFoundError: No module named 'science_tool.graph.patch_membership'`.
+Expected: FAIL with `ImportError: cannot import name 'entity_uri_for_ref'`.
 
-- [ ] **Step 3: Implement the pure deriver**
+- [ ] **Step 3: Add the shared project entity URI minter**
+
+Modify `science/src/science_tool/graph/io.py` near the namespace declarations:
+
+```python
+def entity_uri_for_ref(ref: str) -> URIRef:
+    if ":" not in ref:
+        raise ValueError(f"invalid entity ref {ref!r}")
+    kind, slug = ref.split(":", 1)
+    if not kind or not slug:
+        raise ValueError(f"invalid entity ref {ref!r}")
+    return URIRef(PROJECT_NS[f"{kind}/{slug.lower()}"])
+```
+
+- [ ] **Step 4: Implement the pure deriver**
 
 Create `science/src/science_tool/graph/patch_membership.py`:
 
@@ -580,7 +605,7 @@ from rdflib import Dataset, Literal as RDFLiteral, URIRef
 from rdflib.namespace import RDF, XSD
 
 from science_model.patch_definition import PatchDefinitionEntity
-from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
+from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, entity_uri_for_ref
 
 MemberRole = Literal["focal", "member"]
 DerivationReason = Literal["focal", "seed", "closure", "direct_relation"]
@@ -616,15 +641,6 @@ class PatchDerivationResult:
     warnings: list[str]
 
 
-def entity_uri_for_ref(ref: str) -> URIRef:
-    if ":" not in ref:
-        raise PatchMembershipError(f"invalid entity ref {ref!r}")
-    kind, slug = ref.split(":", 1)
-    if not kind or not slug:
-        raise PatchMembershipError(f"invalid entity ref {ref!r}")
-    return URIRef(PROJECT_NS[f"{kind}/{slug.lower()}"])
-
-
 def derive_patch_memberships(
     dataset: Dataset,
     patch_definitions: list[PatchDefinitionEntity],
@@ -638,7 +654,7 @@ def derive_patch_memberships(
     records: list[MembershipRecord] = []
     warnings: list[str] = []
     for definition in sorted(patch_definitions, key=lambda item: item.canonical_id):
-        patch_uri = entity_uri_for_ref(definition.canonical_id)
+        patch_uri = _entity_uri_for_ref(definition.canonical_id)
         focal_uri = _resolve_required(dataset, definition.focal, label="focal", patch_id=definition.canonical_id)
         seed_uris = [
             _resolve_required(dataset, seed, label="seed", patch_id=definition.canonical_id)
@@ -722,7 +738,7 @@ def derive_patch_memberships(
 
         derived_before_excludes = set(by_member)
         for exclude in definition.excludes:
-            exclude_uri = entity_uri_for_ref(exclude.ref)
+            exclude_uri = _entity_uri_for_ref(exclude.ref)
             if exclude_uri in by_member:
                 del by_member[exclude_uri]
             elif exclude_uri not in derived_before_excludes:
@@ -736,10 +752,17 @@ def derive_patch_memberships(
 
 
 def _resolve_required(dataset: Dataset, ref: str, *, label: str, patch_id: str) -> URIRef:
-    uri = entity_uri_for_ref(ref)
+    uri = _entity_uri_for_ref(ref)
     if any(next(graph.triples((uri, RDF.type, None)), None) is not None for graph in dataset.graphs()):
         return uri
     raise PatchMembershipError(f"{patch_id}: unresolved {label} {ref!r}")
+
+
+def _entity_uri_for_ref(ref: str) -> URIRef:
+    try:
+        return entity_uri_for_ref(ref)
+    except ValueError as exc:
+        raise PatchMembershipError(str(exc)) from exc
 
 
 def _bears_on_neighbors(dataset: Dataset, origin: URIRef, *, max_depth: int) -> list[tuple[URIRef, int]]:
@@ -813,7 +836,7 @@ def _record_sort_key(record: MembershipRecord) -> tuple[int, int, str]:
     )
 ```
 
-- [ ] **Step 4: Run deriver tests**
+- [ ] **Step 5: Run deriver tests**
 
 Run:
 
@@ -823,10 +846,10 @@ uv run --frozen pytest science/tests/test_patch_membership_deriver.py -q
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 2**
+- [ ] **Step 6: Commit Task 2**
 
 ```bash
-git add science/src/science_tool/graph/patch_membership.py science/tests/test_patch_membership_deriver.py
+git add science/src/science_tool/graph/io.py science/src/science_tool/graph/patch_membership.py science/tests/test_patch_membership_deriver.py
 git commit -m "feat(patch): derive local patch memberships"
 ```
 
@@ -849,7 +872,7 @@ from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import RDF, XSD
 
 from science_model.patch_definition import PatchDefinitionEntity
-from science_tool.graph.io import PROJECT_NS, SCI_NS
+from science_tool.graph.io import SCI_NS, entity_uri_for_ref
 from science_tool.graph.patch_membership import (
     MembershipRecord,
     emit_patch_memberships,
@@ -858,8 +881,7 @@ from science_tool.graph.patch_membership import (
 
 
 def _uri(ref: str) -> URIRef:
-    kind, slug = ref.split(":", 1)
-    return URIRef(PROJECT_NS[f"{kind}/{slug.lower()}"])
+    return entity_uri_for_ref(ref)
 
 
 def _patch() -> PatchDefinitionEntity:
@@ -1087,13 +1109,17 @@ from pathlib import Path
 from rdflib import Dataset, URIRef
 from rdflib.namespace import RDF
 
-from science_tool.graph.io import PROJECT_NS, SCI_NS
-from science_tool.graph.materialize import materialize_graph
+from science_tool.graph.io import PROJECT_NS, SCI_NS, entity_uri_for_ref
+from science_tool.graph.materialize import _entity_uri, materialize_graph
 
 
 def _write_entity(path: Path, frontmatter: list[str], body: str = "Body.") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(["---", *frontmatter, "---", "", body, ""]), encoding="utf-8")
+
+
+def test_materialize_entity_uri_uses_shared_project_minter() -> None:
+    assert _entity_uri("hypothesis:H1") == entity_uri_for_ref("hypothesis:H1")
 
 
 def test_graph_build_emits_patch_membership_context(tmp_path: Path) -> None:
@@ -1172,9 +1198,9 @@ Modify imports in `science/src/science_tool/graph/materialize.py`:
 
 ```python
 from science_model.patch_definition import PatchDefinitionEntity
+from science_tool.graph.io import entity_uri_for_ref
 from science_tool.graph.patch_membership import (
     derive_patch_memberships,
-    entity_uri_for_ref,
     emit_patch_memberships,
 )
 ```
@@ -1197,6 +1223,14 @@ def _derive_patch_membership_layer(dataset: Dataset, *, sources: ProjectSources)
         policy_version=PATCH_MEMBERSHIP_POLICY_VERSION,
     )
     emit_patch_memberships(dataset, patch_definitions, result.records)
+```
+
+Add a public wrapper near `_build_dataset_from_sources(...)` so diagnostics can
+re-derive the expected Dataset without importing the private helper:
+
+```python
+def build_dataset_from_sources(sources: ProjectSources) -> Dataset:
+    return _build_dataset_from_sources(sources)
 ```
 
 In the existing `_entity_uri(...)` helper, delegate to the same minter used by
@@ -1336,6 +1370,17 @@ def test_patch_explain_reports_members(tmp_path: Path) -> None:
     assert "seed" in result.output
 
 
+def test_patch_check_passes_for_fresh_graph(tmp_path: Path) -> None:
+    _project(tmp_path)
+    materialize_graph(tmp_path, strict=False)
+    runner = CliRunner()
+
+    result = runner.invoke(main, ["patch", "check", "--project-root", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "patch check: OK" in result.output
+
+
 def test_patch_check_detects_orphan_convenience_edge(tmp_path: Path) -> None:
     _project(tmp_path)
     graph_path = materialize_graph(tmp_path, strict=False)
@@ -1402,8 +1447,7 @@ import click
 from rdflib import Dataset
 
 from science_model.patch_definition import PatchDefinitionEntity
-from science_tool.graph.io import PROJECT_NS
-from science_tool.graph.materialize import PATCH_MEMBERSHIP_POLICY_VERSION, _build_dataset_from_sources
+from science_tool.graph.materialize import PATCH_MEMBERSHIP_POLICY_VERSION, build_dataset_from_sources
 from science_tool.graph.patch_membership import (
     derive_patch_memberships,
     patch_membership_pairs,
@@ -1474,7 +1518,7 @@ def _load_graph(project_root: Path) -> Dataset:
 
 def _expected_graph(project_root: Path) -> Dataset:
     sources = load_project_sources(project_root, strict_identity=False)
-    return _build_dataset_from_sources(sources)
+    return build_dataset_from_sources(sources)
 
 
 def _patch_definitions(project_root: Path) -> list[PatchDefinitionEntity]:
