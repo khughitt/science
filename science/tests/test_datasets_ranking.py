@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from science_tool.datasets._base import DatasetResult
-from science_tool.datasets._ranking import _normalize_doi, score_result
+from science_tool.datasets._ranking import _normalize_doi, _richness, score_result
 
 
 def _r(**kw) -> DatasetResult:
@@ -54,3 +54,21 @@ class TestScoreResult:
 
     def test_no_match_scores_zero(self) -> None:
         assert score_result("zzz", _r(title="abc")) == 0.0
+
+
+class TestRichness:
+    def test_counts_populated_optional_fields(self) -> None:
+        bare = _r(title="t")
+        rich = _r(title="t", organism="mouse", modality="rna-seq", keywords=["a"], year=2024)
+        assert _richness(rich) > _richness(bare)
+
+    def test_bare_result_is_zero(self) -> None:
+        assert _richness(_r(title="t")) == 0
+
+    def test_empty_keywords_not_counted(self) -> None:
+        # default keywords=[] is falsy and must not count toward richness
+        assert _richness(_r(title="t", keywords=[])) == 0
+
+    def test_doi_not_counted(self) -> None:
+        # doi is the group key in dedup, constant within a group, so excluded
+        assert _richness(_r(title="t", doi="10.1/x")) == 0

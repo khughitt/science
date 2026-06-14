@@ -62,3 +62,24 @@ def score_result(query: str, result: DatasetResult) -> float:
             continue
         score += weight * len(query_tokens & _tokens(text))
     return score
+
+
+def _richness(result: DatasetResult) -> int:
+    """Count of populated optional metadata fields (dedup representative tiebreak).
+
+    `doi` is excluded: it is the dedup group key, identical within a group.
+    """
+    optional = (
+        result.description,
+        result.url,
+        result.year,
+        result.license,
+        result.keywords,
+        result.organism,
+        result.modality,
+        result.access,
+        result.sample_count,
+        result.file_count,
+        result.total_size_bytes,
+    )
+    return sum(1 for value in optional if value)
