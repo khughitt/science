@@ -43,6 +43,11 @@ def test_parent_may_not_be_member_of_collection_member():
     assert any(r.severity.name == "ERROR" and "member_of" in r.message for r in results)
 
 
+def test_non_dataset_parent_ref_is_error():
+    results = list(evaluate_dataset_lineage([_ds("dataset:x", parent_dataset="collection:y")]))
+    assert any(r.severity.name == "ERROR" and "must be a 'dataset:' reference" in r.message for r in results)
+
+
 def test_well_formed_chain_is_clean():
     dss = [_ds("dataset:uk-biobank", siblings=["dataset:ukb-ppp"]),
            _ds("dataset:ukb-ppp", parent_dataset="dataset:uk-biobank")]

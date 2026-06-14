@@ -124,6 +124,6 @@ def evaluate_dataset_lineage(
             seen.add(cur)
 
 
-@Check(section="dataset_lineage", order=53)
+@Check(section="dataset lineage", order=53)
 def check_dataset_lineage(ctx: ValidateContext) -> Iterator[Result]:
     yield from evaluate_dataset_lineage(dataset_frontmatters(ctx))
