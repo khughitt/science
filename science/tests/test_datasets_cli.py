@@ -90,3 +90,31 @@ class TestDatasetsCLI:
             result = runner.invoke(main, ["datasets", "search", "nothing"])
         assert result.exit_code == 0
         assert "No datasets found" in result.output
+
+    def test_search_json_includes_access(self, runner: CliRunner) -> None:
+        mock_results = [
+            DatasetResult(source="physionet", id="mmash", title="MMASH", access="public"),
+        ]
+        with patch("science_tool.cli.search_all", return_value=mock_results):
+            result = runner.invoke(main, ["datasets", "search", "actigraphy", "--format", "json"])
+        assert result.exit_code == 0
+        import json
+
+        data = json.loads(result.output)
+        assert data["rows"][0]["access"] == "public"
+
+    def test_metadata_json_includes_access(self, runner: CliRunner) -> None:
+        from unittest.mock import MagicMock
+
+        adapter = MagicMock()
+        adapter.metadata.return_value = DatasetResult(
+            source="sra", id="SRX111", title="RNA-seq", access="controlled"
+        )
+        with patch("science_tool.cli.get_adapter", return_value=adapter):
+            result = runner.invoke(main, ["datasets", "metadata", "sra:SRX111", "--format", "json"])
+        assert result.exit_code == 0
+        import json
+
+        rows = json.loads(result.output)["rows"]
+        access_row = next(r for r in rows if r["field"] == "Access")
+        assert access_row["value"] == "controlled"

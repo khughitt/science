@@ -2977,6 +2977,7 @@ def datasets_search(query: str, source: str | None, max_results: int, output_for
             "id": r.id,
             "title": r.title[:80],
             "year": r.year or "",
+            "access": r.access or "",
             "doi": r.doi or "",
         }
         for r in results
@@ -2990,6 +2991,7 @@ def datasets_search(query: str, source: str | None, max_results: int, output_for
             ("id", "ID"),
             ("title", "Title"),
             ("year", "Year"),
+            ("access", "Access"),
             ("doi", "DOI"),
         ],
         rows=rows,
@@ -3016,6 +3018,7 @@ def datasets_metadata(source_id: str, output_format: str) -> None:
         {"field": "URL", "value": result.url or ""},
         {"field": "Year", "value": str(result.year) if result.year else ""},
         {"field": "License", "value": result.license or ""},
+        {"field": "Access", "value": result.access or ""},
         {"field": "Keywords", "value": ", ".join(result.keywords) if result.keywords else ""},
         {"field": "Organism", "value": result.organism or ""},
         {"field": "Modality", "value": result.modality or ""},
