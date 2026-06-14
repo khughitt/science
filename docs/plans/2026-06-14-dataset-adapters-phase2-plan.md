@@ -10,7 +10,7 @@
 
 **Design spec:** `~/d/science/docs/plans/2026-06-14-dataset-adapters-phase2-design.md`
 
-**Working directory for ALL commands:** `~/d/science/science` (the inner dir is the Python project root — `pyproject.toml` lives there, and `uv run` / pytest fail from the outer repo root). Source paths are relative to `src/`, test paths relative to `tests/`.
+**Working directory for ALL commands:** the `science/` project root (the inner dir is the Python project root — `pyproject.toml` lives there, and `uv run` / pytest fail from the outer repo root). In the main checkout this is `~/d/science/science`; under a worktree it is `<worktree>/science`. Source paths are relative to `src/`, test paths relative to `tests/`. **Exception:** Task 8 edits two docs that live at the repo root (one level up) — it stays in `science/` and reaches them with `../` paths (see that task's path note).
 
 ---
 
@@ -751,18 +751,25 @@ git commit -m "feat(datasets): surface modality/organism/sample_count in dataset
 
 ## Task 8: Documentation
 
+> **Path note:** Unlike Tasks 1–7, these two files live at the **repo root**, one
+> level above the `science/` project root that is the CWD for all other tasks.
+> Stay in `science/` and reach them with `../` paths (`../commands/...`,
+> `../codex-skills/...`) — this works identically in the main checkout and in a
+> worktree, with no `cd`. Both paths are inside the same working tree, so `git add ../...`
+> is valid.
+
 **Files:**
-- Modify: `commands/find-datasets.md`
-- Modify: `codex-skills/science-find-datasets/SKILL.md`
+- Modify: `../commands/find-datasets.md`
+- Modify: `../codex-skills/science-find-datasets/SKILL.md`
 
 - [ ] **Step 1: Locate the search-behavior description**
 
-Run: `grep -n "search_all\|concatenat\|ranks\|Adapters cover\|datasets search" commands/find-datasets.md codex-skills/science-find-datasets/SKILL.md`
+Run: `rtk rg -n "search_all|concatenat|ranks|Adapters cover|datasets search" ../commands/find-datasets.md ../codex-skills/science-find-datasets/SKILL.md`
 Expected: lines describing how `datasets search` returns results (the Phase 1 adapter-coverage note region).
 
 - [ ] **Step 2: Add the Phase 2 behavior note**
 
-In `commands/find-datasets.md`, near the adapter-coverage / search-behavior guidance, add a sentence (adapt the surrounding markdown style):
+In `../commands/find-datasets.md`, near the adapter-coverage / search-behavior guidance, add a sentence (adapt the surrounding markdown style):
 
 ```markdown
 `science datasets search` ranks merged results by lexical relevance to the query
@@ -775,12 +782,12 @@ not semantic.
 
 - [ ] **Step 3: Mirror into the codex skill if it duplicates the description**
 
-If `codex-skills/science-find-datasets/SKILL.md` contains a parallel search-behavior or adapter-coverage paragraph (from Step 1), add the same note there in its style. If it does not duplicate that content, skip this step (do not invent a new section).
+If `../codex-skills/science-find-datasets/SKILL.md` contains a parallel search-behavior or adapter-coverage paragraph (from Step 1), add the same note there in its style. If it does not duplicate that content, skip this step (do not invent a new section).
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add commands/find-datasets.md codex-skills/science-find-datasets/SKILL.md
+git add ../commands/find-datasets.md ../codex-skills/science-find-datasets/SKILL.md
 git commit -m "doc(datasets): note search ranking + DOI dedup + richer fields (phase2)"
 ```
 
