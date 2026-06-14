@@ -56,13 +56,18 @@ dgidb, oetjen_2018.
 `_RoundTripSafeLoader` that strips only the implicit timestamp resolver (+ round-trip regression
 tests). Merged to local `main` (a93757b8). This unblocked the 6 YAML packages.
 
-**OPEN organizational decision (needs user).** The cancer-therapeutics `datapackage.yaml`
-descriptors live under `data/raw/`, which `.gitignore` excludes (data bytes). 4 descriptors were
-already force-added/tracked historically; the campaign newly force-added **chembl-activities** and
-**opentargets** (commits 3879ab4, de6b855) to match. Cleaner per "organization over workarounds":
-add a `.gitignore` exception (`!data/raw/**/datapackage.yaml`) so all descriptors track by rule
-instead of scattered force-adds. Pending user choice: (a) keep force-adds; (b) add gitignore
-exception; (c) un-track the 2 new ones.
+**Organizational decision — RESOLVED.** The cancer-therapeutics `datapackage.yaml` descriptors live
+under gitignored `data/raw/`. Per "organization over workarounds", added a `.gitignore` exception
+(ignore `data/raw/**` but descend and re-include `**/datapackage.yaml`; commit 5e397f9) so all
+descriptors (incl. the newly-tracked chembl-activities + opentargets) track by rule, not force-add.
+Verified: descriptors un-ignored, data payloads still ignored.
+
+**Dropbox-sync caveat (for Phase 2).** These repos are Dropbox-synced; during this session nsc-crosswalk's
+working-tree descriptor AND its data payload were transiently removed by a sync event. The committed
+descriptor was restored from HEAD (schema intact — it was validly inferred from real data at commit
+time); its data file (`../../processed/a2/nsc_crosswalk.tsv`) remains transiently absent and should
+re-sync. Before Phase 2 runs, confirm each package's data files are present (the meaning-authoring
+needs to read them); re-verify repo branch before any commit (mm30 especially).
 
 ## Next: Phase 2 (paused before)
 
