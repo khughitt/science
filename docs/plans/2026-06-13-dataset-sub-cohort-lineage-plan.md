@@ -107,6 +107,8 @@ def test_well_formed_chain_is_clean():
 Create `science/src/science_tool/validate/checks/dataset_lineage.py` modeled on `dataset_taxonomy.py`:
 
 ```python
+from pathlib import Path
+
 from science_tool.validate._helpers import dataset_frontmatters
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -137,9 +139,9 @@ def evaluate_dataset_lineage(datasets, *, commons_cache=None):  # -> Iterator[Re
         if present is False:
             yield _err(path, f"{d['id']}: parent_dataset {parent!r} does not resolve to a dataset entity (not in project or commons)", "dataset.lineage.unresolved")
         elif present is None:
-            yield Result(Severity.INFO, Path(path) if path else None, None,
-                         f"{d['id']}: parent_dataset {parent!r} is non-local and the commons is unavailable; cannot verify",
-                         "dataset.lineage.commons-unavailable", None)
+            yield _result(Severity.INFO, path,
+                          f"{d['id']}: parent_dataset {parent!r} is non-local and the commons is unavailable; cannot verify",
+                          "dataset.lineage.commons-unavailable")
         # present is True -> resolved in commons, no defect
     # cycle detection over the parent_dataset chain
     for start in by_id:
@@ -153,9 +155,11 @@ def evaluate_dataset_lineage(datasets, *, commons_cache=None):  # -> Iterator[Re
     # (optional, recommended) symmetry: parent.siblings must list child when present
     # — promote the health.py:1540 WARN here if desired; keep as WARN.
 
+def _result(severity, path, message, rule):
+    return Result(severity, Path(path) if path else None, None, message, rule, None)
+
 def _err(path, message, rule):
-    from pathlib import Path
-    return Result(Severity.ERROR, Path(path) if path else None, None, message, rule, None)
+    return _result(Severity.ERROR, path, message, rule)
 
 @Check(section="dataset_lineage", order=0)
 def check(ctx: ValidateContext):
@@ -211,7 +215,7 @@ def test_external_dataset_may_carry_parent_dataset():
 
 - [ ] **Step 2: Run to verify it fails** — `rtk uv run --frozen --project science pytest science/tests/test_dataset_usage_materialize.py -k sub_cohort`.
 
-- [ ] **Step 3: Collect `parent_dataset` in `sources.py`.** Do **not** collect in the `dataset_datapackages[...] = ref.path` defer branch (~line 481) — that branch only runs for deferred `DatapackageAdapter` entities that `continue` without becoming owners; normal markdown/structured dataset entities win and are appended elsewhere (~lines 532 and 578). Instead, after the winning `entities` list is finalized (`entities.sort(...)`, ~line 581), build the map from the authoritative list:
+- [ ] **Step 3: Collect `parent_dataset` in `sources.py`.** Do **not** collect in the `dataset_datapackages[...] = ref.path` defer branch (~line 481) — that branch only runs for deferred `DatapackageAdapter` entities that `continue` without becoming owners; normal markdown/structured dataset entities win and are appended elsewhere (~lines 532 and 578). Do **not** collect after the line-581 `entities.sort(...)` either — when `include_commons` is set, the commons block (~lines 611-674) appends more entities and **re-sorts** before the function returns, so commons-hosted datasets would be missed. Build the map **immediately before `return ProjectSources(...)`** (~line 676), after the commons block, from the now-final `entities` list:
 
   ```python
   dataset_parents = {
@@ -221,7 +225,7 @@ def test_external_dataset_may_carry_parent_dataset():
   }
   ```
 
-  Thread `dataset_parents` through `ProjectSources` alongside `dataset_datapackages` (~line 682). This single post-finalization pass covers every dataset entity regardless of which adapter produced it.
+  Thread `dataset_parents` through `ProjectSources` alongside `dataset_datapackages`. This single pass over the finalized list covers every dataset entity — local *and* commons — regardless of adapter.
 
 - [ ] **Step 4: Emit the edge in `materialize.py`.** Near line 130 (just before B2 derivation at ~169, after `_add_dataset_usage_edges`), add:
 
@@ -314,15 +318,17 @@ Plus a **regression** assertion that the existing identical-dataset case (`test_
      - `committable(x, y)` → `relation(x, y) in {"same", "ancestor", "descendant"}` — the **one shared predicate** both paths must use.
      Compute once in `derive_dataset_independence_records` and pass `lineage` down into `_commitment_components`/`_components_from_ancestors` **and** `_candidate_components`/`_candidate_edges`.
 
-  b. **Group by lineage root, not raw dataset.** In `_candidate_edges` (line ~263) and `_components_from_ancestors` (line ~315), replace the grouping key `ancestor.dataset` with `lineage.root(ancestor.dataset)`. Identical-dataset lines still co-group; cross-family lines never co-group (distinct roots) → unrelated-stays-independent falls out for free.
+  b. **Group by lineage root, not raw dataset (a bucket only).** In `_candidate_edges` (line ~263) and `_components_from_ancestors` (line ~315), group ancestors by `lineage.root(ancestor.dataset)` instead of `ancestor.dataset`, so cross-dataset pairs within one family are enumerated and cross-family pairs (distinct roots) never are. **The root key is only a bucket — never derive a record's `datasets` from it** (see step f); doing so is the trap that would mislabel a committed record's `datasets` as the root.
 
-  c. **Gate the COMMITMENT edge builder (the High fix).** `_components_from_ancestors` does **not** call `_is_committable_pair`; it currently joins lines within a `by_dataset` group via a consecutive-pair chain (`zip(lines, lines[1:])`, ~line 324). That chain is only valid when every line in the group is mutually committable — true under exact-dataset grouping, **false** under root grouping (a root group can contain a sibling pair). Replace the consecutive chain with **all-pairs gated by `lineage.committable`**:
+  c. **Commitment edge builder — iterate ancestor PAIRS, gate by `committable`, carry both real datasets (the High fix).** `_components_from_ancestors` does **not** call `_is_committable_pair`; it chains consecutive *lines* within a `by_dataset` group (`zip(lines, lines[1:])`, ~line 324) and then derives `member_datasets` from each edge's third element (~line 331). Both assumptions break under root grouping. Rewrite the edge build to iterate **ancestor pairs** within each root bucket and carry the actual pair datasets in the edge:
      ```python
-     for left, right in itertools.combinations(lines, 2):   # lines sorted by str
-         if lineage.committable(line_dataset[left], line_dataset[right]):
-             edges.append((left, right, dataset_for_edge))
+     edges: list[tuple[URIRef, URIRef, frozenset[URIRef]]] = []
+     for _root, group in by_root.items():            # group: list[LineAncestor]
+         for a, b in itertools.combinations(group, 2):
+             if a.line != b.line and lineage.committable(a.dataset, b.dataset):
+                 edges.append((a.line, b.line, frozenset({a.dataset, b.dataset})))
      ```
-     `direct_full` already pre-filtered to direct + dependence + overlap==full, so only the dataset-relation gate is new here. Effects: a **sibling-only** pair (ppp, nmr) with no parent line → no edge → no commitment (it then surfaces as a candidate, step d). The **transitive-hub** case (lines on ppp, ukb, nmr) keeps its conservative single component: edges ppp–ukb and nmr–ukb are both committable and `_connected_components` merges {ppp, ukb, nmr} through the ukb hub, while the un-committable ppp–nmr pair simply contributes no direct edge. (Track each line's dataset to evaluate `committable`; since `direct_full` can carry multiple usages per line, key the relation off the dataset that put the line in this root group.)
+     `direct_full` already pre-filtered to direct + dependence + overlap==full, so only the relation gate is new. Iterating raw ancestors (not the deduped line set) is deliberate: a single line carrying several datasets in the family contributes one ancestor per dataset, so every committable cross-dataset pairing is seen. Effects: a **sibling-only** pair (ppp, nmr) with no parent line → no committable edge → no commitment (it surfaces as a candidate, step e). The **transitive-hub** case (lines on ppp, ukb, nmr) keeps its conservative single component: edges ppp–ukb and nmr–ukb are committable and `_connected_components` merges {ppp, ukb, nmr} through the ukb hub, while the un-committable ppp–nmr pair contributes no edge.
 
   d. **Gate `_is_committable_pair` with the SAME predicate (candidate path).** Extend `_is_committable_pair(left, right, lineage)` (line ~283) so the candidate path's "skip true commitments" exclusion stays consistent with step c:
      ```python
@@ -342,7 +348,23 @@ Plus a **regression** assertion that the existing identical-dataset case (`test_
      ```
      Ancestor/descendant pairs that are not committable (e.g. one is `partial`) keep falling through to the existing `partial-overlap` / `unknown-overlap` reasons — correct, since a non-full subset usage is a genuine partial overlap.
 
-  f. **Justification / group key.** `_components_from_ancestors` already records `member_datasets` (now spanning child+parent) and `_group_key(member_datasets)`. `_group_key` (line ~405) hashes the sorted multi-dataset set, so a family group is deterministic; the single-dataset shortcut still applies to the unchanged identical-dataset case. Add a test asserting a committed lineage record's `datasets` includes both child and parent.
+  f. **Record `datasets` from actual ancestor datasets, not the bucket key (BOTH paths).** This is the other half of the High fix — the grouping change (step b) makes the existing `datasets` derivations read the root instead of the real datasets.
+     - **Commitment** (`_components_from_ancestors`, ~line 331): currently `member_datasets = frozenset(dataset for left, right, dataset in edges if ...)` reads each edge's third element. With the new edge shape it becomes a union of the per-pair frozensets:
+       ```python
+       member_datasets = frozenset(
+           d for left, right, datasets in edges
+           if left in members and right in members
+           for d in datasets
+       )
+       ```
+       `_connected_components` ignores the third element, so widening it `URIRef → frozenset[URIRef]` is safe — update that function's parameter type hint to `tuple[URIRef, URIRef, frozenset[URIRef]]` (or relax to `object`). The `usage_nodes` filter (`ancestor.dataset in member_datasets`, ~line 335) keeps working since `member_datasets` now holds the actual child+parent datasets.
+     - **Candidate** (`_records_from_candidate_edges`, ~line 361): currently `datasets = frozenset(edge.dataset for edge in component_edges)`; under root grouping `edge.dataset` is the root, so read the actual endpoints instead:
+       ```python
+       datasets = frozenset(d for edge in component_edges for d in (edge.left.dataset, edge.right.dataset))
+       ```
+       (`CandidateEdge.left/.right` are `LineAncestor`s carrying `.dataset`; the `CandidateEdge.dataset` field is now vestigial for the record's `datasets` — leave it or drop it.)
+     - `_group_key` (line ~405) then hashes the sorted multi-dataset set, so a family group is deterministic; the single-dataset shortcut still applies to the unchanged identical-dataset case.
+     - **Tests:** assert a committed lineage record's `datasets == frozenset({child, parent})` and a `lineage-sibling` candidate's `datasets == frozenset({sibling_a, sibling_b})` — these directly catch the root-mislabeling regression.
 
 - [ ] **Step 4: Run to verify all pass**, including the unchanged-regression assertions — `rtk uv run --frozen --project science pytest science/tests/test_dataset_independence.py`.
 
@@ -396,6 +418,7 @@ Plus a **regression** assertion that the existing identical-dataset case (`test_
 - `origin: external` + `access` + `parent_dataset` validates (no invariant #7/#8 regression).
 - `parent_dataset` materializes to `sci:subCohortOf`; URIs match usage-fact dataset URIs.
 - Ancestor–descendant full/full pair ⇒ **commitment**; co-descendant pair ⇒ **candidate `lineage-sibling`**; non-full subset pair ⇒ existing partial/unknown candidate; unrelated ⇒ independent.
+- Committed/candidate records carry the **actual** member datasets (`{child, parent}` / `{sibling_a, sibling_b}`), never the lineage-root bucket key.
 - Chain (sub-cohort of a sub-cohort) commitment is transitive.
 - Identical-dataset collapse unchanged (regression green); `CONFIG_VERSION` unchanged.
 - End-to-end UKB/UKB-PPP example yields one commitment.
