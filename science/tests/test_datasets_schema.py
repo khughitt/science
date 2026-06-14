@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from science_tool.datasets.schema import FieldConstraints, FieldQA, FieldSpec, ForeignKey, MissingValue
+from science_tool.datasets.schema import FieldConstraints, FieldQA, FieldSpec, ForeignKey, MissingValue, TableQA, TableSchema
 
 
 class TestFieldValueModels:
@@ -87,3 +87,37 @@ class TestForeignKey:
             ForeignKey.model_validate(
                 {"fields": ["a", "b"], "reference": {"resource": "r", "fields": "x"}}
             )
+
+
+def _fields(*names: str) -> list[dict]:
+    return [{"name": n} for n in names]
+
+
+class TestTableSchemaShape:
+    def test_minimal(self) -> None:
+        t = TableSchema.model_validate({"fields": _fields("a", "b")})
+        assert [f.name for f in t.fields] == ["a", "b"]
+        assert t.uniqueKeys is None                 # absent
+        assert t.missingValues == [""]              # DP v2 default
+        assert t.qa.exclusive_flags == []
+
+    def test_table_qa_closed_namespace(self) -> None:
+        with pytest.raises(ValidationError):
+            TableQA.model_validate({"exclusive_flagz": []})
+
+    def test_unique_keys_absent_vs_empty(self) -> None:
+        with pytest.raises(ValidationError, match="uniqueKeys.*non-empty"):
+            TableSchema.model_validate({"fields": _fields("a"), "uniqueKeys": []})
+
+    def test_unique_keys_inner_group_non_empty(self) -> None:
+        with pytest.raises(ValidationError, match="group must be non-empty"):
+            TableSchema.model_validate({"fields": _fields("a"), "uniqueKeys": [[]]})
+
+    def test_missing_values_must_be_unique(self) -> None:
+        TableSchema.model_validate({"fields": _fields("a"), "missingValues": ["", "NA"]})  # ok
+        with pytest.raises(ValidationError, match="unique"):
+            TableSchema.model_validate({"fields": _fields("a"), "missingValues": ["NA", "NA"]})
+
+    def test_duplicate_field_names_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="duplicate field name"):
+            TableSchema.model_validate({"fields": _fields("a", "a")})

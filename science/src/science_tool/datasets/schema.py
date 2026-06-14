@@ -114,3 +114,43 @@ class ForeignKey(BaseModel):
                 "foreignKey cardinality mismatch between fields and reference.fields"
             )
         return self
+
+
+class TableQA(BaseModel):
+    """The distribution-severity extension carried at table level (closed namespace)."""
+
+    model_config = ConfigDict(extra="forbid")
+    exclusive_flags: list[tuple[str, str]] = Field(default_factory=list)
+
+
+class TableSchema(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    fields: list[FieldSpec]
+    primaryKey: str | list[str] | None = None
+    # `None` = absent. When present, DP v2 requires uniqueKeys non-empty with non-empty
+    # inner groups; the validator distinguishes absent from explicit `[]`.
+    uniqueKeys: list[list[str]] | None = None
+    foreignKeys: list[ForeignKey] = Field(default_factory=list)
+    missingValues: list[str | MissingValue] = Field(default_factory=lambda: [""])
+    qa: TableQA = Field(default_factory=TableQA)
+
+    @model_validator(mode="after")
+    def _unique_and_missing(self) -> "TableSchema":
+        field_names = [f.name for f in self.fields]
+        dupes = sorted({n for n in field_names if field_names.count(n) > 1})
+        if dupes:
+            raise ValueError(f"duplicate field name(s): {dupes}")
+        if self.uniqueKeys is not None:
+            if not self.uniqueKeys:
+                raise ValueError("uniqueKeys, when present, must be non-empty")
+            if any(not group for group in self.uniqueKeys):
+                raise ValueError("each uniqueKeys group must be non-empty")
+        # Sentinel *values* are the key and must be unique; labels are descriptive
+        # and intentionally NOT required to be unique.
+        seen: set[str] = set()
+        for mv in self.missingValues:
+            key = mv if isinstance(mv, str) else mv.value
+            if key in seen:
+                raise ValueError(f"missingValues entries must be unique; duplicate {key!r}")
+            seen.add(key)
+        return self
