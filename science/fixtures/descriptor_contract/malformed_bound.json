@@ -1,0 +1,9 @@
+{
+  "name": "badbound",
+  "path": "badbound.csv",
+  "schema": {
+    "fields": [
+      {"name": "x", "type": "number", "constraints": {"minimum": "abc"}}
+    ]
+  }
+}

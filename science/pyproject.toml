@@ -17,6 +17,7 @@ dependencies = [
   "science-model",
   "ruff>=0.15.6",
   "pyarrow>=24.0.0",
+  "pandas>=2.0",
   "pypdf>=6.13.2",
 ]
 

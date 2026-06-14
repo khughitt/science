@@ -1,0 +1,367 @@
+# science/tests/test_infer_schema.py
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pandas as pd
+import pytest
+import yaml
+
+from science_tool.datasets import infer_schema as isch
+
+
+def test_load_descriptor_json_file(tmp_path: Path) -> None:
+    p = tmp_path / "datapackage.json"
+    p.write_text(json.dumps({"name": "x", "resources": []}))
+    mapping, fmt = isch.load_descriptor(p)
+    assert fmt == "json"
+    assert mapping["name"] == "x"
+
+
+def test_load_descriptor_yaml_file(tmp_path: Path) -> None:
+    p = tmp_path / "datapackage.yaml"
+    p.write_text("name: y\nresources: []\n")
+    mapping, fmt = isch.load_descriptor(p)
+    assert fmt == "yaml"
+    assert mapping["name"] == "y"
+
+
+def test_load_descriptor_directory_resolves_file(tmp_path: Path) -> None:
+    (tmp_path / "datapackage.json").write_text(json.dumps({"name": "d", "resources": []}))
+    mapping, fmt = isch.load_descriptor(tmp_path)
+    assert fmt == "json"
+    assert mapping["name"] == "d"
+
+
+def test_load_descriptor_unknown_extension_errors(tmp_path: Path) -> None:
+    p = tmp_path / "datapackage.txt"
+    p.write_text("nope")
+    with pytest.raises(isch.InferSchemaError):
+        isch.load_descriptor(p)
+
+
+def test_dump_descriptor_json_is_atomic_and_canonical(tmp_path: Path) -> None:
+    p = tmp_path / "datapackage.json"
+    p.write_text(json.dumps({"b": 2, "a": 1}))
+    isch.dump_descriptor({"b": 2, "a": 1}, p, "json")
+    text = p.read_text()
+    # canonical = sorted keys, 2-space indent, trailing newline
+    assert text == '{\n  "a": 1,\n  "b": 2\n}\n'
+
+
+def test_dump_descriptor_yaml_canonical(tmp_path: Path) -> None:
+    p = tmp_path / "datapackage.yaml"
+    isch.dump_descriptor({"b": 2, "a": 1}, p, "yaml")
+    assert yaml.safe_load(p.read_text()) == {"a": 1, "b": 2}
+    assert p.read_text().startswith("a: 1")  # sorted keys
+
+
+def test_resolve_resource_by_name() -> None:
+    pkg = {"resources": [{"name": "a", "path": "a.csv"}, {"name": "b", "path": "b.csv"}]}
+    res, idx = isch.resolve_resource(pkg, "b")
+    assert idx == 1 and res["path"] == "b.csv"
+
+
+def test_resolve_resource_path_fallback_when_no_name_match() -> None:
+    pkg = {"resources": [{"name": "a", "path": "data/obs.parquet"}]}
+    res, idx = isch.resolve_resource(pkg, "data/obs.parquet")
+    assert idx == 0 and res["name"] == "a"
+
+
+def test_resolve_resource_name_wins_over_path() -> None:
+    # "x" is resource 0's name AND resource 1's path → name match is primary, unambiguous
+    pkg = {"resources": [{"name": "x", "path": "x.csv"}, {"name": "y", "path": "x"}]}
+    res, idx = isch.resolve_resource(pkg, "x")
+    assert idx == 0
+
+
+def test_resolve_resource_duplicate_name_is_ambiguous() -> None:
+    pkg = {"resources": [{"name": "a", "path": "1.csv"}, {"name": "a", "path": "2.csv"}]}
+    with pytest.raises(isch.InferSchemaError, match="ambiguous"):
+        isch.resolve_resource(pkg, "a")
+
+
+def test_resolve_resource_not_found() -> None:
+    pkg = {"resources": [{"name": "a", "path": "a.csv"}]}
+    with pytest.raises(isch.InferSchemaError, match="no resource"):
+        isch.resolve_resource(pkg, "zzz")
+
+
+def test_coarse_type_mapping() -> None:
+    assert isch.coarse_type(pd.Series([1, 2, 3])) == "integer"
+    assert isch.coarse_type(pd.Series([1.0, 2.5])) == "number"
+    assert isch.coarse_type(pd.Series([True, False])) == "boolean"
+    assert isch.coarse_type(pd.Series(pd.to_datetime(["2020-01-01", "2021-06-01"]))) == "datetime"
+    assert isch.coarse_type(pd.Series(["a", "b"])) == "string"
+
+
+def test_coarse_type_all_null_is_string() -> None:
+    assert isch.coarse_type(pd.Series([None, None], dtype="object")) == "string"
+
+
+def test_coarse_type_from_arrow() -> None:
+    import pyarrow as pa
+
+    assert isch.coarse_type_from_arrow(pa.int64()) == "integer"
+    assert isch.coarse_type_from_arrow(pa.float64()) == "number"
+    assert isch.coarse_type_from_arrow(pa.bool_()) == "boolean"
+    assert isch.coarse_type_from_arrow(pa.timestamp("ns")) == "datetime"
+    assert isch.coarse_type_from_arrow(pa.string()) == "string"
+
+
+def test_is_mixed_object_detects_mixed() -> None:
+    assert isch.is_mixed_object(pd.Series([1, "a", 2.0], dtype="object")) is True
+    assert isch.is_mixed_object(pd.Series(["a", "b"], dtype="object")) is False
+
+
+def test_read_table_sample_csv(tmp_path: Path) -> None:
+    p = tmp_path / "t.csv"
+    p.write_text("id,val,flag\nA,1.5,true\nB,2.5,false\n")
+    df = isch.read_table_sample(p, sample=100)
+    assert list(df.columns) == ["id", "val", "flag"]
+    assert len(df) == 2
+
+
+def test_read_table_sample_unsupported(tmp_path: Path) -> None:
+    p = tmp_path / "t.xlsx"
+    p.write_text("x")
+    with pytest.raises(isch.InferSchemaError):
+        isch.read_table_sample(p, sample=10)
+
+
+def test_observed_fields_csv(tmp_path: Path) -> None:
+    p = tmp_path / "t.csv"
+    p.write_text("id,val,mixed\nA,1.5,1\nB,2.5,x\n")
+    by_name = {f.name: f for f in isch.observed_fields(p, sample=100)}
+    assert by_name["id"].type == "string"
+    assert by_name["val"].type == "number"
+    # pandas 3.0 reads CSV string/mixed columns as StringDtype (not object), so
+    # is_mixed_object returns False for CSV-sourced data; mixed detection is only
+    # reliable for DataFrames constructed in-memory (tested in test_infer_fields_from_dataframe).
+    assert by_name["mixed"].type == "string"
+
+
+def test_observed_fields_parquet_from_arrow_schema(tmp_path: Path) -> None:
+    p = tmp_path / "t.parquet"
+    pd.DataFrame({"id": ["A", "B"], "n": [1, 2]}).to_parquet(p)
+    by_name = {f.name: f.type for f in isch.observed_fields(p, sample=100)}
+    assert by_name == {"id": "string", "n": "integer"}
+
+
+def test_observed_fields_parquet_zero_rows_still_infers(tmp_path: Path) -> None:
+    # The core design invariant: parquet names/types come from the Arrow schema metadata,
+    # so an empty file still yields fields (a sampled-dtype approach would lose them).
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    table = pa.table({"id": pa.array([], type=pa.string()), "n": pa.array([], type=pa.int64())})
+    p = tmp_path / "empty.parquet"
+    pq.write_table(table, p)
+    by_name = {f.name: f.type for f in isch.observed_fields(p, sample=100)}
+    assert by_name == {"id": "string", "n": "integer"}
+
+
+def test_infer_fields_from_dataframe(tmp_path: Path) -> None:
+    df = pd.DataFrame({"id": ["A", "B"], "val": [1.5, 2.5], "mixed": [1, "x"]})
+    by_name = {f.name: f for f in isch.infer_fields(df)}
+    assert by_name["val"].type == "number"
+    assert by_name["mixed"].mixed is True
+
+
+def _inf(name: str, typ: str) -> "isch.InferredField":
+    return isch.InferredField(name=name, type=typ)
+
+
+def test_diff_absent_schema_all_add() -> None:
+    diff = isch.diff_schema([], [_inf("a", "integer"), _inf("b", "string")])
+    assert [(d.name, d.action) for d in diff] == [("a", "add"), ("b", "add")]
+
+
+def test_diff_same_type() -> None:
+    diff = isch.diff_schema([{"name": "a", "type": "integer"}], [_inf("a", "integer")])
+    assert diff[0].action == "same" and diff[0].conflict is False
+
+
+def test_diff_fill_untyped_field_is_nonconflict_change() -> None:
+    diff = isch.diff_schema([{"name": "a"}], [_inf("a", "number")])
+    assert diff[0].action == "change" and diff[0].conflict is False
+    assert diff[0].old_type is None and diff[0].new_type == "number"
+
+
+def test_diff_any_typed_field_is_nonconflict_change() -> None:
+    diff = isch.diff_schema([{"name": "a", "type": "any"}], [_inf("a", "string")])
+    assert diff[0].action == "change" and diff[0].conflict is False
+
+
+def test_diff_type_disagreement_is_conflict() -> None:
+    diff = isch.diff_schema([{"name": "a", "type": "string"}], [_inf("a", "integer")])
+    assert diff[0].action == "change" and diff[0].conflict is True
+
+
+def test_diff_field_absent_from_file_is_remove() -> None:
+    diff = isch.diff_schema([{"name": "gone", "type": "string"}], [])
+    assert diff[0].action == "remove"
+
+
+def test_report_required_and_identifier() -> None:
+    df = pd.DataFrame({"id": ["A", "B", "C"], "g": ["x", "x", "y"]})
+    rep = isch.build_report(df, isch.infer_fields(df))
+    kinds = {(r.kind, r.column) for r in rep.recommendations}
+    assert ("required", "id") in kinds       # no nulls observed
+    assert ("identifier", "id") in kinds     # unique + non-null + id-type
+    assert ("enum", "g") in kinds            # low cardinality
+
+
+def test_report_bound_for_numeric() -> None:
+    df = pd.DataFrame({"x": [0.0, 1.0, 2.0]})
+    rep = isch.build_report(df, isch.infer_fields(df))
+    assert any(r.kind == "bound" and r.column == "x" for r in rep.recommendations)
+
+
+def test_report_warns_mixed_and_nullable() -> None:
+    df = pd.DataFrame({"m": [1, "a", 2.0], "n": ["p", None, "q"]})
+    rep = isch.build_report(df, isch.infer_fields(df))
+    cols = {(w.column) for w in rep.warnings}
+    assert "m" in cols  # mixed object
+    assert "n" in cols  # nullable
+
+
+def test_report_missing_sentinel_recommendation() -> None:
+    df = pd.DataFrame({"v": ["1", "NA", "NA", "3"]})
+    rep = isch.build_report(df, isch.infer_fields(df))
+    assert any(r.kind == "missing_sentinel" and r.column == "v" for r in rep.recommendations)
+
+
+def test_report_records_sample_size() -> None:
+    df = pd.DataFrame({"a": [1, 2]})
+    rep = isch.build_report(df, isch.infer_fields(df))
+    assert rep.sample_rows == 2
+
+
+def _write_pkg(tmp_path: Path, pkg: dict, table_name: str, table_text: str) -> Path:
+    (tmp_path / table_name).write_text(table_text)
+    dp = tmp_path / "datapackage.json"
+    dp.write_text(json.dumps(pkg))
+    return dp
+
+
+def test_infer_schema_result_end_to_end(tmp_path: Path) -> None:
+    pkg = {"name": "p", "resources": [{"name": "obs", "path": "obs.csv"}]}
+    dp = _write_pkg(tmp_path, pkg, "obs.csv", "id,val\nA,1.5\nB,2.5\n")
+    result = isch.infer_schema_result(dp, "obs", sample=100)
+    assert result.fmt == "json"
+    assert result.res_index == 0
+    assert {d.name for d in result.diff} == {"id", "val"}
+    assert all(d.action == "add" for d in result.diff)
+    assert result.report.sample_rows == 2
+    assert result.descriptor_path == dp
+
+
+def test_render_diff_rows_shape(tmp_path: Path) -> None:
+    pkg = {"name": "p", "resources": [{"name": "obs", "path": "obs.csv"}]}
+    dp = _write_pkg(tmp_path, pkg, "obs.csv", "id\nA\n")
+    result = isch.infer_schema_result(dp, "obs", sample=100)
+    rows = isch.render_diff_rows(result.diff)
+    assert rows[0]["field"] == "id"
+    assert rows[0]["action"] == "add"
+
+
+def test_report_to_yaml_is_labelled(tmp_path: Path) -> None:
+    pkg = {"name": "p", "resources": [{"name": "obs", "path": "obs.csv"}]}
+    dp = _write_pkg(tmp_path, pkg, "obs.csv", "id\nA\n")
+    result = isch.infer_schema_result(dp, "obs", sample=100)
+    text = isch.report_to_yaml(result.report)
+    obj = yaml.safe_load(text)
+    assert "not emitted as invariant" in obj["disclaimer"].lower()
+
+
+def test_result_to_json_roundtrips(tmp_path: Path) -> None:
+    pkg = {"name": "p", "resources": [{"name": "obs", "path": "obs.csv"}]}
+    dp = _write_pkg(tmp_path, pkg, "obs.csv", "id,val\nA,1\n")
+    result = isch.infer_schema_result(dp, "obs", sample=100)
+    obj = json.loads(isch.result_to_json(result))
+    assert {"patch", "diff", "report"} <= set(obj)
+    assert obj["patch"]["schema"]["fields"]  # proposed names+types only
+
+
+def _result(tmp_path: Path, pkg: dict, table: str = "obs.csv",
+            text: str = "id,val\nA,1\nB,2\n") -> "isch.InferResult":
+    dp = _write_pkg(tmp_path, pkg, table, text)
+    return isch.infer_schema_result(dp, pkg["resources"][0]["name"], sample=100)
+
+
+def test_write_patch_adds_fields_to_schemaless(tmp_path: Path) -> None:
+    pkg = {"name": "p", "resources": [{"name": "obs", "path": "obs.csv"}]}
+    result = _result(tmp_path, pkg)
+    isch.write_patch(result)
+    written = json.loads(result.descriptor_path.read_text())
+    fields = written["resources"][0]["schema"]["fields"]
+    assert {f["name"] for f in fields} == {"id", "val"}
+    assert {f["type"] for f in fields} == {"string", "integer"}
+
+
+def test_write_patch_preserves_field_and_table_metadata(tmp_path: Path) -> None:
+    # Field-level metadata that is Spec-1-valid on a *string* field: constraints.required,
+    # a `description`, and an unmodelled `extra` (extra="allow"). (qa.low_variance is NOT
+    # valid on a string field — Spec 1 rejects it — so it cannot be used here.)
+    pkg = {"name": "p", "resources": [{
+        "name": "obs", "path": "obs.csv",
+        "schema": {
+            "fields": [{"name": "id", "type": "string", "constraints": {"required": True},
+                        "description": "the row id", "extra": {"owner": "me"}}],
+            "primaryKey": "id",
+            "missingValues": ["", "NA"],
+        },
+    }]}
+    result = _result(tmp_path, pkg)  # file has id,val → val is new, id unchanged
+    isch.write_patch(result)
+    schema = json.loads(result.descriptor_path.read_text())["resources"][0]["schema"]
+    id_field = next(f for f in schema["fields"] if f["name"] == "id")
+    assert id_field["constraints"] == {"required": True}   # preserved
+    assert id_field["description"] == "the row id"          # field-level metadata preserved
+    assert id_field["extra"] == {"owner": "me"}             # field-level extra preserved
+    assert schema["primaryKey"] == "id"                     # table-level preserved
+    assert schema["missingValues"] == ["", "NA"]
+    assert any(f["name"] == "val" for f in schema["fields"])  # new field added
+
+
+def test_write_patch_refuses_type_conflict(tmp_path: Path) -> None:
+    pkg = {"name": "p", "resources": [{
+        "name": "obs", "path": "obs.csv",
+        "schema": {"fields": [{"name": "id", "type": "string"}, {"name": "val", "type": "string"}]},
+    }]}
+    # file: val is integer → conflicts with authored type "string"
+    result = _result(tmp_path, pkg)
+    before = result.descriptor_path.read_text()
+    with pytest.raises(isch.InferSchemaError, match="conflict"):
+        isch.write_patch(result)
+    assert result.descriptor_path.read_text() == before  # wrote nothing
+
+
+def test_write_patch_yaml_roundtrips(tmp_path: Path) -> None:
+    (tmp_path / "obs.csv").write_text("id,val\nA,1\n")
+    dp = tmp_path / "datapackage.yaml"
+    dp.write_text("name: p\nresources:\n- name: obs\n  path: obs.csv\n")
+    result = isch.infer_schema_result(dp, "obs", sample=100)
+    isch.write_patch(result)
+    written = yaml.safe_load(dp.read_text())
+    assert {f["name"] for f in written["resources"][0]["schema"]["fields"]} == {"id", "val"}
+
+
+def test_write_patch_validates_external_foreign_key(tmp_path: Path) -> None:
+    # resource B has an FK into A; writing A's inferred schema must keep the package valid
+    (tmp_path / "a.csv").write_text("aid\nX\nY\n")
+    (tmp_path / "b.csv").write_text("bid,aref\n1,X\n")
+    pkg = {"name": "p", "resources": [
+        {"name": "a", "path": "a.csv", "schema": {"fields": [{"name": "aid", "type": "string"}]}},
+        {"name": "b", "path": "b.csv", "schema": {
+            "fields": [{"name": "bid", "type": "string"}, {"name": "aref", "type": "string"}],
+            "foreignKeys": [{"fields": "aref", "reference": {"resource": "a", "fields": "aid"}}],
+        }},
+    ]}
+    dp = tmp_path / "datapackage.json"
+    dp.write_text(json.dumps(pkg))
+    result = isch.infer_schema_result(dp, "a", sample=100)
+    isch.write_patch(result)  # must NOT raise — FK target field "aid" still present
+    assert json.loads(dp.read_text())["resources"][0]["schema"]["fields"]
