@@ -63,6 +63,8 @@ class PhysioNetAdapter:
         resp = self._client.get(f"/projects/{dataset_id}/versions/")
         resp.raise_for_status()
         versions = resp.json()
+        if not versions:
+            raise ValueError(f"No published versions for PhysioNet project: {dataset_id!r}")
         latest = next((v for v in versions if v.get("is_latest_version")), versions[-1])
         return dataset_id, latest["version"]
 

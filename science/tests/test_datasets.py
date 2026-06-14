@@ -883,6 +883,15 @@ class TestPhysioNetAdapter:
         assert csv.format == "csv"
         assert csv.size_bytes is None
 
+    def test_resolve_version_empty_list_raises_valueerror(self) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = []
+        adapter = PhysioNetAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            with pytest.raises(ValueError):
+                adapter.metadata("draft-only-project")
+
     def test_download_gated_raises_permission_error(self) -> None:
         adapter = PhysioNetAdapter()
         file_info = FileInfo(filename="x.dat", url="https://physionet.org/files/secret/1.0.0/x.dat")
