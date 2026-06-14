@@ -50,6 +50,7 @@ CANONICAL_CHECK_MODULES = (
     "identity_context",
     "dataset_taxonomy",
     "dataset_metadata",
+    "dataset_lineage",
     "dataset_promotion_contract",
     "orphan_datapackage_owner",
     "identity_collision",
