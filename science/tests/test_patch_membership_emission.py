@@ -77,6 +77,36 @@ def test_emit_patch_membership_context_and_authoritative_nodes() -> None:
     assert (node, SCI_NS.policyVersion, Literal("local-closure-v1")) in graph
     assert (node, SCI_NS.buildId, Literal("build-1")) in graph
     assert (node, SCI_NS.derivationDepth, Literal(0, datatype=XSD.integer)) in graph
+    # A seed record carries no derivation predicate, so the conditional triple must be absent.
+    assert list(graph.objects(node, SCI_NS.derivationPredicate)) == []
+
+
+def test_emit_membership_includes_derivation_predicate_when_present() -> None:
+    ds = Dataset()
+    patch = _patch()
+    patch_uri = _uri("patch-definition:p1")
+    member_uri = _uri("proposition:p1")
+    records = [
+        MembershipRecord(
+            patch=patch_uri,
+            patch_id=patch.canonical_id,
+            member=member_uri,
+            member_role="member",
+            member_kind="proposition",
+            derivation_reason="closure",
+            depth=1,
+            policy_version="local-closure-v1",
+            derivation_predicate=SCI_NS.bearsOn,
+        )
+    ]
+
+    emit_patch_memberships(ds, [patch], records)
+    graph = ds.graph(patch_uri)
+    node = next(iter(graph.subjects(RDF.type, SCI_NS.PatchMembership)))
+
+    assert (node, SCI_NS.derivationPredicate, SCI_NS.bearsOn) in graph
+    # build_id was not set, so the optional buildId triple must be absent.
+    assert list(graph.objects(node, SCI_NS.buildId)) == []
 
 
 def test_emit_patch_metadata_includes_seeds_and_exclusions() -> None:
@@ -107,4 +137,18 @@ def test_validate_patch_membership_rejects_orphan_convenience_edges() -> None:
 
     assert errors == [
         "http://example.org/project/patch-definition/p1 has sci:hasMember http://example.org/project/proposition/p1 without a sci:PatchMembership node"
+    ]
+
+
+def test_validate_patch_membership_rejects_orphan_in_patch_edge() -> None:
+    ds = Dataset()
+    patch_uri = _uri("patch-definition:p1")
+    member_uri = _uri("proposition:p1")
+    graph = ds.graph(patch_uri)
+    graph.add((member_uri, SCI_NS.inPatch, patch_uri))
+
+    errors = validate_patch_membership_convenience(ds)
+
+    assert errors == [
+        "http://example.org/project/proposition/p1 has sci:inPatch http://example.org/project/patch-definition/p1 without a sci:PatchMembership node"
     ]

@@ -256,20 +256,20 @@ def emit_patch_memberships(
         records_by_patch.setdefault(record.patch_id, []).append(record)
 
     for definition in sorted(patch_definitions, key=lambda item: item.canonical_id):
-        patch_uri = entity_uri_for_ref(definition.canonical_id)
+        patch_uri = _entity_uri_for_ref(definition.canonical_id)
         graph = dataset.graph(patch_uri)
         graph.add((patch_uri, RDF.type, SCI_NS.EpistemicPatch))
-        graph.add((patch_uri, SCI_NS.focalEntity, entity_uri_for_ref(definition.focal)))
+        graph.add((patch_uri, SCI_NS.focalEntity, _entity_uri_for_ref(definition.focal)))
         graph.add((patch_uri, SCI_NS.neighborhoodPolicy, RDFLiteral(definition.neighborhood_policy.name)))
         graph.add((patch_uri, SCI_NS.policyVersion, RDFLiteral(definition.neighborhood_policy.version)))
         graph.add((patch_uri, SCI_NS.patchScope, RDFLiteral("local")))
         for seed in sorted(definition.seeds):
-            graph.add((patch_uri, SCI_NS.patchSeed, entity_uri_for_ref(seed)))
+            graph.add((patch_uri, SCI_NS.patchSeed, _entity_uri_for_ref(seed)))
         for exclude in sorted(definition.excludes, key=lambda item: item.ref):
             exclusion = _exclusion_uri(definition.canonical_id, exclude.ref)
             graph.add((exclusion, RDF.type, SCI_NS.PatchExclusion))
             graph.add((exclusion, SCI_NS.patch, patch_uri))
-            graph.add((exclusion, SCI_NS.excludedEntity, entity_uri_for_ref(exclude.ref)))
+            graph.add((exclusion, SCI_NS.excludedEntity, _entity_uri_for_ref(exclude.ref)))
             graph.add((exclusion, SCI_NS.excludeReason, RDFLiteral(exclude.reason)))
 
         for record in sorted(records_by_patch.get(definition.canonical_id, []), key=lambda item: str(item.member)):
