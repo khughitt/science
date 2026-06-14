@@ -1,8 +1,9 @@
 # Sub-article annotation for `science` papers
 
 - **Status:** Design approved 2026-06-14; spec-review findings resolved 2026-06-14
-  (offset basis, identifier→entity resolver, relation targets, source/dedupe vocab,
-  annotationType registration) → ready for implementation plan
+  (round 1: offset basis, identifier→entity resolver, relation targets, source/dedupe
+  vocab, annotationType registration; round 2: JSON body encoding, content_hash
+  semantics, character-offset/NFC) → ready for implementation plan
 - **Scope:** Extend `science`'s existing W3C annotation system to capture rich,
   semantic, sub-article (word / phrase / sentence) annotations of research
   articles, seeded by PubTator3 and extended by an agent.
@@ -99,21 +100,25 @@ frontmatter and `##` headings included (`annotation/verify.py::_load_source`).
 PubTator3 offsets are therefore **not** directly usable; they must be converted
 to quotes through an explicit map. Policy:
 
-- **Offset basis.** PubTator3 BioC character offsets index into the BioC document
-  text — the concatenation of its passage texts. `.source.md` MUST persist each
-  passage's text **verbatim** (the bytes PubTator annotated), so a deterministic
-  map exists from a BioC `(passage, local_offset, length)` to a byte range in the
-  `.source.md` **body**.
+- **Offset basis (character, not byte).** PubTator3 BioC offsets are **character**
+  offsets into the BioC document text (the concatenation of its passage texts). The
+  selector code operates on Python `str` (character indices), so the map is kept in
+  **character offsets end-to-end** — there is no byte-index layer. The API response
+  is UTF-8 decoded to `str`, **Unicode-normalized to NFC once**, and that single
+  normalized form is what we both persist and index; PubTator's offsets are aligned
+  to it (re-normalize the API text identically before mapping). A deterministic map
+  then exists from a BioC `(passage, local_char_offset, length)` to a character
+  range in the `.source.md` **body**.
 - **Anchor region.** Quotes, prefixes, and suffixes are sliced **only from the
   persisted passage body**, never from YAML frontmatter or `##` heading lines, and
   `prefix`/`suffix` windows MUST NOT cross a heading or passage boundary. This
   keeps a selector from re-anchoring into a heading and guarantees the `exact`
   text the verifier searches for is present in the body.
 - **Provenance for the map.** `.source.md` frontmatter records, per persisted
-  passage, its source offset base (and section), so the seeder reconstructs the
-  offset→byte map on re-runs without re-querying. The seeder computes
-  `exact`/`prefix`/`suffix` by slicing the persisted body at the mapped range; it
-  never trusts a raw offset against the rendered file.
+  passage, its source character-offset base (and section), so the seeder
+  reconstructs the offset→character map on re-runs without re-querying. The seeder
+  computes `exact`/`prefix`/`suffix` by slicing the persisted body (a `str`) at the
+  mapped character range; it never trusts a raw offset against the rendered file.
 - **Testing.** The offset→`TextQuoteSelector` conversion test asserts that every
   seeded selector re-resolves against the rendered `.source.md` via the standard
   verifier (i.e. the round-trip through frontmatter+headings holds), not merely
@@ -145,9 +150,10 @@ to quotes through an explicit map. Policy:
 
 3. **Agent extraction skill** (`paper-annotate`). Reads `.source.md` + existing
    PubTator annotations; extracts **propositions / questions / hypotheses** and
-   **metaphors / analogies** as span annotations with structured bodies.
-   `source = "llm-annot:<model>"`, content-hashed → idempotent (skips unchanged
-   text). May extend or compose with the existing `paper-researcher` agent.
+   **metaphors / analogies** as span annotations with JSON bodies (see *Body
+   encoding*). `source = "llm-annot:<model>"`; idempotent via per-annotation
+   `content_hash` + the document-level `text_sha256` short-circuit (see *Dedup*).
+   May extend or compose with the existing `paper-researcher` agent.
 
 4. **Promotion path** (decision #4 — deliberate, last). Review statement
    annotations and link/dedupe them into epistemic entities.
@@ -181,6 +187,31 @@ corrected to point here). If a runtime validation set for annotation types is
 introduced, the new values are added there too; until then the conventions file is
 the authority.
 
+### Body encoding
+
+The model serializes exactly two body shapes (`annotation/model.py`,
+`annotation/io.py::_emit_body`): `IriBody` → `oa:hasBody <iri>`, and
+`TextualBody(value, format)` → a blank node with `dc:format` + `rdf:value`. There
+are **no structured RDF predicates** for bodies, and `bodies` is a tuple (an
+annotation may carry several). The "structured bodies" this spec needs are encoded
+within that existing machinery — **no model change**:
+
+- **Entity mentions.** `IriBody(<concept IRI>)` for the normalized concept ID, plus
+  an optional `TextualBody(value=<biolink class>)`.
+- **Relations / statements / metaphors–analogies.** A single
+  `TextualBody(value=<json>, format="application/json")` carrying a per-type JSON
+  object (the `format` field already drives `dc:format`, so this round-trips today):
+  - *relation:* `{"subject": <id>, "predicate": <curie>, "object": <id>, "predicate_source": "biolink"|"sci"}`
+  - *statement:* `{"kind": "proposition"|"question"|"hypothesis", "stance": ..., "subject"?: ..., "predicate"?: ..., "object"?: ...}`
+  - *metaphor/analogy:* `{"source_domain": ..., "target_domain": ..., "mapping": ..., "cue"?: ...}`
+- The per-type JSON schemas live alongside the token vocabulary in
+  `docs/conventions/annotation-tokens.md` and are validated at emit time.
+- **Alternative (deferred).** Promoting these JSON fields to first-class structured
+  RDF predicates (queryable in the graph without JSON parsing) would extend the
+  annotation model; deferred to a later iteration (see *Out of scope*) — the
+  promotion phase (#4) is what surfaces statement content into the epistemic graph
+  as real entities, so graph-queryability of the raw body is not needed first.
+
 ## Dedup & promotion (decision #4)
 
 - **Within an article.** Re-runs dedupe on the existing key
@@ -196,10 +227,23 @@ the authority.
   - **`llm-annot:<model>`** — `<model>` is the exact model id (e.g.
     `claude-opus-4-8`). `match_text` = the extracted statement/figure's normalized
     text.
-  - **Hash-required.** Both prefixes JOIN `HASH_REQUIRED_SOURCE_PREFIXES`
-    (`annotation/model.py`) so re-audit caching keys on the `.source.md`
-    `text_sha256`: a re-run over unchanged source text is skipped. (This is what
-    makes both the deterministic seeder and the agent skill idempotent.)
+  - **Hash-required / re-audit cache.** Both prefixes JOIN
+    `HASH_REQUIRED_SOURCE_PREFIXES` (`annotation/model.py`), meaning their
+    annotations carry a `content_hash` and participate in the `sci:AuditLedger`.
+    `content_hash` keeps its **existing per-annotation semantics** —
+    `content_hash(selector.exact, source_version)` (`annotation/hash.py`), assigned
+    in `merge_planned` as `content_hash(p.target.selector.exact, p.source_name)`
+    (`annotation/audit.py`); **this spec does not change that function.** Here
+    `source_version` is the source identity (`pubtator3:<release>` /
+    `llm-annot:<model>`), so a re-run at the same release/model re-derives identical
+    hashes and the ledger skips already-audited annotations — per-annotation
+    idempotency, no document hash involved.
+  - **Document-level short-circuit (separate, new).** The `.source.md`
+    `text_sha256` is **provenance plus an explicit new pre-pass gate**: before
+    re-querying/re-extracting, compare the current `text_sha256` to the value
+    recorded at last run and skip the whole document when unchanged. This is a new
+    document-level check the seeder/agent owns — it is NOT the audit-ledger key and
+    does NOT feed `content_hash`.
 - **To epistemic entities.** Promotion matches a candidate statement against
   existing propositions / questions / hypotheses (lexical + embedding similarity,
   then agent judgment) → either **attach as new evidence** to an existing entity
@@ -227,13 +271,24 @@ Each phase is independently shippable.
   two entity-mention annotation IRIs rather than an evidence span) — requires
   extending the annotation model's `SpecificResource`, which currently mandates a
   `TextQuoteSelector`.
+- **First-class structured RDF bodies** — relation/statement/metaphor content is
+  encoded as JSON in a `TextualBody` for this iteration (see *Body encoding*);
+  promoting those fields to native RDF predicates would extend the annotation model.
 - **Article-level rollups** (key phrases derived from sub-article annotations).
 - The **at-scale `lit-annot` pipeline** project (millions of articles).
 
 ## Testing
 
-- Offset → `TextQuoteSelector` conversion (PubTator offsets vs. persisted text).
+- Offset → `TextQuoteSelector` conversion: every seeded selector **re-resolves via
+  the standard verifier** against the rendered `.source.md` (round-trip through
+  frontmatter + headings), including NFC-normalized text with non-ASCII characters
+  (character-offset alignment, no byte drift).
 - PubTator3 BioC response parsing (small real fixture).
-- Idempotent re-annotation (content-hash skip).
+- JSON body round-trip: `TextualBody(format="application/json")` serialize → parse →
+  equal, and per-type schema validation rejects malformed bodies.
+- Idempotency at both layers: per-annotation `content_hash` skip on re-run at the
+  same `source_version`, and the document-level `text_sha256` short-circuit skipping
+  an unchanged `.source.md` before any API/agent call.
+- Identifier → paper-entity resolution: no-match and multi-match both fail loud.
 - Sidecar TriG round-trip (serialize → parse → equal).
 - Promotion matching (candidate vs. existing epistemic entities).
