@@ -30,6 +30,7 @@ from science_tool.commons.geneset_resources import (
 )
 from science_tool.graph.dataset_usage import (
     add_usage_record_to_graph,
+    project_entity_uri,
     usage_records_for_entity,
     usage_records_for_geneset_rows,
 )
@@ -128,6 +129,7 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
 
     _add_produced_by_edges(sources, entity_index=entity_index, knowledge=knowledge)
     _add_dataset_usage_edges(sources, resolver=resolver, provenance=provenance)
+    _add_sub_cohort_edges(sources, resolver=resolver, knowledge=knowledge)
     _add_dataset_resource_edges(sources, datasets=datasets)
 
     kind_class = _classify_entities(sources)
@@ -703,6 +705,16 @@ def _add_produced_by_edges(
             if target is None or target.kind != "code-file":
                 continue
             knowledge.add((_entity_uri(entity.canonical_id), SCI_NS.producedBy, _entity_uri(target.canonical_id)))
+
+
+def _add_sub_cohort_edges(sources: ProjectSources, *, resolver: ReferenceResolver, knowledge) -> None:
+    """Materialize sci:subCohortOf edges from dataset.parent_dataset into the knowledge graph."""
+    for child_id, parent_ref in sources.dataset_parents.items():
+        if not parent_ref:
+            continue
+        child = project_entity_uri(child_id)
+        parent = project_entity_uri(_resolve_dataset_usage_ref(parent_ref, resolver))
+        knowledge.add((child, SCI_NS.subCohortOf, parent))
 
 
 def _add_dataset_usage_edges(sources: ProjectSources, *, resolver: ReferenceResolver, provenance) -> None:

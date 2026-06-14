@@ -201,6 +201,9 @@ class ProjectSources(BaseModel):
     # graph audit accepts `<peer>:<kind>:<slug>` addresses to these scopes (design
     # §B3a; federation resolution deferred to t068) instead of flagging unresolved.
     peer_ids: frozenset[str] = Field(default_factory=frozenset)
+    # §B6: child canonical_id -> parent_dataset ref for sci:subCohortOf materialization.
+    # Built from the final entities list (after commons merge) immediately before return.
+    dataset_parents: dict[str, str] = Field(default_factory=dict)
 
 
 SourceBinding = BindingSource
@@ -673,6 +676,12 @@ def load_project_sources(
 
         entities.sort(key=lambda e: e.canonical_id)
 
+    dataset_parents = {
+        e.canonical_id: e.parent_dataset
+        for e in entities
+        if e.kind == "dataset" and getattr(e, "parent_dataset", "")
+    }
+
     return ProjectSources(
         project_name=str(config["name"]),
         project_root=str(project_root),
@@ -692,6 +701,7 @@ def load_project_sources(
         aggregate_rows=aggregate_rows,
         freshness_enabled=freshness_enabled,
         peer_ids=frozenset(config.get("peer_ids") or []),  # type: ignore[arg-type]
+        dataset_parents=dataset_parents,
     )
 
 

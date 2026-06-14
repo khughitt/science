@@ -263,6 +263,37 @@ def test_usage_node_uri_is_deterministic_for_record_payload() -> None:
     assert usage_node_uri(record) != usage_node_uri(changed_role)
 
 
+def test_parent_dataset_materializes_sub_cohort_of(tmp_path):
+    from science_tool.graph.dataset_usage import project_entity_uri
+    from science_tool.graph.materialize import materialize_graph
+
+    _write_project(tmp_path)
+    _write_dataset(
+        tmp_path / "data" / "uk-biobank" / "datapackage.yaml",
+        "uk-biobank",
+        "origin: external\n"
+        "access:\n"
+        "  level: controlled\n"
+        "  verified: true\n",
+    )
+    _write_dataset(
+        tmp_path / "data" / "ukb-ppp" / "datapackage.yaml",
+        "ukb-ppp",
+        "origin: external\n"
+        "access:\n"
+        "  level: controlled\n"
+        "  verified: true\n"
+        "parent_dataset: dataset:uk-biobank\n",
+    )
+
+    trig = materialize_graph(tmp_path)
+    knowledge = _load_trig(trig).graph(PROJECT_NS["graph/knowledge"])
+
+    child_uri = project_entity_uri("dataset:ukb-ppp")
+    parent_uri = project_entity_uri("dataset:uk-biobank")
+    assert (child_uri, SCI_NS.subCohortOf, parent_uri) in knowledge
+
+
 def _write_project(root):
     root.mkdir(parents=True, exist_ok=True)
     (root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
