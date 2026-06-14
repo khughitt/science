@@ -135,6 +135,7 @@ def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
             SCI_NS.inquiryType,
             SCI_NS.projectStatus,
             SCI_NS.target,
+            SCI_NS.focalEntity,
             SCI_NS.boundaryRole,
             SCI_NS.treatment,
             SCI_NS.outcome,

@@ -1,10 +1,19 @@
-"""CLI tests for inquiry subcommands."""
+"""CLI tests for inquiry subcommands.
+
+The graph-mutating ``inquiry add-*`` / ``set-estimand`` subcommands are retired;
+inquiry graphs are now produced by the pure compiler
+``science_tool.graph.inquiry_compile.emit_inquiry_views``. Reader/behaviour tests
+build their inquiry graph through the ``build_inquiry_graph`` conftest helper (the
+compile path) and keep their original reader assertions. Tests whose point *was*
+the mutation now assert the retirement error.
+"""
 
 import json
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from conftest import build_inquiry_graph
 from rdflib import Literal, URIRef
 from rdflib.namespace import RDF, SKOS
 
@@ -44,7 +53,8 @@ def graph_path(tmp_path: Path) -> Path:
 
 
 class TestInquiryInit:
-    def test_init(self, runner: CliRunner, graph_path: Path) -> None:
+    def test_init_scaffolds_investigation_source(self, runner: CliRunner, tmp_path: Path) -> None:
+        """`inquiry init` now scaffolds a patch-definition source file (no graph)."""
         result = runner.invoke(
             main,
             [
@@ -55,31 +65,104 @@ class TestInquiryInit:
                 "Signal peptide geometry",
                 "--target",
                 "hypothesis:h01",
-                "--path",
-                str(graph_path),
+                "--profile",
+                "investigation",
+                "--project-root",
+                str(tmp_path),
             ],
         )
-        assert result.exit_code == 0
-        assert "inquiry/sp_geometry" in result.output
+        assert result.exit_code == 0, result.output
+        dest = tmp_path / "entities" / "patches" / "sp-geometry.md"
+        assert dest.exists()
+        text = dest.read_text()
+        assert "patch_type: inquiry" in text
+        assert "profile: investigation" in text
+        assert "focal: hypothesis:h01" in text
+        # The scaffolder writes a source file, never the graph.
+        assert not (tmp_path / "knowledge" / "graph.trig").exists()
 
-    def test_init_duplicate_fails(self, runner: CliRunner, graph_path: Path) -> None:
-        p = str(graph_path)
-        runner.invoke(main, ["inquiry", "init", "dup", "--label", "A", "--target", "hypothesis:h01", "--path", p])
-        result = runner.invoke(
-            main, ["inquiry", "init", "dup", "--label", "B", "--target", "hypothesis:h01", "--path", p]
+    def test_init_causal_requires_estimand(self, runner: CliRunner, tmp_path: Path) -> None:
+        missing = runner.invoke(
+            main,
+            [
+                "inquiry",
+                "init",
+                "dag",
+                "--label",
+                "D",
+                "--target",
+                "hypothesis:h01",
+                "--profile",
+                "causal",
+                "--project-root",
+                str(tmp_path),
+            ],
         )
+        assert missing.exit_code != 0
+        assert "treatment" in missing.output.lower()
+
+        ok = runner.invoke(
+            main,
+            [
+                "inquiry",
+                "init",
+                "dag",
+                "--label",
+                "D",
+                "--target",
+                "hypothesis:h01",
+                "--profile",
+                "causal",
+                "--treatment",
+                "concept:x",
+                "--outcome",
+                "concept:y",
+                "--project-root",
+                str(tmp_path),
+            ],
+        )
+        assert ok.exit_code == 0, ok.output
+        text = (tmp_path / "entities" / "patches" / "dag.md").read_text()
+        assert "profile: causal" in text
+        assert "treatment: concept:x" in text
+        assert "outcome: concept:y" in text
+
+    def test_init_duplicate_fails(self, runner: CliRunner, tmp_path: Path) -> None:
+        args = [
+            "inquiry",
+            "init",
+            "dup",
+            "--label",
+            "A",
+            "--target",
+            "hypothesis:h01",
+            "--profile",
+            "investigation",
+            "--project-root",
+            str(tmp_path),
+        ]
+        assert runner.invoke(main, args).exit_code == 0
+        assert runner.invoke(main, args).exit_code != 0
+
+
+class TestInquiryMutatorsRetired:
+    """The graph-mutating inquiry subcommands are retired; they must error."""
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ["inquiry", "add-node", "test", "concept:input_data", "--role", "BoundaryIn"],
+            ["inquiry", "add-node", "test", "concept:middle_step"],
+            ["inquiry", "add-edge", "test", "concept:a", "sci:feedsInto", "concept:b"],
+            ["inquiry", "add-assumption", "test", "Mean pooling sufficient", "--source", "paper:doi_test"],
+            ["inquiry", "add-transformation", "test", "Extract sequences", "--tool", "BioPython"],
+            ["inquiry", "set-estimand", "test", "--treatment", "concept:x", "--outcome", "concept:y"],
+        ],
+    )
+    def test_mutator_is_retired(self, runner: CliRunner, graph_path: Path, args: list[str]) -> None:
+        result = runner.invoke(main, [*args, "--path", str(graph_path)])
         assert result.exit_code != 0
-
-
-class TestInquiryAddNode:
-    def test_add_boundary_in(self, runner: CliRunner, graph_path: Path) -> None:
-        p = str(graph_path)
-        runner.invoke(main, ["inquiry", "init", "test", "--label", "T", "--target", "hypothesis:h01", "--path", p])
-        runner.invoke(main, ["graph", "add", "concept", "input_data", "--path", p])
-        result = runner.invoke(
-            main, ["inquiry", "add-node", "test", "concept:input_data", "--role", "BoundaryIn", "--path", p]
-        )
-        assert result.exit_code == 0
+        assert "retired" in result.output.lower()
 
 
 class TestInquiryAddEdge:
@@ -90,19 +173,10 @@ class TestInquiryAddEdge:
             assert "Supporting proposition reference" in result.output
             assert "relation claim" not in result.output
 
-    def test_add_edge(self, runner: CliRunner, graph_path: Path) -> None:
+    def test_compiled_edge_with_relation_claim_attaches_claim_to_edge(
+        self, runner: CliRunner, graph_path: Path
+    ) -> None:
         p = str(graph_path)
-        runner.invoke(main, ["inquiry", "init", "test", "--label", "T", "--target", "hypothesis:h01", "--path", p])
-        runner.invoke(main, ["graph", "add", "concept", "a", "--path", p])
-        runner.invoke(main, ["graph", "add", "concept", "b", "--path", p])
-        result = runner.invoke(
-            main, ["inquiry", "add-edge", "test", "concept:a", "sci:feedsInto", "concept:b", "--path", p]
-        )
-        assert result.exit_code == 0
-
-    def test_add_edge_with_relation_claim_attaches_claim_to_edge(self, runner: CliRunner, graph_path: Path) -> None:
-        p = str(graph_path)
-        runner.invoke(main, ["inquiry", "init", "test", "--label", "T", "--target", "hypothesis:h01", "--path", p])
         runner.invoke(main, ["graph", "add", "concept", "a", "--path", p])
         runner.invoke(main, ["graph", "add", "concept", "b", "--path", p])
         runner.invoke(
@@ -127,25 +201,21 @@ class TestInquiryAddEdge:
             ],
         )
 
-        result = runner.invoke(
-            main,
-            [
-                "inquiry",
-                "add-edge",
-                "test",
-                "concept:a",
-                "sci:feedsInto",
-                "concept:b",
-                "--claim",
-                "proposition:a_feeds_into_b",
-                "--path",
-                p,
+        build_inquiry_graph(
+            graph_path,
+            slug="test",
+            flow_edges=[
+                {
+                    "subject": "concept:a",
+                    "predicate": "feedsInto",
+                    "object": "concept:b",
+                    "claim_refs": ["proposition:a_feeds_into_b"],
+                }
             ],
         )
-        assert result.exit_code == 0
 
         show_result = runner.invoke(main, ["inquiry", "show", "test", "--format", "json", "--path", p])
-        assert show_result.exit_code == 0
+        assert show_result.exit_code == 0, show_result.output
         info = json.loads(show_result.output)
         assert info["edges"] == [
             {
@@ -164,39 +234,6 @@ class TestInquiryAddEdge:
         assert (statement_uri, SCI_NS.validatedBy, PROJECT_NS["proposition/a_feeds_into_b"]) not in inquiry_graph
 
 
-class TestInquiryAddNodeInterior:
-    def test_add_interior_node(self, runner: CliRunner, graph_path: Path) -> None:
-        p = str(graph_path)
-        runner.invoke(main, ["inquiry", "init", "test", "--label", "T", "--target", "hypothesis:h01", "--path", p])
-        runner.invoke(main, ["graph", "add", "concept", "middle_step", "--path", p])
-        result = runner.invoke(main, ["inquiry", "add-node", "test", "concept:middle_step", "--path", p])
-        assert result.exit_code == 0
-        assert "interior" in result.output
-
-
-class TestInquiryAddAssumption:
-    def test_add_assumption(self, runner: CliRunner, graph_path: Path) -> None:
-        p = str(graph_path)
-        runner.invoke(main, ["inquiry", "init", "test", "--label", "T", "--target", "hypothesis:h01", "--path", p])
-        result = runner.invoke(
-            main,
-            ["inquiry", "add-assumption", "test", "Mean pooling sufficient", "--source", "paper:doi_test", "--path", p],
-        )
-        assert result.exit_code == 0
-        assert "assumption" in result.output.lower()
-
-
-class TestInquiryAddTransformation:
-    def test_add_transformation(self, runner: CliRunner, graph_path: Path) -> None:
-        p = str(graph_path)
-        runner.invoke(main, ["inquiry", "init", "test", "--label", "T", "--target", "hypothesis:h01", "--path", p])
-        result = runner.invoke(
-            main, ["inquiry", "add-transformation", "test", "Extract sequences", "--tool", "BioPython", "--path", p]
-        )
-        assert result.exit_code == 0
-        assert "transformation" in result.output.lower()
-
-
 class TestInquiryList:
     def test_list_empty(self, runner: CliRunner, graph_path: Path) -> None:
         result = runner.invoke(main, ["inquiry", "list", "--path", str(graph_path), "--format", "json"])
@@ -204,8 +241,8 @@ class TestInquiryList:
 
     def test_list_with_inquiries(self, runner: CliRunner, graph_path: Path) -> None:
         p = str(graph_path)
-        runner.invoke(main, ["inquiry", "init", "i1", "--label", "First", "--target", "hypothesis:h01", "--path", p])
-        runner.invoke(main, ["inquiry", "init", "i2", "--label", "Second", "--target", "hypothesis:h01", "--path", p])
+        build_inquiry_graph(graph_path, slug="i1", title="First")
+        build_inquiry_graph(graph_path, slug="i2", title="Second")
         result = runner.invoke(main, ["inquiry", "list", "--path", p, "--format", "json"])
         assert result.exit_code == 0
         assert "First" in result.output
@@ -215,7 +252,7 @@ class TestInquiryList:
 class TestInquiryShow:
     def test_show(self, runner: CliRunner, graph_path: Path) -> None:
         p = str(graph_path)
-        runner.invoke(main, ["inquiry", "init", "test", "--label", "Test", "--target", "hypothesis:h01", "--path", p])
+        build_inquiry_graph(graph_path, slug="test", title="Test")
         result = runner.invoke(main, ["inquiry", "show", "test", "--path", p, "--format", "json"])
         assert result.exit_code == 0
         assert "Test" in result.output
@@ -243,22 +280,6 @@ class TestInquiryShow:
 class TestInquirySummary:
     def test_inquiry_summary_reports_claim_backing_and_priority(self, runner: CliRunner, graph_path: Path) -> None:
         p = str(graph_path)
-        runner.invoke(
-            main,
-            [
-                "inquiry",
-                "init",
-                "summary-test",
-                "--label",
-                "Summary Test Inquiry",
-                "--description",
-                "Summary Test Inquiry Text",
-                "--target",
-                "hypothesis:h01",
-                "--path",
-                p,
-            ],
-        )
         runner.invoke(main, ["graph", "add", "concept", "a", "--path", p])
         runner.invoke(main, ["graph", "add", "concept", "b", "--path", p])
         runner.invoke(main, ["graph", "add", "concept", "c", "--path", p])
@@ -306,36 +327,33 @@ class TestInquirySummary:
             ],
         )
 
-        runner.invoke(
-            main,
-            [
-                "inquiry",
-                "add-edge",
-                "summary-test",
-                "concept:a",
-                "sci:feedsInto",
-                "concept:b",
-                "--claim",
-                "proposition:flow_a_b",
-                "--path",
-                p,
+        # Build the inquiry (with claim-backed flow edges) via the compile path,
+        # then attach the description note the summary reader renders as `text`.
+        build_inquiry_graph(
+            graph_path,
+            slug="summary_test",
+            title="Summary Test Inquiry",
+            flow_edges=[
+                {
+                    "subject": "concept:a",
+                    "predicate": "feedsInto",
+                    "object": "concept:b",
+                    "claim_refs": ["proposition:flow_a_b"],
+                },
+                {
+                    "subject": "concept:b",
+                    "predicate": "feedsInto",
+                    "object": "concept:c",
+                    "claim_refs": ["proposition:flow_b_c"],
+                },
             ],
         )
-        runner.invoke(
-            main,
-            [
-                "inquiry",
-                "add-edge",
-                "summary-test",
-                "concept:b",
-                "sci:feedsInto",
-                "concept:c",
-                "--claim",
-                "proposition:flow_b_c",
-                "--path",
-                p,
-            ],
+        dataset = _load_dataset(graph_path)
+        inquiry_graph = dataset.graph(URIRef(str(PROJECT_NS) + "inquiry/summary_test"))
+        inquiry_graph.add(
+            (URIRef(str(PROJECT_NS) + "inquiry/summary_test"), SKOS.note, Literal("Summary Test Inquiry Text"))
         )
+        _save_dataset(dataset, graph_path)
 
         runner.invoke(
             main,
@@ -456,19 +474,11 @@ class TestInquirySummary:
 
     def test_inquiry_summary_includes_claims_from_hypothesis_targets(self, runner: CliRunner, graph_path: Path) -> None:
         p = str(graph_path)
-        runner.invoke(
-            main,
-            [
-                "inquiry",
-                "init",
-                "hypothesis-target",
-                "--label",
-                "Hypothesis Target Inquiry",
-                "--target",
-                "hypothesis:h01",
-                "--path",
-                p,
-            ],
+        build_inquiry_graph(
+            graph_path,
+            slug="hypothesis_target",
+            title="Hypothesis Target Inquiry",
+            focal="hypothesis:h01",
         )
         runner.invoke(
             main,
@@ -633,22 +643,11 @@ class TestInquirySummary:
             ).exit_code
             == 0
         )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "inquiry",
-                    "init",
-                    "question-target",
-                    "--label",
-                    "Question Target Inquiry",
-                    "--target",
-                    "question:qtarget",
-                    "--path",
-                    p,
-                ],
-            ).exit_code
-            == 0
+        build_inquiry_graph(
+            graph_path,
+            slug="question_target",
+            title="Question Target Inquiry",
+            focal="question:qtarget",
         )
 
         result = runner.invoke(main, ["graph", "inquiry-summary", "--format", "json", "--path", p])
@@ -666,13 +665,16 @@ class TestInquirySummary:
 class TestInquiryValidate:
     def test_validate_valid(self, runner: CliRunner, graph_path: Path) -> None:
         p = str(graph_path)
-        runner.invoke(main, ["inquiry", "init", "test", "--label", "T", "--target", "hypothesis:h01", "--path", p])
         runner.invoke(main, ["graph", "add", "concept", "din", "--path", p])
         runner.invoke(main, ["graph", "add", "concept", "dout", "--path", p])
-        runner.invoke(main, ["inquiry", "add-node", "test", "concept:din", "--role", "BoundaryIn", "--path", p])
-        runner.invoke(main, ["inquiry", "add-node", "test", "concept:dout", "--role", "BoundaryOut", "--path", p])
-        runner.invoke(
-            main, ["inquiry", "add-edge", "test", "concept:din", "sci:feedsInto", "concept:dout", "--path", p]
+        build_inquiry_graph(
+            graph_path,
+            slug="test",
+            boundary_roles=[
+                {"ref": "concept:din", "role": "BoundaryIn"},
+                {"ref": "concept:dout", "role": "BoundaryOut"},
+            ],
+            flow_edges=[{"subject": "concept:din", "predicate": "feedsInto", "object": "concept:dout"}],
         )
         result = runner.invoke(main, ["inquiry", "validate", "test", "--path", p, "--format", "json"])
         assert result.exit_code == 0
