@@ -63,6 +63,7 @@ from science_tool.graph.sources import (
     is_metadata_reference,
     load_project_sources,
 )
+from science_tool.graph.inquiry_compile import emit_inquiry_views
 from science_tool.graph.io import CITO_NS, DCAT_NS, DCTERMS_NS, entity_uri_for_ref
 from science_tool.graph.patch_membership import (
     derive_patch_memberships,
@@ -1263,12 +1264,16 @@ def _derive_patch_membership_layer(dataset: Dataset, *, sources: ProjectSources)
     Runs after `_derive_bears_on_layer` because patch closure reads the
     precomputed `sci:bearsOn` layer. No-ops when no PatchDefinitionEntity is
     present in sources.
+
+    Inquiry views are emitted first so that any minted assumption/transformation
+    nodes are typed in the graph before the deriver resolves memberKind.
     """
     patch_definitions = [
         entity for entity in sources.entities if isinstance(entity, PatchDefinitionEntity)
     ]
     if not patch_definitions:
         return
+    emit_inquiry_views(dataset, patch_definitions)
     result = derive_patch_memberships(
         dataset,
         patch_definitions,
