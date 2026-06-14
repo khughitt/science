@@ -1,7 +1,8 @@
 from pathlib import Path
 
 import pytest
-from science_qa.compile import CompileError, schema_to_config
+from science_qa.compile import CompileError, merge_configs, schema_to_config
+from science_qa.config import QAConfig
 
 
 def _resource(schema: dict, name="obs", path="obs.csv") -> dict:
@@ -122,3 +123,32 @@ class TestForeignKeys:
         )
         with pytest.raises(CompileError, match="reference field"):
             schema_to_config(edges, Path("/pkg"), _pkg(proteins, edges))
+
+
+class TestMerge:
+    def test_program_scalar_runknob_wins(self):
+        contract = QAConfig(program="")
+        runknobs = QAConfig(program="tabular")
+        assert merge_configs(contract, runknobs).program == "tabular"
+
+    def test_dict_union_with_runknob_override(self):
+        contract = QAConfig(program="", bounds={"x": {"minimum": 0}}, categoricals={"g": {"allowed": ["a"]}})
+        runknobs = QAConfig(program="", bounds={"y": {"maximum": 9}}, categoricals={"g": {"allowed": ["b"]}})
+        merged = merge_configs(contract, runknobs)
+        assert merged.bounds == {"x": {"minimum": 0}, "y": {"maximum": 9}}
+        assert merged.categoricals == {"g": {"allowed": ["b"]}}  # runknob overrides same key
+
+    def test_runknob_only_fields_overlay(self):
+        contract = QAConfig(program="", base_dir=Path("/pkg"))
+        runknobs = QAConfig(program="", polarity=["x"], project_local=["m:c"])
+        merged = merge_configs(contract, runknobs)
+        assert merged.polarity == ["x"] and merged.project_local == ["m:c"]
+        assert merged.base_dir == Path("/pkg")  # contract base_dir (allowed_from resolves against package)
+
+    def test_list_union_dedupes(self):
+        # ["a"] and required "a" both appear in contract AND runknobs -> deduped, order kept
+        contract = QAConfig(program="", required_complete=["a"], unique_keys=[["a"]])
+        runknobs = QAConfig(program="", required_complete=["a", "b"], unique_keys=[["a"], ["b"]])
+        merged = merge_configs(contract, runknobs)
+        assert merged.required_complete == ["a", "b"]
+        assert merged.unique_keys == [["a"], ["b"]]  # the duplicate ["a"] group collapsed

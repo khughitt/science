@@ -113,3 +113,36 @@ def _compile_foreign_keys(resource: dict, schema: dict, package: dict, cfg: QACo
             raise CompileError(
                 f"foreignKey on {self_name!r} reference field {ref_field!r} not in resource {target_name!r}")
         cfg.categoricals[local] = {"allowed_from": f"{target['path']}#{ref_field}"}
+
+
+def merge_configs(contract: QAConfig, runknobs: QAConfig) -> QAConfig:
+    """Overlay operational run-knobs onto the schema-derived contract config (design §5).
+
+    Scalars: run-knob wins when set. Contract list/dict fields: union, run-knob overriding
+    on key collision. Run-knob-only fields (polarity, ranges, project_local, aspect_params,
+    column_sets): overlaid directly. base_dir stays the contract's (package dir) so
+    schema-derived allowed_from pointers resolve.
+    """
+    merged = QAConfig(
+        program=runknobs.program or contract.program,
+        unique_key=runknobs.unique_key or contract.unique_key,
+        base_dir=contract.base_dir,
+    )
+    merged.required_complete = list(dict.fromkeys([*contract.required_complete, *runknobs.required_complete]))
+    merged.unique_keys = []  # list-of-lists: dedupe by value, preserve order
+    for group in [*contract.unique_keys, *runknobs.unique_keys]:
+        if group not in merged.unique_keys:
+            merged.unique_keys.append(group)
+    merged.bounds = {**contract.bounds, **runknobs.bounds}
+    merged.categoricals = {**contract.categoricals, **runknobs.categoricals}
+    merged.expected_types = {**contract.expected_types, **runknobs.expected_types}
+    merged.exclusive_flags = [*contract.exclusive_flags,
+                              *[p for p in runknobs.exclusive_flags if p not in contract.exclusive_flags]]
+    merged.missing_sentinels = list(dict.fromkeys([*contract.missing_sentinels, *runknobs.missing_sentinels]))
+    # run-knob-only overlays
+    merged.polarity = runknobs.polarity or contract.polarity
+    merged.ranges = {**contract.ranges, **runknobs.ranges}
+    merged.project_local = runknobs.project_local or contract.project_local
+    merged.aspect_params = {**contract.aspect_params, **runknobs.aspect_params}
+    merged.column_sets = {**contract.column_sets, **runknobs.column_sets}
+    return merged
