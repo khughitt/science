@@ -290,7 +290,12 @@ def _validate_resource_tables(resources: list[dict], base_dir: Path) -> list[dic
     rows: list[dict[str, str]] = []
     for res in resources:
         name = res.get("name", res.get("path", "unknown"))
-        table = base_dir / res.get("path", "")
+        path_val = res.get("path")
+        if not isinstance(path_val, str) or not path_val:
+            rows.append({"check": f"{name} path", "status": "fail",
+                         "details": f"resource path must be a non-empty string, got {path_val!r}"})
+            continue
+        table = base_dir / path_val
         if not table.exists():
             rows.append({"check": f"{name} file exists", "status": "fail",
                          "details": f"file not found: {table}"})
