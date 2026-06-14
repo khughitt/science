@@ -16,6 +16,7 @@ from science_tool.datasets.figshare import FigshareAdapter
 from science_tool.datasets.geo import GEOAdapter
 from science_tool.datasets.physionet import PhysioNetAdapter
 from science_tool.datasets.semantic_scholar import SemanticScholarAdapter
+from science_tool.datasets.sra import SRAAdapter
 from science_tool.datasets.zenodo import ZenodoAdapter
 
 
@@ -905,3 +906,60 @@ class TestPhysioNetAdapter:
         adapter._client.stream.return_value = ctx
         with pytest.raises(PermissionError):
             adapter.download(file_info, Path("/tmp/pn-test"))
+
+
+class TestSRAAdapter:
+    _ESUMMARY = (
+        '<eSummaryResult><DocSum><Id>1</Id>'
+        '<Item Name="ExpXml" Type="String">'
+        '<Summary><Title>Time-series RNA-seq of liver</Title>'
+        '<Platform instrument_model="Illumina">ILLUMINA</Platform></Summary>'
+        '<Organism ScientificName="Mus musculus"/>'
+        '<Library_descriptor><LIBRARY_STRATEGY>RNA-Seq</LIBRARY_STRATEGY></Library_descriptor>'
+        '<Experiment acc="SRX111"/>'
+        '</Item>'
+        '<Item Name="Runs" Type="String"><Run acc="SRR111"/><Run acc="SRR112"/></Item>'
+        '</DocSum></eSummaryResult>'
+    )
+
+    def test_name(self) -> None:
+        assert SRAAdapter().name == "sra"
+
+    def test_search_parses_esummary(self) -> None:
+        esearch = MagicMock()
+        esearch.text = "<eSearchResult><IdList><Id>1</Id></IdList></eSearchResult>"
+        esummary = MagicMock()
+        esummary.text = self._ESUMMARY
+        adapter = SRAAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.side_effect = [esearch, esummary]
+            results = adapter.search("circadian liver rna-seq", max_results=5)
+        assert len(results) == 1
+        r = results[0]
+        assert r.source == "sra"
+        assert r.id == "SRX111"
+        assert r.title == "Time-series RNA-seq of liver"
+        assert r.organism == "Mus musculus"
+        assert r.modality == "RNA-Seq"
+        assert r.access == "public"
+
+    def test_search_empty_when_no_ids(self) -> None:
+        esearch = MagicMock()
+        esearch.text = "<eSearchResult><IdList></IdList></eSearchResult>"
+        adapter = SRAAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = esearch
+            assert adapter.search("nothing") == []
+
+    def test_files_builds_run_urls(self) -> None:
+        esearch = MagicMock()
+        esearch.text = "<eSearchResult><IdList><Id>1</Id></IdList></eSearchResult>"
+        esummary = MagicMock()
+        esummary.text = self._ESUMMARY
+        adapter = SRAAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.side_effect = [esearch, esummary]
+            files = adapter.files("SRX111")
+        assert [f.filename for f in files] == ["SRR111.sra", "SRR112.sra"]
+        assert files[0].url == "https://sra-pub-run-odp.s3.amazonaws.com/sra/SRR111/SRR111"
+        assert files[0].format == "sra"
