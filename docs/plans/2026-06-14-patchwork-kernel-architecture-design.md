@@ -128,6 +128,12 @@ graph remains useful as the addressable patch object and as a container for
 patch-specific metadata, diagnostics, layout, and generated view triples. It is
 not a hard partition of all member triples.
 
+The Patch Contract spec must name the home graph for member triples. The target
+shape is: patch named graphs hold patch metadata, diagnostics, membership, and
+patch-specific generated view triples; member proposition/evidence triples live
+in their scope or semantic layer graphs and are related to patches by
+membership.
+
 ### BeliefResult is structured
 
 `BeliefResult` is not a single scalar. It is a structured derived object that
@@ -159,6 +165,13 @@ down-weight unreviewed AI-generated evidence, reference-curated evidence, or
 low-trust sources. In all cases, the policy and rationale are recorded on the
 `BeliefResult`.
 
+Belief is comparable only under a shared policy. Composite or federated views
+must declare the `BeliefPolicy` they use and re-derive aggregate belief over the
+union of eligible evidence-lines under that policy. They must not average or
+merge precomputed `BeliefResult`s produced under different policies. The exact
+policy scope rules are owned jointly by the Proposition/Evidence/Belief and
+Scope/Federation specs.
+
 ### Ladder level belongs to Patch as a derived diagnostic
 
 The L0-L4 ladder is a patch-level maturity diagnostic. It is computed from the
@@ -182,6 +195,12 @@ stale `SourceSnapshot` state and propagates through `bears_on` / dependency
 rules to mark dependent epistemic objects as needing review or recompilation.
 Belief changes only after source declarations are updated and the epistemic
 graph is recompiled under a recorded policy.
+
+Source freshness is a new origin for revisit propagation. Existing `bears_on`
+derivation from epistemic relations does not automatically cover it; the Source
+Compiler, Provenance/Agents/Review, and Epistemic Semantics specs must define
+how `SourceSnapshot` changes create dependency records that terminate at
+epistemic review targets.
 
 ## Subsystem specs
 
