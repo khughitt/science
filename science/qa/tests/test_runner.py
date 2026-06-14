@@ -115,3 +115,69 @@ def test_required_check_coverage_records_no_column_selection(tmp_path):
     cov = json.loads((tmp_path / "qa_report.json").read_text())["coverage"]
     entry = next(e for e in cov["entries"] if e["check_id"] == "gene-expression-qc-table/library_size_positive")
     assert entry["columns"] == []
+
+
+import json as _json
+
+
+def _dp(tmp_path, resource: dict, df) -> Path:
+    df.to_parquet(tmp_path / resource["path"])
+    pkg = {"name": "p", "resources": [resource]}
+    (tmp_path / "datapackage.json").write_text(_json.dumps(pkg))
+    return tmp_path / "datapackage.json"
+
+
+def test_datapackage_zero_config_runs_tabular_clean(tmp_path):
+    from science_qa.runner import run_qa_datapackage
+    res = {"name": "obs", "path": "obs.parquet",
+           "schema": {"fields": [{"name": "id", "type": "integer", "constraints": {"required": True, "unique": True}}]}}
+    dp = _dp(tmp_path, res, pd.DataFrame({"id": [1, 2, 3]}))
+    result = run_qa_datapackage(dp, "obs", tmp_path)
+    assert result.structural_failed is False
+    cov = json.loads((tmp_path / "qa_report.json").read_text())["coverage"]
+    assert cov["executable_denominator"] >= 1
+
+
+def test_datapackage_bounds_violation_is_structural(tmp_path):
+    from science_qa.runner import run_qa_datapackage
+    res = {"name": "obs", "path": "obs.parquet",
+           "schema": {"fields": [{"name": "p", "type": "number", "constraints": {"minimum": 0}}]}}
+    dp = _dp(tmp_path, res, pd.DataFrame({"p": [-1.0, 0.5, 2.0]}))
+    result = run_qa_datapackage(dp, "obs", tmp_path)
+    assert result.structural_failed is True
+    ids = {f["flag_id"] for f in json.loads((tmp_path / "qa_report.json").read_text())["flags"]}
+    assert "numeric-column/bounds/p/minimum" in ids
+
+
+def test_datapackage_with_runknobs_overlay(tmp_path):
+    from science_qa.runner import run_qa_datapackage
+    res = {"name": "obs", "path": "obs.parquet",
+           "schema": {"fields": [{"name": "v", "type": "number"}]}}
+    dp = _dp(tmp_path, res, pd.DataFrame({"v": [-1.0, 1.0]}))
+    (tmp_path / "qa.yaml").write_text("qa:\n  polarity: [v]\n")  # no program: -> tabular default
+    result = run_qa_datapackage(dp, "obs", tmp_path, runknobs_path=tmp_path / "qa.yaml")
+    ids = {f["flag_id"] for f in json.loads((tmp_path / "qa_report.json").read_text())["flags"]}
+    assert "numeric-column/polarity/v/-" in ids  # polarity came from the run-knob yaml
+
+
+def test_datapackage_unknown_resource_errors(tmp_path):
+    from science_qa.compile import CompileError
+    from science_qa.runner import run_qa_datapackage
+    res = {"name": "obs", "path": "obs.parquet", "schema": {"fields": [{"name": "id"}]}}
+    dp = _dp(tmp_path, res, pd.DataFrame({"id": [1]}))
+    with pytest.raises(CompileError, match="resource"):
+        run_qa_datapackage(dp, "missing", tmp_path)
+
+
+def test_datapackage_numeric_missing_sentinel_fires_structural(tmp_path):
+    # end-to-end: a schema-declared numeric missingValue ("-999") must actually flag a
+    # surviving -999 in a numeric column — i.e. the compiler's string sentinel is coerced
+    # so numeric-column/missing_sentinel (numeric-only) matches it.
+    from science_qa.runner import run_qa_datapackage
+    res = {"name": "obs", "path": "obs.parquet",
+           "schema": {"fields": [{"name": "v", "type": "number"}], "missingValues": ["-999"]}}
+    dp = _dp(tmp_path, res, pd.DataFrame({"v": [1.0, -999.0, 2.0]}))
+    result = run_qa_datapackage(dp, "obs", tmp_path)
+    assert result.structural_failed is True
+    ids = {f["flag_id"] for f in json.loads((tmp_path / "qa_report.json").read_text())["flags"]}
+    assert "numeric-column/missing_sentinel/v/-" in ids

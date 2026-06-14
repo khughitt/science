@@ -44,3 +44,18 @@ def test_missing_qa_block_is_error(tmp_path):
 def test_absent_file_is_error(tmp_path):
     with pytest.raises(QAConfigError, match="not found"):
         QAConfig.from_file(tmp_path / "nope.yaml")
+
+
+def test_new_fields_default_empty():
+    cfg = QAConfig(program="tabular")
+    assert cfg.bounds == {} and cfg.unique_keys == []
+
+
+def test_require_program_false_allows_missing_program(tmp_path):
+    cfg = QAConfig.from_file(_write(tmp_path, "qa:\n  polarity: [x]\n"), require_program=False)
+    assert cfg.program == "" and cfg.polarity == ["x"]
+
+
+def test_require_program_true_is_default(tmp_path):
+    with pytest.raises(QAConfigError, match="program"):
+        QAConfig.from_file(_write(tmp_path, "qa:\n  polarity: [x]\n"))

@@ -1,12 +1,14 @@
 # science/qa/src/science_qa/runner.py
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
 
 from science_qa.aspects import CHECK_REQUIRED, CheckSpec, Invocation
+from science_qa.compile import CompileError, merge_configs, schema_to_config
 from science_qa.config import QAConfig
 from science_qa.context import Context, TableContext
 from science_qa.coverage import (
@@ -50,7 +52,25 @@ def _missing_required(spec: CheckSpec, inv: Invocation, table: pd.DataFrame) -> 
 
 
 def run_qa(config_path: Path, table_path: Path, report_dir: Path) -> RunResult:
-    config = QAConfig.from_file(config_path)
+    return _run_with_config(QAConfig.from_file(config_path), table_path, report_dir)
+
+
+def run_qa_datapackage(datapackage_path: Path, resource_name: str, report_dir: Path,
+                       runknobs_path: Path | None = None) -> RunResult:
+    package = json.loads(Path(datapackage_path).read_text(encoding="utf-8"))
+    resource = next((r for r in package.get("resources", []) if r.get("name") == resource_name), None)
+    if resource is None:
+        raise CompileError(f"resource {resource_name!r} not found in {datapackage_path}")
+    pkg_dir = Path(datapackage_path).parent
+    config = schema_to_config(resource, pkg_dir, package)
+    if runknobs_path is not None:
+        config = merge_configs(config, QAConfig.from_file(runknobs_path, require_program=False))
+    if not config.program:
+        config.program = "tabular"
+    return _run_with_config(config, pkg_dir / resource["path"], report_dir)
+
+
+def _run_with_config(config: QAConfig, table_path: Path, report_dir: Path) -> RunResult:
     program = resolve_program(config.program)
     built_in_ids = {spec.check_id for spec in program.checks}
     checks = [*program.checks, *load_project_local(config.project_local, reserved_check_ids=built_in_ids)]
