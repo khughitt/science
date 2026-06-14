@@ -32,11 +32,17 @@ def _validate_bound_value(field: str, key: str, value: object) -> None:
         raise CompileError(f"field {field!r} bound {key} has non-scalar value {value!r}")
     if isinstance(value, str):
         try:
-            pd.Timestamp(value)
+            ts = pd.Timestamp(value)
         except (ValueError, TypeError) as exc:
             raise CompileError(
                 f"field {field!r} bound {key}={value!r} is neither a number nor a parseable ISO date"
             ) from exc
+        # pd.Timestamp("nan"/"NaT"/"none") returns NaT rather than raising; a NaT bound would
+        # silently never fire at run time (every comparison is False), so reject it here.
+        if bool(pd.isna(ts)):
+            raise CompileError(
+                f"field {field!r} bound {key}={value!r} is neither a number nor a parseable ISO date"
+            )
 
 
 def schema_to_config(resource: dict, package_dir: Path, package: dict) -> QAConfig:
@@ -78,14 +84,29 @@ def schema_to_config(resource: dict, package_dir: Path, package: dict) -> QAConf
     for entry in schema.get("missingValues", [""]):
         value = entry if isinstance(entry, str) else entry.get("value")
         if value not in ("", None):
-            cfg.missing_sentinels.append(value)
+            cfg.missing_sentinels.append(_coerce_sentinel(value))
 
     table_qa = schema.get("qa", {}) or {}
     for pair in table_qa.get("exclusive_flags", []) or []:
         cfg.exclusive_flags.append(list(pair))
 
-    _compile_foreign_keys(resource, schema, package, cfg)  # added in next task
+    _compile_foreign_keys(resource, schema, package, cfg)
     return cfg
+
+
+def _coerce_sentinel(value: object) -> object:
+    """Frictionless missingValues entries are strings, but numeric-column/missing_sentinel
+    only runs on numeric columns and matches by value — so a numeric-looking sentinel must be
+    its numeric form or `.isin([...])` silently never matches (e.g. -999.0 vs "-999"). Coerce
+    when parseable; leave genuinely non-numeric sentinels (e.g. "NA") as-is (harmless, since
+    the check skips non-numeric columns).
+    """
+    for parse in (int, float):
+        try:
+            return parse(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            continue
+    return value
 
 
 def _as_one(value) -> tuple[str, bool]:

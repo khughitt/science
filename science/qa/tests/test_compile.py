@@ -49,7 +49,10 @@ class TestNativeMapping:
         res = _resource({"fields": [{"name": "x"}],
                          "missingValues": ["", "NA", {"value": "-999", "label": "sensor"}]})
         cfg = schema_to_config(res, Path("/pkg"), _pkg(res))
-        assert cfg.missing_sentinels == ["NA", "-999"]
+        # numeric-looking sentinels are coerced (the missing_sentinel check runs only on
+        # numeric columns and matches by value, so a string "-999" would never fire);
+        # non-numeric sentinels like "NA" stay strings.
+        assert cfg.missing_sentinels == ["NA", -999]
 
     def test_missing_schema_or_path_errors(self):
         with pytest.raises(CompileError, match="schema"):
@@ -76,6 +79,20 @@ class TestNativeMapping:
                                      "constraints": {"minimum": "not-a-date"}}]})
         with pytest.raises(CompileError, match="parseable ISO date"):
             schema_to_config(res, Path("/pkg"), _pkg(res))
+
+    def test_nat_like_bound_value_is_compile_error(self):
+        # pd.Timestamp("nan") returns NaT instead of raising; a NaT bound would silently
+        # never fire at run time, so the compiler must reject it.
+        res = _resource({"fields": [{"name": "p", "type": "number",
+                                     "constraints": {"minimum": "nan"}}]})
+        with pytest.raises(CompileError, match="parseable ISO date"):
+            schema_to_config(res, Path("/pkg"), _pkg(res))
+
+    def test_numeric_string_sentinel_is_coerced(self):
+        res = _resource({"fields": [{"name": "x", "type": "integer"}],
+                         "missingValues": ["-1"]})
+        cfg = schema_to_config(res, Path("/pkg"), _pkg(res))
+        assert cfg.missing_sentinels == [-1]  # coerced int, not "-1"
 
 
 class TestForeignKeys:

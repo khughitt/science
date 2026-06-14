@@ -167,3 +167,17 @@ def test_datapackage_unknown_resource_errors(tmp_path):
     dp = _dp(tmp_path, res, pd.DataFrame({"id": [1]}))
     with pytest.raises(CompileError, match="resource"):
         run_qa_datapackage(dp, "missing", tmp_path)
+
+
+def test_datapackage_numeric_missing_sentinel_fires_structural(tmp_path):
+    # end-to-end: a schema-declared numeric missingValue ("-999") must actually flag a
+    # surviving -999 in a numeric column — i.e. the compiler's string sentinel is coerced
+    # so numeric-column/missing_sentinel (numeric-only) matches it.
+    from science_qa.runner import run_qa_datapackage
+    res = {"name": "obs", "path": "obs.parquet",
+           "schema": {"fields": [{"name": "v", "type": "number"}], "missingValues": ["-999"]}}
+    dp = _dp(tmp_path, res, pd.DataFrame({"v": [1.0, -999.0, 2.0]}))
+    result = run_qa_datapackage(dp, "obs", tmp_path)
+    assert result.structural_failed is True
+    ids = {f["flag_id"] for f in json.loads((tmp_path / "qa_report.json").read_text())["flags"]}
+    assert "numeric-column/missing_sentinel/v/-" in ids
