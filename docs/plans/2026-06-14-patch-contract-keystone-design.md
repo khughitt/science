@@ -1,6 +1,10 @@
 # Patch Contract keystone (v1) — design
 
-**Status:** Design / approved direction — pre-implementation
+**Status:** SHIPPED 2026-06-14 — merged to local `main` (`0b15c7ec`, `--no-ff`),
+not pushed. Convenience-edge invariant promoted to a build gate in `science
+validate` / `graph validate` (`00c89308`). Implementation plan:
+`docs/plans/2026-06-14-patch-contract-keystone-plan.md`. Deferred follow-ons
+remain: `PatchSnapshot`, remote/commons scopes, inquiry↔patch subsumption.
 **Created:** 2026-06-14
 **Origin:** First implementation-facing slice of Spec 4 (Patch Contract) from
 `docs/plans/2026-06-14-patchwork-kernel-architecture-design.md` (lines 215, 224,
