@@ -148,7 +148,7 @@ def test_patch_definition_exclude_reason_required_and_nonempty() -> None:
 
 
 def test_patch_definition_rejects_unknown_policy() -> None:
-    with pytest.raises(ValidationError, match="unsupported patch neighborhood_policy"):
+    with pytest.raises(ValidationError, match="Input should be 'local-closure-v1'"):
         PatchDefinitionEntity.model_validate(
             _base_patch(neighborhood_policy={"name": "latent-v1", "version": "latent-v1"})
         )
@@ -576,7 +576,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import Literal
 
-from rdflib import Dataset, Literal, URIRef
+from rdflib import Dataset, Literal as RDFLiteral, URIRef
 from rdflib.namespace import RDF, XSD
 
 from science_model.patch_definition import PatchDefinitionEntity
@@ -737,7 +737,7 @@ def derive_patch_memberships(
 
 def _resolve_required(dataset: Dataset, ref: str, *, label: str, patch_id: str) -> URIRef:
     uri = entity_uri_for_ref(ref)
-    if any(dataset.graph(g.identifier).triples((uri, RDF.type, None)) for g in dataset.graphs()):
+    if any(next(graph.triples((uri, RDF.type, None)), None) is not None for graph in dataset.graphs()):
         return uri
     raise PatchMembershipError(f"{patch_id}: unresolved {label} {ref!r}")
 
@@ -985,9 +985,9 @@ def emit_patch_memberships(
         graph = dataset.graph(patch_uri)
         graph.add((patch_uri, RDF.type, SCI_NS.EpistemicPatch))
         graph.add((patch_uri, SCI_NS.focalEntity, entity_uri_for_ref(definition.focal)))
-        graph.add((patch_uri, SCI_NS.neighborhoodPolicy, Literal(definition.neighborhood_policy.name)))
-        graph.add((patch_uri, SCI_NS.policyVersion, Literal(definition.neighborhood_policy.version)))
-        graph.add((patch_uri, SCI_NS.patchScope, Literal("local")))
+        graph.add((patch_uri, SCI_NS.neighborhoodPolicy, RDFLiteral(definition.neighborhood_policy.name)))
+        graph.add((patch_uri, SCI_NS.policyVersion, RDFLiteral(definition.neighborhood_policy.version)))
+        graph.add((patch_uri, SCI_NS.patchScope, RDFLiteral("local")))
         for seed in sorted(definition.seeds):
             graph.add((patch_uri, SCI_NS.patchSeed, entity_uri_for_ref(seed)))
         for exclude in sorted(definition.excludes, key=lambda item: item.ref):
@@ -995,41 +995,45 @@ def emit_patch_memberships(
             graph.add((exclusion, RDF.type, SCI_NS.PatchExclusion))
             graph.add((exclusion, SCI_NS.patch, patch_uri))
             graph.add((exclusion, SCI_NS.excludedEntity, entity_uri_for_ref(exclude.ref)))
-            graph.add((exclusion, SCI_NS.excludeReason, Literal(exclude.reason)))
+            graph.add((exclusion, SCI_NS.excludeReason, RDFLiteral(exclude.reason)))
 
         for record in sorted(records_by_patch.get(definition.canonical_id, []), key=lambda item: str(item.member)):
             node = _membership_uri(record)
             graph.add((node, RDF.type, SCI_NS.PatchMembership))
             graph.add((node, SCI_NS.patch, record.patch))
             graph.add((node, SCI_NS.member, record.member))
-            graph.add((node, SCI_NS.memberRole, Literal(record.member_role)))
-            graph.add((node, SCI_NS.memberKind, Literal(record.member_kind)))
-            graph.add((node, SCI_NS.derivationReason, Literal(record.derivation_reason)))
-            graph.add((node, SCI_NS.derivationDepth, Literal(record.depth, datatype=XSD.integer)))
-            graph.add((node, SCI_NS.policyVersion, Literal(record.policy_version)))
+            graph.add((node, SCI_NS.memberRole, RDFLiteral(record.member_role)))
+            graph.add((node, SCI_NS.memberKind, RDFLiteral(record.member_kind)))
+            graph.add((node, SCI_NS.derivationReason, RDFLiteral(record.derivation_reason)))
+            graph.add((node, SCI_NS.derivationDepth, RDFLiteral(record.depth, datatype=XSD.integer)))
+            graph.add((node, SCI_NS.policyVersion, RDFLiteral(record.policy_version)))
             if record.derivation_predicate is not None:
                 graph.add((node, SCI_NS.derivationPredicate, record.derivation_predicate))
             if record.build_id:
-                graph.add((node, SCI_NS.buildId, Literal(record.build_id)))
+                graph.add((node, SCI_NS.buildId, RDFLiteral(record.build_id)))
             graph.add((record.patch, SCI_NS.hasMember, record.member))
             graph.add((record.member, SCI_NS.inPatch, record.patch))
 
 
-def validate_patch_membership_convenience(dataset: Dataset) -> list[str]:
-    errors: list[str] = []
-    membership_pairs = {
-        (patch, member)
+def patch_membership_pairs(dataset: Dataset) -> set[tuple[str, str]]:
+    return {
+        (str(patch), str(member))
         for graph in dataset.graphs()
         for node in graph.subjects(RDF.type, SCI_NS.PatchMembership)
         for patch in graph.objects(node, SCI_NS.patch)
         for member in graph.objects(node, SCI_NS.member)
     }
+
+
+def validate_patch_membership_convenience(dataset: Dataset) -> list[str]:
+    errors: list[str] = []
+    membership_pairs = patch_membership_pairs(dataset)
     for graph in dataset.graphs():
         for patch, _, member in graph.triples((None, SCI_NS.hasMember, None)):
-            if (patch, member) not in membership_pairs:
+            if (str(patch), str(member)) not in membership_pairs:
                 errors.append(f"{patch} has sci:hasMember {member} without a sci:PatchMembership node")
         for member, _, patch in graph.triples((None, SCI_NS.inPatch, None)):
-            if (patch, member) not in membership_pairs:
+            if (str(patch), str(member)) not in membership_pairs:
                 errors.append(f"{member} has sci:inPatch {patch} without a sci:PatchMembership node")
     return sorted(errors)
 
@@ -1116,10 +1120,6 @@ def test_graph_build_emits_patch_membership_context(tmp_path: Path) -> None:
             "ontology_terms: []",
             "source_refs: []",
             "related: []",
-            'subject: "hypothesis:h1"',
-            'predicate: "is_supported_by"',
-            'object: "hypothesis:h1"',
-            'polarity: "not_applicable"',
             'discusses: ["hypothesis:h1"]',
         ],
     )
@@ -1174,6 +1174,7 @@ Modify imports in `science/src/science_tool/graph/materialize.py`:
 from science_model.patch_definition import PatchDefinitionEntity
 from science_tool.graph.patch_membership import (
     derive_patch_memberships,
+    entity_uri_for_ref,
     emit_patch_memberships,
 )
 ```
@@ -1198,7 +1199,17 @@ def _derive_patch_membership_layer(dataset: Dataset, *, sources: ProjectSources)
     emit_patch_memberships(dataset, patch_definitions, result.records)
 ```
 
-Call it in `_build_dataset_from_sources(...)` immediately after `_derive_bears_on_layer(...)` and before dataset independence/freshness:
+In the existing `_entity_uri(...)` helper, delegate to the same minter used by
+patch membership so the URI scheme has one implementation after Task 4:
+
+```python
+def _entity_uri(canonical_id: str) -> URIRef:
+    return entity_uri_for_ref(canonical_id)
+```
+
+Call it at the call site inside `_build_dataset_from_sources(...)`, immediately
+after `_derive_bears_on_layer(...)` returns and before
+`emit_dataset_independence_records(...)`:
 
 ```python
     _derive_bears_on_layer(
@@ -1287,10 +1298,6 @@ def _project(root: Path) -> None:
             "ontology_terms: []",
             "source_refs: []",
             "related: []",
-            'subject: "hypothesis:h1"',
-            'predicate: "is_supported_by"',
-            'object: "hypothesis:h1"',
-            'polarity: "not_applicable"',
             'discusses: ["hypothesis:h1"]',
         ],
     )
@@ -1344,6 +1351,26 @@ def test_patch_check_detects_orphan_convenience_edge(tmp_path: Path) -> None:
 
     assert result.exit_code == 1
     assert "without a sci:PatchMembership node" in result.output
+
+
+def test_patch_check_detects_stale_graph_after_source_edit(tmp_path: Path) -> None:
+    _project(tmp_path)
+    materialize_graph(tmp_path, strict=False)
+    patch_file = tmp_path / "entities" / "patches" / "local-demo.md"
+    text = patch_file.read_text(encoding="utf-8")
+    patch_file.write_text(
+        text.replace(
+            'seeds: ["proposition:p1"]',
+            'excludes:\n  - ref: "proposition:p1"\n    reason: "out of scope"',
+        ),
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(main, ["patch", "check", "--project-root", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert "stale patch membership" in result.output
 ```
 
 - [ ] **Step 2: Run CLI tests to verify they fail**
@@ -1376,10 +1403,10 @@ from rdflib import Dataset
 
 from science_model.patch_definition import PatchDefinitionEntity
 from science_tool.graph.io import PROJECT_NS
-from science_tool.graph.materialize import PATCH_MEMBERSHIP_POLICY_VERSION
+from science_tool.graph.materialize import PATCH_MEMBERSHIP_POLICY_VERSION, _build_dataset_from_sources
 from science_tool.graph.patch_membership import (
     derive_patch_memberships,
-    entity_uri_for_ref,
+    patch_membership_pairs,
     validate_patch_membership_convenience,
 )
 from science_tool.graph.sources import load_project_sources
@@ -1418,9 +1445,17 @@ def patch_explain(patch_id: str, project_root: Path) -> None:
 @patch_group.command("check")
 @click.option("--project-root", default=".", show_default=True, type=click.Path(path_type=Path, file_okay=False))
 def patch_check(project_root: Path) -> None:
-    """Validate patch membership convenience edges in graph.trig."""
-    dataset = _load_graph(project_root.resolve())
-    errors = validate_patch_membership_convenience(dataset)
+    """Re-derive patch membership and diff it against graph.trig."""
+    root = project_root.resolve()
+    actual_dataset = _load_graph(root)
+    expected_dataset = _expected_graph(root)
+    errors = validate_patch_membership_convenience(actual_dataset)
+    actual_pairs = patch_membership_pairs(actual_dataset)
+    expected_pairs = patch_membership_pairs(expected_dataset)
+    for pair in sorted(expected_pairs - actual_pairs):
+        errors.append(f"stale patch membership: missing {_format_pair(pair)}")
+    for pair in sorted(actual_pairs - expected_pairs):
+        errors.append(f"stale patch membership: unexpected {_format_pair(pair)}")
     if errors:
         for error in errors:
             click.echo(error)
@@ -1437,9 +1472,21 @@ def _load_graph(project_root: Path) -> Dataset:
     return dataset
 
 
+def _expected_graph(project_root: Path) -> Dataset:
+    sources = load_project_sources(project_root, strict_identity=False)
+    return _build_dataset_from_sources(sources)
+
+
 def _patch_definitions(project_root: Path) -> list[PatchDefinitionEntity]:
     sources = load_project_sources(project_root, strict_identity=False)
     return [entity for entity in sources.entities if isinstance(entity, PatchDefinitionEntity)]
+
+
+def _format_pair(pair: tuple[str, str]) -> str:
+    patch_uri, member_uri = pair
+    patch = canonical_id_from_entity_uri(patch_uri) or patch_uri
+    member = canonical_id_from_entity_uri(member_uri) or member_uri
+    return f"{patch} -> {member}"
 ```
 
 - [ ] **Step 4: Register the CLI group**
