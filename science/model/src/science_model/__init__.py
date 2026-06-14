@@ -39,10 +39,16 @@ from science_model.reasoning import (
     WEAKEST_LINK_COMPOSITION_RULES,
 )
 from science_model.patch_definition import (
+    Assumption,
+    BoundaryRole,
+    FlowEdge,
+    InquiryProfile,
     LocalClosurePolicy,
+    Param,
     PatchDefinitionEntity,
     PatchExclude,
     PatchScope,
+    Transformation,
 )
 from science_model.profiles import EntityKind, ProfileManifest, RelationKind
 from science_model.propositions import PropositionEntity
@@ -91,6 +97,12 @@ __all__ = [
     "Predicate",
     "PropositionEntity",
     "LocalClosurePolicy",
+    "Assumption",
+    "BoundaryRole",
+    "FlowEdge",
+    "InquiryProfile",
+    "Param",
+    "Transformation",
     "PatchDefinitionEntity",
     "PatchExclude",
     "PatchScope",
