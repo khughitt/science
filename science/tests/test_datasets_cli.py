@@ -103,6 +103,36 @@ class TestDatasetsCLI:
         data = json.loads(result.output)
         assert data["rows"][0]["access"] == "public"
 
+    def test_search_table_includes_modality_organism(self, runner: CliRunner) -> None:
+        mock_results = [
+            DatasetResult(
+                source="geo", id="GSE1", title="Circadian liver",
+                modality="rna-seq", organism="mouse", sample_count=24,
+            ),
+        ]
+        with patch("science_tool.cli.search_all", return_value=mock_results):
+            result = runner.invoke(main, ["datasets", "search", "circadian"])
+        assert result.exit_code == 0
+        assert "Modality" in result.output
+        assert "Organism" in result.output
+
+    def test_search_json_includes_richer_fields(self, runner: CliRunner) -> None:
+        mock_results = [
+            DatasetResult(
+                source="geo", id="GSE1", title="Circadian liver",
+                modality="rna-seq", organism="mouse", sample_count=24,
+            ),
+        ]
+        with patch("science_tool.cli.search_all", return_value=mock_results):
+            result = runner.invoke(main, ["datasets", "search", "circadian", "--format", "json"])
+        assert result.exit_code == 0
+        import json
+
+        row = json.loads(result.output)["rows"][0]
+        assert row["modality"] == "rna-seq"
+        assert row["organism"] == "mouse"
+        assert row["sample_count"] == 24
+
     def test_metadata_json_includes_access(self, runner: CliRunner) -> None:
         from unittest.mock import MagicMock
 

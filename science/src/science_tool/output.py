@@ -16,7 +16,7 @@ def emit_query_rows(
     *,
     output_format: str,
     title: str,
-    columns: list[tuple[str, str]],
+    columns: list[tuple[str, str] | tuple[str, str, dict[str, Any]]],
     rows: Sequence[Mapping[str, Any]],
     meta: Mapping[str, Any] | None = None,
     renderers: Mapping[str, Callable[[Any, Mapping[str, Any]], Any]] | None = None,
@@ -29,13 +29,15 @@ def emit_query_rows(
         return
 
     table = Table(title=title)
-    for _, label in columns:
-        table.add_column(label)
+    for col in columns:
+        _, label, *rest = col
+        col_kwargs: dict[str, Any] = rest[0] if rest else {}
+        table.add_column(label, **col_kwargs)
 
     cell_renderers = renderers or {}
     for row in rows:
         cells: list[Any] = []
-        for key, _ in columns:
+        for key, *_ in columns:
             value = row.get(key, "")
             renderer = cell_renderers.get(key)
             cells.append(renderer(value, row) if renderer is not None else str(value))

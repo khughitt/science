@@ -2979,6 +2979,9 @@ def datasets_search(query: str, source: str | None, max_results: int, output_for
             "title": r.title[:80],
             "year": r.year or "",
             "access": r.access or "",
+            "modality": r.modality or "",
+            "organism": r.organism or "",
+            "sample_count": r.sample_count or "",
             "doi": r.doi or "",
         }
         for r in results
@@ -2990,9 +2993,11 @@ def datasets_search(query: str, source: str | None, max_results: int, output_for
         columns=[
             ("source", "Source"),
             ("id", "ID"),
-            ("title", "Title"),
+            ("title", "Title", {"no_wrap": True}),
             ("year", "Year"),
             ("access", "Access"),
+            ("modality", "Modality"),
+            ("organism", "Organism"),
             ("doi", "DOI"),
         ],
         rows=rows,
