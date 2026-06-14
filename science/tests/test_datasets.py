@@ -8,10 +8,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from science_tool.datasets._base import DatasetResult, FileInfo
+import httpx
+
 from science_tool.datasets.arrayexpress import ArrayExpressAdapter
 from science_tool.datasets.dryad import DryadAdapter
 from science_tool.datasets.figshare import FigshareAdapter
 from science_tool.datasets.geo import GEOAdapter
+from science_tool.datasets.physionet import PhysioNetAdapter
 from science_tool.datasets.semantic_scholar import SemanticScholarAdapter
 from science_tool.datasets.zenodo import ZenodoAdapter
 
@@ -812,3 +815,84 @@ class TestArrayExpressAdapter:
         b = next(f for f in files if f.filename == "sub/b.cel")
         assert b.url == "https://www.ebi.ac.uk/biostudies/files/E-MTAB-1724/sub/b.cel"
         assert b.format == "cel"
+
+
+class TestPhysioNetAdapter:
+    def test_name(self) -> None:
+        assert PhysioNetAdapter().name == "physionet"
+
+    def test_search_parses_projects_and_access(self) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = [
+            {
+                "slug": "mmash",
+                "version": "1.0.0",
+                "title": "MMASH",
+                "short_description": "Actigraphy and saliva",
+                "abstract": "Long abstract",
+                "version_doi": "10.13026/mmash",
+                "publish_date": "2020-07-01",
+                "license": {"name": "ODC-By 1.0"},
+                "access_policy": "Open",
+                "topics": ["actigraphy", "circadian"],
+                "main_storage_size": 12345,
+                "source_url": "https://physionet.org/content/mmash/",
+            },
+            {"slug": "secret", "version": "1.0.0", "title": "Secret", "access_policy": "Credentialed", "topics": []},
+        ]
+        adapter = PhysioNetAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            results = adapter.search("actigraphy", max_results=10)
+        assert len(results) == 2
+        r = results[0]
+        assert r.id == "mmash"
+        assert r.title == "MMASH"
+        assert r.description == "Actigraphy and saliva"
+        assert r.doi == "10.13026/mmash"
+        assert r.year == 2020
+        assert r.license == "ODC-By 1.0"
+        assert r.keywords == ["actigraphy", "circadian"]
+        assert r.total_size_bytes == 12345
+        assert r.access == "public"
+        assert results[1].access == "controlled"
+
+    def test_access_tier_mapping(self) -> None:
+        adapter = PhysioNetAdapter()
+        assert adapter._parse_project({"slug": "a", "access_policy": "Open"}).access == "public"
+        assert adapter._parse_project({"slug": "b", "access_policy": "Restricted"}).access == "restricted"
+        assert adapter._parse_project({"slug": "c", "access_policy": "Credentialed"}).access == "controlled"
+        assert adapter._parse_project({"slug": "d"}).access is None
+
+    def test_files_parses_sha256sums(self) -> None:
+        mock_response = MagicMock()
+        mock_response.text = (
+            "aaaa1111  records/data.csv\n"
+            "bbbb2222  notes.txt\n"
+            "\n"
+        )
+        adapter = PhysioNetAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            files = adapter.files("mmash/1.0.0")
+        assert len(files) == 2
+        csv = files[0]
+        assert csv.filename == "records/data.csv"
+        assert csv.url == "https://physionet.org/files/mmash/1.0.0/records/data.csv"
+        assert csv.checksum == "aaaa1111"
+        assert csv.format == "csv"
+        assert csv.size_bytes is None
+
+    def test_download_gated_raises_permission_error(self) -> None:
+        adapter = PhysioNetAdapter()
+        file_info = FileInfo(filename="x.dat", url="https://physionet.org/files/secret/1.0.0/x.dat")
+        request = httpx.Request("GET", file_info.url)
+        response = httpx.Response(403, request=request)
+        ctx = MagicMock()
+        ctx.__enter__.return_value.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "403", request=request, response=response
+        )
+        adapter._client = MagicMock()
+        adapter._client.stream.return_value = ctx
+        with pytest.raises(PermissionError):
+            adapter.download(file_info, Path("/tmp/pn-test"))
