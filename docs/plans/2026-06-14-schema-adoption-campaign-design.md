@@ -89,11 +89,26 @@ exact-descriptor validation capability with these acceptance criteria:
 - Parses the descriptor (JSON **or** YAML) and validates every resource through the
   Spec 1 `ResourceDescriptor` models and `package_consistency_issues` — the same SSOT
   that `infer-schema --write` validates against.
-- **Fails (non-zero exit)** on any descriptor or consistency error, and also when an
-  explicit descriptor target yields nothing to validate (no silent warn-and-pass for an
-  explicit target — fail early, per project rules).
+- **Also checks each resource against its table** (parity with — and beyond — the legacy
+  scan, which the descriptor gate replaces): resolve the resource `path` relative to the
+  descriptor's directory and confirm the file exists; for tabular resources that declare
+  a schema, confirm the declared `fields[]` agree with the table's observed names+types
+  (reusing `infer-schema`'s `observed_fields` + `diff_schema` — a missing/extra/typed
+  field is a fail). A descriptor whose `schema.fields[]` is stale, or whose data file is
+  absent, must not pass.
+- **Fails (non-zero exit)** on any descriptor, consistency, file-presence, or
+  schema↔table error, and also when an explicit descriptor target yields nothing to
+  validate (no silent warn-and-pass for an explicit target — fail early, per project
+  rules).
 - Additive and backward-compatible: the existing `--path data` raw/processed scan is
   unchanged.
+
+Interaction with blocked-data resources: because the gate checks file presence, a
+**partially-blocked** package (walker_2024's 2 absent parquet, dgidb's 1 cross-dir
+parquet) will report fails on exactly those resources. The per-package done-criterion is
+therefore: a clean exit 0 for fully-present packages, and for the two partials, *the only
+failures name a manifest-recorded blocked-data resource*. reactome (all data absent)
+stays fully blocked and is not worked.
 
 This is implemented TDD-first as the plan's first task and is the gate referenced by
 Phases 1 and 2 below.

@@ -17,7 +17,7 @@
 ## File Structure
 
 **Phase 0 (code, science repo `~/d/science/science`):**
-- Modify `src/science_tool/datasets/validate.py` — add `DESCRIPTOR_NAMES`, `validate_package_descriptor()`, `_is_descriptor_target()`, `validate_path()`. Reuses `load_descriptor` (infer_schema) and the existing `_validate_resource_descriptors()`.
+- Modify `src/science_tool/datasets/validate.py` — add `DESCRIPTOR_NAMES`, `validate_package_descriptor()`, `_validate_resource_tables()` (file presence + schema↔table agreement), `_is_descriptor_target()`, `validate_path()`. Reuses `load_descriptor` / `observed_fields` / `diff_schema` (infer_schema) and the existing `_validate_resource_descriptors()`.
 - Modify `src/science_tool/cli.py:3104-3106` — `datasets_validate` calls `validate_path()` instead of `validate_data_packages()`.
 - Test `tests/test_datasets_validate.py` — add `TestDescriptorTargetValidation`.
 - Test `tests/test_datasets_validate_cli.py` (create) — CLI exit-code behaviour.
@@ -34,7 +34,7 @@
 **S1 — Commit protocol (foreign repo, run from inside the target repo's working tree):**
 
 ```bash
-# $REPO = the data repo root (e.g. /mnt/ssd/Dropbox/cancer/cancer-types/multiple-myeloma)
+# $REPO = the data repo root (e.g. ~/d/cancer/cancer-types/multiple-myeloma)
 cd "$REPO"
 git rev-parse --show-toplevel                 # confirm we are in the intended repo
 git branch --show-current                      # mm30 is Dropbox-synced & branch-volatile — eyeball this
@@ -42,12 +42,28 @@ git add <exact/path/to/datapackage.json>       # NAMED files only — never -A /
 git commit -m "<message>"                       # NO push; NO Co-Authored-By trailer
 ```
 
-**S2 — Phase 0 validation gate (run from `~/d/science/science`):**
+**S2 — Phase 0 validation gate, clean-package case (run from `~/d/science/science`):**
 
 ```bash
 cd ~/d/science/science
 uv run --quiet science datasets validate --path "<PKG_DIR>"   # PKG_DIR contains datapackage.{json,yaml}
-echo "exit=$?"   # 0 = pass; non-zero = a real descriptor/consistency failure
+echo "exit=$?"   # 0 = pass; non-zero = a real descriptor/consistency/file/schema failure
+```
+
+**S3 — Done-check for a partially-blocked package** (walker_2024, dgidb — where the gate
+*will* fail on the manifest-recorded missing-data resources). Confirm every failure names
+a known-blocked resource and nothing else:
+
+```bash
+cd ~/d/science/science
+uv run --quiet science datasets validate --path "<PKG_DIR>" --format json > /tmp/val.json
+python3 - <<'PY'
+import json
+rows = json.load(open("/tmp/val.json"))["rows"]
+fails = [r for r in rows if r["status"] == "fail"]
+print("\n".join(f'{r["check"]}: {r["details"]}' for r in fails) or "(no fails)")
+PY
+# Done iff every printed fail names a resource the manifest marks blocked-data; else fix.
 ```
 
 ---
@@ -129,6 +145,34 @@ class TestDescriptorTargetValidation:
     def test_no_resources_is_fail(self, tmp_path: Path) -> None:
         results = validate_package_descriptor(_pkg_dir(tmp_path, {"name": "p", "resources": []}))
         assert any(r["status"] == "fail" for r in results)
+
+    # --- resource-level table checks (file presence + schema↔table agreement) ---
+
+    def test_missing_data_file_fails(self, tmp_path: Path) -> None:
+        d = tmp_path / "pkg"
+        d.mkdir()
+        pkg = {"name": "p", "resources": [
+            {"name": "x", "path": "absent.csv",
+             "schema": {"fields": [{"name": "a", "type": "integer"}]}}]}
+        (d / "datapackage.json").write_text(json.dumps(pkg))
+        results = validate_package_descriptor(d)
+        assert any(r["status"] == "fail" and "file" in r["check"].lower() for r in results)
+
+    def test_stale_schema_field_fails(self, tmp_path: Path) -> None:
+        # schema declares 'ghost'; the table's only column is 'a' -> add/remove mismatch.
+        pkg = {"name": "p", "resources": [
+            {"name": "x", "path": "x.csv",
+             "schema": {"fields": [{"name": "ghost", "type": "integer"}]}}]}
+        results = validate_package_descriptor(_pkg_dir(tmp_path, pkg, csv="a\n1\n"))
+        assert any("matches table" in r["check"] and r["status"] == "fail" for r in results)
+
+    def test_type_conflict_with_table_fails(self, tmp_path: Path) -> None:
+        # declared string, but the column is integer-valued -> coarse-type conflict.
+        pkg = {"name": "p", "resources": [
+            {"name": "x", "path": "x.csv",
+             "schema": {"fields": [{"name": "a", "type": "string"}]}}]}
+        results = validate_package_descriptor(_pkg_dir(tmp_path, pkg, csv="a\n1\n2\n"))
+        assert any("matches table" in r["check"] and r["status"] == "fail" for r in results)
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -141,27 +185,77 @@ Expected: FAIL — `ImportError: cannot import name 'validate_package_descriptor
 Edit the import block at the top of `src/science_tool/datasets/validate.py` to add:
 
 ```python
-from science_tool.datasets.infer_schema import InferSchemaError, load_descriptor
+from science_tool.datasets.infer_schema import (
+    InferSchemaError,
+    diff_schema,
+    load_descriptor,
+    observed_fields,
+)
 ```
 
 Add near the top of the module (after imports):
 
 ```python
 DESCRIPTOR_NAMES = ("datapackage.json", "datapackage.yaml", "datapackage.yml")
+_TABULAR_SUFFIXES = (".csv", ".tsv", ".parquet")
+_VALIDATE_SAMPLE = 10000
 ```
 
-Append this function to `src/science_tool/datasets/validate.py`:
+Append these functions to `src/science_tool/datasets/validate.py`:
 
 ```python
+def _validate_resource_tables(resources: list[dict], base_dir: Path) -> list[dict[str, str]]:
+    """Resource-level checks the Spec 1 models cannot do: the data file exists (resolved
+    relative to the descriptor dir), and — for tabular resources that declare a schema —
+    the declared fields[] agree with the table's observed names+types. Reuses
+    infer-schema's `observed_fields` (Arrow for parquet, sampled for CSV/TSV) and
+    `diff_schema` (the Spec 3 add/remove/conflict semantics)."""
+    rows: list[dict[str, str]] = []
+    for res in resources:
+        name = res.get("name", res.get("path", "unknown"))
+        table = base_dir / res.get("path", "")
+        if not table.exists():
+            rows.append({"check": f"{name} file exists", "status": "fail",
+                         "details": f"file not found: {table}"})
+            continue
+        rows.append({"check": f"{name} file exists", "status": "pass", "details": str(table)})
+
+        declared = (res.get("schema") or {}).get("fields")
+        if table.suffix.lower() not in _TABULAR_SUFFIXES or not declared:
+            continue
+        try:
+            observed = observed_fields(table, _VALIDATE_SAMPLE)
+        except InferSchemaError as exc:
+            rows.append({"check": f"{name} observed fields", "status": "fail", "details": str(exc)})
+            continue
+        problems = [d for d in diff_schema(declared, observed)
+                    if d.action in ("add", "remove") or d.conflict]
+        if problems:
+            detail = "; ".join(
+                f"{d.name}: " + (
+                    "in table, not in schema" if d.action == "add"
+                    else "in schema, not in table" if d.action == "remove"
+                    else f"declared {d.old_type!r} != observed {d.new_type!r}"
+                )
+                for d in problems
+            )
+            rows.append({"check": f"{name} schema matches table", "status": "fail", "details": detail})
+        else:
+            rows.append({"check": f"{name} schema matches table", "status": "pass",
+                         "details": f"{len(declared)} fields agree"})
+    return rows
+
+
 def validate_package_descriptor(target: Path) -> list[dict[str, str]]:
     """Validate ONE package descriptor (JSON or YAML) at `target` (the descriptor file
-    or the directory containing it) through the Spec 1 models — the same SSOT that
-    `infer-schema --write` validates against.
+    or the directory containing it) through the Spec 1 models AND against its tables —
+    the same SSOT that `infer-schema --write` validates against.
 
     An explicit target must validate *something*: a missing/malformed descriptor, or a
-    descriptor with no resources, is a `fail` row (never a silent warn). This is the
-    campaign's real gate; pointing the legacy raw/processed scan at a nested or YAML
-    package dir would warn-and-pass, which this function deliberately does not do.
+    descriptor with no resources, is a `fail` row (never a silent warn). Beyond the Spec 1
+    model + consistency checks, it confirms each resource's file exists and that declared
+    fields agree with the observed table — so a stale `schema.fields[]` or an absent data
+    file cannot pass. This is the campaign's real done-gate.
     """
     try:
         mapping, _fmt = load_descriptor(target)
@@ -175,18 +269,21 @@ def validate_package_descriptor(target: Path) -> list[dict[str, str]]:
             "status": "fail",
             "details": "descriptor defines no resources to validate",
         }]
-    return _validate_resource_descriptors(resources, str(target))
+    base_dir = target.parent if target.is_file() else target
+    rows = _validate_resource_descriptors(resources, str(target))
+    rows += _validate_resource_tables(resources, base_dir)
+    return rows
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cd ~/d/science/science && uv run --quiet pytest tests/test_datasets_validate.py::TestDescriptorTargetValidation -q`
-Expected: PASS (7 passed).
+Expected: PASS (10 passed).
 
 - [ ] **Step 5: Run the full validate test module (no regressions)**
 
 Run: `cd ~/d/science/science && uv run --quiet pytest tests/test_datasets_validate.py -q`
-Expected: PASS (all prior tests + 7 new).
+Expected: PASS (all prior tests + 10 new).
 
 - [ ] **Step 6: Commit**
 
@@ -462,14 +559,19 @@ uv run --quiet science datasets infer-schema "$PKG_DIR" --resource "$RES" --writ
 
 Expected: `Applied names+types patch to <descriptor>`. The command runs Spec 1 whole-package post-validation internally and refuses on type conflict.
 
-- [ ] **Step 4: Gate with the Phase 0 validator** (snippet S2)
+- [ ] **Step 4: Gate with the Phase 0 validator**
+
+For a package with **no** blocked-data resources, use snippet **S2** and expect `exit=0`:
 
 ```bash
 cd ~/d/science/science
 uv run --quiet science datasets validate --path "$PKG_DIR"; echo "exit=$?"
 ```
 
-Expected: `exit=0`. If non-zero, stop and inspect — do not commit a failing descriptor.
+For the two **partially-blocked** packages (`walker_2024`, `dgidb`), the gate will fail on
+the absent-data resources by design — use snippet **S3** and confirm every reported fail
+names a manifest-recorded blocked-data resource (and nothing else). In either case, if an
+*unexpected* failure appears, stop and inspect — do not commit a failing descriptor.
 
 - [ ] **Step 5: For the FIRST YAML package only (`chembl`) — verify clean round-trip**
 
@@ -495,13 +597,20 @@ Edit `docs/plans/2026-06-14-schema-adoption-campaign-manifest.md`: set the packa
 
 - [ ] **Step 8: Repeat Steps 1–7 for every `pending` package**, then commit the final manifest state.
 
-Run a coverage check before declaring Phase 1 complete:
+Run a **column-aware** coverage check before declaring Phase 1 complete. The Phase 1
+status is the 5th `|`-delimited column; a bare `grep pending` would also match Phase 2
+cells (still pending by design), so check that column specifically:
 
 ```bash
-grep -nE '\| (pending) \|' docs/plans/2026-06-14-schema-adoption-campaign-manifest.md || echo "no pending Phase-1 rows remain"
+M=docs/plans/2026-06-14-schema-adoption-campaign-manifest.md
+if awk -F'|' '$5 ~ /pending/' "$M" | grep -q .; then
+  echo "FAIL: Phase-1 'pending' rows remain:"; awk -F'|' '$5 ~ /pending/' "$M"
+else
+  echo "no pending Phase-1 rows remain"
+fi
 ```
 
-Expected: `no pending Phase-1 rows remain` (only `done` / `no-op` / `blocked-data`).
+Expected: `no pending Phase-1 rows remain` (every Phase 1 cell is `done` / `no-op` / `blocked-data`).
 
 ---
 
@@ -529,7 +638,7 @@ Dispatch a subagent (sonnet) with a prompt containing, verbatim: the package's a
 > - **Per-resource** (`constraints.required`, `constraints.enum`, single-column `primaryKey`): author ONLY where the review report surfaced it AND the data confirms it. Reject sample coincidences — a column unique in-sample is not a primaryKey unless it is the dataset's real identifier (the `Description`-as-PK trap).
 > - **Relational** (`foreignKeys`, composite `primaryKey`/`uniqueKeys`): the per-resource report cannot surface these. Author ONLY with direct cross-resource evidence — verify local field values are a subset of the target resource's key column(s), or that a column tuple is unique-and-non-null across the data. If you cannot verify it from the data, do NOT author it.
 > - NEVER author `minimum`/`maximum` bounds, `qa:` of any kind, or any per-resource invariant the report did not surface.
-> - After editing, run `cd ~/d/science/science && uv run --quiet science datasets validate --path "$PKG_DIR"` and ensure exit 0.
+> - After editing, run `cd ~/d/science/science && uv run --quiet science datasets validate --path "$PKG_DIR"`. For a fully-present package it must exit 0; for `walker_2024`/`dgidb` the ONLY failures allowed are the absent-data resources already recorded as blocked-data in the manifest (your authored changes must introduce no new failures).
 > - Commit IN THE TARGET REPO: `cd <repo-root>`; verify branch with `git branch --show-current`; `git add` the single descriptor file by name (never `-A`); `git commit -m "feat(schema): author structural invariants for <package>"`. Do NOT push. Do NOT add a Co-Authored-By trailer.
 > Report which invariants you authored per resource and the evidence for each.
 
@@ -545,18 +654,23 @@ Confirm every authored per-resource invariant maps to a report recommendation, e
 
 - [ ] **Step 4: Re-gate and mark `done`**
 
-```bash
-cd ~/d/science/science && uv run --quiet science datasets validate --path "$PKG_DIR"; echo "exit=$?"
-```
-
-Expected `exit=0`. Set the package's **Phase 2 (meaning)** manifest cell to `done`; commit the manifest update in the science repo.
+Re-run the Phase 0 gate: snippet **S2** (expect `exit=0`) for fully-present packages, or
+snippet **S3** for `walker_2024`/`dgidb` (every fail must name a blocked-data resource).
+Then set the package's **Phase 2 (meaning)** manifest cell to `done`; commit the manifest
+update in the science repo.
 
 - [ ] **Step 5: Repeat for every Phase-1-`done` package.** User spot-checks a sample of completed packages (surface 2–3 diffs for review).
 
-Coverage check before declaring Phase 2 complete:
+Column-aware coverage check before declaring Phase 2 complete (Phase 2 is the 6th column;
+check that no Phase-1 *or* Phase-2 cell is still `pending`):
 
 ```bash
-grep -nE '\| pending \|' docs/plans/2026-06-14-schema-adoption-campaign-manifest.md || echo "no pending rows remain"
+M=docs/plans/2026-06-14-schema-adoption-campaign-manifest.md
+if awk -F'|' '$5 ~ /pending/ || $6 ~ /pending/' "$M" | grep -q .; then
+  echo "FAIL: pending rows remain:"; awk -F'|' '$5 ~ /pending/ || $6 ~ /pending/' "$M"
+else
+  echo "no pending rows remain"
+fi
 ```
 
 Expected: `no pending rows remain`.
@@ -576,9 +690,9 @@ Confirm every manifest row is `done`, `no-op`, or `blocked-data` (no `pending`),
 - [ ] **Step 2: Confirm each foreign repo has the expected un-pushed commits**
 
 ```bash
-for REPO in /mnt/ssd/Dropbox/cancer/cancer-types/multiple-myeloma \
-            /mnt/ssd/Dropbox/cancer/therapeutics \
-            /mnt/ssd/Dropbox/cancer/mechanisms/evolution; do
+for REPO in ~/d/cancer/cancer-types/multiple-myeloma \
+            ~/d/cancer/therapeutics \
+            ~/d/cancer/mechanisms/evolution; do
   echo "== $REPO =="; cd "$REPO"; git log --oneline -5 -- '**/datapackage.*' 2>/dev/null | head
 done
 ```
