@@ -652,6 +652,14 @@ class TestCBioPortalAdapter:
         assert "cbioportal" in available_adapters()
 
 
+def test_domain_adapters_registered() -> None:
+    from science_tool.datasets import available_adapters
+
+    names = available_adapters()
+    for name in ("figshare", "arrayexpress", "physionet", "sra"):
+        assert name in names
+
+
 class TestFigshareAdapter:
     def test_name(self) -> None:
         assert FigshareAdapter().name == "figshare"

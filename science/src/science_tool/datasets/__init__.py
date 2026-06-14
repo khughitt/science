@@ -98,6 +98,30 @@ def _auto_register() -> None:
         register("cbioportal", CBioPortalAdapter)
     except ImportError:
         pass
+    try:
+        from science_tool.datasets.figshare import FigshareAdapter
+
+        register("figshare", FigshareAdapter)
+    except ImportError:
+        pass
+    try:
+        from science_tool.datasets.arrayexpress import ArrayExpressAdapter
+
+        register("arrayexpress", ArrayExpressAdapter)
+    except ImportError:
+        pass
+    try:
+        from science_tool.datasets.physionet import PhysioNetAdapter
+
+        register("physionet", PhysioNetAdapter)
+    except ImportError:
+        pass
+    try:
+        from science_tool.datasets.sra import SRAAdapter
+
+        register("sra", SRAAdapter)
+    except ImportError:
+        pass
 
 
 _auto_register()
