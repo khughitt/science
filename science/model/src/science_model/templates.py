@@ -21,7 +21,6 @@ MIGRATED_KINDS: frozenset[str] = frozenset(
         "proposition",
         "evidence-line",
         "finding",
-        "inquiry",
         "method",
         "paper",
         "book",

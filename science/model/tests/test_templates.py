@@ -265,7 +265,7 @@ def test_evidence_line_template_round_trip(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# new-kind domain templates (finding, inquiry, method, paper,
+# new-kind domain templates (finding, method, paper,
 # pre-registration, synthesis)
 # ---------------------------------------------------------------------------
 
@@ -275,7 +275,7 @@ _RAW_PLACEHOLDER_RE = re.compile(r"\{\{[^{}]+\}\}")
 
 @pytest.mark.parametrize(
     "kind",
-    ["finding", "inquiry", "method", "paper", "pre-registration", "synthesis"],
+    ["finding", "method", "paper", "pre-registration", "synthesis"],
 )
 def test_new_kind_template_is_migrated(kind: str) -> None:
     from science_model.templates import MIGRATED_KINDS
