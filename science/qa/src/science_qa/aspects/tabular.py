@@ -25,10 +25,11 @@ def _allowed_values(spec: dict, base_dir: Path) -> set:
 
 
 def unique_key(ctx: TableContext, params: dict) -> list[Flag]:
-    col = ctx.columns[0]
-    dupes = int(ctx.table[col].duplicated().sum())
+    cols = list(ctx.columns)
+    subject = "+".join(cols)
+    dupes = int(ctx.table[cols].duplicated().sum())
     if dupes:
-        return [Flag("tabular", "unique_key", col, None, SEVERITY_STRUCTURAL,
+        return [Flag("tabular", "unique_key", subject, None, SEVERITY_STRUCTURAL,
                      str(dupes), "0", f"{dupes} duplicate key value(s)")]
     return []
 

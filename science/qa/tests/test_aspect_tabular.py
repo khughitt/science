@@ -38,3 +38,21 @@ def test_type_conformance_flags_wrong_dtype():
     df = pd.DataFrame({"n": ["x", "y"]})
     flags = type_conformance(_ctx(df, ["n"]), {"expected": "numeric"})
     assert flags[0].check == "type_conformance" and flags[0].severity == "structural"
+
+
+def test_unique_key_single_column_dupes():
+    df = pd.DataFrame({"id": [1, 1, 2]})
+    flags = unique_key(TableContext(table=df, columns=["id"]), {})
+    assert len(flags) == 1 and flags[0].subject == "id" and flags[0].value == "1"
+
+
+def test_unique_key_composite_counts_tuple_dupes():
+    df = pd.DataFrame({"a": [1, 1, 1], "b": ["x", "x", "y"]})
+    flags = unique_key(TableContext(table=df, columns=["a", "b"]), {})
+    # (1,"x") repeats once -> 1 duplicate row-tuple; subject is the joined key
+    assert len(flags) == 1 and flags[0].subject == "a+b" and flags[0].value == "1"
+
+
+def test_unique_key_composite_unique_is_clean():
+    df = pd.DataFrame({"a": [1, 1], "b": ["x", "y"]})
+    assert unique_key(TableContext(table=df, columns=["a", "b"]), {}) == []
