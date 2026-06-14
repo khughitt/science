@@ -88,6 +88,28 @@ def schema_to_config(resource: dict, package_dir: Path, package: dict) -> QAConf
     return cfg
 
 
+def _as_one(value) -> tuple[str, bool]:
+    """Return (single_name, is_composite) for a FK fields value (str or list)."""
+    if isinstance(value, list):
+        return (value[0] if value else "", len(value) > 1)
+    return (value, False)
+
+
 def _compile_foreign_keys(resource: dict, schema: dict, package: dict, cfg: QAConfig) -> None:
-    """Single-column FK → categoricals(allowed_from). Filled in the next task."""
-    return None
+    by_name = {r.get("name"): r for r in package.get("resources", [])}
+    self_name = resource.get("name")
+    for fk in schema.get("foreignKeys", []) or []:
+        local, local_composite = _as_one(fk["fields"])
+        ref = fk.get("reference", {})
+        ref_field, ref_composite = _as_one(ref.get("fields"))
+        if local_composite or ref_composite:
+            raise CompileError(f"composite foreignKey not supported (single-column only): {fk}")
+        target_name = ref.get("resource") or self_name
+        target = by_name.get(target_name)
+        if target is None:
+            raise CompileError(f"foreignKey on {self_name!r} references unknown resource {target_name!r}")
+        target_fields = {f["name"] for f in (target.get("schema", {}) or {}).get("fields", [])}
+        if ref_field not in target_fields:
+            raise CompileError(
+                f"foreignKey on {self_name!r} reference field {ref_field!r} not in resource {target_name!r}")
+        cfg.categoricals[local] = {"allowed_from": f"{target['path']}#{ref_field}"}

@@ -75,3 +75,50 @@ class TestNativeMapping:
                                      "constraints": {"minimum": "not-a-date"}}]})
         with pytest.raises(CompileError, match="parseable ISO date"):
             schema_to_config(res, Path("/pkg"), _pkg(res))
+
+
+class TestForeignKeys:
+    def test_single_column_fk_resolves_to_allowed_from(self):
+        proteins = _resource({"fields": [{"name": "id"}]}, name="proteins", path="proteins.csv")
+        edges = _resource(
+            {"fields": [{"name": "src"}],
+             "foreignKeys": [{"fields": "src", "reference": {"resource": "proteins", "fields": "id"}}]},
+            name="edges", path="edges.csv",
+        )
+        cfg = schema_to_config(edges, Path("/pkg"), _pkg(proteins, edges))
+        assert cfg.categoricals == {"src": {"allowed_from": "proteins.csv#id"}}
+
+    def test_self_reference_points_at_own_path(self):
+        tree = _resource(
+            {"fields": [{"name": "id"}, {"name": "parent"}],
+             "foreignKeys": [{"fields": "parent", "reference": {"fields": "id"}}]},
+            name="tree", path="tree.csv",
+        )
+        cfg = schema_to_config(tree, Path("/pkg"), _pkg(tree))
+        assert cfg.categoricals == {"parent": {"allowed_from": "tree.csv#id"}}
+
+    def test_composite_fk_rejected(self):
+        res = _resource(
+            {"fields": [{"name": "a"}, {"name": "b"}],
+             "foreignKeys": [{"fields": ["a", "b"], "reference": {"resource": "t", "fields": ["x", "y"]}}]},
+        )
+        with pytest.raises(CompileError, match="composite foreignKey"):
+            schema_to_config(res, Path("/pkg"), _pkg(res))
+
+    def test_unknown_target_resource_rejected(self):
+        res = _resource(
+            {"fields": [{"name": "src"}],
+             "foreignKeys": [{"fields": "src", "reference": {"resource": "ghost", "fields": "id"}}]},
+        )
+        with pytest.raises(CompileError, match="unknown resource"):
+            schema_to_config(res, Path("/pkg"), _pkg(res))
+
+    def test_unknown_target_field_rejected(self):
+        proteins = _resource({"fields": [{"name": "id"}]}, name="proteins", path="proteins.csv")
+        edges = _resource(
+            {"fields": [{"name": "src"}],
+             "foreignKeys": [{"fields": "src", "reference": {"resource": "proteins", "fields": "nope"}}]},
+            name="edges", path="edges.csv",
+        )
+        with pytest.raises(CompileError, match="reference field"):
+            schema_to_config(edges, Path("/pkg"), _pkg(proteins, edges))
