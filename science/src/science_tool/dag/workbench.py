@@ -21,6 +21,7 @@ Structural contract
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -197,9 +198,7 @@ def _slug_for_triple(subject: str | None, predicate: str | None, obj: str | None
     raw = "-".join(part for part in (subject, predicate, obj) if part)
     slug = truncate_slug_on_word_boundary(normalize_to_slug(raw), DERIVED_SLUG_MAX_LENGTH)
     if len(slug) < 2:
-        raise EntityCommandError(
-            "row triple cannot derive a stable proposition slug; set an explicit id"
-        )
+        raise EntityCommandError("row triple cannot derive a stable proposition slug; set an explicit id")
     return slug
 
 
@@ -224,9 +223,7 @@ def _proposition_for_row(row: WorkbenchRow) -> PropositionEntity:
     )
 
 
-def _evidence_line_for_stub(
-    stub: EvidenceStub, *, target_id: str, index: int
-) -> EvidenceLineEntity:
+def _evidence_line_for_stub(stub: EvidenceStub, *, target_id: str, index: int) -> EvidenceLineEntity:
     """Lift an inline ``EvidenceStub`` to a typed ``EvidenceLineEntity``.
 
     ``target`` is the proposition id (edge-node IRI). Empirical evidence with no
@@ -235,9 +232,7 @@ def _evidence_line_for_stub(
     """
     target_slug = target_id.split(":", 1)[1]
     line_id = f"evidence-line:{target_slug}-ev{index}"
-    is_staged_empirical = (
-        stub.evidence_type == "empirical_data_evidence" and not stub.dataset_usage
-    )
+    is_staged_empirical = stub.evidence_type == "empirical_data_evidence" and not stub.dataset_usage
     return EvidenceLineEntity(
         id=line_id,
         kind="evidence-line",
@@ -260,7 +255,12 @@ def _evidence_line_for_stub(
     )
 
 
-def _write_entity_file(entity: PropositionEntity | EvidenceLineEntity, *, project_root: Path) -> None:
+def _write_entity_file(
+    entity: PropositionEntity | EvidenceLineEntity,
+    *,
+    project_root: Path,
+    as_of: date | None = None,
+) -> None:
     """Write a typed entity to its canonical ``entities/<kind>/<slug>.md`` file.
 
     Reuses the entity-layer path policy and markdown writer primitives so this
@@ -268,19 +268,37 @@ def _write_entity_file(entity: PropositionEntity | EvidenceLineEntity, *, projec
     bytes from the same frontmatter dump + atomic replace used by ``create_entity``.
     Frontmatter is the typed model's ``model_dump`` (the flat key/value shape the
     validate checks and ``parse_entity_file`` consume).
+
+    ``as_of`` controls the ``created``/``updated`` stamps.  On upsert the
+    existing file's ``created`` is preserved so it is stable across re-compiles;
+    ``updated`` always advances to ``as_of`` (or ``date.today()`` when None).
     """
     from science_tool.entities import (
         _atomic_replace_text,
+        _parse_markdown_file,
         _render_markdown,
         default_status,
         resolve_path_policy,
     )
 
+    today = as_of or date.today()
     kind = entity.kind
     assert entity.id is not None
     local_part = entity.id.split(":", 1)[1]
     policy = resolve_path_policy(kind, project_root=project_root)
     dest = project_root / policy.root / f"{local_part}.md"
+
+    # Preserve `created` from an existing file on upsert.
+    # Guard against a corrupt/unparseable existing file — fall back to today.
+    existing_created: str | None = None
+    if dest.exists():
+        try:
+            existing_fm, _ = _parse_markdown_file(dest)
+            existing_created = existing_fm.get("created")
+            if existing_created is not None:
+                existing_created = str(existing_created)
+        except (yaml.YAMLError, ValueError, OSError):
+            existing_created = None
 
     frontmatter = entity.model_dump(mode="json", exclude_none=True, exclude_defaults=False)
     # Identity/typing the loaders key on; status from the per-kind default.
@@ -288,8 +306,13 @@ def _write_entity_file(entity: PropositionEntity | EvidenceLineEntity, *, projec
     frontmatter["kind"] = kind
     frontmatter.setdefault("status", default_status(kind))
     # Drop fields that are not authored frontmatter (defaults that re-derive on load).
-    for derived in ("canonical_id", "type", "content_preview", "content", "file_path"):
+    # NOTE: `type` is intentionally NOT popped — it is required by entity-conformance.
+    for derived in ("canonical_id", "content_preview", "content", "file_path"):
         frontmatter.pop(derived, None)
+
+    # Stamp created/updated (mirrors create_entity / build_entity_markdown).
+    frontmatter["created"] = existing_created if existing_created is not None else today.isoformat()
+    frontmatter["updated"] = today.isoformat()
 
     body = f"# {entity.title or local_part}\n\n## Summary\n\n\n## Notes\n"
     text = _render_markdown(frontmatter, body)
@@ -298,7 +321,10 @@ def _write_entity_file(entity: PropositionEntity | EvidenceLineEntity, *, projec
 
 
 def compile_workbench(
-    workbench: WorkbenchFile | str | Path, *, project_root: Path
+    workbench: WorkbenchFile | str | Path,
+    *,
+    project_root: Path,
+    as_of: date | None = None,
 ) -> CompileResult:
     """Upsert proposition/evidence-line entities from a workbench; return the result.
 
@@ -309,13 +335,15 @@ def compile_workbench(
 
     ``compile`` is the only writer of these entities from the workbench, so all
     entity files are (re)written via the canonical entity-layer writer.
+
+    ``as_of`` controls the ``created``/``updated`` timestamps written into each
+    entity file.  Defaults to ``date.today()`` when None so existing callers
+    need not change.
     """
     if isinstance(workbench, (str, Path)):
         import yaml
 
-        wb = WorkbenchFile.model_validate(
-            yaml.safe_load(Path(workbench).read_text(encoding="utf-8")) or {}
-        )
+        wb = WorkbenchFile.model_validate(yaml.safe_load(Path(workbench).read_text(encoding="utf-8")) or {})
     else:
         wb = workbench
 
@@ -327,7 +355,7 @@ def compile_workbench(
         prop = _proposition_for_row(row)
         if wb.focal_hypothesis is not None:
             prop = prop.model_copy(update={"discusses": [wb.focal_hypothesis]})
-        _write_entity_file(prop, project_root=project_root)
+        _write_entity_file(prop, project_root=project_root, as_of=as_of)
         propositions.append(prop)
 
         evidence_refs: list[EvidenceStub | str] = []
@@ -338,7 +366,7 @@ def compile_workbench(
                 evidence_refs.append(item)
                 continue
             line = _evidence_line_for_stub(item, target_id=prop.id, index=ev_index)
-            _write_entity_file(line, project_root=project_root)
+            _write_entity_file(line, project_root=project_root, as_of=as_of)
             evidence_lines.append(line)
             evidence_refs.append(line.id)
             ev_index += 1
@@ -451,7 +479,7 @@ def serialize_canonical(result: CompileResult) -> str:
     wb = result.workbench
 
     # Sort rows by their minted/authored proposition id.
-    sorted_rows = sorted(wb.rows, key=lambda r: (r.id or ""))
+    sorted_rows = sorted(wb.rows, key=lambda r: r.id or "")
 
     row_dicts = [_row_to_dict(row) for row in sorted_rows]
 
