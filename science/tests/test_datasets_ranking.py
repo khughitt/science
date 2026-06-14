@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 from science_tool.datasets._base import DatasetResult
-from science_tool.datasets._ranking import _normalize_doi
+from science_tool.datasets._ranking import _normalize_doi, score_result
+
+
+def _r(**kw) -> DatasetResult:
+    base = dict(source="s", id="i", title="")
+    base.update(kw)
+    return DatasetResult(**base)
 
 
 class TestNormalizeDoi:
@@ -21,3 +27,30 @@ class TestNormalizeDoi:
         assert _normalize_doi(None) is None
         assert _normalize_doi("") is None
         assert _normalize_doi("   ") is None
+
+
+class TestScoreResult:
+    def test_title_hit_outscores_description_hit(self) -> None:
+        in_title = _r(title="circadian rhythm", description="unrelated")
+        in_desc = _r(title="unrelated", description="circadian rhythm")
+        assert score_result("circadian", in_title) > score_result("circadian", in_desc)
+
+    def test_token_counts_once_per_field(self) -> None:
+        # "rhythm" appears twice in the title but the query token scores once.
+        r = _r(title="rhythm rhythm")
+        assert score_result("rhythm", r) == 3.0  # title weight
+
+    def test_multiple_fields_accumulate(self) -> None:
+        r = _r(title="sleep", keywords=["sleep"], description="sleep")
+        # title 3 + keywords 2 + description 1
+        assert score_result("sleep", r) == 6.0
+
+    def test_organism_and_modality_each_weight_one(self) -> None:
+        r = _r(title="x", organism="mouse", modality="mouse")
+        assert score_result("mouse", r) == 2.0
+
+    def test_empty_query_scores_zero(self) -> None:
+        assert score_result("", _r(title="anything")) == 0.0
+
+    def test_no_match_scores_zero(self) -> None:
+        assert score_result("zzz", _r(title="abc")) == 0.0
