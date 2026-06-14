@@ -452,7 +452,147 @@ def test_task_source_lands_in_provenance_not_belief(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Point 6 — line-authored dataset_usage collapse (B2 headline mechanism)
+# Point 6 — UKB / UKB-PPP sub-cohort lineage commitment (end-to-end)
+# ---------------------------------------------------------------------------
+
+def _dataset_dp_with_parent(root: Path, slug: str, parent_slug: str) -> None:
+    """Write an external dataset datapackage that declares a parent_dataset."""
+    dp = root / "data" / slug / "datapackage.yaml"
+    dp.parent.mkdir(parents=True, exist_ok=True)
+    dp.write_text(
+        "profiles: [science-pkg-entity-1.0]\n"
+        f"id: dataset:{slug}\n"
+        "type: dataset\n"
+        f"title: {slug}\n"
+        "status: active\n"
+        "origin: external\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n"
+        "access:\n"
+        "  level: controlled\n"
+        "  verified: true\n"
+        f"parent_dataset: dataset:{parent_slug}\n",
+        encoding="utf-8",
+    )
+
+
+def test_ukb_ppp_sub_cohort_lineage_commitment_end_to_end(tmp_path: Path) -> None:
+    """End-to-end UKB / UKB-PPP sub-cohort commitment.
+
+    Project structure:
+      - dataset:uk-biobank   (parent)
+      - dataset:ukb-ppp      (child, parent_dataset: dataset:uk-biobank)
+      - paper:pa             analyzed dataset:ukb-ppp, full overlap
+      - paper:pb             analyzed dataset:uk-biobank, full overlap
+      - proposition:p        the shared target
+      - evidence-line:ea     source=paper:pa, supports proposition:p
+      - evidence-line:eb     source=paper:pb, supports proposition:p
+
+    Expected:
+      - The knowledge graph carries sci:subCohortOf(ukb-ppp → uk-biobank)
+        (materialised by Task 3).
+      - B2 (Task 4) recognises the child-on-parent pair as a shared-source
+        commitment and emits exactly ONE DatasetIndependenceCommitment.
+      - Both evidence lines are independence members; sharedDataset covers
+        both datasets in the lineage family.
+      - reduce_units collapses to 1 kept unit.
+    """
+    _manifest(tmp_path)
+
+    # Parent dataset: UK Biobank
+    _dataset_dp(tmp_path, "uk-biobank")
+
+    # Child dataset: UKB-PPP, declares parent_dataset
+    _dataset_dp_with_parent(tmp_path, "ukb-ppp", "uk-biobank")
+
+    # Proposition
+    _write(tmp_path, "entities/propositions/p.md", _prop_md("p"))
+
+    # Paper A analyzed ukb-ppp (the child sub-cohort)
+    _write(tmp_path, "entities/papers/pa.md", _paper_md("pa", dataset_ref="dataset:ukb-ppp"))
+
+    # Paper B analyzed uk-biobank (the parent)
+    _write(tmp_path, "entities/papers/pb.md", _paper_md("pb", dataset_ref="dataset:uk-biobank"))
+
+    # Evidence lines citing those papers
+    _write(tmp_path, "entities/evidence-lines/ea.md", _evidence_line_md("ea", target="p", source="paper:pa"))
+    _write(tmp_path, "entities/evidence-lines/eb.md", _evidence_line_md("eb", target="p", source="paper:pb"))
+
+    knowledge, provenance = _materialize(tmp_path)
+
+    # --- Task 3 sub-cohort edge must be present in knowledge graph ---
+    ukb_ppp_uri = PROJECT_NS["dataset/ukb-ppp"]
+    uk_biobank_uri = PROJECT_NS["dataset/uk-biobank"]
+    assert (ukb_ppp_uri, SCI_NS.subCohortOf, uk_biobank_uri) in knowledge, (
+        "Expected sci:subCohortOf(ukb-ppp, uk-biobank) in knowledge graph "
+        "(Task 3 materialization)"
+    )
+
+    # --- Task 4 B2: exactly ONE DatasetIndependenceCommitment ---
+    commitments = list(provenance.subjects(RDF.type, SCI_NS.DatasetIndependenceCommitment))
+    assert len(commitments) == 1, (
+        f"Expected exactly 1 DatasetIndependenceCommitment for ukb-ppp/uk-biobank "
+        f"child-on-parent pair; got {len(commitments)}"
+    )
+    commitment = commitments[0]
+
+    # Both evidence lines are members
+    members = set(provenance.objects(commitment, SCI_NS.independenceMember))
+    line_a = PROJECT_NS["evidence-line/ea"]
+    line_b = PROJECT_NS["evidence-line/eb"]
+    assert line_a in members, f"evidence-line:ea missing from commitment members {members}"
+    assert line_b in members, f"evidence-line:eb missing from commitment members {members}"
+
+    # sharedDataset covers both members of the lineage family
+    shared_datasets = set(provenance.objects(commitment, SCI_NS.sharedDataset))
+    assert ukb_ppp_uri in shared_datasets, (
+        f"dataset:ukb-ppp missing from sharedDataset; got {shared_datasets}"
+    )
+    assert uk_biobank_uri in shared_datasets, (
+        f"dataset:uk-biobank missing from sharedDataset; got {shared_datasets}"
+    )
+
+    # independenceGroup is a deterministic key (slug for single-dataset, hash for multi)
+    groups = {str(o) for _, _, o in provenance.triples((commitment, SCI_NS.independenceGroup, None))}
+    assert len(groups) == 1, (
+        f"Expected exactly one independenceGroup on the commitment; got {groups}"
+    )
+    assert groups.pop().startswith("dataset-derived:"), (
+        f"Expected independence group to start with 'dataset-derived:'; got {groups}"
+    )
+
+    # --- reduce_units: collapse to exactly 1 kept unit ---
+    from science_tool.graph.belief import collect_evidence_units, reduce_units
+
+    target_uri = URIRef(PROJECT_NS["proposition/p"])
+    units = collect_evidence_units(knowledge, provenance, [target_uri])
+    assert len(units) == 2, f"Expected 2 raw units before reduction; got {len(units)}"
+
+    groups_on_units = {u.independence_group for u in units}
+    assert None not in groups_on_units, (
+        "Both units should carry a derived independence_group from the sub-cohort "
+        "commitment; found None — lineage B2 path may not be reaching the units"
+    )
+    assert len(groups_on_units) == 1, (
+        f"Both units must share the same independence_group; got {groups_on_units}"
+    )
+
+    reduced = reduce_units(units)
+    assert len(reduced.kept) == 1, (
+        f"Expected 1 kept unit after ukb-ppp/uk-biobank sub-cohort collapse; "
+        f"got {len(reduced.kept)}. "
+        f"kept={[u.line_uri for u in reduced.kept]}, "
+        f"collapsed={[u.line_uri for u in reduced.collapsed]}"
+    )
+    assert len(reduced.collapsed) == 1, (
+        f"Expected 1 collapsed unit; got {len(reduced.collapsed)}"
+    )
+    assert reduced.flagged_ungrouped == [], "No units should be flagged as ungrouped"
+    assert reduced.excluded_circular == [], "No units should be excluded as circular"
+
+
+# ---------------------------------------------------------------------------
+# Point 6 (original) — line-authored dataset_usage collapse (B2 headline mechanism)
 # ---------------------------------------------------------------------------
 
 def test_line_authored_dataset_usage_same_dataset_collapse(tmp_path: Path) -> None:
