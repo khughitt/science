@@ -22,7 +22,17 @@ class Program:
 # --- family expand callables (program declares WHAT; config supplies items) ---
 
 def _expand_unique_key(config) -> list[Invocation]:
-    return [Invocation(columns=[config.unique_key], requires=(config.unique_key,))] if config.unique_key else []
+    groups: list[list[str]] = []
+    if config.unique_key:
+        groups.append([config.unique_key])
+    groups.extend([list(g) for g in config.unique_keys])
+    # Dedupe overlapping groups (a field can be both unique:true and the primaryKey)
+    # so the same key never yields two invocations -> two flags. Order preserved.
+    deduped: list[list[str]] = []
+    for g in groups:
+        if g not in deduped:
+            deduped.append(g)
+    return [Invocation(columns=g, requires=tuple(g)) for g in deduped]
 
 
 def _expand_required_complete(config) -> list[Invocation]:
@@ -55,6 +65,11 @@ def _expand_missing_sentinels(config) -> list[Invocation]:
     if not config.missing_sentinels:
         return []
     return [Invocation(columns=None, params={"sentinels": list(config.missing_sentinels)})]  # selector-driven
+
+
+def _expand_bounds(config) -> list[Invocation]:
+    return [Invocation(columns=[c], requires=(c,), params={"bounds": b})
+            for c, b in config.bounds.items()]
 
 
 def _expand_doublet(config) -> list[Invocation]:
@@ -91,7 +106,27 @@ _SCRNA_QC_TABLE = Program(
     ],
 )
 
-PROGRAMS: dict[str, Program] = {_SCRNA_QC_TABLE.name: _SCRNA_QC_TABLE}
+_TABULAR = Program(
+    name="tabular",
+    substrate=TableContext,
+    checks=[
+        CheckSpec("general", "non_empty", CHECK_REQUIRED, TableContext, general.non_empty),
+        CheckSpec("general", "missing_fraction", CHECK_REQUIRED, TableContext, general.missing_fraction),
+        CheckSpec("tabular", "unique_key", CHECK_FAMILY, TableContext, tabular.unique_key, expand=_expand_unique_key),
+        CheckSpec("tabular", "required_complete", CHECK_FAMILY, TableContext, tabular.required_complete, expand=_expand_required_complete),
+        CheckSpec("tabular", "categoricals", CHECK_FAMILY, TableContext, tabular.categoricals, expand=_expand_categoricals),
+        CheckSpec("tabular", "exclusive_flags", CHECK_FAMILY, TableContext, tabular.exclusive_flags, expand=_expand_exclusive_flags),
+        CheckSpec("tabular", "type_conformance", CHECK_FAMILY, TableContext, tabular.type_conformance, expand=_expand_type_conformance),
+        CheckSpec("numeric-column", "bounds", CHECK_FAMILY, TableContext, numeric_column.bounds, expand=_expand_bounds),
+        CheckSpec("numeric-column", "range", CHECK_FAMILY, TableContext, numeric_column.ranges, expand=_expand_ranges),
+        CheckSpec("numeric-column", "polarity", CHECK_FAMILY, TableContext, numeric_column.polarity, expand=_expand_polarity),
+        CheckSpec("numeric-column", "zero_fraction", CHECK_REQUIRED, TableContext, numeric_column.zero_fraction, selector={"dtype": "numeric"}),
+        CheckSpec("numeric-column", "low_variance", CHECK_REQUIRED, TableContext, numeric_column.low_variance, selector={"dtype": "numeric"}),
+        CheckSpec("numeric-column", "missing_sentinel", CHECK_FAMILY, TableContext, numeric_column.missing_sentinels, selector={"dtype": "numeric"}, expand=_expand_missing_sentinels),
+    ],
+)
+
+PROGRAMS: dict[str, Program] = {_SCRNA_QC_TABLE.name: _SCRNA_QC_TABLE, _TABULAR.name: _TABULAR}
 
 
 def resolve_program(name: str) -> Program:
