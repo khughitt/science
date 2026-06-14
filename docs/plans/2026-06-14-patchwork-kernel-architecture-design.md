@@ -50,7 +50,7 @@ The kernel has a small set of primitives. Each primitive has exactly one job.
 | `Proposition` | The only truth-apt, belief-bearing assertion. A relational proposition is also its reified edge-node for graph rendering. |
 | `EvidenceLine` | The only grounding unit for belief. It supports, disputes, qualifies, or contextualizes propositions, with provenance and dependency metadata. |
 | `BeliefResult` | A derived result of applying a versioned belief policy to evidence-lines. Ordinal magnitude, log-odds scalar, subjective opinion, and edge status are views of this result. |
-| `Patch` | A durable named graph: an epistemic neighborhood around a question, hypothesis, model fragment, dataset evidence flow, or synthesis. Patch membership is compiled graph state, never only workbench state. |
+| `Patch` | A durable named graph: an epistemic neighborhood around a question, hypothesis, model fragment, dataset evidence flow, or synthesis. Patch vocabulary and named-graph emission already exist; the target gap is durable compiled membership and one contract shared with inquiry-like neighborhoods. |
 | `View` | Any generated projection: DAG diagram, dashboard, edge-status summary, composite graph, report, workbench, export, or inventory. Views are disposable and do not own truth. |
 
 The load-bearing invariant is:
@@ -65,6 +65,9 @@ Two clarifications prevent later subsystem specs from splitting the model:
   actor. A person can be an `Agent` with an ORCID and can also control a personal
   `Scope`; authorship/review identity and namespace ownership are linked by
   relations, not collapsed into one object.
+- `KindDescriptor` identity policy and `Scope` identity ownership are
+  complementary. The descriptor says how an id is formed and validated for a
+  kind; the scope says which namespace owns that id and how references resolve.
 - `SourceSnapshot` is provenance/compiler state, not a truth-apt entity by
   default. It may be addressable in the provenance graph, but it does not carry
   belief.
@@ -79,7 +82,7 @@ narrow contract to the next layer.
 | **Model Registry** | `KindDescriptor`, schemas, relation descriptors, field-provenance rules, lifecycle vocabularies | Disk layout, graph output, belief math |
 | **Source Compiler** | Loading local and remote sources into typed declarations: entities, identity rows, source snapshots, relation rows, patch memberships | Scientific semantics beyond declared contracts |
 | **Epistemic Semantics** | Propositions, evidence-lines, dataset usage, independence, `bears_on` revisit dependencies, belief policies, derived belief results | Authoring layouts, DAG status files, remote sync |
-| **Patch & Federation** | Patch named graphs, patch membership, patch maturity, patch-level diagnostics, cross-scope addressing, composite views | Raw source parsing, kind definitions |
+| **Patch & Federation** | Patch named graphs, patch membership, patch maturity, patch-level diagnostics, cross-scope addressing, composite views | Raw source parsing, kind definitions, belief policy implementation |
 | **Views & Interfaces** | Workbenches, DAG renderers, dashboards, inventories, CLI mutation surfaces, reports, exports | Durable truth or belief state |
 
 The data flow is one-way:
@@ -104,6 +107,11 @@ Two rules follow:
    from source declarations through the same path.
 2. **No semantic logic in views.** Renderers can summarize derived data, but they
    cannot invent source-of-truth state such as authored edge status.
+
+Persisted `BeliefResult` records are allowed only as reproducible derived
+artifacts or caches: they must identify the source snapshot set, compiled input
+set, and belief policy version that produced them. They are not an alternate
+belief store and are invalidated by changes to any of those inputs.
 
 Each layer validates its own contract. Cross-layer validation checks only the
 interface between layers: source records compile, compiled identities resolve,
@@ -133,6 +141,26 @@ shape is: patch named graphs hold patch metadata, diagnostics, membership, and
 patch-specific generated view triples; member proposition/evidence triples live
 in their scope or semantic layer graphs and are related to patches by
 membership.
+
+The existing `science_tool.model.patch` prototype is therefore not discarded. It
+is evidence that patch vocabulary, named-graph TriG emission, patch-level belief
+summaries, and independence-aware signature fusion already ship. Spec 4 should
+complete the durable membership and compiler contract around that concept rather
+than rebuild a second patch abstraction.
+
+### Patch subsumes inquiry-like epistemic neighborhoods
+
+The target model has one named-graph abstraction for epistemic neighborhoods:
+`Patch`. Existing inquiry graphs are valuable prior machinery, but they should
+not remain a separate parallel neighborhood primitive. In the target state, an
+inquiry is a patch role or kind for question-centered patches, with inquiry
+boundaries, treatment/outcome fields, and edge lists represented as patch
+metadata or patch-specific views.
+
+The Patch Contract spec owns the exact migration: either rename/subsume
+`sci:Inquiry` into `Patch` directly, or preserve `sci:Inquiry` as a typed role
+on a patch. It must not leave Patch and Inquiry as two independent named-graph
+systems with overlapping semantics.
 
 ### BeliefResult is structured
 
@@ -169,8 +197,9 @@ Belief is comparable only under a shared policy. Composite or federated views
 must declare the `BeliefPolicy` they use and re-derive aggregate belief over the
 union of eligible evidence-lines under that policy. They must not average or
 merge precomputed `BeliefResult`s produced under different policies. The exact
-policy scope rules are owned jointly by the Proposition/Evidence/Belief and
-Scope/Federation specs.
+policy scope rules are owned by the Proposition/Evidence/Belief spec, with the
+Scope/Federation spec declaring how federated builds select and invoke a policy.
+Federation invokes the shared belief engine; it never reimplements belief math.
 
 ### Ladder level belongs to Patch as a derived diagnostic
 
@@ -197,10 +226,11 @@ Belief changes only after source declarations are updated and the epistemic
 graph is recompiled under a recorded policy.
 
 Source freshness is a new origin for revisit propagation. Existing `bears_on`
-derivation from epistemic relations does not automatically cover it; the Source
-Compiler, Provenance/Agents/Review, and Epistemic Semantics specs must define
-how `SourceSnapshot` changes create dependency records that terminate at
-epistemic review targets.
+derivation from epistemic relations does not automatically cover it. The Source
+Compiler spec owns the freshness-origin record type emitted when a
+`SourceSnapshot` changes. Provenance/Agents/Review and Epistemic Semantics
+consume that record type to update review state, `bears_on` dependencies, and
+recompile eligibility.
 
 ## Subsystem specs
 
@@ -211,21 +241,23 @@ owns one region and must not recreate a parallel mechanism.
 |---|---|---|
 | **1. Kernel Architecture Overview** | This document: primitives, layers, invariants, decomposition, and migration implications. | Names and boundaries. |
 | **2. Kind Descriptor & Model Registry** | Collapse entity-kind lists, core profiles, registry classes, path policies, statuses, JSON-schema mixins, and migrated-kind lists into one descriptor system. | Is core just a built-in manifest? Which schema system is canonical? How are descriptors generated and tested? |
-| **3. Source Compiler & Identity Substrate** | Define source records, adapter policies, identity rows, error policy, reference-field policy, source snapshots, and compiled outputs. | Replace adapter-name branching; split compiler phases; unify audit and materialization. |
-| **4. Patch Contract** | Make `Patch` real: named graph identity, relational membership, metadata, workbench contract, diagnostics, patch-level uncertainty, L0-L4 maturity. | Membership predicates, graph emission, overlap behavior, maturation computation, and authored-versus-derived patch metadata. |
-| **5. Proposition, Evidence, and Belief Semantics** | Finish the one-belief model: proposition-as-edge, evidence-line grounding, dataset usage, independence, belief policies, projections. | Define the structured `BeliefResult`; make authored confidence an evidence input; type evidence vocabularies. |
+| **3. Source Compiler & Identity Substrate** | Define source records, adapter policies, identity rows, error policy, reference-field policy, source snapshots, freshness-origin records, and compiled outputs. | Replace adapter-name branching; split compiler phases; unify audit and materialization; own the source-freshness record consumed by review and semantics. |
+| **4. Patch Contract** | Complete the `Patch` contract: named graph identity, relational membership, inquiry subsumption, metadata, workbench contract, diagnostics, patch-level uncertainty, L0-L4 maturity. | Membership predicates, graph emission, overlap behavior, maturation computation, authored-versus-derived patch metadata, and the Patch/Inquiry migration. |
+| **5. Proposition, Evidence, and Belief Semantics** | Finish the one-belief model: proposition-as-edge, evidence-line grounding, dataset usage, independence, belief policies, projections. | Define the structured `BeliefResult`; make authored confidence an evidence input; type evidence vocabularies; consume typed dataset/data-resource schemas and schema-driven QA outputs rather than defining a parallel dataset model. The current typed dataset schema contract starts in `~/d/science/docs/plans/2026-06-13-typed-dataset-schema-plan.md`. |
 | **6. Provenance, Agents, and Review** | Define one provenance stamp for authored and derived fields/statements; model humans, AI, tools, workflows, organizations, and review. | ORCID/model/tool IDs; field-level provenance; review state; trust policy. |
-| **7. Scope, Federation, and Remote Sources** | Unify project, commons, peer, remote, and external authorities as scopes. Add remote source contracts and inventory dependencies. | `scope:kind:id` addressing; peer identity tables; addressing-grammar unification; GitHub/Zenodo/GEO source snapshots; sync leases. |
+| **7. Scope, Federation, and Remote Sources** | Unify project, commons, peer, remote, and external authorities as scopes. Add remote source contracts and inventory dependencies. | `scope:kind:id` addressing; peer identity tables; addressing-grammar unification; GitHub/Zenodo/GEO source snapshots; sync leases; federated belief builds that invoke a declared policy from Spec 5. |
 | **8. Views, Workbenches, and Compatibility Projections** | Define generated surfaces: DAGs, edge status, inventories, dashboards, exports, and editable workbenches. | Which legacy outputs remain? Which are read-only projections? Which editable projections are allowed, and how does normalize/fixpoint validation keep them honest? |
 | **9. Migration Strategy** | Convert current code and docs in phases without compromising the target model. | Order, compatibility gates, deprecation/removal policy, validation strategy. |
 
 The first implementation-facing sequence should likely be:
 
-1. **Patch Contract** — fixes the missing keystone and exercises named graphs.
-   This sequence assumes a minimal patch slice can build on today's
-   `PropositionEntity`: add durable patch membership and graph emission without
-   waiting for the full legacy edge migration. If the patch spec disproves that,
-   Proposition/Evidence/Belief moves before Patch.
+1. **Patch Contract** — closes the durable-membership gap around the existing
+   patch concept and exercises named graphs. This sequence assumes a minimal
+   patch slice can build on today's
+   `PropositionEntity` and existing patch prototype: add durable patch
+   membership and compiler graph emission without waiting for broader belief
+   cleanup. If the patch spec disproves that, Proposition/Evidence/Belief moves
+   before Patch.
 2. **Kind Descriptor & Model Registry** — removes the largest root duplication.
 3. **Source Compiler & Identity Substrate** — cleans the substrate around the new
    descriptor model.
@@ -242,10 +274,8 @@ be explicit so transitional code does not become permanent architecture.
 | Many kind lists and per-kind dictionaries | One `KindDescriptor` registry |
 | Pydantic registry plus independent JSON-schema registry | One canonical schema source, with generated adapters/exports if needed |
 | Broad `Entity` base with kind-gated fields | Descriptor-driven typed entities or typed payloads |
-| `edges.yaml` as an epistemic source | Workbench projection over proposition/evidence entities |
 | Direct graph mutation commands | Source transactions compiled into graph outputs |
 | Split addressing grammars and hardcoded graph URI schemes | One scope-address grammar plus generated URI mappings |
-| Authored `edge_status` | Derived compatibility projection |
 | Evidence edges, observations, and support arrays as alternate grounding paths | `EvidenceLine` as the only grounding unit |
 | Multiple belief representations | One `BeliefResult`, many views |
 | Project, commons, peer, and remote special cases | `Scope` with source/authority policies |
@@ -260,12 +290,21 @@ Examples:
 
 - A `KindDescriptor` layer can initially generate today's hardcoded registries;
   only later do the old lists disappear.
-- A `Patch` entity can initially coexist with inquiries and workbenches; later,
-  workbenches become projections over patches.
+- A `Patch` contract can initially wrap the shipped patch prototype and inquiry
+  named-graph machinery; later, inquiries become patch roles and workbenches
+  become projections over patches.
 - A source compiler can first wrap existing adapters; later, direct graph
   mutation paths can be retired.
 - A derived `edge_status` projection can preserve legacy DAG outputs while
   preventing authored status from re-entering the epistemic model.
+
+Two convergence steps are already done and should be protected from regression,
+not respecified as open migration work: `edges.yaml` is now a deprecated
+legacy-import adapter rather than an epistemic source, and DAG `edge_status` is
+derived at the render/style boundary from proposition channels and belief
+signals. The remaining migration work is to keep these as compatibility
+projections while removing fallback paths that could reintroduce authored status
+or parallel edge storage.
 
 ## Design constraints
 
@@ -283,6 +322,9 @@ Examples:
 - Editable projections such as workbenches must round-trip through a normalize /
   fixed-point check. They may propose changes, but they do not own truth at rest.
 - Transitional compatibility layers must have explicit retirement criteria.
+- The L0-L4 ladder used here is the progressive patch ladder in
+  `~/d/science/meta/specs/hypotheses/h00-working-model.md`; the Patch Contract
+  spec owns the precise computed diagnostic.
 
 ## Non-goals
 
@@ -311,4 +353,16 @@ The architecture is successful when:
 - provenance can distinguish human judgment, AI judgment, tool output, empirical
   observation, and derived computation without relying on prose conventions;
 - legacy views such as DAG edge status can still be generated without becoming
-  source-of-truth.
+  source-of-truth;
+- `edges.yaml` and authored `edge_status` remain retired as epistemic sources;
+- no CLI, workbench, renderer, or cache path can write authoritative belief,
+  identity, or patch membership outside the compiler-owned source path;
+- a persisted `BeliefResult` is reproducible from source snapshots, compiled
+  inputs, and belief policy version, or is treated as stale;
+- a source moving marks dependent epistemic objects for review or recompilation
+  without changing belief until declarations are updated and belief is re-run;
+- patch and inquiry-style neighborhoods use one patch contract rather than two
+  independent named-graph abstractions;
+- dataset usage in evidence semantics consumes the typed dataset/data-resource
+  schema and schema-driven QA contracts instead of defining another dataset
+  model.
