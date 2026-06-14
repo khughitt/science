@@ -109,3 +109,98 @@ def resolve_resource(pkg: dict, resource: str) -> tuple[dict, int]:
         i, r = by_path[0]
         return r, i
     raise InferSchemaError(f"no resource named or pathed {resource!r} in descriptor")
+
+
+@dataclass
+class InferredField:
+    name: str
+    type: str
+    mixed: bool = False
+
+
+def coarse_type(series: pd.Series) -> str:
+    """Map a pandas column to a coarse Frictionless type (used for CSV, which has no embedded
+    schema). Conservative: anything not clearly int/float/bool/datetime — including all-null
+    and mixed object columns — is 'string'."""
+    if series.notna().sum() == 0:
+        return "string"
+    if pdt.is_bool_dtype(series):
+        return "boolean"
+    if pdt.is_integer_dtype(series):
+        return "integer"
+    if pdt.is_float_dtype(series):
+        return "number"
+    if pdt.is_datetime64_any_dtype(series):
+        return "datetime"
+    return "string"
+
+
+def coarse_type_from_arrow(arrow_type) -> str:
+    """Map a pyarrow DataType to a coarse Frictionless type (authoritative for parquet)."""
+    import pyarrow as pa
+
+    if pa.types.is_boolean(arrow_type):
+        return "boolean"
+    if pa.types.is_integer(arrow_type):
+        return "integer"
+    if pa.types.is_floating(arrow_type) or pa.types.is_decimal(arrow_type):
+        return "number"
+    if pa.types.is_temporal(arrow_type):
+        return "datetime"
+    return "string"
+
+
+def is_mixed_object(series: pd.Series) -> bool:
+    """True when an object column holds >1 distinct python base type among non-null values."""
+    if not pdt.is_object_dtype(series):
+        return False
+    kinds = {type(v) for v in series.dropna().tolist()}
+    return len(kinds) > 1
+
+
+def read_table_sample(table_path: Path, sample: int) -> pd.DataFrame:
+    """Read up to `sample` rows of the table as a DataFrame (CSV/TSV/parquet).
+
+    Used for report statistics and for CSV type inference. NOT the source of truth for
+    parquet types — see observed_fields, which reads the Arrow schema instead.
+    """
+    suffix = table_path.suffix.lower()
+    if not table_path.exists():
+        raise InferSchemaError(f"table file not found: {table_path}")
+    try:
+        if suffix == ".parquet":
+            import pyarrow.parquet as pq
+
+            pf = pq.ParquetFile(str(table_path))
+            batch = next(pf.iter_batches(batch_size=max(sample, 1)), None)
+            return batch.to_pandas() if batch is not None else pd.DataFrame()
+        if suffix in (".csv", ".tsv"):
+            sep = "\t" if suffix == ".tsv" else ","
+            return pd.read_csv(table_path, nrows=sample, sep=sep)
+    except Exception as exc:  # malformed table is a user-facing failure, not a crash
+        raise InferSchemaError(f"cannot read table {table_path}: {exc}") from exc
+    raise InferSchemaError(f"unsupported table format {suffix!r} (want .parquet/.csv/.tsv)")
+
+
+def infer_fields(df: pd.DataFrame) -> list[InferredField]:
+    """Infer (name, coarse type, mixed-flag) from a DataFrame (the CSV path)."""
+    return [
+        InferredField(name=str(col), type=coarse_type(df[col]), mixed=is_mixed_object(df[col]))
+        for col in df.columns
+    ]
+
+
+def observed_fields(table_path: Path, sample: int) -> list[InferredField]:
+    """Authoritative (name, type) per column. Parquet → Arrow schema metadata (no row scan;
+    robust to empty/all-null/nullable columns). CSV/TSV → coarse inference over a sample."""
+    if table_path.suffix.lower() == ".parquet":
+        import pyarrow.parquet as pq
+
+        if not table_path.exists():
+            raise InferSchemaError(f"table file not found: {table_path}")
+        schema = pq.ParquetFile(str(table_path)).schema_arrow
+        return [
+            InferredField(name=schema.field(i).name, type=coarse_type_from_arrow(schema.field(i).type))
+            for i in range(len(schema))
+        ]
+    return infer_fields(read_table_sample(table_path, sample))

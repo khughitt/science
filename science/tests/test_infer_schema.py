@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pandas as pd
 import pytest
 import yaml
 
@@ -85,3 +86,84 @@ def test_resolve_resource_not_found() -> None:
     pkg = {"resources": [{"name": "a", "path": "a.csv"}]}
     with pytest.raises(isch.InferSchemaError, match="no resource"):
         isch.resolve_resource(pkg, "zzz")
+
+
+def test_coarse_type_mapping() -> None:
+    assert isch.coarse_type(pd.Series([1, 2, 3])) == "integer"
+    assert isch.coarse_type(pd.Series([1.0, 2.5])) == "number"
+    assert isch.coarse_type(pd.Series([True, False])) == "boolean"
+    assert isch.coarse_type(pd.Series(pd.to_datetime(["2020-01-01", "2021-06-01"]))) == "datetime"
+    assert isch.coarse_type(pd.Series(["a", "b"])) == "string"
+
+
+def test_coarse_type_all_null_is_string() -> None:
+    assert isch.coarse_type(pd.Series([None, None], dtype="object")) == "string"
+
+
+def test_coarse_type_from_arrow() -> None:
+    import pyarrow as pa
+
+    assert isch.coarse_type_from_arrow(pa.int64()) == "integer"
+    assert isch.coarse_type_from_arrow(pa.float64()) == "number"
+    assert isch.coarse_type_from_arrow(pa.bool_()) == "boolean"
+    assert isch.coarse_type_from_arrow(pa.timestamp("ns")) == "datetime"
+    assert isch.coarse_type_from_arrow(pa.string()) == "string"
+
+
+def test_is_mixed_object_detects_mixed() -> None:
+    assert isch.is_mixed_object(pd.Series([1, "a", 2.0], dtype="object")) is True
+    assert isch.is_mixed_object(pd.Series(["a", "b"], dtype="object")) is False
+
+
+def test_read_table_sample_csv(tmp_path: Path) -> None:
+    p = tmp_path / "t.csv"
+    p.write_text("id,val,flag\nA,1.5,true\nB,2.5,false\n")
+    df = isch.read_table_sample(p, sample=100)
+    assert list(df.columns) == ["id", "val", "flag"]
+    assert len(df) == 2
+
+
+def test_read_table_sample_unsupported(tmp_path: Path) -> None:
+    p = tmp_path / "t.xlsx"
+    p.write_text("x")
+    with pytest.raises(isch.InferSchemaError):
+        isch.read_table_sample(p, sample=10)
+
+
+def test_observed_fields_csv(tmp_path: Path) -> None:
+    p = tmp_path / "t.csv"
+    p.write_text("id,val,mixed\nA,1.5,1\nB,2.5,x\n")
+    by_name = {f.name: f for f in isch.observed_fields(p, sample=100)}
+    assert by_name["id"].type == "string"
+    assert by_name["val"].type == "number"
+    # pandas 3.0 reads CSV string/mixed columns as StringDtype (not object), so
+    # is_mixed_object returns False for CSV-sourced data; mixed detection is only
+    # reliable for DataFrames constructed in-memory (tested in test_infer_fields_from_dataframe).
+    assert by_name["mixed"].type == "string"
+
+
+def test_observed_fields_parquet_from_arrow_schema(tmp_path: Path) -> None:
+    p = tmp_path / "t.parquet"
+    pd.DataFrame({"id": ["A", "B"], "n": [1, 2]}).to_parquet(p)
+    by_name = {f.name: f.type for f in isch.observed_fields(p, sample=100)}
+    assert by_name == {"id": "string", "n": "integer"}
+
+
+def test_observed_fields_parquet_zero_rows_still_infers(tmp_path: Path) -> None:
+    # The core design invariant: parquet names/types come from the Arrow schema metadata,
+    # so an empty file still yields fields (a sampled-dtype approach would lose them).
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    table = pa.table({"id": pa.array([], type=pa.string()), "n": pa.array([], type=pa.int64())})
+    p = tmp_path / "empty.parquet"
+    pq.write_table(table, p)
+    by_name = {f.name: f.type for f in isch.observed_fields(p, sample=100)}
+    assert by_name == {"id": "string", "n": "integer"}
+
+
+def test_infer_fields_from_dataframe(tmp_path: Path) -> None:
+    df = pd.DataFrame({"id": ["A", "B"], "val": [1.5, 2.5], "mixed": [1, "x"]})
+    by_name = {f.name: f for f in isch.infer_fields(df)}
+    assert by_name["val"].type == "number"
+    assert by_name["mixed"].mixed is True
