@@ -154,3 +154,31 @@ class TableSchema(BaseModel):
                 raise ValueError(f"missingValues entries must be unique; duplicate {key!r}")
             seen.add(key)
         return self
+
+    @model_validator(mode="after")
+    def _reference_checks(self) -> "TableSchema":
+        names = {f.name for f in self.fields}
+        types = {f.name: f.type for f in self.fields}
+
+        for key in (_as_list(self.primaryKey) if self.primaryKey is not None else []):
+            if key not in names:
+                raise ValueError(f"primaryKey references unknown field {key!r}")
+        for group in (self.uniqueKeys or []):
+            for key in group:
+                if key not in names:
+                    raise ValueError(f"uniqueKeys references unknown field {key!r}")
+        for fk in self.foreignKeys:
+            for key in _as_list(fk.fields):
+                if key not in names:
+                    raise ValueError(f"foreignKey references unknown local field {key!r}")
+        for a, b in self.qa.exclusive_flags:
+            for key in (a, b):
+                if key not in names:
+                    raise ValueError(f"qa.exclusive_flags references unknown field {key!r}")
+            for key in (a, b):
+                if types[key] not in FLAG_TYPES:
+                    raise ValueError(
+                        f"qa.exclusive_flags field {key!r} must be boolean/integer, "
+                        f"got {types[key]!r}"
+                    )
+        return self

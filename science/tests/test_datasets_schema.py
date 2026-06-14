@@ -121,3 +121,39 @@ class TestTableSchemaShape:
     def test_duplicate_field_names_rejected(self) -> None:
         with pytest.raises(ValidationError, match="duplicate field name"):
             TableSchema.model_validate({"fields": _fields("a", "a")})
+
+
+class TestTableSchemaReferences:
+    def test_primary_key_must_reference_known_field(self) -> None:
+        TableSchema.model_validate({"fields": _fields("id"), "primaryKey": "id"})  # ok
+        with pytest.raises(ValidationError, match="primaryKey references unknown"):
+            TableSchema.model_validate({"fields": _fields("id"), "primaryKey": "nope"})
+
+    def test_unique_keys_reference_known_fields(self) -> None:
+        with pytest.raises(ValidationError, match="uniqueKeys references unknown"):
+            TableSchema.model_validate({"fields": _fields("a"), "uniqueKeys": [["a", "b"]]})
+
+    def test_foreign_key_local_field_must_exist(self) -> None:
+        with pytest.raises(ValidationError, match="unknown local field"):
+            TableSchema.model_validate(
+                {"fields": _fields("a"),
+                 "foreignKeys": [{"fields": "b", "reference": {"resource": "r", "fields": "x"}}]}
+            )
+
+    def test_exclusive_flags_reference_known_fields(self) -> None:
+        with pytest.raises(ValidationError, match="exclusive_flags references unknown"):
+            TableSchema.model_validate(
+                {"fields": [{"name": "is_a", "type": "boolean"}],
+                 "qa": {"exclusive_flags": [["is_a", "is_b"]]}}
+            )
+
+    def test_exclusive_flags_require_flag_typed_fields(self) -> None:
+        TableSchema.model_validate(
+            {"fields": [{"name": "is_a", "type": "boolean"}, {"name": "is_b", "type": "integer"}],
+             "qa": {"exclusive_flags": [["is_a", "is_b"]]}}
+        )  # ok
+        with pytest.raises(ValidationError, match="must be boolean/integer"):
+            TableSchema.model_validate(
+                {"fields": [{"name": "is_a", "type": "boolean"}, {"name": "s", "type": "string"}],
+                 "qa": {"exclusive_flags": [["is_a", "s"]]}}
+            )
