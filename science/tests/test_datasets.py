@@ -9,6 +9,7 @@ import pytest
 
 from science_tool.datasets._base import DatasetResult, FileInfo
 from science_tool.datasets.dryad import DryadAdapter
+from science_tool.datasets.figshare import FigshareAdapter
 from science_tool.datasets.geo import GEOAdapter
 from science_tool.datasets.semantic_scholar import SemanticScholarAdapter
 from science_tool.datasets.zenodo import ZenodoAdapter
@@ -644,3 +645,72 @@ class TestCBioPortalAdapter:
         from science_tool.datasets import available_adapters
 
         assert "cbioportal" in available_adapters()
+
+
+class TestFigshareAdapter:
+    def test_name(self) -> None:
+        assert FigshareAdapter().name == "figshare"
+
+    def test_search_parses_summary_list(self) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = [
+            {
+                "id": 123,
+                "title": "CGM dataset",
+                "doi": "10.6084/m9.figshare.123",
+                "published_date": "2023-05-01T00:00:00Z",
+                "url_public_html": "https://figshare.com/articles/123",
+            }
+        ]
+        adapter = FigshareAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.post.return_value = mock_response
+            results = adapter.search("glucose", max_results=5)
+        assert len(results) == 1
+        r = results[0]
+        assert r.source == "figshare"
+        assert r.id == "123"
+        assert r.title == "CGM dataset"
+        assert r.doi == "10.6084/m9.figshare.123"
+        assert r.year == 2023
+        assert r.access == "public"
+
+    def test_metadata_parses_article(self) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "id": 123,
+            "title": "CGM dataset",
+            "description": "Continuous glucose monitoring",
+            "doi": "10.6084/m9.figshare.123",
+            "published_date": "2023-05-01T00:00:00Z",
+            "url_public_html": "https://figshare.com/articles/123",
+            "license": {"name": "CC BY 4.0"},
+            "tags": ["glucose", "cgm"],
+            "files": [{"name": "data.csv", "size": 2048}],
+        }
+        adapter = FigshareAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            r = adapter.metadata("123")
+        assert r.license == "CC BY 4.0"
+        assert r.keywords == ["glucose", "cgm"]
+        assert r.file_count == 1
+        assert r.total_size_bytes == 2048
+
+    def test_files_parses_download_urls(self) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "id": 123,
+            "files": [
+                {"name": "data.csv", "download_url": "https://ndownloader.figshare.com/files/1", "size": 2048, "computed_md5": "abc"},
+            ],
+        }
+        adapter = FigshareAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            files = adapter.files("123")
+        assert len(files) == 1
+        assert files[0].filename == "data.csv"
+        assert files[0].url == "https://ndownloader.figshare.com/files/1"
+        assert files[0].checksum == "abc"
+        assert files[0].format == "csv"
