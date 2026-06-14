@@ -25,7 +25,7 @@ optional Part rollups.
    `## Whole-Book Synthesis`, `## Chapter Map`, `## Key Themes`, `## Relevance`,
    `## Limitations`, `## Follow-up`. Frontmatter: `id: book:<citekey>`, `type: book`,
    `title`, `status: active`, `created`, `updated`, `source_refs: [cite:<citekey>]`,
-   `related: []` (the orchestrator fills hypothesis/question links afterward).
+   `related: []`, `ontology_terms: []` (the orchestrator fills hypothesis/question links afterward).
    - The Chapter Map is a table linking each chapter to
      `../../doc/books/<citekey>/chNN-*.md` with a one-line gist.
 3. **Adaptive Part rollups:** if `parts` is non-empty OR there are more than ~8 chapters,
