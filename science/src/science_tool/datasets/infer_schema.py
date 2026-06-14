@@ -85,3 +85,27 @@ def dump_descriptor(mapping: dict, path: Path, fmt: str) -> None:
         if os.path.exists(tmp_name):
             os.unlink(tmp_name)
         raise
+
+
+def resolve_resource(pkg: dict, resource: str) -> tuple[dict, int]:
+    """Resolve `resource` against resources[]: by name first, then by path.
+
+    Ambiguity (a name matching >1 resource, or a path-fallback matching >1 resource) is an
+    error — never a silent pick. A name match is primary and short-circuits path matching.
+    """
+    resources = pkg.get("resources")
+    if not isinstance(resources, list) or not resources:
+        raise InferSchemaError("descriptor has no resources[] to resolve against")
+    by_name = [(i, r) for i, r in enumerate(resources) if r.get("name") == resource]
+    if len(by_name) > 1:
+        raise InferSchemaError(f"resource name {resource!r} is ambiguous (matches {len(by_name)})")
+    if len(by_name) == 1:
+        i, r = by_name[0]
+        return r, i
+    by_path = [(i, r) for i, r in enumerate(resources) if r.get("path") == resource]
+    if len(by_path) > 1:
+        raise InferSchemaError(f"resource path {resource!r} is ambiguous (matches {len(by_path)})")
+    if len(by_path) == 1:
+        i, r = by_path[0]
+        return r, i
+    raise InferSchemaError(f"no resource named or pathed {resource!r} in descriptor")

@@ -54,3 +54,34 @@ def test_dump_descriptor_yaml_canonical(tmp_path: Path) -> None:
     isch.dump_descriptor({"b": 2, "a": 1}, p, "yaml")
     assert yaml.safe_load(p.read_text()) == {"a": 1, "b": 2}
     assert p.read_text().startswith("a: 1")  # sorted keys
+
+
+def test_resolve_resource_by_name() -> None:
+    pkg = {"resources": [{"name": "a", "path": "a.csv"}, {"name": "b", "path": "b.csv"}]}
+    res, idx = isch.resolve_resource(pkg, "b")
+    assert idx == 1 and res["path"] == "b.csv"
+
+
+def test_resolve_resource_path_fallback_when_no_name_match() -> None:
+    pkg = {"resources": [{"name": "a", "path": "data/obs.parquet"}]}
+    res, idx = isch.resolve_resource(pkg, "data/obs.parquet")
+    assert idx == 0 and res["name"] == "a"
+
+
+def test_resolve_resource_name_wins_over_path() -> None:
+    # "x" is resource 0's name AND resource 1's path → name match is primary, unambiguous
+    pkg = {"resources": [{"name": "x", "path": "x.csv"}, {"name": "y", "path": "x"}]}
+    res, idx = isch.resolve_resource(pkg, "x")
+    assert idx == 0
+
+
+def test_resolve_resource_duplicate_name_is_ambiguous() -> None:
+    pkg = {"resources": [{"name": "a", "path": "1.csv"}, {"name": "a", "path": "2.csv"}]}
+    with pytest.raises(isch.InferSchemaError, match="ambiguous"):
+        isch.resolve_resource(pkg, "a")
+
+
+def test_resolve_resource_not_found() -> None:
+    pkg = {"resources": [{"name": "a", "path": "a.csv"}]}
+    with pytest.raises(isch.InferSchemaError, match="no resource"):
+        isch.resolve_resource(pkg, "zzz")
