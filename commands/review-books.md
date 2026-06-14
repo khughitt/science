@@ -65,8 +65,6 @@ the synthesis (synthesizer), then report back.
      `doc/questions/` directly).
    - Link relevant hypotheses in the overview entity's `related:`.
    - Commit: `git add -A && git commit -m "docs(books): review <citekey> — <short title>"`.
-9. **Process reflection.** `science feedback add --target command:review-books
-   --category <...> --summary <...>` for any friction/gaps/wins (skip if smooth).
 
 ## Annotation tokens
 
