@@ -166,8 +166,14 @@ Because `output.py::emit_query_rows` serializes the full row dicts for JSON
 output, all three new fields appear in `--format json` automatically. The table
 adds two columns — `("modality", "Modality")` and `("organism", "Organism")` —
 between `Access` and `DOI`; `sample_count` stays JSON-only to keep the terminal
-table from overflowing. No change to `output.py`, `metadata`, `files`, or
-`download`.
+table from overflowing. No change to `metadata`, `files`, or `download`.
+
+> **Implementation note (corrected post-build):** `output.py::emit_query_rows`
+> *did* require one minimal, backward-compatible change — each column tuple may
+> now carry an optional third per-column kwargs dict passed to Rich's
+> `add_column`, so the `title` column can be `no_wrap`. Without it, the wider
+> eight-column table wrapped titles in an 80-column terminal. All existing
+> two-tuple callers are unaffected.
 
 ## 3. Testing
 
