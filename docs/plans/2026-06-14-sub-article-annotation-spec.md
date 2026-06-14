@@ -3,8 +3,10 @@
 - **Status:** Design approved 2026-06-14; spec-review findings resolved 2026-06-14
   (round 1: offset basis, identifier→entity resolver, relation targets, source/dedupe
   vocab, annotationType registration; round 2: JSON body encoding, content_hash
-  semantics, character-offset/NFC; round 3: license whitelist + fail-early,
-  single-body entity mentions) → ready for implementation plan
+  semantics, character-offset; round 3: license whitelist + fail-early & cited PMC
+  terms, single-body entity mentions, per-source `sci:sourceTextHash` short-circuit,
+  raw-offset basis + slice-verify/fail-early — NFC dropped as offset-unsafe)
+  → ready for implementation plan
 - **Scope:** Extend `science`'s existing W3C annotation system to capture rich,
   semantic, sub-article (word / phrase / sentence) annotations of research
   articles, seeded by PubTator3 and extended by an agent.
@@ -101,15 +103,23 @@ frontmatter and `##` headings included (`annotation/verify.py::_load_source`).
 PubTator3 offsets are therefore **not** directly usable; they must be converted
 to quotes through an explicit map. Policy:
 
-- **Offset basis (character, not byte).** PubTator3 BioC offsets are **character**
-  offsets into the BioC document text (the concatenation of its passage texts). The
-  selector code operates on Python `str` (character indices), so the map is kept in
-  **character offsets end-to-end** — there is no byte-index layer. The API response
-  is UTF-8 decoded to `str`, **Unicode-normalized to NFC once**, and that single
-  normalized form is what we both persist and index; PubTator's offsets are aligned
-  to it (re-normalize the API text identically before mapping). A deterministic map
-  then exists from a BioC `(passage, local_char_offset, length)` to a character
-  range in the `.source.md` **body**.
+- **Offset basis (character, not byte; raw, not normalized).** PubTator3 BioC
+  offsets are **character** offsets into the BioC document text (the concatenation
+  of its passage texts). The selector code operates on Python `str` (character
+  indices), so the map is kept in **character offsets end-to-end** — there is no
+  byte-index layer. The offset basis is the **raw UTF-8-decoded BioC string,
+  un-normalized**: PubTator's offsets are only known to align with the text BioC
+  returns, so we do **not** apply Unicode normalization to the anchored body (NFC
+  could shift character indices and silently mis-anchor). The persisted passage
+  body is that raw decoded text verbatim, and a deterministic map exists from a
+  BioC `(passage, local_char_offset, length)` to a character range in the
+  `.source.md` **body**.
+- **Verify-and-fail-early.** For every converted span the seeder slices the raw
+  decoded text at `(offset, offset+length)` and asserts the slice equals the
+  mention text BioC reports for that annotation. Any mismatch is a hard error (the
+  paper is skipped with a diagnostic) — never a silently mis-placed selector. If a
+  future need requires NFC-normalized persisted text, it must ship with a raw-char
+  → NFC-char index map and re-run this verification; that is out of scope here.
 - **Anchor region.** Quotes, prefixes, and suffixes are sliced **only from the
   persisted passage body**, never from YAML frontmatter or `##` heading lines, and
   `prefix`/`suffix` windows MUST NOT cross a heading or passage boundary. This
@@ -167,9 +177,14 @@ to quotes through an explicit map. Policy:
 ### License gating (full-text persistence)
 
 `paper-fetch` records `is_oa` + OA URLs today, not a license identifier
-(`paper_fetch.py`). Abstracts are not gated (NCBI / Europe PMC terms permit local
-storage of abstracts for research use); **full-text** persistence is gated on an
-explicit whitelist, fail-early:
+(`paper_fetch.py`). **Abstracts** are persisted by default — small excerpts stored
+locally, single-user, non-redistributive. This is a pragmatic stance, not a blanket
+licensing guarantee: the PMC Copyright Notice states that users are responsible for
+copyright compliance and that reuse of protected material beyond what the license or
+fair use allows requires permission, and the PMC Open Access Subset page notes that
+not all PMC articles are available for text mining/reuse and that license terms vary
+(see *Sources* below). **Full-text** persistence is therefore gated on an explicit
+license whitelist, fail-early:
 
 - **Accepted (full text persisted, `license` recorded verbatim):** `CC0`, `CC-BY`,
   `CC-BY-SA`, `CC-BY-ND` and their versioned forms (e.g. `CC-BY-4.0`). This is the
@@ -181,6 +196,8 @@ explicit whitelist, fail-early:
 - **Resolution.** License is read from OA-source metadata (Europe PMC `license` /
   Unpaywall `oa_locations[].license`); with multiple values the most-permissive
   whitelisted one wins, else `unknown`.
+- **Sources.** PMC Copyright Notice (https://pmc.ncbi.nlm.nih.gov/about/copyright/)
+  and PMC Open Access Subset (https://pmc.ncbi.nlm.nih.gov/tools/openftlist/).
 
 ## Vocabulary (reuse over reinvent)
 
@@ -263,12 +280,17 @@ within that existing machinery — **no model change**:
     `llm-annot:<model>`), so a re-run at the same release/model re-derives identical
     hashes and the ledger skips already-audited annotations — per-annotation
     idempotency, no document hash involved.
-  - **Document-level short-circuit (separate, new).** The `.source.md`
-    `text_sha256` is **provenance plus an explicit new pre-pass gate**: before
-    re-querying/re-extracting, compare the current `text_sha256` to the value
-    recorded at last run and skip the whole document when unchanged. This is a new
-    document-level check the seeder/agent owns — it is NOT the audit-ledger key and
-    does NOT feed `content_hash`.
+  - **Document-level short-circuit (separate, new).** Before re-querying /
+    re-extracting, the seeder/agent compares the current `.source.md` `text_sha256`
+    to the value last processed **for that source** and skips the whole document
+    when unchanged. The last-run value is stored **per source on the existing
+    per-source `sci:AuditLedger`** (in the sidecar `.source.anno.trig`) via a new
+    `sci:sourceTextHash` field: the ledger already carries `sci:source` +
+    `sci:auditedHashes`, so `pubtator3:<release>` and `llm-annot:<model>` each
+    record their own last-seen source-text hash and short-circuit independently.
+    (The `.source.md` frontmatter `text_sha256` remains the document's *current*
+    hash / provenance; the ledger holds the *last-processed* hash per source.) This
+    gate is NOT the audit-ledger annotation key and does NOT feed `content_hash`.
 - **To epistemic entities.** Promotion matches a candidate statement against
   existing propositions / questions / hypotheses (lexical + embedding similarity,
   then agent judgment) → either **attach as new evidence** to an existing entity
@@ -306,8 +328,9 @@ Each phase is independently shippable.
 
 - Offset → `TextQuoteSelector` conversion: every seeded selector **re-resolves via
   the standard verifier** against the rendered `.source.md` (round-trip through
-  frontmatter + headings), including NFC-normalized text with non-ASCII characters
-  (character-offset alignment, no byte drift).
+  frontmatter + headings), with non-ASCII / multi-codepoint text exercised
+  (character-offset alignment, no byte drift); and the **slice == BioC mention
+  text** verification fails early on any offset mismatch.
 - PubTator3 BioC response parsing (small real fixture).
 - JSON body round-trip: `TextualBody(format="application/json")` serialize → parse →
   equal, and per-type schema validation rejects malformed bodies.
