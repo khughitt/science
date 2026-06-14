@@ -283,8 +283,9 @@ Neither command writes the build artifact; both call the same deriver:
   policy_version; generated `sci:hasMember`/`sci:inPatch` both present; an orphan
   convenience edge with no backing node fails validation; `policy_version` always
   present; `build_id` present only when supplied.
-- **Integration:** `update-graph` produces the patch named-graph context inside
-  `graph.trig`; re-running is idempotent.
+- **Integration:** `science graph build` (and the `/science:update-graph`
+  harness alias) produces the patch named-graph context inside `graph.trig`;
+  re-running is idempotent.
 - **CLI:** `patch explain` output (seeds surfaced); `patch check` exits non-zero
   on injected drift, zero when consistent.
 
