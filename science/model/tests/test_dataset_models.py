@@ -228,6 +228,25 @@ def test_entity_invariant_does_not_apply_to_non_dataset_types() -> None:
     assert e.origin is None  # no constraint
 
 
+def test_external_dataset_may_carry_parent_dataset() -> None:
+    """Guard: parent_dataset is origin-orthogonal.
+
+    An origin=external (access-controlled) dataset may legally carry
+    parent_dataset without a derivation block.  The invariants only constrain
+    access/derivation/accessions/local_path by origin, never parent_dataset.
+    This test must PASS immediately; a failure signals schema drift from the
+    design claim and must be reconciled before adding sub-cohort lineage features.
+    """
+    ds = DatasetEntity(
+        **_entity_kwargs(),
+        origin="external",
+        access=AccessBlock(level="controlled", verified=True),
+        parent_dataset="dataset:uk-biobank",
+    )
+    assert ds.parent_dataset == "dataset:uk-biobank"
+    assert ds.derivation is None  # parent_dataset is NOT a derivation block
+
+
 def test_derived_with_produced_by_no_derivation_is_valid() -> None:
     ds = DatasetEntity(**_entity_kwargs(), origin="derived", produced_by=["code-file:stages/run.py"])
     assert ds.produced_by == ["code-file:stages/run.py"]
