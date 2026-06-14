@@ -48,7 +48,6 @@ from science_tool.graph.store import (
     PropositionEvidenceLine,
     PropositionInteractionTerm,
     add_article,
-    add_assumption,
     add_concept,
     add_discussion,
     add_edge,
@@ -56,9 +55,6 @@ from science_tool.graph.store import (
     add_falsification,
     add_finding,
     add_hypothesis,
-    add_inquiry,
-    add_inquiry_edge,
-    add_inquiry_node,
     add_interpretation,
     add_mechanism,
     add_observation,
@@ -66,7 +62,6 @@ from science_tool.graph.store import (
     add_proposition,
     add_question,
     add_story,
-    add_transformation,
     build_graph_dot,
     diff_graph_inputs,
     export_graph_payload,
@@ -87,8 +82,6 @@ from science_tool.graph.store import (
     query_question_summary,
     query_uncertainty,
     read_graph_stats,
-    set_boundary_role,
-    set_treatment_outcome,
     shorten_uri,
     stamp_revision,
     validate_graph,
@@ -2678,29 +2671,149 @@ def inquiry() -> None:
     """Inquiry subgraph commands."""
 
 
+def _retired_mutator(slug: str) -> click.ClickException:
+    return click.ClickException(
+        f"Inquiry graph mutation is retired. Edit entities/patches/{slug}.md and run `science graph build`."
+    )
+
+
+def _ref_from_uri(value: str) -> str:
+    """Best-effort reverse of entity_uri_for_ref for the import bridge."""
+    from science_tool.graph.io import PROJECT_NS
+
+    if not isinstance(value, str) or not value:
+        return value or ""
+    if value.startswith(str(PROJECT_NS)):
+        local = value[len(str(PROJECT_NS)):]
+        if "/" in local:
+            kind, slug = local.split("/", 1)
+            return f"{kind}:{slug}"
+    return value
+
+
+def _local_predicate(value: str) -> str:
+    """Map a flow-edge predicate URI back to the authored short name."""
+    for short in ("feedsInto", "produces", "causes"):
+        if value.endswith(short):
+            return short
+    return value.rsplit("/", 1)[-1].rsplit("#", 1)[-1]
+
+
+def _render_inquiry_source(
+    slug: str,
+    *,
+    title: str,
+    focal_ref: str,
+    profile: str,
+    status: str,
+    project: str = "",
+    boundary_roles: list[tuple[str, str]] = (),          # (ref, "BoundaryIn"|"BoundaryOut")
+    flow_edges: list[tuple[str, str, str, list[str]]] = (),  # (subject_ref, predicate, object_ref, claim_refs)
+    treatment_ref: str | None = None,
+    outcome_ref: str | None = None,
+) -> str:
+    import yaml
+
+    inquiry: dict = {"profile": profile, "status": status}
+    inquiry["boundary_roles"] = [{"ref": r, "role": role} for r, role in boundary_roles]
+    inquiry["flow_edges"] = [
+        {"subject": s, "predicate": p, "object": o, "claim_refs": list(claims)}
+        for s, p, o, claims in flow_edges
+    ]
+    inquiry["assumptions"] = []
+    inquiry["transformations"] = []
+    if profile == "causal":
+        inquiry["treatment"] = treatment_ref or ""
+        inquiry["outcome"] = outcome_ref or ""
+
+    frontmatter = {
+        "id": f"patch-definition:{slug}",
+        "type": "patch-definition",
+        "title": title,
+        "status": "active",
+        "project": project,
+        "ontology_terms": [],
+        "related": [],
+        "source_refs": [],
+        "content_preview": title,
+        "file_path": f"entities/patches/{slug}.md",
+        "focal": focal_ref,
+        "scope_set": [{"scope": "local"}],
+        "neighborhood_policy": {"name": "local-closure-v1", "version": "local-closure-v1", "max_depth": 2},
+        "patch_type": "inquiry",
+        "inquiry": inquiry,
+    }
+    body = f"# Inquiry: {title}\n\n<!-- Edit the `inquiry:` block above, then run `science graph build`. -->\n"
+    return "---\n" + yaml.safe_dump(frontmatter, sort_keys=False) + "---\n\n" + body
+
+
 @inquiry.command("init")
 @click.argument("slug")
 @click.option("--label", required=True)
-@click.option("--target", required=True, help="Target hypothesis or question (e.g. hypothesis:h01)")
-@click.option("--description", default="")
-@click.option(
-    "--status",
-    default="sketch",
-    type=click.Choice(["sketch", "specified", "planned", "in-progress", "complete"]),
-)
-@click.option("--type", "inquiry_type", default="general", type=click.Choice(["general", "causal"]), show_default=True)
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def inquiry_init(
-    slug: str, label: str, target: str, description: str, status: str, inquiry_type: str, graph_path: Path
-) -> None:
-    """Create a new inquiry subgraph."""
-    try:
-        uri = add_inquiry(graph_path, slug, label, target, description, status, inquiry_type=inquiry_type)
-        click.echo(f"Created inquiry: {shorten_uri(str(uri))}")
-    except ValueError as e:
-        raise click.ClickException(str(e))
+@click.option("--target", required=True, help="Focal hypothesis or question (e.g. hypothesis:h01)")
+@click.option("--profile", required=True, type=click.Choice(["investigation", "causal"]))
+@click.option("--status", default="sketch",
+              type=click.Choice(["sketch", "specified", "planned", "in-progress", "complete"]))
+@click.option("--treatment", default=None, help="Treatment ref (required for --profile causal)")
+@click.option("--outcome", default=None, help="Outcome ref (required for --profile causal)")
+@click.option("--project-root", "project_root", default=".", type=click.Path(path_type=Path, file_okay=False))
+def inquiry_init(slug, label, target, profile, status, treatment, outcome, project_root):
+    """Scaffold an inquiry patch-definition source file (does not write the graph)."""
+    if profile == "causal" and (not treatment or not outcome):
+        raise click.ClickException("causal profile requires --treatment and --outcome")
+    dest = Path(project_root) / "entities" / "patches" / f"{slug}.md"
+    if dest.exists():
+        raise click.ClickException(f"{dest} already exists")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(
+        _render_inquiry_source(
+            slug, title=label, focal_ref=target, profile=profile, status=status,
+            project=(Path(project_root).resolve().name or "project"),
+            treatment_ref=treatment, outcome_ref=outcome,
+        ),
+        encoding="utf-8",
+    )
+    click.echo(f"Scaffolded {dest}")
+
+
+@inquiry.command("import")
+@click.argument("slug")
+@click.option("--project-root", "project_root", default=".", type=click.Path(path_type=Path, file_okay=False))
+@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), type=click.Path(path_type=Path))
+@click.option("--force", is_flag=True, help="Overwrite an existing source file")
+def inquiry_import(slug, project_root, graph_path, force):
+    """Bridge: write a patch-definition source from an existing graph inquiry."""
+    import yaml
+    from science_model.patch_definition import PatchDefinitionEntity
+    from science_tool.graph.store.inquiry import get_inquiry
+
+    dest = Path(project_root) / "entities" / "patches" / f"{slug}.md"
+    if dest.exists() and not force:
+        raise click.ClickException(f"{dest} exists; pass --force to overwrite")
+
+    info = get_inquiry(graph_path, slug)
+    profile = "causal" if info.get("inquiry_type") == "causal" else "investigation"
+    boundary = [(_ref_from_uri(u), "BoundaryIn") for u in info.get("boundary_in", [])]
+    boundary += [(_ref_from_uri(u), "BoundaryOut") for u in info.get("boundary_out", [])]
+    flows = [(_ref_from_uri(e["subject"]), _local_predicate(e["predicate"]), _ref_from_uri(e["object"]),
+              [_ref_from_uri(c) for c in e.get("claims", [])])
+             for e in info.get("edges", [])]
+    text = _render_inquiry_source(
+        slug,
+        title=info.get("label") or slug,
+        focal_ref=_ref_from_uri(info.get("target") or ""),
+        profile=profile,
+        status=info.get("status") or "sketch",
+        project=(Path(project_root).resolve().name or "project"),
+        boundary_roles=boundary,
+        flow_edges=flows,
+        treatment_ref=_ref_from_uri(info["treatment"]) if info.get("treatment") else None,
+        outcome_ref=_ref_from_uri(info["outcome"]) if info.get("outcome") else None,
+    )
+    PatchDefinitionEntity(**yaml.safe_load(text.split("---")[1]))  # fail loudly on invalid bridge output
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(text, encoding="utf-8")
+    click.echo(f"Imported inquiry/{slug} -> {dest}")
 
 
 @inquiry.command("add-node")
@@ -2712,15 +2825,7 @@ def inquiry_init(
 )
 def inquiry_add_node(slug: str, entity: str, role: str | None, graph_path: Path) -> None:
     """Add a node to an inquiry, optionally with a boundary role."""
-    try:
-        if role:
-            set_boundary_role(graph_path, slug, entity, role)
-            click.echo(f"Set {entity} as {role} in inquiry/{slug}")
-        else:
-            add_inquiry_node(graph_path, slug, entity)
-            click.echo(f"Added {entity} as interior node in inquiry/{slug}")
-    except ValueError as e:
-        raise click.ClickException(str(e))
+    raise _retired_mutator(slug)
 
 
 @inquiry.command("add-edge")
@@ -2741,13 +2846,7 @@ def inquiry_add_edge(
     graph_path: Path,
 ) -> None:
     """Add an edge within an inquiry subgraph."""
-    try:
-        s, p, o = add_inquiry_edge(
-            graph_path, slug, subject, predicate, object, list(claim_refs) if claim_refs else None
-        )
-        click.echo(f"Added edge: {shorten_uri(str(s))} --[{shorten_uri(str(p))}]--> {shorten_uri(str(o))}")
-    except ValueError as e:
-        raise click.ClickException(str(e))
+    raise _retired_mutator(slug)
 
 
 @inquiry.command("add-assumption")
@@ -2759,11 +2858,7 @@ def inquiry_add_edge(
 )
 def inquiry_add_assumption(slug: str, label: str, source: str, graph_path: Path) -> None:
     """Add an assumption to an inquiry with provenance."""
-    try:
-        uri = add_assumption(graph_path, label=label, source=source, inquiry_slug=slug)
-        click.echo(f"Added assumption: {shorten_uri(str(uri))} in inquiry/{slug}")
-    except ValueError as e:
-        raise click.ClickException(str(e))
+    raise _retired_mutator(slug)
 
 
 @inquiry.command("add-transformation")
@@ -2775,11 +2870,7 @@ def inquiry_add_assumption(slug: str, label: str, source: str, graph_path: Path)
 )
 def inquiry_add_transformation(slug: str, label: str, tool: str, graph_path: Path) -> None:
     """Add a transformation step to an inquiry."""
-    try:
-        uri = add_transformation(graph_path, label=label, inquiry_slug=slug, tool=tool)
-        click.echo(f"Added transformation: {shorten_uri(str(uri))} in inquiry/{slug}")
-    except ValueError as e:
-        raise click.ClickException(str(e))
+    raise _retired_mutator(slug)
 
 
 @inquiry.command("set-estimand")
@@ -2791,11 +2882,7 @@ def inquiry_add_transformation(slug: str, label: str, tool: str, graph_path: Pat
 )
 def inquiry_set_estimand(slug: str, treatment: str, outcome: str, graph_path: Path) -> None:
     """Set treatment and outcome variables for a causal inquiry."""
-    try:
-        set_treatment_outcome(graph_path, slug, treatment=treatment, outcome=outcome)
-        click.echo(f"Set estimand for inquiry/{slug}: treatment={treatment}, outcome={outcome}")
-    except ValueError as e:
-        raise click.ClickException(str(e))
+    raise _retired_mutator(slug)
 
 
 @inquiry.command("list")
