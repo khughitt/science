@@ -1,0 +1,11 @@
+{
+  "name": "composite",
+  "path": "composite.csv",
+  "schema": {
+    "fields": [
+      {"name": "a", "type": "string"},
+      {"name": "b", "type": "string"}
+    ],
+    "foreignKeys": [{"fields": ["a", "b"], "reference": {"resource": "", "fields": ["a", "b"]}}]
+  }
+}

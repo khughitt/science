@@ -1,0 +1,10 @@
+{
+  "name": "minimal",
+  "path": "minimal.csv",
+  "schema": {
+    "fields": [
+      {"name": "id", "type": "string"},
+      {"name": "value", "type": "number"}
+    ]
+  }
+}

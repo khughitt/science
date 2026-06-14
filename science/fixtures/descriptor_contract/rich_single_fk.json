@@ -1,0 +1,15 @@
+{
+  "name": "rich",
+  "path": "rich.csv",
+  "schema": {
+    "fields": [
+      {"name": "id", "type": "string", "constraints": {"required": true, "unique": true}},
+      {"name": "parent_id", "type": "string"},
+      {"name": "score", "type": "number", "constraints": {"minimum": 0, "maximum": 1}},
+      {"name": "grade", "type": "string", "constraints": {"enum": ["A", "B", "C"]}}
+    ],
+    "primaryKey": "id",
+    "foreignKeys": [{"fields": "parent_id", "reference": {"resource": "", "fields": "id"}}],
+    "missingValues": ["", "NA"]
+  }
+}
