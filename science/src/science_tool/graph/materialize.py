@@ -271,7 +271,7 @@ def _add_entity(
     # commons-OWNED protein with a curie must keep full owner treatment.
     if external_reference_ids is not None and entity.canonical_id in external_reference_ids:
         knowledge.add((uri, RDF.type, PROV.Entity))
-    if entity.kind == "paper":
+    if entity.kind in ("paper", "book"):
         # Thin bibliographic surface (year/doi/url), emitted only when present.
         year = getattr(entity, "year", None)
         if year is not None:

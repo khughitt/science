@@ -97,6 +97,7 @@ _LOCAL_ENTITY_KINDS = frozenset(
         "method",
         "model",
         "observation",
+        "book",
         "paper",
         "pre-registration",
         "proposition",

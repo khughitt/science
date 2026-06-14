@@ -14,7 +14,7 @@ except Exception:  # pragma: no cover - shell fallback
 QUOTE = "[\"']?"
 NOT_QUOTE = "[^\"'\n]+"
 LOCAL_KINDS = {
-    "assumption", "concept", "data-package", "dataset", "discussion", "experiment",
+    "assumption", "book", "concept", "data-package", "dataset", "discussion", "experiment",
     "finding", "hypothesis", "inquiry", "interpretation", "mechanism", "method",
     "model", "observation", "paper", "pre-registration", "proposition", "question",
     "report", "source", "story", "task", "theme", "topic", "validation-report",
@@ -247,6 +247,7 @@ TASK_HEADER = re.compile(r"^##\s+\[(\w+)\]")
 
 LOCAL_KINDS = {
     "assumption",
+    "book",
     "concept",
     "data-package",
     "dataset",
