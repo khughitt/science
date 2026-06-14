@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 from science_tool.datasets.validate import validate_data_packages
 
@@ -161,3 +162,97 @@ class TestDescriptorValidation:
         results = validate_data_packages(data_dir)
         descriptor_fails = [r for r in results if "descriptor" in r["check"] and r["status"] == "fail"]
         assert descriptor_fails == []
+
+
+from science_tool.datasets.validate import validate_package_descriptor
+
+
+def _pkg_dir(tmp_path: Path, pkg: dict, fmt: str = "json", csv: str = "a\n1\n") -> Path:
+    """Write a self-contained package dir (descriptor + one data file) and return it."""
+    d = tmp_path / "pkg"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "x.csv").write_text(csv)
+    if fmt == "json":
+        (d / "datapackage.json").write_text(json.dumps(pkg))
+    else:
+        (d / "datapackage.yaml").write_text(yaml.safe_dump(pkg))
+    return d
+
+
+class TestDescriptorTargetValidation:
+    def test_valid_json_package_dir_passes(self, tmp_path: Path) -> None:
+        pkg = {"name": "p", "resources": [
+            {"name": "x", "path": "x.csv",
+             "schema": {"fields": [{"name": "a", "type": "integer"}]}}]}
+        results = validate_package_descriptor(_pkg_dir(tmp_path, pkg))
+        assert results and all(r["status"] == "pass" for r in results)
+
+    def test_valid_yaml_package_dir_passes(self, tmp_path: Path) -> None:
+        pkg = {"name": "p", "resources": [
+            {"name": "x", "path": "x.csv",
+             "schema": {"fields": [{"name": "a", "type": "integer"}]}}]}
+        results = validate_package_descriptor(_pkg_dir(tmp_path, pkg, fmt="yaml"))
+        assert results and all(r["status"] == "pass" for r in results)
+
+    def test_descriptor_file_path_accepted(self, tmp_path: Path) -> None:
+        pkg = {"name": "p", "resources": [
+            {"name": "x", "path": "x.csv",
+             "schema": {"fields": [{"name": "a", "type": "integer"}]}}]}
+        d = _pkg_dir(tmp_path, pkg)
+        results = validate_package_descriptor(d / "datapackage.json")
+        assert results and all(r["status"] == "pass" for r in results)
+
+    def test_invalid_descriptor_fails(self, tmp_path: Path) -> None:
+        # qa.low_variance on a string field violates Spec 1.
+        pkg = {"name": "p", "resources": [
+            {"name": "x", "path": "x.csv",
+             "schema": {"fields": [{"name": "a", "type": "string", "qa": {"low_variance": True}}]}}]}
+        results = validate_package_descriptor(_pkg_dir(tmp_path, pkg))
+        assert any(r["status"] == "fail" for r in results)
+
+    def test_consistency_failure_reported(self, tmp_path: Path) -> None:
+        pkg = {"name": "p", "resources": [
+            {"name": "edges", "path": "x.csv",
+             "schema": {"fields": [{"name": "src"}],
+                        "foreignKeys": [{"fields": "src",
+                                         "reference": {"resource": "ghost", "fields": "id"}}]}}]}
+        results = validate_package_descriptor(_pkg_dir(tmp_path, pkg))
+        assert any("consistency" in r["check"] and r["status"] == "fail" for r in results)
+
+    def test_no_descriptor_is_fail_not_silent(self, tmp_path: Path) -> None:
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        results = validate_package_descriptor(empty)
+        assert results and all(r["status"] == "fail" for r in results)
+
+    def test_no_resources_is_fail(self, tmp_path: Path) -> None:
+        results = validate_package_descriptor(_pkg_dir(tmp_path, {"name": "p", "resources": []}))
+        assert any(r["status"] == "fail" for r in results)
+
+    # --- resource-level table checks (file presence + schema<->table agreement) ---
+
+    def test_missing_data_file_fails(self, tmp_path: Path) -> None:
+        d = tmp_path / "pkg"
+        d.mkdir()
+        pkg = {"name": "p", "resources": [
+            {"name": "x", "path": "absent.csv",
+             "schema": {"fields": [{"name": "a", "type": "integer"}]}}]}
+        (d / "datapackage.json").write_text(json.dumps(pkg))
+        results = validate_package_descriptor(d)
+        assert any(r["status"] == "fail" and "file" in r["check"].lower() for r in results)
+
+    def test_stale_schema_field_fails(self, tmp_path: Path) -> None:
+        # schema declares 'ghost'; the table's only column is 'a' -> add/remove mismatch.
+        pkg = {"name": "p", "resources": [
+            {"name": "x", "path": "x.csv",
+             "schema": {"fields": [{"name": "ghost", "type": "integer"}]}}]}
+        results = validate_package_descriptor(_pkg_dir(tmp_path, pkg, csv="a\n1\n"))
+        assert any("matches table" in r["check"] and r["status"] == "fail" for r in results)
+
+    def test_type_conflict_with_table_fails(self, tmp_path: Path) -> None:
+        # declared string, but the column is integer-valued -> coarse-type conflict.
+        pkg = {"name": "p", "resources": [
+            {"name": "x", "path": "x.csv",
+             "schema": {"fields": [{"name": "a", "type": "string"}]}}]}
+        results = validate_package_descriptor(_pkg_dir(tmp_path, pkg, csv="a\n1\n2\n"))
+        assert any("matches table" in r["check"] and r["status"] == "fail" for r in results)
