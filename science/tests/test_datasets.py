@@ -49,6 +49,11 @@ class TestDatasetResult:
         with pytest.raises(AttributeError):
             r.title = "changed"  # type: ignore[misc]
 
+    def test_access_defaults_none_and_accepts_canonical(self) -> None:
+        assert DatasetResult(source="s", id="1", title="T").access is None
+        r = DatasetResult(source="s", id="1", title="T", access="restricted")
+        assert r.access == "restricted"
+
 
 class TestFileInfo:
     def test_creation(self) -> None:

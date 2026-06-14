@@ -22,6 +22,7 @@ class DatasetResult:
     keywords: list[str] = field(default_factory=list)
     organism: str | None = None
     modality: str | None = None
+    access: str | None = None  # canonical: "public" | "restricted" | "controlled" | None
     sample_count: int | None = None
     file_count: int | None = None
     total_size_bytes: int | None = None
