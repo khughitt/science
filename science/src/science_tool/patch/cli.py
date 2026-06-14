@@ -23,7 +23,9 @@ def patch_group() -> None:
 
 @patch_group.command("explain")
 @click.argument("patch_id")
-@click.option("--project-root", default=".", show_default=True, type=click.Path(exists=True, path_type=Path, file_okay=False))
+@click.option(
+    "--project-root", default=".", show_default=True, type=click.Path(exists=True, path_type=Path, file_okay=False)
+)
 def patch_explain(patch_id: str, project_root: Path) -> None:
     """Explain derived patch membership without writing graph.trig."""
     root = project_root.resolve()
@@ -46,7 +48,9 @@ def patch_explain(patch_id: str, project_root: Path) -> None:
 
 
 @patch_group.command("check")
-@click.option("--project-root", default=".", show_default=True, type=click.Path(exists=True, path_type=Path, file_okay=False))
+@click.option(
+    "--project-root", default=".", show_default=True, type=click.Path(exists=True, path_type=Path, file_okay=False)
+)
 def patch_check(project_root: Path) -> None:
     """Re-derive patch membership and diff it against graph.trig."""
     root = project_root.resolve()

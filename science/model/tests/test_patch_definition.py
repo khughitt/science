@@ -68,9 +68,7 @@ def test_patch_definition_rejects_blank_seed_ref() -> None:
 
 def test_patch_definition_rejects_non_local_scope() -> None:
     with pytest.raises(ValidationError, match="remote scopes deferred"):
-        PatchDefinitionEntity.model_validate(
-            _base_patch(scope_set=[{"scope": "commons", "ref": "commons"}])
-        )
+        PatchDefinitionEntity.model_validate(_base_patch(scope_set=[{"scope": "commons", "ref": "commons"}]))
 
 
 def test_patch_definition_rejects_empty_scope_set() -> None:
@@ -80,9 +78,7 @@ def test_patch_definition_rejects_empty_scope_set() -> None:
 
 def test_patch_definition_exclude_reason_required_and_nonempty() -> None:
     with pytest.raises(ValidationError, match="reason"):
-        PatchDefinitionEntity.model_validate(
-            _base_patch(excludes=[{"ref": "proposition:p1"}])
-        )
+        PatchDefinitionEntity.model_validate(_base_patch(excludes=[{"ref": "proposition:p1"}]))
 
     with pytest.raises(ValidationError, match="reason must be non-empty"):
         PatchExclude.model_validate({"ref": "proposition:p1", "reason": "  "})

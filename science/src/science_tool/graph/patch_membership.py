@@ -152,9 +152,7 @@ def derive_patch_memberships(
             if exclude_uri in by_member:
                 del by_member[exclude_uri]
             elif exclude_uri not in derived_before_excludes:
-                warnings.append(
-                    f"{definition.canonical_id} exclude {exclude.ref} did not match any derived member"
-                )
+                warnings.append(f"{definition.canonical_id} exclude {exclude.ref} did not match any derived member")
 
         records.extend(record for _, record in sorted(by_member.items(), key=lambda item: str(item[0])))
 
@@ -208,11 +206,7 @@ def _direct_relation_neighbors(dataset: Dataset, anchor: URIRef) -> list[tuple[U
 
 
 def _member_kind(dataset: Dataset, member: URIRef) -> str:
-    type_values = sorted(
-        str(obj)
-        for graph in dataset.graphs()
-        for obj in graph.objects(member, RDF.type)
-    )
+    type_values = sorted(str(obj) for graph in dataset.graphs() for obj in graph.objects(member, RDF.type))
     for type_value in type_values:
         if type_value.startswith(str(SCI_NS)):
             local = type_value.removeprefix(str(SCI_NS))

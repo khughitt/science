@@ -118,9 +118,7 @@ def test_deriver_excludes_members_and_warns_when_unused() -> None:
     )
 
     assert _uri("proposition:p1") not in {record.member for record in result.records}
-    assert result.warnings == [
-        "patch-definition:p1 exclude proposition:missing did not match any derived member"
-    ]
+    assert result.warnings == ["patch-definition:p1 exclude proposition:missing did not match any derived member"]
 
 
 def test_deriver_fails_unresolved_focal_or_seed() -> None:
