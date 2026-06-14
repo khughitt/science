@@ -83,3 +83,33 @@ def _richness(result: DatasetResult) -> int:
         result.total_size_bytes,
     )
     return sum(1 for value in optional if value)
+
+
+def dedupe_results(query: str, results: list[DatasetResult]) -> list[DatasetResult]:
+    """Collapse same-DOI records, keeping the best representative.
+
+    Groups by normalized DOI. Within a group the representative maximizes
+    ``(score_result(query, r), _richness(r))`` — relevance first, metadata
+    completeness as tiebreak. None-DOI records are never grouped. A group's
+    output position is fixed by its first appearance in fan-out order.
+    """
+    groups: dict[str, list[DatasetResult]] = {}
+    slots: list[DatasetResult | str] = []
+    for r in results:
+        key = _normalize_doi(r.doi)
+        if key is None:
+            slots.append(r)
+        elif key in groups:
+            groups[key].append(r)
+        else:
+            groups[key] = [r]
+            slots.append(key)
+
+    out: list[DatasetResult] = []
+    for slot in slots:
+        if isinstance(slot, str):
+            group = groups[slot]
+            out.append(max(group, key=lambda r: (score_result(query, r), _richness(r))))
+        else:
+            out.append(slot)
+    return out

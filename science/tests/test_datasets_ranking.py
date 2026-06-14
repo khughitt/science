@@ -72,3 +72,50 @@ class TestRichness:
     def test_doi_not_counted(self) -> None:
         # doi is the group key in dedup, constant within a group, so excluded
         assert _richness(_r(title="t", doi="10.1/x")) == 0
+
+
+from science_tool.datasets._ranking import dedupe_results
+
+
+class TestDedupeResults:
+    def test_keeps_richest_representative(self) -> None:
+        # Same DOI, equal score (identical titles) -> richer record wins.
+        bare = _r(source="zenodo", title="circadian gene atlas", doi="10.1/x")
+        rich = _r(
+            source="figshare", title="circadian gene atlas", doi="10.1/x",
+            organism="mouse", keywords=["circadian"], modality="rna-seq",
+        )
+        out = dedupe_results("circadian", [bare, rich])
+        assert len(out) == 1
+        assert out[0].source == "figshare"
+
+    def test_prefers_higher_score(self) -> None:
+        # Same DOI, different titles -> the more query-relevant title wins,
+        # even though it appears second in fan-out order.
+        low = _r(source="dryad", title="generic dataset", doi="10.1/y")
+        high = _r(source="zenodo", title="circadian rhythm dataset", doi="10.1/y")
+        out = dedupe_results("circadian", [low, high])
+        assert len(out) == 1
+        assert out[0].source == "zenodo"
+
+    def test_distinct_doi_kept(self) -> None:
+        a = _r(title="a", doi="10.1/a")
+        b = _r(title="b", doi="10.1/b")
+        out = dedupe_results("q", [a, b])
+        assert {r.doi for r in out} == {"10.1/a", "10.1/b"}
+
+    def test_none_doi_all_kept(self) -> None:
+        a = _r(source="s1", title="a")
+        b = _r(source="s2", title="b")
+        out = dedupe_results("q", [a, b])
+        assert len(out) == 2
+
+    def test_group_position_is_first_appearance(self) -> None:
+        # The dup group's slot is fixed by first appearance, even when a later,
+        # richer member becomes the representative.
+        first = _r(source="zenodo", title="alpha", doi="10.1/dup")
+        middle = _r(title="beta", doi="10.1/other")
+        rich_dup = _r(source="figshare", title="alpha", doi="10.1/dup", organism="mouse")
+        out = dedupe_results("q", [first, middle, rich_dup])
+        assert [r.doi for r in out] == ["10.1/dup", "10.1/other"]
+        assert out[0].source == "figshare"  # representative is the richer one
