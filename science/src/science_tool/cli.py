@@ -14,7 +14,7 @@ from science_tool.causal.export_pgmpy import export_pgmpy_script
 from science_tool.data_worktree import hydrate_worktree_data
 from science_tool.datasets import available_adapters, get_adapter, search_all
 from science_tool.datasets import infer_schema as _infer_schema
-from science_tool.datasets.validate import validate_data_packages
+from science_tool.datasets.validate import validate_data_packages, validate_path
 from science_tool.distill.openalex import distill_openalex
 from science_tool.distill.pykeen_source import distill_pykeen
 from science_tool.doi import lookup_doi_metadata
@@ -3108,7 +3108,7 @@ def datasets_download(source_id: str, file_pattern: str | None, dest_dir: Path) 
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def datasets_validate(data_path: Path, output_format: str) -> None:
     """Validate Frictionless Data Packages in raw/ and processed/ directories."""
-    results = validate_data_packages(data_path)
+    results = validate_path(data_path)
     emit_query_rows(
         output_format=output_format,
         title="Data Validation",

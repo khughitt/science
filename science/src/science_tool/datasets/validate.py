@@ -355,3 +355,33 @@ def validate_package_descriptor(target: Path) -> list[dict[str, str]]:
     rows = _validate_resource_descriptors(resources, str(target))
     rows += _validate_resource_tables(resources, base_dir)
     return rows
+
+
+def _is_descriptor_target(target: Path) -> bool:
+    """True when `target` is a datapackage descriptor file, or a directory holding one."""
+    if target.is_file():
+        return target.name in DESCRIPTOR_NAMES
+    if target.is_dir():
+        return any((target / name).exists() for name in DESCRIPTOR_NAMES)
+    return False
+
+
+def validate_path(target: Path) -> list[dict[str, str]]:
+    """Dispatch validation by what `target` is.
+
+    1. A datapackage descriptor file (or a directory directly containing one) → the
+       exact-descriptor gate.
+    2. Otherwise, a directory with a `raw/` or `processed/` subdir → the legacy scan
+       (backward-compatible: the default `data` directory takes this path).
+    3. Otherwise → fail. An explicit target that is neither a package nor a data tree
+       must not silently warn-and-pass (fail early, per project rules).
+    """
+    if _is_descriptor_target(target):
+        return validate_package_descriptor(target)
+    if (target / "raw").is_dir() or (target / "processed").is_dir():
+        return validate_data_packages(target)
+    return [{
+        "check": f"{target}",
+        "status": "fail",
+        "details": "no datapackage descriptor and no raw/ or processed/ subdirectory",
+    }]
