@@ -13,6 +13,7 @@ from rdflib.namespace import PROV, RDF, SKOS, XSD
 from science_model.entities import Entity, EntityClass, EvidenceLineEntity
 from science_model.identity import EntityScope
 from science_model.ontologies.schema import OntologyCatalog
+from science_model.patch_definition import PatchDefinitionEntity
 from science_model.profiles import CORE_PROFILE
 from science_model.profiles.schema import RelationKind
 from science_model.reasoning import EvidenceStance, MeasurementModel, RivalModelPacket
@@ -62,7 +63,11 @@ from science_tool.graph.sources import (
     is_metadata_reference,
     load_project_sources,
 )
-from science_tool.graph.io import CITO_NS, DCAT_NS, DCTERMS_NS
+from science_tool.graph.io import CITO_NS, DCAT_NS, DCTERMS_NS, entity_uri_for_ref
+from science_tool.graph.patch_membership import (
+    derive_patch_memberships,
+    emit_patch_memberships,
+)
 from science_tool.graph.store import (
     CURIE_PREFIXES,
     DEFAULT_GRAPH_PATH,
@@ -76,14 +81,23 @@ from science_tool.graph.store import (
 )
 
 
+def build_dataset_from_sources(sources: ProjectSources) -> Dataset:
+    """Public wrapper for diagnostic re-derivation (e.g. `patch check`).
+
+    Lets diagnostics rebuild the expected Dataset without importing the private
+    `_build_dataset_from_sources` helper or writing `graph.trig`.
+    """
+    return _build_dataset_from_sources(sources)
+
+
 def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     """Build the in-memory rdflib Dataset that `materialize_graph` would write.
 
     Composes the existing emission helpers (`_add_entity`, `_add_relations`,
     `_add_authored_relation`, `_add_binding`) and the epistemic derivation
     helpers (`_classify_entities`, `_derive_bears_on_layer`,
-    `_derive_freshness_layer`). Pure: takes `ProjectSources`, returns a
-    populated `Dataset`. Never touches the filesystem.
+    `_derive_patch_membership_layer`, `_derive_freshness_layer`). Pure: takes
+    `ProjectSources`, returns a populated `Dataset`. Never touches the filesystem.
 
     Used by both `materialize_graph` (which writes to disk) and the
     `propagate_freshness_in_memory` sweep (which discards the dataset).
@@ -168,6 +182,7 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
         pre_registration_targets=pre_registration_targets,
         eligible_code_files=_eligible_code_files(sources),
     )
+    _derive_patch_membership_layer(dataset, sources=sources)
     emit_dataset_independence_records(
         provenance,
         derive_dataset_independence_records(knowledge, provenance),
@@ -1138,8 +1153,7 @@ def _resolve_relation_term(value: str) -> URIRef:
 
 
 def _entity_uri(canonical_id: str) -> URIRef:
-    kind, slug = canonical_id.split(":", 1)
-    return URIRef(PROJECT_NS[f"{kind}/{slug.lower()}"])
+    return entity_uri_for_ref(canonical_id)
 
 
 def _external_uri(raw_target: str) -> URIRef:
@@ -1238,6 +1252,29 @@ def _build_entity_meta(
             "review_horizon_days": (entity.review_state.review_horizon_days if entity.review_state else None),
         }
     return entity_meta
+
+
+PATCH_MEMBERSHIP_POLICY_VERSION = "local-closure-v1"
+
+
+def _derive_patch_membership_layer(dataset: Dataset, *, sources: ProjectSources) -> None:
+    """Derive per-patch named graphs with reified PatchMembership nodes.
+
+    Runs after `_derive_bears_on_layer` because patch closure reads the
+    precomputed `sci:bearsOn` layer. No-ops when no PatchDefinitionEntity is
+    present in sources.
+    """
+    patch_definitions = [
+        entity for entity in sources.entities if isinstance(entity, PatchDefinitionEntity)
+    ]
+    if not patch_definitions:
+        return
+    result = derive_patch_memberships(
+        dataset,
+        patch_definitions,
+        policy_version=PATCH_MEMBERSHIP_POLICY_VERSION,
+    )
+    emit_patch_memberships(dataset, patch_definitions, result.records)
 
 
 def _derive_bears_on_layer(
