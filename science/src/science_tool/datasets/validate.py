@@ -7,7 +7,17 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from science_tool.datasets.infer_schema import (
+    InferSchemaError,
+    diff_schema,
+    load_descriptor,
+    observed_fields,
+)
 from science_tool.datasets.schema import ResourceDescriptor, package_consistency_issues
+
+DESCRIPTOR_NAMES = ("datapackage.json", "datapackage.yaml", "datapackage.yml")
+_TABULAR_SUFFIXES = (".csv", ".tsv", ".parquet")
+_VALIDATE_SAMPLE = 10000
 
 
 def validate_data_packages(data_dir: Path) -> list[dict[str, str]]:
@@ -269,3 +279,109 @@ def _check_type(value: str, declared_type: str) -> bool:
         return value.lower() in ("true", "false", "1", "0")
     # For other types (date, datetime, etc.), accept anything for now
     return True
+
+
+def _validate_resource_tables(resources: list[dict], base_dir: Path) -> list[dict[str, str]]:
+    """Resource-level checks the Spec 1 models cannot do: the data file exists (resolved
+    relative to the descriptor dir), and — for tabular resources that declare a schema —
+    the declared fields[] agree with the table's observed names+types. Reuses
+    infer-schema's `observed_fields` (Arrow for parquet, sampled for CSV/TSV) and
+    `diff_schema` (the Spec 3 add/remove/conflict semantics)."""
+    rows: list[dict[str, str]] = []
+    for res in resources:
+        name = res.get("name", res.get("path", "unknown"))
+        path_val = res.get("path")
+        if not isinstance(path_val, str) or not path_val:
+            rows.append({"check": f"{name} path", "status": "fail",
+                         "details": f"resource path must be a non-empty string, got {path_val!r}"})
+            continue
+        table = base_dir / path_val
+        if not table.exists():
+            rows.append({"check": f"{name} file exists", "status": "fail",
+                         "details": f"file not found: {table}"})
+            continue
+        rows.append({"check": f"{name} file exists", "status": "pass", "details": str(table)})
+
+        declared = (res.get("schema") or {}).get("fields")
+        if table.suffix.lower() not in _TABULAR_SUFFIXES or not declared:
+            continue
+        try:
+            observed = observed_fields(table, _VALIDATE_SAMPLE)
+        except InferSchemaError as exc:
+            rows.append({"check": f"{name} observed fields", "status": "fail", "details": str(exc)})
+            continue
+        problems = [d for d in diff_schema(declared, observed)
+                    if d.action in ("add", "remove") or d.conflict]
+        if problems:
+            detail = "; ".join(
+                f"{d.name}: " + (
+                    "in table, not in schema" if d.action == "add"
+                    else "in schema, not in table" if d.action == "remove"
+                    else f"declared {d.old_type!r} != observed {d.new_type!r}"
+                )
+                for d in problems
+            )
+            rows.append({"check": f"{name} schema matches table", "status": "fail", "details": detail})
+        else:
+            rows.append({"check": f"{name} schema matches table", "status": "pass",
+                         "details": f"{len(declared)} fields agree"})
+    return rows
+
+
+def validate_package_descriptor(target: Path) -> list[dict[str, str]]:
+    """Validate ONE package descriptor (JSON or YAML) at `target` (the descriptor file
+    or the directory containing it) through the Spec 1 models AND against its tables —
+    the same SSOT that `infer-schema --write` validates against.
+
+    An explicit target must validate *something*: a missing/malformed descriptor, or a
+    descriptor with no resources, is a `fail` row (never a silent warn). Beyond the Spec 1
+    model + consistency checks, it confirms each resource's file exists and that declared
+    fields agree with the observed table — so a stale `schema.fields[]` or an absent data
+    file cannot pass. This is the campaign's real done-gate.
+    """
+    try:
+        mapping, _fmt = load_descriptor(target)
+    except InferSchemaError as exc:
+        return [{"check": f"{target} descriptor", "status": "fail", "details": str(exc)}]
+
+    resources = mapping.get("resources") or []
+    if not resources:
+        return [{
+            "check": f"{target} descriptor resources",
+            "status": "fail",
+            "details": "descriptor defines no resources to validate",
+        }]
+    base_dir = target.parent if target.is_file() else target
+    rows = _validate_resource_descriptors(resources, str(target))
+    rows += _validate_resource_tables(resources, base_dir)
+    return rows
+
+
+def _is_descriptor_target(target: Path) -> bool:
+    """True when `target` is a datapackage descriptor file, or a directory holding one."""
+    if target.is_file():
+        return target.name in DESCRIPTOR_NAMES
+    if target.is_dir():
+        return any((target / name).exists() for name in DESCRIPTOR_NAMES)
+    return False
+
+
+def validate_path(target: Path) -> list[dict[str, str]]:
+    """Dispatch validation by what `target` is.
+
+    1. A datapackage descriptor file (or a directory directly containing one) → the
+       exact-descriptor gate.
+    2. Otherwise, a directory with a `raw/` or `processed/` subdir → the legacy scan
+       (backward-compatible: the default `data` directory takes this path).
+    3. Otherwise → fail. An explicit target that is neither a package nor a data tree
+       must not silently warn-and-pass (fail early, per project rules).
+    """
+    if _is_descriptor_target(target):
+        return validate_package_descriptor(target)
+    if (target / "raw").is_dir() or (target / "processed").is_dir():
+        return validate_data_packages(target)
+    return [{
+        "check": f"{target}",
+        "status": "fail",
+        "details": "no datapackage descriptor and no raw/ or processed/ subdirectory",
+    }]
