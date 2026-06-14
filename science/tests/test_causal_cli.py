@@ -1,9 +1,18 @@
-"""CLI tests for causal DAG commands."""
+"""CLI tests for causal DAG commands.
+
+Causal inquiry graphs are produced by the pure compiler (the path that replaced
+the retired ``inquiry add-*`` / ``set-estimand`` mutators); these tests build the
+inquiry through the ``build_inquiry_graph`` conftest helper and exercise the
+reader/export CLI against it. ``scic:causes`` edges that the original tests added
+to ``graph/causal`` are still added there via ``graph add edge`` (the export
+reader reads them from both the inquiry graph and ``graph/causal``).
+"""
 
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from conftest import build_inquiry_graph
 
 from science_tool.cli import main
 from science_tool.graph.store import INITIAL_GRAPH_TEMPLATE
@@ -23,33 +32,25 @@ def graph_path(tmp_path: Path) -> Path:
 
 
 def _setup_causal_inquiry(runner: CliRunner, graph_path: Path) -> None:
-    """Set up a causal inquiry via CLI commands."""
+    """Set up the ``testdag`` causal inquiry via the compile path + graph/causal edges."""
     p = str(graph_path)
     runner.invoke(main, ["graph", "add", "concept", "X", "--type", "sci:Variable", "--status", "active", "--path", p])
     runner.invoke(main, ["graph", "add", "concept", "Y", "--type", "sci:Variable", "--status", "active", "--path", p])
     runner.invoke(main, ["graph", "add", "concept", "Z", "--type", "sci:Variable", "--status", "active", "--path", p])
     runner.invoke(main, ["graph", "add", "hypothesis", "test hyp", "--source", "paper:doi_test", "--path", p])
-    runner.invoke(
-        main,
-        [
-            "inquiry",
-            "init",
-            "test-dag",
-            "--label",
-            "Test DAG",
-            "--target",
-            "hypothesis:test_hyp",
-            "--type",
-            "causal",
-            "--path",
-            p,
+    build_inquiry_graph(
+        graph_path,
+        slug="testdag",
+        title="Test DAG",
+        profile="causal",
+        focal="hypothesis:test_hyp",
+        treatment="concept:x",
+        outcome="concept:y",
+        boundary_roles=[
+            {"ref": "concept:x", "role": "BoundaryIn"},
+            {"ref": "concept:y", "role": "BoundaryOut"},
+            {"ref": "concept:z", "role": "BoundaryIn"},
         ],
-    )
-    runner.invoke(main, ["inquiry", "add-node", "test-dag", "concept/x", "--role", "BoundaryIn", "--path", p])
-    runner.invoke(main, ["inquiry", "add-node", "test-dag", "concept/y", "--role", "BoundaryOut", "--path", p])
-    runner.invoke(main, ["inquiry", "add-node", "test-dag", "concept/z", "--role", "BoundaryIn", "--path", p])
-    runner.invoke(
-        main, ["inquiry", "set-estimand", "test-dag", "--treatment", "concept/x", "--outcome", "concept/y", "--path", p]
     )
     runner.invoke(
         main, ["graph", "add", "edge", "concept/x", "scic:causes", "concept/y", "--graph", "graph/causal", "--path", p]
@@ -60,15 +61,32 @@ def _setup_causal_inquiry(runner: CliRunner, graph_path: Path) -> None:
 
 
 class TestInquiryInitType:
-    def test_init_with_type_causal(self, runner: CliRunner, graph_path: Path) -> None:
-        p = str(graph_path)
-        runner.invoke(main, ["graph", "add", "hypothesis", "h1", "--source", "paper:doi_test", "--path", p])
+    def test_init_scaffolds_causal_profile(self, runner: CliRunner, tmp_path: Path) -> None:
+        """`inquiry init --profile causal` scaffolds a causal patch-definition source."""
         result = runner.invoke(
             main,
-            ["inquiry", "init", "dag1", "--label", "DAG", "--target", "hypothesis:h1", "--type", "causal", "--path", p],
+            [
+                "inquiry",
+                "init",
+                "dag1",
+                "--label",
+                "DAG",
+                "--target",
+                "hypothesis:h1",
+                "--profile",
+                "causal",
+                "--treatment",
+                "concept:x",
+                "--outcome",
+                "concept:y",
+                "--project-root",
+                str(tmp_path),
+            ],
         )
-        assert result.exit_code == 0
-        assert "Created inquiry" in result.output
+        assert result.exit_code == 0, result.output
+        text = (tmp_path / "entities" / "patches" / "dag1.md").read_text()
+        assert "patch_type: inquiry" in text
+        assert "profile: causal" in text
 
 
 class TestInquiryTypeInOutput:
@@ -76,9 +94,14 @@ class TestInquiryTypeInOutput:
         """inquiry show text output includes the inquiry type."""
         p = str(graph_path)
         runner.invoke(main, ["graph", "add", "hypothesis", "h1", "--source", "paper:doi_test", "--path", p])
-        runner.invoke(
-            main,
-            ["inquiry", "init", "dag1", "--label", "DAG", "--target", "hypothesis:h1", "--type", "causal", "--path", p],
+        build_inquiry_graph(
+            graph_path,
+            slug="dag1",
+            title="DAG",
+            profile="causal",
+            focal="hypothesis:h1",
+            treatment="concept:x",
+            outcome="concept:y",
         )
         result = runner.invoke(main, ["inquiry", "show", "dag1", "--path", p])
         assert result.exit_code == 0
@@ -88,9 +111,14 @@ class TestInquiryTypeInOutput:
         """inquiry list includes a Type column."""
         p = str(graph_path)
         runner.invoke(main, ["graph", "add", "hypothesis", "h1", "--source", "paper:doi_test", "--path", p])
-        runner.invoke(
-            main,
-            ["inquiry", "init", "dag1", "--label", "DAG", "--target", "hypothesis:h1", "--type", "causal", "--path", p],
+        build_inquiry_graph(
+            graph_path,
+            slug="dag1",
+            title="DAG",
+            profile="causal",
+            focal="hypothesis:h1",
+            treatment="concept:x",
+            outcome="concept:y",
         )
         result = runner.invoke(main, ["inquiry", "list", "--path", p])
         assert result.exit_code == 0
@@ -107,28 +135,6 @@ class TestExportCLI:
             main, ["graph", "add", "concept", "Y", "--type", "sci:Variable", "--status", "active", "--path", p]
         )
         runner.invoke(main, ["graph", "add", "hypothesis", "test hyp", "--source", "paper:doi_test", "--path", p])
-        runner.invoke(
-            main,
-            [
-                "inquiry",
-                "init",
-                "local-dag",
-                "--label",
-                "Local DAG",
-                "--target",
-                "hypothesis:test_hyp",
-                "--type",
-                "causal",
-                "--path",
-                p,
-            ],
-        )
-        runner.invoke(main, ["inquiry", "add-node", "local-dag", "concept/x", "--role", "BoundaryIn", "--path", p])
-        runner.invoke(main, ["inquiry", "add-node", "local-dag", "concept/y", "--role", "BoundaryOut", "--path", p])
-        runner.invoke(
-            main,
-            ["inquiry", "set-estimand", "local-dag", "--treatment", "concept/x", "--outcome", "concept/y", "--path", p],
-        )
         runner.invoke(
             main,
             [
@@ -151,25 +157,32 @@ class TestExportCLI:
             ],
         )
 
-        result = runner.invoke(
-            main,
-            [
-                "inquiry",
-                "add-edge",
-                "local-dag",
-                "concept:x",
-                "scic:causes",
-                "concept:y",
-                "--claim",
-                "proposition:x_causes_y",
-                "--path",
-                p,
+        # A causal inquiry with an inquiry-local `causes` flow edge (backed by the
+        # claim) compiles to an in-graph scic:causes edge with backedByClaim.
+        build_inquiry_graph(
+            graph_path,
+            slug="localdag",
+            title="Local DAG",
+            profile="causal",
+            focal="hypothesis:test_hyp",
+            treatment="concept:x",
+            outcome="concept:y",
+            boundary_roles=[
+                {"ref": "concept:x", "role": "BoundaryIn"},
+                {"ref": "concept:y", "role": "BoundaryOut"},
+            ],
+            flow_edges=[
+                {
+                    "subject": "concept:x",
+                    "predicate": "causes",
+                    "object": "concept:y",
+                    "claim_refs": ["proposition:x_causes_y"],
+                }
             ],
         )
-        assert result.exit_code == 0
 
-        export_result = runner.invoke(main, ["inquiry", "export-pgmpy", "local-dag", "--path", p])
-        assert export_result.exit_code == 0
+        export_result = runner.invoke(main, ["inquiry", "export-pgmpy", "localdag", "--path", p])
+        assert export_result.exit_code == 0, export_result.output
         assert '("x", "y")' in export_result.output
         assert 'claim: "X causes Y"' in export_result.output
 
@@ -281,7 +294,7 @@ class TestExportCLI:
         )
         assert attach_result.exit_code == 0
 
-        result = runner.invoke(main, ["inquiry", "export-pgmpy", "test-dag", "--path", p])
+        result = runner.invoke(main, ["inquiry", "export-pgmpy", "testdag", "--path", p])
         assert result.exit_code == 0
         assert 'claim: "X causes Y"' in result.output
         assert "confidence: 0.85" in result.output
@@ -294,7 +307,7 @@ class TestExportCLI:
         _setup_causal_inquiry(runner, graph_path)
         out_file = tmp_path / "dag.py"
         result = runner.invoke(
-            main, ["inquiry", "export-pgmpy", "test-dag", "--output", str(out_file), "--path", str(graph_path)]
+            main, ["inquiry", "export-pgmpy", "testdag", "--output", str(out_file), "--path", str(graph_path)]
         )
         assert result.exit_code == 0
         assert out_file.exists()
@@ -305,7 +318,7 @@ class TestExportCLI:
         _setup_causal_inquiry(runner, graph_path)
         out_file = tmp_path / "model.py"
         result = runner.invoke(
-            main, ["inquiry", "export-chirho", "test-dag", "--output", str(out_file), "--path", str(graph_path)]
+            main, ["inquiry", "export-chirho", "testdag", "--output", str(out_file), "--path", str(graph_path)]
         )
         assert result.exit_code == 0
         assert out_file.exists()
@@ -314,7 +327,7 @@ class TestExportCLI:
 
     def test_export_pgmpy_stdout(self, runner: CliRunner, graph_path: Path) -> None:
         _setup_causal_inquiry(runner, graph_path)
-        result = runner.invoke(main, ["inquiry", "export-pgmpy", "test-dag", "--path", str(graph_path)])
+        result = runner.invoke(main, ["inquiry", "export-pgmpy", "testdag", "--path", str(graph_path)])
         assert result.exit_code == 0
         assert "BayesianNetwork" in result.output
 

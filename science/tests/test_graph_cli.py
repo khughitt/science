@@ -7,6 +7,8 @@ from click.testing import CliRunner
 from rdflib import Dataset, Literal
 from rdflib.namespace import PROV, RDF, SKOS, Namespace
 
+from conftest import build_inquiry_graph
+
 from science_tool.cli import main
 
 EXPECTED_GRAPHS = (
@@ -152,39 +154,19 @@ def test_graph_export_json_emits_selected_overlays() -> None:
             ).exit_code
             == 0
         )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "inquiry",
-                    "init",
-                    "test-dag",
-                    "--label",
-                    "Test DAG",
-                    "--target",
-                    "concept/recovery",
-                    "--type",
-                    "causal",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(main, ["inquiry", "add-node", "test-dag", "concept/drug", "--role", "BoundaryIn"]).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main, ["inquiry", "add-node", "test-dag", "concept/recovery", "--role", "BoundaryOut"]
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                ["inquiry", "set-estimand", "test-dag", "--treatment", "concept/drug", "--outcome", "concept/recovery"],
-            ).exit_code
-            == 0
+        # Build the causal inquiry via the compile path (the retired mutators).
+        build_inquiry_graph(
+            Path("knowledge/graph.trig"),
+            slug="test_dag",
+            title="Test DAG",
+            profile="causal",
+            focal="concept:recovery",
+            treatment="concept:drug",
+            outcome="concept:recovery",
+            boundary_roles=[
+                {"ref": "concept:drug", "role": "BoundaryIn"},
+                {"ref": "concept:recovery", "role": "BoundaryOut"},
+            ],
         )
 
         result = runner.invoke(main, ["graph", "export-json", "--overlay", "causal", "--overlay", "evidence"])
@@ -2866,9 +2848,7 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
                 stance="disputes",
                 target="cluster_a",
                 extra=(
-                    "evidence_role: model_criticism\n"
-                    "dispute_scope: generalization\n"
-                    "evidence_type: negative_result\n"
+                    "evidence_role: model_criticism\ndispute_scope: generalization\nevidence_type: negative_result\n"
                 ),
             ),
         )
@@ -3492,22 +3472,11 @@ def test_graph_project_summary_rolls_up_research_profile() -> None:
                 == 0
             )
 
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "inquiry",
-                    "init",
-                    "project-inquiry",
-                    "--label",
-                    "Project Inquiry",
-                    "--target",
-                    "question:qproj",
-                    "--path",
-                    "knowledge/graph.trig",
-                ],
-            ).exit_code
-            == 0
+        build_inquiry_graph(
+            Path("knowledge/graph.trig"),
+            slug="project_inquiry",
+            title="Project Inquiry",
+            focal="question:qproj",
         )
 
         result = runner.invoke(main, ["graph", "project-summary", "--format", "json"])

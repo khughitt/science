@@ -1,17 +1,26 @@
-"""End-to-end test for the inquiry workflow."""
+"""End-to-end test for the inquiry workflow.
+
+Inquiry graphs are produced by the pure compiler (the path that replaced the
+retired ``inquiry add-*`` mutators); these tests build the inquiry through the
+``build_inquiry_graph`` conftest helper and exercise the reader CLI (list / show
+/ validate) against it.
+"""
 
 from pathlib import Path
 
 from click.testing import CliRunner
+from conftest import build_inquiry_graph
 
 from science_tool.cli import main
 
 
 def test_full_inquiry_lifecycle(tmp_path: Path) -> None:
-    """Test sketch -> specify -> validate lifecycle via CLI."""
+    """Test compile -> list -> show -> validate lifecycle via the reader CLI."""
     runner = CliRunner()
-    graph_path = str(tmp_path / "knowledge" / "graph.trig")
-    (tmp_path / "knowledge").mkdir()
+    knowledge = tmp_path / "knowledge"
+    knowledge.mkdir()
+    graph_file = knowledge / "graph.trig"
+    graph_path = str(graph_file)
 
     # 1. Init graph
     result = runner.invoke(main, ["graph", "init", "--path", graph_path])
@@ -35,95 +44,50 @@ def test_full_inquiry_lifecycle(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0, f"add hypothesis failed: {result.output}"
 
-    # 3. Create inquiry (sketch)
-    result = runner.invoke(
-        main,
-        [
-            "inquiry",
-            "init",
-            "sp-geometry",
-            "--label",
-            "Signal peptide embedding geometry",
-            "--target",
-            "hypothesis:h01",
-            "--description",
-            "Test whether SP embeddings form distinct clusters",
-            "--path",
-            graph_path,
-        ],
-    )
-    assert result.exit_code == 0, f"inquiry init failed: {result.output}"
-    assert "inquiry/sp_geometry" in result.output
-
-    # 4. Add concepts
+    # 3. Add concepts
     for concept in ["uniprot_sps", "esm2_model", "sp_embeddings", "distance_matrix", "t1_comparison"]:
         result = runner.invoke(main, ["graph", "add", "concept", concept, "--path", graph_path])
         assert result.exit_code == 0, f"add concept {concept} failed: {result.output}"
 
-    # 5. Set boundary roles
-    for entity, role in [
-        ("concept:uniprot_sps", "BoundaryIn"),
-        ("concept:esm2_model", "BoundaryIn"),
-        ("concept:distance_matrix", "BoundaryOut"),
-        ("concept:t1_comparison", "BoundaryOut"),
-    ]:
-        result = runner.invoke(
-            main,
-            [
-                "inquiry",
-                "add-node",
-                "sp-geometry",
-                entity,
-                "--role",
-                role,
-                "--path",
-                graph_path,
-            ],
-        )
-        assert result.exit_code == 0, f"add-node {entity} {role} failed: {result.output}"
+    # 4. Compile the inquiry (boundaries + data flow edges) via the compile path.
+    build_inquiry_graph(
+        graph_file,
+        slug="sp_geometry",
+        title="Signal peptide embedding geometry",
+        focal="hypothesis:h01",
+        boundary_roles=[
+            {"ref": "concept:uniprot_sps", "role": "BoundaryIn"},
+            {"ref": "concept:esm2_model", "role": "BoundaryIn"},
+            {"ref": "concept:distance_matrix", "role": "BoundaryOut"},
+            {"ref": "concept:t1_comparison", "role": "BoundaryOut"},
+        ],
+        flow_edges=[
+            {"subject": "concept:uniprot_sps", "predicate": "feedsInto", "object": "concept:sp_embeddings"},
+            {"subject": "concept:esm2_model", "predicate": "feedsInto", "object": "concept:sp_embeddings"},
+            {"subject": "concept:sp_embeddings", "predicate": "feedsInto", "object": "concept:distance_matrix"},
+            {"subject": "concept:sp_embeddings", "predicate": "feedsInto", "object": "concept:t1_comparison"},
+        ],
+    )
 
-    # 6. Add data flow edges
-    edges = [
-        ("concept:uniprot_sps", "sci:feedsInto", "concept:sp_embeddings"),
-        ("concept:esm2_model", "sci:feedsInto", "concept:sp_embeddings"),
-        ("concept:sp_embeddings", "sci:feedsInto", "concept:distance_matrix"),
-        ("concept:sp_embeddings", "sci:feedsInto", "concept:t1_comparison"),
-    ]
-    for s, p, o in edges:
-        result = runner.invoke(
-            main,
-            [
-                "inquiry",
-                "add-edge",
-                "sp-geometry",
-                s,
-                p,
-                o,
-                "--path",
-                graph_path,
-            ],
-        )
-        assert result.exit_code == 0, f"add-edge {s}->{o} failed: {result.output}"
-
-    # 7. List inquiries
+    # 5. List inquiries
     result = runner.invoke(main, ["inquiry", "list", "--path", graph_path, "--format", "json"])
     assert result.exit_code == 0
     assert "sp_geometry" in result.output
 
-    # 8. Show inquiry
-    result = runner.invoke(main, ["inquiry", "show", "sp-geometry", "--path", graph_path, "--format", "json"])
+    # 6. Show inquiry
+    result = runner.invoke(main, ["inquiry", "show", "sp_geometry", "--path", graph_path, "--format", "json"])
     assert result.exit_code == 0
     assert "Signal peptide" in result.output
     assert "boundary_in" in result.output
     assert "boundary_out" in result.output
 
-    # 9. Validate — should pass
+    # 7. Validate — should pass
     result = runner.invoke(
         main,
         [
             "inquiry",
             "validate",
-            "sp-geometry",
+            "sp_geometry",
             "--path",
             graph_path,
             "--format",
@@ -136,46 +100,33 @@ def test_full_inquiry_lifecycle(tmp_path: Path) -> None:
 def test_inquiry_validation_catches_unreachable(tmp_path: Path) -> None:
     """Validate catches unreachable BoundaryOut nodes."""
     runner = CliRunner()
-    graph_path = str(tmp_path / "knowledge" / "graph.trig")
-    (tmp_path / "knowledge").mkdir()
+    knowledge = tmp_path / "knowledge"
+    knowledge.mkdir()
+    graph_file = knowledge / "graph.trig"
+    graph_path = str(graph_file)
 
     runner.invoke(main, ["graph", "init", "--path", graph_path])
     runner.invoke(
         main,
         ["graph", "add", "hypothesis", "H01", "--text", "Test", "--source", "paper:doi_test", "--path", graph_path],
     )
-    runner.invoke(
-        main, ["inquiry", "init", "broken", "--label", "Broken", "--target", "hypothesis:h01", "--path", graph_path]
-    )
 
-    # Add concepts
     for c in ["input_data", "output_a", "output_b"]:
         runner.invoke(main, ["graph", "add", "concept", c, "--path", graph_path])
 
-    # Set boundaries — output_b will be unreachable
-    runner.invoke(
-        main, ["inquiry", "add-node", "broken", "concept:input_data", "--role", "BoundaryIn", "--path", graph_path]
-    )
-    runner.invoke(
-        main, ["inquiry", "add-node", "broken", "concept:output_a", "--role", "BoundaryOut", "--path", graph_path]
-    )
-    runner.invoke(
-        main, ["inquiry", "add-node", "broken", "concept:output_b", "--role", "BoundaryOut", "--path", graph_path]
-    )
-    runner.invoke(
-        main,
-        [
-            "inquiry",
-            "add-edge",
-            "broken",
-            "concept:input_data",
-            "sci:feedsInto",
-            "concept:output_a",
-            "--path",
-            graph_path,
+    # output_b has no incoming flow edge -> unreachable BoundaryOut.
+    build_inquiry_graph(
+        graph_file,
+        slug="broken",
+        title="Broken",
+        focal="hypothesis:h01",
+        boundary_roles=[
+            {"ref": "concept:input_data", "role": "BoundaryIn"},
+            {"ref": "concept:output_a", "role": "BoundaryOut"},
+            {"ref": "concept:output_b", "role": "BoundaryOut"},
         ],
+        flow_edges=[{"subject": "concept:input_data", "predicate": "feedsInto", "object": "concept:output_a"}],
     )
-    # No edge to output_b!
 
     result = runner.invoke(main, ["inquiry", "validate", "broken", "--path", graph_path, "--format", "json"])
     # Should exit non-zero due to unreachable boundary
