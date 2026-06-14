@@ -2,7 +2,7 @@
 
 Date: 2026-06-13
 
-Status: design / scoping. Implementation deferred to a paired `…-plan.md` (not yet written) and a `science` task.
+Status: design / scoping. Paired implementation plan: `docs/plans/2026-06-13-dataset-sub-cohort-lineage-plan.md` (not yet executed).
 
 Related:
 - `docs/plans/2026-05-29-b2-dataset-independence-design.md` — B2 collapse semantics this extends; §10 names cross-dataset overlap an explicit non-goal
