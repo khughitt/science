@@ -157,10 +157,14 @@ commitment vs candidate. Per the scoping decision:
 
 - **Ancestor–descendant pair (subset chain), both direct dependence → COMMITMENT.**
   A line on C and a line on any ancestor P of C are treated as a **full-overlap shared-source** dependence:
-  the subset fully rests on the parent's participants, so it cannot be an independent replication. This
-  extends `_is_committable_pair` (`dataset_independence.py:283`) to accept a pair whose datasets are in an
-  ancestor/descendant relation (not only datasets that are identical). The committed group's
-  `independence_group`/justification records the lineage root plus both datasets.
+  the subset fully rests on the parent's participants, so it cannot be an independent replication.
+  Mechanically this requires one shared *lineage-committable* predicate (`relation ∈ {same, ancestor,
+  descendant}`) applied at **both** collapse sites — `_is_committable_pair` on the candidate path *and* the
+  edge construction inside `_components_from_ancestors` on the commitment path, which does **not** route
+  through `_is_committable_pair` and currently chains consecutive same-dataset lines. Under root-grouping
+  that chain would otherwise mis-join a sibling pair into a commitment; the gate prevents it. The committed
+  group's `independence_group`/justification records the lineage root plus both datasets. (See the paired
+  plan, Task 4, for the exact change.)
 
 - **Co-descendant pair (siblings/cousins — common ancestor, neither an ancestor of the other) → CANDIDATE.**
   Two distinct sub-cohorts of the same parent (e.g. UKB-PPP proteomics vs a UKB metabolomics sub-cohort)
