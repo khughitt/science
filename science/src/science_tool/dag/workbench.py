@@ -135,6 +135,15 @@ class WorkbenchRow(BaseModel):
     legacy_patch: str | None = None
     legacy_edge_id: int | None = None
 
+    # Bundle routing: an explicit per-row override of the file-level
+    # ``focal_hypothesis``.  ``None`` inherits ``focal_hypothesis`` (the simple
+    # single-focal path); a list routes this row's proposition to EXACTLY those
+    # hypothesis bundles (supports bridge patches spanning multiple bundles).
+    # For migrated DAG rows (``legacy_edge_id`` set) compile fails if neither
+    # this nor ``focal_hypothesis`` is present — every migrated edge-proposition
+    # must declare its bundle membership.
+    discusses: list[str] | None = None
+
     # Evidence: authored inline as ``EvidenceStub``; after ``compile`` the
     # normalized row holds evidence-line *references* (ids) instead of inline
     # substance. The union keeps both shapes parseable — a bare string is an
@@ -200,6 +209,34 @@ def _slug_for_triple(subject: str | None, predicate: str | None, obj: str | None
     if len(slug) < 2:
         raise EntityCommandError("row triple cannot derive a stable proposition slug; set an explicit id")
     return slug
+
+
+def _resolve_row_discusses(row: WorkbenchRow, focal_hypothesis: str | None) -> list[str] | None:
+    """Resolve a row's bundle membership (``cito:discusses`` targets).
+
+    Routing rule (patch-level ``focal_hypothesis`` is a convenience default, not a
+    semantic truth — a row may override it):
+
+    - row has ``discusses``                -> use it EXACTLY (may name multiple bundles).
+    - row lacks it, ``focal_hypothesis`` set -> inherit ``[focal_hypothesis]``.
+    - neither, and the row is a migrated DAG row (``legacy_edge_id`` set) -> FAIL: every
+      migrated edge-proposition must declare its bundle membership.
+    - neither, ordinary (non-migrated) row -> ``None`` (no bundle membership).
+    """
+    if row.discusses is not None:
+        return list(row.discusses)
+    if focal_hypothesis is not None:
+        return [focal_hypothesis]
+    if row.legacy_edge_id is not None:
+        from science_tool.entities import EntityCommandError
+
+        raise EntityCommandError(
+            f"migrated DAG row {row.subject}->{row.object} (legacy edge "
+            f"{row.legacy_patch}#{row.legacy_edge_id}) has neither a row-level `discusses` nor a "
+            f"file-level `focal_hypothesis`; every migrated edge-proposition must declare its "
+            f"bundle membership (set row.discusses for bridge rows, focal_hypothesis otherwise)"
+        )
+    return None
 
 
 def _proposition_for_row(row: WorkbenchRow) -> PropositionEntity:
@@ -353,8 +390,9 @@ def compile_workbench(
 
     for row in wb.rows:
         prop = _proposition_for_row(row)
-        if wb.focal_hypothesis is not None:
-            prop = prop.model_copy(update={"discusses": [wb.focal_hypothesis]})
+        discusses = _resolve_row_discusses(row, wb.focal_hypothesis)
+        if discusses is not None:
+            prop = prop.model_copy(update={"discusses": discusses})
         _write_entity_file(prop, project_root=project_root, as_of=as_of)
         propositions.append(prop)
 
@@ -400,6 +438,7 @@ _ROW_KEY_ORDER: tuple[str, ...] = (
     "legacy_relation_label",
     "legacy_patch",
     "legacy_edge_id",
+    "discusses",
     "evidence",
 )
 
