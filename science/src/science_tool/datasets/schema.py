@@ -182,3 +182,13 @@ class TableSchema(BaseModel):
                         f"got {types[key]!r}"
                     )
         return self
+
+
+class ResourceDescriptor(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    # Explicitly modelled so the marker is documented in the emitted profile and an
+    # invalid value fails rather than passing silently via extra="allow".
+    profile: Literal["science-data-resource/v1"] | None = Field(default=None, alias="$schema")
+    name: str
+    path: str                                # required in Spec 1 (no inline-data support yet)
+    schema_: TableSchema | None = Field(default=None, alias="schema")

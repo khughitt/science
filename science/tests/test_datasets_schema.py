@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from science_tool.datasets.schema import FieldConstraints, FieldQA, FieldSpec, ForeignKey, MissingValue, TableQA, TableSchema
+from science_tool.datasets.schema import FieldConstraints, FieldQA, FieldSpec, ForeignKey, MissingValue, ResourceDescriptor, TableQA, TableSchema
 
 
 class TestFieldValueModels:
@@ -157,3 +157,32 @@ class TestTableSchemaReferences:
                 {"fields": [{"name": "is_a", "type": "boolean"}, {"name": "s", "type": "string"}],
                  "qa": {"exclusive_flags": [["is_a", "s"]]}}
             )
+
+
+class TestResourceDescriptor:
+    def test_minimal(self) -> None:
+        d = ResourceDescriptor.model_validate({"name": "obs", "path": "obs.csv"})
+        assert d.name == "obs" and d.path == "obs.csv"
+        assert d.schema_ is None and d.profile is None
+
+    def test_schema_alias_roundtrip(self) -> None:
+        d = ResourceDescriptor.model_validate(
+            {"name": "obs", "path": "obs.csv", "schema": {"fields": [{"name": "a"}]}}
+        )
+        assert d.schema_ is not None and d.schema_.fields[0].name == "a"
+        dumped = d.model_dump(by_alias=True, exclude_none=True)
+        assert "schema" in dumped and "schema_" not in dumped
+
+    def test_profile_marker_validated(self) -> None:
+        d = ResourceDescriptor.model_validate(
+            {"$schema": "science-data-resource/v1", "name": "o", "path": "o.csv"}
+        )
+        assert d.profile == "science-data-resource/v1"
+        with pytest.raises(ValidationError):
+            ResourceDescriptor.model_validate({"$schema": "bogus/v9", "name": "o", "path": "o.csv"})
+
+    def test_extra_standard_props_allowed(self) -> None:
+        d = ResourceDescriptor.model_validate(
+            {"name": "o", "path": "o.csv", "format": "csv", "mediatype": "text/csv"}
+        )
+        assert d.name == "o"
