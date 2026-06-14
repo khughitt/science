@@ -12,6 +12,16 @@ from science_tool.graph.patch_membership import (
 )
 
 
+_ENTITY_REQUIRED = {
+    "project": "",
+    "ontology_terms": [],
+    "related": [],
+    "source_refs": [],
+    "content_preview": "",
+    "file_path": "entities/patches/demo.md",
+}
+
+
 def _uri(ref: str) -> URIRef:
     return entity_uri_for_ref(ref)
 
@@ -176,3 +186,61 @@ def test_deriver_excludes_non_entity_provenance_nodes() -> None:
     assert _uri("hypothesis:h1") in members
     assert source_node not in members
     assert all(record.member_kind != "unknown" for record in result.records)
+
+
+def test_inquiry_existing_refs_and_minted_nodes_become_members():
+    from rdflib import Dataset, RDF, URIRef
+    from science_model.patch_definition import PatchDefinitionEntity
+    from science_tool.graph.inquiry_compile import emit_inquiry_views
+    from science_tool.graph.io import PROJECT_NS, SCI_NS
+    from science_tool.graph.patch_membership import derive_patch_memberships
+
+    ds = Dataset()
+    g = ds.graph(URIRef(PROJECT_NS["graph/knowledge"]))
+    g.add((URIRef(PROJECT_NS["hypothesis/h01"]), RDF.type, SCI_NS.Hypothesis))
+    g.add((URIRef(PROJECT_NS["concept/x"]), RDF.type, SCI_NS.Concept))
+    g.add((URIRef(PROJECT_NS["concept/y"]), RDF.type, SCI_NS.Concept))
+    g.add((URIRef(PROJECT_NS["proposition/p1"]), RDF.type, SCI_NS.Proposition))
+
+    ent = PatchDefinitionEntity(
+        **_ENTITY_REQUIRED,
+        id="patch-definition:i01", title="I", focal="hypothesis:h01",
+        scope_set=[{"scope": "local"}], neighborhood_policy={}, patch_type="inquiry",
+        inquiry={"profile": "investigation", "status": "sketch",
+                 "boundary_roles": [{"ref": "concept:x", "role": "BoundaryIn"}],
+                 "flow_edges": [{"subject": "concept:x", "predicate": "feedsInto",
+                                 "object": "concept:y", "claim_refs": ["proposition:p1"]}],
+                 "assumptions": [{"ref": "assumption:a1", "statement": "iid"}]},
+    )
+    emit_inquiry_views(ds, [ent])  # view first -> minted assumption node typed
+    result = derive_patch_memberships(ds, [ent], policy_version="local-closure-v1")
+
+    by_member = {str(r.member): r for r in result.records}
+    assert by_member[str(URIRef(PROJECT_NS["concept/x"]))].derivation_reason == "inquiry"
+    assert by_member[str(URIRef(PROJECT_NS["proposition/p1"]))].derivation_reason == "inquiry"
+    assum = next(r for m, r in by_member.items() if "assumption" in m)
+    assert assum.derivation_reason == "inquiry"
+    assert assum.member_kind == "assumption"  # not "unknown" — ordering guard
+
+
+def test_unresolved_inquiry_boundary_ref_is_hard_error():
+    import pytest
+    from rdflib import Dataset, RDF, URIRef
+    from science_model.patch_definition import PatchDefinitionEntity
+    from science_tool.graph.inquiry_compile import emit_inquiry_views
+    from science_tool.graph.io import PROJECT_NS, SCI_NS
+    from science_tool.graph.patch_membership import PatchMembershipError, derive_patch_memberships
+
+    ds = Dataset()
+    g = ds.graph(URIRef(PROJECT_NS["graph/knowledge"]))
+    g.add((URIRef(PROJECT_NS["hypothesis/h01"]), RDF.type, SCI_NS.Hypothesis))
+    ent = PatchDefinitionEntity(
+        **_ENTITY_REQUIRED,
+        id="patch-definition:i02", title="I", focal="hypothesis:h01",
+        scope_set=[{"scope": "local"}], neighborhood_policy={}, patch_type="inquiry",
+        inquiry={"profile": "investigation", "status": "sketch",
+                 "boundary_roles": [{"ref": "concept:ghost", "role": "BoundaryIn"}]},
+    )
+    emit_inquiry_views(ds, [ent])
+    with pytest.raises(PatchMembershipError, match="unresolved inquiry"):
+        derive_patch_memberships(ds, [ent], policy_version="local-closure-v1")

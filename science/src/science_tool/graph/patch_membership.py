@@ -15,10 +15,11 @@ from rdflib import Dataset, Literal as RDFLiteral, URIRef
 from rdflib.namespace import RDF, XSD
 
 from science_model.patch_definition import PatchDefinitionEntity
+from science_tool.graph.inquiry_compile import inquiry_existing_refs, inquiry_minted_uris
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, entity_uri_for_ref
 
 MemberRole = Literal["focal", "member"]
-DerivationReason = Literal["focal", "seed", "closure", "direct_relation"]
+DerivationReason = Literal["focal", "seed", "closure", "direct_relation", "inquiry"]
 
 DIRECT_RELATION_PREDICATES: tuple[URIRef, ...] = (
     CITO_NS.discusses,
@@ -102,7 +103,48 @@ def derive_patch_memberships(
                 ),
             )
 
-        origins = [focal_uri, *seed_uris]
+        inquiry_uris: list[URIRef] = []
+        if definition.patch_type == "inquiry":
+            for ref in inquiry_existing_refs(definition):
+                member_uri = _resolve_required(
+                    dataset, ref, label="inquiry", patch_id=definition.canonical_id
+                )
+                inquiry_uris.append(member_uri)
+                _put_record(
+                    by_member,
+                    MembershipRecord(
+                        patch=patch_uri,
+                        patch_id=definition.canonical_id,
+                        member=member_uri,
+                        member_role="member",
+                        member_kind=_member_kind(dataset, member_uri),
+                        derivation_reason="inquiry",
+                        depth=0,
+                        policy_version=policy_version,
+                        build_id=build_id,
+                    ),
+                )
+            for member_uri in inquiry_minted_uris(definition):
+                member_kind = _member_kind(dataset, member_uri)
+                if member_kind == "unknown":
+                    continue  # emitter always types these; defensive only
+                inquiry_uris.append(member_uri)
+                _put_record(
+                    by_member,
+                    MembershipRecord(
+                        patch=patch_uri,
+                        patch_id=definition.canonical_id,
+                        member=member_uri,
+                        member_role="member",
+                        member_kind=member_kind,
+                        derivation_reason="inquiry",
+                        depth=0,
+                        policy_version=policy_version,
+                        build_id=build_id,
+                    ),
+                )
+
+        origins = [focal_uri, *seed_uris, *inquiry_uris]
         anchors: dict[URIRef, int] = {origin: 0 for origin in origins}
         max_depth = definition.neighborhood_policy.max_depth
         for origin in origins:
@@ -240,7 +282,7 @@ def _put_record(by_member: dict[URIRef, MembershipRecord], record: MembershipRec
 
 
 def _record_sort_key(record: MembershipRecord) -> tuple[int, int, str]:
-    reason_order = {"focal": 0, "seed": 1, "closure": 2, "direct_relation": 3}
+    reason_order = {"focal": 0, "seed": 1, "inquiry": 2, "closure": 3, "direct_relation": 4}
     return (
         record.depth,
         reason_order[record.derivation_reason],
