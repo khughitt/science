@@ -405,3 +405,46 @@ def result_to_json(result: InferResult) -> str:
         },
     }
     return json.dumps(obj, indent=2, sort_keys=True) + "\n"
+
+
+def write_patch(result: InferResult) -> None:
+    """Apply ONLY the names+types patch, under the §6 guards, then atomically write.
+
+    Refuses (and writes nothing) on a type-disagreement conflict or a descriptor that would
+    parse invalid as a whole package. Authored field- and table-level metadata is preserved.
+    """
+    conflicts = [d.name for d in result.diff if d.conflict]
+    if conflicts:
+        raise InferSchemaError(
+            f"type conflict on field(s) {conflicts} — authored type differs from inferred; "
+            "resolve by hand (the tool never overwrites an authored type)")
+
+    pkg = copy.deepcopy(result.pkg)
+    res = pkg["resources"][result.res_index]
+    schema = res.setdefault("schema", {})
+    fields = schema.setdefault("fields", [])
+    by_name = {f.get("name"): f for f in fields}
+    for d in result.diff:
+        if d.action == "add":
+            fields.append({"name": d.name, "type": d.new_type})
+        elif d.action == "change":  # conflicts already excluded → safe type fill
+            by_name[d.name]["type"] = d.new_type
+        # "same"/"remove": untouched (remove is reported, never auto-applied)
+
+    # Whole-package post-validation (cross-resource FK resolution needs every descriptor).
+    descriptors: list[ResourceDescriptor] = []
+    for r in pkg["resources"]:
+        try:
+            descriptors.append(ResourceDescriptor.model_validate(r))
+        except ValidationError as exc:
+            raise InferSchemaError(f"resulting descriptor is invalid: {exc.errors()[0]}") from exc
+    issues = package_consistency_issues(descriptors)
+    if issues:
+        raise InferSchemaError("resulting package is inconsistent: " + "; ".join(issues))
+
+    written = {f.get("name") for f in fields}
+    missing = {i.name for i in result.inferred} - written
+    if missing:
+        raise InferSchemaError(f"internal: inferred columns missing after patch: {sorted(missing)}")
+
+    dump_descriptor(pkg, result.descriptor_path, result.fmt)

@@ -283,3 +283,85 @@ def test_result_to_json_roundtrips(tmp_path: Path) -> None:
     obj = json.loads(isch.result_to_json(result))
     assert {"patch", "diff", "report"} <= set(obj)
     assert obj["patch"]["schema"]["fields"]  # proposed names+types only
+
+
+def _result(tmp_path: Path, pkg: dict, table: str = "obs.csv",
+            text: str = "id,val\nA,1\nB,2\n") -> "isch.InferResult":
+    dp = _write_pkg(tmp_path, pkg, table, text)
+    return isch.infer_schema_result(dp, pkg["resources"][0]["name"], sample=100)
+
+
+def test_write_patch_adds_fields_to_schemaless(tmp_path: Path) -> None:
+    pkg = {"name": "p", "resources": [{"name": "obs", "path": "obs.csv"}]}
+    result = _result(tmp_path, pkg)
+    isch.write_patch(result)
+    written = json.loads(result.descriptor_path.read_text())
+    fields = written["resources"][0]["schema"]["fields"]
+    assert {f["name"] for f in fields} == {"id", "val"}
+    assert {f["type"] for f in fields} == {"string", "integer"}
+
+
+def test_write_patch_preserves_field_and_table_metadata(tmp_path: Path) -> None:
+    # Field-level metadata that is Spec-1-valid on a *string* field: constraints.required,
+    # a `description`, and an unmodelled `extra` (extra="allow"). (qa.low_variance is NOT
+    # valid on a string field — Spec 1 rejects it — so it cannot be used here.)
+    pkg = {"name": "p", "resources": [{
+        "name": "obs", "path": "obs.csv",
+        "schema": {
+            "fields": [{"name": "id", "type": "string", "constraints": {"required": True},
+                        "description": "the row id", "extra": {"owner": "me"}}],
+            "primaryKey": "id",
+            "missingValues": ["", "NA"],
+        },
+    }]}
+    result = _result(tmp_path, pkg)  # file has id,val → val is new, id unchanged
+    isch.write_patch(result)
+    schema = json.loads(result.descriptor_path.read_text())["resources"][0]["schema"]
+    id_field = next(f for f in schema["fields"] if f["name"] == "id")
+    assert id_field["constraints"] == {"required": True}   # preserved
+    assert id_field["description"] == "the row id"          # field-level metadata preserved
+    assert id_field["extra"] == {"owner": "me"}             # field-level extra preserved
+    assert schema["primaryKey"] == "id"                     # table-level preserved
+    assert schema["missingValues"] == ["", "NA"]
+    assert any(f["name"] == "val" for f in schema["fields"])  # new field added
+
+
+def test_write_patch_refuses_type_conflict(tmp_path: Path) -> None:
+    pkg = {"name": "p", "resources": [{
+        "name": "obs", "path": "obs.csv",
+        "schema": {"fields": [{"name": "id", "type": "string"}, {"name": "val", "type": "string"}]},
+    }]}
+    # file: val is integer → conflicts with authored type "string"
+    result = _result(tmp_path, pkg)
+    before = result.descriptor_path.read_text()
+    with pytest.raises(isch.InferSchemaError, match="conflict"):
+        isch.write_patch(result)
+    assert result.descriptor_path.read_text() == before  # wrote nothing
+
+
+def test_write_patch_yaml_roundtrips(tmp_path: Path) -> None:
+    (tmp_path / "obs.csv").write_text("id,val\nA,1\n")
+    dp = tmp_path / "datapackage.yaml"
+    dp.write_text("name: p\nresources:\n- name: obs\n  path: obs.csv\n")
+    result = isch.infer_schema_result(dp, "obs", sample=100)
+    isch.write_patch(result)
+    written = yaml.safe_load(dp.read_text())
+    assert {f["name"] for f in written["resources"][0]["schema"]["fields"]} == {"id", "val"}
+
+
+def test_write_patch_validates_external_foreign_key(tmp_path: Path) -> None:
+    # resource B has an FK into A; writing A's inferred schema must keep the package valid
+    (tmp_path / "a.csv").write_text("aid\nX\nY\n")
+    (tmp_path / "b.csv").write_text("bid,aref\n1,X\n")
+    pkg = {"name": "p", "resources": [
+        {"name": "a", "path": "a.csv", "schema": {"fields": [{"name": "aid", "type": "string"}]}},
+        {"name": "b", "path": "b.csv", "schema": {
+            "fields": [{"name": "bid", "type": "string"}, {"name": "aref", "type": "string"}],
+            "foreignKeys": [{"fields": "aref", "reference": {"resource": "a", "fields": "aid"}}],
+        }},
+    ]}
+    dp = tmp_path / "datapackage.json"
+    dp.write_text(json.dumps(pkg))
+    result = isch.infer_schema_result(dp, "a", sample=100)
+    isch.write_patch(result)  # must NOT raise — FK target field "aid" still present
+    assert json.loads(dp.read_text())["resources"][0]["schema"]["fields"]
