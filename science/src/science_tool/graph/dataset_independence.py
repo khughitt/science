@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 from collections import defaultdict, deque
 from dataclasses import dataclass
@@ -91,6 +92,57 @@ class DerivedCommitmentMetadata:
     independence_group: str
 
 
+LineageRelation = Literal["same", "ancestor", "descendant", "codescendant", "unrelated"]
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetLineage:
+    """Sub-cohort lineage over datasets, from ``sci:subCohortOf`` edges (child -> parent)."""
+
+    parent_of: dict[URIRef, URIRef]
+
+    def root(self, dataset: URIRef) -> URIRef:
+        current = dataset
+        visited: set[URIRef] = set()
+        while current in self.parent_of and current not in visited:
+            visited.add(current)
+            current = self.parent_of[current]
+        return current
+
+    def _reaches(self, descendant: URIRef, ancestor: URIRef) -> bool:
+        """True if ``ancestor`` is on the parent-chain of ``descendant``."""
+        current = descendant
+        visited: set[URIRef] = set()
+        while current in self.parent_of and current not in visited:
+            visited.add(current)
+            current = self.parent_of[current]
+            if current == ancestor:
+                return True
+        return False
+
+    def relation(self, x: URIRef, y: URIRef) -> LineageRelation:
+        if x == y:
+            return "same"
+        if self._reaches(x, y):
+            return "descendant"  # x is a descendant of y
+        if self._reaches(y, x):
+            return "ancestor"  # x is an ancestor of y
+        if self.root(x) == self.root(y):
+            return "codescendant"
+        return "unrelated"
+
+    def committable(self, x: URIRef, y: URIRef) -> bool:
+        return self.relation(x, y) in {"same", "ancestor", "descendant"}
+
+
+def _read_dataset_lineage(knowledge: Graph) -> DatasetLineage:
+    parent_of: dict[URIRef, URIRef] = {}
+    for child, _, parent in knowledge.triples((None, SCI_NS.subCohortOf, None)):
+        if isinstance(child, URIRef) and isinstance(parent, URIRef):
+            parent_of[child] = parent
+    return DatasetLineage(parent_of=parent_of)
+
+
 def read_dataset_usage_facts(provenance: Graph) -> list[UsageFact]:
     facts: list[UsageFact] = []
     for consumer, _, usage_node in provenance.triples((None, SCI_NS.hasDatasetUsage, None)):
@@ -146,11 +198,12 @@ def derive_dataset_independence_records(knowledge: Graph, provenance: Graph) -> 
     reduced = reduce_usage_facts(read_dataset_usage_facts(provenance))
     line_targets = _evidence_line_targets(knowledge)
     ancestors = _line_ancestors(knowledge, provenance, reduced, line_targets)
+    lineage = _read_dataset_lineage(knowledge)
     records: list[DatasetIndependenceRecord] = []
     for target in sorted(set(line_targets.values()), key=str):
         target_lines = frozenset(line for line, line_target in line_targets.items() if line_target == target)
-        records.extend(_commitment_components(target, target_lines, ancestors))
-        records.extend(_candidate_components(target, target_lines, ancestors))
+        records.extend(_commitment_components(target, target_lines, ancestors, lineage))
+        records.extend(_candidate_components(target, target_lines, ancestors, lineage))
     return sorted(records, key=lambda record: (record.kind, str(record.target), record.reason, sorted(map(str, record.members))))
 
 
@@ -228,6 +281,7 @@ def _commitment_components(
     target: URIRef,
     target_lines: frozenset[URIRef],
     ancestors: list[LineAncestor],
+    lineage: DatasetLineage,
 ) -> list[DatasetIndependenceRecord]:
     direct_full = [
         ancestor
@@ -238,17 +292,18 @@ def _commitment_components(
         and ancestor.usage.interpretation == "dependence"
         and ancestor.usage.overlap == "full"
     ]
-    return _components_from_ancestors("commitment", "full-overlap", target, direct_full)
+    return _components_from_ancestors("commitment", "full-overlap", target, direct_full, lineage)
 
 
 def _candidate_components(
     target: URIRef,
     target_lines: frozenset[URIRef],
     ancestors: list[LineAncestor],
+    lineage: DatasetLineage,
 ) -> list[DatasetIndependenceRecord]:
     out: list[DatasetIndependenceRecord] = []
     edges_by_reason: dict[str, list[CandidateEdge]] = defaultdict(list)
-    for edge in _candidate_edges(target, target_lines, ancestors):
+    for edge in _candidate_edges(target, target_lines, ancestors, lineage):
         edges_by_reason[edge.reason].append(edge)
     for reason, edges in sorted(edges_by_reason.items()):
         out.extend(_records_from_candidate_edges(target, reason, edges))
@@ -259,36 +314,38 @@ def _candidate_edges(
     target: URIRef,
     target_lines: frozenset[URIRef],
     ancestors: list[LineAncestor],
+    lineage: DatasetLineage,
 ) -> list[CandidateEdge]:
-    by_dataset: dict[URIRef, list[LineAncestor]] = defaultdict(list)
+    by_root: dict[URIRef, list[LineAncestor]] = defaultdict(list)
     for ancestor in ancestors:
         if ancestor.target != target or ancestor.line not in target_lines:
             continue
-        by_dataset[ancestor.dataset].append(ancestor)
+        by_root[lineage.root(ancestor.dataset)].append(ancestor)
     out: list[CandidateEdge] = []
-    for dataset, group in by_dataset.items():
+    for _root, group in by_root.items():
         ordered = sorted(group, key=lambda ancestor: str(ancestor.line))
         for left_index, left in enumerate(ordered):
             for right in ordered[left_index + 1 :]:
                 if left.line == right.line:
                     continue
-                if _is_committable_pair(left, right):
+                if _is_committable_pair(left, right, lineage):
                     continue
-                reason = _candidate_reason(left, right)
+                reason = _candidate_reason(left, right, lineage)
                 if reason is not None:
-                    out.append(CandidateEdge(left=left, right=right, dataset=dataset, reason=reason))
+                    out.append(CandidateEdge(left=left, right=right, dataset=left.dataset, reason=reason))
     return out
 
 
-def _is_committable_pair(left: LineAncestor, right: LineAncestor) -> bool:
+def _is_committable_pair(left: LineAncestor, right: LineAncestor, lineage: DatasetLineage) -> bool:
     return (
         left.path == right.path == "direct"
         and left.usage.interpretation == right.usage.interpretation == "dependence"
         and left.usage.overlap == right.usage.overlap == "full"
+        and lineage.committable(left.dataset, right.dataset)
     )
 
 
-def _candidate_reason(left: LineAncestor, right: LineAncestor) -> str | None:
+def _candidate_reason(left: LineAncestor, right: LineAncestor, lineage: DatasetLineage) -> str | None:
     if "indirect-bears-on" in {left.path, right.path}:
         return "indirect-bears-on"
     if "virtual" in {left.path, right.path}:
@@ -298,6 +355,8 @@ def _candidate_reason(left: LineAncestor, right: LineAncestor) -> str | None:
         return "citation-only"
     if "validation" in interpretations:
         return "validation"
+    if lineage.relation(left.dataset, right.dataset) == "codescendant":
+        return "lineage-sibling"
     overlaps = {left.usage.overlap, right.usage.overlap}
     if "unknown" in overlaps:
         return "unknown-overlap"
@@ -311,24 +370,28 @@ def _components_from_ancestors(
     reason: str,
     target: URIRef,
     ancestors: list[LineAncestor],
+    lineage: DatasetLineage,
 ) -> list[DatasetIndependenceRecord]:
-    by_dataset: dict[URIRef, list[LineAncestor]] = defaultdict(list)
+    by_root: dict[URIRef, list[LineAncestor]] = defaultdict(list)
     for ancestor in ancestors:
-        by_dataset[ancestor.dataset].append(ancestor)
+        by_root[lineage.root(ancestor.dataset)].append(ancestor)
 
-    edges: list[tuple[URIRef, URIRef, URIRef]] = []
-    for dataset, group in by_dataset.items():
-        lines = sorted({ancestor.line for ancestor in group}, key=str)
-        if len(lines) < 2:
-            continue
-        for left, right in zip(lines, lines[1:], strict=False):
-            edges.append((left, right, dataset))
+    edges: list[tuple[URIRef, URIRef, frozenset[URIRef]]] = []
+    for _root, group in by_root.items():
+        for a, b in itertools.combinations(group, 2):
+            if a.line != b.line and lineage.committable(a.dataset, b.dataset):
+                edges.append((a.line, b.line, frozenset({a.dataset, b.dataset})))
     if not edges:
         return []
 
     records: list[DatasetIndependenceRecord] = []
     for members in _connected_components(edges):
-        member_datasets = frozenset(dataset for left, right, dataset in edges if left in members and right in members)
+        member_datasets = frozenset(
+            d
+            for left, right, datasets in edges
+            if left in members and right in members
+            for d in datasets
+        )
         usage_nodes = frozenset(
             node
             for ancestor in ancestors
@@ -358,7 +421,7 @@ def _records_from_candidate_edges(
     records: list[DatasetIndependenceRecord] = []
     for members in _connected_components(graph_edges):
         component_edges = [edge for edge in edges if edge.left.line in members and edge.right.line in members]
-        datasets = frozenset(edge.dataset for edge in component_edges)
+        datasets = frozenset(d for edge in component_edges for d in (edge.left.dataset, edge.right.dataset))
         usage_nodes = frozenset(
             node
             for edge in component_edges
@@ -379,7 +442,7 @@ def _records_from_candidate_edges(
     return records
 
 
-def _connected_components(edges: list[tuple[URIRef, URIRef, URIRef]]) -> list[frozenset[URIRef]]:
+def _connected_components(edges: list[tuple[URIRef, URIRef, object]]) -> list[frozenset[URIRef]]:
     adjacency: dict[URIRef, set[URIRef]] = defaultdict(set)
     for left, right, _dataset in edges:
         adjacency[left].add(right)

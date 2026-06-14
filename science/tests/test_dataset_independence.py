@@ -231,3 +231,69 @@ def test_virtual_geneset_member_is_candidate_only_even_with_full_overlap() -> No
     records = derive_dataset_independence_records(knowledge, provenance)
 
     assert [(record.kind, record.reason) for record in records] == [("candidate", "virtual-row")]
+
+
+def _add_sub_cohort(knowledge, child, parent):
+    knowledge.add((child, SCI_NS.subCohortOf, parent))
+
+
+def test_child_parent_full_overlap_pair_is_commitment():
+    knowledge, provenance, target, line_a, line_b = _line_graph()
+    ukb = PROJECT_NS["dataset/uk-biobank"]; ppp = PROJECT_NS["dataset/ukb-ppp"]
+    _add_sub_cohort(knowledge, ppp, ukb)
+    _add_usage(provenance, line_a, ppp, "analyzed", "full", "a")
+    _add_usage(provenance, line_b, ukb, "analyzed", "full", "b")
+    records = derive_dataset_independence_records(knowledge, provenance)
+    assert [r.kind for r in records] == ["commitment"]
+    assert records[0].members == frozenset({line_a, line_b})
+    assert records[0].datasets == frozenset({ppp, ukb})
+
+
+def test_sibling_full_overlap_pair_is_candidate_lineage_sibling():
+    knowledge, provenance, _t, line_a, line_b = _line_graph()
+    ukb = PROJECT_NS["dataset/uk-biobank"]; ppp = PROJECT_NS["dataset/ukb-ppp"]; nmr = PROJECT_NS["dataset/ukb-nmr"]
+    _add_sub_cohort(knowledge, ppp, ukb); _add_sub_cohort(knowledge, nmr, ukb)
+    _add_usage(provenance, line_a, ppp, "analyzed", "full", "a")
+    _add_usage(provenance, line_b, nmr, "analyzed", "full", "b")
+    records = derive_dataset_independence_records(knowledge, provenance)
+    assert [(r.kind, r.reason) for r in records] == [("candidate", "lineage-sibling")]
+    assert records[0].datasets == frozenset({ppp, nmr})
+
+
+def test_child_parent_partial_is_candidate_partial_overlap():
+    knowledge, provenance, _t, line_a, line_b = _line_graph()
+    ukb = PROJECT_NS["dataset/uk-biobank"]; ppp = PROJECT_NS["dataset/ukb-ppp"]
+    _add_sub_cohort(knowledge, ppp, ukb)
+    _add_usage(provenance, line_a, ppp, "analyzed", "partial", "a")
+    _add_usage(provenance, line_b, ukb, "analyzed", "full", "b")
+    records = derive_dataset_independence_records(knowledge, provenance)
+    assert [(r.kind, r.reason) for r in records] == [("candidate", "partial-overlap")]
+
+
+def test_unrelated_datasets_stay_independent():
+    knowledge, provenance, _t, line_a, line_b = _line_graph()
+    ppp = PROJECT_NS["dataset/ukb-ppp"]; fin = PROJECT_NS["dataset/finngen"]
+    _add_usage(provenance, line_a, ppp, "analyzed", "full", "a")
+    _add_usage(provenance, line_b, fin, "analyzed", "full", "b")
+    assert derive_dataset_independence_records(knowledge, provenance) == []
+
+
+def test_grandparent_chain_full_overlap_is_commitment():
+    knowledge, provenance, target, line_a, line_b = _line_graph()
+    ukb = PROJECT_NS["dataset/uk-biobank"]; ppp = PROJECT_NS["dataset/ukb-ppp"]; sub = PROJECT_NS["dataset/ppp-sub"]
+    _add_sub_cohort(knowledge, ppp, ukb); _add_sub_cohort(knowledge, sub, ppp)
+    _add_usage(provenance, line_a, sub, "analyzed", "full", "a")   # grandchild
+    _add_usage(provenance, line_b, ukb, "analyzed", "full", "b")   # grandparent
+    assert [r.kind for r in derive_dataset_independence_records(knowledge, provenance)] == ["commitment"]
+
+
+def test_identical_dataset_commitment_group_key_regression():
+    knowledge, provenance, target, line_a, line_b = _line_graph()
+    dataset = PROJECT_NS["dataset/gtex-v8"]
+    _add_usage(provenance, line_a, dataset, "analyzed", "full", "a")
+    _add_usage(provenance, line_b, dataset, "analyzed", "full", "b")
+    records = derive_dataset_independence_records(knowledge, provenance)
+    assert len(records) == 1
+    assert records[0].kind == "commitment"
+    assert records[0].independence_group == f"{DERIVED_GROUP_PREFIX}gtex-v8"
+    assert records[0].datasets == frozenset({dataset})
