@@ -204,3 +204,34 @@ def observed_fields(table_path: Path, sample: int) -> list[InferredField]:
             for i in range(len(schema))
         ]
     return infer_fields(read_table_sample(table_path, sample))
+
+
+@dataclass
+class DiffEntry:
+    name: str
+    action: str  # "add" | "change" | "same" | "remove"
+    old_type: str | None
+    new_type: str | None
+    conflict: bool = False
+
+
+def diff_schema(existing_fields: list[dict], inferred: list[InferredField]) -> list[DiffEntry]:
+    """Diff inferred fields against an existing schema's fields. See §6.2 conflict rule."""
+    existing = {f.get("name"): f for f in existing_fields}
+    inferred_names = {i.name for i in inferred}
+    entries: list[DiffEntry] = []
+    for inf in inferred:
+        if inf.name not in existing:
+            entries.append(DiffEntry(inf.name, "add", None, inf.type))
+            continue
+        old = existing[inf.name].get("type")
+        if old is None or old == "any":
+            entries.append(DiffEntry(inf.name, "change", old, inf.type, conflict=False))
+        elif old == inf.type:
+            entries.append(DiffEntry(inf.name, "same", old, inf.type, conflict=False))
+        else:
+            entries.append(DiffEntry(inf.name, "change", old, inf.type, conflict=True))
+    for name, fld in existing.items():
+        if name not in inferred_names:
+            entries.append(DiffEntry(str(name), "remove", fld.get("type"), None))
+    return entries

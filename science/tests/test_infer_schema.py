@@ -167,3 +167,38 @@ def test_infer_fields_from_dataframe(tmp_path: Path) -> None:
     by_name = {f.name: f for f in isch.infer_fields(df)}
     assert by_name["val"].type == "number"
     assert by_name["mixed"].mixed is True
+
+
+def _inf(name: str, typ: str) -> "isch.InferredField":
+    return isch.InferredField(name=name, type=typ)
+
+
+def test_diff_absent_schema_all_add() -> None:
+    diff = isch.diff_schema([], [_inf("a", "integer"), _inf("b", "string")])
+    assert [(d.name, d.action) for d in diff] == [("a", "add"), ("b", "add")]
+
+
+def test_diff_same_type() -> None:
+    diff = isch.diff_schema([{"name": "a", "type": "integer"}], [_inf("a", "integer")])
+    assert diff[0].action == "same" and diff[0].conflict is False
+
+
+def test_diff_fill_untyped_field_is_nonconflict_change() -> None:
+    diff = isch.diff_schema([{"name": "a"}], [_inf("a", "number")])
+    assert diff[0].action == "change" and diff[0].conflict is False
+    assert diff[0].old_type is None and diff[0].new_type == "number"
+
+
+def test_diff_any_typed_field_is_nonconflict_change() -> None:
+    diff = isch.diff_schema([{"name": "a", "type": "any"}], [_inf("a", "string")])
+    assert diff[0].action == "change" and diff[0].conflict is False
+
+
+def test_diff_type_disagreement_is_conflict() -> None:
+    diff = isch.diff_schema([{"name": "a", "type": "string"}], [_inf("a", "integer")])
+    assert diff[0].action == "change" and diff[0].conflict is True
+
+
+def test_diff_field_absent_from_file_is_remove() -> None:
+    diff = isch.diff_schema([{"name": "gone", "type": "string"}], [])
+    assert diff[0].action == "remove"
