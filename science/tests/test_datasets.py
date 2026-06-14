@@ -901,6 +901,13 @@ class TestPhysioNetAdapter:
             with pytest.raises(ValueError):
                 adapter.metadata("draft-only-project")
 
+    def test_keywords_from_dict_topics(self) -> None:
+        adapter = PhysioNetAdapter()
+        r = adapter._parse_project(
+            {"slug": "x", "topics": [{"description": "sleep"}, {"description": "ecg"}]}
+        )
+        assert r.keywords == ["sleep", "ecg"]
+
     def test_download_gated_raises_permission_error(self) -> None:
         adapter = PhysioNetAdapter()
         file_info = FileInfo(filename="x.dat", url="https://physionet.org/files/secret/1.0.0/x.dat")
@@ -984,6 +991,26 @@ class TestSRAAdapter:
         '<Item Name="Runs" Type="String">&lt;Run acc="SRR999"/&gt;</Item>'
         '</DocSum></eSummaryResult>'
     )
+
+    def test_search_flags_dbgap_controlled(self) -> None:
+        esearch = MagicMock()
+        esearch.text = "<eSearchResult><IdList><Id>9</Id></IdList></eSearchResult>"
+        esummary = MagicMock()
+        esummary.text = (
+            '<eSummaryResult><DocSum><Id>9</Id>'
+            '<Item Name="ExpXml" Type="String">'
+            '<Summary><Title>Controlled human study (dbGaP)</Title></Summary>'
+            '<Experiment acc="SRX900"/>'
+            '</Item>'
+            '<Item Name="Runs" Type="String"><Run acc="SRR900"/></Item>'
+            '</DocSum></eSummaryResult>'
+        )
+        adapter = SRAAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.side_effect = [esearch, esummary]
+            results = adapter.search("controlled", max_results=5)
+        assert len(results) == 1
+        assert results[0].access == "controlled"
 
     def test_search_parses_escaped_text_expxml(self) -> None:
         esearch = MagicMock()
