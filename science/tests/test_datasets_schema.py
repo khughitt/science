@@ -234,6 +234,15 @@ class TestPackageConsistency:
         issues = package_consistency_issues([a, b])
         assert any("duplicate resource name" in i for i in issues)
 
+    def test_foreign_key_target_resource_without_schema_is_an_issue(self) -> None:
+        bare = ResourceDescriptor.model_validate({"name": "bare", "path": "bare.csv"})
+        edges = _resource(
+            "edges", [{"name": "src"}],
+            foreign_keys=[{"fields": "src", "reference": {"resource": "bare", "fields": "id"}}],
+        )
+        issues = package_consistency_issues([bare, edges])
+        assert any("has no schema" in i for i in issues)
+
 class TestProfileEmission:
     def test_emit_is_deterministic(self) -> None:
         assert emit_profile() == emit_profile()

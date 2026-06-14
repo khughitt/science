@@ -52,6 +52,9 @@ class FieldConstraints(BaseModel):
     enum: list[object] | None = None
     pattern: str | None = None
 
+    # Note: bounds (minimum/maximum/exclusive*) are additionally checked for
+    # *type applicability* in FieldSpec._semantic_applicability, which needs the
+    # field's declared type — that lives on FieldSpec, not here (design §7).
     @model_validator(mode="after")
     def _enum_non_empty(self) -> "FieldConstraints":
         if self.enum is not None and len(self.enum) == 0:
