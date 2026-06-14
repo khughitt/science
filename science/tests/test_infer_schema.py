@@ -237,3 +237,49 @@ def test_report_records_sample_size() -> None:
     df = pd.DataFrame({"a": [1, 2]})
     rep = isch.build_report(df, isch.infer_fields(df))
     assert rep.sample_rows == 2
+
+
+def _write_pkg(tmp_path: Path, pkg: dict, table_name: str, table_text: str) -> Path:
+    (tmp_path / table_name).write_text(table_text)
+    dp = tmp_path / "datapackage.json"
+    dp.write_text(json.dumps(pkg))
+    return dp
+
+
+def test_infer_schema_result_end_to_end(tmp_path: Path) -> None:
+    pkg = {"name": "p", "resources": [{"name": "obs", "path": "obs.csv"}]}
+    dp = _write_pkg(tmp_path, pkg, "obs.csv", "id,val\nA,1.5\nB,2.5\n")
+    result = isch.infer_schema_result(dp, "obs", sample=100)
+    assert result.fmt == "json"
+    assert result.res_index == 0
+    assert {d.name for d in result.diff} == {"id", "val"}
+    assert all(d.action == "add" for d in result.diff)
+    assert result.report.sample_rows == 2
+    assert result.descriptor_path == dp
+
+
+def test_render_diff_rows_shape(tmp_path: Path) -> None:
+    pkg = {"name": "p", "resources": [{"name": "obs", "path": "obs.csv"}]}
+    dp = _write_pkg(tmp_path, pkg, "obs.csv", "id\nA\n")
+    result = isch.infer_schema_result(dp, "obs", sample=100)
+    rows = isch.render_diff_rows(result.diff)
+    assert rows[0]["field"] == "id"
+    assert rows[0]["action"] == "add"
+
+
+def test_report_to_yaml_is_labelled(tmp_path: Path) -> None:
+    pkg = {"name": "p", "resources": [{"name": "obs", "path": "obs.csv"}]}
+    dp = _write_pkg(tmp_path, pkg, "obs.csv", "id\nA\n")
+    result = isch.infer_schema_result(dp, "obs", sample=100)
+    text = isch.report_to_yaml(result.report)
+    obj = yaml.safe_load(text)
+    assert "not emitted as invariant" in obj["disclaimer"].lower()
+
+
+def test_result_to_json_roundtrips(tmp_path: Path) -> None:
+    pkg = {"name": "p", "resources": [{"name": "obs", "path": "obs.csv"}]}
+    dp = _write_pkg(tmp_path, pkg, "obs.csv", "id,val\nA,1\n")
+    result = isch.infer_schema_result(dp, "obs", sample=100)
+    obj = json.loads(isch.result_to_json(result))
+    assert {"patch", "diff", "report"} <= set(obj)
+    assert obj["patch"]["schema"]["fields"]  # proposed names+types only

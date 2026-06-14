@@ -312,3 +312,96 @@ def build_report(df: pd.DataFrame, inferred: list[InferredField]) -> ReviewRepor
         if ftype == "string" and n_nonnull and distinct > HIGH_CARDINALITY_FRACTION * n_nonnull and not is_unique:
             rep.warnings.append(ReportWarning(name, "high-cardinality string (likely free text)"))
     return rep
+
+
+@dataclass
+class InferResult:
+    fmt: str
+    pkg: dict
+    res_index: int
+    descriptor_path: Path
+    table_path: Path
+    diff: list[DiffEntry]
+    report: ReviewReport
+    inferred: list[InferredField]
+
+
+def infer_schema_result(dp_path: Path, resource: str, sample: int) -> InferResult:
+    """Read-only pipeline: load descriptor, resolve resource, read table, infer, diff, report."""
+    mapping, fmt = load_descriptor(dp_path)
+    descriptor_path = dp_path if dp_path.is_file() else _resolved_descriptor_path(dp_path)
+    res, idx = resolve_resource(mapping, resource)
+    rel = res.get("path")
+    if not rel:
+        raise InferSchemaError(f"resource {resource!r} has no path")
+    table_path = descriptor_path.parent / rel
+    df = read_table_sample(table_path, sample)          # sample for the report stats
+    inferred = observed_fields(table_path, sample)      # authoritative names+types (Arrow for parquet)
+    existing_fields = (res.get("schema") or {}).get("fields") or []
+    diff = diff_schema(existing_fields, inferred)
+    report = build_report(df, inferred)
+    return InferResult(fmt, mapping, idx, descriptor_path, table_path, diff, report, inferred)
+
+
+def _resolved_descriptor_path(directory: Path) -> Path:
+    for name in _DESCRIPTOR_NAMES:
+        candidate = directory / name
+        if candidate.exists():
+            return candidate
+    raise InferSchemaError(f"no datapackage descriptor found in {directory}")
+
+
+def proposed_schema(inferred: list[InferredField]) -> dict:
+    """The machine-safe patch: names + types ONLY."""
+    return {"schema": {"fields": [{"name": i.name, "type": i.type} for i in inferred]}}
+
+
+def render_diff_rows(diff: list[DiffEntry]) -> list[dict]:
+    rows: list[dict] = []
+    glyph = {"add": "+", "change": "~", "same": "=", "remove": "-"}
+    for d in diff:
+        if d.action == "change":
+            detail = f"{d.old_type or '(none)'} -> {d.new_type}" + (" CONFLICT" if d.conflict else "")
+        elif d.action == "add":
+            detail = f"type={d.new_type}"
+        elif d.action == "remove":
+            detail = "in schema, not in file"
+        else:
+            detail = f"type={d.new_type}"
+        rows.append({"action": d.action, "glyph": glyph[d.action], "field": d.name, "details": detail})
+    return rows
+
+
+def render_report_rows(report: ReviewReport) -> list[dict]:
+    rows = [{"kind": r.kind, "column": r.column, "note": r.message,
+             "label": "recommendation — not emitted as invariant"}
+            for r in report.recommendations]
+    rows += [{"kind": "warning", "column": w.column, "note": w.message, "label": "warning"}
+             for w in report.warnings]
+    return rows
+
+
+def report_to_yaml(report: ReviewReport) -> str:
+    obj = {
+        "disclaimer": "recommendations are candidate invariants only — NOT emitted as invariant",
+        "sample_rows": report.sample_rows,
+        "recommendations": [{"kind": r.kind, "column": r.column, "message": r.message}
+                            for r in report.recommendations],
+        "warnings": [{"column": w.column, "message": w.message} for w in report.warnings],
+    }
+    return yaml.safe_dump(obj, sort_keys=False, default_flow_style=False, allow_unicode=True)
+
+
+def result_to_json(result: InferResult) -> str:
+    obj = {
+        "patch": proposed_schema(result.inferred),
+        "diff": [{"name": d.name, "action": d.action, "old_type": d.old_type,
+                  "new_type": d.new_type, "conflict": d.conflict} for d in result.diff],
+        "report": {
+            "sample_rows": result.report.sample_rows,
+            "recommendations": [{"kind": r.kind, "column": r.column, "message": r.message}
+                                for r in result.report.recommendations],
+            "warnings": [{"column": w.column, "message": w.message} for w in result.report.warnings],
+        },
+    }
+    return json.dumps(obj, indent=2, sort_keys=True) + "\n"
