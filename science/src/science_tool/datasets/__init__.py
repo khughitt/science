@@ -6,13 +6,16 @@ from collections.abc import Callable
 import logging
 
 from science_tool.datasets._base import DatasetAdapter, DatasetResult, FileInfo
+from science_tool.datasets._ranking import dedupe_results, rank_results
 
 __all__ = [
     "DatasetAdapter",
     "DatasetResult",
     "FileInfo",
     "available_adapters",
+    "dedupe_results",
     "get_adapter",
+    "rank_results",
     "register",
     "search_all",
 ]
@@ -43,6 +46,7 @@ def search_all(
     sources: list[str] | None = None,
     max_per_source: int = 10,
     on_error: Callable[[str, Exception], None] | None = None,
+    rank: bool = True,
 ) -> list[DatasetResult]:
     """Fan out search across multiple adapters, merge results.
 
@@ -51,6 +55,10 @@ def search_all(
     other adapters' results are still returned. Each failure is reported via
     ``on_error(name, exc)`` if provided, otherwise logged as a warning, so the
     degradation is never silent.
+
+    When ``rank`` is true (the default), results are deduped by DOI (keeping the
+    best-scoring / richest representative) and ranked by lexical relevance to
+    ``query``. Pass ``rank=False`` for the raw concatenation.
     """
     targets = sources or list(_ADAPTERS)
     results: list[DatasetResult] = []
@@ -63,6 +71,8 @@ def search_all(
                 on_error(name, exc)
             else:
                 logging.getLogger(__name__).warning("dataset source %r failed: %s", name, exc)
+    if rank:
+        results = rank_results(query, dedupe_results(query, results))
     return results
 
 

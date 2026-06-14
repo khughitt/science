@@ -159,6 +159,90 @@ class TestRegistry:
         assert errors[0][0] == "ratelimited"
         assert isinstance(errors[0][1], RuntimeError)
 
+    def test_search_all_dedupes_by_doi(self) -> None:
+        """The same DOI from two sources collapses to one ranked result."""
+        from science_tool.datasets import register, search_all
+
+        class ZenodoLike:
+            name = "zlike"
+
+            def search(self, query: str, *, max_results: int = 20) -> list[DatasetResult]:
+                return [DatasetResult(source="zlike", id="1", title="shared", doi="10.1/dup")]
+
+            def metadata(self, dataset_id: str) -> DatasetResult:  # pragma: no cover
+                return DatasetResult(source="zlike", id=dataset_id, title="x")
+
+            def files(self, dataset_id: str) -> list[FileInfo]:  # pragma: no cover
+                return []
+
+            def download(self, file_info: FileInfo, dest_dir: Path) -> Path:  # pragma: no cover
+                return dest_dir
+
+        class FigshareLike(ZenodoLike):
+            name = "flike"
+
+            def search(self, query: str, *, max_results: int = 20) -> list[DatasetResult]:
+                return [DatasetResult(source="flike", id="2", title="shared", doi="10.1/dup", organism="mouse")]
+
+        register("zlike", ZenodoLike)
+        register("flike", FigshareLike)
+        results = search_all("shared", sources=["zlike", "flike"])
+        assert len(results) == 1
+        # richer (organism-bearing) figshare record is the representative
+        assert results[0].source == "flike"
+
+    def test_search_all_ranks_by_relevance(self) -> None:
+        """More query-relevant results sort first."""
+        from science_tool.datasets import register, search_all
+
+        class TwoHits:
+            name = "twohits"
+
+            def search(self, query: str, *, max_results: int = 20) -> list[DatasetResult]:
+                return [
+                    DatasetResult(source="twohits", id="1", title="unrelated record"),
+                    DatasetResult(source="twohits", id="2", title="circadian rhythm record"),
+                ]
+
+            def metadata(self, dataset_id: str) -> DatasetResult:  # pragma: no cover
+                return DatasetResult(source="twohits", id=dataset_id, title="x")
+
+            def files(self, dataset_id: str) -> list[FileInfo]:  # pragma: no cover
+                return []
+
+            def download(self, file_info: FileInfo, dest_dir: Path) -> Path:  # pragma: no cover
+                return dest_dir
+
+        register("twohits", TwoHits)
+        results = search_all("circadian rhythm", sources=["twohits"])
+        assert [r.id for r in results] == ["2", "1"]
+
+    def test_search_all_rank_false_preserves_concatenation(self) -> None:
+        """rank=False returns the raw fan-out order and count (no dedup/rank)."""
+        from science_tool.datasets import register, search_all
+
+        class DupSource:
+            name = "dupsource"
+
+            def search(self, query: str, *, max_results: int = 20) -> list[DatasetResult]:
+                return [
+                    DatasetResult(source="dupsource", id="1", title="unrelated", doi="10.1/dup"),
+                    DatasetResult(source="dupsource", id="2", title="circadian", doi="10.1/dup"),
+                ]
+
+            def metadata(self, dataset_id: str) -> DatasetResult:  # pragma: no cover
+                return DatasetResult(source="dupsource", id=dataset_id, title="x")
+
+            def files(self, dataset_id: str) -> list[FileInfo]:  # pragma: no cover
+                return []
+
+            def download(self, file_info: FileInfo, dest_dir: Path) -> Path:  # pragma: no cover
+                return dest_dir
+
+        register("dupsource", DupSource)
+        results = search_all("circadian", sources=["dupsource"], rank=False)
+        assert [r.id for r in results] == ["1", "2"]
+
     def test_get_unknown_adapter_raises(self) -> None:
         from science_tool.datasets import get_adapter
 
