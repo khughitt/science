@@ -157,7 +157,7 @@ scraping is required.
 |---|---|---|
 | `search` | `GET /projects/search/?search_term=&resource_type=` | array of projects; fields: `slug`, `version`, `title`, `abstract`/`short_description`, `version_doi`/`core_doi`, `publish_date`→year, `license.name`, `access_policy`, `topics`→keywords, `main_storage_size`, `source_url` |
 | `metadata` | `GET /projects/{slug}/versions/{version}/` | full project detail (the client's `get_details`) |
-| `files` | `GET /projects/published/{slug}/{version}/sha256sums/` | parse `<sha256>␠␠<path>` lines → `FileInfo(filename=path, url=…/files/{slug}/{version}/{path}, checksum=sha256)` |
+| `files` | `GET /projects/published/{slug}/{version}/sha256sums/` | parse `<sha256>␠␠<path>` lines → `FileInfo(filename=path, url=…/files/{slug}/{version}/{path}, checksum=sha256, format=<ext inferred from path>, size_bytes=None)`. The `sha256sums` body carries **only** checksum + path, so `size_bytes` is `None` unless a future JSON/file-listing source provides per-file bytes |
 | `download` | stream `https://physionet.org/files/{slug}/{version}/{path}` | for `Restricted`/`Credentialed` projects, **raise `PermissionError` with `source_url`** instead of persisting a 403/login body |
 
 Adapter `id` is the project `slug`; `metadata("slug")` resolves to the latest
