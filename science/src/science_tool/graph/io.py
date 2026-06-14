@@ -20,6 +20,16 @@ DCTERMS_NS = Namespace("http://purl.org/dc/terms/")
 DCAT_NS = Namespace("http://www.w3.org/ns/dcat#")
 REVISION_URI = URIRef(PROJECT_NS["graph_revision"])
 
+
+def entity_uri_for_ref(ref: str) -> URIRef:
+    if ":" not in ref:
+        raise ValueError(f"invalid entity ref {ref!r}")
+    kind, slug = ref.split(":", 1)
+    if not kind or not slug:
+        raise ValueError(f"invalid entity ref {ref!r}")
+    return URIRef(PROJECT_NS[f"{kind}/{slug.lower()}"])
+
+
 _SERIALIZER_PREFIXES: tuple[tuple[str, str], ...] = (
     ("rdf", str(RDF)),
     ("prov", str(PROV)),

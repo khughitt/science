@@ -10,6 +10,7 @@ from science_tool.graph.io import (
     build_input_manifest as _build_input_manifest,
     read_revision_manifest as _read_revision_manifest,
 )
+from science_tool.graph.patch_membership import validate_patch_membership_convenience
 
 from .constants import PREDICATE_REGISTRY, SCHEMA_NS, SCI_NS, SCIC_NS
 from .dataset import _load_dataset
@@ -128,6 +129,27 @@ def validate_graph_dataset(dataset: Dataset) -> tuple[list[dict[str, str]], bool
                 "check": "orphaned_nodes",
                 "status": "pass",
                 "details": "all entities have at least one edge",
+            }
+        )
+
+    convenience_errors = validate_patch_membership_convenience(dataset)
+    if convenience_errors:
+        rows.append(
+            {
+                "check": "patch_membership_convenience",
+                "status": "fail",
+                "details": (
+                    f"{len(convenience_errors)} convenience edge(s) without a "
+                    f"sci:PatchMembership node: {convenience_errors[0]}"
+                ),
+            }
+        )
+    else:
+        rows.append(
+            {
+                "check": "patch_membership_convenience",
+                "status": "pass",
+                "details": "all patch convenience edges backed by sci:PatchMembership nodes",
             }
         )
 
