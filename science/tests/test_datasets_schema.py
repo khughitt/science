@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from science_tool.datasets.schema import FieldConstraints, FieldQA, FieldSpec, ForeignKey, MissingValue, ResourceDescriptor, TableQA, TableSchema, package_consistency_issues
+from science_tool.datasets.schema import PROFILE_PATH, FieldConstraints, FieldQA, FieldSpec, ForeignKey, MissingValue, ResourceDescriptor, TableQA, TableSchema, emit_profile, package_consistency_issues
 
 
 class TestFieldValueModels:
@@ -233,3 +233,15 @@ class TestPackageConsistency:
         b = _resource("dup", [{"name": "y"}])
         issues = package_consistency_issues([a, b])
         assert any("duplicate resource name" in i for i in issues)
+
+class TestProfileEmission:
+    def test_emit_is_deterministic(self) -> None:
+        assert emit_profile() == emit_profile()
+        assert emit_profile().endswith("\n")
+
+    def test_committed_profile_matches_models(self) -> None:
+        assert PROFILE_PATH.exists(), "run: python -m science_tool.datasets.schema --emit"
+        assert PROFILE_PATH.read_text(encoding="utf-8") == emit_profile(), (
+            "profile drifted from models; regenerate with "
+            "`python -m science_tool.datasets.schema --emit`"
+        )

@@ -1,0 +1,421 @@
+{
+  "$defs": {
+    "FieldConstraints": {
+      "additionalProperties": true,
+      "properties": {
+        "enum": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Enum"
+        },
+        "exclusiveMaximum": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exclusivemaximum"
+        },
+        "exclusiveMinimum": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exclusiveminimum"
+        },
+        "maximum": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Maximum"
+        },
+        "minimum": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Minimum"
+        },
+        "pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pattern"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "unique": {
+          "default": false,
+          "title": "Unique",
+          "type": "boolean"
+        }
+      },
+      "title": "FieldConstraints",
+      "type": "object"
+    },
+    "FieldQA": {
+      "additionalProperties": false,
+      "description": "The distribution-severity extension carried per field (closed namespace).",
+      "properties": {
+        "low_variance": {
+          "default": false,
+          "title": "Low Variance",
+          "type": "boolean"
+        },
+        "zero_fraction": {
+          "default": false,
+          "title": "Zero Fraction",
+          "type": "boolean"
+        }
+      },
+      "title": "FieldQA",
+      "type": "object"
+    },
+    "FieldSpec": {
+      "additionalProperties": true,
+      "properties": {
+        "constraints": {
+          "$ref": "#/$defs/FieldConstraints"
+        },
+        "missingValues": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/MissingValue"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Missingvalues"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "qa": {
+          "$ref": "#/$defs/FieldQA"
+        },
+        "type": {
+          "default": "any",
+          "enum": [
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "object",
+            "array",
+            "list",
+            "datetime",
+            "date",
+            "time",
+            "year",
+            "yearmonth",
+            "duration",
+            "geopoint",
+            "geojson",
+            "any"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "FieldSpec",
+      "type": "object"
+    },
+    "ForeignKey": {
+      "additionalProperties": true,
+      "properties": {
+        "fields": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ],
+          "title": "Fields"
+        },
+        "reference": {
+          "$ref": "#/$defs/ForeignKeyReference"
+        }
+      },
+      "required": [
+        "fields",
+        "reference"
+      ],
+      "title": "ForeignKey",
+      "type": "object"
+    },
+    "ForeignKeyReference": {
+      "additionalProperties": true,
+      "properties": {
+        "fields": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ],
+          "title": "Fields"
+        },
+        "resource": {
+          "default": "",
+          "title": "Resource",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fields"
+      ],
+      "title": "ForeignKeyReference",
+      "type": "object"
+    },
+    "MissingValue": {
+      "additionalProperties": true,
+      "description": "A null sentinel: a bare string, or a labelled object (DP v2).",
+      "properties": {
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "MissingValue",
+      "type": "object"
+    },
+    "TableQA": {
+      "additionalProperties": false,
+      "description": "The distribution-severity extension carried at table level (closed namespace).",
+      "properties": {
+        "exclusive_flags": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Exclusive Flags",
+          "type": "array"
+        }
+      },
+      "title": "TableQA",
+      "type": "object"
+    },
+    "TableSchema": {
+      "additionalProperties": true,
+      "properties": {
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/FieldSpec"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "foreignKeys": {
+          "items": {
+            "$ref": "#/$defs/ForeignKey"
+          },
+          "title": "Foreignkeys",
+          "type": "array"
+        },
+        "missingValues": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/MissingValue"
+              }
+            ]
+          },
+          "title": "Missingvalues",
+          "type": "array"
+        },
+        "primaryKey": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Primarykey"
+        },
+        "qa": {
+          "$ref": "#/$defs/TableQA"
+        },
+        "uniqueKeys": {
+          "anyOf": [
+            {
+              "items": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uniquekeys"
+        }
+      },
+      "required": [
+        "fields"
+      ],
+      "title": "TableSchema",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "properties": {
+    "$schema": {
+      "anyOf": [
+        {
+          "const": "science-data-resource/v1",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "$Schema"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "path": {
+      "title": "Path",
+      "type": "string"
+    },
+    "schema": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TableSchema"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "name",
+    "path"
+  ],
+  "title": "ResourceDescriptor",
+  "type": "object"
+}

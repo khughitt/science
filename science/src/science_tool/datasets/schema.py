@@ -229,3 +229,29 @@ def package_consistency_issues(descriptors: list[ResourceDescriptor]) -> list[st
                         f"{(ref.resource or d.name)!r}"
                     )
     return issues
+
+
+def emit_profile() -> str:
+    """Deterministic JSON Schema for the Data Resource descriptor (the $schema target)."""
+    schema = ResourceDescriptor.model_json_schema(by_alias=True)
+    return json.dumps(schema, indent=2, sort_keys=True) + "\n"
+
+
+def write_profile() -> Path:
+    PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PROFILE_PATH.write_text(emit_profile(), encoding="utf-8")
+    return PROFILE_PATH
+
+
+if __name__ == "__main__":  # pragma: no cover
+    import argparse
+
+    parser = argparse.ArgumentParser(description="science Data Resource profile tools")
+    parser.add_argument(
+        "--emit", action="store_true", help="(re)write the committed JSON Schema profile"
+    )
+    args = parser.parse_args()
+    if args.emit:
+        print(f"wrote {write_profile()}")
+    else:
+        parser.error("nothing to do; pass --emit")
