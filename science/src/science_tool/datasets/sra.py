@@ -110,7 +110,7 @@ class SRAAdapter:
             item_els = {it.get("Name", ""): it for it in doc.findall("Item")}
             exp = self._item_content(item_els["ExpXml"]) if "ExpXml" in item_els else ET.fromstring("<root/>")
             runs = self._item_content(item_els["Runs"]) if "Runs" in item_els else ET.fromstring("<root/>")
-            run_accs = [r.get("acc") for r in runs.findall(".//Run") if r.get("acc")]
+            run_accs = [acc for r in runs.findall(".//Run") if (acc := r.get("acc"))]
             exp_el = exp.find(".//Experiment")
             accession = (exp_el.get("acc") if exp_el is not None else "") or (
                 run_accs[0] if run_accs else ""
@@ -146,5 +146,5 @@ class SRAAdapter:
         for doc in root.findall("DocSum"):
             item_els = {it.get("Name", ""): it for it in doc.findall("Item")}
             runs = self._item_content(item_els["Runs"]) if "Runs" in item_els else ET.fromstring("<root/>")
-            accs.extend(r.get("acc") for r in runs.findall(".//Run") if r.get("acc"))
+            accs.extend(acc for r in runs.findall(".//Run") if (acc := r.get("acc")))
         return accs

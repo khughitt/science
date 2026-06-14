@@ -963,3 +963,32 @@ class TestSRAAdapter:
         assert [f.filename for f in files] == ["SRR111.sra", "SRR112.sra"]
         assert files[0].url == "https://sra-pub-run-odp.s3.amazonaws.com/sra/SRR111/SRR111"
         assert files[0].format == "sra"
+
+    _ESUMMARY_ESCAPED = (
+        '<eSummaryResult><DocSum><Id>2</Id>'
+        '<Item Name="ExpXml" Type="String">'
+        '&lt;Summary&gt;&lt;Title&gt;Escaped RNA-seq&lt;/Title&gt;'
+        '&lt;Platform&gt;ILLUMINA&lt;/Platform&gt;&lt;/Summary&gt;'
+        '&lt;Organism ScientificName="Homo sapiens"/&gt;'
+        '&lt;Library_descriptor&gt;&lt;LIBRARY_STRATEGY&gt;ATAC-seq&lt;/LIBRARY_STRATEGY&gt;&lt;/Library_descriptor&gt;'
+        '&lt;Experiment acc="SRX999"/&gt;'
+        '</Item>'
+        '<Item Name="Runs" Type="String">&lt;Run acc="SRR999"/&gt;</Item>'
+        '</DocSum></eSummaryResult>'
+    )
+
+    def test_search_parses_escaped_text_expxml(self) -> None:
+        esearch = MagicMock()
+        esearch.text = "<eSearchResult><IdList><Id>2</Id></IdList></eSearchResult>"
+        esummary = MagicMock()
+        esummary.text = self._ESUMMARY_ESCAPED
+        adapter = SRAAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.side_effect = [esearch, esummary]
+            results = adapter.search("atac", max_results=5)
+        assert len(results) == 1
+        r = results[0]
+        assert r.id == "SRX999"
+        assert r.title == "Escaped RNA-seq"
+        assert r.organism == "Homo sapiens"
+        assert r.modality == "ATAC-seq"
