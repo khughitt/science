@@ -26,8 +26,10 @@ result type (Phase 1 §2.1); this phase only ranks, dedups, and surfaces them.
 - Rank merged results by lexical relevance to the query, in pure Python with no
   new dependency and no live network in tests.
 - Collapse the same dataset surfacing from multiple repositories (e.g. one DOI
-  appearing from Zenodo + Dryad + figshare) to a single result.
-- Surface `modality` / `organism` / `sample_count` in `datasets search` output.
+  appearing from Zenodo + Dryad + figshare) to a single result, keeping the
+  best-scoring / richest representative rather than an arbitrary first hit.
+- Surface `modality` / `organism` in the `datasets search` table, and
+  `sample_count` in its JSON output.
 
 ### Non-goals
 
@@ -57,13 +59,32 @@ lowercases (DOIs are case-insensitive); strips surrounding whitespace; returns
 `None` for `None`/empty input.
 
 ```python
-def dedupe_results(results: list[DatasetResult]) -> list[DatasetResult]:
-    """Keep-first by normalized DOI; None-DOI results are never merged."""
+def _richness(result: DatasetResult) -> int:
+    """Count of populated optional metadata fields (dedup tiebreak)."""
 ```
 
-Iterates in fan-out order, keeping the first result for each normalized DOI.
-Results whose normalized DOI is `None` are all kept (no key collision).
-Deterministic and order-preserving.
+Counts non-empty optional fields among `description`, `url`, `year`, `license`,
+`keywords`, `organism`, `modality`, `access`, `sample_count`, `file_count`,
+`total_size_bytes` — a query-independent measure of how complete a record is.
+
+```python
+def dedupe_results(query: str, results: list[DatasetResult]) -> list[DatasetResult]:
+    """Collapse same-DOI records, keeping the best representative."""
+```
+
+Groups results by normalized DOI. Within each group, keeps the single
+representative that maximizes the key `(score_result(query, r), _richness(r))` —
+so the duplicate that best matches the query wins, and metadata completeness
+breaks ties (e.g. the figshare mirror that filled in `organism` and `keywords`
+beats the bare Zenodo deposit of the same DOI). Records whose normalized DOI is
+`None` are never grouped — each is kept as-is. The first occurrence of each DOI
+group fixes that group's output position, so the result is deterministic and
+order-stable relative to fan-out order; representative *selection* is by
+score+richness, representative *position* is the group's first appearance.
+
+Dedup is query-aware (it needs `score_result`) precisely so representative
+selection cannot drop the more relevant or richer duplicate — the failure mode
+of a fan-out-order keep-first.
 
 ```python
 def score_result(query: str, result: DatasetResult) -> float:
@@ -108,7 +129,7 @@ def search_all(
 ) -> list[DatasetResult]:
     ...  # existing collection loop unchanged
     if rank:
-        results = rank_results(query, dedupe_results(results))
+        results = rank_results(query, dedupe_results(query, results))
     return results
 ```
 
@@ -154,9 +175,14 @@ New `science/tests/test_datasets_ranking.py` (pure unit tests, no network):
 
 - `test_normalize_doi` — `https://doi.org/10.X`, `doi:10.X`, bare `10.X`, mixed
   case, and `None`/empty all map as specified.
-- `test_dedupe_keeps_first_by_doi` — two results with the same DOI from
-  different sources collapse to the first; a third with a different DOI stays.
+- `test_dedupe_keeps_richest_representative` — two results with the same DOI but
+  equal score collapse to the one with more populated fields; a third with a
+  different DOI stays.
+- `test_dedupe_prefers_higher_score` — when same-DOI duplicates differ in query
+  relevance, the higher-scoring one is the surviving representative.
 - `test_dedupe_keeps_all_none_doi` — multiple `None`-DOI results are all kept.
+- `test_dedupe_group_position_is_first_appearance` — selecting a later, richer
+  representative does not move the group ahead of an earlier distinct DOI.
 - `test_score_weights_title_over_description` — a title hit outscores a
   description-only hit for the same token.
 - `test_rank_orders_by_score_stable` — higher score first; equal scores keep
