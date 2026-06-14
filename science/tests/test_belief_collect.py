@@ -158,3 +158,106 @@ def test_collect_evidence_units_ignores_dataset_independence_candidates_for_scor
     units = collect_evidence_units(knowledge, provenance, [target])
 
     assert [(unit.independence, unit.independence_group) for unit in units] == [(None, None), (None, None)]
+
+
+# ── Lineage flow-through (Task 5) ────────────────────────────────────────────
+#
+# A DatasetIndependenceCommitment produced by the lineage-aware collapse path
+# (child dataset + parent dataset, sci:subCohortOf edge) is the SAME record
+# type as an identical-dataset commitment.  collect_evidence_units must merge
+# both lines into the same independence group via the existing
+# committed_metadata_by_line path — no formula change required.
+
+
+def test_lineage_commitment_merges_into_same_independence_group_as_identical_dataset() -> None:
+    """A child-on-parent commitment record flows through collect_evidence_units unchanged.
+
+    The knowledge graph carries a sci:subCohortOf edge (child -> parent) to
+    simulate what B2 materialization produces.  The provenance graph carries a
+    DatasetIndependenceCommitment record whose members are the two evidence
+    lines (one analysed against the child dataset, one against the parent).
+    collect_evidence_units must assign both lines the same independence group
+    with independence == "shared-source", identical to the identical-dataset
+    path — proving lineage changes WHICH records exist, not the aggregation
+    formula.
+    """
+    knowledge = Graph()
+    provenance = Graph()
+    target = PROJECT_NS["proposition/p1"]
+    line_child = PROJECT_NS["evidence-line/child"]
+    line_parent = PROJECT_NS["evidence-line/parent"]
+    ds_child = PROJECT_NS["dataset/ukb-ppp"]
+    ds_parent = PROJECT_NS["dataset/uk-biobank"]
+    record = PROJECT_NS["dataset-independence/r-lineage"]
+
+    # Knowledge graph: two evidence lines + the lineage edge
+    for line in (line_child, line_parent):
+        knowledge.add((line, RDF.type, SCI_NS.EvidenceLine))
+        knowledge.add((line, CITO_NS.supports, target))
+    knowledge.add((ds_child, SCI_NS.subCohortOf, ds_parent))
+
+    # Provenance graph: a DatasetIndependenceCommitment — same class as
+    # identical-dataset commits; reason "full-overlap" with two member lines.
+    group_key = "dataset-derived:ukb-lineage"
+    provenance.add((record, RDF.type, SCI_NS.DatasetIndependenceCommitment))
+    provenance.add((record, SCI_NS.independenceTarget, target))
+    provenance.add((record, SCI_NS.independenceGroup, Literal(group_key)))
+    provenance.add((record, SCI_NS.independenceMember, line_child))
+    provenance.add((record, SCI_NS.independenceMember, line_parent))
+
+    units = collect_evidence_units(knowledge, provenance, [target])
+
+    # Both lines must share the same independence group and independence value.
+    by_uri = {u.line_uri: u for u in units}
+    assert str(line_child) in by_uri
+    assert str(line_parent) in by_uri
+    assert by_uri[str(line_child)].independence == "shared-source"
+    assert by_uri[str(line_parent)].independence == "shared-source"
+    assert by_uri[str(line_child)].independence_group == group_key
+    assert by_uri[str(line_parent)].independence_group == group_key
+    # Both lines share ONE independence group — they belong to the same collapse bucket.
+    groups = {u.independence_group for u in units}
+    assert len(groups) == 1, f"Expected 1 independence group, got {groups}"
+
+
+def test_lineage_sibling_candidate_does_not_collapse_lines() -> None:
+    """A lineage-sibling candidate (two sub-cohorts sharing a common parent) is NOT
+    a commitment and must NOT assign independence to the member lines.
+
+    This verifies the design boundary: the candidate record type (produced for
+    sibling datasets) is ignored by collect_evidence_units, so the two lines
+    remain ungrouped — they do not share an independence group and do not
+    collapse in belief aggregation.
+    """
+    knowledge = Graph()
+    provenance = Graph()
+    target = PROJECT_NS["proposition/p1"]
+    line_a = PROJECT_NS["evidence-line/sib-a"]
+    line_b = PROJECT_NS["evidence-line/sib-b"]
+    ds_sib_a = PROJECT_NS["dataset/ukb-ppp-olink"]
+    ds_sib_b = PROJECT_NS["dataset/ukb-ppp-soma"]
+    ds_parent = PROJECT_NS["dataset/uk-biobank"]
+    record = PROJECT_NS["dataset-independence/r-sibling"]
+
+    # Knowledge graph: two evidence lines + both siblings point to the same parent
+    for line in (line_a, line_b):
+        knowledge.add((line, RDF.type, SCI_NS.EvidenceLine))
+        knowledge.add((line, CITO_NS.supports, target))
+    knowledge.add((ds_sib_a, SCI_NS.subCohortOf, ds_parent))
+    knowledge.add((ds_sib_b, SCI_NS.subCohortOf, ds_parent))
+
+    # Provenance graph: a DatasetIndependenceCandidate (reason "lineage-sibling"),
+    # NOT a commitment — siblings share a root but are not ancestor/descendant.
+    provenance.add((record, RDF.type, SCI_NS.DatasetIndependenceCandidate))
+    provenance.add((record, SCI_NS.independenceTarget, target))
+    provenance.add((record, SCI_NS.independenceGroup, Literal("dataset-derived:sibling-group")))
+    provenance.add((record, SCI_NS.independenceMember, line_a))
+    provenance.add((record, SCI_NS.independenceMember, line_b))
+
+    units = collect_evidence_units(knowledge, provenance, [target])
+
+    # Candidates are invisible to belief collection — lines must stay ungrouped.
+    assert all(u.independence is None for u in units), \
+        f"Expected no independence set from a candidate record, got {[(u.line_uri, u.independence) for u in units]}"
+    assert all(u.independence_group is None for u in units), \
+        f"Expected no independence_group from a candidate record, got {[(u.line_uri, u.independence_group) for u in units]}"
