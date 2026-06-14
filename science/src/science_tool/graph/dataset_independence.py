@@ -6,6 +6,7 @@ import hashlib
 import itertools
 import json
 from collections import defaultdict, deque
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -378,6 +379,9 @@ def _components_from_ancestors(
 
     edges: list[tuple[URIRef, URIRef, frozenset[URIRef]]] = []
     for _root, group in by_root.items():
+        # Grouped by lineage root, so a group mixes ancestors/descendants/siblings; gate
+        # each pair by committable() to emit only ancestor⊂descendant (and identical-dataset)
+        # edges, never sibling pairs — _is_committable_pair is NOT used on the commitment path.
         for a, b in itertools.combinations(group, 2):
             if a.line != b.line and lineage.committable(a.dataset, b.dataset):
                 edges.append((a.line, b.line, frozenset({a.dataset, b.dataset})))
@@ -442,7 +446,7 @@ def _records_from_candidate_edges(
     return records
 
 
-def _connected_components(edges: list[tuple[URIRef, URIRef, object]]) -> list[frozenset[URIRef]]:
+def _connected_components(edges: Sequence[tuple[URIRef, URIRef, object]]) -> list[frozenset[URIRef]]:
     adjacency: dict[URIRef, set[URIRef]] = defaultdict(set)
     for left, right, _dataset in edges:
         adjacency[left].add(right)
