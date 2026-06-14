@@ -3,7 +3,8 @@
 - **Status:** Design approved 2026-06-14; spec-review findings resolved 2026-06-14
   (round 1: offset basis, identifier→entity resolver, relation targets, source/dedupe
   vocab, annotationType registration; round 2: JSON body encoding, content_hash
-  semantics, character-offset/NFC) → ready for implementation plan
+  semantics, character-offset/NFC; round 3: license whitelist + fail-early,
+  single-body entity mentions) → ready for implementation plan
 - **Scope:** Extend `science`'s existing W3C annotation system to capture rich,
   semantic, sub-article (word / phrase / sentence) annotations of research
   articles, seeded by PubTator3 and extended by an agent.
@@ -128,9 +129,12 @@ to quotes through an explicit map. Policy:
 
 1. **Article-text persistence.** Extend `paper-fetch`
    (`~/d/science/science/src/science_tool/paper_fetch.py`) to normalize and
-   persist `.source.md`: abstract from Europe PMC / PubTator; OA full text only
-   when the license permits. Record `text_sha256` + provenance in frontmatter.
-   Abstract is the guaranteed floor; full text is best-effort.
+   persist `.source.md`. When PubTator seeding is intended, the persisted abstract
+   is the **BioC passage text** (so PubTator offsets align, per *Offset basis*);
+   Europe PMC is the fallback when no BioC record exists. Full text is persisted
+   only when the license is whitelisted (see *License gating*). Record
+   `text_sha256` + provenance in frontmatter. Abstract is the guaranteed floor;
+   full text is best-effort.
 
 2. **PubTator3 seeder** (deterministic CLI, e.g. `science paper annotate-pubtator
    <pmid|doi>`). Query the PubTator3 BioC API
@@ -139,7 +143,9 @@ to quotes through an explicit map. Policy:
    Two annotation shapes, both span-anchored (the model's `SpecificResource`
    **requires** a `TextQuoteSelector`, so every target is a span):
    - **Entity mentions.** Target = the mention span, converted via the offset map
-     above. Body = the normalized concept ID (`IriBody`) + Biolink class.
+     above. `annotation_type` = the Biolink class (e.g. `biolink:Gene`); the single
+     body is `IriBody(<normalized concept IRI>)` (see *Body encoding* — the
+     `merge_planned` pipeline emits exactly one body per row).
    - **Relations.** A PubTator relation links two entity mentions and has no quote
      span of its own. Target = the **evidence sentence/passage span** PubTator
      supplies for the relation; when none is supplied, target the smallest passage
@@ -157,6 +163,24 @@ to quotes through an explicit map. Policy:
 
 4. **Promotion path** (decision #4 — deliberate, last). Review statement
    annotations and link/dedupe them into epistemic entities.
+
+### License gating (full-text persistence)
+
+`paper-fetch` records `is_oa` + OA URLs today, not a license identifier
+(`paper_fetch.py`). Abstracts are not gated (NCBI / Europe PMC terms permit local
+storage of abstracts for research use); **full-text** persistence is gated on an
+explicit whitelist, fail-early:
+
+- **Accepted (full text persisted, `license` recorded verbatim):** `CC0`, `CC-BY`,
+  `CC-BY-SA`, `CC-BY-ND` and their versioned forms (e.g. `CC-BY-4.0`). This is the
+  initial set; extend it in `docs/conventions/annotation-tokens.md`.
+- **Unknown / absent / non-whitelisted (incl. `CC-BY-NC*` for now):** persist the
+  **abstract only**, omit full text, and record `license` (the raw value or
+  `unknown`) plus `fulltext_omitted_reason: license-not-whitelisted`. We never store
+  full text we cannot license-verify.
+- **Resolution.** License is read from OA-source metadata (Europe PMC `license` /
+  Unpaywall `oa_locations[].license`); with multiple values the most-permissive
+  whitelisted one wins, else `unknown`.
 
 ## Vocabulary (reuse over reinvent)
 
@@ -196,8 +220,9 @@ are **no structured RDF predicates** for bodies, and `bodies` is a tuple (an
 annotation may carry several). The "structured bodies" this spec needs are encoded
 within that existing machinery — **no model change**:
 
-- **Entity mentions.** `IriBody(<concept IRI>)` for the normalized concept ID, plus
-  an optional `TextualBody(value=<biolink class>)`.
+- **Entity mentions.** A single `IriBody(<concept IRI>)` for the normalized concept
+  ID; the Biolink class goes in `annotation_type` (not a second body), keeping the
+  row within the one-body `PlannedAnnotation` / `merge_planned` path.
 - **Relations / statements / metaphors–analogies.** A single
   `TextualBody(value=<json>, format="application/json")` carrying a per-type JSON
   object (the `format` field already drives `dc:format`, so this round-trips today):
@@ -290,5 +315,7 @@ Each phase is independently shippable.
   same `source_version`, and the document-level `text_sha256` short-circuit skipping
   an unchanged `.source.md` before any API/agent call.
 - Identifier → paper-entity resolution: no-match and multi-match both fail loud.
+- License gating: a whitelisted license persists full text; unknown / absent /
+  `CC-BY-NC*` persists abstract only and records `fulltext_omitted_reason`.
 - Sidecar TriG round-trip (serialize → parse → equal).
 - Promotion matching (candidate vs. existing epistemic entities).
