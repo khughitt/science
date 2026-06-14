@@ -292,6 +292,8 @@ def test_parent_dataset_materializes_sub_cohort_of(tmp_path):
     child_uri = project_entity_uri("dataset:ukb-ppp")
     parent_uri = project_entity_uri("dataset:uk-biobank")
     assert (child_uri, SCI_NS.subCohortOf, parent_uri) in knowledge
+    # The parent dataset itself has no parent_dataset, so it must emit no subCohortOf edge.
+    assert not list(knowledge.triples((parent_uri, SCI_NS.subCohortOf, None)))
 
 
 def _write_project(root):

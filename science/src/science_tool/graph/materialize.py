@@ -708,10 +708,12 @@ def _add_produced_by_edges(
 
 
 def _add_sub_cohort_edges(sources: ProjectSources, *, resolver: ReferenceResolver, knowledge) -> None:
-    """Materialize sci:subCohortOf edges from dataset.parent_dataset into the knowledge graph."""
+    """Materialize sci:subCohortOf edges from dataset.parent_dataset into the knowledge graph.
+
+    URIs must match usage-fact dataset URIs (minted by `project_entity_uri`) so downstream
+    B2 lineage grouping joins correctly.
+    """
     for child_id, parent_ref in sources.dataset_parents.items():
-        if not parent_ref:
-            continue
         child = project_entity_uri(child_id)
         parent = project_entity_uri(_resolve_dataset_usage_ref(parent_ref, resolver))
         knowledge.add((child, SCI_NS.subCohortOf, parent))

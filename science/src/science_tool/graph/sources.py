@@ -679,7 +679,7 @@ def load_project_sources(
     dataset_parents = {
         e.canonical_id: e.parent_dataset
         for e in entities
-        if e.kind == "dataset" and getattr(e, "parent_dataset", "")
+        if e.kind == "dataset" and e.parent_dataset
     }
 
     return ProjectSources(
