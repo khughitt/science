@@ -39,6 +39,12 @@ from science_model.reasoning import (
     WEAKEST_LINK_COMPOSITION_RULES,
 )
 from science_model.profiles import EntityKind, ProfileManifest, RelationKind
+from science_model.patch_definition import (
+    LocalClosurePolicy,
+    PatchDefinitionEntity,
+    PatchExclude,
+    PatchScope,
+)
 from science_model.propositions import PropositionEntity
 from science_model.provenance import EvidenceIndependence, ProvenanceType
 from science_model.relations import build_relation_registry
@@ -84,6 +90,10 @@ __all__ = [
     "Polarity",
     "Predicate",
     "PropositionEntity",
+    "LocalClosurePolicy",
+    "PatchDefinitionEntity",
+    "PatchExclude",
+    "PatchScope",
     "PropositionMetadata",
     "RESERVED_COMPOSITION_RULES",
     "SIGN_MEANINGFUL_PREDICATES",

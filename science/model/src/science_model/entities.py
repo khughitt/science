@@ -75,6 +75,7 @@ class EntityType(StrEnum):
     HYPOTHESIS = "hypothesis"
     QUESTION = "question"
     PROPOSITION = "proposition"
+    PATCH_DEFINITION = "patch-definition"
     OBSERVATION = "observation"
     INQUIRY = "inquiry"
     TOPIC = "topic"
