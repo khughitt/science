@@ -70,8 +70,16 @@ science datasets search "<query>" --source zenodo,geo --format json
 science datasets search "<query>" --source cbioportal --format json
 ```
 
-Adapters cover Zenodo, NCBI GEO, Dryad, Semantic Scholar, and the public
-cBioPortal study catalog. **Limitation:** DUA-gated or separately hosted
+Adapters cover Zenodo, NCBI GEO, Dryad, Semantic Scholar, the public cBioPortal
+study catalog, figshare, ArrayExpress (EBI BioStudies), PhysioNet, and NCBI SRA.
+
+**Access tiers:** PhysioNet and SRA report an access tier on each result —
+`public` (freely downloadable), `restricted` (self-serve DUA/login), or
+`controlled` (application/approval required). PhysioNet `restricted`/`credentialed`
+files raise on download until access is granted; SRA `.sra` files need
+`fasterq-dump` conversion downstream.
+
+**Limitation:** DUA-gated or separately hosted
 oncology resources — notably AACR GENIE / GENIE BPC (Synapse +
 `genie.cbioportal.org`), MSK-CHORD, and TCGA MC3 controlled-access tiers — are
 not indexed by any adapter. For those, fall back to LLM knowledge plus the
@@ -118,6 +126,9 @@ Required frontmatter fields to populate (see template comments for enum values):
 
 - `tier` — one of `use-now`, `evaluate-next`, `track` (mirror the ranking label from Step 4)
 - `access` — one of `public`, `controlled`, `mixed`
+  When mapping an adapter result's `access` tier to the entity `access.level`,
+  apply: `public → public`, `restricted → controlled`, `controlled → controlled`.
+  `mixed` is set only when sibling artefacts differ in level (see emission rules).
 - `license` — SPDX identifier or `unknown`
 - `formats` — list of lower-case format slugs
 - `size_estimate` — with unit (e.g., `"12 GB"`, `"~500 MB"`, `"unknown"`)
