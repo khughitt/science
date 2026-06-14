@@ -80,7 +80,9 @@ def test_reduce_usage_facts_keeps_validation_and_citation_non_committing() -> No
     consumer = PROJECT_NS["paper/p1"]
     dataset = PROJECT_NS["dataset/gtex-v8"]
     validation = UsageFact(consumer, dataset, "validation_source", "full", "authored", PROJECT_NS["dataset-usage/v"])
-    citation = UsageFact(consumer, PROJECT_NS["dataset/cited"], "cited", "full", "authored", PROJECT_NS["dataset-usage/c"])
+    citation = UsageFact(
+        consumer, PROJECT_NS["dataset/cited"], "cited", "full", "authored", PROJECT_NS["dataset-usage/c"]
+    )
 
     reduced = reduce_usage_facts([validation, citation])
 
@@ -239,7 +241,8 @@ def _add_sub_cohort(knowledge, child, parent):
 
 def test_child_parent_full_overlap_pair_is_commitment():
     knowledge, provenance, target, line_a, line_b = _line_graph()
-    ukb = PROJECT_NS["dataset/uk-biobank"]; ppp = PROJECT_NS["dataset/ukb-ppp"]
+    ukb = PROJECT_NS["dataset/uk-biobank"]
+    ppp = PROJECT_NS["dataset/ukb-ppp"]
     _add_sub_cohort(knowledge, ppp, ukb)
     _add_usage(provenance, line_a, ppp, "analyzed", "full", "a")
     _add_usage(provenance, line_b, ukb, "analyzed", "full", "b")
@@ -251,8 +254,11 @@ def test_child_parent_full_overlap_pair_is_commitment():
 
 def test_sibling_full_overlap_pair_is_candidate_lineage_sibling():
     knowledge, provenance, _t, line_a, line_b = _line_graph()
-    ukb = PROJECT_NS["dataset/uk-biobank"]; ppp = PROJECT_NS["dataset/ukb-ppp"]; nmr = PROJECT_NS["dataset/ukb-nmr"]
-    _add_sub_cohort(knowledge, ppp, ukb); _add_sub_cohort(knowledge, nmr, ukb)
+    ukb = PROJECT_NS["dataset/uk-biobank"]
+    ppp = PROJECT_NS["dataset/ukb-ppp"]
+    nmr = PROJECT_NS["dataset/ukb-nmr"]
+    _add_sub_cohort(knowledge, ppp, ukb)
+    _add_sub_cohort(knowledge, nmr, ukb)
     _add_usage(provenance, line_a, ppp, "analyzed", "full", "a")
     _add_usage(provenance, line_b, nmr, "analyzed", "full", "b")
     records = derive_dataset_independence_records(knowledge, provenance)
@@ -262,7 +268,8 @@ def test_sibling_full_overlap_pair_is_candidate_lineage_sibling():
 
 def test_child_parent_partial_is_candidate_partial_overlap():
     knowledge, provenance, _t, line_a, line_b = _line_graph()
-    ukb = PROJECT_NS["dataset/uk-biobank"]; ppp = PROJECT_NS["dataset/ukb-ppp"]
+    ukb = PROJECT_NS["dataset/uk-biobank"]
+    ppp = PROJECT_NS["dataset/ukb-ppp"]
     _add_sub_cohort(knowledge, ppp, ukb)
     _add_usage(provenance, line_a, ppp, "analyzed", "partial", "a")
     _add_usage(provenance, line_b, ukb, "analyzed", "full", "b")
@@ -272,7 +279,8 @@ def test_child_parent_partial_is_candidate_partial_overlap():
 
 def test_unrelated_datasets_stay_independent():
     knowledge, provenance, _t, line_a, line_b = _line_graph()
-    ppp = PROJECT_NS["dataset/ukb-ppp"]; fin = PROJECT_NS["dataset/finngen"]
+    ppp = PROJECT_NS["dataset/ukb-ppp"]
+    fin = PROJECT_NS["dataset/finngen"]
     _add_usage(provenance, line_a, ppp, "analyzed", "full", "a")
     _add_usage(provenance, line_b, fin, "analyzed", "full", "b")
     assert derive_dataset_independence_records(knowledge, provenance) == []
@@ -280,10 +288,13 @@ def test_unrelated_datasets_stay_independent():
 
 def test_grandparent_chain_full_overlap_is_commitment():
     knowledge, provenance, target, line_a, line_b = _line_graph()
-    ukb = PROJECT_NS["dataset/uk-biobank"]; ppp = PROJECT_NS["dataset/ukb-ppp"]; sub = PROJECT_NS["dataset/ppp-sub"]
-    _add_sub_cohort(knowledge, ppp, ukb); _add_sub_cohort(knowledge, sub, ppp)
-    _add_usage(provenance, line_a, sub, "analyzed", "full", "a")   # grandchild
-    _add_usage(provenance, line_b, ukb, "analyzed", "full", "b")   # grandparent
+    ukb = PROJECT_NS["dataset/uk-biobank"]
+    ppp = PROJECT_NS["dataset/ukb-ppp"]
+    sub = PROJECT_NS["dataset/ppp-sub"]
+    _add_sub_cohort(knowledge, ppp, ukb)
+    _add_sub_cohort(knowledge, sub, ppp)
+    _add_usage(provenance, line_a, sub, "analyzed", "full", "a")  # grandchild
+    _add_usage(provenance, line_b, ukb, "analyzed", "full", "b")  # grandparent
     assert [r.kind for r in derive_dataset_independence_records(knowledge, provenance)] == ["commitment"]
 
 

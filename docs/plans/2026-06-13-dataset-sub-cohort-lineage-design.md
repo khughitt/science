@@ -2,7 +2,7 @@
 
 Date: 2026-06-13
 
-Status: design / scoping. Paired implementation plan: `docs/plans/2026-06-13-dataset-sub-cohort-lineage-plan.md` (not yet executed).
+Status: implemented on branch `feat/dataset-sub-cohort-lineage`. Paired implementation plan: `docs/plans/2026-06-13-dataset-sub-cohort-lineage-plan.md` (executed).
 
 Related:
 - `docs/plans/2026-05-29-b2-dataset-independence-design.md` — B2 collapse semantics this extends; §10 names cross-dataset overlap an explicit non-goal
@@ -78,7 +78,7 @@ a ref, not an inference.
 | Field (`parent_dataset`) | exists, origin-orthogonal | none |
 | Semantics / docs | undocumented | bless as sub-cohort-of (§3) |
 | Referential integrity + acyclicity | missing | add validate check (§4) |
-| Symmetry (`↔ siblings`) | health WARN only | keep; optionally promote (§4) |
+| Symmetry (`↔ siblings`) | health WARN only | keep as health WARN (deferred; §4) |
 | Graph materialization | absent | emit lineage edge (§5.1) |
 | B2 collapse | lineage-blind | lineage-aware grouping (§5.2) |
 
@@ -119,10 +119,10 @@ flag, as ERROR:
 - `parent_dataset` pointing at a `member_of`-derived collection member (category error — a sub-cohort's
   parent must be a plain dataset, not a collection row).
 
-Keep the existing `health.py` symmetry warning. **Open call (recommend: yes):** promote the
-`parent_dataset ↔ siblings` symmetry from a health WARN to a validate check so it gates `science validate`
-and is enforced even when `siblings` is omitted (i.e. parent silently missing the back-link is at most a
-hint, never required — `parent_dataset` alone is sufficient and authoritative).
+Keep the existing `health.py` symmetry warning. **Decision (deferred — kept as health WARN):** the
+`parent_dataset ↔ siblings` symmetry check was NOT promoted to a validate gate. The implemented
+`dataset_lineage` validate check enforces referential integrity, acyclicity, and member_of-parent rejection
+only. Symmetry remains a `graph/health.py` WARNING, as before.
 
 No new required fields. `parent_dataset` stays optional; absence means "not a sub-cohort," which is the
 common case.
@@ -143,7 +143,7 @@ In dataset materialization (`graph/materialize.py` / `graph/sources.py`), emit a
 <dataset:C>  sci:subCohortOf  <dataset:P>
 ```
 
-A dedicated `sci:subCohortOf` predicate is preferred over reusing `prov:wasDerivedFrom` so that B2 can
+A dedicated `sci:subCohortOf` predicate was used (not `prov:wasDerivedFrom`) so that B2 can
 distinguish a *subset* relation (this design) from a *compute-derived* relation (which has different
 overlap semantics and already flows through `derivation`). The materializer computes, per dataset, its
 ancestor chain to the lineage root; cycles are rejected upstream by §4 so materialization can assume a
@@ -249,5 +249,5 @@ The implementation plan should cover:
 - **Field:** reuse the existing top-level `parent_dataset` / `siblings`; do **not** add a derivation variant
   and do **not** add a new field. [decided]
 - **Overlap of subset edge:** treated as full, no sample-size inference. [decided]
-- **Symmetry check promotion (health WARN → validate):** recommended, left to the plan. [open]
-- **Predicate:** new `sci:subCohortOf` rather than reusing `prov:wasDerivedFrom`. [recommended]
+- **Symmetry check promotion (health WARN → validate):** deferred — kept as health WARN only. [resolved]
+- **Predicate:** new `sci:subCohortOf` rather than reusing `prov:wasDerivedFrom`. [confirmed]

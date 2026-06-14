@@ -156,9 +156,7 @@ def test_materialize_graph_rejects_dataset_usage_self_reference(tmp_path):
     _write_dataset(
         tmp_path / "data" / "self" / "datapackage.yaml",
         "self",
-        "dataset_usage:\n"
-        "  - ref: dataset:self\n"
-        "    role: analyzed\n",
+        "dataset_usage:\n  - ref: dataset:self\n    role: analyzed\n",
     )
 
     with pytest.raises(ValueError, match="self-referential"):
@@ -271,19 +269,12 @@ def test_parent_dataset_materializes_sub_cohort_of(tmp_path):
     _write_dataset(
         tmp_path / "data" / "uk-biobank" / "datapackage.yaml",
         "uk-biobank",
-        "origin: external\n"
-        "access:\n"
-        "  level: controlled\n"
-        "  verified: true\n",
+        "origin: external\naccess:\n  level: controlled\n  verified: true\n",
     )
     _write_dataset(
         tmp_path / "data" / "ukb-ppp" / "datapackage.yaml",
         "ukb-ppp",
-        "origin: external\n"
-        "access:\n"
-        "  level: controlled\n"
-        "  verified: true\n"
-        "parent_dataset: dataset:uk-biobank\n",
+        "origin: external\naccess:\n  level: controlled\n  verified: true\nparent_dataset: dataset:uk-biobank\n",
     )
 
     trig = materialize_graph(tmp_path)
@@ -329,10 +320,7 @@ def test_materialize_graph_emits_entity_usage_nodes(tmp_path):
     _write_dataset(
         tmp_path / "data" / "gtex" / "datapackage.yaml",
         "gtex-v8",
-        "origin: external\n"
-        "access:\n"
-        "  level: public\n"
-        "  verified: true\n",
+        "origin: external\naccess:\n  level: public\n  verified: true\n",
     )
     _write_dataset(
         tmp_path / "data" / "derived" / "datapackage.yaml",
@@ -397,10 +385,7 @@ def test_materialize_graph_emits_dataset_independence_commitment(tmp_path) -> No
     _write_dataset(
         tmp_path / "data" / "gtex" / "datapackage.yaml",
         "gtex-v8",
-        "origin: external\n"
-        "access:\n"
-        "  level: public\n"
-        "  verified: true\n",
+        "origin: external\naccess:\n  level: public\n  verified: true\n",
     )
     prop_dir = tmp_path / "entities" / "propositions"
     prop_dir.mkdir(parents=True)
@@ -476,10 +461,7 @@ def test_materialize_graph_emits_dataset_independence_commitment(tmp_path) -> No
     ("frontmatter", "field_name"),
     [
         (
-            "dataset_usage:\n"
-            "  - ref: dataset:gtex-v88\n"
-            "    role: analyzed\n"
-            "    overlap: full\n",
+            "dataset_usage:\n  - ref: dataset:gtex-v88\n    role: analyzed\n    overlap: full\n",
             "dataset_usage",
         ),
         ('datasets: ["dataset:gtex-v88"]\n', "datasets"),
@@ -551,11 +533,7 @@ def test_materialize_graph_canonicalizes_authored_usage_alias(tmp_path):
     _write_dataset(
         tmp_path / "data" / "gtex" / "datapackage.yaml",
         "gtex-v8",
-        "aliases: [dataset:gtex]\n"
-        "origin: external\n"
-        "access:\n"
-        "  level: public\n"
-        "  verified: true\n",
+        "aliases: [dataset:gtex]\norigin: external\naccess:\n  level: public\n  verified: true\n",
     )
     paper_dir = tmp_path / "entities" / "papers"
     paper_dir.mkdir(parents=True)
@@ -594,11 +572,7 @@ def test_materialize_graph_rejects_legacy_paper_dataset_bare_alias(tmp_path):
     _write_dataset(
         tmp_path / "data" / "gtex" / "datapackage.yaml",
         "gtex-v8",
-        "aliases: [dataset:gtex, gtex]\n"
-        "origin: external\n"
-        "access:\n"
-        "  level: public\n"
-        "  verified: true\n",
+        "aliases: [dataset:gtex, gtex]\norigin: external\naccess:\n  level: public\n  verified: true\n",
     )
     paper_dir = tmp_path / "entities" / "papers"
     paper_dir.mkdir(parents=True)
@@ -631,11 +605,7 @@ def test_materialize_graph_canonicalizes_derivation_input_alias(tmp_path):
     _write_dataset(
         tmp_path / "data" / "gtex" / "datapackage.yaml",
         "gtex-v8",
-        "aliases: [dataset:gtex]\n"
-        "origin: external\n"
-        "access:\n"
-        "  level: public\n"
-        "  verified: true\n",
+        "aliases: [dataset:gtex]\norigin: external\naccess:\n  level: public\n  verified: true\n",
     )
     _write_dataset(
         tmp_path / "data" / "derived" / "datapackage.yaml",
@@ -695,10 +665,7 @@ def test_materialize_graph_rejects_dataset_self_reference_through_alias(tmp_path
     ("frontmatter", "field_name"),
     [
         (
-            "dataset_usage:\n"
-            "  - ref: dataset:smith\n"
-            "    role: analyzed\n"
-            "    overlap: full\n",
+            "dataset_usage:\n  - ref: dataset:smith\n    role: analyzed\n    overlap: full\n",
             "dataset_usage",
         ),
         ('datasets: ["dataset:smith"]\n', "datasets"),
@@ -739,9 +706,7 @@ def test_materialize_graph_audits_paper_usage_refs_as_dataset_only(tmp_path, fro
 
     assert has_failures is True
     assert any(
-        row["check"] == "invalid_dataset_reference"
-        and row["field"] == field_name
-        and row["target"] == "dataset:smith"
+        row["check"] == "invalid_dataset_reference" and row["field"] == field_name and row["target"] == "dataset:smith"
         for row in rows
     )
     with pytest.raises(ValueError) as excinfo:
@@ -849,10 +814,7 @@ def test_materialize_graph_emits_geneset_row_usage_nodes(tmp_path):
     _write_dataset(
         tmp_path / "data" / "gtex" / "datapackage.yaml",
         "gtex-v8",
-        "origin: external\n"
-        "access:\n"
-        "  level: public\n"
-        "  verified: true\n",
+        "origin: external\naccess:\n  level: public\n  verified: true\n",
     )
     _write_geneset_collection(tmp_path)
 
@@ -876,11 +838,7 @@ def test_materialize_graph_canonicalizes_geneset_row_usage_alias(tmp_path):
     _write_dataset(
         tmp_path / "data" / "gtex" / "datapackage.yaml",
         "gtex-v8",
-        "aliases: [dataset:gtex]\n"
-        "origin: external\n"
-        "access:\n"
-        "  level: public\n"
-        "  verified: true\n",
+        "aliases: [dataset:gtex]\norigin: external\naccess:\n  level: public\n  verified: true\n",
     )
     _write_geneset_collection(tmp_path)
     (tmp_path / "data" / "reactome" / "sets.csv").write_text(
@@ -1011,9 +969,7 @@ def test_materialize_graph_emits_commons_geneset_row_usage_nodes(tmp_path, monke
         encoding="utf-8",
     )
     (reactome_dir / "datapackage.yaml").write_text(
-        "resources:\n"
-        "  - name: sets\n"
-        "    path: sets.csv\n",
+        "resources:\n  - name: sets\n    path: sets.csv\n",
         encoding="utf-8",
     )
     (reactome_dir / "sets.csv").write_text(
@@ -1193,10 +1149,7 @@ def test_materialize_graph_emits_geneset_row_usage_nodes_for_promoted_markdown_o
     _write_dataset(
         tmp_path / "data" / "gtex" / "datapackage.yaml",
         "gtex-v8",
-        "origin: external\n"
-        "access:\n"
-        "  level: public\n"
-        "  verified: true\n",
+        "origin: external\naccess:\n  level: public\n  verified: true\n",
     )
     _write_promoted_geneset_collection(tmp_path)
 
@@ -1280,8 +1233,7 @@ def test_promote_orphans_then_materialize_preserves_geneset_members_end_to_end(t
     _write_dataset(
         tmp_path / "data" / "gtex" / "datapackage.yaml",
         "gtex-v8",
-        "origin: external\naccess:\n  level: public\n  verified: true\n"
-        "created: '2026-01-01'\nupdated: '2026-01-01'\n",
+        "origin: external\naccess:\n  level: public\n  verified: true\ncreated: '2026-01-01'\nupdated: '2026-01-01'\n",
     )
     _write_orphan_geneset_collection(tmp_path)
 

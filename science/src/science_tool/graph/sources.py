@@ -676,11 +676,7 @@ def load_project_sources(
 
         entities.sort(key=lambda e: e.canonical_id)
 
-    dataset_parents = {
-        e.canonical_id: e.parent_dataset
-        for e in entities
-        if e.kind == "dataset" and e.parent_dataset
-    }
+    dataset_parents = {e.canonical_id: e.parent_dataset for e in entities if e.kind == "dataset" and e.parent_dataset}
 
     return ProjectSources(
         project_name=str(config["name"]),
@@ -1053,9 +1049,7 @@ def _load_structured_source_records(
                 ontology_catalogs=ontology_catalogs,
             )
             entity = schema.model_validate(raw)
-            out.append(
-                (entity, SourceRef(adapter_name="structured-source", path=record.source_path or default_path))
-            )
+            out.append((entity, SourceRef(adapter_name="structured-source", path=record.source_path or default_path)))
     return out
 
 

@@ -57,7 +57,8 @@ def evaluate_dataset_lineage(
     member_of_ids: set[str] = {
         d["id"]
         for d in datasets
-        if isinstance(d.get("derivation"), dict) and d["derivation"].get("kind") == "member_of"
+        if isinstance(d.get("derivation"), dict)
+        and d["derivation"].get("kind") == "member_of"
         and isinstance(d.get("id"), str)
     }
 
@@ -81,8 +82,7 @@ def evaluate_dataset_lineage(
         if parent in member_of_ids:
             yield _err(
                 path,
-                f"{ident}: parent_dataset {parent!r} is a member_of collection member, "
-                f"not a sub-cohort parent",
+                f"{ident}: parent_dataset {parent!r} is a member_of collection member, not a sub-cohort parent",
                 "dataset.lineage.member-parent",
             )
 
@@ -94,16 +94,14 @@ def evaluate_dataset_lineage(
         if present is False:
             yield _err(
                 path,
-                f"{ident}: parent_dataset {parent!r} does not resolve to a dataset entity "
-                f"(not in project or commons)",
+                f"{ident}: parent_dataset {parent!r} does not resolve to a dataset entity (not in project or commons)",
                 "dataset.lineage.unresolved",
             )
         elif present is None:
             yield _result(
                 Severity.INFO,
                 path,
-                f"{ident}: parent_dataset {parent!r} is non-local and the commons is "
-                f"unavailable; cannot verify",
+                f"{ident}: parent_dataset {parent!r} is non-local and the commons is unavailable; cannot verify",
                 "dataset.lineage.commons-unavailable",
             )
         # present is True → resolved in commons, no defect

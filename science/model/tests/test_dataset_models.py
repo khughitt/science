@@ -370,9 +370,7 @@ def test_dataset_entity_derived_class_with_kind_ok() -> None:
 
 def test_dataset_entity_invalid_source_class_rejects() -> None:
     with pytest.raises(ValueError, match="source_class"):
-        DatasetEntity(
-            **_entity_kwargs(), origin="external", access=_ext_access(), source_class="curated"
-        )
+        DatasetEntity(**_entity_kwargs(), origin="external", access=_ext_access(), source_class="curated")
 
 
 def test_dataset_entity_invalid_source_class_rejected_without_origin() -> None:
@@ -459,8 +457,6 @@ def test_parse_dataset_empty_mapping_usage_raises(tmp_path: Path) -> None:
 
 
 def test_parse_dataset_usage_bad_role_raises(tmp_path: Path) -> None:
-    md = _write_dataset_md(
-        tmp_path, "dataset_usage:", "  - ref: dataset:x", "    role: consulted"
-    )
+    md = _write_dataset_md(tmp_path, "dataset_usage:", "  - ref: dataset:x", "    role: consulted")
     with pytest.raises(ValidationError):
         parse_entity_file(md, project_slug="testproj")

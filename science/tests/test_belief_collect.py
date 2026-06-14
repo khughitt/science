@@ -9,11 +9,12 @@ LINE = URIRef("http://example.org/science/entity/evidence-line/e")
 PAPER = URIRef("http://example.org/science/entity/paper/x")
 BARE = URIRef("http://example.org/science/entity/observation/o")
 
+
 def test_collects_line_metadata_from_provenance():
     knowledge, provenance = Graph(), Graph()
     knowledge.add((LINE, RDF.type, EVIDENCE_LINE_CLASS))
     knowledge.add((LINE, CITO_NS.disputes, CLAIM))
-    knowledge.add((BARE, CITO_NS.supports, CLAIM))            # not a line -> ignored
+    knowledge.add((BARE, CITO_NS.supports, CLAIM))  # not a line -> ignored
     provenance.add((LINE, SCI_NS.evidenceStrength, Literal("strong")))
     provenance.add((LINE, SCI_NS.evidenceIndependence, Literal("independent")))
     provenance.add((LINE, SCI_NS.independenceGroup, Literal("g1")))
@@ -88,7 +89,7 @@ def test_multi_derived_from_detects_reference_dataset():
     knowledge.add((LINE, RDF.type, EVIDENCE_LINE_CLASS))
     knowledge.add((LINE, CITO_NS.supports, CLAIM))
     knowledge.add((DATASET, SCI_NS.sourceClass, Literal("reference")))
-    provenance.add((LINE, PROV.wasDerivedFrom, OTHER))   # non-reference, listed first
+    provenance.add((LINE, PROV.wasDerivedFrom, OTHER))  # non-reference, listed first
     provenance.add((LINE, PROV.wasDerivedFrom, DATASET))  # reference dataset
     (u,) = collect_evidence_units(knowledge, provenance, [CLAIM])
     assert u.is_reference_dataset is True
@@ -257,7 +258,9 @@ def test_lineage_sibling_candidate_does_not_collapse_lines() -> None:
     units = collect_evidence_units(knowledge, provenance, [target])
 
     # Candidates are invisible to belief collection — lines must stay ungrouped.
-    assert all(u.independence is None for u in units), \
+    assert all(u.independence is None for u in units), (
         f"Expected no independence set from a candidate record, got {[(u.line_uri, u.independence) for u in units]}"
-    assert all(u.independence_group is None for u in units), \
+    )
+    assert all(u.independence_group is None for u in units), (
         f"Expected no independence_group from a candidate record, got {[(u.line_uri, u.independence_group) for u in units]}"
+    )

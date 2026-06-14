@@ -205,13 +205,17 @@ def derive_dataset_independence_records(knowledge: Graph, provenance: Graph) -> 
         target_lines = frozenset(line for line, line_target in line_targets.items() if line_target == target)
         records.extend(_commitment_components(target, target_lines, ancestors, lineage))
         records.extend(_candidate_components(target, target_lines, ancestors, lineage))
-    return sorted(records, key=lambda record: (record.kind, str(record.target), record.reason, sorted(map(str, record.members))))
+    return sorted(
+        records, key=lambda record: (record.kind, str(record.target), record.reason, sorted(map(str, record.members)))
+    )
 
 
 def emit_dataset_independence_records(provenance: Graph, records: list[DatasetIndependenceRecord]) -> None:
     for record in records:
         node = _record_uri(record)
-        klass = SCI_NS.DatasetIndependenceCommitment if record.kind == "commitment" else SCI_NS.DatasetIndependenceCandidate
+        klass = (
+            SCI_NS.DatasetIndependenceCommitment if record.kind == "commitment" else SCI_NS.DatasetIndependenceCandidate
+        )
         provenance.add((node, RDF.type, klass))
         provenance.add((node, SCI_NS.independenceTarget, record.target))
         provenance.add((node, SCI_NS.independenceGroup, RDFLiteral(record.independence_group)))
@@ -224,7 +228,9 @@ def emit_dataset_independence_records(provenance: Graph, records: list[DatasetIn
             provenance.add((node, SCI_NS.derivedFromDatasetUsage, usage_node))
 
 
-def committed_metadata_by_line(provenance: Graph, targets: frozenset[URIRef]) -> dict[URIRef, DerivedCommitmentMetadata]:
+def committed_metadata_by_line(
+    provenance: Graph, targets: frozenset[URIRef]
+) -> dict[URIRef, DerivedCommitmentMetadata]:
     out: dict[URIRef, DerivedCommitmentMetadata] = {}
     for record in provenance.subjects(RDF.type, SCI_NS.DatasetIndependenceCommitment):
         target = _one_uri(provenance, URIRef(record), SCI_NS.independenceTarget)
@@ -243,7 +249,11 @@ def _evidence_line_targets(knowledge: Graph) -> dict[URIRef, URIRef]:
     out: dict[URIRef, URIRef] = {}
     for predicate in (CITO_NS.supports, CITO_NS.disputes):
         for line, _, target in knowledge.triples((None, predicate, None)):
-            if (line, RDF.type, SCI_NS.EvidenceLine) in knowledge and isinstance(line, URIRef) and isinstance(target, URIRef):
+            if (
+                (line, RDF.type, SCI_NS.EvidenceLine) in knowledge
+                and isinstance(line, URIRef)
+                and isinstance(target, URIRef)
+            ):
                 out[line] = target
     return out
 
@@ -391,10 +401,7 @@ def _components_from_ancestors(
     records: list[DatasetIndependenceRecord] = []
     for members in _connected_components(edges):
         member_datasets = frozenset(
-            d
-            for left, right, datasets in edges
-            if left in members and right in members
-            for d in datasets
+            d for left, right, datasets in edges if left in members and right in members for d in datasets
         )
         usage_nodes = frozenset(
             node

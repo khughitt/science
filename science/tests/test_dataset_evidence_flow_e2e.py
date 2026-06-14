@@ -33,6 +33,7 @@ from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
 # Shared helpers
 # ---------------------------------------------------------------------------
 
+
 def _write(root: Path, rel: str, body: str) -> None:
     p = root / rel
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -153,6 +154,7 @@ def _materialize(root: Path) -> tuple:
 # Point 1 — same-dataset collapse
 # ---------------------------------------------------------------------------
 
+
 def test_same_dataset_two_lines_collapse_to_one_unit(tmp_path: Path) -> None:
     """Two evidence-lines whose sources BOTH used dataset:mmrf (analyzed, full)
     support the same proposition → B2 emits one DatasetIndependenceCommitment,
@@ -175,9 +177,7 @@ def test_same_dataset_two_lines_collapse_to_one_unit(tmp_path: Path) -> None:
 
     # --- B2 structural assertion: one DatasetIndependenceCommitment record ---
     commitments = list(provenance.subjects(RDF.type, SCI_NS.DatasetIndependenceCommitment))
-    assert len(commitments) == 1, (
-        f"Expected exactly 1 DatasetIndependenceCommitment; got {len(commitments)}"
-    )
+    assert len(commitments) == 1, f"Expected exactly 1 DatasetIndependenceCommitment; got {len(commitments)}"
     commitment = commitments[0]
 
     # Both lines are members of the shared-source group
@@ -202,9 +202,7 @@ def test_same_dataset_two_lines_collapse_to_one_unit(tmp_path: Path) -> None:
     groups_on_units = {u.independence_group for u in units}
     # One group value (the shared dataset-derived group), not two different groups or None
     assert None not in groups_on_units, "Both units should carry a derived independence_group; found None"
-    assert len(groups_on_units) == 1, (
-        f"Both units must share the same independence_group; got {groups_on_units}"
-    )
+    assert len(groups_on_units) == 1, f"Both units must share the same independence_group; got {groups_on_units}"
 
     reduced = reduce_units(units)
     # Exactly one unit kept; the other is collapsed (same group, same stance → only one winner)
@@ -212,9 +210,7 @@ def test_same_dataset_two_lines_collapse_to_one_unit(tmp_path: Path) -> None:
         f"Expected 1 kept unit after collapse; got {len(reduced.kept)}. "
         f"kept={[u.line_uri for u in reduced.kept]}, collapsed={[u.line_uri for u in reduced.collapsed]}"
     )
-    assert len(reduced.collapsed) == 1, (
-        f"Expected 1 collapsed unit; got {len(reduced.collapsed)}"
-    )
+    assert len(reduced.collapsed) == 1, f"Expected 1 collapsed unit; got {len(reduced.collapsed)}"
     assert reduced.flagged_ungrouped == [], "No units should be flagged as ungrouped"
     assert reduced.excluded_circular == [], "No units should be excluded as circular"
 
@@ -222,6 +218,7 @@ def test_same_dataset_two_lines_collapse_to_one_unit(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Point 2 — distinct-dataset independence (no collapse)
 # ---------------------------------------------------------------------------
+
 
 def test_distinct_datasets_two_lines_stay_independent(tmp_path: Path) -> None:
     """Two evidence-lines backed by *different* datasets (mmrf vs gse19784)
@@ -243,9 +240,7 @@ def test_distinct_datasets_two_lines_stay_independent(tmp_path: Path) -> None:
 
     # No DatasetIndependenceCommitment (two different datasets → no shared-source group)
     commitments = list(provenance.subjects(RDF.type, SCI_NS.DatasetIndependenceCommitment))
-    assert commitments == [], (
-        f"Expected no commitment records for distinct datasets; got {len(commitments)}"
-    )
+    assert commitments == [], f"Expected no commitment records for distinct datasets; got {len(commitments)}"
 
     # reduce_units keeps both lines as independent contributors
     from science_tool.graph.belief import collect_evidence_units, reduce_units
@@ -266,9 +261,8 @@ def test_distinct_datasets_two_lines_stay_independent(tmp_path: Path) -> None:
 # Point 3 — unregistered dataset ref WARNs
 # ---------------------------------------------------------------------------
 
-def test_unregistered_dataset_ref_warns_ref_unresolved(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+
+def test_unregistered_dataset_ref_warns_ref_unresolved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """An evidence-line (or paper) with a dataset_usage ref pointing at a dataset
     that is not registered in the project yields dataset-influence.ref-unresolved WARN.
     Uses evaluate_dataset_influence directly to avoid needing a commons registry.
@@ -283,9 +277,7 @@ def test_unregistered_dataset_ref_warns_ref_unresolved(
                     "id": "paper:Adams2025",
                     "type": "paper",
                     "_path": "entities/papers/Adams2025.md",
-                    "dataset_usage": [
-                        {"ref": "dataset:does-not-exist", "role": "analyzed", "overlap": "full"}
-                    ],
+                    "dataset_usage": [{"ref": "dataset:does-not-exist", "role": "analyzed", "overlap": "full"}],
                 }
             ],
             dataset_ref_status={"dataset:does-not-exist": "missing"},
@@ -303,6 +295,7 @@ def test_unregistered_dataset_ref_warns_ref_unresolved(
 # Point 4 — dependence-role + unknown overlap WARNs
 # ---------------------------------------------------------------------------
 
+
 def test_dependence_role_with_unknown_overlap_warns(tmp_path: Path) -> None:
     """An evidence-line's source paper has role=analyzed and overlap=unknown (omitted)
     → dataset-influence.overlap-unknown-candidate WARN fires.
@@ -319,9 +312,7 @@ def test_dependence_role_with_unknown_overlap_warns(tmp_path: Path) -> None:
                     "id": "paper:Adams2025",
                     "type": "paper",
                     "_path": "entities/papers/Adams2025.md",
-                    "dataset_usage": [
-                        {"ref": "dataset:mmrf", "role": "analyzed"}
-                    ],
+                    "dataset_usage": [{"ref": "dataset:mmrf", "role": "analyzed"}],
                 }
             ],
             dataset_ref_status={"dataset:mmrf": "resolved"},
@@ -341,9 +332,7 @@ def test_dependence_role_with_unknown_overlap_warns(tmp_path: Path) -> None:
                     "id": "paper:Adams2025",
                     "type": "paper",
                     "_path": "entities/papers/Adams2025.md",
-                    "dataset_usage": [
-                        {"ref": "dataset:mmrf", "role": "analyzed", "overlap": "unknown"}
-                    ],
+                    "dataset_usage": [{"ref": "dataset:mmrf", "role": "analyzed", "overlap": "unknown"}],
                 }
             ],
             dataset_ref_status={"dataset:mmrf": "resolved"},
@@ -363,9 +352,7 @@ def test_dependence_role_with_unknown_overlap_warns(tmp_path: Path) -> None:
                     "id": "paper:Adams2025",
                     "type": "paper",
                     "_path": "entities/papers/Adams2025.md",
-                    "dataset_usage": [
-                        {"ref": "dataset:mmrf", "role": "analyzed", "overlap": "full"}
-                    ],
+                    "dataset_usage": [{"ref": "dataset:mmrf", "role": "analyzed", "overlap": "full"}],
                 }
             ],
             dataset_ref_status={"dataset:mmrf": "resolved"},
@@ -381,6 +368,7 @@ def test_dependence_role_with_unknown_overlap_warns(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Point 5 — task source in provenance, not belief
 # ---------------------------------------------------------------------------
+
 
 def test_task_source_lands_in_provenance_not_belief(tmp_path: Path) -> None:
     """An evidence-line whose `source` is `task:<id>` must route exclusively into
@@ -455,6 +443,7 @@ def test_task_source_lands_in_provenance_not_belief(tmp_path: Path) -> None:
 # Point 6 — UKB / UKB-PPP sub-cohort lineage commitment (end-to-end)
 # ---------------------------------------------------------------------------
 
+
 def _dataset_dp_with_parent(root: Path, slug: str, parent_slug: str) -> None:
     """Write an external dataset datapackage that declares a parent_dataset."""
     dp = root / "data" / slug / "datapackage.yaml"
@@ -524,8 +513,7 @@ def test_ukb_ppp_sub_cohort_lineage_commitment_end_to_end(tmp_path: Path) -> Non
     ukb_ppp_uri = PROJECT_NS["dataset/ukb-ppp"]
     uk_biobank_uri = PROJECT_NS["dataset/uk-biobank"]
     assert (ukb_ppp_uri, SCI_NS.subCohortOf, uk_biobank_uri) in knowledge, (
-        "Expected sci:subCohortOf(ukb-ppp, uk-biobank) in knowledge graph "
-        "(Task 3 materialization)"
+        "Expected sci:subCohortOf(ukb-ppp, uk-biobank) in knowledge graph (Task 3 materialization)"
     )
 
     # --- Task 4 B2: exactly ONE DatasetIndependenceCommitment ---
@@ -545,18 +533,12 @@ def test_ukb_ppp_sub_cohort_lineage_commitment_end_to_end(tmp_path: Path) -> Non
 
     # sharedDataset covers both members of the lineage family
     shared_datasets = set(provenance.objects(commitment, SCI_NS.sharedDataset))
-    assert ukb_ppp_uri in shared_datasets, (
-        f"dataset:ukb-ppp missing from sharedDataset; got {shared_datasets}"
-    )
-    assert uk_biobank_uri in shared_datasets, (
-        f"dataset:uk-biobank missing from sharedDataset; got {shared_datasets}"
-    )
+    assert ukb_ppp_uri in shared_datasets, f"dataset:ukb-ppp missing from sharedDataset; got {shared_datasets}"
+    assert uk_biobank_uri in shared_datasets, f"dataset:uk-biobank missing from sharedDataset; got {shared_datasets}"
 
     # independenceGroup is a deterministic key (slug for single-dataset, hash for multi)
     groups = {str(o) for _, _, o in provenance.triples((commitment, SCI_NS.independenceGroup, None))}
-    assert len(groups) == 1, (
-        f"Expected exactly one independenceGroup on the commitment; got {groups}"
-    )
+    assert len(groups) == 1, f"Expected exactly one independenceGroup on the commitment; got {groups}"
     assert groups.pop().startswith("dataset-derived:"), (
         f"Expected independence group to start with 'dataset-derived:'; got {groups}"
     )
@@ -573,9 +555,7 @@ def test_ukb_ppp_sub_cohort_lineage_commitment_end_to_end(tmp_path: Path) -> Non
         "Both units should carry a derived independence_group from the sub-cohort "
         "commitment; found None — lineage B2 path may not be reaching the units"
     )
-    assert len(groups_on_units) == 1, (
-        f"Both units must share the same independence_group; got {groups_on_units}"
-    )
+    assert len(groups_on_units) == 1, f"Both units must share the same independence_group; got {groups_on_units}"
 
     reduced = reduce_units(units)
     assert len(reduced.kept) == 1, (
@@ -584,9 +564,7 @@ def test_ukb_ppp_sub_cohort_lineage_commitment_end_to_end(tmp_path: Path) -> Non
         f"kept={[u.line_uri for u in reduced.kept]}, "
         f"collapsed={[u.line_uri for u in reduced.collapsed]}"
     )
-    assert len(reduced.collapsed) == 1, (
-        f"Expected 1 collapsed unit; got {len(reduced.collapsed)}"
-    )
+    assert len(reduced.collapsed) == 1, f"Expected 1 collapsed unit; got {len(reduced.collapsed)}"
     assert reduced.flagged_ungrouped == [], "No units should be flagged as ungrouped"
     assert reduced.excluded_circular == [], "No units should be excluded as circular"
 
@@ -594,6 +572,7 @@ def test_ukb_ppp_sub_cohort_lineage_commitment_end_to_end(tmp_path: Path) -> Non
 # ---------------------------------------------------------------------------
 # Point 6 (original) — line-authored dataset_usage collapse (B2 headline mechanism)
 # ---------------------------------------------------------------------------
+
 
 def test_line_authored_dataset_usage_same_dataset_collapse(tmp_path: Path) -> None:
     """Two evidence-lines with dataset_usage authored DIRECTLY on the lines
@@ -657,17 +636,13 @@ def test_line_authored_dataset_usage_same_dataset_collapse(tmp_path: Path) -> No
         "Both units should carry a derived independence_group; found None — "
         "line-authored dataset_usage may not be reaching _ancestor_path"
     )
-    assert len(groups_on_units) == 1, (
-        f"Both units must share the same independence_group; got {groups_on_units}"
-    )
+    assert len(groups_on_units) == 1, f"Both units must share the same independence_group; got {groups_on_units}"
 
     reduced = reduce_units(units)
     assert len(reduced.kept) == 1, (
         f"Expected 1 kept unit after collapse of line-authored usage; got {len(reduced.kept)}. "
         f"kept={[u.line_uri for u in reduced.kept]}, collapsed={[u.line_uri for u in reduced.collapsed]}"
     )
-    assert len(reduced.collapsed) == 1, (
-        f"Expected 1 collapsed unit; got {len(reduced.collapsed)}"
-    )
+    assert len(reduced.collapsed) == 1, f"Expected 1 collapsed unit; got {len(reduced.collapsed)}"
     assert reduced.flagged_ungrouped == [], "No units should be flagged as ungrouped"
     assert reduced.excluded_circular == [], "No units should be excluded as circular"
