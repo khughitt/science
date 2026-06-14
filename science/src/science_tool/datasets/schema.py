@@ -94,3 +94,23 @@ class FieldSpec(BaseModel):
                 f"integer/number/boolean type, got {self.type!r}"
             )
         return self
+
+
+class ForeignKeyReference(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    resource: str = ""                       # "" (or absent) = self-reference
+    fields: str | list[str]
+
+
+class ForeignKey(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    fields: str | list[str]
+    reference: ForeignKeyReference
+
+    @model_validator(mode="after")
+    def _cardinality(self) -> "ForeignKey":
+        if len(_as_list(self.fields)) != len(_as_list(self.reference.fields)):
+            raise ValueError(
+                "foreignKey cardinality mismatch between fields and reference.fields"
+            )
+        return self

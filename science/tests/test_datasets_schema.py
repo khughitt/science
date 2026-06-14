@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from science_tool.datasets.schema import FieldConstraints, FieldQA, FieldSpec, MissingValue
+from science_tool.datasets.schema import FieldConstraints, FieldQA, FieldSpec, ForeignKey, MissingValue
 
 
 class TestFieldValueModels:
@@ -64,3 +64,26 @@ class TestFieldSpec:
     def test_field_extra_allowed(self) -> None:
         f = FieldSpec.model_validate({"name": "x", "title": "X", "description": "d"})
         assert f.name == "x"
+
+
+class TestForeignKey:
+    def test_single_string_form(self) -> None:
+        fk = ForeignKey.model_validate({"fields": "uniprot_id", "reference": {"resource": "proteins", "fields": "id"}})
+        assert fk.fields == "uniprot_id"
+        assert fk.reference.resource == "proteins"
+
+    def test_self_reference_default_resource(self) -> None:
+        fk = ForeignKey.model_validate({"fields": "parent_id", "reference": {"fields": "id"}})
+        assert fk.reference.resource == ""          # "" ⇒ self
+
+    def test_list_form_matched_cardinality(self) -> None:
+        fk = ForeignKey.model_validate(
+            {"fields": ["a", "b"], "reference": {"resource": "r", "fields": ["x", "y"]}}
+        )
+        assert fk.fields == ["a", "b"]
+
+    def test_cardinality_mismatch_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="cardinality"):
+            ForeignKey.model_validate(
+                {"fields": ["a", "b"], "reference": {"resource": "r", "fields": "x"}}
+            )
