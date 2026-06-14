@@ -9,7 +9,7 @@ Paths are package directories relative to each project root. No pushes — all c
 |---|---|---|---|---|---|
 | data/external/ccle_proteomics/2020-01 | json | 2 | done | done | P1 5a32847d; P2 9e5002c8 — composite PK [Protein_Id,ccle_code] + FK ccle_code→cell-lines; assay-cohort enums |
 | data/external/ctrp_v2/2015 | json | 3 | done | done | P1 5e368dd2; P2 194a92b8 — integer PKs on both lookups + 2 FKs from sensitivity-long; CCLE site/histology enums |
-| data/external/gdsc_v2/2022-07-24 | json | 3 | done | done | P1 65edc4d3; P2 cc7e77ed — curve/cell-line PKs + cosmic_id FK; **single-value enums on dataset/webrelease (borderline, flagged)** |
+| data/external/gdsc_v2/2022-07-24 | json | 3 | done | done | P1 65edc4d3; P2 cc7e77ed — curve/cell-line PKs + cosmic_id FK; single-value enums on dataset/webrelease trimmed b876a573 (required kept) |
 | data/external/oetjen_2018/2018-10 | json | 1 | done | done | P2 56fb7984 — **first git-tracking of descriptor** (removed oetjen descriptor-ignore .gitignore line; data file stays ignored); donor_id PK |
 | data/external/opentargets/25.03 | json | 3 | done | done | P1 a082d175; P2 6d46a12a — assoc/tractability PKs + FK; EFO/MONDO disease + drug-type enums |
 | data/external/walker_2024/2024-05 | json | 6 | done | done | P1 d66028e6; P2 8b737283 — 4 present resources (cell_barcode/symbol PKs, 2 FKs, 28/166 required); **4 absent resources** (2 parquet + 14GB h5ad + qc-report json) stay blocked-data |
@@ -83,9 +83,9 @@ Per-package done-gate met: `validate --path` exit 0 for fully-present packages; 
 blocked ones (walker_2024, dgidb) the ONLY gate failures are the manifest-recorded absent data files
 (S3 json check), with zero failures on any present resource.
 
-**Two judgment calls flagged for spot-check:**
-- **gdsc_v2** authored single-value enums on `dataset={GDSC2}` / `webrelease={Y}` (constant-column
-  assertions — true but brittle vs future re-pulls; ccle rejected an analogous single-value enum).
+**Two judgment calls (spot-checked by user 2026-06-14):**
+- **gdsc_v2** single-value enums on `dataset={GDSC2}` / `webrelease={Y}` — **RESOLVED: trimmed**
+  (b876a573); `required` kept. User chose the conservative standard.
 - **oetjen_2018**: its descriptor was previously gitignored (an oetjen-specific descriptor-ignore
   line peers lacked), so Phase 1's no-op never tracked it. P2 commit removed that one .gitignore line
   (data file still ignored) → first git-tracking. Consistent with the cancer-therapeutics descriptor
