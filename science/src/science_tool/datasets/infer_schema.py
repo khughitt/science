@@ -27,6 +27,20 @@ _DESCRIPTOR_NAMES = ("datapackage.json", "datapackage.yaml", "datapackage.yml")
 _FMT_BY_SUFFIX = {".json": "json", ".yaml": "yaml", ".yml": "yaml"}
 
 
+class _RoundTripSafeLoader(yaml.SafeLoader):
+    """SafeLoader with the implicit *timestamp* resolver removed, so an unquoted ISO-8601
+    value (e.g. ``provenance.retrieved``) loads as a plain ``str`` and round-trips faithfully
+    through load→dump instead of being coerced to ``datetime`` (which drops the ``T`` separator
+    and changes the type). Other implicit scalars (int/float/bool/null) resolve normally —
+    they round-trip without loss."""
+
+
+_RoundTripSafeLoader.yaml_implicit_resolvers = {
+    ch: [(tag, regexp) for tag, regexp in resolvers if tag != "tag:yaml.org,2002:timestamp"]
+    for ch, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+
+
 class InferSchemaError(Exception):
     """Any user-facing infer-schema failure (the CLI maps it to a clean error exit)."""
 
@@ -56,7 +70,7 @@ def load_descriptor(path: Path) -> tuple[dict, str]:
     except OSError as exc:
         raise InferSchemaError(f"cannot read descriptor {path}: {exc}") from exc
     try:
-        mapping = json.loads(text) if fmt == "json" else yaml.safe_load(text)
+        mapping = json.loads(text) if fmt == "json" else yaml.load(text, Loader=_RoundTripSafeLoader)
     except (json.JSONDecodeError, yaml.YAMLError) as exc:
         raise InferSchemaError(f"malformed {fmt} descriptor {path}: {exc}") from exc
     if not isinstance(mapping, dict):

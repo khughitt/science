@@ -349,6 +349,51 @@ def test_write_patch_yaml_roundtrips(tmp_path: Path) -> None:
     assert {f["name"] for f in written["resources"][0]["schema"]["fields"]} == {"id", "val"}
 
 
+def test_yaml_timestamp_loads_as_string(tmp_path: Path) -> None:
+    from science_tool.datasets import infer_schema as ix
+    d = tmp_path / "pkg"
+    d.mkdir()
+    (d / "datapackage.yaml").write_text(
+        "name: p\n"
+        "provenance:\n"
+        "- action: fetch\n"
+        "  retrieved: 2026-05-31T13:20:44.428732+00:00\n"
+        "resources: []\n"
+    )
+    mapping, fmt = ix.load_descriptor(d)
+    assert fmt == "yaml"
+    val = mapping["provenance"][0]["retrieved"]
+    assert isinstance(val, str)
+    assert val == "2026-05-31T13:20:44.428732+00:00"
+
+
+def test_yaml_timestamp_round_trips_through_dump(tmp_path: Path) -> None:
+    from science_tool.datasets import infer_schema as ix
+    d = tmp_path / "pkg"
+    d.mkdir()
+    p = d / "datapackage.yaml"
+    p.write_text(
+        "name: p\n"
+        "provenance:\n"
+        "- retrieved: 2026-05-31T13:20:44.428732+00:00\n"
+        "resources: []\n"
+    )
+    mapping, fmt = ix.load_descriptor(d)
+    ix.dump_descriptor(mapping, p, fmt)
+    reloaded, _ = ix.load_descriptor(d)
+    assert reloaded["provenance"][0]["retrieved"] == "2026-05-31T13:20:44.428732+00:00"
+
+
+def test_yaml_integers_still_resolve(tmp_path: Path) -> None:
+    # the loader change must NOT turn numbers into strings
+    from science_tool.datasets import infer_schema as ix
+    d = tmp_path / "pkg"
+    d.mkdir()
+    (d / "datapackage.yaml").write_text("name: p\nbytes: 6263907\nresources: []\n")
+    mapping, _ = ix.load_descriptor(d)
+    assert mapping["bytes"] == 6263907 and isinstance(mapping["bytes"], int)
+
+
 def test_write_patch_validates_external_foreign_key(tmp_path: Path) -> None:
     # resource B has an FK into A; writing A's inferred schema must keep the package valid
     (tmp_path / "a.csv").write_text("aid\nX\nY\n")
