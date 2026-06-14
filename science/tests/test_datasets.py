@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from science_tool.datasets._base import DatasetResult, FileInfo
+from science_tool.datasets.arrayexpress import ArrayExpressAdapter
 from science_tool.datasets.dryad import DryadAdapter
 from science_tool.datasets.figshare import FigshareAdapter
 from science_tool.datasets.geo import GEOAdapter
@@ -745,3 +746,69 @@ class TestFigshareAdapter:
         adapter = FigshareAdapter()
         with pytest.raises(ValueError):
             adapter.download(FileInfo(filename="x.csv", url=""), Path("/tmp/figshare-test"))
+
+
+class TestArrayExpressAdapter:
+    def test_name(self) -> None:
+        assert ArrayExpressAdapter().name == "arrayexpress"
+
+    def test_search_parses_hits(self) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "hits": [
+                {"accession": "E-MTAB-1724", "title": "Circadian blood", "release_date": "2015-03-10"},
+            ]
+        }
+        adapter = ArrayExpressAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            results = adapter.search("circadian", max_results=5)
+        assert len(results) == 1
+        r = results[0]
+        assert r.source == "arrayexpress"
+        assert r.id == "E-MTAB-1724"
+        assert r.title == "Circadian blood"
+        assert r.year == 2015
+        assert r.access == "public"
+
+    def test_metadata_parses_section_attributes(self) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "accession": "E-MTAB-1724",
+            "section": {
+                "attributes": [
+                    {"name": "Title", "value": "Circadian blood"},
+                    {"name": "Organism", "value": "Homo sapiens"},
+                    {"name": "Study type", "value": "transcription profiling by array"},
+                ],
+                "files": [{"path": "data.txt", "size": 100}],
+            },
+        }
+        adapter = ArrayExpressAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            r = adapter.metadata("E-MTAB-1724")
+        assert r.title == "Circadian blood"
+        assert r.organism == "Homo sapiens"
+        assert r.modality == "transcription profiling by array"
+        assert r.file_count == 1
+
+    def test_files_flattens_nested_lists(self) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "accession": "E-MTAB-1724",
+            "section": {
+                "files": [
+                    {"path": "a.txt", "size": 10},
+                    [{"path": "sub/b.cel", "size": 20}],
+                ]
+            },
+        }
+        adapter = ArrayExpressAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            files = adapter.files("E-MTAB-1724")
+        assert {f.filename for f in files} == {"a.txt", "sub/b.cel"}
+        b = next(f for f in files if f.filename == "sub/b.cel")
+        assert b.url == "https://www.ebi.ac.uk/biostudies/files/E-MTAB-1724/sub/b.cel"
+        assert b.format == "cel"
