@@ -7,32 +7,32 @@ Paths are package directories relative to each project root. No pushes — all c
 
 | Package | Fmt | Tabular | Phase 1 (shape) | Phase 2 (meaning) | Notes |
 |---|---|---|---|---|---|
-| data/external/ccle_proteomics/2020-01 | json | 2 | done | pending | commit 5a32847d |
-| data/external/ctrp_v2/2015 | json | 3 | done | pending | commit 5e368dd2 |
-| data/external/gdsc_v2/2022-07-24 | json | 3 | done | pending | commit 65edc4d3 |
-| data/external/oetjen_2018/2018-10 | json | 1 | done | pending | schema pre-existed (write a no-op); 2 non-tabular files absent |
-| data/external/opentargets/25.03 | json | 3 | done | pending | commit a082d175 |
-| data/external/walker_2024/2024-05 | json | 6 | done | pending | commit d66028e6 — 4 present tabular schema'd; 4 files absent locally stay blocked-data |
+| data/external/ccle_proteomics/2020-01 | json | 2 | done | done | P1 5a32847d; P2 9e5002c8 — composite PK [Protein_Id,ccle_code] + FK ccle_code→cell-lines; assay-cohort enums |
+| data/external/ctrp_v2/2015 | json | 3 | done | done | P1 5e368dd2; P2 194a92b8 — integer PKs on both lookups + 2 FKs from sensitivity-long; CCLE site/histology enums |
+| data/external/gdsc_v2/2022-07-24 | json | 3 | done | done | P1 65edc4d3; P2 cc7e77ed — curve/cell-line PKs + cosmic_id FK; **single-value enums on dataset/webrelease (borderline, flagged)** |
+| data/external/oetjen_2018/2018-10 | json | 1 | done | done | P2 56fb7984 — **first git-tracking of descriptor** (removed oetjen descriptor-ignore .gitignore line; data file stays ignored); donor_id PK |
+| data/external/opentargets/25.03 | json | 3 | done | done | P1 a082d175; P2 6d46a12a — assoc/tractability PKs + FK; EFO/MONDO disease + drug-type enums |
+| data/external/walker_2024/2024-05 | json | 6 | done | done | P1 d66028e6; P2 8b737283 — 4 present resources (cell_barcode/symbol PKs, 2 FKs, 28/166 required); **4 absent resources** (2 parquet + 14GB h5ad + qc-report json) stay blocked-data |
 
 ## cancer-therapeutics  [~/d/cancer/therapeutics]  — all YAML
 
 | Package | Fmt | Tabular | Phase 1 (shape) | Phase 2 (meaning) | Notes |
 |---|---|---|---|---|---|
-| data/raw/chembl-activities | yaml | 1 | done | pending | commit 3879ab4 — **newly git-tracked** (force-add past data/raw/ ignore) |
-| data/raw/chembl | yaml | 1 | done | pending | commit 7084e12 |
-| data/raw/dgidb | yaml | 2 | done | pending | commit 13f52fc — 1 resource blocked-data (../../processed absent) |
-| data/raw/drugcomb | yaml | 1 | done | pending | commit 118c233 |
+| data/raw/chembl-activities | yaml | 1 | done | done | P1 3879ab4 (git-tracked via .gitignore exception); P2 42e50281 — composite PK [chembl_id,gene_symbol] |
+| data/raw/chembl | yaml | 1 | done | done | P1 7084e12; P2 8bcc356 — 5 required; no PK (drug×target non-unique) |
+| data/raw/dgidb | yaml | 2 | done | done | P1 13f52fc; P2 ce4f9fd — raw-table required+enums, no PK; 1 resource blocked-data (../../processed parquet absent) |
+| data/raw/drugcomb | yaml | 1 | done | done | P1 118c233; P2 313a7bd — composite PK [block_id,conc_r,conc_c]; 23-value study_name enum |
 | data/raw/nci-almanac | yaml | 0 | no-op | no-op | no tabular resources |
-| data/raw/nsc-crosswalk | yaml | 1 | done | pending | commit 5fb915b |
-| data/raw/opentargets | yaml | 1 | done | pending | commit de6b855 — **newly git-tracked** (force-add past data/raw/ ignore) |
+| data/raw/nsc-crosswalk | yaml | 1 | done | done | P1 5fb915b; re-inferred 0e83835 (fetch-script regen stripped schema); P2 a2e1921 — PK [nsc]; map_status enum [ambiguous,mapped,unmapped] |
+| data/raw/opentargets | yaml | 1 | done | done | P1 de6b855 (git-tracked via .gitignore exception); P2 39bc5ef — composite PK [drug_chembl_id,target_gene_symbol]; 29-value action_type enum |
 | data/raw/string | yaml | 0 | no-op | no-op | no tabular resources |
 
 ## cancer-evolution  [~/d/cancer/mechanisms/evolution]
 
 | Package | Fmt | Tabular | Phase 1 (shape) | Phase 2 (meaning) | Notes |
 |---|---|---|---|---|---|
-| data/raw/ampliconrepository-kim2024-pcawg | json | 9 | done | pending | commit 061b1d0 |
-| data/raw/ampliconrepository-kim2024-tcga | json | 9 | done | pending | commit 141174c |
+| data/raw/ampliconrepository-kim2024-pcawg | json | 9 | done | done | P1 061b1d0; P2 9ce468c — 9-table grains, single+composite PKs, subset-verified FKs; rejected 3 false FKs; headerless ecDNA_context_calls flagged |
+| data/raw/ampliconrepository-kim2024-tcga | json | 9 | done | done | P1 141174c; P2 6e99379 — mirror of pcawg; PKs + 9 subset-verified FKs; rejected NA-placeholder FKs |
 | data/raw/kim2024-supplement | json | 0 | no-op | no-op | no tabular resources |
 | data/raw/nct02415621-trial-patient-data | json | 0 | no-op | no-op | no tabular resources |
 
@@ -69,9 +69,29 @@ time); its data file (`../../processed/a2/nsc_crosswalk.tsv`) remains transientl
 re-sync. Before Phase 2 runs, confirm each package's data files are present (the meaning-authoring
 needs to read them); re-verify repo branch before any commit (mm30 especially).
 
-## Next: Phase 2 (paused before)
+## Phase 2 status — COMPLETE (2026-06-14)
 
-Structural-meaning authoring (required/enum/primaryKey + relational foreignKeys/composite keys,
-two-tier evidence rule), subagent per package + over-authoring review + user spot-check, across
-all `done` packages. Per-package done-gate = validate exit 0 (partial walker/dgidb/oetjen = fails
-only name manifest-recorded absent resources, S3 json check).
+All 14 effective-working-set packages have authored structural meaning (one subagent per package,
+two-tier evidence rule, over-authoring review). Each authored invariant was verified against the
+FULL data, not a sample — the discipline caught real traps: a 138-column required set rejected in
+walker (sample said non-null, full data had 35k nulls); Description/drug_name-as-PK rejected
+repeatedly; three false FKs in amplicon-pcawg and the NA-placeholder FKs in amplicon-tcga rejected
+on exact subset miss. Relational invariants (PKs + subset-verified FKs) authored where the data
+proved them; per-resource invariants only where the report surfaced AND data confirmed.
+
+Per-package done-gate met: `validate --path` exit 0 for fully-present packages; for the partially-
+blocked ones (walker_2024, dgidb) the ONLY gate failures are the manifest-recorded absent data files
+(S3 json check), with zero failures on any present resource.
+
+**Two judgment calls flagged for spot-check:**
+- **gdsc_v2** authored single-value enums on `dataset={GDSC2}` / `webrelease={Y}` (constant-column
+  assertions — true but brittle vs future re-pulls; ccle rejected an analogous single-value enum).
+- **oetjen_2018**: its descriptor was previously gitignored (an oetjen-specific descriptor-ignore
+  line peers lacked), so Phase 1's no-op never tracked it. P2 commit removed that one .gitignore line
+  (data file still ignored) → first git-tracking. Consistent with the cancer-therapeutics descriptor
+  exception chosen earlier.
+
+**Volatility note:** nsc-crosswalk's descriptor is regenerated by `fetch_nsc_crosswalk.py`, which
+strips the `schema` block on each run (it stripped P1's; re-inferred at 0e83835 before P2). Authored
+schema there is durable only until the next fetch re-run — making the generator preserve/emit schema
+is future work, out of this campaign's scope.
