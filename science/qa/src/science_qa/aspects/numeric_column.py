@@ -91,10 +91,10 @@ def bounds(ctx: TableContext, params: dict) -> list[Flag]:
     numeric = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in spec.values())
     raw = ctx.table[col]
     if numeric:
-        series = pd.to_numeric(raw, errors="coerce")
+        series = cast("pd.Series", pd.to_numeric(raw, errors="coerce"))
         cmp_spec = dict(spec)
     else:
-        series = pd.to_datetime(raw, errors="coerce")
+        series = cast("pd.Series", pd.to_datetime(raw, errors="coerce"))
         cmp_spec = {k: pd.Timestamp(v) for k, v in spec.items()}
     if len(raw) and series.isna().all():
         raise ValueError(f"numeric-column/bounds: column {col!r} cannot be coerced for bounds {spec}")
