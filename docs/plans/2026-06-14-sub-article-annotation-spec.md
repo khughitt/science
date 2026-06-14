@@ -5,7 +5,9 @@
   vocab, annotationType registration; round 2: JSON body encoding, content_hash
   semantics, character-offset; round 3: license whitelist + fail-early & cited PMC
   terms, single-body entity mentions, per-source `sci:sourceTextHash` short-circuit,
-  raw-offset basis + slice-verify/fail-early — NFC dropped as offset-unsafe)
+  raw-offset basis + slice-verify/fail-early — NFC dropped as offset-unsafe;
+  round 4: versioned `source` identities (`seeder-vN`/`paper-annotate-vN`), kebab
+  `entity-<type>` annotation types)
   → ready for implementation plan
 - **Scope:** Extend `science`'s existing W3C annotation system to capture rich,
   semantic, sub-article (word / phrase / sentence) annotations of research
@@ -149,11 +151,11 @@ to quotes through an explicit map. Policy:
 2. **PubTator3 seeder** (deterministic CLI, e.g. `science paper annotate-pubtator
    <pmid|doi>`). Query the PubTator3 BioC API
    (https://www.ncbi.nlm.nih.gov/research/pubtator3/api). PubMed-only by design
-   (graceful no-op for non-PubMed articles). `source = "pubtator3:<release>"`.
+   (graceful no-op for non-PubMed articles). `source = "pubtator3:<release>:seeder-v1"` (the `seeder-vN` segment invalidates cached rows when the seeder mapping/normalization logic changes — see *Dedup*).
    Two annotation shapes, both span-anchored (the model's `SpecificResource`
    **requires** a `TextQuoteSelector`, so every target is a span):
    - **Entity mentions.** Target = the mention span, converted via the offset map
-     above. `annotation_type` = the Biolink class (e.g. `biolink:Gene`); the single
+     above. `annotation_type` = `entity-<pubtator_type>` (kebab, e.g. `entity-gene` — consistent with existing values like `bare-author-year`, NOT a CURIE), and the Biolink class is derived from the type via the documented map; the single
      body is `IriBody(<normalized concept IRI>)` (see *Body encoding* — the
      `merge_planned` pipeline emits exactly one body per row).
    - **Relations.** A PubTator relation links two entity mentions and has no quote
@@ -167,7 +169,7 @@ to quotes through an explicit map. Policy:
 3. **Agent extraction skill** (`paper-annotate`). Reads `.source.md` + existing
    PubTator annotations; extracts **propositions / questions / hypotheses** and
    **metaphors / analogies** as span annotations with JSON bodies (see *Body
-   encoding*). `source = "llm-annot:<model>"`; idempotent via per-annotation
+   encoding*). `source = "llm-annot:<model>:paper-annotate-v1"` (the `paper-annotate-vN` segment bumps when the prompt/JSON schema changes — see *Dedup*); idempotent via per-annotation
    `content_hash` + the document-level `text_sha256` short-circuit (see *Dedup*).
    May extend or compose with the existing `paper-researcher` agent.
 
@@ -219,8 +221,8 @@ license whitelist, fail-early:
 ### Vocabulary registration
 
 `annotation_type` is a free `str` on the model today (`annotation/model.py`), with
-no enum or registry. The new values (`proposition` / `question` / `hypothesis` /
-`metaphor` / `analogy`) and the two new `source` prefixes are registered as
+no enum or registry. The new values (the six kebab `entity-<pubtator_type>` types — `entity-gene` / `entity-disease` / `entity-chemical` / `entity-variant` / `entity-species` / `entity-cellline` — plus `relation`, `proposition` / `question` / `hypothesis` /
+`metaphor` / `analogy`) and the two new **versioned** `source` prefixes, plus the `entity-<type>`→Biolink-class map, are registered as
 controlled vocabulary in **`docs/conventions/annotation-tokens.md`** (the actual
 conventions file — the older annotation spec's reference to
 `docs/conventions/annotations.md` is stale; that file does not exist and should be
@@ -238,7 +240,7 @@ annotation may carry several). The "structured bodies" this spec needs are encod
 within that existing machinery — **no model change**:
 
 - **Entity mentions.** A single `IriBody(<concept IRI>)` for the normalized concept
-  ID; the Biolink class goes in `annotation_type` (not a second body), keeping the
+  ID; `annotation_type` is `entity-<pubtator_type>` (kebab) and the Biolink class is derived from that type via the documented map (not a second body), keeping the
   row within the one-body `PlannedAnnotation` / `merge_planned` path.
 - **Relations / statements / metaphors–analogies.** A single
   `TextualBody(value=<json>, format="application/json")` carrying a per-type JSON
@@ -260,14 +262,14 @@ within that existing machinery — **no model change**:
   `(source, exact, lifted_from, match_text)` (`annotation/audit.py::_annotation_tuple`)
   plus `content_hash` re-audit caching. The two new source prefixes must be
   specified against that machinery:
-  - **`pubtator3:<release>`** — `<release>` is the PubTator3 data release string
+  - **`pubtator3:<release>:seeder-vN`** — `<release>` is the PubTator3 data release string
     read from the BioC response metadata (fallback to a pinned API-version
-    constant when absent). `match_text` = the exact mention text for entity
+    constant when absent); `seeder-vN` is the local seeder version, bumped when the offset-mapping or concept-normalization logic changes so cached rows invalidate. `match_text` = the exact mention text for entity
     annotations; for relations, the concatenation `"<subj_id>|<predicate>|<obj_id>"`
     (so two relations over the same evidence span but different predicates do not
     collide).
-  - **`llm-annot:<model>`** — `<model>` is the exact model id (e.g.
-    `claude-opus-4-8`). `match_text` = the extracted statement/figure's normalized
+  - **`llm-annot:<model>:paper-annotate-vN`** — `<model>` is the exact model id (e.g.
+    `claude-opus-4-8`); `paper-annotate-vN` bumps when the extraction prompt or per-type JSON schema changes. `match_text` = the extracted statement/figure's normalized
     text.
   - **Hash-required / re-audit cache.** Both prefixes JOIN
     `HASH_REQUIRED_SOURCE_PREFIXES` (`annotation/model.py`), meaning their
@@ -276,8 +278,8 @@ within that existing machinery — **no model change**:
     `content_hash(selector.exact, source_version)` (`annotation/hash.py`), assigned
     in `merge_planned` as `content_hash(p.target.selector.exact, p.source_name)`
     (`annotation/audit.py`); **this spec does not change that function.** Here
-    `source_version` is the source identity (`pubtator3:<release>` /
-    `llm-annot:<model>`), so a re-run at the same release/model re-derives identical
+    `source_version` is the full versioned source identity (`pubtator3:<release>:seeder-vN` /
+    `llm-annot:<model>:paper-annotate-vN`), so a re-run at the same release/model+version re-derives identical
     hashes and the ledger skips already-audited annotations — per-annotation
     idempotency, no document hash involved.
   - **Document-level short-circuit (separate, new).** Before re-querying /
@@ -286,7 +288,7 @@ within that existing machinery — **no model change**:
     when unchanged. The last-run value is stored **per source on the existing
     per-source `sci:AuditLedger`** (in the sidecar `.source.anno.trig`) via a new
     `sci:sourceTextHash` field: the ledger already carries `sci:source` +
-    `sci:auditedHashes`, so `pubtator3:<release>` and `llm-annot:<model>` each
+    `sci:auditedHashes`, so `pubtator3:<release>:seeder-vN` and `llm-annot:<model>:paper-annotate-vN` each
     record their own last-seen source-text hash and short-circuit independently.
     (The `.source.md` frontmatter `text_sha256` remains the document's *current*
     hash / provenance; the ledger holds the *last-processed* hash per source.) This
@@ -335,7 +337,7 @@ Each phase is independently shippable.
 - JSON body round-trip: `TextualBody(format="application/json")` serialize → parse →
   equal, and per-type schema validation rejects malformed bodies.
 - Idempotency at both layers: per-annotation `content_hash` skip on re-run at the
-  same `source_version`, and the document-level `text_sha256` short-circuit skipping
+  same `source_version`, cache invalidation when the `seeder-vN` / `paper-annotate-vN` segment bumps, and the document-level `text_sha256` short-circuit skipping
   an unchanged `.source.md` before any API/agent call.
 - Identifier → paper-entity resolution: no-match and multi-match both fail loud.
 - License gating: a whitelisted license persists full text; unknown / absent /
