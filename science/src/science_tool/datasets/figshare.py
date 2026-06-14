@@ -39,6 +39,8 @@ class FigshareAdapter:
         return [self._parse_file(f) for f in resp.json().get("files", [])]
 
     def download(self, file_info: FileInfo, dest_dir: Path) -> Path:
+        if not file_info.url:
+            raise ValueError(f"figshare file has no download URL: {file_info.filename}")
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest = dest_dir / file_info.filename
         with self._client.stream("GET", file_info.url) as resp:
@@ -49,7 +51,12 @@ class FigshareAdapter:
         return dest
 
     def _year(self, published: str) -> int | None:
-        return int(published[:4]) if published and len(published) >= 4 else None
+        if not published or len(published) < 4:
+            return None
+        try:
+            return int(published[:4])
+        except ValueError:
+            return None
 
     def _parse_summary(self, data: dict) -> DatasetResult:  # type: ignore[type-arg]
         return DatasetResult(
@@ -66,7 +73,7 @@ class FigshareAdapter:
         files = data.get("files", [])
         license_info = data.get("license")
         license_name = license_info.get("name") if isinstance(license_info, dict) else None
-        total_size = sum(f.get("size", 0) for f in files) if files else None
+        total_size = sum(f.get("size") or 0 for f in files) if files else None
         return DatasetResult(
             source="figshare",
             id=str(data["id"]),

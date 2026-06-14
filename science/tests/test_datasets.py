@@ -696,6 +696,10 @@ class TestFigshareAdapter:
         assert r.keywords == ["glucose", "cgm"]
         assert r.file_count == 1
         assert r.total_size_bytes == 2048
+        assert r.description == "Continuous glucose monitoring"
+        assert r.doi == "10.6084/m9.figshare.123"
+        assert r.year == 2023
+        assert r.url == "https://figshare.com/articles/123"
 
     def test_files_parses_download_urls(self) -> None:
         mock_response = MagicMock()
@@ -714,3 +718,30 @@ class TestFigshareAdapter:
         assert files[0].url == "https://ndownloader.figshare.com/files/1"
         assert files[0].checksum == "abc"
         assert files[0].format == "csv"
+
+    def test_year_handles_malformed_date(self) -> None:
+        adapter = FigshareAdapter()
+        assert adapter._year("N/A ") is None
+        assert adapter._year("") is None
+
+    def test_metadata_tolerates_null_file_size(self) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "id": 1,
+            "title": "T",
+            "published_date": "2024-01-01T00:00:00Z",
+            "files": [{"name": "a.csv", "size": None}, {"name": "b.csv", "size": 10}],
+        }
+        adapter = FigshareAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            r = adapter.metadata("1")
+        assert r.total_size_bytes == 10
+        assert r.file_count == 2
+
+    def test_download_without_url_raises(self) -> None:
+        from pathlib import Path
+
+        adapter = FigshareAdapter()
+        with pytest.raises(ValueError):
+            adapter.download(FileInfo(filename="x.csv", url=""), Path("/tmp/figshare-test"))
