@@ -12,7 +12,7 @@ Paths are package directories relative to each project root. No pushes — all c
 | data/external/gdsc_v2/2022-07-24 | json | 3 | pending | pending | |
 | data/external/oetjen_2018/2018-10 | json | 1 | pending | pending | |
 | data/external/opentargets/25.03 | json | 3 | pending | pending | |
-| data/external/walker_2024/2024-05 | json | 6 | pending | pending | 2 resources blocked-data (parquet absent) |
+| data/external/walker_2024/2024-05 | json | 6 | pending | pending | 4 resources data-absent locally: 2 parquet (cytogenetic_calls, functional_groups) + h5ad + qc_report.json — gate will fail on all four |
 
 ## cancer-therapeutics  [~/d/cancer/therapeutics]
 
