@@ -73,6 +73,12 @@ science datasets search "<query>" --source cbioportal --format json
 Adapters cover Zenodo, NCBI GEO, Dryad, Semantic Scholar, the public cBioPortal
 study catalog, figshare, ArrayExpress (EBI BioStudies), PhysioNet, and NCBI SRA.
 
+**Search quality:** Results are ranked by lexical relevance to the query (title
+weighted over keywords over description) and deduped across sources by DOI,
+keeping the most relevant / metadata-complete copy. The result table shows
+modality and organism; `--format json` additionally carries `sample_count`. Pass
+distinct query terms — ranking is lexical token overlap, not semantic.
+
 **Access tiers:** PhysioNet and SRA report an access tier on each result —
 `public` (freely downloadable), `restricted` (self-serve DUA/login), or
 `controlled` (application/approval required). PhysioNet `restricted`/`credentialed`
