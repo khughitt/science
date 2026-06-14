@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Deliver a `science paper persist-source <pmid|doi>` CLI command that resolves an identifier to an existing paper entity, acquires the article text (PubTator3 BioC abstract preferred, Europe PMC abstract fallback), license-gates full-text persistence, and writes a `<citekey>.source.md` artifact next to the paper entity containing the abstract (always), the full text (only when the license is whitelisted), a verifiable per-passage character-offset map, and provenance frontmatter (`retrieved_from`, `license`, `text_sha256`, `pmid`/`doi`, `fulltext_omitted_reason`). This is the *anchor surface* the later seeder/agent/promotion phases consume — and it must round-trip and ship on its own with zero dependency on annotations.
+**Goal:** Deliver a `science paper persist-source <pmid|doi>` CLI command that resolves an identifier to an existing paper entity, acquires the article text (PubTator3 BioC abstract preferred, Europe PMC abstract fallback), license-gates full-text persistence, and writes a `<citekey>.source.md` artifact next to the paper entity containing the abstract (always), the full text (best-effort — when the PubTator3 BioC record supplies body passages **and** the license is whitelisted), a verifiable per-passage character-offset map, and provenance frontmatter (`retrieved_from`, `source_release`, `license`, `text_sha256`, `pmid`/`doi`, `fulltext_omitted_reason`). This is the *anchor surface* the later seeder/agent/promotion phases consume — and it must round-trip and ship on its own with zero dependency on annotations.
 
 **Architecture:** A new focused module `science/src/science_tool/annotation/source_text.py` holds the pure, testable core (identifier→entity resolver, license resolution/whitelist, BioC parsing into passages, offset-map construction + slice-verification, and the `.source.md` renderer). Network I/O reuses `paper_fetch.py`'s injectable-`httpx.Client` + `RateLimiter` + `FetchConfig` pattern exactly (so tests use `httpx.MockTransport`). A thin `persist-source` Click command in `cli.py` wires resolver → acquisition → license gate → writer, mirroring `paper-fetch`. The module lives under `annotation/` because the offset map it produces is consumed by the Phase-2 annotation seeder/verifier and the `oa:TextQuoteSelector` machinery in `annotation/verify.py` / `annotation/selector.py`; placing it there keeps the anchor-surface logic beside its only consumers and keeps `paper_fetch.py` (already ~1000 lines, tier-orchestration focused) from bloating.
 
@@ -28,7 +28,7 @@
 | `science/tests/test_source_text.py` | **New.** Unit + integration tests for every function above; `MockTransport` for network, `tmp_path` for filesystem. Mirrors `test_paper_fetch.py` idioms (`_make_client`, `_cfg`). | 1–6 |
 | `science/src/science_tool/cli.py` (modify, after `paper_fetch_cmd` at ~4600) | **New `persist-source` command** wiring resolver → acquisition → license gate → writer; mirrors `paper-fetch` option/`FetchConfig`/email pattern. | 7 |
 | `science/tests/test_cli_persist_source.py` | **New.** `CliRunner` end-to-end test of `persist-source` with `tmp_path` project + `MockTransport` (injected via a seam). | 7 |
-| `docs/conventions/annotation-tokens.md` | **New (minimal, Phase-1 slice only).** Records the full-text **license whitelist** as controlled vocabulary. (Annotation-type / source-prefix vocab is Phase 2+; only the license whitelist is in scope here.) | 3 |
+| `docs/conventions/annotation-tokens.md` | **Modify (append).** File already exists (marker-token conventions). Append a full-text **license whitelist** section. | 3 |
 | `science/src/science_tool/graph/storage_adapters/markdown.py` (modify, `discover` ~27-42) | Exclude `*.source.md` sidecars from entity ingestion (they live inside entity roots but are not entities). | 8 |
 
 ---
@@ -84,13 +84,23 @@ class TestResolvePaperEntity:
     def test_resolves_by_doi_case_insensitive(self, tmp_path: Path) -> None:
         path = _write_paper(tmp_path, "Smith2024", doi="10.1038/Foo-1")
         resolved = resolve_paper_entity(tmp_path, doi="https://doi.org/10.1038/foo-1", pmid=None)
-        assert resolved == ResolvedPaper(citekey="Smith2024", path=path, directory=path.parent)
+        assert resolved == ResolvedPaper(
+            citekey="Smith2024", path=path, directory=path.parent, doi="10.1038/foo-1", pmid=None
+        )
 
     def test_resolves_by_pmid(self, tmp_path: Path) -> None:
         path = _write_paper(tmp_path, "Jones2025", pmid="123456")
         resolved = resolve_paper_entity(tmp_path, doi=None, pmid="123456")
         assert resolved.citekey == "Jones2025"
         assert resolved.path == path
+
+    def test_carries_entity_pmid_when_resolved_by_doi(self, tmp_path: Path) -> None:
+        # Core of the resolver→acquisition contract: a DOI-invoked resolve still
+        # surfaces the entity's PMID, so acquisition can prefer PubTator.
+        _write_paper(tmp_path, "Smith2024", doi="10.1038/foo-1", pmid="123456")
+        resolved = resolve_paper_entity(tmp_path, doi="10.1038/foo-1", pmid=None)
+        assert resolved.doi == "10.1038/foo-1"
+        assert resolved.pmid == "123456"
 
     def test_no_match_fails_loud(self, tmp_path: Path) -> None:
         _write_paper(tmp_path, "Smith2024", doi="10.1038/foo-1")
@@ -156,6 +166,8 @@ class ResolvedPaper:
     citekey: str
     path: Path
     directory: Path
+    doi: str | None  # normalized doi from the entity frontmatter (may differ from the input)
+    pmid: str | None  # normalized pmid from the entity frontmatter
 
 
 def _papers_root(project_root: Path) -> Path:
@@ -181,7 +193,9 @@ def resolve_paper_entity(
         )
 
     root = _papers_root(project_root)
-    matches: list[Path] = []
+    # Each match carries the entity's own normalized identifiers so acquisition can
+    # use the entity's PMID even when the user invoked persist-source with a DOI.
+    matches: list[tuple[Path, str | None, str | None]] = []
     if root.is_dir():
         for path in sorted(root.glob("*.md")):
             if any(path.name.endswith(sfx) for sfx in _SIDECAR_SUFFIXES):
@@ -192,7 +206,7 @@ def resolve_paper_entity(
             if (want_doi and entity_doi == want_doi) or (
                 want_pmid and entity_pmid == want_pmid
             ):
-                matches.append(path)
+                matches.append((path, entity_doi, entity_pmid))
 
     ident = want_doi or want_pmid
     if not matches:
@@ -201,13 +215,15 @@ def resolve_paper_entity(
             "run `science paper-fetch` and create the paper entity first."
         )
     if len(matches) > 1:
-        named = ", ".join(str(p) for p in matches)
+        named = ", ".join(str(p) for p, _d, _p in matches)
         raise SourceTextError(
             f"multiple paper entities claim doi/pmid {ident!r}: {named}. "
             "This is a data error; fix the duplicate before persisting source text."
         )
-    path = matches[0]
-    return ResolvedPaper(citekey=path.stem, path=path, directory=path.parent)
+    path, entity_doi, entity_pmid = matches[0]
+    return ResolvedPaper(
+        citekey=path.stem, path=path, directory=path.parent, doi=entity_doi, pmid=entity_pmid
+    )
 
 
 def _as_str(value: Any) -> str | None:
@@ -376,12 +392,12 @@ def parse_bioc_passages(record: dict[str, Any]) -> SourcePassages | None:
 
 ## Task 3 — License resolution + whitelist (and conventions doc)
 
-Pure `is_whitelisted(...)` + `resolve_license(...)`. Whitelist `CC0`, `CC-BY`, `CC-BY-SA`, `CC-BY-ND` and versioned forms (`CC-BY-4.0`). Resolve from candidate values (Europe PMC `license` / Unpaywall `oa_locations[].license`); most-permissive whitelisted value wins, else `unknown`.
+Pure `is_whitelisted(...)` + `resolve_license(...)`. Whitelist `CC0`, `CC-BY`, `CC-BY-SA`, `CC-BY-ND` and versioned forms (`CC-BY-4.0`). Resolve from candidate values; most-permissive whitelisted value wins, else `unknown`. **Phase 1 source of candidates: Europe PMC `license` only.** `_try_unpaywall` (`paper_fetch.py:412`) exposes no license field today, so Unpaywall is NOT a candidate source in Phase 1 — `resolve_license` takes a generic candidate list so an Unpaywall license can be added later without an interface change.
 
 **Files**
 - Modify: `science/src/science_tool/annotation/source_text.py` (add `normalize_license_token`, `is_whitelisted`, `resolve_license`, `LICENSE_WHITELIST`)
 - Modify: `science/tests/test_source_text.py` (add `TestLicense`)
-- Create: `docs/conventions/annotation-tokens.md` (license-whitelist section only)
+- Modify: `docs/conventions/annotation-tokens.md` (**append** a license-whitelist section — the file already exists with marker-token conventions; do NOT overwrite it)
 
 **Steps**
 
@@ -487,12 +503,11 @@ def resolve_license(candidates: list[str | None]) -> tuple[str, bool]:
   `cd science && uv run --frozen pytest tests/test_source_text.py::TestLicense -v`
   Expected: tests pass (15 parametrized + cases).
 
-- [ ] **3.5 Create the conventions doc.** Create `docs/conventions/annotation-tokens.md`:
+- [ ] **3.5 Append to the conventions doc.** `docs/conventions/annotation-tokens.md` **already exists** (marker-token conventions, with `id: convention:annotation-tokens` frontmatter). Do NOT overwrite it — append the following section to the end of the file (and bump the frontmatter `updated:` date to today):
 
 ```markdown
-# Annotation tokens (controlled vocabulary)
 
-## Full-text license whitelist (Phase 1)
+## Full-text license whitelist (Phase 1 — source-text persistence)
 
 `<citekey>.source.md` persists full text only when the resolved license is on
 this whitelist. The persisted `license` frontmatter field records the raw value
@@ -507,8 +522,9 @@ verbatim; the canonical token below is used only for membership testing
 | `CC-BY-ND`      | `CC-BY-ND-4.0`           | yes |
 | anything else (incl. `CC-BY-NC*`, `unknown`, absent) | — | **no** — abstract only, `fulltext_omitted_reason: license-not-whitelisted` |
 
-License is resolved from Europe PMC `license` / Unpaywall `oa_locations[].license`;
-with multiple values the most-permissive whitelisted one wins, else `unknown`.
+License is resolved from Europe PMC `license` in Phase 1 (Unpaywall exposes no
+license field today); with multiple values the most-permissive whitelisted one
+wins, else `unknown`.
 
 > Annotation-type and source-prefix vocabularies (e.g. `entity-gene`,
 > `pubtator3:<release>:seeder-vN`) are introduced in Phase 2+; only the license
@@ -756,6 +772,7 @@ def render_source_md(
     # 2) Render frontmatter (Task 5 fills the full set; here just enough to render).
     fm = _build_frontmatter(
         retrieved_from=retrieved_from,
+        source_release=passages.release,
         license_=license_,
         text_sha256=text_sha256,
         pmid=pmid,
@@ -806,6 +823,7 @@ Add the `_build_frontmatter` helper (final field set lands in Task 5; stub the f
 def _build_frontmatter(
     *,
     retrieved_from: str,
+    source_release: str,
     license_: str,
     text_sha256: str,
     pmid: str | None,
@@ -817,6 +835,9 @@ def _build_frontmatter(
     fm: dict[str, Any] = {
         "kind": "paper-source",
         "retrieved_from": retrieved_from,
+        # PubTator3 data release (or pinned API marker) the text was drawn from —
+        # provenance/reproducibility; Phase 2 may re-query but records the basis.
+        "source_release": source_release,
         "license": license_,
         "text_sha256": text_sha256,
     }
@@ -979,7 +1000,9 @@ def write_source_md(
     mismatch raises SourceTextError and nothing is written.
     """
     persisted_fulltext = fulltext if licensed else None
-    omitted_reason = None if licensed else "license-not-whitelisted"
+    # Only record license omission when full text actually existed but the license
+    # blocked it — not when no full text was available in the first place.
+    omitted_reason = "license-not-whitelisted" if (fulltext is not None and not licensed) else None
 
     rendered = render_source_md(
         citekey=citekey,
@@ -1018,7 +1041,7 @@ Ensure `_build_frontmatter` emits, in order: `kind: paper-source`, `retrieved_fr
 
 ## Task 6 — Text acquisition (network, injectable httpx.Client)
 
-Fetch the PubTator3 BioC abstract record (preferred); fall back to the Europe PMC abstract (single passage) when no BioC record. Resolve a license from Europe PMC `license` / Unpaywall `oa_locations[].license`. All requests go through an injected `httpx.Client` via `RateLimiter`, exactly like `fetch_paper`.
+Fetch the PubTator3 BioC record (preferred), splitting passages into the abstract floor (title/abstract) and best-effort full text (body sections); fall back to the Europe PMC abstract (single passage) when no BioC record. Resolve a license from Europe PMC `license` (Unpaywall exposes no license field today — deferred). All requests go through an injected `httpx.Client` via `RateLimiter`, exactly like `fetch_paper`.
 
 **Files**
 - Modify: `science/src/science_tool/annotation/source_text.py` (add `AcquiredSource`, `acquire_source_text`, `_fetch_bioc`, `_fetch_europepmc_core`)
@@ -1062,6 +1085,39 @@ class TestAcquireSourceText:
         assert acquired.retrieved_from == "pubtator3"
         assert acquired.abstract.passages[0].text == "BRCA1 in cancer"
         assert acquired.license == "CC-BY"
+        assert acquired.licensed is True
+        # _BIOC_RECORD has only title+abstract -> no full text.
+        assert acquired.fulltext is None
+
+    def test_bioc_body_sections_become_fulltext(self, tmp_path: Path) -> None:
+        record = {
+            "PubTator3": [
+                {
+                    "infons": {"_release": "2024.01"},
+                    "passages": [
+                        {"offset": 0, "text": "T", "infons": {"type": "title"}},
+                        {"offset": 2, "text": "Abstract here.", "infons": {"type": "abstract"}},
+                        {"offset": 17, "text": "Methods paragraph.", "infons": {"type": "methods"}},
+                    ],
+                }
+            ]
+        }
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == _PUBTATOR_HOST:
+                return httpx.Response(200, json=record)
+            if req.url.host == _EPMC_HOST:
+                return httpx.Response(200, json={"resultList": {"result": [{"license": "CC-BY-4.0"}]}})
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        acquired = acquire_source_text(
+            pmid="123456", doi="10.1038/foo-1", cfg=_cfg(tmp_path), http=_make_client(handler)
+        )
+        assert {p.section for p in acquired.abstract.passages} == {"title", "abstract"}
+        assert acquired.fulltext is not None
+        assert acquired.fulltext.passages == (
+            Passage(section="methods", bioc_offset=17, text="Methods paragraph."),
+        )
         assert acquired.licensed is True
 
     def test_falls_back_to_europepmc_abstract(self, tmp_path: Path) -> None:
@@ -1189,11 +1245,16 @@ def acquire_source_text(
             license_candidates.append(_as_str(epmc.get("license")))
 
         abstract: SourcePassages | None = None
+        fulltext: SourcePassages | None = None
         retrieved_from = ""
         if pmid:
             bioc = _fetch_bioc(pmid, client, limiter, cfg)
             if bioc is not None:
-                abstract = bioc
+                # PubTator3 BioC returns title+abstract always and body sections for
+                # PMC-OA articles. Split by section: abstract floor vs best-effort
+                # full text. Both share the same release; the writer license-gates
+                # full text.
+                abstract, fulltext = _split_passages(bioc)
                 retrieved_from = "pubtator3"
 
         if abstract is None and epmc:
@@ -1204,6 +1265,7 @@ def acquire_source_text(
                     release=PUBTATOR3_API_VERSION,
                 )
                 retrieved_from = "europepmc"
+                # Europe PMC fallback yields abstract only; full text stays None.
 
         if abstract is None:
             raise SourceTextError(
@@ -1211,11 +1273,9 @@ def acquire_source_text(
             )
 
         license_, licensed = resolve_license(license_candidates)
-        # Phase 1 does not yet fetch full-text passages; that is wired by the
-        # seeder phase. Persist the abstract floor; fulltext stays None here.
         return AcquiredSource(
             abstract=abstract,
-            fulltext=None,
+            fulltext=fulltext,
             retrieved_from=retrieved_from,
             release=abstract.release,
             license=license_,
@@ -1226,11 +1286,36 @@ def acquire_source_text(
             client.close()
 ```
 
-> Scope note: Phase 1's `acquire_source_text` returns `fulltext=None` (the abstract is the guaranteed floor and the only text the BioC/EPMC-abstract path yields). The writer's full-text gating (Task 5) and the license whitelist are nonetheless fully implemented and tested so that when the seeder phase begins supplying full-text passages, gating is already correct. The `license`/`licensed` values are persisted now so re-runs and Phase 2 see the gate decision.
+Add the `_split_passages` helper near `parse_bioc_passages`:
+
+```python
+# BioC passage sections that constitute the abstract floor; everything else
+# (intro/methods/results/discussion/etc.) is best-effort full text.
+_ABSTRACT_BIOC_SECTIONS = frozenset({"title", "abstract"})
+
+
+def _split_passages(parsed: SourcePassages) -> tuple[SourcePassages, SourcePassages | None]:
+    """Partition BioC passages into (abstract, full-text-or-None) by section.
+
+    Falls back to treating all passages as the abstract when none is labeled
+    title/abstract (defensive; a malformed record should still yield the floor).
+    """
+    abstract = tuple(p for p in parsed.passages if p.section in _ABSTRACT_BIOC_SECTIONS)
+    body = tuple(p for p in parsed.passages if p.section not in _ABSTRACT_BIOC_SECTIONS)
+    abstract_sp = SourcePassages(
+        passages=abstract or parsed.passages, release=parsed.release
+    )
+    fulltext_sp = (
+        SourcePassages(passages=body, release=parsed.release) if body else None
+    )
+    return abstract_sp, fulltext_sp
+```
+
+> Scope note: full text is **best-effort and license-gated**. PubTator3 BioC returns body passages only for PMC-OA articles; when present and the license is whitelisted, `## Full Text` is written. Common cases — non-OA article (BioC returns title+abstract only) or Europe PMC fallback — yield abstract only, which is the guaranteed floor. Phase 1 does NOT add a separate Europe PMC full-text-XML path (deferred); full text in Phase 1 comes solely from the BioC record already fetched, preserving offset alignment.
 
 - [ ] **6.4 Run it — expect pass:**
   `cd science && uv run --frozen pytest tests/test_source_text.py::TestAcquireSourceText -v`
-  Expected: 3 passed.
+  Expected: 4 passed.
 
 - [ ] **6.5 Commit:**
   `git add science/src/science_tool/annotation/source_text.py science/tests/test_source_text.py`
@@ -1356,7 +1441,11 @@ def persist_source(
             f"{identifier!r} is neither a DOI nor a PMID; pass a bare DOI/PMID or doi.org URL."
         )
     resolved = resolve_paper_entity(project_root, doi=doi, pmid=pmid)
-    acquired = acquire_source_text(pmid=pmid, doi=doi, cfg=cfg, http=_test_http_client)
+    # Use the ENTITY's identifiers, not just the input shape: a DOI-invoked command
+    # must still hand PubTator the entity's PMID (acquisition prefers BioC by PMID).
+    acquired = acquire_source_text(
+        pmid=resolved.pmid, doi=resolved.doi, cfg=cfg, http=_test_http_client
+    )
     return write_source_md(
         directory=resolved.directory,
         citekey=resolved.citekey,
@@ -1365,8 +1454,8 @@ def persist_source(
         retrieved_from=acquired.retrieved_from,
         license_=acquired.license,
         licensed=acquired.licensed,
-        pmid=pmid,
-        doi=doi,
+        pmid=resolved.pmid,
+        doi=resolved.doi,
     )
 ```
 
@@ -1523,6 +1612,7 @@ Then skip sidecars in both discovery branches of `discover`:
 | Identifier → paper-entity resolver; scan frontmatter `doi`/`pmid`, normalized (Identifier→resolution) | Task 1 (`resolve_paper_entity`, `normalize_doi`/`normalize_pmid`) |
 | No-match fails loud + actionable (`paper-fetch`/create) (Identifier→resolution) | Task 1 (`test_no_match_fails_loud`) |
 | Multi-match fails loud naming both files (Identifier→resolution) | Task 1 (`test_multi_match_fails_loud_naming_both`) |
+| Resolver surfaces the entity's own normalized doi+pmid so acquisition can prefer PubTator even on DOI invocation | Task 1 (`ResolvedPaper.doi`/`.pmid`, `test_carries_entity_pmid_when_resolved_by_doi`); Task 7 (`persist_source` uses `resolved.pmid`/`resolved.doi`) |
 | Placement honors path policy / project override, not hardcoded `doc/papers/` | Task 1 (`resolve_path_policy("paper", project_root=...)`) |
 | Offset basis = raw UTF-8-decoded, NOT NFC-normalized (Offset basis) | Task 2 (`Passage.text` verbatim; docstring states no NFC); Task 4 (`test_offset_base_is_character_not_byte`) |
 | Character offsets end-to-end, no byte layer (Offset basis) | Task 4 (`PassageOffset.file_char_base` is a `str` index; em-dash test) |
@@ -1532,10 +1622,10 @@ Then skip sidecars in both discovery branches of `discover`:
 | BioC abstract (title+abstract passages) preferred (Components #1) | Task 2 + Task 6 (`_fetch_bioc`, `test_prefers_pubtator_bioc_abstract`) |
 | Europe PMC abstract single-passage fallback (Components #1) | Task 6 (`test_falls_back_to_europepmc_abstract`) |
 | License whitelist `CC0/CC-BY/CC-BY-SA/CC-BY-ND` + versioned (License gating) | Task 3 (`LICENSE_WHITELIST`, `is_whitelisted`) |
-| Resolve from EPMC `license` / Unpaywall `oa_locations[].license`; most-permissive wins else unknown | Task 3 (`resolve_license`); Task 6 (candidate from EPMC core) |
+| Resolve license from EPMC `license`; most-permissive whitelisted wins else unknown (Unpaywall has no license field today → deferred) | Task 3 (`resolve_license`); Task 6 (candidate from EPMC core) |
 | Abstract never gated; non-whitelisted ⇒ abstract only + `fulltext_omitted_reason` (License gating) | Task 5 (`test_abstract_only_when_unlicensed`) |
-| Full text persisted only when whitelisted (License gating) | Task 5 (`test_full_text_persisted_when_licensed`) |
-| Frontmatter: `retrieved_from`, `license`, `text_sha256`, `pmid`/`doi`, offset map, `fulltext_omitted_reason` (artifact row) | Task 4/5 (`_build_frontmatter`; `test_text_sha256_is_hash_of_body_region`) |
+| Full text acquired from BioC body sections (best-effort) and persisted only when whitelisted (License gating) | Task 6 (`_split_passages`, `test_bioc_body_sections_become_fulltext`); Task 5 (`test_full_text_persisted_when_licensed`) |
+| Frontmatter: `retrieved_from`, `source_release`, `license`, `text_sha256`, `pmid`/`doi`, offset map, `fulltext_omitted_reason` (artifact row) | Task 4/5 (`_build_frontmatter`; `test_text_sha256_is_hash_of_body_region`) |
 | `text_sha256` = sha256 of persisted body (Dedup: document hash provenance) | Task 4/5 (`test_text_sha256_is_hash_of_body_region`) |
 | CLI mirrors `paper-fetch` (email/`FetchConfig`/`--cache-dir`/`--project-root`) (Components #1) | Task 7 |
 | Network through injectable `httpx.Client` + `MockTransport` (Testing; Be testable) | Tasks 6–7 (`http=` param, `_test_http_client` seam, `MockTransport`) |
@@ -1550,5 +1640,6 @@ Then skip sidecars in both discovery branches of `discover`:
 - **`sci:sourceTextHash`** and the per-source `sci:AuditLedger` document-level short-circuit — this is a **Phase-2 ledger field**, not a `.source.md` frontmatter field. (`text_sha256` here is only the document's current-body provenance hash.)
 - **`content_hash` / `HASH_REQUIRED_SOURCE_PREFIXES` / re-audit caching** and per-annotation idempotency.
 - **Agent extraction skill** (`paper-annotate`) and **promotion** into epistemic entities.
-- **Actual full-text passage acquisition** (BioC/EPMC full-text XML → passages). Phase 1 ships the full-text **gating + writer path** (tested), but `acquire_source_text` returns `fulltext=None`; the seeder phase supplies full-text passages into the already-correct gate.
+- **Europe PMC full-text-XML acquisition** (`_try_europepmc_fulltext` JATS → passages) for articles where PubTator BioC carries no body sections. Phase 1 sources full text **only** from the BioC record already fetched (preserving offset alignment); a separate EPMC-XML full-text path is deferred. (Phase 1 does write `## Full Text` when BioC supplies licensed body sections — see Task 6 `test_bioc_body_sections_become_fulltext`.)
+- **Unpaywall license extraction** (`_try_unpaywall` exposes no license field today); Phase 1 resolves license from Europe PMC only.
 - **`<citekey>.source.anno.trig`** sidecar (created by the seeder, not the anchor surface).
