@@ -31,6 +31,7 @@ from science_model.entities import (
     ThemeEntity,
     WorkflowRunEntity,
 )
+from science_model.patch_definition import PatchDefinitionEntity
 from science_model.propositions import PropositionEntity
 
 
@@ -81,6 +82,7 @@ _CORE_KIND_CLASSES: dict[str, EntityClass] = {
     "talk": EntityClass.OPERATIONAL,
     "plan": EntityClass.OPERATIONAL,
     "pre-registration": EntityClass.OPERATIONAL,
+    "patch-definition": EntityClass.EPISTEMIC,
     "proposition": EntityClass.EPISTEMIC,
     "question": EntityClass.EPISTEMIC,
     "research-question": EntityClass.EPISTEMIC,
@@ -143,6 +145,11 @@ class EntityRegistry:
         )
         r.register_core_kind("inquiry", InquiryEntity, entity_class=_CORE_KIND_CLASSES["inquiry"])
         r.register_core_kind("proposition", PropositionEntity, entity_class=_CORE_KIND_CLASSES["proposition"])
+        r.register_core_kind(
+            "patch-definition",
+            PatchDefinitionEntity,
+            entity_class=_CORE_KIND_CLASSES["patch-definition"],
+        )
         # Generic project kinds → ProjectEntity.
         for kind in (
             "concept",

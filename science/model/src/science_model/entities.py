@@ -75,6 +75,7 @@ class EntityType(StrEnum):
     HYPOTHESIS = "hypothesis"
     QUESTION = "question"
     PROPOSITION = "proposition"
+    PATCH_DEFINITION = "patch-definition"
     OBSERVATION = "observation"
     INQUIRY = "inquiry"
     TOPIC = "topic"
@@ -202,6 +203,7 @@ _DISALLOWED_MECHANISM_PARTICIPANT_KINDS = frozenset(
         EntityType.SPEC.value,
         EntityType.CANONICAL_PARAMETER.value,
         EntityType.CODE_FILE.value,
+        EntityType.PATCH_DEFINITION.value,
         EntityType.UNKNOWN.value,
     }
 )

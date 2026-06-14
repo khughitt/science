@@ -40,6 +40,7 @@ class EntityPathPolicy:
 _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
     "question": EntityPathPolicy(Path("entities/questions"), "numeric"),
     "hypothesis": EntityPathPolicy(Path("entities/hypotheses"), "numeric"),
+    "patch-definition": EntityPathPolicy(Path("entities/patches"), "slug"),
     "proposition": EntityPathPolicy(Path("entities/propositions"), "slug"),
     "interpretation": EntityPathPolicy(Path("entities/interpretations"), "numeric"),
     "discussion": EntityPathPolicy(Path("entities/discussions"), "numeric"),
@@ -213,6 +214,7 @@ _DEFAULT_STATUS: dict[str, str] = {
     "discussion": "active",
     "interpretation": "active",
     "theme": "active",
+    "patch-definition": "active",
     "proposition": "draft",
     "finding": "active",
     "inquiry": "active",
@@ -249,6 +251,7 @@ _STATUS_VALUES: dict[str, frozenset[str]] = {
     "discussion": frozenset({"active", "complete", "superseded"}),
     "interpretation": frozenset({"active", "complete", "superseded"}),
     "theme": frozenset({"draft", "active", "superseded", "retired"}),
+    "patch-definition": frozenset({"active", "retired"}),
     "proposition": frozenset(
         {
             "draft",

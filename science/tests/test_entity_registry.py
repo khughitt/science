@@ -153,3 +153,14 @@ def test_registered_class_must_subclass_entity() -> None:
     registry = EntityRegistry()
     with pytest.raises(TypeError, match="must subclass Entity"):
         registry.register_core_kind("x", NotAnEntity, entity_class=EntityClass.OPERATIONAL)  # type: ignore[arg-type]
+
+
+def test_core_registry_resolves_patch_definition() -> None:
+    from science_model.entities import EntityClass
+    from science_model.patch_definition import PatchDefinitionEntity
+    from science_tool.graph.entity_registry import EntityRegistry
+
+    registry = EntityRegistry.with_core_types()
+
+    assert registry.resolve("patch-definition") is PatchDefinitionEntity
+    assert registry.kind_class("patch-definition") is EntityClass.EPISTEMIC

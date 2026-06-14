@@ -8,6 +8,7 @@ from typing import Any, cast
 import click
 from rich.text import Text
 
+from science_tool.patch.cli import patch_group
 from science_tool.causal.export_chirho import export_chirho_script
 from science_tool.causal.export_pgmpy import export_pgmpy_script
 from science_tool.data_worktree import hydrate_worktree_data
@@ -232,6 +233,7 @@ main.add_command(wander_command)
 main.add_command(qa_audit_command)
 main.add_command(commons_group)
 main.add_command(validate_cmd)
+main.add_command(patch_group)
 
 
 @main.group("entities")
