@@ -13,9 +13,12 @@ Spec 3 `infer-schema` scaffold. This is the first real consumer of Specs 1–3: 
 dogfoods the scaffold against real data and produces the authored schemas that are
 the precondition for Spec 4.
 
-This is a **data-authoring campaign**, not a code build. No `science_tool` /
-`science_qa` source changes are planned. If the campaign surfaces a scaffold defect,
-that is a separate bug fixed in its own cycle — the campaign records it and moves on.
+This is primarily a **data-authoring campaign**, not a code build. It requires exactly
+one scoped tooling change up front — a real validation gate (Phase 0, §4.0) — because
+the current `datasets validate` cannot validate these nested, sometimes-YAML package
+descriptors. Beyond that, no `science_tool` / `science_qa` source changes are planned;
+if the campaign surfaces a scaffold or compiler defect, that is a separate bug fixed in
+its own cycle — the campaign records it and moves on.
 
 ## 2. Separation rule (inherited from Spec 3)
 
@@ -23,7 +26,7 @@ The machine writes observed **shape** (field name + coarse type). Humans author
 **meaning** (constraints, keys, qa). The hard line, unchanged: *if a wrong inference
 could make a future QA run build-fatal, it is never emitted into the schema by
 default — it only appears in the review report.* The campaign honors this by keeping
-the two phases (§4) strictly separated.
+the shape phase (machine) and the meaning phase (human) strictly separated (§4).
 
 ## 3. Scope
 
@@ -70,7 +73,30 @@ the 3 individually-missing resources (2 walker, 1 dgidb) are skipped and recorde
 failed. The campaign does not download or hydrate data — a blocked package stays
 blocked and is surfaced, not worked around.
 
-## 4. Two-phase execution
+## 4. Execution
+
+### Phase 0 — Validation gate (tooling prerequisite)
+
+The campaign's safety gate must actually validate the campaign's targets. The current
+`science datasets validate` does not: it scans only `<path>/raw/datapackage.json` and
+`<path>/processed/datapackage.json`, JSON-only, and returns a single *warn* (exit 0)
+when pointed at a nested or YAML package dir — which would let the Definition of Done be
+falsely satisfied with nothing actually validated. Before any authoring, add a focused
+exact-descriptor validation capability with these acceptance criteria:
+
+- Accepts a path pointing **directly at a package descriptor or its directory**,
+  resolving `datapackage.json`, `datapackage.yaml`, or `datapackage.yml`.
+- Parses the descriptor (JSON **or** YAML) and validates every resource through the
+  Spec 1 `ResourceDescriptor` models and `package_consistency_issues` — the same SSOT
+  that `infer-schema --write` validates against.
+- **Fails (non-zero exit)** on any descriptor or consistency error, and also when an
+  explicit descriptor target yields nothing to validate (no silent warn-and-pass for an
+  explicit target — fail early, per project rules).
+- Additive and backward-compatible: the existing `--path data` raw/processed scan is
+  unchanged.
+
+This is implemented TDD-first as the plan's first task and is the gate referenced by
+Phases 1 and 2 below.
 
 ### Phase 1 — Shape (machine, fully safe)
 
@@ -83,8 +109,8 @@ For every **ready** tabular resource:
    whole-package post-validation gates the write (refuses on type conflict, validates
    the mutated descriptor through Spec 1 before replacing the file, writes atomically
    in the descriptor's own format).
-3. After all resources in a package are written, run `science datasets validate
-   --path <pkg-dir>` to confirm the package still parses and passes Spec 1 + package
+3. After all resources in a package are written, run the Phase 0 validator against the
+   package descriptor to confirm it still parses and passes Spec 1 + package
    consistency.
 
 Commit per repo at the end of Phase 1 (§6). This phase is mechanical; it can run as a
@@ -96,26 +122,34 @@ One subagent per **package**. For each tabular resource the subagent:
 
 1. Reads the Spec 3 review report (`--emit-suggestions` to a temp YAML) and samples the
    data directly.
-2. Authors **only** invariants that are both report-supported **and** data-verifiable:
-   - `constraints.required` — where the report shows no nulls *and* the column is
-     genuinely mandatory for the dataset's meaning.
-   - `constraints.enum` — where cardinality is low *and* the value set is a true closed
-     domain (not merely small in-sample).
-   - `primaryKey` / `uniqueKeys` — where a column (or tuple) is the dataset's real
-     identifier, not just incidentally unique in sample (the `Description`-as-PK trap
-     from the ccle_proteomics dogfood is the canonical thing to reject).
-   - `foreignKeys` — **only** where a cross-resource relationship is clear and
-     verifiable (local field values are a subset of the target resource's key). Where
-     domain knowledge is insufficient, the FK is left as a report recommendation, not
-     authored.
-3. Never authors a bound (`minimum`/`maximum`), `qa:`, or any invariant the report did
-   not surface. Sample-derived ranges are explicitly *not* constraints.
-4. Runs `science datasets validate --path <pkg-dir>`; the package must pass before the
-   subagent reports done.
+2. Authors invariants in two tiers, each with its **own** evidence rule:
+   - **Per-resource invariants — must be report-supported *and* data-verifiable.** The
+     Spec 3 report surfaces exactly these:
+     - `constraints.required` — report shows no nulls *and* the column is genuinely
+       mandatory for the dataset's meaning.
+     - `constraints.enum` — cardinality is low *and* the value set is a true closed
+       domain (not merely small in-sample).
+     - single-column `primaryKey` — the report's `identifier` recommendation *and* the
+       column is the dataset's real identifier, not incidentally unique in sample (the
+       `Description`-as-PK trap from the ccle_proteomics dogfood is the canonical reject).
+   - **Relational invariants — governed by direct cross-resource evidence, not the
+     per-resource report** (which structurally cannot surface them):
+     - `foreignKeys` — author only where local field values are a verified subset of the
+       target resource's key column(s) *and* the relationship is meaningful; otherwise
+       leave it unauthored.
+     - composite (multi-column) `primaryKey` / `uniqueKeys` — author only where the
+       column tuple is verified unique-and-non-null across the data *and* is the
+       dataset's real key.
+3. Never promotes a sample coincidence to an invariant, and never authors a bound
+   (`minimum`/`maximum`), `qa:`, or any **per-resource** invariant the report did not
+   surface. Sample-derived ranges are explicitly *not* constraints.
+4. Runs the Phase 0 validator against the package descriptor; the package must pass
+   before the subagent reports done.
 
-I review each package against its report for **over-authoring** — the single failure
-mode that matters here: did the subagent emit any invariant the report did not support,
-or promote a sample coincidence to an invariant? You spot-check a sample of packages.
+I review each package for **over-authoring** — the single failure mode that matters
+here: did the subagent emit a *per-resource* invariant the report did not support, a
+*relational* invariant without direct cross-resource evidence, or promote a sample
+coincidence to an invariant? You spot-check a sample of packages.
 
 ## 5. Why human judgment stays in the loop
 
@@ -173,7 +207,7 @@ scaffold defect or data-hydration gap surfaced, so nothing is silently dropped.
 
 The campaign is complete when every **ready** package in §3.1 has: (a) names+types on
 all tabular resources (Phase 1), (b) hand-authored structural invariants where
-report-supported and data-verifiable (Phase 2), (c) a passing `science datasets
-validate`, and (d) a committed, un-pushed state in its repo. Blocked and no-op packages
+report-supported and data-verifiable (Phase 2), (c) a passing Phase 0 validator run on
+its descriptor, and (d) a committed, un-pushed state in its repo. Blocked and no-op packages
 are recorded as such. The result is the corpus of real authored schemas that Spec 4
 requires.
