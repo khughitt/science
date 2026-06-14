@@ -203,6 +203,7 @@ _DISALLOWED_MECHANISM_PARTICIPANT_KINDS = frozenset(
         EntityType.SPEC.value,
         EntityType.CANONICAL_PARAMETER.value,
         EntityType.CODE_FILE.value,
+        EntityType.PATCH_DEFINITION.value,
         EntityType.UNKNOWN.value,
     }
 )

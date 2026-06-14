@@ -56,6 +56,16 @@ def test_patch_definition_requires_focal() -> None:
         PatchDefinitionEntity.model_validate(data)
 
 
+def test_patch_definition_rejects_blank_focal() -> None:
+    with pytest.raises(ValidationError, match="focal must be non-empty"):
+        PatchDefinitionEntity.model_validate(_base_patch(focal="   "))
+
+
+def test_patch_definition_rejects_blank_seed_ref() -> None:
+    with pytest.raises(ValidationError, match="seed refs must be non-empty"):
+        PatchDefinitionEntity.model_validate(_base_patch(seeds=["proposition:p1", "  "]))
+
+
 def test_patch_definition_rejects_non_local_scope() -> None:
     with pytest.raises(ValidationError, match="remote scopes deferred"):
         PatchDefinitionEntity.model_validate(

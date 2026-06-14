@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from science_model.entities import EntityType, ProjectEntity
 
@@ -36,7 +36,7 @@ class PatchExclude(BaseModel):
 
     @field_validator("ref", "reason")
     @classmethod
-    def _non_empty(cls, value: str, info) -> str:  # type: ignore[no-untyped-def]
+    def _non_empty(cls, value: str, info: ValidationInfo) -> str:
         if not value.strip():
             raise ValueError(f"{info.field_name} must be non-empty")
         return value

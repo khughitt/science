@@ -38,13 +38,13 @@ from science_model.reasoning import (
     SupportScope,
     WEAKEST_LINK_COMPOSITION_RULES,
 )
-from science_model.profiles import EntityKind, ProfileManifest, RelationKind
 from science_model.patch_definition import (
     LocalClosurePolicy,
     PatchDefinitionEntity,
     PatchExclude,
     PatchScope,
 )
+from science_model.profiles import EntityKind, ProfileManifest, RelationKind
 from science_model.propositions import PropositionEntity
 from science_model.provenance import EvidenceIndependence, ProvenanceType
 from science_model.relations import build_relation_registry
