@@ -129,5 +129,6 @@ def test_inquiry_validation_catches_unreachable(tmp_path: Path) -> None:
     )
 
     result = runner.invoke(main, ["inquiry", "validate", "broken", "--path", graph_path, "--format", "json"])
-    # Should exit non-zero due to unreachable boundary
-    assert result.exit_code != 0 or "fail" in result.output
+    # Should exit non-zero due to unreachable boundary, and report the failure.
+    assert result.exit_code != 0
+    assert "fail" in result.output

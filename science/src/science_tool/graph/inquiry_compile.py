@@ -133,6 +133,10 @@ def _emit_one(dataset: Dataset, definition: PatchDefinitionEntity, prof: Inquiry
                 g.add((node, SCI_NS.paramNote, RDFLiteral(p.note)))
 
     for unknown in prof.unknowns:
+        # `Unknown` is an additive marker on the referenced node, not its primary
+        # kind: if the ref names an existing entity it stays double-typed, and
+        # `_member_kind` still resolves the real kind (concrete sci: types sort
+        # before `Unknown`).
         g.add((entity_uri_for_ref(unknown), RDF.type, SCI_NS.Unknown))
 
 

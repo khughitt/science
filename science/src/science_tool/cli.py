@@ -2731,6 +2731,9 @@ def _render_inquiry_source(
         "type": "patch-definition",
         "title": title,
         "status": "active",
+        # The build loader normally injects these base-Entity fields; we author
+        # them here so the scaffold is directly model-valid (the `import` bridge
+        # validates it via `PatchDefinitionEntity(**fm)` without the loader).
         "project": project,
         "ontology_terms": [],
         "related": [],
