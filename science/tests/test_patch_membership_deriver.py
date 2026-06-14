@@ -135,6 +135,9 @@ def test_deriver_requires_policy_version() -> None:
     with pytest.raises(PatchMembershipError, match="policy_version"):
         derive_patch_memberships(_dataset(), [_patch()], policy_version="")
 
+    with pytest.raises(PatchMembershipError, match="policy_version"):
+        derive_patch_memberships(_dataset(), [_patch()], policy_version="   ")
+
 
 def test_entity_uri_for_ref_rejects_malformed_refs() -> None:
     with pytest.raises(ValueError, match="invalid entity ref"):
@@ -142,6 +145,9 @@ def test_entity_uri_for_ref_rejects_malformed_refs() -> None:
 
     with pytest.raises(ValueError, match="invalid entity ref"):
         entity_uri_for_ref("missing-slug:")
+
+    with pytest.raises(ValueError, match="invalid entity ref"):
+        entity_uri_for_ref("nocolon")
 
 
 def test_deriver_output_is_sorted_by_member_iri() -> None:

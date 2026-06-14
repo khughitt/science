@@ -163,7 +163,7 @@ def derive_patch_memberships(
 
 def _resolve_required(dataset: Dataset, ref: str, *, label: str, patch_id: str) -> URIRef:
     uri = _entity_uri_for_ref(ref)
-    if any(next(graph.triples((uri, RDF.type, None)), None) is not None for graph in dataset.graphs()):
+    if any((uri, RDF.type, None) in graph for graph in dataset.graphs()):
         return uri
     raise PatchMembershipError(f"{patch_id}: unresolved {label} {ref!r}")
 
