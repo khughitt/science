@@ -5,6 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from pydantic import ValidationError
+
+from science_tool.datasets.schema import ResourceDescriptor, package_consistency_issues
+
 
 def validate_data_packages(data_dir: Path) -> list[dict[str, str]]:
     """Validate datapackage.json files in raw/ and processed/ subdirectories.
@@ -74,6 +78,9 @@ def validate_data_packages(data_dir: Path) -> list[dict[str, str]]:
             )
             continue
 
+        # Check 3.5: typed-schema descriptor validation (Spec 1, additive)
+        results.extend(_validate_resource_descriptors(resources, subdir_name))
+
         # Check 4: each resource file exists and schema validates
         for res in resources:
             res_name = res.get("name", res.get("path", "unknown"))
@@ -113,6 +120,40 @@ def validate_data_packages(data_dir: Path) -> list[dict[str, str]]:
         )
 
     return results
+
+
+def _validate_resource_descriptors(resources: list[dict], prefix: str) -> list[dict[str, str]]:
+    """Additive descriptor-validation pass (Spec 1): parse each resource against the
+    typed-schema models and run cross-resource consistency. Emits pass|fail rows."""
+    rows: list[dict[str, str]] = []
+    descriptors: list[ResourceDescriptor] = []
+    for res in resources:
+        res_name = res.get("name", res.get("path", "unknown"))
+        try:
+            descriptors.append(ResourceDescriptor.model_validate(res))
+        except ValidationError as exc:
+            # One fail row per error → rich, located authoring feedback (design §7).
+            for err in exc.errors():
+                loc = ".".join(str(p) for p in err.get("loc", ()))
+                msg = str(err.get("msg", ""))
+                rows.append({
+                    "check": f"{prefix}/{res_name} descriptor",
+                    "status": "fail",
+                    "details": f"{loc}: {msg}" if loc else msg,
+                })
+            continue
+        rows.append({
+            "check": f"{prefix}/{res_name} descriptor",
+            "status": "pass",
+            "details": "resource descriptor valid",
+        })
+    for issue in package_consistency_issues(descriptors):
+        rows.append({
+            "check": f"{prefix} descriptor consistency",
+            "status": "fail",
+            "details": issue,
+        })
+    return rows
 
 
 def _validate_resource_schema(file_path: Path, schema: dict, prefix: str) -> list[dict[str, str]]:

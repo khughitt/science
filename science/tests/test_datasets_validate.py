@@ -91,3 +91,73 @@ class TestValidateDataPackages:
         results = validate_data_packages(bad_data_dir)
         failures = [r for r in results if r["status"] == "fail"]
         assert len(failures) > 0
+
+
+def _write_pkg(tmp_path: Path, pkg: dict, csv: str = "a\n1\n") -> Path:
+    raw = tmp_path / "data" / "raw"
+    raw.mkdir(parents=True, exist_ok=True)
+    (raw / "x.csv").write_text(csv)  # data file so the file-exists check passes
+    (raw / "datapackage.json").write_text(json.dumps(pkg))
+    return tmp_path / "data"
+
+
+class TestDescriptorValidation:
+    def test_rich_valid_descriptor_has_no_descriptor_failures(self, tmp_path: Path) -> None:
+        pkg = {
+            "name": "p",
+            "resources": [{
+                "name": "x", "path": "x.csv",
+                "schema": {
+                    "fields": [
+                        {"name": "a", "type": "integer", "constraints": {"required": True, "unique": True}},
+                        {"name": "v", "type": "number", "constraints": {"minimum": 0}, "qa": {"low_variance": True}},
+                    ],
+                    "primaryKey": "a",
+                },
+            }],
+        }
+        # CSV columns match the declared fields so the case is valid end-to-end.
+        results = validate_data_packages(_write_pkg(tmp_path, pkg, csv="a,v\n1,0.5\n"))
+        descriptor_fails = [r for r in results if "descriptor" in r["check"] and r["status"] == "fail"]
+        assert descriptor_fails == []
+
+    def test_qa_on_string_field_fails_descriptor(self, tmp_path: Path) -> None:
+        pkg = {
+            "name": "p",
+            "resources": [{
+                "name": "x", "path": "x.csv",
+                "schema": {"fields": [{"name": "a", "type": "string", "qa": {"low_variance": True}}]},
+            }],
+        }
+        results = validate_data_packages(_write_pkg(tmp_path, pkg))
+        assert any("descriptor" in r["check"] and r["status"] == "fail" for r in results)
+
+    def test_dangling_exclusive_flags_fails(self, tmp_path: Path) -> None:
+        pkg = {
+            "name": "p",
+            "resources": [{
+                "name": "x", "path": "x.csv",
+                "schema": {"fields": [{"name": "is_a", "type": "boolean"}],
+                           "qa": {"exclusive_flags": [["is_a", "is_b"]]}},
+            }],
+        }
+        results = validate_data_packages(_write_pkg(tmp_path, pkg))
+        assert any("descriptor" in r["check"] and r["status"] == "fail" for r in results)
+
+    def test_unresolved_cross_resource_fk_fails(self, tmp_path: Path) -> None:
+        pkg = {
+            "name": "p",
+            "resources": [{
+                "name": "edges", "path": "x.csv",
+                "schema": {"fields": [{"name": "src"}],
+                           "foreignKeys": [{"fields": "src", "reference": {"resource": "ghost", "fields": "id"}}]},
+            }],
+        }
+        results = validate_data_packages(_write_pkg(tmp_path, pkg))
+        assert any("consistency" in r["check"] and r["status"] == "fail" for r in results)
+
+    def test_legacy_name_type_only_still_passes(self, data_dir: Path) -> None:
+        # data_dir fixture: name/type-only schema, no constraints/qa — must remain clean.
+        results = validate_data_packages(data_dir)
+        descriptor_fails = [r for r in results if "descriptor" in r["check"] and r["status"] == "fail"]
+        assert descriptor_fails == []
