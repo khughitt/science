@@ -83,7 +83,6 @@ class DatasetIndependenceRecord:
 class CandidateEdge:
     left: LineAncestor
     right: LineAncestor
-    dataset: URIRef
     reason: str
 
 
@@ -343,7 +342,7 @@ def _candidate_edges(
                     continue
                 reason = _candidate_reason(left, right, lineage)
                 if reason is not None:
-                    out.append(CandidateEdge(left=left, right=right, dataset=left.dataset, reason=reason))
+                    out.append(CandidateEdge(left=left, right=right, reason=reason))
     return out
 
 
@@ -428,7 +427,7 @@ def _records_from_candidate_edges(
     reason: str,
     edges: list[CandidateEdge],
 ) -> list[DatasetIndependenceRecord]:
-    graph_edges = [(edge.left.line, edge.right.line, edge.dataset) for edge in edges]
+    graph_edges = [(edge.left.line, edge.right.line, frozenset({edge.left.dataset, edge.right.dataset})) for edge in edges]
     records: list[DatasetIndependenceRecord] = []
     for members in _connected_components(graph_edges):
         component_edges = [edge for edge in edges if edge.left.line in members and edge.right.line in members]
