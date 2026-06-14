@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from science_tool.datasets._base import DatasetResult
-from science_tool.datasets._ranking import _normalize_doi, _richness, score_result
+from science_tool.datasets._ranking import (
+    _normalize_doi,
+    _richness,
+    dedupe_results,
+    score_result,
+)
 
 
 def _r(**kw) -> DatasetResult:
@@ -74,9 +79,6 @@ class TestRichness:
         assert _richness(_r(title="t", doi="10.1/x")) == 0
 
 
-from science_tool.datasets._ranking import dedupe_results
-
-
 class TestDedupeResults:
     def test_keeps_richest_representative(self) -> None:
         # Same DOI, equal score (identical titles) -> richer record wins.
@@ -119,3 +121,12 @@ class TestDedupeResults:
         out = dedupe_results("q", [first, middle, rich_dup])
         assert [r.doi for r in out] == ["10.1/dup", "10.1/other"]
         assert out[0].source == "figshare"  # representative is the richer one
+
+    def test_full_tie_keeps_first_member(self) -> None:
+        # Equal score (same title) AND equal richness (both bare) -> the earliest
+        # fan-out member must win, deterministically.
+        first = _r(source="geo", title="same title", doi="10.1/tie")
+        second = _r(source="zenodo", title="same title", doi="10.1/tie")
+        out = dedupe_results("same", [first, second])
+        assert len(out) == 1
+        assert out[0].source == "geo"
