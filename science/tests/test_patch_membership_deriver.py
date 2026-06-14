@@ -152,3 +152,27 @@ def test_deriver_output_is_sorted_by_member_iri() -> None:
     result = derive_patch_memberships(_dataset(), [_patch(seeds=["proposition:p3"])], policy_version="local-closure-v1")
 
     assert [str(record.member) for record in result.records] == sorted(str(record.member) for record in result.records)
+
+
+def test_deriver_excludes_non_entity_provenance_nodes() -> None:
+    from rdflib.namespace import XSD
+
+    ds = Dataset()
+    g = ds.graph(PROJECT_NS["graph/knowledge"])
+    g.add((_uri("hypothesis:h1"), RDF.type, SCI_NS.Hypothesis))
+    # A provenance source-file node: typed prov:Entity, NOT an sci: entity type.
+    source_node = URIRef(PROJECT_NS["source/entities_hypotheses_h1.md"])
+    g.add((source_node, RDF.type, URIRef("http://www.w3.org/ns/prov#Entity")))
+    # The bears-on layer connects the source node to the entity at depth 1.
+    edge = URIRef(PROJECT_NS["bears-on-edge/source-h1-1"])
+    g.add((edge, RDF.type, SCI_NS.BearsOnEdge))
+    g.add((edge, SCI_NS.bearsOnSource, source_node))
+    g.add((edge, SCI_NS.bearsOnTarget, _uri("hypothesis:h1")))
+    g.add((edge, SCI_NS.bearsOnDepth, Literal(1, datatype=XSD.integer)))
+
+    result = derive_patch_memberships(ds, [_patch()], policy_version="local-closure-v1")
+    members = {record.member for record in result.records}
+
+    assert _uri("hypothesis:h1") in members
+    assert source_node not in members
+    assert all(record.member_kind != "unknown" for record in result.records)

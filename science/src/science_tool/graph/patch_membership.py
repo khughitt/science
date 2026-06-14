@@ -109,6 +109,11 @@ def derive_patch_memberships(
             for member, depth in _bears_on_neighbors(dataset, origin, max_depth=max_depth):
                 if member == origin:
                     continue
+                member_kind = _member_kind(dataset, member)
+                if member_kind == "unknown":
+                    # Skip non-entity nodes (e.g. prov source-file nodes that
+                    # appear in the bears-on layer via provenance edges).
+                    continue
                 anchors[member] = min(depth, anchors.get(member, depth))
                 _put_record(
                     by_member,
@@ -117,7 +122,7 @@ def derive_patch_memberships(
                         patch_id=definition.canonical_id,
                         member=member,
                         member_role="member",
-                        member_kind=_member_kind(dataset, member),
+                        member_kind=member_kind,
                         derivation_reason="closure",
                         derivation_predicate=SCI_NS.bearsOn,
                         depth=depth,
@@ -130,6 +135,9 @@ def derive_patch_memberships(
             for member, predicate in _direct_relation_neighbors(dataset, anchor):
                 if member == anchor:
                     continue
+                member_kind = _member_kind(dataset, member)
+                if member_kind == "unknown":
+                    continue
                 _put_record(
                     by_member,
                     MembershipRecord(
@@ -137,7 +145,7 @@ def derive_patch_memberships(
                         patch_id=definition.canonical_id,
                         member=member,
                         member_role="member",
-                        member_kind=_member_kind(dataset, member),
+                        member_kind=member_kind,
                         derivation_reason="direct_relation",
                         derivation_predicate=predicate,
                         depth=anchor_depth + 1,
