@@ -65,3 +65,32 @@ class FieldQA(BaseModel):
     model_config = ConfigDict(extra="forbid")
     low_variance: bool = False
     zero_fraction: bool = False
+
+
+class FieldSpec(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    name: str
+    type: FrictionlessType = "any"          # DP v2: omitted type ⇒ "any" (NOT "string")
+    constraints: FieldConstraints = Field(default_factory=FieldConstraints)
+    # Field-level missingValues override (DP v2) — accepted/round-tripped, but not
+    # consumed until a later spec; table-level missingValues remains the primary path.
+    missingValues: list[str | MissingValue] | None = None
+    qa: FieldQA = Field(default_factory=FieldQA)
+
+    @model_validator(mode="after")
+    def _semantic_applicability(self) -> "FieldSpec":
+        has_bound = any(
+            getattr(self.constraints, b) is not None
+            for b in ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum")
+        )
+        if has_bound and self.type not in (NUMERIC_TYPES | TEMPORAL_TYPES):
+            raise ValueError(
+                f"field {self.name!r}: bounds require a numeric or temporal type, "
+                f"got {self.type!r}"
+            )
+        if (self.qa.low_variance or self.qa.zero_fraction) and self.type not in QA_STAT_TYPES:
+            raise ValueError(
+                f"field {self.name!r}: qa.low_variance/zero_fraction require an "
+                f"integer/number/boolean type, got {self.type!r}"
+            )
+        return self

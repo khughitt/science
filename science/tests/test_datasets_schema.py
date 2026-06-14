@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from science_tool.datasets.schema import FieldConstraints, FieldQA, MissingValue
+from science_tool.datasets.schema import FieldConstraints, FieldQA, FieldSpec, MissingValue
 
 
 class TestFieldValueModels:
@@ -35,3 +35,32 @@ class TestFieldValueModels:
         assert FieldQA().low_variance is False
         with pytest.raises(ValidationError):
             FieldQA.model_validate({"low_varianse": True})  # typo rejected (extra=forbid)
+
+
+class TestFieldSpec:
+    def test_default_type_is_any(self) -> None:
+        f = FieldSpec(name="x")
+        assert f.type == "any"          # DP v2: omitted type ⇒ any, NOT string
+        assert f.constraints.required is False
+        assert f.qa.low_variance is False
+        assert f.missingValues is None
+
+    def test_field_level_missing_values_accepted(self) -> None:
+        f = FieldSpec.model_validate({"name": "x", "type": "number", "missingValues": ["NA"]})
+        assert f.missingValues == ["NA"]
+
+    def test_bounds_require_numeric_or_temporal_type(self) -> None:
+        FieldSpec(name="plddt", type="number", constraints={"minimum": 0, "maximum": 100})  # ok
+        FieldSpec(name="d", type="date", constraints={"minimum": "2020-01-01"})              # ok
+        with pytest.raises(ValidationError, match="numeric or temporal"):
+            FieldSpec(name="s", type="string", constraints={"minimum": 0})
+
+    def test_qa_stats_require_numeric_or_boolean_type(self) -> None:
+        FieldSpec(name="n", type="integer", qa={"low_variance": True})                       # ok
+        FieldSpec(name="b", type="boolean", qa={"zero_fraction": True})                      # ok
+        with pytest.raises(ValidationError, match="integer/number/boolean"):
+            FieldSpec(name="s", type="string", qa={"low_variance": True})
+
+    def test_field_extra_allowed(self) -> None:
+        f = FieldSpec.model_validate({"name": "x", "title": "X", "description": "d"})
+        assert f.name == "x"
