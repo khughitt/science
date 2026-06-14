@@ -27,7 +27,7 @@ Belief/aggregation is **not** touched: lineage commitments reuse the existing `D
 | `science/src/science_tool/graph/materialize.py` | Emit `<child> sci:subCohortOf <parent>` into the knowledge graph from the `dataset_parents` map, before B2 derivation runs (line ~130, near `_add_dataset_usage_edges`). |
 | `science/src/science_tool/graph/dataset_independence.py` | Read `sci:subCohortOf` into a lineage map; group by lineage root; gate the **commitment edge builder** and `_is_committable_pair` with one shared lineage-committable predicate; add `lineage-sibling` to `_candidate_reason`. |
 | `science/src/science_tool/graph/io.py` | (No change — `sci:` predicates are accessed dynamically via `SCI_NS.subCohortOf`; the prefix is already registered.) |
-| `science/model/src/science_model/tests/test_dataset_models.py` | Regression: `origin: external` + `access` + `parent_dataset` validates (no invariant #7/#8 regression). |
+| `science/model/tests/test_dataset_models.py` | Regression: `origin: external` + `access` + `parent_dataset` validates (no invariant #7/#8 regression). |
 | `science/tests/validate/test_checks_dataset_lineage.py` | **New.** Lineage validation tests. |
 | `science/tests/test_dataset_independence.py` | Lineage-aware commitment/candidate derivation tests + identical-dataset regression. |
 | `science/tests/test_dataset_usage_materialize.py` | Materialization integration test: `parent_dataset` → `sci:subCohortOf` triple; UKB end-to-end. |
@@ -179,7 +179,7 @@ Register in `science/src/science_tool/validate/checks/__init__.py` by adding `"d
 ## Task 2: Model Regression Guard (origin-orthogonality)
 
 **Files:**
-- Edit: `science/model/src/science_model/tests/test_dataset_models.py`
+- Edit: `science/model/tests/test_dataset_models.py`
 
 - [ ] **Step 1: Add a passing-guard test** proving the design's origin-orthogonality claim holds (and will keep holding):
 
@@ -198,7 +198,7 @@ def test_external_dataset_may_carry_parent_dataset():
 
 (Adjust constructor kwargs to the test module's existing factory/helpers.)
 
-- [ ] **Step 2: Run** — `rtk uv run --frozen --project science pytest science/model/src/science_model/tests/test_dataset_models.py`. This should **pass immediately** (origin-orthogonality already holds); it is a guard against future regression, not a red test. If it fails, the schema drifted — stop and reconcile with the design before continuing.
+- [ ] **Step 2: Run** — `rtk uv run --frozen --project science pytest science/model/tests/test_dataset_models.py`. This should **pass immediately** (origin-orthogonality already holds); it is a guard against future regression, not a red test. If it fails, the schema drifted — stop and reconcile with the design before continuing.
 
 - [ ] **Step 3: Commit** — `test(model): guard external dataset may carry parent_dataset`.
 
@@ -404,7 +404,7 @@ Plus a **regression** assertion that the existing identical-dataset case (`test_
 
 - [ ] **Step 1: Flip design status.** In `docs/plans/2026-06-13-dataset-sub-cohort-lineage-design.md`, change Status to "implemented; see `…-plan.md`". Resolve the two design open-calls in the doc with what was actually done (symmetry-promotion: yes/no; predicate `sci:subCohortOf`: confirmed).
 
-- [ ] **Step 2: Run the full affected suite** — `rtk uv run --frozen --project science pytest science/tests/test_dataset_independence.py science/tests/test_dataset_usage_materialize.py science/tests/validate/test_checks_dataset_lineage.py science/tests/test_belief_collect.py science/model/src/science_model/tests/test_dataset_models.py`.
+- [ ] **Step 2: Run the full affected suite** — `rtk uv run --frozen --project science pytest science/tests/test_dataset_independence.py science/tests/test_dataset_usage_materialize.py science/tests/validate/test_checks_dataset_lineage.py science/tests/test_belief_collect.py science/model/tests/test_dataset_models.py`.
 
 - [ ] **Step 3: Run lint + whitespace + full validate** per repo convention (ruff / whitespace check / `science validate` on a fixture project).
 
