@@ -12,6 +12,7 @@ from science_tool.causal.export_chirho import export_chirho_script
 from science_tool.causal.export_pgmpy import export_pgmpy_script
 from science_tool.data_worktree import hydrate_worktree_data
 from science_tool.datasets import available_adapters, get_adapter, search_all
+from science_tool.datasets import infer_schema as _infer_schema
 from science_tool.datasets.validate import validate_data_packages
 from science_tool.distill.openalex import distill_openalex
 from science_tool.distill.pykeen_source import distill_pykeen
@@ -3106,6 +3107,59 @@ def datasets_validate(data_path: Path, output_format: str) -> None:
     )
     if any(r["status"] == "fail" for r in results):
         raise click.exceptions.Exit(1)
+
+
+@datasets.command("infer-schema")
+@click.argument("datapackage", type=click.Path(path_type=Path))
+@click.option("--resource", "resource", required=True, help="Resource name (or path) to infer.")
+@click.option("--sample", default=10000, show_default=True, help="Max rows sampled for inference.")
+@click.option("--write", "do_write", is_flag=True, help="Apply ONLY the safe names+types patch in place.")
+@click.option("--emit-suggestions", "suggestions_path", default=None, type=click.Path(path_type=Path),
+              help="Write the review report to this YAML file (never mutates the descriptor).")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def datasets_infer_schema(
+    datapackage: Path,
+    resource: str,
+    sample: int,
+    do_write: bool,
+    suggestions_path: Path | None,
+    output_format: str,
+) -> None:
+    """Infer a resource's observed shape (field names + coarse types) from its table.
+
+    Read-only by default (prints a diff vs the existing schema + a review report). With
+    --write, applies ONLY the safe names+types patch; it never infers constraints, keys,
+    foreignKeys, or qa: those are recommended in the report and authored by hand. Writes
+    are canonical (the descriptor is re-rendered in its own format; formatting/comments are
+    not preserved).
+    """
+    try:
+        result = _infer_schema.infer_schema_result(datapackage, resource, sample)
+    except _infer_schema.InferSchemaError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if output_format == "json":
+        click.echo(_infer_schema.result_to_json(result), nl=False)
+    else:
+        emit_query_rows(
+            output_format=output_format, title="Proposed schema (names + types only)",
+            columns=[("glyph", ""), ("action", "Action"), ("field", "Field"), ("details", "Details")],
+            rows=_infer_schema.render_diff_rows(result.diff))
+        emit_query_rows(
+            output_format=output_format, title="Review recommendations (NOT applied — author by hand)",
+            columns=[("kind", "Kind"), ("column", "Column"), ("note", "Note"), ("label", "Label")],
+            rows=_infer_schema.render_report_rows(result.report))
+
+    if suggestions_path is not None:
+        suggestions_path.write_text(_infer_schema.report_to_yaml(result.report), encoding="utf-8")
+        click.echo(f"Wrote review report to {suggestions_path}")
+
+    if do_write:
+        try:
+            _infer_schema.write_patch(result)
+        except _infer_schema.InferSchemaError as exc:
+            raise click.ClickException(str(exc)) from exc
+        click.echo(f"Applied names+types patch to {result.descriptor_path}")
 
 
 @datasets.command("hydrate-worktree")
