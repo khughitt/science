@@ -1,6 +1,6 @@
 # Schema Adoption Campaign — Manifest
 
-Audited 2026-06-14. Statuses: `pending` | `done` | `no-op` | `blocked-data` | `blocked-scaffold`.
+Audited 2026-06-14. Statuses: `pending` | `done` | `no-op` | `blocked-data`.
 Paths are package directories relative to each project root. No pushes — all commits stay local.
 
 ## mm30  [~/d/cancer/cancer-types/multiple-myeloma]
@@ -12,19 +12,19 @@ Paths are package directories relative to each project root. No pushes — all c
 | data/external/gdsc_v2/2022-07-24 | json | 3 | done | pending | commit 65edc4d3 |
 | data/external/oetjen_2018/2018-10 | json | 1 | done | pending | schema pre-existed (write a no-op); 2 non-tabular files absent |
 | data/external/opentargets/25.03 | json | 3 | done | pending | commit a082d175 |
-| data/external/walker_2024/2024-05 | json | 6 | done | pending | commit d66028e6 — 4 present tabular schema'd; 4 files absent locally (2 parquet + h5ad + qc_report.json) stay blocked-data |
+| data/external/walker_2024/2024-05 | json | 6 | done | pending | commit d66028e6 — 4 present tabular schema'd; 4 files absent locally stay blocked-data |
 
-## cancer-therapeutics  [~/d/cancer/therapeutics]  — ALL YAML, blocked on scaffold defect (see below)
+## cancer-therapeutics  [~/d/cancer/therapeutics]  — all YAML
 
 | Package | Fmt | Tabular | Phase 1 (shape) | Phase 2 (meaning) | Notes |
 |---|---|---|---|---|---|
-| data/raw/chembl-activities | yaml | 1 | blocked-scaffold | blocked-scaffold | YAML timestamp coercion |
-| data/raw/chembl | yaml | 1 | blocked-scaffold | blocked-scaffold | smoke-test that surfaced the defect; write reverted |
-| data/raw/dgidb | yaml | 2 | blocked-scaffold | blocked-scaffold | 1 resource also blocked-data (../../processed path) |
-| data/raw/drugcomb | yaml | 1 | blocked-scaffold | blocked-scaffold | |
+| data/raw/chembl-activities | yaml | 1 | done | pending | commit 3879ab4 — **newly git-tracked** (force-add past data/raw/ ignore) |
+| data/raw/chembl | yaml | 1 | done | pending | commit 7084e12 |
+| data/raw/dgidb | yaml | 2 | done | pending | commit 13f52fc — 1 resource blocked-data (../../processed absent) |
+| data/raw/drugcomb | yaml | 1 | done | pending | commit 118c233 |
 | data/raw/nci-almanac | yaml | 0 | no-op | no-op | no tabular resources |
-| data/raw/nsc-crosswalk | yaml | 1 | blocked-scaffold | blocked-scaffold | |
-| data/raw/opentargets | yaml | 1 | blocked-scaffold | blocked-scaffold | |
+| data/raw/nsc-crosswalk | yaml | 1 | done | pending | commit 5fb915b |
+| data/raw/opentargets | yaml | 1 | done | pending | commit de6b855 — **newly git-tracked** (force-add past data/raw/ ignore) |
 | data/raw/string | yaml | 0 | no-op | no-op | no tabular resources |
 
 ## cancer-evolution  [~/d/cancer/mechanisms/evolution]
@@ -40,39 +40,33 @@ Paths are package directories relative to each project root. No pushes — all c
 
 | Package | Fmt | Tabular | Phase 1 (shape) | Phase 2 (meaning) | Notes |
 |---|---|---|---|---|---|
-| code/scripts/external/reactome | yaml | 6 | blocked-data | blocked-data | all 6 CSVs absent locally — needs hydration (also YAML → blocked-scaffold) |
+| code/scripts/external/reactome | yaml | 6 | blocked-data | blocked-data | all 6 CSVs absent locally — needs hydration |
 
-## Phase 1 status (2026-06-14)
+## Phase 1 status — COMPLETE (2026-06-14)
 
-- **JSON half DONE** — 8 packages schema'd with names+types and committed (local, not pushed),
-  all verified value-safe (only `schema` added; every other descriptor field byte-identical):
-  mm30 ×6 (ccle, ctrp_v2, gdsc_v2, oetjen[pre-existing], opentargets, walker[4 present resources]),
-  cancer-evolution ×2 (ampliconrepository pcawg, tcga). Gate (`science datasets validate --path`)
-  passes; partial packages (oetjen, walker) fail only on absent data files, as expected.
-- **YAML half BLOCKED** — the 6 non-no-op cancer-therapeutics packages cannot be written until
-  the scaffold defect below is fixed.
+All 14 effective-working-set packages are shape-done (names+types written, gated, committed
+local, NOT pushed; every change verified value-safe — only `schema` added, all other descriptor
+content preserved; YAML ISO timestamps preserved as strings, re-quoted only). 8 JSON +
+6 cancer-therapeutics YAML. no-op (0 tabular): nci-almanac, string, kim2024-supplement,
+nct02415621. blocked-data: reactome (whole package); plus absent resources within walker_2024,
+dgidb, oetjen_2018.
 
-## Scaffold defect (blocks YAML writes) — for a separate science-repo cycle
+**Scaffold defect — FIXED.** The YAML timestamp coercion in `infer_schema.load_descriptor`
+(`yaml.safe_load` parsed ISO timestamps to `datetime`, dropping the `T`) was fixed by a custom
+`_RoundTripSafeLoader` that strips only the implicit timestamp resolver (+ round-trip regression
+tests). Merged to local `main` (a93757b8). This unblocked the 6 YAML packages.
 
-`science datasets infer-schema --write` corrupts a value when re-rendering a YAML descriptor:
-`infer_schema.load_descriptor` uses `yaml.safe_load`, which **implicitly parses an unquoted
-ISO-8601 timestamp string into a `datetime`**; `_render_descriptor`'s `yaml.safe_dump` then
-re-emits it as a YAML timestamp — e.g. `provenance.retrieved: 2026-05-31T13:20:44.428732+00:00`
-became `2026-05-31 13:20:44.428732+00:00` (lost the `T`, type str→datetime). The chembl smoke
-test caught this; the write was reverted (no corrupted descriptor was committed). This violates
-the scaffold's "value-preserved" contract and affects every YAML descriptor carrying an unquoted
-ISO timestamp (all 6 cancer-therapeutics targets carry `provenance.retrieved`). JSON is
-unaffected (no implicit scalar coercion).
+**OPEN organizational decision (needs user).** The cancer-therapeutics `datapackage.yaml`
+descriptors live under `data/raw/`, which `.gitignore` excludes (data bytes). 4 descriptors were
+already force-added/tracked historically; the campaign newly force-added **chembl-activities** and
+**opentargets** (commits 3879ab4, de6b855) to match. Cleaner per "organization over workarounds":
+add a `.gitignore` exception (`!data/raw/**/datapackage.yaml`) so all descriptors track by rule
+instead of scattered force-adds. Pending user choice: (a) keep force-adds; (b) add gitignore
+exception; (c) un-track the 2 new ones.
 
-**Recommended fix:** make `load_descriptor`/`_render_descriptor` round-trip YAML scalars
-faithfully — load with a loader whose implicit-timestamp (and ideally other risky implicit)
-resolvers are removed so timestamps stay strings, OR otherwise guarantee non-schema scalars are
-value-preserved. Add a regression test: a YAML descriptor with `retrieved: <ISO-with-T>` must
-round-trip unchanged through `--write`. Then unblock the 6 YAML packages.
+## Next: Phase 2 (paused before)
 
-## Summary
-
-- Effective working set: 14 packages with present local data.
-- Phase 1 done: 8 (all JSON). Phase 1 blocked-scaffold: 6 (all cancer-therapeutics YAML).
-- no-op (no tabular): nci-almanac, string, kim2024-supplement, nct02415621-trial-patient-data.
-- blocked-data: reactome (whole package); plus absent resources within walker_2024 and dgidb.
+Structural-meaning authoring (required/enum/primaryKey + relational foreignKeys/composite keys,
+two-tier evidence rule), subagent per package + over-authoring review + user spot-check, across
+all `done` packages. Per-package done-gate = validate exit 0 (partial walker/dgidb/oetjen = fails
+only name manifest-recorded absent resources, S3 json check).
