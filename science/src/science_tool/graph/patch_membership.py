@@ -244,3 +244,82 @@ def _record_sort_key(record: MembershipRecord) -> tuple[int, int, str]:
         reason_order[record.derivation_reason],
         str(record.derivation_predicate or ""),
     )
+
+
+def emit_patch_memberships(
+    dataset: Dataset,
+    patch_definitions: list[PatchDefinitionEntity],
+    records: list[MembershipRecord],
+) -> None:
+    records_by_patch: dict[str, list[MembershipRecord]] = {}
+    for record in records:
+        records_by_patch.setdefault(record.patch_id, []).append(record)
+
+    for definition in sorted(patch_definitions, key=lambda item: item.canonical_id):
+        patch_uri = entity_uri_for_ref(definition.canonical_id)
+        graph = dataset.graph(patch_uri)
+        graph.add((patch_uri, RDF.type, SCI_NS.EpistemicPatch))
+        graph.add((patch_uri, SCI_NS.focalEntity, entity_uri_for_ref(definition.focal)))
+        graph.add((patch_uri, SCI_NS.neighborhoodPolicy, RDFLiteral(definition.neighborhood_policy.name)))
+        graph.add((patch_uri, SCI_NS.policyVersion, RDFLiteral(definition.neighborhood_policy.version)))
+        graph.add((patch_uri, SCI_NS.patchScope, RDFLiteral("local")))
+        for seed in sorted(definition.seeds):
+            graph.add((patch_uri, SCI_NS.patchSeed, entity_uri_for_ref(seed)))
+        for exclude in sorted(definition.excludes, key=lambda item: item.ref):
+            exclusion = _exclusion_uri(definition.canonical_id, exclude.ref)
+            graph.add((exclusion, RDF.type, SCI_NS.PatchExclusion))
+            graph.add((exclusion, SCI_NS.patch, patch_uri))
+            graph.add((exclusion, SCI_NS.excludedEntity, entity_uri_for_ref(exclude.ref)))
+            graph.add((exclusion, SCI_NS.excludeReason, RDFLiteral(exclude.reason)))
+
+        for record in sorted(records_by_patch.get(definition.canonical_id, []), key=lambda item: str(item.member)):
+            node = _membership_uri(record)
+            graph.add((node, RDF.type, SCI_NS.PatchMembership))
+            graph.add((node, SCI_NS.patch, record.patch))
+            graph.add((node, SCI_NS.member, record.member))
+            graph.add((node, SCI_NS.memberRole, RDFLiteral(record.member_role)))
+            graph.add((node, SCI_NS.memberKind, RDFLiteral(record.member_kind)))
+            graph.add((node, SCI_NS.derivationReason, RDFLiteral(record.derivation_reason)))
+            graph.add((node, SCI_NS.derivationDepth, RDFLiteral(record.depth, datatype=XSD.integer)))
+            graph.add((node, SCI_NS.policyVersion, RDFLiteral(record.policy_version)))
+            if record.derivation_predicate is not None:
+                graph.add((node, SCI_NS.derivationPredicate, record.derivation_predicate))
+            if record.build_id:
+                graph.add((node, SCI_NS.buildId, RDFLiteral(record.build_id)))
+            graph.add((record.patch, SCI_NS.hasMember, record.member))
+            graph.add((record.member, SCI_NS.inPatch, record.patch))
+
+
+def patch_membership_pairs(dataset: Dataset) -> set[tuple[str, str]]:
+    return {
+        (str(patch), str(member))
+        for graph in dataset.graphs()
+        for node in graph.subjects(RDF.type, SCI_NS.PatchMembership)
+        for patch in graph.objects(node, SCI_NS.patch)
+        for member in graph.objects(node, SCI_NS.member)
+    }
+
+
+def validate_patch_membership_convenience(dataset: Dataset) -> list[str]:
+    errors: list[str] = []
+    membership_pairs = patch_membership_pairs(dataset)
+    for graph in dataset.graphs():
+        for patch, _, member in graph.triples((None, SCI_NS.hasMember, None)):
+            if (str(patch), str(member)) not in membership_pairs:
+                errors.append(f"{patch} has sci:hasMember {member} without a sci:PatchMembership node")
+        for member, _, patch in graph.triples((None, SCI_NS.inPatch, None)):
+            if (str(patch), str(member)) not in membership_pairs:
+                errors.append(f"{member} has sci:inPatch {patch} without a sci:PatchMembership node")
+    return sorted(errors)
+
+
+def _membership_uri(record: MembershipRecord) -> URIRef:
+    key = f"{record.patch}\x00{record.member}\x00{record.policy_version}"
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+    return URIRef(PROJECT_NS[f"patch-membership/{digest}"])
+
+
+def _exclusion_uri(patch_id: str, ref: str) -> URIRef:
+    key = f"{patch_id}\x00{ref}"
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+    return URIRef(PROJECT_NS[f"patch-exclusion/{digest}"])
