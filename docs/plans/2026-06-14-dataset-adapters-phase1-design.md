@@ -35,42 +35,82 @@ surfaced in the CLI). Phase 1 is breadth only.
 - Add four self-contained adapters following the existing `zenodo.py` / `geo.py`
   pattern, each independently testable with no live network in tests.
 - Make the rhythm-relevant repositories that `t001` needs discoverable through
-  `science datasets search` with no CLI changes.
-- Signal access tier (public vs. credentialed/controlled) where the repository
-  forces the distinction (PhysioNet, SRA).
+  `science datasets search` (no new CLI commands; one small output change in §2.2).
+- Signal access tier (public / restricted / controlled) where the repository
+  forces the distinction (PhysioNet, SRA), via a canonical vocabulary (§2.1).
 
 ### Non-goals
 
 - No relevance ranking, scoring, or cross-source dedup (that is Phase 2).
 - No NSRR / NHANES adapters — DUA-gated cohort portals and fixed file portals do
   not fit the search-adapter shape; they stay manual.
-- No CLI surface changes.
+- No new CLI commands. The only CLI edit is surfacing `access` in `search` /
+  `metadata` output rows (§2.2).
 
 ## 2. Architecture
 
-Unchanged core. Each adapter is a self-contained class implementing the existing
-`DatasetAdapter` protocol, constructed with its own `httpx.Client`, registered
-in `datasets/__init__.py::_auto_register()` via a `try/except ImportError`
-block. `search_all` already provides per-source error degradation; the CLI is
-adapter-agnostic, so the new sources appear automatically in
-`science datasets sources` and participate in `search`. Each adapter file is
-~80–130 lines, matching `zenodo.py` / `geo.py`.
+Mostly-unchanged core. Each adapter is a self-contained class implementing the
+existing `DatasetAdapter` protocol, constructed with its own `httpx.Client`,
+registered in `datasets/__init__.py::_auto_register()` via a `try/except
+ImportError` block. `search_all` already provides per-source error degradation;
+adapter *discovery/search/download* is adapter-agnostic, so the new sources
+participate in `science datasets sources` / `search` / `download` with no change.
+Each adapter file is ~80–130 lines, matching `zenodo.py` / `geo.py`.
+
+One small CLI change *is* required (see §2.2): the new `access` field is dropped
+by the current output unless `search` and `metadata` rows are extended to carry
+it.
 
 ### 2.1 Shared-schema change (additive)
 
 Add one optional field to `DatasetResult` in `datasets/_base.py`:
 
 ```python
-access: str | None = None   # "public" | "credentialed" | "controlled" | None
+access: str | None = None   # canonical: "public" | "restricted" | "controlled" | None
 ```
 
-Rationale: PhysioNet (open vs. credentialed projects) and SRA (dbGaP controlled
-tiers) force the public-vs-gated distinction, and `/find-datasets` already maps
-an `access` tier into dataset entities, so surfacing it from search is directly
-useful and feeds Phase 2 ranking. The field is optional and defaulted, so no
-existing adapter or test breaks. Existing adapters leave it `None`; `zenodo`,
-`dryad`, `figshare`, `arrayexpress` may set `"public"` since their search
-surfaces public records only.
+Rationale: PhysioNet (Open/Restricted/Credentialed projects) and SRA (dbGaP
+controlled tiers) force the public-vs-gated distinction, and `/find-datasets`
+already maps an `access` tier into dataset entities, so surfacing it from search
+is directly useful and feeds Phase 2 ranking. The field is optional and
+defaulted, so no existing adapter or test breaks. Existing adapters leave it
+`None`.
+
+**Canonical access vocabulary.** To prevent adapters from encoding tiers
+inconsistently (and to give the entity layer one thing to translate),
+`DatasetResult.access` uses exactly three values plus `None`:
+
+| Canonical | Meaning | Maps from |
+|---|---|---|
+| `public` | freely downloadable, no agreement | figshare, arrayexpress, zenodo, dryad; PhysioNet `Open`; SRA public |
+| `restricted` | self-serve gate (click-through DUA / login), no application | PhysioNet `Restricted` |
+| `controlled` | application/approval required | PhysioNet `Credentialed`; SRA dbGaP |
+| `None` | unknown / not determined | any adapter that cannot tell |
+
+**Crosswalk to the dataset-entity vocabulary** (`commands/find-datasets.md`
+uses `access.level ∈ {public, controlled, mixed}`):
+
+- `public` → `public`
+- `restricted` → `controlled`
+- `controlled` → `controlled`
+- `mixed` is **not** an adapter-level value — it is emergent at entity-emission
+  time when sibling artefacts differ in level, per the existing emission rules.
+
+This crosswalk is the single canonical mapping; the `/find-datasets` step
+applies it when populating `access.level`.
+
+### 2.2 CLI change (surface `access`)
+
+The current CLI builds explicit rows that omit `access`, and JSON output
+(`output.py::emit_query_rows`) serializes exactly those rows — so the field is
+silently dropped without this change:
+
+- `datasets_search` (`cli.py` ~line 2974): add `"access": r.access or ""` to each
+  row and an `("access", "Access")` column.
+- `datasets_metadata` (`cli.py` ~line 3010): add an
+  `{"field": "Access", "value": result.access or ""}` row.
+
+No change to `output.py` or `files`/`download` commands.
 
 ## 3. The four adapters
 
@@ -109,22 +149,26 @@ later is a one-line endpoint change.
 
 ### 3.3 `physionet`
 
-Base: `https://physionet.org` — **no first-class search API**; this is the
-highest-maintenance-risk adapter.
+Base: `https://physionet.org/api/v1` — **first-class JSON API** (verified live;
+matches the official MIT-LCP `physionet` client's `projects` endpoints). No HTML
+scraping is required.
 
-| Method | Approach | Notes |
+| Method | Endpoint | Notes |
 |---|---|---|
-| `search` | fetch the published-projects index, substring/keyword-match `query` against project titles | parse access policy (open vs. credentialed) and version from the listing |
-| `metadata` | fetch + parse the project landing page | title, version, access policy → `access` |
-| `files` | parse the `/files/{slug}/{version}/` directory listing | filename, size where available |
-| `download` | stream open-access file URLs; **raise `PermissionError` with the access URL for credentialed projects** | never write a 403 HTML body to disk |
+| `search` | `GET /projects/search/?search_term=&resource_type=` | array of projects; fields: `slug`, `version`, `title`, `abstract`/`short_description`, `version_doi`/`core_doi`, `publish_date`→year, `license.name`, `access_policy`, `topics`→keywords, `main_storage_size`, `source_url` |
+| `metadata` | `GET /projects/{slug}/versions/{version}/` | full project detail (the client's `get_details`) |
+| `files` | `GET /projects/published/{slug}/{version}/sha256sums/` | parse `<sha256>␠␠<path>` lines → `FileInfo(filename=path, url=…/files/{slug}/{version}/{path}, checksum=sha256)` |
+| `download` | stream `https://physionet.org/files/{slug}/{version}/{path}` | for `Restricted`/`Credentialed` projects, **raise `PermissionError` with `source_url`** instead of persisting a 403/login body |
 
-HTML parsing is isolated in a private helper (`_parse_project_index`,
-`_parse_file_listing`) and pinned to small saved HTML fixtures in tests. This
-adapter is flagged as the most fragile — index/landing-page markup changes will
-break it first; the fixture-pinned tests localize the failure.
+Adapter `id` is the project `slug`; `metadata("slug")` resolves to the latest
+version via `GET /projects/{slug}/versions/` when no version is pinned.
 
-`access`: `"public"` for open projects, `"credentialed"` for credentialed ones.
+`access`: from `access_policy` — `Open`→`public`, `Restricted`→`restricted`,
+`Credentialed`→`controlled` (per the §2.1 canonical vocabulary).
+
+This adapter is now pure-JSON like the others; the only residual fragility is the
+plain-text `sha256sums` parsing, isolated in a private `_parse_sha256sums`
+helper and fixture-pinned in tests.
 
 ### 3.4 `sra`
 
@@ -162,20 +206,31 @@ Per adapter, following the established `MagicMock` + `patch.object(adapter,
 - `test_search_parses_response`
 - `test_metadata_parses_record`
 - `test_files`
-- Edge cases: empty search results; gated-access path raises for `physionet`
-  (credentialed project) and `sra` (controlled).
+- `test_access_tier` for `physionet` (Open→public, Restricted→restricted,
+  Credentialed→controlled) and `sra` (dbGaP→controlled).
+- Edge cases: empty search results; gated-access `download()` raises for
+  `physionet` (restricted/credentialed) and `sra` (controlled).
 
-Fixtures: PhysioNet project-index + file-listing HTML, and an SRA `esummary`
-XML with an `ExpXml` blob — small, representative, saved as test fixtures.
+Fixtures: a PhysioNet `projects/search/` JSON response and a `sha256sums`
+text body; an SRA `esummary` XML with an `ExpXml` blob — small, representative,
+saved as test fixtures.
 
 Registry: extend the existing registry test to assert `figshare`,
 `arrayexpress`, `physionet`, `sra` all appear in `available_adapters()`.
+
+CLI: extend `science/tests/test_datasets_cli.py` to assert the `Access` column
+appears in `datasets search` output and the `Access` field in `datasets
+metadata` output (both table and JSON), so the §2.2 change is regression-guarded.
 
 ## 6. Documentation
 
 - Update `commands/find-datasets.md` — the "Adapters cover …" line (currently
   ~line 73) and the limitations note — to list the four new sources and the
   PhysioNet/SRA access caveats.
+- Document the §2.1 access crosswalk in `commands/find-datasets.md` near the
+  `access` entity-field guidance (~line 119), so the step that populates
+  `access.level` applies `public→public`, `restricted→controlled`,
+  `controlled→controlled` consistently.
 - Mirror the adapter-list change into `codex-skills/science-find-datasets/SKILL.md`
   if it duplicates the list.
 
@@ -184,8 +239,8 @@ Registry: extend the existing registry test to assert `figshare`,
 From `~/d/science`:
 
 ```bash
-uv run pytest science/tests/test_datasets.py
-uv run ruff check science/src/science_tool/datasets
+uv run pytest science/tests/test_datasets.py science/tests/test_datasets_cli.py
+uv run ruff check science/src/science_tool/datasets science/src/science_tool/cli.py
 ```
 
 ## 8. Out of scope → Phase 2 (separate spec)
@@ -194,5 +249,5 @@ uv run ruff check science/src/science_tool/datasets
   LLM ranks in the skill).
 - Cross-source dedup (same DOI surfacing from Zenodo + Dryad + figshare).
 - Richer result fields surfaced in the CLI `search` table (modality, organism,
-  sample_count, access).
+  sample_count). `access` is already surfaced in Phase 1 (§2.2).
 - Optional follow-on adapters: `osf`, and a generalized `biostudies` toggle.
