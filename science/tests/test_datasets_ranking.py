@@ -7,6 +7,7 @@ from science_tool.datasets._ranking import (
     _normalize_doi,
     _richness,
     dedupe_results,
+    rank_results,
     score_result,
 )
 
@@ -130,3 +131,18 @@ class TestDedupeResults:
         out = dedupe_results("same", [first, second])
         assert len(out) == 1
         assert out[0].source == "geo"
+
+
+class TestRankResults:
+    def test_orders_by_score_descending(self) -> None:
+        low = _r(source="a", title="generic data")
+        high = _r(source="b", title="circadian rhythm data")
+        out = rank_results("circadian rhythm", [low, high])
+        assert [r.source for r in out] == ["b", "a"]
+
+    def test_equal_scores_keep_input_order(self) -> None:
+        # Neither matches the query -> equal (zero) score -> stable order preserved.
+        first = _r(source="first", title="alpha")
+        second = _r(source="second", title="beta")
+        out = rank_results("zzz", [first, second])
+        assert [r.source for r in out] == ["first", "second"]

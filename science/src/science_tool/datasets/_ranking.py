@@ -113,3 +113,8 @@ def dedupe_results(query: str, results: list[DatasetResult]) -> list[DatasetResu
         else:
             out.append(slot)
     return out
+
+
+def rank_results(query: str, results: list[DatasetResult]) -> list[DatasetResult]:
+    """Stable sort by descending lexical score (equal scores keep input order)."""
+    return sorted(results, key=lambda r: score_result(query, r), reverse=True)
