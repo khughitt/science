@@ -235,3 +235,80 @@ def diff_schema(existing_fields: list[dict], inferred: list[InferredField]) -> l
         if name not in inferred_names:
             entries.append(DiffEntry(str(name), "remove", fld.get("type"), None))
     return entries
+
+
+ENUM_MAX_DISTINCT = 20
+HIGH_CARDINALITY_FRACTION = 0.9
+STRING_SENTINELS = {"NA", "N/A", "null", "NULL", "NaN", "-", "?"}
+
+
+@dataclass
+class Recommendation:
+    kind: str  # identifier|enum|required|unique|missing_sentinel|bound
+    column: str
+    message: str
+
+
+@dataclass
+class ReportWarning:
+    column: str
+    message: str
+
+
+@dataclass
+class ReviewReport:
+    recommendations: list[Recommendation] = field(default_factory=list)
+    warnings: list[ReportWarning] = field(default_factory=list)
+    sample_rows: int = 0
+
+
+def build_report(df: pd.DataFrame, inferred: list[InferredField]) -> ReviewReport:
+    """Build the human-facing review report from a sample. Recommendations are candidate
+    invariants the author may choose to add by hand; they are NEVER emitted into a schema."""
+    rep = ReviewReport(sample_rows=int(len(df)))
+    by_name = {i.name: i for i in inferred}
+    for col in df.columns:
+        s = df[col]
+        name = str(col)
+        nonnull = s.dropna()
+        n_nonnull = int(len(nonnull))
+        n_null = int(len(s) - n_nonnull)
+        distinct = int(nonnull.nunique())
+        ftype = by_name[name].type if name in by_name else "string"
+
+        if n_null == 0 and len(s) > 0:
+            rep.recommendations.append(Recommendation(
+                "required", name, f"no nulls in {len(s)} sampled rows — consider constraints.required"))
+        is_unique = n_nonnull > 0 and distinct == n_nonnull
+        if is_unique and n_null == 0 and ftype in ("string", "integer"):
+            rep.recommendations.append(Recommendation(
+                "identifier", name, "unique & non-null in sample — consider primaryKey"))
+        elif is_unique:
+            rep.recommendations.append(Recommendation(
+                "unique", name, "all sampled values distinct — consider constraints.unique"))
+        if (ftype in ("string", "integer", "boolean") and 2 <= distinct <= ENUM_MAX_DISTINCT
+                and n_nonnull and not is_unique):
+            rep.recommendations.append(Recommendation(
+                "enum", name, f"low cardinality ({distinct} distinct) — consider constraints.enum"))
+        if ftype in ("number", "integer", "datetime") and n_nonnull:
+            rep.recommendations.append(Recommendation(
+                "bound", name,
+                f"observed range [{nonnull.min()!r}, {nonnull.max()!r}] in sample — "
+                "possible minimum/maximum (sample-derived, NOT a constraint)"))
+
+        # missing-sentinel: recurring out-of-band tokens
+        sentinels = {str(v) for v in nonnull.unique()} & STRING_SENTINELS
+        for tok in sorted(sentinels):
+            if int((nonnull.astype(str) == tok).sum()) > 1:
+                rep.recommendations.append(Recommendation(
+                    "missing_sentinel", name,
+                    f"recurring sentinel-like value {tok!r} — consider table missingValues"))
+
+        # warnings
+        if by_name.get(name) and by_name[name].mixed:
+            rep.warnings.append(ReportWarning(name, "mixed python types in sample — typed as string"))
+        if n_null:
+            rep.warnings.append(ReportWarning(name, f"{n_null}/{len(s)} null in sample (nullable)"))
+        if ftype == "string" and n_nonnull and distinct > HIGH_CARDINALITY_FRACTION * n_nonnull and not is_unique:
+            rep.warnings.append(ReportWarning(name, "high-cardinality string (likely free text)"))
+    return rep

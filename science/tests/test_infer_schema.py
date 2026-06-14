@@ -202,3 +202,38 @@ def test_diff_type_disagreement_is_conflict() -> None:
 def test_diff_field_absent_from_file_is_remove() -> None:
     diff = isch.diff_schema([{"name": "gone", "type": "string"}], [])
     assert diff[0].action == "remove"
+
+
+def test_report_required_and_identifier() -> None:
+    df = pd.DataFrame({"id": ["A", "B", "C"], "g": ["x", "x", "y"]})
+    rep = isch.build_report(df, isch.infer_fields(df))
+    kinds = {(r.kind, r.column) for r in rep.recommendations}
+    assert ("required", "id") in kinds       # no nulls observed
+    assert ("identifier", "id") in kinds     # unique + non-null + id-type
+    assert ("enum", "g") in kinds            # low cardinality
+
+
+def test_report_bound_for_numeric() -> None:
+    df = pd.DataFrame({"x": [0.0, 1.0, 2.0]})
+    rep = isch.build_report(df, isch.infer_fields(df))
+    assert any(r.kind == "bound" and r.column == "x" for r in rep.recommendations)
+
+
+def test_report_warns_mixed_and_nullable() -> None:
+    df = pd.DataFrame({"m": [1, "a", 2.0], "n": ["p", None, "q"]})
+    rep = isch.build_report(df, isch.infer_fields(df))
+    cols = {(w.column) for w in rep.warnings}
+    assert "m" in cols  # mixed object
+    assert "n" in cols  # nullable
+
+
+def test_report_missing_sentinel_recommendation() -> None:
+    df = pd.DataFrame({"v": ["1", "NA", "NA", "3"]})
+    rep = isch.build_report(df, isch.infer_fields(df))
+    assert any(r.kind == "missing_sentinel" and r.column == "v" for r in rep.recommendations)
+
+
+def test_report_records_sample_size() -> None:
+    df = pd.DataFrame({"a": [1, 2]})
+    rep = isch.build_report(df, isch.infer_fields(df))
+    assert rep.sample_rows == 2
