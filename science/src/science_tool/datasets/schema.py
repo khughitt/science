@@ -192,3 +192,40 @@ class ResourceDescriptor(BaseModel):
     name: str
     path: str                                # required in Spec 1 (no inline-data support yet)
     schema_: TableSchema | None = Field(default=None, alias="schema")
+
+
+def package_consistency_issues(descriptors: list[ResourceDescriptor]) -> list[str]:
+    """Cross-resource checks needing whole-package context (foreign-key resolution).
+
+    Returns human-readable issue strings (empty list = consistent). Within-descriptor
+    invariants are enforced at parse time by the model validators, not here.
+    """
+    issues: list[str] = []
+    seen: set[str] = set()
+    for d in descriptors:
+        if d.name in seen:
+            issues.append(f"duplicate resource name {d.name!r}")
+        seen.add(d.name)
+    by_name: dict[str, ResourceDescriptor] = {d.name: d for d in descriptors}
+    for d in descriptors:
+        if d.schema_ is None:
+            continue
+        for fk in d.schema_.foreignKeys:
+            ref = fk.reference
+            target = d if ref.resource == "" else by_name.get(ref.resource)
+            if target is None:
+                issues.append(f"{d.name}: foreignKey references unknown resource {ref.resource!r}")
+                continue
+            if target.schema_ is None:
+                issues.append(
+                    f"{d.name}: foreignKey target resource {ref.resource!r} has no schema"
+                )
+                continue
+            target_names = {f.name for f in target.schema_.fields}
+            for key in _as_list(ref.fields):
+                if key not in target_names:
+                    issues.append(
+                        f"{d.name}: foreignKey reference field {key!r} not in resource "
+                        f"{(ref.resource or d.name)!r}"
+                    )
+    return issues

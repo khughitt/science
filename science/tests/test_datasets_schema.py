@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from science_tool.datasets.schema import FieldConstraints, FieldQA, FieldSpec, ForeignKey, MissingValue, ResourceDescriptor, TableQA, TableSchema
+from science_tool.datasets.schema import FieldConstraints, FieldQA, FieldSpec, ForeignKey, MissingValue, ResourceDescriptor, TableQA, TableSchema, package_consistency_issues
 
 
 class TestFieldValueModels:
@@ -186,3 +186,50 @@ class TestResourceDescriptor:
             {"name": "o", "path": "o.csv", "format": "csv", "mediatype": "text/csv"}
         )
         assert d.name == "o"
+
+
+def _resource(name: str, fields: list[dict], foreign_keys: list[dict] | None = None) -> ResourceDescriptor:
+    schema: dict = {"fields": fields}
+    if foreign_keys is not None:
+        schema["foreignKeys"] = foreign_keys
+    return ResourceDescriptor.model_validate({"name": name, "path": f"{name}.csv", "schema": schema})
+
+
+class TestPackageConsistency:
+    def test_resolvable_cross_resource_fk_has_no_issues(self) -> None:
+        proteins = _resource("proteins", [{"name": "id"}])
+        edges = _resource(
+            "edges", [{"name": "src"}],
+            foreign_keys=[{"fields": "src", "reference": {"resource": "proteins", "fields": "id"}}],
+        )
+        assert package_consistency_issues([proteins, edges]) == []
+
+    def test_unknown_target_resource_is_an_issue(self) -> None:
+        edges = _resource(
+            "edges", [{"name": "src"}],
+            foreign_keys=[{"fields": "src", "reference": {"resource": "ghost", "fields": "id"}}],
+        )
+        issues = package_consistency_issues([edges])
+        assert any("unknown resource" in i for i in issues)
+
+    def test_unknown_target_field_is_an_issue(self) -> None:
+        proteins = _resource("proteins", [{"name": "id"}])
+        edges = _resource(
+            "edges", [{"name": "src"}],
+            foreign_keys=[{"fields": "src", "reference": {"resource": "proteins", "fields": "nope"}}],
+        )
+        issues = package_consistency_issues([proteins, edges])
+        assert any("reference field" in i for i in issues)
+
+    def test_self_reference_resolves_against_own_fields(self) -> None:
+        tree = _resource(
+            "tree", [{"name": "id"}, {"name": "parent"}],
+            foreign_keys=[{"fields": "parent", "reference": {"fields": "id"}}],
+        )
+        assert package_consistency_issues([tree]) == []
+
+    def test_duplicate_resource_names_flagged(self) -> None:
+        a = _resource("dup", [{"name": "x"}])
+        b = _resource("dup", [{"name": "y"}])
+        issues = package_consistency_issues([a, b])
+        assert any("duplicate resource name" in i for i in issues)
