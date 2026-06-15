@@ -382,6 +382,8 @@ git commit -m "feat(statement-extract): section normalization + containing-passa
 - [ ] **Step 1: Write the failing test** (append)
 
 ```python
+import json
+
 import pytest
 
 from science_tool.annotation.statement_extract import (
