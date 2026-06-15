@@ -47,6 +47,23 @@ def ledger_append_hash(
     )
 
 
+def ledger_set_source_text_hash(
+    ledger: AuditLedger, source_text_hash: str, *, now: datetime
+) -> AuditLedger:
+    """Return a ledger with the document-level source_text_hash set; idempotent.
+
+    Unchanged hash returns the SAME object (no modified bump), so a re-run that
+    re-records an identical hash produces no sidecar churn.
+    """
+    if ledger.source_text_hash == source_text_hash:
+        return ledger
+    return replace(
+        ledger,
+        source_text_hash=source_text_hash,
+        modified=now,
+    )
+
+
 def _ledger_id_for(source_version: str) -> str:
     """Mint a stable ledger ID from a source-version string.
 

@@ -36,6 +36,7 @@ HASH_REQUIRED_SOURCE_PREFIXES: tuple[str, ...] = (
     "lint:",
     "marker-scanner:",
     "pubtator3:",
+    "llm-annot:",
 )
 
 
@@ -121,6 +122,7 @@ class AuditLedger:
     source: str
     audited_hashes: tuple[str, ...]
     modified: datetime
+    source_text_hash: str | None = None
 
 
 @dataclass(frozen=True)

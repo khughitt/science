@@ -140,3 +140,37 @@ same BioC record, alongside entity mentions, under the same
 specialize it. Any unexpected/future type maps to `sci:pubtator_<slug>` (lowercased,
 non-`[a-z0-9_]` → `_`) with the verbatim type preserved in `raw_predicate_type` —
 never dropped, never presented as a curated predicate.
+
+## Statement annotations (paper-annotate Phase 3a)
+
+Agent-extracted sub-article statements. Produced by the `paper-annotate` subagent →
+`science annotate extract`.
+
+- **`annotation_type`**: `proposition` | `question` | `hypothesis` (kebab; no `sci:` prefix).
+- **Motivation**: `oa:classifying`.
+- **Source identity**: `llm-annot:<model>:paper-annotate-v1`, where `<model>` is the exact
+  extracting model id (e.g. `claude-sonnet-4-6`). Bump the `paper-annotate-vN` segment when
+  the extraction prompt or the statement body schema changes (invalidates `content_hash`
+  and the document `sci:sourceTextHash` guard for that source).
+- **Body**: a single `TextualBody` with `format = application/json`, serialized with sorted
+  keys + compact separators + `allow_nan=False`:
+
+  ```json
+  {"section":"results","stance":"asserted","subject":"BRCA1 loss",
+   "object":"genomic instability","subject_concept":"https://identifiers.org/ncbigene:672"}
+  ```
+
+  - `section` (required, CLI-derived): one of
+    `title · abstract · introduction · methods · results · discussion · conclusion · figure · table · other`.
+  - `stance` (required): `asserted · negated · hypothesized · open`.
+  - `subject` / `object` (optional): short phrases.
+  - `subject_concept` / `object_concept` (optional): concept IRIs, kept ONLY when they match an
+    active (`open`/`ack`) `entity-*` annotation in the same paper; otherwise dropped (counted as
+    `grounding_dropped`), the statement still persisted.
+
+- **Document guard**: `sci:sourceTextHash` on the per-source `sci:AuditLedger` records the last
+  `.source.md` `text_sha256` processed for this source; `extract --check` skips re-running the
+  agent when unchanged. Advanced for any validly-processed document (incl. empty / all-duplicate)
+  but not when a candidate fails to anchor.
+
+`metaphor` / `analogy` statement types are Phase 3b (additive), not registered here yet.

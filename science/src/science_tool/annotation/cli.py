@@ -25,7 +25,7 @@ from science_tool.annotation.io import (
     sidecar_for_markdown,
     write_sidecar,
 )
-from science_tool.annotation.model import Annotation, Sidecar, Status
+from science_tool.annotation.model import Annotation, Body, IriBody, Sidecar, Status
 from science_tool.annotation.sources import LINT_SOURCES, SOURCES
 from science_tool.annotation.sources.marker_token import (
     MarkerTokenSource,
@@ -786,6 +786,7 @@ def _emit_list_json(
 ) -> None:
     items = []
     for sidecar_path, ann in rows:
+        sel = ann.target.selector
         items.append({
             "id": ann.id,
             "qualified_id":
@@ -794,6 +795,12 @@ def _emit_list_json(
             "source": ann.source,
             "annotation_type": ann.annotation_type,
             "exact_preview": ann.target.selector.exact[:60],
+            "selector": {
+                "exact": sel.exact,
+                "prefix": sel.prefix,
+                "suffix": sel.suffix,
+            },
+            "bodies": [_body_json(b) for b in ann.bodies],
         })
     click.echo(json.dumps({
         "summary": {
@@ -802,6 +809,13 @@ def _emit_list_json(
         },
         "annotations": items,
     }, indent=2))
+
+
+def _body_json(body: Body) -> dict[str, str]:
+    """JSON view of a body for grounding consumers (IRI value / textual value)."""
+    if isinstance(body, IriBody):
+        return {"type": "iri", "value": body.iri}
+    return {"type": "textual", "format": body.format, "value": body.value}
 
 
 # ---------------------------------------------------------------------------
@@ -1042,3 +1056,88 @@ def pubtator_cmd(
         f"Wrote {report.entity_written} entity + {report.relation_written} relation "
         f"annotation(s)" + (f"; skipped {skips}" if skips else "")
     )
+
+
+@annotate_group.command("extract")
+@click.option(
+    "--source-md", "source_md", required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Path to the paper's <citekey>.source.md.",
+)
+@click.option("--model", required=True, help="Exact extracting model id (source identity).")
+@click.option(
+    "--input", "input_path", default=None,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="candidates.json produced by the paper-annotate agent.",
+)
+@click.option("--check", "check_only", is_flag=True, default=False,
+              help="Read-only: print JSON {status: changed|unchanged} for the "
+                   "source vs last extraction (ignores --format).")
+@click.option("--actor", default="paper-annotate",
+              help="Identity recorded as the annotation creator.")
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def extract_cmd(
+    source_md: Path,
+    model: str,
+    input_path: Path | None,
+    check_only: bool,
+    actor: str,
+    fmt: str,
+) -> None:
+    """Persist agent-extracted statement candidates as anchored annotations.
+
+    `--check` reports changed/unchanged without writing. Otherwise reads
+    `--input candidates.json`, anchors each quote, verifies grounding, and merges
+    idempotently into `<citekey>.source.anno.trig`.
+    """
+    from science_tool.annotation.source_text import SourceTextError
+    from science_tool.annotation.statement_extract import (
+        CandidateError,
+        check_source_changed,
+        extract_statements,
+        parse_candidates,
+    )
+
+    if check_only:
+        if input_path is not None:
+            raise click.ClickException("--check takes no --input")
+        try:
+            changed = check_source_changed(source_md=source_md, model=model)
+        except SourceTextError as exc:
+            raise click.ClickException(str(exc)) from exc
+        click.echo(json.dumps({"status": "changed" if changed else "unchanged"}))
+        return
+
+    if input_path is None:
+        raise click.ClickException("--input <candidates.json> is required (or use --check)")
+    try:
+        candidates = parse_candidates(input_path.read_text(encoding="utf-8"))
+    except CandidateError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    try:
+        report = extract_statements(
+            source_md=source_md, model=model, candidates=candidates,
+            now=datetime.now(timezone.utc), actor=actor,
+        )
+    except SourceTextError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if fmt == "json":
+        click.echo(json.dumps({
+            "written": report.written,
+            "skipped": report.skipped,
+            "grounding_dropped": report.grounding_dropped,
+            "source_text_hash_recorded": report.source_text_hash_recorded,
+            "note": report.note,
+        }, indent=2))
+    else:
+        skips = ", ".join(f"{k}:{v}" for k, v in sorted(report.skipped.items())) or "none"
+        click.echo(
+            f"annotate extract: {report.written} statement(s) written, "
+            f"{report.grounding_dropped} grounding field(s) dropped, "
+            f"skipped [{skips}], "
+            f"hash recorded: {report.source_text_hash_recorded}"
+        )
+        if report.note:
+            click.echo(report.note)
