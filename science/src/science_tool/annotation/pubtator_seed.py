@@ -562,7 +562,8 @@ def plan_relation(
     """Convert a BiocRelation to a PlannedAnnotation, or (None, skip_reason).
 
     Skip reasons: "relation-unnormalized-concept" (a role id does not normalize),
-    "relation-no-persisted-mentions" (a role concept has no persisted mention),
+    "relation-no-persisted-mentions" (a role concept has no persisted mention; the
+    reason does not distinguish whether subject or object was the absent role),
     "relation-cross-passage" (both persisted but never co-occur in one passage).
     Target = the smallest covering span of the closest same-passage subject x object
     mention pair; prefix/suffix clamped to that passage.

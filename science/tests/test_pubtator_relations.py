@@ -275,3 +275,4 @@ def test_resolve_persisted_mentions_groups_by_iri():
     grouped = resolve_persisted_mentions(file_text, paired, mentions)
     assert set(grouped) == {GENE, DIS}  # TP53 (non-persisted) excluded
     assert grouped[GENE][0].file_idx == 0
+    assert grouped[DIS][0].file_idx == 10
