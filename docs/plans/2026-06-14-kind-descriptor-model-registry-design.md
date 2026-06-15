@@ -280,6 +280,18 @@ the §4 value-for-value equivalence claim stays true for this slice. (See §10.)
 This gate lands green before any derived consumer is changed, so subsequent flips
 operate on a reconciled set.
 
+**One intended additive change (not byte-identical).** Populating `CORE_PROFILE`
+23→~45 grows `science_tool/graph/sources.py::_CORE_KINDS`
+(`frozenset(k.name for k in CORE_PROFILE.entity_kinds)`), which feeds `known_kinds()`
+and `_default_profile_for_kind()` (a kind in `_CORE_KINDS` resolves to the `core`
+source profile). The added kinds are all already **registry-core**, so resolving them
+to `core` is the correct classification, not a regression — but it *is* a deliberate
+additive change rather than a byte-identical one. It is guarded by a **core-kind
+recognition contract test** (§7) that pins the delta to exactly the intended additions
+(no removals, no surprises) plus the full ~5400-test suite. This is the single place
+the slice changes a consumer beyond the five derived maps, and it is called out so it
+is reviewed, not silent.
+
 ### 3.1 Audit seeds (initial rulings, finalized during the gate task)
 
 - **authored-core** (author full descriptors): `dataset`, `discussion`,
@@ -380,6 +392,9 @@ that pattern to the full set rather than introducing a new mechanism.)
     `_STATUS_VALUES` / `_SHORTFORM_ENTITY_KINDS` become thin derivations over
     `CORE_PROFILE` (re-pointed off `CORE_KINDS`); imports `EntityFilenameStrategy`
     from `science_model.profiles.schema` after the final task.
+  - `graph/sources.py` — `_CORE_KINDS` (derived from `CORE_PROFILE.entity_kinds`)
+    grows with the §3 expansion; behavior change guarded by the core-kind recognition
+    contract test (§7).
   - tool/root-suite tests: assertion 4 of §3 (manifest ≡ registry) + the
     per-flip equivalence tests for the tool-layer maps; the keystone's
     `tests/test_kind_descriptor_derivation.py` is replaced by those equivalence tests.
@@ -433,6 +448,10 @@ Tool → model dependency direction is preserved throughout; no test makes
   keystone's `CORE_KINDS`-derivation guard (`tests/test_kind_descriptor_derivation.py`)
   and self-consistency suite (`model/tests/test_kinds.py`), which are removed with
   `kinds.py` — no coverage is lost (§0.1).
+- **Core-kind recognition contract** (`science/tests/`): capture the pre-expansion
+  `_CORE_KINDS` / `known_kinds()` set; after populating `CORE_PROFILE`, assert the set
+  grew by exactly the intended authored-core additions and lost nothing — so the
+  `sources.py` consumer change (§3) is reviewed, not silent.
 - **Full suite + ruff** as the final gate (the existing ~5400-test suite covers
   the broad consumers).
 
@@ -443,6 +462,13 @@ Tool → model dependency direction is preserved throughout; no test makes
 - **Coupling breadth** (`EntityType` ~50 files, registry ~18) — mitigated by
   keeping `EntityType` static and changing only map internals behind stable
   accessors.
+- **`CORE_PROFILE` expansion changes `sources.py::_CORE_KINDS`** — growing
+  `CORE_PROFILE` 23→~45 (required so every core-registered kind has a descriptor for
+  the `entity_class` flip) grows the core-kind recognition set, which feeds
+  `known_kinds()` / `_default_profile_for_kind()`. The added kinds are already
+  registry-core, so the new `core`-profile resolution is correct; risk is bounded by
+  the core-kind recognition contract test (§7, pins the delta to intended additions)
+  + full suite. This is the slice's one intended additive (non-byte-identical) change.
 - **9 additive `EntityType` members** — `EntityType.TASK`-style refs are stable
   (additive `StrEnum`), so the residual risk is code that **iterates all enum values
   assuming the old set** (e.g. exhaustive match/dispatch tables). That hidden coupling
