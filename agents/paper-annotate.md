@@ -22,13 +22,15 @@ do not touch the `.source.md`.
 1. **Read existing grounding annotations** (active set only):
 
    ```bash
-   uv run science annotate list --root <paper-dir> --status open --status ack --format json
+   uv run science annotate list <source-md-path> --status open --status ack --format json
    ```
 
-   Each item carries `annotation_type`, `bodies` (for `entity-*` rows, an `iri` body = the
-   concept IRI), and `selector` (`exact`/`prefix`/`suffix` = where the entity sits). Use these
-   to ground statement subjects/objects: when a statement is about an entity that appears here,
-   reuse that exact concept IRI.
+   Pass the `.source.md` path itself as the positional argument (NOT `--root`) so the listing is
+   scoped to exactly this one paper's sidecar. Each item carries `annotation_type`, `bodies`, and
+   `selector` (`exact`/`prefix`/`suffix` = where the entity sits). For an `entity-*` row, the body
+   with `"type": "iri"` carries the concept IRI in its `"value"` field — read `bodies[].value`.
+   Use these to ground statement subjects/objects: when a statement is about an entity that appears
+   here, reuse that exact concept IRI.
 
 2. **Read the source text**: `Read` the `.source.md`. Statements must be quoted verbatim from
    the passage bodies (the text under `## Abstract` / `## Full Text`), never from headings or
@@ -55,9 +57,14 @@ do not touch the `.source.md`.
    uv run science annotate extract --source-md <path> --model <id> --input candidates.json --format json
    ```
 
-   Read the JSON report (`written`, `skipped`, `grounding_dropped`). If `skipped` shows
-   `extract-quote-not-found` / `extract-quote-ambiguous`, your `exact`/`prefix`/`suffix` did not
-   match the document — fix those candidates and re-run; do not fabricate spans.
+   Read the JSON report (`written`, `skipped`, `grounding_dropped`, `note`). The skip reasons:
+   - `extract-quote-not-found` — your `exact`/`prefix`/`suffix` did not match the document text.
+   - `extract-quote-ambiguous` — the quote occurs more than once; add more `prefix`/`suffix` context.
+   - `extract-anchored-outside-passage` — your `exact` landed in a heading/frontmatter, not a
+     passage body; requote from the body text.
+
+   Any skip means fix those candidates and re-run (it is safe — already-written rows dedupe; the
+   `note` will say the document was not marked processed). Never fabricate spans.
 
 ## Scope discipline
 
