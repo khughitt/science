@@ -1,3 +1,5 @@
+from science_tool.annotation.model import HASH_REQUIRED_SOURCE_PREFIXES
+
 # A title+abstract record with one body passage (non-persisted in abstract-only mode),
 # duplicate-surface mentions in the same passage, and one unnormalized variant.
 # NOTE: validate against a live PubTator3 biocjson response before a seeder-v1 release.
@@ -72,9 +74,6 @@ BIOC_FIXTURE = {
         }
     ]
 }
-
-
-from science_tool.annotation.model import HASH_REQUIRED_SOURCE_PREFIXES  # noqa: E402
 
 
 def test_pubtator3_prefix_is_hash_required():
