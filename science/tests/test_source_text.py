@@ -51,6 +51,7 @@ _BIOC_RECORD = {
 class TestParseBiocPassages:
     def test_parses_title_and_abstract_in_order(self) -> None:
         parsed = parse_bioc_passages(_BIOC_RECORD)
+        assert parsed is not None
         assert parsed.release == "2024.01"
         assert parsed.passages == (
             Passage(section="title", bioc_offset=0, text="BRCA1 in cancer"),
@@ -64,11 +65,13 @@ class TestParseBiocPassages:
     def test_documents_key_is_accepted(self) -> None:
         record = {"documents": _BIOC_RECORD["PubTator3"]}
         parsed = parse_bioc_passages(record)
+        assert parsed is not None
         assert parsed.passages[0].text == "BRCA1 in cancer"
 
     def test_release_falls_back_to_constant_when_absent(self) -> None:
         record = {"PubTator3": [{"passages": [{"offset": 0, "text": "t", "infons": {"type": "title"}}]}]}
         parsed = parse_bioc_passages(record)
+        assert parsed is not None
         assert parsed.release  # non-empty pinned constant
 
     def test_returns_none_for_empty_record(self) -> None:

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -289,7 +290,7 @@ class RenderedSource:
 
 
 def verify_offset_map(
-    file_text: str, offset_map: list[PassageOffset], passages: SourcePassages
+    file_text: str, offset_map: Sequence[PassageOffset], passages: SourcePassages
 ) -> None:
     """Slice-verify: every map entry must reproduce its source passage text.
 
@@ -455,7 +456,7 @@ def write_source_md(
         passages=abstract.passages + (persisted_fulltext.passages if persisted_fulltext else ()),
         release=abstract.release,
     )
-    verify_offset_map(rendered.text, list(rendered.offset_map), combined)
+    verify_offset_map(rendered.text, rendered.offset_map, combined)
 
     out = directory / f"{citekey}.source.md"
     out.write_text(rendered.text, encoding="utf-8")
