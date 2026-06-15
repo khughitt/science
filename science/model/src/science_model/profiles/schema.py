@@ -34,7 +34,7 @@ class EntityKind(BaseModel):
     # Layout/status overrides for project-local markdown kinds (v3 layout). All
     # optional; defaults derive name->entities/<name>/, numeric strategy, "active".
     home: str | None = None
-    strategy: EntityFilenameStrategy | None = None
+    strategy: str | None = None  # raw manifest input; the EntityFilenameStrategy vocab is enforced tool-side by the path-policy loader, not at the schema boundary
     default_status: str | None = None
     statuses: list[str] | None = None
     # Structured-source declaration: a project-local kind whose entities are
