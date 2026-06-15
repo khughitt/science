@@ -7,11 +7,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 import yaml
 
 from science_model.entities import ProjectEntity
+from science_model.kinds import CORE_KINDS, EntityFilenameStrategy
 from science_model.profiles import EntityKind, ProfileManifest, load_profile_manifest
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
@@ -21,8 +22,6 @@ from science_tool.graph.sources import (
     resolve_local_profile_name,
 )
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
-
-EntityFilenameStrategy = Literal["numeric", "citekey", "singleton", "slug", "verbatim"]
 
 LOCAL_PART_WIDTH = 4
 
@@ -38,35 +37,7 @@ class EntityPathPolicy:
 
 
 _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
-    "question": EntityPathPolicy(Path("entities/questions"), "numeric"),
-    "hypothesis": EntityPathPolicy(Path("entities/hypotheses"), "numeric"),
-    "patch-definition": EntityPathPolicy(Path("entities/patches"), "slug"),
-    "proposition": EntityPathPolicy(Path("entities/propositions"), "slug"),
-    "interpretation": EntityPathPolicy(Path("entities/interpretations"), "numeric"),
-    "discussion": EntityPathPolicy(Path("entities/discussions"), "numeric"),
-    "finding": EntityPathPolicy(Path("entities/findings"), "numeric"),
-    "inquiry": EntityPathPolicy(Path("entities/inquiries"), "numeric"),
-    "theme": EntityPathPolicy(Path("entities/themes"), "numeric"),
-    "topic": EntityPathPolicy(Path("entities/topics"), "slug"),  # was "numeric" (4c: slug identity kind)
-    "evidence-line": EntityPathPolicy(Path("entities/evidence-lines"), "slug"),
-    "observation": EntityPathPolicy(Path("entities/observations"), "slug"),  # was "numeric": observations carry descriptive slug ids (e.g. observation:swan-stage-shift); enables id-preserving single-type aggregate retirement (§B5)
-    "mechanism": EntityPathPolicy(Path("entities/mechanisms"), "numeric"),
-    "synthesis": EntityPathPolicy(Path("entities/synthesis"), "numeric"),
-    "report": EntityPathPolicy(Path("entities/reports"), "numeric"),
-    "plan": EntityPathPolicy(Path("entities/plans"), "numeric"),
-    "search": EntityPathPolicy(Path("entities/searches"), "numeric"),
-    "method": EntityPathPolicy(Path("entities/methods"), "slug"),  # was "numeric" (4c: slug identity kind)
-    "pre-registration": EntityPathPolicy(Path("entities/pre-registrations"), "numeric"),
-    "concept": EntityPathPolicy(Path("entities/concepts"), "slug"),
-    "construct": EntityPathPolicy(Path("entities/constructs"), "slug"),
-    "decision": EntityPathPolicy(Path("entities/decision"), "verbatim"),
-    "paper": EntityPathPolicy(Path("entities/papers"), "citekey"),
-    "book": EntityPathPolicy(Path("entities/books"), "citekey"),
-    "talk": EntityPathPolicy(Path("entities/talks"), "citekey"),
-    "outcome": EntityPathPolicy(Path("entities/outcomes"), "slug"),
-    # Singletons: `root` is the file path itself, not a directory.
-    "research-question": EntityPathPolicy(Path("entities/research-question.md"), "singleton"),
-    "claim-registry": EntityPathPolicy(Path("entities/claim-registry.yaml"), "singleton"),
+    k.name: EntityPathPolicy(k.path, k.strategy) for k in CORE_KINDS if k.path is not None and k.strategy is not None
 }
 # Cache local-policy reads keyed by (project_root, manifest mtime_ns) so repeated
 # resolve_path_policy calls during a migration don't re-parse the manifest, while
@@ -199,89 +170,9 @@ _ID_PREFIX_RE = re.compile(r"^(?P<prefix>[a-z]?)(?P<number>\d+)-", re.IGNORECASE
 _NUMERIC_SCAN_RE = re.compile(r"^(?:[A-Za-z])?(\d+)")
 _SHORTFORM_REF_RE = re.compile(r"^(?P<prefix>[A-Za-z])(?P<number>\d+)(?P<suffix>(?:[.-].*)?)$")
 _NOTES_HEADING_RE = re.compile(r"^##\s+Notes\s*$")
-_SHORTFORM_ENTITY_KINDS: dict[str, str] = {
-    "d": "discussion",
-    "h": "hypothesis",
-    "i": "interpretation",
-    "p": "proposition",
-    "q": "question",
-    "t": "theme",
-}
-_DEFAULT_STATUS: dict[str, str] = {
-    "evidence-line": "draft",
-    "question": "active",
-    "hypothesis": "proposed",
-    "discussion": "active",
-    "interpretation": "active",
-    "theme": "active",
-    "patch-definition": "active",
-    "proposition": "draft",
-    "finding": "active",
-    "inquiry": "active",
-    "topic": "active",
-    "observation": "active",
-    "mechanism": "active",
-    "synthesis": "active",
-    "report": "active",
-    "plan": "active",
-    "search": "active",
-    "method": "active",
-    "pre-registration": "active",
-    "paper": "active",
-    "book": "active",
-    "talk": "active",
-    "concept": "active",
-    "construct": "active",
-    "decision": "active",
-    "outcome": "active",
-}
-_STATUS_VALUES: dict[str, frozenset[str]] = {
-    "evidence-line": frozenset({"draft", "active", "retired"}),
-    "question": frozenset({"active", "partially-answered", "answered", "deferred", "retired"}),
-    "hypothesis": frozenset(
-        {
-            "proposed",
-            "under-investigation",
-            "partially-supported",
-            "supported",
-            "weakened",
-            "refuted",
-        }
-    ),
-    "discussion": frozenset({"active", "complete", "superseded"}),
-    "interpretation": frozenset({"active", "complete", "superseded"}),
-    "theme": frozenset({"draft", "active", "superseded", "retired"}),
-    "patch-definition": frozenset({"active", "retired"}),
-    "proposition": frozenset(
-        {
-            "draft",
-            "active",
-            "supported",
-            "contested",
-            "weakened",
-            "retired",
-            "superseded",
-        }
-    ),
-    "finding": frozenset({"active", "superseded", "retired"}),
-    "inquiry": frozenset({"active", "complete", "superseded"}),
-    "topic": frozenset({"active", "superseded", "retired"}),
-    "observation": frozenset({"active", "superseded", "retired"}),
-    "mechanism": frozenset({"active", "superseded", "retired"}),
-    "synthesis": frozenset({"active", "superseded", "retired"}),
-    "report": frozenset({"active", "superseded", "retired"}),
-    "plan": frozenset({"active", "complete", "superseded", "retired"}),
-    "search": frozenset({"active", "complete", "retired"}),
-    "method": frozenset({"active", "superseded", "retired"}),
-    "pre-registration": frozenset({"active", "amended", "superseded", "retired"}),
-    "paper": frozenset({"active", "retired"}),
-    "book": frozenset({"active", "retired"}),
-    "talk": frozenset({"active", "retired"}),
-    "concept": frozenset({"active", "deprecated"}),
-    "construct": frozenset({"active", "retired"}),
-    "decision": frozenset({"active", "superseded", "abandoned"}),
-    "outcome": frozenset({"active", "retired"}),
-}
+_SHORTFORM_ENTITY_KINDS: dict[str, str] = {k.shortform: k.name for k in CORE_KINDS if k.shortform}
+_DEFAULT_STATUS: dict[str, str] = {k.name: k.default_status for k in CORE_KINDS if k.default_status}
+_STATUS_VALUES: dict[str, frozenset[str]] = {k.name: k.statuses for k in CORE_KINDS if k.statuses}
 _ALLOWED_EXPLICIT_ROOTS = (Path("entities"),)
 
 
