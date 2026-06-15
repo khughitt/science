@@ -20,6 +20,7 @@ from science_tool.annotation.source_text import (
     resolve_license,
     resolve_paper_entity,
     verify_offset_map,
+    write_source_md,
 )
 
 
@@ -307,3 +308,119 @@ class TestOffsetMap:
         )
         # Must not raise: every entry (abstract + full text) slices back exactly.
         verify_offset_map(rendered.text, rendered.offset_map, combined)
+
+
+class TestWriteSourceMd:
+    def _abstract(self) -> SourcePassages:
+        return SourcePassages(
+            passages=(Passage(section="abstract", bioc_offset=0, text="An abstract sentence."),),
+            release="2024.01",
+        )
+
+    def _fulltext(self) -> SourcePassages:
+        return SourcePassages(
+            passages=(Passage(section="body", bioc_offset=0, text="Full text body paragraph."),),
+            release="2024.01",
+        )
+
+    def test_abstract_only_when_unlicensed(self, tmp_path: Path) -> None:
+        # Full text WAS available but the license blocks it -> abstract only +
+        # fulltext_omitted_reason. (The reason is recorded only when full text
+        # actually existed; see `write_source_md`.)
+        out = write_source_md(
+            directory=tmp_path,
+            citekey="Smith2024",
+            abstract=self._abstract(),
+            fulltext=self._fulltext(),
+            retrieved_from="pubtator3",
+            license_="CC-BY-NC",
+            licensed=False,
+            pmid="123456",
+            doi="10.1038/foo-1",
+        )
+        text = out.read_text(encoding="utf-8")
+        assert out.name == "Smith2024.source.md"
+        assert "## Abstract" in text
+        assert "## Full Text" not in text
+        assert "Full text body paragraph." not in text
+        assert "fulltext_omitted_reason: license-not-whitelisted" in text
+        assert "license: CC-BY-NC" in text
+        assert "An abstract sentence." in text
+
+    def test_no_fulltext_records_distinct_reason(self, tmp_path: Path) -> None:
+        # No full text was retrievable -> record `no-fulltext-available`, NOT the
+        # license reason, so provenance distinguishes the two cases.
+        out = write_source_md(
+            directory=tmp_path,
+            citekey="Smith2024",
+            abstract=self._abstract(),
+            fulltext=None,
+            retrieved_from="europepmc",
+            license_="unknown",
+            licensed=False,
+            pmid=None,
+            doi="10.1038/foo-1",
+        )
+        text = out.read_text(encoding="utf-8")
+        assert "## Full Text" not in text
+        assert "fulltext_omitted_reason: no-fulltext-available" in text
+        assert "license-not-whitelisted" not in text
+
+    def test_full_text_persisted_when_licensed(self, tmp_path: Path) -> None:
+        out = write_source_md(
+            directory=tmp_path,
+            citekey="Smith2024",
+            abstract=self._abstract(),
+            fulltext=self._fulltext(),
+            retrieved_from="europepmc",
+            license_="CC-BY-4.0",
+            licensed=True,
+            pmid=None,
+            doi="10.1038/foo-1",
+        )
+        text = out.read_text(encoding="utf-8")
+        assert "## Full Text" in text
+        assert "Full text body paragraph." in text
+        assert "fulltext_omitted_reason" not in text
+        assert "license: CC-BY-4.0" in text
+
+    def test_text_sha256_is_hash_of_body_region(self, tmp_path: Path) -> None:
+        import hashlib
+
+        from science_tool.commons.frontmatter import raw_frontmatter
+
+        out = write_source_md(
+            directory=tmp_path,
+            citekey="Smith2024",
+            abstract=self._abstract(),
+            fulltext=None,
+            retrieved_from="pubtator3",
+            license_="CC-BY",
+            licensed=True,
+            pmid=None,
+            doi="10.1038/foo-1",
+        )
+        fm = raw_frontmatter(out)
+        text = out.read_text(encoding="utf-8")
+        body = text.split("---\n", 2)[2].lstrip("\n")
+        assert fm["text_sha256"] == hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+    def test_offsets_in_written_file_slice_back(self, tmp_path: Path) -> None:
+        from science_tool.commons.frontmatter import raw_frontmatter
+
+        out = write_source_md(
+            directory=tmp_path,
+            citekey="Smith2024",
+            abstract=self._abstract(),
+            fulltext=self._fulltext(),
+            retrieved_from="europepmc",
+            license_="CC-BY-4.0",
+            licensed=True,
+            pmid=None,
+            doi="10.1038/foo-1",
+        )
+        text = out.read_text(encoding="utf-8")
+        fm = raw_frontmatter(out)
+        for entry in fm["passages"]:
+            base, length = entry["file_char_base"], entry["length"]
+            assert text[base : base + length] in {"An abstract sentence.", "Full text body paragraph."}

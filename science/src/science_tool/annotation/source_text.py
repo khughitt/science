@@ -370,6 +370,60 @@ def render_source_md(
     return RenderedSource(text=text, offset_map=offset_map, text_sha256=text_sha256)
 
 
+def write_source_md(
+    *,
+    directory: Path,
+    citekey: str,
+    abstract: SourcePassages,
+    fulltext: SourcePassages | None,
+    retrieved_from: str,
+    license_: str,
+    licensed: bool,
+    pmid: str | None,
+    doi: str | None,
+) -> Path:
+    """Render, slice-verify, and write `<citekey>.source.md` next to the entity.
+
+    Full text is included ONLY when `licensed` is True and full text exists.
+    Otherwise `fulltext_omitted_reason` records why it is absent:
+    `license-not-whitelisted` (full text existed but its license is not whitelisted)
+    or `no-fulltext-available` (no full text was retrievable). The
+    offset map is slice-verified against the rendered file before writing — a
+    mismatch raises SourceTextError and nothing is written.
+    """
+    persisted_fulltext = fulltext if licensed else None
+    # Distinguish the two reasons full text can be absent: a non-whitelisted license
+    # on full text that DID exist, vs. no full text being retrievable at all. Both are
+    # recorded so provenance always states why full text is absent.
+    if fulltext is not None and not licensed:
+        omitted_reason: str | None = "license-not-whitelisted"
+    elif fulltext is None:
+        omitted_reason = "no-fulltext-available"
+    else:
+        omitted_reason = None
+
+    rendered = render_source_md(
+        passages=abstract,
+        retrieved_from=retrieved_from,
+        license_=license_,
+        pmid=pmid,
+        doi=doi,
+        fulltext=persisted_fulltext,
+        fulltext_omitted_reason=omitted_reason,
+    )
+
+    # Self-consistency: every offset entry must slice back to its passage text.
+    combined = SourcePassages(
+        passages=abstract.passages + (persisted_fulltext.passages if persisted_fulltext else ()),
+        release=abstract.release,
+    )
+    verify_offset_map(rendered.text, list(rendered.offset_map), combined)
+
+    out = directory / f"{citekey}.source.md"
+    out.write_text(rendered.text, encoding="utf-8")
+    return out
+
+
 def _build_frontmatter(
     *,
     retrieved_from: str,
