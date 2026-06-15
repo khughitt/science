@@ -13,9 +13,11 @@
 **Test command (run from the worktree's `science/` directory):**
 ```bash
 cd science    # the package root inside the worktree
-PYTHONPATH=src ~/d/science/science/.venv/bin/pytest <test-path> -v
+PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest <test-path> -v
 ```
-> CRITICAL: `PYTHONPATH=src` is mandatory. Without it the shared venv imports the *main* checkout's `science_tool`, silently testing the wrong code. Verify with `PYTHONPATH=src ~/d/science/science/.venv/bin/python -c "import science_tool; print(science_tool.__file__)"` → must print a path under `.worktrees/`.
+> CRITICAL: `PYTHONPATH=src` is mandatory. Without it the shared venv imports the *main* checkout's `science_tool`, silently testing the wrong code. Verify with `PYTHONPATH=src rtk ~/d/science/science/.venv/bin/python -c "import science_tool; print(science_tool.__file__)"` → must print a path under `.worktrees/`.
+>
+> RTK: per `~/.codex/RTK.md`, shell commands are prefixed with `rtk` (token-optimized proxy). All runnable commands below already carry the `rtk` prefix. If your harness auto-rewrites via the Claude Code hook, run them bare — do not double-prefix.
 
 ---
 
@@ -99,7 +101,7 @@ def test_build_supersedes_graph_non_linear(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_graph.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_graph.py -v`
 Expected: FAIL with `ImportError: cannot import name 'build_supersedes_graph'`.
 
 - [ ] **Step 3: Implement the refactor**
@@ -260,14 +262,14 @@ Delete the now-unused `_iter_entity_frontmatter` definition (its body moved verb
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_graph.py tests/test_consolidation_mark_superseded.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_graph.py tests/test_consolidation_mark_superseded.py -v`
 Expected: PASS (2 new + 7 existing P1 tests). The P1 tests passing confirms the refactor is behaviour-neutral.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/consolidation.py science/tests/test_consolidation_graph.py
-git commit -m "refactor(consolidation): extract build_supersedes_graph + public iter_entity_frontmatter"
+rtk git add science/src/science_tool/consolidation.py science/tests/test_consolidation_graph.py
+rtk git commit -m "refactor(consolidation): extract build_supersedes_graph + public iter_entity_frontmatter"
 ```
 
 ---
@@ -355,7 +357,7 @@ def test_lineage_reports_kind_lacking_superseded_vocab(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'science_tool.consolidation_candidates'`.
 
 - [ ] **Step 3: Create the module with models + lineage section**
@@ -468,14 +470,14 @@ def detect_consolidation_candidates(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -v`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/consolidation_candidates.py science/tests/test_consolidation_candidates.py
-git commit -m "feat(consolidation): P2 detector skeleton + unfiltered lineage section"
+rtk git add science/src/science_tool/consolidation_candidates.py science/tests/test_consolidation_candidates.py
+rtk git commit -m "feat(consolidation): P2 detector skeleton + unfiltered lineage section"
 ```
 
 ---
@@ -524,7 +526,7 @@ def test_id_stem_does_not_cross_kinds(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -k id_stem -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -k id_stem -v`
 Expected: FAIL (no `structural-family` clusters produced yet).
 
 - [ ] **Step 3: Implement the id-stem signal**
@@ -580,14 +582,14 @@ Then in `detect_consolidation_candidates`, build the `visible` list and call the
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -v`
 Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/consolidation_candidates.py science/tests/test_consolidation_candidates.py
-git commit -m "feat(consolidation): structural-family id-stem signal (same-kind)"
+rtk git add science/src/science_tool/consolidation_candidates.py science/tests/test_consolidation_candidates.py
+rtk git commit -m "feat(consolidation): structural-family id-stem signal (same-kind)"
 ```
 
 ---
@@ -628,7 +630,7 @@ def test_group_and_task_family_are_basis_namespaced(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -k basis_namespaced -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -k basis_namespaced -v`
 Expected: FAIL (group/task-family sub-bases not implemented; only id-stem keys exist).
 
 - [ ] **Step 3: Implement the group + task-family sub-bases**
@@ -637,9 +639,10 @@ In `consolidation_candidates.py`, add a task-ref helper and extend `_structural_
 
 ```python
 def _task_refs(fm: dict[str, Any]) -> list[str]:
-    """`task:`-prefixed refs from `related:` only. Task entities live outside the
-    entities/ scan (tasks/active.md), so resolution is by `task:` prefix shape, not
-    membership in the entity-id set."""
+    """`task:`-prefixed refs from `related:` only. PREFIX-SHAPED BY DESIGN (spec
+    §6.2): task entities live in `tasks/` (outside the `entities/` scan), so there
+    is no loaded task set to resolve against — any `task:`-prefixed string counts.
+    Real task-id resolution is a deferred §7 tuning-round concern, not P2."""
     related = fm.get("related")
     items = related if isinstance(related, list) else []
     return sorted({item for item in items if isinstance(item, str) and item.startswith(_TASK_PREFIX)})
@@ -661,14 +664,14 @@ Then, inside `_structural_family_clusters`, extend the grouping loop body (after
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -v`
 Expected: PASS (6 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/consolidation_candidates.py science/tests/test_consolidation_candidates.py
-git commit -m "feat(consolidation): structural-family group: + task-family sub-bases (namespaced)"
+rtk git add science/src/science_tool/consolidation_candidates.py science/tests/test_consolidation_candidates.py
+rtk git commit -m "feat(consolidation): structural-family group: + task-family sub-bases (namespaced)"
 ```
 
 ---
@@ -719,7 +722,7 @@ def test_shared_anchor_ignores_unresolved_refs(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -k shared_anchor -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -k shared_anchor -v`
 Expected: FAIL (no `shared-anchor` clusters yet).
 
 - [ ] **Step 3: Implement entity-ref hygiene + shared-anchor**
@@ -780,14 +783,14 @@ Then in `detect_consolidation_candidates`, compute `known_ids` and append shared
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -v`
 Expected: PASS (8 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/consolidation_candidates.py science/tests/test_consolidation_candidates.py
-git commit -m "feat(consolidation): shared-anchor signal + entity-ref hygiene"
+rtk git add science/src/science_tool/consolidation_candidates.py science/tests/test_consolidation_candidates.py
+rtk git commit -m "feat(consolidation): shared-anchor signal + entity-ref hygiene"
 ```
 
 ---
@@ -808,7 +811,7 @@ def test_related_overlap_clusters_above_threshold(tmp_path: Path) -> None:
     # Anchors a..d exist as entities so refs resolve.
     for a in ("a", "b", "c", "d"):
         _write(tmp_path, "concepts", f"anchor-{a}", {"id": f"concept:anchor-{a}", "type": "concept"})
-    # x and y share 3/4 related -> Jaccard 0.6 >= 0.5 : cluster.
+    # x={a,b,c}, y={a,b,c,d}: intersection 3, union 4 -> Jaccard 0.75 >= 0.5 : cluster.
     _write(tmp_path, "interpretations", "x", {"id": "interpretation:x", "type": "interpretation",
         "related": ["concept:anchor-a", "concept:anchor-b", "concept:anchor-c"]})
     _write(tmp_path, "interpretations", "y", {"id": "interpretation:y", "type": "interpretation",
@@ -852,7 +855,7 @@ def test_related_overlap_ignores_non_entity_refs(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -k related_overlap -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -k related_overlap -v`
 Expected: FAIL (no `related-overlap` clusters yet).
 
 - [ ] **Step 3: Implement related-overlap with union-find**
@@ -928,14 +931,14 @@ Then in `detect_consolidation_candidates`, append related-overlap. Change the se
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -v`
 Expected: PASS (11 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/consolidation_candidates.py science/tests/test_consolidation_candidates.py
-git commit -m "feat(consolidation): related-overlap Jaccard signal"
+rtk git add science/src/science_tool/consolidation_candidates.py science/tests/test_consolidation_candidates.py
+rtk git commit -m "feat(consolidation): related-overlap Jaccard signal"
 ```
 
 ---
@@ -1012,7 +1015,7 @@ def test_report_is_deterministic(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -k "merge or excludes or deterministic" -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -k "merge or excludes or deterministic" -v`
 Expected: FAIL on `test_duplicate_member_sets_merge_evidence` (un-merged duplicate clusters; signal not joined). The exclusion and determinism tests may already pass from Task 3/7 ordering, but the merge test pins the new behaviour.
 
 - [ ] **Step 3: Implement the merge + ordering**
@@ -1050,14 +1053,14 @@ Then wrap the semantic assembly in `detect_consolidation_candidates`. Change the
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates.py -v`
 Expected: PASS (14 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/consolidation_candidates.py science/tests/test_consolidation_candidates.py
-git commit -m "feat(consolidation): merge identical member-sets + deterministic ordering"
+rtk git add science/src/science_tool/consolidation_candidates.py science/tests/test_consolidation_candidates.py
+rtk git commit -m "feat(consolidation): merge identical member-sets + deterministic ordering"
 ```
 
 ---
@@ -1148,7 +1151,7 @@ def test_cli_is_read_only(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates_cli.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates_cli.py -v`
 Expected: FAIL — `No such command 'consolidation-candidates'`.
 
 - [ ] **Step 3a: Add `render_text` to the detector module**
@@ -1204,14 +1207,14 @@ def consolidation_candidates_cmd(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates_cli.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_candidates_cli.py -v`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/consolidation_candidates.py science/src/science_tool/curate/cli.py science/tests/test_consolidation_candidates_cli.py
-git commit -m "feat(curate): science curate consolidation-candidates subcommand"
+rtk git add science/src/science_tool/consolidation_candidates.py science/src/science_tool/curate/cli.py science/tests/test_consolidation_candidates_cli.py
+rtk git commit -m "feat(curate): science curate consolidation-candidates subcommand"
 ```
 
 ---
@@ -1222,12 +1225,12 @@ git commit -m "feat(curate): science curate consolidation-candidates subcommand"
 
 - [ ] **Step 1: Run the consolidation + curate test slice**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidation_graph.py tests/test_consolidation_mark_superseded.py tests/test_consolidation_candidates.py tests/test_consolidation_candidates_cli.py tests/test_status_visibility.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_consolidation_graph.py tests/test_consolidation_mark_superseded.py tests/test_consolidation_candidates.py tests/test_consolidation_candidates_cli.py tests/test_status_visibility.py -v`
 Expected: PASS (all P1 + P2 consolidation/visibility tests).
 
 - [ ] **Step 2: Run the full suite**
 
-Run: `cd science && PYTHONPATH=src ~/d/science/science/.venv/bin/pytest -q`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest -q`
 Expected: PASS, except the two known pre-existing failures unrelated to this work — `test_full_lifecycle` and `test_meta_validate_smoke_runs` (both caused by a missing `science` Rust-shim binary on PATH; verify they also fail on `main` before this branch and are therefore NOT regressions). No other failures.
 
 - [ ] **Step 3: Commit (only if anything changed)**

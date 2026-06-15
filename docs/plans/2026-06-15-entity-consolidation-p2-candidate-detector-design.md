@@ -167,10 +167,16 @@ later via §6.5 — that is the only place sub-bases combine.)
   **trailing version suffix** (`-v\d+$`); the residual is the *stem*. Key:
   `(kind, "id-stem", stem)`.
 - **group** — exact `group:` value equality. Key: `(kind, "group", group)`.
-- **task-family** — members sharing the same parent `task:` ref. Only
-  **resolvable `task:` entity refs from `related:`** count (§6.1); `source_refs:`
-  is **not** consulted for this sub-basis. Key: `(kind, "task-family", task_ref)`
-  (one key per shared task ref).
+- **task-family** — members sharing the same parent `task:` ref. **Prefix-shaped,
+  not resolved:** any `task:`-prefixed string in `related:` counts; it is *not*
+  validated against the entity-id set, because task entities live in `tasks/`
+  (`tasks/active.md`, `tasks/done/**`), outside the `entities/` scan — there is no
+  loaded task set to resolve against. `source_refs:` is **not** consulted for this
+  sub-basis. Key: `(kind, "task-family", task_ref)` (one key per shared task ref).
+  Two entities sharing a *typo'd/nonexistent* `task:` id would still cluster; this
+  is acceptable for a human-reviewed surface, and adding real task-id resolution
+  (loading `tasks/`) is a §7 tuning-round consideration, deliberately out of scope
+  for P2.
 - *Evidence* names the firing basis, e.g.
   `"id-stem 'h05-predictions-vs-dag' (kind interpretation; v3..v12; 10 members)"`
   or `"task-family task:t327 (kind interpretation; 4 members)"`.
