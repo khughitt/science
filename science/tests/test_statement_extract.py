@@ -58,3 +58,47 @@ def test_legacy_ledger_without_predicate_reads_none(tmp_path: Path):
     text = path.read_text(encoding="utf-8")
     assert "sci:sourceTextHash" not in text  # None -> predicate omitted
     assert read_sidecar(path).ledgers[0].source_text_hash is None
+
+
+from science_tool.annotation.pubtator_seed import PersistedPassage
+from science_tool.annotation.statement_extract import (
+    CANONICAL_SECTIONS,
+    _containing_passage,
+    normalize_section,
+)
+
+
+def test_normalize_known_sections():
+    assert normalize_section("title") == "title"
+    assert normalize_section("abstract") == "abstract"
+    assert normalize_section("INTRO") == "introduction"
+    assert normalize_section("METHODS") == "methods"
+    assert normalize_section("RESULTS") == "results"
+    assert normalize_section("DISCUSS") == "discussion"
+    assert normalize_section("CONCL") == "conclusion"
+    assert normalize_section("FIG") == "figure"
+    assert normalize_section("TABLE") == "table"
+
+
+def test_normalize_unknown_section_is_other():
+    assert normalize_section("ACK_FUND") == "other"
+    assert normalize_section("") == "other"
+    assert normalize_section("passage") == "other"
+
+
+def test_canonical_sections_closed_set():
+    assert "results" in CANONICAL_SECTIONS
+    assert "other" in CANONICAL_SECTIONS
+
+
+def test_containing_passage_finds_enclosing():
+    passages = [
+        PersistedPassage(section="title", file_char_base=100, length=10),
+        PersistedPassage(section="RESULTS", file_char_base=200, length=50),
+    ]
+    pp = _containing_passage(passages, 210, 5)
+    assert pp is not None and pp.section == "RESULTS"
+    # span straddling a passage boundary -> None
+    assert _containing_passage(passages, 248, 5) is None
+    # span outside every passage (e.g. a heading) -> None
+    assert _containing_passage(passages, 130, 5) is None
