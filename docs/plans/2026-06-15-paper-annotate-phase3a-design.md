@@ -41,7 +41,8 @@ idempotency). This mirrors the Phase 2 seeder split.
   │
   ├─ 2. dispatch paper-annotate subagent  (only if changed / forced)
   │       ├─ science annotate list <p> --status open --status ack --format json
-  │       │       → existing entity-* / relation anchors (grounding set)
+  │       │       → existing entity-* / relation anchors with concept IRIs + full
+  │       │         selectors (grounding set; requires the extended list JSON below)
   │       ├─ read <p>.source.md   → text + section structure
   │       └─ write candidates.json   ← the agent's ONLY deliverable
   │
@@ -133,6 +134,26 @@ agent's context and the deterministic verifier see the same anchors.
   Optional grounding is a bonus, never a hard gate; the statement span is the primary artifact. The
   drop is reported (counted), so it is explicit, not silent.
 
+### Grounding data export (required `annotate list` JSON extension)
+
+The agent can only emit `subject_concept` / `object_concept` if it can *see* the concept IRIs and
+spans of the existing entity annotations. The current `_emit_list_json` (`cli.py:782`) emits only
+`id / qualified_id / status / source / annotation_type / exact_preview[:60]` — it **omits the
+`IriBody` values and the full selector**, so the grounding contract is unfulfillable as written.
+Phase 3a therefore **extends the `annotate list` JSON emitter additively** (no field removed, so
+existing consumers are unaffected):
+
+- `bodies`: the annotation's body values — for an `IriBody`, the concept IRI string (this is what
+  the agent matches a statement subject/object against); for a `TextualBody`, its `{format, value}`.
+- `selector`: the full `exact`, `prefix`, `suffix` (not the 60-char preview), so the agent knows
+  exactly where each grounded entity sits in the text.
+
+(Considered and rejected: a separate `annotate export-grounding` subcommand — `list` already does
+the status filtering the agent needs (`--status open --status ack`), so extending its JSON is the
+smaller, more reuseful change. YAGNI on a second surface.) The deterministic verifier in `extract`
+reads the same persisted `IriBody` values directly from the sidecar (not via the JSON), so the
+agent and the verifier remain consistent.
+
 ### Persistence
 
 - `annotation_type` = the candidate `type` (kebab `proposition` / `question` / `hypothesis`).
@@ -164,8 +185,23 @@ gets its own field rather than overloading `audited_hashes`:
   of its absence; no migration needed because the field is additive and optional).
 - `extract` (non-`--check`) records the current `.source.md` `text_sha256` into this field for the
   `llm-annot:<model>:paper-annotate-v1` ledger **only after deterministic extraction completes
-  successfully**. A run that fails validation or anchoring-with-zero-writes does not advance the
-  hash, so a fixed re-run is not falsely skipped.
+  successfully**, where "successfully" is defined precisely below.
+
+**Valid no-op vs failed no-op (when to advance the hash).** Let `anchored` = the number of
+candidates that resolved to a unique span (whether they then wrote a new row or deduped). Advance
+the hash iff the input was valid **and not** (`candidates` non-empty **and** `anchored == 0`):
+
+  | Outcome | Advance hash? | Rationale |
+  |---------|:---:|-----------|
+  | Malformed input (fails strict validation) | **No** | Fails loud before any processing; nothing ran |
+  | Non-empty candidates, **zero anchored** (all `quote-not-found`/`ambiguous`) | **No** (*failed no-op*) | The candidate set is defective; a fixed re-run must proceed |
+  | **Empty** candidate set (agent legitimately found nothing) | **Yes** (*valid no-op*) | Document was fully processed; re-running the LLM on unchanged text won't help |
+  | All candidates anchored but **all duplicates** under merge | **Yes** (*valid no-op*) | Already fully captured; don't re-burn the LLM |
+  | Some/all anchored, ≥1 new row written | **Yes** | Normal success |
+
+  The distinction: advance whenever the document was *validly processed* (even with zero **new**
+  rows), but **not** when zero new rows is caused by anchoring failure — which signals a defective
+  candidate set worth re-running, not an unchanged document worth skipping.
 
 This makes the **non-deterministic** agent idempotent at the document level — which per-annotation
 `content_hash` structurally cannot do, since an LLM re-run that quotes a slightly different span
@@ -202,7 +238,10 @@ separately as `grounding_dropped: int`), `source_text_hash_recorded: bool`, `not
 
 `section` (CLI-written) and `stance` (required) always present; `subject` / `object` /
 `subject_concept` / `object_concept` present only when supplied and (for concepts) verified. Keys
-sorted, finite, compact — byte-deterministic for stable `content_hash`.
+sorted, finite, compact — byte-deterministic for **stable serialization / clean diffs**. (Note:
+`content_hash` is `content_hash(selector.exact, source_version)` (`hash.py:13`) and is
+independent of the body JSON; deterministic body serialization is for stable bytes/diffs, not for
+the hash.)
 
 ---
 
@@ -210,7 +249,8 @@ sorted, finite, compact — byte-deterministic for stable `content_hash`.
 
 - **`agents/paper-annotate.md`** — subagent (frontmatter `name/description/model/tools`),
   `model: claude-sonnet-4-6` (parallels `paper-researcher`). Contract: read existing annotations
-  (`annotate list --status open --status ack --format json`) + `.source.md`; emit a well-formed
+  (`annotate list --status open --status ack --format json`, the extended JSON carrying concept
+  IRIs + full selectors) + `.source.md`; emit a well-formed
   `candidates.json`; call `science annotate extract`; report `written` / `skipped` / dropped
   grounding back to the orchestrator. Does **one** paper. Does not touch the sidecar or summarize.
 - **`commands/annotate-paper.md`** — the orchestrator workflow: resolve the project profile via
@@ -251,6 +291,11 @@ Deterministic `extract` carries the bulk of coverage (no live LLM):
   `extract` → `annotate verify` confirms every seeded selector re-anchors.
 - **Ledger I/O:** `source_text_hash` Turtle round-trip; legacy ledger without the predicate reads as
   `None`.
+- **List JSON extension:** the additive `bodies` (IRI/textual values) + full `selector`
+  (exact/prefix/suffix) fields are emitted; the pre-existing keys (incl. `exact_preview`) are
+  unchanged (backward-compatible).
+- **No-op hash policy:** empty candidate set and all-duplicate run **advance** the hash;
+  non-empty-but-zero-anchored run does **not**; malformed input does not.
 - **Agent:** a small `candidates.json` → `extract` integration test exercises the contract; the
   subagent prompt itself is not run against a live model in tests.
 
