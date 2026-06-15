@@ -66,3 +66,34 @@ def test_lineage_reports_kind_lacking_superseded_vocab(tmp_path: Path) -> None:
     report = detect_consolidation_candidates(tmp_path)
     assert len(report.superseded_lineage.linear) == 1
     assert report.superseded_lineage.linear[0].archivable == ["workflow-run:wr-old"]
+
+
+def test_id_stem_clusters_within_a_kind(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _write(tmp_path, "interpretations", "0001-foo-v1", {"id": "interpretation:0001-foo-v1", "type": "interpretation"})
+    _write(tmp_path, "interpretations", "0002-foo-v2", {"id": "interpretation:0002-foo-v2", "type": "interpretation"})
+    _write(tmp_path, "interpretations", "0003-foo-v3", {"id": "interpretation:0003-foo-v3", "type": "interpretation"})
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    report = detect_consolidation_candidates(tmp_path)
+    family = [c for c in report.semantic_clusters if c.signal == "structural-family"]
+    assert len(family) == 1
+    assert family[0].members == [
+        "interpretation:0001-foo-v1",
+        "interpretation:0002-foo-v2",
+        "interpretation:0003-foo-v3",
+    ]
+    assert "id-stem 'foo'" in family[0].evidence
+
+
+def test_id_stem_does_not_cross_kinds(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _write(tmp_path, "questions", "0001-foo", {"id": "question:0001-foo", "type": "question"})
+    _write(tmp_path, "hypotheses", "0002-foo", {"id": "hypothesis:0002-foo", "type": "hypothesis"})
+    _write(tmp_path, "interpretations", "0003-foo", {"id": "interpretation:0003-foo", "type": "interpretation"})
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    report = detect_consolidation_candidates(tmp_path)
+    assert [c for c in report.semantic_clusters if c.signal == "structural-family"] == []

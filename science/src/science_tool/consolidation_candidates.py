@@ -57,6 +57,41 @@ class ConsolidationCandidates(BaseModel):
     counts: dict[str, int] = Field(default_factory=dict)
 
 
+def _local_part(entity_id: str) -> str:
+    return entity_id.split(":", 1)[1] if ":" in entity_id else entity_id
+
+
+def _id_stem(entity_id: str) -> str:
+    local = _local_part(entity_id)
+    local = _SEQ_PREFIX.sub("", local)
+    local = _VERSION_SUFFIX.sub("", local)
+    return local
+
+
+def _structural_family_clusters(
+    visible: list[tuple[str, str, dict[str, Any]]],
+    min_cluster_size: int,
+) -> list[SemanticCluster]:
+    """Basis-namespaced structural grouping. Keys are (kind, basis, value) so the
+    three sub-bases never collide by value; identical member-sets merge later."""
+    groups: dict[tuple[str, str, str], list[str]] = {}
+    for eid, kind, _fm in visible:
+        groups.setdefault((kind, "id-stem", _id_stem(eid)), []).append(eid)
+
+    clusters: list[SemanticCluster] = []
+    for (kind, basis, value), members in groups.items():
+        if len(members) < min_cluster_size:
+            continue
+        clusters.append(
+            SemanticCluster(
+                signal="structural-family",
+                members=sorted(members),
+                evidence=f"{basis} '{value}' (kind {kind}; {len(members)} members)",
+            )
+        )
+    return clusters
+
+
 def _lineage_section(graph: SupersedesGraph) -> SupersededLineage:
     linear = [
         LinearChain(
@@ -86,7 +121,12 @@ def detect_consolidation_candidates(
     graph = build_supersedes_graph(entries)
     lineage = _lineage_section(graph)
 
-    semantic: list[SemanticCluster] = []  # populated in Tasks 3-7
+    visible: list[tuple[str, str, dict[str, Any]]] = [
+        (str(fm["id"]), graph.kind_by_id[str(fm["id"])], fm)
+        for _path, fm in entries
+        if is_default_visible(graph.status_by_id.get(str(fm["id"])))
+    ]
+    semantic = _structural_family_clusters(visible, min_cluster_size)
 
     counts = {
         "linear": len(lineage.linear),
