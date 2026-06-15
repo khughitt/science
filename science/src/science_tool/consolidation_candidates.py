@@ -276,3 +276,19 @@ def detect_consolidation_candidates(
         semantic_clusters=semantic,
         counts=counts,
     )
+
+
+def render_text(report: ConsolidationCandidates) -> str:
+    """Deterministic plain-text rendering of a candidates report."""
+    lines = [
+        f"Consolidation candidates for {report.project_root}",
+        f"  superseded lineage: {report.counts['linear']} linear, {report.counts['non_linear']} non-linear",
+        f"  semantic clusters:  {report.counts['semantic']}",
+    ]
+    for chain in report.superseded_lineage.linear:
+        lines.append(f"  [linear] survivor {chain.survivor}; archivable {', '.join(chain.archivable)}")
+    for comp in report.superseded_lineage.non_linear:
+        lines.append(f"  [non-linear] {', '.join(comp.nodes)} — {comp.reason}")
+    for cluster in report.semantic_clusters:
+        lines.append(f"  [{cluster.signal}] {', '.join(cluster.members)} — {cluster.evidence}")
+    return "\n".join(lines)
