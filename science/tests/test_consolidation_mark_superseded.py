@@ -67,6 +67,10 @@ def test_report_skips_already_superseded_members(tmp_path: Path) -> None:
 
     report = mark_superseded(tmp_path, apply=False)
     assert report["to_mark"] == []  # i-v3 is already superseded
+    # The chain is still detected; only the to_mark stamping is skipped.
+    assert len(report["chains"]) == 1
+    assert report["chains"][0]["survivor"] == "interpretation:i-v4"
+    assert report["chains"][0]["members"] == ["interpretation:i-v3"]
 
 
 def test_report_flags_non_linear_chain_and_skips_it(tmp_path: Path) -> None:

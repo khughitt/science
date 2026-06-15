@@ -56,6 +56,7 @@ def _supersedes_targets(fm: dict[str, Any]) -> list[str]:
 
 
 def _kind_of(entity_id: str, fm: dict[str, Any]) -> str:
+    """The entity's kind: `type`, else `kind`, else the id prefix before `:`."""
     return str(fm.get("type") or fm.get("kind") or entity_id.split(":", 1)[0])
 
 
@@ -120,6 +121,22 @@ def _classify(comp: set[str], edges: list[tuple[str, str]]) -> tuple[bool, str |
 
 
 def mark_superseded(project_root: Path, *, apply: bool) -> dict[str, Any]:
+    """Scan supersedes chains under ``project_root`` and report (or apply) the
+    `superseded` status auto-derivation.
+
+    Returns a dict with keys:
+    - ``chains``: linear chains as ``{"survivor", "members" (sorted), "linear": True}``.
+    - ``non_linear``: branched/cyclic components as ``{"nodes" (sorted), "reason"}``
+      — reported and skipped (ambiguous survivor needs human review).
+    - ``to_mark``: member ids a linear chain would stamp ``superseded`` (excludes
+      already-superseded members and members whose kind can't carry the status).
+    - ``applied``: member ids actually stamped (empty unless ``apply=True``).
+    - ``skipped_kinds``: ``{"id", "kind"}`` for members whose kind does not declare
+      the ``superseded`` status (see ``_supports_superseded``).
+
+    With ``apply=False`` nothing is mutated. With ``apply=True`` each id in
+    ``to_mark`` is stamped via ``edit_entity`` and recorded in ``applied``.
+    """
     project_root = project_root.resolve()
     entries = _iter_entity_frontmatter(project_root)
     status_by_id: dict[str, str | None] = {}
