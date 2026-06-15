@@ -92,6 +92,25 @@ BIOC_FIXTURE = {
                     ],
                 },
             ],
+            "relations": [
+                {
+                    "id": "R1",
+                    "infons": {
+                        "role1": {"identifier": "672", "type": "Gene"},
+                        "role2": {"identifier": "MESH:D001943", "type": "Disease"},
+                        "type": "Association",
+                        "score": "0.95",
+                    },
+                },
+                {
+                    "id": "R2",
+                    "infons": {
+                        "role1": {"identifier": "672", "type": "Gene"},
+                        "role2": {"identifier": "MESH:D013629", "type": "Chemical"},
+                        "type": "Negative_Correlation",
+                    },
+                },
+            ],
         }
     ]
 }
@@ -394,13 +413,18 @@ def test_seed_pubtator_end_to_end(tmp_path):
     )
     assert isinstance(report, SeedReport)
     # 2 BRCA1 (gene) + 1 disease + 1 chemical + 1 species + 1 rsID variant = 6 written.
-    assert report.written == 6
+    assert report.entity_written == 6
     # Skips: 1 tmVar (unnormalized) + 1 TP53 (non-persisted INTRO body).
-    assert report.skipped.get("unnormalized-concept") == 1
-    assert report.skipped.get("non-persisted-passage") == 1
+    assert report.entity_skipped.get("unnormalized-concept") == 1
+    assert report.entity_skipped.get("non-persisted-passage") == 1
+    assert report.relation_written == 1            # BRCA1 -- breast cancer (title passage)
+    assert report.relation_skipped.get("relation-cross-passage") == 1  # BRCA1 -- Tamoxifen
 
     sidecar = read_sidecar(sidecar_for_markdown(source_md))
-    assert len(sidecar.annotations) == 6
+    assert len(sidecar.annotations) == 7           # 6 entity + 1 relation
+    rels = [a for a in sidecar.annotations if a.annotation_type == "relation"]
+    assert len(rels) == 1
+    assert rels[0].motivation == Motivation.LINKING
     assert all(a.content_hash for a in sidecar.annotations)
 
 
@@ -412,8 +436,11 @@ def test_seed_pubtator_idempotent_rerun(tmp_path):
     persist_source(project_root=tmp_path, identifier="12345678", cfg=cfg, http=_client(_bioc_handler))
     first = seed_pubtator(project_root=tmp_path, identifier="12345678", cfg=cfg, actor="t", now=NOW, http=_client(_bioc_handler))
     second = seed_pubtator(project_root=tmp_path, identifier="12345678", cfg=cfg, actor="t", now=NOW, http=_client(_bioc_handler))
-    assert first.written == 6
-    assert second.written == 0  # 4-tuple skip -> fully idempotent
+    assert first.entity_written == 6
+    assert second.entity_written == 0  # 4-tuple skip -> fully idempotent
+    assert first.relation_written == 1
+    assert second.relation_written == 0  # relations are idempotent too
+    assert second.relation_skipped == {"relation-cross-passage": 1}
 
 
 def test_seed_pubtator_missing_source_md_fails_loud(tmp_path):
@@ -439,7 +466,7 @@ def test_seed_pubtator_no_bioc_record_is_noop(tmp_path):
 
     persist_source(project_root=tmp_path, identifier="12345678", cfg=cfg, http=_client(epmc_only))
     report = seed_pubtator(project_root=tmp_path, identifier="12345678", cfg=cfg, actor="t", now=NOW, http=_client(epmc_only))
-    assert report.written == 0
+    assert report.entity_written == 0
     assert report.note is not None
 
 
@@ -456,6 +483,7 @@ def test_seeded_selectors_resolve_via_verifier(tmp_path):
     # against its rendered source file. VerifyReport exposes count properties
     # (.broken/.fuzzy/.source_missing) — there is no `.unresolved`.
     report = verify_path(tmp_path)
+    assert report.annotations == 7, f"expected 7 (6 entity + 1 relation), got {report.annotations}"
     assert report.broken == 0, report.issues
     assert report.fuzzy == 0, report.issues
     assert report.source_missing == 0, report.issues

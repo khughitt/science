@@ -107,3 +107,36 @@ Entity annotation types (`sci:annotationType`), motivation `oa:identifying`, sin
 The Biolink class is derived from `annotation_type` via this table; it is NOT stored
 in the annotation. Mentions PubTator left unnormalized (no id matching the namespace
 shape) are skipped, not stored with a fallback body.
+
+## PubTator3 relation seeding (Phase 2b)
+
+`science annotate pubtator <pmid|doi>` also seeds **document-level relations** from the
+same BioC record, alongside entity mentions, under the same
+`pubtator3:<release>:seeder-v1` source.
+
+- **`annotation_type`:** `relation`. **Motivation:** `oa:linking`.
+- **Target:** the smallest covering span of the closest subject×object entity-mention
+  pair within a single persisted passage (PubTator supplies no relation offset).
+- **Body:** one `TextualBody` with `format = "application/json"`, carrying a
+  deterministic JSON object (`json.dumps(sort_keys=True, separators=(",", ":"))`):
+  - always `subject`, `predicate`, `object`, `predicate_source` (`"biolink"` | `"sci"`)
+  - `raw_predicate_type` only when the PubTator relation type is unmapped
+  - `score` only when PubTator supplied a numeric confidence (excluded from identity)
+
+### Relation-type → predicate map (BioRED 8-type set)
+
+| PubTator `infons.type` | predicate | source |
+|---|---|---|
+| `Association` | `biolink:associated_with` | biolink |
+| `Positive_Correlation` | `biolink:positively_correlated_with` | biolink |
+| `Negative_Correlation` | `biolink:negatively_correlated_with` | biolink |
+| `Bind` | `biolink:directly_physically_interacts_with` | biolink |
+| `Drug_Interaction` | `biolink:interacts_with` | biolink |
+| `Cotreatment` | `sci:cotreatment` | sci |
+| `Comparison` | `sci:comparison` | sci |
+| `Conversion` | `sci:conversion` | sci |
+
+`Drug_Interaction` maps to the broad `biolink:interacts_with`; promotion (Phase 4) may
+specialize it. Any unexpected/future type maps to `sci:pubtator_<slug>` (lowercased,
+non-`[a-z0-9_]` → `_`) with the verbatim type preserved in `raw_predicate_type` —
+never dropped, never presented as a curated predicate.

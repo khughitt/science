@@ -9,6 +9,7 @@ See docs/plans/2026-06-15-pubtator-seeder-phase2a-design.md.
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -31,6 +32,7 @@ from science_tool.annotation.model import (
     Sidecar,
     SpecificResource,
     TextQuoteSelector,
+    TextualBody,
 )
 from science_tool.annotation.source_text import (
     PUBTATOR3_API_VERSION,
@@ -132,6 +134,81 @@ def parse_bioc_entity_annotations(
     return mentions, dict(dropped)
 
 
+@dataclass(frozen=True)
+class BiocRelation:
+    """One PubTator document-level relation: subject/object concept (type+id),
+    predicate type, and optional model confidence."""
+
+    subject_type: str
+    subject_id: str
+    object_type: str
+    object_id: str
+    rel_type: str
+    score: float | None
+
+
+def _parse_score(raw: Any) -> float | None:
+    """PubTator stores `infons.score` as a stringified float; non-numeric -> None."""
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        return float(raw)
+    if isinstance(raw, str):
+        try:
+            return float(raw)
+        except ValueError:
+            return None
+    return None
+
+
+def parse_bioc_relations(
+    record: dict[str, Any],
+) -> tuple[list[BiocRelation], dict[str, int]]:
+    """Flatten the document-level `relations` into ordered rows + a drop-count map.
+
+    Returns `(relations, dropped)`. A relation missing/invalid `role1`/`role2`/`type`
+    (or non-dict) is counted under "malformed-bioc-relation" (nothing silent); the
+    orchestrator folds this into the report's relation skips.
+    """
+    dropped: Counter[str] = Counter()
+    docs = record.get("PubTator3") or record.get("documents")
+    if not isinstance(docs, list) or not docs:
+        return [], {}
+    doc = docs[0]
+    if not isinstance(doc, dict):
+        return [], {}
+    raw_rels = doc.get("relations")
+    if not isinstance(raw_rels, list):
+        return [], {}
+
+    relations: list[BiocRelation] = []
+    for rel in raw_rels:
+        if not isinstance(rel, dict):
+            dropped["malformed-bioc-relation"] += 1
+            continue
+        infons = rel.get("infons")
+        infons = infons if isinstance(infons, dict) else {}
+        role1, role2 = infons.get("role1"), infons.get("role2")
+        rtype = infons.get("type")
+        if not isinstance(role1, dict) or not isinstance(role2, dict) or not isinstance(rtype, str) or not rtype:
+            dropped["malformed-bioc-relation"] += 1
+            continue
+        s_type, s_id = role1.get("type"), role1.get("identifier")
+        o_type, o_id = role2.get("type"), role2.get("identifier")
+        if not (isinstance(s_type, str) and isinstance(s_id, str) and isinstance(o_type, str) and isinstance(o_id, str)):
+            dropped["malformed-bioc-relation"] += 1
+            continue
+        relations.append(
+            BiocRelation(
+                subject_type=s_type,
+                subject_id=s_id,
+                object_type=o_type,
+                object_id=o_id,
+                rel_type=rtype,
+                score=_parse_score(infons.get("score")),
+            )
+        )
+    return relations, dict(dropped)
+
+
 # --- Entity type -> annotation_type ------------------------------------------
 
 # PubTator BioC `infons.type` (lowercased) -> our kebab entity slug.
@@ -184,6 +261,12 @@ def _compact(namespace: str, accession: str) -> str:
     return f"{_IDENTIFIERS_BASE}/{namespace}:{accession}"
 
 
+def _pubtator_source_name(release: str) -> str:
+    """The shared seeder source identity for both entity and relation annotations.
+    They MUST match: merge_planned rejects a batch with mixed source_name values."""
+    return f"pubtator3:{release}:seeder-v1"
+
+
 def concept_iri_for(pubtator_type: str, identifier: str | None) -> str | None:
     """Build the identifiers.org concept IRI, or None if unnormalizable (skip).
 
@@ -213,6 +296,69 @@ def concept_iri_for(pubtator_type: str, identifier: str | None) -> str | None:
     if entity == "cellline":
         return _compact("cellosaurus", raw) if _CVCL.match(raw) else None
     return None
+
+
+# --- Relation type -> predicate CURIE ----------------------------------------
+
+# PubTator3 uses the fixed BioRED 8-type relation set. Clean Biolink predicate where
+# one exists, else a `sci:` project predicate. Keys are matched case-insensitively
+# (lowercased). See docs/conventions/annotation-tokens.md.
+RELATION_PREDICATES: dict[str, tuple[str, str]] = {
+    "association": ("biolink:associated_with", "biolink"),
+    "positive_correlation": ("biolink:positively_correlated_with", "biolink"),
+    "negative_correlation": ("biolink:negatively_correlated_with", "biolink"),
+    "bind": ("biolink:directly_physically_interacts_with", "biolink"),
+    "drug_interaction": ("biolink:interacts_with", "biolink"),
+    "cotreatment": ("sci:cotreatment", "sci"),
+    "comparison": ("sci:comparison", "sci"),
+    "conversion": ("sci:conversion", "sci"),
+}
+
+_PRED_SLUG_BAD = re.compile(r"[^a-z0-9_]")
+
+
+def predicate_for(rel_type: str) -> tuple[str, str, str | None]:
+    """Map a PubTator relation type to (predicate_curie, predicate_source, raw_or_None).
+
+    Known BioRED types return (curie, "biolink"|"sci", None). An unexpected type is
+    NOT dropped: it returns ("sci:pubtator_<slug>", "sci", <verbatim raw type>) where
+    <slug> lowercases the raw type and replaces every non-[a-z0-9_] char with "_", so
+    the data is preserved without pretending it is a curated project predicate.
+    """
+    mapped = RELATION_PREDICATES.get(rel_type.strip().lower())
+    if mapped is not None:
+        return mapped[0], mapped[1], None
+    slug = _PRED_SLUG_BAD.sub("_", rel_type.strip().lower())
+    return f"sci:pubtator_{slug}", "sci", rel_type
+
+
+def relation_body_json(
+    *,
+    subject_iri: str,
+    object_iri: str,
+    predicate: str,
+    predicate_source: str,
+    raw_predicate_type: str | None,
+    score: float | None,
+) -> str:
+    """Build the deterministic JSON for a relation's TextualBody.
+
+    Always carries subject / predicate / object / predicate_source. `raw_predicate_type`
+    is included only for unmapped types; `score` only when PubTator supplied a numeric
+    confidence. Serialized with sorted keys + compact separators so re-runs are
+    byte-stable (stable content_hash, no sidecar churn).
+    """
+    obj: dict[str, Any] = {
+        "subject": subject_iri,
+        "predicate": predicate,
+        "object": object_iri,
+        "predicate_source": predicate_source,
+    }
+    if raw_predicate_type is not None:
+        obj["raw_predicate_type"] = raw_predicate_type
+    if score is not None:
+        obj["score"] = score
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"))
 
 
 # --- Offset-map loader + ordered passage bridge ------------------------------
@@ -360,7 +506,135 @@ def plan_mention(
         motivation=Motivation.IDENTIFYING,
         body=IriBody(iri=concept_iri),
         match_text=match_text,
-        source_name=f"pubtator3:{release}:seeder-v1",
+        source_name=_pubtator_source_name(release),
+    )
+    return planned, None
+
+
+# --- Relation -> PlannedAnnotation conversion ---------------------------------
+
+
+@dataclass(frozen=True)
+class ResolvedMention:
+    """A persisted, normalizable entity mention located at an absolute file index."""
+
+    iri: str
+    file_idx: int
+    length: int
+    passage: PairedPassage
+
+
+def resolve_persisted_mentions(
+    file_text: str,
+    paired: list[PairedPassage],
+    mentions: list[BiocMention],
+) -> dict[str, list[ResolvedMention]]:
+    """Group persisted + normalizable mentions by concept IRI, with absolute file index.
+
+    A mention is included only if it (a) falls inside a persisted passage and (b) has a
+    normalizable concept IRI. The slice-verify guard mirrors plan_mention: a mapped slice
+    that does not equal the mention text is a hard SourceTextError (never a mis-placed
+    anchor). Used by plan_relation to find subject/object evidence spans.
+    """
+    grouped: dict[str, list[ResolvedMention]] = {}
+    for m in mentions:
+        pp = _containing(paired, m.offset, m.length)
+        if pp is None:
+            continue
+        iri = concept_iri_for(m.pubtator_type, m.identifier)
+        if iri is None:
+            continue
+        file_idx = pp.file_char_base + (m.offset - pp.bioc_offset)
+        exact = file_text[file_idx : file_idx + m.length]
+        if exact != m.text:
+            raise SourceTextError(
+                f"offset slice {exact!r} != BioC mention text {m.text!r} "
+                f"at file index {file_idx} (offset drift); aborting"
+            )
+        grouped.setdefault(iri, []).append(
+            ResolvedMention(iri=iri, file_idx=file_idx, length=m.length, passage=pp)
+        )
+    return grouped
+
+
+def plan_relation(
+    file_text: str,
+    relation: BiocRelation,
+    mentions_by_iri: dict[str, list[ResolvedMention]],
+    *,
+    release: str,
+    source_md_name: str,
+) -> tuple[PlannedAnnotation | None, str | None]:
+    """Convert a BiocRelation to a PlannedAnnotation, or (None, skip_reason).
+
+    Skip reasons: "relation-unnormalized-concept" (a role id does not normalize),
+    "relation-no-persisted-mentions" (a role concept has no persisted mention; the
+    reason does not distinguish whether subject or object was the absent role),
+    "relation-cross-passage" (both persisted but never co-occur in one passage),
+    "relation-self-single-mention" (a self-relation — subject concept == object concept —
+    with only one persisted mention, so no two-mention evidence span exists).
+    Target = the smallest covering span of the closest same-passage subject x object
+    mention pair; prefix/suffix clamped to that passage.
+    """
+    subject_iri = concept_iri_for(relation.subject_type, relation.subject_id)
+    object_iri = concept_iri_for(relation.object_type, relation.object_id)
+    if subject_iri is None or object_iri is None:
+        return None, "relation-unnormalized-concept"
+
+    subj_mentions = mentions_by_iri.get(subject_iri, [])
+    obj_mentions = mentions_by_iri.get(object_iri, [])
+    if not subj_mentions or not obj_mentions:
+        return None, "relation-no-persisted-mentions"
+
+    best: tuple[int, int, int] | None = None  # (span_len, span_start, span_end)
+    best_passage: PairedPassage | None = None
+    for s in subj_mentions:
+        for o in obj_mentions:
+            if s is o:
+                continue  # self-relation: span two DISTINCT mentions, not one paired with itself
+            if s.passage != o.passage:
+                continue
+            span_start = min(s.file_idx, o.file_idx)
+            span_end = max(s.file_idx + s.length, o.file_idx + o.length)
+            cand = (span_end - span_start, span_start, span_end)
+            if best is None or cand < best:
+                best = cand
+                best_passage = s.passage
+    if best is None or best_passage is None:
+        if subject_iri == object_iri and len(subj_mentions) < 2:
+            return None, "relation-self-single-mention"
+        return None, "relation-cross-passage"
+
+    _, span_start, span_end = best
+    exact = file_text[span_start:span_end]
+    passage_start = best_passage.file_char_base
+    passage_end = best_passage.file_char_base + best_passage.bioc_len
+    prefix_start = max(passage_start, span_start - _CONTEXT)
+    suffix_end = min(passage_end, span_end + _CONTEXT)
+    selector = TextQuoteSelector(
+        exact=exact,
+        prefix=file_text[prefix_start:span_start],
+        suffix=file_text[span_end:suffix_end],
+    )
+
+    predicate, predicate_source, raw_predicate_type = predicate_for(relation.rel_type)
+    body = relation_body_json(
+        subject_iri=subject_iri,
+        object_iri=object_iri,
+        predicate=predicate,
+        predicate_source=predicate_source,
+        raw_predicate_type=raw_predicate_type,
+        score=relation.score,
+    )
+    span_length = span_end - span_start
+    match_text = f"{predicate}|{subject_iri}|{object_iri}|{span_start}:{span_length}"
+    planned = PlannedAnnotation(
+        target=SpecificResource(source=source_md_name, selector=selector),
+        annotation_type="relation",
+        motivation=Motivation.LINKING,
+        body=TextualBody(value=body, format="application/json"),
+        match_text=match_text,
+        source_name=_pubtator_source_name(release),
     )
     return planned, None
 
@@ -370,8 +644,10 @@ def plan_mention(
 
 @dataclass(frozen=True)
 class SeedReport:
-    written: int
-    skipped: dict[str, int]
+    entity_written: int
+    entity_skipped: dict[str, int]
+    relation_written: int
+    relation_skipped: dict[str, int]
     note: str | None = None
 
 
@@ -401,9 +677,8 @@ def seed_pubtator(
         )
     file_text, persisted = load_persisted_passages(source_md)
 
-    skipped: Counter[str] = Counter()
     if not resolved.pmid:
-        return SeedReport(written=0, skipped={}, note="no PMID; PubTator3 is PubMed-only")
+        return SeedReport(entity_written=0, entity_skipped={}, relation_written=0, relation_skipped={}, note="no PMID; PubTator3 is PubMed-only")
 
     owns = http is None
     client = http or httpx.Client(
@@ -417,18 +692,18 @@ def seed_pubtator(
             client.close()
 
     if not record:
-        return SeedReport(written=0, skipped={}, note=f"no PubTator3 record ({err or 'no record'})")
+        return SeedReport(entity_written=0, entity_skipped={}, relation_written=0, relation_skipped={}, note=f"no PubTator3 record ({err or 'no record'})")
 
     parsed = parse_bioc_passages(record)
     if parsed is None:
-        return SeedReport(written=0, skipped={}, note="PubTator3 record had no usable passages")
+        return SeedReport(entity_written=0, entity_skipped={}, relation_written=0, relation_skipped={}, note="PubTator3 record had no usable passages")
 
     release = parsed.release or PUBTATOR3_API_VERSION
     paired = pair_passages(file_text, persisted, parsed)
     mentions, parse_drops = parse_bioc_entity_annotations(record)
-    skipped.update(parse_drops)  # malformed-bioc / multi-location surfaced, not silent
 
-    planned = []
+    entity_skipped: Counter[str] = Counter(parse_drops)
+    planned: list[PlannedAnnotation] = []
     for m in mentions:
         p, reason = plan_mention(
             file_text, paired, m, release=release, source_md_name=source_md.name
@@ -436,12 +711,35 @@ def seed_pubtator(
         if p is not None:
             planned.append(p)
         elif reason is not None:
-            skipped[reason] += 1
+            entity_skipped[reason] += 1
+
+    # Relations: same record, same paired passages, same normalized-mention index.
+    relations, rel_drops = parse_bioc_relations(record)
+    relation_skipped: Counter[str] = Counter(rel_drops)  # malformed-bioc-relation, not silent
+    mentions_by_iri = resolve_persisted_mentions(file_text, paired, mentions)
+    rel_planned: list[PlannedAnnotation] = []
+    for r in relations:
+        p, reason = plan_relation(
+            file_text, r, mentions_by_iri, release=release, source_md_name=source_md.name
+        )
+        if p is not None:
+            rel_planned.append(p)
+        elif reason is not None:
+            relation_skipped[reason] += 1
 
     sidecar_path = sidecar_for_markdown(source_md)
     sidecar = read_sidecar(sidecar_path) if sidecar_path.exists() else Sidecar()
-    new_sidecar, written = merge_planned(sidecar, planned, actor=actor, now=now)
+    new_sidecar, written = merge_planned(sidecar, planned + rel_planned, actor=actor, now=now)
     if written:
         atomic_write_text(sidecar_path, serialize_sidecar(new_sidecar))
 
-    return SeedReport(written=len(written), skipped=dict(skipped), note=None)
+    # Partition the written rows by annotation_type to report entity vs relation counts.
+    rel_written = sum(1 for a in written if a.annotation_type == "relation")
+    ent_written = sum(1 for a in written if a.annotation_type.startswith("entity-"))
+    return SeedReport(
+        entity_written=ent_written,
+        entity_skipped=dict(entity_skipped),
+        relation_written=rel_written,
+        relation_skipped=dict(relation_skipped),
+        note=None,
+    )
