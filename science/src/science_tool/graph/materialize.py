@@ -107,6 +107,12 @@ def _build_dataset_from_sources(
     `_derive_patch_membership_layer`, `_derive_freshness_layer`). Pure: takes
     `ProjectSources`, returns a populated `Dataset`. Never touches the filesystem.
 
+    When `source_snapshots` is provided (precomputed by `compute_source_snapshots`,
+    which does the filesystem work upstream), the snapshot layer is emitted ahead of
+    `_derive_bears_on_layer` — load-bearing ordering, so each `SourceSnapshot` node's
+    `bears_on` edge exists before closure and feeds `_derive_freshness_layer` via
+    `source_changes`. When None, no snapshot layer is emitted (pre-Slice-B behavior).
+
     Used by both `materialize_graph` (which writes to disk) and the
     `propagate_freshness_in_memory` sweep (which discards the dataset).
     """
@@ -184,6 +190,8 @@ def _build_dataset_from_sources(
 
     _validate_no_amendment_cycles(dataset)
 
+    # Load-bearing ordering: emit the snapshot layer BEFORE `_derive_bears_on_layer`
+    # so each SourceSnapshot's `bears_on` edge is present for transitive closure.
     if source_snapshots is not None:
         emit_source_snapshots(dataset, source_snapshots)
 

@@ -1,8 +1,8 @@
 """Leaf source-record types emitted by storage adapters during load.
 
 Lives below ``sources.py`` (which imports the adapter modules) so adapters can
-return these types without an import cycle. Slice B's ``SourceRecord`` /
-``SourceSnapshot`` will join this module.
+return these types without an import cycle. Slice B's ``SourceSnapshot`` /
+``SourceChange`` source-observation primitives also live here for the same reason.
 """
 
 from __future__ import annotations
