@@ -132,6 +132,81 @@ def parse_bioc_entity_annotations(
     return mentions, dict(dropped)
 
 
+@dataclass(frozen=True)
+class BiocRelation:
+    """One PubTator document-level relation: subject/object concept (type+id),
+    predicate type, and optional model confidence."""
+
+    subject_type: str
+    subject_id: str
+    object_type: str
+    object_id: str
+    rel_type: str
+    score: float | None
+
+
+def _parse_score(raw: Any) -> float | None:
+    """PubTator stores `infons.score` as a stringified float; non-numeric -> None."""
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, str):
+        try:
+            return float(raw)
+        except ValueError:
+            return None
+    return None
+
+
+def parse_bioc_relations(
+    record: dict[str, Any],
+) -> tuple[list[BiocRelation], dict[str, int]]:
+    """Flatten the document-level `relations` into ordered rows + a drop-count map.
+
+    Returns `(relations, dropped)`. A relation missing/invalid `role1`/`role2`/`type`
+    (or non-dict) is counted under "malformed-bioc-relation" (nothing silent); the
+    orchestrator folds this into the report's relation skips.
+    """
+    dropped: Counter[str] = Counter()
+    docs = record.get("PubTator3") or record.get("documents")
+    if not isinstance(docs, list) or not docs:
+        return [], {}
+    doc = docs[0]
+    if not isinstance(doc, dict):
+        return [], {}
+    raw_rels = doc.get("relations")
+    if not isinstance(raw_rels, list):
+        return [], {}
+
+    relations: list[BiocRelation] = []
+    for rel in raw_rels:
+        if not isinstance(rel, dict):
+            dropped["malformed-bioc-relation"] += 1
+            continue
+        infons = rel.get("infons")
+        infons = infons if isinstance(infons, dict) else {}
+        role1, role2 = infons.get("role1"), infons.get("role2")
+        rtype = infons.get("type")
+        if not isinstance(role1, dict) or not isinstance(role2, dict) or not isinstance(rtype, str) or not rtype:
+            dropped["malformed-bioc-relation"] += 1
+            continue
+        s_type, s_id = role1.get("type"), role1.get("identifier")
+        o_type, o_id = role2.get("type"), role2.get("identifier")
+        if not (isinstance(s_type, str) and isinstance(s_id, str) and isinstance(o_type, str) and isinstance(o_id, str)):
+            dropped["malformed-bioc-relation"] += 1
+            continue
+        relations.append(
+            BiocRelation(
+                subject_type=s_type,
+                subject_id=s_id,
+                object_type=o_type,
+                object_id=o_id,
+                rel_type=rtype,
+                score=_parse_score(infons.get("score")),
+            )
+        )
+    return relations, dict(dropped)
+
+
 # --- Entity type -> annotation_type ------------------------------------------
 
 # PubTator BioC `infons.type` (lowercased) -> our kebab entity slug.
