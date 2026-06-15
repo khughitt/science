@@ -185,6 +185,43 @@ _STATUS_VALUES: dict[str, frozenset[str]] = {
 }
 _ALLOWED_EXPLICIT_ROOTS = (Path("entities"),)
 
+# Lifecycle states hidden from default view/consumer surfaces (consolidation P1).
+# `archived` is reserved here for forward-compatibility; nothing sets it until the
+# archive/apply phases. Filtering happens at consumer layers ONLY — never at the
+# KG ingestion layer (MarkdownAdapter.discover / load_project_sources), so
+# `sci:supersedes` lineage survives materialization.
+_HIDDEN_STATUSES: frozenset[str] = frozenset({"superseded", "archived"})
+
+# Human-curated allowlist of statuses that remain default-visible. This is the
+# source of truth the EntityKind schema lacks (it carries only `statuses` /
+# `default_status`, no live/terminal metadata). Every status declared by any core
+# kind must appear here or in `_HIDDEN_STATUSES`; the guard tests in
+# test_status_visibility.py fail loud on an unclassified status, forcing a
+# deliberate live-or-hidden decision when a new status is introduced. Per design
+# open-question #5, `retired`/`deprecated`/`abandoned` stay LIVE (visible) in this
+# slice — no regression vs today.
+_LIVE_STATUSES: frozenset[str] = frozenset(
+    {
+        "draft",
+        "active",
+        "retired",
+        "partially-answered",
+        "answered",
+        "deferred",
+        "proposed",
+        "under-investigation",
+        "partially-supported",
+        "supported",
+        "weakened",
+        "refuted",
+        "complete",
+        "contested",
+        "amended",
+        "deprecated",
+        "abandoned",
+    }
+)
+
 
 def _local_entity_kind(project_root: Path, kind: str) -> EntityKind | None:
     """Return the manifest EntityKind for a local kind, or None."""
@@ -222,6 +259,16 @@ def valid_statuses(kind: str, *, project_root: Path | None = None) -> frozenset[
         if ek is not None:
             return frozenset(ek.statuses) if ek.statuses else None
     raise KeyError(kind)
+
+
+def is_default_visible(status: str | None) -> bool:
+    """Whether an entity with ``status`` is shown by default on view/consumer
+    surfaces. A missing/empty status is visible; only explicitly hidden lifecycle
+    states (`_HIDDEN_STATUSES`) are excluded. This is NOT ``status == "active"`` —
+    live statuses such as `proposed`, `answered`, `complete`, `retired` stay
+    visible.
+    """
+    return status not in _HIDDEN_STATUSES
 
 
 @dataclass(frozen=True)
