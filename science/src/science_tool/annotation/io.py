@@ -238,10 +238,16 @@ def _iter_ledgers(ds: Dataset) -> "list[AuditLedger]":
         hashes = (
             tuple(str(item) for item in ds.items(hashes_node)) if hashes_node else ()
         )
+        sth_node = ds.value(subj, SCI.sourceTextHash)
+        source_text_hash = str(sth_node) if sth_node is not None else None
         modified = _read_dt(_required(ds, subj, DCTERMS.modified, context=ctx))
         out.append(
             AuditLedger(
-                id=led_id, source=source, audited_hashes=hashes, modified=modified
+                id=led_id,
+                source=source,
+                audited_hashes=hashes,
+                modified=modified,
+                source_text_hash=source_text_hash,
             )
         )
     return out
@@ -413,12 +419,15 @@ def _emit_body(body: Body) -> "list[str]":
 
 def _emit_ledger(led: AuditLedger) -> "list[str]":
     hashes = " ".join(_str_lit(h) for h in led.audited_hashes)
-    return [
+    lines = [
         f"  anno:{led.id} a sci:AuditLedger ;",
         f"    sci:source         {_str_lit(led.source)} ;",
         f"    sci:auditedHashes  ( {hashes} ) ;",
-        f"    dc:modified        {_dt_lit(led.modified)} .",
     ]
+    if led.source_text_hash is not None:
+        lines.append(f"    sci:sourceTextHash {_str_lit(led.source_text_hash)} ;")
+    lines.append(f"    dc:modified        {_dt_lit(led.modified)} .")
+    return lines
 
 
 def _str_lit(s: str) -> str:
