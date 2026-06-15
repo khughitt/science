@@ -290,6 +290,40 @@ def concept_iri_for(pubtator_type: str, identifier: str | None) -> str | None:
     return None
 
 
+# --- Relation type -> predicate CURIE ----------------------------------------
+
+# PubTator3 uses the fixed BioRED 8-type relation set. Clean Biolink predicate where
+# one exists, else a `sci:` project predicate. Keys are matched case-insensitively
+# (lowercased). See docs/conventions/annotation-tokens.md.
+RELATION_PREDICATES: dict[str, tuple[str, str]] = {
+    "association": ("biolink:associated_with", "biolink"),
+    "positive_correlation": ("biolink:positively_correlated_with", "biolink"),
+    "negative_correlation": ("biolink:negatively_correlated_with", "biolink"),
+    "bind": ("biolink:directly_physically_interacts_with", "biolink"),
+    "drug_interaction": ("biolink:interacts_with", "biolink"),
+    "cotreatment": ("sci:cotreatment", "sci"),
+    "comparison": ("sci:comparison", "sci"),
+    "conversion": ("sci:conversion", "sci"),
+}
+
+_PRED_SLUG_BAD = re.compile(r"[^a-z0-9_]")
+
+
+def predicate_for(rel_type: str) -> tuple[str, str, str | None]:
+    """Map a PubTator relation type to (predicate_curie, predicate_source, raw_or_None).
+
+    Known BioRED types return (curie, "biolink"|"sci", None). An unexpected type is
+    NOT dropped: it returns ("sci:pubtator_<slug>", "sci", <verbatim raw type>) where
+    <slug> lowercases the raw type and replaces every non-[a-z0-9_] char with "_", so
+    the data is preserved without pretending it is a curated project predicate.
+    """
+    mapped = RELATION_PREDICATES.get(rel_type.strip().lower())
+    if mapped is not None:
+        return mapped[0], mapped[1], None
+    slug = _PRED_SLUG_BAD.sub("_", rel_type.strip().lower())
+    return f"sci:pubtator_{slug}", "sci", rel_type
+
+
 # --- Offset-map loader + ordered passage bridge ------------------------------
 
 

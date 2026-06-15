@@ -1,4 +1,6 @@
-from science_tool.annotation.pubtator_seed import BiocRelation, parse_bioc_relations
+import pytest
+
+from science_tool.annotation.pubtator_seed import BiocRelation, parse_bioc_relations, predicate_for
 
 # Real-shape relation record (pinned from live PubTator3, PMID 28483577, 2026-06-15).
 REL_RECORD = {
@@ -93,3 +95,34 @@ def test_parse_bioc_relations_bool_score_is_none():
 
 def test_parse_bioc_relations_no_relations_key():
     assert parse_bioc_relations({"PubTator3": [{"passages": []}]}) == ([], {})
+
+
+@pytest.mark.parametrize(
+    "rel_type,curie,source",
+    [
+        ("Association", "biolink:associated_with", "biolink"),
+        ("Positive_Correlation", "biolink:positively_correlated_with", "biolink"),
+        ("Negative_Correlation", "biolink:negatively_correlated_with", "biolink"),
+        ("Bind", "biolink:directly_physically_interacts_with", "biolink"),
+        ("Drug_Interaction", "biolink:interacts_with", "biolink"),
+        ("Cotreatment", "sci:cotreatment", "sci"),
+        ("Comparison", "sci:comparison", "sci"),
+        ("Conversion", "sci:conversion", "sci"),
+    ],
+)
+def test_predicate_for_known_types(rel_type, curie, source):
+    assert predicate_for(rel_type) == (curie, source, None)
+
+
+def test_predicate_for_is_case_insensitive():
+    assert predicate_for("negative_correlation") == ("biolink:negatively_correlated_with", "biolink", None)
+    assert predicate_for("COTREATMENT") == ("sci:cotreatment", "sci", None)
+
+
+def test_predicate_for_unexpected_type_sanitized():
+    # Unknown type -> sci:pubtator_<slug>, raw type preserved, never dropped.
+    assert predicate_for("Some New/Weird Type!") == (
+        "sci:pubtator_some_new_weird_type_",
+        "sci",
+        "Some New/Weird Type!",
+    )
