@@ -10,13 +10,16 @@ import pytest
 
 from science_tool.annotation.source_text import (
     Passage,
+    PassageOffset,
     ResolvedPaper,
     SourcePassages,
     SourceTextError,
     is_whitelisted,
     parse_bioc_passages,
+    render_source_md,
     resolve_license,
     resolve_paper_entity,
+    verify_offset_map,
 )
 
 
@@ -190,13 +193,6 @@ class TestLicense:
         assert license_ == "unknown"
 
 
-from science_tool.annotation.source_text import (  # noqa: E402
-    PassageOffset,
-    render_source_md,
-    verify_offset_map,
-)
-
-
 class TestOffsetMap:
     def _passages(self) -> SourcePassages:
         return SourcePassages(
@@ -209,7 +205,6 @@ class TestOffsetMap:
 
     def test_offsets_slice_back_to_passage_text(self) -> None:
         rendered = render_source_md(
-            citekey="Smith2024",
             passages=self._passages(),
             retrieved_from="pubtator3",
             license_="CC-BY-4.0",
@@ -227,7 +222,6 @@ class TestOffsetMap:
     def test_offset_base_is_character_not_byte(self) -> None:
         # The em dash (U+2014) is 3 bytes but 1 character; offsets must stay in chars.
         rendered = render_source_md(
-            citekey="Smith2024",
             passages=self._passages(),
             retrieved_from="pubtator3",
             license_="CC-BY-4.0",
@@ -242,7 +236,6 @@ class TestOffsetMap:
 
     def test_verify_offset_map_passes_on_self(self) -> None:
         rendered = render_source_md(
-            citekey="Smith2024",
             passages=self._passages(),
             retrieved_from="pubtator3",
             license_="CC-BY-4.0",
@@ -255,7 +248,6 @@ class TestOffsetMap:
 
     def test_verify_offset_map_raises_on_corruption(self) -> None:
         rendered = render_source_md(
-            citekey="Smith2024",
             passages=self._passages(),
             retrieved_from="pubtator3",
             license_="CC-BY-4.0",
@@ -266,3 +258,52 @@ class TestOffsetMap:
         bad = [PassageOffset(section=o.section, file_char_base=o.file_char_base + 1, length=o.length) for o in rendered.offset_map]
         with pytest.raises(SourceTextError):
             verify_offset_map(rendered.text, bad, self._passages())
+
+    def test_header_length_converges_across_digit_boundary(self) -> None:
+        # Many passages force file_char_base values to grow in digit-count as the
+        # header lengthens, which can push later bases across another digit
+        # boundary. The fixpoint loop converges (needs ~5 iterations here); the old
+        # build-once-then-re-derive-once logic provably raised at this passage count.
+        passages = SourcePassages(
+            passages=tuple(
+                Passage(section="abstract", bioc_offset=i, text=f"passage number {i} text")
+                for i in range(131)
+            ),
+            release="2024.01",
+        )
+        rendered = render_source_md(
+            passages=passages,
+            retrieved_from="pubtator3",
+            license_="CC-BY-4.0",
+            pmid="123456",
+            doi="10.1038/foo-1",
+            fulltext=None,
+        )
+        for off, src in zip(rendered.offset_map, passages.passages, strict=True):
+            sliced = rendered.text[off.file_char_base : off.file_char_base + off.length]
+            assert sliced == src.text
+
+    def test_verify_offset_map_passes_for_fulltext(self) -> None:
+        # The slice-verify safety net must cover abstract + full-text passages, not
+        # just abstract-only. Build a combined SourcePassages in render order.
+        abstract = self._passages()
+        fulltext = SourcePassages(
+            passages=(
+                Passage(section="introduction", bioc_offset=100, text="Intro paragraph one."),
+                Passage(section="methods", bioc_offset=200, text="We did experiments — many."),
+            ),
+            release="2024.01",
+        )
+        rendered = render_source_md(
+            passages=abstract,
+            retrieved_from="pubtator3",
+            license_="CC-BY-4.0",
+            pmid="123456",
+            doi="10.1038/foo-1",
+            fulltext=fulltext,
+        )
+        combined = SourcePassages(
+            passages=abstract.passages + fulltext.passages, release="2024.01"
+        )
+        # Must not raise: every entry (abstract + full text) slices back exactly.
+        verify_offset_map(rendered.text, rendered.offset_map, combined)

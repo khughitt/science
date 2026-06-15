@@ -259,12 +259,11 @@ def verify_offset_map(
     mis-placed anchor. Pairs entries to passages positionally (render order is
     preserved 1:1).
     """
-    entries = list(offset_map)
-    if len(entries) != len(passages.passages):
+    if len(offset_map) != len(passages.passages):
         raise SourceTextError(
-            f"offset map has {len(entries)} entries but {len(passages.passages)} passages"
+            f"offset map has {len(offset_map)} entries but {len(passages.passages)} passages"
         )
-    for off, passage in zip(entries, passages.passages, strict=True):
+    for off, passage in zip(offset_map, passages.passages, strict=True):
         sliced = file_text[off.file_char_base : off.file_char_base + off.length]
         if sliced != passage.text:
             raise SourceTextError(
@@ -273,14 +272,8 @@ def verify_offset_map(
             )
 
 
-# Section -> rendered heading. "title" + "abstract" go under "## Abstract";
-# any full-text sections render under "## Full Text".
-_ABSTRACT_SECTIONS = frozenset({"title", "abstract"})
-
-
 def render_source_md(
     *,
-    citekey: str,
     passages: SourcePassages,
     retrieved_from: str,
     license_: str,
@@ -347,39 +340,31 @@ def render_source_md(
         text_sha256=text_sha256,
         pmid=pmid,
         doi=doi,
-        offsets=rel_offsets,  # recomputed to absolute below before serialization
         fulltext_omitted_reason=fulltext_omitted_reason,
-        body_offset=0,  # patched after we know header length
     )
-    header = "---\n" + yaml.safe_dump(fm, sort_keys=False, allow_unicode=True) + "---\n\n"
-    header_len = len(header)
 
-    # 3) Recompute absolute offsets and patch the frontmatter map.
-    offset_map = tuple(
-        PassageOffset(section=sec, file_char_base=header_len + rel, length=length)
-        for (sec, rel, length) in rel_offsets
-    )
-    fm["passages"] = [
-        {"section": o.section, "file_char_base": o.file_char_base, "length": o.length}
-        for o in offset_map
-    ]
-    header = "---\n" + yaml.safe_dump(fm, sort_keys=False, allow_unicode=True) + "---\n\n"
-    # Header length must be stable across the patch (we only replaced a placeholder
-    # list with the real one); recompute and assert no drift, else fail loud.
-    if len(header) != header_len:
-        # The map serialization changed the header length; re-derive once more.
-        header_len2 = len(header)
-        offset_map = tuple(
-            PassageOffset(section=sec, file_char_base=header_len2 + rel, length=length)
-            for (sec, rel, length) in rel_offsets
-        )
+    # 3) Solve for the header length as a fixpoint.
+    # `base` is the body's absolute char start (== header length). It depends on the
+    # serialized passages map, whose file_char_base ints depend on `base` — a fixpoint.
+    # Header length only grows as base grows (more digits), so this converges fast.
+    base = 0
+    header = ""
+    for _ in range(8):
         fm["passages"] = [
-            {"section": o.section, "file_char_base": o.file_char_base, "length": o.length}
-            for o in offset_map
+            {"section": sec, "file_char_base": base + rel, "length": length}
+            for (sec, rel, length) in rel_offsets
         ]
         header = "---\n" + yaml.safe_dump(fm, sort_keys=False, allow_unicode=True) + "---\n\n"
-        if len(header) != header_len2:
-            raise SourceTextError("offset-map serialization did not converge; refusing to write")
+        if len(header) == base:
+            break
+        base = len(header)
+    else:
+        raise SourceTextError("offset-map serialization did not converge; refusing to write")
+
+    offset_map = tuple(
+        PassageOffset(section=sec, file_char_base=base + rel, length=length)
+        for (sec, rel, length) in rel_offsets
+    )
 
     text = header + body
     return RenderedSource(text=text, offset_map=offset_map, text_sha256=text_sha256)
@@ -393,10 +378,9 @@ def _build_frontmatter(
     text_sha256: str,
     pmid: str | None,
     doi: str | None,
-    offsets: list[tuple[str, int, int]],
     fulltext_omitted_reason: str | None,
-    body_offset: int,
 ) -> dict[str, Any]:
+    """Frontmatter without `passages` — the caller's fixpoint loop sets that field."""
     fm: dict[str, Any] = {
         "kind": "paper-source",
         "retrieved_from": retrieved_from,
@@ -412,8 +396,4 @@ def _build_frontmatter(
         fm["pmid"] = pmid
     if fulltext_omitted_reason:
         fm["fulltext_omitted_reason"] = fulltext_omitted_reason
-    fm["passages"] = [
-        {"section": sec, "file_char_base": body_offset + rel, "length": length}
-        for (sec, rel, length) in offsets
-    ]
     return fm
