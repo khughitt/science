@@ -2,11 +2,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from science_tool.annotation.io import read_sidecar, serialize_sidecar, write_sidecar
-from science_tool.annotation.ledger import (
-    find_or_create_ledger,
-    ledger_set_source_text_hash,
-)
+from science_tool.annotation.io import read_sidecar, write_sidecar
+from science_tool.annotation.ledger import ledger_set_source_text_hash
 from science_tool.annotation.model import (
     AuditLedger,
     HASH_REQUIRED_SOURCE_PREFIXES,
