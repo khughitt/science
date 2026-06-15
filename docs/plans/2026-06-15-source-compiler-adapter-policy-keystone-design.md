@@ -78,17 +78,29 @@ Add to the base contract, with the common-case default inline and per-adapter ov
 - **`on_owner_declared(self, *, entity, ref, raw, kind) -> AggregateRowMeta | None`** —
   base returns `None`. `AggregateAdapter` builds the `AggregateRowMeta`. The loop appends
   it to `aggregate_rows` when non-`None`. (Collapses branch 5.)
-- **`on_deferred(self, *, entity, ref) -> None`** — base is a no-op. `DatapackageAdapter`
-  overrides to record `dataset_datapackages[entity.canonical_id] = ref.path` so the
-  geneset member gate can still locate the datapackage's resources after the owner wins
-  the column. (Captures the datapackage defer side-effect from branch 3.)
+- **`deferred_dataset_datapackage(self, *, entity, ref) -> tuple[str, str] | None`** —
+  base returns `None`. `DatapackageAdapter` overrides to return
+  `(entity.canonical_id, ref.path)`. The loop owns the mutation: when the return is
+  non-`None`, the loop writes it into `dataset_datapackages` so the geneset member gate
+  can still locate the datapackage's resources after the owner wins the column.
+  (Captures the datapackage defer side-effect from branch 3.)
 
-`dataset_datapackages` is supplied to the adapter via the call signature (e.g. the loop
-passes the dict, or `on_deferred` returns the `(id, path)` pair and the loop records it —
-resolved at plan time; the returned-pair form keeps the adapter free of loop-owned
-mutable state and is preferred). The two record-capture hooks (`source_document`,
-`on_owner_declared`) and `on_deferred` are deliberately three small parallel typed hooks
-rather than one over-generalized callback; each captures one concrete downstream record.
+These three record-capture hooks (`source_document`, `on_owner_declared`,
+`deferred_dataset_datapackage`) are deliberately small parallel typed hooks rather than
+one over-generalized callback; each returns one concrete payload and the loop owns every
+mutation — adapters never touch loop-owned mutable state.
+
+#### Record types move to a leaf module (import-cycle fix)
+
+`MarkdownSourceDocument` and `AggregateRowMeta` currently live in `sources.py`, but
+`sources.py` imports the adapter modules — so an adapter that imported those types from
+`sources.py` would create a cycle. Relocate both dataclasses to a new leaf module
+`science/src/science_tool/graph/source_records.py` (depends only on `science_model`).
+`base.py`, the adapter modules, and `sources.py` all import them from the leaf. This is
+behavior-neutral (a pure move + re-import) and gives Slice B's `SourceRecord` /
+`SourceSnapshot` a natural home. `sources.py` may keep a re-export of the two names if any
+external caller imports them from there today (verify at plan time; drop the re-export if
+there are none).
 
 ### `owner_scope` policy stays consolidated
 
@@ -117,12 +129,14 @@ for adapter in adapters:
         #   (the only adapter knob is adapter.skip_core_on_missing_identity)
         owner_scope, deprecated = classify_owner_scope(adapter.name, project_name=...)
         if adapter.should_defer(already_owned=entity.canonical_id in identity_table):
-            adapter.on_deferred(entity=entity, ref=ref)   # datapackage records its path
+            if (pair := adapter.deferred_dataset_datapackage(entity=entity, ref=ref)):
+                cid, path = pair                          # loop owns the mutation
+                dataset_datapackages[cid] = path
             continue
         identity_declarations.append(IdentityDeclaration(...))
         if (meta := adapter.on_owner_declared(...)) is not None:
             aggregate_rows.append(meta)
-        # existing identity_table collision handling (unchanged)
+        # existing identity_table + entity_source_adapters handling (unchanged)
 ```
 
 ### Error policy (preserved exactly)
@@ -161,9 +175,12 @@ Mirror Spec 2's equivalence discipline:
   aggregate row captured for triage, and at least one core entity missing identity
   fields (the strict skip-warn path). Capture the full load output —
   `entities`, `identity_declarations`, `skipped_entities`, `markdown_documents`,
-  `aggregate_rows`, `dataset_datapackages` — as frozen expected values. The test asserts
-  the post-refactor load equals the frozen capture, field for field. Any difference is a
-  bug, not a judgment call.
+  `aggregate_rows`, `dataset_datapackages`, `entity_source_adapters` — as frozen expected
+  values. (`entity_source_adapters` is load-bearing: the collapsed defer/owner branches
+  directly shape it — `sources.py:529`, returned at `:688` — and existing datapackage
+  tests assert deferred-vs-orphan behavior through it.) The test asserts the post-refactor
+  load equals the frozen capture, field for field. Any difference is a bug, not a judgment
+  call.
 - **Full regression suite.** `cd ~/d/science && uv run --frozen pytest` (5500+ tests)
   must stay green — the existing per-adapter tests already cover each behavior; the
   equivalence fixture adds the cross-adapter interaction guarantee.
@@ -172,14 +189,19 @@ Mirror Spec 2's equivalence discipline:
 
 ## File structure
 
+- **Add** `science/src/science_tool/graph/source_records.py` (leaf) — relocate
+  `MarkdownSourceDocument` and `AggregateRowMeta` here (depends only on `science_model`).
 - **Modify** `science/src/science_tool/graph/storage_adapters/base.py` — add the policy
-  fields + hook method signatures with common-case defaults.
+  fields + hook method signatures with common-case defaults (imports record types from
+  the leaf).
 - **Modify** `storage_adapters/markdown.py` — override `skip_core_on_missing_identity`,
   `source_document`.
-- **Modify** `storage_adapters/datapackage.py` — override `should_defer`, `on_deferred`.
+- **Modify** `storage_adapters/datapackage.py` — override `should_defer`,
+  `deferred_dataset_datapackage`.
 - **Modify** `storage_adapters/aggregate.py` — override `on_owner_declared`.
 - **Modify** `science/src/science_tool/graph/sources.py` — rewrite the loop body to read
-  the policy surface; remove the `isinstance`/`name ==` branches.
+  the policy surface; remove the `isinstance`/`name ==` branches; import the record types
+  from the leaf (keep a re-export only if an existing external caller needs it).
 - **Add** fixture project + equivalence test under `science/tests/`.
 - **Unchanged** `identity_table.py` (`classify_owner_scope` kept).
 
