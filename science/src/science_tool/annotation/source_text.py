@@ -11,7 +11,7 @@ so callers (and tests) control every request.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -51,28 +51,6 @@ def _paper_dirs(project_root: Path) -> list[Path]:
     return [project_root / sub for sub in PROMOTE_KIND_PAPER.source_subdirs]
 
 
-def _normalize_doi_loose(raw: str | None) -> str | None:
-    """Normalize a DOI, falling back to a lowercased/stripped string for synthetic/short DOIs.
-
-    `normalize_doi` enforces the real DOI registrant format (`10.NNNN/`); this
-    wrapper preserves that for real DOIs while still returning a comparable token
-    for synthetic test DOIs (e.g. `10.1/meta`) that don't meet the 4-9 digit rule.
-    """
-    if not raw:
-        return None
-    normed = normalize_doi(raw)
-    if normed is not None:
-        return normed
-    # Fallback: strip URL prefix, lowercase, strip whitespace/slashes — still
-    # comparable as long as both entity and query go through the same path.
-    import re as _re
-    cleaned = raw.strip()
-    cleaned = _re.sub(r"^https?://(?:dx\.)?doi\.org/", "", cleaned, flags=_re.IGNORECASE)
-    if cleaned.lower().startswith("doi:"):
-        cleaned = cleaned[4:]
-    return cleaned.strip().strip("/").lower() or None
-
-
 def resolve_paper_entity(
     project_root: Path, *, doi: str | None, pmid: str | None
 ) -> ResolvedPaper:
@@ -82,7 +60,7 @@ def resolve_paper_entity(
     normalized doi/pmid. No match -> SourceTextError (actionable). Two entities
     claiming the same identifier -> SourceTextError naming both files.
     """
-    want_doi = _normalize_doi_loose(doi)
+    want_doi = normalize_doi(doi)
     want_pmid = normalize_pmid(pmid)
     if not want_doi and not want_pmid:
         raise SourceTextError(
@@ -100,12 +78,12 @@ def resolve_paper_entity(
             if any(path.name.endswith(sfx) for sfx in _SIDECAR_SUFFIXES):
                 continue
             fm = raw_frontmatter(path)
-            entity_doi = _normalize_doi_loose(_as_str(fm.get("doi")))
+            entity_doi = normalize_doi(_as_str(fm.get("doi")))
             entity_pmid = normalize_pmid(_as_str(fm.get("pmid")))
             if (want_doi and entity_doi == want_doi) or (
                 want_pmid and entity_pmid == want_pmid
             ):
-                matches.append((path, normalize_doi(_as_str(fm.get("doi"))), entity_pmid))
+                matches.append((path, entity_doi, entity_pmid))
 
     ident = want_doi or want_pmid
     if not matches:

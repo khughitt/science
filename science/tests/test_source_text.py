@@ -53,9 +53,9 @@ class TestResolvePaperEntity:
         # Real checkouts (this meta repo) store paper summaries outside entities/papers;
         # the resolver must scan every canonical paper subdir, not the policy root.
         path = _write_paper(
-            tmp_path, "Meta2026", doi="10.1/meta", subdir="doc/background/papers"
+            tmp_path, "Meta2026", doi="10.1101/meta", subdir="doc/background/papers"
         )
-        resolved = resolve_paper_entity(tmp_path, doi="10.1/meta", pmid=None)
+        resolved = resolve_paper_entity(tmp_path, doi="10.1101/meta", pmid=None)
         assert resolved.path == path
         assert resolved.directory == tmp_path / "doc" / "background" / "papers"
 
@@ -77,10 +77,10 @@ class TestResolvePaperEntity:
         assert "paper-fetch" in msg
 
     def test_multi_match_fails_loud_naming_both(self, tmp_path: Path) -> None:
-        a = _write_paper(tmp_path, "Aaa2024", doi="10.1/dup")
-        b = _write_paper(tmp_path, "Bbb2024", doi="10.1/dup")
+        a = _write_paper(tmp_path, "Aaa2024", doi="10.1038/dup")
+        b = _write_paper(tmp_path, "Bbb2024", doi="10.1038/dup")
         with pytest.raises(SourceTextError) as exc:
-            resolve_paper_entity(tmp_path, doi="10.1/dup", pmid=None)
+            resolve_paper_entity(tmp_path, doi="10.1038/dup", pmid=None)
         msg = str(exc.value)
         assert str(a) in msg and str(b) in msg
 
