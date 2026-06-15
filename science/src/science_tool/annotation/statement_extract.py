@@ -267,3 +267,108 @@ def find_qualified_spans(
             continue
         out.append(i)
     return out
+
+
+# --- Grounding + planning -----------------------------------------------------
+
+
+def _llm_annot_source_name(model: str) -> str:
+    """The Phase-3a source identity. The `paper-annotate-v1` segment bumps when the
+    prompt or body schema changes (see annotation-tokens.md)."""
+    return f"llm-annot:{model}:paper-annotate-v1"
+
+
+def _normalize_text(text: str) -> str:
+    """Whitespace-collapsed form used in match_text (stable across trivial respacing)."""
+    return " ".join(text.split())
+
+
+def active_entity_iris(sidecar: Sidecar) -> set[str]:
+    """Concept IRIs of all ACTIVE (open|ack) `entity-*` annotations in the sidecar.
+
+    Dismissed/superseded entity annotations are excluded — the same active-set policy
+    the agent is told to pass to `annotate list --status open --status ack`.
+    """
+    out: set[str] = set()
+    for a in sidecar.annotations:
+        if not a.annotation_type.startswith("entity-"):
+            continue
+        if a.status not in (Status.OPEN, Status.ACK):
+            continue
+        for body in a.bodies:
+            if isinstance(body, IriBody):
+                out.add(body.iri)
+    return out
+
+
+def plan_statement(
+    file_text: str,
+    persisted: list[PersistedPassage],
+    candidate: Candidate,
+    *,
+    active_iris: set[str],
+    model: str,
+    source_md_name: str,
+) -> tuple[PlannedAnnotation | None, str | None, int]:
+    """Convert a Candidate to (PlannedAnnotation | None, skip_reason | None, dropped).
+
+    skip reasons: "extract-quote-not-found", "extract-quote-ambiguous",
+    "extract-anchored-outside-passage". `dropped` counts unverified concept fields
+    removed (the statement is still planned — grounding is a bonus, never a gate).
+    """
+    spans = find_qualified_spans(
+        file_text, candidate.exact, candidate.prefix, candidate.suffix
+    )
+    if not spans:
+        return None, "extract-quote-not-found", 0
+    if len(spans) > 1:
+        return None, "extract-quote-ambiguous", 0
+    file_idx = spans[0]
+    length = len(candidate.exact)
+
+    pp = _containing_passage(persisted, file_idx, length)
+    if pp is None:
+        return None, "extract-anchored-outside-passage", 0
+    section = normalize_section(pp.section)
+
+    dropped = 0
+    subject_concept = candidate.subject_concept
+    if subject_concept is not None and subject_concept not in active_iris:
+        subject_concept = None
+        dropped += 1
+    object_concept = candidate.object_concept
+    if object_concept is not None and object_concept not in active_iris:
+        object_concept = None
+        dropped += 1
+
+    body = statement_body_json(
+        section=section,
+        stance=candidate.stance,
+        subject=candidate.subject,
+        object_=candidate.object,
+        subject_concept=subject_concept,
+        object_concept=object_concept,
+    )
+
+    passage_start = pp.file_char_base
+    passage_end = pp.file_char_base + pp.length
+    prefix_start = max(passage_start, file_idx - _CONTEXT)
+    suffix_end = min(passage_end, file_idx + length + _CONTEXT)
+    selector = TextQuoteSelector(
+        exact=candidate.exact,
+        prefix=file_text[prefix_start:file_idx],
+        suffix=file_text[file_idx + length:suffix_end],
+    )
+
+    match_text = (
+        f"{candidate.type}|{file_idx}:{length}|{_normalize_text(candidate.exact)}"
+    )
+    planned = PlannedAnnotation(
+        target=SpecificResource(source=source_md_name, selector=selector),
+        annotation_type=candidate.type,
+        motivation=Motivation.CLASSIFYING,
+        body=TextualBody(value=body, format="application/json"),
+        match_text=match_text,
+        source_name=_llm_annot_source_name(model),
+    )
+    return planned, None, dropped

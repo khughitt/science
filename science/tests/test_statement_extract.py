@@ -289,3 +289,145 @@ def test_anchor_requires_adjacent_prefix():
 
 def test_anchor_empty_exact_returns_empty():
     assert find_qualified_spans("anything", "", "", "") == []
+
+
+from science_tool.annotation.model import (
+    Annotation,
+    IriBody,
+    Motivation,
+    Sidecar,
+    SpecificResource,
+    Status,
+    TextQuoteSelector,
+)
+from science_tool.annotation.statement_extract import (
+    active_entity_iris,
+    plan_statement,
+)
+
+_MODEL = "claude-sonnet-4-6"
+_GENE = "https://identifiers.org/ncbigene:672"
+# A file whose passage body spans [0, len). Build a simple single-passage doc.
+_TEXT = "BRCA1 loss drives genomic instability in these tumors and elsewhere."
+_PASSAGES = [PersistedPassage(section="RESULTS", file_char_base=0, length=len(_TEXT))]
+
+
+def _entity_ann(iri: str, status: Status = Status.OPEN) -> Annotation:
+    return Annotation(
+        id="e1",
+        target=SpecificResource(
+            source="P.source.md",
+            selector=TextQuoteSelector(exact="BRCA1", prefix="", suffix=" loss"),
+        ),
+        bodies=(IriBody(iri=iri),),
+        motivation=Motivation.IDENTIFYING,
+        annotation_type="entity-gene",
+        source="pubtator3:2024:seeder-v1",
+        status=status,
+        creator="x",
+        created=_NOW,
+        content_hash="h",
+        modified=(None if status is Status.OPEN else _NOW),
+        modified_by=(None if status is Status.OPEN else "x"),
+        match_text="entity-gene|...",
+    )
+
+
+def test_active_entity_iris_includes_open_and_ack_excludes_others():
+    sc = Sidecar(annotations=(
+        _entity_ann(_GENE, Status.OPEN),
+        _entity_ann("https://identifiers.org/mesh:D1", Status.ACK),
+        _entity_ann("https://identifiers.org/mesh:D2", Status.DISMISSED),
+        _entity_ann("https://identifiers.org/mesh:D3", Status.SUPERSEDED),
+    ))
+    iris = active_entity_iris(sc)
+    assert _GENE in iris
+    assert "https://identifiers.org/mesh:D1" in iris
+    assert "https://identifiers.org/mesh:D2" not in iris
+    assert "https://identifiers.org/mesh:D3" not in iris
+
+
+def _cand(**over) -> Candidate:
+    base = dict(type="proposition", exact="BRCA1 loss drives genomic instability",
+                prefix="", suffix=" in these", stance="asserted")
+    base.update(over)
+    return Candidate(**base)  # type: ignore[arg-type]
+
+
+def test_plan_statement_anchors_and_builds_body():
+    p, reason, dropped = plan_statement(
+        _TEXT, _PASSAGES, _cand(), active_iris=set(),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert reason is None and dropped == 0 and p is not None
+    assert p.annotation_type == "proposition"
+    assert p.motivation is Motivation.CLASSIFYING
+    assert p.source_name == "llm-annot:claude-sonnet-4-6:paper-annotate-v1"
+    assert p.body.format == "application/json"
+    assert '"section":"results"' in p.body.value
+    # match_text carries the offset discriminator: type|file_idx:length|normalized_exact
+    assert p.match_text.startswith("proposition|0:37|")
+
+
+def test_plan_statement_quote_not_found():
+    p, reason, _ = plan_statement(
+        _TEXT, _PASSAGES, _cand(exact="absent text"), active_iris=set(),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert p is None and reason == "extract-quote-not-found"
+
+
+def test_plan_statement_ambiguous():
+    text = "the cell. the cell."
+    passages = [PersistedPassage(section="RESULTS", file_char_base=0, length=len(text))]
+    p, reason, _ = plan_statement(
+        text, passages, _cand(exact="the cell", suffix=""), active_iris=set(),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert p is None and reason == "extract-quote-ambiguous"
+
+
+def test_plan_statement_outside_passage():
+    # passage occupies [10, len); anchor at 0 is outside it
+    passages = [PersistedPassage(section="RESULTS", file_char_base=10, length=len(_TEXT) - 10)]
+    p, reason, _ = plan_statement(
+        _TEXT, passages, _cand(exact="BRCA1 loss", suffix=" drives"), active_iris=set(),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert p is None and reason == "extract-anchored-outside-passage"
+
+
+def test_plan_statement_keeps_verified_grounding():
+    p, reason, dropped = plan_statement(
+        _TEXT, _PASSAGES, _cand(subject_concept=_GENE), active_iris={_GENE},
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert reason is None and dropped == 0 and p is not None
+    assert _GENE in p.body.value
+
+
+def test_plan_statement_drops_unverified_grounding_keeps_statement():
+    p, reason, dropped = plan_statement(
+        _TEXT, _PASSAGES,
+        _cand(subject_concept="https://identifiers.org/ncbigene:999"),
+        active_iris={_GENE},
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert reason is None and p is not None  # statement kept
+    assert dropped == 1
+    assert "ncbigene:999" not in p.body.value  # bad grounding dropped
+
+
+def test_plan_statement_match_text_distinguishes_repeated_identical():
+    text = "X drives Y. Later, X drives Y again."
+    passages = [PersistedPassage(section="RESULTS", file_char_base=0, length=len(text))]
+    p1, _, _ = plan_statement(
+        text, passages, _cand(exact="X drives Y", prefix="", suffix=". Later"),
+        active_iris=set(), model=_MODEL, source_md_name="P.source.md",
+    )
+    p2, _, _ = plan_statement(
+        text, passages, _cand(exact="X drives Y", prefix="Later, ", suffix=" again"),
+        active_iris=set(), model=_MODEL, source_md_name="P.source.md",
+    )
+    assert p1 is not None and p2 is not None
+    assert p1.match_text != p2.match_text  # different file_idx => distinct dedup keys
