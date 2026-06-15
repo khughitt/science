@@ -261,6 +261,12 @@ def _compact(namespace: str, accession: str) -> str:
     return f"{_IDENTIFIERS_BASE}/{namespace}:{accession}"
 
 
+def _pubtator_source_name(release: str) -> str:
+    """The shared seeder source identity for both entity and relation annotations.
+    They MUST match: merge_planned rejects a batch with mixed source_name values."""
+    return f"pubtator3:{release}:seeder-v1"
+
+
 def concept_iri_for(pubtator_type: str, identifier: str | None) -> str | None:
     """Build the identifiers.org concept IRI, or None if unnormalizable (skip).
 
@@ -500,7 +506,7 @@ def plan_mention(
         motivation=Motivation.IDENTIFYING,
         body=IriBody(iri=concept_iri),
         match_text=match_text,
-        source_name=f"pubtator3:{release}:seeder-v1",
+        source_name=_pubtator_source_name(release),
     )
     return planned, None
 
@@ -622,7 +628,7 @@ def plan_relation(
         motivation=Motivation.LINKING,
         body=TextualBody(value=body, format="application/json"),
         match_text=match_text,
-        source_name=f"pubtator3:{release}:seeder-v1",
+        source_name=_pubtator_source_name(release),
     )
     return planned, None
 
@@ -665,7 +671,6 @@ def seed_pubtator(
         )
     file_text, persisted = load_persisted_passages(source_md)
 
-    skipped: Counter[str] = Counter()
     if not resolved.pmid:
         return SeedReport(entity_written=0, entity_skipped={}, relation_written=0, relation_skipped={}, note="no PMID; PubTator3 is PubMed-only")
 
@@ -690,9 +695,8 @@ def seed_pubtator(
     release = parsed.release or PUBTATOR3_API_VERSION
     paired = pair_passages(file_text, persisted, parsed)
     mentions, parse_drops = parse_bioc_entity_annotations(record)
-    skipped.update(parse_drops)  # malformed-bioc / multi-location surfaced, not silent
 
-    entity_skipped: Counter[str] = Counter(skipped)  # carries parse_drops folded in above
+    entity_skipped: Counter[str] = Counter(parse_drops)
     planned: list[PlannedAnnotation] = []
     for m in mentions:
         p, reason = plan_mention(
@@ -725,8 +729,9 @@ def seed_pubtator(
 
     # Partition the written rows by annotation_type to report entity vs relation counts.
     rel_written = sum(1 for a in written if a.annotation_type == "relation")
+    ent_written = sum(1 for a in written if a.annotation_type.startswith("entity-"))
     return SeedReport(
-        entity_written=len(written) - rel_written,
+        entity_written=ent_written,
         entity_skipped=dict(entity_skipped),
         relation_written=rel_written,
         relation_skipped=dict(relation_skipped),

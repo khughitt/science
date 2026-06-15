@@ -440,6 +440,7 @@ def test_seed_pubtator_idempotent_rerun(tmp_path):
     assert second.entity_written == 0  # 4-tuple skip -> fully idempotent
     assert first.relation_written == 1
     assert second.relation_written == 0  # relations are idempotent too
+    assert second.relation_skipped == {"relation-cross-passage": 1}
 
 
 def test_seed_pubtator_missing_source_md_fails_loud(tmp_path):
@@ -482,6 +483,7 @@ def test_seeded_selectors_resolve_via_verifier(tmp_path):
     # against its rendered source file. VerifyReport exposes count properties
     # (.broken/.fuzzy/.source_missing) — there is no `.unresolved`.
     report = verify_path(tmp_path)
+    assert report.annotations == 7, f"expected 7 (6 entity + 1 relation), got {report.annotations}"
     assert report.broken == 0, report.issues
     assert report.fuzzy == 0, report.issues
     assert report.source_missing == 0, report.issues
