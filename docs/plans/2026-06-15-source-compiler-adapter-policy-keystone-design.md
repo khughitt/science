@@ -98,9 +98,9 @@ mutation — adapters never touch loop-owned mutable state.
 `science/src/science_tool/graph/source_records.py` (depends only on `science_model`).
 `base.py`, the adapter modules, and `sources.py` all import them from the leaf. This is
 behavior-neutral (a pure move + re-import) and gives Slice B's `SourceRecord` /
-`SourceSnapshot` a natural home. `sources.py` may keep a re-export of the two names if any
-external caller imports them from there today (verify at plan time; drop the re-export if
-there are none).
+`SourceSnapshot` a natural home. `sources.py` keeps a plain re-export of the two names
+from the leaf because existing callers import them from `science_tool.graph.sources`;
+the re-export preserves that public path while the implementation moves.
 
 ### `owner_scope` policy stays consolidated
 
@@ -201,7 +201,8 @@ Mirror Spec 2's equivalence discipline:
 - **Modify** `storage_adapters/aggregate.py` — override `on_owner_declared`.
 - **Modify** `science/src/science_tool/graph/sources.py` — rewrite the loop body to read
   the policy surface; remove the `isinstance`/`name ==` branches; import the record types
-  from the leaf (keep a re-export only if an existing external caller needs it).
+  from the leaf and re-export them from this module to preserve the current public import
+  path.
 - **Add** fixture project + equivalence test under `science/tests/`.
 - **Unchanged** `identity_table.py` (`classify_owner_scope` kept).
 

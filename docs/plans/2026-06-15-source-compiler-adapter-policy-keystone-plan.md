@@ -493,14 +493,14 @@ rtk git commit -m "feat(source-compiler): declare adapter load-time policy on St
 
 ---
 
-## Task 3: Characterization test pinning the FULL load output
+## Task 3: Characterization test pinning branch-relevant load output
 
-Builds two minimal projects that exercise all five branch points, then captures the **full normalized load output** — `entities`, `identity_declarations`, `skipped_entities`, `markdown_documents`, `aggregate_rows`, `dataset_datapackages`, `entity_source_adapters` — and asserts it equals a frozen expected value **field for field** (the design's equivalence guarantee). The frozen literals below were captured from the current (pre-flip) loop, so the test runs GREEN now; Task 4's flip must keep it green. Fixture shapes are lifted from existing passing tests; the strict/non-strict split is required because branch 2 (missing-identity skip) is only meaningful under `strict_core_schema=True` while the bib→aggregate-stub defer (branch 4) is exercised under `strict_core_schema=False` (mirroring `tests/graph/test_bib_external_reference_load.py`).
+Builds two minimal projects that exercise all five branch points, then captures the **normalized branch-relevant load output** across the surfaces this slice can affect: `entities`, `identity_declarations`, `skipped_entities`, `markdown_documents`, `aggregate_rows`, `dataset_datapackages`, and `entity_source_adapters`. The snapshot intentionally records the stable fields that prove the policy extraction is behavior-neutral (ids, adapters, ownership/defer facts, skip reasons, markdown document identity/body, aggregate row metadata), not every Pydantic field on every entity. The frozen literals below were captured from the current (pre-flip) loop, so the test runs GREEN now; Task 4's flip must keep the normalized projection identical. Fixture shapes are lifted from existing passing tests; the strict/non-strict split is required because branch 2 (missing-identity skip) is only meaningful under `strict_core_schema=True` while the bib→aggregate-stub defer (branch 4) is exercised under `strict_core_schema=False` (mirroring `tests/graph/test_bib_external_reference_load.py`).
 
 **Files:**
 - Test: `science/tests/graph/test_source_load_equivalence.py`
 
-- [ ] **Step 1: Write the full-snapshot characterization test (must pass on current code)**
+- [ ] **Step 1: Write the normalized characterization test (must pass on current code)**
 
 Create `science/tests/graph/test_source_load_equivalence.py`:
 
@@ -510,9 +510,10 @@ Create `science/tests/graph/test_source_load_equivalence.py`:
 Two fixtures exercise every branch that moves from the load loop onto adapter
 policy: 1 markdown source_document, 2 missing-identity skip under strict, 3
 datapackage defer onto a markdown owner, 4 external-ref (bib) defer onto an
-aggregate stub, 5 aggregate row-meta capture. `_snapshot` captures the full
-normalized load output; the test asserts it equals a frozen value captured from
-the pre-refactor loop. The flip in Task 4 must keep this green field-for-field.
+aggregate stub, 5 aggregate row-meta capture. `_snapshot` captures the
+branch-relevant projection of the load output; the test asserts it equals a
+frozen value captured from the pre-refactor loop. The flip in Task 4 must keep
+this normalized projection identical.
 """
 
 from __future__ import annotations
@@ -534,7 +535,7 @@ def _write(root: Path, rel: str, text: str) -> None:
 
 
 def _snapshot(s: ProjectSources) -> dict[str, Any]:
-    """Normalize the full load output into deterministic, comparable values."""
+    """Normalize the branch-relevant output into deterministic comparable values."""
     return {
         "entities": [e.canonical_id for e in s.entities],  # load sorts by canonical_id
         "identity_declarations": sorted(
@@ -906,7 +907,7 @@ rtk git commit -m "refactor(source-compiler): drive source-load loop from adapte
 - `classify_owner_scope` kept (design §"owner_scope policy stays consolidated") → Task 4 leaves it untouched; guard allows `classify_owner_scope(adapter.name, …)` while forbidding `adapter.name ==`.
 - Rewritten uniform loop (design §"The rewritten loop") → Task 4.
 - Error policy preserved exactly, only `skip_core_on_missing_identity` lifted (design §"Error policy") → Task 4 Edit B.
-- Behavior-neutral guarantee with the full output captured incl. `entity_source_adapters` (design §"Behavior-neutral guarantee & testing") → Task 3 asserts the FULL normalized load output (all 7 fields: `entities`, `identity_declarations`, `skipped_entities`, `markdown_documents`, `aggregate_rows`, `dataset_datapackages`, `entity_source_adapters`) equals a frozen literal captured from current behavior, field-for-field.
+- Behavior-neutral guarantee for this keystone's touched surfaces incl. `entity_source_adapters` (design §"Behavior-neutral guarantee & testing") → Task 3 asserts the normalized branch-relevant output (7 surfaces: `entities`, `identity_declarations`, `skipped_entities`, `markdown_documents`, `aggregate_rows`, `dataset_datapackages`, `entity_source_adapters`) equals a frozen literal captured from current behavior.
 - Success criterion "no `isinstance(adapter,…)` / `adapter.name ==`" → Task 4 guard test.
 - Out-of-scope items (error rationalization, legacy-loaders-as-adapters, `SourceSnapshot`) → not in any task, by design.
 
