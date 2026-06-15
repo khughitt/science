@@ -69,7 +69,7 @@ def parse_bioc_entity_annotations(
             ptype = infons.get("type")
             text = ann.get("text")
             locations = ann.get("locations")
-            if not isinstance(ptype, str) or not isinstance(text, str) or not text:
+            if not isinstance(ptype, str) or not ptype or not isinstance(text, str) or not text:
                 dropped["malformed-bioc-annotation"] += 1
                 continue
             if not isinstance(locations, list) or not locations:

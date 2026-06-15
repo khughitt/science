@@ -166,6 +166,8 @@ def test_parse_bioc_entity_annotations_counts_malformed_and_multilocation():
                         "offset": 0,
                         "text": "G here",
                         "annotations": [
+                            # empty type -> malformed
+                            {"infons": {"type": ""}, "text": "G", "locations": [{"offset": 0, "length": 1}]},
                             # empty locations -> malformed
                             {"infons": {"type": "Gene"}, "text": "G", "locations": []},
                             # discontinuous span -> multi-location (not truncated)
@@ -182,4 +184,4 @@ def test_parse_bioc_entity_annotations_counts_malformed_and_multilocation():
     }
     mentions, dropped = parse_bioc_entity_annotations(record)
     assert len(mentions) == 1
-    assert dropped == {"malformed-bioc-annotation": 1, "multi-location-mention": 1}
+    assert dropped == {"malformed-bioc-annotation": 2, "multi-location-mention": 1}
