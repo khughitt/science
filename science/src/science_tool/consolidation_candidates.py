@@ -207,6 +207,24 @@ def _related_overlap_clusters(
     return clusters
 
 
+def _merge_and_order(clusters: list[SemanticCluster]) -> list[SemanticCluster]:
+    """Merge clusters with identical member-sets into one (signals joined with "+",
+    evidences joined with " | " in a deterministic order); sort the result."""
+    by_members: dict[tuple[str, ...], list[SemanticCluster]] = {}
+    for cluster in clusters:
+        by_members.setdefault(tuple(cluster.members), []).append(cluster)
+
+    merged: list[SemanticCluster] = []
+    for members, group in by_members.items():
+        ordered = sorted(group, key=lambda c: (c.signal, c.evidence))
+        signal = "+".join(sorted({c.signal for c in group}))
+        evidence = " | ".join(c.evidence for c in ordered)
+        merged.append(SemanticCluster(signal=signal, members=list(members), evidence=evidence))
+
+    merged.sort(key=lambda c: (c.signal, c.members))
+    return merged
+
+
 def _lineage_section(graph: SupersedesGraph) -> SupersededLineage:
     linear = [
         LinearChain(
@@ -242,9 +260,10 @@ def detect_consolidation_candidates(
         if is_default_visible(graph.status_by_id.get(str(fm["id"])))
     ]
     known_ids = set(graph.kind_by_id)
-    semantic = _structural_family_clusters(visible, min_cluster_size)
-    semantic += _shared_anchor_clusters(visible, known_ids, min_cluster_size)
-    semantic += _related_overlap_clusters(visible, known_ids, related_jaccard, min_cluster_size)
+    raw_clusters = _structural_family_clusters(visible, min_cluster_size)
+    raw_clusters += _shared_anchor_clusters(visible, known_ids, min_cluster_size)
+    raw_clusters += _related_overlap_clusters(visible, known_ids, related_jaccard, min_cluster_size)
+    semantic = _merge_and_order(raw_clusters)
 
     counts = {
         "linear": len(lineage.linear),

@@ -134,9 +134,12 @@ def test_shared_anchor_clusters_same_kind(tmp_path: Path) -> None:
     from science_tool.consolidation_candidates import detect_consolidation_candidates
 
     report = detect_consolidation_candidates(tmp_path)
-    anchors = [c for c in report.semantic_clusters if c.signal == "shared-anchor"]
+    # All three share the same related set {hypothesis:0005-anchor}, so related-overlap
+    # (Jaccard=1.0) also fires and merges with shared-anchor into a combined signal.
+    members = ["interpretation:int-a", "interpretation:int-b", "interpretation:int-c"]
+    anchors = [c for c in report.semantic_clusters if c.members == members]
     assert len(anchors) == 1
-    assert anchors[0].members == ["interpretation:int-a", "interpretation:int-b", "interpretation:int-c"]
+    assert "shared-anchor" in anchors[0].signal
     assert "hypothesis:0005-anchor" in anchors[0].evidence
 
 
@@ -161,6 +164,7 @@ def test_related_overlap_clusters_above_threshold(tmp_path: Path) -> None:
     for a in ("a", "b", "c", "d"):
         _write(tmp_path, "concepts", f"anchor-{a}", {"id": f"concept:anchor-{a}", "type": "concept"})
     # x and y share 3/4 related -> Jaccard 0.75 >= 0.5 : cluster.
+    # They also share anchors a/b/c, so shared-anchor fires too; signals merge.
     _write(tmp_path, "interpretations", "x", {"id": "interpretation:x", "type": "interpretation",
         "related": ["concept:anchor-a", "concept:anchor-b", "concept:anchor-c"]})
     _write(tmp_path, "interpretations", "y", {"id": "interpretation:y", "type": "interpretation",
@@ -169,9 +173,10 @@ def test_related_overlap_clusters_above_threshold(tmp_path: Path) -> None:
     from science_tool.consolidation_candidates import detect_consolidation_candidates
 
     report = detect_consolidation_candidates(tmp_path)
-    overlap = [c for c in report.semantic_clusters if c.signal == "related-overlap"]
+    members = ["interpretation:x", "interpretation:y"]
+    overlap = [c for c in report.semantic_clusters if c.members == members]
     assert len(overlap) == 1
-    assert overlap[0].members == ["interpretation:x", "interpretation:y"]
+    assert "related-overlap" in overlap[0].signal
     assert "Jaccard" in overlap[0].evidence
 
 
@@ -200,3 +205,62 @@ def test_related_overlap_ignores_non_entity_refs(tmp_path: Path) -> None:
 
     report = detect_consolidation_candidates(tmp_path)
     assert [c for c in report.semantic_clusters if c.signal == "related-overlap"] == []
+
+
+def test_duplicate_member_sets_merge_evidence(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    # Same two entities fire BOTH id-stem (shared stem 'foo') AND shared-anchor
+    # (both ref hypothesis:0005) -> one merged cluster, both evidences, joined signal.
+    # Each carries DISTINCT extra resolvable refs so related-overlap stays below
+    # threshold (Jaccard 1/5 = 0.2 < 0.5) and does NOT also fire — keeping the
+    # merged signal exactly "shared-anchor+structural-family".
+    _write(tmp_path, "hypotheses", "0005-anchor", {"id": "hypothesis:0005-anchor", "type": "hypothesis"})
+    for c in ("p", "q", "r", "s"):
+        _write(tmp_path, "concepts", f"c-{c}", {"id": f"concept:c-{c}", "type": "concept"})
+    _write(tmp_path, "interpretations", "0001-foo-v1",
+        {"id": "interpretation:0001-foo-v1", "type": "interpretation",
+         "related": ["hypothesis:0005-anchor", "concept:c-p", "concept:c-q"]})
+    _write(tmp_path, "interpretations", "0002-foo-v2",
+        {"id": "interpretation:0002-foo-v2", "type": "interpretation",
+         "related": ["hypothesis:0005-anchor", "concept:c-r", "concept:c-s"]})
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    report = detect_consolidation_candidates(tmp_path)
+    members = ["interpretation:0001-foo-v1", "interpretation:0002-foo-v2"]
+    matching = [c for c in report.semantic_clusters if c.members == members]
+    assert len(matching) == 1  # merged, not duplicated
+    assert matching[0].signal == "shared-anchor+structural-family"
+    assert "id-stem 'foo'" in matching[0].evidence
+    assert "hypothesis:0005-anchor" in matching[0].evidence
+
+
+def test_semantic_excludes_non_default_visible_entities(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    # Three share stem 'foo', but one is superseded -> excluded from semantic
+    # clustering, leaving only 2 visible members. (It still appears in lineage if
+    # part of a chain; here it is not.)
+    _write(tmp_path, "interpretations", "0001-foo-v1", {"id": "interpretation:0001-foo-v1", "type": "interpretation"})
+    _write(tmp_path, "interpretations", "0002-foo-v2", {"id": "interpretation:0002-foo-v2", "type": "interpretation"})
+    _write(tmp_path, "interpretations", "0003-foo-v3", {"id": "interpretation:0003-foo-v3", "type": "interpretation", "status": "superseded"})
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    report = detect_consolidation_candidates(tmp_path)
+    family = [c for c in report.semantic_clusters if c.signal == "structural-family"]
+    assert len(family) == 1
+    assert family[0].members == ["interpretation:0001-foo-v1", "interpretation:0002-foo-v2"]
+
+
+def test_report_is_deterministic(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _write(tmp_path, "hypotheses", "0005-anchor", {"id": "hypothesis:0005-anchor", "type": "hypothesis"})
+    for n in ("a", "b", "c"):
+        _write(tmp_path, "interpretations", f"0001-fam-{n}",
+            {"id": f"interpretation:0001-fam-{n}", "type": "interpretation", "related": ["hypothesis:0005-anchor"]})
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    first = detect_consolidation_candidates(tmp_path).model_dump(mode="json")
+    second = detect_consolidation_candidates(tmp_path).model_dump(mode="json")
+    assert first == second
