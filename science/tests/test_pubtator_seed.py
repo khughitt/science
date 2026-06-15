@@ -394,10 +394,10 @@ def test_seed_pubtator_end_to_end(tmp_path):
     )
     assert isinstance(report, SeedReport)
     # 2 BRCA1 (gene) + 1 disease + 1 chemical + 1 species + 1 rsID variant = 6 written.
-    assert report.written == 6
+    assert report.entity_written == 6
     # Skips: 1 tmVar (unnormalized) + 1 TP53 (non-persisted INTRO body).
-    assert report.skipped.get("unnormalized-concept") == 1
-    assert report.skipped.get("non-persisted-passage") == 1
+    assert report.entity_skipped.get("unnormalized-concept") == 1
+    assert report.entity_skipped.get("non-persisted-passage") == 1
 
     sidecar = read_sidecar(sidecar_for_markdown(source_md))
     assert len(sidecar.annotations) == 6
@@ -412,8 +412,8 @@ def test_seed_pubtator_idempotent_rerun(tmp_path):
     persist_source(project_root=tmp_path, identifier="12345678", cfg=cfg, http=_client(_bioc_handler))
     first = seed_pubtator(project_root=tmp_path, identifier="12345678", cfg=cfg, actor="t", now=NOW, http=_client(_bioc_handler))
     second = seed_pubtator(project_root=tmp_path, identifier="12345678", cfg=cfg, actor="t", now=NOW, http=_client(_bioc_handler))
-    assert first.written == 6
-    assert second.written == 0  # 4-tuple skip -> fully idempotent
+    assert first.entity_written == 6
+    assert second.entity_written == 0  # 4-tuple skip -> fully idempotent
 
 
 def test_seed_pubtator_missing_source_md_fails_loud(tmp_path):
@@ -439,7 +439,7 @@ def test_seed_pubtator_no_bioc_record_is_noop(tmp_path):
 
     persist_source(project_root=tmp_path, identifier="12345678", cfg=cfg, http=_client(epmc_only))
     report = seed_pubtator(project_root=tmp_path, identifier="12345678", cfg=cfg, actor="t", now=NOW, http=_client(epmc_only))
-    assert report.written == 0
+    assert report.entity_written == 0
     assert report.note is not None
 
 

@@ -370,8 +370,10 @@ def plan_mention(
 
 @dataclass(frozen=True)
 class SeedReport:
-    written: int
-    skipped: dict[str, int]
+    entity_written: int
+    entity_skipped: dict[str, int]
+    relation_written: int
+    relation_skipped: dict[str, int]
     note: str | None = None
 
 
@@ -403,7 +405,7 @@ def seed_pubtator(
 
     skipped: Counter[str] = Counter()
     if not resolved.pmid:
-        return SeedReport(written=0, skipped={}, note="no PMID; PubTator3 is PubMed-only")
+        return SeedReport(0, {}, 0, {}, note="no PMID; PubTator3 is PubMed-only")
 
     owns = http is None
     client = http or httpx.Client(
@@ -417,11 +419,11 @@ def seed_pubtator(
             client.close()
 
     if not record:
-        return SeedReport(written=0, skipped={}, note=f"no PubTator3 record ({err or 'no record'})")
+        return SeedReport(0, {}, 0, {}, note=f"no PubTator3 record ({err or 'no record'})")
 
     parsed = parse_bioc_passages(record)
     if parsed is None:
-        return SeedReport(written=0, skipped={}, note="PubTator3 record had no usable passages")
+        return SeedReport(0, {}, 0, {}, note="PubTator3 record had no usable passages")
 
     release = parsed.release or PUBTATOR3_API_VERSION
     paired = pair_passages(file_text, persisted, parsed)
@@ -444,4 +446,10 @@ def seed_pubtator(
     if written:
         atomic_write_text(sidecar_path, serialize_sidecar(new_sidecar))
 
-    return SeedReport(written=len(written), skipped=dict(skipped), note=None)
+    return SeedReport(
+        entity_written=len(written),
+        entity_skipped=dict(skipped),
+        relation_written=0,
+        relation_skipped={},
+        note=None,
+    )

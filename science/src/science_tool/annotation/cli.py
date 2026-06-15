@@ -1033,5 +1033,12 @@ def pubtator_cmd(
 
     if report.note:
         click.echo(report.note)
-    skips = ", ".join(f"{k}={v}" for k, v in sorted(report.skipped.items()))
-    click.echo(f"Wrote {report.written} annotation(s)" + (f"; skipped {skips}" if skips else ""))
+    all_skips = {
+        **{f"entity:{k}": v for k, v in report.entity_skipped.items()},
+        **{f"relation:{k}": v for k, v in report.relation_skipped.items()},
+    }
+    skips = ", ".join(f"{k}={v}" for k, v in sorted(all_skips.items()))
+    click.echo(
+        f"Wrote {report.entity_written} entity + {report.relation_written} relation "
+        f"annotation(s)" + (f"; skipped {skips}" if skips else "")
+    )
