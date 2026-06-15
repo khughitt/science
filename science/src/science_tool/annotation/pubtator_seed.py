@@ -692,7 +692,8 @@ def seed_pubtator(
     mentions, parse_drops = parse_bioc_entity_annotations(record)
     skipped.update(parse_drops)  # malformed-bioc / multi-location surfaced, not silent
 
-    planned = []
+    entity_skipped: Counter[str] = Counter(skipped)  # carries parse_drops folded in above
+    planned: list[PlannedAnnotation] = []
     for m in mentions:
         p, reason = plan_mention(
             file_text, paired, m, release=release, source_md_name=source_md.name
@@ -700,18 +701,34 @@ def seed_pubtator(
         if p is not None:
             planned.append(p)
         elif reason is not None:
-            skipped[reason] += 1
+            entity_skipped[reason] += 1
+
+    # Relations: same record, same paired passages, same normalized-mention index.
+    relations, rel_drops = parse_bioc_relations(record)
+    relation_skipped: Counter[str] = Counter(rel_drops)  # malformed-bioc-relation, not silent
+    mentions_by_iri = resolve_persisted_mentions(file_text, paired, mentions)
+    rel_planned: list[PlannedAnnotation] = []
+    for r in relations:
+        p, reason = plan_relation(
+            file_text, r, mentions_by_iri, release=release, source_md_name=source_md.name
+        )
+        if p is not None:
+            rel_planned.append(p)
+        elif reason is not None:
+            relation_skipped[reason] += 1
 
     sidecar_path = sidecar_for_markdown(source_md)
     sidecar = read_sidecar(sidecar_path) if sidecar_path.exists() else Sidecar()
-    new_sidecar, written = merge_planned(sidecar, planned, actor=actor, now=now)
+    new_sidecar, written = merge_planned(sidecar, planned + rel_planned, actor=actor, now=now)
     if written:
         atomic_write_text(sidecar_path, serialize_sidecar(new_sidecar))
 
+    # Partition the written rows by annotation_type to report entity vs relation counts.
+    rel_written = sum(1 for a in written if a.annotation_type == "relation")
     return SeedReport(
-        entity_written=len(written),
-        entity_skipped=dict(skipped),
-        relation_written=0,
-        relation_skipped={},
+        entity_written=len(written) - rel_written,
+        entity_skipped=dict(entity_skipped),
+        relation_written=rel_written,
+        relation_skipped=dict(relation_skipped),
         note=None,
     )

@@ -92,6 +92,25 @@ BIOC_FIXTURE = {
                     ],
                 },
             ],
+            "relations": [
+                {
+                    "id": "R1",
+                    "infons": {
+                        "role1": {"identifier": "672", "type": "Gene"},
+                        "role2": {"identifier": "MESH:D001943", "type": "Disease"},
+                        "type": "Association",
+                        "score": "0.95",
+                    },
+                },
+                {
+                    "id": "R2",
+                    "infons": {
+                        "role1": {"identifier": "672", "type": "Gene"},
+                        "role2": {"identifier": "MESH:D013629", "type": "Chemical"},
+                        "type": "Negative_Correlation",
+                    },
+                },
+            ],
         }
     ]
 }
@@ -398,9 +417,14 @@ def test_seed_pubtator_end_to_end(tmp_path):
     # Skips: 1 tmVar (unnormalized) + 1 TP53 (non-persisted INTRO body).
     assert report.entity_skipped.get("unnormalized-concept") == 1
     assert report.entity_skipped.get("non-persisted-passage") == 1
+    assert report.relation_written == 1            # BRCA1 -- breast cancer (title passage)
+    assert report.relation_skipped.get("relation-cross-passage") == 1  # BRCA1 -- Tamoxifen
 
     sidecar = read_sidecar(sidecar_for_markdown(source_md))
-    assert len(sidecar.annotations) == 6
+    assert len(sidecar.annotations) == 7           # 6 entity + 1 relation
+    rels = [a for a in sidecar.annotations if a.annotation_type == "relation"]
+    assert len(rels) == 1
+    assert rels[0].motivation == Motivation.LINKING
     assert all(a.content_hash for a in sidecar.annotations)
 
 
@@ -414,6 +438,8 @@ def test_seed_pubtator_idempotent_rerun(tmp_path):
     second = seed_pubtator(project_root=tmp_path, identifier="12345678", cfg=cfg, actor="t", now=NOW, http=_client(_bioc_handler))
     assert first.entity_written == 6
     assert second.entity_written == 0  # 4-tuple skip -> fully idempotent
+    assert first.relation_written == 1
+    assert second.relation_written == 0  # relations are idempotent too
 
 
 def test_seed_pubtator_missing_source_md_fails_loud(tmp_path):
