@@ -68,6 +68,16 @@ def _id_stem(entity_id: str) -> str:
     return local
 
 
+def _task_refs(fm: dict[str, Any]) -> list[str]:
+    """`task:`-prefixed refs from `related:` only. PREFIX-SHAPED BY DESIGN (spec
+    §6.2): task entities live in `tasks/` (outside the `entities/` scan), so there
+    is no loaded task set to resolve against — any `task:`-prefixed string counts.
+    Real task-id resolution is a deferred §7 tuning-round concern, not P2."""
+    related = fm.get("related")
+    items = related if isinstance(related, list) else []
+    return sorted({item for item in items if isinstance(item, str) and item.startswith(_TASK_PREFIX)})
+
+
 def _structural_family_clusters(
     visible: list[tuple[str, str, dict[str, Any]]],
     min_cluster_size: int,
@@ -77,6 +87,11 @@ def _structural_family_clusters(
     groups: dict[tuple[str, str, str], list[str]] = {}
     for eid, kind, _fm in visible:
         groups.setdefault((kind, "id-stem", _id_stem(eid)), []).append(eid)
+        group_value = _fm.get("group")
+        if isinstance(group_value, str) and group_value:
+            groups.setdefault((kind, "group", group_value), []).append(eid)
+        for task_ref in _task_refs(_fm):
+            groups.setdefault((kind, "task-family", task_ref), []).append(eid)
 
     clusters: list[SemanticCluster] = []
     for (kind, basis, value), members in groups.items():

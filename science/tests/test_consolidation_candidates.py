@@ -97,3 +97,26 @@ def test_id_stem_does_not_cross_kinds(tmp_path: Path) -> None:
 
     report = detect_consolidation_candidates(tmp_path)
     assert [c for c in report.semantic_clusters if c.signal == "structural-family"] == []
+
+
+def test_group_and_task_family_are_basis_namespaced(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    # Same value "alpha" reached by DIFFERENT bases must NOT merge into one cluster:
+    #   - h1/h2 share group: alpha
+    #   - h3/h4 share task:alpha in related
+    # id-stems are distinct, so the only structural keys are (group, alpha) and
+    # (task-family, task:alpha) -> two separate clusters.
+    _write(tmp_path, "hypotheses", "0001-aa", {"id": "hypothesis:0001-aa", "type": "hypothesis", "group": "alpha"})
+    _write(tmp_path, "hypotheses", "0002-bb", {"id": "hypothesis:0002-bb", "type": "hypothesis", "group": "alpha"})
+    _write(tmp_path, "hypotheses", "0003-cc", {"id": "hypothesis:0003-cc", "type": "hypothesis", "related": ["task:alpha"]})
+    _write(tmp_path, "hypotheses", "0004-dd", {"id": "hypothesis:0004-dd", "type": "hypothesis", "related": ["task:alpha"]})
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    report = detect_consolidation_candidates(tmp_path)
+    family = sorted((c for c in report.semantic_clusters if c.signal == "structural-family"), key=lambda c: c.members)
+    assert len(family) == 2
+    assert family[0].members == ["hypothesis:0001-aa", "hypothesis:0002-bb"]
+    assert "group 'alpha'" in family[0].evidence
+    assert family[1].members == ["hypothesis:0003-cc", "hypothesis:0004-dd"]
+    assert "task-family 'task:alpha'" in family[1].evidence
