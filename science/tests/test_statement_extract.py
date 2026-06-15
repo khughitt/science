@@ -63,6 +63,7 @@ def test_legacy_ledger_without_predicate_reads_none(tmp_path: Path):
 from science_tool.annotation.pubtator_seed import PersistedPassage
 from science_tool.annotation.statement_extract import (
     CANONICAL_SECTIONS,
+    _SECTION_NORMALIZE,
     _containing_passage,
     normalize_section,
 )
@@ -87,8 +88,15 @@ def test_normalize_unknown_section_is_other():
 
 
 def test_canonical_sections_closed_set():
-    assert "results" in CANONICAL_SECTIONS
-    assert "other" in CANONICAL_SECTIONS
+    assert CANONICAL_SECTIONS == frozenset({
+        "title", "abstract", "introduction", "methods", "results",
+        "discussion", "conclusion", "figure", "table", "other",
+    })
+
+
+def test_section_map_values_are_canonical():
+    # every normalized output must live in the closed vocabulary
+    assert set(_SECTION_NORMALIZE.values()) <= CANONICAL_SECTIONS
 
 
 def test_containing_passage_finds_enclosing():
