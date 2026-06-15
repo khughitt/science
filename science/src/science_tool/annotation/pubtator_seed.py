@@ -32,6 +32,7 @@ from science_tool.annotation.model import (
     Sidecar,
     SpecificResource,
     TextQuoteSelector,
+    TextualBody,
 )
 from science_tool.annotation.source_text import (
     PUBTATOR3_API_VERSION,
@@ -498,6 +499,127 @@ def plan_mention(
         annotation_type=annotation_type,
         motivation=Motivation.IDENTIFYING,
         body=IriBody(iri=concept_iri),
+        match_text=match_text,
+        source_name=f"pubtator3:{release}:seeder-v1",
+    )
+    return planned, None
+
+
+# --- Relation -> PlannedAnnotation conversion ---------------------------------
+
+
+@dataclass(frozen=True)
+class ResolvedMention:
+    """A persisted, normalizable entity mention located at an absolute file index."""
+
+    iri: str
+    file_idx: int
+    length: int
+    passage: PairedPassage
+
+
+def resolve_persisted_mentions(
+    file_text: str,
+    paired: list[PairedPassage],
+    mentions: list[BiocMention],
+) -> dict[str, list[ResolvedMention]]:
+    """Group persisted + normalizable mentions by concept IRI, with absolute file index.
+
+    A mention is included only if it (a) falls inside a persisted passage and (b) has a
+    normalizable concept IRI. The slice-verify guard mirrors plan_mention: a mapped slice
+    that does not equal the mention text is a hard SourceTextError (never a mis-placed
+    anchor). Used by plan_relation to find subject/object evidence spans.
+    """
+    grouped: dict[str, list[ResolvedMention]] = {}
+    for m in mentions:
+        pp = _containing(paired, m.offset, m.length)
+        if pp is None:
+            continue
+        iri = concept_iri_for(m.pubtator_type, m.identifier)
+        if iri is None:
+            continue
+        file_idx = pp.file_char_base + (m.offset - pp.bioc_offset)
+        exact = file_text[file_idx : file_idx + m.length]
+        if exact != m.text:
+            raise SourceTextError(
+                f"offset slice {exact!r} != BioC mention text {m.text!r} "
+                f"at file index {file_idx} (offset drift); aborting"
+            )
+        grouped.setdefault(iri, []).append(
+            ResolvedMention(iri=iri, file_idx=file_idx, length=m.length, passage=pp)
+        )
+    return grouped
+
+
+def plan_relation(
+    file_text: str,
+    relation: BiocRelation,
+    mentions_by_iri: dict[str, list[ResolvedMention]],
+    *,
+    release: str,
+    source_md_name: str,
+) -> tuple[PlannedAnnotation | None, str | None]:
+    """Convert a BiocRelation to a PlannedAnnotation, or (None, skip_reason).
+
+    Skip reasons: "relation-unnormalized-concept" (a role id does not normalize),
+    "relation-no-persisted-mentions" (a role concept has no persisted mention),
+    "relation-cross-passage" (both persisted but never co-occur in one passage).
+    Target = the smallest covering span of the closest same-passage subject x object
+    mention pair; prefix/suffix clamped to that passage.
+    """
+    subject_iri = concept_iri_for(relation.subject_type, relation.subject_id)
+    object_iri = concept_iri_for(relation.object_type, relation.object_id)
+    if subject_iri is None or object_iri is None:
+        return None, "relation-unnormalized-concept"
+
+    subj_mentions = mentions_by_iri.get(subject_iri, [])
+    obj_mentions = mentions_by_iri.get(object_iri, [])
+    if not subj_mentions or not obj_mentions:
+        return None, "relation-no-persisted-mentions"
+
+    best: tuple[int, int, int] | None = None  # (span_len, span_start, span_end)
+    best_passage: PairedPassage | None = None
+    for s in subj_mentions:
+        for o in obj_mentions:
+            if s.passage != o.passage:
+                continue
+            span_start = min(s.file_idx, o.file_idx)
+            span_end = max(s.file_idx + s.length, o.file_idx + o.length)
+            cand = (span_end - span_start, span_start, span_end)
+            if best is None or cand < best:
+                best = cand
+                best_passage = s.passage
+    if best is None or best_passage is None:
+        return None, "relation-cross-passage"
+
+    _, span_start, span_end = best
+    exact = file_text[span_start:span_end]
+    passage_start = best_passage.file_char_base
+    passage_end = best_passage.file_char_base + best_passage.bioc_len
+    prefix_start = max(passage_start, span_start - _CONTEXT)
+    suffix_end = min(passage_end, span_end + _CONTEXT)
+    selector = TextQuoteSelector(
+        exact=exact,
+        prefix=file_text[prefix_start:span_start],
+        suffix=file_text[span_end:suffix_end],
+    )
+
+    predicate, predicate_source, raw_predicate_type = predicate_for(relation.rel_type)
+    body = relation_body_json(
+        subject_iri=subject_iri,
+        object_iri=object_iri,
+        predicate=predicate,
+        predicate_source=predicate_source,
+        raw_predicate_type=raw_predicate_type,
+        score=relation.score,
+    )
+    span_length = span_end - span_start
+    match_text = f"{predicate}|{subject_iri}|{object_iri}|{span_start}:{span_length}"
+    planned = PlannedAnnotation(
+        target=SpecificResource(source=source_md_name, selector=selector),
+        annotation_type="relation",
+        motivation=Motivation.LINKING,
+        body=TextualBody(value=body, format="application/json"),
         match_text=match_text,
         source_name=f"pubtator3:{release}:seeder-v1",
     )

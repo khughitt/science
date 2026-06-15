@@ -2,7 +2,18 @@ import json
 
 import pytest
 
-from science_tool.annotation.pubtator_seed import BiocRelation, parse_bioc_relations, predicate_for, relation_body_json
+from science_tool.annotation.model import Motivation, TextualBody
+from science_tool.annotation.pubtator_seed import (
+    BiocMention,
+    BiocRelation,
+    PairedPassage,
+    ResolvedMention,
+    parse_bioc_relations,
+    plan_relation,
+    predicate_for,
+    relation_body_json,
+    resolve_persisted_mentions,
+)
 
 # Real-shape relation record (pinned from live PubTator3, PMID 28483577, 2026-06-15).
 REL_RECORD = {
@@ -168,3 +179,99 @@ def test_relation_body_json_includes_raw_predicate_type_when_present():
         raw_predicate_type="Weird", score=None,
     )
     assert json.loads(body)["raw_predicate_type"] == "Weird"
+
+
+# --- Task 5: relation targeting (plan_relation + resolve_persisted_mentions) --
+
+# A single passage spanning file indices [0, 40); bioc offset 0.
+_PASSAGE = PairedPassage(bioc_offset=0, bioc_len=40, file_char_base=0)
+_TEXT = "BRCA1 raises risk of breast cancer a lot."
+#         0....5         ........21...........  (BRCA1 @0:5, breast cancer @21:13)
+
+GENE = "https://identifiers.org/ncbigene:672"
+DIS = "https://identifiers.org/mesh:D001943"
+
+
+def _mentions():
+    return {
+        GENE: [ResolvedMention(iri=GENE, file_idx=0, length=5, passage=_PASSAGE)],
+        DIS: [ResolvedMention(iri=DIS, file_idx=21, length=13, passage=_PASSAGE)],
+    }
+
+
+def _rel(subj=("Gene", "672"), obj=("Disease", "MESH:D001943"), rtype="Association", score=0.9):
+    return BiocRelation(subj[0], subj[1], obj[0], obj[1], rtype, score)
+
+
+def test_plan_relation_minimal_covering_span():
+    planned, reason = plan_relation(
+        _TEXT, _rel(), _mentions(), release="2025-01", source_md_name="x.source.md"
+    )
+    assert reason is None
+    assert planned is not None
+    # Covering span = BRCA1 start (0) .. breast cancer end (34).
+    assert planned.target.selector.exact == _TEXT[0:34]
+    assert planned.annotation_type == "relation"
+    assert planned.motivation == Motivation.LINKING
+    assert isinstance(planned.body, TextualBody)
+    assert planned.body.format == "application/json"
+    body = json.loads(planned.body.value)
+    assert body["subject"] == GENE and body["object"] == DIS
+    assert body["predicate"] == "biolink:associated_with"
+    # match_text = predicate|subj|obj|span_start:span_length
+    assert planned.match_text == f"biolink:associated_with|{GENE}|{DIS}|0:34"
+    assert planned.source_name == "pubtator3:2025-01:seeder-v1"
+
+
+def test_plan_relation_picks_closest_pair():
+    # Two gene mentions; the nearer one to the disease wins the minimal span.
+    mentions = {
+        GENE: [
+            ResolvedMention(iri=GENE, file_idx=0, length=5, passage=_PASSAGE),
+            ResolvedMention(iri=GENE, file_idx=15, length=5, passage=_PASSAGE),
+        ],
+        DIS: [ResolvedMention(iri=DIS, file_idx=21, length=13, passage=_PASSAGE)],
+    }
+    planned, _ = plan_relation(_TEXT, _rel(), mentions, release="r", source_md_name="x")
+    # Closest gene (file_idx 15) .. disease end (34): span [15, 34).
+    assert planned.target.selector.exact == _TEXT[15:34]
+    assert planned.match_text.endswith("|15:19")
+
+
+def test_plan_relation_unnormalized_concept_skips():
+    planned, reason = plan_relation(
+        _TEXT, _rel(obj=("Disease", "OMIM:99999")), _mentions(),
+        release="r", source_md_name="x",
+    )
+    assert planned is None and reason == "relation-unnormalized-concept"
+
+
+def test_plan_relation_no_persisted_mentions_skips():
+    # Object concept resolves but has no persisted mention.
+    planned, reason = plan_relation(
+        _TEXT, _rel(obj=("Gene", "7157")), _mentions(), release="r", source_md_name="x"
+    )
+    assert planned is None and reason == "relation-no-persisted-mentions"
+
+
+def test_plan_relation_cross_passage_skips():
+    other = PairedPassage(bioc_offset=100, bioc_len=20, file_char_base=100)
+    mentions = {
+        GENE: [ResolvedMention(iri=GENE, file_idx=0, length=5, passage=_PASSAGE)],
+        DIS: [ResolvedMention(iri=DIS, file_idx=100, length=13, passage=other)],
+    }
+    planned, reason = plan_relation(_TEXT + " " * 80 + "breast cancer", _rel(), mentions, release="r", source_md_name="x")
+    assert planned is None and reason == "relation-cross-passage"
+
+
+def test_resolve_persisted_mentions_groups_by_iri():
+    file_text = "BRCA1 and breast cancer"  # BRCA1 @0:5, breast cancer @10:13
+    paired = [PairedPassage(bioc_offset=0, bioc_len=23, file_char_base=0)]
+    mentions = [
+        BiocMention(pubtator_type="Gene", identifier="672", text="BRCA1", offset=0, length=5),
+        BiocMention(pubtator_type="Disease", identifier="MESH:D001943", text="breast cancer", offset=10, length=13),
+        BiocMention(pubtator_type="Gene", identifier="7157", text="TP53", offset=500, length=4),  # non-persisted
+    ]
+    grouped = resolve_persisted_mentions(file_text, paired, mentions)
+    assert set(grouped) == {GENE, DIS}  # TP53 (non-persisted) excluded
+    assert grouped[GENE][0].file_idx == 0
