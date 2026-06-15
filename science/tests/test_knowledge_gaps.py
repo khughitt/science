@@ -50,23 +50,22 @@ def test_load_papers_finds_both_prefix_styles() -> None:
     assert "paper:p02-legacy-article" in papers
 
 
-def test_duplicate_topic_ids_across_topic_directories_raise(tmp_path: Path) -> None:
+def test_duplicate_topic_ids_in_topic_directory_raise(tmp_path: Path) -> None:
     shutil.copytree(FIXTURE, tmp_path / "p")
     project = tmp_path / "p"
-    # Place a duplicate topic in entities/topics/ (second scanned root).
-    (project / "doc" / "topics").mkdir(parents=True)
-    (project / "doc" / "topics" / "t01-covered.md").write_text(
+    # A second file in entities/topics/ sharing an existing topic id collides.
+    (project / "entities" / "topics" / "t01-covered-dup.md").write_text(
         '---\nid: "topic:t01-covered"\ntype: "topic"\nrelated: []\n---\n'
     )
     with pytest.raises(ValueError, match="t01-covered"):
         _load_topics(project)
 
 
-def test_duplicate_paper_ids_across_paper_directories_raise(tmp_path: Path) -> None:
+def test_duplicate_paper_ids_in_paper_directory_raise(tmp_path: Path) -> None:
     shutil.copytree(FIXTURE, tmp_path / "p")
     project = tmp_path / "p"
-    (project / "doc" / "background" / "papers").mkdir(parents=True)
-    (project / "doc" / "background" / "papers" / "p01-example.md").write_text(
+    # A second file in entities/papers/ canonicalizing to an existing id collides.
+    (project / "entities" / "papers" / "p01-example-dup.md").write_text(
         '---\nid: "paper:p01-example"\ntype: "paper"\nrelated: []\n---\n'
     )
     with pytest.raises(ValueError, match="p01-example"):
@@ -119,7 +118,7 @@ def test_coverage_dedupes_bibkey_across_entity_and_source_refs(tmp_path: Path) -
     shutil.copytree(FIXTURE, tmp_path / "p")
     project = tmp_path / "p"
     # Edit t01 to also source_refs the same bibkey as its entity-linked paper.
-    t01 = project / "doc" / "background" / "topics" / "t01-covered.md"
+    t01 = project / "entities" / "topics" / "t01-covered.md"
     text = t01.read_text()
     text = text.replace(
         "source_refs: []",
@@ -157,7 +156,7 @@ def test_demand_zero_for_unreferenced_topic(tmp_path: Path) -> None:
     shutil.copytree(FIXTURE, tmp_path / "p")
     project = tmp_path / "p"
     # Add an orphan topic nobody references.
-    (project / "doc" / "background" / "topics" / "t99-orphan.md").write_text(
+    (project / "entities" / "topics" / "t99-orphan.md").write_text(
         '---\nid: "topic:t99-orphan"\ntype: "topic"\nrelated: []\n---\n'
     )
     resolved = resolve_questions(project)
@@ -218,11 +217,11 @@ def test_compute_topic_gaps_sort_order_gap_score_desc_tiebreak_topic_id_asc(
     shutil.copytree(FIXTURE, tmp_path / "p")
     project = tmp_path / "p"
     # Add another thin topic with demand=1, coverage=0 (gap_score=1).
-    (project / "doc" / "background" / "topics" / "t05-also-thin.md").write_text(
+    (project / "entities" / "topics" / "t05-also-thin.md").write_text(
         '---\nid: "topic:t05-also-thin"\ntype: "topic"\nrelated: []\nsource_refs: []\n---\n'
     )
     # Add a new question referencing only t05 so we have a gap_score=1 topic.
-    (project / "doc" / "questions" / "q99-extra.md").write_text(
+    (project / "entities" / "questions" / "q99-extra.md").write_text(
         '---\nid: "question:q99-extra"\ntype: "question"\nrelated:\n  - "topic:t05-also-thin"\n---\nExtra.\n'
     )
     resolved = resolve_questions(project)
@@ -241,7 +240,7 @@ def test_dangling_topic_ref_logs_warning(tmp_path: Path, caplog) -> None:  # typ
     shutil.copytree(FIXTURE, tmp_path / "p")
     project = tmp_path / "p"
     # Add a dangling topic ref to q01.
-    q01 = project / "doc" / "questions" / "q01-direct-to-h1.md"
+    q01 = project / "entities" / "questions" / "q01-direct-to-h1.md"
     text = q01.read_text()
     text = text.replace(
         '  - "topic:t02-thin"',
@@ -262,7 +261,7 @@ def test_malformed_source_refs_logs_warning(tmp_path: Path, caplog) -> None:  # 
 
     shutil.copytree(FIXTURE, tmp_path / "p")
     project = tmp_path / "p"
-    t03 = project / "doc" / "background" / "topics" / "t03-bibtex-covered.md"
+    t03 = project / "entities" / "topics" / "t03-bibtex-covered.md"
     text = t03.read_text()
     text = text.replace(
         "source_refs: [cite:Smith2024]",

@@ -23,6 +23,7 @@ from science_model.aspects import (
     validate_entity_aspects,
 )
 from science_tool.big_picture.frontmatter import read_frontmatter
+from science_tool.big_picture.layout import entity_dir
 
 Confidence = Literal["direct", "inverse", "back-inverse", "transitive"]
 
@@ -43,8 +44,8 @@ class ResolverOutput:
 
 def resolve_questions(project_root: Path) -> dict[str, ResolverOutput]:
     """Resolve all questions in ``project_root`` to hypothesis associations."""
-    questions = _load_entities(project_root / "doc" / "questions")
-    hypotheses = _load_entities(project_root / "specs" / "hypotheses")
+    questions = _load_entities(entity_dir(project_root, "question"))
+    hypotheses = _load_entities(entity_dir(project_root, "hypothesis"))
 
     try:
         project_aspects = load_project_aspects(project_root)
@@ -72,7 +73,7 @@ def resolve_questions(project_root: Path) -> dict[str, ResolverOutput]:
                 results[qid][ref] = HypothesisMatch(ref, "back-inverse", 0.8)
 
     # Transitive: interpretation lists both a question and a hypothesis.
-    interpretations = _load_entities(project_root / "doc" / "interpretations")
+    interpretations = _load_entities(entity_dir(project_root, "interpretation"))
     for _iid, ifm in interpretations.items():
         refs = _as_list(ifm.get("related"))
         q_refs = [r for r in refs if r in results]

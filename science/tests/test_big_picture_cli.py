@@ -36,11 +36,16 @@ def test_resolve_questions_emits_json() -> None:
 
 
 def test_validate_exits_nonzero_on_issues(tmp_path: Path) -> None:
-    synth_dir = tmp_path / "doc" / "reports" / "synthesis"
+    # Copy fixture entities into tmp_path so referenced IDs are available.
+    import shutil
+
+    shutil.copytree(FIXTURE / "entities", tmp_path / "entities")
+    synth_dir = tmp_path / "entities" / "synthesis"
     synth_dir.mkdir(parents=True)
-    (synth_dir / "h1-alpha.md").write_text(
+    (synth_dir / "0004-h1-alpha.md").write_text(
         """---
-id: "synthesis:h1-alpha"
+id: "synthesis:0004-h1-alpha"
+report_kind: "hypothesis-synthesis"
 hypothesis: "hypothesis:h1-alpha"
 provenance_coverage: "high"
 ---
@@ -50,13 +55,6 @@ provenance_coverage: "high"
 Built on interpretation:i99-fake.
 """
     )
-
-    # Copy fixture project files into tmp_path so referenced IDs are available
-    import shutil
-
-    shutil.copytree(FIXTURE / "specs", tmp_path / "specs")
-    shutil.copytree(FIXTURE / "doc" / "questions", tmp_path / "doc" / "questions")
-    shutil.copytree(FIXTURE / "doc" / "interpretations", tmp_path / "doc" / "interpretations")
 
     runner = CliRunner()
     result = runner.invoke(
@@ -71,9 +69,8 @@ Built on interpretation:i99-fake.
 def test_validate_passes_on_clean_project(tmp_path: Path) -> None:
     import shutil
 
-    shutil.copytree(FIXTURE / "specs", tmp_path / "specs")
-    shutil.copytree(FIXTURE / "doc", tmp_path / "doc")
-    (tmp_path / "doc" / "reports" / "synthesis").mkdir(parents=True, exist_ok=True)
+    shutil.copytree(FIXTURE / "entities", tmp_path / "entities")
+    (tmp_path / "entities" / "synthesis").mkdir(parents=True, exist_ok=True)
 
     runner = CliRunner()
     result = runner.invoke(

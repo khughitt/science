@@ -71,25 +71,23 @@ def validate_synthesis_file(path: Path, project_root: Path) -> list[ValidationIs
 
 def _collect_project_ids(project_root: Path) -> set[str]:
     ids: set[str] = set()
-    for relative in (
-        "specs/hypotheses",
-        "doc/questions",
-        "doc/interpretations",
-        # Legacy topic coverage still needs to validate topic IDs that appear
-        # in generated synthesis output.
-        "doc/topics",
-        "doc/background/topics",
-        "tasks",
-    ):
-        directory = project_root / relative
-        if not directory.is_dir():
-            continue
-        for path in directory.rglob("*.md"):
+    # Canonical v3 layout: every authored entity (question, hypothesis,
+    # interpretation, topic, …) lives under entities/<kind>/. Scanning the tree
+    # covers all kinds whose IDs can appear in generated synthesis output.
+    entities_root = project_root / "entities"
+    if entities_root.is_dir():
+        for path in entities_root.rglob("*.md"):
             fm = read_frontmatter(path)
             if fm and "id" in fm:
                 ids.add(str(fm["id"]))
-            if relative == "tasks":
-                ids.update(_extract_aggregated_task_ids(path))
+    # Tasks are aggregated into markdown files with one heading per task.
+    tasks_root = project_root / "tasks"
+    if tasks_root.is_dir():
+        for path in tasks_root.rglob("*.md"):
+            fm = read_frontmatter(path)
+            if fm and "id" in fm:
+                ids.add(str(fm["id"]))
+            ids.update(_extract_aggregated_task_ids(path))
     return ids
 
 
