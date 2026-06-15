@@ -14,11 +14,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
-# Moved here from science_tool/entities.py: the filename-strategy vocabulary is
-# part of the kind SSOT. The tool imports it from this module.
-EntityFilenameStrategy = Literal["numeric", "citekey", "singleton", "slug", "verbatim"]
+from science_model.profiles.schema import EntityFilenameStrategy  # noqa: F401  (canonical def moved to profiles.schema in Spec 2; re-exported so kinds.py stays the SSOT import site)
 
 
 @dataclass(frozen=True)

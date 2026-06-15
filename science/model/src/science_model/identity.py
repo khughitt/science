@@ -14,6 +14,22 @@ class EntityScope(StrEnum):
     SHARED = "shared"
 
 
+class EntityClass(StrEnum):
+    """High-level taxonomic classification of an entity kind.
+
+    Distinguishes which kinds carry continuous belief (epistemic), which
+    represent operational artifacts produced by project work (operational),
+    and which name external things that rarely change (reference).
+
+    Used by the freshness engine to decide whether an entity participates
+    in `bears_on` propagation: only EPISTEMIC entities are valid targets.
+    """
+
+    EPISTEMIC = "epistemic"
+    OPERATIONAL = "operational"
+    REFERENCE = "reference"
+
+
 class ExternalId(BaseModel):
     """Structured external identifier attached to an entity."""
 

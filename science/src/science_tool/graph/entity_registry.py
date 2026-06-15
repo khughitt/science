@@ -101,6 +101,29 @@ _CORE_KIND_CLASSES: dict[str, EntityClass] = {
 }
 
 
+# The only per-kind fact that cannot be data: the bound Pydantic class. Kinds
+# absent here default to ProjectEntity at registration (design §2.4). Consumed by
+# with_core_types() once the registry flip lands (Task 6).
+CORE_KIND_MODELS: dict[str, type[Entity]] = {
+    "task": TaskEntity,
+    "dataset": DatasetEntity,
+    "workflow-run": WorkflowRunEntity,
+    "research-package": ResearchPackageEntity,
+    "mechanism": MechanismEntity,
+    "theme": ThemeEntity,
+    "book": BookEntity,
+    "paper": PaperEntity,
+    "talk": TalkEntity,
+    "structural-chain": StructuralChainEntity,
+    "chain-audit": ChainAuditEntity,
+    "code-file": CodeFileEntity,
+    "evidence-line": EvidenceLineEntity,
+    "inquiry": InquiryEntity,
+    "proposition": PropositionEntity,
+    "patch-definition": PatchDefinitionEntity,
+}
+
+
 class EntityRegistry:
     """Resolves kind strings to their Entity subclass at load time."""
 
@@ -261,6 +284,10 @@ class EntityRegistry:
 
     def is_core_kind(self, kind: str) -> bool:
         return kind in self._core
+
+    def core_kinds(self) -> frozenset[str]:
+        """Names of the registered core kinds (for reconciliation tests)."""
+        return frozenset(self._core)
 
     def kind_class(self, kind: str) -> EntityClass:
         if kind not in self._kind_class:

@@ -9,7 +9,7 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from science_model.identity import EntityScope, ExternalId
+from science_model.identity import EntityClass, EntityScope, ExternalId  # noqa: F401  (EntityClass re-exported; relocated to identity in Spec 2)
 from science_model.packages.schema import (
     AccessBlock,
     DatasetUsage,
@@ -112,22 +112,6 @@ class EntityType(StrEnum):
     CODE_FILE = "code-file"
     EVIDENCE_LINE = "evidence-line"
     UNKNOWN = "unknown"
-
-
-class EntityClass(StrEnum):
-    """High-level taxonomic classification of an entity kind.
-
-    Distinguishes which kinds carry continuous belief (epistemic), which
-    represent operational artifacts produced by project work (operational),
-    and which name external things that rarely change (reference).
-
-    Used by the freshness engine to decide whether an entity participates
-    in `bears_on` propagation: only EPISTEMIC entities are valid targets.
-    """
-
-    EPISTEMIC = "epistemic"
-    OPERATIONAL = "operational"
-    REFERENCE = "reference"
 
 
 class EpistemicReviewState(BaseModel):
