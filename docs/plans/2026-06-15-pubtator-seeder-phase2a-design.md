@@ -42,6 +42,8 @@ variant / species / cellline) → single-`IriBody` span annotations.
 | 4 | CLI home | **`science annotate pubtator <pmid\|doi>`** — a new subcommand on the existing top-level `annotate` group, so future book-applicable annotators sit beside it |
 | 5 | Concept-IRI scheme | Full **`identifiers.org`** HTTP IRIs in `IriBody` (TriG emits `IriBody.iri` as a literal `<iri>`, so it must be a full IRI, not a CURIE) |
 | 6 | Unmappable mentions | **Skip and count** (non-persisted passage, or PubTator left the mention unnormalized) — only clean concept anchors are seeded; nothing silent |
+| 7 | `match_text` | A **span discriminator** `{annotation_type}\|{concept_iri}\|{file_char_base}:{length}\|{exact}`, not the bare mention text — the merge 4-tuple has no position, so bare text would collapse repeated/overlapping mentions |
+| 8 | Passage bridge | Pair persisted↔BioC passages by **ordered occurrence** (left-to-right scan), not unordered text search; **fail loud** on ambiguous duplicate text |
 
 ## Architecture
 
@@ -75,12 +77,22 @@ passage, in render order. The live BioC record gives passages with `bioc_offset`
 raw `text`. Bridge them by **text equality** — exactly the invariant Phase 1's
 `verify_offset_map` guarantees at write time:
 
-1. **Pair persisted passages to live BioC offset bases.** For each offset-map entry
-   `e`: `slice = file_text[e.file_char_base : e.file_char_base + e.length]`; find the
-   BioC passage `p` with `p.text == slice`, and record `p.bioc_offset →
-   e.file_char_base`. A persisted passage **absent** from the re-fetched BioC ⇒
-   **fail loud** (API/text drift; the persisted `text_sha256` is the guard that the
-   body — hence the passages — is unchanged).
+1. **Pair persisted passages to live BioC offset bases — by ordered occurrence, not
+   unordered text search.** The persisted passages preserve BioC relative order (Phase
+   1 renders abstract-floor then body, each in BioC order), so pair with a single
+   left-to-right scan: iterate offset-map entries `e` in render order, advancing a
+   pointer through the BioC passage list to the **next** passage `p` whose `p.text`
+   equals `file_text[e.file_char_base : e.file_char_base + e.length]`; record
+   `p.bioc_offset → e.file_char_base` and leave the pointer past `p`. This pairs
+   duplicate-text passages to **successive** BioC occurrences by order (no ambiguity)
+   and naturally skips BioC passages that were not persisted (e.g. license-gated body).
+   An unordered `p.text == slice` search is **wrong**: two persisted passages with
+   identical text could pair the later entry to the earlier BioC offset and mis-map
+   every body annotation. A persisted passage with no remaining ordered match in the
+   re-fetched BioC ⇒ **fail loud** (API/text drift; the persisted `text_sha256` is the
+   guard that the body — hence the passages — is unchanged). If duplicate persisted
+   text still makes a pairing genuinely ambiguous (the ordered scan cannot resolve it
+   deterministically), **fail loud** rather than guess.
 2. **Map each entity annotation.** For a BioC entity annotation `a` with
    `(bioc_offset, length, mention_text, concept_id, type)`:
    - Find the BioC passage `p` whose range `[p.bioc_offset, p.bioc_offset+len(p.text))`
@@ -141,7 +153,19 @@ real fixture used in tests.
   `content_hash(exact, source_name)`, so a re-run at the same release re-derives
   identical hashes and the existing 4-tuple skip (`(source, exact, lifted_from,
   match_text)`) makes it idempotent. Bumping `seeder-vN` invalidates the cache.
-- **`match_text`** = the exact mention text. **`lifted_from`** = `None`.
+- **`match_text`** = a stable **span discriminator**, NOT the bare mention text. The
+  merge dedup key is `(source, selector.exact, lifted_from, match_text)`
+  (`audit.py::_annotation_tuple`) — it carries no prefix/suffix or position, so two
+  distinct mentions of the same surface form (e.g. two `BRCA1` occurrences in one
+  paper, or the same span tagged with two concepts) would collapse to one row if
+  `match_text` were just the mention text. Use
+  `match_text = f"{annotation_type}|{concept_iri}|{file_char_base}:{length}|{exact}"`,
+  which is unique per (type, concept, span position) and **stable across re-runs** of
+  an unchanged `.source.md` (so idempotency holds). **`lifted_from`** = `None`.
+- **Note on `content_hash`.** It stays `content_hash(selector.exact, source_name)`
+  (spec-pinned, unchanged), so two same-surface mentions share a `content_hash`. That
+  is fine here: `content_hash` is the re-audit cache key, not the merge key — insertion
+  is governed by the 4-tuple above, which the span discriminator keeps distinct.
 
 ## File structure
 
@@ -189,6 +213,13 @@ real fixture used in tests.
 - **PubTator3 BioC annotation parsing:** small real fixture (title+abstract record
   with a handful of typed mentions, at least one unnormalized and one body-section
   mention).
+- **Duplicate surface mention (regression for the merge collapse):** two distinct
+  mentions of the same surface form (e.g. `BRCA1`) at **different** offsets both
+  survive `merge_planned` as separate rows (the span discriminator in `match_text`
+  keeps the 4-tuples distinct), and re-running seeds zero new rows.
+- **Duplicate passage text (regression for the bridge ambiguity):** a fixture with two
+  persisted passages carrying identical text maps body annotations to the **correct**
+  occurrence via the ordered scan (and a genuinely ambiguous case fails loud).
 - **Skip accounting:** non-persisted-passage mention and unnormalized mention are
   both skipped, counted, and reported (not silently dropped).
 - **Idempotency:** re-run at the same release writes zero new rows (4-tuple skip);
