@@ -63,15 +63,23 @@ self-consistency).
 further on `CORE_KINDS`. Concretely:
 
 - **`EntityKind` (not `CORE_KINDS`) becomes the SSOT.** The four tool maps re-derive from the
-  descriptor system (`CORE_PROFILE`, filtered to `category == authored-core` for the markdown
-  path/status maps; `shortform` filtered on presence), exactly as §4 specifies.
-- **The keystone's 28 file-authored kinds are exactly this spec's `authored-core` set** (§2.3) —
-  the kinds that receive path/status/template derivation. Because `CORE_KINDS`'s values were
-  transcribed verbatim from the original literals and are guarded green, they are the **verified
-  source** for populating each authored-core descriptor's
-  `home`/`strategy`/`default_status`/`statuses`/`shortform` during the §3 audit — the audit
-  copies from `CORE_KINDS` rather than re-transcribing the inline literals, so the
-  transcription risk the keystone already retired is not reintroduced.
+  descriptor system by **field presence** — a descriptor contributes to a map iff it carries that
+  field (`home`+`strategy`, `default_status`, `statuses`, `shortform`) — *not* by `category`, exactly
+  as §4 specifies.
+- **`CORE_KINDS`'s 28 kinds are the *path-policy* cross-section, not the `authored-core`
+  category.** They are exactly the kinds carrying a built-in path policy today (`home`+`strategy`)
+  — which includes typed kinds like `concept`/`finding`/`theme` and **excludes** authored-core
+  kinds with no built-in policy such as `dataset`/`variable`/`structural-chain`. So `CORE_KINDS`
+  is a *subset crossed with* `authored-core`, **not** equal to it (see the category-vs-derivation
+  split in §2.3 / §4). What `CORE_KINDS` *is* is the **derivation domain** for the path/status/
+  shortform maps: those maps derive from descriptors that **carry the relevant field**
+  (field-presence filter), exactly as the keystone did — never from `category` membership.
+- Because `CORE_KINDS`'s values were transcribed verbatim from the original literals and are
+  guarded green, they are the **verified source** for populating those descriptors'
+  `home`/`strategy`/`default_status`/`statuses`/`shortform` during the §3 audit — the audit copies
+  from `CORE_KINDS` rather than re-transcribing the inline literals, so the transcription risk the
+  keystone already retired is not reintroduced. Kinds outside the `CORE_KINDS` set keep blank
+  path/status fields, so field-presence derivation reproduces today's maps value-for-value.
 - **`science_model/kinds.py` is deleted in this slice** (the final task): `KindDescriptor`,
   `CORE_KINDS`, `CORE_KINDS_BY_NAME`. The `EntityFilenameStrategy` Literal is **relocated** to
   `profiles/schema.py` (the module that owns `EntityKind`); `EntityKind.strategy` is typed
@@ -136,9 +144,14 @@ Changes:
   exact drift this spec removes.
 - **`category`** (new, typed `KindCategory`): `authored-core | reserved |
   source-only`. The named-contract taxonomy (§2.3).
-- **`template_ready`** (new, `bool`): "this kind ships a packaged markdown
-  template." Replaces membership in `MIGRATED_KINDS`. (Named for what it *is*,
-  not the migration that produced it.)
+- **`template_ready`** (new, `bool`): "this kind renders through the migrated
+  Renderer path." Replaces membership in `MIGRATED_KINDS` — and is set for **exactly
+  today's 13 `MIGRATED_KINDS`**, no more. It is **not** "a packaged template file
+  exists": `templates/` ships 29 `.md` files (incl. `dataset.md`, `experiment.md`,
+  `workflow*.md`, `research-package.md`, `story.md`) for kinds that are *not* in
+  `MIGRATED_KINDS`, so deriving from file existence would change create/render
+  behavior. The §4 equivalence test pins `{name | template_ready}` to the current
+  `MIGRATED_KINDS` set.
 - **`shortform`** (new, `str | None`): the single-letter CLI alias (e.g. `h` →
   `hypothesis`). Absorbs `_SHORTFORM_ENTITY_KINDS` (the fourth tool map the keystone
   derived from `CORE_KINDS`). Derivation filters on *presence*, not `category`, since a
@@ -147,9 +160,12 @@ Changes:
 - **`strategy` becomes typed** `EntityFilenameStrategy | None` (was `str | None`),
   absorbing the Literal relocated from `science_model/kinds.py` (§0.1). Full vocabulary:
   `numeric | citekey | singleton | slug | verbatim`.
-- **`home` / `strategy` / `default_status` / `statuses` / `shortform` are populated for
-  every authored-core kind** (most are blank today), so the markdown path/status/shortform
-  maps can derive from them — sourced from the keystone's verified `CORE_KINDS` values (§0.1).
+- **`home` / `strategy` / `default_status` / `statuses` / `shortform` are populated only
+  for the kinds that carry them today** — the path-policy cross-section `CORE_KINDS`
+  enumerates (§0.1), not every `authored-core` kind. Kinds with no built-in policy
+  (e.g. `dataset`, `variable`) keep these blank. The markdown path/status/shortform maps
+  derive by **field presence**, not by `category` (§4), so the derived maps reproduce
+  today's literals exactly — sourced from the keystone's verified `CORE_KINDS` values.
 - **`structured_source` stays a loader/source field, orthogonal to `category`.**
   A genuine authored-core kind may still carry structured-source rows via the
   existing `CoreStructuredSource` mechanism. `source-only` (§2.3) is a *semantic
@@ -159,11 +175,14 @@ Changes:
 
 Define `EntityClass` in the existing leaf module `science_model/identity.py`
 (which already hosts sibling enums `EntityScope` / `ExternalId`), and **keep a
-plain re-export from `science_model/entities.py`** (`from science_model.identity
-import EntityClass`, listed in `__all__`). `profiles/schema.py` imports it from
-`identity.py`. This is cycle-free (`identity.py` is a leaf; `entities.py` does
-not import `profiles`) and keeps `profiles/schema.py` lightweight rather than
-coupling it to `entities.py`'s heavy transitive imports.
+plain re-export from `science_model/entities.py`** (a top-level
+`from science_model.identity import EntityClass` in `entities.py`, which puts the
+name in that module's namespace). `entities.py` has no module-level `__all__`
+today and none is added — the import statement alone preserves the public path.
+`profiles/schema.py` imports it from `identity.py`. This is cycle-free
+(`identity.py` is a leaf; `entities.py` does not import `profiles`) and keeps
+`profiles/schema.py` lightweight rather than coupling it to `entities.py`'s heavy
+transitive imports.
 
 The re-export is the deliberate **stable public path**: existing
 `from science_model.entities import EntityClass` sites keep working unchanged, so
@@ -201,9 +220,11 @@ The descriptor system spans the **two built-in manifests**:
 
 `CORE_PROFILE` remains the SSOT for *authored-core* facts; "the descriptor
 system" (core + local) is the SSOT for *which kinds exist and their category*.
-All markdown derivations (§4) filter `category == authored-core` across both
-manifests, so reserved/source-only kinds never receive a path policy, status
-vocabulary, or template.
+Markdown derivations (§4) filter on **field presence** across both manifests
+(a descriptor contributes a path policy / status vocab / template only if it
+carries those fields). Reserved and source-only kinds are simply authored without
+those fields, so they never receive a path policy, status vocabulary, or template —
+the exclusion follows from the data, not from a `category` filter.
 
 ### 2.4 Kind → Pydantic-model binding (the irreducible code)
 
@@ -284,21 +305,25 @@ operate on a reconciled set.
 Public accessors stay byte-for-byte identical — `entity_policies()`,
 `default_status()`, `valid_statuses()`, shortform expansion, `MIGRATED_KINDS`
 membership — only their *internals* flip to compute from the descriptor system
-(which, for authored-core kinds, currently means `CORE_PROFILE`). The markdown
-maps filter to `category == authored-core`; shortform filters on *presence*;
-`entity_class` spans every classified kind (so reserved/source-only carry one too):
+(`CORE_PROFILE` + `LOCAL_PROFILE`). **Every derivation filters on field presence,
+not on `category`** — `category` drives the §3 reconciliation gate (which kinds
+exist + enum/registry agreement); derivation reads whichever descriptors actually
+carry the relevant field. This split is what keeps the flips value-for-value
+equivalent even though `authored-core` is broader than the path-policy set (§0.1):
 
-- `_BUILTIN_MARKDOWN_POLICIES` ← authored-core descriptor `home` + `strategy`.
-- `_DEFAULT_STATUS` ← authored-core descriptor `default_status`.
-- `_STATUS_VALUES` ← authored-core descriptor `statuses`.
-- `_SHORTFORM_ENTITY_KINDS` ← `{d.shortform: d.name for d in descriptors if d.shortform}`
-  (all kinds, not filtered by `category`).
-- `MIGRATED_KINDS` ← `{name for authored-core if template_ready}`.
-- registry `entity_class` ← descriptor `entity_class` (standalone
-  `_CORE_KIND_CLASSES` removed).
+- `_BUILTIN_MARKDOWN_POLICIES` ← `{d.name: (d.home, d.strategy) for d if d.home and d.strategy}`.
+- `_DEFAULT_STATUS` ← `{d.name: d.default_status for d if d.default_status}`.
+- `_STATUS_VALUES` ← `{d.name: d.statuses for d if d.statuses}`.
+- `_SHORTFORM_ENTITY_KINDS` ← `{d.shortform: d.name for d if d.shortform}`.
+- `MIGRATED_KINDS` ← `{d.name for d if d.template_ready}` (set for exactly the current
+  13; §2.1).
+- registry `entity_class` ← descriptor `entity_class` (spans every classified kind —
+  reserved/source-only carry one too; standalone `_CORE_KIND_CLASSES` removed).
 
-These five flips replace the keystone's single `CORE_KINDS`-derivation guard; the
-last task then deletes `science_model/kinds.py` and repoints the
+(Here `d` ranges over `CORE_PROFILE.entity_kinds + LOCAL_PROFILE.entity_kinds`.)
+
+These flips replace the keystone's `CORE_KINDS`-derivation guard (which covered the
+four tool maps); the last task then deletes `science_model/kinds.py` and repoints the
 `EntityFilenameStrategy` import (§0.1).
 
 Each flip ships a **transitional equivalence test** asserting the derived map
@@ -322,8 +347,9 @@ that pattern to the full set rather than introducing a new mechanism.)
   - `profiles/local.py` — `LOCAL_PROFILE` gains `category=source-only` tags
     (no kinds moved).
   - `identity.py` — `EntityClass` (definition lives here).
-  - `entities.py` — static `EntityType` enum (unchanged shape) + plain
-    `EntityClass` re-export (stable public path).
+  - `entities.py` — `EntityType` enum: an **additive static change** (hand-adds
+    `decision` + `claim-registry` members per §3.1's promotion; still hand-written,
+    no codegen, no dynamic enum) + plain `EntityClass` re-export (stable public path).
   - `kinds.py` — **deleted** at the final task (`CORE_KINDS` absorbed into
     `EntityKind`; `EntityFilenameStrategy` relocated to `schema.py`). Until then it
     re-exports the Literal from `schema.py` so intermediate flips stay neutral.
