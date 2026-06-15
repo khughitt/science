@@ -87,3 +87,16 @@ class TestResolvePaperEntity:
     def test_requires_an_identifier(self, tmp_path: Path) -> None:
         with pytest.raises(SourceTextError):
             resolve_paper_entity(tmp_path, doi=None, pmid=None)
+
+    def test_skips_source_md_sidecar(self, tmp_path: Path) -> None:
+        # A <citekey>.source.md sidecar in the same dir must never be treated as a
+        # paper entity — the resolver must return the real .md file only.
+        real = _write_paper(tmp_path, "Chu2024", doi="10.1038/s41586-024-0001-1")
+        sidecar = tmp_path / "entities" / "papers" / "Chu2024.source.md"
+        sidecar.write_text(
+            "---\ndoi: 10.1038/s41586-024-0001-1\n---\n\nsidecar body\n",
+            encoding="utf-8",
+        )
+        resolved = resolve_paper_entity(tmp_path, doi="10.1038/s41586-024-0001-1", pmid=None)
+        assert resolved.path == real
+        assert resolved.path != sidecar

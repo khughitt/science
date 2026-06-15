@@ -51,6 +51,15 @@ def _paper_dirs(project_root: Path) -> list[Path]:
     return [project_root / sub for sub in PROMOTE_KIND_PAPER.source_subdirs]
 
 
+def _as_str(value: Any) -> str | None:
+    # pmid/doi may parse as int from YAML (e.g. `pmid: 123456`); stringify for the normalizers.
+    if value is None:
+        return None
+    if isinstance(value, (int, str)):
+        return str(value)
+    return None
+
+
 def resolve_paper_entity(
     project_root: Path, *, doi: str | None, pmid: str | None
 ) -> ResolvedPaper:
@@ -93,7 +102,7 @@ def resolve_paper_entity(
             "run `science paper-fetch` and create the paper entity first."
         )
     if len(matches) > 1:
-        named = ", ".join(str(p) for p, _d, _p in matches)
+        named = ", ".join(str(m[0]) for m in matches)
         raise SourceTextError(
             f"multiple paper entities claim doi/pmid {ident!r}: {named}. "
             "This is a data error; fix the duplicate before persisting source text."
@@ -102,11 +111,3 @@ def resolve_paper_entity(
     return ResolvedPaper(
         citekey=path.stem, path=path, directory=path.parent, doi=entity_doi, pmid=entity_pmid
     )
-
-
-def _as_str(value: Any) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, (int, str)):
-        return str(value)
-    return None
