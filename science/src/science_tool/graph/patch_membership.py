@@ -255,11 +255,19 @@ def _direct_relation_neighbors(dataset: Dataset, anchor: URIRef) -> list[tuple[U
     return sorted(found, key=lambda item: (str(item[1]), str(item[0])))
 
 
+# Provenance/observation node types that appear in the bears-on layer (e.g. via the
+# SourceSnapshot -> entity reified edge) but are NOT patch members. Treated as "unknown"
+# so the closure/direct-relation walks skip them, mirroring the prov source-file handling.
+_NON_MEMBER_SCI_TYPES = {"SourceSnapshot", "SourceChange"}
+
+
 def _member_kind(dataset: Dataset, member: URIRef) -> str:
     type_values = sorted(str(obj) for graph in dataset.graphs() for obj in graph.objects(member, RDF.type))
     for type_value in type_values:
         if type_value.startswith(str(SCI_NS)):
             local = type_value.removeprefix(str(SCI_NS))
+            if local in _NON_MEMBER_SCI_TYPES:
+                return "unknown"
             if local == "EvidenceLine":
                 return "evidence"
             return _camel_to_kebab(local)

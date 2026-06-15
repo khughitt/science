@@ -65,6 +65,11 @@ from science_tool.graph.sources import (
 )
 from science_tool.graph.inquiry_compile import emit_inquiry_views
 from science_tool.graph.io import CITO_NS, DCAT_NS, DCTERMS_NS, entity_uri_for_ref
+from science_tool.graph.source_snapshots import (
+    SourceSnapshotResult,
+    compute_source_snapshots,
+    emit_source_snapshots,
+)
 from science_tool.graph.patch_membership import (
     derive_patch_memberships,
     emit_patch_memberships,
@@ -91,7 +96,9 @@ def build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     return _build_dataset_from_sources(sources)
 
 
-def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
+def _build_dataset_from_sources(
+    sources: ProjectSources, *, source_snapshots: SourceSnapshotResult | None = None
+) -> Dataset:
     """Build the in-memory rdflib Dataset that `materialize_graph` would write.
 
     Composes the existing emission helpers (`_add_entity`, `_add_relations`,
@@ -99,6 +106,12 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     helpers (`_classify_entities`, `_derive_bears_on_layer`,
     `_derive_patch_membership_layer`, `_derive_freshness_layer`). Pure: takes
     `ProjectSources`, returns a populated `Dataset`. Never touches the filesystem.
+
+    When `source_snapshots` is provided (precomputed by `compute_source_snapshots`,
+    which does the filesystem work upstream), the snapshot layer is emitted ahead of
+    `_derive_bears_on_layer` — load-bearing ordering, so each `SourceSnapshot` node's
+    `bears_on` edge exists before closure and feeds `_derive_freshness_layer` via
+    `source_changes`. When None, no snapshot layer is emitted (pre-Slice-B behavior).
 
     Used by both `materialize_graph` (which writes to disk) and the
     `propagate_freshness_in_memory` sweep (which discards the dataset).
@@ -177,6 +190,11 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
 
     _validate_no_amendment_cycles(dataset)
 
+    # Load-bearing ordering: emit the snapshot layer BEFORE `_derive_bears_on_layer`
+    # so each SourceSnapshot's `bears_on` edge is present for transitive closure.
+    if source_snapshots is not None:
+        emit_source_snapshots(dataset, source_snapshots)
+
     _derive_bears_on_layer(
         dataset,
         kind_class=kind_class,
@@ -190,7 +208,10 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     )
     if sources.freshness_enabled:
         entity_meta = _build_entity_meta(sources, kind_class)
-        _derive_freshness_layer(dataset, entities=entity_meta, today=_date.today())
+        source_changes = source_snapshots.source_changes if source_snapshots is not None else {}
+        _derive_freshness_layer(
+            dataset, entities=entity_meta, today=_date.today(), source_changes=source_changes
+        )
 
     return dataset
 
@@ -232,9 +253,15 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
         msg = f"Cannot materialize graph with unresolved references: {details}"
         raise ValueError(msg)
 
-    dataset = _build_dataset_from_sources(sources)
-
     trig_path = project_root / DEFAULT_GRAPH_PATH
+    # Snapshot OBSERVATION is compiler/provenance state and runs UNCONDITIONALLY — it is not
+    # gated on freshness_enabled. Gating it would stop persisting SourceSnapshot provenance
+    # when freshness is off and lose baseline continuity, so re-enabling freshness later would
+    # miss every intervening content change. Only the freshness-STATE derivation (inside
+    # `_build_dataset_from_sources`, the `if sources.freshness_enabled` block) is gated.
+    snapshots = compute_source_snapshots(sources, prior_graph_path=trig_path, today=_date.today())
+    dataset = _build_dataset_from_sources(sources, source_snapshots=snapshots)
+
     trig_path.parent.mkdir(parents=True, exist_ok=True)
     save_graph_dataset(dataset, trig_path)
     return trig_path
@@ -1312,9 +1339,12 @@ def _derive_freshness_layer(
     *,
     entities: dict[str, EntityFreshnessInfo],
     today: _date,
+    source_changes: dict[str, _date],
 ) -> None:
     """Derive freshness state triples (sci:freshnessState / sci:upstreamChangeAt / sci:triggeredBy).
 
     Gated on sources.freshness_enabled — skipped entirely when opt-out is active.
+    `source_changes` maps SourceSnapshot node URIs to their latest SourceChange observed_on
+    (the values are `datetime.date`; `date` is imported as `_date` in this file).
     """
-    derive_freshness(dataset, entities=entities, today=today)
+    derive_freshness(dataset, entities=entities, today=today, source_changes=source_changes)
