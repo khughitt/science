@@ -9,6 +9,7 @@ See docs/plans/2026-06-15-pubtator-seeder-phase2a-design.md.
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -322,6 +323,35 @@ def predicate_for(rel_type: str) -> tuple[str, str, str | None]:
         return mapped[0], mapped[1], None
     slug = _PRED_SLUG_BAD.sub("_", rel_type.strip().lower())
     return f"sci:pubtator_{slug}", "sci", rel_type
+
+
+def relation_body_json(
+    *,
+    subject_iri: str,
+    object_iri: str,
+    predicate: str,
+    predicate_source: str,
+    raw_predicate_type: str | None,
+    score: float | None,
+) -> str:
+    """Build the deterministic JSON for a relation's TextualBody.
+
+    Always carries subject / predicate / object / predicate_source. `raw_predicate_type`
+    is included only for unmapped types; `score` only when PubTator supplied a numeric
+    confidence. Serialized with sorted keys + compact separators so re-runs are
+    byte-stable (stable content_hash, no sidecar churn).
+    """
+    obj: dict[str, Any] = {
+        "subject": subject_iri,
+        "predicate": predicate,
+        "object": object_iri,
+        "predicate_source": predicate_source,
+    }
+    if raw_predicate_type is not None:
+        obj["raw_predicate_type"] = raw_predicate_type
+    if score is not None:
+        obj["score"] = score
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"))
 
 
 # --- Offset-map loader + ordered passage bridge ------------------------------

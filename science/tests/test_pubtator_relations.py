@@ -1,6 +1,8 @@
+import json
+
 import pytest
 
-from science_tool.annotation.pubtator_seed import BiocRelation, parse_bioc_relations, predicate_for
+from science_tool.annotation.pubtator_seed import BiocRelation, parse_bioc_relations, predicate_for, relation_body_json
 
 # Real-shape relation record (pinned from live PubTator3, PMID 28483577, 2026-06-15).
 REL_RECORD = {
@@ -126,3 +128,43 @@ def test_predicate_for_unexpected_type_sanitized():
         "sci",
         "Some New/Weird Type!",
     )
+
+
+def test_relation_body_json_deterministic_and_sorted():
+    body = relation_body_json(
+        subject_iri="https://identifiers.org/ncbigene:672",
+        object_iri="https://identifiers.org/mesh:D001943",
+        predicate="biolink:associated_with",
+        predicate_source="biolink",
+        raw_predicate_type=None,
+        score=0.97,
+    )
+    # Compact separators, sorted keys, byte-stable.
+    assert body == (
+        '{"object":"https://identifiers.org/mesh:D001943",'
+        '"predicate":"biolink:associated_with",'
+        '"predicate_source":"biolink",'
+        '"score":0.97,'
+        '"subject":"https://identifiers.org/ncbigene:672"}'
+    )
+    assert json.loads(body)["score"] == 0.97
+
+
+def test_relation_body_json_omits_optional_fields():
+    body = relation_body_json(
+        subject_iri="a", object_iri="b",
+        predicate="sci:cotreatment", predicate_source="sci",
+        raw_predicate_type=None, score=None,
+    )
+    obj = json.loads(body)
+    assert "score" not in obj
+    assert "raw_predicate_type" not in obj
+
+
+def test_relation_body_json_includes_raw_predicate_type_when_present():
+    body = relation_body_json(
+        subject_iri="a", object_iri="b",
+        predicate="sci:pubtator_weird", predicate_source="sci",
+        raw_predicate_type="Weird", score=None,
+    )
+    assert json.loads(body)["raw_predicate_type"] == "Weird"
