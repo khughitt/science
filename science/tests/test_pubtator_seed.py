@@ -272,21 +272,21 @@ def test_pair_passages_section_disambiguates_duplicate_text():
 
 # --- plan_mention tests -------------------------------------------------------
 
-# Reusable mini-file: header + a single persisted title passage "BRCA1 and BRCA1".
+# Reusable mini-file: header + a single persisted abstract passage "BRCA1 and BRCA1".
 _FILE = "---\nkind: paper-source\n---\n\n## Abstract\n\nBRCA1 and BRCA1\n"
 _BASE = _FILE.index("BRCA1")  # absolute file index where the passage body begins
 
 
-def _paired_for_title():
+def _paired_for_abstract():
     from science_tool.annotation.pubtator_seed import PairedPassage
-    # The title passage is BioC offset 0, 15 chars ("BRCA1 and BRCA1"), at _BASE.
+    # The abstract passage is BioC offset 0, 15 chars ("BRCA1 and BRCA1"), at _BASE.
     return [PairedPassage(bioc_offset=0, bioc_len=15, file_char_base=_BASE)]
 
 
 def test_plan_mention_builds_annotation():
     m = BiocMention(pubtator_type="Gene", identifier="672", text="BRCA1", offset=0, length=5)
     planned, reason = plan_mention(
-        _FILE, _paired_for_title(), m, release="2025-01", source_md_name="x.source.md"
+        _FILE, _paired_for_abstract(), m, release="2025-01", source_md_name="x.source.md"
     )
     assert reason is None
     assert isinstance(planned, PlannedAnnotation)
@@ -303,32 +303,34 @@ def test_plan_mention_builds_annotation():
 def test_plan_mention_two_same_surface_in_one_passage_distinct():
     m1 = BiocMention(pubtator_type="Gene", identifier="672", text="BRCA1", offset=0, length=5)
     m2 = BiocMention(pubtator_type="Gene", identifier="672", text="BRCA1", offset=10, length=5)
-    p1, _ = plan_mention(_FILE, _paired_for_title(), m1, release="2025-01", source_md_name="x.source.md")
-    p2, _ = plan_mention(_FILE, _paired_for_title(), m2, release="2025-01", source_md_name="x.source.md")
+    p1, _ = plan_mention(_FILE, _paired_for_abstract(), m1, release="2025-01", source_md_name="x.source.md")
+    p2, _ = plan_mention(_FILE, _paired_for_abstract(), m2, release="2025-01", source_md_name="x.source.md")
     assert p1 is not None and p2 is not None
     assert p1.match_text != p2.match_text
     assert p1.target.selector.prefix != p2.target.selector.prefix
+    assert p1.target.selector.prefix == ""           # first BRCA1 is at the passage start
+    assert p2.target.selector.prefix == "BRCA1 and "  # second BRCA1 anchored after the first
 
 
 def test_plan_mention_skips_unnormalized():
     m = BiocMention(pubtator_type="Mutation", identifier="tmVar:c|SUB|A|1|T", text="BRCA1", offset=0, length=5)
-    planned, reason = plan_mention(_FILE, _paired_for_title(), m, release="2025-01", source_md_name="x.source.md")
+    planned, reason = plan_mention(_FILE, _paired_for_abstract(), m, release="2025-01", source_md_name="x.source.md")
     assert planned is None and reason == "unnormalized-concept"
 
 
 def test_plan_mention_skips_unsupported_type():
     m = BiocMention(pubtator_type="Anatomy", identifier="x", text="BRCA1", offset=0, length=5)
-    planned, reason = plan_mention(_FILE, _paired_for_title(), m, release="2025-01", source_md_name="x.source.md")
+    planned, reason = plan_mention(_FILE, _paired_for_abstract(), m, release="2025-01", source_md_name="x.source.md")
     assert planned is None and reason == "unsupported-type"
 
 
 def test_plan_mention_skips_nonpersisted_passage():
     m = BiocMention(pubtator_type="Gene", identifier="7157", text="TP53", offset=500, length=4)
-    planned, reason = plan_mention(_FILE, _paired_for_title(), m, release="2025-01", source_md_name="x.source.md")
+    planned, reason = plan_mention(_FILE, _paired_for_abstract(), m, release="2025-01", source_md_name="x.source.md")
     assert planned is None and reason == "non-persisted-passage"
 
 
 def test_plan_mention_slice_mismatch_fails_loud():
     m = BiocMention(pubtator_type="Gene", identifier="672", text="XXXXX", offset=0, length=5)
     with pytest.raises(SourceTextError, match="slice"):
-        plan_mention(_FILE, _paired_for_title(), m, release="2025-01", source_md_name="x.source.md")
+        plan_mention(_FILE, _paired_for_abstract(), m, release="2025-01", source_md_name="x.source.md")
