@@ -24,3 +24,10 @@ def test_leaf_module_does_not_import_sources_or_adapters() -> None:
     text = open(src, encoding="utf-8").read()
     assert "from science_tool.graph.sources" not in text
     assert "storage_adapters" not in text
+
+
+def test_new_snapshot_types_are_exported_from_leaf():
+    from science_tool.graph import source_records
+
+    assert hasattr(source_records, "SourceSnapshot")
+    assert hasattr(source_records, "SourceChange")
