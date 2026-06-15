@@ -31,7 +31,12 @@ class Motivation(StrEnum):
 
 
 # Source kinds whose annotations require a content_hash for re-audit caching.
-HASH_REQUIRED_SOURCE_PREFIXES: tuple[str, ...] = ("llm-audit:", "lint:", "marker-scanner:")
+HASH_REQUIRED_SOURCE_PREFIXES: tuple[str, ...] = (
+    "llm-audit:",
+    "lint:",
+    "marker-scanner:",
+    "pubtator3:",
+)
 
 
 @dataclass(frozen=True)

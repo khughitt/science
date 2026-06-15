@@ -964,3 +964,74 @@ def stats_cmd(root_path: Path | None, fmt: str) -> None:
         click.echo("By type:")
         for type_, count in report.by_type.items():
             click.echo(f"  {type_:<24} {count}")
+
+
+@annotate_group.command("pubtator")
+@click.argument("identifier")
+@click.option(
+    "--project-root",
+    "project_root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False),
+    help="Project root (defaults to the current directory).",
+)
+@click.option(
+    "--email",
+    default=None,
+    help="Contact email for polite-pool APIs (falls back to $SCIENCE_CONTACT_EMAIL).",
+)
+@click.option(
+    "--cache-dir",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Override cache directory (defaults to $SCIENCE_CACHE_DIR or ~/.cache/science).",
+)
+@click.option(
+    "--actor",
+    default="science-annotate-cli",
+    help="Identity recorded as the annotation creator.",
+)
+def pubtator_cmd(
+    identifier: str,
+    project_root: Path | None,
+    email: str | None,
+    cache_dir: Path | None,
+    actor: str,
+) -> None:
+    """Seed PubTator3 entity-mention annotations into `<citekey>.source.anno.trig`.
+
+    Requires an existing `<citekey>.source.md` (run `science paper persist-source`
+    first). PubMed-only: papers with no PubTator3 record are a graceful no-op.
+    """
+    import os as _os
+
+    from science_tool.annotation.pubtator_seed import seed_pubtator
+    from science_tool.annotation.source_text import SourceTextError
+    from science_tool.paper_fetch import FetchConfig
+
+    resolved_email = email or _os.environ.get("SCIENCE_CONTACT_EMAIL")
+    if not resolved_email:
+        raise click.ClickException(
+            "Contact email is required. Pass --email or set $SCIENCE_CONTACT_EMAIL."
+        )
+    cfg = (
+        FetchConfig(email=resolved_email)
+        if cache_dir is None
+        else FetchConfig(email=resolved_email, cache_dir=cache_dir)
+    )
+    root = (project_root or Path.cwd()).resolve()
+    try:
+        report = seed_pubtator(
+            project_root=root,
+            identifier=identifier,
+            cfg=cfg,
+            actor=actor,
+            now=datetime.now(timezone.utc),
+        )
+    except SourceTextError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if report.note:
+        click.echo(report.note)
+    skips = ", ".join(f"{k}={v}" for k, v in sorted(report.skipped.items()))
+    click.echo(f"Wrote {report.written} annotation(s)" + (f"; skipped {skips}" if skips else ""))

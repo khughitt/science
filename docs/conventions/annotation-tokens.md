@@ -4,7 +4,7 @@ type: "convention"
 title: "Annotation tokens"
 status: "active"
 created: "2026-05-09"
-updated: "2026-06-14"
+updated: "2026-06-15"
 ---
 
 # Annotation tokens
@@ -84,3 +84,26 @@ wins, else `unknown`.
 > Annotation-type and source-prefix vocabularies (e.g. `entity-gene`,
 > `pubtator3:<release>:seeder-vN`) are introduced in Phase 2+; only the license
 > whitelist is in scope for Phase 1.
+
+## PubTator3 entity-mention seeding (Phase 2a)
+
+Source prefix: `pubtator3:<release>:seeder-vN` — `<release>` is the BioC `_release`
+infon (fallback `pubtator3-api`); bump `seeder-vN` when the offset-mapping or
+concept-normalization logic changes (invalidates the re-audit cache).
+
+Entity annotation types (`sci:annotationType`), motivation `oa:identifying`, single
+`IriBody` carrying the concept IRI (identifiers.org compact form
+`https://identifiers.org/<namespace>:<accession>`):
+
+| annotation_type | Biolink class | concept IRI namespace |
+|---|---|---|
+| `entity-gene` | `biolink:Gene` | `ncbigene` |
+| `entity-disease` | `biolink:Disease` | `mesh` |
+| `entity-chemical` | `biolink:ChemicalEntity` | `mesh` |
+| `entity-species` | `biolink:OrganismTaxon` | `taxonomy` |
+| `entity-variant` | `biolink:SequenceVariant` | `dbsnp` (rsID only) |
+| `entity-cellline` | `biolink:CellLine` | `cellosaurus` |
+
+The Biolink class is derived from `annotation_type` via this table; it is NOT stored
+in the annotation. Mentions PubTator left unnormalized (no id matching the namespace
+shape) are skipped, not stored with a fallback body.
