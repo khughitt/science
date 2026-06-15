@@ -221,15 +221,21 @@ it by `annotation_type` (`relation` vs `entity-*`) to fill the two `*_written` c
 ## Testing
 
 Fixtures pinned from the **real** record fetched 2026-06-15 (PMID 28483577:
-Fluticasone / Formoterol Fumarate / Inflammation / HDAC3; types `Association`,
-`Negative_Correlation`, `Cotreatment`).
+Fluticasone / Formoterol Fumarate / Inflammation / HDAC3). That record's relation
+types are `Cotreatment` (1) and `Negative_Correlation` (5) — exercising one `sci:`-mapped
+and one `biolink:`-mapped predicate end-to-end. The **full 8-type predicate map** is
+covered by a **synthetic unit test** (each `infons.type` value + an unexpected type for
+the `sci:pubtator_<slug>` sanitizer), not a real PMID per type — mirroring how 2a
+unit-tested `concept_iri_for` id shapes. (`Association`, if a real end-to-end fixture for
+it is ever wanted, is available in PMID 30429607 / 22429397.)
 
 - **`parse_bioc_relations`:** real-shape relation rows parsed; malformed relation
   (missing role / type) counted under `malformed-bioc-relation`, not dropped silently;
   numeric `score` parsed, non-numeric → `None`.
-- **Predicate map:** each of the 8 BioRED types → expected `(curie, source)`;
-  case-insensitive match; an unexpected type → `sci:pubtator_<slug>` with the
-  non-`[a-z0-9_]`→`_` sanitizer and `raw_predicate_type` in the body.
+- **Predicate map (synthetic unit test):** each of the 8 BioRED types → expected
+  `(curie, source)`; case-insensitive match; an unexpected type → `sci:pubtator_<slug>`
+  with the non-`[a-z0-9_]`→`_` sanitizer and `raw_predicate_type` in the body. Synthetic
+  `infons.type` values, so it does not depend on any single PMID carrying all eight.
 - **Targeting:** minimal covering span chosen among multiple same-passage candidate
   pairs; tie broken by earliest start; `exact` equals the expected substring; prefix /
   suffix clamped to the passage.
