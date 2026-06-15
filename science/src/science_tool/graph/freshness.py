@@ -429,7 +429,14 @@ def propagate_freshness_in_memory(project_root: Path) -> list[dict]:
     if not sources.freshness_enabled:
         return []
 
-    dataset = _build_dataset_from_sources(sources)
+    # Lazy imports avoid the freshness -> source_snapshots -> freshness import cycle
+    # (source_snapshots imports _emit_bears_on_edge from this module).
+    from science_tool.graph.source_snapshots import compute_source_snapshots
+    from science_tool.graph.store import DEFAULT_GRAPH_PATH
+
+    prior_graph_path = project_root.resolve() / DEFAULT_GRAPH_PATH
+    snapshots = compute_source_snapshots(sources, prior_graph_path=prior_graph_path, today=date.today())
+    dataset = _build_dataset_from_sources(sources, source_snapshots=snapshots)
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
 
     rows: list[dict] = []

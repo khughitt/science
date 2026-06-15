@@ -164,3 +164,17 @@ def test_snapshot_provenance_persists_when_freshness_disabled(tmp_path: Path):
 
     assert (ss, RDF.type, SCI_NS.SourceSnapshot) in prov  # baseline persists regardless
     assert list(knowledge.triples((None, SCI_NS.freshnessState, None))) == []  # state gated off
+
+
+def test_in_memory_sweep_sees_content_change(tmp_path: Path):
+    from science_tool.graph.freshness import propagate_freshness_in_memory
+
+    root = _build_min_project(tmp_path)
+    materialize_graph(root, strict=False)  # baseline persisted to graph.trig
+
+    h1_path = root / "entities" / "hypotheses" / "h1.md"
+    h1_path.write_text(h1_path.read_text().replace("Original body.", "Edited body."))
+
+    rows = propagate_freshness_in_memory(root)
+    states = {row["id"]: row["state"] for row in rows}
+    assert states.get("hypothesis:h1") == "needs-review"  # content-derived, no `updated:` bump
