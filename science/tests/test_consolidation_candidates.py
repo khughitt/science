@@ -153,3 +153,50 @@ def test_shared_anchor_ignores_unresolved_refs(tmp_path: Path) -> None:
 
     report = detect_consolidation_candidates(tmp_path)
     assert [c for c in report.semantic_clusters if c.signal == "shared-anchor"] == []
+
+
+def test_related_overlap_clusters_above_threshold(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    # Anchors a..d exist as entities so refs resolve.
+    for a in ("a", "b", "c", "d"):
+        _write(tmp_path, "concepts", f"anchor-{a}", {"id": f"concept:anchor-{a}", "type": "concept"})
+    # x and y share 3/4 related -> Jaccard 0.75 >= 0.5 : cluster.
+    _write(tmp_path, "interpretations", "x", {"id": "interpretation:x", "type": "interpretation",
+        "related": ["concept:anchor-a", "concept:anchor-b", "concept:anchor-c"]})
+    _write(tmp_path, "interpretations", "y", {"id": "interpretation:y", "type": "interpretation",
+        "related": ["concept:anchor-a", "concept:anchor-b", "concept:anchor-c", "concept:anchor-d"]})
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    report = detect_consolidation_candidates(tmp_path)
+    overlap = [c for c in report.semantic_clusters if c.signal == "related-overlap"]
+    assert len(overlap) == 1
+    assert overlap[0].members == ["interpretation:x", "interpretation:y"]
+    assert "Jaccard" in overlap[0].evidence
+
+
+def test_related_overlap_below_threshold_no_cluster(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    for a in ("a", "b", "c"):
+        _write(tmp_path, "concepts", f"anchor-{a}", {"id": f"concept:anchor-{a}", "type": "concept"})
+    # x={a}, y={a,b,c} -> Jaccard 1/3 = 0.33 < 0.5 : no cluster.
+    _write(tmp_path, "interpretations", "x", {"id": "interpretation:x", "type": "interpretation", "related": ["concept:anchor-a"]})
+    _write(tmp_path, "interpretations", "y", {"id": "interpretation:y", "type": "interpretation",
+        "related": ["concept:anchor-a", "concept:anchor-b", "concept:anchor-c"]})
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    report = detect_consolidation_candidates(tmp_path)
+    assert [c for c in report.semantic_clusters if c.signal == "related-overlap"] == []
+
+
+def test_related_overlap_ignores_non_entity_refs(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    # Both share only a non-entity tag string -> not counted -> no cluster.
+    _write(tmp_path, "interpretations", "x", {"id": "interpretation:x", "type": "interpretation", "related": ["just-a-tag", ""]})
+    _write(tmp_path, "interpretations", "y", {"id": "interpretation:y", "type": "interpretation", "related": ["just-a-tag"]})
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    report = detect_consolidation_candidates(tmp_path)
+    assert [c for c in report.semantic_clusters if c.signal == "related-overlap"] == []

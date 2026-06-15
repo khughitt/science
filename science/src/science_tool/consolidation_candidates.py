@@ -150,6 +150,63 @@ def _shared_anchor_clusters(
     return clusters
 
 
+def _related_overlap_clusters(
+    visible: list[tuple[str, str, dict[str, Any]]],
+    known_ids: set[str],
+    threshold: float,
+    min_cluster_size: int,
+) -> list[SemanticCluster]:
+    """Connected components over entity pairs whose `related:` entity-ref sets have
+    Jaccard >= threshold. Kind-agnostic (unlike structural-family / shared-anchor)."""
+    related_sets = {
+        eid: _entity_refs(fm, known_ids, fields=("related",)) for eid, _kind, fm in visible
+    }
+    ids = sorted(eid for eid in related_sets if related_sets[eid])
+
+    parent = {eid: eid for eid in ids}
+
+    def find(x: str) -> str:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: str, b: str) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[max(ra, rb)] = min(ra, rb)
+
+    best_jaccard: dict[str, float] = {eid: 0.0 for eid in ids}
+    for a, b in combinations(ids, 2):
+        sa, sb = related_sets[a], related_sets[b]
+        union_size = len(sa | sb)
+        if union_size == 0:
+            continue
+        jaccard = len(sa & sb) / union_size
+        if jaccard >= threshold:
+            union(a, b)
+            best_jaccard[a] = max(best_jaccard[a], jaccard)
+            best_jaccard[b] = max(best_jaccard[b], jaccard)
+
+    components: dict[str, list[str]] = {}
+    for eid in ids:
+        components.setdefault(find(eid), []).append(eid)
+
+    clusters: list[SemanticCluster] = []
+    for members in components.values():
+        if len(members) < min_cluster_size:
+            continue
+        peak = max(best_jaccard[m] for m in members)
+        clusters.append(
+            SemanticCluster(
+                signal="related-overlap",
+                members=sorted(members),
+                evidence=f"related Jaccard >= {threshold:.2f} (peak {peak:.2f}; {len(members)} members)",
+            )
+        )
+    return clusters
+
+
 def _lineage_section(graph: SupersedesGraph) -> SupersededLineage:
     linear = [
         LinearChain(
@@ -187,6 +244,7 @@ def detect_consolidation_candidates(
     known_ids = set(graph.kind_by_id)
     semantic = _structural_family_clusters(visible, min_cluster_size)
     semantic += _shared_anchor_clusters(visible, known_ids, min_cluster_size)
+    semantic += _related_overlap_clusters(visible, known_ids, related_jaccard, min_cluster_size)
 
     counts = {
         "linear": len(lineage.linear),
