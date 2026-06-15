@@ -246,3 +246,23 @@ def test_pair_passages_drift_fails_loud():
     bioc = _bioc(("a", 0, "Different text entirely"))
     with pytest.raises(SourceTextError, match="not found in re-fetched BioC"):
         pair_passages(file_text, persisted, bioc)
+
+
+def test_pair_passages_section_disambiguates_duplicate_text():
+    # Two persisted passages share the text "DUP" but differ by section; a NON-persisted
+    # body passage of the same text sits between them in BioC order. Section-aware
+    # pairing must map the abstract entry to the abstract BioC passage (offset 100),
+    # never the intervening body passage (offset 50).
+    file_text = "H\n\nDUP\n\nDUP\n"
+    persisted = [
+        PersistedPassage(section="title", file_char_base=3, length=3),
+        PersistedPassage(section="abstract", file_char_base=8, length=3),
+    ]
+    assert file_text[3:6] == "DUP" and file_text[8:11] == "DUP"
+    bioc = _bioc(
+        ("title", 0, "DUP"),
+        ("INTRO", 50, "DUP"),       # non-persisted body, identical text
+        ("abstract", 100, "DUP"),
+    )
+    paired = pair_passages(file_text, persisted, bioc)
+    assert [p.bioc_offset for p in paired] == [0, 100]

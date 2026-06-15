@@ -223,7 +223,7 @@ def load_persisted_passages(source_md: Path) -> tuple[str, list[PersistedPassage
     persisted: list[PersistedPassage] = []
     for entry in raw:
         if not isinstance(entry, dict):
-            continue
+            raise SourceTextError(f"{source_md}: non-dict passages offset map entry {entry!r}")
         section = str(entry.get("section") or "passage")
         base = entry.get("file_char_base")
         length = entry.get("length")
@@ -241,17 +241,21 @@ def pair_passages(
     """Pair persisted passages to live BioC offset bases by ordered occurrence.
 
     Iterate persisted entries in render order, advancing a single pointer through
-    the BioC passage list to the next passage whose text equals the entry's file
-    slice. Duplicate-text passages therefore pair to successive BioC occurrences,
-    and non-persisted BioC passages are skipped. A persisted passage with no
-    remaining ordered match means the source text drifted -> fail loud.
+    the BioC passage list to the next passage whose (section, text) matches the
+    entry's section and file slice. Pairing is by (section, text) occurrence order:
+    duplicate-text passages within the same section pair to successive BioC
+    occurrences, and non-persisted BioC passages (including same-text passages
+    with a different section) are skipped. A persisted passage with no remaining
+    ordered match means the source text drifted -> fail loud.
     """
     paired: list[PairedPassage] = []
     j = 0
     bioc_passages = bioc.passages
     for e in persisted:
         slice_ = file_text[e.file_char_base : e.file_char_base + e.length]
-        while j < len(bioc_passages) and bioc_passages[j].text != slice_:
+        while j < len(bioc_passages) and not (
+            bioc_passages[j].text == slice_ and bioc_passages[j].section == e.section
+        ):
             j += 1
         if j >= len(bioc_passages):
             raise SourceTextError(
