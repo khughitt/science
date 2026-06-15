@@ -20,7 +20,12 @@ are today re-declared across surfaces that already drift:
 - The registry (`science_tool/graph/entity_registry.py`) — `register_core_kind`
   bindings (46 kinds) + `_CORE_KIND_CLASSES` (kind → `EntityClass`).
 - The `entities.py` maps in the tool layer — `_BUILTIN_MARKDOWN_POLICIES`
-  (path/strategy), `_DEFAULT_STATUS`, `_STATUS_VALUES`.
+  (path/strategy), `_DEFAULT_STATUS`, `_STATUS_VALUES`, `_SHORTFORM_ENTITY_KINDS`.
+  Since increment 1 (the keystone) these four **derive from `CORE_KINDS`** rather
+  than from inline literals (see §0.1).
+- `CORE_KINDS` (`science_model/kinds.py`) — the **transitional** descriptor manifest
+  shipped by increment 1 (28 file-authored kinds); the current SSOT for the four
+  tool maps above. This spec absorbs it into `EntityKind` and deletes it (§0.1).
 - `MIGRATED_KINDS` (`science_model/templates.py`).
 - `CORE_PROFILE.entity_kinds` (`science_model/profiles/core.py`) — the intended
   SSOT, but currently the **sparsest** surface (23 kinds, most carrying only
@@ -41,6 +46,50 @@ drift tests** — *not* codegen, *not* a registry rewrite.
 
 ---
 
+## 0.1 Relationship to the shipped keystone (`CORE_KINDS`)
+
+Increment 1 (the keystone, `2026-06-14-kind-descriptor-keystone-design.md`, shipped)
+introduced a **transitional** manifest `CORE_KINDS` (`science_model/kinds.py`): a frozen
+`KindDescriptor` tuple over the 28 **file-authored** core kinds, plus the
+`EntityFilenameStrategy` Literal (moved there from `science_tool/entities.py`). Today the four
+tool maps — `_BUILTIN_MARKDOWN_POLICIES`, `_DEFAULT_STATUS`, `_STATUS_VALUES`,
+`_SHORTFORM_ENTITY_KINDS` — derive from `CORE_KINDS`, pinned by
+`science/tests/test_kind_descriptor_derivation.py` (each map ≡ `CORE_KINDS`-derived ≡ a frozen
+copy of the original literal) and `science/model/tests/test_kinds.py` (descriptor
+self-consistency).
+
+`CORE_KINDS` was declared transitional from the outset — a typed manifest to be **absorbed once
+`EntityKind` carried the same facts**. This spec performs that absorption; it does not build
+further on `CORE_KINDS`. Concretely:
+
+- **`EntityKind` (not `CORE_KINDS`) becomes the SSOT.** The four tool maps re-derive from the
+  descriptor system (`CORE_PROFILE`, filtered to `category == authored-core` for the markdown
+  path/status maps; `shortform` filtered on presence), exactly as §4 specifies.
+- **The keystone's 28 file-authored kinds are exactly this spec's `authored-core` set** (§2.3) —
+  the kinds that receive path/status/template derivation. Because `CORE_KINDS`'s values were
+  transcribed verbatim from the original literals and are guarded green, they are the **verified
+  source** for populating each authored-core descriptor's
+  `home`/`strategy`/`default_status`/`statuses`/`shortform` during the §3 audit — the audit
+  copies from `CORE_KINDS` rather than re-transcribing the inline literals, so the
+  transcription risk the keystone already retired is not reintroduced.
+- **`science_model/kinds.py` is deleted in this slice** (the final task): `KindDescriptor`,
+  `CORE_KINDS`, `CORE_KINDS_BY_NAME`. The `EntityFilenameStrategy` Literal is **relocated** to
+  `profiles/schema.py` (the module that owns `EntityKind`); `EntityKind.strategy` is typed
+  `EntityFilenameStrategy | None`; `science_tool/entities.py` imports the Literal from
+  `science_model.profiles.schema`. (Task 1 defines it in `schema.py` and has `kinds.py` re-export
+  it, so every flip in between stays behavior-neutral; the final task repoints the tool import and
+  removes `kinds.py`.)
+- **The keystone tests are replaced, not dropped.** `test_kind_descriptor_derivation.py`'s guard
+  is superseded by §4's per-flip equivalence tests (each derived map ≡ the prior literal captured
+  before the flip, now sourced from `CORE_PROFILE`); `test_kinds.py`'s self-consistency checks are
+  superseded by §3's reconciliation gate + named-contract tests. No coverage is lost.
+
+This reaches the single-descriptor-per-kind end state the keystone's own roadmap named, and
+removes the transitional manifest in the same slice that obsoletes it — so `CORE_KINDS` never
+lingers as a second SSOT beside `CORE_PROFILE`.
+
+---
+
 ## 1. Scope
 
 **In scope**
@@ -50,7 +99,11 @@ drift tests** — *not* codegen, *not* a registry rewrite.
   authored-core set, with reserved / source-only kinds pinned as named contracts.
 - Flip the derived surfaces to compute from the descriptor behind their existing
   public accessors: `_BUILTIN_MARKDOWN_POLICIES`, `_DEFAULT_STATUS`,
-  `_STATUS_VALUES`, `MIGRATED_KINDS`, registry `entity_class`.
+  `_STATUS_VALUES`, `_SHORTFORM_ENTITY_KINDS`, `MIGRATED_KINDS`, registry
+  `entity_class`. These four tool maps currently derive from `CORE_KINDS`; the flip
+  re-points them at `CORE_PROFILE`.
+- Absorb and delete the transitional `CORE_KINDS` manifest (`science_model/kinds.py`)
+  and relocate the `EntityFilenameStrategy` Literal into `profiles/schema.py` (§0.1).
 
 **Non-goals (explicit)**
 - No dynamic or generated `EntityType` — it stays a hand-written `StrEnum`
@@ -86,9 +139,17 @@ Changes:
 - **`template_ready`** (new, `bool`): "this kind ships a packaged markdown
   template." Replaces membership in `MIGRATED_KINDS`. (Named for what it *is*,
   not the migration that produced it.)
-- **`home` / `strategy` / `default_status` / `statuses` are populated for every
-  authored-core kind** (most are blank today), so the markdown path/status maps
-  can derive from them.
+- **`shortform`** (new, `str | None`): the single-letter CLI alias (e.g. `h` →
+  `hypothesis`). Absorbs `_SHORTFORM_ENTITY_KINDS` (the fourth tool map the keystone
+  derived from `CORE_KINDS`). Derivation filters on *presence*, not `category`, since a
+  few non-markdown kinds also carry one; the gate requires each `shortform` unique and
+  single-character.
+- **`strategy` becomes typed** `EntityFilenameStrategy | None` (was `str | None`),
+  absorbing the Literal relocated from `science_model/kinds.py` (§0.1). Full vocabulary:
+  `numeric | citekey | singleton | slug | verbatim`.
+- **`home` / `strategy` / `default_status` / `statuses` / `shortform` are populated for
+  every authored-core kind** (most are blank today), so the markdown path/status/shortform
+  maps can derive from them — sourced from the keystone's verified `CORE_KINDS` values (§0.1).
 - **`structured_source` stays a loader/source field, orthogonal to `category`.**
   A genuine authored-core kind may still carry structured-source rows via the
   existing `CoreStructuredSource` mechanism. `source-only` (§2.3) is a *semantic
@@ -221,17 +282,24 @@ operate on a reconciled set.
 ## 4. Derivation (after the gate is green)
 
 Public accessors stay byte-for-byte identical — `entity_policies()`,
-`default_status()`, `valid_statuses()`, `MIGRATED_KINDS` membership — only their
-*internals* flip to compute from the descriptor system (which, for authored-core
-kinds, currently means `CORE_PROFILE`), every derivation filtered to
-`category == authored-core`:
+`default_status()`, `valid_statuses()`, shortform expansion, `MIGRATED_KINDS`
+membership — only their *internals* flip to compute from the descriptor system
+(which, for authored-core kinds, currently means `CORE_PROFILE`). The markdown
+maps filter to `category == authored-core`; shortform filters on *presence*;
+`entity_class` spans every classified kind (so reserved/source-only carry one too):
 
-- `_BUILTIN_MARKDOWN_POLICIES` ← descriptor `home` + `strategy`.
-- `_DEFAULT_STATUS` ← descriptor `default_status`.
-- `_STATUS_VALUES` ← descriptor `statuses`.
+- `_BUILTIN_MARKDOWN_POLICIES` ← authored-core descriptor `home` + `strategy`.
+- `_DEFAULT_STATUS` ← authored-core descriptor `default_status`.
+- `_STATUS_VALUES` ← authored-core descriptor `statuses`.
+- `_SHORTFORM_ENTITY_KINDS` ← `{d.shortform: d.name for d in descriptors if d.shortform}`
+  (all kinds, not filtered by `category`).
 - `MIGRATED_KINDS` ← `{name for authored-core if template_ready}`.
 - registry `entity_class` ← descriptor `entity_class` (standalone
   `_CORE_KIND_CLASSES` removed).
+
+These five flips replace the keystone's single `CORE_KINDS`-derivation guard; the
+last task then deletes `science_model/kinds.py` and repoints the
+`EntityFilenameStrategy` import (§0.1).
 
 Each flip ships a **transitional equivalence test** asserting the derived map
 equals the current hand-written map value-for-value (captured *before* the
@@ -247,7 +315,8 @@ that pattern to the full set rather than introducing a new mechanism.)
 
 - **`science_model`** owns the SSOT:
   - `profiles/schema.py` — extended `EntityKind` (typed `entity_class`,
-    `category`, `template_ready`), `KindCategory` enum, imports `EntityClass`.
+    `category`, `template_ready`, `shortform`, typed `strategy`), `KindCategory`
+    enum, the relocated `EntityFilenameStrategy` Literal (§0.1), imports `EntityClass`.
   - `profiles/core.py` — fully populated `CORE_PROFILE` (authored-core + reserved
     sentinels).
   - `profiles/local.py` — `LOCAL_PROFILE` gains `category=source-only` tags
@@ -255,14 +324,21 @@ that pattern to the full set rather than introducing a new mechanism.)
   - `identity.py` — `EntityClass` (definition lives here).
   - `entities.py` — static `EntityType` enum (unchanged shape) + plain
     `EntityClass` re-export (stable public path).
-  - model-package drift/contract tests (assertions 1–3 of §3).
+  - `kinds.py` — **deleted** at the final task (`CORE_KINDS` absorbed into
+    `EntityKind`; `EntityFilenameStrategy` relocated to `schema.py`). Until then it
+    re-exports the Literal from `schema.py` so intermediate flips stay neutral.
+  - model-package drift/contract tests (assertions 1–3 of §3); the keystone's
+    `model/tests/test_kinds.py` is removed once §3's gate supersedes it.
 - **`science_tool`** consumes/derives:
   - `graph/entity_registry.py` — `CORE_KIND_MODELS` code map; reads
     `entity_class` from descriptor.
   - `entities.py` — `_BUILTIN_MARKDOWN_POLICIES` / `_DEFAULT_STATUS` /
-    `_STATUS_VALUES` become thin derivations.
+    `_STATUS_VALUES` / `_SHORTFORM_ENTITY_KINDS` become thin derivations over
+    `CORE_PROFILE` (re-pointed off `CORE_KINDS`); imports `EntityFilenameStrategy`
+    from `science_model.profiles.schema` after the final task.
   - tool/root-suite tests: assertion 4 of §3 (manifest ≡ registry) + the
-    per-flip equivalence tests for the tool-layer maps.
+    per-flip equivalence tests for the tool-layer maps; the keystone's
+    `tests/test_kind_descriptor_derivation.py` is replaced by those equivalence tests.
   - (`templates.py` lives in `science_model`) — `MIGRATED_KINDS` derives from the
     manifest (its equivalence test is a model-package test).
 
@@ -273,20 +349,26 @@ Tool → model dependency direction is preserved throughout; no test makes
 
 ## 6. Phasing (single implementation plan, ~7 tasks)
 
-1. Extend `EntityKind` schema (typed `entity_class`, `category`,
-   `template_ready`) + `KindCategory` enum; define `EntityClass` in `identity.py`
-   with a plain re-export from `entities.py`; add `CORE_KIND_MODELS` scaffold in
-   the registry. Behavior-neutral (re-export keeps existing imports working).
+1. Extend `EntityKind` schema (typed `entity_class`, `category`, `template_ready`,
+   `shortform`, typed `strategy`) + `KindCategory` enum; relocate
+   `EntityFilenameStrategy` into `schema.py` with `kinds.py` re-exporting it; define
+   `EntityClass` in `identity.py` with a plain re-export from `entities.py`; add
+   `CORE_KIND_MODELS` scaffold in the registry. Behavior-neutral (re-exports keep
+   existing imports working).
 2. Audit the full 50-kind universe + populate `CORE_PROFILE` (authored-core +
    reserved sentinels) and tag `LOCAL_PROFILE` (source-only); rule on
-   `curation-sweep` and the map-only kinds (`decision`, `claim-registry`).
+   `curation-sweep` and the map-only kinds (`decision`, `claim-registry`). Source
+   authored-core `home`/`strategy`/`default_status`/`statuses`/`shortform` from the
+   keystone's verified `CORE_KINDS` values (§0.1).
 3. **Reconciliation drift tests (the gate)** — strict, split by layer
    (§3 assertions 1–3 model-package, 4 tool/root); green once 1 + 2 land.
-4. Derive path policies (+ equivalence test).
+4. Derive path policies + shortform map (+ equivalence tests).
 5. Derive status map + status vocab (+ equivalence tests).
 6. Derive `MIGRATED_KINDS` + registry `entity_class` (+ equivalence tests).
 7. Remove the now-superseded hand-written map literals (e.g. `_CORE_KIND_CLASSES`)
-   that derivation replaces — not kinds; full suite + ruff.
+   **and delete `science_model/kinds.py`** (`CORE_KINDS`/`KindDescriptor`): repoint the
+   tool's `EntityFilenameStrategy` import to `schema.py`, replace the keystone's two
+   test files with this slice's gate + equivalence tests — not kinds; full suite + ruff.
 
 ---
 
@@ -298,8 +380,11 @@ Tool → model dependency direction is preserved throughout; no test makes
 - **Named contract tests**: one per reserved / source-only kind, asserting its
   category and its exclusion from authored-core equality.
 - **Per-flip equivalence tests**: derived map ≡ prior literal (captured before
-  refactor) for path policies, status map, status vocab, `MIGRATED_KINDS`,
-  registry `entity_class`.
+  refactor) for path policies, shortform map, status map, status vocab,
+  `MIGRATED_KINDS`, registry `entity_class`. These collectively **replace** the
+  keystone's `CORE_KINDS`-derivation guard (`tests/test_kind_descriptor_derivation.py`)
+  and self-consistency suite (`model/tests/test_kinds.py`), which are removed with
+  `kinds.py` — no coverage is lost (§0.1).
 - **Full suite + ruff** as the final gate (the existing ~5400-test suite covers
   the broad consumers).
 
@@ -320,14 +405,22 @@ Tool → model dependency direction is preserved throughout; no test makes
 - **`EntityClass` relocation** — behavior-neutral: the definition moves to
   `identity.py` but `entities.py` keeps a plain re-export (stable public path), so
   existing `from science_model.entities import EntityClass` imports are unaffected.
+- **Absorbing/deleting `CORE_KINDS`** — low risk: the authored-core descriptor values
+  are copied from `CORE_KINDS` (already verbatim-verified against the original literals
+  by the keystone guard), the `EntityFilenameStrategy` relocation routes through a
+  transitional re-export, and the per-flip equivalence tests re-prove value-for-value
+  equality before `kinds.py` is removed. Net: the keystone's guarantees are preserved,
+  not re-derived from scratch.
 
 ---
 
 ## 9. Success criteria
 
 - `CORE_PROFILE` is the single authored source of core-kind facts; path policies,
-  status map, status vocab, `MIGRATED_KINDS`, and registry `entity_class` all
-  derive from it.
+  status map, status vocab, shortform map, `MIGRATED_KINDS`, and registry
+  `entity_class` all derive from it. The transitional `CORE_KINDS` manifest
+  (`science_model/kinds.py`) is deleted; `EntityFilenameStrategy` lives in
+  `profiles/schema.py`.
 - The four strict drift assertions hold; every `EntityType` member is classified;
   reserved / source-only kinds are named contracts with dedicated tests.
 - `EntityType` remains a hand-written static enum; no codegen introduced.
