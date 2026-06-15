@@ -222,6 +222,25 @@ def test_parse_bioc_relations_non_numeric_score_is_none():
     assert rels[0].score is None
 
 
+def test_parse_bioc_relations_non_finite_score_is_none():
+    rec = {
+        "PubTator3": [
+            {
+                "relations": [
+                    {"infons": {"role1": {"identifier": "1", "type": "Gene"},
+                                "role2": {"identifier": "2", "type": "Gene"},
+                                "type": "Association", "score": "NaN"}},
+                    {"infons": {"role1": {"identifier": "1", "type": "Gene"},
+                                "role2": {"identifier": "2", "type": "Gene"},
+                                "type": "Association", "score": "Infinity"}},
+                ]
+            }
+        ]
+    }
+    rels, _ = parse_bioc_relations(rec)
+    assert [r.score for r in rels] == [None, None]
+
+
 def test_parse_bioc_relations_no_relations_key():
     assert parse_bioc_relations({"PubTator3": [{"passages": []}]}) == ([], {})
 ```
@@ -233,7 +252,7 @@ Expected: FAIL — `ImportError: cannot import name 'BiocRelation'`.
 
 - [ ] **Step 3: Implement `BiocRelation` + `parse_bioc_relations`**
 
-In `pubtator_seed.py`, add after `parse_bioc_entity_annotations` (~line 133):
+Add `import math` to the top of `pubtator_seed.py` (with the other stdlib imports, before `import re`). Then add after `parse_bioc_entity_annotations` (~line 133):
 
 ```python
 @dataclass(frozen=True)
@@ -250,14 +269,20 @@ class BiocRelation:
 
 
 def _parse_score(raw: Any) -> float | None:
-    """PubTator stores `infons.score` as a stringified float; non-numeric -> None."""
+    """PubTator stores `infons.score` as a stringified float; invalid -> None.
+
+    JSON permits only finite numbers for a portable `application/json` body, so NaN
+    and infinities are treated like a missing confidence.
+    """
     if isinstance(raw, (int, float)):
-        return float(raw)
+        value = float(raw)
+        return value if math.isfinite(value) else None
     if isinstance(raw, str):
         try:
-            return float(raw)
+            value = float(raw)
         except ValueError:
             return None
+        return value if math.isfinite(value) else None
     return None
 
 
@@ -314,7 +339,7 @@ def parse_bioc_relations(
 - [ ] **Step 4: Run to verify pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_pubtator_relations.py -q`
-Expected: PASS (4 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -486,6 +511,16 @@ def test_relation_body_json_includes_raw_predicate_type_when_present():
         raw_predicate_type="Weird", score=None,
     )
     assert json.loads(body)["raw_predicate_type"] == "Weird"
+
+
+def test_relation_body_json_omits_non_finite_score():
+    body = relation_body_json(
+        subject_iri="a", object_iri="b",
+        predicate="sci:cotreatment", predicate_source="sci",
+        raw_predicate_type=None, score=float("nan"),
+    )
+    obj = json.loads(body)
+    assert "score" not in obj
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -495,7 +530,7 @@ Expected: FAIL — `ImportError: cannot import name 'relation_body_json'`.
 
 - [ ] **Step 3: Implement**
 
-Add `import json` to the top of `pubtator_seed.py` (with the other stdlib imports, after `import re`). Then add after `predicate_for`:
+Add `import json` to the top of `pubtator_seed.py` (with the other stdlib imports, before `import math` / `import re` if Task 2 already added `math`). Then add after `predicate_for`:
 
 ```python
 def relation_body_json(
@@ -522,9 +557,9 @@ def relation_body_json(
     }
     if raw_predicate_type is not None:
         obj["raw_predicate_type"] = raw_predicate_type
-    if score is not None:
+    if score is not None and math.isfinite(score):
         obj["score"] = score
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"))
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), allow_nan=False)
 ```
 
 - [ ] **Step 4: Run to verify pass**
@@ -615,6 +650,29 @@ def test_plan_relation_picks_closest_pair():
     # Closest gene (file_idx 15) .. disease end (34): span [15, 34).
     assert planned.target.selector.exact == _TEXT[15:34]
     assert planned.match_text.endswith("|15:19")
+
+
+def test_plan_relation_tie_breaks_by_earliest_span_start():
+    text = "AAAAAxxBBBBByyCCCCC"
+    left = "https://identifiers.org/ncbigene:672"
+    right = "https://identifiers.org/ncbigene:7157"
+    mentions = {
+        left: [
+            ResolvedMention(iri=left, file_idx=0, length=5, passage=_PASSAGE),
+            ResolvedMention(iri=left, file_idx=7, length=5, passage=_PASSAGE),
+        ],
+        right: [
+            ResolvedMention(iri=right, file_idx=7, length=5, passage=_PASSAGE),
+            ResolvedMention(iri=right, file_idx=14, length=5, passage=_PASSAGE),
+        ],
+    }
+    rel = BiocRelation("Gene", "672", "Gene", "7157", "Association", None)
+    planned, reason = plan_relation(text, rel, mentions, release="r", source_md_name="x")
+    assert reason is None
+    assert planned is not None
+    # Candidate spans [0, 12) and [7, 19) are both length 12; earliest start wins.
+    assert planned.target.selector.exact == text[0:12]
+    assert planned.match_text.endswith("|0:12")
 
 
 def test_plan_relation_unnormalized_concept_skips():
@@ -744,6 +802,7 @@ def plan_relation(
         return None, "relation-no-persisted-mentions"
 
     best: tuple[int, int, int] | None = None  # (span_len, span_start, span_end)
+    best_passage: PairedPassage | None = None
     for s in subj_mentions:
         for o in obj_mentions:
             if s.passage != o.passage:
@@ -756,6 +815,7 @@ def plan_relation(
                 best_passage = s.passage
     if best is None:
         return None, "relation-cross-passage"
+    assert best_passage is not None
 
     _, span_start, span_end = best
     exact = file_text[span_start:span_end]
@@ -811,7 +871,7 @@ Expected: PASS (all relation tests).
 - [ ] **Step 5: Type-check and lint**
 
 Run: `cd science && uv run --frozen pyright src/science_tool/annotation/pubtator_seed.py && uv run --frozen ruff check src/science_tool/annotation/pubtator_seed.py`
-Expected: clean. (If pyright flags `best_passage` as possibly unbound, it is guarded by the `best is None` check; if it complains, initialize `best_passage: PairedPassage | None = None` before the loop and assert it is not None after.)
+Expected: clean.
 
 - [ ] **Step 6: Commit**
 
@@ -1034,12 +1094,12 @@ Then proceed to **superpowers:finishing-a-development-branch**.
 ## Self-Review
 
 **Spec coverage** (design doc → task):
-- Targeting (minimal covering span, same-passage, tie-break) → Task 5 ✓
+- Targeting (minimal covering span, same-passage, explicit earliest-start tie-break) → Task 5 ✓
 - Three skip reasons (unnormalized / no-persisted / cross-passage) → Task 5 ✓ (+ end-to-end cross-passage in Task 6)
 - `concept_iri_for` reuse for roles → Task 5 (`plan_relation`, `resolve_persisted_mentions`) ✓
 - Predicate map (8 types + case-insensitive + `sci:pubtator_<slug>` + `raw_predicate_type`) → Task 3 ✓
-- Body (deterministic JSON, optional score, LINKING, `relation` type, no model change) → Task 4 + Task 5 ✓
-- `score` optional + excluded from `match_text` → Task 4 (omit) + Task 5 (`match_text` has no score) ✓
+- Body (deterministic strict JSON, optional finite score, LINKING, `relation` type, no model change) → Task 4 + Task 5 ✓
+- `score` optional, finite-only, and excluded from `match_text` → Task 2 (finite parse) + Task 4 (omit non-finite) + Task 5 (`match_text` has no score) ✓
 - `match_text = predicate|subj|obj|start:length` → Task 5 ✓
 - Source `pubtator3:<release>:seeder-v1`, additive/idempotent → Task 5 + Task 6 (idempotency assertions) ✓
 - `SeedReport` entity/relation split + caller migration → Task 1 ✓

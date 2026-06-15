@@ -315,3 +315,57 @@ def test_two_predicates_same_span_both_survive_merge():
     assert p1.match_text != p2.match_text
     _, written = merge_planned(Sidecar(), [p1, p2], actor="t", now=datetime(2026, 6, 15, tzinfo=timezone.utc))
     assert len(written) == 2  # both survive the merge 4-tuple, no collapse
+
+
+def test_parse_bioc_relations_non_finite_score_is_none():
+    # NaN / Infinity parse as floats but are not portable JSON -> treated as no score.
+    rec = {
+        "PubTator3": [
+            {
+                "relations": [
+                    {"infons": {"role1": {"identifier": "1", "type": "Gene"},
+                                "role2": {"identifier": "2", "type": "Gene"},
+                                "type": "Association", "score": "NaN"}},
+                    {"infons": {"role1": {"identifier": "1", "type": "Gene"},
+                                "role2": {"identifier": "2", "type": "Gene"},
+                                "type": "Association", "score": "Infinity"}},
+                ]
+            }
+        ]
+    }
+    rels, _ = parse_bioc_relations(rec)
+    assert [r.score for r in rels] == [None, None]
+
+
+def test_relation_body_json_omits_non_finite_score():
+    body = relation_body_json(
+        subject_iri="a", object_iri="b",
+        predicate="sci:cotreatment", predicate_source="sci",
+        raw_predicate_type=None, score=float("nan"),
+    )
+    obj = json.loads(body)
+    assert "score" not in obj
+
+
+def test_plan_relation_tie_breaks_by_earliest_span_start():
+    # Two distinct genes; minimal covering length (15) is achieved by several pairs
+    # with different starts and NO shorter pair exists -> earliest start wins.
+    text = "x" * 40
+    left = "https://identifiers.org/ncbigene:672"
+    right = "https://identifiers.org/ncbigene:7157"
+    mentions = {
+        left: [
+            ResolvedMention(iri=left, file_idx=0, length=5, passage=_PASSAGE),
+            ResolvedMention(iri=left, file_idx=20, length=5, passage=_PASSAGE),
+        ],
+        right: [
+            ResolvedMention(iri=right, file_idx=10, length=5, passage=_PASSAGE),
+            ResolvedMention(iri=right, file_idx=30, length=5, passage=_PASSAGE),
+        ],
+    }
+    rel = BiocRelation("Gene", "672", "Gene", "7157", "Association", None)
+    planned, reason = plan_relation(text, rel, mentions, release="r", source_md_name="x")
+    assert reason is None
+    # Length-15 pairs start at 0, 10, 20; (0,10) wins -> span [0, 15).
+    assert planned.target.selector.exact == text[0:15]
+    assert planned.match_text.endswith("|0:15")

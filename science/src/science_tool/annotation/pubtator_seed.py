@@ -10,6 +10,7 @@ See docs/plans/2026-06-15-pubtator-seeder-phase2a-design.md.
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -148,14 +149,20 @@ class BiocRelation:
 
 
 def _parse_score(raw: Any) -> float | None:
-    """PubTator stores `infons.score` as a stringified float; non-numeric -> None."""
+    """PubTator stores `infons.score` as a stringified float; invalid -> None.
+
+    JSON permits only finite numbers for a portable `application/json` body, so NaN
+    and infinities are treated like a missing confidence.
+    """
     if isinstance(raw, (int, float)) and not isinstance(raw, bool):
-        return float(raw)
+        value = float(raw)
+        return value if math.isfinite(value) else None
     if isinstance(raw, str):
         try:
-            return float(raw)
+            value = float(raw)
         except ValueError:
             return None
+        return value if math.isfinite(value) else None
     return None
 
 
@@ -356,9 +363,9 @@ def relation_body_json(
     }
     if raw_predicate_type is not None:
         obj["raw_predicate_type"] = raw_predicate_type
-    if score is not None:
+    if score is not None and math.isfinite(score):
         obj["score"] = score
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"))
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
 # --- Offset-map loader + ordered passage bridge ------------------------------
