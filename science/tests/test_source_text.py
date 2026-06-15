@@ -13,6 +13,60 @@ from science_tool.annotation.source_text import (
     SourceTextError,
     resolve_paper_entity,
 )
+from science_tool.annotation.source_text import (  # noqa: E402  (append to existing import)
+    Passage,
+    SourcePassages,
+    parse_bioc_passages,
+)
+
+
+# Representative PubTator3 BioC abstract record: title + abstract passages, with a
+# multi-codepoint character to exercise character-offset (not byte) handling.
+_BIOC_RECORD = {
+    "PubTator3": [
+        {
+            "id": "123456",
+            "infons": {"_release": "2024.01"},
+            "passages": [
+                {"offset": 0, "text": "BRCA1 in cancer", "infons": {"type": "title"}},
+                {
+                    "offset": 16,
+                    "text": "We show BRCA1 drives tumours — clearly.",
+                    "infons": {"type": "abstract", "section_type": "ABSTRACT"},
+                },
+            ],
+        }
+    ]
+}
+
+
+class TestParseBiocPassages:
+    def test_parses_title_and_abstract_in_order(self) -> None:
+        parsed = parse_bioc_passages(_BIOC_RECORD)
+        assert parsed.release == "2024.01"
+        assert parsed.passages == (
+            Passage(section="title", bioc_offset=0, text="BRCA1 in cancer"),
+            Passage(
+                section="abstract",
+                bioc_offset=16,
+                text="We show BRCA1 drives tumours — clearly.",
+            ),
+        )
+
+    def test_documents_key_is_accepted(self) -> None:
+        record = {"documents": _BIOC_RECORD["PubTator3"]}
+        parsed = parse_bioc_passages(record)
+        assert parsed.passages[0].text == "BRCA1 in cancer"
+
+    def test_release_falls_back_to_constant_when_absent(self) -> None:
+        record = {"PubTator3": [{"passages": [{"offset": 0, "text": "t", "infons": {"type": "title"}}]}]}
+        parsed = parse_bioc_passages(record)
+        assert parsed.release  # non-empty pinned constant
+
+    def test_returns_none_for_empty_record(self) -> None:
+        assert parse_bioc_passages({"PubTator3": []}) is None
+        assert parse_bioc_passages({}) is None
+        assert parse_bioc_passages({"PubTator3": [{"passages": []}]}) is None
 
 
 def _make_client(handler: Callable[[httpx.Request], httpx.Response]) -> httpx.Client:

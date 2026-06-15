@@ -24,6 +24,66 @@ class SourceTextError(ValueError):
     """Raised for user-correctable persist-source errors (fail-loud)."""
 
 
+# Pinned PubTator3 API release marker used when the BioC payload omits one.
+PUBTATOR3_API_VERSION = "pubtator3-api"
+
+
+@dataclass(frozen=True)
+class Passage:
+    """One BioC passage: its section, BioC char offset, and raw decoded text.
+
+    `text` is the raw UTF-8-decoded BioC string, NOT Unicode-normalized: PubTator
+    offsets only align with the text BioC returns, so applying NFC here could
+    shift character indices and silently mis-anchor later selectors.
+    """
+
+    section: str
+    bioc_offset: int
+    text: str
+
+
+@dataclass(frozen=True)
+class SourcePassages:
+    passages: tuple[Passage, ...]
+    release: str
+
+
+def parse_bioc_passages(record: dict[str, Any]) -> SourcePassages | None:
+    """Parse a PubTator3 BioC JSON record into ordered passages.
+
+    Accepts either the `PubTator3` or `documents` top-level key. Returns None when
+    the record carries no usable passages.
+    """
+    docs = record.get("PubTator3") or record.get("documents")
+    if not isinstance(docs, list) or not docs:
+        return None
+    doc = docs[0]
+    if not isinstance(doc, dict):
+        return None
+    raw_passages = doc.get("passages")
+    if not isinstance(raw_passages, list):
+        return None
+
+    passages: list[Passage] = []
+    for raw in raw_passages:
+        if not isinstance(raw, dict):
+            continue
+        text = raw.get("text")
+        offset = raw.get("offset")
+        if not isinstance(text, str) or not text or not isinstance(offset, int):
+            continue
+        infons = raw.get("infons") if isinstance(raw.get("infons"), dict) else {}
+        section = str(infons.get("type") or "passage")
+        passages.append(Passage(section=section, bioc_offset=offset, text=text))
+
+    if not passages:
+        return None
+
+    doc_infons = doc.get("infons") if isinstance(doc.get("infons"), dict) else {}
+    release = str(doc_infons.get("_release") or "") or PUBTATOR3_API_VERSION
+    return SourcePassages(passages=tuple(passages), release=release)
+
+
 # Sidecar artifacts that must not be mistaken for paper-entity markdown.
 _SIDECAR_SUFFIXES = (".source.md",)
 
