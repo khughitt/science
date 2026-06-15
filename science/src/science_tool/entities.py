@@ -14,6 +14,8 @@ import yaml
 from science_model.entities import ProjectEntity
 from science_model.kinds import CORE_KINDS, EntityFilenameStrategy
 from science_model.profiles import EntityKind, ProfileManifest, load_profile_manifest
+from science_model.profiles.core import CORE_PROFILE
+from science_model.profiles.local import LOCAL_PROFILE
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
@@ -36,8 +38,12 @@ class EntityPathPolicy:
     strategy: EntityFilenameStrategy
 
 
+_KIND_DESCRIPTORS = (*CORE_PROFILE.entity_kinds, *LOCAL_PROFILE.entity_kinds)
+
 _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
-    k.name: EntityPathPolicy(k.path, k.strategy) for k in CORE_KINDS if k.path is not None and k.strategy is not None
+    ek.name: EntityPathPolicy(Path(ek.home), ek.strategy)
+    for ek in _KIND_DESCRIPTORS
+    if ek.home is not None and ek.strategy is not None
 }
 # Cache local-policy reads keyed by (project_root, manifest mtime_ns) so repeated
 # resolve_path_policy calls during a migration don't re-parse the manifest, while
@@ -170,7 +176,7 @@ _ID_PREFIX_RE = re.compile(r"^(?P<prefix>[a-z]?)(?P<number>\d+)-", re.IGNORECASE
 _NUMERIC_SCAN_RE = re.compile(r"^(?:[A-Za-z])?(\d+)")
 _SHORTFORM_REF_RE = re.compile(r"^(?P<prefix>[A-Za-z])(?P<number>\d+)(?P<suffix>(?:[.-].*)?)$")
 _NOTES_HEADING_RE = re.compile(r"^##\s+Notes\s*$")
-_SHORTFORM_ENTITY_KINDS: dict[str, str] = {k.shortform: k.name for k in CORE_KINDS if k.shortform}
+_SHORTFORM_ENTITY_KINDS: dict[str, str] = {ek.shortform: ek.name for ek in _KIND_DESCRIPTORS if ek.shortform}
 _DEFAULT_STATUS: dict[str, str] = {k.name: k.default_status for k in CORE_KINDS if k.default_status}
 _STATUS_VALUES: dict[str, frozenset[str]] = {k.name: k.statuses for k in CORE_KINDS if k.statuses}
 _ALLOWED_EXPLICIT_ROOTS = (Path("entities"),)
