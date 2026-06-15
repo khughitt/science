@@ -106,3 +106,21 @@ def test_member_whose_kind_lacks_superseded_vocab_is_skipped_not_crashed(tmp_pat
     assert report["to_mark"] == []
     assert {entry["id"] for entry in report["skipped_kinds"]} == {"workflow-run:wr-old"}
     assert report["skipped_kinds"][0]["kind"] == "workflow-run"
+
+
+def test_apply_sets_superseded_status_on_members(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _write(tmp_path, "interpretations", "i-v3", {"id": "interpretation:i-v3", "type": "interpretation", "title": "v3"})
+    _write(tmp_path, "interpretations", "i-v4", {"id": "interpretation:i-v4", "type": "interpretation", "title": "v4", "relations": [_supersedes("interpretation:i-v3")]})
+
+    from science_tool.big_picture.frontmatter import read_frontmatter
+    from science_tool.consolidation import mark_superseded
+
+    report = mark_superseded(tmp_path, apply=True)
+    assert report["applied"] == ["interpretation:i-v3"]
+
+    fm = read_frontmatter(tmp_path / "entities" / "interpretations" / "i-v3.md")
+    assert fm is not None and fm["status"] == "superseded"
+    # survivor untouched
+    fm_v4 = read_frontmatter(tmp_path / "entities" / "interpretations" / "i-v4.md")
+    assert fm_v4 is not None and fm_v4.get("status") in (None, "active")
