@@ -135,6 +135,12 @@ Concept IRIs follow the identifiers.org **compact-identifier** form
 - A small `PUBTATOR_TYPE_SPEC` table (type → `annotation_type`, Biolink class, IRI
   builder, id validator) is the single source of this mapping in code. The seeder
   ignores PubTator types outside this table (counted as skipped/unsupported).
+- **Malformed / multi-location BioC annotations are counted, not silently dropped.** A
+  BioC annotation with missing/invalid `type`/`text`/`locations`/offset is counted
+  under `malformed-bioc-annotation`; a **discontinuous span** (`len(locations) != 1`)
+  is counted under `multi-location-mention` and skipped — Phase 2a anchors
+  single-location spans only (discontinuous-span support deferred). Both surface in the
+  report's skip counts, preserving the "nothing silent" posture.
 
 ### Concept-id parsing notes
 

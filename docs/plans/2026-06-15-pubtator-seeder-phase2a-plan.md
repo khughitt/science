@@ -6,7 +6,7 @@
 
 **Architecture:** A new focused module `annotation/pubtator_seed.py` holds: (1) a `PUBTATOR_TYPE_SPEC` mapping + concept-IRI builders, (2) BioC entity-annotation parsing, (3) the `.source.md` offset-map loader + ordered passage bridge, (4) mention→`PlannedAnnotation` conversion with a span-discriminating `match_text`, and (5) the `seed_pubtator` orchestrator. The CLI subcommand lives on the existing top-level `annotate` group in `annotation/cli.py`. Network I/O reuses Phase 1's injectable `httpx.Client` + `RateLimiter` + `FetchConfig`; annotation persistence reuses `merge_planned`/`read_sidecar`/`write_sidecar`.
 
-**Tech Stack:** Python 3.12, click, httpx (+`httpx.MockTransport` for hermetic tests), PyYAML, pytest, uv workspace. Tests + lint/type gates run from `science/`.
+**Tech Stack:** Python 3.11, click, httpx (+`httpx.MockTransport` for hermetic tests), PyYAML, pytest, uv workspace. Tests + lint/type gates run from `science/`.
 
 **Design reference:** `~/d/science/docs/plans/2026-06-15-pubtator-seeder-phase2a-design.md`.
 
@@ -414,7 +414,8 @@ from science_tool.annotation.pubtator_seed import (
 
 
 def test_parse_bioc_entity_annotations():
-    mentions = parse_bioc_entity_annotations(BIOC_FIXTURE)
+    mentions, dropped = parse_bioc_entity_annotations(BIOC_FIXTURE)
+    assert dropped == {}  # fixture is all well-formed, single-location
     # 3 (title) + 4 (abstract) + 1 (intro) = 8 mention rows, all preserved in order.
     assert len(mentions) == 8
     first = mentions[0]
@@ -430,8 +431,38 @@ def test_parse_bioc_entity_annotations():
 
 
 def test_parse_bioc_entity_annotations_empty():
-    assert parse_bioc_entity_annotations({"PubTator3": []}) == []
-    assert parse_bioc_entity_annotations({}) == []
+    assert parse_bioc_entity_annotations({"PubTator3": []}) == ([], {})
+    assert parse_bioc_entity_annotations({}) == ([], {})
+
+
+def test_parse_bioc_entity_annotations_counts_malformed_and_multilocation():
+    record = {
+        "PubTator3": [
+            {
+                "infons": {},
+                "passages": [
+                    {
+                        "infons": {"type": "title"},
+                        "offset": 0,
+                        "text": "G here",
+                        "annotations": [
+                            # empty locations -> malformed
+                            {"infons": {"type": "Gene"}, "text": "G", "locations": []},
+                            # discontinuous span -> multi-location (not truncated)
+                            {"infons": {"type": "Gene"}, "text": "G", "locations": [
+                                {"offset": 0, "length": 1}, {"offset": 5, "length": 1}]},
+                            # well-formed
+                            {"infons": {"identifier": "1", "type": "Gene"}, "text": "G", "locations": [
+                                {"offset": 0, "length": 1}]},
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+    mentions, dropped = parse_bioc_entity_annotations(record)
+    assert len(mentions) == 1
+    assert dropped == {"malformed-bioc-annotation": 1, "multi-location-mention": 1}
 ```
 
 - [ ] **Step 2: Run it to confirm it fails**
@@ -456,22 +487,29 @@ class BiocMention:
     length: int
 
 
-def parse_bioc_entity_annotations(record: dict[str, Any]) -> list[BiocMention]:
-    """Flatten all passage entity annotations into ordered BiocMention rows.
+def parse_bioc_entity_annotations(
+    record: dict[str, Any],
+) -> tuple[list[BiocMention], dict[str, int]]:
+    """Flatten passage entity annotations into ordered rows + a drop-count map.
 
     Reads the same `PubTator3`/`documents` top-level shape as parse_bioc_passages.
-    A mention with no usable `text`/`type`/location is skipped at parse time
-    (malformed); concept-id normalization happens later (concept_iri_for).
+    Returns `(mentions, dropped)` where `dropped` counts annotations skipped at parse
+    time BY REASON (nothing silent — the orchestrator folds these into the report):
+      - "malformed-bioc-annotation": missing/invalid `type`/`text`/`locations`/offset.
+      - "multi-location-mention": a discontinuous span (len(locations) != 1) —
+        out of Phase 2a scope; counted, not silently truncated to locations[0].
+    Concept-id normalization happens later (concept_iri_for), not here.
     """
+    dropped: Counter[str] = Counter()
     docs = record.get("PubTator3") or record.get("documents")
     if not isinstance(docs, list) or not docs:
-        return []
+        return [], {}
     doc = docs[0]
     if not isinstance(doc, dict):
-        return []
+        return [], {}
     passages = doc.get("passages")
     if not isinstance(passages, list):
-        return []
+        return [], {}
 
     mentions: list[BiocMention] = []
     for passage in passages:
@@ -482,6 +520,7 @@ def parse_bioc_entity_annotations(record: dict[str, Any]) -> list[BiocMention]:
             continue
         for ann in anns:
             if not isinstance(ann, dict):
+                dropped["malformed-bioc-annotation"] += 1
                 continue
             infons = ann.get("infons")
             infons = infons if isinstance(infons, dict) else {}
@@ -489,15 +528,22 @@ def parse_bioc_entity_annotations(record: dict[str, Any]) -> list[BiocMention]:
             text = ann.get("text")
             locations = ann.get("locations")
             if not isinstance(ptype, str) or not isinstance(text, str) or not text:
+                dropped["malformed-bioc-annotation"] += 1
                 continue
             if not isinstance(locations, list) or not locations:
+                dropped["malformed-bioc-annotation"] += 1
+                continue
+            if len(locations) != 1:
+                dropped["multi-location-mention"] += 1
                 continue
             loc = locations[0]
             if not isinstance(loc, dict):
+                dropped["malformed-bioc-annotation"] += 1
                 continue
             offset = loc.get("offset")
             length = loc.get("length")
             if not isinstance(offset, int) or not isinstance(length, int):
+                dropped["malformed-bioc-annotation"] += 1
                 continue
             identifier = infons.get("identifier")
             mentions.append(
@@ -509,7 +555,7 @@ def parse_bioc_entity_annotations(record: dict[str, Any]) -> list[BiocMention]:
                     length=length,
                 )
             )
-    return mentions
+    return mentions, dict(dropped)
 ```
 
 - [ ] **Step 4: Run it to confirm it passes**
@@ -1148,7 +1194,8 @@ def seed_pubtator(
 
     release = parsed.release or PUBTATOR3_API_VERSION
     paired = pair_passages(file_text, persisted, parsed)
-    mentions = parse_bioc_entity_annotations(record)
+    mentions, parse_drops = parse_bioc_entity_annotations(record)
+    skipped.update(parse_drops)  # malformed-bioc / multi-location surfaced, not silent
 
     planned = []
     for m in mentions:
@@ -1262,15 +1309,18 @@ def test_cli_pubtator_seeds(tmp_path, monkeypatch):
     # First persist the source via the Phase 1 path, then seed.
     from science_tool.cli import main as root_main
 
+    cache = str(tmp_path / "cache")  # keep FetchConfig off ~/.cache/science (sandbox + state)
     persist = runner.invoke(
         root_main,
-        ["paper", "persist-source", "12345678", "--project-root", str(tmp_path), "--email", "t@example.com"],
+        ["paper", "persist-source", "12345678", "--project-root", str(tmp_path),
+         "--email", "t@example.com", "--cache-dir", cache],
     )
     assert persist.exit_code == 0, persist.output
 
     result = runner.invoke(
         annotate_group,
-        ["pubtator", "12345678", "--project-root", str(tmp_path), "--email", "t@example.com", "--actor", "tester"],
+        ["pubtator", "12345678", "--project-root", str(tmp_path),
+         "--email", "t@example.com", "--actor", "tester", "--cache-dir", cache],
     )
     assert result.exit_code == 0, result.output
     assert "Wrote 2" in result.output  # gene + disease from the inline title passage
@@ -1281,7 +1331,8 @@ def test_cli_pubtator_missing_source_md_errors(tmp_path):
     runner = CliRunner()
     result = runner.invoke(
         annotate_group,
-        ["pubtator", "12345678", "--project-root", str(tmp_path), "--email", "t@example.com"],
+        ["pubtator", "12345678", "--project-root", str(tmp_path),
+         "--email", "t@example.com", "--cache-dir", str(tmp_path / "cache")],
     )
     assert result.exit_code != 0
     assert "persist-source" in result.output
