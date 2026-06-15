@@ -229,3 +229,33 @@ def statement_body_json(
     if object_concept is not None:
         obj["object_concept"] = object_concept
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+# --- Anchoring ----------------------------------------------------------------
+
+
+def find_qualified_spans(
+    file_text: str, exact: str, prefix: str, suffix: str
+) -> list[int]:
+    """Return the start indices of every occurrence of `exact` in `file_text`
+    whose immediately-preceding text ends with `prefix` and whose immediately-
+    following text starts with `suffix`.
+
+    Empty prefix/suffix impose no constraint on that side. The caller treats
+    0 matches as `extract-quote-not-found` and >1 as `extract-quote-ambiguous`.
+    """
+    if not exact:
+        return []
+    out: list[int] = []
+    start = 0
+    while True:
+        i = file_text.find(exact, start)
+        if i == -1:
+            break
+        start = i + 1
+        if prefix and not file_text[:i].endswith(prefix):
+            continue
+        if suffix and not file_text[i + len(exact):].startswith(suffix):
+            continue
+        out.append(i)
+    return out

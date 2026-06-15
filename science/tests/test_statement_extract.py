@@ -247,3 +247,45 @@ def test_body_gate_is_none_based_not_falsy():
         subject_concept=None, object_concept=None,
     )
     assert body == '{"section":"results","stance":"asserted","subject":""}'
+
+
+from science_tool.annotation.statement_extract import find_qualified_spans
+
+
+def test_anchor_unique_no_context():
+    text = "alpha beta gamma"
+    assert find_qualified_spans(text, "beta", "", "") == [6]
+
+
+def test_anchor_not_found():
+    assert find_qualified_spans("alpha beta", "delta", "", "") == []
+
+
+def test_anchor_repeated_quote_is_ambiguous_without_context():
+    text = "the cell. the cell."
+    assert find_qualified_spans(text, "the cell", "", "") == [0, 10]
+
+
+def test_anchor_prefix_disambiguates_repeat():
+    text = "the cell. the cell."
+    # only the second "the cell" is preceded by ". " ... use a distinguishing prefix
+    spans = find_qualified_spans(text, "the cell", ". ", "")
+    assert spans == [10]
+
+
+def test_anchor_suffix_disambiguates_repeat():
+    text = "the cell grows. the cell dies."
+    spans = find_qualified_spans(text, "the cell", "", " dies")
+    assert spans == [16]
+
+
+def test_anchor_requires_adjacent_prefix():
+    text = "we found the result here"
+    # prefix must be the text IMMEDIATELY before exact
+    assert find_qualified_spans(text, "result", "found ", "") == []  # not adjacent
+    # returns the start index of `exact` ("result" at 13), not of the prefix
+    assert find_qualified_spans(text, "result", "the ", "") == [13]
+
+
+def test_anchor_empty_exact_returns_empty():
+    assert find_qualified_spans("anything", "", "", "") == []
