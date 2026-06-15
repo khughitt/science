@@ -269,6 +269,22 @@ def entities_migrate_identifiers_command(project_path: Path, apply_changes: bool
     click.echo(json.dumps(report, indent=2))
 
 
+@entities_group.command("mark-superseded")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path("."),
+    help="Project root (default: current directory).",
+)
+@click.option("--apply", "apply_changes", is_flag=True, default=False, help="Apply changes (default: dry-run report).")
+def entities_mark_superseded_command(project_root: Path, apply_changes: bool) -> None:
+    """Auto-derive `superseded` status from linear supersedes chains (report, then --apply)."""
+    from science_tool.consolidation import mark_superseded
+
+    report = mark_superseded(project_root, apply=apply_changes)
+    click.echo(json.dumps(report, indent=2))
+
+
 @entities_group.command("migrate")
 @click.option("--apply", "apply_changes", is_flag=True, help="Apply the migration (default: dry run).")
 @click.option(

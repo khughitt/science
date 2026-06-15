@@ -124,3 +124,29 @@ def test_apply_sets_superseded_status_on_members(tmp_path: Path) -> None:
     # survivor untouched
     fm_v4 = read_frontmatter(tmp_path / "entities" / "interpretations" / "i-v4.md")
     assert fm_v4 is not None and fm_v4.get("status") in (None, "active")
+
+
+def test_cli_mark_superseded_dry_run_emits_json(tmp_path: Path) -> None:
+    import json
+
+    from click.testing import CliRunner
+
+    from science_tool.big_picture.frontmatter import read_frontmatter
+    from science_tool.cli import main
+
+    _seed(tmp_path)
+    _write(tmp_path, "interpretations", "i-v3", {"id": "interpretation:i-v3", "type": "interpretation", "title": "v3"})
+    _write(tmp_path, "interpretations", "i-v4", {"id": "interpretation:i-v4", "type": "interpretation", "title": "v4", "relations": [_supersedes("interpretation:i-v3")]})
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["entities", "mark-superseded", "--project-root", str(tmp_path)]
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["applied"] == []  # dry run
+    assert payload["to_mark"] == ["interpretation:i-v3"]
+
+    # The dry run must not have mutated anything.
+    fm = read_frontmatter(tmp_path / "entities" / "interpretations" / "i-v3.md")
+    assert fm is not None and fm.get("status") in (None, "active")
