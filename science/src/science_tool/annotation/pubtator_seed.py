@@ -570,7 +570,9 @@ def plan_relation(
     Skip reasons: "relation-unnormalized-concept" (a role id does not normalize),
     "relation-no-persisted-mentions" (a role concept has no persisted mention; the
     reason does not distinguish whether subject or object was the absent role),
-    "relation-cross-passage" (both persisted but never co-occur in one passage).
+    "relation-cross-passage" (both persisted but never co-occur in one passage),
+    "relation-self-single-mention" (a self-relation — subject concept == object concept —
+    with only one persisted mention, so no two-mention evidence span exists).
     Target = the smallest covering span of the closest same-passage subject x object
     mention pair; prefix/suffix clamped to that passage.
     """
@@ -588,6 +590,8 @@ def plan_relation(
     best_passage: PairedPassage | None = None
     for s in subj_mentions:
         for o in obj_mentions:
+            if s is o:
+                continue  # self-relation: span two DISTINCT mentions, not one paired with itself
             if s.passage != o.passage:
                 continue
             span_start = min(s.file_idx, o.file_idx)
@@ -597,6 +601,8 @@ def plan_relation(
                 best = cand
                 best_passage = s.passage
     if best is None or best_passage is None:
+        if subject_iri == object_iri and len(subj_mentions) < 2:
+            return None, "relation-self-single-mention"
         return None, "relation-cross-passage"
 
     _, span_start, span_end = best

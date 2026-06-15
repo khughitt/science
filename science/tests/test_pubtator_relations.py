@@ -276,3 +276,42 @@ def test_resolve_persisted_mentions_groups_by_iri():
     assert set(grouped) == {GENE, DIS}  # TP53 (non-persisted) excluded
     assert grouped[GENE][0].file_idx == 0
     assert grouped[DIS][0].file_idx == 10
+
+
+def test_plan_relation_self_relation_spans_two_distinct_mentions():
+    # Bind(672, 672): two BRCA1 mentions -> span covers BOTH, not a single token.
+    same = {
+        GENE: [
+            ResolvedMention(iri=GENE, file_idx=0, length=5, passage=_PASSAGE),
+            ResolvedMention(iri=GENE, file_idx=13, length=4, passage=_PASSAGE),
+        ]
+    }
+    rel = _rel(subj=("Gene", "672"), obj=("Gene", "672"), rtype="Bind")
+    planned, reason = plan_relation(_TEXT, rel, same, release="r", source_md_name="x")
+    assert reason is None
+    # span [0, 17): from first BRCA1 start to second mention end — covers both, not just [0,5).
+    assert planned.target.selector.exact == _TEXT[0:17]
+    assert planned.match_text.endswith("|0:17")
+
+
+def test_plan_relation_self_relation_single_mention_skips():
+    one = {GENE: [ResolvedMention(iri=GENE, file_idx=0, length=5, passage=_PASSAGE)]}
+    rel = _rel(subj=("Gene", "672"), obj=("Gene", "672"), rtype="Bind")
+    planned, reason = plan_relation(_TEXT, rel, one, release="r", source_md_name="x")
+    assert planned is None and reason == "relation-self-single-mention"
+
+
+def test_two_predicates_same_span_both_survive_merge():
+    from datetime import datetime, timezone
+
+    from science_tool.annotation.audit import merge_planned
+    from science_tool.annotation.model import Sidecar
+
+    mentions = _mentions()  # GENE @0:5, DIS @21:13 in one passage
+    p1, _ = plan_relation(_TEXT, _rel(rtype="Association"), mentions, release="r", source_md_name="x.source.md")
+    p2, _ = plan_relation(_TEXT, _rel(rtype="Negative_Correlation"), mentions, release="r", source_md_name="x.source.md")
+    # Same exact span, different predicate -> distinct identity via match_text.
+    assert p1.target.selector.exact == p2.target.selector.exact
+    assert p1.match_text != p2.match_text
+    _, written = merge_planned(Sidecar(), [p1, p2], actor="t", now=datetime(2026, 6, 15, tzinfo=timezone.utc))
+    assert len(written) == 2  # both survive the merge 4-tuple, no collapse
