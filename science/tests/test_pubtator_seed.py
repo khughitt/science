@@ -441,3 +441,21 @@ def test_seed_pubtator_no_bioc_record_is_noop(tmp_path):
     report = seed_pubtator(project_root=tmp_path, identifier="12345678", cfg=cfg, actor="t", now=NOW, http=_client(epmc_only))
     assert report.written == 0
     assert report.note is not None
+
+
+def test_seeded_selectors_resolve_via_verifier(tmp_path):
+    from science_tool.annotation.source_text import persist_source
+    from science_tool.annotation.verify import verify_path
+
+    _paper_entity(tmp_path)
+    cfg = _cfg(tmp_path)
+    persist_source(project_root=tmp_path, identifier="12345678", cfg=cfg, http=_client(_bioc_handler))
+    seed_pubtator(project_root=tmp_path, identifier="12345678", cfg=cfg, actor="t", now=NOW, http=_client(_bioc_handler))
+
+    # verify_path(root) walks the root for *.anno.trig and re-resolves every selector
+    # against its rendered source file. VerifyReport exposes count properties
+    # (.broken/.fuzzy/.source_missing) — there is no `.unresolved`.
+    report = verify_path(tmp_path)
+    assert report.broken == 0, report.issues
+    assert report.fuzzy == 0, report.issues
+    assert report.source_missing == 0, report.issues
