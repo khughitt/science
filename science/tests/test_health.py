@@ -408,7 +408,7 @@ class TestBuildHealthReport:
             'type: "question"\n'
             'title: "Q1"\n'
             'status: "open"\n'
-            'related: ["topic:missing", "decision:d1"]\n'
+            'related: ["gadget:missing", "gizmo:d1"]\n'
             "---\n"
             "Body.\n",
             encoding="utf-8",
@@ -416,7 +416,7 @@ class TestBuildHealthReport:
 
         report = build_health_report(tmp_path, checks={"unregistered_ref_kinds"}, collect_timings=True)
 
-        assert report["unregistered_ref_kinds"][0]["kind"] == "decision"
+        assert report["unregistered_ref_kinds"][0]["kind"] == "gadget"
         assert report["unresolved_refs"] == []
         assert report["_meta"]["timings"][1:] == [
             {
@@ -577,7 +577,7 @@ class TestBuildHealthReport:
             'type: "question"\n'
             'title: "Q1"\n'
             'status: "open"\n'
-            'related: ["decision:d1", "hypothesis:h01"]\n'
+            'related: ["gadget:d1", "hypothesis:h01"]\n'
             'commits_to: ["latent:l1"]\n'
             'source_refs: ["go:0008150"]\n'
             "---\n"
@@ -589,10 +589,10 @@ class TestBuildHealthReport:
 
         assert report["unregistered_ref_kinds"] == [
             {
-                "kind": "decision",
+                "kind": "gadget",
                 "field": "related",
                 "mention_count": 1,
-                "refs": ["decision:d1"],
+                "refs": ["gadget:d1"],
                 "sources": ["entities/questions/q01.md"],
             },
             {
@@ -743,7 +743,7 @@ class TestHealthCLI:
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
             '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
-            'status: "proposed"\nrelated: [topic:missing, decision:d1]\n'
+            'status: "proposed"\nrelated: [topic:missing, gizmo:d1]\n'
             'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
         )
 
@@ -753,7 +753,7 @@ class TestHealthCLI:
         assert result.exit_code == 0, result.output
         assert "topic:missing" in result.output
         assert "Unregistered reference kinds" in result.output
-        assert "decision" in result.output
+        assert "gizmo" in result.output
 
     def test_json_output(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
@@ -825,7 +825,7 @@ class TestHealthCLI:
             'type: "question"\n'
             'title: "Q1"\n'
             'status: "open"\n'
-            'related: ["topic:missing", "decision:d1"]\n'
+            'related: ["gadget:missing", "gizmo:d1"]\n'
             "---\n"
             "Body.\n",
             encoding="utf-8",
@@ -848,7 +848,7 @@ class TestHealthCLI:
 
         assert result.exit_code == 0, result.output
         report = json.loads(result.output)
-        assert report["unregistered_ref_kinds"][0]["kind"] == "decision"
+        assert report["unregistered_ref_kinds"][0]["kind"] == "gadget"
         assert report["unresolved_refs"] == []
         assert [row["name"] for row in report["_meta"]["timings"]] == [
             "load_project_sources",

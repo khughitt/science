@@ -1,15 +1,16 @@
-"""Guard: the four kind-keyed dicts in science_tool/entities.py must be exactly
-reproducible from science_model.kinds.CORE_KINDS, and must match today's literals.
-Frozen copies of today's literals are pasted here; each test asserts BOTH the live
-dict and the CORE_KINDS-derived dict equal the frozen copy, so a shared transcription
-mistake between CORE_KINDS and the frozen copy cannot pass silently.
+"""Equivalence-before-flip guard for Task 4 (and Task 5).
+
+Frozen copies of the original tool-map literals are pasted here verbatim. The
+tests assert the live ``science_tool.entities`` maps equal these frozen copies,
+so the flip from ``CORE_KINDS`` to ``CORE_PROFILE`` derivation is proven to be
+value-for-value identical. The status fixtures are pasted now (unused until
+Task 5) so Task 5 can assert against them without re-deriving the literals.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from science_model.kinds import CORE_KINDS
 from science_tool.entities import (
     EntityPathPolicy,
     _BUILTIN_MARKDOWN_POLICIES,
@@ -121,36 +122,104 @@ FROZEN_SHORTFORM = {
 }
 
 
-def test_markdown_policies_reconstruct_from_descriptors() -> None:
-    assert _BUILTIN_MARKDOWN_POLICIES == FROZEN_MARKDOWN_POLICIES  # live == frozen
-    derived = {
-        k.name: EntityPathPolicy(k.path, k.strategy)
-        for k in CORE_KINDS
-        if k.path is not None and k.strategy is not None
+def test_markdown_policies_equal_prior_literal() -> None:
+    assert _BUILTIN_MARKDOWN_POLICIES == FROZEN_MARKDOWN_POLICIES
+
+
+def test_shortforms_equal_prior_literal() -> None:
+    assert _SHORTFORM_ENTITY_KINDS == FROZEN_SHORTFORM
+
+
+def test_default_status_equals_prior_literal() -> None:
+    assert _DEFAULT_STATUS == FROZEN_DEFAULT_STATUS
+
+
+def test_status_values_equal_prior_literal() -> None:
+    assert _STATUS_VALUES == FROZEN_STATUS_VALUES
+
+
+# --- Task 6: MIGRATED_KINDS + registry entity_class equivalence ---
+
+from science_model.templates import MIGRATED_KINDS
+from science_tool.graph.entity_registry import EntityRegistry
+
+FROZEN_MIGRATED_KINDS = frozenset(
+    {
+        "hypothesis",
+        "question",
+        "interpretation",
+        "discussion",
+        "theme",
+        "proposition",
+        "evidence-line",
+        "finding",
+        "method",
+        "paper",
+        "book",
+        "pre-registration",
+        "synthesis",
     }
-    assert derived == FROZEN_MARKDOWN_POLICIES  # CORE_KINDS == frozen
+)
+
+# The FULL post-Task-2 registry class map (all core kinds incl. the two promoted),
+# values as EntityClass.value strings. Captured live verbatim.
+FROZEN_KIND_CLASSES = {
+    "article": "reference",
+    "assumption": "epistemic",
+    "book": "operational",
+    "chain-audit": "epistemic",
+    "claim-registry": "operational",
+    "code-file": "operational",
+    "concept": "reference",
+    "construct": "reference",
+    "curation-sweep": "operational",
+    "data-package": "operational",
+    "dataset": "operational",
+    "decision": "reference",
+    "discussion": "epistemic",
+    "evidence-line": "epistemic",
+    "experiment": "operational",
+    "finding": "epistemic",
+    "hypothesis": "epistemic",
+    "inquiry": "epistemic",
+    "interpretation": "epistemic",
+    "mechanism": "epistemic",
+    "method": "operational",
+    "observation": "epistemic",
+    "outcome": "reference",
+    "paper": "operational",
+    "patch-definition": "epistemic",
+    "plan": "operational",
+    "pre-registration": "operational",
+    "proposition": "epistemic",
+    "question": "epistemic",
+    "report": "epistemic",
+    "research-package": "operational",
+    "research-question": "epistemic",
+    "search": "operational",
+    "spec": "operational",
+    "story": "epistemic",
+    "structural-chain": "epistemic",
+    "synthesis": "epistemic",
+    "talk": "operational",
+    "task": "operational",
+    "theme": "epistemic",
+    "topic": "reference",
+    "transformation": "operational",
+    "unknown": "reference",
+    "validation-report": "epistemic",
+    "variable": "reference",
+    "workflow": "operational",
+    "workflow-run": "operational",
+    "workflow-step": "operational",
+}
 
 
-def test_default_status_reconstructs_from_descriptors() -> None:
-    assert _DEFAULT_STATUS == FROZEN_DEFAULT_STATUS  # live == frozen
-    derived = {k.name: k.default_status for k in CORE_KINDS if k.default_status}
-    assert derived == FROZEN_DEFAULT_STATUS  # CORE_KINDS == frozen
+def test_migrated_kinds_equal_prior_literal() -> None:
+    assert set(MIGRATED_KINDS) == FROZEN_MIGRATED_KINDS
 
 
-def test_status_values_reconstruct_from_descriptors() -> None:
-    assert _STATUS_VALUES == FROZEN_STATUS_VALUES  # live == frozen
-    derived = {k.name: k.statuses for k in CORE_KINDS if k.statuses}
-    assert derived == FROZEN_STATUS_VALUES  # CORE_KINDS == frozen
-
-
-def test_shortforms_reconstruct_from_descriptors() -> None:
-    assert _SHORTFORM_ENTITY_KINDS == FROZEN_SHORTFORM  # live == frozen
-    derived = {k.shortform: k.name for k in CORE_KINDS if k.shortform}
-    assert derived == FROZEN_SHORTFORM  # CORE_KINDS == frozen
-
-
-def test_every_configured_kind_has_a_descriptor() -> None:
-    names = {k.name for k in CORE_KINDS}
-    for frozen in (FROZEN_MARKDOWN_POLICIES, FROZEN_DEFAULT_STATUS, FROZEN_STATUS_VALUES):
-        assert set(frozen) <= names
-    assert set(FROZEN_SHORTFORM.values()) <= names
+def test_registry_entity_class_equals_prior_literal() -> None:
+    registry = EntityRegistry.with_core_types()
+    live = {k: v.value for k, v in registry.all_kind_classes().items()}
+    assert live == FROZEN_KIND_CLASSES

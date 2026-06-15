@@ -353,7 +353,7 @@ def test_load_project_sources_includes_research_question_with_rq_prefix(tmp_path
 
     assert isinstance(entity, ProjectEntity)
     assert entity.kind == "research-question"
-    assert entity.type is None
+    assert entity.type == EntityType.RESEARCH_QUESTION
     assert entity.related == ["hypothesis:h1"]
 
 

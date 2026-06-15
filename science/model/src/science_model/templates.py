@@ -10,23 +10,11 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from science_model.profiles.core import CORE_PROFILE
+
 
 MIGRATED_KINDS: frozenset[str] = frozenset(
-    {
-        "hypothesis",
-        "question",
-        "interpretation",
-        "discussion",
-        "theme",
-        "proposition",
-        "evidence-line",
-        "finding",
-        "method",
-        "paper",
-        "book",
-        "pre-registration",
-        "synthesis",
-    }
+    ek.name for ek in CORE_PROFILE.entity_kinds if ek.template_ready
 )
 VALID_FIELD_NAMES: frozenset[str] = frozenset(
     {

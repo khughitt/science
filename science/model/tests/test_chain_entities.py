@@ -11,6 +11,7 @@ from science_model.entities import (
     BayesFactorEvidence,
     ChainAuditEntity,
     ChainAuditInterpretation,
+    EntityType,
     StructuralChainEntity,
 )
 
@@ -126,6 +127,7 @@ def _chain_kwargs(**overrides: Any) -> dict[str, Any]:
         id="chain:fp",
         canonical_id="natural-systems/chain:fp",
         kind="structural-chain",
+        type=EntityType.STRUCTURAL_CHAIN,
         title="FP chain",
         project="natural-systems",
         ontology_terms=[],
@@ -174,6 +176,7 @@ def _audit_kwargs(**overrides: Any) -> dict[str, Any]:
         id="chain-audit:fp-2026-05",
         canonical_id="natural-systems/chain-audit:fp-2026-05",
         kind="chain-audit",
+        type=EntityType.CHAIN_AUDIT,
         title="FP coupling audit (2026-05)",
         project="natural-systems",
         ontology_terms=[],

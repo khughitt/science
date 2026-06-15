@@ -32,6 +32,8 @@ from science_model.entities import (
     WorkflowRunEntity,
 )
 from science_model.patch_definition import PatchDefinitionEntity
+from science_model.profiles.core import CORE_PROFILE
+from science_model.profiles.schema import KindCategory
 from science_model.propositions import PropositionEntity
 
 
@@ -47,57 +49,26 @@ class EntityKindNotRegisteredError(KeyError):
     """Raised when resolve() is called with an unregistered kind."""
 
 
-# Classification for every kind in with_core_types(). Adding a new kind there
-# requires adding an entry here — the registration call asserts coverage.
-_CORE_KIND_CLASSES: dict[str, EntityClass] = {
-    # Typed entities
-    "task": EntityClass.OPERATIONAL,
-    "dataset": EntityClass.OPERATIONAL,
-    "workflow-run": EntityClass.OPERATIONAL,
-    "research-package": EntityClass.OPERATIONAL,
-    "mechanism": EntityClass.EPISTEMIC,
-    "theme": EntityClass.EPISTEMIC,
-    "structural-chain": EntityClass.EPISTEMIC,
-    "chain-audit": EntityClass.EPISTEMIC,
-    "evidence-line": EntityClass.EPISTEMIC,
-    # Generic project kinds (alphabetized)
-    "article": EntityClass.REFERENCE,
-    "assumption": EntityClass.EPISTEMIC,
-    "code-file": EntityClass.OPERATIONAL,
-    "concept": EntityClass.REFERENCE,
-    "construct": EntityClass.REFERENCE,
-    "curation-sweep": EntityClass.OPERATIONAL,
-    "data-package": EntityClass.OPERATIONAL,
-    "discussion": EntityClass.EPISTEMIC,
-    "experiment": EntityClass.OPERATIONAL,
-    "finding": EntityClass.EPISTEMIC,
-    "hypothesis": EntityClass.EPISTEMIC,
-    "inquiry": EntityClass.EPISTEMIC,
-    "interpretation": EntityClass.EPISTEMIC,
-    "method": EntityClass.OPERATIONAL,
-    "observation": EntityClass.EPISTEMIC,
-    "outcome": EntityClass.REFERENCE,
-    "book": EntityClass.OPERATIONAL,
-    "paper": EntityClass.OPERATIONAL,
-    "talk": EntityClass.OPERATIONAL,
-    "plan": EntityClass.OPERATIONAL,
-    "pre-registration": EntityClass.OPERATIONAL,
-    "patch-definition": EntityClass.EPISTEMIC,
-    "proposition": EntityClass.EPISTEMIC,
-    "question": EntityClass.EPISTEMIC,
-    "research-question": EntityClass.EPISTEMIC,
-    "report": EntityClass.EPISTEMIC,
-    "search": EntityClass.OPERATIONAL,
-    "spec": EntityClass.OPERATIONAL,
-    "story": EntityClass.EPISTEMIC,
-    "synthesis": EntityClass.EPISTEMIC,
-    "topic": EntityClass.REFERENCE,
-    "transformation": EntityClass.OPERATIONAL,
-    "unknown": EntityClass.REFERENCE,
-    "validation-report": EntityClass.EPISTEMIC,
-    "variable": EntityClass.REFERENCE,
-    "workflow": EntityClass.OPERATIONAL,
-    "workflow-step": EntityClass.OPERATIONAL,
+# The only per-kind fact that cannot be data: the bound Pydantic class. Kinds
+# absent here default to ProjectEntity at registration (design §2.4). Consumed by
+# with_core_types() once the registry flip lands (Task 6).
+CORE_KIND_MODELS: dict[str, type[Entity]] = {
+    "task": TaskEntity,
+    "dataset": DatasetEntity,
+    "workflow-run": WorkflowRunEntity,
+    "research-package": ResearchPackageEntity,
+    "mechanism": MechanismEntity,
+    "theme": ThemeEntity,
+    "book": BookEntity,
+    "paper": PaperEntity,
+    "talk": TalkEntity,
+    "structural-chain": StructuralChainEntity,
+    "chain-audit": ChainAuditEntity,
+    "code-file": CodeFileEntity,
+    "evidence-line": EvidenceLineEntity,
+    "inquiry": InquiryEntity,
+    "proposition": PropositionEntity,
+    "patch-definition": PatchDefinitionEntity,
 }
 
 
@@ -113,77 +84,20 @@ class EntityRegistry:
 
     @classmethod
     def with_core_types(cls) -> "EntityRegistry":
-        """Return a registry pre-populated with Science core kinds."""
+        """Return a registry pre-populated with Science core kinds, read from the
+        descriptor SSOT (CORE_PROFILE). Model class comes from CORE_KIND_MODELS;
+        kinds without a typed subclass default to ProjectEntity."""
         r = cls()
-        # Typed entities
-        r.register_core_kind("task", TaskEntity, entity_class=_CORE_KIND_CLASSES["task"])
-        r.register_core_kind("dataset", DatasetEntity, entity_class=_CORE_KIND_CLASSES["dataset"])
-        r.register_core_kind("workflow-run", WorkflowRunEntity, entity_class=_CORE_KIND_CLASSES["workflow-run"])
-        r.register_core_kind(
-            "research-package", ResearchPackageEntity, entity_class=_CORE_KIND_CLASSES["research-package"]
-        )
-        r.register_core_kind("mechanism", MechanismEntity, entity_class=_CORE_KIND_CLASSES["mechanism"])
-        r.register_core_kind("theme", ThemeEntity, entity_class=_CORE_KIND_CLASSES["theme"])
-        r.register_core_kind("book", BookEntity, entity_class=_CORE_KIND_CLASSES["book"])
-        r.register_core_kind("paper", PaperEntity, entity_class=_CORE_KIND_CLASSES["paper"])
-        r.register_core_kind("talk", TalkEntity, entity_class=_CORE_KIND_CLASSES["talk"])
-        r.register_core_kind(
-            "structural-chain",
-            StructuralChainEntity,
-            entity_class=_CORE_KIND_CLASSES["structural-chain"],
-        )
-        r.register_core_kind(
-            "chain-audit",
-            ChainAuditEntity,
-            entity_class=_CORE_KIND_CLASSES["chain-audit"],
-        )
-        r.register_core_kind("code-file", CodeFileEntity, entity_class=_CORE_KIND_CLASSES["code-file"])
-        r.register_core_kind(
-            "evidence-line",
-            EvidenceLineEntity,
-            entity_class=_CORE_KIND_CLASSES["evidence-line"],
-        )
-        r.register_core_kind("inquiry", InquiryEntity, entity_class=_CORE_KIND_CLASSES["inquiry"])
-        r.register_core_kind("proposition", PropositionEntity, entity_class=_CORE_KIND_CLASSES["proposition"])
-        r.register_core_kind(
-            "patch-definition",
-            PatchDefinitionEntity,
-            entity_class=_CORE_KIND_CLASSES["patch-definition"],
-        )
-        # Generic project kinds → ProjectEntity.
-        for kind in (
-            "concept",
-            "construct",
-            "hypothesis",
-            "question",
-            "observation",
-            "outcome",
-            "research-question",
-            "topic",
-            "interpretation",
-            "discussion",
-            "plan",
-            "pre-registration",
-            "assumption",
-            "transformation",
-            "variable",
-            "method",
-            "experiment",
-            "article",
-            "workflow",
-            "workflow-step",
-            "data-package",
-            "finding",
-            "story",
-            "search",
-            "report",
-            "synthesis",
-            "validation-report",
-            "unknown",
-            "spec",
-            "curation-sweep",
-        ):
-            r.register_core_kind(kind, ProjectEntity, entity_class=_CORE_KIND_CLASSES[kind])
+        for ek in CORE_PROFILE.entity_kinds:
+            if ek.category not in (KindCategory.AUTHORED_CORE, KindCategory.RESERVED):
+                continue
+            if ek.entity_class is None:
+                raise ValueError(f"core kind {ek.name!r} has no entity_class in CORE_PROFILE")
+            r.register_core_kind(
+                ek.name,
+                CORE_KIND_MODELS.get(ek.name, ProjectEntity),
+                entity_class=ek.entity_class,
+            )
         return r
 
     def register_core_kind(self, kind: str, cls: type[Entity], *, entity_class: EntityClass) -> None:
@@ -261,6 +175,10 @@ class EntityRegistry:
 
     def is_core_kind(self, kind: str) -> bool:
         return kind in self._core
+
+    def core_kinds(self) -> frozenset[str]:
+        """Names of the registered core kinds (for reconciliation tests)."""
+        return frozenset(self._core)
 
     def kind_class(self, kind: str) -> EntityClass:
         if kind not in self._kind_class:

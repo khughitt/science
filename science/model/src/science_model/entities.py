@@ -9,7 +9,7 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from science_model.identity import EntityScope, ExternalId
+from science_model.identity import EntityClass, EntityScope, ExternalId  # noqa: F401  (EntityClass re-exported; relocated to identity in Spec 2)
 from science_model.packages.schema import (
     AccessBlock,
     DatasetUsage,
@@ -72,17 +72,21 @@ class EntityType(StrEnum):
     """Known entity types across Science projects."""
 
     CONCEPT = "concept"
+    CONSTRUCT = "construct"
     HYPOTHESIS = "hypothesis"
     QUESTION = "question"
+    RESEARCH_QUESTION = "research-question"
     PROPOSITION = "proposition"
     PATCH_DEFINITION = "patch-definition"
     OBSERVATION = "observation"
+    OUTCOME = "outcome"
     INQUIRY = "inquiry"
     TOPIC = "topic"
     INTERPRETATION = "interpretation"
     DISCUSSION = "discussion"
     MODEL = "model"
     PLAN = "plan"
+    PRE_REGISTRATION = "pre-registration"
     ASSUMPTION = "assumption"
     TRANSFORMATION = "transformation"
     VARIABLE = "variable"
@@ -93,8 +97,11 @@ class EntityType(StrEnum):
     WORKFLOW = "workflow"
     WORKFLOW_RUN = "workflow-run"
     WORKFLOW_STEP = "workflow-step"
+    STRUCTURAL_CHAIN = "structural-chain"
+    CHAIN_AUDIT = "chain-audit"
     DATA_PACKAGE = "data-package"
     RESEARCH_PACKAGE = "research-package"
+    CURATION_SWEEP = "curation-sweep"
     FINDING = "finding"
     STORY = "story"
     THEME = "theme"
@@ -108,26 +115,12 @@ class EntityType(StrEnum):
     VALIDATION_REPORT = "validation-report"
     TASK = "task"
     SPEC = "spec"
+    DECISION = "decision"
+    CLAIM_REGISTRY = "claim-registry"
     CANONICAL_PARAMETER = "canonical_parameter"
     CODE_FILE = "code-file"
     EVIDENCE_LINE = "evidence-line"
     UNKNOWN = "unknown"
-
-
-class EntityClass(StrEnum):
-    """High-level taxonomic classification of an entity kind.
-
-    Distinguishes which kinds carry continuous belief (epistemic), which
-    represent operational artifacts produced by project work (operational),
-    and which name external things that rarely change (reference).
-
-    Used by the freshness engine to decide whether an entity participates
-    in `bears_on` propagation: only EPISTEMIC entities are valid targets.
-    """
-
-    EPISTEMIC = "epistemic"
-    OPERATIONAL = "operational"
-    REFERENCE = "reference"
 
 
 class EpistemicReviewState(BaseModel):

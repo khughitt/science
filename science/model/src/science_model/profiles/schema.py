@@ -2,9 +2,22 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+from science_model.identity import EntityClass
+
+EntityFilenameStrategy = Literal["numeric", "citekey", "singleton", "slug", "verbatim"]
+
+
+class KindCategory(StrEnum):
+    """Named-contract taxonomy for kinds (design §2.3)."""
+
+    AUTHORED_CORE = "authored-core"
+    RESERVED = "reserved"
+    SOURCE_ONLY = "source-only"
 
 
 class EntityKind(BaseModel):
@@ -14,11 +27,14 @@ class EntityKind(BaseModel):
     canonical_prefix: str
     layer: str
     description: str
-    entity_class: str | None = None  # "epistemic" | "operational" | "reference"; None defaults to caller's choice
+    entity_class: EntityClass | None = None
+    category: KindCategory | None = None  # None for project-local kinds (only built-in profiles set it)
+    template_ready: bool = False  # renders through the migrated Renderer path (== today's MIGRATED_KINDS)
+    shortform: str | None = None  # single-letter CLI alias, e.g. "h" -> hypothesis
     # Layout/status overrides for project-local markdown kinds (v3 layout). All
     # optional; defaults derive name->entities/<name>/, numeric strategy, "active".
     home: str | None = None
-    strategy: str | None = None  # "numeric" | "citekey" (singleton is core-only)
+    strategy: str | None = None  # raw manifest input; the EntityFilenameStrategy vocab is enforced tool-side by the path-policy loader, not at the schema boundary
     default_status: str | None = None
     statuses: list[str] | None = None
     # Structured-source declaration: a project-local kind whose entities are

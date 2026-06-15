@@ -157,7 +157,7 @@ def test_home_override_core_collision_is_skipped_with_warning(tmp_path: Path) ->
     assert "gadget" in {kind for kind, _ in local_kind_warnings(tmp_path)}
 
 
-@pytest.mark.parametrize("bad_strategy", ["banana", "singleton"])
+@pytest.mark.parametrize("bad_strategy", ["banana", "singleton", "verbatim"])
 def test_strategy_override_unknown_is_skipped_with_warning(tmp_path: Path, bad_strategy: str) -> None:
     manifest = _LOCAL_MANIFEST.replace(
         "    home: entities/gizmos\n", f"    home: entities/gizmos\n    strategy: {bad_strategy}\n"
@@ -167,6 +167,7 @@ def test_strategy_override_unknown_is_skipped_with_warning(tmp_path: Path, bad_s
     policies = load_local_entity_policies(tmp_path)
     assert "gadget" not in policies
     assert "gadget" in {kind for kind, _ in local_kind_warnings(tmp_path)}
+    assert "design" in policies  # valid sibling kind still loads; only the bad kind was dropped
 
 
 def test_valid_manifest_has_no_local_kind_warnings(tmp_path: Path) -> None:
