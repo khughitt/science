@@ -14,9 +14,9 @@
 
 ## Conventions for every task
 
-- **Worktree:** Work happens in an isolated git worktree created via `superpowers:using-git-worktrees`. Every subagent MUST `cd` into the worktree path and `git branch --show-current` to confirm it is on the feature branch before editing or committing — commits must not leak to `main`.
-- **Repo layout:** the repo root is `~/d/science`; the Python workspace member lives in `~/d/science/science/`. Run pytest from the workspace dir: `cd <worktree>/science && uv run --frozen pytest …`. `rtk` has no `uv` subcommand; do not use `rtk pytest` (it collects 0 tests in this uv workspace).
-- **Git:** use `rtk git …` for status/diff/commit. **Do NOT** include any `Co-Authored-By` trailer.
+- **Worktree:** Work happens in an isolated git worktree created via `superpowers:using-git-worktrees`. Every subagent MUST `cd` into the worktree path and run `rtk git branch --show-current` to confirm it is on the feature branch before editing or committing — commits must not leak to `main`.
+- **Repo layout:** the repo root is `~/d/science`; the Python workspace member lives in `~/d/science/science/`. Run Python tooling from the workspace dir via the raw `rtk` proxy (`rtk` has no `uv`/`pytest` subcommand of its own, so pass them through `rtk proxy`): `cd <worktree>/science && rtk proxy uv run --frozen pytest …`. Do NOT use `rtk pytest` or `rtk uv` (they collect 0 tests / are unrecognized in this uv workspace).
+- **Git:** use `rtk git …` for status/diff/commit/branch. **Do NOT** include any `Co-Authored-By` trailer.
 - **Paths in code/docs:** write `~/d/…`, never `/home/keith/…` or `/mnt/ssd/Dropbox/…`.
 - **Behavior-neutral:** this slice changes no behavior. The pytest summary line is sometimes swallowed by warning capture in this repo — confirm green via exit code 0 (`echo "EXIT=$?"`) or `--junit-xml`, not the printed summary.
 - **`science_model` must never import `science_tool`** (not touched here, but keep it true).
@@ -82,7 +82,7 @@ def test_leaf_module_does_not_import_sources_or_adapters() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd <worktree>/science && uv run --frozen pytest tests/graph/test_source_records_relocation.py -v`
+Run: `cd <worktree>/science && rtk proxy uv run --frozen pytest tests/graph/test_source_records_relocation.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'science_tool.graph.source_records'`.
 
 - [ ] **Step 3: Create the leaf module**
@@ -148,7 +148,7 @@ Leave every other use of these names in `sources.py` (the `ProjectSources` field
 
 Run:
 ```
-cd <worktree>/science && uv run --frozen pytest \
+cd <worktree>/science && rtk proxy uv run --frozen pytest \
   tests/graph/test_source_records_relocation.py \
   tests/test_entity_identity_health.py \
   tests/graph/test_aggregate_retire_decisions.py \
@@ -185,7 +185,7 @@ Create `science/tests/graph/test_adapter_policy_surface.py`:
 ```python
 from __future__ import annotations
 
-from science_model.entities import ProjectEntity
+from science_model.entities import EntityType, ProjectEntity
 from science_model.source_ref import SourceRef
 
 from science_tool.graph.identity_table import ParticipationMode
@@ -197,13 +197,30 @@ from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
 from science_tool.graph.storage_adapters.task import TaskAdapter
 
 
+def _mk_entity(cid: str, kind: str) -> ProjectEntity:
+    """Minimal valid ProjectEntity (all required base fields supplied)."""
+    return ProjectEntity(
+        id=cid,
+        canonical_id=cid,
+        kind=kind,
+        type=EntityType(kind),
+        title="X",
+        project="test",
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path="test",
+    )
+
+
 def test_base_defaults_are_inert() -> None:
     # TaskAdapter overrides none of the new policy → it exercises the base defaults.
     adapter = TaskAdapter()
     assert adapter.skip_core_on_missing_identity is False
     assert adapter.should_defer(already_owned=True) is False
     assert adapter.source_document(SourceRef(adapter_name="task", path="t.md"), {}) is None
-    entity = ProjectEntity(canonical_id="task:t1", type="task", title="T")
+    entity = _mk_entity("task:t1", "task")
     assert adapter.on_owner_declared(
         entity=entity, ref=SourceRef(adapter_name="task", path="t.md"), raw={}, kind="task"
     ) is None
@@ -236,7 +253,7 @@ def test_datapackage_overrides() -> None:
     adapter = DatapackageAdapter()
     assert adapter.should_defer(already_owned=True) is True
     assert adapter.should_defer(already_owned=False) is False
-    entity = ProjectEntity(canonical_id="dataset:ds2", type="dataset", title="DS2")
+    entity = _mk_entity("dataset:ds2", "dataset")
     ref = SourceRef(adapter_name="datapackage", path="data/ds2/datapackage.yaml")
     assert adapter.deferred_dataset_datapackage(entity=entity, ref=ref) == (
         "dataset:ds2",
@@ -246,7 +263,7 @@ def test_datapackage_overrides() -> None:
 
 def test_aggregate_on_owner_declared_builds_row_meta() -> None:
     adapter = AggregateAdapter(local_profile="local")
-    entity = ProjectEntity(canonical_id="concept:coined", type="concept", title="Coined")
+    entity = _mk_entity("concept:coined", "concept")
     ref = SourceRef(adapter_name="aggregate", path="knowledge/sources/local/entities.yaml", line=0)
     meta = adapter.on_owner_declared(entity=entity, ref=ref, raw={"source_path": "x"}, kind="concept")
     assert isinstance(meta, AggregateRowMeta)
@@ -257,11 +274,9 @@ def test_aggregate_on_owner_declared_builds_row_meta() -> None:
     assert meta.primary_external_id is None
 ```
 
-> If `ProjectEntity(canonical_id=…, type=…, title=…)` rejects a kind for missing required fields, construct the entity through the registry the way `tests/test_load_project_sources_unified.py` does instead — but the three kinds used here (`task`, `dataset`, `concept`) are minimal-field kinds and should accept these kwargs directly. Confirm at Step 2.
-
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd <worktree>/science && uv run --frozen pytest tests/graph/test_adapter_policy_surface.py -v`
+Run: `cd <worktree>/science && rtk proxy uv run --frozen pytest tests/graph/test_adapter_policy_surface.py -v`
 Expected: FAIL — `AttributeError: 'TaskAdapter' object has no attribute 'should_defer'` (and similar).
 
 - [ ] **Step 3: Add the policy surface to the base**
@@ -460,8 +475,8 @@ from science_tool.graph.source_records import AggregateRowMeta
 
 Run:
 ```
-cd <worktree>/science && uv run --frozen pytest tests/graph/test_adapter_policy_surface.py -v ; echo "EXIT=$?"
-cd <worktree>/science && uv run --frozen pytest -q ; echo "FULL_EXIT=$?"
+cd <worktree>/science && rtk proxy uv run --frozen pytest tests/graph/test_adapter_policy_surface.py -v ; echo "EXIT=$?"
+cd <worktree>/science && rtk proxy uv run --frozen pytest -q ; echo "FULL_EXIT=$?"
 ```
 Expected: EXIT=0 and FULL_EXIT=0 (additive change; nothing wired yet, so all existing tests still pass).
 
@@ -478,34 +493,36 @@ rtk git commit -m "feat(source-compiler): declare adapter load-time policy on St
 
 ---
 
-## Task 3: Characterization tests pinning every collapsed branch
+## Task 3: Characterization test pinning the FULL load output
 
-Builds two minimal projects that exercise all five branch points and asserts the exact current outputs. These run GREEN on the current (pre-flip) loop — proving the captured expectations are real current behavior — and Task 4's flip must keep them green. Shapes are lifted from existing passing tests.
+Builds two minimal projects that exercise all five branch points, then captures the **full normalized load output** — `entities`, `identity_declarations`, `skipped_entities`, `markdown_documents`, `aggregate_rows`, `dataset_datapackages`, `entity_source_adapters` — and asserts it equals a frozen expected value **field for field** (the design's equivalence guarantee). The frozen literals below were captured from the current (pre-flip) loop, so the test runs GREEN now; Task 4's flip must keep it green. Fixture shapes are lifted from existing passing tests; the strict/non-strict split is required because branch 2 (missing-identity skip) is only meaningful under `strict_core_schema=True` while the bib→aggregate-stub defer (branch 4) is exercised under `strict_core_schema=False` (mirroring `tests/graph/test_bib_external_reference_load.py`).
 
 **Files:**
 - Test: `science/tests/graph/test_source_load_equivalence.py`
 
-- [ ] **Step 1: Write the characterization tests (must pass on current code)**
+- [ ] **Step 1: Write the full-snapshot characterization test (must pass on current code)**
 
 Create `science/tests/graph/test_source_load_equivalence.py`:
 
 ```python
-"""Behavior-neutral pinning tests for the Spec 3 Slice A loop refactor.
+"""Behavior-neutral pinning test for the Spec 3 Slice A loop refactor.
 
-Each test exercises a branch that moves from the load loop onto adapter policy:
-1 markdown source_document, 2 missing-identity skip under strict, 3 datapackage
-defer onto a markdown owner, 4 external-ref (bib) defer onto an aggregate stub,
-5 aggregate row-meta capture. They pass on the pre-refactor loop and must stay
-green after the loop is rewritten.
+Two fixtures exercise every branch that moves from the load loop onto adapter
+policy: 1 markdown source_document, 2 missing-identity skip under strict, 3
+datapackage defer onto a markdown owner, 4 external-ref (bib) defer onto an
+aggregate stub, 5 aggregate row-meta capture. `_snapshot` captures the full
+normalized load output; the test asserts it equals a frozen value captured from
+the pre-refactor loop. The flip in Task 4 must keep this green field-for-field.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import yaml
 
-from science_tool.graph.sources import load_project_sources
+from science_tool.graph.sources import ProjectSources, load_project_sources
 
 _MANIFEST = "name: slice-a\nprofile: research\nprofiles: {local: local}\n"
 
@@ -516,83 +533,75 @@ def _write(root: Path, rel: str, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def test_strict_load_branches_1_2_3(tmp_path: Path) -> None:
-    # science.yaml
-    _write(tmp_path, "science.yaml", _MANIFEST)
+def _snapshot(s: ProjectSources) -> dict[str, Any]:
+    """Normalize the full load output into deterministic, comparable values."""
+    return {
+        "entities": [e.canonical_id for e in s.entities],  # load sorts by canonical_id
+        "identity_declarations": sorted(
+            (d.canonical_id, d.participation_mode.value, d.owner_scope, d.adapter, d.deprecated)
+            for d in s.identity_declarations
+        ),
+        "skipped_entities": sorted((x.path, x.kind, x.reason) for x in s.skipped_entities),
+        "markdown_documents": sorted(
+            (d.path, tuple(sorted(d.frontmatter)), d.body) for d in s.markdown_documents
+        ),
+        "aggregate_rows": sorted(
+            (
+                m.path,
+                m.line,
+                m.canonical_id,
+                m.kind,
+                m.source_path,
+                tuple(sorted(m.primary_external_id.items())) if m.primary_external_id else None,
+            )
+            for m in s.aggregate_rows
+        ),
+        "dataset_datapackages": dict(s.dataset_datapackages),
+        "entity_source_adapters": dict(s.entity_source_adapters),
+    }
+
+
+def _build_strict_project(root: Path) -> None:
+    _write(root, "science.yaml", _MANIFEST)
     # branch 1 + a normal markdown owner
     _write(
-        tmp_path,
+        root,
         "entities/hypotheses/h1.md",
         '---\nid: "hypothesis:h1"\ntype: "hypothesis"\ntitle: "H1"\n---\nbody\n',
     )
     # branch 2: core hypothesis missing identity → skip-warn even under strict
-    _write(
-        tmp_path,
-        "entities/hypotheses/bad.md",
-        '---\ntype: "hypothesis"\ntitle: "Bad"\n---\n',
-    )
+    _write(root, "entities/hypotheses/bad.md", '---\ntype: "hypothesis"\ntitle: "Bad"\n---\n')
     # branch 3: markdown dataset owner that a datapackage will defer to
     _write(
-        tmp_path,
+        root,
         "entities/datasets/ds2.md",
         '---\nid: "dataset:ds2"\ntype: "dataset"\ntitle: "DS2"\n'
         'origin: "external"\naccess: {level: "public", verified: false}\n---\n',
     )
-    # branch 3: the deferring datapackage (same id as the markdown owner)
+    # branch 3: the deferring datapackage (same id as the markdown owner) + an orphan
+    for dsid in ("ds2", "ds1"):
+        _write(
+            root,
+            f"data/{dsid}/datapackage.yaml",
+            yaml.safe_dump(
+                {
+                    "profiles": ["science-pkg-entity-1.0"],
+                    "name": dsid,
+                    "id": f"dataset:{dsid}",
+                    "type": "dataset",
+                    "title": dsid.upper(),
+                    "origin": "external",
+                    "access": {"level": "public", "verified": False},
+                }
+            ),
+        )
+
+
+def _build_nonstrict_project(root: Path) -> None:
+    _write(root, "science.yaml", _MANIFEST)
+    # branch 5: aggregate rows captured; branch 4: paper stub the bib defers to
     _write(
-        tmp_path,
-        "data/ds2/datapackage.yaml",
-        yaml.safe_dump(
-            {
-                "profiles": ["science-pkg-entity-1.0"],
-                "name": "ds2",
-                "id": "dataset:ds2",
-                "type": "dataset",
-                "title": "DS2",
-                "origin": "external",
-                "access": {"level": "public", "verified": False},
-            }
-        ),
-    )
-    # an orphan datapackage that BECOMES the owner (no markdown owner for ds1)
-    _write(
-        tmp_path,
-        "data/ds1/datapackage.yaml",
-        yaml.safe_dump(
-            {
-                "profiles": ["science-pkg-entity-1.0"],
-                "name": "ds1",
-                "id": "dataset:ds1",
-                "type": "dataset",
-                "title": "DS1",
-                "origin": "external",
-                "access": {"level": "public", "verified": False},
-            }
-        ),
-    )
-
-    sources = load_project_sources(tmp_path, include_commons=False)  # strict defaults
-
-    # branch 1: the markdown owner produced a source document
-    assert any(d.path == "entities/hypotheses/h1.md" for d in sources.markdown_documents)
-
-    # branch 2: the identity-less core entity was skipped, not raised
-    bad = [s for s in sources.skipped_entities if s.path == "entities/hypotheses/bad.md"]
-    assert bad and bad[0].reason == "entity_schema_validation_failed"
-
-    # branch 3: datapackage deferred to the markdown owner; markdown won the column
-    assert sources.dataset_datapackages["dataset:ds2"] == "data/ds2/datapackage.yaml"
-    assert sources.entity_source_adapters["dataset:ds2"] == "markdown"
-    # the orphan datapackage owns its id
-    assert sources.entity_source_adapters["dataset:ds1"] == "datapackage"
-    assert "dataset:ds1" not in sources.dataset_datapackages
-
-
-def test_nonstrict_load_branches_4_5(tmp_path: Path) -> None:
-    _write(tmp_path, "science.yaml", _MANIFEST)
-    # branch 5: aggregate row captured; branch 4: paper stub the bib will defer to
-    _write(
-        tmp_path,
+        root,
         "knowledge/sources/local/entities.yaml",
         yaml.safe_dump(
             {
@@ -609,31 +618,90 @@ def test_nonstrict_load_branches_4_5(tmp_path: Path) -> None:
         ),
     )
     # branch 4: bib has the same paper id → defers to the aggregate stub
-    _write(tmp_path, "papers/references.bib", "@article{Smith2024,\n  title = {Cells},\n}\n")
+    _write(root, "papers/references.bib", "@article{Smith2024,\n  title = {Cells},\n}\n")
 
+
+# Frozen expected output, captured from the current (pre-flip) loop.
+EXPECTED_STRICT: dict[str, Any] = {
+    "entities": ["dataset:ds1", "dataset:ds2", "hypothesis:h1"],
+    "identity_declarations": [
+        ("dataset:ds1", "owner", "slice-a", "datapackage", True),
+        ("dataset:ds2", "owner", "slice-a", "markdown", False),
+        ("hypothesis:h1", "owner", "slice-a", "markdown", False),
+    ],
+    "skipped_entities": [
+        ("entities/hypotheses/bad.md", "hypothesis", "entity_schema_validation_failed"),
+    ],
+    "markdown_documents": [
+        (
+            "entities/datasets/ds2.md",
+            ("access", "canonical_id", "file_path", "id", "kind", "origin", "title", "type"),
+            "",
+        ),
+        ("entities/hypotheses/bad.md", ("file_path", "kind", "title", "type"), ""),
+        (
+            "entities/hypotheses/h1.md",
+            ("canonical_id", "file_path", "id", "kind", "title", "type"),
+            "body\n",
+        ),
+    ],
+    "aggregate_rows": [],
+    "dataset_datapackages": {"dataset:ds2": "data/ds2/datapackage.yaml"},
+    "entity_source_adapters": {
+        "dataset:ds1": "datapackage",
+        "dataset:ds2": "markdown",
+        "hypothesis:h1": "markdown",
+    },
+}
+
+EXPECTED_NONSTRICT: dict[str, Any] = {
+    "entities": ["concept:coined", "paper:Smith2024"],
+    "identity_declarations": [
+        ("concept:coined", "owner", "slice-a", "aggregate", True),
+        ("paper:Smith2024", "owner", "slice-a", "aggregate", True),
+    ],
+    "skipped_entities": [],
+    "markdown_documents": [],
+    "aggregate_rows": [
+        (
+            "knowledge/sources/local/entities.yaml",
+            0,
+            "concept:coined",
+            "concept",
+            "knowledge/sources/local/entities.yaml",
+            None,
+        ),
+        ("knowledge/sources/local/entities.yaml", 1, "paper:Smith2024", "paper", None, None),
+    ],
+    "dataset_datapackages": {},
+    "entity_source_adapters": {"concept:coined": "aggregate", "paper:Smith2024": "aggregate"},
+}
+
+
+def test_strict_load_full_output_is_unchanged(tmp_path: Path) -> None:
+    _build_strict_project(tmp_path)
+    sources = load_project_sources(tmp_path, include_commons=False)  # strict defaults
+    assert _snapshot(sources) == EXPECTED_STRICT
+
+
+def test_nonstrict_load_full_output_is_unchanged(tmp_path: Path) -> None:
+    _build_nonstrict_project(tmp_path)
     sources = load_project_sources(
         tmp_path, include_commons=False, strict_core_schema=False, strict_identity=True
     )
-
-    # branch 5: aggregate rows captured for both rows
-    agg_ids = {m.canonical_id for m in sources.aggregate_rows}
-    assert {"concept:coined", "paper:Smith2024"} <= agg_ids
-
-    # branch 4: the aggregate stub won the owner column; bib deferred (no 2nd decl)
-    paper_decls = [d for d in sources.identity_declarations if d.canonical_id == "paper:Smith2024"]
-    assert paper_decls and all(d.adapter == "aggregate" for d in paper_decls)
+    assert _snapshot(sources) == EXPECTED_NONSTRICT
 ```
 
 - [ ] **Step 2: Run on the current (pre-flip) loop and confirm GREEN**
 
-Run: `cd <worktree>/science && uv run --frozen pytest tests/graph/test_source_load_equivalence.py -v ; echo "EXIT=$?"`
-Expected: EXIT=0. These characterize current behavior, so they must pass *before* the loop changes. If a fixture field is rejected (e.g. a kind needs another required field), adjust the fixture until green — do NOT relax an assertion; the assertions are the behavior contract.
+Run: `cd <worktree>/science && rtk proxy uv run --frozen pytest tests/graph/test_source_load_equivalence.py -v ; echo "EXIT=$?"`
+Expected: EXIT=0. The frozen `EXPECTED_*` literals were captured from current behavior, so the test must pass *before* the loop changes. If a literal mismatches (e.g. the environment differs), re-capture by printing `_snapshot(...)` for each fixture and update the literal to match current behavior — do NOT change the fixture or weaken `_snapshot`; the captured output IS the behavior contract the flip must preserve.
 
 - [ ] **Step 3: Commit**
 
 ```bash
 rtk git add science/tests/graph/test_source_load_equivalence.py
-rtk git commit -m "test(source-compiler): pin source-load branch behavior before Slice A flip"
+rtk git commit -m "test(source-compiler): pin full source-load output before Slice A flip"
 ```
 
 ---
@@ -669,7 +737,7 @@ def test_load_loop_has_no_adapter_type_or_name_branching() -> None:
 
 - [ ] **Step 2: Run guard to verify it fails**
 
-Run: `cd <worktree>/science && uv run --frozen pytest tests/graph/test_load_loop_no_adapter_branching.py -v`
+Run: `cd <worktree>/science && rtk proxy uv run --frozen pytest tests/graph/test_load_loop_no_adapter_branching.py -v`
 Expected: FAIL — both `isinstance(adapter,` and `adapter.name ==` are present in the current loop.
 
 - [ ] **Step 3: Rewrite the loop body**
@@ -796,12 +864,12 @@ Leave `owner_scope, deprecated = classify_owner_scope(adapter.name, project_name
 
 Run:
 ```
-cd <worktree>/science && uv run --frozen pytest \
+cd <worktree>/science && rtk proxy uv run --frozen pytest \
   tests/graph/test_load_loop_no_adapter_branching.py \
   tests/graph/test_source_load_equivalence.py \
   tests/graph/test_adapter_policy_surface.py \
   tests/graph/test_source_records_relocation.py -v ; echo "EXIT=$?"
-cd <worktree>/science && uv run --frozen pytest -q ; echo "FULL_EXIT=$?"
+cd <worktree>/science && rtk proxy uv run --frozen pytest -q ; echo "FULL_EXIT=$?"
 ```
 Expected: EXIT=0 (guard now passes; characterization tests still green) and FULL_EXIT=0 (≈ 5500+ tests, behavior unchanged). If the full suite reports an empty summary line, re-run with `--junit-xml=/tmp/slice-a.xml` and confirm 0 failures/errors.
 
@@ -809,7 +877,7 @@ Expected: EXIT=0 (guard now passes; characterization tests still green) and FULL
 
 Run:
 ```
-cd <worktree>/science && uv run --frozen ruff check \
+cd <worktree>/science && rtk proxy uv run --frozen ruff check \
   src/science_tool/graph/source_records.py \
   src/science_tool/graph/sources.py \
   src/science_tool/graph/storage_adapters/base.py \
@@ -838,10 +906,10 @@ rtk git commit -m "refactor(source-compiler): drive source-load loop from adapte
 - `classify_owner_scope` kept (design §"owner_scope policy stays consolidated") → Task 4 leaves it untouched; guard allows `classify_owner_scope(adapter.name, …)` while forbidding `adapter.name ==`.
 - Rewritten uniform loop (design §"The rewritten loop") → Task 4.
 - Error policy preserved exactly, only `skip_core_on_missing_identity` lifted (design §"Error policy") → Task 4 Edit B.
-- Behavior-neutral guarantee with the full output captured incl. `entity_source_adapters` (design §"Behavior-neutral guarantee & testing") → Task 3 asserts branches 1–5 + `entity_source_adapters` + `dataset_datapackages`.
+- Behavior-neutral guarantee with the full output captured incl. `entity_source_adapters` (design §"Behavior-neutral guarantee & testing") → Task 3 asserts the FULL normalized load output (all 7 fields: `entities`, `identity_declarations`, `skipped_entities`, `markdown_documents`, `aggregate_rows`, `dataset_datapackages`, `entity_source_adapters`) equals a frozen literal captured from current behavior, field-for-field.
 - Success criterion "no `isinstance(adapter,…)` / `adapter.name ==`" → Task 4 guard test.
 - Out-of-scope items (error rationalization, legacy-loaders-as-adapters, `SourceSnapshot`) → not in any task, by design.
 
-**2. Placeholder scan:** No TBD/TODO; every code step shows complete code; the one judgment note (entity construction in Task 2) gives a concrete fallback.
+**2. Placeholder scan:** No TBD/TODO; every code step shows complete code. Task 2 uses a verified `_mk_entity` helper (full minimal `ProjectEntity` shape); Task 3's frozen `EXPECTED_*` literals were captured from the live pre-flip loop.
 
 **3. Type/name consistency:** Method names and signatures match across base (Task 2), overrides (Task 2), and call sites (Task 4): `should_defer(*, already_owned)`, `source_document(ref, raw)`, `on_owner_declared(*, entity, ref, raw, kind)`, `deferred_dataset_datapackage(*, entity, ref) -> tuple[str, str] | None`, `skip_core_on_missing_identity`. Record types `MarkdownSourceDocument` / `AggregateRowMeta` are created in Task 1 and imported consistently thereafter.
