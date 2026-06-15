@@ -9,11 +9,14 @@ import httpx
 import pytest
 
 from science_tool.annotation.source_text import (
+    EUROPEPMC_API_VERSION,
+    AcquiredSource,
     Passage,
     PassageOffset,
     ResolvedPaper,
     SourcePassages,
     SourceTextError,
+    acquire_source_text,
     is_whitelisted,
     parse_bioc_passages,
     render_source_md,
@@ -22,6 +25,7 @@ from science_tool.annotation.source_text import (
     verify_offset_map,
     write_source_md,
 )
+from science_tool.paper_fetch import FetchConfig
 
 
 # Representative PubTator3 BioC abstract record: title + abstract passages, with a
@@ -424,3 +428,103 @@ class TestWriteSourceMd:
         for entry in fm["passages"]:
             base, length = entry["file_char_base"], entry["length"]
             assert text[base : base + length] in {"An abstract sentence.", "Full text body paragraph."}
+
+
+def _cfg(tmp_path: Path) -> FetchConfig:
+    return FetchConfig(email="test@example.com", cache_dir=tmp_path, sleep=lambda _s: None)
+
+
+_PUBTATOR_HOST = "www.ncbi.nlm.nih.gov"
+_EPMC_HOST = "www.ebi.ac.uk"
+
+
+class TestAcquireSourceText:
+    def test_prefers_pubtator_bioc_abstract(self, tmp_path: Path) -> None:
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == _PUBTATOR_HOST:
+                return httpx.Response(200, json=_BIOC_RECORD)
+            if req.url.host == _EPMC_HOST:
+                return httpx.Response(
+                    200,
+                    json={"resultList": {"result": [{"license": "CC-BY"}]}},
+                )
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        acquired = acquire_source_text(
+            pmid="123456", doi="10.1038/foo-1", cfg=_cfg(tmp_path), http=_make_client(handler)
+        )
+        assert isinstance(acquired, AcquiredSource)
+        assert acquired.retrieved_from == "pubtator3"
+        assert acquired.abstract.passages[0].text == "BRCA1 in cancer"
+        assert acquired.license == "CC-BY"
+        assert acquired.licensed is True
+        # _BIOC_RECORD has only title+abstract -> no full text.
+        assert acquired.fulltext is None
+        assert acquired.abstract.release == "2024.01"  # BioC release, not a marker
+
+    def test_bioc_body_sections_become_fulltext(self, tmp_path: Path) -> None:
+        record = {
+            "PubTator3": [
+                {
+                    "infons": {"_release": "2024.01"},
+                    "passages": [
+                        {"offset": 0, "text": "T", "infons": {"type": "title"}},
+                        {"offset": 2, "text": "Abstract here.", "infons": {"type": "abstract"}},
+                        {"offset": 17, "text": "Methods paragraph.", "infons": {"type": "methods"}},
+                    ],
+                }
+            ]
+        }
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == _PUBTATOR_HOST:
+                return httpx.Response(200, json=record)
+            if req.url.host == _EPMC_HOST:
+                return httpx.Response(200, json={"resultList": {"result": [{"license": "CC-BY-4.0"}]}})
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        acquired = acquire_source_text(
+            pmid="123456", doi="10.1038/foo-1", cfg=_cfg(tmp_path), http=_make_client(handler)
+        )
+        assert {p.section for p in acquired.abstract.passages} == {"title", "abstract"}
+        assert acquired.fulltext is not None
+        assert acquired.fulltext.passages == (
+            Passage(section="methods", bioc_offset=17, text="Methods paragraph."),
+        )
+        assert acquired.licensed is True
+
+    def test_falls_back_to_europepmc_abstract(self, tmp_path: Path) -> None:
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == _PUBTATOR_HOST:
+                return httpx.Response(404)
+            if req.url.host == _EPMC_HOST:
+                return httpx.Response(
+                    200,
+                    json={"resultList": {"result": [{"abstractText": "Fallback abstract.", "license": "CC-BY-NC"}]}},
+                )
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        acquired = acquire_source_text(
+            pmid="123456", doi="10.1038/foo-1", cfg=_cfg(tmp_path), http=_make_client(handler)
+        )
+        assert acquired.retrieved_from == "europepmc"
+        assert acquired.abstract.passages == (
+            Passage(section="abstract", bioc_offset=0, text="Fallback abstract."),
+        )
+        # source_release must reflect the EPMC source, not a PubTator marker.
+        assert acquired.abstract.release == EUROPEPMC_API_VERSION
+        assert acquired.license == "CC-BY-NC"
+        assert acquired.licensed is False
+
+    def test_raises_when_no_abstract_anywhere(self, tmp_path: Path) -> None:
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == _PUBTATOR_HOST:
+                return httpx.Response(404)
+            if req.url.host == _EPMC_HOST:
+                return httpx.Response(200, json={"resultList": {"result": []}})
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        with pytest.raises(SourceTextError):
+            acquire_source_text(
+                pmid="123456", doi="10.1038/foo-1", cfg=_cfg(tmp_path), http=_make_client(handler)
+            )

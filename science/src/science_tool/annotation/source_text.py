@@ -17,11 +17,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import httpx
 import yaml
 
 from science_tool.commons.frontmatter import raw_frontmatter
 from science_tool.commons.promote import PROMOTE_KIND_PAPER
-from science_tool.paper_fetch import normalize_doi, normalize_pmid
+from science_tool.paper_fetch import (
+    FetchConfig,
+    RateLimiter,
+    _get_json,
+    normalize_doi,
+    normalize_pmid,
+)
 
 
 class SourceTextError(ValueError):
@@ -88,6 +95,28 @@ def parse_bioc_passages(record: dict[str, Any]) -> SourcePassages | None:
     doc_infons = di if isinstance(di, dict) else {}
     release = str(doc_infons.get("_release") or "") or PUBTATOR3_API_VERSION
     return SourcePassages(passages=tuple(passages), release=release)
+
+
+# BioC passage sections that constitute the abstract floor; everything else
+# (intro/methods/results/discussion/etc.) is best-effort full text.
+_ABSTRACT_BIOC_SECTIONS = frozenset({"title", "abstract"})
+
+
+def _split_passages(parsed: SourcePassages) -> tuple[SourcePassages, SourcePassages | None]:
+    """Partition BioC passages into (abstract, full-text-or-None) by section.
+
+    Falls back to treating all passages as the abstract when none is labeled
+    title/abstract (defensive; a malformed record should still yield the floor).
+    """
+    abstract = tuple(p for p in parsed.passages if p.section in _ABSTRACT_BIOC_SECTIONS)
+    body = tuple(p for p in parsed.passages if p.section not in _ABSTRACT_BIOC_SECTIONS)
+    abstract_sp = SourcePassages(
+        passages=abstract or parsed.passages, release=parsed.release
+    )
+    fulltext_sp = (
+        SourcePassages(passages=body, release=parsed.release) if body else None
+    )
+    return abstract_sp, fulltext_sp
 
 
 # Sidecar artifacts that must not be mistaken for paper-entity markdown.
@@ -451,3 +480,132 @@ def _build_frontmatter(
     if fulltext_omitted_reason:
         fm["fulltext_omitted_reason"] = fulltext_omitted_reason
     return fm
+
+
+# --- Text acquisition (network) ----------------------------------------------
+
+# PubTator3 BioC export endpoint (live API, JSON format). PubMed-only by design.
+_PUBTATOR3_BIOC_URL = (
+    "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/export/biocjson"
+)
+_PUBTATOR3_HOST = "www.ncbi.nlm.nih.gov"
+_EPMC_SEARCH_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+_EPMC_HOST = "www.ebi.ac.uk"
+
+
+# Marker for Europe-PMC-sourced text (no PubTator release applies).
+EUROPEPMC_API_VERSION = "europepmc-api"
+
+
+@dataclass(frozen=True)
+class AcquiredSource:
+    abstract: SourcePassages
+    fulltext: SourcePassages | None
+    retrieved_from: str
+    license: str
+    licensed: bool
+    # NOTE: the source release lives on `abstract.release` (BioC release for
+    # PubTator, EUROPEPMC_API_VERSION for the fallback) and the renderer reads it
+    # from there via `passages.release`; there is no separate `release` field to
+    # drift out of sync.
+
+
+def _fetch_bioc(
+    pmid: str, client: httpx.Client, limiter: RateLimiter, cfg: FetchConfig
+) -> SourcePassages | None:
+    _ = cfg  # reserved for future polite-pool identification / API key
+    data, _err = _get_json(
+        client, limiter, _PUBTATOR3_BIOC_URL, _PUBTATOR3_HOST, params={"pmids": pmid}
+    )
+    if not data:
+        return None
+    return parse_bioc_passages(data)
+
+
+def _fetch_europepmc_core(
+    doi: str | None, pmid: str | None, client: httpx.Client, limiter: RateLimiter
+) -> dict[str, Any] | None:
+    if doi:
+        query = f'DOI:"{doi}"'
+    elif pmid:
+        query = f"EXT_ID:{pmid} AND SRC:MED"
+    else:
+        return None
+    data, _err = _get_json(
+        client,
+        limiter,
+        _EPMC_SEARCH_URL,
+        _EPMC_HOST,
+        params={"query": query, "format": "json", "resultType": "core", "pageSize": "1"},
+    )
+    if not data:
+        return None
+    results = data.get("resultList")
+    if not isinstance(results, dict):
+        return None
+    items = results.get("result") or []
+    return items[0] if items and isinstance(items[0], dict) else None
+
+
+def acquire_source_text(
+    *,
+    pmid: str | None,
+    doi: str | None,
+    cfg: FetchConfig,
+    http: httpx.Client | None = None,
+) -> AcquiredSource:
+    """Acquire abstract text (BioC preferred, Europe PMC fallback) + license.
+
+    Full-text acquisition is best-effort and license-gated at the writer; Phase 1
+    persists the abstract floor. Raises SourceTextError when no abstract resolves.
+    """
+    owns = http is None
+    client = http or httpx.Client(
+        timeout=cfg.http_timeout, headers={"User-Agent": f"science/0.1 (mailto:{cfg.email})"}
+    )
+    try:
+        limiter = RateLimiter(cfg)
+        epmc = _fetch_europepmc_core(doi, pmid, client, limiter)
+        license_candidates: list[str | None] = []
+        if epmc:
+            license_candidates.append(_as_str(epmc.get("license")))
+
+        abstract: SourcePassages | None = None
+        fulltext: SourcePassages | None = None
+        retrieved_from = ""
+        if pmid:
+            bioc = _fetch_bioc(pmid, client, limiter, cfg)
+            if bioc is not None:
+                # PubTator3 BioC returns title+abstract always and body sections for
+                # PMC-OA articles. Split by section: abstract floor vs best-effort
+                # full text. Both share the same release; the writer license-gates
+                # full text.
+                abstract, fulltext = _split_passages(bioc)
+                retrieved_from = "pubtator3"
+
+        if abstract is None and epmc:
+            text = _as_str(epmc.get("abstractText"))
+            if text and text.strip():
+                abstract = SourcePassages(
+                    passages=(Passage(section="abstract", bioc_offset=0, text=text.strip()),),
+                    release=EUROPEPMC_API_VERSION,  # NOT a PubTator release
+                )
+                retrieved_from = "europepmc"
+                # Europe PMC fallback yields abstract only; full text stays None.
+
+        if abstract is None:
+            raise SourceTextError(
+                f"no abstract available from PubTator3 or Europe PMC for doi={doi!r} pmid={pmid!r}"
+            )
+
+        license_, licensed = resolve_license(license_candidates)
+        return AcquiredSource(
+            abstract=abstract,
+            fulltext=fulltext,
+            retrieved_from=retrieved_from,
+            license=license_,
+            licensed=licensed,
+        )
+    finally:
+        if owns:
+            client.close()
