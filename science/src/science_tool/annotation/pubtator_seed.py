@@ -147,7 +147,7 @@ class BiocRelation:
 
 def _parse_score(raw: Any) -> float | None:
     """PubTator stores `infons.score` as a stringified float; non-numeric -> None."""
-    if isinstance(raw, (int, float)):
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
         return float(raw)
     if isinstance(raw, str):
         try:

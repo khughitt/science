@@ -47,13 +47,16 @@ def test_parse_bioc_relations_counts_malformed():
                     {"infons": {"role1": {"identifier": "X", "type": "Gene"},
                                 "role2": {"identifier": "Y", "type": "Gene"}}},  # no type
                     "not-a-dict",
+                    {"infons": {"role1": {"identifier": None, "type": "Gene"},
+                                "role2": {"identifier": "Y", "type": "Gene"},
+                                "type": "Association"}},  # role identifier not a str
                 ]
             }
         ]
     }
     rels, dropped = parse_bioc_relations(rec)
     assert rels == []
-    assert dropped == {"malformed-bioc-relation": 3}
+    assert dropped == {"malformed-bioc-relation": 4}
 
 
 def test_parse_bioc_relations_non_numeric_score_is_none():
@@ -64,6 +67,22 @@ def test_parse_bioc_relations_non_numeric_score_is_none():
                     {"infons": {"role1": {"identifier": "1", "type": "Gene"},
                                 "role2": {"identifier": "2", "type": "Gene"},
                                 "type": "Association", "score": "n/a"}}
+                ]
+            }
+        ]
+    }
+    rels, _ = parse_bioc_relations(rec)
+    assert rels[0].score is None
+
+
+def test_parse_bioc_relations_bool_score_is_none():
+    rec = {
+        "PubTator3": [
+            {
+                "relations": [
+                    {"infons": {"role1": {"identifier": "1", "type": "Gene"},
+                                "role2": {"identifier": "2", "type": "Gene"},
+                                "type": "Association", "score": True}}
                 ]
             }
         ]
