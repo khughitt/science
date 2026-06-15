@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from science_model.entities import EntityClass as EntityClassFromEntities
 from science_model.identity import EntityClass
-from science_model.profiles.schema import EntityFilenameStrategy, EntityKind, KindCategory
+from science_model.profiles.schema import EntityKind, KindCategory
 
 
 def test_entity_class_defined_in_identity_and_reexported() -> None:
@@ -32,8 +32,3 @@ def test_entity_kind_typed_fields_coerce() -> None:
     assert ek.entity_class is EntityClass.EPISTEMIC
     assert ek.category is KindCategory.AUTHORED_CORE
     assert ek.strategy == "numeric"
-
-
-def test_entity_filename_strategy_is_the_relocated_literal() -> None:
-    from science_model.kinds import EntityFilenameStrategy as FromKinds
-    assert FromKinds is EntityFilenameStrategy

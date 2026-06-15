@@ -12,7 +12,7 @@ from typing import Any, cast
 import yaml
 
 from science_model.entities import ProjectEntity
-from science_model.kinds import CORE_KINDS, EntityFilenameStrategy
+from science_model.profiles.schema import EntityFilenameStrategy
 from science_model.profiles import EntityKind, ProfileManifest, load_profile_manifest
 from science_model.profiles.core import CORE_PROFILE
 from science_model.profiles.local import LOCAL_PROFILE
