@@ -118,3 +118,17 @@ def test_extract_cli_surfaces_note_on_anchor_failure(tmp_path: Path):
     out = json.loads(r.output)
     assert out["written"] == 0 and out["source_text_hash_recorded"] is False
     assert out["note"] is not None and "failed to anchor" in out["note"]
+
+
+def test_paper_annotate_agent_file_has_frontmatter():
+    # repo root is three levels up from science/tests/
+    repo_root = Path(__file__).resolve().parents[2]
+    agent = repo_root / "agents" / "paper-annotate.md"
+    assert agent.is_file(), "agents/paper-annotate.md must exist"
+    text = agent.read_text(encoding="utf-8")
+    assert text.startswith("---")
+    assert "name: paper-annotate" in text
+    assert "science annotate extract" in text  # documents the deterministic call
+    cmd = repo_root / "commands" / "annotate-paper.md"
+    assert cmd.is_file(), "commands/annotate-paper.md must exist"
+    assert "--check" in cmd.read_text(encoding="utf-8")  # documents the precheck
