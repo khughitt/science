@@ -7,6 +7,7 @@ from typing import Any
 
 import yaml
 
+from science_model.entities import Entity
 from science_model.source_ref import SourceRef
 
 from science_tool.graph.storage_adapters.base import StorageAdapter
@@ -98,3 +99,15 @@ class DatapackageAdapter(StorageAdapter):
         raw.setdefault("canonical_id", raw.get("id", ""))
         raw.setdefault("file_path", ref.path)
         return raw
+
+    def should_defer(self, *, already_owned: bool) -> bool:
+        return already_owned
+
+    def deferred_dataset_datapackage(
+        self, *, entity: Entity, ref: SourceRef
+    ) -> tuple[str, str] | None:
+        # §B4: a datapackage is attached resource metadata, not a second owner.
+        # When its id is already owned (markdown owner or transitional aggregate
+        # stub — both precede DatapackageAdapter), defer and record the path so
+        # member-resource resolution can still find the datapackage's resources.
+        return (entity.canonical_id, ref.path)

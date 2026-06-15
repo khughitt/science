@@ -8,8 +8,10 @@ from typing import Any
 
 import yaml
 
+from science_model.entities import Entity
 from science_model.source_ref import SourceRef
 
+from science_tool.graph.source_records import AggregateRowMeta
 from science_tool.graph.storage_adapters.base import StorageAdapter
 
 
@@ -150,6 +152,26 @@ class AggregateAdapter(StorageAdapter):
         # Preserve file_path so downstream code has it.
         raw.setdefault("file_path", ref.path)
         return raw
+
+    def on_owner_declared(
+        self, *, entity: Entity, ref: SourceRef, raw: dict[str, Any], kind: str
+    ) -> AggregateRowMeta | None:
+        assert ref.line is not None  # AggregateAdapter always sets the entry index
+        sp_raw = raw.get("source_path")
+        # Capture from the VALIDATED entity, not raw: entity.primary_external_id
+        # is a typed ExternalId (already validated) or None. exclude_none drops the
+        # optional `version`, leaving the four required keys.
+        pei = entity.primary_external_id
+        return AggregateRowMeta(
+            path=ref.path,
+            line=ref.line,
+            canonical_id=entity.canonical_id,
+            kind=kind,
+            # source_path is unschema'd extra metadata; normalize a malformed
+            # (non-string) value to None so the report can't crash.
+            source_path=sp_raw if isinstance(sp_raw, str) else None,
+            primary_external_id=pei.model_dump(exclude_none=True) if pei is not None else None,
+        )
 
     def _normalize_term_row(self, raw: dict[str, Any]) -> dict[str, Any]:
         normalized = dict(raw)
