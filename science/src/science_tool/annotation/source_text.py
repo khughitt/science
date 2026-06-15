@@ -349,7 +349,7 @@ def render_source_md(
     # Header length only grows as base grows (more digits), so this converges fast.
     base = 0
     header = ""
-    for _ in range(8):
+    for _ in range(12):
         fm["passages"] = [
             {"section": sec, "file_char_base": base + rel, "length": length}
             for (sec, rel, length) in rel_offsets

@@ -262,8 +262,8 @@ class TestOffsetMap:
     def test_header_length_converges_across_digit_boundary(self) -> None:
         # Many passages force file_char_base values to grow in digit-count as the
         # header lengthens, which can push later bases across another digit
-        # boundary. The fixpoint loop converges (needs ~5 iterations here); the old
-        # build-once-then-re-derive-once logic provably raised at this passage count.
+        # boundary. This passage count needs ~5 fixpoint iterations to stabilize —
+        # more than the old fixed two-pass logic could absorb.
         passages = SourcePassages(
             passages=tuple(
                 Passage(section="abstract", bioc_offset=i, text=f"passage number {i} text")
