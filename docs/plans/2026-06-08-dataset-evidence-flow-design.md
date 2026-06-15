@@ -1,7 +1,13 @@
 # Dataset Evidence Flow — Facet Design
 
 **Date:** 2026-06-08
-**Status:** Design (planning only — implementation held until `layout_version: 3`, per umbrella §7)
+**Status:** Framework **implemented + merged** (2026-06-15). The v3 gate has lifted (v3 landed 2026-06-09)
+and `epistemic-edges` has landed, so every framework piece this facet relies on is built: `belief_eligible`
+staging (validate + materialize), `DatasetUsage` ref integrity, the `overlap=unknown` dependence-role WARN
+(`6e81a4eb`), the `check_projection_drift` primitive (`aa44e4a2`), and the B2 e2e payoff
+(`test_dataset_evidence_flow_e2e.py`). The remaining work is the **MM30-side population** (task→dataset
+resolution + filling the staged lines), now specced at
+`~/d/cancer/cancer-types/multiple-myeloma/doc/specs/2026-06-15-evidence-line-dataset-grounding-design.md`.
 **Kind:** Facet design. Elaborates the dataset-grounding region of the umbrella
 [`2026-06-08-epistemic-data-model-design.md`](./2026-06-08-epistemic-data-model-design.md).
 **Sibling facet:** `epistemic-edges` ([`2026-06-08-epistemic-edges-design.md`](./2026-06-08-epistemic-edges-design.md)) — creates the evidence-lines this facet grounds.
@@ -175,7 +181,7 @@ not designed here (see §9).
   `prov:wasDerivedFrom` task-trace wiring. (Much of the `belief_eligible` staging plumbing is shared with the
   `epistemic-edges` framework plan — see that plan's Tasks 1c/2c/3b; this facet's framework plan adds
   the dataset-specific pieces and avoids duplicating them.)
-- **MM30 (`~/d/r/mm30`):** the curated `task → dataset` resolution table data; the `source_class`
+- **MM30 (`~/d/cancer/cancer-types/multiple-myeloma`):** the curated `task → dataset` resolution table data; the `source_class`
   registry extension + generated `doc/datasets/`; external-dataset registration; and **filling
   the staged evidence-lines** `epistemic-edges` created. Deferred to the MM30 migration plan, gated on
   this facet's framework plan **and** the `epistemic-edges` framework plan landing on v3.

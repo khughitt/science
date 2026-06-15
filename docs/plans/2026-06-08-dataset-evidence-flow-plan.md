@@ -4,18 +4,28 @@
 > or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`)
 > syntax for tracking.
 
+> **✅ EXECUTED (2026-06-15 status).** This framework plan is **done**. The genuine build (Task 2d
+> `overlap=unknown` dependence-role WARN, `6e81a4eb`), the drift primitive (Task 4 `entity_projection.py`,
+> `aa44e4a2`), and the B2 e2e payoff (Task 5a, `76edb44a`/`38add4d7`, `test_dataset_evidence_flow_e2e.py`)
+> are all merged on `main`. **Task 5b is now unblocked**: `epistemic-edges` has landed, so `belief_eligible`
+> + staging-exclusion exist in this repo (verified 2026-06-15: `evidence.empirical.requires_dataset_usage`
+> `@Check`; materialize skips staged lines). The two "confirm/PASS-immediately" test files
+> (`test_evidence_line_dataset_usage.py`, `test_evidence_line_task_provenance.py`) were folded in rather
+> than committed standalone. **The out-of-scope MM30 migration is now specced** at
+> `~/d/cancer/cancer-types/multiple-myeloma/doc/specs/2026-06-15-evidence-line-dataset-grounding-design.md`.
+>
 > **v3 status (2026-06-10 reconciliation).** The v2→v3 layout migration **landed** (applied 2026-06-09;
 > v3 conformance gate `2ffb182f`), and `docs/epistemic-data-model` was merged to `main`. The
 > *dataset-specific* framework (Tasks 1–4) is therefore **v3-unblocked**. Phase 0 now *confirms* v3 in
 > the target project rather than gating on it. Tasks tagged **[v3-API]** still finalize against the
 > confirmed v3 substrate API (entity layout, materialization contract).
 >
-> **⛔ Task 5 is still gated on the `epistemic-edges` framework plan.** Its belief-eligibility assertions
-> require the `belief_eligible` field + staging-exclusion machinery, which that plan owns and which is
-> **not yet in this repo** (confirmed 2026-06-10: zero `belief_eligible` occurrences in `science/model`,
-> `science/src`, `science/tests`; `EvidenceLineEntity` has no such field). The *dataset-independence*
-> half of Task 5 (B2 same-vs-distinct collapse) does **not** depend on it and can run now; the
-> `belief_eligible` assertions must wait. See Task 5's gating note.
+> **✅ Task 5 is now unblocked (2026-06-15).** `epistemic-edges` has landed, so the `belief_eligible`
+> field + staging-exclusion machinery it owns are now **in this repo** (verified 2026-06-15:
+> `evidence.empirical.requires_dataset_usage` `@Check`; `EvidenceLineEntity.belief_eligible` exists;
+> materialization skips staged lines). The earlier 2026-06-10 gate ("zero `belief_eligible` occurrences;
+> `EvidenceLineEntity` has no such field") no longer holds. Both halves of Task 5 — the
+> dataset-independence B2 collapse (5a) and the belief-eligibility exclusion (5b) — can run.
 
 > **Reconciled against merged `~/d/science` `main` (2026-06-10).** Substantial drift from the original
 > draft was found and corrected here — most of what this plan first proposed to *build* has since been
@@ -59,7 +69,7 @@ RDF/TriG materialization via `rdflib`); `uv run pytest`; `ruff`.
 
 **Repos:** All tasks in **`~/d/science`** (`science/` package). The MM30 `task → dataset` resolution
 table, `mm30.v8.yml` `source_class` extension, dataset-entity generation, and filling the staged
-evidence-lines are **out of scope** (separate `~/d/r/mm30` migration plan, gated on this + the
+evidence-lines are **out of scope** (separate `~/d/cancer/cancer-types/multiple-myeloma` migration plan, gated on this + the
 `epistemic-edges` framework plan).
 
 ---
@@ -408,7 +418,7 @@ fixture with no MM30 data (5a, now); belief-eligibility exclusion is verified on
 
 ---
 
-## Out of scope (separate `~/d/r/mm30` migration plan)
+## Out of scope (separate `~/d/cancer/cancer-types/multiple-myeloma` migration plan)
 
 - The curated `task → dataset` **resolution table** (auto-seed + curate + the two loud-fail gates as a
   *migration* step), and recording `prov:wasDerivedFrom task:<id>` for real MM30 lines.
