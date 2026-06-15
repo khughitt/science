@@ -13,7 +13,9 @@ from science_tool.annotation.source_text import (
     ResolvedPaper,
     SourcePassages,
     SourceTextError,
+    is_whitelisted,
     parse_bioc_passages,
+    resolve_license,
     resolve_paper_entity,
 )
 
@@ -152,3 +154,37 @@ class TestResolvePaperEntity:
         resolved = resolve_paper_entity(tmp_path, doi="10.1038/s41586-024-0001-1", pmid=None)
         assert resolved.path == real
         assert resolved.path != sidecar
+
+
+class TestLicense:
+    @pytest.mark.parametrize(
+        "raw",
+        ["CC0", "cc-by", "CC BY", "CC-BY-4.0", "cc-by-sa-3.0", "CC-BY-ND", "CC BY 4.0"],
+    )
+    def test_whitelisted_values(self, raw: str) -> None:
+        assert is_whitelisted(raw) is True
+
+    @pytest.mark.parametrize("raw", ["CC-BY-NC", "CC-BY-NC-4.0", "all-rights-reserved", "", "unknown", "  "])
+    def test_non_whitelisted_values(self, raw: str) -> None:
+        assert is_whitelisted(raw) is False
+
+    def test_resolve_returns_verbatim_whitelisted_value(self) -> None:
+        # Most-permissive whitelisted wins; the raw verbatim form is returned.
+        license_, ok = resolve_license(["CC-BY-NC", "CC-BY-4.0"])
+        assert ok is True
+        assert license_ == "CC-BY-4.0"
+
+    def test_resolve_prefers_more_permissive(self) -> None:
+        license_, ok = resolve_license(["CC-BY-ND", "CC-BY"])
+        assert ok is True
+        assert license_ == "CC-BY"
+
+    def test_resolve_unknown_when_none_whitelisted(self) -> None:
+        license_, ok = resolve_license(["CC-BY-NC", "all-rights-reserved"])
+        assert ok is False
+        assert license_ == "CC-BY-NC"  # raw value retained for provenance
+
+    def test_resolve_unknown_when_no_candidates(self) -> None:
+        license_, ok = resolve_license([None, "", "  "])
+        assert ok is False
+        assert license_ == "unknown"

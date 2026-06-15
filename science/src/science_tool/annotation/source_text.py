@@ -11,6 +11,7 @@ so callers (and tests) control every request.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -173,3 +174,49 @@ def resolve_paper_entity(
     return ResolvedPaper(
         citekey=path.stem, path=path, directory=path.parent, doi=entity_doi, pmid=entity_pmid
     )
+
+
+# Full-text persistence whitelist. Verbatim license strings are normalized to a
+# canonical token (uppercased, spaces/underscores -> hyphens, version stripped)
+# before membership testing; versioned forms (CC-BY-4.0) therefore match.
+# Permissiveness order: CC0 > CC-BY > CC-BY-SA > CC-BY-ND (more restrictive last).
+LICENSE_WHITELIST: tuple[str, ...] = ("CC0", "CC-BY", "CC-BY-SA", "CC-BY-ND")
+
+_LICENSE_PERMISSIVENESS: dict[str, int] = {
+    "CC0": 0,
+    "CC-BY": 1,
+    "CC-BY-SA": 2,
+    "CC-BY-ND": 3,
+}
+_VERSION_SUFFIX = re.compile(r"-\d+(?:\.\d+)*$")
+
+
+def normalize_license_token(raw: str | None) -> str:
+    """Canonical token for whitelist comparison (NOT the persisted value)."""
+    if not raw:
+        return ""
+    token = raw.strip().upper().replace("_", "-").replace(" ", "-")
+    token = re.sub(r"-{2,}", "-", token).strip("-")
+    token = _VERSION_SUFFIX.sub("", token)
+    return token
+
+
+def is_whitelisted(raw: str | None) -> bool:
+    return normalize_license_token(raw) in LICENSE_WHITELIST
+
+
+def resolve_license(candidates: list[str | None]) -> tuple[str, bool]:
+    """Resolve a license from OA-source candidate strings.
+
+    Returns ``(license, whitelisted)``: the most-permissive whitelisted candidate
+    (verbatim) when any qualifies, else the first non-empty raw value (for
+    provenance) or ``"unknown"``. ``whitelisted`` gates full-text persistence.
+    """
+    whitelisted = [c for c in candidates if c and is_whitelisted(c)]
+    if whitelisted:
+        best = min(whitelisted, key=lambda c: _LICENSE_PERMISSIVENESS[normalize_license_token(c)])
+        return best.strip(), True
+    for c in candidates:
+        if c and c.strip():
+            return c.strip(), False
+    return "unknown", False
