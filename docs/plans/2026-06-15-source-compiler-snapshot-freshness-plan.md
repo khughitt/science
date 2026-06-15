@@ -35,7 +35,7 @@ changes through the existing dependency substrate.
   subcommand; `rtk proxy` passes the raw command through.)
 - **Git.** Use `rtk git` for all git. **No `Co-Authored-By` trailers.** Commit at the end of
   each task with the message shown in that task's final step.
-- **Paths in docs/comments** use `~/d/` (not `/home/keith/d/` or `/mnt/ssd/Dropbox/`).
+- **Paths in docs/comments** use `~/d/`, not machine-specific absolute paths.
 - **`science_model` must never import `science_tool`.**
 - Source files referenced below are relative to the `science/` member dir unless absolute.
 
@@ -1147,6 +1147,12 @@ cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run -
 cd ~/d/science/.worktrees/source-compiler-snapshot && rtk git add science/src/science_tool/graph/freshness.py science/tests/test_source_snapshot_freshness_e2e.py && rtk git commit -m "feat(source-compiler): in-memory freshness sweep consumes SourceSnapshot origins (Slice B)"
 ```
 
+- [ ] **Step 6: Full suite after the in-memory sweep change**
+
+Run: `cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest -q`
+Expected: all green. This is the final full-suite gate for Slice B; Task 6 changes production
+freshness behavior after Task 5's full-suite run, so do not rely on the earlier gate alone.
+
 ---
 
 ## Final review (after all tasks)
@@ -1162,10 +1168,11 @@ cd ~/d/science/.worktrees/source-compiler-snapshot && rtk git add science/src/sc
 
 - **Spec coverage:** §5 primitives → Task 1; §6/§7 observe+diff+emit → Tasks 2–3; §8
   derive_freshness → Task 4; §7 materialize wiring + §9 idempotency + §11.5/§11.6 e2e &
-  characterization → Task 5. §10 error handling (fail-loud on unreadable file) is inherent in
-  `_sha256_file`; the empty-baseline cases are tested in Tasks 2 & 5.
+  characterization → Task 5; in-memory freshness sweep coverage → Task 6. §10 error handling
+  (fail-loud on unreadable file) is inherent in `_sha256_file`; the empty-baseline cases are
+  tested in Tasks 2 & 5.
 - **Type consistency:** `SourceSnapshotResult.source_changes` values are `date`; the freshness
   param is `dict[str, date]`; the materialize layer annotation note (Task 4 Step 4) flags the
   cosmetic `str` vs `_date` choice. `source_snapshot_uri`/`source_change_uri`/`entity_uri_for_ref`
-  signatures are used identically across Tasks 2, 3, 5.
+  signatures are used identically across Tasks 2, 3, 5, and 6.
 - **No placeholders:** every code/test step contains the full content to write.
