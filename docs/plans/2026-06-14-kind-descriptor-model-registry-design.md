@@ -124,8 +124,9 @@ lingers as a second SSOT beside `CORE_PROFILE`.
   entity-kind mixin surface (only dataset/DAG-specific `.model_json_schema()`
   exports). Recorded here so the omission is deliberate.
 - No Source-Compiler / structured-source redesign — that is Spec 3. If the
-  `curation-sweep` audit (§4) concludes it is a source/ledger artifact rather
-  than an authored kind, this spec only documents + categorizes it.
+  `curation-sweep` audit (§3.1) concludes it is a source/ledger artifact rather
+  than an authored kind, this spec keeps it `authored-core` for behavior-neutrality
+  and only records a `recommend-reclassify` annotation (§3.1).
 
 ---
 
@@ -194,8 +195,11 @@ deprecated compatibility shim — `entities.py` stays a legitimate export surfac
 `KindCategory` (new typed enum in `science_model`):
 
 - **`authored-core`**: full descriptor in `CORE_PROFILE.entity_kinds`; the
-  user-authored markdown core. The drift test enforces 3-way equality on exactly
-  this set. Path/status/template derivation applies **only** to this category.
+  user-authored core. The **drift gate** (§3) enforces 3-way equality on exactly
+  this category. Path/status/template derivation is **not** category-gated — it is
+  controlled by *populated fields* (§4): an authored-core kind contributes a path
+  policy / status vocab / template only if it carries those fields today (the
+  `CORE_KINDS` path-policy cross-section is the subset that does).
 - **`reserved`**: built-in sentinel/compatibility kinds — `unknown` (and any pure
   marker). Today `unknown` has **no manifest descriptor** (it is enum + registry
   only). It gains a descriptor in `CORE_PROFILE` with `category=reserved` (it is a
@@ -287,10 +291,17 @@ operate on a reconciled set.
 - **reserved**: `unknown`.
 - **source-only**: `model`, `canonical_parameter`, `parameter_binding` (all
   currently in `LOCAL_PROFILE`; tied to source-row loading).
-- **needs ruling**: `curation-sweep` — determine whether it is a real authored
-  entity kind or a ledger/source artifact that should compile as an
-  artifact/source record (Spec 3). If the latter, document + categorize only;
-  do not redesign loading here.
+- **`curation-sweep` — behavior-neutral landing for this slice: classify
+  `authored-core`.** It is registry-core today (`ProjectEntity`, `entity_class =
+  OPERATIONAL`) and carries no path/status/template fields, so an `authored-core`
+  descriptor with `entity_class=OPERATIONAL` and those fields blank reproduces the
+  current registry/maps exactly and satisfies gate assertion 4 (registry-core ≡
+  authored-core). If the audit judges it a ledger/source artifact (Spec 3), that is
+  recorded as a **`recommend-reclassify`** annotation only; the actual move to a
+  source/ledger record (and any new `source-only`-with-core-ownership rule it would
+  need) is deferred to Spec 3 / the cleanup slice — **not** done here, so this slice
+  needs no broadened `source-only` ownership and the category set stays the three
+  named contracts.
 - **map-only, needs ruling**: `decision`, `claim-registry` — present only in the
   path/status maps. In this behavior-neutral slice each is **promoted**: author a
   descriptor carrying its *current* path/status values, add the enum member, and
@@ -383,9 +394,11 @@ Tool → model dependency direction is preserved throughout; no test makes
    existing imports working).
 2. Audit the full 50-kind universe + populate `CORE_PROFILE` (authored-core +
    reserved sentinels) and tag `LOCAL_PROFILE` (source-only); rule on
-   `curation-sweep` and the map-only kinds (`decision`, `claim-registry`). Source
-   authored-core `home`/`strategy`/`default_status`/`statuses`/`shortform` from the
-   keystone's verified `CORE_KINDS` values (§0.1).
+   `curation-sweep` and the map-only kinds (`decision`, `claim-registry`). For the
+   **path-policy cross-section only** (the kinds `CORE_KINDS` enumerates), copy
+   `home`/`strategy`/`default_status`/`statuses`/`shortform` from the keystone's
+   verified `CORE_KINDS` values (§0.1); other authored-core descriptors get only the
+   fields they carry today (most leave these blank).
 3. **Reconciliation drift tests (the gate)** — strict, split by layer
    (§3 assertions 1–3 model-package, 4 tool/root); green once 1 + 2 land.
 4. Derive path policies + shortform map (+ equivalence tests).
@@ -431,10 +444,12 @@ Tool → model dependency direction is preserved throughout; no test makes
 - **`EntityClass` relocation** — behavior-neutral: the definition moves to
   `identity.py` but `entities.py` keeps a plain re-export (stable public path), so
   existing `from science_model.entities import EntityClass` imports are unaffected.
-- **Absorbing/deleting `CORE_KINDS`** — low risk: the authored-core descriptor values
-  are copied from `CORE_KINDS` (already verbatim-verified against the original literals
-  by the keystone guard), the `EntityFilenameStrategy` relocation routes through a
-  transitional re-export, and the per-flip equivalence tests re-prove value-for-value
+- **Absorbing/deleting `CORE_KINDS`** — low risk: the path-policy cross-section's
+  field values (the kinds `CORE_KINDS` covers) are copied from `CORE_KINDS` (already
+  verbatim-verified against the original literals by the keystone guard) — broader
+  authored-core descriptors only gain the fields they already carry; the
+  `EntityFilenameStrategy` relocation routes through a transitional re-export, and the
+  per-flip equivalence tests re-prove value-for-value
   equality before `kinds.py` is removed. Net: the keystone's guarantees are preserved,
   not re-derived from scratch.
 
