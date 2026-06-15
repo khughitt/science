@@ -199,11 +199,14 @@ license whitelist, fail-early:
   initial set; extend it in `docs/conventions/annotation-tokens.md`.
 - **Unknown / absent / non-whitelisted (incl. `CC-BY-NC*` for now):** persist the
   **abstract only**, omit full text, and record `license` (the raw value or
-  `unknown`) plus `fulltext_omitted_reason: license-not-whitelisted`. We never store
-  full text we cannot license-verify.
-- **Resolution.** License is read from OA-source metadata (Europe PMC `license` /
-  Unpaywall `oa_locations[].license`); with multiple values the most-permissive
-  whitelisted one wins, else `unknown`.
+  `unknown`) plus a `fulltext_omitted_reason` — `license-not-whitelisted` when full
+  text existed but its license is not whitelisted, or `no-fulltext-available` when no
+  full text was retrievable at all. We never store full text we cannot
+  license-verify, and provenance always states why full text is absent.
+- **Resolution.** In Phase 1, license is read from Europe PMC `license` only; with
+  multiple values the most-permissive whitelisted one wins, else `unknown`.
+  Unpaywall's `oa_locations[].license` is a known secondary source, deferred to a
+  later phase.
 - **Sources.** PMC Copyright Notice (https://pmc.ncbi.nlm.nih.gov/about/copyright/)
   and PMC Open Access Subset (https://pmc.ncbi.nlm.nih.gov/tools/openftlist/).
 

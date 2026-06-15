@@ -16,7 +16,7 @@
 - **Run tests from `science/`:** `cd science && uv run --frozen pytest <path> -v`. Never run pytest from the repo root.
 - **Tool code** under `science/src/science_tool/`; **tests** under `science/tests/`.
 - **Commits from the repo root** (the directory above `science/`), staging with `git add science/...`. Do **not** add a `Co-Authored-By` trailer to commits in this plan.
-- In doc prose, refer to paths under the meta checkout as `~/d/science/...` (this checkout stores paper summaries at `~/d/science/meta/doc/background/papers/` via a project-local path-policy override, which is exactly why the resolver must consult the path policy rather than hardcode `entities/papers/`).
+- In doc prose, refer to paths under the meta checkout as `~/d/science/...` (this checkout stores paper summaries at `~/d/science/meta/doc/background/papers/`, which is exactly why the resolver scans the canonical paper subdirs — `entities/papers`, `doc/papers`, `doc/background/papers` — instead of the single path-policy root `entities/papers/`, which builtins pin and a project cannot override).
 - **Hermetic tests only:** every `httpx` call goes through an injected `httpx.Client` built with `httpx.MockTransport` (mirror `_make_client` in `test_paper_fetch.py`); every filesystem operation is under `tmp_path`. No test touches the network or the real home directory.
 - All new public functions are **pure where possible** (operate on passed-in data / a `tmp_path` project dir), so they are unit-testable without the CLI.
 
@@ -67,8 +67,11 @@ def _make_client(handler: Callable[[httpx.Request], httpx.Response]) -> httpx.Cl
     return httpx.Client(transport=httpx.MockTransport(handler))
 
 
-def _write_paper(project_root: Path, citekey: str, *, doi: str = "", pmid: str = "") -> Path:
-    papers_dir = project_root / "entities" / "papers"
+def _write_paper(
+    project_root: Path, citekey: str, *, doi: str = "", pmid: str = "",
+    subdir: str = "entities/papers",
+) -> Path:
+    papers_dir = project_root / subdir
     papers_dir.mkdir(parents=True, exist_ok=True)
     path = papers_dir / f"{citekey}.md"
     fm = [f"id: paper:{citekey}", f"title: {citekey}"]
@@ -93,6 +96,16 @@ class TestResolvePaperEntity:
         resolved = resolve_paper_entity(tmp_path, doi=None, pmid="123456")
         assert resolved.citekey == "Jones2025"
         assert resolved.path == path
+
+    def test_resolves_paper_under_doc_background_papers(self, tmp_path: Path) -> None:
+        # Real checkouts (this meta repo) store paper summaries outside entities/papers;
+        # the resolver must scan every canonical paper subdir, not the policy root.
+        path = _write_paper(
+            tmp_path, "Meta2026", doi="10.1/meta", subdir="doc/background/papers"
+        )
+        resolved = resolve_paper_entity(tmp_path, doi="10.1/meta", pmid=None)
+        assert resolved.path == path
+        assert resolved.directory == tmp_path / "doc" / "background" / "papers"
 
     def test_carries_entity_pmid_when_resolved_by_doi(self, tmp_path: Path) -> None:
         # Core of the resolver→acquisition contract: a DOI-invoked resolve still
@@ -149,7 +162,7 @@ from pathlib import Path
 from typing import Any
 
 from science_tool.commons.frontmatter import raw_frontmatter
-from science_tool.entities import resolve_path_policy
+from science_tool.commons.promote import PROMOTE_KIND_PAPER
 from science_tool.paper_fetch import normalize_doi, normalize_pmid
 
 
@@ -170,10 +183,18 @@ class ResolvedPaper:
     pmid: str | None  # normalized pmid from the entity frontmatter
 
 
-def _papers_root(project_root: Path) -> Path:
-    """Directory holding paper-entity markdown, honoring any project override."""
-    policy = resolve_path_policy("paper", project_root=project_root)
-    return (project_root / policy.root).resolve()
+def _paper_dirs(project_root: Path) -> list[Path]:
+    """Directories that may hold paper-entity markdown in this project.
+
+    `resolve_path_policy("paper")` is NOT usable here: `paper` is a builtin kind, so
+    the policy table always returns `entities/papers` (builtins win the merge in
+    `entity_policies`, and a project-local `papers` home is rejected as a core-dir
+    collision). Real checkouts store paper summaries under any of the canonical
+    paper subdirs — this meta checkout uses `doc/background/papers/`. Reuse the one
+    authoritative list (`PROMOTE_KIND_PAPER.source_subdirs`) so resolution and
+    promotion never diverge.
+    """
+    return [project_root / sub for sub in PROMOTE_KIND_PAPER.source_subdirs]
 
 
 def resolve_paper_entity(
@@ -192,11 +213,13 @@ def resolve_paper_entity(
             "persist-source requires a DOI or PMID to resolve a paper entity."
         )
 
-    root = _papers_root(project_root)
     # Each match carries the entity's own normalized identifiers so acquisition can
     # use the entity's PMID even when the user invoked persist-source with a DOI.
+    paper_dirs = _paper_dirs(project_root)
     matches: list[tuple[Path, str | None, str | None]] = []
-    if root.is_dir():
+    for root in paper_dirs:
+        if not root.is_dir():
+            continue
         for path in sorted(root.glob("*.md")):
             if any(path.name.endswith(sfx) for sfx in _SIDECAR_SUFFIXES):
                 continue
@@ -210,8 +233,9 @@ def resolve_paper_entity(
 
     ident = want_doi or want_pmid
     if not matches:
+        searched = ", ".join(str(d) for d in paper_dirs)
         raise SourceTextError(
-            f"no paper entity has doi/pmid {ident!r} under {root}; "
+            f"no paper entity has doi/pmid {ident!r} under any of {searched}; "
             "run `science paper-fetch` and create the paper entity first."
         )
     if len(matches) > 1:
@@ -236,7 +260,7 @@ def _as_str(value: Any) -> str | None:
 
 - [ ] **1.4 Run it — expect pass:**
   `cd science && uv run --frozen pytest tests/test_source_text.py -v`
-  Expected: 5 passed.
+  Expected: 7 passed.
 
 - [ ] **1.5 Commit** (from repo root):
   `git add science/src/science_tool/annotation/source_text.py science/tests/test_source_text.py`
@@ -520,7 +544,7 @@ verbatim; the canonical token below is used only for membership testing
 | `CC-BY`         | `CC-BY-4.0`, `CC-BY-3.0` | yes |
 | `CC-BY-SA`      | `CC-BY-SA-4.0`           | yes |
 | `CC-BY-ND`      | `CC-BY-ND-4.0`           | yes |
-| anything else (incl. `CC-BY-NC*`, `unknown`, absent) | — | **no** — abstract only, `fulltext_omitted_reason: license-not-whitelisted` |
+| anything else (incl. `CC-BY-NC*`, `unknown`, absent) | — | **no** — abstract only; `fulltext_omitted_reason` is `license-not-whitelisted` when full text existed, else `no-fulltext-available` |
 
 License is resolved from Europe PMC `license` in Phase 1 (Unpaywall's `oa_locations[].license` is deferred, with EPMC license the Phase 1 primary); with multiple values the most-permissive whitelisted one
 wins, else `unknown`.
@@ -789,7 +813,7 @@ def render_source_md(
         for (sec, rel, length) in rel_offsets
     )
     fm["passages"] = [
-        {"section": o.section, "char_offset": o.file_char_base, "length": o.length}
+        {"section": o.section, "file_char_base": o.file_char_base, "length": o.length}
         for o in offset_map
     ]
     header = "---\n" + yaml.safe_dump(fm, sort_keys=False, allow_unicode=True) + "---\n\n"
@@ -803,7 +827,7 @@ def render_source_md(
             for (sec, rel, length) in rel_offsets
         )
         fm["passages"] = [
-            {"section": o.section, "char_offset": o.file_char_base, "length": o.length}
+            {"section": o.section, "file_char_base": o.file_char_base, "length": o.length}
             for o in offset_map
         ]
         header = "---\n" + yaml.safe_dump(fm, sort_keys=False, allow_unicode=True) + "---\n\n"
@@ -847,7 +871,7 @@ def _build_frontmatter(
     if fulltext_omitted_reason:
         fm["fulltext_omitted_reason"] = fulltext_omitted_reason
     fm["passages"] = [
-        {"section": sec, "char_offset": body_offset + rel, "length": length}
+        {"section": sec, "file_char_base": body_offset + rel, "length": length}
         for (sec, rel, length) in offsets
     ]
     return fm
@@ -916,8 +940,9 @@ class TestWriteSourceMd:
         assert "license: CC-BY-NC" in text
         assert "An abstract sentence." in text
 
-    def test_no_omitted_reason_when_no_fulltext_available(self, tmp_path: Path) -> None:
-        # Unlicensed but no full text existed anyway -> no misleading omission reason.
+    def test_no_fulltext_records_distinct_reason(self, tmp_path: Path) -> None:
+        # No full text was retrievable -> record `no-fulltext-available`, NOT the
+        # license reason, so provenance distinguishes the two cases.
         out = write_source_md(
             directory=tmp_path,
             citekey="Smith2024",
@@ -931,7 +956,8 @@ class TestWriteSourceMd:
         )
         text = out.read_text(encoding="utf-8")
         assert "## Full Text" not in text
-        assert "fulltext_omitted_reason" not in text
+        assert "fulltext_omitted_reason: no-fulltext-available" in text
+        assert "license-not-whitelisted" not in text
 
     def test_full_text_persisted_when_licensed(self, tmp_path: Path) -> None:
         out = write_source_md(
@@ -989,7 +1015,7 @@ class TestWriteSourceMd:
         text = out.read_text(encoding="utf-8")
         fm = raw_frontmatter(out)
         for entry in fm["passages"]:
-            base, length = entry["char_offset"], entry["length"]
+            base, length = entry["file_char_base"], entry["length"]
             assert text[base : base + length] in {"An abstract sentence.", "Full text body paragraph."}
 ```
 
@@ -1014,15 +1040,23 @@ def write_source_md(
 ) -> Path:
     """Render, slice-verify, and write `<citekey>.source.md` next to the entity.
 
-    Full text is included ONLY when `licensed` is True; otherwise it is omitted
-    and `fulltext_omitted_reason: license-not-whitelisted` is recorded. The
+    Full text is included ONLY when `licensed` is True and full text exists.
+    Otherwise `fulltext_omitted_reason` records why it is absent:
+    `license-not-whitelisted` (full text existed but its license is not whitelisted)
+    or `no-fulltext-available` (no full text was retrievable). The
     offset map is slice-verified against the rendered file before writing — a
     mismatch raises SourceTextError and nothing is written.
     """
     persisted_fulltext = fulltext if licensed else None
-    # Only record license omission when full text actually existed but the license
-    # blocked it — not when no full text was available in the first place.
-    omitted_reason = "license-not-whitelisted" if (fulltext is not None and not licensed) else None
+    # Distinguish the two reasons full text can be absent: a non-whitelisted license
+    # on full text that DID exist, vs. no full text being retrievable at all. Both are
+    # recorded so provenance always states why full text is absent.
+    if fulltext is not None and not licensed:
+        omitted_reason: str | None = "license-not-whitelisted"
+    elif fulltext is None:
+        omitted_reason = "no-fulltext-available"
+    else:
+        omitted_reason = None
 
     rendered = render_source_md(
         citekey=citekey,
@@ -1638,12 +1672,12 @@ Then skip sidecars in both discovery branches of `discover`:
 
 | Spec requirement (section) | Where covered |
 |---|---|
-| `<citekey>.source.md` co-located with resolved entity (Data artifacts) | Task 5 (`write_source_md` writes into `resolved.directory`); Task 1 resolves directory via path policy |
+| `<citekey>.source.md` co-located with resolved entity (Data artifacts) | Task 5 (`write_source_md` writes into `resolved.directory`); Task 1 resolves the directory by scanning the canonical paper subdirs |
 | Identifier → paper-entity resolver; scan frontmatter `doi`/`pmid`, normalized (Identifier→resolution) | Task 1 (`resolve_paper_entity`, `normalize_doi`/`normalize_pmid`) |
 | No-match fails loud + actionable (`paper-fetch`/create) (Identifier→resolution) | Task 1 (`test_no_match_fails_loud`) |
 | Multi-match fails loud naming both files (Identifier→resolution) | Task 1 (`test_multi_match_fails_loud_naming_both`) |
 | Resolver surfaces the entity's own normalized doi+pmid so acquisition can prefer PubTator even on DOI invocation | Task 1 (`ResolvedPaper.doi`/`.pmid`, `test_carries_entity_pmid_when_resolved_by_doi`); Task 7 (`persist_source` uses `resolved.pmid`/`resolved.doi`) |
-| Placement honors path policy / project override, not hardcoded `doc/papers/` | Task 1 (`resolve_path_policy("paper", project_root=...)`) |
+| Placement follows the resolved entity's own directory — any canonical paper subdir (`entities/papers`, `doc/papers`, `doc/background/papers`), not a single hardcoded root | Task 1 (`_paper_dirs` reuses `PROMOTE_KIND_PAPER.source_subdirs`; `test_resolves_paper_under_doc_background_papers`) |
 | Offset basis = raw UTF-8-decoded, NOT NFC-normalized (Offset basis) | Task 2 (`Passage.text` verbatim; docstring states no NFC); Task 4 (`test_offset_base_is_character_not_byte`) |
 | Character offsets end-to-end, no byte layer (Offset basis) | Task 4 (`PassageOffset.file_char_base` is a `str` index; em-dash test) |
 | Per-passage offset map: section + char base + length (Offset basis: provenance) | Task 4 (`PassageOffset`); Task 5 (`passages` frontmatter) |
