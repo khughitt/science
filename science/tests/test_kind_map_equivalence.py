@@ -136,3 +136,90 @@ def test_default_status_equals_prior_literal() -> None:
 
 def test_status_values_equal_prior_literal() -> None:
     assert _STATUS_VALUES == FROZEN_STATUS_VALUES
+
+
+# --- Task 6: MIGRATED_KINDS + registry entity_class equivalence ---
+
+from science_model.templates import MIGRATED_KINDS
+from science_tool.graph.entity_registry import EntityRegistry
+
+FROZEN_MIGRATED_KINDS = frozenset(
+    {
+        "hypothesis",
+        "question",
+        "interpretation",
+        "discussion",
+        "theme",
+        "proposition",
+        "evidence-line",
+        "finding",
+        "method",
+        "paper",
+        "book",
+        "pre-registration",
+        "synthesis",
+    }
+)
+
+# The FULL post-Task-2 registry class map (all core kinds incl. the two promoted),
+# values as EntityClass.value strings. Captured live verbatim.
+FROZEN_KIND_CLASSES = {
+    "article": "reference",
+    "assumption": "epistemic",
+    "book": "operational",
+    "chain-audit": "epistemic",
+    "claim-registry": "operational",
+    "code-file": "operational",
+    "concept": "reference",
+    "construct": "reference",
+    "curation-sweep": "operational",
+    "data-package": "operational",
+    "dataset": "operational",
+    "decision": "reference",
+    "discussion": "epistemic",
+    "evidence-line": "epistemic",
+    "experiment": "operational",
+    "finding": "epistemic",
+    "hypothesis": "epistemic",
+    "inquiry": "epistemic",
+    "interpretation": "epistemic",
+    "mechanism": "epistemic",
+    "method": "operational",
+    "observation": "epistemic",
+    "outcome": "reference",
+    "paper": "operational",
+    "patch-definition": "epistemic",
+    "plan": "operational",
+    "pre-registration": "operational",
+    "proposition": "epistemic",
+    "question": "epistemic",
+    "report": "epistemic",
+    "research-package": "operational",
+    "research-question": "epistemic",
+    "search": "operational",
+    "spec": "operational",
+    "story": "epistemic",
+    "structural-chain": "epistemic",
+    "synthesis": "epistemic",
+    "talk": "operational",
+    "task": "operational",
+    "theme": "epistemic",
+    "topic": "reference",
+    "transformation": "operational",
+    "unknown": "reference",
+    "validation-report": "epistemic",
+    "variable": "reference",
+    "workflow": "operational",
+    "workflow-run": "operational",
+    "workflow-step": "operational",
+}
+
+
+def test_migrated_kinds_equal_prior_literal() -> None:
+    assert set(MIGRATED_KINDS) == FROZEN_MIGRATED_KINDS
+
+
+def test_registry_entity_class_equals_prior_literal() -> None:
+    registry = EntityRegistry.with_core_types()
+    live = {k: v.value for k, v in registry.all_kind_classes().items()}
+    assert live == FROZEN_KIND_CLASSES

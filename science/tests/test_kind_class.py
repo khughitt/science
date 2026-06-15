@@ -10,19 +10,26 @@ from science_tool.graph.entity_registry import EntityRegistry
 
 def test_with_core_types_classifies_every_kind():
     """Every kind registered by with_core_types() must have a classification
-    matching the source-of-truth _CORE_KIND_CLASSES dict. Exhaustive equality
-    check rather than spot-check, so dropping or re-classifying any kind fails
-    loudly."""
-    from science_tool.graph.entity_registry import _CORE_KIND_CLASSES
+    matching the source-of-truth descriptor manifest (CORE_PROFILE). Exhaustive
+    equality check rather than spot-check, so dropping or re-classifying any kind
+    fails loudly."""
+    from science_model.profiles.core import CORE_PROFILE
+    from science_model.profiles.schema import KindCategory
+
+    expected = {
+        ek.name: ek.entity_class
+        for ek in CORE_PROFILE.entity_kinds
+        if ek.category in (KindCategory.AUTHORED_CORE, KindCategory.RESERVED)
+    }
 
     r = EntityRegistry.with_core_types()
     classifications = r.all_kind_classes()
-    assert set(classifications) == set(_CORE_KIND_CLASSES), (
-        f"missing: {set(_CORE_KIND_CLASSES) - set(classifications)}, "
-        f"extra: {set(classifications) - set(_CORE_KIND_CLASSES)}"
+    assert set(classifications) == set(expected), (
+        f"missing: {set(expected) - set(classifications)}, "
+        f"extra: {set(classifications) - set(expected)}"
     )
-    for kind, expected in _CORE_KIND_CLASSES.items():
-        assert classifications[kind] == expected, kind
+    for kind, expected_class in expected.items():
+        assert classifications[kind] == expected_class, kind
 
 
 def test_kind_class_lookup_returns_classification():
