@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import os
 import re
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar, cast
 
@@ -49,6 +48,7 @@ from science_tool.graph.identity_table import (
     ParticipationMode,
     classify_owner_scope,
 )
+from science_tool.graph.source_records import AggregateRowMeta, MarkdownSourceDocument
 from science_tool.graph.storage_adapters.aggregate import AggregateAdapter
 from science_tool.graph.storage_adapters.base import StorageAdapter
 from science_tool.graph.storage_adapters.bib import BibAdapter
@@ -95,12 +95,6 @@ class SourceRelation(BaseModel):
     source_path: str
 
 
-class MarkdownSourceDocument(BaseModel):
-    path: str
-    frontmatter: dict[str, Any] = Field(default_factory=dict)
-    body: str = ""
-
-
 def known_kinds(
     extra_profiles: list[ProfileManifest] | None = None,
     ontology_catalogs: list[OntologyCatalog] | None = None,
@@ -145,29 +139,6 @@ class SkippedEntity(BaseModel):
     kind: str
     reason: str  # "unknown_entity_kind" | "entity_schema_validation_failed" | "core_schema_validation_failed"
     details: str
-
-
-@dataclass(frozen=True, slots=True)
-class AggregateRowMeta:
-    """Row-level triage metadata for one aggregate (`entities.yaml`) entry.
-
-    Captured at load time — before non-strict dedup can drop a shadowed entry's
-    Entity (sources.py emit point) — so the §B5 triage classifier can bucket every
-    aggregate row. Joined to its IdentityDeclaration by (path, line), which
-    AggregateAdapter always populates.
-    """
-
-    path: str
-    line: int
-    canonical_id: str
-    kind: str
-    source_path: str | None
-    # 4c: the row's external authority identifier, captured from the VALIDATED
-    # entity. `entity.primary_external_id` is a typed ExternalId (or None); a
-    # malformed value never reaches capture (it fails ExternalId validation and the
-    # row is skipped). So this is the full {source, id, curie, provenance} dump or
-    # None — never a half-filled mapping that could masquerade as a backed ref.
-    primary_external_id: dict[str, str] | None = None
 
 
 class ProjectSources(BaseModel):
