@@ -1,9 +1,9 @@
-"""Legacy topic-coverage gap computation for `/science:big-picture` synthesis.
+"""Topic-coverage gap computation for `/science:big-picture` synthesis.
 
-This module computes coverage gaps over explicitly authored legacy topic docs
-(`doc/topics/`, `doc/background/topics/`). It does not imply that unresolved
-semantic refs should be migrated into new `topic` entities.
-See docs/specs/2026-04-19-knowledge-gaps-design.md.
+This module computes coverage gaps over explicitly authored ``topic`` entities
+(``entities/topics/``) against the demand expressed by questions referencing
+them. It does not imply that unresolved semantic refs should be migrated into
+new ``topic`` entities. See docs/specs/2026-04-19-knowledge-gaps-design.md.
 """
 
 from __future__ import annotations
@@ -13,15 +13,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from science_tool.big_picture.frontmatter import read_frontmatter
+from science_tool.big_picture.layout import entity_dir
 from science_tool.big_picture.literature_prefix import (
     canonical_paper_id,
     is_external_paper_id,
 )
 from science_tool.big_picture.resolver import ResolverOutput
-
-
-_TOPIC_DIRS = ("doc/topics", "doc/background/topics")
-_PAPER_DIRS = ("doc/papers", "doc/background/papers")
 
 _logger = logging.getLogger(__name__)
 
@@ -65,8 +62,7 @@ def _load_topics(project_root: Path) -> dict[str, dict]:
     """
     topics: dict[str, dict] = {}
     origins: dict[str, Path] = {}
-    for rel in _TOPIC_DIRS:
-        root = project_root / rel
+    for root in (entity_dir(project_root, "topic"),):
         if not root.is_dir():
             continue
         for md in sorted(root.glob("*.md")):
@@ -91,8 +87,7 @@ def _load_papers(project_root: Path) -> dict[str, dict]:
     """
     papers: dict[str, dict] = {}
     origins: dict[str, Path] = {}
-    for rel in _PAPER_DIRS:
-        root = project_root / rel
+    for root in (entity_dir(project_root, "paper"),):
         if not root.is_dir():
             continue
         for md in sorted(root.glob("*.md")):
@@ -186,7 +181,7 @@ def _compute_demand(
     of the form ``topic:<X>`` that is not in ``known_topic_ids`` is logged
     as a warning (once per unknown topic ID across this call).
     """
-    questions_dir = project_root / "doc" / "questions"
+    questions_dir = entity_dir(project_root, "question")
     if not questions_dir.is_dir():
         return 0, []
 

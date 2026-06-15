@@ -83,10 +83,10 @@ def test_resolved_aspects_overrides_with_explicit_entity_aspects() -> None:
 def test_resolver_raises_on_invalid_explicit_aspects(tmp_path) -> None:
     import pytest
 
-    (tmp_path / "specs" / "hypotheses").mkdir(parents=True)
-    (tmp_path / "doc" / "questions").mkdir(parents=True)
+    (tmp_path / "entities" / "hypotheses").mkdir(parents=True)
+    (tmp_path / "entities" / "questions").mkdir(parents=True)
     (tmp_path / "science.yaml").write_text("name: broken\nprofile: research\naspects: [hypothesis-testing]\n")
-    (tmp_path / "doc" / "questions" / "q01.md").write_text(
+    (tmp_path / "entities" / "questions" / "q01.md").write_text(
         '---\nid: "question:q01"\naspects: ["not-a-real-aspect"]\n---\nBroken.\n'
     )
     with pytest.raises(Exception):  # AspectValidationError from validate_entity_aspects

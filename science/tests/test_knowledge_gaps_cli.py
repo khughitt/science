@@ -40,8 +40,7 @@ def test_knowledge_gaps_cli_respects_limit() -> None:
 
 def test_knowledge_gaps_cli_empty_project(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text("name: empty\naspects: []\n")
-    (tmp_path / "doc").mkdir()
-    (tmp_path / "doc" / "questions").mkdir()
+    (tmp_path / "entities" / "questions").mkdir(parents=True)
     result = CliRunner().invoke(
         big_picture_group,
         ["knowledge-gaps", "--project-root", str(tmp_path)],

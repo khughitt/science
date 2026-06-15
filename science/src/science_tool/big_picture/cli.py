@@ -11,7 +11,9 @@ from science_model.aspects import (
     load_project_aspects,
     matches_aspect_filter,
 )
+from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
+from science_tool.big_picture.layout import entity_dir
 from science_tool.big_picture.resolver import resolve_questions
 from science_tool.big_picture.validator import (
     validate_rollup_file,
@@ -49,17 +51,20 @@ def resolve_questions_cmd(project_root: Path) -> None:
 )
 def validate_cmd(project_root: Path) -> None:
     """Validate generated big-picture synthesis files in this project."""
-    synthesis_dir = project_root / "doc" / "reports" / "synthesis"
-    rollup_path = project_root / "doc" / "reports" / "synthesis.md"
+    # v3 canonical layout: synthesis artifacts are `synthesis` entities under
+    # entities/synthesis/. The rollup is identified by its report_kind rather
+    # than a fixed filename; per-hypothesis and emergent-threads files are
+    # validated as synthesis files.
+    synthesis_dir = entity_dir(project_root, "synthesis")
 
     issues = []
     if synthesis_dir.is_dir():
         for path in sorted(synthesis_dir.glob("*.md")):
-            if path.name.startswith("_"):
-                continue
-            issues.extend(validate_synthesis_file(path, project_root=project_root))
-    if rollup_path.is_file():
-        issues.extend(validate_rollup_file(rollup_path, project_root=project_root))
+            fm = read_frontmatter(path) or {}
+            if fm.get("report_kind") == "synthesis-rollup":
+                issues.extend(validate_rollup_file(path, project_root=project_root))
+            else:
+                issues.extend(validate_synthesis_file(path, project_root=project_root))
 
     for issue in issues:
         click.echo(f"[{issue.kind}] {issue.path.name}: {issue.message}")
