@@ -94,3 +94,108 @@ def _containing_passage(
         if pp.file_char_base <= file_idx and end <= pp.file_char_base + pp.length:
             return pp
     return None
+
+
+# --- Candidate parsing (strict, fail-loud) ------------------------------------
+
+STATEMENT_TYPES: frozenset[str] = frozenset({"proposition", "question", "hypothesis"})
+STANCES: frozenset[str] = frozenset({"asserted", "negated", "hypothesized", "open"})
+MAX_CANDIDATES = 500
+MAX_FIELD_CHARS = 2000
+
+_ALLOWED_KEYS = frozenset({
+    "type", "exact", "prefix", "suffix", "stance",
+    "subject", "object", "subject_concept", "object_concept",
+})
+_REQUIRED_KEYS = frozenset({"type", "exact", "prefix", "suffix", "stance"})
+
+
+class CandidateError(ValueError):
+    """A candidates.json file that is structurally invalid. Fail loud; write nothing."""
+
+
+@dataclass(frozen=True)
+class Candidate:
+    type: str
+    exact: str
+    prefix: str
+    suffix: str
+    stance: str
+    subject: str | None = None
+    object: str | None = None
+    subject_concept: str | None = None
+    object_concept: str | None = None
+
+
+def parse_candidates(raw: str) -> list[Candidate]:
+    """Parse + strictly validate a candidates.json string into Candidate rows.
+
+    Any structural problem (bad JSON, unknown key, unknown type/stance, wrong field
+    type, over-count, over-length, empty exact) raises CandidateError — no silent
+    coercion, no partial acceptance.
+    """
+    try:
+        doc = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise CandidateError(f"candidates input is not valid JSON: {exc}") from exc
+    if not isinstance(doc, dict):
+        raise CandidateError("candidates input must be a JSON object with a 'candidates' array")
+    extra = set(doc) - {"candidates"}
+    if extra:
+        raise CandidateError(f"unknown top-level keys: {sorted(extra)}")
+    items = doc.get("candidates")
+    if not isinstance(items, list):
+        raise CandidateError("'candidates' must be a JSON array")
+    if len(items) > MAX_CANDIDATES:
+        raise CandidateError(f"too many candidates ({len(items)} > {MAX_CANDIDATES})")
+    return [_parse_one(item, idx) for idx, item in enumerate(items)]
+
+
+def _parse_one(item: Any, idx: int) -> Candidate:
+    if not isinstance(item, dict):
+        raise CandidateError(f"candidate[{idx}] must be a JSON object")
+    keys = set(item)
+    extra = keys - _ALLOWED_KEYS
+    if extra:
+        raise CandidateError(f"candidate[{idx}] unknown fields: {sorted(extra)}")
+    missing = _REQUIRED_KEYS - keys
+    if missing:
+        raise CandidateError(f"candidate[{idx}] missing required fields: {sorted(missing)}")
+
+    def _str(name: str, *, optional: bool) -> str | None:
+        if optional and (name not in item or item[name] is None):
+            return None
+        val = item[name]
+        if not isinstance(val, str):
+            suffix = " or null" if optional else ""
+            raise CandidateError(f"candidate[{idx}].{name} must be a string{suffix}")
+        if len(val) > MAX_FIELD_CHARS:
+            raise CandidateError(
+                f"candidate[{idx}].{name} exceeds {MAX_FIELD_CHARS} chars"
+            )
+        return val
+
+    ctype = _str("type", optional=False)
+    if ctype not in STATEMENT_TYPES:
+        raise CandidateError(
+            f"candidate[{idx}].type {ctype!r} not in {sorted(STATEMENT_TYPES)}"
+        )
+    exact = _str("exact", optional=False)
+    if not exact:
+        raise CandidateError(f"candidate[{idx}].exact must be non-empty")
+    stance = _str("stance", optional=False)
+    if stance not in STANCES:
+        raise CandidateError(
+            f"candidate[{idx}].stance {stance!r} not in {sorted(STANCES)}"
+        )
+    return Candidate(
+        type=ctype,
+        exact=exact,
+        prefix=_str("prefix", optional=False),
+        suffix=_str("suffix", optional=False),
+        stance=stance,
+        subject=_str("subject", optional=True),
+        object=_str("object", optional=True),
+        subject_concept=_str("subject_concept", optional=True),
+        object_concept=_str("object_concept", optional=True),
+    )

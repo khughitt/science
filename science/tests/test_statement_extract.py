@@ -110,3 +110,100 @@ def test_containing_passage_finds_enclosing():
     assert _containing_passage(passages, 248, 5) is None
     # span outside every passage (e.g. a heading) -> None
     assert _containing_passage(passages, 130, 5) is None
+
+
+import pytest
+
+from science_tool.annotation.statement_extract import (
+    Candidate,
+    CandidateError,
+    MAX_CANDIDATES,
+    MAX_FIELD_CHARS,
+    parse_candidates,
+)
+
+
+def _one(**over):
+    base = {
+        "type": "proposition", "exact": "X drives Y", "prefix": "we found ",
+        "suffix": " here.", "stance": "asserted",
+    }
+    base.update(over)
+    return json.dumps({"candidates": [base]})
+
+
+def test_parse_minimal_valid():
+    [c] = parse_candidates(_one())
+    assert isinstance(c, Candidate)
+    assert c.type == "proposition" and c.stance == "asserted"
+    assert c.subject is None and c.subject_concept is None
+
+
+def test_parse_optional_fields():
+    raw = _one(subject="X", object="Y",
+               subject_concept="https://identifiers.org/ncbigene:672")
+    [c] = parse_candidates(raw)
+    assert c.subject == "X" and c.object == "Y"
+    assert c.subject_concept == "https://identifiers.org/ncbigene:672"
+
+
+def test_parse_rejects_unknown_top_level_key():
+    raw = json.dumps({"candidates": [], "junk": 1})
+    with pytest.raises(CandidateError, match="unknown top-level"):
+        parse_candidates(raw)
+
+
+def test_parse_rejects_unknown_candidate_field():
+    with pytest.raises(CandidateError, match="unknown fields"):
+        parse_candidates(_one(weight=0.9))
+
+
+def test_parse_rejects_unknown_type():
+    with pytest.raises(CandidateError, match="type"):
+        parse_candidates(_one(type="metaphor"))
+
+
+def test_parse_rejects_unknown_stance():
+    with pytest.raises(CandidateError, match="stance"):
+        parse_candidates(_one(stance="maybe"))
+
+
+def test_parse_rejects_missing_required():
+    raw = json.dumps({"candidates": [{"type": "question", "exact": "Q?"}]})
+    with pytest.raises(CandidateError, match="missing required"):
+        parse_candidates(raw)
+
+
+def test_parse_rejects_non_string_field():
+    with pytest.raises(CandidateError, match="must be a string"):
+        parse_candidates(_one(exact=123))
+
+
+def test_parse_rejects_empty_exact():
+    with pytest.raises(CandidateError, match="non-empty"):
+        parse_candidates(_one(exact=""))
+
+
+def test_parse_rejects_over_count():
+    many = json.dumps({"candidates": [
+        {"type": "proposition", "exact": f"s{i}", "prefix": "",
+         "suffix": "", "stance": "asserted"}
+        for i in range(MAX_CANDIDATES + 1)
+    ]})
+    with pytest.raises(CandidateError, match="too many"):
+        parse_candidates(many)
+
+
+def test_parse_rejects_over_length():
+    with pytest.raises(CandidateError, match="exceeds"):
+        parse_candidates(_one(exact="z" * (MAX_FIELD_CHARS + 1)))
+
+
+def test_parse_rejects_non_object_input():
+    with pytest.raises(CandidateError, match="JSON object"):
+        parse_candidates(json.dumps([1, 2]))
+
+
+def test_parse_rejects_bad_json():
+    with pytest.raises(CandidateError, match="not valid JSON"):
+        parse_candidates("{not json")
