@@ -158,15 +158,22 @@ are much noisier than entity anchors. Their inclusion is a candidate knob for th
 Catches naming families like the vN snapshots. **Same-kind only.** The three
 sub-bases below all emit this one signal; the `evidence` string names which fired
 (`id-stem` / `group:` / `task-family`).
-- Normalization of an entity id: take the **local id part** (after the first
-  `:`), strip a **leading numeric sequence prefix** (`^\d+-`), strip a **trailing
-  version suffix** (`-v\d+$`), and take the residual as the *stem*.
-- Group by `(kind, stem)`; any group with ≥ `min_cluster_size` members is a
-  cluster.
-- Also folds in **exact `group:`** equality and **same task-family** (members
-  sharing the same parent `task:` ref) under the same `(kind, …)` keying — all
-  three are the same high-precision "structural family" signal.
-- *Evidence:* `"id-stem 'h05-predictions-vs-dag' (kind interpretation; v3..v12; 10 members)"`.
+The three sub-bases produce **basis-namespaced** grouping keys so they never
+collude by value collision; a group is any key shared by ≥ `min_cluster_size`
+same-kind members. (Different bases yielding the *same* member-set still merge
+later via §6.5 — that is the only place sub-bases combine.)
+- **id-stem** — normalize an entity id: take the **local id part** (after the
+  first `:`), strip a **leading numeric sequence prefix** (`^\d+-`), strip a
+  **trailing version suffix** (`-v\d+$`); the residual is the *stem*. Key:
+  `(kind, "id-stem", stem)`.
+- **group** — exact `group:` value equality. Key: `(kind, "group", group)`.
+- **task-family** — members sharing the same parent `task:` ref. Only
+  **resolvable `task:` entity refs from `related:`** count (§6.1); `source_refs:`
+  is **not** consulted for this sub-basis. Key: `(kind, "task-family", task_ref)`
+  (one key per shared task ref).
+- *Evidence* names the firing basis, e.g.
+  `"id-stem 'h05-predictions-vs-dag' (kind interpretation; v3..v12; 10 members)"`
+  or `"task-family task:t327 (kind interpretation; 4 members)"`.
 
 > Cross-kind grouping is forbidden: a `question`, `hypothesis`, and
 > `interpretation` that happen to share a slug stem must **not** be clustered
@@ -276,4 +283,3 @@ to real-world needs in this round rather than being over-tuned up front.
   dependency; the detector reads `entities/` directly via the shared iterator.
 - **Non-determinism breaking snapshot tests.** Mitigated: total ordering, no
   time/random inputs, mtime-unchanged assertion.
-```
