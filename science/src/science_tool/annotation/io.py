@@ -238,8 +238,7 @@ def _iter_ledgers(ds: Dataset) -> "list[AuditLedger]":
         hashes = (
             tuple(str(item) for item in ds.items(hashes_node)) if hashes_node else ()
         )
-        sth_node = ds.value(subj, SCI.sourceTextHash)
-        source_text_hash = str(sth_node) if sth_node is not None else None
+        source_text_hash = _str_or_none(ds.value(subj, SCI.sourceTextHash))
         modified = _read_dt(_required(ds, subj, DCTERMS.modified, context=ctx))
         out.append(
             AuditLedger(
