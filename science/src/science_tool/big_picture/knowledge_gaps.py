@@ -19,6 +19,7 @@ from science_tool.big_picture.literature_prefix import (
     is_external_paper_id,
 )
 from science_tool.big_picture.resolver import ResolverOutput
+from science_tool.entities import is_default_visible
 
 _logger = logging.getLogger(__name__)
 
@@ -69,6 +70,8 @@ def _load_topics(project_root: Path) -> dict[str, dict]:
             fm = read_frontmatter(md) or {}
             eid = fm.get("id")
             if not eid:
+                continue
+            if not is_default_visible(fm.get("status")):
                 continue
             if eid in topics:
                 raise ValueError(f"Duplicate topic id {eid!r}: {origins[eid]} vs {md}")
