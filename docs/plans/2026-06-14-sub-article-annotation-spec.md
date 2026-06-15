@@ -92,8 +92,8 @@ A resolver is required before any artifact is written:
   fail loud and name both files rather than guessing.
 
 Annotations target the **article text**, not our summary — so spans quote the
-authors' own words and the human summary stays clean and readable. Persisting
-normalized text (vs. the raw PDF) is what makes quote selectors stable and
+authors' own words and the human summary stays clean and readable. Persisting a
+rendered text artifact (vs. the raw PDF) is what makes quote selectors stable and
 re-anchorable across re-runs.
 
 ### Offset basis & anchoring policy
@@ -128,10 +128,15 @@ to quotes through an explicit map. Policy:
   keeps a selector from re-anchoring into a heading and guarantees the `exact`
   text the verifier searches for is present in the body.
 - **Provenance for the map.** `.source.md` frontmatter records, per persisted
-  passage, its source character-offset base (and section), so the seeder
-  reconstructs the offset→character map on re-runs without re-querying. The seeder
-  computes `exact`/`prefix`/`suffix` by slicing the persisted body (a `str`) at the
-  mapped character range; it never trusts a raw offset against the rendered file.
+  passage, its **rendered-file character base** (`file_char_base`), `length`, and
+  `section`. The seeder re-fetches the BioC record (it needs the annotations
+  regardless), recovers each passage's BioC document-offset base from that live
+  response, and maps a BioC `(offset, length)` to an absolute file index via
+  `file_char_base + (offset - passage_bioc_offset)`; the persisted `text_sha256`
+  guards that the passages still align (unchanged body => unchanged passages), so
+  the raw BioC offset base need not be persisted. The seeder computes
+  `exact`/`prefix`/`suffix` by slicing the persisted body (a `str`) at the mapped
+  character range; it never trusts a raw offset against the rendered file.
 - **Testing.** The offset→`TextQuoteSelector` conversion test asserts that every
   seeded selector re-resolves against the rendered `.source.md` via the standard
   verifier (i.e. the round-trip through frontmatter+headings holds), not merely
@@ -140,8 +145,9 @@ to quotes through an explicit map. Policy:
 ### Components
 
 1. **Article-text persistence.** Extend `paper-fetch`
-   (`~/d/science/science/src/science_tool/paper_fetch.py`) to normalize and
-   persist `.source.md`. When PubTator seeding is intended, the persisted abstract
+   (`~/d/science/science/src/science_tool/paper_fetch.py`) to render and
+   persist `.source.md` without Unicode or whitespace normalization of anchored
+   passage text. When PubTator seeding is intended, the persisted abstract
    is the **BioC passage text** (so PubTator offsets align, per *Offset basis*);
    Europe PMC is the fallback when no BioC record exists. Full text is persisted
    only when the license is whitelisted (see *License gating*). Record

@@ -392,7 +392,7 @@ def parse_bioc_passages(record: dict[str, Any]) -> SourcePassages | None:
 
 ## Task 3 — License resolution + whitelist (and conventions doc)
 
-Pure `is_whitelisted(...)` + `resolve_license(...)`. Whitelist `CC0`, `CC-BY`, `CC-BY-SA`, `CC-BY-ND` and versioned forms (`CC-BY-4.0`). Resolve from candidate values; most-permissive whitelisted value wins, else `unknown`. **Phase 1 source of candidates: Europe PMC `license` only.** `_try_unpaywall` (`paper_fetch.py:412`) exposes no license field today, so Unpaywall is NOT a candidate source in Phase 1 — `resolve_license` takes a generic candidate list so an Unpaywall license can be added later without an interface change.
+Pure `is_whitelisted(...)` + `resolve_license(...)`. Whitelist `CC0`, `CC-BY`, `CC-BY-SA`, `CC-BY-ND` and versioned forms (`CC-BY-4.0`). Resolve from candidate values; most-permissive whitelisted value wins, else `unknown`. **Phase 1 source of candidates: Europe PMC `license` only.** `_try_unpaywall` (`paper_fetch.py:412`) returns `oa_locations[].license` but does not currently extract it, so Unpaywall is NOT a candidate source in Phase 1 — `resolve_license` takes a generic candidate list so an Unpaywall license can be added later without an interface change.
 
 **Files**
 - Modify: `science/src/science_tool/annotation/source_text.py` (add `normalize_license_token`, `is_whitelisted`, `resolve_license`, `LICENSE_WHITELIST`)
@@ -522,8 +522,7 @@ verbatim; the canonical token below is used only for membership testing
 | `CC-BY-ND`      | `CC-BY-ND-4.0`           | yes |
 | anything else (incl. `CC-BY-NC*`, `unknown`, absent) | — | **no** — abstract only, `fulltext_omitted_reason: license-not-whitelisted` |
 
-License is resolved from Europe PMC `license` in Phase 1 (Unpaywall exposes no
-license field today); with multiple values the most-permissive whitelisted one
+License is resolved from Europe PMC `license` in Phase 1 (Unpaywall's `oa_locations[].license` is deferred, with EPMC license the Phase 1 primary); with multiple values the most-permissive whitelisted one
 wins, else `unknown`.
 
 > Annotation-type and source-prefix vocabularies (e.g. `entity-gene`,
@@ -894,11 +893,14 @@ class TestWriteSourceMd:
         )
 
     def test_abstract_only_when_unlicensed(self, tmp_path: Path) -> None:
+        # Full text WAS available but the license blocks it -> abstract only +
+        # fulltext_omitted_reason. (The reason is recorded only when full text
+        # actually existed; see `write_source_md`.)
         out = write_source_md(
             directory=tmp_path,
             citekey="Smith2024",
             abstract=self._abstract(),
-            fulltext=None,
+            fulltext=self._fulltext(),
             retrieved_from="pubtator3",
             license_="CC-BY-NC",
             licensed=False,
@@ -909,9 +911,27 @@ class TestWriteSourceMd:
         assert out.name == "Smith2024.source.md"
         assert "## Abstract" in text
         assert "## Full Text" not in text
+        assert "Full text body paragraph." not in text
         assert "fulltext_omitted_reason: license-not-whitelisted" in text
         assert "license: CC-BY-NC" in text
         assert "An abstract sentence." in text
+
+    def test_no_omitted_reason_when_no_fulltext_available(self, tmp_path: Path) -> None:
+        # Unlicensed but no full text existed anyway -> no misleading omission reason.
+        out = write_source_md(
+            directory=tmp_path,
+            citekey="Smith2024",
+            abstract=self._abstract(),
+            fulltext=None,
+            retrieved_from="europepmc",
+            license_="unknown",
+            licensed=False,
+            pmid=None,
+            doi="10.1038/foo-1",
+        )
+        text = out.read_text(encoding="utf-8")
+        assert "## Full Text" not in text
+        assert "fulltext_omitted_reason" not in text
 
     def test_full_text_persisted_when_licensed(self, tmp_path: Path) -> None:
         out = write_source_md(
@@ -1041,7 +1061,7 @@ Ensure `_build_frontmatter` emits, in order: `kind: paper-source`, `retrieved_fr
 
 ## Task 6 — Text acquisition (network, injectable httpx.Client)
 
-Fetch the PubTator3 BioC record (preferred), splitting passages into the abstract floor (title/abstract) and best-effort full text (body sections); fall back to the Europe PMC abstract (single passage) when no BioC record. Resolve a license from Europe PMC `license` (Unpaywall exposes no license field today — deferred). All requests go through an injected `httpx.Client` via `RateLimiter`, exactly like `fetch_paper`.
+Fetch the PubTator3 BioC record (preferred), splitting passages into the abstract floor (title/abstract) and best-effort full text (body sections); fall back to the Europe PMC abstract (single passage) when no BioC record. Resolve a license from Europe PMC `license` (Unpaywall's `oa_locations[].license` is a deferred secondary source; EPMC is the Phase 1 primary). All requests go through an injected `httpx.Client` via `RateLimiter`, exactly like `fetch_paper`.
 
 **Files**
 - Modify: `science/src/science_tool/annotation/source_text.py` (add `AcquiredSource`, `acquire_source_text`, `_fetch_bioc`, `_fetch_europepmc_core`)
@@ -1053,6 +1073,7 @@ Fetch the PubTator3 BioC record (preferred), splitting passages into the abstrac
 
 ```python
 from science_tool.annotation.source_text import (  # noqa: E402
+    EUROPEPMC_API_VERSION,
     AcquiredSource,
     acquire_source_text,
 )
@@ -1088,6 +1109,7 @@ class TestAcquireSourceText:
         assert acquired.licensed is True
         # _BIOC_RECORD has only title+abstract -> no full text.
         assert acquired.fulltext is None
+        assert acquired.abstract.release == "2024.01"  # BioC release, not a marker
 
     def test_bioc_body_sections_become_fulltext(self, tmp_path: Path) -> None:
         record = {
@@ -1138,6 +1160,8 @@ class TestAcquireSourceText:
         assert acquired.abstract.passages == (
             Passage(section="abstract", bioc_offset=0, text="Fallback abstract."),
         )
+        # source_release must reflect the EPMC source, not a PubTator marker.
+        assert acquired.abstract.release == EUROPEPMC_API_VERSION
         assert acquired.license == "CC-BY-NC"
         assert acquired.licensed is False
 
@@ -1175,14 +1199,21 @@ _EPMC_SEARCH_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
 _EPMC_HOST = "www.ebi.ac.uk"
 
 
+# Marker for Europe-PMC-sourced text (no PubTator release applies).
+EUROPEPMC_API_VERSION = "europepmc-api"
+
+
 @dataclass(frozen=True)
 class AcquiredSource:
     abstract: SourcePassages
     fulltext: SourcePassages | None
     retrieved_from: str
-    release: str
     license: str
     licensed: bool
+    # NOTE: the source release lives on `abstract.release` (BioC release for
+    # PubTator, EUROPEPMC_API_VERSION for the fallback) and the renderer reads it
+    # from there via `passages.release`; there is no separate `release` field to
+    # drift out of sync.
 
 
 def _fetch_bioc(
@@ -1262,7 +1293,7 @@ def acquire_source_text(
             if text and text.strip():
                 abstract = SourcePassages(
                     passages=(Passage(section="abstract", bioc_offset=0, text=text.strip()),),
-                    release=PUBTATOR3_API_VERSION,
+                    release=EUROPEPMC_API_VERSION,  # NOT a PubTator release
                 )
                 retrieved_from = "europepmc"
                 # Europe PMC fallback yields abstract only; full text stays None.
@@ -1277,7 +1308,6 @@ def acquire_source_text(
             abstract=abstract,
             fulltext=fulltext,
             retrieved_from=retrieved_from,
-            release=abstract.release,
             license=license_,
             licensed=licensed,
         )
@@ -1622,7 +1652,7 @@ Then skip sidecars in both discovery branches of `discover`:
 | BioC abstract (title+abstract passages) preferred (Components #1) | Task 2 + Task 6 (`_fetch_bioc`, `test_prefers_pubtator_bioc_abstract`) |
 | Europe PMC abstract single-passage fallback (Components #1) | Task 6 (`test_falls_back_to_europepmc_abstract`) |
 | License whitelist `CC0/CC-BY/CC-BY-SA/CC-BY-ND` + versioned (License gating) | Task 3 (`LICENSE_WHITELIST`, `is_whitelisted`) |
-| Resolve license from EPMC `license`; most-permissive whitelisted wins else unknown (Unpaywall has no license field today → deferred) | Task 3 (`resolve_license`); Task 6 (candidate from EPMC core) |
+| Resolve license from EPMC `license`; most-permissive whitelisted wins else unknown (Unpaywall `oa_locations[].license` exists but is deferred; EPMC license is the Phase 1 primary) | Task 3 (`resolve_license`); Task 6 (candidate from EPMC core) |
 | Abstract never gated; non-whitelisted ⇒ abstract only + `fulltext_omitted_reason` (License gating) | Task 5 (`test_abstract_only_when_unlicensed`) |
 | Full text acquired from BioC body sections (best-effort) and persisted only when whitelisted (License gating) | Task 6 (`_split_passages`, `test_bioc_body_sections_become_fulltext`); Task 5 (`test_full_text_persisted_when_licensed`) |
 | Frontmatter: `retrieved_from`, `source_release`, `license`, `text_sha256`, `pmid`/`doi`, offset map, `fulltext_omitted_reason` (artifact row) | Task 4/5 (`_build_frontmatter`; `test_text_sha256_is_hash_of_body_region`) |
@@ -1641,5 +1671,5 @@ Then skip sidecars in both discovery branches of `discover`:
 - **`content_hash` / `HASH_REQUIRED_SOURCE_PREFIXES` / re-audit caching** and per-annotation idempotency.
 - **Agent extraction skill** (`paper-annotate`) and **promotion** into epistemic entities.
 - **Europe PMC full-text-XML acquisition** (`_try_europepmc_fulltext` JATS → passages) for articles where PubTator BioC carries no body sections. Phase 1 sources full text **only** from the BioC record already fetched (preserving offset alignment); a separate EPMC-XML full-text path is deferred. (Phase 1 does write `## Full Text` when BioC supplies licensed body sections — see Task 6 `test_bioc_body_sections_become_fulltext`.)
-- **Unpaywall license extraction** (`_try_unpaywall` exposes no license field today); Phase 1 resolves license from Europe PMC only.
+- **Unpaywall license extraction** — `_try_unpaywall` *does* return `oa_locations[].license`, but Phase 1 resolves license from Europe PMC only; Unpaywall is a deferred secondary source.
 - **`<citekey>.source.anno.trig`** sidecar (created by the seeder, not the anchor surface).
