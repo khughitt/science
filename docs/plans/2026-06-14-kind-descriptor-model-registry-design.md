@@ -287,7 +287,11 @@ operate on a reconciled set.
   `variable`, `assumption`, `transformation`, `article`, `search`, `spec`,
   `research-package`, `validation-report`, `construct`, `outcome`,
   `pre-registration`, `research-question`, `structural-chain`, `chain-audit`
-  (plus the 21 already-agreeing kinds).
+  (plus the 21 already-agreeing kinds). Of these, **7 are registered but absent
+  from `EntityType`** (`construct`, `curation-sweep`, `outcome`,
+  `pre-registration`, `research-question`, `structural-chain`, `chain-audit`) and
+  gain **additive enum members** this slice, so the strict 3-way gate (descriptor ≡
+  registry ≡ enum core projection) holds without relaxation.
 - **reserved**: `unknown`.
 - **source-only**: `model`, `canonical_parameter`, `parameter_binding` (all
   currently in `LOCAL_PROFILE`; tied to source-row loading).
@@ -358,9 +362,12 @@ that pattern to the full set rather than introducing a new mechanism.)
   - `profiles/local.py` — `LOCAL_PROFILE` gains `category=source-only` tags
     (no kinds moved).
   - `identity.py` — `EntityClass` (definition lives here).
-  - `entities.py` — `EntityType` enum: an **additive static change** (hand-adds
-    `decision` + `claim-registry` members per §3.1's promotion; still hand-written,
-    no codegen, no dynamic enum) + plain `EntityClass` re-export (stable public path).
+  - `entities.py` — `EntityType` enum: an **additive static reconciliation** — hand-adds
+    the **9 authored-core kinds currently missing from the enum**: the 7 registry-present
+    (`construct`, `curation-sweep`, `outcome`, `pre-registration`, `research-question`,
+    `structural-chain`, `chain-audit`) + the 2 map-only (`decision`, `claim-registry`).
+    Still hand-written, no codegen, no dynamic enum; existing `EntityType.TASK`-style
+    refs are unaffected. + plain `EntityClass` re-export (stable public path).
   - `kinds.py` — **deleted** at the final task (`CORE_KINDS` absorbed into
     `EntityKind`; `EntityFilenameStrategy` relocated to `schema.py`). Until then it
     re-exports the Literal from `schema.py` so intermediate flips stay neutral.
@@ -394,7 +401,9 @@ Tool → model dependency direction is preserved throughout; no test makes
    existing imports working).
 2. Audit the full 50-kind universe + populate `CORE_PROFILE` (authored-core +
    reserved sentinels) and tag `LOCAL_PROFILE` (source-only); rule on
-   `curation-sweep` and the map-only kinds (`decision`, `claim-registry`). For the
+   `curation-sweep` and the map-only kinds (`decision`, `claim-registry`); **add the
+   9 authored-core kinds missing from `EntityType`** (the 7 registry-present +
+   `decision`/`claim-registry`) as additive enum members. For the
    **path-policy cross-section only** (the kinds `CORE_KINDS` enumerates), copy
    `home`/`strategy`/`default_status`/`statuses`/`shortform` from the keystone's
    verified `CORE_KINDS` values (§0.1); other authored-core descriptors get only the
@@ -434,6 +443,11 @@ Tool → model dependency direction is preserved throughout; no test makes
 - **Coupling breadth** (`EntityType` ~50 files, registry ~18) — mitigated by
   keeping `EntityType` static and changing only map internals behind stable
   accessors.
+- **9 additive `EntityType` members** — `EntityType.TASK`-style refs are stable
+  (additive `StrEnum`), so the residual risk is code that **iterates all enum values
+  assuming the old set** (e.g. exhaustive match/dispatch tables). That hidden coupling
+  is exactly what the strict drift tests + the existing ~5400-test suite are meant to
+  expose; any such site is fixed as part of this slice (full suite must stay green).
 - **Audit surfaces genuinely-dead kinds** — handled by an explicit `retire`
   ruling per orphan (removed, not enshrined); the strict gate forbids silent
   carry-over.
@@ -464,7 +478,9 @@ Tool → model dependency direction is preserved throughout; no test makes
   `profiles/schema.py`.
 - The four strict drift assertions hold; every `EntityType` member is classified;
   reserved / source-only kinds are named contracts with dedicated tests.
-- `EntityType` remains a hand-written static enum; no codegen introduced.
+- `EntityType` remains a hand-written static enum; no codegen introduced. It gains
+  9 additive members (the authored-core kinds it was missing) so the strict gate holds
+  with **zero tolerated registry-vs-enum drift**.
 - Full suite + ruff green; per-flip equivalence tests prove zero behavior change.
 
 ---
