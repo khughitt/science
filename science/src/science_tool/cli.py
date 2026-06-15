@@ -269,6 +269,22 @@ def entities_migrate_identifiers_command(project_path: Path, apply_changes: bool
     click.echo(json.dumps(report, indent=2))
 
 
+@entities_group.command("mark-superseded")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path("."),
+    help="Project root (default: current directory).",
+)
+@click.option("--apply", "apply_changes", is_flag=True, default=False, help="Apply changes (default: dry-run report).")
+def entities_mark_superseded_command(project_root: Path, apply_changes: bool) -> None:
+    """Auto-derive `superseded` status from linear supersedes chains (report, then --apply)."""
+    from science_tool.consolidation import mark_superseded
+
+    report = mark_superseded(project_root, apply=apply_changes)
+    click.echo(json.dumps(report, indent=2))
+
+
 @entities_group.command("migrate")
 @click.option("--apply", "apply_changes", is_flag=True, help="Apply the migration (default: dry run).")
 @click.option(
@@ -622,12 +638,13 @@ def entity_note(ref: str, note: str, note_date: str | None) -> None:
 @click.option("--kind")
 @click.option("--status")
 @click.option("--related")
+@click.option("--include-hidden", is_flag=True, default=False, help="Include superseded/archived entities (hidden by default).")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def entity_list(kind: str | None, status: str | None, related: str | None, output_format: str) -> None:
+def entity_list(kind: str | None, status: str | None, related: str | None, include_hidden: bool, output_format: str) -> None:
     """List source-authored entities."""
 
     try:
-        rows = list_entities(Path.cwd(), kind=kind, status=status, related=related)
+        rows = list_entities(Path.cwd(), kind=kind, status=status, related=related, include_hidden=include_hidden)
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
     emit_query_rows(

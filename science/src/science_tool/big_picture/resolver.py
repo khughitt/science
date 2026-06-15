@@ -24,6 +24,7 @@ from science_model.aspects import (
 )
 from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.big_picture.layout import entity_dir
+from science_tool.entities import is_default_visible
 
 Confidence = Literal["direct", "inverse", "back-inverse", "transitive"]
 
@@ -104,14 +105,17 @@ def resolve_questions(project_root: Path) -> dict[str, ResolverOutput]:
     return out
 
 
-def _load_entities(directory: Path) -> dict[str, dict]:
+def _load_entities(directory: Path, *, include_hidden: bool = False) -> dict[str, dict]:
     if not directory.is_dir():
         return {}
     out: dict[str, dict] = {}
     for path in sorted(directory.glob("*.md")):
         fm = read_frontmatter(path)
-        if fm and "id" in fm:
-            out[str(fm["id"])] = fm
+        if not fm or "id" not in fm:
+            continue
+        if not include_hidden and not is_default_visible(fm.get("status")):
+            continue
+        out[str(fm["id"])] = fm
     return out
 
 
