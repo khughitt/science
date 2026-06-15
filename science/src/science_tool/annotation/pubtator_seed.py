@@ -39,14 +39,14 @@ def annotation_type_for(pubtator_type: str) -> str | None:
 _IDENTIFIERS_BASE = "https://identifiers.org"
 
 _DIGITS = re.compile(r"^\d+$")
-_MESH = re.compile(r"^[A-Z]\d{6,}$")  # MeSH descriptor/supplementary, e.g. D001943
+_MESH = re.compile(r"^[A-Z]\d{6,}$")  # MeSH descriptor/supplementary id: a letter + 6 or more digits (PubTator emits the canonical 6-digit form, e.g. D001943).
 _RSID = re.compile(r"^rs\d+$")
 _RS_HASH = re.compile(r"^RS#:(\d+)$")
 _CVCL = re.compile(r"^CVCL_\w+$")
 
 
 def _first_id(identifier: str | None) -> str:
-    """First id of a possibly `;`-joined list, with a leading `NS:` prefix stripped."""
+    """First id of a possibly `;`-joined list, with a leading gene-namespace prefix (Gene:/NCBIGene:/Entrez:) stripped if present. MESH:/RS#: prefixes are left for the callers to handle."""
     if not identifier:
         return ""
     head = identifier.split(";")[0].strip()

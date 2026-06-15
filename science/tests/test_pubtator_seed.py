@@ -98,6 +98,7 @@ def test_pubtator3_prefix_is_hash_required():
         ("DNAMutation", "entity-variant"),
         ("SNP", "entity-variant"),
         ("Variant", "entity-variant"),
+        ("ProteinMutation", "entity-variant"),
         ("Unsupported", None),
     ],
 )
