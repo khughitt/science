@@ -344,8 +344,13 @@ equivalent even though `authored-core` is broader than the path-policy set (§0.
 - `_SHORTFORM_ENTITY_KINDS` ← `{d.shortform: d.name for d if d.shortform}`.
 - `MIGRATED_KINDS` ← `{d.name for d if d.template_ready}` (set for exactly the current
   13; §2.1).
-- registry `entity_class` ← descriptor `entity_class` (spans every classified kind —
-  reserved/source-only carry one too; standalone `_CORE_KIND_CLASSES` removed).
+- registry `entity_class` ← descriptor `entity_class`. Every classified kind carries
+  one on its descriptor (authored-core + reserved in `CORE_PROFILE`; source-only in
+  `LOCAL_PROFILE` at their effective `OPERATIONAL` default). The **flip itself rewires
+  `with_core_types`** (the core path: authored-core + reserved), removing the standalone
+  `_CORE_KIND_CLASSES`. Source-only kinds keep registering via the local-profile loader
+  at the same `OPERATIONAL` value the descriptor now records — behavior-neutral; wiring
+  that loader to read the descriptor is a trivial deferred follow-on, not this slice.
 
 (Here `d` ranges over `CORE_PROFILE.entity_kinds + LOCAL_PROFILE.entity_kinds`.)
 

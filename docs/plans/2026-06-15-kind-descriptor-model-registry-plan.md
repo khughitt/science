@@ -12,7 +12,7 @@
 
 ## Conventions (read before any task)
 
-- **Worktree:** all work happens in `~/d/science/.worktrees/kind-descriptor-model-registry` on branch `feat/kind-descriptor-model-registry`. Every step `cd`s into it; verify `git branch --show-current` prints `feat/kind-descriptor-model-registry` before committing (commits must not leak to `main`).
+- **Worktree:** all work happens in `~/d/science/.worktrees/kind-descriptor-model-registry` on branch `feat/kind-descriptor-model-registry`. Every step `cd`s into it; verify `rtk git branch --show-current` prints `feat/kind-descriptor-model-registry` before committing (commits must not leak to `main`).
 - **Tests run from the package dir under the worktree:** `cd ~/d/science/.worktrees/kind-descriptor-model-registry/science && uv run --frozen pytest <path>`. Model tests live in `science/model/tests/`; tool/root tests in `science/tests/`. Running pytest from the repo root fails with `ModuleNotFoundError: No module named 'science_model'`. (`rtk pytest` collects 0 tests under this uv workspace — keep `uv run --frozen pytest`.) Use `rtk git` / `rtk grep` for git/grep.
 - **Dependency direction:** `science_model` must never import `science_tool`. Model-package tests may not import the registry or tool maps; that assertion lives in the tool/root suite.
 - **No `Co-Authored-By` trailers** in commits. Use `~/d/` (not absolute Dropbox paths) in any doc/code text.
@@ -23,11 +23,11 @@
 
 ## Authoritative data sources (the SSOT for Task 2's values)
 
-Every value populated in Task 2 is **transcribed from an existing literal**, never invented. The four `FROZEN_*` maps are the ones currently pasted in `science/tests/test_kind_descriptor_derivation.py` (the keystone guard — itself derived green from today's literals). Quoting them here so tasks are self-contained:
+Every value populated in Task 2 is **transcribed from an existing literal**, with **exactly two explicit new audit rulings** (called out below): the `entity_class` of `decision` and `claim-registry`, which were map-only and had no prior registry/enum entry, so no literal to copy. Everything else is a transcription. The four `FROZEN_*` maps are the ones currently pasted in `science/tests/test_kind_descriptor_derivation.py` (the keystone guard — itself derived green from today's literals). Quoting them here so tasks are self-contained:
 
 - **Path policy** (`home` + `strategy`) and the per-kind `default_status` / `statuses` come from `FROZEN_MARKDOWN_POLICIES`, `FROZEN_DEFAULT_STATUS`, `FROZEN_STATUS_VALUES` (reproduced verbatim in Task 4/5 fixtures below). `home` is the `EntityPathPolicy.root` rendered as a string, e.g. `"entities/hypotheses"`; singletons point at a file, e.g. `"entities/research-question.md"`, `"entities/claim-registry.yaml"`.
 - **`shortform`** comes from `FROZEN_SHORTFORM = {"d":"discussion","h":"hypothesis","i":"interpretation","p":"proposition","q":"question","t":"theme"}`.
-- **`entity_class`** comes from `_CORE_KIND_CLASSES` in `science/src/science_tool/graph/entity_registry.py` (reproduced in the Task 2 table below).
+- **`entity_class`** comes from `_CORE_KIND_CLASSES` in `science/src/science_tool/graph/entity_registry.py` (reproduced in the Task 2 table below) — **except** the two new audit rulings: `decision` → `EntityClass.REFERENCE`, `claim-registry` → `EntityClass.OPERATIONAL` (these had no prior class). The three `source-only` kinds (`model`, `canonical_parameter`, `parameter_binding`) carry `EntityClass.OPERATIONAL` — their current effective value (the `register_profile_kind` default).
 - **`template_ready`** is `True` for exactly the current `MIGRATED_KINDS` (`science/model/src/science_model/templates.py`): `{hypothesis, question, interpretation, discussion, theme, proposition, evidence-line, finding, method, paper, book, pre-registration, synthesis}` (13).
 - **`category`**: `unknown` → `reserved`; `model`/`canonical_parameter`/`parameter_binding` → `source-only`; every other core kind → `authored-core`.
 
@@ -251,10 +251,10 @@ Expected: PASS (the new fields are defaulted, so existing manifests/loaders are 
 
 ```bash
 cd ~/d/science/.worktrees/kind-descriptor-model-registry
-git add science/model/src/science_model/identity.py science/model/src/science_model/entities.py \
+rtk git add science/model/src/science_model/identity.py science/model/src/science_model/entities.py \
   science/model/src/science_model/profiles/schema.py science/model/src/science_model/kinds.py \
   science/src/science_tool/graph/entity_registry.py science/model/tests/test_entity_kind_schema.py
-git commit -m "feat(kinds): extend EntityKind descriptor; relocate EntityClass + EntityFilenameStrategy; scaffold registry model map"
+rtk git commit -m "feat(kinds): extend EntityKind descriptor; relocate EntityClass + EntityFilenameStrategy; scaffold registry model map"
 ```
 
 ---
@@ -416,7 +416,19 @@ Add `from science_model.identity import EntityClass` and `from science_model.pro
 
 - [ ] **Step 4: Tag `LOCAL_PROFILE` source-only kinds**
 
-In `science/model/src/science_model/profiles/local.py`, add `category=KindCategory.SOURCE_ONLY` to all three `EntityKind`s (`model`, `canonical_parameter`, `parameter_binding`); add the `KindCategory` import. No kinds moved.
+In `science/model/src/science_model/profiles/local.py`, add **both** `category=KindCategory.SOURCE_ONLY` **and** `entity_class=EntityClass.OPERATIONAL` to all three `EntityKind`s (`model`, `canonical_parameter`, `parameter_binding`); add the `KindCategory` + `EntityClass` imports. `OPERATIONAL` is their current effective class — the `register_profile_kind(..., entity_class=EntityClass.OPERATIONAL)` default they register under today — so recording it on the descriptor is behavior-neutral and makes the descriptor the complete SSOT (design §4 "reserved/source-only carry one too"). No kinds moved.
+
+Add a named-contract test to `science/model/tests/test_kind_reconciliation.py` (Task 3 file; or alongside, if writing Task 2 first):
+
+```python
+def test_source_only_descriptors_carry_operational_class() -> None:
+    from science_model.identity import EntityClass
+    for ek in LOCAL_PROFILE.entity_kinds:
+        if ek.category == KindCategory.SOURCE_ONLY:
+            assert ek.entity_class == EntityClass.OPERATIONAL, ek.name
+```
+
+> Scope note: this slice's *registry* `entity_class` flip (Task 6) rewires only `with_core_types` (CORE kinds). Source-only kinds register via the local-profile loader (`register_profile_kind`), which already defaults to `OPERATIONAL` — equal to the descriptor value pinned above — so no loader rewiring is needed and behavior is unchanged. The descriptor is now the recorded SSOT for their class; wiring the loader to *read* it is a trivial future follow-on, not required here.
 
 - [ ] **Step 5: Register the two promoted map-only kinds (temporary, until Task 6)**
 
@@ -431,10 +443,10 @@ Expected: the recognition-delta test PASSES (delta == `INTENDED_ADDITIONS`); mod
 
 ```bash
 cd ~/d/science/.worktrees/kind-descriptor-model-registry
-git add science/model/src/science_model/profiles/core.py science/model/src/science_model/profiles/local.py \
+rtk git add science/model/src/science_model/profiles/core.py science/model/src/science_model/profiles/local.py \
   science/model/src/science_model/entities.py science/src/science_tool/graph/entity_registry.py \
   science/tests/test_kind_reconciliation_registry.py
-git commit -m "feat(kinds): populate CORE_PROFILE descriptors, tag LOCAL_PROFILE, reconcile EntityType (+9), register promoted kinds"
+rtk git commit -m "feat(kinds): populate CORE_PROFILE descriptors, tag LOCAL_PROFILE, reconcile EntityType (+9), register promoted kinds"
 ```
 
 ---
@@ -521,8 +533,8 @@ Expected: PASS. Any failure means Task 2's data is incomplete — fix the descri
 
 ```bash
 cd ~/d/science/.worktrees/kind-descriptor-model-registry
-git add science/model/tests/test_kind_reconciliation.py science/tests/test_kind_reconciliation_registry.py
-git commit -m "test(kinds): strict reconciliation gate (descriptor ≡ registry ≡ EntityType core projection)"
+rtk git add science/model/tests/test_kind_reconciliation.py science/tests/test_kind_reconciliation_registry.py
+rtk git commit -m "test(kinds): strict reconciliation gate (descriptor ≡ registry ≡ EntityType core projection)"
 ```
 
 ---
@@ -591,8 +603,8 @@ Expected: PASS (derived maps byte-identical to the frozen literals).
 
 ```bash
 cd ~/d/science/.worktrees/kind-descriptor-model-registry
-git add science/src/science_tool/entities.py science/tests/test_kind_map_equivalence.py
-git commit -m "refactor(kinds): derive path policies + shortform map from CORE_PROFILE (field-presence)"
+rtk git add science/src/science_tool/entities.py science/tests/test_kind_map_equivalence.py
+rtk git commit -m "refactor(kinds): derive path policies + shortform map from CORE_PROFILE (field-presence)"
 ```
 
 ---
@@ -643,8 +655,8 @@ Expected: PASS.
 
 ```bash
 cd ~/d/science/.worktrees/kind-descriptor-model-registry
-git add science/src/science_tool/entities.py science/tests/test_kind_map_equivalence.py
-git commit -m "refactor(kinds): derive default-status + status-vocab maps from CORE_PROFILE"
+rtk git add science/src/science_tool/entities.py science/tests/test_kind_map_equivalence.py
+rtk git commit -m "refactor(kinds): derive default-status + status-vocab maps from CORE_PROFILE"
 ```
 
 ---
@@ -667,10 +679,13 @@ FROZEN_MIGRATED_KINDS = frozenset({
     "hypothesis", "question", "interpretation", "discussion", "theme", "proposition",
     "evidence-line", "finding", "method", "paper", "book", "pre-registration", "synthesis",
 })
-# Verbatim copy of _CORE_KIND_CLASSES captured before the flip (kind -> class value).
+# The FULL post-Task-2 _CORE_KIND_CLASSES (all 48 core kinds, values as EntityClass
+# .value strings). By Task 6, "current" _CORE_KIND_CLASSES already includes the two
+# promoted kinds, so they MUST be in this fixture. Copy the dict verbatim, e.g.:
 FROZEN_KIND_CLASSES = {
     "task": "operational", "dataset": "operational", "workflow-run": "operational",
-    # ... paste ALL entries from _CORE_KIND_CLASSES verbatim (values as EntityClass) ...
+    # ... all 46 original entries verbatim ...
+    "decision": "reference", "claim-registry": "operational",  # the two promoted (Task 2)
 }
 
 
@@ -681,13 +696,12 @@ def test_migrated_kinds_equal_prior_literal() -> None:
 def test_registry_entity_class_equals_prior_literal() -> None:
     registry = EntityRegistry.with_core_types()
     live = {k: v.value for k, v in registry.all_kind_classes().items()}
-    # decision/claim-registry are NEW registrations (not in the old _CORE_KIND_CLASSES);
-    # assert the pre-existing classes are unchanged:
-    for kind, cls in FROZEN_KIND_CLASSES.items():
-        assert live[kind] == cls, kind
+    # with_core_types registers exactly the core kinds, so assert FULL equality
+    # (not just pre-existing entries) against the post-Task-2 class map.
+    assert live == FROZEN_KIND_CLASSES
 ```
 
-> Capture `FROZEN_KIND_CLASSES` by copying the current `_CORE_KIND_CLASSES` dict (use `EntityClass` members or their `.value`); this is the before-refactor authority.
+> Capture `FROZEN_KIND_CLASSES` by copying the `_CORE_KIND_CLASSES` dict **as it exists after Task 2** (48 entries, including `decision`/`claim-registry`), values as `EntityClass.value` strings. Full equality is the authority that the descriptor-derived registry classes reproduce the hand map exactly.
 
 - [ ] **Step 2: Run; expect PASS** (still hand-written).
 
@@ -738,8 +752,8 @@ Expected: PASS.
 
 ```bash
 cd ~/d/science/.worktrees/kind-descriptor-model-registry
-git add science/model/src/science_model/templates.py science/src/science_tool/graph/entity_registry.py science/tests/test_kind_map_equivalence.py
-git commit -m "refactor(kinds): derive MIGRATED_KINDS + registry entity_class from CORE_PROFILE; drop _CORE_KIND_CLASSES"
+rtk git add science/model/src/science_model/templates.py science/src/science_tool/graph/entity_registry.py science/tests/test_kind_map_equivalence.py
+rtk git commit -m "refactor(kinds): derive MIGRATED_KINDS + registry entity_class from CORE_PROFILE; drop _CORE_KIND_CLASSES"
 ```
 
 ---
@@ -765,7 +779,7 @@ Expected: only matches inside `science/model/src/science_model/kinds.py` itself 
 
 ```bash
 cd ~/d/science/.worktrees/kind-descriptor-model-registry
-git rm science/model/src/science_model/kinds.py science/model/tests/test_kinds.py science/tests/test_kind_descriptor_derivation.py
+rtk git rm science/model/src/science_model/kinds.py science/model/tests/test_kinds.py science/tests/test_kind_descriptor_derivation.py
 ```
 
 > Coverage is not lost: the path/status/shortform maps are now pinned by `test_kind_map_equivalence.py`; descriptor self-consistency is pinned by the reconciliation gate (`test_kind_reconciliation*.py`).
@@ -779,8 +793,8 @@ Expected: full suite PASS (the existing ~5400-test suite covers the broad `Entit
 
 ```bash
 cd ~/d/science/.worktrees/kind-descriptor-model-registry
-git add -A
-git commit -m "refactor(kinds): delete transitional CORE_KINDS; EntityKind is the sole kind SSOT"
+rtk git add -A
+rtk git commit -m "refactor(kinds): delete transitional CORE_KINDS; EntityKind is the sole kind SSOT"
 ```
 
 ---
