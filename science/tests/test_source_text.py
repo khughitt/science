@@ -589,3 +589,22 @@ class TestAcquireSourceText:
         msg = str(exc.value)
         assert "pubtator" in msg and "HTTP 500" in msg
         assert "europepmc" in msg and "HTTP 503" in msg
+
+
+from science_tool.graph.storage_adapters.markdown import MarkdownAdapter  # noqa: E402
+
+
+class TestSidecarNotDiscovered:
+    def test_source_md_sidecar_is_not_ingested_as_entity(self, tmp_path: Path) -> None:
+        papers = tmp_path / "entities" / "papers"
+        papers.mkdir(parents=True)
+        (papers / "Smith2024.md").write_text(
+            "---\nid: paper:Smith2024\ntitle: Smith2024\n---\n\nx\n", encoding="utf-8"
+        )
+        (papers / "Smith2024.source.md").write_text(
+            "---\nkind: paper-source\ntext_sha256: abc\n---\n\n## Abstract\n\nx\n", encoding="utf-8"
+        )
+        refs = MarkdownAdapter(scan_roots=["entities"]).discover(tmp_path)
+        paths = {r.path for r in refs}
+        assert "entities/papers/Smith2024.md" in paths
+        assert "entities/papers/Smith2024.source.md" not in paths

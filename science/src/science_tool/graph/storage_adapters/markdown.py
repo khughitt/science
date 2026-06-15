@@ -11,6 +11,10 @@ from science_model.source_ref import SourceRef
 
 from science_tool.graph.storage_adapters.base import StorageAdapter
 
+# Anchor-surface sidecars (paper `.source.md`) live inside entity roots but are
+# NOT entities; never ingest them as source records.
+SIDECAR_MARKDOWN_SUFFIX = ".source.md"
+
 
 class MarkdownAdapter(StorageAdapter):
     name = "markdown"
@@ -31,13 +35,15 @@ class MarkdownAdapter(StorageAdapter):
             if not root.is_dir():
                 continue
             for path in sorted(root.rglob("*.md")):
+                if path.name.endswith(SIDECAR_MARKDOWN_SUFFIX):
+                    continue
                 try:
                     rel_path = str(path.relative_to(project_root))
                 except ValueError:
                     rel_path = str(path)
                 refs_by_path[rel_path] = SourceRef(adapter_name=self.name, path=rel_path)
         for rel_path in self._virtual_files:
-            if rel_path.endswith(".md"):
+            if rel_path.endswith(".md") and not rel_path.endswith(SIDECAR_MARKDOWN_SUFFIX):
                 refs_by_path[rel_path] = SourceRef(adapter_name=self.name, path=rel_path)
         return [refs_by_path[path] for path in sorted(refs_by_path)]
 
