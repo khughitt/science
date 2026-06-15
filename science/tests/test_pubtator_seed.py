@@ -1,18 +1,25 @@
+from datetime import datetime, timezone
+
+import httpx
 import pytest
 
+from science_tool.annotation.io import read_sidecar, sidecar_for_markdown
 from science_tool.annotation.model import HASH_REQUIRED_SOURCE_PREFIXES, IriBody, Motivation
 from science_tool.annotation.pubtator_seed import (
     BiocMention,
     PairedPassage,
     PersistedPassage,
+    SeedReport,
     annotation_type_for,
     concept_iri_for,
     pair_passages,
     parse_bioc_entity_annotations,
     plan_mention,
+    seed_pubtator,
 )
 from science_tool.annotation.source_text import Passage, SourcePassages, SourceTextError
 from science_tool.annotation.sources.base import PlannedAnnotation
+from science_tool.paper_fetch import FetchConfig
 
 # A title+abstract record with one body passage (non-persisted in abstract-only mode),
 # duplicate-surface mentions in the same passage, and one unnormalized variant.
@@ -334,3 +341,103 @@ def test_plan_mention_slice_mismatch_fails_loud():
     m = BiocMention(pubtator_type="Gene", identifier="672", text="XXXXX", offset=0, length=5)
     with pytest.raises(SourceTextError, match="slice"):
         plan_mention(_FILE, _paired_for_abstract(), m, release="2025-01", source_md_name="x.source.md")
+
+
+# --- seed_pubtator orchestrator tests -----------------------------------------
+
+NOW = datetime(2026, 6, 15, tzinfo=timezone.utc)
+
+
+def _cfg(tmp_path):
+    return FetchConfig(email="t@example.com", cache_dir=tmp_path / "cache")
+
+
+def _client(handler):
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def _paper_entity(tmp_path):
+    """Create a paper entity whose pmid resolves, under doc/background/papers/."""
+    d = tmp_path / "doc" / "background" / "papers"
+    d.mkdir(parents=True)
+    (d / "doe2020.md").write_text("---\nkind: paper\npmid: 12345678\n---\n\n# Doe 2020\n")
+    return d / "doe2020.md"
+
+
+def _bioc_handler(request: httpx.Request) -> httpx.Response:
+    # PubTator3 BioC export endpoint -> the fixture; Europe PMC -> empty.
+    if "pubtator3-api" in str(request.url):
+        return httpx.Response(200, json=BIOC_FIXTURE)
+    return httpx.Response(200, json={"resultList": {"result": []}})
+
+
+def test_seed_pubtator_end_to_end(tmp_path):
+    from science_tool.annotation.source_text import persist_source
+
+    entity = _paper_entity(tmp_path)
+    cfg = _cfg(tmp_path)
+    # Phase 1: write a real .source.md (abstract floor only; INTRO body is non-persisted).
+    persist_source(
+        project_root=tmp_path, identifier="12345678", cfg=cfg, http=_client(_bioc_handler)
+    )
+    source_md = entity.parent / "doe2020.source.md"
+    assert source_md.exists()
+
+    # Phase 2a: seed.
+    report = seed_pubtator(
+        project_root=tmp_path,
+        identifier="12345678",
+        cfg=cfg,
+        actor="tester",
+        now=NOW,
+        http=_client(_bioc_handler),
+    )
+    assert isinstance(report, SeedReport)
+    # 2 BRCA1 (gene) + 1 disease + 1 chemical + 1 species + 1 rsID variant = 6 written.
+    assert report.written == 6
+    # Skips: 1 tmVar (unnormalized) + 1 TP53 (non-persisted INTRO body).
+    assert report.skipped.get("unnormalized-concept") == 1
+    assert report.skipped.get("non-persisted-passage") == 1
+
+    sidecar = read_sidecar(sidecar_for_markdown(source_md))
+    assert len(sidecar.annotations) == 6
+    assert all(a.content_hash for a in sidecar.annotations)
+
+
+def test_seed_pubtator_idempotent_rerun(tmp_path):
+    from science_tool.annotation.source_text import persist_source
+
+    _paper_entity(tmp_path)
+    cfg = _cfg(tmp_path)
+    persist_source(project_root=tmp_path, identifier="12345678", cfg=cfg, http=_client(_bioc_handler))
+    first = seed_pubtator(project_root=tmp_path, identifier="12345678", cfg=cfg, actor="t", now=NOW, http=_client(_bioc_handler))
+    second = seed_pubtator(project_root=tmp_path, identifier="12345678", cfg=cfg, actor="t", now=NOW, http=_client(_bioc_handler))
+    assert first.written == 6
+    assert second.written == 0  # 4-tuple skip -> fully idempotent
+
+
+def test_seed_pubtator_missing_source_md_fails_loud(tmp_path):
+    _paper_entity(tmp_path)  # entity exists, but no .source.md
+    cfg = _cfg(tmp_path)
+    with pytest.raises(SourceTextError, match="persist-source"):
+        seed_pubtator(project_root=tmp_path, identifier="12345678", cfg=cfg, actor="t", now=NOW, http=_client(_bioc_handler))
+
+
+def test_seed_pubtator_no_bioc_record_is_noop(tmp_path):
+    from science_tool.annotation.source_text import persist_source
+
+    _paper_entity(tmp_path)
+    cfg = _cfg(tmp_path)
+
+    def epmc_only(request: httpx.Request) -> httpx.Response:
+        if "pubtator3-api" in str(request.url):
+            return httpx.Response(200, json={"PubTator3": []})
+        return httpx.Response(
+            200,
+            json={"resultList": {"result": [{"abstractText": "An abstract.", "license": "CC-BY"}]}},
+        )
+
+    persist_source(project_root=tmp_path, identifier="12345678", cfg=cfg, http=_client(epmc_only))
+    report = seed_pubtator(project_root=tmp_path, identifier="12345678", cfg=cfg, actor="t", now=NOW, http=_client(epmc_only))
+    assert report.written == 0
+    assert report.note is not None

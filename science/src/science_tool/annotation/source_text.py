@@ -553,18 +553,21 @@ class AcquiredSource:
     # drift out of sync.
 
 
+def fetch_bioc_record(
+    pmid: str, client: httpx.Client, limiter: RateLimiter, cfg: FetchConfig
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Fetch the raw PubTator3 BioC JSON record. Returns (record-or-None, err-or-None)."""
+    _ = cfg  # reserved for future polite-pool identification / API key
+    return _get_json(
+        client, limiter, _PUBTATOR3_BIOC_URL, _PUBTATOR3_HOST, params={"pmids": pmid}
+    )
+
+
 def _fetch_bioc(
     pmid: str, client: httpx.Client, limiter: RateLimiter, cfg: FetchConfig
 ) -> tuple[SourcePassages | None, str | None]:
-    """Fetch PubTator3 BioC passages. Returns (passages-or-None, err-or-None).
-
-    `err` carries the transport/HTTP/JSON failure reason from `_get_json` so the
-    terminal acquisition error can name a real service failure (vs. a clean 404).
-    """
-    _ = cfg  # reserved for future polite-pool identification / API key
-    data, err = _get_json(
-        client, limiter, _PUBTATOR3_BIOC_URL, _PUBTATOR3_HOST, params={"pmids": pmid}
-    )
+    """Fetch PubTator3 BioC passages. Returns (passages-or-None, err-or-None)."""
+    data, err = fetch_bioc_record(pmid, client, limiter, cfg)
     if not data:
         return None, err
     return parse_bioc_passages(data), err

@@ -12,16 +12,39 @@ from __future__ import annotations
 import re
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from science_tool.annotation.model import IriBody, Motivation, SpecificResource, TextQuoteSelector
+import httpx
+
+from science_tool.annotation.audit import merge_planned
+from science_tool.annotation.io import (
+    atomic_write_text,
+    read_sidecar,
+    serialize_sidecar,
+    sidecar_for_markdown,
+)
+from science_tool.annotation.model import (
+    IriBody,
+    Motivation,
+    Sidecar,
+    SpecificResource,
+    TextQuoteSelector,
+)
 from science_tool.annotation.source_text import (
+    PUBTATOR3_API_VERSION,
     SourcePassages,
     SourceTextError,
+    fetch_bioc_record,
+    normalize_doi,
+    normalize_pmid,
+    parse_bioc_passages,
+    resolve_paper_entity,
 )
 from science_tool.annotation.sources.base import PlannedAnnotation
 from science_tool.commons.frontmatter import raw_frontmatter
+from science_tool.paper_fetch import FetchConfig, RateLimiter
 
 # --- BioC entity mention dataclass + parser -----------------------------------
 
@@ -340,3 +363,85 @@ def plan_mention(
         source_name=f"pubtator3:{release}:seeder-v1",
     )
     return planned, None
+
+
+# --- Orchestrator -------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SeedReport:
+    written: int
+    skipped: dict[str, int]
+    note: str | None = None
+
+
+def seed_pubtator(
+    *,
+    project_root: Path,
+    identifier: str,
+    cfg: FetchConfig,
+    actor: str,
+    now: datetime,
+    http: httpx.Client | None = None,
+) -> SeedReport:
+    """Seed PubTator3 entity-mention annotations into `<citekey>.source.anno.trig`.
+
+    Requires an existing `<citekey>.source.md` (fail loud otherwise). Re-fetches the
+    raw BioC record for the entity's PMID, converts each entity mention, and merges
+    the planned rows idempotently. PubMed-only: no PMID / no BioC record -> no-op.
+    """
+    doi = normalize_doi(identifier)
+    pmid = None if doi else normalize_pmid(identifier)
+    resolved = resolve_paper_entity(project_root, doi=doi, pmid=pmid)
+
+    source_md = resolved.directory / f"{resolved.citekey}.source.md"
+    if not source_md.is_file():
+        raise SourceTextError(
+            f"{source_md} not found; run `science paper persist-source {identifier}` first."
+        )
+    file_text, persisted = load_persisted_passages(source_md)
+
+    skipped: Counter[str] = Counter()
+    if not resolved.pmid:
+        return SeedReport(written=0, skipped={}, note="no PMID; PubTator3 is PubMed-only")
+
+    owns = http is None
+    client = http or httpx.Client(
+        timeout=cfg.http_timeout, headers={"User-Agent": f"science/0.1 (mailto:{cfg.email})"}
+    )
+    try:
+        limiter = RateLimiter(cfg)
+        record, err = fetch_bioc_record(resolved.pmid, client, limiter, cfg)
+    finally:
+        if owns:
+            client.close()
+
+    if not record:
+        return SeedReport(written=0, skipped={}, note=f"no PubTator3 record ({err or 'no record'})")
+
+    parsed = parse_bioc_passages(record)
+    if parsed is None:
+        return SeedReport(written=0, skipped={}, note="PubTator3 record had no usable passages")
+
+    release = parsed.release or PUBTATOR3_API_VERSION
+    paired = pair_passages(file_text, persisted, parsed)
+    mentions, parse_drops = parse_bioc_entity_annotations(record)
+    skipped.update(parse_drops)  # malformed-bioc / multi-location surfaced, not silent
+
+    planned = []
+    for m in mentions:
+        p, reason = plan_mention(
+            file_text, paired, m, release=release, source_md_name=source_md.name
+        )
+        if p is not None:
+            planned.append(p)
+        elif reason is not None:
+            skipped[reason] += 1
+
+    sidecar_path = sidecar_for_markdown(source_md)
+    sidecar = read_sidecar(sidecar_path) if sidecar_path.exists() else Sidecar()
+    new_sidecar, written = merge_planned(sidecar, planned, actor=actor, now=now)
+    if written:
+        atomic_write_text(sidecar_path, serialize_sidecar(new_sidecar))
+
+    return SeedReport(written=len(written), skipped=dict(skipped), note=None)
