@@ -30,12 +30,12 @@ _TASK_PREFIX = "task:"
 
 class LinearChain(BaseModel):
     survivor: str
-    archivable: list[str]  # the superseded tail (everything but the survivor)
-    members: list[str]     # all nodes including the survivor, sorted
+    archivable: list[str]  # the superseded tail (everything but the survivor); alphabetically sorted, NOT topological depth-order
+    members: list[str]     # all nodes including the survivor; alphabetically sorted
 
 
 class NonLinearChain(BaseModel):
-    nodes: list[str]
+    nodes: list[str]  # component nodes, alphabetically sorted
     reason: str
 
 
