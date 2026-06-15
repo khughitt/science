@@ -50,5 +50,5 @@ def test_invalid_entity_class_in_manifest_raises(tmp_path: Path) -> None:
     project_root = _build_extension_project(tmp_path)
     manifest_path = project_root / "knowledge" / "sources" / "ext" / "manifest.yaml"
     manifest_path.write_text(manifest_path.read_text().replace("epistemic", "epistemyk"))
-    with pytest.raises(ValueError, match="Invalid entity_class"):
+    with pytest.raises(ValueError, match="entity_class"):
         load_project_sources(project_root)

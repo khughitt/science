@@ -558,12 +558,32 @@ def test_materialize_graph_uses_configured_local_profile_sources(tmp_path: Path)
     )
     local_sources = project / "knowledge" / "sources" / "lab_local"
     local_sources.mkdir(parents=True)
+    # Declare a genuinely project-local kind so the entity defaults to the
+    # configured local profile (core kinds always default to profile: core,
+    # regardless of which sources dir they live in).
+    (local_sources / "manifest.yaml").write_text(
+        "\n".join(
+            [
+                "name: lab_local",
+                "imports: []",
+                "strictness: typed-extension",
+                "entity_kinds:",
+                "  - name: lab-note",
+                "    canonical_prefix: lab-note",
+                "    layer: layer/extension",
+                "    description: Project-local lab note.",
+                "relation_kinds: []",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
     (local_sources / "entities.yaml").write_text(
         "\n".join(
             [
                 "entities:",
-                "  - canonical_id: topic:evaluation",
-                "    kind: topic",
+                "  - canonical_id: lab-note:evaluation",
+                "    kind: lab-note",
                 "    title: Evaluation",
                 "    related: [question:q01-demo]",
                 "",
@@ -578,12 +598,12 @@ def test_materialize_graph_uses_configured_local_profile_sources(tmp_path: Path)
     dataset.parse(source=str(trig_path), format="trig")
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
 
-    topic_uri = PROJECT_NS["topic/evaluation"]
+    note_uri = PROJECT_NS["lab-note/evaluation"]
     question_uri = PROJECT_NS["question/q01-demo"]
 
-    assert (topic_uri, RDF.type, SCI.Topic) in knowledge
-    assert (topic_uri, SCI.profile, Literal("lab_local")) in knowledge
-    assert (topic_uri, SKOS.related, question_uri) in knowledge
+    assert (note_uri, RDF.type, SCI.LabNote) in knowledge
+    assert (note_uri, SCI.profile, Literal("lab_local")) in knowledge
+    assert (note_uri, SKOS.related, question_uri) in knowledge
 
 
 def test_materialize_graph_uses_kind_for_domain_rdf_class(tmp_path: Path) -> None:

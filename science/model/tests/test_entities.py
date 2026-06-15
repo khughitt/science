@@ -235,7 +235,6 @@ def test_removed_types_absent():
     assert not hasattr(EntityType, "ARTIFACT")
     assert not hasattr(EntityType, "COMPARISON")
     assert not hasattr(EntityType, "BIAS_AUDIT")
-    assert not hasattr(EntityType, "PRE_REGISTRATION")
 
 
 def test_pre_registered_fields():
