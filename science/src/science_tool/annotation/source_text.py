@@ -105,11 +105,20 @@ _ABSTRACT_BIOC_SECTIONS = frozenset({"title", "abstract"})
 def _split_passages(parsed: SourcePassages) -> tuple[SourcePassages, SourcePassages | None]:
     """Partition BioC passages into (abstract, full-text-or-None) by section.
 
-    Falls back to treating all passages as the abstract when none is labeled
-    title/abstract (defensive; a malformed record should still yield the floor).
+    The partition is strictly disjoint: no passage may appear in both the abstract
+    floor and the full text. When NO passage is labeled title/abstract (malformed
+    or body-only record), the whole record becomes the abstract floor and there is
+    no full text — otherwise the fallback would duplicate every passage into both
+    sections.
     """
     abstract = tuple(p for p in parsed.passages if p.section in _ABSTRACT_BIOC_SECTIONS)
-    body = tuple(p for p in parsed.passages if p.section not in _ABSTRACT_BIOC_SECTIONS)
+    # Only carve out a body when an abstract floor is actually labeled; without one
+    # the whole record is the floor (body stays empty) so nothing is duplicated.
+    body = (
+        tuple(p for p in parsed.passages if p.section not in _ABSTRACT_BIOC_SECTIONS)
+        if abstract
+        else ()
+    )
     abstract_sp = SourcePassages(
         passages=abstract or parsed.passages, release=parsed.release
     )
@@ -512,26 +521,32 @@ class AcquiredSource:
 
 def _fetch_bioc(
     pmid: str, client: httpx.Client, limiter: RateLimiter, cfg: FetchConfig
-) -> SourcePassages | None:
+) -> tuple[SourcePassages | None, str | None]:
+    """Fetch PubTator3 BioC passages. Returns (passages-or-None, err-or-None).
+
+    `err` carries the transport/HTTP/JSON failure reason from `_get_json` so the
+    terminal acquisition error can name a real service failure (vs. a clean 404).
+    """
     _ = cfg  # reserved for future polite-pool identification / API key
-    data, _err = _get_json(
+    data, err = _get_json(
         client, limiter, _PUBTATOR3_BIOC_URL, _PUBTATOR3_HOST, params={"pmids": pmid}
     )
     if not data:
-        return None
-    return parse_bioc_passages(data)
+        return None, err
+    return parse_bioc_passages(data), err
 
 
 def _fetch_europepmc_core(
     doi: str | None, pmid: str | None, client: httpx.Client, limiter: RateLimiter
-) -> dict[str, Any] | None:
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Fetch the Europe PMC core record. Returns (record-or-None, err-or-None)."""
     if doi:
         query = f'DOI:"{doi}"'
     elif pmid:
         query = f"EXT_ID:{pmid} AND SRC:MED"
     else:
-        return None
-    data, _err = _get_json(
+        return None, None
+    data, err = _get_json(
         client,
         limiter,
         _EPMC_SEARCH_URL,
@@ -539,12 +554,13 @@ def _fetch_europepmc_core(
         params={"query": query, "format": "json", "resultType": "core", "pageSize": "1"},
     )
     if not data:
-        return None
+        return None, err
     results = data.get("resultList")
     if not isinstance(results, dict):
-        return None
+        return None, err
     items = results.get("result") or []
-    return items[0] if items and isinstance(items[0], dict) else None
+    record = items[0] if items and isinstance(items[0], dict) else None
+    return record, err
 
 
 def acquire_source_text(
@@ -565,7 +581,7 @@ def acquire_source_text(
     )
     try:
         limiter = RateLimiter(cfg)
-        epmc = _fetch_europepmc_core(doi, pmid, client, limiter)
+        epmc, epmc_err = _fetch_europepmc_core(doi, pmid, client, limiter)
         license_candidates: list[str | None] = []
         if epmc:
             license_candidates.append(_as_str(epmc.get("license")))
@@ -573,8 +589,9 @@ def acquire_source_text(
         abstract: SourcePassages | None = None
         fulltext: SourcePassages | None = None
         retrieved_from = ""
+        bioc_err: str | None = None
         if pmid:
-            bioc = _fetch_bioc(pmid, client, limiter, cfg)
+            bioc, bioc_err = _fetch_bioc(pmid, client, limiter, cfg)
             if bioc is not None:
                 # PubTator3 BioC returns title+abstract always and body sections for
                 # PMC-OA articles. Split by section: abstract floor vs best-effort
@@ -594,8 +611,13 @@ def acquire_source_text(
                 # Europe PMC fallback yields abstract only; full text stays None.
 
         if abstract is None:
+            # Name the per-service outcome so a transport/HTTP failure is not masked
+            # as a benign "no record": `*_err` is non-None only on a real failure.
+            ident = doi or pmid
             raise SourceTextError(
-                f"no abstract available from PubTator3 or Europe PMC for doi={doi!r} pmid={pmid!r}"
+                f"no abstract text available for {ident!r} "
+                f"(pubtator: {bioc_err or 'no record'}; "
+                f"europepmc: {epmc_err or 'no record'})"
             )
 
         license_, licensed = resolve_license(license_candidates)

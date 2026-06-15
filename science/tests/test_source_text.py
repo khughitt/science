@@ -442,8 +442,15 @@ class TestAcquireSourceText:
     def test_prefers_pubtator_bioc_abstract(self, tmp_path: Path) -> None:
         def handler(req: httpx.Request) -> httpx.Response:
             if req.url.host == _PUBTATOR_HOST:
+                # BioC export endpoint + the PMID-bearing query param.
+                assert req.url.path.endswith("/export/biocjson")
+                assert req.url.params.get("pmids") == "123456"
                 return httpx.Response(200, json=_BIOC_RECORD)
             if req.url.host == _EPMC_HOST:
+                # Europe PMC search endpoint + core-result DOI query.
+                assert req.url.path.endswith("/search")
+                assert req.url.params.get("resultType") == "core"
+                assert 'DOI:"10.1038/foo-1"' in req.url.params.get("query", "")
                 return httpx.Response(
                     200,
                     json={"resultList": {"result": [{"license": "CC-BY"}]}},
@@ -528,3 +535,61 @@ class TestAcquireSourceText:
             acquire_source_text(
                 pmid="123456", doi="10.1038/foo-1", cfg=_cfg(tmp_path), http=_make_client(handler)
             )
+
+    def test_body_only_bioc_does_not_duplicate_into_fulltext(self, tmp_path: Path) -> None:
+        # A BioC record with ONLY body sections (no title/abstract passage). The old
+        # fallback put every passage in BOTH the abstract floor and full text; the
+        # partition must be disjoint, so the whole record is the abstract floor and
+        # there is no full text.
+        record = {
+            "PubTator3": [
+                {
+                    "infons": {"_release": "2024.01"},
+                    "passages": [
+                        {"offset": 0, "text": "Intro paragraph.", "infons": {"type": "introduction"}},
+                        {"offset": 17, "text": "Methods paragraph.", "infons": {"type": "methods"}},
+                    ],
+                }
+            ]
+        }
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == _PUBTATOR_HOST:
+                return httpx.Response(200, json=record)
+            if req.url.host == _EPMC_HOST:
+                return httpx.Response(200, json={"resultList": {"result": [{"license": "CC-BY"}]}})
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        acquired = acquire_source_text(
+            pmid="123456", doi="10.1038/foo-1", cfg=_cfg(tmp_path), http=_make_client(handler)
+        )
+        # All content lives in the abstract floor exactly once; no full text.
+        assert acquired.fulltext is None
+        abstract_texts = [p.text for p in acquired.abstract.passages]
+        assert abstract_texts == ["Intro paragraph.", "Methods paragraph."]
+        # Disjointness: nothing from the abstract floor leaks into full text.
+        fulltext_texts: list[str] = (
+            [p.text for p in acquired.fulltext.passages]
+            if acquired.fulltext is not None
+            else []
+        )
+        assert set(abstract_texts).isdisjoint(fulltext_texts)
+
+    def test_terminal_error_names_both_service_failures(self, tmp_path: Path) -> None:
+        # PubTator returns HTTP 500 (a real transport-level failure -> non-None err)
+        # AND Europe PMC also errors. The raised error must name BOTH services and
+        # their reasons, not mask them as a benign "no abstract".
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == _PUBTATOR_HOST:
+                return httpx.Response(500)
+            if req.url.host == _EPMC_HOST:
+                return httpx.Response(503)
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        with pytest.raises(SourceTextError) as exc:
+            acquire_source_text(
+                pmid="123456", doi="10.1038/foo-1", cfg=_cfg(tmp_path), http=_make_client(handler)
+            )
+        msg = str(exc.value)
+        assert "pubtator" in msg and "HTTP 500" in msg
+        assert "europepmc" in msg and "HTTP 503" in msg
