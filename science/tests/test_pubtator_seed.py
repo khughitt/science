@@ -1,6 +1,6 @@
 import pytest
 
-from science_tool.annotation.model import HASH_REQUIRED_SOURCE_PREFIXES
+from science_tool.annotation.model import HASH_REQUIRED_SOURCE_PREFIXES, IriBody, Motivation
 from science_tool.annotation.pubtator_seed import (
     BiocMention,
     PairedPassage,
@@ -9,8 +9,10 @@ from science_tool.annotation.pubtator_seed import (
     concept_iri_for,
     pair_passages,
     parse_bioc_entity_annotations,
+    plan_mention,
 )
-from science_tool.annotation.source_text import Passage, SourcePassages
+from science_tool.annotation.source_text import Passage, SourcePassages, SourceTextError
+from science_tool.annotation.sources.base import PlannedAnnotation
 
 # A title+abstract record with one body passage (non-persisted in abstract-only mode),
 # duplicate-surface mentions in the same passage, and one unnormalized variant.
@@ -266,3 +268,67 @@ def test_pair_passages_section_disambiguates_duplicate_text():
     )
     paired = pair_passages(file_text, persisted, bioc)
     assert [p.bioc_offset for p in paired] == [0, 100]
+
+
+# --- plan_mention tests -------------------------------------------------------
+
+# Reusable mini-file: header + a single persisted title passage "BRCA1 and BRCA1".
+_FILE = "---\nkind: paper-source\n---\n\n## Abstract\n\nBRCA1 and BRCA1\n"
+_BASE = _FILE.index("BRCA1")  # absolute file index where the passage body begins
+
+
+def _paired_for_title():
+    from science_tool.annotation.pubtator_seed import PairedPassage
+    # The title passage is BioC offset 0, 15 chars ("BRCA1 and BRCA1"), at _BASE.
+    return [PairedPassage(bioc_offset=0, bioc_len=15, file_char_base=_BASE)]
+
+
+def test_plan_mention_builds_annotation():
+    m = BiocMention(pubtator_type="Gene", identifier="672", text="BRCA1", offset=0, length=5)
+    planned, reason = plan_mention(
+        _FILE, _paired_for_title(), m, release="2025-01", source_md_name="x.source.md"
+    )
+    assert reason is None
+    assert isinstance(planned, PlannedAnnotation)
+    assert planned.annotation_type == "entity-gene"
+    assert planned.motivation is Motivation.IDENTIFYING
+    assert planned.body == IriBody(iri="https://identifiers.org/ncbigene:672")
+    assert planned.source_name == "pubtator3:2025-01:seeder-v1"
+    assert planned.target.source == "x.source.md"
+    assert planned.target.selector.exact == "BRCA1"
+    file_idx = _BASE  # first BRCA1 sits at the passage base
+    assert planned.match_text == f"entity-gene|https://identifiers.org/ncbigene:672|{file_idx}:5|BRCA1"
+
+
+def test_plan_mention_two_same_surface_in_one_passage_distinct():
+    m1 = BiocMention(pubtator_type="Gene", identifier="672", text="BRCA1", offset=0, length=5)
+    m2 = BiocMention(pubtator_type="Gene", identifier="672", text="BRCA1", offset=10, length=5)
+    p1, _ = plan_mention(_FILE, _paired_for_title(), m1, release="2025-01", source_md_name="x.source.md")
+    p2, _ = plan_mention(_FILE, _paired_for_title(), m2, release="2025-01", source_md_name="x.source.md")
+    assert p1 is not None and p2 is not None
+    assert p1.match_text != p2.match_text
+    assert p1.target.selector.prefix != p2.target.selector.prefix
+
+
+def test_plan_mention_skips_unnormalized():
+    m = BiocMention(pubtator_type="Mutation", identifier="tmVar:c|SUB|A|1|T", text="BRCA1", offset=0, length=5)
+    planned, reason = plan_mention(_FILE, _paired_for_title(), m, release="2025-01", source_md_name="x.source.md")
+    assert planned is None and reason == "unnormalized-concept"
+
+
+def test_plan_mention_skips_unsupported_type():
+    m = BiocMention(pubtator_type="Anatomy", identifier="x", text="BRCA1", offset=0, length=5)
+    planned, reason = plan_mention(_FILE, _paired_for_title(), m, release="2025-01", source_md_name="x.source.md")
+    assert planned is None and reason == "unsupported-type"
+
+
+def test_plan_mention_skips_nonpersisted_passage():
+    m = BiocMention(pubtator_type="Gene", identifier="7157", text="TP53", offset=500, length=4)
+    planned, reason = plan_mention(_FILE, _paired_for_title(), m, release="2025-01", source_md_name="x.source.md")
+    assert planned is None and reason == "non-persisted-passage"
+
+
+def test_plan_mention_slice_mismatch_fails_loud():
+    m = BiocMention(pubtator_type="Gene", identifier="672", text="XXXXX", offset=0, length=5)
+    with pytest.raises(SourceTextError, match="slice"):
+        plan_mention(_FILE, _paired_for_title(), m, release="2025-01", source_md_name="x.source.md")

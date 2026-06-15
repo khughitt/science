@@ -15,10 +15,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from science_tool.annotation.model import IriBody, Motivation, SpecificResource, TextQuoteSelector
 from science_tool.annotation.source_text import (
     SourcePassages,
     SourceTextError,
 )
+from science_tool.annotation.sources.base import PlannedAnnotation
 from science_tool.commons.frontmatter import raw_frontmatter
 
 # --- BioC entity mention dataclass + parser -----------------------------------
@@ -268,3 +270,73 @@ def pair_passages(
         )
         j += 1
     return paired
+
+
+# --- Mention -> PlannedAnnotation conversion ----------------------------------
+
+# Prefix/suffix context window (chars), clamped to the passage bounds.
+_CONTEXT = 60
+
+
+def _containing(paired: list[PairedPassage], offset: int, length: int) -> PairedPassage | None:
+    end = offset + length
+    for pp in paired:
+        if pp.bioc_offset <= offset and end <= pp.bioc_offset + pp.bioc_len:
+            return pp
+    return None
+
+
+def plan_mention(
+    file_text: str,
+    paired: list[PairedPassage],
+    mention: BiocMention,
+    *,
+    release: str,
+    source_md_name: str,
+) -> tuple[PlannedAnnotation | None, str | None]:
+    """Convert a BiocMention to a PlannedAnnotation, or (None, skip_reason).
+
+    Skip reasons: "unsupported-type", "non-persisted-passage", "unnormalized-concept".
+    A mention whose mapped file slice does not equal its reported text is a hard
+    SourceTextError (never a silently mis-placed anchor).
+    """
+    annotation_type = annotation_type_for(mention.pubtator_type)
+    if annotation_type is None:
+        return None, "unsupported-type"
+
+    pp = _containing(paired, mention.offset, mention.length)
+    if pp is None:
+        return None, "non-persisted-passage"
+
+    concept_iri = concept_iri_for(mention.pubtator_type, mention.identifier)
+    if concept_iri is None:
+        return None, "unnormalized-concept"
+
+    file_idx = pp.file_char_base + (mention.offset - pp.bioc_offset)
+    exact = file_text[file_idx : file_idx + mention.length]
+    if exact != mention.text:
+        raise SourceTextError(
+            f"offset slice {exact!r} != BioC mention text {mention.text!r} "
+            f"at file index {file_idx} (offset drift); aborting"
+        )
+
+    passage_start = pp.file_char_base
+    passage_end = pp.file_char_base + pp.bioc_len
+    prefix_start = max(passage_start, file_idx - _CONTEXT)
+    suffix_end = min(passage_end, file_idx + mention.length + _CONTEXT)
+    selector = TextQuoteSelector(
+        exact=exact,
+        prefix=file_text[prefix_start:file_idx],
+        suffix=file_text[file_idx + mention.length : suffix_end],
+    )
+
+    match_text = f"{annotation_type}|{concept_iri}|{file_idx}:{mention.length}|{exact}"
+    planned = PlannedAnnotation(
+        target=SpecificResource(source=source_md_name, selector=selector),
+        annotation_type=annotation_type,
+        motivation=Motivation.IDENTIFYING,
+        body=IriBody(iri=concept_iri),
+        match_text=match_text,
+        source_name=f"pubtator3:{release}:seeder-v1",
+    )
+    return planned, None
