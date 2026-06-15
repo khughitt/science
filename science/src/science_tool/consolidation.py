@@ -16,7 +16,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Mapping
 
 from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.entities import _STATUS_VALUES, edit_entity
@@ -146,8 +147,8 @@ class SupersedesGraph:
 
     linear: tuple[SupersededChain, ...]
     non_linear: tuple[NonLinearComponent, ...]
-    status_by_id: dict[str, str | None]
-    kind_by_id: dict[str, str]
+    status_by_id: Mapping[str, str | None]
+    kind_by_id: Mapping[str, str]
 
 
 def build_supersedes_graph(entries: list[tuple[Path, dict[str, Any]]]) -> SupersedesGraph:
@@ -187,8 +188,8 @@ def build_supersedes_graph(entries: list[tuple[Path, dict[str, Any]]]) -> Supers
     return SupersedesGraph(
         linear=tuple(linear),
         non_linear=tuple(non_linear),
-        status_by_id=status_by_id,
-        kind_by_id=kind_by_id,
+        status_by_id=MappingProxyType(status_by_id),
+        kind_by_id=MappingProxyType(kind_by_id),
     )
 
 
