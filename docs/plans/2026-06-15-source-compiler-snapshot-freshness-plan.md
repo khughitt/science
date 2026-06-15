@@ -26,11 +26,11 @@ changes through the existing dependency substrate.
 
 - **Worktree.** All work happens in the worktree `~/d/science/.worktrees/source-compiler-snapshot`
   on branch `feat/source-compiler-snapshot`. Every shell step must first
-  `cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot` and verify
+  `cd ~/d/science/.worktrees/source-compiler-snapshot` and verify
   `rtk git branch --show-current` prints `feat/source-compiler-snapshot` before editing or
   committing (commits must not leak to `main`).
 - **Tests/lint.** Run from the `science/` member dir:
-  `cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest <paths>`
+  `cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest <paths>`
   and `… rtk proxy uv run --frozen ruff check <paths>`. (`rtk` has no `uv`/`pytest`
   subcommand; `rtk proxy` passes the raw command through.)
 - **Git.** Use `rtk git` for all git. **No `Co-Authored-By` trailers.** Commit at the end of
@@ -105,7 +105,7 @@ def test_source_snapshot_carries_a_change():
 
 - [ ] **Step 2: Run it to confirm failure**
 
-Run: `cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/graph/test_source_snapshot_types.py -q`
+Run: `cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/graph/test_source_snapshot_types.py -q`
 Expected: FAIL — `ImportError: cannot import name 'SourceChange'`.
 
 - [ ] **Step 3: Add the primitives**
@@ -155,14 +155,14 @@ def test_new_snapshot_types_are_exported_from_leaf():
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/graph/test_source_snapshot_types.py tests/graph/test_source_records_relocation.py -q`
+Run: `cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/graph/test_source_snapshot_types.py tests/graph/test_source_records_relocation.py -q`
 Expected: PASS.
 
 - [ ] **Step 6: Lint + commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen ruff check src/science_tool/graph/source_records.py tests/graph/test_source_snapshot_types.py
-cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot && rtk git add science/src/science_tool/graph/source_records.py science/tests/graph/test_source_snapshot_types.py science/tests/graph/test_source_records_relocation.py && rtk git commit -m "feat(source-compiler): add SourceSnapshot + SourceChange primitives (Slice B)"
+cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen ruff check src/science_tool/graph/source_records.py tests/graph/test_source_snapshot_types.py
+cd ~/d/science/.worktrees/source-compiler-snapshot && rtk git add science/src/science_tool/graph/source_records.py science/tests/graph/test_source_snapshot_types.py science/tests/graph/test_source_records_relocation.py && rtk git commit -m "feat(source-compiler): add SourceSnapshot + SourceChange primitives (Slice B)"
 ```
 
 ---
@@ -293,11 +293,26 @@ def test_only_markdown_backed_entities_are_snapshotted(tmp_path: Path):
 
 def test_missing_prior_graph_is_empty_baseline(tmp_path: Path):
     assert read_prior_snapshots(tmp_path / "nope" / "graph.trig") == {}
+
+
+def test_empty_prior_graph_is_empty_baseline(tmp_path: Path):
+    p = tmp_path / "graph.trig"
+    p.write_text("")  # first build writes an empty graph.trig
+    assert read_prior_snapshots(p) == {}
+
+
+def test_corrupt_prior_graph_fails_loud(tmp_path: Path):
+    import pytest
+
+    bad = tmp_path / "graph.trig"
+    bad.write_text("@@ this is not valid trig @@ <<<>>>")
+    with pytest.raises(Exception):  # corrupt non-empty must NOT be silently empty-baselined
+        read_prior_snapshots(bad)
 ```
 
 - [ ] **Step 2: Run to confirm failure**
 
-Run: `cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/graph/test_source_snapshot_compute.py -q`
+Run: `cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/graph/test_source_snapshot_compute.py -q`
 Expected: FAIL — `ModuleNotFoundError: science_tool.graph.source_snapshots`.
 
 - [ ] **Step 3: Create the module**
@@ -368,16 +383,20 @@ class SourceSnapshotResult:
 
 
 def read_prior_snapshots(prior_graph_path: Path) -> dict[str, _PriorSnapshot]:
-    """Read baseline snapshots from a prior graph.trig. Missing/empty/pre-Slice-B → {}."""
+    """Read baseline snapshots from a prior graph.trig.
+
+    Missing file, or an empty / whitespace-only / pre-Slice-B graph (parses to no
+    SourceSnapshot nodes) → empty baseline. A corrupt NON-EMPTY graph.trig is NOT
+    swallowed: it raises, because silently treating it as empty would suppress the
+    very source-change event Slice B exists to detect.
+    """
     if not prior_graph_path.exists():
         return {}
+    text = prior_graph_path.read_text(encoding="utf-8")
+    if not text.strip():
+        return {}  # empty / whitespace-only = valid empty baseline
     dataset = Dataset()
-    try:
-        dataset.parse(source=str(prior_graph_path), format="trig")
-    except Exception:
-        # A corrupt/empty prior graph yields an empty baseline (not an error): the
-        # materialize audit gate already guards the authoritative build path.
-        return {}
+    dataset.parse(data=text, format="trig")  # corrupt non-empty → raises (fail loud)
     prov = dataset.graph(PROJECT_NS["graph/provenance"])
     prior: dict[str, _PriorSnapshot] = {}
     for ss in prov.subjects(RDF.type, SCI_NS.SourceSnapshot):
@@ -453,14 +472,14 @@ def emit_source_snapshots(dataset: Dataset, result: SourceSnapshotResult) -> Non
 
 - [ ] **Step 4: Run compute tests to verify they pass**
 
-Run: `cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/graph/test_source_snapshot_compute.py -q`
+Run: `cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/graph/test_source_snapshot_compute.py -q`
 Expected: PASS (5 tests).
 
 - [ ] **Step 5: Lint + commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen ruff check src/science_tool/graph/source_snapshots.py tests/graph/test_source_snapshot_compute.py
-cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot && rtk git add science/src/science_tool/graph/source_snapshots.py science/tests/graph/test_source_snapshot_compute.py && rtk git commit -m "feat(source-compiler): observe + diff source snapshots with carry-forward (Slice B)"
+cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen ruff check src/science_tool/graph/source_snapshots.py tests/graph/test_source_snapshot_compute.py
+cd ~/d/science/.worktrees/source-compiler-snapshot && rtk git add science/src/science_tool/graph/source_snapshots.py science/tests/graph/test_source_snapshot_compute.py && rtk git commit -m "feat(source-compiler): observe + diff source snapshots with carry-forward (Slice B)"
 ```
 
 ---
@@ -556,14 +575,14 @@ def test_changed_snapshot_emits_linked_source_change():
 
 - [ ] **Step 2: Run to verify pass (emit already implemented in Task 2)**
 
-Run: `cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/graph/test_source_snapshot_emit.py -q`
+Run: `cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/graph/test_source_snapshot_emit.py -q`
 Expected: PASS (3 tests). If any fail, fix `emit_source_snapshots` in
 `src/science_tool/graph/source_snapshots.py` to match the contract above.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot && rtk git add science/tests/graph/test_source_snapshot_emit.py && rtk git commit -m "test(source-compiler): pin snapshot graph contract + reified bears_on edge (Slice B)"
+cd ~/d/science/.worktrees/source-compiler-snapshot && rtk git add science/tests/graph/test_source_snapshot_emit.py && rtk git commit -m "test(source-compiler): pin snapshot graph contract + reified bears_on edge (Slice B)"
 ```
 
 ---
@@ -673,7 +692,7 @@ def test_empty_source_changes_preserves_date_driven_behavior():
 
 - [ ] **Step 2: Run to confirm failure**
 
-Run: `cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/test_freshness_source_origin.py -q`
+Run: `cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/test_freshness_source_origin.py -q`
 Expected: FAIL — `derive_freshness() got an unexpected keyword argument 'source_changes'`.
 
 - [ ] **Step 3: Extend `derive_freshness`**
@@ -730,19 +749,16 @@ def _derive_freshness_layer(
     *,
     entities: dict[str, EntityFreshnessInfo],
     today: _date,
-    source_changes: dict[str, str],
+    source_changes: dict[str, _date],
 ) -> None:
     """Derive freshness state triples (sci:freshnessState / sci:upstreamChangeAt / sci:triggeredBy).
 
     Gated on sources.freshness_enabled — skipped entirely when opt-out is active.
-    `source_changes` maps SourceSnapshot node URIs to their latest SourceChange observed_on.
+    `source_changes` maps SourceSnapshot node URIs to their latest SourceChange observed_on
+    (the values are `datetime.date`; `date` is imported as `_date` in this file).
     """
     derive_freshness(dataset, entities=entities, today=today, source_changes=source_changes)
 ```
-
-> The annotation `dict[str, str]` keeps the param obvious at the call boundary; the values
-> are `datetime.date` objects (`SourceSnapshotResult.source_changes`). If ruff/pyright flags
-> the mismatch, use `dict[str, _date]` (import `date as _date` is already aliased in the file).
 
 `_build_dataset_from_sources` — add the `source_snapshots` parameter, emit the snapshot layer
 before bears_on, and pass `source_changes` to freshness. Change the signature:
@@ -785,21 +801,21 @@ today=...)` call must pass `source_changes={}`. Add `source_changes={}` to each 
 are date-driven scenarios with no snapshot origins, so `{}` is the correct, explicit value).
 
 > Find them with:
-> `cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/test_freshness_derivation.py -q`
+> `cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/test_freshness_derivation.py -q`
 > — failures will name each `TypeError` call site. There are no production direct callers
 > besides `_derive_freshness_layer` (updated in Step 4).
 
 - [ ] **Step 6: Run the affected suites**
 
-Run: `cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/test_freshness_source_origin.py tests/test_freshness_derivation.py tests/test_graph_freshness_integration.py tests/test_freshness_opt_out.py -q`
+Run: `cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/test_freshness_source_origin.py tests/test_freshness_derivation.py tests/test_graph_freshness_integration.py tests/test_freshness_opt_out.py -q`
 Expected: PASS. (Integration/opt-out still pass because `materialize_graph` does not yet pass
 `source_snapshots`, so `source_changes` defaults to `{}` — behavior unchanged.)
 
 - [ ] **Step 7: Lint + commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen ruff check src/science_tool/graph/freshness.py src/science_tool/graph/materialize.py tests/test_freshness_source_origin.py
-cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot && rtk git add science/src/science_tool/graph/freshness.py science/src/science_tool/graph/materialize.py science/tests/test_freshness_source_origin.py science/tests/test_freshness_derivation.py && rtk git commit -m "feat(source-compiler): derive_freshness consumes SourceSnapshot origins (Slice B)"
+cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen ruff check src/science_tool/graph/freshness.py src/science_tool/graph/materialize.py tests/test_freshness_source_origin.py
+cd ~/d/science/.worktrees/source-compiler-snapshot && rtk git add science/src/science_tool/graph/freshness.py science/src/science_tool/graph/materialize.py science/tests/test_freshness_source_origin.py science/tests/test_freshness_derivation.py && rtk git commit -m "feat(source-compiler): derive_freshness consumes SourceSnapshot origins (Slice B)"
 ```
 
 ---
@@ -823,10 +839,11 @@ from pathlib import Path
 from textwrap import dedent
 
 from rdflib import Dataset, URIRef
+from rdflib.namespace import RDF
 
 from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.source_snapshots import source_snapshot_uri
-from science_tool.graph.store import PROJECT_NS, RDF, SCI_NS  # RDF re-exported via store
+from science_tool.graph.store import PROJECT_NS, SCI_NS
 
 
 def _write(path: Path, content: str) -> None:
@@ -939,13 +956,9 @@ def _snapshot_triples(ds: Dataset) -> set[tuple[str, str, str]]:
     return out
 ```
 
-> If `RDF` is not re-exported from `science_tool.graph.store`, import it directly:
-> `from rdflib.namespace import RDF`. The implementer should use whichever resolves; prefer
-> the direct rdflib import to avoid coupling to store re-exports.
-
 - [ ] **Step 2: Run to confirm failure**
 
-Run: `cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/test_source_snapshot_freshness_e2e.py -q`
+Run: `cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/test_source_snapshot_freshness_e2e.py -q`
 Expected: FAIL — `test_first_build…` finds no `SourceSnapshot` node (materialize_graph does
 not yet compute snapshots).
 
@@ -969,11 +982,12 @@ New (compute snapshots from the prior graph + disk, then build):
 
 ```python
     trig_path = project_root / DEFAULT_GRAPH_PATH
-    snapshots = (
-        compute_source_snapshots(sources, prior_graph_path=trig_path, today=_date.today())
-        if sources.freshness_enabled
-        else None
-    )
+    # Snapshot OBSERVATION is compiler/provenance state and runs UNCONDITIONALLY — it is not
+    # gated on freshness_enabled. Gating it would stop persisting SourceSnapshot provenance
+    # when freshness is off and lose baseline continuity, so re-enabling freshness later would
+    # miss every intervening content change. Only the freshness-STATE derivation (inside
+    # `_build_dataset_from_sources`, the `if sources.freshness_enabled` block) is gated.
+    snapshots = compute_source_snapshots(sources, prior_graph_path=trig_path, today=_date.today())
     dataset = _build_dataset_from_sources(sources, source_snapshots=snapshots)
 ```
 
@@ -982,7 +996,7 @@ existing `trig_path.parent.mkdir(...)` + `save_graph_dataset(dataset, trig_path)
 
 - [ ] **Step 4: Run the e2e suite to verify pass**
 
-Run: `cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/test_source_snapshot_freshness_e2e.py -q`
+Run: `cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/test_source_snapshot_freshness_e2e.py -q`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Characterization — existing freshness unchanged on a no-content-change build**
@@ -1011,14 +1025,36 @@ def test_snapshot_layer_does_not_perturb_entity_freshness_when_unchanged(tmp_pat
         return {(str(s), str(o)) for s, _, o in k.triples((None, SCI_NS.freshnessState, None))}
 
     assert _freshness(ds_without) == _freshness(ds_with)  # no change → identical entity freshness
+
+
+def test_snapshot_provenance_persists_when_freshness_disabled(tmp_path: Path):
+    """Snapshot OBSERVATION is not gated on freshness_enabled (High-2): baseline persists,
+    but no freshness-state triples are emitted."""
+    root = _build_min_project(tmp_path)
+    # Disable freshness-state emission. Mirror the `freshness:` opt-out YAML shape used by
+    # tests/test_freshness_opt_out.py (the canonical opt-out fixture).
+    (root / "science.yaml").write_text(
+        "name: demo\nknowledge_profiles:\n  local: core\nfreshness:\n  enabled: false\n"
+    )
+    trig = materialize_graph(root, strict=False)
+    ds = _load(trig)
+    prov = ds.graph(PROJECT_NS["graph/provenance"])
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    ss = source_snapshot_uri("entities/hypotheses/h1.md")
+
+    assert (ss, RDF.type, SCI_NS.SourceSnapshot) in prov  # baseline persists regardless
+    assert list(knowledge.triples((None, SCI_NS.freshnessState, None))) == []  # state gated off
 ```
 
-Run: `cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/test_source_snapshot_freshness_e2e.py -q`
-Expected: PASS (4 tests).
+> Confirm the opt-out YAML key against `tests/test_freshness_opt_out.py` before running; use
+> that file's exact `freshness:` shape if it differs from the snippet above.
+
+Run: `cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/test_source_snapshot_freshness_e2e.py -q`
+Expected: PASS (5 tests).
 
 - [ ] **Step 6: Full suite — confirm no regressions**
 
-Run: `cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest -q`
+Run: `cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest -q`
 Expected: all green (no new failures vs the pre-Slice-B baseline; new tests pass). The printed
 summary line may be swallowed by warning capture — confirm via exit code 0, or add
 `--junit-xml=/tmp/sliceb.xml` and read `testsuite tests/failures/errors`.
@@ -1026,8 +1062,89 @@ summary line may be swallowed by warning capture — confirm via exit code 0, or
 - [ ] **Step 7: Lint + commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen ruff check src/science_tool/graph/materialize.py tests/test_source_snapshot_freshness_e2e.py
-cd /mnt/ssd/Dropbox/science/.worktrees/source-compiler-snapshot && rtk git add science/src/science_tool/graph/materialize.py science/tests/test_source_snapshot_freshness_e2e.py && rtk git commit -m "feat(source-compiler): wire SourceSnapshot freshness origins into materialize_graph (Slice B)"
+cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen ruff check src/science_tool/graph/materialize.py tests/test_source_snapshot_freshness_e2e.py
+cd ~/d/science/.worktrees/source-compiler-snapshot && rtk git add science/src/science_tool/graph/materialize.py science/tests/test_source_snapshot_freshness_e2e.py && rtk git commit -m "feat(source-compiler): wire SourceSnapshot freshness origins into materialize_graph (Slice B)"
+```
+
+---
+
+## Task 6: Make `graph propagate-freshness` (in-memory sweep) snapshot-aware
+
+`propagate_freshness_in_memory` builds its dataset via `_build_dataset_from_sources` but passes
+no snapshots, so the read-only `graph propagate-freshness` sweep stays blind to content-derived
+staleness — the exact failure mode Slice B fixes, left open on a second surface. Compute
+snapshots from the prior materialized graph + disk and pass them in. The sweep discards the
+dataset (nothing is persisted); it reports "what would be stale if rebuilt now."
+
+**Files:**
+- Modify: `src/science_tool/graph/freshness.py` (`propagate_freshness_in_memory`)
+- Test: `tests/test_source_snapshot_freshness_e2e.py` (extend)
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `tests/test_source_snapshot_freshness_e2e.py`:
+
+```python
+def test_in_memory_sweep_sees_content_change(tmp_path: Path):
+    from science_tool.graph.freshness import propagate_freshness_in_memory
+
+    root = _build_min_project(tmp_path)
+    materialize_graph(root, strict=False)  # baseline persisted to graph.trig
+
+    h1_path = root / "entities" / "hypotheses" / "h1.md"
+    h1_path.write_text(h1_path.read_text().replace("Original body.", "Edited body."))
+
+    rows = propagate_freshness_in_memory(root)
+    states = {row["id"]: row["state"] for row in rows}
+    assert states.get("hypothesis:h1") == "needs-review"  # content-derived, no `updated:` bump
+```
+
+- [ ] **Step 2: Run to confirm failure**
+
+Run: `cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/test_source_snapshot_freshness_e2e.py::test_in_memory_sweep_sees_content_change -q`
+Expected: FAIL — the sweep is snapshot-blind, so `hypothesis:h1` is absent from the non-fresh
+rows (`states.get(...)` is None).
+
+- [ ] **Step 3: Wire snapshots into the sweep**
+
+In `src/science_tool/graph/freshness.py`, in `propagate_freshness_in_memory`, replace:
+
+```python
+    if not sources.freshness_enabled:
+        return []
+
+    dataset = _build_dataset_from_sources(sources)
+```
+
+with:
+
+```python
+    if not sources.freshness_enabled:
+        return []
+
+    # Lazy imports avoid the freshness -> source_snapshots -> freshness import cycle
+    # (source_snapshots imports _emit_bears_on_edge from this module).
+    from science_tool.graph.source_snapshots import compute_source_snapshots
+    from science_tool.graph.store import DEFAULT_GRAPH_PATH
+
+    prior_graph_path = project_root.resolve() / DEFAULT_GRAPH_PATH
+    snapshots = compute_source_snapshots(sources, prior_graph_path=prior_graph_path, today=date.today())
+    dataset = _build_dataset_from_sources(sources, source_snapshots=snapshots)
+```
+
+(`date` is already imported at the top of `freshness.py`; `DEFAULT_GRAPH_PATH` is exported from
+`science_tool.graph.store`.)
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen pytest tests/test_source_snapshot_freshness_e2e.py -q`
+Expected: PASS (6 tests).
+
+- [ ] **Step 5: Lint + commit**
+
+```bash
+cd ~/d/science/.worktrees/source-compiler-snapshot/science && rtk proxy uv run --frozen ruff check src/science_tool/graph/freshness.py tests/test_source_snapshot_freshness_e2e.py
+cd ~/d/science/.worktrees/source-compiler-snapshot && rtk git add science/src/science_tool/graph/freshness.py science/tests/test_source_snapshot_freshness_e2e.py && rtk git commit -m "feat(source-compiler): in-memory freshness sweep consumes SourceSnapshot origins (Slice B)"
 ```
 
 ---
