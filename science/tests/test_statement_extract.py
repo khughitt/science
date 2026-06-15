@@ -238,3 +238,12 @@ def test_body_is_byte_stable():
     kw = dict(section="methods", stance="hypothesized", subject="A", object_="B",
               subject_concept=None, object_concept=None)
     assert statement_body_json(**kw) == statement_body_json(**kw)
+
+
+def test_body_gate_is_none_based_not_falsy():
+    # an empty-string optional is EMITTED; a None optional is OMITTED
+    body = statement_body_json(
+        section="results", stance="asserted", subject="", object_=None,
+        subject_concept=None, object_concept=None,
+    )
+    assert body == '{"section":"results","stance":"asserted","subject":""}'
