@@ -1,0 +1,94 @@
+"""Phase 2a: PubTator3 entity-mention seeder.
+
+Convert PubTator3 BioC entity mentions into oa:TextQuoteSelector annotations
+anchored in an existing `<citekey>.source.md`, written to the
+`<citekey>.source.anno.trig` sidecar via the existing annotation machinery.
+
+See docs/plans/2026-06-15-pubtator-seeder-phase2a-design.md.
+"""
+
+from __future__ import annotations
+
+import re
+
+# --- Entity type -> annotation_type ------------------------------------------
+
+# PubTator BioC `infons.type` (lowercased) -> our kebab entity slug.
+_TYPE_TO_ENTITY: dict[str, str] = {
+    "gene": "gene",
+    "disease": "disease",
+    "chemical": "chemical",
+    "species": "species",
+    "cellline": "cellline",
+    "variant": "variant",
+    "mutation": "variant",
+    "dnamutation": "variant",
+    "proteinmutation": "variant",
+    "snp": "variant",
+}
+
+
+def annotation_type_for(pubtator_type: str) -> str | None:
+    """`entity-<slug>` for a supported PubTator type, else None (unsupported)."""
+    slug = _TYPE_TO_ENTITY.get(pubtator_type.strip().lower())
+    return f"entity-{slug}" if slug else None
+
+
+# --- Concept identifier -> identifiers.org compact IRI ------------------------
+
+_IDENTIFIERS_BASE = "https://identifiers.org"
+
+_DIGITS = re.compile(r"^\d+$")
+_MESH = re.compile(r"^[A-Z]\d{6,}$")  # MeSH descriptor/supplementary, e.g. D001943
+_RSID = re.compile(r"^rs\d+$")
+_RS_HASH = re.compile(r"^RS#:(\d+)$")
+_CVCL = re.compile(r"^CVCL_\w+$")
+
+
+def _first_id(identifier: str | None) -> str:
+    """First id of a possibly `;`-joined list, with a leading `NS:` prefix stripped."""
+    if not identifier:
+        return ""
+    head = identifier.split(";")[0].strip()
+    # Strip a leading source-namespace prefix PubTator sometimes prepends,
+    # e.g. "Gene:672" / "NCBIGene:672". Keep "MESH:"/"RS#:" handling to callers.
+    if ":" in head:
+        prefix, rest = head.split(":", 1)
+        if prefix.lower() in {"gene", "ncbigene", "entrez"}:
+            return rest.strip()
+    return head
+
+
+def _compact(namespace: str, accession: str) -> str:
+    return f"{_IDENTIFIERS_BASE}/{namespace}:{accession}"
+
+
+def concept_iri_for(pubtator_type: str, identifier: str | None) -> str | None:
+    """Build the identifiers.org concept IRI, or None if unnormalizable (skip).
+
+    Only ids matching each namespace's expected shape are accepted; anything else
+    (tmVar variant strings, OMIM disease ids, non-Cellosaurus cell lines, empty) is
+    rejected so the seeder skips-and-counts rather than minting a junk anchor.
+    """
+    entity = _TYPE_TO_ENTITY.get(pubtator_type.strip().lower())
+    if entity is None:
+        return None
+    raw = _first_id(identifier)
+    if not raw:
+        return None
+
+    if entity == "gene":
+        return _compact("ncbigene", raw) if _DIGITS.match(raw) else None
+    if entity == "species":
+        return _compact("taxonomy", raw) if _DIGITS.match(raw) else None
+    if entity in ("disease", "chemical"):
+        mesh = raw[5:] if raw.upper().startswith("MESH:") else raw
+        return _compact("mesh", mesh) if _MESH.match(mesh) else None
+    if entity == "variant":
+        if _RSID.match(raw):
+            return _compact("dbsnp", raw)
+        m = _RS_HASH.match(raw)
+        return _compact("dbsnp", f"rs{m.group(1)}") if m else None
+    if entity == "cellline":
+        return _compact("cellosaurus", raw) if _CVCL.match(raw) else None
+    return None

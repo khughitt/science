@@ -1,4 +1,10 @@
+import pytest
+
 from science_tool.annotation.model import HASH_REQUIRED_SOURCE_PREFIXES
+from science_tool.annotation.pubtator_seed import (
+    annotation_type_for,
+    concept_iri_for,
+)
 
 # A title+abstract record with one body passage (non-persisted in abstract-only mode),
 # duplicate-surface mentions in the same passage, and one unnormalized variant.
@@ -78,3 +84,47 @@ BIOC_FIXTURE = {
 
 def test_pubtator3_prefix_is_hash_required():
     assert "pubtator3:" in HASH_REQUIRED_SOURCE_PREFIXES
+
+
+@pytest.mark.parametrize(
+    "pubtator_type,expected",
+    [
+        ("Gene", "entity-gene"),
+        ("Disease", "entity-disease"),
+        ("Chemical", "entity-chemical"),
+        ("Species", "entity-species"),
+        ("CellLine", "entity-cellline"),
+        ("Mutation", "entity-variant"),
+        ("DNAMutation", "entity-variant"),
+        ("SNP", "entity-variant"),
+        ("Variant", "entity-variant"),
+        ("Unsupported", None),
+    ],
+)
+def test_annotation_type_for(pubtator_type, expected):
+    assert annotation_type_for(pubtator_type) == expected
+
+
+@pytest.mark.parametrize(
+    "pubtator_type,identifier,expected",
+    [
+        ("Gene", "672", "https://identifiers.org/ncbigene:672"),
+        ("Gene", "Gene:672", "https://identifiers.org/ncbigene:672"),
+        ("Gene", "672;675", "https://identifiers.org/ncbigene:672"),
+        ("Species", "9606", "https://identifiers.org/taxonomy:9606"),
+        ("Disease", "MESH:D001943", "https://identifiers.org/mesh:D001943"),
+        ("Disease", "D001943", "https://identifiers.org/mesh:D001943"),
+        ("Chemical", "MESH:D013629", "https://identifiers.org/mesh:D013629"),
+        ("Mutation", "rs80357065", "https://identifiers.org/dbsnp:rs80357065"),
+        ("Mutation", "RS#:80357065", "https://identifiers.org/dbsnp:rs80357065"),
+        ("CellLine", "CVCL_0031", "https://identifiers.org/cellosaurus:CVCL_0031"),
+        ("Mutation", "tmVar:c|SUB|A|1|T", None),
+        ("Gene", "", None),
+        ("Gene", None, None),
+        ("Disease", "OMIM:114480", None),
+        ("CellLine", "12345", None),
+        ("Unsupported", "1", None),
+    ],
+)
+def test_concept_iri_for(pubtator_type, identifier, expected):
+    assert concept_iri_for(pubtator_type, identifier) == expected
