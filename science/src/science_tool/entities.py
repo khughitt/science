@@ -177,8 +177,12 @@ _NUMERIC_SCAN_RE = re.compile(r"^(?:[A-Za-z])?(\d+)")
 _SHORTFORM_REF_RE = re.compile(r"^(?P<prefix>[A-Za-z])(?P<number>\d+)(?P<suffix>(?:[.-].*)?)$")
 _NOTES_HEADING_RE = re.compile(r"^##\s+Notes\s*$")
 _SHORTFORM_ENTITY_KINDS: dict[str, str] = {ek.shortform: ek.name for ek in _KIND_DESCRIPTORS if ek.shortform}
-_DEFAULT_STATUS: dict[str, str] = {k.name: k.default_status for k in CORE_KINDS if k.default_status}
-_STATUS_VALUES: dict[str, frozenset[str]] = {k.name: k.statuses for k in CORE_KINDS if k.statuses}
+_DEFAULT_STATUS: dict[str, str] = {
+    ek.name: ek.default_status for ek in _KIND_DESCRIPTORS if ek.default_status
+}
+_STATUS_VALUES: dict[str, frozenset[str]] = {
+    ek.name: frozenset(ek.statuses) for ek in _KIND_DESCRIPTORS if ek.statuses
+}
 _ALLOWED_EXPLICIT_ROOTS = (Path("entities"),)
 
 

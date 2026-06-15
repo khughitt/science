@@ -14,7 +14,9 @@ from pathlib import Path
 from science_tool.entities import (
     EntityPathPolicy,
     _BUILTIN_MARKDOWN_POLICIES,
+    _DEFAULT_STATUS,
     _SHORTFORM_ENTITY_KINDS,
+    _STATUS_VALUES,
 )
 
 # --- Frozen copies of the original literals (do not edit to match drift) ---
@@ -126,3 +128,11 @@ def test_markdown_policies_equal_prior_literal() -> None:
 
 def test_shortforms_equal_prior_literal() -> None:
     assert _SHORTFORM_ENTITY_KINDS == FROZEN_SHORTFORM
+
+
+def test_default_status_equals_prior_literal() -> None:
+    assert _DEFAULT_STATUS == FROZEN_DEFAULT_STATUS
+
+
+def test_status_values_equal_prior_literal() -> None:
+    assert _STATUS_VALUES == FROZEN_STATUS_VALUES
