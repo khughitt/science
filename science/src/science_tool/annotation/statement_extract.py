@@ -162,28 +162,36 @@ def _parse_one(item: Any, idx: int) -> Candidate:
     if missing:
         raise CandidateError(f"candidate[{idx}] missing required fields: {sorted(missing)}")
 
-    def _str(name: str, *, optional: bool) -> str | None:
-        if optional and (name not in item or item[name] is None):
-            return None
-        val = item[name]
-        if not isinstance(val, str):
-            suffix = " or null" if optional else ""
-            raise CandidateError(f"candidate[{idx}].{name} must be a string{suffix}")
+    def _checked(name: str, val: str) -> str:
         if len(val) > MAX_FIELD_CHARS:
             raise CandidateError(
                 f"candidate[{idx}].{name} exceeds {MAX_FIELD_CHARS} chars"
             )
         return val
 
-    ctype = _str("type", optional=False)
+    def _req(name: str) -> str:
+        val = item[name]
+        if not isinstance(val, str):
+            raise CandidateError(f"candidate[{idx}].{name} must be a string")
+        return _checked(name, val)
+
+    def _opt(name: str) -> str | None:
+        if name not in item or item[name] is None:
+            return None
+        val = item[name]
+        if not isinstance(val, str):
+            raise CandidateError(f"candidate[{idx}].{name} must be a string or null")
+        return _checked(name, val)
+
+    ctype = _req("type")
     if ctype not in STATEMENT_TYPES:
         raise CandidateError(
             f"candidate[{idx}].type {ctype!r} not in {sorted(STATEMENT_TYPES)}"
         )
-    exact = _str("exact", optional=False)
+    exact = _req("exact")
     if not exact:
         raise CandidateError(f"candidate[{idx}].exact must be non-empty")
-    stance = _str("stance", optional=False)
+    stance = _req("stance")
     if stance not in STANCES:
         raise CandidateError(
             f"candidate[{idx}].stance {stance!r} not in {sorted(STANCES)}"
@@ -191,13 +199,13 @@ def _parse_one(item: Any, idx: int) -> Candidate:
     return Candidate(
         type=ctype,
         exact=exact,
-        prefix=_str("prefix", optional=False),
-        suffix=_str("suffix", optional=False),
+        prefix=_req("prefix"),
+        suffix=_req("suffix"),
         stance=stance,
-        subject=_str("subject", optional=True),
-        object=_str("object", optional=True),
-        subject_concept=_str("subject_concept", optional=True),
-        object_concept=_str("object_concept", optional=True),
+        subject=_opt("subject"),
+        object=_opt("object"),
+        subject_concept=_opt("subject_concept"),
+        object_concept=_opt("object_concept"),
     )
 
 
