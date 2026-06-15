@@ -721,6 +721,8 @@ def list_entities(
     kind: str | None = None,
     status: str | None = None,
     related: str | None = None,
+    *,
+    include_hidden: bool = False,
 ) -> list[dict[str, str]]:
     sources = load_project_sources(project_root.resolve())
     resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
@@ -731,7 +733,10 @@ def list_entities(
         if kind is not None and entity.kind != kind:
             continue
         entity_status = entity.status or ""
-        if status is not None and entity_status != status:
+        if status is not None:
+            if entity_status != status:
+                continue
+        elif not include_hidden and not is_default_visible(entity.status):
             continue
         if related_key is not None and not _related_refs_match(entity.related, related_key, resolver):
             continue

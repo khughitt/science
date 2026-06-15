@@ -872,3 +872,59 @@ def test_create_entity_auto_generates_interpretation_id_without_siblings(tmp_pat
     )
     assert result.entity_id == "interpretation:0001-run-1-result"
     assert result.path == tmp_path / "entities/interpretations/0001-run-1-result.md"
+
+
+def test_list_entities_hides_superseded_by_default(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "entities/interpretations/0001-active.md",
+        {"id": "interpretation:0001-active", "type": "interpretation", "title": "Active", "status": "active"},
+    )
+    write_markdown_entity(
+        tmp_path,
+        "entities/interpretations/0002-old.md",
+        {"id": "interpretation:0002-old", "type": "interpretation", "title": "Old", "status": "superseded"},
+    )
+
+    ids = {row["id"] for row in list_entities(tmp_path)}
+    assert "interpretation:0001-active" in ids
+    assert "interpretation:0002-old" not in ids  # hidden by default
+
+    all_ids = {row["id"] for row in list_entities(tmp_path, include_hidden=True)}
+    assert "interpretation:0002-old" in all_ids
+
+
+def test_list_entities_explicit_status_returns_hidden(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "entities/interpretations/0002-old.md",
+        {"id": "interpretation:0002-old", "type": "interpretation", "title": "Old", "status": "superseded"},
+    )
+    # An explicit status request is honored even though the status is hidden.
+    rows = list_entities(tmp_path, status="superseded")
+    assert [row["id"] for row in rows] == ["interpretation:0002-old"]
+
+
+def test_cli_entity_list_include_hidden_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from click.testing import CliRunner
+
+    from science_tool.cli import main
+
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "entities/interpretations/0002-old.md",
+        {"id": "interpretation:0002-old", "type": "interpretation", "title": "Old", "status": "superseded"},
+    )
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+
+    default = runner.invoke(main, ["entity", "list", "--format", "json"])
+    assert default.exit_code == 0, default.output
+    assert "interpretation:0002-old" not in default.output
+
+    shown = runner.invoke(main, ["entity", "list", "--include-hidden", "--format", "json"])
+    assert shown.exit_code == 0, shown.output
+    assert "interpretation:0002-old" in shown.output
