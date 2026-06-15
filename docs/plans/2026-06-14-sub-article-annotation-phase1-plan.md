@@ -157,7 +157,7 @@ so callers (and tests) control every request.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -760,8 +760,6 @@ def render_source_md(
     if fulltext is not None:
         all_passages += list(fulltext.passages)
 
-    # 1) Render frontmatter first to know its character length.
-    body_sha = hashlib.sha256()  # placeholder; real hash computed after body built
     # We need text_sha256 of the persisted *body*; build the body region first,
     # hash it, then prepend frontmatter and recompute absolute offsets.
 

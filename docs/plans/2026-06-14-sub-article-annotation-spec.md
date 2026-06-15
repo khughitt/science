@@ -82,8 +82,10 @@ and `paper-fetch` writes only DOI-slugged *cache* artifacts (`<slug>.json/.pdf/
 A resolver is required before any artifact is written:
 
 - **Resolve.** Map the `pmid|doi` to a paper entity by scanning paper-entity
-  frontmatter for a matching `doi`/`pmid` (the paper kind, via its path policy and
-  any project-local override). Return the entity's citekey and directory.
+  frontmatter for a matching `doi`/`pmid` under the canonical paper summary
+  subdirs used by promotion (`entities/papers`, `doc/papers`,
+  `doc/background/papers`; implemented from `PROMOTE_KIND_PAPER.source_subdirs`,
+  not `resolve_path_policy("paper")`). Return the entity's citekey and directory.
 - **No match.** Fail loud with an actionable message ("no paper entity has
   doi/pmid X; run `paper-fetch` / create the entity first"). The seeder does **not**
   silently mint a paper entity — promotion of a paper into the graph is a separate,

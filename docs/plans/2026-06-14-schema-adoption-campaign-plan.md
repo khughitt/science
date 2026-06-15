@@ -173,6 +173,15 @@ class TestDescriptorTargetValidation:
              "schema": {"fields": [{"name": "a", "type": "string"}]}}]}
         results = validate_package_descriptor(_pkg_dir(tmp_path, pkg, csv="a\n1\n2\n"))
         assert any("matches table" in r["check"] and r["status"] == "fail" for r in results)
+
+    def test_missing_or_any_type_fails_shape_gate(self, tmp_path: Path) -> None:
+        # Phase 1's done depth is names + concrete coarse types. Omitted type / "any"
+        # is valid DP syntax, but not sufficient for this campaign's shape gate.
+        for field in ({"name": "a"}, {"name": "a", "type": "any"}):
+            pkg = {"name": "p", "resources": [
+                {"name": "x", "path": "x.csv", "schema": {"fields": [field]}}]}
+            results = validate_package_descriptor(_pkg_dir(tmp_path, pkg, csv="a\n1\n2\n"))
+            assert any("matches table" in r["check"] and r["status"] == "fail" for r in results)
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -229,7 +238,7 @@ def _validate_resource_tables(resources: list[dict], base_dir: Path) -> list[dic
             rows.append({"check": f"{name} observed fields", "status": "fail", "details": str(exc)})
             continue
         problems = [d for d in diff_schema(declared, observed)
-                    if d.action in ("add", "remove") or d.conflict]
+                    if d.action in ("add", "remove", "change")]
         if problems:
             detail = "; ".join(
                 f"{d.name}: " + (
@@ -278,7 +287,7 @@ def validate_package_descriptor(target: Path) -> list[dict[str, str]]:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cd ~/d/science/science && uv run --quiet pytest tests/test_datasets_validate.py::TestDescriptorTargetValidation -q`
-Expected: PASS (10 passed).
+Expected: PASS (11 passed).
 
 - [ ] **Step 5: Run the full validate test module (no regressions)**
 
@@ -411,13 +420,11 @@ In `src/science_tool/cli.py`, change the body of `datasets_validate` (line ~3106
     results = validate_path(data_path)
 ```
 
-and update the import line for the validate module. Find the existing import of `validate_data_packages` (grep `from science_tool.datasets.validate import`) and add `validate_path`:
+and update the import line for the validate module. Find the existing import of `validate_data_packages` (grep `from science_tool.datasets.validate import`) and replace it with `validate_path`:
 
 ```python
-from science_tool.datasets.validate import validate_data_packages, validate_path
+from science_tool.datasets.validate import validate_path
 ```
-
-(If `validate_data_packages` is no longer referenced elsewhere in `cli.py`, keep it imported anyway — other call sites and tests may use it; do not remove.)
 
 - [ ] **Step 5: Run the CLI tests to verify they pass**
 

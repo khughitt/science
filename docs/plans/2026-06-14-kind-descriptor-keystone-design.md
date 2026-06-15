@@ -48,12 +48,29 @@ Decisions locked during brainstorming:
 - **SSOT form:** a built-in *manifest of descriptor objects* (not a per-class `ClassVar`, not an
   external data file). Chosen because many core kinds share `ProjectEntity` and have no dedicated
   subclass, so only a manifest covers all kinds uniformly.
-- **Coexistence:** the manifest lists **all** core kinds from the start; the keystone fully
-  rewires its consumers with **no per-kind shim** and **no `descriptor-else-legacy` fallback**
-  (which would be a compatibility layer). Remaining consumers keep reading their own structures
-  until their increment.
+- **Roster scope (keystone):** `CORE_KINDS` enumerates **every file-authored core kind** — the kinds
+  that carry a built-in path policy today (the union of the four `science_tool/entities.py` dicts, 28
+  kinds). It does **not** enumerate non-file-authored `EntityType` members (`dataset`, `task`,
+  `workflow-run`, `code-file`, …); those have no path/status entry to derive and would add rows no
+  keystone consumer reads. Enumerating the full `EntityType` roster (with typed `entity_class` /
+  `model_class`) is increment 2's concern, where those fields bind to `EntityType`. The two sets
+  already drift in both directions today (six file-authored kinds — `pre-registration`, `construct`,
+  `decision`, `outcome`, `research-question`, `claim-registry` — are not `EntityType` members), so
+  the keystone deliberately reconciles only the four dicts.
+- **Coexistence:** the keystone fully rewires its consumers with **no per-kind shim** and **no
+  `descriptor-else-legacy` fallback** (which would be a compatibility layer). Remaining consumers
+  keep reading their own structures until their increment.
 - **Location:** the descriptor lives in `science_model` (the SSOT layer, which already owns
   `EntityType` and templates).
+- **Relationship to `ProfileManifest` / `CORE_PROFILE` (migration path):** the broader Spec 2
+  direction is "extend `EntityKind` as the SSOT; derive everything." `CORE_KINDS` is a **transitional
+  typed manifest**, not a permanent parallel surface: increment 3 (which owns the profile system)
+  folds `CORE_PROFILE`/`EntityKind` onto these descriptors so there is **one** descriptor per kind —
+  `EntityKind` gains the typed precision (`Path`, `frozenset` statuses) and the kinds it is missing,
+  and `CORE_KINDS` is absorbed and deleted. The keystone introduces a separate dataclass now (rather
+  than extending `CORE_PROFILE` immediately) purely to isolate risk: touching `CORE_PROFILE` pulls in
+  templates, `MIGRATED_KINDS`, and profile reconciliation, all explicitly deferred. The keystone
+  commits that `CORE_KINDS` does **not** survive as a second manifest alongside `CORE_PROFILE`.
 
 ## §2. The descriptor model & location
 
@@ -73,8 +90,8 @@ EntityFilenameStrategy = Literal["numeric", "citekey", "singleton", "slug", "ver
 @dataclass(frozen=True)
 class KindDescriptor:
     name: str                                       # canonical kind, e.g. "hypothesis"
-    path: Path | None = None                        # markdown home: a dir, or a file for singletons
-    strategy: EntityFilenameStrategy | None = None  # filename strategy; None for non-markdown kinds
+    path: Path | None = None                        # file home: a dir, or a file for singletons
+    strategy: EntityFilenameStrategy | None = None  # filename strategy; None for non-file-authored kinds
     statuses: frozenset[str] | None = None          # controlled vocab; None = open set
     default_status: str | None = None
     shortform: str | None = None                    # single-letter alias, e.g. "h" -> hypothesis
@@ -99,14 +116,18 @@ Notes:
 
 ## §3. Manifest content & scope
 
-`CORE_KINDS` enumerates **every core kind** (the `EntityType` roster). For the keystone:
-- **Markdown-authored kinds** (the ~27 that appear in the four dicts) populate
-  `path` / `strategy` / `statuses` / `default_status` / `shortform`, transcribed *verbatim* from
-  today's literals in `science_tool/entities.py`.
-- **Non-markdown kinds** (dataset, task, workflow-run, code-file, data-package, …) appear in the
-  manifest with those fields left `None` — they are real core kinds but are not markdown-authored,
-  so they have no path/status entry today.
-- `model_class` / `entity_class` / `template` are `None` for all entries this increment.
+`CORE_KINDS` enumerates the **file-authored core kinds** — the 28 kinds that carry a built-in path
+policy (the union of the four `science_tool/entities.py` dicts). "File-authored" is the precise term:
+26 are markdown-authored, plus two YAML/markdown **singletons** (`research-question` is a markdown
+file, `claim-registry` is a YAML file). For the keystone:
+- Every entry populates `path` / `strategy`, and the 26 non-singleton kinds also populate
+  `statuses` / `default_status`; six kinds additionally set `shortform` — all transcribed *verbatim*
+  from today's literals in `science_tool/entities.py`.
+- Singletons (`research-question`, `claim-registry`) set `path` + `strategy="singleton"` only; they
+  have no per-instance status vocabulary or default status today, so those stay `None`.
+- Non-file-authored `EntityType` members (`dataset`, `task`, `workflow-run`, `code-file`, …) are
+  **not** listed (see the roster-scope decision in §1) — they have no path/status entry to derive.
+- `model_class` / `entity_class` / `template` are `None`/absent for all entries this increment.
 
 Comments that annotate the current literals (e.g. *"was numeric (4c: slug identity kind)"* on
 `topic`/`method`/`observation`) are carried over so the rationale is not lost.
@@ -119,7 +140,7 @@ All in `science_tool/entities.py`. **Delete** `_BUILTIN_MARKDOWN_POLICIES`, `_DE
 
 | Deleted structure | Derivation | Consumers preserved |
 |---|---|---|
-| `_BUILTIN_MARKDOWN_POLICIES` | `{k.name: EntityPathPolicy(k.path, k.strategy) for k in CORE_KINDS if k.path}` | path resolution, local-policy merge, `_CORE_HOME_DIR_NAMES` |
+| `_BUILTIN_MARKDOWN_POLICIES` | `{k.name: EntityPathPolicy(k.path, k.strategy) for k in CORE_KINDS if k.path is not None and k.strategy is not None}` | path resolution, local-policy merge, `_CORE_HOME_DIR_NAMES` |
 | `_DEFAULT_STATUS` | `{k.name: k.default_status for k in CORE_KINDS if k.default_status}` | `default_status()` core branch |
 | `_STATUS_VALUES` | `{k.name: k.statuses for k in CORE_KINDS if k.statuses}` | `valid_statuses()` core branch |
 | `_SHORTFORM_ENTITY_KINDS` | `{k.shortform: k.name for k in CORE_KINDS if k.shortform}` | shortform reference expansion |
