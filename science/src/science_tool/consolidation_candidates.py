@@ -107,6 +107,49 @@ def _structural_family_clusters(
     return clusters
 
 
+def _entity_refs(fm: dict[str, Any], known_ids: set[str], *, fields: tuple[str, ...]) -> set[str]:
+    """Refs from *fields* that resolve to a known entity id (`kind:slug`). Empty,
+    tag-like, dict, and non-entity strings are ignored. External `source_refs`
+    citations (DOI/PMID/URL/free strings) are absent from `known_ids`, so they are
+    excluded automatically."""
+    refs: set[str] = set()
+    for field in fields:
+        value = fm.get(field)
+        items = value if isinstance(value, list) else [value] if isinstance(value, str) else []
+        for item in items:
+            if isinstance(item, str) and item in known_ids:
+                refs.add(item)
+    return refs
+
+
+def _shared_anchor_clusters(
+    visible: list[tuple[str, str, dict[str, Any]]],
+    known_ids: set[str],
+    min_cluster_size: int,
+) -> list[SemanticCluster]:
+    """Same-kind entities whose entity-refs (related + resolvable source_refs) point
+    at the same anchor entity."""
+    anchor_members: dict[tuple[str, str], set[str]] = {}
+    for eid, kind, fm in visible:
+        for anchor in _entity_refs(fm, known_ids, fields=("related", "source_refs")):
+            if anchor == eid:
+                continue  # ignore self-reference
+            anchor_members.setdefault((kind, anchor), set()).add(eid)
+
+    clusters: list[SemanticCluster] = []
+    for (kind, anchor), members in anchor_members.items():
+        if len(members) < min_cluster_size:
+            continue
+        clusters.append(
+            SemanticCluster(
+                signal="shared-anchor",
+                members=sorted(members),
+                evidence=f"{len(members)} {kind} entities all ref {anchor}",
+            )
+        )
+    return clusters
+
+
 def _lineage_section(graph: SupersedesGraph) -> SupersededLineage:
     linear = [
         LinearChain(
@@ -141,7 +184,9 @@ def detect_consolidation_candidates(
         for _path, fm in entries
         if is_default_visible(graph.status_by_id.get(str(fm["id"])))
     ]
+    known_ids = set(graph.kind_by_id)
     semantic = _structural_family_clusters(visible, min_cluster_size)
+    semantic += _shared_anchor_clusters(visible, known_ids, min_cluster_size)
 
     counts = {
         "linear": len(lineage.linear),

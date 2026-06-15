@@ -120,3 +120,36 @@ def test_group_and_task_family_are_basis_namespaced(tmp_path: Path) -> None:
     assert "group 'alpha'" in family[0].evidence
     assert family[1].members == ["hypothesis:0003-cc", "hypothesis:0004-dd"]
     assert "task-family 'task:alpha'" in family[1].evidence
+
+
+def test_shared_anchor_clusters_same_kind(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _write(tmp_path, "hypotheses", "0005-anchor", {"id": "hypothesis:0005-anchor", "type": "hypothesis"})
+    for n in ("a", "b", "c"):
+        _write(
+            tmp_path, "interpretations", f"int-{n}",
+            {"id": f"interpretation:int-{n}", "type": "interpretation", "related": ["hypothesis:0005-anchor"]},
+        )
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    report = detect_consolidation_candidates(tmp_path)
+    anchors = [c for c in report.semantic_clusters if c.signal == "shared-anchor"]
+    assert len(anchors) == 1
+    assert anchors[0].members == ["interpretation:int-a", "interpretation:int-b", "interpretation:int-c"]
+    assert "hypothesis:0005-anchor" in anchors[0].evidence
+
+
+def test_shared_anchor_ignores_unresolved_refs(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    # The shared ref is a non-entity tag string, not a known kind:slug id -> no cluster.
+    for n in ("a", "b", "c"):
+        _write(
+            tmp_path, "interpretations", f"int-{n}",
+            {"id": f"interpretation:int-{n}", "type": "interpretation", "related": ["topic-tag-not-an-entity"]},
+        )
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    report = detect_consolidation_candidates(tmp_path)
+    assert [c for c in report.semantic_clusters if c.signal == "shared-anchor"] == []
