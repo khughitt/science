@@ -36,6 +36,43 @@ class SourceTextError(ValueError):
     """Raised for user-correctable persist-source errors (fail-loud)."""
 
 
+# Optional test seam: when set, persist_source hands this client to
+# acquire_source_text instead of letting it construct its own. Production code
+# leaves it None; only hermetic tests assign a MockTransport-backed client.
+_test_http_client: httpx.Client | None = None
+
+
+def persist_source(*, project_root: Path, identifier: str, cfg: FetchConfig) -> Path:
+    """Resolve identifier -> entity, acquire text, gate license, write .source.md.
+
+    `identifier` is a bare DOI/PMID (or doi.org URL). The resolved entity's OWN
+    normalized identifiers drive acquisition, so a DOI-invoked command still hands
+    PubTator the entity's PMID (acquisition prefers BioC by PMID).
+    """
+    doi = normalize_doi(identifier)
+    pmid = None if doi else normalize_pmid(identifier)
+    if not doi and not pmid:
+        raise SourceTextError(
+            f"{identifier!r} is neither a DOI nor a PMID; "
+            "pass a bare DOI/PMID or doi.org URL."
+        )
+    resolved = resolve_paper_entity(project_root, doi=doi, pmid=pmid)
+    acquired = acquire_source_text(
+        pmid=resolved.pmid, doi=resolved.doi, cfg=cfg, http=_test_http_client
+    )
+    return write_source_md(
+        directory=resolved.directory,
+        citekey=resolved.citekey,
+        abstract=acquired.abstract,
+        fulltext=acquired.fulltext,
+        retrieved_from=acquired.retrieved_from,
+        license_=acquired.license,
+        licensed=acquired.licensed,
+        pmid=resolved.pmid,
+        doi=resolved.doi,
+    )
+
+
 # Pinned PubTator3 API release marker used when the BioC payload omits one.
 PUBTATOR3_API_VERSION = "pubtator3-api"
 

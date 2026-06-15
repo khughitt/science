@@ -4599,6 +4599,64 @@ def paper_fetch_cmd(
     click.echo(_json.dumps(result.to_dict(), indent=2))
 
 
+@main.group("paper")
+def paper() -> None:
+    """Paper-entity source-text commands."""
+
+
+@paper.command("persist-source")
+@click.argument("identifier")
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False),
+    help="Project root (defaults to the current directory).",
+)
+@click.option(
+    "--email",
+    default=None,
+    help="Contact email for polite-pool APIs (falls back to $SCIENCE_CONTACT_EMAIL)",
+)
+@click.option(
+    "--cache-dir",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Override cache directory (defaults to $SCIENCE_CACHE_DIR or ~/.cache/science)",
+)
+def persist_source_cmd(
+    identifier: str,
+    project_root: Path | None,
+    email: str | None,
+    cache_dir: Path | None,
+) -> None:
+    """Persist <citekey>.source.md (abstract always; full text when OA-licensed).
+
+    Resolves a DOI or PMID to an existing paper entity, fetches the article text
+    (PubTator3 BioC preferred, Europe PMC abstract fallback), license-gates
+    full-text persistence, and writes the anchor surface next to the entity.
+    """
+    import os as _os
+
+    from science_tool.annotation.source_text import SourceTextError, persist_source
+    from science_tool.paper_fetch import FetchConfig
+
+    resolved_email = email or _os.environ.get("SCIENCE_CONTACT_EMAIL")
+    if not resolved_email:
+        raise click.ClickException(
+            "Contact email is required. Pass --email or set $SCIENCE_CONTACT_EMAIL."
+        )
+    cfg_kwargs: dict[str, Any] = {"email": resolved_email}
+    if cache_dir is not None:
+        cfg_kwargs["cache_dir"] = cache_dir
+    cfg = FetchConfig(**cfg_kwargs)
+    root = (project_root or Path.cwd()).resolve()
+    try:
+        out = persist_source(project_root=root, identifier=identifier, cfg=cfg)
+    except SourceTextError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Wrote {out}")
+
+
 @main.command("book-split")
 @click.argument("pdf", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--json", "as_json", is_flag=True, help="Emit the chapter manifest as JSON.")
