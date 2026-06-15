@@ -1071,7 +1071,8 @@ def pubtator_cmd(
     help="candidates.json produced by the paper-annotate agent.",
 )
 @click.option("--check", "check_only", is_flag=True, default=False,
-              help="Read-only: print whether the source changed since last extraction.")
+              help="Read-only: print JSON {status: changed|unchanged} for the "
+                   "source vs last extraction (ignores --format).")
 @click.option("--actor", default="paper-annotate",
               help="Identity recorded as the annotation creator.")
 @click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
@@ -1128,6 +1129,7 @@ def extract_cmd(
             "skipped": report.skipped,
             "grounding_dropped": report.grounding_dropped,
             "source_text_hash_recorded": report.source_text_hash_recorded,
+            "note": report.note,
         }, indent=2))
     else:
         skips = ", ".join(f"{k}:{v}" for k, v in sorted(report.skipped.items())) or "none"
@@ -1137,3 +1139,5 @@ def extract_cmd(
             f"skipped [{skips}], "
             f"hash recorded: {report.source_text_hash_recorded}"
         )
+        if report.note:
+            click.echo(report.note)

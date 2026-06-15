@@ -101,3 +101,20 @@ def test_list_json_exposes_bodies_and_full_selector(tmp_path: Path):
     assert "selector" in item
     assert item["selector"]["exact"] == "BRCA1 loss drives genomic instability"
     assert "prefix" in item["selector"] and "suffix" in item["selector"]
+
+
+def test_extract_cli_surfaces_note_on_anchor_failure(tmp_path: Path):
+    src = _make_source_md(tmp_path)
+    cand_file = tmp_path / "c.json"
+    cand_file.write_text(json.dumps({"candidates": [{
+        "type": "proposition", "exact": "absent from this document",
+        "prefix": "", "suffix": "", "stance": "asserted",
+    }]}), encoding="utf-8")
+    r = CliRunner().invoke(annotate_group, [
+        "extract", "--source-md", str(src), "--model", _MODEL,
+        "--input", str(cand_file), "--format", "json",
+    ])
+    assert r.exit_code == 0, r.output
+    out = json.loads(r.output)
+    assert out["written"] == 0 and out["source_text_hash_recorded"] is False
+    assert out["note"] is not None and "failed to anchor" in out["note"]
