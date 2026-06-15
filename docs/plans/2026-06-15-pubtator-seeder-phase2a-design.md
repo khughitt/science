@@ -42,7 +42,7 @@ variant / species / cellline) → single-`IriBody` span annotations.
 | 4 | CLI home | **`science annotate pubtator <pmid\|doi>`** — a new subcommand on the existing top-level `annotate` group, so future book-applicable annotators sit beside it |
 | 5 | Concept-IRI scheme | Full **`identifiers.org`** HTTP IRIs in `IriBody` (TriG emits `IriBody.iri` as a literal `<iri>`, so it must be a full IRI, not a CURIE) |
 | 6 | Unmappable mentions | **Skip and count** (non-persisted passage, or PubTator left the mention unnormalized) — only clean concept anchors are seeded; nothing silent |
-| 7 | `match_text` | A **span discriminator** `{annotation_type}\|{concept_iri}\|{file_char_base}:{length}\|{exact}`, not the bare mention text — the merge 4-tuple has no position, so bare text would collapse repeated/overlapping mentions |
+| 7 | `match_text` | A **span discriminator** `{annotation_type}\|{concept_iri}\|{file_idx}:{length}\|{exact}` where `file_idx` is the **mention's** absolute start (not the passage start) — the merge 4-tuple has no position, so bare text (or a passage-level base) would collapse repeated/overlapping mentions in one passage |
 | 8 | Passage bridge | Pair persisted↔BioC passages by **ordered occurrence** (left-to-right scan), not unordered text search; **fail loud** on ambiguous duplicate text |
 
 ## Architecture
@@ -114,12 +114,16 @@ through the standard `annotation/verify.py` against the rendered `.source.md`
 
 | PubTator type | `annotation_type` | Biolink class (docs map only) | Concept IRI |
 |---|---|---|---|
-| gene | `entity-gene` | `biolink:Gene` | `https://identifiers.org/ncbigene/{id}` |
-| disease | `entity-disease` | `biolink:Disease` | `https://identifiers.org/mesh/{id}` |
-| chemical | `entity-chemical` | `biolink:ChemicalEntity` | `https://identifiers.org/mesh/{id}` |
-| species | `entity-species` | `biolink:OrganismTaxon` | `https://identifiers.org/taxonomy/{id}` |
-| variant | `entity-variant` | `biolink:SequenceVariant` | `https://identifiers.org/dbsnp/{id}` (rsID) |
-| cellline | `entity-cellline` | `biolink:CellLine` | `https://identifiers.org/cellosaurus/{id}` |
+| gene | `entity-gene` | `biolink:Gene` | `https://identifiers.org/ncbigene:{id}` |
+| disease | `entity-disease` | `biolink:Disease` | `https://identifiers.org/mesh:{id}` |
+| chemical | `entity-chemical` | `biolink:ChemicalEntity` | `https://identifiers.org/mesh:{id}` |
+| species | `entity-species` | `biolink:OrganismTaxon` | `https://identifiers.org/taxonomy:{id}` |
+| variant | `entity-variant` | `biolink:SequenceVariant` | `https://identifiers.org/dbsnp:{id}` (rsID) |
+| cellline | `entity-cellline` | `biolink:CellLine` | `https://identifiers.org/cellosaurus:{id}` |
+
+Concept IRIs follow the identifiers.org **compact-identifier** form
+`https://identifiers.org/<namespace>:<accession>` (colon, not slash), per
+<https://docs.identifiers.org/>.
 
 - **Single body:** `IriBody(<full concept IRI>)`. **Motivation:** `oa:identifying`.
 - The Biolink class is **derived from `annotation_type`** via the documented map; it
@@ -159,9 +163,12 @@ real fixture used in tests.
   distinct mentions of the same surface form (e.g. two `BRCA1` occurrences in one
   paper, or the same span tagged with two concepts) would collapse to one row if
   `match_text` were just the mention text. Use
-  `match_text = f"{annotation_type}|{concept_iri}|{file_char_base}:{length}|{exact}"`,
-  which is unique per (type, concept, span position) and **stable across re-runs** of
-  an unchanged `.source.md` (so idempotency holds). **`lifted_from`** = `None`.
+  `match_text = f"{annotation_type}|{concept_iri}|{file_idx}:{length}|{exact}"`, where
+  `file_idx` is the **mention's** absolute file char start (§3 step 2), **not** the
+  passage start `file_char_base` — two identical surface mentions in the *same*
+  persisted passage share `file_char_base` and would still collapse. This is unique per
+  (type, concept, mention position) and **stable across re-runs** of an unchanged
+  `.source.md` (so idempotency holds). **`lifted_from`** = `None`.
 - **Note on `content_hash`.** It stays `content_hash(selector.exact, source_name)`
   (spec-pinned, unchanged), so two same-surface mentions share a `content_hash`. That
   is fine here: `content_hash` is the re-audit cache key, not the merge key — insertion
@@ -214,9 +221,10 @@ real fixture used in tests.
   with a handful of typed mentions, at least one unnormalized and one body-section
   mention).
 - **Duplicate surface mention (regression for the merge collapse):** two distinct
-  mentions of the same surface form (e.g. `BRCA1`) at **different** offsets both
-  survive `merge_planned` as separate rows (the span discriminator in `match_text`
-  keeps the 4-tuples distinct), and re-running seeds zero new rows.
+  mentions of the same surface form (e.g. `BRCA1`) at different offsets **within the
+  same persisted passage** both survive `merge_planned` as separate rows (the
+  `file_idx`-based discriminator keeps the 4-tuples distinct even though they share the
+  passage `file_char_base`), and re-running seeds zero new rows.
 - **Duplicate passage text (regression for the bridge ambiguity):** a fixture with two
   persisted passages carrying identical text maps body annotations to the **correct**
   occurrence via the ordered scan (and a genuinely ambiguous case fails loud).
