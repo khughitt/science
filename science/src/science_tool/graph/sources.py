@@ -339,14 +339,9 @@ def load_project_sources(
         for adapter in adapters:
             for ref in adapter.discover(project_root):
                 raw = adapter.load_raw(ref)
-                if isinstance(adapter, MarkdownAdapter):
-                    markdown_documents.append(
-                        MarkdownSourceDocument(
-                            path=ref.path,
-                            frontmatter={key: value for key, value in raw.items() if key != "content"},
-                            body=str(raw.get("content") or ""),
-                        )
-                    )
+                doc = adapter.source_document(ref, raw)
+                if doc is not None:
+                    markdown_documents.append(doc)
                 raw_kind = raw.get("kind")
                 if not isinstance(raw_kind, str) or not raw_kind:
                     # Adapter returned a record with no kind (e.g. frontmatter-less
@@ -385,7 +380,7 @@ def load_project_sources(
                 except ValidationError as exc:
                     details = _format_missing_fields(exc)
                     if registry.is_core_kind(kind):
-                        if isinstance(adapter, MarkdownAdapter) and _is_missing_identity_validation(exc):
+                        if adapter.skip_core_on_missing_identity and _is_missing_identity_validation(exc):
                             logger.warning(
                                 "skipping %s: core entity is missing identity fields (%s)",
                                 ref.path,
@@ -440,33 +435,16 @@ def load_project_sources(
                     )
                     continue
                 owner_scope, deprecated = classify_owner_scope(adapter.name, project_name=project_name)
-                if isinstance(adapter, DatapackageAdapter) and entity.canonical_id in identity_table:
-                    # §B4: a datapackage is attached resource metadata, not a second
-                    # owner. Its id already has an owner recorded this load (a real
-                    # markdown owner OR a transitional entities.yaml aggregate stub —
-                    # both adapters precede DatapackageAdapter), so it DEFERS: emit no
-                    # competing owner declaration and no duplicate entity (it never
-                    # collides, under strict or non-strict). A datapackage shadowed by
-                    # an aggregate stub rides that stub; §B5 retirement carries the
-                    # debt. Only a TRUE orphan (id not yet owned) synthesizes the
-                    # deprecated transitional owner below.
-                    # Record its path so the geneset member gate can still locate the
-                    # datapackage's resources after the owner (markdown) wins the column.
-                    dataset_datapackages[entity.canonical_id] = ref.path
-                    continue
-                if (
-                    adapter.participation_mode == ParticipationMode.EXTERNAL_REFERENCE
-                    and entity.canonical_id in identity_table
-                ):
-                    # §B3/§C3 external-reference defer (generalized over bib + curie):
-                    # an external-reference adapter contributes references, not
-                    # owners. If a real owner OR a transitional aggregate stub already
-                    # claimed this id this load (all owner-ish adapters precede the
-                    # external-reference adapters), it defers — no second declaration,
-                    # no duplicate entity, no collision under strict load. The
-                    # owner->external-reference flip happens automatically on the next
-                    # load once retirement drops the stub. The branch is deliberately
-                    # adapter-agnostic; source-specific parsing stays in the adapter.
+                # Defer is declared by the adapter (§B3/§B4/§C3): external-reference
+                # adapters (bib, curie-ref) and datapackages yield to an existing
+                # owner of this id rather than emit a competing owner. A deferring
+                # datapackage still reports its (id, path) so the geneset member gate
+                # can locate its resources after the owner wins the column.
+                if adapter.should_defer(already_owned=entity.canonical_id in identity_table):
+                    pair = adapter.deferred_dataset_datapackage(entity=entity, ref=ref)
+                    if pair is not None:
+                        deferred_id, deferred_path = pair
+                        dataset_datapackages[deferred_id] = deferred_path
                     continue
                 identity_declarations.append(
                     IdentityDeclaration(
@@ -478,25 +456,9 @@ def load_project_sources(
                         deprecated=deprecated,
                     )
                 )
-                if adapter.name == "aggregate":
-                    assert ref.line is not None  # AggregateAdapter always sets the entry index
-                    sp_raw = raw.get("source_path")
-                    # Capture from the VALIDATED entity, not raw: entity.primary_external_id
-                    # is a typed ExternalId (already passed ExternalId validation) or None.
-                    # exclude_none drops the optional `version`, leaving the four required keys.
-                    pei = entity.primary_external_id
-                    aggregate_rows.append(
-                        AggregateRowMeta(
-                            path=ref.path,
-                            line=ref.line,
-                            canonical_id=entity.canonical_id,
-                            kind=kind,
-                            # source_path is unschema'd extra metadata; normalize a
-                            # malformed (non-string) value to None so the report can't crash.
-                            source_path=sp_raw if isinstance(sp_raw, str) else None,
-                            primary_external_id=pei.model_dump(exclude_none=True) if pei is not None else None,
-                        )
-                    )
+                meta = adapter.on_owner_declared(entity=entity, ref=ref, raw=raw, kind=kind)
+                if meta is not None:
+                    aggregate_rows.append(meta)
                 existing = identity_table.get(entity.canonical_id)
                 if existing is not None:
                     if strict_identity:
