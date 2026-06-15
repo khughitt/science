@@ -9,6 +9,7 @@ import yaml
 
 from science_model.source_ref import SourceRef
 
+from science_tool.graph.source_records import MarkdownSourceDocument
 from science_tool.graph.storage_adapters.base import StorageAdapter
 
 # Anchor-surface sidecars (paper `.source.md`) live inside entity roots but are
@@ -18,6 +19,7 @@ SIDECAR_MARKDOWN_SUFFIX = ".source.md"
 
 class MarkdownAdapter(StorageAdapter):
     name = "markdown"
+    skip_core_on_missing_identity = True
 
     def __init__(self, scan_roots: list[str] | None = None, virtual_files: dict[str, str] | None = None) -> None:
         # Roots relative to project_root. Defaults mirror the previous MarkdownProvider.
@@ -66,6 +68,13 @@ class MarkdownAdapter(StorageAdapter):
         if "canonical_id" not in raw and "id" in raw:
             raw["canonical_id"] = raw["id"]
         return raw
+
+    def source_document(self, ref: SourceRef, raw: dict[str, Any]) -> MarkdownSourceDocument | None:
+        return MarkdownSourceDocument(
+            path=ref.path,
+            frontmatter={key: value for key, value in raw.items() if key != "content"},
+            body=str(raw.get("content") or ""),
+        )
 
 
 def _parse_markdown(path: Path) -> tuple[dict[str, Any], str]:
