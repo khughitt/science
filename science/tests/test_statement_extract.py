@@ -207,3 +207,34 @@ def test_parse_rejects_non_object_input():
 def test_parse_rejects_bad_json():
     with pytest.raises(CandidateError, match="not valid JSON"):
         parse_candidates("{not json")
+
+
+from science_tool.annotation.statement_extract import statement_body_json
+
+
+def test_body_minimal_sorted_compact():
+    body = statement_body_json(
+        section="results", stance="asserted",
+        subject=None, object_=None,
+        subject_concept=None, object_concept=None,
+    )
+    assert body == '{"section":"results","stance":"asserted"}'
+
+
+def test_body_includes_present_optionals_sorted():
+    body = statement_body_json(
+        section="results", stance="asserted",
+        subject="BRCA1 loss", object_="genomic instability",
+        subject_concept="https://identifiers.org/ncbigene:672", object_concept=None,
+    )
+    # keys sorted: object, section, stance, subject, subject_concept
+    assert body == (
+        '{"object":"genomic instability","section":"results","stance":"asserted",'
+        '"subject":"BRCA1 loss","subject_concept":"https://identifiers.org/ncbigene:672"}'
+    )
+
+
+def test_body_is_byte_stable():
+    kw = dict(section="methods", stance="hypothesized", subject="A", object_="B",
+              subject_concept=None, object_concept=None)
+    assert statement_body_json(**kw) == statement_body_json(**kw)

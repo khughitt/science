@@ -199,3 +199,33 @@ def _parse_one(item: Any, idx: int) -> Candidate:
         subject_concept=_str("subject_concept", optional=True),
         object_concept=_str("object_concept", optional=True),
     )
+
+
+# --- Statement body JSON ------------------------------------------------------
+
+
+def statement_body_json(
+    *,
+    section: str,
+    stance: str,
+    subject: str | None,
+    object_: str | None,
+    subject_concept: str | None,
+    object_concept: str | None,
+) -> str:
+    """Build the deterministic JSON for a statement's TextualBody.
+
+    Always carries section + stance. Optional subject/object phrases and verified
+    concept IRIs are included only when present. Sorted keys + compact separators +
+    allow_nan=False guarantee finite, byte-stable serialization (clean diffs).
+    """
+    obj: dict[str, Any] = {"section": section, "stance": stance}
+    if subject is not None:
+        obj["subject"] = subject
+    if object_ is not None:
+        obj["object"] = object_
+    if subject_concept is not None:
+        obj["subject_concept"] = subject_concept
+    if object_concept is not None:
+        obj["object_concept"] = object_concept
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), allow_nan=False)
