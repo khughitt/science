@@ -10,6 +10,95 @@ See docs/plans/2026-06-15-pubtator-seeder-phase2a-design.md.
 from __future__ import annotations
 
 import re
+from collections import Counter
+from dataclasses import dataclass
+from typing import Any
+
+# --- BioC entity mention dataclass + parser -----------------------------------
+
+
+@dataclass(frozen=True)
+class BiocMention:
+    """One PubTator entity mention: type, normalized id, surface text, and the
+    document-global BioC char offset+length of its span."""
+
+    pubtator_type: str
+    identifier: str | None
+    text: str
+    offset: int
+    length: int
+
+
+def parse_bioc_entity_annotations(
+    record: dict[str, Any],
+) -> tuple[list[BiocMention], dict[str, int]]:
+    """Flatten passage entity annotations into ordered rows + a drop-count map.
+
+    Reads the same `PubTator3`/`documents` top-level shape as parse_bioc_passages.
+    Returns `(mentions, dropped)` where `dropped` counts annotations skipped at parse
+    time BY REASON (nothing silent — the orchestrator folds these into the report):
+      - "malformed-bioc-annotation": missing/invalid `type`/`text`/`locations`/offset.
+      - "multi-location-mention": a discontinuous span (len(locations) != 1) —
+        out of Phase 2a scope; counted, not silently truncated to locations[0].
+    Concept-id normalization happens later (concept_iri_for), not here.
+    """
+    dropped: Counter[str] = Counter()
+    docs = record.get("PubTator3") or record.get("documents")
+    if not isinstance(docs, list) or not docs:
+        return [], {}
+    doc = docs[0]
+    if not isinstance(doc, dict):
+        return [], {}
+    passages = doc.get("passages")
+    if not isinstance(passages, list):
+        return [], {}
+
+    mentions: list[BiocMention] = []
+    for passage in passages:
+        if not isinstance(passage, dict):
+            continue
+        anns = passage.get("annotations")
+        if not isinstance(anns, list):
+            continue
+        for ann in anns:
+            if not isinstance(ann, dict):
+                dropped["malformed-bioc-annotation"] += 1
+                continue
+            infons = ann.get("infons")
+            infons = infons if isinstance(infons, dict) else {}
+            ptype = infons.get("type")
+            text = ann.get("text")
+            locations = ann.get("locations")
+            if not isinstance(ptype, str) or not isinstance(text, str) or not text:
+                dropped["malformed-bioc-annotation"] += 1
+                continue
+            if not isinstance(locations, list) or not locations:
+                dropped["malformed-bioc-annotation"] += 1
+                continue
+            if len(locations) != 1:
+                dropped["multi-location-mention"] += 1
+                continue
+            loc = locations[0]
+            if not isinstance(loc, dict):
+                dropped["malformed-bioc-annotation"] += 1
+                continue
+            offset = loc.get("offset")
+            length = loc.get("length")
+            if not isinstance(offset, int) or not isinstance(length, int):
+                dropped["malformed-bioc-annotation"] += 1
+                continue
+            identifier = infons.get("identifier")
+            mentions.append(
+                BiocMention(
+                    pubtator_type=ptype,
+                    identifier=identifier if isinstance(identifier, str) else None,
+                    text=text,
+                    offset=offset,
+                    length=length,
+                )
+            )
+    return mentions, dict(dropped)
+
 
 # --- Entity type -> annotation_type ------------------------------------------
 

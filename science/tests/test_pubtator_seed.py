@@ -2,8 +2,10 @@ import pytest
 
 from science_tool.annotation.model import HASH_REQUIRED_SOURCE_PREFIXES
 from science_tool.annotation.pubtator_seed import (
+    BiocMention,
     annotation_type_for,
     concept_iri_for,
+    parse_bioc_entity_annotations,
 )
 
 # A title+abstract record with one body passage (non-persisted in abstract-only mode),
@@ -129,3 +131,55 @@ def test_annotation_type_for(pubtator_type, expected):
 )
 def test_concept_iri_for(pubtator_type, identifier, expected):
     assert concept_iri_for(pubtator_type, identifier) == expected
+
+
+def test_parse_bioc_entity_annotations():
+    mentions, dropped = parse_bioc_entity_annotations(BIOC_FIXTURE)
+    assert dropped == {}  # fixture is all well-formed, single-location
+    # 3 (title) + 4 (abstract) + 1 (intro) = 8 mention rows, all preserved in order.
+    assert len(mentions) == 8
+    first = mentions[0]
+    assert isinstance(first, BiocMention)
+    assert (first.pubtator_type, first.identifier, first.text) == ("Gene", "672", "BRCA1")
+    assert (first.offset, first.length) == (0, 5)
+    # The two BRCA1 mentions in the title differ only by offset.
+    assert mentions[0].offset == 0 and mentions[1].offset == 10
+    assert mentions[0].text == mentions[1].text == "BRCA1"
+    # The duplicate-tagged abstract span yields two rows (rsID + tmVar).
+    variants = [m for m in mentions if m.pubtator_type == "Mutation"]
+    assert {m.identifier for m in variants} == {"rs80357065", "tmVar:c|SUB|A|1|T"}
+
+
+def test_parse_bioc_entity_annotations_empty():
+    assert parse_bioc_entity_annotations({"PubTator3": []}) == ([], {})
+    assert parse_bioc_entity_annotations({}) == ([], {})
+
+
+def test_parse_bioc_entity_annotations_counts_malformed_and_multilocation():
+    record = {
+        "PubTator3": [
+            {
+                "infons": {},
+                "passages": [
+                    {
+                        "infons": {"type": "title"},
+                        "offset": 0,
+                        "text": "G here",
+                        "annotations": [
+                            # empty locations -> malformed
+                            {"infons": {"type": "Gene"}, "text": "G", "locations": []},
+                            # discontinuous span -> multi-location (not truncated)
+                            {"infons": {"type": "Gene"}, "text": "G", "locations": [
+                                {"offset": 0, "length": 1}, {"offset": 5, "length": 1}]},
+                            # well-formed
+                            {"infons": {"identifier": "1", "type": "Gene"}, "text": "G", "locations": [
+                                {"offset": 0, "length": 1}]},
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+    mentions, dropped = parse_bioc_entity_annotations(record)
+    assert len(mentions) == 1
+    assert dropped == {"malformed-bioc-annotation": 1, "multi-location-mention": 1}
