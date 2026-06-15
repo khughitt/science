@@ -65,6 +65,7 @@ from science_tool.graph.sources import (
 )
 from science_tool.graph.inquiry_compile import emit_inquiry_views
 from science_tool.graph.io import CITO_NS, DCAT_NS, DCTERMS_NS, entity_uri_for_ref
+from science_tool.graph.source_snapshots import SourceSnapshotResult, emit_source_snapshots
 from science_tool.graph.patch_membership import (
     derive_patch_memberships,
     emit_patch_memberships,
@@ -91,7 +92,9 @@ def build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     return _build_dataset_from_sources(sources)
 
 
-def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
+def _build_dataset_from_sources(
+    sources: ProjectSources, *, source_snapshots: SourceSnapshotResult | None = None
+) -> Dataset:
     """Build the in-memory rdflib Dataset that `materialize_graph` would write.
 
     Composes the existing emission helpers (`_add_entity`, `_add_relations`,
@@ -177,6 +180,9 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
 
     _validate_no_amendment_cycles(dataset)
 
+    if source_snapshots is not None:
+        emit_source_snapshots(dataset, source_snapshots)
+
     _derive_bears_on_layer(
         dataset,
         kind_class=kind_class,
@@ -190,7 +196,10 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     )
     if sources.freshness_enabled:
         entity_meta = _build_entity_meta(sources, kind_class)
-        _derive_freshness_layer(dataset, entities=entity_meta, today=_date.today())
+        source_changes = source_snapshots.source_changes if source_snapshots is not None else {}
+        _derive_freshness_layer(
+            dataset, entities=entity_meta, today=_date.today(), source_changes=source_changes
+        )
 
     return dataset
 
@@ -1312,9 +1321,12 @@ def _derive_freshness_layer(
     *,
     entities: dict[str, EntityFreshnessInfo],
     today: _date,
+    source_changes: dict[str, _date],
 ) -> None:
     """Derive freshness state triples (sci:freshnessState / sci:upstreamChangeAt / sci:triggeredBy).
 
     Gated on sources.freshness_enabled — skipped entirely when opt-out is active.
+    `source_changes` maps SourceSnapshot node URIs to their latest SourceChange observed_on
+    (the values are `datetime.date`; `date` is imported as `_date` in this file).
     """
-    derive_freshness(dataset, entities=entities, today=today)
+    derive_freshness(dataset, entities=entities, today=today, source_changes=source_changes)

@@ -291,6 +291,7 @@ def derive_freshness(
     *,
     entities: dict[str, EntityFreshnessInfo],
     today: date,
+    source_changes: dict[str, date],
 ) -> None:
     """Compute EpistemicFreshness for every epistemic entity and emit triples.
 
@@ -300,6 +301,13 @@ def derive_freshness(
         created: date | None
         updated: date | None
         review_horizon_days: int | None
+
+    `source_changes` maps a SourceSnapshot node URI (str) to the observed_on of
+    its current SourceChange. When an upstream `bears_on` source is a snapshot
+    node, that date is used as its change_at — so a content change triggers
+    needs-review even when the authored `updated:` date did not move. triggeredBy
+    then points to the snapshot node (typed sci:SourceSnapshot in the graph),
+    keeping the cause distinguishable from date-driven entity triggers.
 
     Algorithm:
       State precedence (highest first): needs-review > stale > fresh.
@@ -350,12 +358,16 @@ def derive_freshness(
         triggered: list[URIRef] = []
         upstream_change_at: date | None = None
         for source_uri in bears_on_in.get(entity_uri, set()):
-            source_info = entities.get(str(source_uri))
-            if source_info is None:
-                continue
-            change_at = source_info.get("updated") or source_info.get("created")
-            if change_at is None:
-                continue
+            source_key = str(source_uri)
+            if source_key in source_changes:
+                change_at: date | None = source_changes[source_key]
+            else:
+                source_info = entities.get(source_key)
+                if source_info is None:
+                    continue
+                change_at = source_info.get("updated") or source_info.get("created")
+                if change_at is None:
+                    continue
             if change_at > baseline:
                 triggered.append(source_uri)
                 if upstream_change_at is None or change_at > upstream_change_at:

@@ -60,7 +60,7 @@ def test_freshness_fresh_when_no_upstream_change():
             "review_horizon_days": None,
         },
     }
-    derive_freshness(ds, entities=entities, today=date(2026, 5, 3))
+    derive_freshness(ds, entities=entities, today=date(2026, 5, 3), source_changes={})
     assert _state_for(ds, _u("hypothesis/h1")) == "fresh"
     assert _triggered_by(ds, _u("hypothesis/h1")) == set()
 
@@ -83,7 +83,7 @@ def test_freshness_needs_review_when_upstream_changed_after_last_review():
             "review_horizon_days": None,
         },
     }
-    derive_freshness(ds, entities=entities, today=date(2026, 5, 3))
+    derive_freshness(ds, entities=entities, today=date(2026, 5, 3), source_changes={})
     assert _state_for(ds, _u("hypothesis/h1")) == "needs-review"
     assert _triggered_by(ds, _u("hypothesis/h1")) == {str(_u("dataset/d1"))}
 
@@ -118,7 +118,7 @@ def test_freshness_ignores_amends_and_supersedes_edges() -> None:
             },
         }
 
-        derive_freshness(ds, entities=entities, today=date(2026, 5, 3))
+        derive_freshness(ds, entities=entities, today=date(2026, 5, 3), source_changes={})
 
         assert _state_for(ds, h) == "fresh"
         assert _triggered_by(ds, h) == set()
@@ -142,7 +142,7 @@ def test_freshness_falls_back_to_created_when_last_reviewed_unset():
             "review_horizon_days": None,
         },
     }
-    derive_freshness(ds, entities=entities, today=date(2026, 5, 3))
+    derive_freshness(ds, entities=entities, today=date(2026, 5, 3), source_changes={})
     # created (2026-05-02) > upstream updated (2026-04-01) => fresh
     assert _state_for(ds, _u("hypothesis/h1")) == "fresh"
 
@@ -158,7 +158,7 @@ def test_freshness_stale_when_horizon_exceeded_without_upstream_change():
             "review_horizon_days": 90,
         },
     }
-    derive_freshness(ds, entities=entities, today=date(2026, 5, 3))
+    derive_freshness(ds, entities=entities, today=date(2026, 5, 3), source_changes={})
     assert _state_for(ds, _u("hypothesis/h1")) == "stale"
 
 
@@ -173,7 +173,7 @@ def test_freshness_skips_non_epistemic_entities():
             "review_horizon_days": None,
         },
     }
-    derive_freshness(ds, entities=entities, today=date(2026, 5, 3))
+    derive_freshness(ds, entities=entities, today=date(2026, 5, 3), source_changes={})
     assert _state_for(ds, _u("dataset/d1")) is None  # No freshness emitted.
 
 
@@ -207,7 +207,7 @@ def test_freshness_emits_upstream_change_at():
             "review_horizon_days": None,
         },
     }
-    derive_freshness(ds, entities=entities, today=date(2026, 5, 3))
+    derive_freshness(ds, entities=entities, today=date(2026, 5, 3), source_changes={})
     knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
     upstream_at_values = [str(o) for _, _, o in knowledge.triples((_u("hypothesis/h1"), SCI_NS.upstreamChangeAt, None))]
     assert upstream_at_values == ["2026-05-01"]
@@ -234,7 +234,7 @@ def test_freshness_needs_review_wins_over_stale_when_both_apply():
             "review_horizon_days": None,
         },
     }
-    derive_freshness(ds, entities=entities, today=date(2026, 5, 3))
+    derive_freshness(ds, entities=entities, today=date(2026, 5, 3), source_changes={})
     # Both conditions apply: upstream change AND horizon exceeded.
     # needs-review must win.
     assert _state_for(ds, _u("hypothesis/h1")) == "needs-review"
@@ -256,7 +256,7 @@ def test_derive_freshness_emits_last_reviewed_triple() -> None:
             "review_horizon_days": None,
         }
     }
-    derive_freshness(ds, entities=entities, today=date(2026, 5, 4))
+    derive_freshness(ds, entities=entities, today=date(2026, 5, 4), source_changes={})
 
     triples = list(knowledge.triples((h, SCI_NS.lastReviewed, None)))
     assert triples == [(h, SCI_NS.lastReviewed, Literal("2026-01-15", datatype=XSD.date))]
@@ -275,7 +275,7 @@ def test_derive_freshness_no_last_reviewed_triple_when_unset() -> None:
             "review_horizon_days": None,
         }
     }
-    derive_freshness(ds, entities=entities, today=date(2026, 5, 4))
+    derive_freshness(ds, entities=entities, today=date(2026, 5, 4), source_changes={})
     assert list(knowledge.triples((h, SCI_NS.lastReviewed, None))) == []
 
 
@@ -302,7 +302,7 @@ def test_horizon_boundary_inclusive_at_threshold() -> None:
         }
     }
     today_eq = baseline + timedelta(days=horizon)
-    derive_freshness(ds, entities=entities, today=today_eq)
+    derive_freshness(ds, entities=entities, today=today_eq, source_changes={})
     assert (h, SCI_NS.freshnessState, Literal("fresh")) in knowledge
 
 
@@ -329,7 +329,7 @@ def test_horizon_one_day_past_threshold_is_stale() -> None:
         }
     }
     today_past = baseline + timedelta(days=horizon + 1)
-    derive_freshness(ds, entities=entities, today=today_past)
+    derive_freshness(ds, entities=entities, today=today_past, source_changes={})
     assert (h, SCI_NS.freshnessState, Literal("stale")) in knowledge
 
 
@@ -355,10 +355,10 @@ def test_horizon_one_day_minimum() -> None:
 
     # day after baseline → still fresh (today - baseline == 1, not > 1)
     ds1 = Dataset()
-    derive_freshness(ds1, entities=entities, today=baseline + timedelta(days=1))
+    derive_freshness(ds1, entities=entities, today=baseline + timedelta(days=1), source_changes={})
     assert (h, SCI_NS.freshnessState, Literal("fresh")) in ds1.graph(PROJECT_NS["graph/knowledge"])
 
     # two days after → stale
     ds2 = Dataset()
-    derive_freshness(ds2, entities=entities, today=baseline + timedelta(days=2))
+    derive_freshness(ds2, entities=entities, today=baseline + timedelta(days=2), source_changes={})
     assert (h, SCI_NS.freshnessState, Literal("stale")) in ds2.graph(PROJECT_NS["graph/knowledge"])
