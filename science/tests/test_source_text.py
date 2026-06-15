@@ -567,13 +567,6 @@ class TestAcquireSourceText:
         assert acquired.fulltext is None
         abstract_texts = [p.text for p in acquired.abstract.passages]
         assert abstract_texts == ["Intro paragraph.", "Methods paragraph."]
-        # Disjointness: nothing from the abstract floor leaks into full text.
-        fulltext_texts: list[str] = (
-            [p.text for p in acquired.fulltext.passages]
-            if acquired.fulltext is not None
-            else []
-        )
-        assert set(abstract_texts).isdisjoint(fulltext_texts)
 
     def test_terminal_error_names_both_service_failures(self, tmp_path: Path) -> None:
         # PubTator returns HTTP 500 (a real transport-level failure -> non-None err)
