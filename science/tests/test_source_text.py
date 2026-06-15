@@ -188,3 +188,81 @@ class TestLicense:
         license_, ok = resolve_license([None, "", "  "])
         assert ok is False
         assert license_ == "unknown"
+
+
+from science_tool.annotation.source_text import (  # noqa: E402
+    PassageOffset,
+    render_source_md,
+    verify_offset_map,
+)
+
+
+class TestOffsetMap:
+    def _passages(self) -> SourcePassages:
+        return SourcePassages(
+            passages=(
+                Passage(section="title", bioc_offset=0, text="BRCA1 in cancer"),
+                Passage(section="abstract", bioc_offset=16, text="We show BRCA1 drives tumours — clearly."),
+            ),
+            release="2024.01",
+        )
+
+    def test_offsets_slice_back_to_passage_text(self) -> None:
+        rendered = render_source_md(
+            citekey="Smith2024",
+            passages=self._passages(),
+            retrieved_from="pubtator3",
+            license_="CC-BY-4.0",
+            pmid="123456",
+            doi="10.1038/foo-1",
+            fulltext=None,
+        )
+        file_text = rendered.text
+        # Entries are positional 1:1 with passages (render order preserved).
+        for off, src in zip(rendered.offset_map, self._passages().passages, strict=True):
+            sliced = file_text[off.file_char_base : off.file_char_base + off.length]
+            assert off.section == src.section
+            assert sliced == src.text
+
+    def test_offset_base_is_character_not_byte(self) -> None:
+        # The em dash (U+2014) is 3 bytes but 1 character; offsets must stay in chars.
+        rendered = render_source_md(
+            citekey="Smith2024",
+            passages=self._passages(),
+            retrieved_from="pubtator3",
+            license_="CC-BY-4.0",
+            pmid=None,
+            doi="10.1038/foo-1",
+            fulltext=None,
+        )
+        abstract_off = next(o for o in rendered.offset_map if o.section == "abstract")
+        sliced = rendered.text[abstract_off.file_char_base : abstract_off.file_char_base + abstract_off.length]
+        assert "—" in sliced
+        assert abstract_off.length == len("We show BRCA1 drives tumours — clearly.")
+
+    def test_verify_offset_map_passes_on_self(self) -> None:
+        rendered = render_source_md(
+            citekey="Smith2024",
+            passages=self._passages(),
+            retrieved_from="pubtator3",
+            license_="CC-BY-4.0",
+            pmid=None,
+            doi="10.1038/foo-1",
+            fulltext=None,
+        )
+        # Must not raise: each map entry slices back to its source passage text.
+        verify_offset_map(rendered.text, rendered.offset_map, self._passages())
+
+    def test_verify_offset_map_raises_on_corruption(self) -> None:
+        rendered = render_source_md(
+            citekey="Smith2024",
+            passages=self._passages(),
+            retrieved_from="pubtator3",
+            license_="CC-BY-4.0",
+            pmid=None,
+            doi="10.1038/foo-1",
+            fulltext=None,
+        )
+        bad = [PassageOffset(section=o.section, file_char_base=o.file_char_base + 1, length=o.length) for o in rendered.offset_map]
+        with pytest.raises(SourceTextError):
+            verify_offset_map(rendered.text, bad, self._passages())
