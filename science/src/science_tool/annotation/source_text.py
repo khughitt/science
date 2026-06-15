@@ -72,14 +72,16 @@ def parse_bioc_passages(record: dict[str, Any]) -> SourcePassages | None:
         offset = raw.get("offset")
         if not isinstance(text, str) or not text or not isinstance(offset, int):
             continue
-        infons = raw.get("infons") if isinstance(raw.get("infons"), dict) else {}
+        ri = raw.get("infons")
+        infons = ri if isinstance(ri, dict) else {}
         section = str(infons.get("type") or "passage")
         passages.append(Passage(section=section, bioc_offset=offset, text=text))
 
     if not passages:
         return None
 
-    doc_infons = doc.get("infons") if isinstance(doc.get("infons"), dict) else {}
+    di = doc.get("infons")
+    doc_infons = di if isinstance(di, dict) else {}
     release = str(doc_infons.get("_release") or "") or PUBTATOR3_API_VERSION
     return SourcePassages(passages=tuple(passages), release=release)
 

@@ -9,19 +9,17 @@ import httpx
 import pytest
 
 from science_tool.annotation.source_text import (
-    ResolvedPaper,
-    SourceTextError,
-    resolve_paper_entity,
-)
-from science_tool.annotation.source_text import (  # noqa: E402  (append to existing import)
     Passage,
+    ResolvedPaper,
     SourcePassages,
+    SourceTextError,
     parse_bioc_passages,
+    resolve_paper_entity,
 )
 
 
 # Representative PubTator3 BioC abstract record: title + abstract passages, with a
-# multi-codepoint character to exercise character-offset (not byte) handling.
+# multi-byte character (em-dash) that round-trips unchanged through JSON decode.
 _BIOC_RECORD = {
     "PubTator3": [
         {
