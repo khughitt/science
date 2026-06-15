@@ -986,12 +986,16 @@ def stats_cmd(root_path: Path | None, fmt: str) -> None:
     type=click.Path(path_type=Path),
     help="Override cache directory (defaults to $SCIENCE_CACHE_DIR or ~/.cache/science).",
 )
-@click.option("--actor", default="science-annotate-cli", help="Identity recorded as the annotation creator.")
+@click.option(
+    "--actor",
+    default="science-annotate-cli",
+    help="Identity recorded as the annotation creator.",
+)
 def pubtator_cmd(
     identifier: str,
-    project_root: Optional[Path],
-    email: Optional[str],
-    cache_dir: Optional[Path],
+    project_root: Path | None,
+    email: str | None,
+    cache_dir: Path | None,
     actor: str,
 ) -> None:
     """Seed PubTator3 entity-mention annotations into `<citekey>.source.anno.trig`.
@@ -999,18 +1003,22 @@ def pubtator_cmd(
     Requires an existing `<citekey>.source.md` (run `science paper persist-source`
     first). PubMed-only: papers with no PubTator3 record are a graceful no-op.
     """
-    import os
+    import os as _os
 
     from science_tool.annotation.pubtator_seed import seed_pubtator
     from science_tool.annotation.source_text import SourceTextError
     from science_tool.paper_fetch import FetchConfig
 
-    resolved_email = email or os.environ.get("SCIENCE_CONTACT_EMAIL")
+    resolved_email = email or _os.environ.get("SCIENCE_CONTACT_EMAIL")
     if not resolved_email:
         raise click.ClickException(
             "Contact email is required. Pass --email or set $SCIENCE_CONTACT_EMAIL."
         )
-    cfg = FetchConfig(email=resolved_email) if cache_dir is None else FetchConfig(email=resolved_email, cache_dir=cache_dir)
+    cfg = (
+        FetchConfig(email=resolved_email)
+        if cache_dir is None
+        else FetchConfig(email=resolved_email, cache_dir=cache_dir)
+    )
     root = (project_root or Path.cwd()).resolve()
     try:
         report = seed_pubtator(
