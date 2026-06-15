@@ -405,7 +405,7 @@ def seed_pubtator(
 
     skipped: Counter[str] = Counter()
     if not resolved.pmid:
-        return SeedReport(0, {}, 0, {}, note="no PMID; PubTator3 is PubMed-only")
+        return SeedReport(entity_written=0, entity_skipped={}, relation_written=0, relation_skipped={}, note="no PMID; PubTator3 is PubMed-only")
 
     owns = http is None
     client = http or httpx.Client(
@@ -419,11 +419,11 @@ def seed_pubtator(
             client.close()
 
     if not record:
-        return SeedReport(0, {}, 0, {}, note=f"no PubTator3 record ({err or 'no record'})")
+        return SeedReport(entity_written=0, entity_skipped={}, relation_written=0, relation_skipped={}, note=f"no PubTator3 record ({err or 'no record'})")
 
     parsed = parse_bioc_passages(record)
     if parsed is None:
-        return SeedReport(0, {}, 0, {}, note="PubTator3 record had no usable passages")
+        return SeedReport(entity_written=0, entity_skipped={}, relation_written=0, relation_skipped={}, note="PubTator3 record had no usable passages")
 
     release = parsed.release or PUBTATOR3_API_VERSION
     paired = pair_passages(file_text, persisted, parsed)
