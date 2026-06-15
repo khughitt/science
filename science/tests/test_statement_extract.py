@@ -519,6 +519,7 @@ def test_extract_empty_candidates_records_hash(tmp_path: Path):
     )
     assert report.written == 0
     assert report.source_text_hash_recorded is True  # valid no-op
+    assert report.note is None  # fully processed -> no note
     assert check_source_changed(source_md=src, model=_MODEL) is False
 
 
@@ -533,6 +534,7 @@ def test_extract_all_unanchored_does_not_record_hash(tmp_path: Path):
     )
     assert report.written == 0
     assert report.skipped == {"extract-quote-not-found": 1}
+    assert report.note is not None and "failed to anchor" in report.note
     assert report.source_text_hash_recorded is False  # failed no-op
     assert check_source_changed(source_md=src, model=_MODEL) is True  # re-run allowed
 

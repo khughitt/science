@@ -464,12 +464,19 @@ def extract_statements(
     if written or new_sidecar != sidecar:
         atomic_write_text(sidecar_path, serialize_sidecar(new_sidecar))
 
+    # Surface WHY the document was not marked processed, so the agent/CLI knows a
+    # corrected re-run is expected (rather than silently leaving the hash unadvanced).
+    note = (
+        None if advance
+        else f"source_text_hash not advanced: {sum(skipped.values())} "
+        "candidate(s) failed to anchor; fix and re-run"
+    )
     return ExtractReport(
         written=len(written),
         skipped=dict(skipped),
         grounding_dropped=grounding_dropped,
         source_text_hash_recorded=hash_recorded,
-        note=None,
+        note=note,
     )
 
 
