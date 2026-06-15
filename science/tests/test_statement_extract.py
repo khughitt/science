@@ -418,6 +418,19 @@ def test_plan_statement_drops_unverified_grounding_keeps_statement():
     assert "ncbigene:999" not in p.body.value  # bad grounding dropped
 
 
+def test_plan_statement_drops_one_grounding_field_keeps_other():
+    p, reason, dropped = plan_statement(
+        _TEXT, _PASSAGES,
+        _cand(subject_concept=_GENE,
+              object_concept="https://identifiers.org/ncbigene:999"),
+        active_iris={_GENE},
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert reason is None and p is not None and dropped == 1
+    assert _GENE in p.body.value  # verified subject kept
+    assert "ncbigene:999" not in p.body.value  # unverified object dropped
+
+
 def test_plan_statement_match_text_distinguishes_repeated_identical():
     text = "X drives Y. Later, X drives Y again."
     passages = [PersistedPassage(section="RESULTS", file_char_base=0, length=len(text))]

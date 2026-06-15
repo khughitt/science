@@ -360,6 +360,9 @@ def plan_statement(
         suffix=file_text[file_idx + length:suffix_end],
     )
 
+    # The `type|file_idx:length` prefix is already unique per anchored position (one
+    # start index per occurrence), so it carries the dedup identity; the normalized-text
+    # tail is descriptive (human-readable), not discriminating.
     match_text = (
         f"{candidate.type}|{file_idx}:{length}|{_normalize_text(candidate.exact)}"
     )
