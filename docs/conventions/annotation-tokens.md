@@ -4,7 +4,7 @@ type: "convention"
 title: "Annotation tokens"
 status: "active"
 created: "2026-05-09"
-updated: "2026-05-09"
+updated: "2026-06-14"
 ---
 
 # Annotation tokens
@@ -62,3 +62,25 @@ A richer sub-document annotation system (rich payloads, multi-annotation per ROI
   (bare author-year, short-form IDs, frontmatter-inline gaps, numeric
   anchors). Lints surface candidates; the four-token vocabulary is the
   authoring output for claims that need LLM/human judgment.
+
+## Full-text license whitelist (Phase 1 — source-text persistence)
+
+`<citekey>.source.md` persists full text only when the resolved license is on
+this whitelist. The persisted `license` frontmatter field records the raw value
+verbatim; the canonical token below is used only for membership testing
+(uppercased, spaces/underscores → hyphens, version suffix stripped).
+
+| Canonical token | Versioned forms accepted | Persist full text? |
+|-----------------|--------------------------|--------------------|
+| `CC0`           | `CC0-1.0`                | yes |
+| `CC-BY`         | `CC-BY-4.0`, `CC-BY-3.0` | yes |
+| `CC-BY-SA`      | `CC-BY-SA-4.0`           | yes |
+| `CC-BY-ND`      | `CC-BY-ND-4.0`           | yes |
+| anything else (incl. `CC-BY-NC*`, `unknown`, absent) | — | **no** — abstract only; `fulltext_omitted_reason` is `license-not-whitelisted` when full text existed, else `no-fulltext-available` |
+
+License is resolved from Europe PMC `license` in Phase 1 (Unpaywall's `oa_locations[].license` is deferred, with EPMC license the Phase 1 primary); with multiple values the most-permissive whitelisted one
+wins, else `unknown`.
+
+> Annotation-type and source-prefix vocabularies (e.g. `entity-gene`,
+> `pubtator3:<release>:seeder-vN`) are introduced in Phase 2+; only the license
+> whitelist is in scope for Phase 1.
