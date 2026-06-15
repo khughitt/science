@@ -375,3 +375,114 @@ def plan_statement(
         source_name=_llm_annot_source_name(model),
     )
     return planned, None, dropped
+
+
+# --- Orchestrator -------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ExtractReport:
+    written: int
+    skipped: dict[str, int]
+    grounding_dropped: int
+    source_text_hash_recorded: bool
+    note: str | None = None
+
+
+def _read_text_sha256(source_md: Path) -> str:
+    fm = raw_frontmatter(source_md)
+    value = fm.get("text_sha256")
+    if not isinstance(value, str) or not value:
+        raise SourceTextError(
+            f"{source_md} has no `text_sha256` frontmatter; re-run `persist-source`."
+        )
+    return value
+
+
+def extract_statements(
+    *,
+    source_md: Path,
+    model: str,
+    candidates: list[Candidate],
+    now: datetime,
+    actor: str,
+) -> ExtractReport:
+    """Anchor + persist statement candidates into `<citekey>.source.anno.trig`.
+
+    Document idempotency: the source_text_hash is advanced only when the document was
+    FULLY processed (no candidate hit an anchoring failure) — incl. empty / all-duplicate
+    runs — but NOT when any candidate failed to anchor (a defective set worth re-running,
+    even if other candidates persisted).
+    """
+    if not source_md.is_file():
+        raise SourceTextError(f"{source_md} not found.")
+    file_text, persisted = load_persisted_passages(source_md)
+
+    sidecar_path = sidecar_for_markdown(source_md)
+    sidecar = read_sidecar(sidecar_path) if sidecar_path.exists() else Sidecar()
+    active = active_entity_iris(sidecar)
+
+    skipped: Counter[str] = Counter()
+    grounding_dropped = 0
+    planned: list[PlannedAnnotation] = []
+    for cand in candidates:
+        p, reason, dropped = plan_statement(
+            file_text, persisted, cand,
+            active_iris=active, model=model, source_md_name=source_md.name,
+        )
+        grounding_dropped += dropped
+        if p is not None:
+            planned.append(p)
+        elif reason is not None:
+            skipped[reason] += 1
+
+    new_sidecar, written = merge_planned(sidecar, planned, actor=actor, now=now)
+
+    # Valid no-op vs failed no-op: advance the hash only when the document was FULLY
+    # processed — i.e. NO candidate hit an anchoring failure. Every skip reason
+    # (quote-not-found / ambiguous / anchored-outside-passage) is a locatability defect,
+    # so `not skipped` means every candidate either persisted or cleanly deduped. A
+    # partial run (some anchored, some failed) does NOT advance: re-running is idempotent
+    # (written rows dedupe) and gives the failed candidates another shot. Empty and
+    # all-duplicate runs have no skips, so they advance.
+    advance = not skipped
+    hash_recorded = False
+    if advance:
+        text_sha = _read_text_sha256(source_md)
+        source_name = _llm_annot_source_name(model)
+        new_sidecar, ledger = find_or_create_ledger(new_sidecar, source_name, now=now)
+        updated = ledger_set_source_text_hash(ledger, text_sha, now=now)
+        new_sidecar = replace(
+            new_sidecar,
+            ledgers=tuple(
+                updated if led.id == updated.id else led
+                for led in new_sidecar.ledgers
+            ),
+        )
+        hash_recorded = True
+
+    if written or new_sidecar != sidecar:
+        atomic_write_text(sidecar_path, serialize_sidecar(new_sidecar))
+
+    return ExtractReport(
+        written=len(written),
+        skipped=dict(skipped),
+        grounding_dropped=grounding_dropped,
+        source_text_hash_recorded=hash_recorded,
+        note=None,
+    )
+
+
+def check_source_changed(*, source_md: Path, model: str) -> bool:
+    """True if the agent should run: the `.source.md` text differs from the last
+    value processed for this source (or no sidecar/ledger exists yet)."""
+    current = _read_text_sha256(source_md)
+    sidecar_path = sidecar_for_markdown(source_md)
+    if not sidecar_path.exists():
+        return True
+    sidecar = read_sidecar(sidecar_path)
+    source_name = _llm_annot_source_name(model)
+    for led in sidecar.ledgers:
+        if led.source == source_name:
+            return led.source_text_hash != current
+    return True

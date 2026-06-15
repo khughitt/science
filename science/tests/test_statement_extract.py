@@ -444,3 +444,130 @@ def test_plan_statement_match_text_distinguishes_repeated_identical():
     )
     assert p1 is not None and p2 is not None
     assert p1.match_text != p2.match_text  # different file_idx => distinct dedup keys
+
+
+from science_tool.annotation.source_text import Passage, SourcePassages, write_source_md
+from science_tool.annotation.statement_extract import (
+    ExtractReport,
+    check_source_changed,
+    extract_statements,
+)
+
+
+def _make_source_md(tmp_path: Path) -> Path:
+    abstract = SourcePassages(
+        passages=(
+            Passage(section="title", bioc_offset=0, text="A study of BRCA1."),
+            Passage(
+                section="abstract", bioc_offset=18,
+                text="BRCA1 loss drives genomic instability in tumors.",
+            ),
+        ),
+        release="2024",
+    )
+    return write_source_md(
+        directory=tmp_path, citekey="Brca2024", abstract=abstract, fulltext=None,
+        retrieved_from="https://example.org", license_="unknown", licensed=False,
+        pmid="1", doi=None,
+    )
+
+
+def _cands(*objs) -> list[Candidate]:
+    return [Candidate(**o) for o in objs]  # type: ignore[arg-type]
+
+
+def test_extract_end_to_end_writes_and_records_hash(tmp_path: Path):
+    src = _make_source_md(tmp_path)
+    cands = _cands(dict(
+        type="proposition", exact="BRCA1 loss drives genomic instability",
+        prefix="", suffix=" in tumors", stance="asserted",
+    ))
+    report = extract_statements(
+        source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="paper-annotate",
+    )
+    assert isinstance(report, ExtractReport)
+    assert report.written == 1 and report.skipped == {}
+    assert report.source_text_hash_recorded is True
+    # sidecar persisted with the statement + the ledger hash
+    sidecar = read_sidecar(src.with_name("Brca2024.source.anno.trig"))
+    assert any(a.annotation_type == "proposition" for a in sidecar.annotations)
+    led = next(l for l in sidecar.ledgers
+               if l.source == "llm-annot:claude-sonnet-4-6:paper-annotate-v1")
+    assert led.source_text_hash is not None
+    # and now --check reports unchanged
+    assert check_source_changed(source_md=src, model=_MODEL) is False
+
+
+def test_extract_identical_rerun_is_idempotent(tmp_path: Path):
+    src = _make_source_md(tmp_path)
+    cands = _cands(dict(
+        type="proposition", exact="BRCA1 loss drives genomic instability",
+        prefix="", suffix=" in tumors", stance="asserted",
+    ))
+    extract_statements(source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a")
+    again = extract_statements(
+        source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
+    )
+    assert again.written == 0  # all-duplicate
+    assert again.source_text_hash_recorded is True  # valid no-op still records
+
+
+def test_extract_empty_candidates_records_hash(tmp_path: Path):
+    src = _make_source_md(tmp_path)
+    report = extract_statements(
+        source_md=src, model=_MODEL, candidates=[], now=_NOW, actor="a",
+    )
+    assert report.written == 0
+    assert report.source_text_hash_recorded is True  # valid no-op
+    assert check_source_changed(source_md=src, model=_MODEL) is False
+
+
+def test_extract_all_unanchored_does_not_record_hash(tmp_path: Path):
+    src = _make_source_md(tmp_path)
+    cands = _cands(dict(
+        type="proposition", exact="text that is absent from the document",
+        prefix="", suffix="", stance="asserted",
+    ))
+    report = extract_statements(
+        source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
+    )
+    assert report.written == 0
+    assert report.skipped == {"extract-quote-not-found": 1}
+    assert report.source_text_hash_recorded is False  # failed no-op
+    assert check_source_changed(source_md=src, model=_MODEL) is True  # re-run allowed
+
+
+def test_extract_partial_anchor_failure_does_not_record_hash(tmp_path: Path):
+    # one candidate anchors, one does not -> the document is NOT fully processed.
+    src = _make_source_md(tmp_path)
+    cands = _cands(
+        dict(type="proposition", exact="BRCA1 loss drives genomic instability",
+             prefix="", suffix=" in tumors", stance="asserted"),
+        dict(type="hypothesis", exact="a clause that is absent from the document",
+             prefix="", suffix="", stance="hypothesized"),
+    )
+    report = extract_statements(
+        source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
+    )
+    assert report.written == 1  # the good one persisted
+    assert report.skipped == {"extract-quote-not-found": 1}
+    assert report.source_text_hash_recorded is False  # defective set -> re-run allowed
+    assert check_source_changed(source_md=src, model=_MODEL) is True
+
+
+def test_check_changed_when_no_sidecar(tmp_path: Path):
+    src = _make_source_md(tmp_path)
+    assert check_source_changed(source_md=src, model=_MODEL) is True
+
+
+def test_extract_reports_grounding_dropped(tmp_path: Path):
+    src = _make_source_md(tmp_path)
+    cands = _cands(dict(
+        type="proposition", exact="BRCA1 loss drives genomic instability",
+        prefix="", suffix=" in tumors", stance="asserted",
+        subject_concept="https://identifiers.org/ncbigene:999",  # not a persisted entity
+    ))
+    report = extract_statements(
+        source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
+    )
+    assert report.written == 1 and report.grounding_dropped == 1
