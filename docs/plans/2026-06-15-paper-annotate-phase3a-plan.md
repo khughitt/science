@@ -40,6 +40,7 @@
 Create `science/tests/test_statement_extract.py` with:
 
 ```python
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -1181,6 +1182,24 @@ def test_extract_all_unanchored_does_not_record_hash(tmp_path: Path):
     assert check_source_changed(source_md=src, model=_MODEL) is True  # re-run allowed
 
 
+def test_extract_partial_anchor_failure_does_not_record_hash(tmp_path: Path):
+    # one candidate anchors, one does not → the document is NOT fully processed.
+    src = _make_source_md(tmp_path)
+    cands = _cands(
+        dict(type="proposition", exact="BRCA1 loss drives genomic instability",
+             prefix="", suffix=" in tumors", stance="asserted"),
+        dict(type="hypothesis", exact="a clause that is absent from the document",
+             prefix="", suffix="", stance="hypothesized"),
+    )
+    report = extract_statements(
+        source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
+    )
+    assert report.written == 1  # the good one persisted
+    assert report.skipped == {"extract-quote-not-found": 1}
+    assert report.source_text_hash_recorded is False  # defective set → re-run allowed
+    assert check_source_changed(source_md=src, model=_MODEL) is True
+
+
 def test_check_changed_when_no_sidecar(tmp_path: Path):
     src = _make_source_md(tmp_path)
     assert check_source_changed(source_md=src, model=_MODEL) is True
@@ -1239,9 +1258,10 @@ def extract_statements(
 ) -> ExtractReport:
     """Anchor + persist statement candidates into `<citekey>.source.anno.trig`.
 
-    Document idempotency: the source_text_hash is advanced for a VALIDLY processed
-    document (incl. empty / all-duplicate runs) but NOT when a non-empty candidate
-    set produced zero anchored rows (a defective set worth re-running).
+    Document idempotency: the source_text_hash is advanced only when the document was
+    FULLY processed (no candidate hit an anchoring failure) — incl. empty / all-duplicate
+    runs — but NOT when any candidate failed to anchor (a defective set worth re-running,
+    even if other candidates persisted).
     """
     if not source_md.is_file():
         raise SourceTextError(f"{source_md} not found.")
@@ -1267,9 +1287,14 @@ def extract_statements(
 
     new_sidecar, written = merge_planned(sidecar, planned, actor=actor, now=now)
 
-    # Valid no-op vs failed no-op: advance the hash unless a non-empty candidate set
-    # anchored nothing.
-    advance = not (len(candidates) > 0 and len(planned) == 0)
+    # Valid no-op vs failed no-op: advance the hash only when the document was FULLY
+    # processed — i.e. NO candidate hit an anchoring failure. Every skip reason
+    # (quote-not-found / ambiguous / anchored-outside-passage) is a locatability defect,
+    # so `not skipped` means every candidate either persisted or cleanly deduped. A
+    # partial run (some anchored, some failed) does NOT advance: re-running is idempotent
+    # (written rows dedupe) and gives the failed candidates another shot. Empty and
+    # all-duplicate runs have no skips, so they advance.
+    advance = not skipped
     hash_recorded = False
     if advance:
         text_sha = _read_text_sha256(source_md)
@@ -1836,4 +1861,3 @@ Expected: clean. (`reportMissingImports` for `science_tool.*` under a bare edito
 - **The ledger update is separate from `merge_planned`** (which only touches annotations). Find-or-create the ledger, set `source_text_hash`, then write the sidecar — exactly as Task 7 shows.
 - **`pytest`'s summary line may not reach piped logs in this project** — rely on exit code 0 + `[100%]` + zero `FAILED`/`ERROR` markers as the gate.
 - **Do not push.** This branch stays local (science work convention).
-```

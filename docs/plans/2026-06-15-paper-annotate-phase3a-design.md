@@ -187,21 +187,24 @@ gets its own field rather than overloading `audited_hashes`:
   `llm-annot:<model>:paper-annotate-v1` ledger **only after deterministic extraction completes
   successfully**, where "successfully" is defined precisely below.
 
-**Valid no-op vs failed no-op (when to advance the hash).** Let `anchored` = the number of
-candidates that resolved to a unique span (whether they then wrote a new row or deduped). Advance
-the hash iff the input was valid **and not** (`candidates` non-empty **and** `anchored == 0`):
+**Valid no-op vs failed no-op (when to advance the hash).** Advance the hash iff the input was
+valid **and no candidate hit an anchoring failure** — i.e. the run produced **zero skips** (every
+skip reason — `extract-quote-not-found` / `extract-quote-ambiguous` /
+`extract-anchored-outside-passage` — is a locatability defect). Equivalently: `advance = not skipped`.
 
   | Outcome | Advance hash? | Rationale |
   |---------|:---:|-----------|
   | Malformed input (fails strict validation) | **No** | Fails loud before any processing; nothing ran |
-  | Non-empty candidates, **zero anchored** (all `quote-not-found`/`ambiguous`) | **No** (*failed no-op*) | The candidate set is defective; a fixed re-run must proceed |
+  | **Any** candidate fails to anchor (whether all, or a partial run where others persisted) | **No** (*failed no-op*) | The candidate set is partially defective; re-running is idempotent (written rows dedupe) and gives the failed candidates another shot |
   | **Empty** candidate set (agent legitimately found nothing) | **Yes** (*valid no-op*) | Document was fully processed; re-running the LLM on unchanged text won't help |
   | All candidates anchored but **all duplicates** under merge | **Yes** (*valid no-op*) | Already fully captured; don't re-burn the LLM |
-  | Some/all anchored, ≥1 new row written | **Yes** | Normal success |
+  | All candidates anchored, ≥1 new row written, **no skips** | **Yes** | Normal full success |
 
-  The distinction: advance whenever the document was *validly processed* (even with zero **new**
-  rows), but **not** when zero new rows is caused by anchoring failure — which signals a defective
-  candidate set worth re-running, not an unchanged document worth skipping.
+  The distinction: advance only when the document was *fully processed* (no anchoring failures),
+  even with zero **new** rows (empty / all-duplicate). A **partial** run with any anchoring failure
+  does **not** advance — abandoning the failed candidates by marking the doc "done" is worse than a
+  safe idempotent re-run. `grounding_dropped` is **not** a skip and does not block advancing (the
+  statement still persisted).
 
 This makes the **non-deterministic** agent idempotent at the document level — which per-annotation
 `content_hash` structurally cannot do, since an LLM re-run that quotes a slightly different span
@@ -295,7 +298,8 @@ Deterministic `extract` carries the bulk of coverage (no live LLM):
   (exact/prefix/suffix) fields are emitted; the pre-existing keys (incl. `exact_preview`) are
   unchanged (backward-compatible).
 - **No-op hash policy:** empty candidate set and all-duplicate run **advance** the hash;
-  non-empty-but-zero-anchored run does **not**; malformed input does not.
+  any run with an anchoring failure — total **or partial** (some persisted, some failed) —
+  does **not**; malformed input does not.
 - **Agent:** a small `candidates.json` → `extract` integration test exercises the contract; the
   subagent prompt itself is not run against a live model in tests.
 
