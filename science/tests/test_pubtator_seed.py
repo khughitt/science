@@ -3,10 +3,14 @@ import pytest
 from science_tool.annotation.model import HASH_REQUIRED_SOURCE_PREFIXES
 from science_tool.annotation.pubtator_seed import (
     BiocMention,
+    PairedPassage,
+    PersistedPassage,
     annotation_type_for,
     concept_iri_for,
+    pair_passages,
     parse_bioc_entity_annotations,
 )
+from science_tool.annotation.source_text import Passage, SourcePassages
 
 # A title+abstract record with one body passage (non-persisted in abstract-only mode),
 # duplicate-surface mentions in the same passage, and one unnormalized variant.
@@ -185,3 +189,60 @@ def test_parse_bioc_entity_annotations_counts_malformed_and_multilocation():
     mentions, dropped = parse_bioc_entity_annotations(record)
     assert len(mentions) == 1
     assert dropped == {"malformed-bioc-annotation": 2, "multi-location-mention": 1}
+
+
+# --- pair_passages tests ------------------------------------------------------
+
+
+def _bioc(*sections):
+    # sections: (section, bioc_offset, text)
+    return SourcePassages(
+        passages=tuple(Passage(section=s, bioc_offset=o, text=t) for s, o, t in sections),
+        release="2025-01",
+    )
+
+
+def test_pair_passages_skips_nonpersisted_body():
+    # Persisted = title + abstract only (abstract-only paper); BioC also has a body.
+    file_text = "HEADER\n\nTitle text\n\nAbstract text\n"
+    persisted = [
+        PersistedPassage(section="title", file_char_base=8, length=10),     # "Title text"
+        PersistedPassage(section="abstract", file_char_base=20, length=13),  # "Abstract text"
+    ]
+    assert file_text[8:18] == "Title text"
+    assert file_text[20:33] == "Abstract text"
+    bioc = _bioc(
+        ("title", 0, "Title text"),
+        ("abstract", 11, "Abstract text"),
+        ("INTRO", 25, "Body text not persisted"),
+    )
+    paired = pair_passages(file_text, persisted, bioc)
+    assert paired == [
+        PairedPassage(bioc_offset=0, bioc_len=10, file_char_base=8),
+        PairedPassage(bioc_offset=11, bioc_len=13, file_char_base=20),
+    ]
+
+
+def test_pair_passages_duplicate_text_pairs_by_order():
+    # Two persisted passages with identical text pair to successive BioC occurrences.
+    file_text = "H\n\nDUP\n\nDUP\n"
+    persisted = [
+        PersistedPassage(section="a", file_char_base=3, length=3),  # first "DUP"
+        PersistedPassage(section="b", file_char_base=8, length=3),  # second "DUP"
+    ]
+    assert file_text[3:6] == "DUP" and file_text[8:11] == "DUP"
+    bioc = _bioc(("a", 0, "DUP"), ("b", 100, "DUP"))
+    paired = pair_passages(file_text, persisted, bioc)
+    assert [p.file_char_base for p in paired] == [3, 8]
+    assert [p.bioc_offset for p in paired] == [0, 100]
+
+
+def test_pair_passages_drift_fails_loud():
+    from science_tool.annotation.source_text import SourceTextError
+
+    file_text = "H\n\nPersisted only here\n"
+    persisted = [PersistedPassage(section="a", file_char_base=3, length=19)]
+    assert file_text[3:22] == "Persisted only here"
+    bioc = _bioc(("a", 0, "Different text entirely"))
+    with pytest.raises(SourceTextError, match="not found in re-fetched BioC"):
+        pair_passages(file_text, persisted, bioc)

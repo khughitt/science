@@ -12,7 +12,14 @@ from __future__ import annotations
 import re
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+
+from science_tool.annotation.source_text import (
+    SourcePassages,
+    SourceTextError,
+)
+from science_tool.commons.frontmatter import raw_frontmatter
 
 # --- BioC entity mention dataclass + parser -----------------------------------
 
@@ -181,3 +188,79 @@ def concept_iri_for(pubtator_type: str, identifier: str | None) -> str | None:
     if entity == "cellline":
         return _compact("cellosaurus", raw) if _CVCL.match(raw) else None
     return None
+
+
+# --- Offset-map loader + ordered passage bridge ------------------------------
+
+
+@dataclass(frozen=True)
+class PersistedPassage:
+    """One persisted passage from `.source.md` frontmatter `passages` (render order)."""
+
+    section: str
+    file_char_base: int
+    length: int
+
+
+@dataclass(frozen=True)
+class PairedPassage:
+    """A persisted passage paired to its live BioC document offset base."""
+
+    bioc_offset: int
+    bioc_len: int
+    file_char_base: int
+
+
+def load_persisted_passages(source_md: Path) -> tuple[str, list[PersistedPassage]]:
+    """Read `.source.md`: return (full file text, persisted passages in render order)."""
+    file_text = source_md.read_text(encoding="utf-8")
+    fm = raw_frontmatter(source_md)
+    raw = fm.get("passages")
+    if not isinstance(raw, list) or not raw:
+        raise SourceTextError(
+            f"{source_md} has no `passages` offset map; re-run `persist-source`."
+        )
+    persisted: list[PersistedPassage] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        section = str(entry.get("section") or "passage")
+        base = entry.get("file_char_base")
+        length = entry.get("length")
+        if not isinstance(base, int) or not isinstance(length, int):
+            raise SourceTextError(f"{source_md}: malformed passages offset map entry {entry!r}")
+        persisted.append(PersistedPassage(section=section, file_char_base=base, length=length))
+    return file_text, persisted
+
+
+def pair_passages(
+    file_text: str,
+    persisted: list[PersistedPassage],
+    bioc: SourcePassages,
+) -> list[PairedPassage]:
+    """Pair persisted passages to live BioC offset bases by ordered occurrence.
+
+    Iterate persisted entries in render order, advancing a single pointer through
+    the BioC passage list to the next passage whose text equals the entry's file
+    slice. Duplicate-text passages therefore pair to successive BioC occurrences,
+    and non-persisted BioC passages are skipped. A persisted passage with no
+    remaining ordered match means the source text drifted -> fail loud.
+    """
+    paired: list[PairedPassage] = []
+    j = 0
+    bioc_passages = bioc.passages
+    for e in persisted:
+        slice_ = file_text[e.file_char_base : e.file_char_base + e.length]
+        while j < len(bioc_passages) and bioc_passages[j].text != slice_:
+            j += 1
+        if j >= len(bioc_passages):
+            raise SourceTextError(
+                f"persisted passage at {e.file_char_base} (section {e.section!r}) "
+                "not found in re-fetched BioC (source text drift); re-run persist-source"
+            )
+        p = bioc_passages[j]
+        paired.append(
+            PairedPassage(bioc_offset=p.bioc_offset, bioc_len=e.length, file_char_base=e.file_char_base)
+        )
+        j += 1
+    return paired
