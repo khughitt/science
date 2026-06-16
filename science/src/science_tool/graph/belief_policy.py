@@ -19,7 +19,7 @@ from types import MappingProxyType
 
 from .belief_weights import (
     CIRCULAR, CURATION_STEP_PENALTY, DIAGNOSTIC_ROLES, EVIDENCE_ROLE_RANK,
-    EVIDENCE_TYPE_RANK, GATED_PROXY, INDEPENDENT, ROLE_DIRECT_TEST,
+    EVIDENCE_TYPE_RANK, GATED_PROXY, INDEPENDENT, MAGNITUDE_NAMES, ROLE_DIRECT_TEST,
     SCOPE_WHOLE_CLAIM, SHARED_SOURCE, STRENGTH_RANK,
 )
 
@@ -47,6 +47,14 @@ class BeliefPolicy:
     decisive_strength: str
     well_supported_min_clean_support: int
     well_supported_requires_direct_test: bool
+    # Authored-confidence knobs (Spec 5 Slice B). An authored assertion is a unit whose
+    # normalized evidence_type == authored_assertion_type; it is admitted by a confidence
+    # gate (authored_min_confidence) and, when support is authored-only, capped at
+    # authored_only_ceiling. Ceiling is a magnitude STRING (not BeliefMagnitude) so this
+    # module keeps importing only belief_weights — no cycle with belief.py.
+    authored_assertion_type: str
+    authored_min_confidence: float
+    authored_only_ceiling: str
 
     def __post_init__(self) -> None:
         # A frozen dataclass does not stop a caller mutating a dict/set it was handed.
@@ -56,6 +64,17 @@ class BeliefPolicy:
         object.__setattr__(self, "strength_rank", MappingProxyType(dict(self.strength_rank)))
         object.__setattr__(self, "gated_proxy", frozenset(self.gated_proxy))
         object.__setattr__(self, "diagnostic_roles", frozenset(self.diagnostic_roles))
+        # Fail early on out-of-discipline authored knobs (Spec 5 Slice B). Validated against
+        # MAGNITUDE_NAMES rather than BeliefMagnitude to avoid importing belief.py (cycle).
+        if not 0.0 <= self.authored_min_confidence <= 1.0:
+            raise ValueError(
+                f"authored_min_confidence must be in [0, 1], got {self.authored_min_confidence!r}"
+            )
+        if self.authored_only_ceiling not in MAGNITUDE_NAMES:
+            raise ValueError(
+                f"authored_only_ceiling must be one of {MAGNITUDE_NAMES}, "
+                f"got {self.authored_only_ceiling!r}"
+            )
 
 
 DEFAULT_BELIEF_POLICY = BeliefPolicy(
@@ -75,4 +94,7 @@ DEFAULT_BELIEF_POLICY = BeliefPolicy(
     decisive_strength="strong",
     well_supported_min_clean_support=2,
     well_supported_requires_direct_test=True,
+    authored_assertion_type="expert_judgment",
+    authored_min_confidence=0.5,
+    authored_only_ceiling="fragile",
 )
