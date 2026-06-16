@@ -27,8 +27,8 @@ def test_digest_consolidates_edge_targets_tombstone(tmp_path: Path) -> None:
     out_path = materialize_graph(root, strict=False)
     text = out_path.read_text(encoding="utf-8")
 
-    assert "consolidates" in text          # the sci:consolidates edge (predicate) is emitted
+    assert "sci:consolidates" in text      # the sci:consolidates edge (predicate CURIE) is emitted
     assert "0001-a" in text                # the archived member id appears as the edge target
-    assert "ArchivedEntity" in text        # the member is a typed tombstone stub, not rehydrated
+    assert "sci:ArchivedEntity" in text    # the member is a typed tombstone stub, not rehydrated
     # the archived member markdown is NOT pulled back into the live tree
     assert not (root / "entities" / "findings" / "0001-a.md").exists()
