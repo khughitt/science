@@ -65,6 +65,13 @@ A new **brain** and a new **hands**, plus one small model field:
   orchestrator command (`commands/synthesize-propositions.md`). Its own prompt and its
   own versioned source identity: **`llm-synth:<model>:proposition-synthesize-v1`**
   (distinct from `paper-annotate`, which stays focused on finding grounded spans).
+  The agent **self-declares** this string — including its own `<model>` — in the
+  top-level `source` field of the candidates file (§6), exactly as the seeders/annotators
+  self-declare their `source`. That is the *only* path by which `<model>` reaches
+  deterministic apply; there is no `--model` flag to drift out of sync with the model that
+  actually produced the proposals. Apply validates the string against the exact pattern
+  `^llm-synth:[^:]+:proposition-synthesize-v1$` and stamps it verbatim into
+  `reasoning_source` (§7).
 - **CLI** `science annotate synthesize <source.md>` (a new subcommand on the existing
   `annotate` group), backed by a new module `annotation/synthesize.py` (sibling to
   `promote.py`; reuses `entity_dest`, the markdown-parse helper, and the
@@ -88,10 +95,17 @@ sidecar and the curator reviews — cross-paper reconciliation is out of scope (
 
 ## 5. Read-only scaffold (default invocation)
 
-For each in-scope proposition, the scaffold emits one object:
+The scaffold is a single object sharing the candidates file's outer wrapper (a top-level
+`source` + a list): a `source` template line the agent fills with its own model, plus a
+`propositions` list with one rich context entry per in-scope proposition. The agent reads
+each `propositions[]` entry and emits one `candidates[]` patch (§6) — a different, smaller
+shape — under the same `source`.
 
 ```jsonc
 {
+  "source": "llm-synth:<MODEL>:proposition-synthesize-v1",  // agent replaces <MODEL>
+  "propositions": [
+  {
   "proposition": "proposition:brca1-loss-genomic-instability",
   "title": "BRCA1 loss drives genomic instability",
   "current": {                         // present fields only (unset omitted)
@@ -110,6 +124,8 @@ For each in-scope proposition, the scaffold emits one object:
   "relation_hints": [                  // co-located Phase-2b relation predicates (NON-authoritative)
     { "predicate": "biolink:affects", "subject_iri": "...", "object_iri": "...",
       "annotation": "annotation:papers/brca1#rel3" }
+  ]
+  }
   ]
 }
 ```
@@ -131,43 +147,63 @@ deterministic layer, which is wrong — disagreements are semantic, not mechanic
 
 ```jsonc
 {
-  "proposition": "proposition:brca1-loss-genomic-instability",
-  "annotation": "annotation:papers/brca1#stmt1",   // anchoring evidence (provenance)
-  "subject": "BRCA1 loss",
-  "predicate": "affects",
-  "object": "genomic instability",
-  "polarity": "positive",
-  "claim_layer": "causal_effect",
-  "override": ["claim_layer"]                       // optional; see §7
+  "source": "llm-synth:claude-opus-4-8:proposition-synthesize-v1",  // self-declared; validated
+  "candidates": [
+  {
+    "proposition": "proposition:brca1-loss-genomic-instability",
+    "annotation": "annotation:papers/brca1#stmt1",   // anchoring evidence; validated (§7)
+    "subject": "BRCA1 loss",
+    "predicate": "affects",
+    "object": "genomic instability",
+    "polarity": "positive",
+    "claim_layer": "causal_effect",
+    "override": ["claim_layer"]                       // optional; see §7
+  }
+  ]
 }
 ```
 
+- The top-level `source` is required and validated against
+  `^llm-synth:[^:]+:proposition-synthesize-v1$`; it is stamped verbatim into
+  `reasoning_source` on any proposition that is actually written (§7).
+- `annotation` is **required** and must be one of that proposition's supporting-statement
+  refs from the scaffold (untrusted input is checked, not trusted). It records which
+  evidence anchored the factorization; it is not separately persisted — the prop↔annotation
+  link already lives in `source_refs` from 4a.
 - Any of `subject`/`object`/`predicate`/`polarity`/`claim_layer` may be **omitted** —
   omitted means *leave unset*, never "guess a default".
 - `override` (optional) is a closed list drawn from
   `{subject, object, predicate, polarity, claim_layer}` naming already-set fields the
   curator authorises replacing. `reasoning_source` is **never** overrideable from input.
 
-## 7. Deterministic apply — two-pass, atomic
+## 7. Deterministic apply — two-pass (validate-before-write)
 
 Validation failures here are semantic-contract failures, not per-row best-effort skips,
 so the whole input is validated before **any** proposition file is written.
 
-**Pass 1 — validate every candidate (no writes):**
-1. **Parse, fail-loud:** unknown keys; non-canonical enum values; `proposition` not in
-   the in-scope set; `override` entries outside the closed field set, naming a field not
-   present in the patch, or naming a field that is currently unset; `override` naming
-   `reasoning_source`.
-2. **predicate→operands contract:** if the patch proposes `predicate`, an **effective**
+**Pass 1 — validate the whole input (no writes):**
+1. **Top-level `source`, fail-loud:** required; must match
+   `^llm-synth:[^:]+:proposition-synthesize-v1$`. Held for the Pass-2 stamp.
+2. **Parse each candidate, fail-loud:** unknown keys; non-canonical enum values;
+   `proposition` not in the in-scope set; missing `annotation`, or an `annotation` that is
+   not one of that proposition's supporting-statement refs from the scaffold; `override`
+   entries outside the closed field set, naming a field not present in the patch, or naming
+   a field that is currently unset; `override` naming `reasoning_source`.
+3. **predicate→operands contract:** if the patch proposes `predicate`, an **effective**
    `subject` and `object` must exist — either already on the proposition or proposed in
    the same patch. Otherwise hard error.
-3. **Interlocks:** construct the *would-be* updated `PropositionEntity` from the current
+4. **polarity→predicate contract:** a patch that writes `polarity` (any value) without an
+   **effective** `predicate` is a hard error. Polarity is relation-scoped; the model would
+   permit a bare polarity, but a polarity-only proposition is semantically incoherent, so
+   synthesis forbids it. (`not_applicable` for a sign-less predicate is *written by*
+   canonicalization, never *proposed* bare.)
+5. **Interlocks:** construct the *would-be* updated `PropositionEntity` from the current
    frontmatter plus the **fields this patch will actually write** (computed by applying the
    Pass-2 fill-only-unset + override + sign-less-canonicalization rules, so Pass 1 validates
    exactly the state Pass 2 persists — never a value Pass 2 would block), and let the model's
    own `_validate_relational_fields` run. A sign-meaningful predicate with missing/`not_applicable`
    polarity is a hard error (the agent must supply a signed polarity — sign cannot be
-   guessed). Enum membership is already guaranteed by step 1. Operand presence (step 2) is
+   guessed). Enum membership is already guaranteed by step 2. Operand presence (step 3) is
    evaluated against this same effective state.
 
 Any Pass-1 failure aborts with a non-zero `ClickException` and writes nothing.
@@ -181,12 +217,31 @@ Any Pass-1 failure aborts with a non-zero `ClickException` and writes nothing.
    polarity is omitted/unset, write `polarity: not_applicable` (the validate-clean form;
    §2). Sign-meaningful predicates are never canonicalized — their polarity is
    agent-supplied or a Pass-1 hard error.
-3. **Provenance stamp:** set `reasoning_source = llm-synth:<model>:proposition-synthesize-v1`
-   **only when ≥1 synthesis-owned field is actually written** for that proposition. A
-   proposition whose every proposed field was already filled (a pure no-op) is left
-   **completely untouched** — no `reasoning_source`, no `updated` bump, no rewrite.
-4. Persist via `write_entity_file` (so `created` is preserved, `updated` advances only on
-   a real change).
+3. **Provenance stamp:** set `reasoning_source` to the **validated top-level `source`**
+   string (Pass 1 step 1) **only when ≥1 synthesis-owned field is actually written** for
+   that proposition. A proposition whose every proposed field was already filled (a pure
+   no-op) is left **completely untouched** — no `reasoning_source`, no `updated` bump, no
+   rewrite. `reasoning_source` is itself a synthesis-owned write, so stamping it on an
+   otherwise-changed proposition does not by itself make a no-op proposition "changed".
+4. **Persist preserving the existing body.** A minted proposition may carry curated prose
+   (`## Claim`, `## Evidence Summary`, `## Caveats`, hand-authored `## Measurement Model`,
+   etc.). Synthesis writes **only frontmatter fields** and must never rebuild the body. The
+   write is: `_parse_markdown_file(dest)` → `(frontmatter, body)`; reconstruct the typed
+   `PropositionEntity` from the current frontmatter with the synthesis-owned fields updated;
+   call `write_entity_file(prop, project_root=…, body=body, as_of=…)` passing the **original
+   `body` verbatim**. (This mirrors 4a's LINK path, which uses `append_entity_source_ref` to
+   "preserve the possibly hand-authored prose body" — promote.py:386.) `created` is preserved
+   and `updated` advances only on a real change.
+
+**Failure boundary (not transactional).** "Validate-before-write" guarantees that no
+*semantic*-contract failure ever writes a partial corpus. It does **not** make the
+multi-file Pass 2 a single transaction: each proposition is written with
+`_atomic_replace_text` (per-file atomic — no torn file), but an OS/IO error partway
+through Pass 2 can leave the earlier propositions written and the rest not. No rollback is
+specified or needed, because fill-only-unset makes re-apply idempotent: re-running the
+same input writes only the propositions that did not get through, and the already-written
+ones are clean no-ops. The CLI reports per-proposition write counts so a partial run is
+visible.
 
 ## 8. Idempotency
 
@@ -212,9 +267,10 @@ string they ignore, and the interlock/enum checks already cover the fields 4c wr
 
 ## 10. Error handling (fail-loud, mirroring promote)
 
-- `SynthesisReadError` — malformed scaffold input / unreadable proposition.
-- `SynthesisApplyError` — interlock violation, predicate-without-operands, write-boundary
-  refusal.
+- `SynthesisReadError` — malformed candidates file / unreadable proposition / bad
+  top-level `source` shape / `annotation` not a supporting-statement ref of its proposition.
+- `SynthesisApplyError` — interlock violation, predicate-without-operands,
+  polarity-without-predicate, write-boundary refusal.
 - `SynthesisOverrideError` — malformed/illegal `override` (unknown field, field not in
   patch, field currently unset, or `reasoning_source`).
 - All surface as non-zero `ClickException`.
@@ -237,11 +293,14 @@ string they ignore, and the interlock/enum checks already cover the fields 4c wr
 ## 12. Testing
 
 - **Unit** (`synthesize.py`): scaffold grouping/scope; relation-hint co-location +
-  unresolved omission; candidate parse fail-loud (keys/enums/scope/override); the
-  predicate→operands contract (already-present vs in-patch operands); interlock validation
-  via the real model validator (sign-meaningful-missing-polarity hard error; sign-less +
-  omitted polarity canonicalized to `not_applicable`); fill-only-unset + existing-value
-  block + override replacement; provenance stamp only on real write; two-pass atomicity
+  unresolved omission; top-level `source` shape validation; `annotation`-membership
+  validation; candidate parse fail-loud (keys/enums/scope/override); the predicate→operands
+  contract (already-present vs in-patch operands); the polarity→predicate contract
+  (bare-polarity rejected); interlock validation via the real model validator
+  (sign-meaningful-missing-polarity hard error; sign-less + omitted polarity canonicalized
+  to `not_applicable`); fill-only-unset + existing-value block + override replacement;
+  **body preservation** (curated prose survives a frontmatter-only write); provenance stamp
+  only on real write (and the no-op-leaves-file-untouched case); validate-before-write
   (one bad candidate ⇒ no file written); idempotent re-apply.
 - **Integration** (CLI): persist a `.source.md` + statement annotation, promote it (4a),
   run `synthesize` read-only → edit the candidate → `--apply` → assert proposition
