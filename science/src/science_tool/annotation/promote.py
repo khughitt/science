@@ -5,23 +5,29 @@ from __future__ import annotations
 import dataclasses
 import json
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
 from science_model.propositions import PropositionEntity
+from science_model.templates import Renderer
 
 from science_tool.annotation import io as anno_io
 from science_tool.annotation.model import Status, TextualBody
 from science_tool.annotation.query import entity_relpath_for_sidecar, read_sidecar_strict
 from science_tool.entities import (
     EntityCommandError,
+    _atomic_replace_text,
     _parse_markdown_file,
     append_entity_source_ref,
+    default_status,
     resolve_path_policy,
     slug_for_claim_text,
+    validate_slug,
     write_entity_file,
 )
+from science_tool.entity_reservation import reserve_entity
 
 
 def normalize_claim(text: str) -> str:
@@ -40,13 +46,15 @@ class Promotable:
     claim: str          # the TextQuoteSelector exact span
     subject: str | None
     object: str | None
+    kind: str = "proposition"   # promotable kind: proposition | question | hypothesis
 
 
 @dataclass(frozen=True)
 class PromotionCorpus:
-    title_to_ref: dict[str, str]   # normalize_claim(title) -> "proposition:<slug>"
-    existing_slugs: set[str]       # bare slugs of existing propositions
-    derived_refs: set[str]         # annotation: refs already in some proposition's source_refs
+    title_to_ref: dict[str, str]      # normalize_claim(title) -> "<kind>:<local_part>" (first-wins)
+    existing_slugs: set[str]          # bare local-parts of existing entities of this kind
+    derived_refs: set[str]            # annotation: refs already in some entity's source_refs (global)
+    ambiguous_titles: set[str] = field(default_factory=set)  # normalized titles held by >=2 entities
 
 
 @dataclass(frozen=True)
@@ -57,41 +65,75 @@ class PromotionCandidate:
     subject: str | None
     object: str | None
     decision: str           # MINT | LINK | COLLISION | SKIP
-    slug: str | None        # MINT: new bare slug; LINK: "proposition:<slug>"; else None
+    slug: str | None        # MINT: new bare local-part; LINK: "<kind>:<local_part>"; else None
     reason: str             # short explanation / skip reason
+    kind: str = "proposition"
 
 
-def decide_candidates(promotables: list[Promotable], corpus: PromotionCorpus) -> list[PromotionCandidate]:
-    """Pure mint-or-link-or-collision decision. Detects intra-batch slug collisions."""
+def decide_candidates(
+    promotables: list[Promotable],
+    corpus: PromotionCorpus,
+    *,
+    slug_addressed: bool = True,
+) -> list[PromotionCandidate]:
+    """Pure mint-or-link-or-collision decision for one kind's promotables.
+
+    Detects intra-batch slug collisions. `slug_addressed` True (proposition) keeps the 4a
+    slug-collision detection; False (numeric question/hypothesis) skips it — numeric
+    reservation cannot collide.
+    """
     out: list[PromotionCandidate] = []
     minted_slugs: set[str] = set()
     for p in promotables:
         key = normalize_claim(p.claim)
+        if key in corpus.ambiguous_titles:
+            out.append(_cand(p, "SKIP", None, "promote-link-ambiguous"))
+            continue
         existing = corpus.title_to_ref.get(key)
         if existing is not None:
-            out.append(_cand(p, "LINK", existing, "normalized claim equals existing proposition title"))
+            out.append(_cand(p, "LINK", existing, "normalized claim equals existing entity title"))
             continue
         try:
             slug = slug_for_claim_text(p.claim)
         except EntityCommandError:
             out.append(_cand(p, "SKIP", None, "promote-claim-unsluggable"))
             continue
-        if slug in corpus.existing_slugs:
-            out.append(_cand(p, "COLLISION", slug, "promote-slug-collision"))  # vs existing corpus
-            continue
-        if slug in minted_slugs:
-            out.append(_cand(p, "COLLISION", slug, "promote-slug-collision"))  # intra-batch
-            continue
-        minted_slugs.add(slug)
-        out.append(_cand(p, "MINT", slug, "new proposition"))
+        if slug_addressed:
+            if slug in corpus.existing_slugs:
+                out.append(_cand(p, "COLLISION", slug, "promote-slug-collision"))  # vs existing corpus
+                continue
+            if slug in minted_slugs:
+                out.append(_cand(p, "COLLISION", slug, "promote-slug-collision"))  # intra-batch
+                continue
+            minted_slugs.add(slug)
+        out.append(_cand(p, "MINT", slug, "new entity"))
     return out
 
 
 def _cand(p: Promotable, decision: str, slug: str | None, reason: str) -> PromotionCandidate:
     return PromotionCandidate(
         ref=p.ref, frag=p.frag, claim=p.claim, subject=p.subject, object=p.object,
-        decision=decision, slug=slug, reason=reason,
+        decision=decision, slug=slug, reason=reason, kind=p.kind,
     )
+
+
+def decide_all(
+    promotables: list[Promotable],
+    corpora: dict[str, PromotionCorpus],
+    targets: dict[str, PromotionTarget],
+) -> list[PromotionCandidate]:
+    """Decide every promotable, grouped by kind (for intra-batch collision), order preserved."""
+    groups: dict[str, list[tuple[int, Promotable]]] = {}
+    for i, p in enumerate(promotables):
+        groups.setdefault(p.kind, []).append((i, p))
+    results: dict[int, PromotionCandidate] = {}
+    for kind, group in groups.items():
+        cands = decide_candidates(
+            [p for _, p in group], corpora[kind], slug_addressed=targets[kind].slug_addressed
+        )
+        for (i, _), c in zip(group, cands):
+            results[i] = c
+    return [results[i] for i in range(len(promotables))]
 
 
 class PromotionReadError(Exception):
@@ -121,12 +163,12 @@ def _statement_subject_object(ann) -> tuple[str | None, str | None]:
 
 
 def collect_promotable(sidecar, sidecar_path: Path, root: Path, *, derived_refs: set[str]) -> tuple[list[Promotable], Counter]:
-    """Filter a sidecar to the promotable proposition queue, counting skip reasons."""
+    """Filter a sidecar to the promotable statement queue (all promotable kinds), counting skips."""
     out: list[Promotable] = []
     skipped: Counter = Counter()
     for ann in sidecar.annotations:
-        if ann.annotation_type != "proposition":
-            skipped["promote-not-proposition-type"] += 1
+        if ann.annotation_type not in PROMOTABLE_KINDS:
+            skipped["promote-non-promotable-type"] += 1
             continue
         if ann.status not in (Status.OPEN, Status.ACK):
             skipped["promote-inactive-status"] += 1
@@ -136,30 +178,51 @@ def collect_promotable(sidecar, sidecar_path: Path, root: Path, *, derived_refs:
             skipped["promote-already-promoted"] += 1
             continue
         subject, object_ = _statement_subject_object(ann)
-        out.append(Promotable(ref=ref, frag=ann.id, claim=ann.target.selector.exact, subject=subject, object=object_))
+        out.append(Promotable(
+            kind=ann.annotation_type, ref=ref, frag=ann.id,
+            claim=ann.target.selector.exact, subject=subject, object=object_,
+        ))
     return out, skipped
 
 
-def load_corpus(project_root: Path) -> PromotionCorpus:
-    """Build the proposition corpus (title index, slug set, already-derived refs) from disk."""
+def load_corpora(project_root: Path) -> tuple[dict[str, PromotionCorpus], set[str]]:
+    """Build a per-kind corpus for every promotable kind + a single global derived-refs set.
+
+    `derived_refs` (annotation refs already in some entity's source_refs) is global: an
+    annotation is "already promoted" if ANY entity carries its ref, independent of kind.
+    """
     from science_tool.graph.sources import load_project_sources
 
     sources = load_project_sources(project_root.resolve())
-    title_to_ref: dict[str, str] = {}
-    existing_slugs: set[str] = set()
-    derived_refs: set[str] = set()
+    title_first: dict[str, dict[str, str]] = {k: {} for k in PROMOTABLE_KINDS}
+    title_seen: dict[str, set[str]] = {k: set() for k in PROMOTABLE_KINDS}
+    ambiguous: dict[str, set[str]] = {k: set() for k in PROMOTABLE_KINDS}
+    slugs: dict[str, set[str]] = {k: set() for k in PROMOTABLE_KINDS}
+    derived: set[str] = set()
     for entity in sources.entities:
-        if entity.kind != "proposition":
-            continue
-        ref = entity.canonical_id  # "proposition:<slug>"
-        existing_slugs.add(ref.split(":", 1)[1])
-        title = (entity.title or "").strip()
-        if title:
-            title_to_ref.setdefault(normalize_claim(title), ref)
+        kind = entity.kind
+        if kind in PROMOTABLE_KINDS:
+            ref = entity.canonical_id  # "<kind>:<local_part>"
+            slugs[kind].add(ref.split(":", 1)[1])
+            title = (entity.title or "").strip()
+            if title:
+                key = normalize_claim(title)
+                if key in title_seen[kind]:
+                    ambiguous[kind].add(key)
+                else:
+                    title_seen[kind].add(key)
+                    title_first[kind][key] = ref
         for sref in entity.source_refs:
             if isinstance(sref, str) and sref.startswith("annotation:"):
-                derived_refs.add(sref)
-    return PromotionCorpus(title_to_ref=title_to_ref, existing_slugs=existing_slugs, derived_refs=derived_refs)
+                derived.add(sref)
+    corpora = {
+        k: PromotionCorpus(
+            title_to_ref=title_first[k], existing_slugs=slugs[k],
+            derived_refs=derived, ambiguous_titles=ambiguous[k],
+        )
+        for k in PROMOTABLE_KINDS
+    }
+    return corpora, derived
 
 
 class PromotionApplyError(Exception):
@@ -178,6 +241,124 @@ def _proposition_body(claim: str) -> str:
     return f"# {claim}\n\n## Claim\n\n{claim}\n\n## Evidence Summary\n\n\n## Caveats\n"
 
 
+PROMOTABLE_KINDS: tuple[str, ...] = ("proposition", "question", "hypothesis")
+
+# (candidate, source_refs, project_root, as_of) -> minted entity id "<kind>:<local_part>"
+MintFn = Callable[["PromotionCandidate", list[str], Path, "date | None"], str]
+
+
+@dataclass(frozen=True)
+class PromotionTarget:
+    kind: str
+    slug_addressed: bool   # proposition True (content-addressed slug); numeric kinds False
+    mint: MintFn
+
+
+def entity_dest(entity_id: str, project_root: Path) -> Path:
+    """Canonical file path for `<kind>:<local_part>` (works for slug + numeric kinds)."""
+    kind, local_part = entity_id.split(":", 1)
+    policy = resolve_path_policy(kind, project_root=project_root)
+    return project_root / policy.root / f"{local_part}.md"
+
+
+def _mint_proposition(
+    c: PromotionCandidate, source_refs: list[str], project_root: Path, as_of: date | None
+) -> str:
+    """4a proposition mint: slug-addressed write_entity_file + never-overwrite guard."""
+    assert c.slug is not None
+    prop_ref = f"proposition:{c.slug}"
+    dest = entity_dest(prop_ref, project_root)
+    # Never-overwrite guard: a MINT slug colliding with a DIFFERENT-claim proposition
+    # (only reachable via an explicit-id override; auto mints are pre-screened) fails loud.
+    if dest.exists():
+        existing_fm, _ = _parse_markdown_file(dest)
+        if normalize_claim(str(existing_fm.get("title") or "")) != normalize_claim(c.claim):
+            raise PromotionApplyError(
+                f"refusing to overwrite {dest.name}: it holds a different proposition"
+            )
+    prop = PropositionEntity(
+        id=prop_ref, title=c.claim, subject=c.subject, object=c.object,
+        source_refs=list(source_refs),
+    )
+    write_entity_file(prop, project_root=project_root, body=_proposition_body(c.claim), as_of=as_of)
+    return prop_ref
+
+
+def proposition_target() -> PromotionTarget:
+    return PromotionTarget(kind="proposition", slug_addressed=True, mint=_mint_proposition)
+
+
+_LEAD_SECTION: dict[str, str] = {
+    "question": "Summary",
+    "hypothesis": "Organizing Conjecture",
+}
+
+
+def _insert_claim_into_lead(rendered: str, section_name: str, claim: str) -> str:
+    """Insert the verbatim claim as the first body line under `## {section_name}`."""
+    marker = f"## {section_name}\n"
+    idx = rendered.find(marker)
+    if idx == -1:
+        raise PromotionApplyError(f"rendered template missing lead section '## {section_name}'")
+    at = idx + len(marker)
+    return f"{rendered[:at]}\n{claim}\n{rendered[at:]}"
+
+
+def _mint_numeric(kind: str) -> MintFn:
+    lead = _LEAD_SECTION[kind]
+
+    def mint(c: PromotionCandidate, source_refs: list[str], project_root: Path, as_of: date | None) -> str:
+        assert c.slug is not None
+        today = (as_of or date.today()).isoformat()
+        # (1) Preflight the template (pure read, no number consumed). Raises if the packaged
+        #     template is missing/malformed — a loud environment error.
+        renderer = Renderer()
+        renderer.sections(kind)
+        # (2) Reserve the number atomically (empty placeholder .md backs the claimed number).
+        reservation = reserve_entity(project_root, kind, title=c.claim, slug=c.slug)
+        try:
+            # (3) Render template-faithful with the real id, then insert the claim into the lead.
+            fields: dict[str, object] = {
+                "entity_id": reservation.entity_id,
+                "title": c.claim,
+                "status": default_status(kind),
+                "source_refs": list(source_refs),
+                "related": [],
+                "created": today,
+                "updated": today,
+            }
+            if kind == "hypothesis":
+                fields["phase"] = "candidate"
+            rendered = renderer.render(kind, fields=fields)
+            rendered = _insert_claim_into_lead(rendered, lead, c.claim)
+            # (4) Final write — overwrites the empty placeholder. Last step.
+            _atomic_replace_text(reservation.path, rendered)
+        except Exception as exc:  # explicit post-reservation rollback, then fail loud
+            reservation.path.unlink(missing_ok=True)
+            if isinstance(exc, PromotionApplyError):
+                raise
+            raise PromotionApplyError(
+                f"failed to write {kind} {reservation.entity_id}: {exc}"
+            ) from exc
+        return reservation.entity_id
+
+    return mint
+
+
+def numeric_target(kind: str) -> PromotionTarget:
+    if kind not in ("question", "hypothesis"):
+        raise ValueError(f"numeric_target supports question/hypothesis, got {kind!r}")
+    return PromotionTarget(kind=kind, slug_addressed=False, mint=_mint_numeric(kind))
+
+
+def build_targets() -> dict[str, PromotionTarget]:
+    return {
+        "proposition": proposition_target(),
+        "question": numeric_target("question"),
+        "hypothesis": numeric_target("hypothesis"),
+    }
+
+
 def apply_candidates(
     candidates: list[PromotionCandidate],
     *,
@@ -185,38 +366,23 @@ def apply_candidates(
     project_root: Path,
     paper_ref: str,
     as_of: date | None = None,
+    targets: dict[str, PromotionTarget] | None = None,
 ) -> ApplyReport:
-    """Execute MINT/LINK candidates: write entities, accrue provenance, set the sidecar backlink."""
+    """Execute MINT/LINK candidates: mint via the per-kind target, accrue provenance, backlink."""
+    targets = targets if targets is not None else build_targets()
     report = ApplyReport()
-    backlinks: dict[str, str] = {}  # frag -> proposition:<slug>
+    backlinks: dict[str, str] = {}  # frag -> "<kind>:<local_part>"
 
     for c in candidates:
         if c.decision == "MINT":
-            assert c.slug is not None
-            prop_ref = f"proposition:{c.slug}"
-            policy = resolve_path_policy("proposition", project_root=project_root)
-            dest = project_root / policy.root / f"{c.slug}.md"
-            # Never-overwrite guard: a MINT slug colliding with a DIFFERENT-claim proposition
-            # (only reachable via an explicit-id override; auto mints are pre-screened) fails loud.
-            if dest.exists():
-                existing_fm, _ = _parse_markdown_file(dest)
-                if normalize_claim(str(existing_fm.get("title") or "")) != normalize_claim(c.claim):
-                    raise PromotionApplyError(
-                        f"refusing to overwrite {dest.name}: it holds a different proposition"
-                    )
-            prop = PropositionEntity(
-                id=prop_ref, title=c.claim, subject=c.subject, object=c.object,
-                source_refs=[paper_ref, c.ref],
-            )
-            write_entity_file(prop, project_root=project_root, body=_proposition_body(c.claim), as_of=as_of)
-            report.written_paths.append(str(dest))
+            new_id = targets[c.kind].mint(c, [paper_ref, c.ref], project_root, as_of)
+            report.written_paths.append(str(entity_dest(new_id, project_root)))
             report.minted += 1
-            backlinks[c.frag] = prop_ref
+            backlinks[c.frag] = new_id
         elif c.decision == "LINK":
-            assert c.slug is not None  # "proposition:<slug>"
-            policy = resolve_path_policy("proposition", project_root=project_root)
-            dest = project_root / policy.root / f"{c.slug.split(':', 1)[1]}.md"
-            # Accrue BOTH provenance refs onto the existing proposition; append_entity_source_ref
+            assert c.slug is not None  # "<kind>:<local_part>"
+            dest = entity_dest(c.slug, project_root)
+            # Accrue BOTH provenance refs onto the existing entity; append_entity_source_ref
             # dedups, preserves the (possibly hand-authored) prose body, and advances `updated`
             # whenever it actually appends a ref.
             for ref in (paper_ref, c.ref):
@@ -274,12 +440,29 @@ def apply_overrides(
             continue
         if decision == "LINK":
             if not slug or slug not in existing_refs:
-                raise PromotionOverrideError(f"LINK target {slug!r} is not an existing proposition")
+                raise PromotionOverrideError(f"LINK target {slug!r} is not an existing entity")
+            if slug.split(":", 1)[0] != c.kind:
+                raise PromotionOverrideError(
+                    f"LINK target {slug!r} is not a {c.kind} (kind-local dedup)"
+                )
             out.append(dataclasses.replace(c, decision="LINK", slug=slug, reason="curator override: link"))
         elif decision == "MINT":
-            bare = slug.split(":", 1)[1] if isinstance(slug, str) and slug.startswith("proposition:") else slug
+            bare = slug
+            if isinstance(slug, str) and ":" in slug:
+                pfx, rest = slug.split(":", 1)
+                if pfx != c.kind:
+                    raise PromotionOverrideError(
+                        f"MINT override slug {slug!r} has the wrong kind prefix for a {c.kind}"
+                    )
+                bare = rest
             if not bare:
                 raise PromotionOverrideError(f"MINT override for {c.ref!r} requires a slug")
+            # Validate eagerly here so a bad curator slug fails as a clean ClickException,
+            # not an uncaught EntityCommandError from reserve_entity(..., slug=...) at apply time.
+            try:
+                validate_slug(bare)
+            except EntityCommandError as exc:
+                raise PromotionOverrideError(f"MINT override slug {bare!r} is invalid: {exc}") from exc
             out.append(dataclasses.replace(c, decision="MINT", slug=bare, reason="curator override: mint"))
         else:
             raise PromotionOverrideError(f"override decision for {c.ref!r} must be LINK or MINT, got {decision!r}")

@@ -1,15 +1,35 @@
 import pytest
 from science_tool.annotation.promote import (
-    Promotable, PromotionCorpus, decide_candidates, normalize_claim,
+    Promotable, PromotionCandidate, PromotionCorpus, PromotionOverrideError,
+    decide_candidates, normalize_claim,
 )
 
 
-def _corpus(titles_to_slug=None, slugs=None, derived=None):
+def _corpus(titles_to_slug=None, slugs=None, derived=None, ambiguous=None):
     return PromotionCorpus(
         title_to_ref={normalize_claim(t): s for t, s in (titles_to_slug or {}).items()},
         existing_slugs=set(slugs or []),
         derived_refs=set(derived or []),
+        ambiguous_titles={normalize_claim(t) for t in (ambiguous or [])},
     )
+
+
+def test_ambiguous_title_skips_not_links():
+    # Corpus already holds two same-kind entities with the same normalized title.
+    p = Promotable(ref="annotation:a#f1", frag="f1", claim="Shared claim text", subject=None, object=None)
+    corp = _corpus(titles_to_slug={"Shared claim text": "proposition:shared-claim-text"},
+                   ambiguous=["Shared claim text"])
+    [c] = decide_candidates([p], corp)
+    assert c.decision == "SKIP" and c.reason == "promote-link-ambiguous"
+
+
+def test_numeric_kind_never_collides():
+    # slug_addressed=False: an occupied slug does NOT become a COLLISION (numeric reserves a number).
+    p = Promotable(kind="question", ref="annotation:a#f1", frag="f1",
+                   claim="Alpha beta", subject=None, object=None)
+    corp = _corpus(slugs={"alpha-beta"})
+    [c] = decide_candidates([p], corp, slug_addressed=False)
+    assert c.decision == "MINT" and c.slug == "alpha-beta" and c.kind == "question"
 
 
 def test_normalize_claim_casefolds_and_collapses():
@@ -65,6 +85,33 @@ def test_unsluggable_claim_skipped():
     assert c.decision == "SKIP" and c.reason == "promote-claim-unsluggable"
 
 
+def test_load_corpora_indexes_each_kind(tmp_path):
+    from science_tool.annotation.promote import PROMOTABLE_KINDS, load_corpora
+
+    # Two questions sharing a normalized title -> ambiguous; one hypothesis; one proposition.
+    (tmp_path / "entities" / "questions").mkdir(parents=True)
+    (tmp_path / "entities" / "hypotheses").mkdir(parents=True)
+    (tmp_path / "entities" / "propositions").mkdir(parents=True)
+    q1 = "---\nid: \"question:0001-dup\"\ntype: question\ntitle: \"Same question\"\nstatus: active\n---\n# Same question\n"
+    q2 = "---\nid: \"question:0002-dup\"\ntype: question\ntitle: \"same QUESTION\"\nstatus: active\n---\n# same QUESTION\n"
+    (tmp_path / "entities" / "questions" / "0001-dup.md").write_text(q1, encoding="utf-8")
+    (tmp_path / "entities" / "questions" / "0002-dup.md").write_text(q2, encoding="utf-8")
+    hyp = ("---\nid: \"hypothesis:0001-h\"\ntype: hypothesis\ntitle: \"A hypothesis\"\nstatus: proposed\n"
+           "source_refs: [\"annotation:papers/p#fx\"]\n---\n# A hypothesis\n")
+    (tmp_path / "entities" / "hypotheses" / "0001-h.md").write_text(hyp, encoding="utf-8")
+    prop = "---\nid: \"proposition:a-claim\"\ntype: proposition\ntitle: \"A claim\"\nstatus: draft\n---\n# A claim\n"
+    (tmp_path / "entities" / "propositions" / "a-claim.md").write_text(prop, encoding="utf-8")
+
+    corpora, derived = load_corpora(tmp_path)
+    assert set(corpora) == set(PROMOTABLE_KINDS)
+    assert normalize_claim("Same question") in corpora["question"].ambiguous_titles
+    assert corpora["hypothesis"].title_to_ref[normalize_claim("A hypothesis")] == "hypothesis:0001-h"
+    assert "0001-h" in corpora["hypothesis"].existing_slugs
+    # derived_refs are global (annotation ref from the hypothesis is visible kind-independently).
+    assert "annotation:papers/p#fx" in derived
+    assert "annotation:papers/p#fx" in corpora["question"].derived_refs
+
+
 def _statement_ann(frag, exact, *, status, atype="proposition", subject=None, promoted_to=None):
     import json as _json
     from datetime import datetime, timezone
@@ -102,15 +149,19 @@ def test_promotable_filters_queue(tmp_path):
         _statement_ann("a-1", "Open proposition claim", status=Status.OPEN, subject="cells"),
         _statement_ann("a-2", "Already promoted", status=Status.OPEN, promoted_to="proposition:x"),
         _statement_ann("a-3", "A question", status=Status.OPEN, atype="question"),
+        _statement_ann("a-5", "A hypothesis", status=Status.OPEN, atype="hypothesis"),
+        _statement_ann("a-6", "A metaphor", status=Status.OPEN, atype="metaphor"),
         _statement_ann("a-4", "Dismissed claim", status=Status.DISMISSED),
     )
     sidecar = anno_io.Sidecar(annotations=anns)
 
     promotable, skipped = collect_promotable(sidecar, sidecar_path, tmp_path, derived_refs=set())
-    assert [p.frag for p in promotable] == ["a-1"]
-    assert promotable[0].subject == "cells"
+    # proposition + question + hypothesis are now all promotable, tagged with their kind.
+    assert [(p.frag, p.kind) for p in promotable] == [
+        ("a-1", "proposition"), ("a-3", "question"), ("a-5", "hypothesis"),
+    ]
     assert skipped["promote-already-promoted"] == 1
-    assert skipped["promote-not-proposition-type"] == 1
+    assert skipped["promote-non-promotable-type"] == 1   # the metaphor
     assert skipped["promote-inactive-status"] == 1
 
 
@@ -143,7 +194,7 @@ def test_apply_mints_proposition_and_backlinks(tmp_path):
     from science_tool.annotation import io as anno_io
     from science_tool.annotation.model import Status
     from science_tool.annotation.promote import (
-        apply_candidates, collect_promotable, decide_candidates, load_corpus,
+        apply_candidates, collect_promotable, decide_candidates, load_corpora,
     )
     from science_tool.annotation.query import read_sidecar_strict
 
@@ -157,9 +208,9 @@ def test_apply_mints_proposition_and_backlinks(tmp_path):
     ann = _statement_ann("a-1", "Cells divide rapidly", status=Status.OPEN, subject="Cells")
     anno_io.write_sidecar(sidecar_path, anno_io.Sidecar(annotations=(ann,)))
 
-    corpus = load_corpus(tmp_path)
-    promotable, _ = collect_promotable(read_sidecar_strict(sidecar_path), sidecar_path, tmp_path, derived_refs=corpus.derived_refs)
-    candidates = decide_candidates(promotable, corpus)
+    corpora, derived = load_corpora(tmp_path)
+    promotable, _ = collect_promotable(read_sidecar_strict(sidecar_path), sidecar_path, tmp_path, derived_refs=derived)
+    candidates = decide_candidates(promotable, corpora["proposition"])
     report = apply_candidates(
         candidates, sidecar_path=sidecar_path, project_root=tmp_path,
         paper_ref="paper:smith2020", as_of=date(2026, 6, 16),
@@ -183,7 +234,7 @@ def test_apply_links_to_existing_appends_both_refs_preserves_prose(tmp_path):
     from science_tool.annotation.model import Status
     from science_tool.annotation.query import read_sidecar_strict
     from science_tool.annotation.promote import (
-        apply_candidates, collect_promotable, decide_candidates, load_corpus,
+        apply_candidates, collect_promotable, decide_candidates, load_corpora,
     )
 
     (tmp_path / "entities" / "propositions").mkdir(parents=True)
@@ -202,9 +253,9 @@ def test_apply_links_to_existing_appends_both_refs_preserves_prose(tmp_path):
     ann = _statement_ann("a-1", "Known claim", status=Status.OPEN)
     anno_io.write_sidecar(sp, anno_io.Sidecar(annotations=(ann,)))
 
-    corpus = load_corpus(tmp_path)
-    promotable, _ = collect_promotable(read_sidecar_strict(sp), sp, tmp_path, derived_refs=corpus.derived_refs)
-    candidates = decide_candidates(promotable, corpus)
+    corpora, derived = load_corpora(tmp_path)
+    promotable, _ = collect_promotable(read_sidecar_strict(sp), sp, tmp_path, derived_refs=derived)
+    candidates = decide_candidates(promotable, corpora["proposition"])
     assert candidates[0].decision == "LINK"
 
     report = apply_candidates(candidates, sidecar_path=sp, project_root=tmp_path,
@@ -245,7 +296,7 @@ def test_apply_is_idempotent(tmp_path):
     from science_tool.annotation import io as anno_io
     from science_tool.annotation.model import Status
     from science_tool.annotation.promote import (
-        apply_candidates, collect_promotable, decide_candidates, load_corpus,
+        apply_candidates, collect_promotable, decide_candidates, load_corpora,
     )
     from science_tool.annotation.query import read_sidecar_strict
     (tmp_path / "entities" / "propositions").mkdir(parents=True)
@@ -257,9 +308,9 @@ def test_apply_is_idempotent(tmp_path):
     anno_io.write_sidecar(sp, anno_io.Sidecar(annotations=(ann,)))
 
     def run():
-        corpus = load_corpus(tmp_path)
-        pr, _ = collect_promotable(read_sidecar_strict(sp), sp, tmp_path, derived_refs=corpus.derived_refs)
-        return apply_candidates(decide_candidates(pr, corpus), sidecar_path=sp,
+        corpora, derived = load_corpora(tmp_path)
+        pr, _ = collect_promotable(read_sidecar_strict(sp), sp, tmp_path, derived_refs=derived)
+        return apply_candidates(decide_candidates(pr, corpora["proposition"]), sidecar_path=sp,
                                 project_root=tmp_path, paper_ref="paper:p", as_of=date(2026, 6, 16))
 
     assert run().minted == 1
@@ -332,3 +383,80 @@ def test_override_untouched_collision_row_passes_through():
     out = apply_overrides(base, edited, existing_refs=set())
     assert out[0].decision == "COLLISION"
     assert out[1].decision == "MINT" and out[1].slug == "b-2"
+
+
+def test_proposition_target_is_default_and_slug_addressed():
+    from science_tool.annotation.promote import PROMOTABLE_KINDS, build_targets
+    targets = build_targets()
+    assert set(PROMOTABLE_KINDS) == {"proposition", "question", "hypothesis"}
+    assert targets["proposition"].slug_addressed is True
+    assert callable(targets["proposition"].mint)
+
+
+def test_entity_dest_resolves_by_kind(tmp_path):
+    from science_tool.annotation.promote import entity_dest
+    # proposition (slug strategy) and question (numeric) resolve under their homes.
+    assert entity_dest("proposition:foo-bar", tmp_path).name == "foo-bar.md"
+    assert entity_dest("proposition:foo-bar", tmp_path).parent.name == "propositions"
+    assert entity_dest("question:0007-foo", tmp_path).name == "0007-foo.md"
+    assert entity_dest("question:0007-foo", tmp_path).parent.name == "questions"
+
+
+def test_decide_all_preserves_order_and_kind_local_dedup():
+    from science_tool.annotation.promote import build_targets, decide_all
+    promotables = [
+        Promotable(kind="question", ref="annotation:a#q", frag="q", claim="Shared text", subject=None, object=None),
+        Promotable(kind="proposition", ref="annotation:a#p", frag="p", claim="Shared text", subject=None, object=None),
+    ]
+    corpora = {
+        "question": _corpus(titles_to_slug={"Shared text": "question:0001-shared-text"}),
+        "hypothesis": _corpus(),
+        "proposition": _corpus(),  # proposition corpus does NOT contain "Shared text"
+    }
+    out = decide_all(promotables, corpora, build_targets())
+    # order preserved; question LINKs (its corpus has the title), proposition MINTs (its does not)
+    assert [c.frag for c in out] == ["q", "p"]
+    assert out[0].decision == "LINK" and out[0].slug == "question:0001-shared-text"
+    assert out[1].decision == "MINT" and out[1].kind == "proposition"
+
+
+def test_override_link_must_be_same_kind():
+    from science_tool.annotation.promote import apply_overrides
+    base = [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="Q text", subject=None,
+                               object=None, decision="MINT", slug="q-text", reason="new entity",
+                               kind="question")]
+    rows = [{"annotation": "annotation:a#f1", "decision": "LINK", "slug": "proposition:q-text"}]
+    with pytest.raises(PromotionOverrideError):
+        apply_overrides(base, rows, existing_refs={"proposition:q-text", "question:0001-q-text"})
+
+
+def test_override_numeric_mint_slug_strips_kind_prefix():
+    from science_tool.annotation.promote import apply_overrides
+    base = [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="Q text", subject=None,
+                               object=None, decision="MINT", slug="q-text", reason="new entity",
+                               kind="question")]
+    rows = [{"annotation": "annotation:a#f1", "decision": "MINT", "slug": "question:better-slug"}]
+    [c] = apply_overrides(base, rows, existing_refs=set())
+    assert c.decision == "MINT" and c.slug == "better-slug" and c.kind == "question"
+
+
+def _q_mint_base():
+    return [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="Q text", subject=None,
+                               object=None, decision="MINT", slug="q-text", reason="new entity",
+                               kind="question")]
+
+
+def test_override_mint_wrong_kind_prefix_fails():
+    from science_tool.annotation.promote import apply_overrides
+    rows = [{"annotation": "annotation:a#f1", "decision": "MINT", "slug": "hypothesis:foo"}]
+    with pytest.raises(PromotionOverrideError):
+        apply_overrides(_q_mint_base(), rows, existing_refs=set())
+
+
+def test_override_mint_invalid_slug_fails():
+    # A slug that can't pass validate_slug must fail as a clean PromotionOverrideError,
+    # not leak EntityCommandError from reserve_entity at apply time.
+    from science_tool.annotation.promote import apply_overrides
+    rows = [{"annotation": "annotation:a#f1", "decision": "MINT", "slug": "Not A Slug!"}]
+    with pytest.raises(PromotionOverrideError):
+        apply_overrides(_q_mint_base(), rows, existing_refs=set())
