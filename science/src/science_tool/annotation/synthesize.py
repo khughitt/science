@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass, field
 from typing import Any
 
 from science_model.reasoning import (
@@ -169,3 +170,105 @@ def build_scaffold(
             "relation_hints": hints,
         })
     return {"source": SCAFFOLD_SOURCE_PLACEHOLDER, "propositions": entries}, total_unresolved
+
+
+class SynthesisReadError(Exception):
+    """Malformed candidates file / bad source / scope / annotation (fail loud)."""
+
+
+class SynthesisApplyError(Exception):
+    """Interlock / operand / polarity-without-predicate / write-boundary failure (fail loud)."""
+
+
+class SynthesisOverrideError(SynthesisReadError):
+    """Illegal override: unknown field, field not in patch, currently-unset, or reasoning_source.
+
+    Subclasses SynthesisReadError so the CLI catch and `pytest.raises(SynthesisReadError)`
+    cover it; the dedicated type matches design §10's three-class taxonomy.
+    """
+
+
+@dataclass(frozen=True)
+class SynthesisCandidate:
+    proposition: str
+    annotation: str
+    fields: dict[str, str] = field(default_factory=dict)   # proposed SYNTH_FIELDS (non-null)
+    override: frozenset[str] = frozenset()
+
+
+def _require(cond: bool, msg: str) -> None:
+    if not cond:
+        raise SynthesisReadError(msg)
+
+
+def _require_override(cond: bool, msg: str) -> None:
+    if not cond:
+        raise SynthesisOverrideError(msg)
+
+
+def parse_candidates_doc(
+    doc: Any, scope: dict[str, set[str]]
+) -> tuple[str, list[SynthesisCandidate]]:
+    """Parse + structurally validate a candidates document against the in-scope set.
+
+    `scope[prop_ref]` is the set of that proposition's supporting-statement refs. Returns
+    `(validated_source, candidates)`. Raises SynthesisReadError on any structural defect.
+    """
+    _require(isinstance(doc, dict), "candidates input must be a JSON object")
+    extra = set(doc) - {"source", "candidates"}
+    _require(not extra, f"unknown top-level keys: {sorted(extra)}")
+    source = doc.get("source")
+    _require(isinstance(source, str) and bool(SYNTH_SOURCE_RE.match(source)),
+             f"top-level 'source' must match {SYNTH_SOURCE_RE.pattern!r} (got {source!r})")
+    items = doc.get("candidates")
+    _require(isinstance(items, list), "'candidates' must be a JSON array")
+
+    seen: set[str] = set()
+    out: list[SynthesisCandidate] = []
+    for i, item in enumerate(items):
+        out.append(_parse_candidate(item, i, scope, seen))
+    return source, out
+
+
+def _parse_candidate(
+    item: Any, idx: int, scope: dict[str, set[str]], seen: set[str]
+) -> SynthesisCandidate:
+    _require(isinstance(item, dict), f"candidate[{idx}] must be a JSON object")
+    extra = set(item) - _CANDIDATE_KEYS
+    _require(not extra, f"candidate[{idx}] unknown fields: {sorted(extra)}")
+
+    prop = item.get("proposition")
+    _require(isinstance(prop, str) and prop in scope,
+             f"candidate[{idx}].proposition {prop!r} is not an in-scope proposition")
+    _require(prop not in seen, f"duplicate candidate for proposition {prop!r}")
+    seen.add(prop)
+
+    ann = item.get("annotation")
+    _require(isinstance(ann, str) and ann in scope[prop],
+             f"candidate[{idx}].annotation {ann!r} is not a supporting statement of {prop!r}")
+
+    fields: dict[str, str] = {}
+    for f in SYNTH_FIELDS:
+        if f not in item:
+            continue
+        val = item[f]
+        _require(isinstance(val, str) and val != "",
+                 f"candidate[{idx}].{f} must be a non-empty string (omit it to leave unset; "
+                 f"null is not allowed)")
+        if f in _ENUM_VALUES:
+            _require(val in _ENUM_VALUES[f],
+                     f"candidate[{idx}].{f} {val!r} not in {sorted(_ENUM_VALUES[f])}")
+        fields[f] = val
+
+    override = item.get("override", [])
+    _require_override(isinstance(override, list) and all(isinstance(x, str) for x in override),
+                      f"candidate[{idx}].override must be a list of field names")
+    for name in override:
+        _require_override(name in SYNTH_FIELDS,
+                          f"candidate[{idx}].override {name!r} not in {sorted(SYNTH_FIELDS)} "
+                          f"(reasoning_source is never overrideable)")
+        _require_override(name in fields,
+                          f"candidate[{idx}].override names {name!r} which is not present in the patch")
+    return SynthesisCandidate(
+        proposition=prop, annotation=ann, fields=fields, override=frozenset(override),
+    )

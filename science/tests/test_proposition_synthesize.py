@@ -98,3 +98,93 @@ def test_build_scaffold_shape():
                                 "polarity": None, "claim_layer": None}
     assert entry["statements"][0]["annotation"] == "annotation:papers/p.source#s1"
     assert entry["relation_hints"] == []
+
+
+import pytest
+from science_tool.annotation.synthesize import (
+    SynthesisCandidate, SynthesisReadError, parse_candidates_doc,
+)
+
+# in-scope set + per-proposition supporting-statement refs the parser validates against
+SCOPE = {"proposition:p": {"annotation:papers/p.source#s1"}}
+SRC = "llm-synth:claude-opus-4-8:proposition-synthesize-v1"
+
+
+def _doc(candidates, source=SRC):
+    return {"source": source, "candidates": candidates}
+
+
+def test_parse_minimal_candidate():
+    doc = _doc([{
+        "proposition": "proposition:p", "annotation": "annotation:papers/p.source#s1",
+        "predicate": "affects", "subject": "X", "object": "Y", "polarity": "positive",
+        "claim_layer": "causal_effect",
+    }])
+    source, cands = parse_candidates_doc(doc, SCOPE)
+    assert source == SRC
+    assert cands == [SynthesisCandidate(
+        proposition="proposition:p", annotation="annotation:papers/p.source#s1",
+        fields={"predicate": "affects", "subject": "X", "object": "Y",
+                "polarity": "positive", "claim_layer": "causal_effect"},
+        override=frozenset(),
+    )]
+
+
+def test_bad_source_rejected():
+    with pytest.raises(SynthesisReadError, match="source"):
+        parse_candidates_doc(_doc([], source="llm-synth:<MODEL>:proposition-synthesize-v1"), SCOPE)
+
+
+def test_duplicate_proposition_rejected():
+    row = {"proposition": "proposition:p", "annotation": "annotation:papers/p.source#s1",
+           "claim_layer": "causal_effect"}
+    with pytest.raises(SynthesisReadError, match="duplicate"):
+        parse_candidates_doc(_doc([row, dict(row)]), SCOPE)
+
+
+def test_explicit_null_field_rejected():
+    with pytest.raises(SynthesisReadError, match="null|omit"):
+        parse_candidates_doc(_doc([{
+            "proposition": "proposition:p", "annotation": "annotation:papers/p.source#s1",
+            "claim_layer": None,
+        }]), SCOPE)
+
+
+def test_unknown_enum_value_rejected():
+    with pytest.raises(SynthesisReadError, match="claim_layer"):
+        parse_candidates_doc(_doc([{
+            "proposition": "proposition:p", "annotation": "annotation:papers/p.source#s1",
+            "claim_layer": "made_up",
+        }]), SCOPE)
+
+
+def test_out_of_scope_proposition_rejected():
+    with pytest.raises(SynthesisReadError, match="in scope|scope"):
+        parse_candidates_doc(_doc([{
+            "proposition": "proposition:other", "annotation": "annotation:papers/p.source#s1",
+            "claim_layer": "causal_effect",
+        }]), SCOPE)
+
+
+def test_annotation_not_supporting_rejected():
+    with pytest.raises(SynthesisReadError, match="annotation"):
+        parse_candidates_doc(_doc([{
+            "proposition": "proposition:p", "annotation": "annotation:papers/p.source#sX",
+            "claim_layer": "causal_effect",
+        }]), SCOPE)
+
+
+def test_override_must_name_a_present_field():
+    with pytest.raises(SynthesisReadError, match="override"):
+        parse_candidates_doc(_doc([{
+            "proposition": "proposition:p", "annotation": "annotation:papers/p.source#s1",
+            "claim_layer": "causal_effect", "override": ["predicate"],
+        }]), SCOPE)
+
+
+def test_override_rejects_reasoning_source():
+    with pytest.raises(SynthesisReadError, match="override"):
+        parse_candidates_doc(_doc([{
+            "proposition": "proposition:p", "annotation": "annotation:papers/p.source#s1",
+            "claim_layer": "causal_effect", "override": ["reasoning_source"],
+        }]), SCOPE)
