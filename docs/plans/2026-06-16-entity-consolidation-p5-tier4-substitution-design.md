@@ -162,22 +162,33 @@ purely internal correctness — restore bridges lost to consolidation:
 `HypothesisMatch` is unchanged (no digest-provenance field) — recognition lives in
 the registry surface (§3.4), not in the q→h matches.
 
-### 3.3 `knowledge_gaps.py` — redirect on demand edges
+### 3.3 `knowledge_gaps.py` — inherits digest-awareness, no local change
 
-`compute_topic_gaps` already depends on `resolve_questions` output (so it inherits
-the restored bridges automatically through `_hypotheses_for`). The only local
-change is to apply the same **ref-redirect** when reading questions' `related:` in
-`_compute_demand` and topics' `related:` in `_compute_coverage`, so a question or
-topic that cites a now-archived member resolves to the digest rather than
-dangling. Build `remap = member_to_digest(project_root)` once in
-`compute_topic_gaps` and thread it into both helpers.
+`compute_topic_gaps` depends on `resolve_questions` output, so it **inherits the
+restored q↔h bridges automatically** through `_hypotheses_for` — a `TopicGap`'s
+`hypotheses` list reflects digest-bridged hypotheses with no local change.
 
-No digest-as-*topic* logic: topics are rarely consolidated, and `TopicGap`'s
-coverage/demand model (questions↔topics↔papers) has no slot for a synthesis
-digest. Output shape unchanged. (If a topic itself is archived into a digest, the
-redirect makes references to it resolve to the digest id, and the archived topic
-correctly drops out of `_load_topics` — no gap is emitted for a consolidated
-topic, which is the desired substitution.)
+A local ref-redirect in `_compute_demand` / `_compute_coverage` would be **dead
+code**, and is deliberately omitted (Explicit > Defensive; avoid no-op fallbacks).
+A `member → digest` remap can only change a match if a redirected id lands on a
+live `topic` or `paper`, but the only consolidatable kinds are *never* topics or
+papers — P4 explicitly excluded `paper`/`talk`/`book`/`bio` from the 18
+consolidatable kinds, so a member id can never be in `member_to_digest` *and* be a
+topic/paper id. Demand is `topic_id in question.related` (topic_id ranges over live
+topics; a digest id is a `synthesis` id, never a topic id) and coverage is over
+external paper ids (papers are never consolidated) — neither can be altered by the
+remap. So knowledge_gaps gets correctness for free and stays byte-stable except
+through the resolver it already calls.
+
+No digest-as-*topic* logic: `TopicGap`'s coverage/demand model
+(questions↔topics↔papers) has no slot for a synthesis digest. Output shape
+unchanged. (If a topic itself were archived into a digest, it simply drops out of
+`_load_topics` — no gap emitted for a consolidated topic, the desired
+substitution; this requires no redirect because an archived topic is already absent
+from the scan.)
+
+The P5 knowledge_gaps deliverable is therefore the **inherited** correctness plus
+regression/behavioral tests pinning it (§6), not new module code.
 
 ### 3.4 CLI — recognition registry + `--deep`
 
@@ -256,8 +267,10 @@ their internal behavior improves (restored bridges) transparently.
   q↔h transitive link after the bridging interpretations are consolidated into a
   digest authored with the same `related:`; (c) ref-redirect — a live entity citing
   an archived member contributes its edge via the digest.
-- `knowledge_gaps.py`: demand/coverage with a redirected archived-member ref;
-  archived topic drops out and emits no gap.
+- `knowledge_gaps.py`: a `TopicGap.hypotheses` list reflects a digest-bridged
+  hypothesis (inherited from the resolver) after the bridging interpretations are
+  consolidated; an archived topic drops out and emits no gap. No local-redirect
+  test — there is no local redirect (§3.3).
 - `cli.py`: `cluster-digests` JSON shape default vs `--deep`; `resolve-questions`
   and `knowledge-gaps` output shapes unchanged (golden).
 - Acceptance: a fixture project where consolidating an interpretation family (via
