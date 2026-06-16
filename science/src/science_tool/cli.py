@@ -2269,7 +2269,7 @@ def add_article_cmd(doi: str, graph_path: Path) -> None:
 @click.argument("text")
 @click.option("--source", required=True, help="Provenance reference")
 @click.option("--confidence", type=float, default=None)
-@click.option("--evidence-type", default=None)
+@click.option("--evidence-type", default=None, type=click.Choice(EVIDENCE_TYPES))
 @click.option("--id", "proposition_id", default=None, help="Custom proposition ID slug")
 @click.option("--subject", default=None, help="Structured S-P-O: subject entity")
 @click.option("--predicate", default=None, help="Structured S-P-O: predicate")
