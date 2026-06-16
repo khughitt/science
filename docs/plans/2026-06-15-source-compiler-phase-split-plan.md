@@ -14,14 +14,15 @@
 
 ## Conventions for every task
 
-- **Worktree discipline:** every subagent MUST `cd` into the worktree and verify the branch before editing or committing:
+- **Working directory:** the uv Python project is `science/pyproject.toml` (there is **no** root `pyproject.toml`), so all `uv`/`pytest`/`ruff` commands must run from the `science/` member dir. Every subagent MUST `cd` there and verify the branch before editing or committing:
   ```bash
-  cd ~/d/science/.worktrees/source-compiler-slice-c
+  cd ~/d/science/.worktrees/source-compiler-slice-c/science
   rtk git branch --show-current   # MUST print: feat/source-compiler-slice-c
   ```
   If the branch is wrong, STOP — do not edit or commit (commits would leak to `main`).
-- **Tests:** `rtk proxy uv run --frozen pytest <path> -v` (rtk has no `uv`/`pytest` subcommand; `rtk proxy` passes the raw command through). Run from the worktree root.
-- **Commits:** `rtk git add <paths>` then `rtk git commit -m "<msg>"`. Do NOT include any `Co-Authored-By` trailer.
+- **All runnable command paths below are relative to this `science/` dir** (e.g. `tests/graph/...`, `src/science_tool/...`) — no `science/` prefix. The `Files:` headers, by contrast, give the worktree-relative location (`science/tests/...`, `science/src/...`) so you know where each file lives.
+- **Tests:** `rtk proxy uv run --frozen pytest <path> -v` (rtk has no `uv`/`pytest` subcommand; `rtk proxy` passes the raw command through). Run from the `science/` dir.
+- **Commits:** `rtk git add <paths>` then `rtk git commit -m "<msg>"` — run from the `science/` dir; git resolves the relative paths against it. Do NOT include any `Co-Authored-By` trailer.
 - **Behavior-neutral bar:** the existing emission suites (`tests/test_graph_materialize.py`, `tests/test_dataset_usage_materialize.py`, `tests/test_freshness_derivation.py`, `tests/graph/test_patch_membership_materialize.py`, `tests/test_source_snapshot_freshness_e2e.py`, etc.) are the comprehensive regression net for emitted-graph content. Each task must keep them green; do not modify them.
 
 ## File structure
@@ -455,7 +456,7 @@ Expected: all passed (behavior-neutral — the split changed no emission logic).
 - [ ] **Step 7: Commit**
 
 ```bash
-rtk git add science/src/science_tool/graph/materialize.py tests/graph/test_phase_split_emit_derive.py
+rtk git add src/science_tool/graph/materialize.py tests/graph/test_phase_split_emit_derive.py
 rtk git commit -m "refactor(source-compiler): split build into _emit_phase/_derive_phase via EmitResult (Slice C)"
 ```
 
@@ -771,13 +772,13 @@ Expected: full suite green except the 6 known-unrelated `tests/test_codex_skills
 
 - [ ] **Step 9: Lint**
 
-Run: `rtk proxy uv run --frozen ruff check science/src/science_tool/graph/materialize.py tests/graph/test_phase_split_contracts.py tests/graph/test_phase_split_emit_derive.py tests/graph/test_phase_split_compile.py`
+Run: `rtk proxy uv run --frozen ruff check src/science_tool/graph/materialize.py tests/graph/test_phase_split_contracts.py tests/graph/test_phase_split_emit_derive.py tests/graph/test_phase_split_compile.py`
 Expected: no errors.
 
 - [ ] **Step 10: Commit**
 
 ```bash
-rtk git add science/src/science_tool/graph/materialize.py tests/graph/test_phase_split_compile.py
+rtk git add src/science_tool/graph/materialize.py tests/graph/test_phase_split_compile.py
 rtk git commit -m "refactor(source-compiler): unify audit/materialize via _compile pipeline + thin wrappers (Slice C)"
 ```
 
