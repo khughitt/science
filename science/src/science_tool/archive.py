@@ -253,6 +253,20 @@ def unarchive_entities(
     return report
 
 
+def search_archive(project_root: Path, query: str) -> list[dict]:
+    """Case-insensitive substring search over active archive entries
+    (id, title, kind, aliases, same_as). Returns sorted hit dicts."""
+    q = query.lower()
+    idx = load_archive_index(Path(project_root).resolve())
+    hits: list[dict] = []
+    for cid, row in idx.active_by_id.items():
+        haystack = " ".join(filter(None, [cid, row.title or "", row.kind or "", *row.aliases, *row.same_as])).lower()
+        if q in haystack:
+            hits.append({"id": cid, "kind": row.kind, "title": row.title,
+                         "status": row.status, "original_path": row.original_path})
+    return sorted(hits, key=lambda h: h["id"])
+
+
 def verify_archive(project_root: Path, live_alias_space: set[str]) -> list[str]:
     """Reconcile filesystem <-> active index and detect alias collisions against the
     caller-supplied live alias space. Returns a list of problem strings (empty ==
