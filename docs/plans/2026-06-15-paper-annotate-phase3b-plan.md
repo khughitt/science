@@ -86,10 +86,20 @@ In `test_statement_extract.py`: change the two import blocks
 (`from science_tool.annotation.statement_extract import (Candidate, ...)` →
 `StatementCandidate`; `import (... extract_statements ...)` → `extract_candidates`), the
 `isinstance(c, Candidate)` → `isinstance(c, StatementCandidate)`, the `_cand` / `_cands` helper
-return-types + `Candidate(**...)` constructors → `StatementCandidate`, and both
-`extract_statements(` call sites in the orchestrator tests → `extract_candidates(`.
+return-types + `Candidate(**...)` constructors → `StatementCandidate`, and **all**
+`extract_statements(` call sites in the orchestrator tests → `extract_candidates(` (there are
+several — replace every one).
 
-- [ ] **Step 2: Run the full annotation suite — green, no behavior change**
+- [ ] **Step 2: Verify no stale references remain, then run the full annotation suite**
+
+First confirm the old names are fully gone from the three touched files (the only allowed `Candidate`
+hits are `CandidateError`):
+
+```bash
+rg -n "extract_statements" science/src/science_tool/annotation/ science/tests/test_statement_extract.py
+rg -n "\bCandidate\b" science/src/science_tool/annotation/statement_extract.py science/tests/test_statement_extract.py | rg -v "StatementCandidate|CandidateError"
+```
+Expected: **no output** from either command.
 
 Run: `uv run --frozen pytest tests/test_statement_extract.py tests/test_annotate_extract_cli.py -q`
 Expected: PASS (same count as before — this is a rename only).
@@ -1075,9 +1085,10 @@ command + `llm-annot:<model>:paper-annotate-v1` source as statements — emitted
   - **No `stance`, no concept grounding** — figurative domains are free-text (entity linking is
     Phase 4). A blank/whitespace-only required-or-present field is rejected (fail loud), not stored.
 
-- **Dedup**: `match_text` for figurative is `type|file_idx:length|json([source_domain, target_domain])`
-  — the JSON-encoded domain pair is the semantic identity (delimiter-safe), so two same-span figures
-  with different domains both persist. `mapping`/`cue` are enrichment, not identity.
+- **Dedup**: `match_text` for figurative is
+  `type|file_idx:length|json([normalized_source_domain, normalized_target_domain])` — the
+  whitespace-normalized, JSON-encoded domain pair is the semantic identity (delimiter-safe), so two
+  same-span figures with different domains both persist. `mapping`/`cue` are enrichment, not identity.
 - **Document guard**: identical to statements (`sci:sourceTextHash`); a mixed statement+figurative
   run advances the hash only when no candidate fails to anchor.
 ```
@@ -1138,7 +1149,7 @@ Expected: FAIL (`metaphor`/`source_domain` not yet in the agent file).
 Update the frontmatter `description` (line 3) to mention both:
 
 ```
-description: Extract proposition/question/hypothesis statements AND metaphor/analogy figures from one paper's persisted .source.md, grounded in its existing PubTator entity annotations, and persist them via `science annotate extract`. Requires an existing <citekey>.source.md (run `science paper persist-source` first). Returns the written/skipped counts.
+description: Extract proposition/question/hypothesis statements AND metaphor/analogy figures from one paper's persisted .source.md, using existing PubTator entity annotations for optional statement grounding (figurative domains remain free-text), and persist them via `science annotate extract`. Requires an existing <citekey>.source.md (run `science paper persist-source` first). Returns the written/skipped counts.
 ```
 
 Update the opening sentence (lines 10–13) from "extract sub-article **statements** ... You do not"
