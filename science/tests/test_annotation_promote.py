@@ -121,15 +121,19 @@ def test_promotable_filters_queue(tmp_path):
         _statement_ann("a-1", "Open proposition claim", status=Status.OPEN, subject="cells"),
         _statement_ann("a-2", "Already promoted", status=Status.OPEN, promoted_to="proposition:x"),
         _statement_ann("a-3", "A question", status=Status.OPEN, atype="question"),
+        _statement_ann("a-5", "A hypothesis", status=Status.OPEN, atype="hypothesis"),
+        _statement_ann("a-6", "A metaphor", status=Status.OPEN, atype="metaphor"),
         _statement_ann("a-4", "Dismissed claim", status=Status.DISMISSED),
     )
     sidecar = anno_io.Sidecar(annotations=anns)
 
     promotable, skipped = collect_promotable(sidecar, sidecar_path, tmp_path, derived_refs=set())
-    assert [p.frag for p in promotable] == ["a-1"]
-    assert promotable[0].subject == "cells"
+    # proposition + question + hypothesis are now all promotable, tagged with their kind.
+    assert [(p.frag, p.kind) for p in promotable] == [
+        ("a-1", "proposition"), ("a-3", "question"), ("a-5", "hypothesis"),
+    ]
     assert skipped["promote-already-promoted"] == 1
-    assert skipped["promote-not-proposition-type"] == 1
+    assert skipped["promote-non-promotable-type"] == 1   # the metaphor
     assert skipped["promote-inactive-status"] == 1
 
 

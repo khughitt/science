@@ -143,12 +143,12 @@ def _statement_subject_object(ann) -> tuple[str | None, str | None]:
 
 
 def collect_promotable(sidecar, sidecar_path: Path, root: Path, *, derived_refs: set[str]) -> tuple[list[Promotable], Counter]:
-    """Filter a sidecar to the promotable proposition queue, counting skip reasons."""
+    """Filter a sidecar to the promotable statement queue (all promotable kinds), counting skips."""
     out: list[Promotable] = []
     skipped: Counter = Counter()
     for ann in sidecar.annotations:
-        if ann.annotation_type != "proposition":
-            skipped["promote-not-proposition-type"] += 1
+        if ann.annotation_type not in PROMOTABLE_KINDS:
+            skipped["promote-non-promotable-type"] += 1
             continue
         if ann.status not in (Status.OPEN, Status.ACK):
             skipped["promote-inactive-status"] += 1
@@ -158,7 +158,10 @@ def collect_promotable(sidecar, sidecar_path: Path, root: Path, *, derived_refs:
             skipped["promote-already-promoted"] += 1
             continue
         subject, object_ = _statement_subject_object(ann)
-        out.append(Promotable(ref=ref, frag=ann.id, claim=ann.target.selector.exact, subject=subject, object=object_))
+        out.append(Promotable(
+            kind=ann.annotation_type, ref=ref, frag=ann.id,
+            claim=ann.target.selector.exact, subject=subject, object=object_,
+        ))
     return out, skipped
 
 
