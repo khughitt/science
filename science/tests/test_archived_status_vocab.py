@@ -24,10 +24,10 @@ def test_consolidatable_kind_accepts_archived(kind: str) -> None:
     assert vs is not None and "archived" in vs
 
 
-def test_reference_kinds_do_not_gain_archived() -> None:
-    for kind in ("paper", "book", "talk"):
-        vs = valid_statuses(kind)
-        assert vs is not None and "archived" not in vs
+@pytest.mark.parametrize("kind", ["paper", "book", "talk"])
+def test_reference_kind_does_not_gain_archived(kind: str) -> None:
+    vs = valid_statuses(kind)
+    assert vs is not None and "archived" not in vs
 
 
 def test_every_declared_status_still_classified() -> None:
