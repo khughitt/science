@@ -241,3 +241,21 @@ def test_nonreproducible_silent_when_authored_capped_absent(tmp_path: Path):
     legacy = {k: v for k, v in rows[0].items() if k != "authored_capped"}
     snap.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
     assert list(check_belief_nonreproducible(ctx)) == []
+
+
+def test_nonreproducible_errors_when_authored_capped_mismatches(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_two_support_graph(tmp_path)
+    ctx = _ctx(tmp_path)
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    # Same inputs, but stored authored_capped=True while the empirical recompute is False.
+    # authored_capped is a golden output, so the divergence must be flagged.
+    corrupted = rows[0] | {"authored_capped": True}
+    snap.write_text(json.dumps(corrupted) + "\n", encoding="utf-8")
+    results = list(check_belief_nonreproducible(ctx))
+    assert any(r.severity is Severity.ERROR for r in results)
