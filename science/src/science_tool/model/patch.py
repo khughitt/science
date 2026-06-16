@@ -25,6 +25,7 @@ from rdflib import Dataset, Literal, RDF, URIRef
 from rdflib.namespace import PROV, RDFS, XSD
 
 from science_tool.graph.belief import EvidenceUnit, aggregate_belief
+from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
 from science_tool.graph.belief_scalar import belief_scalar, unit_score
 from science_tool.graph.io import SCI_NS
 
@@ -139,6 +140,8 @@ def emit_patch_trig(
         g.add((edge.iri, SCI_NS.subject, sub.iri))
         g.add((edge.iri, SCI_NS.object, focal.iri))
         g.add((edge.iri, SCI_NS.beliefMagnitude, Literal(edge.belief_magnitude)))
+        g.add((edge.iri, SCI_NS.beliefPolicyId, Literal(DEFAULT_BELIEF_POLICY.policy_id)))
+        g.add((edge.iri, SCI_NS.beliefPolicyVersion, Literal(DEFAULT_BELIEF_POLICY.version)))
         if edge.provenance_routes:
             g.add((edge.iri, SCI_NS.provenanceRoutes, Literal(",".join(edge.provenance_routes))))
         if edge.opinion is not None:
