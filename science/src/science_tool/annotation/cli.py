@@ -1165,12 +1165,12 @@ def extract_cmd(
 @click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
 def promote_cmd(source_md: Path, root: Path | None, paper_ref: str | None,
                 do_apply: bool, input_path: Path | None, fmt: str) -> None:
-    """Promote proposition-type statement annotations into proposition entities (mint-or-link)."""
+    """Promote statement annotations (proposition/question/hypothesis) into entities (mint-or-link)."""
     from science_tool.annotation.io import sidecar_for_markdown
     from science_tool.annotation.query import read_sidecar_strict
     from science_tool.annotation.promote import (
         PromotionApplyError, PromotionOverrideError, PromotionReadError, apply_candidates,
-        apply_overrides, collect_promotable, decide_candidates, load_corpus,
+        apply_overrides, build_targets, collect_promotable, decide_all, load_corpora,
     )
 
     if input_path is not None and not do_apply:
@@ -1184,12 +1184,13 @@ def promote_cmd(source_md: Path, root: Path | None, paper_ref: str | None,
 
     sidecar_path = sidecar_for_markdown(source_md)
     sidecar = read_sidecar_strict(sidecar_path)
-    corpus = load_corpus(project_root)
+    corpora, derived_refs = load_corpora(project_root)
+    targets = build_targets()
     try:
-        promotable, skipped = collect_promotable(sidecar, sidecar_path, project_root, derived_refs=corpus.derived_refs)
+        promotable, skipped = collect_promotable(sidecar, sidecar_path, project_root, derived_refs=derived_refs)
     except PromotionReadError as exc:
         raise click.ClickException(str(exc)) from exc
-    candidates = decide_candidates(promotable, corpus)
+    candidates = decide_all(promotable, corpora, targets)
 
     if do_apply and input_path is not None:
         try:
@@ -1200,13 +1201,15 @@ def promote_cmd(source_md: Path, root: Path | None, paper_ref: str | None,
         edited_rows = raw.get("candidates") if isinstance(raw, dict) else raw
         if not isinstance(edited_rows, list):
             raise click.ClickException("--input must be the read-only output object or a candidates list")
-        existing_refs = {f"proposition:{s}" for s in corpus.existing_slugs}
+        existing_refs = {
+            f"{kind}:{slug}" for kind, corp in corpora.items() for slug in corp.existing_slugs
+        }
         try:
             candidates = apply_overrides(candidates, edited_rows, existing_refs=existing_refs)
         except PromotionOverrideError as exc:
             raise click.ClickException(str(exc)) from exc
 
-    rows = [{"annotation": c.ref, "decision": c.decision, "slug": c.slug,
+    rows = [{"annotation": c.ref, "kind": c.kind, "decision": c.decision, "slug": c.slug,
              "claim": c.claim[:80], "reason": c.reason} for c in candidates]
 
     if not do_apply:
@@ -1214,7 +1217,7 @@ def promote_cmd(source_md: Path, root: Path | None, paper_ref: str | None,
             click.echo(json.dumps({"candidates": rows, "skipped": dict(skipped)}, indent=2))
         else:
             for r in rows:
-                click.echo(f"{r['decision']:9} {r['slug'] or '-':40} {r['annotation']}  {r['claim']}")
+                click.echo(f"{r['kind']:11} {r['decision']:9} {r['slug'] or '-':40} {r['annotation']}  {r['claim']}")
             click.echo(f"skipped: {dict(skipped) or 'none'}")
         return
 

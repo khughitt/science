@@ -24,6 +24,7 @@ from science_tool.entities import (
     default_status,
     resolve_path_policy,
     slug_for_claim_text,
+    validate_slug,
     write_entity_file,
 )
 from science_tool.entity_reservation import reserve_entity
@@ -114,6 +115,25 @@ def _cand(p: Promotable, decision: str, slug: str | None, reason: str) -> Promot
         ref=p.ref, frag=p.frag, claim=p.claim, subject=p.subject, object=p.object,
         decision=decision, slug=slug, reason=reason, kind=p.kind,
     )
+
+
+def decide_all(
+    promotables: list[Promotable],
+    corpora: dict[str, PromotionCorpus],
+    targets: dict[str, PromotionTarget],
+) -> list[PromotionCandidate]:
+    """Decide every promotable, grouped by kind (for intra-batch collision), order preserved."""
+    groups: dict[str, list[tuple[int, Promotable]]] = {}
+    for i, p in enumerate(promotables):
+        groups.setdefault(p.kind, []).append((i, p))
+    results: dict[int, PromotionCandidate] = {}
+    for kind, group in groups.items():
+        cands = decide_candidates(
+            [p for _, p in group], corpora[kind], slug_addressed=targets[kind].slug_addressed
+        )
+        for (i, _), c in zip(group, cands):
+            results[i] = c
+    return [results[i] for i in range(len(promotables))]
 
 
 class PromotionReadError(Exception):
@@ -420,12 +440,29 @@ def apply_overrides(
             continue
         if decision == "LINK":
             if not slug or slug not in existing_refs:
-                raise PromotionOverrideError(f"LINK target {slug!r} is not an existing proposition")
+                raise PromotionOverrideError(f"LINK target {slug!r} is not an existing entity")
+            if slug.split(":", 1)[0] != c.kind:
+                raise PromotionOverrideError(
+                    f"LINK target {slug!r} is not a {c.kind} (kind-local dedup)"
+                )
             out.append(dataclasses.replace(c, decision="LINK", slug=slug, reason="curator override: link"))
         elif decision == "MINT":
-            bare = slug.split(":", 1)[1] if isinstance(slug, str) and slug.startswith("proposition:") else slug
+            bare = slug
+            if isinstance(slug, str) and ":" in slug:
+                pfx, rest = slug.split(":", 1)
+                if pfx != c.kind:
+                    raise PromotionOverrideError(
+                        f"MINT override slug {slug!r} has the wrong kind prefix for a {c.kind}"
+                    )
+                bare = rest
             if not bare:
                 raise PromotionOverrideError(f"MINT override for {c.ref!r} requires a slug")
+            # Validate eagerly here so a bad curator slug fails as a clean ClickException,
+            # not an uncaught EntityCommandError from reserve_entity(..., slug=...) at apply time.
+            try:
+                validate_slug(bare)
+            except EntityCommandError as exc:
+                raise PromotionOverrideError(f"MINT override slug {bare!r} is invalid: {exc}") from exc
             out.append(dataclasses.replace(c, decision="MINT", slug=bare, reason="curator override: mint"))
         else:
             raise PromotionOverrideError(f"override decision for {c.ref!r} must be LINK or MINT, got {decision!r}")

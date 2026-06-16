@@ -1,6 +1,7 @@
 import pytest
 from science_tool.annotation.promote import (
-    Promotable, PromotionCorpus, decide_candidates, normalize_claim,
+    Promotable, PromotionCandidate, PromotionCorpus, PromotionOverrideError,
+    decide_candidates, normalize_claim,
 )
 
 
@@ -399,3 +400,63 @@ def test_entity_dest_resolves_by_kind(tmp_path):
     assert entity_dest("proposition:foo-bar", tmp_path).parent.name == "propositions"
     assert entity_dest("question:0007-foo", tmp_path).name == "0007-foo.md"
     assert entity_dest("question:0007-foo", tmp_path).parent.name == "questions"
+
+
+def test_decide_all_preserves_order_and_kind_local_dedup():
+    from science_tool.annotation.promote import build_targets, decide_all
+    promotables = [
+        Promotable(kind="question", ref="annotation:a#q", frag="q", claim="Shared text", subject=None, object=None),
+        Promotable(kind="proposition", ref="annotation:a#p", frag="p", claim="Shared text", subject=None, object=None),
+    ]
+    corpora = {
+        "question": _corpus(titles_to_slug={"Shared text": "question:0001-shared-text"}),
+        "hypothesis": _corpus(),
+        "proposition": _corpus(),  # proposition corpus does NOT contain "Shared text"
+    }
+    out = decide_all(promotables, corpora, build_targets())
+    # order preserved; question LINKs (its corpus has the title), proposition MINTs (its does not)
+    assert [c.frag for c in out] == ["q", "p"]
+    assert out[0].decision == "LINK" and out[0].slug == "question:0001-shared-text"
+    assert out[1].decision == "MINT" and out[1].kind == "proposition"
+
+
+def test_override_link_must_be_same_kind():
+    from science_tool.annotation.promote import apply_overrides
+    base = [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="Q text", subject=None,
+                               object=None, decision="MINT", slug="q-text", reason="new entity",
+                               kind="question")]
+    rows = [{"annotation": "annotation:a#f1", "decision": "LINK", "slug": "proposition:q-text"}]
+    with pytest.raises(PromotionOverrideError):
+        apply_overrides(base, rows, existing_refs={"proposition:q-text", "question:0001-q-text"})
+
+
+def test_override_numeric_mint_slug_strips_kind_prefix():
+    from science_tool.annotation.promote import apply_overrides
+    base = [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="Q text", subject=None,
+                               object=None, decision="MINT", slug="q-text", reason="new entity",
+                               kind="question")]
+    rows = [{"annotation": "annotation:a#f1", "decision": "MINT", "slug": "question:better-slug"}]
+    [c] = apply_overrides(base, rows, existing_refs=set())
+    assert c.decision == "MINT" and c.slug == "better-slug" and c.kind == "question"
+
+
+def _q_mint_base():
+    return [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="Q text", subject=None,
+                               object=None, decision="MINT", slug="q-text", reason="new entity",
+                               kind="question")]
+
+
+def test_override_mint_wrong_kind_prefix_fails():
+    from science_tool.annotation.promote import apply_overrides
+    rows = [{"annotation": "annotation:a#f1", "decision": "MINT", "slug": "hypothesis:foo"}]
+    with pytest.raises(PromotionOverrideError):
+        apply_overrides(_q_mint_base(), rows, existing_refs=set())
+
+
+def test_override_mint_invalid_slug_fails():
+    # A slug that can't pass validate_slug must fail as a clean PromotionOverrideError,
+    # not leak EntityCommandError from reserve_entity at apply time.
+    from science_tool.annotation.promote import apply_overrides
+    rows = [{"annotation": "annotation:a#f1", "decision": "MINT", "slug": "Not A Slug!"}]
+    with pytest.raises(PromotionOverrideError):
+        apply_overrides(_q_mint_base(), rows, existing_refs=set())
