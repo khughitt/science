@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 from science_qa.package import load_package
 
