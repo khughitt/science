@@ -124,14 +124,33 @@ The 3a `plan_statement` body is **already** type-agnostic except for grounding +
 key off `type` / `exact` generically.
 
 Refactor: extract the shared **locate-and-anchor** step into a helper
-`_anchor_candidate(file_text, persisted, type_, exact, prefix, suffix)` returning either a skip reason
+`_anchor_candidate(file_text, persisted, exact, prefix, suffix)` returning either a skip reason
 (`extract-quote-not-found` / `extract-quote-ambiguous` / `extract-anchored-outside-passage`) or the
-anchored `(file_idx, length, pp, selector, match_text)`. Then two thin planners:
+anchored locus `(file_idx, length, pp, selector)`. The helper does **not** build `match_text` —
+`match_text` is composed **per kind** by the planner, because its discriminator differs (below). Then
+two thin planners:
 
 - `plan_statement(...)` — calls the helper, applies opportunistic grounding drop, builds the statement
-  body. **Behavior identical to 3a.**
-- `plan_figurative(...)` — calls the helper, **no grounding**, builds the figurative body. Returns
-  `grounding_dropped = 0` always.
+  body, and composes the 3a-identical `match_text = f"{type}|{file_idx}:{length}|{normalized_exact}"`.
+  **Behavior byte-identical to 3a.**
+- `plan_figurative(...)` — calls the helper, **no grounding**, builds the figurative body, and composes
+  a domain-discriminated `match_text` (below). Returns `grounding_dropped = 0` always.
+
+### `match_text` dedup discriminator (per kind)
+
+`merge_planned` dedupes on `(source, selector.exact, lifted_from, match_text)`
+(`audit.py::_annotation_tuple`) — there is **no positional component**, so `match_text` must carry
+everything that makes a row a distinct annotation. The two kinds differ in what that is:
+
+- **statement:** `f"{type}|{file_idx}:{length}|{normalized_exact}"` — unchanged from 3a. The
+  `file_idx:length` segment distinguishes repeated identical statements at different offsets; the
+  optional `subject`/`object` are *not* identity (they may be absent), so they stay out of the key.
+- **figurative:** `f"{type}|{file_idx}:{length}|{normalize_text(source_domain)}|{normalize_text(target_domain)}"`.
+  `source_domain` + `target_domain` are **required semantic identity** — two `metaphor` candidates
+  anchored at the **same span** but asserting different domains are genuinely different annotations and
+  must not collapse. They are therefore part of the figurative key (`mapping`/`cue` are optional
+  enrichment, not identity, so they stay out, mirroring how `subject`/`object` are excluded for
+  statements). `normalize_text` is the existing whitespace-collapse helper.
 
 Both return the same `(PlannedAnnotation | None, skip_reason | None, dropped)` shape, so the
 orchestrator loop is kind-uniform.
@@ -159,6 +178,17 @@ run simply reports `grounding_dropped = 0`.
     transferred), `cue` (optional: the lexical trigger, e.g. "like" / "as" / "mounts").
   - same anchoring discipline as statements (verbatim `exact` from passage bodies; never headings).
   - both kinds go in the **same** `candidates.json`, mixed with statements.
+
+### `science/src/science_tool/annotation/cli.py` (the public CLI surface)
+`extract_cmd` (the `annotate extract` command) is the caller of the renamed orchestrator and must be
+updated:
+- import + call `extract_candidates` (was `extract_statements`).
+- the human-readable (table) output is **type-neutral**: `"{written} annotation(s) written"` (was
+  `"statement(s) written"`), since a run may now write statements and/or figurative rows. The `--json`
+  output keys are unchanged (`written` / `skipped` / `grounding_dropped` /
+  `source_text_hash_recorded` / `note`).
+- the docstring is reworded from "statement candidates" to "annotation candidates" (statements +
+  figurative); `--check` / `--input` / grounding behavior is otherwise unchanged.
 
 ### `commands/annotate-paper.md`
 - Type-agnostic orchestration — **no logic change**. Wording touch so it no longer says "statements"
@@ -192,11 +222,12 @@ Deterministic `extract` carries the coverage (no live LLM):
 - **Grounding:** a figurative run never consults `active_entity_iris` and always reports
   `grounding_dropped = 0`, even when the paper has active entity annotations.
 - **Dedup / guard:** a `metaphor` and a `proposition` anchored at the **same span** both persist
-  (distinct `type` segment in `match_text`); a byte-identical mixed re-run dedupes to zero new rows;
-  the idempotency hash advances on a clean figurative-only run and does **not** advance when a
-  figurative candidate fails to anchor.
+  (distinct `type` segment in `match_text`); **two `metaphor` candidates at the same span with
+  different `source_domain`/`target_domain` both persist** (domain segments keep them distinct), while
+  a byte-identical mixed re-run dedupes to zero new rows; the idempotency hash advances on a clean
+  figurative-only run and does **not** advance when a figurative candidate fails to anchor.
 - **CLI round-trip:** a mixed `candidates.json` → `extract` → `annotate verify` re-anchors every
-  written row (statement and figurative).
+  written row (statement and figurative); the table output reads `annotation(s) written` (type-neutral).
 
 ---
 
