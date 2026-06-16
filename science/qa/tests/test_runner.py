@@ -192,3 +192,14 @@ def test_run_qa_datapackage_exposes_rows_checked(tmp_path):
     (tmp_path / "datapackage.json").write_text(_json.dumps({"name": "p", "resources": [res]}))
     result = run_qa_datapackage(tmp_path / "datapackage.json", "obs", tmp_path)
     assert result.rows_checked == 4
+
+
+def test_run_qa_datapackage_reads_yaml(tmp_path):
+    from science_qa.runner import run_qa_datapackage
+    pd.DataFrame({"id": [1, 2, 3]}).to_parquet(tmp_path / "obs.parquet")
+    (tmp_path / "datapackage.yaml").write_text(
+        "name: p\nresources:\n"
+        "  - name: obs\n    path: obs.parquet\n    schema:\n      fields:\n"
+        "        - name: id\n          type: integer\n          constraints: {required: true}\n")
+    result = run_qa_datapackage(tmp_path / "datapackage.yaml", "obs", tmp_path)
+    assert result.structural_failed is False and result.rows_checked == 3

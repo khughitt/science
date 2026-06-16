@@ -9,6 +9,7 @@ import pandas as pd
 
 from science_qa.aspects import CHECK_REQUIRED, CheckSpec, Invocation
 from science_qa.compile import CompileError, merge_configs, schema_to_config
+from science_qa.package import load_package
 from science_qa.config import QAConfig
 from science_qa.context import Context, TableContext
 from science_qa.coverage import (
@@ -58,11 +59,10 @@ def run_qa(config_path: Path, table_path: Path, report_dir: Path) -> RunResult:
 
 def run_qa_datapackage(datapackage_path: Path, resource_name: str, report_dir: Path,
                        runknobs_path: Path | None = None) -> RunResult:
-    package = json.loads(Path(datapackage_path).read_text(encoding="utf-8"))
+    package, pkg_dir = load_package(Path(datapackage_path))
     resource = next((r for r in package.get("resources", []) if r.get("name") == resource_name), None)
     if resource is None:
         raise CompileError(f"resource {resource_name!r} not found in {datapackage_path}")
-    pkg_dir = Path(datapackage_path).parent
     config = schema_to_config(resource, pkg_dir, package)
     if runknobs_path is not None:
         config = merge_configs(config, QAConfig.from_file(runknobs_path, require_program=False))
