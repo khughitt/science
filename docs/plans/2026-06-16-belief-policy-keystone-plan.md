@@ -24,7 +24,8 @@
     tests/test_belief_collect.py tests/test_belief_scalar.py tests/test_belief_scalar_quant_result.py \
     tests/test_belief_e2e.py tests/test_bundle_belief_rollup.py tests/test_bundle_belief_snapshot.py \
     tests/test_belief_snapshot.py tests/test_belief_cli.py tests/test_evidence_line_belief_checks.py \
-    tests/test_epistemic_edges_e2e.py tests/test_model_patch.py -q
+    tests/test_epistemic_edges_e2e.py tests/test_model_patch.py \
+    tests/validate/test_checks_belief_sensitivity.py -q
   ```
   This is referred to below as **the regression net**.
 
@@ -37,12 +38,15 @@
 | `src/science_tool/graph/belief_policy.py` | **New.** `BeliefPolicy` + `DEFAULT_BELIEF_POLICY`. Imports only `belief_weights` (one-way; no cycle). | 1 |
 | `src/science_tool/graph/belief.py` | Thread `policy` through `aggregate_belief` + ordinal helpers; stamp `BeliefResult`. | 2 |
 | `src/science_tool/graph/bundle_belief.py` | `MixedBeliefPolicyError`; comparability guard + policy stamp on `BundleBeliefResult`. | 3 |
-| `src/science_tool/graph/belief_snapshot.py` | Add `policy_id`/`policy_version` to rows **and to `_key`**. | 4 |
+| `src/science_tool/graph/belief_snapshot.py` | Add `policy_id`/`policy_version` to rows **and to `_key`**; normalize pre-policy rows on read. | 4 |
 | `src/science_tool/model/patch.py` | Emit `sci:beliefPolicyId`/`beliefPolicyVersion` (unconditional default stamp). | 4 |
+| `tests/test_belief_cli.py` | Update canned `make_snapshots` fixture to carry policy fields. | 4 |
+| `src/science_tool/validate/checks/evidence_lines.py` | Make `belief.nonreproducible` matcher policy-aware. | 5 |
 | `tests/test_belief_policy.py` | Policy object: identity, default values, deep immutability. | 1 |
 | `tests/test_belief_policy_aggregate.py` | Stamping, explicit==implicit default, seam proof. | 2 |
 | `tests/test_belief_policy_bundle.py` | Rollup stamp + mixed-policy rejection. | 3 |
-| `tests/test_belief_policy_persistence.py` | Snapshot row+`_key`; patch RDF identity. | 4 |
+| `tests/test_belief_policy_persistence.py` | Snapshot row+`_key`; pre-policy normalization; patch RDF identity. | 4 |
+| `tests/validate/test_checks_belief_sensitivity.py` | Policy identity gates reproducibility comparison. | 5 |
 
 ---
 
@@ -589,11 +593,12 @@ rtk git commit -m "feat(belief): reject mixed-policy bundle rollups; stamp polic
 
 ---
 
-## Task 4: Persist policy identity (snapshot JSONL `_key` + rows; patch RDF)
+## Task 4: Persist policy identity (snapshot JSONL `_key` + rows; pre-policy normalization; patch RDF)
 
 **Files:**
-- Modify: `src/science_tool/graph/belief_snapshot.py` (`snapshot_records` both row branches; `_key`)
+- Modify: `src/science_tool/graph/belief_snapshot.py` (import; `snapshot_records` both row branches; `read_snapshots` normalization; `_key`)
 - Modify: `src/science_tool/model/patch.py` (import + `emit_patch_trig`)
+- Modify: `tests/test_belief_cli.py` (canned `make_snapshots` fixture)
 - Test: `tests/test_belief_policy_persistence.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -650,6 +655,27 @@ def test_policy_version_bump_is_not_deduped(tmp_path: Path):
     assert {r["policy_version"] for r in read_snapshots(out)} == {"1", "2"}
 
 
+def test_read_snapshots_normalizes_pre_policy_rows(tmp_path: Path):
+    # A pre-Slice-A artifact row has no policy fields; it was produced by the core-default
+    # policy, so read normalizes it to that identity (no KeyError downstream in _key/matcher).
+    import json
+
+    out = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    legacy = {
+        "as_of": "2026-05-24", "claim": "prop:p1", "belief_state": "fragile",
+        "contested": False, "scalar_enabled": False,
+        "input_hashes": ["sha256:abc"], "config_version": "belief-logodds-v3",
+    }
+    out.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
+    row = read_snapshots(out)[0]
+    assert row["policy_id"] == "core-default"
+    assert row["policy_version"] == "1"
+    # And append remains idempotent against the normalized legacy row.
+    normalized = {**legacy, "policy_id": "core-default", "policy_version": "1"}
+    assert append_snapshots(out, [normalized]) == 0
+
+
 def test_patch_trig_emits_policy_identity(tmp_path: Path):
     from science_tool.model.patch import PatchEdge, PatchNode, emit_patch_trig
 
@@ -675,11 +701,21 @@ def test_patch_trig_emits_policy_identity(tmp_path: Path):
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `rtk proxy uv run --frozen pytest tests/test_belief_policy_persistence.py -q`
-Expected: FAIL — `KeyError: 'policy_id'` in the snapshot row, and the patch test finds no `beliefPolicyId` objects.
+Expected: FAIL — snapshot rows lack `policy_id`; the normalization test sees no defaults; the patch test finds no `beliefPolicyId` objects.
 
-- [ ] **Step 3: Stamp policy identity in both snapshot row branches**
+- [ ] **Step 3: Import the default policy into `belief_snapshot.py`**
 
-In `src/science_tool/graph/belief_snapshot.py`, add two keys to the **bundle** row dict (currently the dict ending at line 71 with `"config_version": CONFIG_VERSION,`):
+In `src/science_tool/graph/belief_snapshot.py`, add the import beside the existing belief imports (currently lines 10-15):
+
+```python
+from .belief import collect_evidence_units
+from .belief_policy import DEFAULT_BELIEF_POLICY
+from .belief_scalar import belief_scalar, belief_scalar_enabled
+```
+
+- [ ] **Step 4: Stamp policy identity in both snapshot row branches**
+
+Add two keys to the **bundle** row dict (currently the dict ending at line 71 with `"config_version": CONFIG_VERSION,`):
 
 ```python
                 "input_hashes": input_hashes,
@@ -699,18 +735,44 @@ and to the **plain proposition** row dict (currently ending at line 96):
         })
 ```
 
-- [ ] **Step 4: Add policy identity to the dedup `_key`**
+- [ ] **Step 5: Normalize pre-policy rows on read, then add policy to the dedup `_key`**
 
-Replace `_key` (currently lines 109-111):
+Pre-Slice-A `belief-snapshots.jsonl` rows have no policy fields. They were produced by what is now the built-in core-default policy, so stamp that identity explicitly on read — this is the correct semantic, not a silent fallback, and it keeps the new `_key` (and the Task 5 matcher) from raising `KeyError` on real history. Add a normalizer and route `read_snapshots` through it; replace `read_snapshots` and `_key` (currently lines 109-121):
 
 ```python
 def _key(row: dict):
     return (row["as_of"], row["claim"], tuple(row["input_hashes"]),
             row["config_version"], row["scalar_enabled"],
             row["policy_id"], row["policy_version"])
+
+
+def _with_policy_defaults(row: dict) -> dict:
+    # Pre-policy snapshot rows predate Spec 5 Slice A; they were computed by the
+    # core-default policy. Stamp that identity explicitly so dedup and reproducibility
+    # checks are policy-aware without rejecting or KeyError-ing on legacy history.
+    if "policy_id" not in row:
+        row["policy_id"] = DEFAULT_BELIEF_POLICY.policy_id
+        row["policy_version"] = DEFAULT_BELIEF_POLICY.version
+    return row
+
+
+def _dump(row: dict) -> str:
+    return json.dumps(row, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+
+
+def read_snapshots(path: Path) -> list[dict]:
+    if not path.is_file():
+        return []
+    return [
+        _with_policy_defaults(json.loads(line))
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
 ```
 
-- [ ] **Step 5: Emit policy identity in the patch TriG**
+(Note: `_dump` is unchanged but shown because it sits between `_key` and `read_snapshots`; keep it as-is when replacing the block. Incoming `rows` passed to `append_snapshots` are NOT normalized — they come from `snapshot_records`, which always stamps them. The only un-stamped source is the CLI test's canned fixture, fixed in Step 7.)
+
+- [ ] **Step 6: Emit policy identity in the patch TriG**
 
 In `src/science_tool/model/patch.py`, add the import beside the existing belief imports (currently line 27-29):
 
@@ -726,24 +788,139 @@ In `emit_patch_trig`, immediately after the `beliefMagnitude` triple (currently 
         g.add((edge.iri, SCI_NS.beliefPolicyVersion, Literal(DEFAULT_BELIEF_POLICY.version)))
 ```
 
-- [ ] **Step 6: Run the new tests, then the regression net**
+- [ ] **Step 7: Update the CLI test's canned `make_snapshots` fixture**
 
-Run: `rtk proxy uv run --frozen pytest tests/test_belief_policy_persistence.py -q`
-Expected: 3 passed.
+The new `_key` requires `policy_id`/`policy_version` on every incoming row. `tests/test_belief_cli.py` monkeypatches `make_snapshots` with a canned row that predates these fields, so `append_snapshots` would `KeyError`. Make the fixture mirror real `make_snapshots` output — add the two keys to the `canned` dict (currently lines 14-21, the dict ending with `"input_hashes": ["sha256:abc"], "config_version": "belief-logodds-v3",`):
+
+```python
+    canned = [{
+        "as_of": "2026-05-24", "claim": "prop:p1", "belief_state": "fragile",
+        "contested": False, "diagnostic_dispute_count": 0, "scalar_enabled": False,
+        "massed_support_score": None, "massed_dispute_score": None,
+        "massed_support_band": None, "massed_dispute_band": None,
+        "net_band": None, "net_robust": None,
+        "input_hashes": ["sha256:abc"], "config_version": "belief-logodds-v3",
+        "policy_id": "core-default", "policy_version": "1",
+    }]
+```
+
+- [ ] **Step 8: Run the new tests, then the regression net**
+
+Run: `rtk proxy uv run --frozen pytest tests/test_belief_policy_persistence.py tests/test_belief_cli.py -q`
+Expected: 4 passed in the persistence file + the CLI test green.
 
 Run the regression net.
-Expected: all passed (`test_belief_snapshot.py` / `test_bundle_belief_snapshot.py` still green — the new row keys are additive and `_key` gains fields every row now has; `test_model_patch.py` still green — the new triples are additive).
+Expected: all passed (`test_belief_snapshot.py` / `test_bundle_belief_snapshot.py` still green — new row keys are additive and `_key` gains fields every row now has after normalization; `test_model_patch.py` still green — the new triples are additive; `test_checks_belief_sensitivity.py` still green — its stored rows come from `make_snapshots`, so they carry matching policy fields).
 
-- [ ] **Step 7: Lint**
+- [ ] **Step 9: Lint**
 
-Run: `rtk proxy uv run --frozen ruff check src/science_tool/graph/belief_snapshot.py src/science_tool/model/patch.py tests/test_belief_policy_persistence.py`
+Run: `rtk proxy uv run --frozen ruff check src/science_tool/graph/belief_snapshot.py src/science_tool/model/patch.py tests/test_belief_policy_persistence.py tests/test_belief_cli.py`
 Expected: `All checks passed!`
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-rtk git add src/science_tool/graph/belief_snapshot.py src/science_tool/model/patch.py tests/test_belief_policy_persistence.py
-rtk git commit -m "feat(belief): persist policy identity in belief snapshots (incl. _key) and patch RDF"
+rtk git add src/science_tool/graph/belief_snapshot.py src/science_tool/model/patch.py tests/test_belief_policy_persistence.py tests/test_belief_cli.py
+rtk git commit -m "feat(belief): persist policy identity in snapshots (rows + _key), normalize pre-policy rows, stamp patch RDF"
+```
+
+---
+
+## Task 5: Make the `belief.nonreproducible` validator policy-aware
+
+The golden reproducibility matcher defines "same inputs" as `claim + input_hashes + config_version + scalar_enabled`. Without policy identity it would compare a stored row from one policy against a recomputed row from another and report a **false** `belief.nonreproducible` ERROR. Add policy identity to the match criteria. (Task 4's `read_snapshots` normalization guarantees stored rows always carry the fields, and `make_snapshots` stamps the recomputed rows.)
+
+**Files:**
+- Modify: `src/science_tool/validate/checks/evidence_lines.py` (`check_belief_nonreproducible`)
+- Test: `tests/validate/test_checks_belief_sensitivity.py`
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `tests/validate/test_checks_belief_sensitivity.py`:
+
+```python
+def test_nonreproducible_silent_when_policy_identity_differs(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_two_support_graph(tmp_path)
+    ctx = _ctx(tmp_path)
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    # Same inputs, WRONG belief, but a different policy_version -> not comparable, no error.
+    other_policy = rows[0] | {"belief_state": "speculative", "policy_version": "2"}
+    snap.write_text(json.dumps(other_policy) + "\n", encoding="utf-8")
+    assert list(check_belief_nonreproducible(ctx)) == []
+
+
+def test_nonreproducible_normalizes_pre_policy_stored_row(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_two_support_graph(tmp_path)
+    ctx = _ctx(tmp_path)
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    # A legacy stored row (no policy fields) with corrupted belief. read_snapshots normalizes
+    # it to core-default/1 == the recomputed identity, so corruption is still caught.
+    legacy = {k: v for k, v in rows[0].items() if k not in ("policy_id", "policy_version")}
+    legacy["belief_state"] = "speculative"
+    snap.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
+    results = list(check_belief_nonreproducible(ctx))
+    assert any(r.severity is Severity.ERROR for r in results)
+```
+
+- [ ] **Step 2: Run the tests to verify the first one fails**
+
+Run: `rtk proxy uv run --frozen pytest tests/validate/test_checks_belief_sensitivity.py::test_nonreproducible_silent_when_policy_identity_differs -q`
+Expected: FAIL — the matcher ignores policy, so the differing-policy row matches and a false ERROR is raised. (`test_nonreproducible_normalizes_pre_policy_stored_row` already passes given Task 4's normalization.)
+
+- [ ] **Step 3: Add policy identity to the matcher**
+
+In `src/science_tool/validate/checks/evidence_lines.py`, in `check_belief_nonreproducible`, extend the `matches` comprehension (currently lines 526-533) with two clauses, and update the docstring/comment to name policy identity:
+
+```python
+    matches = [
+        r for r in stored
+        if r["claim"] == now["claim"]
+        and sorted(r["input_hashes"]) == sorted(now["input_hashes"])
+        and r["config_version"] == now["config_version"]
+        and r["scalar_enabled"] == now["scalar_enabled"]
+        and r["policy_id"] == now["policy_id"]
+        and r["policy_version"] == now["policy_version"]
+    ]
+```
+
+Update the function docstring (currently lines 518-519) to:
+
+```python
+    """#8 golden: equal inputs (input_hashes + config_version + scalar_enabled + policy identity)
+    must reproduce the stored belief. Differing inputs OR a different BeliefPolicy are a
+    legitimate change, not flagged."""
+```
+
+- [ ] **Step 4: Run the new tests, then the regression net**
+
+Run: `rtk proxy uv run --frozen pytest tests/validate/test_checks_belief_sensitivity.py -q`
+Expected: all passed (the existing corruption-detection tests stay green — their stored rows come from `make_snapshots` under the default policy, matching the recomputed default identity).
+
+Run the regression net.
+Expected: all passed.
+
+- [ ] **Step 5: Lint**
+
+Run: `rtk proxy uv run --frozen ruff check src/science_tool/validate/checks/evidence_lines.py tests/validate/test_checks_belief_sensitivity.py`
+Expected: `All checks passed!`
+
+- [ ] **Step 6: Commit**
+
+```bash
+rtk git add src/science_tool/validate/checks/evidence_lines.py tests/validate/test_checks_belief_sensitivity.py
+rtk git commit -m "fix(belief): make belief.nonreproducible matcher policy-aware (no cross-policy false errors)"
 ```
 
 ---
@@ -756,12 +933,12 @@ Run the regression net one final time. Expected: all passed.
 
 - [ ] **Step 2: Targeted full run of touched areas**
 
-Run: `rtk proxy uv run --frozen pytest tests/test_belief_policy.py tests/test_belief_policy_aggregate.py tests/test_belief_policy_bundle.py tests/test_belief_policy_persistence.py -q`
-Expected: 14 passed.
+Run: `rtk proxy uv run --frozen pytest tests/test_belief_policy.py tests/test_belief_policy_aggregate.py tests/test_belief_policy_bundle.py tests/test_belief_policy_persistence.py tests/validate/test_checks_belief_sensitivity.py -q`
+Expected: the new policy tests (5 + 4 + 2 + 4 = 15) plus the full sensitivity suite (existing + 2 new) all pass.
 
 - [ ] **Step 3: Lint the whole change set**
 
-Run: `rtk proxy uv run --frozen ruff check src/science_tool/graph/belief_policy.py src/science_tool/graph/belief.py src/science_tool/graph/bundle_belief.py src/science_tool/graph/belief_snapshot.py src/science_tool/model/patch.py tests/test_belief_policy.py tests/test_belief_policy_aggregate.py tests/test_belief_policy_bundle.py tests/test_belief_policy_persistence.py`
+Run: `rtk proxy uv run --frozen ruff check src/science_tool/graph/belief_policy.py src/science_tool/graph/belief.py src/science_tool/graph/bundle_belief.py src/science_tool/graph/belief_snapshot.py src/science_tool/model/patch.py src/science_tool/validate/checks/evidence_lines.py tests/test_belief_policy.py tests/test_belief_policy_aggregate.py tests/test_belief_policy_bundle.py tests/test_belief_policy_persistence.py tests/test_belief_cli.py tests/validate/test_checks_belief_sensitivity.py`
 Expected: `All checks passed!`
 
 After all tasks pass, hand off to **superpowers:finishing-a-development-branch** (the 6 pre-existing unrelated `tests/test_codex_skills.py` failures are out of scope and not caused by this slice).
