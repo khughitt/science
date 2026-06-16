@@ -40,8 +40,9 @@ class ConsolidateError(Exception):
 
 
 def _is_consolidatable(project_root: Path, kind: str) -> bool:
-    """A kind is consolidatable iff its status vocab is open (None) or includes
-    `archived`. A closed vocab lacking `archived` fails loud (no auto-patch)."""
+    """Whether `kind` can be consolidated: its status vocab is open (None) or
+    includes `archived`. A closed vocab lacking `archived` returns False — the
+    caller (`_validate_members`) is what fails loud on it (no auto-patch)."""
     vs = valid_statuses(kind, project_root=project_root)
     return vs is None or "archived" in vs
 
