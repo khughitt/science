@@ -152,6 +152,7 @@ def _iter_annotations(
         content_hash = _str_or_none(ds.value(subj, SCI.contentHash))
         description = _str_or_none(ds.value(subj, DCTERMS.description))
         lifted_from = _str_or_none(ds.value(subj, SCI.liftedFrom))
+        promoted_to = _str_or_none(ds.value(subj, SCI.promotedTo))
         match_text = _str_or_none(ds.value(subj, SCI.matchText))
         prior_states = tuple(_read_prior_states(ds, subj))
         out.append(
@@ -170,6 +171,7 @@ def _iter_annotations(
                 content_hash=content_hash,
                 description=description,
                 lifted_from=lifted_from,
+                promoted_to=promoted_to,
                 match_text=match_text,
                 prior_states=prior_states,
             )
@@ -379,6 +381,8 @@ def _emit_annotation(ann: Annotation) -> "list[str]":
         out.append(f"    sci:contentHash    {_str_lit(ann.content_hash)} ;")
     if ann.lifted_from is not None:
         out.append(f"    sci:liftedFrom     {_str_lit(ann.lifted_from)} ;")
+    if ann.promoted_to is not None:
+        out.append(f"    sci:promotedTo     {_str_lit(ann.promoted_to)} ;")
     if ann.match_text is not None:
         out.append(f"    sci:matchText      {_str_lit(ann.match_text)} ;")
     out.append(f"    dc:creator         {_str_lit(ann.creator)} ;")
