@@ -84,10 +84,29 @@ gdsc-v2-cell-lines       FAIL      9 checks, 1 structural, 0 distribution
 package: FAIL  (1/3 resources structural; 0 blocked, 0 skipped)
 ```
 
-Non-tabular resources (`.json` sidecars, `*.qa_verdict.json`) are silent unless
-`--format json`. Blocked/skipped resources appear with their status and reason.
+Text-output rule: **show every status except `not-applicable`.** `not-applicable`
+resources (non-tabular — `.json` sidecars, `*.qa_verdict.json`) are hidden in text and
+appear only under `--format json`. `blocked` (tabular, data absent) and `skipped`
+(tabular, no schema) resources are shown with their status and reason. This removes the
+earlier non-tabular/skipped ambiguity by giving non-tabular its own status (§5.2).
 
 ## 5. Engine addition: `run_qa_package`
+
+### 5.0 Neutral descriptor loader (boundary fix + YAML gap)
+
+The existing `run_qa_datapackage` reads descriptors with **`json.loads`** only
+(`runner.py:60`). Two consequences: (a) it cannot load the 6 campaign packages whose
+descriptor is `datapackage.yaml` (`cancer-therapeutics/*`), and (b) the obvious reuse —
+`science_tool`'s `infer_schema.load_descriptor` — is **forbidden**, because importing it
+would make `science_qa` depend on `science_tool` and break the locked one-way boundary
+(§8; decision 5 in §3).
+
+Resolution: add a **neutral loader inside `science_qa`** —
+`load_package(path) -> tuple[dict, Path]` (returns the descriptor mapping + its base
+dir), reading JSON or YAML via `pyyaml`, which `science_qa` **already** depends on
+(`config.py`, `dispositions.py` import `yaml`). Both `run_qa_datapackage` (replacing its
+`json.loads`) and the new `run_qa_package` use it, so single-resource **and** package
+runs handle YAML. No `science_tool` import is introduced; the boundary holds.
 
 ### 5.1 Factor a non-writing core (behavior-preserving)
 
@@ -95,22 +114,37 @@ Today `_run_with_config(config, table_path, report_dir)` does compile-independen
 (resolve program, read table, run checks → flags + coverage) **and then** writes reports
 and reconciles dispositions. Split it:
 
+`RunResult` gains a **`rows_checked: int`** field so the row count survives the split
+without rereading the table (today `_run_with_config` passes `rows_checked=len(table)`
+to `write_reports`; after the split the `table` local lives only inside `_evaluate`):
+
 ```python
+@dataclass(frozen=True)
+class RunResult:
+    flags: list[Flag]
+    structural_failed: bool
+    coverage: Coverage
+    rows_checked: int          # NEW — len(evaluated table), preserved for the writer
+
 def _evaluate(config: QAConfig, table_path: Path) -> RunResult:
     """Compile-independent core: resolve program, read table, run checks.
-    Returns a RunResult. Writes nothing, reconciles nothing."""
-    ...  # exactly the current _run_with_config body up to (not including) write_reports
+    Returns a RunResult (incl. rows_checked). Writes nothing, reconciles nothing."""
+    ...  # current _run_with_config body up to (not including) write_reports;
+         # the final RunResult(...) now also passes rows_checked=len(table)
 
 def _run_with_config(config: QAConfig, table_path: Path, report_dir: Path) -> RunResult:
     result = _evaluate(config, table_path)
-    write_reports(result.flags, report_dir=report_dir, rows_checked=..., coverage=result.coverage)
-    reconcile_dispositions(report_dir, [f.flag_id for f in result.flags if f.severity == SEVERITY_DISTRIBUTION])
+    write_reports(result.flags, report_dir=report_dir,
+                  rows_checked=result.rows_checked, coverage=result.coverage)
+    reconcile_dispositions(report_dir,
+                           [f.flag_id for f in result.flags if f.severity == SEVERITY_DISTRIBUTION])
     return result
 ```
 
 `run_qa` and `run_qa_datapackage` are unchanged in behavior — they still go through
-`_run_with_config`, so their existing tests stay green. This is the only edit to existing
-runner logic, and it is byte-equivalent for the single-resource paths.
+`_run_with_config`, so their existing tests stay green (the plan updates any direct
+`RunResult(...)` constructions in tests to pass the new `rows_checked`). This is the only
+edit to existing runner logic, and it is byte-equivalent for the single-resource paths.
 
 ### 5.2 New `run_qa_package`
 
@@ -118,9 +152,9 @@ runner logic, and it is byte-equivalent for the single-resource paths.
 @dataclass(frozen=True)
 class ResourceOutcome:
     name: str
-    status: str            # "ok" | "fail" | "blocked" | "skipped"
+    status: str            # "ok" | "fail" | "blocked" | "skipped" | "not-applicable"
     reason: str            # "" for ok/fail; e.g. "data file absent", "no schema", "non-tabular"
-    result: RunResult | None   # None for blocked/skipped
+    result: RunResult | None   # None for blocked/skipped/not-applicable
 
 @dataclass(frozen=True)
 class PackageRunResult:
@@ -135,11 +169,13 @@ def run_qa_package(datapackage_path: Path, report_dir: Path | None = None,
 ```
 
 Algorithm:
-1. Load the descriptor (JSON or YAML — reuse `infer_schema.load_descriptor` shape).
+1. Load the descriptor with the neutral `science_qa` `load_package` loader (§5.0) — JSON
+   or YAML, no `science_tool` import.
 2. Resource selection: if `resources` given, that set (error → `CompileError` if a named
    resource is absent); else every resource.
 3. Per resource, classify before running:
-   - **non-tabular** (path suffix ∉ `.parquet/.csv/.tsv`) → `skipped`, reason `"non-tabular"`.
+   - **non-tabular** (path suffix ∉ `.parquet/.csv/.tsv`) → `not-applicable`, reason
+     `"non-tabular"`. Never a QA candidate; hidden in text output (§4.1).
    - **no schema** (`schema.fields` absent/empty) → `skipped`, reason `"no schema"`.
      QA needs a contract; un-QA-able is surfaced, not fatal, not a crash.
    - **data file absent** → `blocked`, reason `"data file absent"`. These packages
@@ -148,15 +184,28 @@ Algorithm:
      `merge_configs` if `runknobs_path`; default `program="tabular"`; `result = _evaluate(cfg, table_path)`.
      `status = "fail"` if `result.structural_failed` else `"ok"`.
 4. `package_structural_failed = any(o.status == "fail")`.
-5. If `report_dir` is given, write **one** package report (`qa_report.json` with a
-   per-resource section list + a flat `flags[]`; `qa_report.md` the human rollup) using a
-   small package-level writer that composes the existing per-resource `write_reports`
-   payload shape. If `report_dir` is `None`, write nothing.
+5. If `report_dir` is given, persist **per-resource** into resource-scoped subdirs
+   (`report_dir/<resource_name>/qa_report.{json,md}`) by reusing the existing
+   single-resource `write_reports` + `reconcile_dispositions` verbatim — so each
+   resource's report and disposition ledger are byte-identical to running it standalone,
+   and **no cross-resource collision is possible**. Then write a package rollup
+   `report_dir/qa_report.{json,md}`: the JSON is a list of per-resource **sections**
+   (`{resource, status, reason, flags[], coverage}`), *not* a flattened `flags[]`; the MD
+   is the human rollup table. If `report_dir` is `None`, write nothing.
+
+**Why per-resource subdirs (fix for flag-id collision).** `Flag.flag_id` is
+check/subject-based (`build_flag_id(source, check, subject, side)`, `flags.py:9`) and is
+**not** resource-qualified — two resources can both emit
+`numeric-column/bounds/p/minimum`. A single flat package `flags[]` + one disposition
+ledger keyed by `flag_id` (`dispositions.py` merges by `flag_id`) would silently merge
+distinct findings. Resource-scoped subdirs keep each ledger isolated and preserve exact
+single-resource behavior; the package rollup keeps findings under their resource section,
+so identity stays `(resource, flag_id)` without changing `Flag` or `build_flag_id`.
 
 **Disposition reconciliation.** The build-fatal decision depends only on *structural*
 flags, which carry no disposition state, so a transient (no `--report-dir`) run needs no
-disposition ledger. Distribution-flag disposition reconciliation runs only when
-`report_dir` is set, against that one package report dir.
+disposition ledger at all. Distribution-flag disposition reconciliation runs only when
+`report_dir` is set, and only inside each resource's own subdir (never at package level).
 
 ### 5.3 Standalone-CLI reach (optional, low-cost)
 
@@ -173,8 +222,13 @@ natural by-product, not a requirement; include it only if it falls out cleanly.
 - **CLI** `src/science_tool/cli.py`: register `qa` in the `datasets` group (next to
   `validate`/`infer-schema`), parse options, render `--format text|json`, `raise
   SystemExit(code)`.
-- Exit code: `0` ok · `1` `package_structural_failed and not no_strict` · `2` on
-  `CompileError` / bad path / unknown resource (surfaced as the message, fail-early).
+- Exit code: `0` ok · `1` `package_structural_failed and not no_strict` · `2` bad input.
+  The wrapper's exit-`2` catch list is **explicit and complete**, matching §7:
+  `(CompileError, RunnerError, ValueError, FileNotFoundError)` plus the path-resolution
+  error from the shared resolver. `CompileError` covers bad descriptor / unknown resource;
+  `RunnerError`/`ValueError` cover corrupt-or-unreadable data and uncoercible columns;
+  `FileNotFoundError` covers a missing descriptor path. Each is surfaced as its message
+  (fail-early), never as a traceback.
 
 The command imports `science_qa` at call time and contains **no QA logic** — only
 path resolution, rendering, and exit-code policy.
@@ -206,13 +260,19 @@ path resolution, rendering, and exit-code policy.
 ## 9. Testing strategy
 
 `science_qa` (run from `science/qa`, `PYTHONPATH=src`):
+- `load_package` (§5.0): loads a JSON descriptor and a YAML descriptor to equal mappings;
+  `run_qa_datapackage` now QAs a single resource from a **YAML** package (the regression
+  the old `json.loads` could not).
 - `_evaluate`/`_run_with_config` split is behavior-preserving — existing `test_runner.py`
-  single-resource tests stay green unchanged.
+  single-resource tests stay green unchanged (after the `rows_checked` field is threaded
+  through any direct `RunResult(...)` construction).
 - New `run_qa_package` tests: clean multi-resource package → `ok`; one resource with a
   bounds/PK violation → that resource `fail`, package `fail`; absent data file → `blocked`
-  (non-fatal); non-tabular resource → `skipped`; tabular-but-schemaless → `skipped`;
-  `--report-dir` writes exactly one `qa_report.{json,md}` (no per-resource clobber);
-  no `report_dir` writes nothing; `resources=[...]` selection + unknown-name → `CompileError`.
+  (non-fatal); non-tabular resource → `not-applicable`; tabular-but-schemaless →
+  `skipped`; **two resources emitting the same `flag_id`** → distinct entries under
+  resource-scoped subdirs, neither disposition ledger merged (the collision regression);
+  `--report-dir` writes one rollup + per-resource subdirs; no `report_dir` writes nothing;
+  `resources=[...]` selection + unknown-name → `CompileError`.
 
 `science_tool` (framework venv):
 - `test_datasets_qa.py`: path resolution (dir vs descriptor), `--format json` shape,
