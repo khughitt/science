@@ -62,6 +62,7 @@ from pathlib import Path
 
 from science_model.propositions import PropositionEntity
 from science_tool.entities import (
+    append_entity_source_ref,
     slug_for_claim_text,
     slug_from_raw,
     write_entity_file,
@@ -95,12 +96,40 @@ def test_write_entity_file_places_custom_body(tmp_path: Path):
     assert "## Claim\n\nDemo claim." in text
     assert "id: proposition:demo-claim" in text or 'id: "proposition:demo-claim"' in text
     assert "created: 2026-06-16" in text or 'created: "2026-06-16"' in text
+
+
+def test_append_entity_source_ref_preserves_body_and_updates_timestamp(tmp_path: Path):
+    root = _project(tmp_path)
+    dest = root / "entities" / "propositions" / "existing.md"
+    dest.write_text(
+        "---\n"
+        "id: proposition:existing\n"
+        "type: proposition\n"
+        "title: Existing\n"
+        "status: draft\n"
+        "source_refs:\n"
+        '  - "paper:old"\n'
+        'created: "2026-06-01"\n'
+        'updated: "2026-06-01"\n'
+        "---\n"
+        "# Existing\n\n## Claim\n\nHand-authored prose.\n",
+        encoding="utf-8",
+    )
+
+    assert (
+        append_entity_source_ref(dest, "annotation:papers/p.source#a-1", as_of=date(2026, 6, 16))
+        is True
+    )
+    text = dest.read_text(encoding="utf-8")
+    assert "Hand-authored prose." in text
+    assert "annotation:papers/p.source#a-1" in text
+    assert "updated: 2026-06-16" in text or 'updated: "2026-06-16"' in text
 ```
 
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `cd science && uv run --frozen pytest tests/test_entity_writer.py -v`
-Expected: FAIL — `ImportError: cannot import name 'write_entity_file'` (and `slug_for_claim_text`).
+Expected: FAIL — `ImportError: cannot import name 'write_entity_file'` (and the new slug/source-ref helpers).
 
 - [ ] **Step 3: Add the shared primitives to `entities.py`**
 
@@ -165,16 +194,18 @@ def write_entity_file(
     _atomic_replace_text(dest, text)
 
 
-def append_entity_source_ref(file_path: Path, ref: str) -> bool:
+def append_entity_source_ref(file_path: Path, ref: str, *, as_of: date | None = None) -> bool:
     """Append ``ref`` to an existing entity file's ``source_refs`` frontmatter, preserving
     the body. Returns True if added, False if already present. Used by promotion LINK so a
-    hand-authored proposition's prose is never clobbered."""
+    hand-authored proposition's prose is never clobbered. When a ref is added, `updated`
+    advances to ``as_of`` (or today), matching other entity mutations."""
     frontmatter, body = _parse_markdown_file(file_path)
     refs = list(frontmatter.get("source_refs") or [])
     if ref in refs:
         return False
     refs.append(ref)
     frontmatter["source_refs"] = refs
+    frontmatter["updated"] = (as_of or date.today()).isoformat()
     _atomic_replace_text(file_path, _render_markdown(frontmatter, body))
     return True
 ```
@@ -182,7 +213,7 @@ def append_entity_source_ref(file_path: Path, ref: str) -> bool:
 - [ ] **Step 4: Run the writer test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_entity_writer.py -v`
-Expected: PASS (4 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 5: Repoint `dag/workbench.py` onto the shared primitives (byte-preserving)**
 
@@ -862,7 +893,7 @@ def test_apply_links_to_existing_appends_both_refs_preserves_prose(tmp_path):
     existing.write_text(
         '---\nid: proposition:known-claim\ntype: proposition\ntitle: Known claim\n'
         'status: draft\nsource_refs:\n  - "paper:other"\n'
-        'created: "2026-06-16"\nupdated: "2026-06-16"\n---\n'
+        'created: "2026-06-01"\nupdated: "2026-06-01"\n---\n'
         "# Known claim\n\n## Claim\n\nHand-authored prose.\n",
         encoding="utf-8",
     )
@@ -885,6 +916,7 @@ def test_apply_links_to_existing_appends_both_refs_preserves_prose(tmp_path):
     assert "Hand-authored prose." in text                 # prose preserved (no clobber)
     assert "annotation:papers/p.source#a-1" in text        # annotation ref appended
     assert "paper:p" in text and "paper:other" in text     # paper ref appended; original kept
+    assert "updated: 2026-06-16" in text or 'updated: "2026-06-16"' in text
     assert read_sidecar_strict(sp).annotations[0].promoted_to == "proposition:known-claim"
 
 
@@ -1012,9 +1044,10 @@ def apply_candidates(
             policy = resolve_path_policy("proposition", project_root=project_root)
             dest = project_root / policy.root / f"{c.slug.split(':', 1)[1]}.md"
             # Accrue BOTH provenance refs onto the existing proposition; append_entity_source_ref
-            # dedups and preserves the (possibly hand-authored) prose body.
+            # dedups, preserves the (possibly hand-authored) prose body, and advances `updated`
+            # whenever it actually appends a ref.
             for ref in (paper_ref, c.ref):
-                append_entity_source_ref(dest, ref)
+                append_entity_source_ref(dest, ref, as_of=as_of)
             report.linked += 1
             backlinks[c.frag] = c.slug
         else:  # COLLISION / SKIP — not applied
@@ -1247,7 +1280,7 @@ def _setup(tmp_path: Path):
 
 def test_promote_readonly_writes_nothing(tmp_path):
     md, sp = _setup(tmp_path)
-    r = CliRunner().invoke(annotate_group, ["promote", "--source-md", str(md), "--root", str(tmp_path), "--format", "json"])
+    r = CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path), "--format", "json"])
     assert r.exit_code == 0, r.output
     payload = json.loads(r.output)
     assert payload["candidates"][0]["decision"] == "MINT"
@@ -1258,7 +1291,7 @@ def test_promote_readonly_writes_nothing(tmp_path):
 
 def test_promote_apply_mints_and_backlinks(tmp_path):
     md, sp = _setup(tmp_path)
-    r = CliRunner().invoke(annotate_group, ["promote", "--source-md", str(md), "--root", str(tmp_path),
+    r = CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path),
                                             "--paper-ref", "paper:p", "--apply"])
     assert r.exit_code == 0, r.output
     prop = (tmp_path / "entities" / "propositions" / "genes-encode-proteins.md")
@@ -1275,14 +1308,14 @@ def test_promote_apply_input_override_links(tmp_path):
         'status: draft\ncreated: "2026-06-16"\nupdated: "2026-06-16"\n---\n# Preexisting\n',
         encoding="utf-8",
     )
-    ro = CliRunner().invoke(annotate_group, ["promote", "--source-md", str(md), "--root", str(tmp_path), "--format", "json"])
+    ro = CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path), "--format", "json"])
     assert ro.exit_code == 0, ro.output
     payload = json.loads(ro.output)
     payload["candidates"][0]["decision"] = "LINK"
     payload["candidates"][0]["slug"] = "proposition:preexisting"
     edited = tmp_path / "edited.json"
     edited.write_text(json.dumps(payload), encoding="utf-8")
-    r = CliRunner().invoke(annotate_group, ["promote", "--source-md", str(md), "--root", str(tmp_path),
+    r = CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path),
                                             "--apply", "--input", str(edited)])
     assert r.exit_code == 0, r.output
     assert read_sidecar_strict(sp).annotations[0].promoted_to == "proposition:preexisting"
@@ -1293,7 +1326,7 @@ def test_promote_malformed_input_fails_loud(tmp_path):
     md, _ = _setup(tmp_path)
     bad = tmp_path / "bad.json"
     bad.write_text("{ not json", encoding="utf-8")
-    r = CliRunner().invoke(annotate_group, ["promote", "--source-md", str(md), "--root", str(tmp_path),
+    r = CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path),
                                             "--apply", "--input", str(bad)])
     assert r.exit_code != 0
 ```
@@ -1307,10 +1340,9 @@ Expected: FAIL — no such command `promote`.
 
 ```python
 @annotate_group.command("promote")
-@click.option(
-    "--source-md", "source_md", required=True,
+@click.argument(
+    "source_md",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="Path to the paper's <citekey>.source.md.",
 )
 @click.option(
     "--root", "root", default=None,
@@ -1319,7 +1351,7 @@ Expected: FAIL — no such command `promote`.
 )
 @click.option("--paper-ref", "paper_ref", default=None,
               help="Resolvable paper entity ref (paper:<id>) recorded in source_refs. "
-                   "Defaults to paper:<source-md stem minus .source>.")
+                   "Defaults to paper:<source path stem minus .source>.")
 @click.option("--apply", "do_apply", is_flag=True, default=False,
               help="Execute candidates (mint/link + backlink). Default is read-only.")
 @click.option("--input", "input_path", default=None,
@@ -1406,7 +1438,7 @@ def test_minted_proposition_materializes_wasderivedfrom(tmp_path):
     from rdflib.namespace import PROV
     from science_tool.graph.materialize import _annotation_uri
     md, sp = _setup(tmp_path)
-    CliRunner().invoke(annotate_group, ["promote", "--source-md", str(md), "--root", str(tmp_path),
+    CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path),
                                         "--paper-ref", "paper:p", "--apply"])
     text = (tmp_path / "entities" / "propositions" / "genes-encode-proteins.md").read_text(encoding="utf-8")
     assert "annotation:papers/p.source#a-1" in text and "paper:p" in text
