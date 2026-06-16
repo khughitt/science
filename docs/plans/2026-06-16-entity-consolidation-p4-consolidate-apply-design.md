@@ -63,8 +63,16 @@ A new sub-group under `entities_group`, sibling to `migrate` /
   - `report_kind: cluster-digest`
   - `status: active` (the synthesis default; never a hidden status)
   - `title:` from `--title` (or a derived placeholder)
-  - `relations: [{target: <member-id>, kind: consolidates}, …]` (§7)
+  - `relations: [{predicate: "sci:consolidates", target: <member-id>}, …]` (§7)
+    — the authored-relation contract is `{predicate, target, graph_layer?}`
+    (`AuthoredTargetedRelation`), **not** `{kind, target}`.
   - the standard synthesis template body sections for a human/agent to fill.
+- **Scaffold rollback contract.** Create-then-rewrite must be atomic: if the
+  post-create frontmatter rewrite or the re-validation fails after `create_entity`
+  has already written the file, delete the newly created digest file (it is
+  brand-new this command — safe to remove) and report failure. The command never
+  leaves a half-scaffolded synthesis on disk (neither the default
+  `hypothesis-synthesis` stub nor a partially-rewritten invalid digest).
 - **Touches no members.** Output names the created digest path and the members it
   will later consolidate.
 
@@ -74,8 +82,9 @@ Report-then-apply, matching the `mark_superseded` / `archive_entities`
 `apply: bool` convention.
 
 - Re-reads the digest entity on **live state**; fails loud if the digest is
-  missing, is not `report_kind: cluster-digest`, or has no `consolidates`-kind
-  `relations:` entries. The member list is the set of those entries' `target`s.
+  missing, is not `report_kind: cluster-digest`, or has no `relations:` entry whose
+  `predicate` resolves to `sci:consolidates`. The member list is the set of those
+  entries' `target`s.
 - Re-validates each member exactly as scaffold does (exists, live, not already
   archived, consolidatable, not the digest).
 - Dry-run (default): reports the digest, the members, and per-member
@@ -159,13 +168,17 @@ never has to rehydrate the archived markdown.
 - **`cluster-digest` report_kind:** add to `_VALID_SYNTHESIS_KINDS` in
   `validate/checks/discussions.py`; mirror in the `synthesis.md` template's
   `report_kind` enum comment.
-- **New `consolidates` RelationKind (core profile relation list):** the digest→
+- **New `consolidates` RelationKind (`CORE_PROFILE.relation_kinds`):** the digest→
   member link is a *typed authored relation*, not a bespoke frontmatter field
-  (§7). Declare it with `name: consolidates`, RDF predicate `sci:consolidates`,
-  `source_kinds: [synthesis]`, and `target_kinds: []` (empty ⇒ unrestricted, per
+  (§7). Declare it with RDF `predicate: "sci:consolidates"`, `source_kinds:
+  [synthesis]`, and `target_kinds: []` (empty ⇒ unrestricted, per
   `relation_allows_kinds`) — so **no Cartesian kind-pair enumeration is needed**.
-  Add the predicate to whatever RelationKind→RDF-predicate mapping
-  `_add_authored_relation` consults.
+  Note the predicate string `sci:consolidates` already resolves to a URI via
+  `_resolve_relation_term` (the `sci:` prefix is registered), so emission does
+  **not** require registration; registering the RelationKind is what activates
+  `_validate_authored_relation_endpoint`'s synthesis→member endpoint gating + the
+  self-reference guard, and makes `consolidates` a first-class profile relation
+  alongside the others. `_profile_relation_for_predicate` matches it by predicate.
 - **Closed-vocab handling — fail loud (no auto-patch).** When a member's kind has
   a *closed* status vocabulary that lacks `archived` (a local kind with an
   explicit `statuses` list, or a non-epistemic core kind not in the list above),
@@ -184,9 +197,11 @@ frontmatter, the Entity model has no `consolidates`/`consolidated_into` field
 / `_add_authored_relation` never read them. They would be inert — neither
 validated nor emitted. So the linkage is modeled explicitly:
 
-- **Digest → members: a typed `consolidates` authored relation (live→archived).**
-  The digest carries `relations: [{target: <member>, kind: consolidates}]`. This
-  rides the *existing* typed-relation machinery: `sources.relations` →
+- **Digest → members: a typed `sci:consolidates` authored relation (live→archived).**
+  The digest carries `relations: [{predicate: "sci:consolidates", target: <member>}]`
+  — the `AuthoredTargetedRelation` contract (`{predicate, target, graph_layer?}`),
+  flattened by `_entity_nested_relations` reading `relation.predicate`/`.target`.
+  This rides the *existing* typed-relation machinery: `sources.relations` →
   `_add_authored_relation` (`materialize.py:216`), which P3 already threads
   `archive_active`/`referenced_archived` through. So when a target resolves to an
   active archived id, the emitter routes it to the archived **tombstone stub**
@@ -213,7 +228,7 @@ validated nor emitted. So the linkage is modeled explicitly:
 - Member must exist, be live, not already in the active archive index, not the
   digest id, and its kind must allow `archived` (else fail loud).
 - Digest must exist, be `report_kind: cluster-digest`, and carry at least one
-  `consolidates`-kind `relations:` entry (apply step).
+  `relations:` entry whose `predicate` resolves to `sci:consolidates` (apply step).
 - Dry-run by default; mutation only under `--apply`.
 - Append-only index; move-first-then-append with per-member rollback (incl.
   frontmatter restore).
@@ -223,17 +238,21 @@ validated nor emitted. So the linkage is modeled explicitly:
 ## 9. Testing
 
 - **scaffold:** mints a digest at the synthesis home with correct frontmatter
-  (`type`, `report_kind: cluster-digest`, and one `relations:` entry of kind
-  `consolidates` per member via the create-then-rewrite path); validates members;
-  touches no members; fails loud on a non-existent / already-archived / non-
-  consolidatable member, or the digest id appearing among members.
+  (`type`, `report_kind: cluster-digest`, and one `relations:` entry with
+  `predicate: "sci:consolidates"` per member via the create-then-rewrite path);
+  validates members; touches no members; fails loud on a non-existent /
+  already-archived / non-consolidatable member, or the digest id appearing among
+  members.
+- **scaffold rollback:** a forced rewrite/revalidate failure after `create_entity`
+  leaves **no** digest file on disk (the brand-new file is removed) and reports
+  failure.
 - **apply dry-run:** reports digest + members + destination paths; zero mutation.
 - **apply --apply:** each member stamped `status: archived` + `consolidated_into`;
   relocated under `_archive/`; index rows carry `consolidated_into` +
   `digest_insight`; digest stays live and unmoved.
 - **fail-loud:** member already archived; member is the digest; digest has no
-  `consolidates` relation; digest not `cluster-digest`; member kind closed-vocab
-  lacking `archived` (local + non-epistemic core).
+  `sci:consolidates` relation entry; digest not `cluster-digest`; member kind
+  closed-vocab lacking `archived` (local + non-epistemic core).
 - **atomic rollback:** simulate an append failure mid-apply → member file is back
   at its original path with original bytes (frontmatter rewrite reverted); index
   unchanged for that member.
