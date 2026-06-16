@@ -84,6 +84,19 @@ promotable-kind gate generalizes to `{proposition, question, hypothesis}`; figur
 (metaphor/analogy) and the seeder kinds (entity/relation) stay non-promotable — no
 truth/inquiry-apt target.
 
+**MINT-row slug semantics differ by identity strategy** (the read-only candidate list cannot
+know a numeric entity's final `NNNN` before `--apply` reserves it):
+- A **slug-strategy MINT** (proposition) row carries a **full id** `proposition:<slug>` — the
+  slug *is* the address, known pre-apply (4a behavior, unchanged).
+- A **numeric-strategy MINT** (question/hypothesis) row carries only a **proposed descriptive
+  slug** (the `-slug` suffix); the `NNNN-` number is allocated at `--apply` time by the
+  reservation. The row's `kind` disambiguates which home it mints into.
+- A **LINK** row (any kind) carries a **full same-kind entity id** (the resolved target).
+
+Override (`--input`) accordingly: editing a numeric MINT row's slug changes only the
+descriptive suffix; flipping a row to LINK requires a full **same-kind** id (a wrong-kind or
+non-existent id fails loud).
+
 ## Decision 2 — kind-parameterized promotion (`PromotionTarget`, composition not hierarchy)
 
 4a's engine is proposition-hardcoded (slug minting, `PropositionEntity`, slug-collision). 4b
@@ -96,7 +109,8 @@ precedent — no inheritance trees).
 PromotionTarget (frozen dataclass), one per promotable kind:
   kind / type / canonical_prefix      "question" | "hypothesis" | "proposition"
   default_status                      from the kind descriptor (active / proposed / draft)
-  link_corpus(project_root)           -> { normalize_claim(title): entity_id }  (THIS kind only)
+  link_corpus(project_root)           -> { normalize_claim(title): [entity_id, ...] }  (THIS kind only)
+                                         (a key mapping to >1 id is an ambiguous link target — Decision 4)
   mint(claim, slug, source_refs, as_of) -> new entity id   (writes the file)
 ```
 
@@ -118,15 +132,22 @@ chosen so **everything that can fail does so before any number is consumed**, an
 
 1. `slug = slug_for_claim_text(claim)` (reuse 4a's word-boundary slug + `len < 2` guard →
    skip `promote-claim-unsluggable`). **Before reservation.**
-2. Build the render `fields` and **render the template body in memory**, deferring only the
-   `entity_id` substitution (the one field that needs the reserved number). Template render is
-   total for a valid kind + fields; validating it here keeps surprises out of the post-reserve
-   window. **Before reservation.**
+2. **Preflight the template (pure read, before reservation).** Confirm the kind's packaged
+   template is renderable — it exists and its frontmatter + declared required sections parse
+   (`Renderer` raises `EntityTemplateError` otherwise). No number is consumed. This moves the
+   only realistic render failure out of the post-reserve window. **Render itself cannot run
+   yet:** `Renderer` reads `id` from `{from: entity_id}` via `context.get(...)`, so an absent
+   `entity_id` renders literal `id: null` (NOT a `{{}}` placeholder that could be substituted
+   afterward). The real `entity_id` must therefore be present at render time, which is why the
+   single render happens *after* reservation (step 4).
 3. **Reserve atomically:** `number, local_part, path = reserve_number_in_dir(home_dir, slug,
    stub="", label=kind)`. The reservation commits an **empty placeholder `.md`** (`stub=""`)
    whose only job is to back the claimed number; the real content is written in step 5. Fails
    loud (`EntityCommandError`) after `max_attempts`.
-4. Substitute `entity_id = f"{kind}:{local_part}"` into the rendered text.
+4. **Render once, with the real id:** `Renderer().render(kind, fields={entity_id:
+   f"{kind}:{local_part}", …})`, then insert the claim text into the lead section. After a
+   successful step-2 preflight this render is total — only the step-5 IO write can realistically
+   fail.
 5. **Final write:** `_atomic_replace_text(path, rendered)` — overwrites the empty placeholder
    with the full entity. This is the **last step**.
 
@@ -173,9 +194,15 @@ For each promotable annotation, dispatch on its `annotation_type` to the matchin
 1. `key = normalize_claim(claim_exact)` — the **same** promotion-specific normalizer as 4a
    (`" ".join(t.casefold().split())`, deliberately separate from Phase-3 `_normalize_text`,
    which must not change).
-2. If `key` equals `normalize_claim(title)` of an existing entity **of the same kind** (the
-   target's own `link_corpus` only) → **LINK** to that id.
-3. Else → **MINT** via that target.
+2. If `key` matches exactly one existing entity **of the same kind** (the target's own
+   `link_corpus` only) → **LINK** to that id.
+3. If `key` matches **two or more** existing same-kind entities (the corpus already holds
+   duplicate normalized titles) → **skip-and-count `promote-link-ambiguous`**. The shared spine
+   never silently collapses an ambiguous target to one id; the curator resolves it by supplying
+   an explicit same-kind id via `--input`. (Additive: this reason fires only when the corpus
+   actually contains duplicate-title entities, so it does not alter 4a's tested single-match
+   behavior — the proposition regression gate stays green.)
+4. Else → **MINT** via that target.
 
 **Dedup is target-local by construction:** a normalized `question` title can only link to an
 existing question, never to a same-text proposition or hypothesis — each target's
@@ -206,6 +233,9 @@ Skip-and-count per-annotation; hard-fail on structural problems (unchanged ethos
 - `promote-inactive-status` — not `OPEN`/`ACK`. (all-kind)
 - `promote-already-promoted` — backlink or derived entity present. (all-kind)
 - `promote-claim-unsluggable` — claim cannot derive a stable slug (`len < 2`). (all-kind)
+- `promote-link-ambiguous` — the claim's normalized title matches ≥2 existing same-kind
+   entities; never silently collapsed, curator resolves with an explicit id via `--input`.
+   (all-kind)
 - `promote-slug-collision` — **proposition-only** (numeric kinds cannot collide).
 
 A malformed/unparseable statement body remains a hard, loud failure (`PromotionReadError`),
@@ -222,8 +252,9 @@ not a skip.
   target; rename the skip reason.
 - **`annotation/cli.py`** — `promote_cmd` gate widens to the three promotable kinds; no new
   flags.
-- **Reused as-is:** `entity_reservation.reserve_number_in_dir`, `science_model.templates.Renderer`,
-  `entities.slug_for_claim_text` / `append_entity_source_ref` / `write_entity_file`,
+- **Reused as-is:** `science_tool.entity_reservation.reserve_number_in_dir`,
+  `science_model.templates.Renderer`, `science_tool.entities.slug_for_claim_text` /
+  `append_entity_source_ref` / `write_entity_file`,
   `graph/materialize` annotation bypass, `graph/migrate.py` audit skip, the `sci:promotedTo`
   io round-trip. No changes to Phase-3 extraction or `_normalize_text`.
 
@@ -234,6 +265,9 @@ not a skip.
 - **Numeric mint-or-link (per kind):** identical normalized claim → LINK to same-kind entity;
   novel claim → MINT a `NNNN-slug`; **cross-kind same-text does NOT link** (question vs
   proposition vs hypothesis with identical text → independent entities).
+- **Ambiguous link target:** a corpus with two same-kind entities sharing a normalized title →
+  a matching claim is skipped `promote-link-ambiguous` (never silently collapsed to one id);
+  an explicit `--input` id resolves it.
 - **Reservation under stress (riskiest new behavior):** existing-file cases (a number already
   taken → next number), and a post-reservation write failure → loud `PromotionApplyError` +
   the reserved placeholder is unlinked (no orphan); `max_attempts` exhaustion fails loud.
@@ -245,8 +279,9 @@ not a skip.
 - **Provenance/idempotency parity:** q/h minted entity carries both refs; sidecar gains
   `sci:promotedTo "<kind>:<id>"`; status unchanged; second `--apply` is a no-op; half-written
   pair suppresses; materialize emits `wasDerivedFrom` for the annotation ref for q/h too.
-- **Override (`--input`):** an edited `MINT`→`LINK <same-kind id>` is honored; a LINK target of
-  the wrong kind or a non-existent id fails loud.
+- **Override (`--input`):** editing a numeric MINT row's descriptive slug changes the minted
+  `-slug` suffix (number still allocated at apply); an edited `MINT`→`LINK <same-kind id>` is
+  honored; a LINK target of the wrong kind or a non-existent id fails loud.
 - **CLI round-trip:** `science annotate promote <path>` lists q/h candidates; `--apply` writes
   the entities + backlinks; malformed input fails loud.
 
