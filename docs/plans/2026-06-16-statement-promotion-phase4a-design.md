@@ -112,7 +112,7 @@ a minimal **valid** proposition:
 | `predicate`, `polarity` | **unset** (4c) |
 | `claim_layer`, `identification_strength`, `proxy_directness`, `supports_scope` | **unset** (4c / curator) |
 | `status` | `draft` |
-| `source_refs` | the source paper (citekey) — existing entity→paper provenance |
+| `source_refs` | `paper:<paper-id>` of the sidecar's owning paper (a **resolvable entity ref**, see Decision 3) + the `annotation:` source ref |
 
 **Reasoning fields are left unset, not defaulted.** 4a's value is the spine, not premature
 factoring; baking the template defaults (`empirical_regularity`/`observational`/…) would
@@ -154,15 +154,22 @@ This is a **data contract** (not a plan-only detail), because the existing
 resolve to a **known entity** — an annotation is not an entity, so a bare annotation ref
 would be silently dropped (`continue`). The contract:
 
-- **Stable annotation ref syntax:** `annotation:<sidecar-rel-path>#<frag>` — the sidecar path
-  relative to the project root, `#`, and the annotation's opaque `frag`. The `annotation:`
-  prefix disambiguates it from entity refs; the pair `(sidecar, frag)` is exactly what
-  `annotation/query` already resolves, so the ref round-trips to a concrete annotation.
-- **Entity side (carrier):** the proposition lists this ref in `source_refs` *alongside* the
-  source paper citekey. `graph/materialize` is **extended** (plan task) so the `source_refs`
-  loop recognizes an `annotation:`-prefixed ref, **bypasses** the entity resolver, mints the
-  annotation URI, and emits `entity_uri PROV.wasDerivedFrom <annotation-uri>`. The paper
-  citekey continues to materialize `wasDerivedFrom → paper` via the existing path.
+- **Stable annotation ref syntax (new):** `annotation:<entity-relpath>#<frag>`, where
+  `<entity-relpath>` is built by reusing the existing `query.entity_relpath_for_sidecar`
+  (the project-root-relative sidecar stem) and `<frag>` is the annotation's opaque id. This
+  is a **new** source-ref syntax, **not** the existing `resolve_id` handle: that handle is
+  `<entity-relpath>:<frag>` (no `annotation:` prefix, no `#`). The `annotation:` prefix is the
+  disambiguator the materialize bypass keys on; a small new parser strips the prefix, splits
+  on the final `#`, and adapts to the `resolve_id` handle form `<entity-relpath>:<frag>` so it
+  round-trips to a concrete annotation.
+- **Entity side (carrier):** the proposition lists **two** refs in `source_refs`: the
+  `annotation:` ref above, and `paper:<paper-id>` for the sidecar's owning paper. `paper:<id>`
+  is a resolvable entity ref → the existing loop materializes `wasDerivedFrom → paper`. (A
+  `cite:<key>` bibliography ref would **not** — `materialize` skips bibliography refs before
+  the resolver — so the paper ref must be the `paper:` entity form.) `graph/materialize` is
+  **extended** (plan task) so the `source_refs` loop recognizes an `annotation:`-prefixed ref,
+  **bypasses** the entity resolver, mints the annotation URI, and emits
+  `entity_uri PROV.wasDerivedFrom <annotation-uri>`.
 - **Annotation side (carrier):** a **new** `sci:promotedTo` predicate on the annotation
   (`io.py` read/write round-trip + an optional `promoted_to: str | None` field on the
   `Annotation` model), holding `proposition:<slug>`. Status untouched.
@@ -245,11 +252,12 @@ A malformed sidecar / unparseable annotation body is a **hard, loud failure** (n
   first MINTs, second is `promote-slug-collision` (skipped, original file untouched); an
   explicit `id` via `--input` resolves it; intra-batch collision among two MINTs is detected
   in the read-only pass.
-- **Provenance unit:** entity carries the `annotation:<sidecar>#<frag>` ref + paper in
-  `source_refs`; sidecar gains `sci:promotedTo`; annotation status unchanged. **Materialize
-  test:** an `annotation:`-prefixed `source_ref` emits `proposition prov:wasDerivedFrom
-  <annotation-uri>` (the new bypass branch), and the `io.py` round-trip preserves
-  `sci:promotedTo`.
+- **Provenance unit:** entity carries the `annotation:<entity-relpath>#<frag>` ref +
+  `paper:<paper-id>` in `source_refs`; sidecar gains `sci:promotedTo`; annotation status
+  unchanged. **Materialize test:** an `annotation:`-prefixed `source_ref` emits `proposition
+  prov:wasDerivedFrom <annotation-uri>` (the new bypass branch) and `paper:<id>` still emits
+  `wasDerivedFrom → paper`; a `cite:<key>` ref emits **no** such edge (regression guard); the
+  `io.py` round-trip preserves `sci:promotedTo`.
 - **Override unit:** an edited `--input` flips a `MINT` to `LINK <slug>` (and a bad link
   target fails loud); an explicit mint `id` is honored; a re-used explicit id whose existing
   proposition has a different claim fails loud.
