@@ -31,6 +31,7 @@ class RunResult:
     flags: list[Flag]
     structural_failed: bool
     coverage: Coverage
+    rows_checked: int
 
 
 def _read_table(table_path: Path) -> pd.DataFrame:
@@ -70,7 +71,11 @@ def run_qa_datapackage(datapackage_path: Path, resource_name: str, report_dir: P
     return _run_with_config(config, pkg_dir / resource["path"], report_dir)
 
 
-def _run_with_config(config: QAConfig, table_path: Path, report_dir: Path) -> RunResult:
+def _evaluate(config: QAConfig, table_path: Path) -> RunResult:
+    """Compile-independent core: resolve program, read table, run checks.
+
+    Returns a RunResult (incl. rows_checked = len(table)). Writes nothing, reconciles
+    nothing — so the package runner can call it per-resource and write ONE report."""
     program = resolve_program(config.program)
     built_in_ids = {spec.check_id for spec in program.checks}
     checks = [*program.checks, *load_project_local(config.project_local, reserved_check_ids=built_in_ids)]
@@ -94,11 +99,18 @@ def _run_with_config(config: QAConfig, table_path: Path, report_dir: Path) -> Ru
             entry = _run_invocation(spec, inv, table, config, flags)
             coverage.entries.append(entry)
 
-    write_reports(flags, report_dir=report_dir, rows_checked=len(table), coverage=coverage)
-    distribution_ids = [f.flag_id for f in flags if f.severity == SEVERITY_DISTRIBUTION]
-    reconcile_dispositions(report_dir, distribution_ids)
     structural_failed = any(f.severity == SEVERITY_STRUCTURAL for f in flags)
-    return RunResult(flags=flags, structural_failed=structural_failed, coverage=coverage)
+    return RunResult(flags=flags, structural_failed=structural_failed,
+                     coverage=coverage, rows_checked=len(table))
+
+
+def _run_with_config(config: QAConfig, table_path: Path, report_dir: Path) -> RunResult:
+    result = _evaluate(config, table_path)
+    write_reports(result.flags, report_dir=report_dir,
+                  rows_checked=result.rows_checked, coverage=result.coverage)
+    distribution_ids = [f.flag_id for f in result.flags if f.severity == SEVERITY_DISTRIBUTION]
+    reconcile_dispositions(report_dir, distribution_ids)
+    return result
 
 
 def _run_invocation(spec: CheckSpec, inv: Invocation, table: pd.DataFrame,

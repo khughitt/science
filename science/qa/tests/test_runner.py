@@ -181,3 +181,14 @@ def test_datapackage_numeric_missing_sentinel_fires_structural(tmp_path):
     assert result.structural_failed is True
     ids = {f["flag_id"] for f in json.loads((tmp_path / "qa_report.json").read_text())["flags"]}
     assert "numeric-column/missing_sentinel/v/-" in ids
+
+
+def test_run_qa_datapackage_exposes_rows_checked(tmp_path):
+    import json as _json
+    from science_qa.runner import run_qa_datapackage
+    res = {"name": "obs", "path": "obs.parquet",
+           "schema": {"fields": [{"name": "id", "type": "integer"}]}}
+    pd.DataFrame({"id": [1, 2, 3, 4]}).to_parquet(tmp_path / "obs.parquet")
+    (tmp_path / "datapackage.json").write_text(_json.dumps({"name": "p", "resources": [res]}))
+    result = run_qa_datapackage(tmp_path / "datapackage.json", "obs", tmp_path)
+    assert result.rows_checked == 4
