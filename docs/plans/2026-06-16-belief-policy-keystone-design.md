@@ -39,6 +39,9 @@ the Phase-2 scalar that still reads those globals.
 `BeliefPolicy` — a frozen dataclass holding **only today's implicit knobs**:
 
 - rank tables: `evidence_type_rank`, `evidence_role_rank`, `strength_rank`
+- ordinal penalty: `curation_step_penalty` (the `CURATION_STEP_PENALTY` that `quality_key`
+  consumes in the ordinal winner-selection path). `PROXY_STEP_PENALTY` is **not** included —
+  it is read only by the Phase-2 scalar (`belief_scalar.py`), which is out of scope.
 - reduction / vocabulary constants: `gated_proxy`, `diagnostic_roles`, the independence
   tokens (`independent`, `shared_source`, `circular`), `scope_whole_claim`
 - magnitude thresholds: the literals currently inside `aggregate_belief`
@@ -65,8 +68,11 @@ so it sits below `belief.py` in the import graph — no cycle.
 
 - `aggregate_belief(units, *, policy: BeliefPolicy = DEFAULT_BELIEF_POLICY) -> BeliefResult`.
   Thread `policy` through the helpers that read the constants — `reduce_units`,
-  `is_decisive_refutation`, `quality_key`, `is_proxy_gated`, `is_diagnostic`, and the
-  ordinal `*_steps` reads — so they consume policy fields rather than module globals.
+  `is_decisive_refutation`, `quality_key` (reads the rank tables + `curation_step_penalty`),
+  `is_proxy_gated`, `is_diagnostic` — so they consume policy fields rather than module
+  globals. The `type_steps` / `role_steps` / `strength_steps` helpers live in
+  `belief_scalar.py` and feed only the Phase-2 scalar; they are **out of this slice** and
+  are not threaded.
 - `BeliefResult` gains `policy_id: str` and `policy_version: str`, **with defaults sourced
   from `DEFAULT_BELIEF_POLICY`** (`policy_id = DEFAULT_BELIEF_POLICY.policy_id`,
   `policy_version = DEFAULT_BELIEF_POLICY.version`). `aggregate_belief` sets them explicitly
@@ -90,11 +96,20 @@ These are the only two places a belief result's identity escapes the engine toda
 
 - `graph/belief_snapshot.py` `snapshot_records()` — add `policy_id` / `policy_version` to
   both row branches (the `BundleBeliefResult` branch and the single-claim `BeliefResult`
-  branch) of the JSONL belief history. The snapshot `_key` (dedup identity) is unchanged;
-  the policy fields are additive row content.
+  branch) of the JSONL belief history. **Add `policy_id` / `policy_version` to the snapshot
+  `_key`** (dedup identity), analogous to `config_version`. Today `_key` is
+  `(as_of, claim, input_hashes, config_version, scalar_enabled)`; without this, a future
+  `version` bump with unchanged evidence inputs and scalar config would make
+  `append_snapshots()` treat the new belief row as a duplicate and drop it — which would
+  silently undercut the "versioned policy" contract.
 - `model/patch.py` — emit `SCI_NS.beliefPolicyId` and `SCI_NS.beliefPolicyVersion`
   alongside the existing `SCI_NS.beliefMagnitude` patch-summary triples (the only place
-  belief identity reaches RDF today).
+  belief identity reaches RDF today). `emit_patch_trig()` only persists the caller-supplied
+  `PatchEdge.belief_magnitude`, so for this default-only slice it stamps
+  `DEFAULT_BELIEF_POLICY.policy_id` / `version` **unconditionally** — there is a single
+  policy and `belief_magnitude` was computed under it. (When project-selectable policies
+  arrive, `PatchEdge` gains the policy identity of the result that produced
+  `belief_magnitude` and `emit_patch_trig()` reads it from there instead.)
 
 ## Boundary (explicit, deferred)
 
@@ -129,6 +144,9 @@ These are the only two places a belief result's identity escapes the engine toda
    `BundleBeliefResult` carries that `policy_id` / `policy_version`.
 6. **Persistence:** snapshot rows (both branches) carry `policy_id` / `policy_version`, and
    the patch RDF summary carries `SCI_NS.beliefPolicyId` / `SCI_NS.beliefPolicyVersion`.
+7. **Dedup honors policy:** two snapshot rows identical except for `policy_version` both
+   survive `append_snapshots()` (the new row is not dropped as a duplicate), proving
+   `policy_id` / `policy_version` are part of `_key`.
 
 ## Success criteria
 
