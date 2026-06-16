@@ -27,7 +27,7 @@
 | `science/src/science_tool/annotation/promote.py` | Decision core, targets, mint, apply, override | Heavily extended |
 | `science/src/science_tool/annotation/cli.py` | `promote_cmd` — widen to 3 kinds, per-kind override | Modified (one command) |
 | `science/tests/test_annotation_promote.py` | Decision/queue/mint/corpus units | Extended + a few 4a constructions updated |
-| `science/tests/test_annotate_promote_cli.py` | CLI round-trip | Extended |
+| `science/tests/test_annotate_promote_cli.py` | Proposition CLI round-trip | Regression gate (unchanged) |
 | `science/tests/test_promote_numeric_mint.py` | Numeric mint + reservation + rollback units | **Create** |
 | `science/tests/test_promote_qh_integration.py` | q/h promote end-to-end (disk + provenance + idempotency) | **Create** |
 | `docs/conventions/annotation-tokens.md` | Promotion vocab | Append a 4b note |
@@ -745,17 +745,48 @@ def load_corpora(project_root: Path) -> tuple[dict[str, PromotionCorpus], set[st
     return corpora, derived
 ```
 
-- [ ] **Step 4: Run to verify pass + no other unit regressed**
+- [ ] **Step 4: Migrate the three proposition apply-tests off the removed `load_corpus`**
+
+`load_corpus` is gone, so the three pre-existing proposition tests that import it
+(`test_apply_mints_proposition_and_backlinks`, `test_apply_links_to_existing_appends_both_refs_preserves_prose`,
+`test_apply_is_idempotent`) must be repointed to `load_corpora` + `decide_all` — a mechanical
+swap that preserves every assertion (proposition behavior is unchanged). In each test:
+
+- change the import line `apply_candidates, collect_promotable, decide_candidates, load_corpus,`
+  → `apply_candidates, build_targets, collect_promotable, decide_all, load_corpora,`
+- replace `corpus = load_corpus(tmp_path)` →
+  `corpora, derived = load_corpora(tmp_path)`
+- replace `collect_promotable(..., derived_refs=corpus.derived_refs)` →
+  `collect_promotable(..., derived_refs=derived)`
+- replace `decide_candidates(promotable, corpus)` →
+  `decide_all(promotable, corpora, build_targets())`
+
+For `test_apply_is_idempotent`, the same swap inside its local `run()`:
+
+```python
+    def run():
+        corpora, derived = load_corpora(tmp_path)
+        pr, _ = collect_promotable(read_sidecar_strict(sp), sp, tmp_path, derived_refs=derived)
+        return apply_candidates(decide_all(pr, corpora, build_targets()), sidecar_path=sp,
+                                project_root=tmp_path, paper_ref="paper:p", as_of=date(2026, 6, 16))
+```
+
+(These tests still assert identical proposition outcomes — mint at `cells-divide-rapidly.md`,
+link appends both refs + preserves prose, second run mints 0 — so they remain the proposition
+regression gate, now exercised through the generalized loader/orchestrator.)
+
+- [ ] **Step 5: Run to verify pass + no other unit regressed**
 
 Run: `cd science && uv run --frozen pytest tests/test_annotation_promote.py -q`
-Expected: PASS.
+Expected: PASS (the `load_corpora` unit + the three migrated proposition apply-tests + all
+decision units). A leftover `load_corpus` import anywhere → `ImportError` here.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 cd ~/d/science/.worktrees/sub-article-annotation-phase4b
 git add science/src/science_tool/annotation/promote.py science/tests/test_annotation_promote.py
-git commit -m "feat(promote): load_corpora (per-kind index + global derived-refs)"
+git commit -m "feat(promote): load_corpora (per-kind index + global derived-refs); migrate proposition tests"
 ```
 
 ---
@@ -813,6 +844,28 @@ def test_override_numeric_mint_slug_strips_kind_prefix():
     rows = [{"annotation": "annotation:a#f1", "decision": "MINT", "slug": "question:better-slug"}]
     [c] = apply_overrides(base, rows, existing_refs=set())
     assert c.decision == "MINT" and c.slug == "better-slug" and c.kind == "question"
+
+
+def _q_mint_base():
+    return [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="Q text", subject=None,
+                               object=None, decision="MINT", slug="q-text", reason="new entity",
+                               kind="question")]
+
+
+def test_override_mint_wrong_kind_prefix_fails():
+    from science_tool.annotation.promote import apply_overrides
+    rows = [{"annotation": "annotation:a#f1", "decision": "MINT", "slug": "hypothesis:foo"}]
+    with pytest.raises(PromotionOverrideError):
+        apply_overrides(_q_mint_base(), rows, existing_refs=set())
+
+
+def test_override_mint_invalid_slug_fails():
+    # A slug that can't pass validate_slug must fail as a clean PromotionOverrideError,
+    # not leak EntityCommandError from reserve_entity at apply time.
+    from science_tool.annotation.promote import apply_overrides
+    rows = [{"annotation": "annotation:a#f1", "decision": "MINT", "slug": "Not A Slug!"}]
+    with pytest.raises(PromotionOverrideError):
+        apply_overrides(_q_mint_base(), rows, existing_refs=set())
 ```
 
 Also add to the import at the top of the test file:
@@ -821,8 +874,8 @@ the existing import).
 
 - [ ] **Step 2: Run to verify they fail**
 
-Run: `cd science && uv run --frozen pytest tests/test_annotation_promote.py -k "decide_all or override_link_must or override_numeric_mint" -q`
-Expected: FAIL — `decide_all` missing; `apply_overrides` lacks same-kind/kind-prefix handling.
+Run: `cd science && uv run --frozen pytest tests/test_annotation_promote.py -k "decide_all or override_" -q`
+Expected: FAIL — `decide_all` missing; `apply_overrides` lacks same-kind/kind-prefix/slug-validation handling.
 
 - [ ] **Step 3: Add `decide_all` and generalize `apply_overrides`**
 
@@ -861,12 +914,27 @@ Generalize the LINK/MINT branches of `apply_overrides` (the `decision == "LINK"`
                 )
             out.append(dataclasses.replace(c, decision="LINK", slug=slug, reason="curator override: link"))
         elif decision == "MINT":
-            prefix = f"{c.kind}:"
-            bare = slug.split(":", 1)[1] if isinstance(slug, str) and slug.startswith(prefix) else slug
+            bare = slug
+            if isinstance(slug, str) and ":" in slug:
+                pfx, rest = slug.split(":", 1)
+                if pfx != c.kind:
+                    raise PromotionOverrideError(
+                        f"MINT override slug {slug!r} has the wrong kind prefix for a {c.kind}"
+                    )
+                bare = rest
             if not bare:
                 raise PromotionOverrideError(f"MINT override for {c.ref!r} requires a slug")
+            # Validate eagerly here so a bad curator slug fails as a clean ClickException,
+            # not an uncaught EntityCommandError from reserve_entity(..., slug=...) at apply time.
+            try:
+                validate_slug(bare)
+            except EntityCommandError as exc:
+                raise PromotionOverrideError(f"MINT override slug {bare!r} is invalid: {exc}") from exc
             out.append(dataclasses.replace(c, decision="MINT", slug=bare, reason="curator override: mint"))
 ```
+
+Add `validate_slug` to the existing `from science_tool.entities import (...)` block at the top of
+`promote.py` (`EntityCommandError` is already imported).
 
 - [ ] **Step 4: Rewrite `promote_cmd` to use the orchestration**
 
@@ -959,119 +1027,114 @@ a second `--apply` is a no-op; an ambiguous corpus skips; the materialized graph
 
 - [ ] **Step 1: Write the failing integration tests**
 
-Create `science/tests/test_promote_qh_integration.py`. Reuse the sidecar/annotation builder
-pattern from `test_annotate_promote_cli.py` (inspect that file for the exact project-scaffold
-and `_statement_ann`/sidecar-write helpers it uses, and mirror them here):
+Create `science/tests/test_promote_qh_integration.py`. The scaffold below mirrors the **actual**
+`_setup` helper in `science/tests/test_annotate_promote_cli.py` (a `papers/p.source.md` sidecar
+with one OPEN statement annotation under project root `tmp_path`), parameterized by kind:
 
 ```python
 import json
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 
 from click.testing import CliRunner
 
 from science_tool.annotation import io as anno_io
 from science_tool.annotation.cli import annotate_group
-from science_tool.annotation.promote import collect_promotable, decide_all, apply_candidates, build_targets, load_corpora
+from science_tool.annotation.model import (
+    Annotation, Motivation, SpecificResource, Status, TextQuoteSelector, TextualBody,
+)
+from science_tool.annotation.query import read_sidecar_strict
 
 
-def _write_sidecar(md: Path, anns):
-    sidecar_path = anno_io.sidecar_for_markdown(md)
-    anno_io.write_sidecar(sidecar_path, anno_io.Sidecar(annotations=tuple(anns)))
-    return sidecar_path
+def _setup_statement(tmp_path: Path, *, atype: str, exact: str, frag: str = "s1"):
+    """Minimal project: a papers/p.source.md sidecar with one OPEN statement annotation."""
+    (tmp_path / "entities" / "propositions").mkdir(parents=True)
+    (tmp_path / "papers").mkdir()
+    md = tmp_path / "papers" / "p.source.md"
+    md.write_text(f"{exact}.\n", encoding="utf-8")
+    sp = anno_io.sidecar_for_markdown(md)
+    ann = Annotation(
+        id=frag,
+        target=SpecificResource(source="p.source.md",
+                                selector=TextQuoteSelector(exact=exact, prefix="", suffix="")),
+        bodies=(TextualBody(value='{"section":"abstract","stance":"asserted"}', format="application/json"),),
+        motivation=Motivation.CLASSIFYING, annotation_type=atype,
+        source="llm-annot:m:paper-annotate-v1", status=Status.OPEN,
+        creator="paper-annotate", created=datetime(2026, 6, 16, tzinfo=timezone.utc),
+        content_hash="0" * 64,  # required for llm-annot: source
+    )
+    anno_io.write_sidecar(sp, anno_io.Sidecar(annotations=(ann,)))
+    return md, sp
 
 
 def test_question_promote_round_trip(tmp_path):
-    # Build a minimal project with a .source.md sidecar carrying one question annotation,
-    # then run `annotate promote --apply` and assert the entity + provenance + backlink.
-    from tests.test_annotate_promote_cli import build_project, statement_annotation  # reuse 4a helpers
-    project = build_project(tmp_path)  # returns project root with a paper + .source.md
-    md = project / "doc" / "background" / "papers" / "smith2020.source.md"
-    _write_sidecar(md, [statement_annotation("q1", "What regulates X?", atype="question")])
+    from science_tool.graph.materialize import _annotation_uri
+    md, sp = _setup_statement(tmp_path, atype="question", exact="What regulates X", frag="q1")
+    r = CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path), "--apply"])
+    assert r.exit_code == 0, r.output
 
-    runner = CliRunner()
-    result = runner.invoke(annotate_group, ["promote", str(md), "--root", str(project), "--apply"])
-    assert result.exit_code == 0, result.output
-
-    qdir = project / "entities" / "questions"
-    minted = list(qdir.glob("0001-*.md"))
+    qdir = tmp_path / "entities" / "questions"
+    minted = list(qdir.glob("*.md"))                # count ALL question files, not just 0001-*
     assert len(minted) == 1
     text = minted[0].read_text(encoding="utf-8")
-    assert "paper:smith2020" in text
-    assert "annotation:" in text and "#q1" in text
-    assert "## Summary" in text and "What regulates X?" in text
-    # sidecar backlink set, status untouched
-    sidecar = anno_io.read_sidecar(anno_io.sidecar_for_markdown(md))
-    ann = next(a for a in sidecar.annotations if a.id == "q1")
+    assert minted[0].name.startswith("0001-")
+    assert "status: active" in text and "phase:" not in text
+    assert "paper:p" in text
+    assert "annotation:papers/p.source#q1" in text
+    assert "## Summary" in text and "What regulates X" in text
+    # provenance: the annotation ref mints a stable wasDerivedFrom URI (same minter 4a uses)
+    assert str(_annotation_uri("annotation:papers/p.source#q1")).endswith("#q1")
+    # backlink set, status untouched
+    ann = read_sidecar_strict(sp).annotations[0]
     assert ann.promoted_to is not None and ann.promoted_to.startswith("question:0001-")
+    assert ann.status == Status.OPEN
 
-    # second --apply is a no-op (idempotent): no second entity minted
-    result2 = runner.invoke(annotate_group, ["promote", str(md), "--root", str(project), "--apply"])
-    assert result2.exit_code == 0, result2.output
-    assert len(list(qdir.glob("0001-*.md"))) == 1
+    # second --apply is a no-op (idempotent): still exactly one question entity total
+    r2 = CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path), "--apply"])
+    assert r2.exit_code == 0, r2.output
+    assert len(list(qdir.glob("*.md"))) == 1
 
 
 def test_hypothesis_promote_is_candidate_phase(tmp_path):
-    from tests.test_annotate_promote_cli import build_project, statement_annotation
-    project = build_project(tmp_path)
-    md = project / "doc" / "background" / "papers" / "smith2020.source.md"
-    _write_sidecar(md, [statement_annotation("h1", "X drives Y", atype="hypothesis")])
-
-    runner = CliRunner()
-    result = runner.invoke(annotate_group, ["promote", str(md), "--root", str(project), "--apply"])
-    assert result.exit_code == 0, result.output
-    text = next((project / "entities" / "hypotheses").glob("0001-*.md")).read_text(encoding="utf-8")
-    assert "phase: candidate" in text
+    md, sp = _setup_statement(tmp_path, atype="hypothesis", exact="X drives Y", frag="h1")
+    r = CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path), "--apply"])
+    assert r.exit_code == 0, r.output
+    minted = list((tmp_path / "entities" / "hypotheses").glob("*.md"))
+    assert len(minted) == 1
+    text = minted[0].read_text(encoding="utf-8")
+    assert "status: proposed" in text and "phase: candidate" in text
     assert "## Organizing Conjecture" in text and "X drives Y" in text
 
 
 def test_idempotent_second_apply_via_json(tmp_path):
-    from tests.test_annotate_promote_cli import build_project, statement_annotation
-    project = build_project(tmp_path)
-    md = project / "doc" / "background" / "papers" / "smith2020.source.md"
-    _write_sidecar(md, [statement_annotation("q1", "What regulates X?", atype="question")])
-    runner = CliRunner()
-    runner.invoke(annotate_group, ["promote", str(md), "--root", str(project), "--apply"])
-    res = runner.invoke(annotate_group, ["promote", str(md), "--root", str(project), "--apply", "--format", "json"])
+    md, sp = _setup_statement(tmp_path, atype="question", exact="What regulates X", frag="q1")
+    CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path), "--apply"])
+    res = CliRunner().invoke(annotate_group,
+                             ["promote", str(md), "--root", str(tmp_path), "--apply", "--format", "json"])
     assert res.exit_code == 0, res.output
     payload = json.loads(res.output)
     assert payload["minted"] == 0 and payload["linked"] == 0
     assert payload["skipped"].get("promote-already-promoted") == 1
 ```
 
-> **Implementer note:** `build_project` / `statement_annotation` are illustrative names — open
-> `science/tests/test_annotate_promote_cli.py` first and reuse whatever its actual scaffold +
-> annotation-builder helpers are named (the 4a CLI tests already construct a paper + `.source.md`
-> project). If those helpers are module-private, lift the minimal scaffold inline rather than
-> importing private names.
+> **Implementer note:** This scaffold is copied from the real `_setup` in
+> `test_annotate_promote_cli.py` (verify it still matches before relying on it). `_annotation_uri`
+> is imported from `science_tool.graph.materialize` exactly as the 4a CLI test
+> `test_minted_proposition_materializes_wasderivedfrom` does.
 
-- [ ] **Step 2: Run to verify they fail**
+- [ ] **Step 2: Run the integration tests**
 
 Run: `cd science && uv run --frozen pytest tests/test_promote_qh_integration.py -q`
-Expected: FAIL (initially possibly on helper wiring — fix the scaffold imports first, then the
-assertions drive the behavior).
+Expected: **PASS** — Tasks 1–6 already implement this behavior, so these acceptance tests are
+green-by-construction. They are not a fail-first TDD pair; they pin the end-to-end contract. If
+any assertion is red, it pinpoints a real gap — fix it in `promote.py` (or the graph layer) and
+note the fix in the commit message rather than weakening the assertion.
 
-- [ ] **Step 3: Make them pass**
-
-No new production code should be required — Tasks 1–6 implement the behavior. This task is
-green-by-construction once the test scaffold is wired correctly. If a genuine gap surfaces (e.g.
-a materialize edge missing for q/h), fix it in `promote.py`/`graph` and note it in the commit.
-
-- [ ] **Step 4: Add a materialize provenance assertion**
-
-Add one test that builds the graph and asserts the annotation `wasDerivedFrom` edge exists for
-a promoted question (mirror the 4a materialize test in `tests/test_graph_materialize.py` — find
-the proposition `annotation:` `wasDerivedFrom` case and parameterize/clone it for a `question:`
-entity). Confirm `paper:smith2020` also yields a `wasDerivedFrom → paper` edge.
-
-Run: `cd science && uv run --frozen pytest tests/test_promote_qh_integration.py tests/test_graph_materialize.py -q`
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 cd ~/d/science/.worktrees/sub-article-annotation-phase4b
-git add science/tests/test_promote_qh_integration.py science/tests/test_graph_materialize.py
+git add science/tests/test_promote_qh_integration.py
 git commit -m "test(promote): end-to-end question/hypothesis promotion (disk, provenance, idempotency)"
 ```
 
