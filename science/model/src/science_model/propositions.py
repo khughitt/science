@@ -55,6 +55,10 @@ class PropositionEntity(ProjectEntity):
     # Reasoning metadata
     claim_layer: ClaimLayer | None = None
     identification_strength: IdentificationStrength | None = None
+    # Versioned identity of the synthesizer that authored the reasoning fields above
+    # (Phase 4c: "llm-synth:<model>:proposition-synthesize-v1"). Answers "is this
+    # reasoning stale under the current synthesizer?"; a free string the validators ignore.
+    reasoning_source: str | None = None
 
     @model_validator(mode="after")
     def _validate_relational_fields(self) -> "PropositionEntity":
