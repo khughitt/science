@@ -503,8 +503,9 @@ def check_belief_fragile_single_line(ctx: ValidateContext) -> Iterator[Result]:
 
 # ---------------------------------------------------------------------------
 # Check 8: belief.nonreproducible (ERROR) — golden snapshot comparison
-#   Equal inputs (input_hashes + config_version + scalar_enabled) must reproduce
-#   the stored belief. Differing inputs are a legitimate change, not flagged.
+#   Equal inputs (input_hashes + config_version + scalar_enabled + policy identity)
+#   must reproduce the stored belief. Differing inputs OR a different BeliefPolicy
+#   are a legitimate change, not flagged.
 # ---------------------------------------------------------------------------
 
 _GOLDEN_SCALAR_FIELDS = (
@@ -515,8 +516,9 @@ _GOLDEN_SCALAR_FIELDS = (
 
 @Check(section="evidence lines", order=30)
 def check_belief_nonreproducible(ctx: ValidateContext) -> Iterator[Result]:
-    """#8 golden: equal inputs (input_hashes + config_version + scalar_enabled) must reproduce
-    the stored belief. Differing inputs are legitimate change, not flagged."""
+    """#8 golden: equal inputs (input_hashes + config_version + scalar_enabled + policy identity)
+    must reproduce the stored belief. Differing inputs OR a different BeliefPolicy are a
+    legitimate change, not flagged."""
     from science_tool.graph.belief_snapshot import make_snapshots, read_snapshots
 
     graph_file = ctx.project_root / "knowledge" / "graph.trig"
@@ -533,6 +535,8 @@ def check_belief_nonreproducible(ctx: ValidateContext) -> Iterator[Result]:
             and sorted(r["input_hashes"]) == sorted(now["input_hashes"])
             and r["config_version"] == now["config_version"]
             and r["scalar_enabled"] == now["scalar_enabled"]
+            and r["policy_id"] == now["policy_id"]
+            and r["policy_version"] == now["policy_version"]
         ]
         if not matches:
             continue
