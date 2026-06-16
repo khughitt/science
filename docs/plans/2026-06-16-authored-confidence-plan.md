@@ -99,6 +99,7 @@ rtk git commit -m "feat(belief): add MAGNITUDE_NAMES canonical magnitude tuple (
 **Files:**
 - Modify: `src/science_tool/graph/belief_policy.py`
 - Test: `tests/test_authored_confidence_policy.py` (create)
+- Test: `tests/test_belief_policy.py` (modify — the one direct `BeliefPolicy(...)` constructor)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -684,19 +685,22 @@ def test_existing_authored_capped_is_preserved():
     assert out["authored_capped"] is True
 ```
 
-1b. Append to `tests/test_bundle_belief_snapshot.py` a test proving the **bundle** row branch persists the flag. Reuse the file's existing bundle-graph harness (the same `k, prov` setup `test_snapshot_emits_mechanism_bundle_row` uses — copy its graph-construction lines, then assert on the row):
+1b. Append to `tests/test_bundle_belief_snapshot.py` a test proving the **bundle** row branch persists the flag. The file already provides module-level `_strong(k, prov, target, gid)`, `MECH`, `PA`, `PB`, and imports `Graph`, `snapshot_records`, `SCI_NS`, `RDF` — reuse them directly (this is the exact graph `test_snapshot_emits_mechanism_bundle_row` builds):
 
 ```python
 def test_snapshot_bundle_row_persists_authored_capped():
-    # Build the same mechanism-bundle graph the existing bundle-row test uses, then assert the
-    # emitted bundle row carries authored_capped (False — strong empirical members).
-    k, prov, target = _bundle_graph()   # use the file's existing builder / inline its setup
+    k, prov = Graph(), Graph()
+    k.add((MECH, RDF.type, SCI_NS.Mechanism))
+    for p in (PA, PB):
+        k.add((p, RDF.type, SCI_NS.Proposition))
+        k.add((MECH, SCI_NS.hasProposition, p))
+    _strong(k, prov, PA, "g1")
+    _strong(k, prov, PA, "g2")
+    _strong(k, prov, PB, "g3")
     rows = snapshot_records(k, prov, scalar_enabled=False, as_of="2026-06-11")
     row = next(r for r in rows if r["is_bundle"])
-    assert row["authored_capped"] is False
+    assert row["authored_capped"] is False  # strong empirical members -> ceiling never fires
 ```
-
-If `tests/test_bundle_belief_snapshot.py` has no reusable `_bundle_graph()` helper, inline the exact graph-construction lines from `test_snapshot_emits_mechanism_bundle_row` (the `_strong(k, prov, target, gid)` calls plus the mechanism/step wiring) into the new test before calling `snapshot_records`.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
