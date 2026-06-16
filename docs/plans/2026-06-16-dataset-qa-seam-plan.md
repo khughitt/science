@@ -271,12 +271,26 @@ def test_base_magnitude_matches_inline_and_qa_failed_not_qualifying():
     # A QA-failed direct test is NOT a qualifying direct test.
     assert is_qualifying_direct_test(unit(qa=("dataset:bad",)), policy=P) is False
     assert is_qualifying_direct_test(unit(), policy=P) is True
+
+
+def test_contested_groups_for_intersects_support_and_dispute_groups():
+    from science_tool.graph.belief import EvidenceUnit, _contested_groups_for
+
+    def u(stance, group):
+        return EvidenceUnit(line_uri=f"{stance}-{group}", stance=stance, strength="strong",
+            independence="independent", independence_group=group, evidence_role="direct_test",
+            evidence_type="empirical_data", dispute_scope=None, proxy_directness=None,
+            has_measurement_model=False, source=None, observability_keys=())
+
+    support = [u("supports", "g1"), u("supports", "g2"), u("supports", None)]
+    dispute = [u("disputes", "g1"), u("disputes", "g3")]
+    assert _contested_groups_for(support, dispute) == {"g1"}   # only the shared group; None ignored
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `PYTHONPATH=src:model/src rtk proxy uv run --frozen pytest tests/test_belief_aggregate.py::test_base_magnitude_matches_inline_and_qa_failed_not_qualifying -v`
-Expected: FAIL — `_base_magnitude` undefined; `is_qualifying_direct_test` lacks the QA clause.
+Run: `PYTHONPATH=src:model/src rtk proxy uv run --frozen pytest tests/test_belief_aggregate.py::test_base_magnitude_matches_inline_and_qa_failed_not_qualifying tests/test_belief_aggregate.py::test_contested_groups_for_intersects_support_and_dispute_groups -v`
+Expected: FAIL — `_base_magnitude`/`_contested_groups_for` undefined; `is_qualifying_direct_test` lacks the QA clause.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -470,10 +484,37 @@ def test_qa_hard_ceiling_edge_clean_supported_failed_lifts_to_well_supported():
     assert res.qa_dataset_capped is True
 ```
 
+Then append the **required** contested-group clean-only test (locks the `_contested_groups_for`
+recomputation in the stands-on-its-own branch — a contested group is present, and the QA-clean
+support must still stand on its own):
+
+```python
+def test_qa_no_cap_with_contested_group_present_clean_stands_on_its_own():
+    from science_tool.graph.belief import BeliefMagnitude, EvidenceUnit, aggregate_belief
+    from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY as P
+
+    def u(uri, stance, role, group=None, qa=()):
+        return EvidenceUnit(line_uri=uri, stance=stance, strength="strong",
+            independence="independent", independence_group=group, evidence_role=role,
+            evidence_type="empirical_data", dispute_scope=None, proxy_directness=None,
+            has_measurement_model=False, source=None, observability_keys=(), qa_failed_datasets=qa)
+
+    units = [
+        u("s1", "supports", "direct_test"),                 # ungrouped clean direct test
+        u("s2", "supports", "proxy_support"),               # ungrouped clean -> clean pair reaches WELL_SUPPORTED
+        u("s3", "supports", "proxy_support", qa=("dataset:bad",)),  # failed-QA, not load-bearing
+        u("s4", "supports", "direct_test", group="g1"),     # support winner of contested g1
+        u("d1", "disputes", "proxy_support", group="g1"),   # dispute winner of g1 -> g1 contested
+    ]
+    res = aggregate_belief(units, policy=P)
+    # clean-only support (s1,s2,s4) recomputes g1 as still contested, excludes s4, leaving
+    # s1+s2 which reach WELL_SUPPORTED on their own -> no cap.
+    assert res.magnitude == BeliefMagnitude.WELL_SUPPORTED
+    assert res.qa_dataset_capped is False
+```
+
 Run: `PYTHONPATH=src:model/src rtk proxy uv run --frozen pytest tests/test_belief_aggregate.py -v`
-Expected: PASS. (If a contested-group-specific edge is exercisable with grouped units, add a
-test that a group contested only via a removed failed-QA unit lets clean support stand on its
-own; otherwise the `_contested_groups_for` unit coverage in Task 4 suffices.)
+Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -537,6 +578,53 @@ def test_dependence_datasets_by_line_excludes_cited_role():
     p.add((usage, SCI_NS.usageOverlap, Literal("unknown")))
 
     assert dependence_datasets_by_line(k, p).get(line, set()) == set()
+
+
+def test_dependence_datasets_by_line_includes_virtual_member():
+    from rdflib import Graph, Literal, RDF, URIRef
+    from rdflib.namespace import PROV
+    from science_tool.graph.dataset_independence import dependence_datasets_by_line
+    from science_tool.graph.io import CITO_NS, SCI_NS
+
+    k, p = Graph(), Graph()
+    line = URIRef("https://example.org/p/evidence-line/ev-v")
+    target = URIRef("https://example.org/p/proposition/cv")
+    consumer = URIRef("https://example.org/p/virtual/geneset-member/m1")   # virtual member URI
+    ds = URIRef("https://example.org/p/dataset/vds")
+    k.add((line, RDF.type, SCI_NS.EvidenceLine))
+    k.add((line, CITO_NS.supports, target))
+    p.add((line, PROV.wasDerivedFrom, consumer))                          # line derives from it
+    usage = URIRef("https://example.org/p/usage/v")
+    p.add((consumer, SCI_NS.hasDatasetUsage, usage))
+    p.add((usage, RDF.type, SCI_NS.DatasetUsage))
+    p.add((usage, SCI_NS.dataset, ds))
+    p.add((usage, SCI_NS.usageRole, Literal("analyzed")))
+    p.add((usage, SCI_NS.usageOverlap, Literal("full")))
+
+    assert dependence_datasets_by_line(k, p).get(line, set()) == {ds}     # virtual path INCLUDED
+
+
+def test_dependence_datasets_by_line_excludes_indirect_bears_on():
+    from rdflib import Graph, Literal, RDF, URIRef
+    from science_tool.graph.dataset_independence import dependence_datasets_by_line
+    from science_tool.graph.io import CITO_NS, SCI_NS
+
+    k, p = Graph(), Graph()
+    line = URIRef("https://example.org/p/evidence-line/ev-i")
+    target = URIRef("https://example.org/p/proposition/ci")
+    consumer = URIRef("https://example.org/p/entity/other")               # reaches target only via bears_on
+    ds = URIRef("https://example.org/p/dataset/ids")
+    k.add((line, RDF.type, SCI_NS.EvidenceLine))
+    k.add((line, CITO_NS.supports, target))
+    k.add((consumer, SCI_NS.bearsOn, target))                            # indirect-bears-on path
+    usage = URIRef("https://example.org/p/usage/i")
+    p.add((consumer, SCI_NS.hasDatasetUsage, usage))
+    p.add((usage, RDF.type, SCI_NS.DatasetUsage))
+    p.add((usage, SCI_NS.dataset, ds))
+    p.add((usage, SCI_NS.usageRole, Literal("analyzed")))
+    p.add((usage, SCI_NS.usageOverlap, Literal("full")))
+
+    assert dependence_datasets_by_line(k, p).get(line, set()) == set()   # indirect EXCLUDED
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -679,6 +767,16 @@ def test_missing_report_raises(tmp_path):
     sources = _Sources(tmp_path, [_Ent("dataset:gone", qa_report="qa/gone/qa_report.json")])
     with pytest.raises(DatasetQaReportError):
         emit_dataset_qa_layer(Graph(), Graph(), sources)
+
+
+def test_non_boolean_verdict_raises_not_coerced(tmp_path):
+    # bool("false") is True — must fail loud, not silently invert the verdict.
+    path = tmp_path / "qa" / "weird" / "qa_report.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"package": "p", "package_structural_failed": "false", "resources": []}))
+    sources = _Sources(tmp_path, [_Ent("dataset:weird", qa_report="qa/weird/qa_report.json")])
+    with pytest.raises(DatasetQaReportError):
+        emit_dataset_qa_layer(Graph(), Graph(), sources)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -730,7 +828,13 @@ def _read_structural_verdict(report_path: Path, dataset_id: str) -> tuple[bool, 
         raise DatasetQaReportError(
             f"{dataset_id}: qa_report {report_path} has no 'package_structural_failed' field"
         )
-    failed = bool(report["package_structural_failed"])
+    failed = report["package_structural_failed"]
+    if not isinstance(failed, bool):
+        # Fail loud: do NOT coerce. bool("false") is True, which would silently invert intent.
+        raise DatasetQaReportError(
+            f"{dataset_id}: qa_report {report_path} 'package_structural_failed' must be a JSON "
+            f"boolean, got {failed!r}"
+        )
     failed_resources = sorted(
         str(r.get("resource", ""))
         for r in report.get("resources", [])
@@ -1051,4 +1155,3 @@ Expected: no errors (fix any inline, amend the relevant commit).
   only the unit (no policy); `_base_magnitude(support, contested_groups, *, policy)` and
   `_contested_groups_for(support, dispute)` signatures are fixed in T4 and reused in T5.
 - **No patch RDF surface** (matches `authored_capped`).
-```
