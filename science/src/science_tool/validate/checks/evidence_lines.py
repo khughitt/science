@@ -503,8 +503,9 @@ def check_belief_fragile_single_line(ctx: ValidateContext) -> Iterator[Result]:
 
 # ---------------------------------------------------------------------------
 # Check 8: belief.nonreproducible (ERROR) — golden snapshot comparison
-#   Equal inputs (input_hashes + config_version + scalar_enabled) must reproduce
-#   the stored belief. Differing inputs are a legitimate change, not flagged.
+#   Equal inputs (input_hashes + config_version + scalar_enabled + policy identity)
+#   must reproduce the stored belief. Differing inputs OR a different BeliefPolicy
+#   are a legitimate change, not flagged.
 # ---------------------------------------------------------------------------
 
 _GOLDEN_SCALAR_FIELDS = (
