@@ -697,6 +697,19 @@ def test_unarchive_restores_and_tombstones(tmp_path: Path) -> None:
     assert load_archive_index(tmp_path).active_by_id == {}
 
 
+def test_archive_collision_fails_before_overwriting(tmp_path: Path) -> None:
+    # A stale file already sitting at the derived archive path must NOT be clobbered.
+    _superseded(tmp_path, "interpretations", "0001-x", "interpretation:0001-x")
+    stale = tmp_path / "entities" / "_archive" / "interpretations" / "0001-x.md"
+    stale.parent.mkdir(parents=True, exist_ok=True)
+    stale.write_text("stale archived content\n", encoding="utf-8")
+    with pytest.raises(Exception):
+        archive_entities(tmp_path, apply=True, now="T1")
+    # stale file untouched; live file not moved
+    assert stale.read_text(encoding="utf-8") == "stale archived content\n"
+    assert (tmp_path / "entities" / "interpretations" / "0001-x.md").exists()
+
+
 def test_unarchive_collision_fails_before_moving(tmp_path: Path) -> None:
     _superseded(tmp_path, "interpretations", "0001-x", "interpretation:0001-x")
     archive_entities(tmp_path, apply=True, now="T1")
@@ -810,6 +823,13 @@ def archive_entities(
         if not src.exists():
             report["skipped"].append(row.id)
             continue
+        if dst.exists():
+            # A stale archive file (crash recovery, manual mess) — never overwrite.
+            # shutil.move would clobber an existing destination file on POSIX.
+            raise ArchiveError(
+                f"cannot archive {row.id!r}: archive path {derive_archive_path(row.original_path)} "
+                "already exists (run `science archive verify` to reconcile)"
+            )
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(src), str(dst))  # move first
         _fsync_dir(dst.parent)
@@ -865,7 +885,7 @@ def unarchive_entities(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_archive_mutators.py -v`
-Expected: PASS (6 tests).
+Expected: PASS (8 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -1181,13 +1201,14 @@ def test_archived_ref_edges_land_per_graph_and_stub(tmp_path: Path) -> None:
     assert "supersededBy" in text                      # superseded_by resolvable -> emitted
 
 
-def test_unknown_ref_makes_no_stub(tmp_path: Path) -> None:
+def test_unknown_ref_still_fails_audit(tmp_path: Path) -> None:
+    # The archive fix resolves ACTIVE archived ids only — a genuine unknown ref
+    # (neither live nor archived) must still fail the graph audit, NOT get a stub.
     _seed(tmp_path)
     _live(tmp_path, "---\nid: interpretation:0001-live\ntype: interpretation\n"
                     "related:\n  - interpretation:0099-typo\n---\n")
-    text = _build_graph_text(tmp_path)
-    assert "ArchivedEntity" not in text
-    assert "0099-typo" not in text
+    with pytest.raises(ValueError, match="unresolved"):
+        _build_graph_text(tmp_path)
 ```
 
 Notes for the implementer: (1) asserts on serialized TriG substrings to stay robust to URI scheme details. (2) Match the exact predicate CURIEs at the three graph edge sites and `SCI_NS` to `graph/materialize.py`. (3) **Fixture risk:** `materialize_graph` builds the whole project graph; if the minimal `science.yaml`/entities fixture is rejected by the build (e.g. `resolve_paths`/profile requirements), mirror the project scaffold from an existing graph-build test under `tests/` (search `materialize_graph(` in tests).
@@ -1554,6 +1575,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from science_tool.archive import ArchiveRow, append_row, archive_index_path
 from science_tool.entities import list_entities
 
@@ -1581,6 +1604,13 @@ def test_include_archived_merges_tagged_rows(tmp_path: Path) -> None:
     assert "interpretation:0002-gone" in by_id
     assert by_id["interpretation:0002-gone"].get("archived") is True
     assert by_id["interpretation:0001-live"].get("archived") in (False, None)
+
+
+def test_related_with_include_archived_is_rejected(tmp_path: Path) -> None:
+    from science_tool.entities import EntityCommandError
+    _seed(tmp_path)
+    with pytest.raises(EntityCommandError):
+        list_entities(tmp_path, related="interpretation:0001-live", include_archived=True)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1601,6 +1631,12 @@ def list_entities(
     include_hidden: bool = False,
     include_archived: bool = False,
 ) -> list[dict[str, str]]:
+    if related is not None and include_archived:
+        # The archive index carries no relation data, so the `related` filter cannot
+        # be evaluated against archived rows. Fail loud rather than silently include
+        # unfiltered archived rows or silently drop them.
+        raise EntityCommandError("--related cannot be combined with --include-archived "
+                                 "(the archive index does not carry relation data)")
     sources = load_project_sources(project_root.resolve())
     resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
     related_key = _resolved_ref_key(resolver, related) if related is not None else None
@@ -1653,7 +1689,7 @@ Add `--include-archived` to the `entity list` CLI command (`entity_list` at `cli
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_list_include_archived.py -v`
-Expected: PASS (2 tests).
+Expected: PASS (3 tests).
 
 - [ ] **Step 5: Add `.rgignore` and commit**
 
@@ -1676,7 +1712,7 @@ git commit -m "feat(archive): entities list --include-archived (index-merge, tag
 **Files:**
 - Test: `science/tests/test_archive_acceptance.py`
 
-The P3 acceptance invariant: after `archive --apply` on a *referenced* superseded entity, `science validate` passes (no new dangling) and graph build materializes the edge to a stub node, and the archived file is not scanned as a live entity.
+The P3 acceptance invariant: after `archive --apply` on a *referenced* superseded entity, the validation checks pass (cross-reference resolution **and** the archive-index subcheck), graph build (which runs the audit) materializes the edge to a stub node, and the archived file is not scanned as a live entity. (The tests exercise the relevant checks directly + graph build; a full `science validate` CLI run over the minimal fixture is out of scope — many unrelated checks would need a richer project.)
 
 - [ ] **Step 1: Write the acceptance test**
 
@@ -1734,11 +1770,16 @@ def test_archive_then_graph_edge_and_stub(tmp_path: Path) -> None:
 def test_archive_then_validate_no_new_dangling(tmp_path: Path) -> None:
     _seed(tmp_path)
     CliRunner().invoke(main, ["entities", "archive", "--project-root", str(tmp_path), "--apply"])
-    from science_tool.validate.checks.cross_references import check_cross_references
+    from science_tool.validate.checks.cross_references import check_archive_index, check_cross_references
     from science_tool.validate.context import ValidateContext
     ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
-    msgs = [r.message for r in check_cross_references(ctx)]
-    assert not any("0002-gone" in m and "not found" in m for m in msgs)
+    # (a) the archived ref resolves — not reported dangling
+    xref = [r.message for r in check_cross_references(ctx)]
+    assert not any("0002-gone" in m and "not found" in m for m in xref)
+    # (b) the archive-index subcheck reports the archive consistent (no ERRORs)
+    from science_tool.validate.context import Severity  # adjust import to repo's Severity location
+    arch = list(check_archive_index(ctx))
+    assert not any(r.severity == Severity.ERROR for r in arch)
 ```
 
 Note: same fixture-completeness caveat as Task 8 — if `materialize_graph` / `from_project_root` reject the minimal fixture, mirror an existing graph-build/validate test's project scaffold.
@@ -1771,4 +1812,5 @@ git commit -m "test(archive): P3 acceptance invariant — referenced superseded 
 - **Review fixes folded in (2nd-round):** graph **audit** archive-awareness (High-1, Task 8 Step 3a); `verify_archive` walks active rows for archive-vs-archive collisions (High-2, Task 6); validate subcheck no fail-open + `same_as` in live-space (Medium-3, Task 6); frozen-inventory + SSOT-usage guard pair (Medium-4, Task 3); inbound-live-refs in archive report (Medium-5, Task 5); `~/d/` paths + `rtk` note (Low-6, header).
 - **Review fixes folded in (3rd-round):** archive→manual-alias merge raises instead of `setdefault`-masking (High, Task 8 3a) — closing the masking gap with verify; `_add_authored_relation` gains an explicit archived-object branch (High, Task 8 3b); per-edge graph/predicate fallbacks — `related`→knowledge `skos:related`/`sci:tests`, `source_refs`→**provenance** `prov:wasDerivedFrom`, `relations[].target`→relation layer — with per-edge test assertions (Medium, Task 8); `supersededBy` emitted for live-or-archived successor; Task 6 count 4→5 (Low).
 - **Review fixes folded in (4th-round):** the archived `relations[].target` branch passes a `_ArchivedEndpoint(canonical_id, kind)` stand-in (NOT `object_entity=None`), because `_validate_authored_relation_endpoint` raises on `None` for constrained relations like `sci:supersedes`; the archived endpoint is now validated by `ArchiveRow.kind` exactly like a live one (High). `verify_archive` docstring corrected to say `live_alias_space` excludes `manual_aliases` (Low).
+- **Review fixes folded in (5th-round):** archive `--apply` fails before overwriting a pre-existing archive-path file (was a `shutil.move` clobber/data-loss risk) + test (High); `test_unknown_ref_makes_no_stub` reframed to `test_unknown_ref_still_fails_audit` (`materialize_graph` raises on the unknown ref before any graph text) (Medium); `list_entities` rejects `--related` + `--include-archived` (index has no relation data) + test (Medium); acceptance invariant wording corrected to "cross-reference + archive subcheck + graph audit" and the validate test now also asserts `check_archive_index` emits no ERROR (Low). Test counts updated: mutators 6→8, list 2→3.
 - **Still requires in-repo confirmation** (noted inline): the exact predicate CURIEs at the three graph edge-resolution sites + `SCI_NS`/`RDF`/`RDFS`/`Literal` imports in `materialize.py`; mutability of `ProjectSources.manual_aliases` for the in-place augmentation; whether the minimal tmp_path fixture is rich enough for `materialize_graph`/`from_project_root` (else mirror an existing graph/validate test scaffold); the actual non-entity `rglob` ALLOWLIST set (reconcile in Task 3 Step 2).
