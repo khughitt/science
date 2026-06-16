@@ -351,3 +351,20 @@ def test_override_untouched_collision_row_passes_through():
     out = apply_overrides(base, edited, existing_refs=set())
     assert out[0].decision == "COLLISION"
     assert out[1].decision == "MINT" and out[1].slug == "b-2"
+
+
+def test_proposition_target_is_default_and_slug_addressed():
+    from science_tool.annotation.promote import PROMOTABLE_KINDS, build_targets
+    targets = build_targets()
+    assert set(PROMOTABLE_KINDS) == {"proposition", "question", "hypothesis"}
+    assert targets["proposition"].slug_addressed is True
+    assert callable(targets["proposition"].mint)
+
+
+def test_entity_dest_resolves_by_kind(tmp_path):
+    from science_tool.annotation.promote import entity_dest
+    # proposition (slug strategy) and question (numeric) resolve under their homes.
+    assert entity_dest("proposition:foo-bar", tmp_path).name == "foo-bar.md"
+    assert entity_dest("proposition:foo-bar", tmp_path).parent.name == "propositions"
+    assert entity_dest("question:0007-foo", tmp_path).name == "0007-foo.md"
+    assert entity_dest("question:0007-foo", tmp_path).parent.name == "questions"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -18,6 +19,7 @@ from science_tool.entities import (
     EntityCommandError,
     _parse_markdown_file,
     append_entity_source_ref,
+    default_status,
     resolve_path_policy,
     slug_for_claim_text,
     write_entity_file,
@@ -195,6 +197,58 @@ def _proposition_body(claim: str) -> str:
     return f"# {claim}\n\n## Claim\n\n{claim}\n\n## Evidence Summary\n\n\n## Caveats\n"
 
 
+PROMOTABLE_KINDS: tuple[str, ...] = ("proposition", "question", "hypothesis")
+
+# (candidate, source_refs, project_root, as_of) -> minted entity id "<kind>:<local_part>"
+MintFn = Callable[["PromotionCandidate", list[str], Path, "date | None"], str]
+
+
+@dataclass(frozen=True)
+class PromotionTarget:
+    kind: str
+    slug_addressed: bool   # proposition True (content-addressed slug); numeric kinds False
+    mint: MintFn
+
+
+def entity_dest(entity_id: str, project_root: Path) -> Path:
+    """Canonical file path for `<kind>:<local_part>` (works for slug + numeric kinds)."""
+    kind, local_part = entity_id.split(":", 1)
+    policy = resolve_path_policy(kind, project_root=project_root)
+    return project_root / policy.root / f"{local_part}.md"
+
+
+def _mint_proposition(
+    c: PromotionCandidate, source_refs: list[str], project_root: Path, as_of: date | None
+) -> str:
+    """4a proposition mint: slug-addressed write_entity_file + never-overwrite guard."""
+    assert c.slug is not None
+    prop_ref = f"proposition:{c.slug}"
+    dest = entity_dest(prop_ref, project_root)
+    # Never-overwrite guard: a MINT slug colliding with a DIFFERENT-claim proposition
+    # (only reachable via an explicit-id override; auto mints are pre-screened) fails loud.
+    if dest.exists():
+        existing_fm, _ = _parse_markdown_file(dest)
+        if normalize_claim(str(existing_fm.get("title") or "")) != normalize_claim(c.claim):
+            raise PromotionApplyError(
+                f"refusing to overwrite {dest.name}: it holds a different proposition"
+            )
+    prop = PropositionEntity(
+        id=prop_ref, title=c.claim, subject=c.subject, object=c.object,
+        source_refs=list(source_refs),
+    )
+    write_entity_file(prop, project_root=project_root, body=_proposition_body(c.claim), as_of=as_of)
+    return prop_ref
+
+
+def proposition_target() -> PromotionTarget:
+    return PromotionTarget(kind="proposition", slug_addressed=True, mint=_mint_proposition)
+
+
+def build_targets() -> dict[str, PromotionTarget]:
+    # numeric_target is added in Task 3; until then question/hypothesis raise on mint.
+    return {"proposition": proposition_target()}
+
+
 def apply_candidates(
     candidates: list[PromotionCandidate],
     *,
@@ -202,38 +256,23 @@ def apply_candidates(
     project_root: Path,
     paper_ref: str,
     as_of: date | None = None,
+    targets: dict[str, PromotionTarget] | None = None,
 ) -> ApplyReport:
-    """Execute MINT/LINK candidates: write entities, accrue provenance, set the sidecar backlink."""
+    """Execute MINT/LINK candidates: mint via the per-kind target, accrue provenance, backlink."""
+    targets = targets if targets is not None else build_targets()
     report = ApplyReport()
-    backlinks: dict[str, str] = {}  # frag -> proposition:<slug>
+    backlinks: dict[str, str] = {}  # frag -> "<kind>:<local_part>"
 
     for c in candidates:
         if c.decision == "MINT":
-            assert c.slug is not None
-            prop_ref = f"proposition:{c.slug}"
-            policy = resolve_path_policy("proposition", project_root=project_root)
-            dest = project_root / policy.root / f"{c.slug}.md"
-            # Never-overwrite guard: a MINT slug colliding with a DIFFERENT-claim proposition
-            # (only reachable via an explicit-id override; auto mints are pre-screened) fails loud.
-            if dest.exists():
-                existing_fm, _ = _parse_markdown_file(dest)
-                if normalize_claim(str(existing_fm.get("title") or "")) != normalize_claim(c.claim):
-                    raise PromotionApplyError(
-                        f"refusing to overwrite {dest.name}: it holds a different proposition"
-                    )
-            prop = PropositionEntity(
-                id=prop_ref, title=c.claim, subject=c.subject, object=c.object,
-                source_refs=[paper_ref, c.ref],
-            )
-            write_entity_file(prop, project_root=project_root, body=_proposition_body(c.claim), as_of=as_of)
-            report.written_paths.append(str(dest))
+            new_id = targets[c.kind].mint(c, [paper_ref, c.ref], project_root, as_of)
+            report.written_paths.append(str(entity_dest(new_id, project_root)))
             report.minted += 1
-            backlinks[c.frag] = prop_ref
+            backlinks[c.frag] = new_id
         elif c.decision == "LINK":
-            assert c.slug is not None  # "proposition:<slug>"
-            policy = resolve_path_policy("proposition", project_root=project_root)
-            dest = project_root / policy.root / f"{c.slug.split(':', 1)[1]}.md"
-            # Accrue BOTH provenance refs onto the existing proposition; append_entity_source_ref
+            assert c.slug is not None  # "<kind>:<local_part>"
+            dest = entity_dest(c.slug, project_root)
+            # Accrue BOTH provenance refs onto the existing entity; append_entity_source_ref
             # dedups, preserves the (possibly hand-authored) prose body, and advances `updated`
             # whenever it actually appends a ref.
             for ref in (paper_ref, c.ref):
