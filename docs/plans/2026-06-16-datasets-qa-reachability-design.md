@@ -67,7 +67,13 @@ science datasets qa <path> [--resource NAME] [--report-dir DIR]
   tabular resources.
 - `--report-dir DIR` — persist `qa_report.{json,md}`; default writes no files.
 - `--format text|json` — `text` (default) prints the human summary table; `json` prints
-  the structured `PackageRunResult` to stdout (for tooling).
+  the **same serializable report schema** persisted by `--report-dir` (the package rollup
+  of §5.2: `{package, package_structural_failed, resources: [{resource, status, reason,
+  flags[], coverage}]}`) to stdout. It is **not** an `asdict()` dump of the
+  `PackageRunResult` dataclass — `ResourceOutcome.result` holds live `RunResult`/`Flag`/
+  `Coverage` objects, so the command serializes through the report writer's explicit
+  schema (each `Flag` via its existing `to_dict()`), guaranteeing stdout JSON and the
+  on-disk `qa_report.json` are byte-identical and field-stable.
 - `--no-strict` — suppress the build-fatal exit `1` (local inspection only).
 - `--config qa.yaml` — optional operational run-knobs, forwarded as `runknobs_path` to
   the engine (same overlay semantics as Spec 2).
@@ -107,6 +113,28 @@ dir), reading JSON or YAML via `pyyaml`, which `science_qa` **already** depends 
 (`config.py`, `dispositions.py` import `yaml`). Both `run_qa_datapackage` (replacing its
 `json.loads`) and the new `run_qa_package` use it, so single-resource **and** package
 runs handle YAML. No `science_tool` import is introduced; the boundary holds.
+
+**Timestamp-safe YAML (required).** Plain `yaml.safe_load` resolves an unquoted ISO-8601
+scalar to a Python `date`/`datetime`. The Spec 2 compiler's `_validate_bound_value`
+accepts only `str|int|float`, so a YAML date *bound* (e.g. `maximum: 2020-01-01`) would
+become a `date` object and raise a **false `CompileError`**. `load_package` must
+therefore use the same fix `science_tool.datasets.infer_schema` already uses: a
+`SafeLoader` subclass with the implicit **timestamp** resolver removed (keeping
+int/float/bool/null resolution), so unquoted ISO values stay strings —
+
+```python
+class _TimestampSafeLoader(yaml.SafeLoader):
+    """SafeLoader with the implicit timestamp resolver removed (ISO scalars stay str)."""
+
+_TimestampSafeLoader.yaml_implicit_resolvers = {
+    ch: [(tag, rx) for tag, rx in resolvers if tag != "tag:yaml.org,2002:timestamp"]
+    for ch, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+```
+
+This is a deliberate small duplication of `infer_schema._RoundTripSafeLoader`'s pattern
+(the boundary forbids importing it); a regression test (§9) asserts both loaders parse an
+unquoted ISO bound to the identical `str`, so they cannot silently drift.
 
 ### 5.1 Factor a non-writing core (behavior-preserving)
 
@@ -262,7 +290,10 @@ path resolution, rendering, and exit-code policy.
 `science_qa` (run from `science/qa`, `PYTHONPATH=src`):
 - `load_package` (§5.0): loads a JSON descriptor and a YAML descriptor to equal mappings;
   `run_qa_datapackage` now QAs a single resource from a **YAML** package (the regression
-  the old `json.loads` could not).
+  the old `json.loads` could not); an **unquoted ISO date bound** in YAML (`maximum:
+  2020-01-01`) stays a `str` and compiles without a false `CompileError`; a drift guard
+  asserts `science_qa.load_package` and `infer_schema.load_descriptor` parse that same
+  bound to the identical `str`.
 - `_evaluate`/`_run_with_config` split is behavior-preserving — existing `test_runner.py`
   single-resource tests stay green unchanged (after the `rows_checked` field is threaded
   through any direct `RunResult(...)` construction).
@@ -275,8 +306,10 @@ path resolution, rendering, and exit-code policy.
   `resources=[...]` selection + unknown-name → `CompileError`.
 
 `science_tool` (framework venv):
-- `test_datasets_qa.py`: path resolution (dir vs descriptor), `--format json` shape,
-  exit-code matrix (`0`/`1`/`2`, `--no-strict`→`0`), unknown resource → `2`.
+- `test_datasets_qa.py`: path resolution (dir vs descriptor), exit-code matrix
+  (`0`/`1`/`2`, `--no-strict`→`0`), unknown resource → `2`; **`--format json` stdout
+  equals the persisted `qa_report.json`** byte-for-byte (the schema-stability contract,
+  not an `asdict()` dump).
 - `test_datasets_qa_cli.py`: end-to-end CLI invocation on a tmp package fixture.
 - Boundary guard test: `grep` that `science/qa/src` contains no `science_tool` import
   (extend the existing one-way-dependency check).
