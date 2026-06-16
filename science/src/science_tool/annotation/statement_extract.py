@@ -568,7 +568,7 @@ def extract_candidates(
     *,
     source_md: Path,
     model: str,
-    candidates: list[StatementCandidate],
+    candidates: list[StatementCandidate | FigurativeCandidate],
     now: datetime,
     actor: str,
 ) -> ExtractReport:
@@ -591,10 +591,16 @@ def extract_candidates(
     grounding_dropped = 0
     planned: list[PlannedAnnotation] = []
     for cand in candidates:
-        p, reason, dropped = plan_statement(
-            file_text, persisted, cand,
-            active_iris=active, model=model, source_md_name=source_md.name,
-        )
+        if isinstance(cand, StatementCandidate):
+            p, reason, dropped = plan_statement(
+                file_text, persisted, cand,
+                active_iris=active, model=model, source_md_name=source_md.name,
+            )
+        else:
+            p, reason, dropped = plan_figurative(
+                file_text, persisted, cand,
+                model=model, source_md_name=source_md.name,
+            )
         grounding_dropped += dropped
         if p is not None:
             planned.append(p)

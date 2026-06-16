@@ -758,3 +758,68 @@ def test_plan_figurative_match_text_prefix_shape():
     assert p is not None
     file_idx = _FIG_TEXT.index("the immune system mounts an attack")
     assert p.match_text.startswith(f"metaphor|{file_idx}:34|")
+
+
+def _make_fig_source_md(tmp_path: Path) -> Path:
+    abstract = SourcePassages(
+        passages=(
+            Passage(section="title", bioc_offset=0, text="On immunity."),
+            Passage(section="discussion", bioc_offset=13,
+                    text="The immune system mounts an attack on pathogens."),
+        ),
+        release="2024",
+    )
+    return write_source_md(
+        directory=tmp_path, citekey="Imm2024", abstract=abstract, fulltext=None,
+        retrieved_from="https://example.org", license_="unknown", licensed=False,
+        pmid="2", doi=None,
+    )
+
+
+def test_extract_mixed_statement_and_figurative_persist(tmp_path: Path):
+    src = _make_source_md(tmp_path)  # text: "BRCA1 loss drives genomic instability in tumors."
+    cands = parse_candidates(json.dumps({"candidates": [
+        {"type": "proposition", "exact": "BRCA1 loss drives genomic instability",
+         "prefix": "", "suffix": " in tumors", "stance": "asserted"},
+        {"type": "metaphor", "exact": "BRCA1 loss drives genomic instability",
+         "prefix": "", "suffix": " in tumors",
+         "source_domain": "a driver", "target_domain": "BRCA1 loss"},
+    ]}))
+    report = extract_candidates(
+        source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
+    )
+    assert report.written == 2  # same span, different type -> both persist
+    assert report.grounding_dropped == 0
+    sidecar = read_sidecar(src.with_name("Brca2024.source.anno.trig"))
+    types = {a.annotation_type for a in sidecar.annotations}
+    assert {"proposition", "metaphor"} <= types
+
+
+def test_extract_figurative_only_records_hash_no_grounding(tmp_path: Path):
+    src = _make_fig_source_md(tmp_path)
+    cands = parse_candidates(json.dumps({"candidates": [
+        {"type": "analogy", "exact": "The immune system mounts an attack",
+         "prefix": "", "suffix": " on pathogens",
+         "source_domain": "warfare", "target_domain": "immune response"},
+    ]}))
+    report = extract_candidates(
+        source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
+    )
+    assert report.written == 1
+    assert report.grounding_dropped == 0
+    assert report.source_text_hash_recorded is True
+
+
+def test_extract_figurative_unanchored_does_not_record_hash(tmp_path: Path):
+    src = _make_fig_source_md(tmp_path)
+    cands = parse_candidates(json.dumps({"candidates": [
+        {"type": "metaphor", "exact": "a phrase absent from the document",
+         "prefix": "", "suffix": "",
+         "source_domain": "warfare", "target_domain": "immune response"},
+    ]}))
+    report = extract_candidates(
+        source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
+    )
+    assert report.written == 0
+    assert report.skipped == {"extract-quote-not-found": 1}
+    assert report.source_text_hash_recorded is False
