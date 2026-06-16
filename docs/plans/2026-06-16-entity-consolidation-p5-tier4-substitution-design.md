@@ -56,7 +56,7 @@ All five via `AskUserQuestion` this session:
 | Consumer surfaces | **big-picture programmatic only**: `resolver.py` + `knowledge_gaps.py` (+ their CLI). NOT the `consolidation-candidates` detector; NOT a standalone digest CLI. |
 | `--deep` descent source | **Index-only** — `ArchiveRow` fields (`id`/`kind`/`title`/`digest_insight`). No rehydration of `_archive/*.md`. |
 | Default-mode behavior | **Recognition/labeling** of the digest (consumers detect `cluster-digest` and surface it as consolidating N members). Substitution itself is already done by relocation. |
-| Resolver bridge model | **Both** — digest-as-bridge *and* redirect dangling member refs (the view-layer analogue of P3's graph tombstone redirect). |
+| Resolver bridge model | **digest-as-bridge** in the surfaces. `member_to_digest`/`redirect_refs` are kept as tested primitives and exposed in the registry for the `/science:big-picture` skill, but **not wired** into resolver/knowledge_gaps — there they are a provable no-op (membership matching only, never reference materialization). |
 | Deferred cleanups | **None** — strictly Tier 4. (`paper:` related-overlap exclusion and idempotent `apply` resume stay deferred.) |
 
 **Forced by the data model:** index-only descent is the only option that works —
@@ -138,26 +138,29 @@ def redirect_refs(refs: Iterable[str], remap: Mapping[str, str]) -> list[str]:
 `MemberSummary.kind`/`title`/`digest_insight` come straight off `ArchiveRow`
 (`ArchiveRow.digest_insight` was set by P4's `apply_consolidation`).
 
-### 3.2 `resolver.py` — digest-as-bridge + ref-redirect
+### 3.2 `resolver.py` — digest-as-bridge only
 
-`resolve_questions(project_root)` gains no new *output* shape and no new public
-parameter (its output is q→h only; members never appear as rows, so neither
-`--deep` nor an `include_archived` toggle changes what it returns). The change is
-purely internal correctness — restore bridges lost to consolidation:
+`resolve_questions(project_root)` gains no new output shape and no new public
+parameter (its output is q→h only; members never appear as rows). The sole change
+is **digest-as-bridge**: load `digests = load_cluster_digests(project_root)` and add
+a fourth contributor to the transitive pass — a digest whose authored `related:`
+lists both a question `q` and a hypothesis `h` adds `HypothesisMatch(h,
+"transitive", 0.5)` to `results[q]`, exactly as an interpretation does. The digest
+thus inherits the bridging role its archived members used to play, **if** it is
+authored with the relevant `related:` edges. (No-op when no `cluster-digest`
+synthesis exists — fully behavior-preserving for projects that never consolidate.)
 
-1. **Build the redirect map once:** `remap = member_to_digest(project_root)`.
-2. **Normalize every `related:` read** through `redirect_refs(_as_list(fm.get("related")), remap)`
-   in all three places `related:` is consumed (inverse, back-inverse, transitive).
-   A live entity that still cites an archived member by id now resolves that edge
-   to the digest instead of dangling. (This is a no-op when `remap` is empty, i.e.
-   no consolidations have happened — fully behavior-preserving for projects that
-   never consolidate.)
-3. **Digest-as-bridge:** load `digests = load_cluster_digests(project_root)` and add
-   a fourth contributor to the transitive pass — a digest whose (redirect-
-   normalized) `related:` lists both a question `q` and a hypothesis `h` adds
-   `HypothesisMatch(h, "transitive", 0.5)` to `results[q]`, exactly as an
-   interpretation does. The digest thus inherits the bridging role its archived
-   members used to play, **if** it is authored with the relevant `related:` edges.
+**Ref-redirect is deliberately NOT wired into the resolver.** Tracing every branch
+shows it is a provable no-op: the resolver does *membership matching* only
+(`ref in questions` / `ref in hypotheses`; a bridge node listing both a q and an
+h), never reference *materialization*. A `member → digest` remap rewrites an
+already-unloaded archived-member id to a `synthesis` digest id, which is never a
+question or hypothesis — so every branch maps an already-unmatched ref to a
+still-unmatched ref, leaving the output identical. Wiring it would be dead code
+(Explicit > Defensive). `member_to_digest`/`redirect_refs` live in `digests.py` as
+primitives for the registry/skill (§3.1, §3.4), not for this surface. This is the
+one correction to the originally-approved "Both" decision, made at plan time once
+the wiring was traced concretely.
 
 `HypothesisMatch` is unchanged (no digest-provenance field) — recognition lives in
 the registry surface (§3.4), not in the q→h matches.
@@ -202,13 +205,33 @@ a **new sibling subcommand** rather than a field grafted onto `resolve-questions
 science big-picture cluster-digests --project-root . [--deep]
 ```
 
-- Emits JSON: `{digest_id: asdict(ClusterDigest), ...}` sorted by id.
-- Default: `members: []`, `member_count` set, `related`/`member_ids` populated —
-  enough for the skill to **label** "synthesis:0042 — cluster-digest consolidating
-  11 entities" and to substitute it for its members.
-- `--deep`: each digest's `members` carries the index-only `MemberSummary` list, so
-  the skill can render the one-line `digest_insight` per archived member nested
-  under the digest (one entry that *expands*, never N+1 flat).
+Emits a JSON object with **two** keys (frozen contract, set now before it has
+consumers):
+
+```json
+{
+  "digests": {
+    "synthesis:0042-x": { "id": "...", "title": "...", "related": [...],
+                          "member_ids": [...], "member_count": 11, "members": [...] }
+  },
+  "member_to_digest": {
+    "interpretation:0001-old": "synthesis:0042-x",
+    "0001-old-alias":         "synthesis:0042-x"
+  }
+}
+```
+
+- `digests`: `{digest_id: asdict(ClusterDigest), ...}` sorted by id. Default has
+  `members: []` with `member_count`/`member_ids`/`related` populated — enough for
+  the skill to **label** "synthesis:0042 — cluster-digest consolidating 11
+  entities". `--deep` fills each digest's `members` with the index-only
+  `MemberSummary` list (id/kind/title/`digest_insight`), so the skill renders one
+  expandable entry per digest, never N+1 flat.
+- `member_to_digest`: the explicit `member_to_digest(project_root)` map
+  (**including alias / `same_as` keys**), so the skill can substitute *any*
+  archived-member reference it encounters while reading raw entity files — without
+  re-deriving an incomplete canonical-only map from `member_ids` (which would lose
+  the alias redirects that are part of the archive-index resolution contract).
 
 This is part of the big-picture *programmatic* surface (the in-scope choice), not
 the standalone entity-level digest CLI that was explicitly out of scope. The
@@ -263,16 +286,18 @@ their internal behavior improves (restored bridges) transparently.
   (index-built, alias seeding, scaffolded-member exclusion, unarchive drop),
   `redirect_refs` (remap, pass-through, order-preserving de-dup).
 - `resolver.py`: (a) **regression** — a project with zero consolidations produces
-  identical `resolve_questions` output before/after; (b) digest-as-bridge restores a
-  q↔h transitive link after the bridging interpretations are consolidated into a
-  digest authored with the same `related:`; (c) ref-redirect — a live entity citing
-  an archived member contributes its edge via the digest.
+  identical `resolve_questions` output (the existing resolver suite is the guard);
+  (b) digest-as-bridge restores a q↔h transitive link after the bridging
+  interpretations are consolidated into a digest authored with the same `related:`.
+  (No ref-redirect resolver test — redirect is not wired into the resolver, §3.2.)
 - `knowledge_gaps.py`: a `TopicGap.hypotheses` list reflects a digest-bridged
   hypothesis (inherited from the resolver) after the bridging interpretations are
   consolidated; an archived topic drops out and emits no gap. No local-redirect
   test — there is no local redirect (§3.3).
-- `cli.py`: `cluster-digests` JSON shape default vs `--deep`; `resolve-questions`
-  and `knowledge-gaps` output shapes unchanged (golden).
+- `cli.py`: `cluster-digests` emits both `digests` and `member_to_digest` keys;
+  `digests` default vs `--deep` (`members` empty vs index-only summaries);
+  `member_to_digest` includes alias keys; `resolve-questions` and `knowledge-gaps`
+  output shapes unchanged (golden).
 - Acceptance: a fixture project where consolidating an interpretation family (via
   P4 `scaffold`+`apply`) leaves big-picture seeing 1 labeled digest with N
   descendable members instead of N interpretations, and the q↔h resolution that ran
