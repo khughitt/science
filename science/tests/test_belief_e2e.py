@@ -9,6 +9,7 @@ cap behavior:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 
@@ -215,3 +216,133 @@ def test_e2e_diagnostic_dispute_clears_error_support_stands(tmp_path: Path) -> N
         f"belief.single-source-ceiling should not fire with two independent support units; "
         f"rules={rules}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Dataset-QA ceiling — end-to-end through materialize (Task 8)
+#
+# Wires emit_dataset_qa_layer into the materialize pipeline and exercises the
+# full seam: dataset declares a qa_report.json → QA layer stamps qaFailedDataset
+# on the empirical line resting on the failed dependence dataset → belief applies
+# the dataset-QA ceiling.
+# ---------------------------------------------------------------------------
+
+
+def _dataset_with_qa_report(slug: str, *, qa_report_rel: str) -> str:
+    """A minimal external dataset datapackage declaring a project-root-relative qa_report."""
+    return (
+        "profiles: [science-pkg-entity-1.0]\n"
+        f"id: dataset:{slug}\n"
+        "type: dataset\n"
+        f"title: {slug}\n"
+        "status: active\n"
+        "origin: external\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n"
+        f"qa_report: {qa_report_rel}\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n"
+    )
+
+
+def _supporting_line_on_dataset(eid: str, group: str, dataset_ref: str) -> str:
+    """Empirical, independent, strong direct_test support that ANALYZED `dataset_ref`
+    (a DEPENDENCE role) — so it can be stamped qaFailedDataset when that dataset fails QA."""
+    return (
+        "---\n"
+        f"id: evidence-line:{eid}\n"
+        "kind: evidence-line\n"
+        f'title: "{eid}"\n'
+        "project: test\n"
+        "ontology_terms: []\n"
+        "related: []\n"
+        "source_refs: []\n"
+        "created: 2026-05-01\n"
+        "updated: 2026-05-01\n"
+        "stance: supports\n"
+        "target: proposition:p\n"
+        "evidence_role: direct_test\n"
+        "strength: strong\n"
+        "independence: independent\n"
+        f"independence_group: {group}\n"
+        "evidence_type: empirical_data_evidence\n"
+        "dataset_usage:\n"
+        f"  - ref: {dataset_ref}\n"
+        "    role: analyzed\n"
+        "    overlap: full\n"
+        "---\n"
+    )
+
+
+def _write_qa_report(root: Path, rel: str, *, structural_failed: bool) -> None:
+    _write(
+        root,
+        rel,
+        json.dumps(
+            {
+                "package": "dataset:mmrf",
+                "package_structural_failed": structural_failed,
+                "resources": (
+                    [{"resource": "expression", "status": "fail"}] if structural_failed else []
+                ),
+            }
+        ),
+    )
+
+
+def _belief_for_p(root: Path):
+    """Same belief path _claim_summary_data uses, but returns the full BeliefResult so the
+    dataset-QA ceiling flags (magnitude + qa_dataset_capped) are observable end-to-end."""
+    from science_tool.graph.belief import aggregate_belief, collect_evidence_units
+    from science_tool.graph.store import _evidence_targets_for_uri
+
+    knowledge, provenance, claim = _build_and_load(root)
+    units = collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(knowledge, claim))
+    return aggregate_belief(units)
+
+
+def test_dataset_qa_ceiling_end_to_end(tmp_path: Path) -> None:
+    """Two independent strong direct_test EMPIRICAL supports reach well_supported on clean
+    data. One support ANALYZED dataset:mmrf, which declares a qa_report.json.
+
+    Failed report  → mmrf is structurally failed → QA layer stamps qaFailedDataset on the
+                     line resting on it. The QA-clean remainder is a single support (fragile),
+                     which cannot stand at well_supported, so belief is capped to FRAGILE and
+                     qa_dataset_capped is True.
+    Clean report   → nothing is stamped → both supports count cleanly → WELL_SUPPORTED and
+                     qa_dataset_capped is False (belief RISES above fragile).
+    """
+    qa_rel = "data/mmrf/qa_report.json"
+    _manifest(tmp_path)
+    _write(
+        tmp_path,
+        "data/mmrf/datapackage.yaml",
+        _dataset_with_qa_report("mmrf", qa_report_rel=qa_rel),
+    )
+    _write(tmp_path, "entities/propositions/p.md", _prop("well_supported"))
+    # sup1 rests on the failed-QA dataset; sup2 is QA-clean (no dataset usage).
+    _write(
+        tmp_path,
+        "entities/evidence-lines/sup1.md",
+        _supporting_line_on_dataset("sup1", "g1", "dataset:mmrf"),
+    )
+    _write(tmp_path, "entities/evidence-lines/sup2.md", _supporting_line("sup2", "g2"))
+
+    # --- Failed report → capped to fragile ---
+    _write_qa_report(tmp_path, qa_rel, structural_failed=True)
+    failed = _belief_for_p(tmp_path)
+    assert failed.magnitude.value == "fragile", (
+        f"expected fragile (dataset-QA ceiling: clean remainder is a single support), "
+        f"got {failed.magnitude.value!r}"
+    )
+    assert failed.qa_dataset_capped is True, "expected qa_dataset_capped=True with failed QA report"
+
+    # --- Clean report → not capped, belief rises ---
+    _write_qa_report(tmp_path, qa_rel, structural_failed=False)
+    clean = _belief_for_p(tmp_path)
+    assert clean.magnitude.value == "well_supported", (
+        f"expected well_supported (two clean direct_test supports, no QA cap), "
+        f"got {clean.magnitude.value!r}"
+    )
+    assert clean.qa_dataset_capped is False, "expected qa_dataset_capped=False with clean QA report"

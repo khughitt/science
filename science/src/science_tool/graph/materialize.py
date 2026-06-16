@@ -41,6 +41,7 @@ from science_tool.graph.dataset_independence import (
     derive_dataset_independence_records,
     emit_dataset_independence_records,
 )
+from science_tool.graph.dataset_qa import emit_dataset_qa_layer
 from science_tool.graph.freshness import (
     EntityFreshnessInfo,
     close_bears_on,
@@ -292,6 +293,9 @@ def _derive_phase(
         provenance,
         derive_dataset_independence_records(knowledge, provenance),
     )
+    # Dataset-QA layer reuses dependence resolution, so it MUST run after the independence
+    # records are emitted.
+    emit_dataset_qa_layer(knowledge, provenance, sources)
     if sources.freshness_enabled:
         entity_meta = _build_entity_meta(sources, emit.kind_class)
         source_changes = source_snapshots.source_changes if source_snapshots is not None else {}
