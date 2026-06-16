@@ -18,7 +18,9 @@ curator reviews and applies.
 
 - `--source-md <path>`: the paper's `<citekey>.source.md`.
 - `--root <path>`: the project root (entities live under it).
-- `--model <id>`: the model id to record as the source identity (your own model).
+
+Record **your own model id** in the candidates `source` string (see below); the command has
+no `--model` flag — the synthesizer identity travels in the file you emit, not on the CLI.
 
 ## Workflow
 

@@ -32,7 +32,6 @@ from science_tool.entities import _parse_markdown_file, write_entity_file
 
 SYNTH_SOURCE_RE = re.compile(r"^llm-synth:[A-Za-z0-9._-]+:proposition-synthesize-v1$")
 SYNTH_FIELDS: tuple[str, ...] = ("subject", "object", "predicate", "polarity", "claim_layer")
-_ENUM_FIELDS: tuple[str, ...] = ("predicate", "polarity", "claim_layer")
 _CANDIDATE_KEYS = frozenset({"proposition", "annotation", "override", *SYNTH_FIELDS})
 _PREDICATE_VALUES = frozenset(p.value for p in Predicate)
 _POLARITY_VALUES = frozenset(p.value for p in Polarity)

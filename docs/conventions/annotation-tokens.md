@@ -295,8 +295,9 @@ CLI validates + writes, and the curator runs `--apply`.
     supplied in the same patch).
   - **Sign-meaningful** predicates `affects` / `regulates` / `associates_with` **require**
     `polarity` ∈ `{positive, negative, unsigned}`. ALL other (**sign-less**) predicates take no
-    polarity — the tool writes `not_applicable` automatically; a patch must not send a polarity
-    for them. A bare `polarity` with no `predicate` is rejected.
+    *signed* polarity — omit it and the tool canonicalizes the field to `not_applicable`
+    automatically (sending a signed polarity for a sign-less predicate is rejected). A bare
+    `polarity` with no `predicate` is rejected.
   - `claim_layer` ∈
     `{empirical_regularity, causal_effect, mechanistic_narrative, structural_claim}` —
     independent of subject/object.
@@ -305,7 +306,9 @@ CLI validates + writes, and the curator runs `--apply`.
     without listing it in `override`.
   - `synthesize-nothing-to-fill` — the patch contributes no field the proposition can accept
     (all proposed fields already set, none overridden).
-  - `synthesize-proposition-uncovered` — the `proposition` id is not one of the in-scope
-    propositions for this paper.
-  - `synthesize-relation-hint-unresolved` — a referenced relation hint did not resolve to a
-    usable subject/object in scope.
+  - `synthesize-proposition-uncovered` — an in-scope proposition received no candidate in this
+    apply (counted, not fatal; an *out-of-scope* `proposition` id is a hard error at parse, not
+    this token).
+  - `synthesize-relation-hint-unresolved` — a relation annotation's quote selector did not
+    resolve uniquely against the current `.source.md` (drift/ambiguity), so its hint was omitted
+    from the scaffold (counted, never fatal).
