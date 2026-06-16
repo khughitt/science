@@ -9,9 +9,13 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from pathlib import Path
 
 from pydantic import BaseModel, Field
+
+from science_tool.big_picture.frontmatter import read_frontmatter
+from science_tool.entity_scan import iter_entity_markdown
 
 SCHEMA_VERSION = 1
 ARCHIVE_SEGMENT = "_archive"
@@ -102,3 +106,148 @@ def load_archive_index(project_root: Path) -> ArchiveIndex:
         elif row.op == "unarchive":
             active.pop(row.id, None)
     return ArchiveIndex(active_by_id=active)
+
+
+class ArchiveError(Exception):
+    """Raised on an unsafe archive/unarchive operation (fail-loud)."""
+
+
+def _candidate_rows(project_root: Path, statuses: frozenset[str]) -> list[ArchiveRow]:
+    """Live (non-archived) entities whose status is in ``statuses``, as archive rows."""
+    rows: list[ArchiveRow] = []
+    entities_root = project_root / "entities"
+    for path in iter_entity_markdown(entities_root):  # archive skipped -> already-archived never re-seen
+        fm = read_frontmatter(path)
+        if not fm or "id" not in fm:
+            continue
+        status = fm.get("status")
+        if status not in statuses:
+            continue
+        original_rel = path.relative_to(project_root).as_posix()
+        rows.append(
+            ArchiveRow(
+                op="archive",
+                id=str(fm["id"]),
+                kind=fm.get("type") or fm.get("kind"),
+                title=fm.get("title"),
+                aliases=[a for a in (fm.get("aliases") or []) if isinstance(a, str)],
+                same_as=[s for s in (fm.get("same_as") or []) if isinstance(s, str)],
+                status=status,
+                superseded_by=fm.get("superseded_by"),
+                original_path=original_rel,
+                reason=f"status:{status}",
+            )
+        )
+    return sorted(rows, key=lambda r: r.id)
+
+
+def _inbound_live_refs(project_root: Path, candidate_ids: set[str]) -> dict[str, list[str]]:
+    """Map each candidate id -> sorted live entity ids that reference it via
+    related: / source_refs: / relations[].target. Decision support: a survivor
+    that still points at a to-be-archived entity shows up here (those refs stay
+    resolvable post-archive via the index, but a human should see them)."""
+    inbound: dict[str, set[str]] = {cid: set() for cid in candidate_ids}
+    for path in iter_entity_markdown(project_root / "entities"):
+        fm = read_frontmatter(path)
+        if not fm or "id" not in fm:
+            continue
+        eid = str(fm["id"])
+        if eid in candidate_ids:
+            continue  # a candidate referencing another candidate is not a LIVE inbound ref
+        refs: set[str] = set()
+        for field in ("related", "source_refs"):
+            refs.update(r for r in (fm.get(field) or []) if isinstance(r, str))
+        for rel in fm.get("relations") or []:
+            if isinstance(rel, dict) and isinstance(rel.get("target"), str):
+                refs.add(rel["target"])
+        for cid in refs & candidate_ids:
+            inbound[cid].add(eid)
+    return {cid: sorted(ids) for cid, ids in inbound.items()}
+
+
+def archive_entities(
+    project_root: Path,
+    *,
+    statuses: frozenset[str] = DEFAULT_ARCHIVE_STATUSES,
+    apply: bool = False,
+    now: str | None = None,
+) -> dict:
+    """Report-then-apply relocation of hidden-status entities into the archive.
+    Apply does move-first-then-append per entity, rolling the move back if the
+    index append fails."""
+    project_root = Path(project_root).resolve()
+    rows = _candidate_rows(project_root, statuses)
+    inbound = _inbound_live_refs(project_root, {r.id for r in rows})
+    report: dict = {"candidates": [{"id": r.id, "kind": r.kind, "status": r.status,
+                                    "original_path": r.original_path, "superseded_by": r.superseded_by,
+                                    "inbound_live_refs": inbound.get(r.id, [])}
+                                   for r in rows],
+                    "applied": [], "skipped": []}
+    if not apply:
+        return report
+
+    index_path = archive_index_path(project_root)
+    for row in rows:
+        assert row.original_path is not None
+        src = project_root / row.original_path
+        dst = project_root / derive_archive_path(row.original_path)
+        if not src.exists():
+            report["skipped"].append(row.id)
+            continue
+        if dst.exists():
+            # A stale archive file (crash recovery, manual mess) — never overwrite.
+            # shutil.move would clobber an existing destination file on POSIX.
+            raise ArchiveError(
+                f"cannot archive {row.id!r}: archive path {derive_archive_path(row.original_path)} "
+                "already exists (run `science validate` to reconcile the archive index)"
+            )
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(dst))  # move first
+        _fsync_dir(dst.parent)
+        try:
+            append_row(index_path, row.model_copy(update={"archived_at": now}))
+        except Exception:
+            shutil.move(str(dst), str(src))  # roll back the move
+            raise
+        report["applied"].append(row.id)
+    return report
+
+
+def unarchive_entities(
+    project_root: Path,
+    ids: list[str],
+    *,
+    apply: bool = False,
+    now: str | None = None,
+) -> dict:
+    """Restore archived entities to their original path; append unarchive tombstone.
+    Collision (target exists) fails before moving — never overwrite."""
+    project_root = Path(project_root).resolve()
+    idx = load_archive_index(project_root)
+    report: dict = {"candidates": [], "applied": [], "skipped": []}
+    plans: list[tuple[ArchiveRow, Path, Path]] = []
+    for eid in ids:
+        row = idx.active_by_id.get(eid)
+        if row is None:
+            report["skipped"].append(eid)
+            continue
+        assert row.original_path is not None
+        dst = project_root / row.original_path
+        src = project_root / derive_archive_path(row.original_path)
+        if dst.exists():
+            raise ArchiveError(f"cannot unarchive {eid!r}: target {row.original_path} already exists")
+        if not src.exists():
+            raise ArchiveError(f"cannot unarchive {eid!r}: archived file missing at {src}")
+        report["candidates"].append({"id": eid, "restored_path": row.original_path})
+        plans.append((row, src, dst))
+    if not apply:
+        return report
+    index_path = archive_index_path(project_root)
+    for row, src, dst in plans:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(dst))
+        _fsync_dir(dst.parent)
+        append_row(index_path, ArchiveRow(op="unarchive", id=row.id,
+                                          restored_path=row.original_path, unarchived_at=now))
+        report["applied"].append(row.id)
+    return report
