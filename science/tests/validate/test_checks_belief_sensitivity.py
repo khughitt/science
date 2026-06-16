@@ -224,3 +224,20 @@ def test_nonreproducible_normalizes_pre_policy_stored_row(tmp_path: Path):
     snap.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
     results = list(check_belief_nonreproducible(ctx))
     assert any(r.severity is Severity.ERROR for r in results)
+
+
+def test_nonreproducible_silent_when_authored_capped_absent(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_two_support_graph(tmp_path)
+    ctx = _ctx(tmp_path)
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    # Simulate a pre-Slice-B history line: strip authored_capped from the (otherwise correct)
+    # row. read_snapshots normalizes it back to False, matching the current empirical result.
+    legacy = {k: v for k, v in rows[0].items() if k != "authored_capped"}
+    snap.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
+    assert list(check_belief_nonreproducible(ctx)) == []

@@ -29,6 +29,7 @@ from science_tool.graph.belief_weights import (
     STRENGTH_RANK,
     normalize_evidence_type,
 )
+from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
 from science_tool.graph.io import SCHEMA_NS, SCI_NS
 from science_tool.graph.store import _evidence_targets_for_uri, _graph_uri
 from science_tool.entities import resolve_path_policy
@@ -545,6 +546,11 @@ def check_belief_nonreproducible(ctx: ValidateContext) -> Iterator[Result]:
             f for f in ("belief_state", "contested", "diagnostic_dispute_count")
             if prior.get(f) != now.get(f)
         ]
+        # authored_capped compared with an explicit False default so a pre-Slice-B prior row
+        # (read_snapshots already normalizes it to False) never produces a spurious
+        # belief.nonreproducible error against a current authored_capped == False result.
+        if prior.get("authored_capped", False) != now.get("authored_capped", False):
+            diffs.append("authored_capped")
         if now["scalar_enabled"]:
             diffs += [f for f in _GOLDEN_SCALAR_FIELDS if prior.get(f) != now.get(f)]
         if diffs:
@@ -624,6 +630,24 @@ def check_evidence_unscored_line(ctx: ValidateContext) -> Iterator[Result]:
     for path, fm in _ev_lines(ctx):
         stance = fm.get("stance")
         if stance not in ("supports", "disputes"):
+            continue
+        # Authored assertions (Slice B) are ADMITTED by confidence, not scored by role/strength
+        # — exempt them from the unscored-line requirement. Instead, flag a missing or
+        # out-of-range confidence, which is the un-gateable authoring error.
+        if normalize_evidence_type(fm.get("evidence_type")) == DEFAULT_BELIEF_POLICY.authored_assertion_type:
+            conf = fm.get("confidence")
+            if not isinstance(conf, (int, float)) or isinstance(conf, bool) or not (0.0 <= conf <= 1.0):
+                yield Result(
+                    severity=Severity.WARN,
+                    path=path,
+                    line=None,
+                    message=(
+                        f"{path.name}: authored assertion (expert_judgment) has missing or "
+                        f"out-of-range confidence — set confidence in [0, 1] so it can be scored"
+                    ),
+                    rule="evidence.authored-confidence-invalid",
+                    task=None,
+                )
             continue
         role = fm.get("evidence_role") or ""
         if role in DIAGNOSTIC_ROLES:

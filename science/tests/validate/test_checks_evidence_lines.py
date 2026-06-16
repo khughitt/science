@@ -435,6 +435,39 @@ def test_unscored_line_skips_diagnostic_roles(tmp_path: Path):
     assert list(check_evidence_unscored_line(_ctx(tmp_path))) == []
 
 
+def test_unscored_line_skips_authored_assertion_with_valid_confidence(tmp_path: Path):
+    from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
+
+    # An authored assertion (expert_judgment) with valid confidence and NO role/strength is
+    # admitted by confidence -> not flagged unscored, not flagged invalid-confidence.
+    _write(tmp_path, "entities/evidence-lines/el01.md",
+           "---\nstance: supports\ntarget: proposition:p1\n"
+           "evidence_type: expert_judgment\nconfidence: 0.8\n---\n")
+    rules = {r.rule for r in check_evidence_unscored_line(_ctx(tmp_path))}
+    assert "evidence.unscored-line" not in rules
+    assert "evidence.authored-confidence-invalid" not in rules
+
+
+def test_authored_assertion_missing_confidence_warned(tmp_path: Path):
+    from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
+
+    _write(tmp_path, "entities/evidence-lines/el01.md",
+           "---\nstance: supports\ntarget: proposition:p1\nevidence_type: expert_judgment\n---\n")
+    results = list(check_evidence_unscored_line(_ctx(tmp_path)))
+    assert any(r.rule == "evidence.authored-confidence-invalid" for r in results)
+    assert all(r.severity is Severity.WARN for r in results)
+
+
+def test_authored_assertion_out_of_range_confidence_warned(tmp_path: Path):
+    from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
+
+    _write(tmp_path, "entities/evidence-lines/el01.md",
+           "---\nstance: supports\ntarget: proposition:p1\n"
+           "evidence_type: expert_judgment\nconfidence: 1.4\n---\n")
+    rules = {r.rule for r in check_evidence_unscored_line(_ctx(tmp_path))}
+    assert "evidence.authored-confidence-invalid" in rules
+
+
 def _ctx_with_b2_graph(tmp_path: Path, *, record_type: URIRef, authored: dict[str, str] | None = None) -> ValidateContext:
     root = tmp_path / "project"
     root.mkdir()
