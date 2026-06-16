@@ -86,6 +86,8 @@ class BundleBeliefResult:
     bottleneck_members: list[str]       # ORDINAL-only: members sharing the minimum magnitude (superset of the scalar driver)
     contested_members: list[str]
     unresolved_members: list[str]
+    policy_id: str
+    policy_version: str
 
 
 def member_rank_key(belief: BeliefResult, scalar: BeliefScalar | None, member_uri: str) -> tuple:
@@ -109,6 +111,11 @@ def roll_up_weakest_link(members: list[MemberBelief], *, rule: CompositionRule) 
     listed as bottlenecks for explanation. Every member's `scalar`/`rank_key` is
     retained in `member_results`, so the scalar driver is always identifiable.
     """
+    identities = {(m.belief.policy_id, m.belief.policy_version) for m in members}
+    if len(identities) > 1:
+        raise MixedBeliefPolicyError(
+            f"cannot combine belief results computed under different policies: {sorted(identities)}"
+        )
     ordered = sorted(members, key=lambda m: m.rank_key)
     bottleneck = ordered[0]
     bundle_magnitude = bottleneck.belief.magnitude
@@ -122,7 +129,13 @@ def roll_up_weakest_link(members: list[MemberBelief], *, rule: CompositionRule) 
         bottleneck_members=[m.member_uri for m in ordered if m.belief.magnitude == bundle_magnitude],
         contested_members=[m.member_uri for m in ordered if m.belief.contested],
         unresolved_members=[m.member_uri for m in ordered if m.belief.magnitude == BeliefMagnitude.SPECULATIVE],
+        policy_id=ordered[0].belief.policy_id,
+        policy_version=ordered[0].belief.policy_version,
     )
+
+
+class MixedBeliefPolicyError(ValueError):
+    """Refuse to combine belief results computed under different BeliefPolicy identities."""
 
 
 class UnresolvedBundleError(ValueError):
