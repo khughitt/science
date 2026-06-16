@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from dataclasses import dataclass, field
+from datetime import date
+from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
@@ -22,7 +25,9 @@ from science_model.reasoning import (
 )
 
 from science_tool.annotation.model import Annotation, Sidecar, TextualBody
+from science_tool.annotation.promote import entity_dest
 from science_tool.annotation.statement_extract import find_qualified_spans
+from science_tool.entities import _parse_markdown_file, write_entity_file
 
 
 SYNTH_SOURCE_RE = re.compile(r"^llm-synth:[A-Za-z0-9._-]+:proposition-synthesize-v1$")
@@ -358,3 +363,68 @@ def validate_candidate(current: dict[str, Any], cand: SynthesisCandidate) -> Wri
     except ValidationError as exc:
         raise SynthesisApplyError(f"{cand.proposition}: {exc}") from exc
     return plan
+
+
+@dataclass
+class SynthReport:
+    updated: int = 0
+    skipped: Counter = field(default_factory=Counter)
+    written_paths: list[str] = field(default_factory=list)
+
+
+def apply_synthesis(
+    candidates: list[SynthesisCandidate],
+    *,
+    current: dict[str, dict[str, Any]],
+    project_root: Path,
+    source: str,
+    in_scope: set[str],
+    as_of: date | None = None,
+) -> SynthReport:
+    """Two-pass apply. Pass 1 validates every candidate (raises ⇒ nothing written); Pass 2
+    writes with fill-only-unset, sign-less canonicalization, body preservation, and stamps
+    `reasoning_source` only on a real write. Uncovered in-scope props are counted, not failed.
+    """
+    # Pass 1 — validate everything (no writes). plans[i] aligns with candidates[i].
+    plans: list[WritePlan] = [
+        validate_candidate(current[c.proposition], c) for c in candidates
+    ]
+
+    # Pass 2 — apply.
+    report = SynthReport()
+    for cand, plan in zip(candidates, plans):
+        if plan.blocked:
+            # Count every proposed field blocked by an existing differing value, even when
+            # other fields on the same candidate are written. This keeps curator-visible
+            # conflict reporting from disappearing in mixed write/skip patches.
+            report.skipped["synthesize-existing-value-blocks"] += len(plan.blocked)
+        if not plan.writes:
+            if not plan.blocked:
+                report.skipped["synthesize-nothing-to-fill"] += 1
+            continue
+        fm = dict(current[cand.proposition])
+        fm.update(plan.writes)
+        fm["reasoning_source"] = source            # a synthesis-owned write (stamped on real change)
+        _write_proposition(cand.proposition, fm, project_root, as_of)
+        report.updated += 1
+        report.written_paths.append(str(entity_dest(cand.proposition, project_root)))
+
+    covered = {c.proposition for c in candidates}
+    for prop_ref in in_scope:
+        if prop_ref not in covered:
+            report.skipped["synthesize-proposition-uncovered"] += 1
+    return report
+
+
+def _write_proposition(
+    prop_ref: str, merged_fm: dict[str, Any], project_root: Path, as_of: date | None
+) -> None:
+    """Body-preserving frontmatter write: reconstruct the typed entity, keep the prose body.
+
+    The existing (possibly curated) markdown body is read and passed back verbatim; only
+    frontmatter fields change. `write_entity_file` preserves `created` and advances `updated`.
+    """
+    dest = entity_dest(prop_ref, project_root)
+    _, body = _parse_markdown_file(dest)
+    prop = PropositionEntity(**merged_fm)          # re-runs interlock validator; extra keys ignored
+    write_entity_file(prop, project_root=project_root, body=body, as_of=as_of)

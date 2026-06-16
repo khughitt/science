@@ -257,3 +257,117 @@ def test_validate_ok_returns_plan():
     plan = validate_candidate(current, cand)
     assert plan.writes == {"predicate": "regulates", "polarity": "negative",
                            "claim_layer": "causal_effect"}
+
+
+from pathlib import Path
+from science_tool.annotation.synthesize import SynthReport, apply_synthesis
+from science_tool.entities import _parse_markdown_file, write_entity_file
+from science_model.propositions import PropositionEntity
+
+
+def _project(tmp_path: Path) -> Path:
+    (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    (tmp_path / "entities" / "propositions").mkdir(parents=True)
+    return tmp_path
+
+
+def _write_prop(root: Path, slug: str, *, title: str, body: str = "# t\n\n## Claim\n\nKEEP-ME\n",
+                **fields) -> str:
+    ref = f"proposition:{slug}"
+    write_entity_file(PropositionEntity(id=ref, title=title, **fields),
+                      project_root=root, body=body)
+    return ref
+
+
+def test_apply_fills_unset_and_stamps_source(tmp_path):
+    root = _project(tmp_path)
+    ref = _write_prop(root, "p", title="claim", subject="X", object="Y",
+                      body="# claim\n\n## Claim\n\nCURATED PROSE\n")
+    cand = _cand({"predicate": "affects", "polarity": "positive", "claim_layer": "causal_effect"},
+                 prop=ref)
+    report = apply_synthesis(
+        [cand], current={ref: _parse_markdown_file(root / "entities/propositions/p.md")[0]},
+        project_root=root, source="llm-synth:m:proposition-synthesize-v1", in_scope={ref},
+    )
+    assert report.updated == 1
+    fm, body = _parse_markdown_file(root / "entities/propositions/p.md")
+    assert fm["predicate"] == "affects" and fm["polarity"] == "positive"
+    assert fm["claim_layer"] == "causal_effect"
+    assert fm["reasoning_source"] == "llm-synth:m:proposition-synthesize-v1"
+    assert "CURATED PROSE" in body          # body preserved
+
+
+def test_apply_noop_when_already_filled_leaves_file_untouched(tmp_path):
+    root = _project(tmp_path)
+    ref = _write_prop(root, "p", title="claim", subject="X", object="Y",
+                      claim_layer="causal_effect")
+    before = (root / "entities/propositions/p.md").read_text(encoding="utf-8")
+    cand = _cand({"claim_layer": "causal_effect"}, prop=ref)
+    report = apply_synthesis(
+        [cand], current={ref: _parse_markdown_file(root / "entities/propositions/p.md")[0]},
+        project_root=root, source="llm-synth:m:proposition-synthesize-v1", in_scope={ref},
+    )
+    assert report.updated == 0
+    assert report.skipped.get("synthesize-nothing-to-fill") == 1
+    after = (root / "entities/propositions/p.md").read_text(encoding="utf-8")
+    assert after == before                   # untouched: no reasoning_source, no updated bump
+
+
+def test_apply_existing_value_blocks(tmp_path):
+    root = _project(tmp_path)
+    ref = _write_prop(root, "p", title="claim", claim_layer="empirical_regularity")
+    cand = _cand({"claim_layer": "causal_effect"}, prop=ref)   # differs, no override
+    report = apply_synthesis(
+        [cand], current={ref: _parse_markdown_file(root / "entities/propositions/p.md")[0]},
+        project_root=root, source="llm-synth:m:proposition-synthesize-v1", in_scope={ref},
+    )
+    assert report.updated == 0
+    assert report.skipped.get("synthesize-existing-value-blocks") == 1
+    fm, _ = _parse_markdown_file(root / "entities/propositions/p.md")
+    assert fm["claim_layer"] == "empirical_regularity"        # unchanged
+
+
+def test_apply_reports_blocked_fields_even_when_other_fields_write(tmp_path):
+    root = _project(tmp_path)
+    ref = _write_prop(root, "p", title="claim", claim_layer="empirical_regularity")
+    cand = _cand({"subject": "X", "claim_layer": "causal_effect"}, prop=ref)
+    report = apply_synthesis(
+        [cand], current={ref: _parse_markdown_file(root / "entities/propositions/p.md")[0]},
+        project_root=root, source="llm-synth:m:proposition-synthesize-v1", in_scope={ref},
+    )
+    assert report.updated == 1
+    assert report.skipped.get("synthesize-existing-value-blocks") == 1
+    fm, _ = _parse_markdown_file(root / "entities/propositions/p.md")
+    assert fm["subject"] == "X"
+    assert fm["claim_layer"] == "empirical_regularity"        # blocked value preserved
+    assert fm["reasoning_source"] == "llm-synth:m:proposition-synthesize-v1"
+
+
+def test_apply_uncovered_proposition_counted(tmp_path):
+    root = _project(tmp_path)
+    ref = _write_prop(root, "p", title="claim")
+    report = apply_synthesis(
+        [], current={ref: _parse_markdown_file(root / "entities/propositions/p.md")[0]},
+        project_root=root, source="llm-synth:m:proposition-synthesize-v1", in_scope={ref},
+    )
+    assert report.skipped.get("synthesize-proposition-uncovered") == 1
+
+
+def test_apply_is_atomic_on_interlock_error(tmp_path):
+    root = _project(tmp_path)
+    good = _write_prop(root, "good", title="good claim")
+    bad = _write_prop(root, "bad", title="bad claim")
+    cur = {
+        good: _parse_markdown_file(root / "entities/propositions/good.md")[0],
+        bad: _parse_markdown_file(root / "entities/propositions/bad.md")[0],
+    }
+    good_cand = _cand({"claim_layer": "causal_effect"}, prop=good,
+                      ann="annotation:papers/p.source#s1")
+    bad_cand = _cand({"polarity": "positive"}, prop=bad,   # bare polarity → Pass-1 abort
+                     ann="annotation:papers/p.source#s2")
+    with pytest.raises(SynthesisApplyError):
+        apply_synthesis([good_cand, bad_cand], current=cur, project_root=root,
+                        source="llm-synth:m:proposition-synthesize-v1", in_scope={good, bad})
+    # good was NOT written (validate-before-write): no claim_layer on disk
+    fm, _ = _parse_markdown_file(root / "entities/propositions/good.md")
+    assert "claim_layer" not in fm
