@@ -13,7 +13,7 @@
 ## Working conventions (read first)
 
 - **Worktree:** all work happens in
-  `/mnt/ssd/Dropbox/science/.worktrees/entity-consolidation-p4-consolidate-apply`
+  `~/d/science/.worktrees/entity-consolidation-p4-consolidate-apply`
   on branch `feat/entity-consolidation-p4-consolidate-apply`. **Subagents: `cd`
   into this worktree path and confirm `git branch --show-current` before editing —
   commits must not land on `main`.**
@@ -23,10 +23,13 @@
 - **Test command** (the worktree has no `.venv`; use the main repo's venv with
   `PYTHONPATH=src`), run from the `science/` subdir:
   ```bash
-  cd /mnt/ssd/Dropbox/science/.worktrees/entity-consolidation-p4-consolidate-apply/science
+  cd ~/d/science/.worktrees/entity-consolidation-p4-consolidate-apply/science
   PYTHONPATH=src ~/d/science/science/.venv/bin/pytest <path> -v
   ```
 - **Commits:** do NOT include any `Co-Authored-By` trailer. One commit per task.
+- **rtk:** shell commands are auto-rewritten through the `rtk` proxy by the Claude
+  Code hook (transparent — `pytest …` → `rtk pytest …`). Run the commands as
+  written below; do **not** hand-prefix `rtk` yourself (that would double it).
 - **Design reference:** `docs/plans/2026-06-16-entity-consolidation-p4-consolidate-apply-design.md`.
 
 ## File Structure
@@ -72,6 +75,7 @@
 
 **Files:**
 - Modify: `science/model/src/science_model/profiles/core.py` (the `statuses=[...]` lists of 18 kinds)
+- Modify: `science/tests/test_kind_map_equivalence.py` (the `FROZEN_STATUS_VALUES` parity literal — it asserts `_STATUS_VALUES == FROZEN_STATUS_VALUES`, so it MUST be updated in lockstep or it breaks)
 - Test: `science/tests/test_archived_status_vocab.py`
 
 The 18 consolidatable kinds (explicit enumeration — do NOT prune by `entity_class`):
@@ -159,20 +163,39 @@ For each kind, locate its `EntityKind(... name="<kind>" ...)` block and add
 `"archived"` to the existing `statuses=[...]` list (do not reorder existing
 values; do not touch `default_status`).
 
-- [ ] **Step 4: Run the new test + the visibility guards**
+- [ ] **Step 3b: Update the frozen parity literal in lockstep**
+
+`science/tests/test_kind_map_equivalence.py` asserts `_STATUS_VALUES ==
+FROZEN_STATUS_VALUES` (around line 138). `_STATUS_VALUES` is profile-derived, so
+the 18 edits above will break that assertion unless the frozen literal is updated
+intentionally. In `FROZEN_STATUS_VALUES`, add `"archived"` to the `frozenset({...})`
+of **exactly these 18 keys** (leave `patch-definition`, `pre-registration`,
+`paper`, `book`, `talk`, `concept`, `construct`, `outcome` UNCHANGED):
+`hypothesis`, `question`, `proposition`, `observation`, `finding`,
+`interpretation`, `synthesis`, `report`, `discussion`, `inquiry`, `mechanism`,
+`theme`, `topic`, `method`, `plan`, `search`, `decision`, `evidence-line`.
+Example:
+```python
+    "finding": frozenset({"active", "superseded", "retired", "archived"}),
+    "hypothesis": frozenset(
+        {"proposed", "under-investigation", "partially-supported", "supported", "weakened", "refuted", "archived"}
+    ),
+```
+
+- [ ] **Step 4: Run the new test + the parity + visibility guards**
 
 Run:
 ```
-PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_archived_status_vocab.py tests/test_status_visibility.py -v
+PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_archived_status_vocab.py tests/test_kind_map_equivalence.py tests/test_status_visibility.py -v
 ```
 Expected: PASS (all). `archived` is already in `_HIDDEN_STATUSES`, so the
-classification guard stays green.
+classification guard stays green; the parity literal now matches the profile.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/entity-consolidation-p4-consolidate-apply
-git add science/model/src/science_model/profiles/core.py science/tests/test_archived_status_vocab.py
+cd ~/d/science/.worktrees/entity-consolidation-p4-consolidate-apply
+git add science/model/src/science_model/profiles/core.py science/tests/test_kind_map_equivalence.py science/tests/test_archived_status_vocab.py
 git commit -m "feat(consolidation): add archived status to consolidatable core kinds (P4)"
 ```
 
@@ -1198,6 +1221,9 @@ from science_tool.archive import load_archive_index, unarchive_entities, verify_
 from science_tool.consolidate import apply_consolidation, scaffold_digest
 from science_tool.entities import _parse_markdown_file, _render_markdown, create_entity
 from science_tool.graph.materialize import materialize_graph
+from science_tool.validate.checks.cross_references import check_archive_index, check_cross_references
+from science_tool.validate.context import ValidateContext
+from science_tool.validate.result import Severity
 
 
 def _project(tmp_path: Path) -> Path:
@@ -1236,7 +1262,16 @@ def test_full_consolidation_lifecycle(tmp_path: Path) -> None:
     assert (root / "entities" / "synthesis" / "0001-d.md").exists()
     assert not (root / "entities" / "findings" / "0001-a.md").exists()
 
-    # 6. reversibility: unarchive restores a member to its original path (location only)
+    # 6. validate is clean: archive index reconciles + no broken cross-references.
+    #    (check_archive_index yields one INFO "consistent" when clean, ERROR on a problem.)
+    ctx = ValidateContext.from_project_root(root, strict=True, verbose=False)
+    arch_results = list(check_archive_index(ctx))
+    assert not any(r.severity == Severity.ERROR for r in arch_results)
+    assert any("consistent" in r.message for r in arch_results)
+    xref_results = list(check_cross_references(ctx))
+    assert not any(r.severity == Severity.ERROR for r in xref_results)
+
+    # 7. reversibility: unarchive restores a member to its original path (location only)
     unarchive_entities(root, ["finding:0001-a"], apply=True, now="T2")
     assert (root / "entities" / "findings" / "0001-a.md").exists()
     assert "finding:0001-a" not in load_archive_index(root).active_by_id
@@ -1281,7 +1316,7 @@ failures (6× `test_codex_skills.py` frontmatter, `test_shims.py::test_meta_vali
 reproduce on `main`):
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/entity-consolidation-p4-consolidate-apply/science
+cd ~/d/science/.worktrees/entity-consolidation-p4-consolidate-apply/science
 PYTHONPATH=src ~/d/science/science/.venv/bin/pytest -q
 ```
 
