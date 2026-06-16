@@ -105,3 +105,43 @@ def member_to_digest(project_root: Path) -> dict[str, str]:
                 )
             out[key] = digest
     return out
+
+
+def load_cluster_digests(project_root: Path, *, deep: bool = False) -> dict[str, ClusterDigest]:
+    """Scan ``entities/synthesis/`` for visible ``report_kind: cluster-digest``
+    entities. ``member_ids`` come from each digest's ``sci:consolidates`` relations.
+    When ``deep`` is True, each member is resolved against the active archive index
+    into a ``MemberSummary`` (``archived=False`` when the id is absent — e.g. a
+    scaffolded-but-unapplied digest whose members are still live)."""
+    directory = entity_dir(project_root, SYNTHESIS_KIND)
+    if not directory.is_dir():
+        return {}
+    index = load_archive_index(project_root) if deep else None
+    out: dict[str, ClusterDigest] = {}
+    for path in sorted(directory.glob("*.md")):
+        fm = read_frontmatter(path)
+        if not fm or "id" not in fm:
+            continue
+        if fm.get("report_kind") != CLUSTER_DIGEST_REPORT_KIND:
+            continue
+        if not is_default_visible(fm.get("status")):
+            continue
+        member_ids = _consolidates_targets(fm)
+        members: list[MemberSummary] = []
+        if deep:
+            assert index is not None
+            for mid in member_ids:
+                row = index.active_by_id.get(mid)
+                if row is None:
+                    members.append(MemberSummary(
+                        id=mid, kind=None, title=None, digest_insight=None, archived=False))
+                else:
+                    members.append(MemberSummary(
+                        id=mid, kind=row.kind, title=row.title,
+                        digest_insight=row.digest_insight, archived=True))
+        digest_id = str(fm["id"])
+        title = str(fm["title"]) if fm.get("title") is not None else None
+        out[digest_id] = ClusterDigest(
+            id=digest_id, title=title, related=_as_list(fm.get("related")),
+            member_ids=member_ids, member_count=len(member_ids), members=members)
+    return out
