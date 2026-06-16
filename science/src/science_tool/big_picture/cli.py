@@ -11,6 +11,7 @@ from science_model.aspects import (
     load_project_aspects,
     matches_aspect_filter,
 )
+from science_tool.big_picture.digests import load_cluster_digests, member_to_digest
 from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
 from science_tool.big_picture.layout import entity_dir
@@ -111,3 +112,31 @@ def knowledge_gaps_cmd(project_root: Path, limit: int | None) -> None:
     if limit is not None:
         gaps = gaps[:limit]
     click.echo(json.dumps([asdict(g) for g in gaps], indent=2, sort_keys=True))
+
+
+@big_picture_group.command("cluster-digests")
+@click.option(
+    "--project-root",
+    type=click.Path(file_okay=False, exists=True, path_type=Path),
+    default=Path.cwd(),
+    show_default=True,
+    help="Path to the project root.",
+)
+@click.option(
+    "--deep",
+    is_flag=True,
+    default=False,
+    help="Attach index-only member summaries (id/kind/title/digest_insight) per digest.",
+)
+def cluster_digests_cmd(project_root: Path, deep: bool) -> None:
+    """Emit the cluster-digest registry + member->digest map as JSON.
+
+    Recognition surface for /science:big-picture: substitute one digest for its N
+    archived members (and label it); --deep descends into the members index-only.
+    """
+    digests = load_cluster_digests(project_root, deep=deep)
+    payload = {
+        "digests": {did: asdict(cd) for did, cd in sorted(digests.items())},
+        "member_to_digest": member_to_digest(project_root),
+    }
+    click.echo(json.dumps(payload, indent=2, sort_keys=True))
