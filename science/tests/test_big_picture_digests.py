@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import dataclasses as dc
 
+import pytest
+
 from science_tool.archive import ArchiveRow, append_row, archive_index_path
 from science_tool.big_picture.digests import (
     ClusterDigest,
@@ -61,6 +63,21 @@ def test_member_to_digest_excludes_plain_archives(tmp_path) -> None:
 
 def test_member_to_digest_empty_when_no_index(tmp_path) -> None:
     assert member_to_digest(tmp_path) == {}
+
+
+def test_member_to_digest_raises_on_key_mapping_to_two_digests(tmp_path) -> None:
+    # An alias of one archived row collides with a different row's canonical id,
+    # but the two rows consolidated into DIFFERENT digests -> integrity violation.
+    idx = archive_index_path(tmp_path)
+    append_row(idx, ArchiveRow(
+        op="archive", id="interpretation:i01", kind="interpretation",
+        status="archived", consolidated_into="synthesis:d1", archived_at="T1"))
+    append_row(idx, ArchiveRow(
+        op="archive", id="interpretation:i02", kind="interpretation",
+        aliases=["interpretation:i01"], status="archived",
+        consolidated_into="synthesis:d2", archived_at="T1"))
+    with pytest.raises(ValueError, match="two digests"):
+        member_to_digest(tmp_path)
 
 
 def _write(path, text):
