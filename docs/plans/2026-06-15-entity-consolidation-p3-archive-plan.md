@@ -1025,7 +1025,7 @@ def check_archive_index(ctx: ValidateContext) -> Iterator[Result]:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_archive_verify.py -v`
-Expected: PASS (4 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -1155,10 +1155,13 @@ def _build_graph_text(tmp_path: Path) -> str:
     return out_path.read_text(encoding="utf-8")
 
 
-def test_related_ref_to_archived_id_makes_stub_and_edge(tmp_path: Path) -> None:
+def test_archived_ref_edges_land_per_graph_and_stub(tmp_path: Path) -> None:
     _seed(tmp_path)
+    # one live entity references the archived id via ALL THREE acceptance edge types
     _live(tmp_path, "---\nid: interpretation:0001-live\ntype: interpretation\n"
-                    "related:\n  - interpretation:0002-gone\n---\n")
+                    "related:\n  - interpretation:0002-gone\n"
+                    "source_refs:\n  - interpretation:0002-gone\n"
+                    "relations:\n  - predicate: sci:supersedes\n    target: interpretation:0002-gone\n---\n")
     append_row(archive_index_path(tmp_path), ArchiveRow(op="archive", id="interpretation:0002-gone",
                kind="interpretation", title="Gone v1", superseded_by="interpretation:0003-new",
                original_path="entities/interpretations/0002-gone.md", archived_at="T1"))
@@ -1166,6 +1169,9 @@ def test_related_ref_to_archived_id_makes_stub_and_edge(tmp_path: Path) -> None:
                kind="interpretation", title="New", original_path="entities/interpretations/0003-new.md", archived_at="T1"))
     text = _build_graph_text(tmp_path)
     assert "0002-gone" in text                        # edge target present
+    assert "related" in text                           # related -> skos:related (knowledge graph)
+    assert "wasDerivedFrom" in text                    # source_refs -> prov:wasDerivedFrom (provenance graph)
+    assert "supersedes" in text                        # relations[].target -> relation predicate
     assert "ArchivedEntity" in text                   # stub typed
     assert "Gone v1" in text                           # label from index
     assert "supersededBy" in text                      # superseded_by resolvable -> emitted
@@ -1189,18 +1195,25 @@ Expected: FAIL — `materialize_graph` raises `ValueError: Cannot materialize gr
 
 - [ ] **Step 3a: Make the audit archive-aware (`load_project_sources`)**
 
-In `graph/sources.py::load_project_sources`, after the `ProjectSources` is assembled and before it is returned, fold the archive index's resolvable-ids into `manual_aliases` so every downstream resolver (audit + materialize + validate graph-audit) resolves archived refs:
+In `graph/sources.py::load_project_sources`, after the `ProjectSources` is assembled and before it is returned, fold the archive index's resolvable-ids into `manual_aliases` so every downstream resolver (audit + materialize + validate graph-audit) resolves archived refs. **Do NOT use `setdefault`** — an archive token whose target conflicts with an existing project-authored manual alias must fail loud, not be silently skipped:
 ```python
     # Archived ids remain resolvable reference targets (index-only; archived
     # markdown is NOT loaded as a live entity). Folding them into manual_aliases
     # makes the audit + materialization resolvers treat refs to archived ids as
-    # resolved instead of unresolved_reference. A real collision with a live alias
-    # raises AliasCollisionError downstream (fail-loud).
+    # resolved instead of unresolved_reference. Fail loud on a real collision with a
+    # project-authored manual alias (archive-vs-entity collisions surface separately
+    # as AliasCollisionError when ReferenceResolver.from_entities runs).
     from science_tool.archive import load_archive_index
     for token, canonical in load_archive_index(project_root).resolvable_ids().items():
-        sources.manual_aliases.setdefault(token, canonical)
+        existing = sources.manual_aliases.get(token)
+        if existing is not None and existing != canonical:
+            raise ValueError(
+                f"archive token {token!r} -> {canonical!r} collides with project manual "
+                f"alias -> {existing!r}; unarchive or rename before archiving"
+            )
+        sources.manual_aliases[token] = canonical
 ```
-(Place this where `sources` is the assembled `ProjectSources` and `sources.manual_aliases` is a mutable dict. If `manual_aliases` is immutable in your `ProjectSources`, build the merged dict before constructing `sources`. Guard against import cycles: `archive.py` imports `entity_scan` + `big_picture.frontmatter`, not `graph.sources`, so a local import here is safe.)
+(Place this where `sources` is the assembled `ProjectSources` and `sources.manual_aliases` is a mutable dict. If `manual_aliases` is immutable in your `ProjectSources`, build the merged dict before constructing `sources`. Guard against import cycles: `archive.py` imports `entity_scan` + `big_picture.frontmatter`, not `graph.sources`, so a local import here is safe.) This raise propagates out of `materialize_graph` and is caught by Task 6's archive subcheck (`except Exception -> ERROR`), so the collision is surfaced loud on both graph build and `validate` — closing the masking gap.
 
 - [ ] **Step 3b: Thread `archive_active` into the dataset build + emit stub/edges (`materialize.py`)**
 
@@ -1219,33 +1232,54 @@ Inside `_build_dataset_from_sources`, build the resolvable map + a stub-collecti
     referenced_archived: set[str] = set()
 ```
 
-Add a helper near `_entity_uri` (~line 1183):
+Helper near `_entity_uri` (~line 1183). After Step 3a, an archived ref already resolves (`resolution.status == "resolved"`, `canonical_id` = the archived id), so the existing `entity_index.get(canonical_id)` returns `None` (archived not live) — that `None` is exactly where each live branch currently bails. The helper just confirms the resolved id is an active archived id and records it for the stub:
 ```python
-def _archived_target_uri(raw_target: str, resolver, entity_index, archive_resolvable, referenced_archived):
-    """If raw_target resolves to an ACTIVE archived id (and is not a live entity),
-    return its canonical URI and record it for stub emission. Else None."""
-    res = resolver.resolve(raw_target, allow_cross_kind_fallback=True)
-    cid = res.canonical_id if res.status == "resolved" else None
-    cid = cid or archive_resolvable.get(raw_target)
-    if cid is None or cid in entity_index:  # live entity wins; not an archived-only target
-        return None
-    archived = archive_resolvable.get(cid)
-    if archived is None:
-        return None
-    referenced_archived.add(archived)
-    return _entity_uri(archived)
+def _archived_uri_if_active(canonical_id, archive_active, referenced_archived):
+    """canonical_id is a RESOLVED id with no live entity. If it is an active archived
+    id, record it for stub emission and return its URI; else None."""
+    if canonical_id in archive_active:
+        referenced_archived.add(canonical_id)
+        return _entity_uri(canonical_id)
+    return None
 ```
 
-At each of the three acceptance edge sites — the `related:`, `source_refs:`, and `relations[].target` resolution loops — where the code currently does `if resolution.status != "resolved": continue` (or `entity_index.get(...) is None: continue`), insert a fallback BEFORE the `continue` that adds the edge to the archived URI:
-```python
-        archived_uri = _archived_target_uri(raw_target, resolver, entity_index, archive_resolvable, referenced_archived)
-        if archived_uri is not None:
-            knowledge.add((entity_uri, <SAME_PREDICATE_AS_THIS_EDGE>, archived_uri))
-        continue
-```
-(Use the same predicate the live branch uses for that edge type, e.g. `SCI_NS.related` / `SCI_NS.hasSource` / the relation's resolved predicate — match the live code at each site.)
+Apply the fallback **per edge site, matching that site's target graph and predicate** (do NOT use a single `knowledge.add` for all three):
 
-After the per-entity loop (before serializing), emit one stub node per referenced archived id:
+**(1) `related:`** (line ~437, where `target is None: continue`). Preserve the kind-specialized predicate, taking the archived target's kind from the index:
+```python
+        if target is None:
+            archived_uri = _archived_uri_if_active(resolution.canonical_id, archive_active, referenced_archived)
+            if archived_uri is not None:
+                akind = archive_active[resolution.canonical_id].kind
+                predicate = SCI_NS.tests if entity.kind == "task" and akind in {"hypothesis", "question"} else SKOS.related
+                knowledge.add((entity_uri, predicate, archived_uri))
+            continue
+```
+
+**(2) `source_refs:`** (line ~503, where `target is None: continue`). This edge lives in the **provenance** graph with `PROV.wasDerivedFrom`:
+```python
+        if target is None:
+            archived_uri = _archived_uri_if_active(resolution.canonical_id, archive_active, referenced_archived)
+            if archived_uri is not None:
+                provenance.add((entity_uri, PROV.wasDerivedFrom, archived_uri))
+            continue
+```
+
+**(3) `relations[].target`** (`_add_authored_relation`, line ~920 — it does NOT `continue`; it calls `_canonical_entity(relation.object, …)` which RAISES `ValueError` on a resolved-but-not-live object). Add an archived-object branch that mirrors the external-reference branch (leaves `object_entity = None`, so `_validate_authored_relation_endpoint` skips object-kind validation exactly as it already does for external refs):
+```python
+    else:
+        obj_res = resolver.resolve(relation.object, allow_cross_kind_fallback=True)
+        obj_cid = obj_res.canonical_id if obj_res.status == "resolved" else None
+        if obj_cid is not None and obj_cid not in entity_index and obj_cid in archive_active:
+            object_uri = _entity_uri(obj_cid)          # object_entity stays None (like external)
+            referenced_archived.add(obj_cid)
+        else:
+            object_entity = _canonical_entity(relation.object, entity_index=entity_index, resolver=resolver)
+            object_uri = _entity_uri(object_entity.canonical_id)
+```
+Thread `archive_active` and the shared `referenced_archived` set into `_add_authored_relation` (it is called from the build loop, ~line 171). Confirm `_validate_authored_relation_endpoint` tolerates `object_entity=None` (it must — the external-ref path already passes None).
+
+After the per-entity loop AND the authored-relation loop (so both edge sources have populated `referenced_archived`), emit one stub node per referenced archived id into the **knowledge** graph:
 ```python
     for archived_id in sorted(referenced_archived):
         row = archive_active[archived_id]
@@ -1256,10 +1290,15 @@ After the per-entity loop (before serializing), emit one stub node per reference
         if row.title:
             knowledge.add((uri, RDFS.label, Literal(row.title)))
         knowledge.add((uri, SCI_NS.archived, Literal(True)))
-        if row.superseded_by and row.superseded_by in archive_resolvable:
-            knowledge.add((uri, SCI_NS.supersededBy, _entity_uri(archive_resolvable[row.superseded_by])))
+        # superseded_by emitted only when it resolves to a known id — a live entity
+        # (the usual case: an archived old version points at its live successor) OR
+        # another active archived id. Unresolvable/dangling successor -> omitted.
+        if row.superseded_by and (row.superseded_by in entity_index or row.superseded_by in archive_active):
+            knowledge.add((uri, SCI_NS.supersededBy, _entity_uri(row.superseded_by)))
 ```
-Confirm `RDF`, `RDFS`, `Literal`, and `SCI_NS` are imported at the top of `materialize.py` (they are used elsewhere; add any missing import). If `SCI_NS.ArchivedEntity` / `entityKind` / `archived` / `supersededBy` are new terms, that is fine — `SCI_NS` is a namespace object that mints terms on demand.
+Confirm `RDF`, `RDFS`, `Literal`, `SKOS`, `PROV`, and `SCI_NS` are imported at the top of `materialize.py` (all are used elsewhere). New `SCI_NS` terms (`ArchivedEntity`/`entityKind`/`archived`/`supersededBy`) mint on demand.
+
+Extend the Step-1 test to assert the **graph/predicate per edge** — `related` → knowledge `skos:related` (or `sci:tests`); `source_refs` → provenance `prov:wasDerivedFrom`; `relations[].target` → the relation's layer graph with the relation predicate. The TriG serialization includes all named graphs, so substring assertions on `wasDerivedFrom`, `related`, the relation predicate, and `ArchivedEntity` suffice.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1716,4 +1755,5 @@ git commit -m "test(archive): P3 acceptance invariant — referenced superseded 
 - **Type consistency:** `iter_entity_markdown(root, *, include_archived)`, `ArchiveRow`, `load_archive_index().active_by_id` / `.resolvable_ids()`, `archive_entities(...apply, now)`, `unarchive_entities(ids, ...)`, `verify_archive(project_root, live_alias_space)`, `search_archive(project_root, query)` are used identically across tasks.
 - **Pinned APIs** (verified against the repo): `ValidateContext.from_project_root(root, *, strict, verbose)` (`validate/context.py`); `materialize_graph(project_root, *, strict=True) -> Path` writes/returns `knowledge/graph.trig` and **runs `audit_project_sources` first, raising on unresolved refs** (`graph/materialize.py:219,247`); the audit + materialize resolvers are both built from `sources.entities`+`sources.manual_aliases` (`migrate.py:175`), so the High-1 fix is the single `load_project_sources` alias augmentation; root group is `main`, archive/unarchive on `entities_group` (`cli.py:232`), `search` on `main`; the list command is `entity list` (`entity_group`, `entity_list`, `cli.py:637`, uses `Path.cwd()`).
 - **Review fixes folded in (2nd-round):** graph **audit** archive-awareness (High-1, Task 8 Step 3a); `verify_archive` walks active rows for archive-vs-archive collisions (High-2, Task 6); validate subcheck no fail-open + `same_as` in live-space (Medium-3, Task 6); frozen-inventory + SSOT-usage guard pair (Medium-4, Task 3); inbound-live-refs in archive report (Medium-5, Task 5); `~/d/` paths + `rtk` note (Low-6, header).
+- **Review fixes folded in (3rd-round):** archive→manual-alias merge raises instead of `setdefault`-masking (High, Task 8 3a) — closing the masking gap with verify; `_add_authored_relation` gains an explicit archived-object branch (mirrors external-ref, `object_entity=None`) since it raises rather than `continue`s (High, Task 8 3b); per-edge graph/predicate fallbacks — `related`→knowledge `skos:related`/`sci:tests`, `source_refs`→**provenance** `prov:wasDerivedFrom`, `relations[].target`→relation layer — with per-edge test assertions (Medium, Task 8); `supersededBy` emitted for live-or-archived successor; Task 6 count 4→5 (Low).
 - **Still requires in-repo confirmation** (noted inline): the exact predicate CURIEs at the three graph edge-resolution sites + `SCI_NS`/`RDF`/`RDFS`/`Literal` imports in `materialize.py`; mutability of `ProjectSources.manual_aliases` for the in-place augmentation; whether the minimal tmp_path fixture is rich enough for `materialize_graph`/`from_project_root` (else mirror an existing graph/validate test scaffold); the actual non-entity `rglob` ALLOWLIST set (reconcile in Task 3 Step 2).
