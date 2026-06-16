@@ -20,11 +20,15 @@
 - **The package lives under `science/`** inside the worktree. Source is
   `science/src/science_tool/...` and `science/model/src/science_model/...`; tests
   are `science/tests/...`.
-- **Test command** (the worktree has no `.venv`; use the main repo's venv with
-  `PYTHONPATH=src`), run from the `science/` subdir:
+- **Test command** (the worktree has no `.venv`; use the main repo's venv), run
+  from the `science/` subdir. **`PYTHONPATH` MUST be `src:model/src`** — the venv
+  has `science_model` editable-installed from the **main** repo, so without
+  prepending the worktree's `model/src` your edits to `science_model` (e.g.
+  `profiles/core.py`, templates) are silently shadowed by main and tests will not
+  see them:
   ```bash
   cd ~/d/science/.worktrees/entity-consolidation-p4-consolidate-apply/science
-  PYTHONPATH=src ~/d/science/science/.venv/bin/pytest <path> -v
+  PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest <path> -v
   ```
 - **Commits:** do NOT include any `Co-Authored-By` trailer. One commit per task.
 - **rtk:** shell commands are auto-rewritten through the `rtk` proxy by the Claude
@@ -128,7 +132,7 @@ def test_every_declared_status_still_classified() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_archived_status_vocab.py -v`
+Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_archived_status_vocab.py -v`
 Expected: FAIL — `test_consolidatable_kind_accepts_archived` fails (no kind has `archived` yet).
 
 - [ ] **Step 3: Implement — add `archived` to each of the 18 kinds**
@@ -186,7 +190,7 @@ Example:
 
 Run:
 ```
-PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_archived_status_vocab.py tests/test_kind_map_equivalence.py tests/test_status_visibility.py -v
+PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_archived_status_vocab.py tests/test_kind_map_equivalence.py tests/test_status_visibility.py -v
 ```
 Expected: PASS (all). `archived` is already in `_HIDDEN_STATUSES`, so the
 classification guard stays green; the parity literal now matches the profile.
@@ -225,7 +229,7 @@ def test_cluster_digest_is_a_valid_report_kind() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_cluster_digest_report_kind.py -v`
+Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_cluster_digest_report_kind.py -v`
 Expected: FAIL — `cluster-digest` not in the set.
 
 - [ ] **Step 3: Implement**
@@ -248,7 +252,7 @@ In `science/model/src/science_model/templates/synthesis.md`, extend both
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_cluster_digest_report_kind.py -v`
+Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_cluster_digest_report_kind.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -303,7 +307,7 @@ def test_consolidates_allows_synthesis_to_any_member_kind() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidates_relation_kind.py -v`
+Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_consolidates_relation_kind.py -v`
 Expected: FAIL — `"consolidates" in registry` assertion fails.
 
 - [ ] **Step 3: Implement — add the RelationKind**
@@ -325,7 +329,7 @@ add a new entry (place it after the existing entries, before the closing `]`):
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidates_relation_kind.py -v`
+Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_consolidates_relation_kind.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -396,7 +400,7 @@ def test_relocate_rows_moves_and_appends(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_relocate_rows_primitive.py -v`
+Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_relocate_rows_primitive.py -v`
 Expected: FAIL — `consolidated_into` not a field and `_relocate_rows` does not exist.
 
 - [ ] **Step 3: Implement — add fields + extract primitive**
@@ -471,7 +475,7 @@ above unchanged.)
 
 Run:
 ```
-PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_relocate_rows_primitive.py tests/test_archive_mutators.py tests/test_archive_index.py -v
+PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_relocate_rows_primitive.py tests/test_archive_mutators.py tests/test_archive_index.py -v
 ```
 Expected: PASS (all). `archive_entities` behavior is unchanged.
 
@@ -571,7 +575,7 @@ def test_scaffold_rejects_digest_id_colliding_with_archived(tmp_path: Path) -> N
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_scaffold.py -v`
+Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_scaffold.py -v`
 Expected: FAIL — `science_tool.consolidate` does not exist.
 
 - [ ] **Step 3: Implement `consolidate.py` (scaffold half)**
@@ -704,7 +708,7 @@ def scaffold_digest(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_scaffold.py -v`
+Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_scaffold.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -816,7 +820,7 @@ def test_apply_rejects_already_archived_member(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_apply.py -v`
+Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_apply.py -v`
 Expected: FAIL — `apply_consolidation` does not exist.
 
 - [ ] **Step 3: Implement `apply_consolidation`**
@@ -897,7 +901,7 @@ def apply_consolidation(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_apply.py -v`
+Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_apply.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -964,7 +968,7 @@ def test_append_failure_restores_member(tmp_path: Path, monkeypatch: pytest.Monk
 
 - [ ] **Step 2: Run test to verify it fails or passes**
 
-Run: `PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_rollback.py -v`
+Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_rollback.py -v`
 Expected: PASS if Task 6's transaction is correct. (The test monkeypatches
 `_relocate_rows` to raise *after* the frontmatter rewrite, exercising the
 `except: loc.path.write_bytes(original_bytes)` restore path.) If it FAILS,
@@ -979,7 +983,7 @@ re-raising (see Task 6 code).
 
 - [ ] **Step 4: Re-run to confirm PASS**
 
-Run: `PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_rollback.py -v`
+Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_rollback.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1049,7 +1053,7 @@ def test_digest_consolidates_edge_targets_tombstone(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails (or surfaces a real gap)**
 
-Run: `PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidates_graph_resolution.py -v`
+Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_consolidates_graph_resolution.py -v`
 Expected: the test should PASS *without* any materialize change — the
 authored-relation emitter already receives `archive_active`/`referenced_archived`
 (P3). **If `"consolidates"`/`"ArchivedEntity"` is missing or the build raises**,
@@ -1070,7 +1074,7 @@ keeping it minimal and mirroring the existing `_archived_uri_if_active` handling
 
 Run:
 ```
-PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidates_graph_resolution.py tests/test_archive_resolution_graph.py tests/test_archive_resolution_validate.py -v
+PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_consolidates_graph_resolution.py tests/test_archive_resolution_graph.py tests/test_archive_resolution_validate.py -v
 ```
 Expected: PASS (all). The archived member must not be forced into the live graph,
 and validate must report no nonexistent-reference error for the `consolidates`
@@ -1149,7 +1153,7 @@ def test_scaffold_then_apply_via_cli(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_cli.py -v`
+Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_cli.py -v`
 Expected: FAIL — no `consolidate` subcommand under `entities`.
 
 - [ ] **Step 3: Implement the CLI sub-group**
@@ -1213,7 +1217,7 @@ exc: raise click.ClickException(str(exc))` — mirror whatever the surrounding
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_cli.py -v`
+Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_cli.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1302,7 +1306,7 @@ def test_full_consolidation_lifecycle(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it passes**
 
-Run: `PYTHONPATH=src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_acceptance.py -v`
+Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_consolidate_acceptance.py -v`
 Expected: PASS. (If `verify_archive`'s signature differs, mirror its call in
 `tests/test_archive_verify.py`.)
 
@@ -1310,7 +1314,7 @@ Expected: PASS. (If `verify_archive`'s signature differs, mirror its call in
 
 Run:
 ```
-PYTHONPATH=src ~/d/science/science/.venv/bin/pytest \
+PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest \
   tests/test_archived_status_vocab.py tests/test_cluster_digest_report_kind.py \
   tests/test_consolidates_relation_kind.py tests/test_relocate_rows_primitive.py \
   tests/test_consolidate_scaffold.py tests/test_consolidate_apply.py \
@@ -1340,7 +1344,7 @@ reproduce on `main`):
 
 ```bash
 cd ~/d/science/.worktrees/entity-consolidation-p4-consolidate-apply/science
-PYTHONPATH=src ~/d/science/science/.venv/bin/pytest -q
+PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest -q
 ```
 
 Then dispatch a final whole-feature code review before finishing the branch.
