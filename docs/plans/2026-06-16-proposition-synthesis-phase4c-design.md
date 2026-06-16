@@ -70,8 +70,10 @@ A new **brain** and a new **hands**, plus one small model field:
   self-declare their `source`. That is the *only* path by which `<model>` reaches
   deterministic apply; there is no `--model` flag to drift out of sync with the model that
   actually produced the proposals. Apply validates the string against the exact pattern
-  `^llm-synth:[^:]+:proposition-synthesize-v1$` and stamps it verbatim into
-  `reasoning_source` (§7).
+  **`^llm-synth:[A-Za-z0-9._-]+:proposition-synthesize-v1$`** — the model token allows only
+  `[A-Za-z0-9._-]`, so the scaffold placeholder `<MODEL>` (and any whitespace, `<`, `>`, or
+  path separator) is rejected, never stamped — and writes it verbatim into `reasoning_source`
+  (§7).
 - **CLI** `science annotate synthesize <source.md>` (a new subcommand on the existing
   `annotate` group), backed by a new module `annotation/synthesize.py` (sibling to
   `promote.py`; reuses `entity_dest`, the markdown-parse helper, and the
@@ -108,7 +110,7 @@ shape — under the same `source`.
   {
   "proposition": "proposition:brca1-loss-genomic-instability",
   "title": "BRCA1 loss drives genomic instability",
-  "current": {                         // present fields only (unset omitted)
+  "current": {                         // unset fields shown as null, for the agent's context
     "subject": "BRCA1 loss", "object": null,
     "predicate": null, "polarity": null, "claim_layer": null
   },
@@ -171,7 +173,16 @@ deterministic layer, which is wrong — disagreements are semantic, not mechanic
   evidence anchored the factorization; it is not separately persisted — the prop↔annotation
   link already lives in `source_refs` from 4a.
 - Any of `subject`/`object`/`predicate`/`polarity`/`claim_layer` may be **omitted** —
-  omitted means *leave unset*, never "guess a default".
+  omitted means *leave unset*, never "guess a default". A field present with an explicit
+  `null` (or empty string) is a **hard error**, not a synonym for omission: the scaffold
+  may show `null` for context, but a candidate must carry each field as either *absent* or
+  a canonical non-null enum/string value. This keeps "leave unset" unambiguous.
+- **Coverage — at most one candidate per in-scope proposition.** Two candidates naming the
+  same `proposition` is a **hard error** (`SynthesisReadError`) — synthesis never merges or
+  order-resolves competing patches (reconciliation is the agent's job, §6 intro). An
+  in-scope proposition with **no** candidate is not silently skipped: it is reported and
+  counted as `synthesize-proposition-uncovered` (the curator may deliberately omit a
+  proposition; the report makes every such omission visible and re-runnable).
 - `override` (optional) is a closed list drawn from
   `{subject, object, predicate, polarity, claim_layer}` naming already-set fields the
   curator authorises replacing. `reasoning_source` is **never** overrideable from input.
@@ -183,27 +194,34 @@ so the whole input is validated before **any** proposition file is written.
 
 **Pass 1 — validate the whole input (no writes):**
 1. **Top-level `source`, fail-loud:** required; must match
-   `^llm-synth:[^:]+:proposition-synthesize-v1$`. Held for the Pass-2 stamp.
-2. **Parse each candidate, fail-loud:** unknown keys; non-canonical enum values;
+   `^llm-synth:[A-Za-z0-9._-]+:proposition-synthesize-v1$` (the tightened model token rejects
+   the scaffold `<MODEL>` placeholder and any whitespace/`<`/`>`/path separator). Held for
+   the Pass-2 stamp.
+2. **Coverage, fail-loud:** the `candidates` list has **at most one** entry per
+   `proposition` — a duplicate `proposition` ref aborts. After validation, every in-scope
+   proposition with no candidate is recorded as `synthesize-proposition-uncovered` (reported,
+   non-fatal).
+3. **Parse each candidate, fail-loud:** unknown keys; any reasoning field present as
+   explicit `null`/empty (must be omitted or a canonical value); non-canonical enum values;
    `proposition` not in the in-scope set; missing `annotation`, or an `annotation` that is
    not one of that proposition's supporting-statement refs from the scaffold; `override`
    entries outside the closed field set, naming a field not present in the patch, or naming
    a field that is currently unset; `override` naming `reasoning_source`.
-3. **predicate→operands contract:** if the patch proposes `predicate`, an **effective**
+4. **predicate→operands contract:** if the patch proposes `predicate`, an **effective**
    `subject` and `object` must exist — either already on the proposition or proposed in
    the same patch. Otherwise hard error.
-4. **polarity→predicate contract:** a patch that writes `polarity` (any value) without an
+5. **polarity→predicate contract:** a patch that writes `polarity` (any value) without an
    **effective** `predicate` is a hard error. Polarity is relation-scoped; the model would
    permit a bare polarity, but a polarity-only proposition is semantically incoherent, so
    synthesis forbids it. (`not_applicable` for a sign-less predicate is *written by*
    canonicalization, never *proposed* bare.)
-5. **Interlocks:** construct the *would-be* updated `PropositionEntity` from the current
+6. **Interlocks:** construct the *would-be* updated `PropositionEntity` from the current
    frontmatter plus the **fields this patch will actually write** (computed by applying the
    Pass-2 fill-only-unset + override + sign-less-canonicalization rules, so Pass 1 validates
    exactly the state Pass 2 persists — never a value Pass 2 would block), and let the model's
    own `_validate_relational_fields` run. A sign-meaningful predicate with missing/`not_applicable`
    polarity is a hard error (the agent must supply a signed polarity — sign cannot be
-   guessed). Enum membership is already guaranteed by step 2. Operand presence (step 3) is
+   guessed). Enum membership is already guaranteed by step 3. Operand presence (step 4) is
    evaluated against this same effective state.
 
 Any Pass-1 failure aborts with a non-zero `ClickException` and writes nothing.
@@ -268,7 +286,8 @@ string they ignore, and the interlock/enum checks already cover the fields 4c wr
 ## 10. Error handling (fail-loud, mirroring promote)
 
 - `SynthesisReadError` — malformed candidates file / unreadable proposition / bad
-  top-level `source` shape / `annotation` not a supporting-statement ref of its proposition.
+  top-level `source` shape / duplicate `proposition` candidate / explicit-`null` reasoning
+  field / `annotation` not a supporting-statement ref of its proposition.
 - `SynthesisApplyError` — interlock violation, predicate-without-operands,
   polarity-without-predicate, write-boundary refusal.
 - `SynthesisOverrideError` — malformed/illegal `override` (unknown field, field not in
@@ -276,8 +295,8 @@ string they ignore, and the interlock/enum checks already cover the fields 4c wr
 - All surface as non-zero `ClickException`.
 - **Benign skip-and-count reasons** (reported, never abort): `synthesize-existing-value-blocks`
   (set field, different value, no override), `synthesize-nothing-to-fill` (all proposed
-  fields already match current), `synthesize-relation-hint-unresolved` (scaffold-stage
-  hint omission).
+  fields already match current), `synthesize-proposition-uncovered` (in-scope proposition
+  with no candidate), `synthesize-relation-hint-unresolved` (scaffold-stage hint omission).
 
 ## 11. Files
 
@@ -293,8 +312,11 @@ string they ignore, and the interlock/enum checks already cover the fields 4c wr
 ## 12. Testing
 
 - **Unit** (`synthesize.py`): scaffold grouping/scope; relation-hint co-location +
-  unresolved omission; top-level `source` shape validation; `annotation`-membership
-  validation; candidate parse fail-loud (keys/enums/scope/override); the predicate→operands
+  unresolved omission; top-level `source` shape validation (accepts a real model token,
+  **rejects the `<MODEL>` placeholder** and whitespace/path separators); coverage
+  (duplicate `proposition` ⇒ hard error; uncovered in-scope prop ⇒ counted, not silent);
+  explicit-`null` candidate field rejected; `annotation`-membership validation; candidate
+  parse fail-loud (keys/enums/scope/override); the predicate→operands
   contract (already-present vs in-patch operands); the polarity→predicate contract
   (bare-polarity rejected); interlock validation via the real model validator
   (sign-meaningful-missing-polarity hard error; sign-less + omitted polarity canonicalized
