@@ -783,5 +783,13 @@ CORE_PROFILE = ProfileManifest(
             layer="layer/core",
             description="A code file defines a workflow.",
         ),
+        RelationKind(
+            name="consolidates",
+            predicate="sci:consolidates",
+            source_kinds=["synthesis"],
+            target_kinds=[],  # unrestricted target: a digest may consolidate any consolidatable kind
+            layer="layer/core",
+            description="A cluster-digest synthesis subsumes the entities it consolidates (live->archived).",
+        ),
     ],
 )
