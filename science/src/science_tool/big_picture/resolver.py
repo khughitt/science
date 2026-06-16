@@ -23,7 +23,7 @@ from science_model.aspects import (
     validate_entity_aspects,
 )
 from science_tool.big_picture.digests import load_cluster_digests
-from science_tool.big_picture.frontmatter import read_frontmatter
+from science_tool.big_picture.frontmatter import as_list, read_frontmatter
 from science_tool.big_picture.layout import entity_dir
 from science_tool.entities import is_default_visible
 
@@ -58,26 +58,26 @@ def resolve_questions(project_root: Path) -> dict[str, ResolverOutput]:
 
     # Direct: question frontmatter declares hypothesis.
     for qid, qfm in questions.items():
-        for hid in _as_list(qfm.get("hypothesis")):
+        for hid in as_list(qfm.get("hypothesis")):
             results[qid][hid] = HypothesisMatch(hid, "direct", 1.0)
 
     # Inverse: hypothesis.related lists the question.
     for hid, hfm in hypotheses.items():
-        for ref in _as_list(hfm.get("related")):
+        for ref in as_list(hfm.get("related")):
             if ref in results and hid not in results[ref]:
                 results[ref][hid] = HypothesisMatch(hid, "inverse", 0.8)
 
     # Back-inverse: question.related lists the hypothesis (edge hosted on the
     # question side). Scored like inverse — same authored bidirectional intent.
     for qid, qfm in questions.items():
-        for ref in _as_list(qfm.get("related")):
+        for ref in as_list(qfm.get("related")):
             if ref in hypotheses and ref not in results[qid]:
                 results[qid][ref] = HypothesisMatch(ref, "back-inverse", 0.8)
 
     # Transitive: interpretation lists both a question and a hypothesis.
     interpretations = _load_entities(entity_dir(project_root, "interpretation"))
     for _iid, ifm in interpretations.items():
-        refs = _as_list(ifm.get("related"))
+        refs = as_list(ifm.get("related"))
         q_refs = [r for r in refs if r in results]
         h_refs = [r for r in refs if r in hypotheses]
         for qid in q_refs:
@@ -130,14 +130,6 @@ def _load_entities(directory: Path, *, include_hidden: bool = False) -> dict[str
             continue
         out[str(fm["id"])] = fm
     return out
-
-
-def _as_list(value: object) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(v) for v in value]
-    return [str(value)]
 
 
 def _finalize(matches: dict[str, HypothesisMatch]) -> ResolverOutput:

@@ -125,5 +125,32 @@ def test_load_cluster_digests_deep_pulls_index_only_summaries(tmp_path) -> None:
     ]
 
 
+def test_load_cluster_digests_deep_resolves_member_named_by_alias(tmp_path) -> None:
+    # A digest names a member by an ALIAS (or same_as) of the archived row, not its
+    # canonical id. Deep descent must still resolve it to the archived row (symmetric
+    # with member_to_digest's alias fan-out), reporting archived=True + the row fields,
+    # while keeping the authored member id on the summary.
+    syn = tmp_path / "entities" / "synthesis"
+    _write(syn / "0001-d.md",
+        '---\nid: "synthesis:0001-d"\ntitle: "D"\nreport_kind: "cluster-digest"\nstatus: "active"\n'
+        'relations:\n  - predicate: "sci:consolidates"\n    target: "interpretation:i01-alias"\n'
+        '  - predicate: "sci:consolidates"\n    target: "interpretation:i02-sameas"\n---\nx\n')
+    append_row(archive_index_path(tmp_path), ArchiveRow(
+        op="archive", id="interpretation:i01-canon", kind="interpretation",
+        title="Canon i01", aliases=["interpretation:i01-alias"], status="archived",
+        consolidated_into="synthesis:0001-d", digest_insight="i01 says X", archived_at="T1"))
+    append_row(archive_index_path(tmp_path), ArchiveRow(
+        op="archive", id="interpretation:i02-canon", kind="interpretation",
+        title="Canon i02", same_as=["interpretation:i02-sameas"], status="archived",
+        consolidated_into="synthesis:0001-d", digest_insight="i02 says Y", archived_at="T1"))
+
+    d = load_cluster_digests(tmp_path, deep=True)["synthesis:0001-d"]
+    # id stays as authored (the alias); the rest comes from the resolved canonical row.
+    assert [(m.id, m.archived, m.title, m.digest_insight) for m in d.members] == [
+        ("interpretation:i01-alias", True, "Canon i01", "i01 says X"),
+        ("interpretation:i02-sameas", True, "Canon i02", "i02 says Y"),
+    ]
+
+
 def test_load_cluster_digests_empty_without_synthesis_dir(tmp_path) -> None:
     assert load_cluster_digests(tmp_path) == {}
