@@ -7,6 +7,7 @@ from datetime import date as _date
 import hashlib
 import json
 from pathlib import Path
+from typing import Literal as _Literal
 from urllib.parse import quote
 
 from rdflib import Dataset, Literal, URIRef
@@ -52,7 +53,7 @@ from science_tool.graph.freshness import (
     derive_freshness,
 )
 from science_tool.graph.identity_table import ParticipationMode, build_identity_table
-from science_tool.graph.migrate import audit_project_sources
+from science_tool.graph.migrate import AuditRow, audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
     ProjectSources,
@@ -95,6 +96,25 @@ def build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     `_build_dataset_from_sources` helper or writing `graph.trig`.
     """
     return _build_dataset_from_sources(sources)
+
+
+@dataclass(frozen=True)
+class CompilationResult:
+    """Output of the compiler pipeline.
+
+    `dataset`/`trig_path` are None for an audit-only run (`stop_after="audit"`).
+    `sources` and `audit_rows` are the Load and Audit phase outputs, retained so
+    callers (e.g. diagnostics) can inspect them without re-running those phases.
+    For a full run, `dataset` reflects POST-write state: `save_graph_dataset` adds
+    REVISION_URI provenance triples in place, so the field is not a pre-write
+    snapshot (compare semantic content with REVISION_URI filtered out).
+    """
+
+    sources: ProjectSources
+    audit_rows: list[AuditRow]
+    has_failures: bool
+    dataset: Dataset | None
+    trig_path: Path | None
 
 
 @dataclass(frozen=True)
@@ -251,60 +271,118 @@ def _build_dataset_from_sources(
     return emit.dataset
 
 
-def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
-    """Build `knowledge/graph.trig` deterministically from project sources.
+def _preflight_migration(project_root: Path) -> None:
+    """Project-root preflight, materialize-only: block on unmigrated data-packages.
 
-    When `strict=True` (the default), raises RuntimeError if any legacy
-    data-package entities have not yet been migrated via
-    `science data-package migrate`.
+    Scans `doc/data-packages/` for active (non-superseded) legacy data-package
+    entities and raises RuntimeError if any remain. Not a phase and outside
+    `stop_after`: the audit path never runs this.
+    """
+    from science_model.frontmatter import parse_frontmatter
+
+    unmigrated: list[str] = []
+    dp_dir = project_root / "doc" / "data-packages"
+    if dp_dir.exists():
+        for md in dp_dir.rglob("*.md"):
+            result = parse_frontmatter(md)
+            fm = result[0] if result else {}
+            if fm.get("type") == "data-package" and fm.get("status") != "superseded":
+                unmigrated.append(str(fm.get("id", md.stem)))
+    if unmigrated:
+        slugs = ", ".join(sorted(unmigrated))
+        raise RuntimeError(
+            f"unmigrated data-package entities: {slugs}. "
+            f"Run `science data-package migrate <slug>` to split each into "
+            f"derived dataset(s) + research-package."
+        )
+
+
+def _audit_phase(sources: ProjectSources) -> tuple[list[AuditRow], bool]:
+    """Audit phase: the single `audit_project_sources` call site."""
+    return audit_project_sources(sources)
+
+
+def _write_phase(dataset: Dataset, trig_path: Path) -> Path:
+    """Write phase: persist the dataset to `trig_path`."""
+    trig_path.parent.mkdir(parents=True, exist_ok=True)
+    save_graph_dataset(dataset, trig_path)
+    return trig_path
+
+
+def _compile(
+    project_root: Path,
+    *,
+    stop_after: _Literal["audit"] | None = None,
+    strict: bool = True,
+) -> CompilationResult:
+    """Run the source-compiler phases: Load -> Audit -> Emit -> Derive -> Write.
+
+    `stop_after="audit"` returns after the audit phase without gating, emitting,
+    or writing (the `materialization_audit` projection). A full run hard-gates on
+    audit failures (the `materialize_graph` projection). The project-root preflight
+    is materialize-only and lives outside `stop_after`; `strict` is threaded to it
+    and `strict=False` suppresses it (matching the old `materialize_graph(strict=...)`).
     """
     project_root = project_root.resolve()
 
-    if strict:
-        from science_model.frontmatter import parse_frontmatter
-
-        unmigrated: list[str] = []
-        dp_dir = project_root / "doc" / "data-packages"
-        if dp_dir.exists():
-            for md in dp_dir.rglob("*.md"):
-                result = parse_frontmatter(md)
-                fm = result[0] if result else {}
-                if fm.get("type") == "data-package" and fm.get("status") != "superseded":
-                    unmigrated.append(str(fm.get("id", md.stem)))
-        if unmigrated:
-            slugs = ", ".join(sorted(unmigrated))
-            raise RuntimeError(
-                f"unmigrated data-package entities: {slugs}. "
-                f"Run `science data-package migrate <slug>` to split each into "
-                f"derived dataset(s) + research-package."
-            )
+    # Project-root preflight, materialize-only: only when producing output.
+    if stop_after is None and strict:
+        _preflight_migration(project_root)
 
     sources = load_project_sources(project_root, strict_identity=False)
-    rows, has_failures = audit_project_sources(sources)
+    audit_rows, has_failures = _audit_phase(sources)
+
+    if stop_after == "audit":
+        return CompilationResult(
+            sources=sources,
+            audit_rows=audit_rows,
+            has_failures=has_failures,
+            dataset=None,
+            trig_path=None,
+        )
+
     if has_failures:
         details = "; ".join(
-            f"{row['source']} {row['field']} -> {row['target']}" for row in rows if row["status"] == "fail"
+            f"{row['source']} {row['field']} -> {row['target']}"
+            for row in audit_rows
+            if row["status"] == "fail"
         )
-        msg = f"Cannot materialize graph with unresolved references: {details}"
-        raise ValueError(msg)
+        raise ValueError(f"Cannot materialize graph with unresolved references: {details}")
 
     trig_path = project_root / DEFAULT_GRAPH_PATH
     # Snapshot OBSERVATION is compiler/provenance state and runs UNCONDITIONALLY — it is not
     # gated on freshness_enabled. Gating it would stop persisting SourceSnapshot provenance
     # when freshness is off and lose baseline continuity, so re-enabling freshness later would
     # miss every intervening content change. Only the freshness-STATE derivation (inside
-    # `_build_dataset_from_sources`, the `if sources.freshness_enabled` block) is gated.
+    # `_derive_phase`, the `if sources.freshness_enabled` block) is gated.
     snapshots = compute_source_snapshots(sources, prior_graph_path=trig_path, today=_date.today())
     dataset = _build_dataset_from_sources(sources, source_snapshots=snapshots)
+    trig_path = _write_phase(dataset, trig_path)
 
-    trig_path.parent.mkdir(parents=True, exist_ok=True)
-    save_graph_dataset(dataset, trig_path)
-    return trig_path
+    return CompilationResult(
+        sources=sources,
+        audit_rows=audit_rows,
+        has_failures=has_failures,
+        dataset=dataset,
+        trig_path=trig_path,
+    )
+
+
+def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
+    """Build `knowledge/graph.trig` deterministically from project sources.
+
+    When `strict=True` (the default), the project-root preflight raises
+    RuntimeError if any legacy data-package entities have not yet been migrated
+    via `science data-package migrate`.
+    """
+    result = _compile(project_root, strict=strict)
+    assert result.trig_path is not None  # a full compile always writes
+    return result.trig_path
 
 
 def materialization_audit(project_root: Path) -> tuple[list[dict[str, str]], bool]:
     """Audit a project root for unresolved canonical references."""
-    rows, has_failures = audit_project_sources(load_project_sources(project_root.resolve(), strict_identity=False))
+    result = _compile(project_root, stop_after="audit")
     audit_rows = [
         {
             "check": row["check"],
@@ -314,9 +392,9 @@ def materialization_audit(project_root: Path) -> tuple[list[dict[str, str]], boo
             "target": row["target"],
             "details": row["details"],
         }
-        for row in rows
+        for row in result.audit_rows
     ]
-    return audit_rows, has_failures
+    return audit_rows, result.has_failures
 
 
 def _add_entity(
