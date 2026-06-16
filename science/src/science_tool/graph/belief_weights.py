@@ -2,7 +2,11 @@
 
 Ordering is fixed here; per-project numeric weights and the quantitative scalar are
 Phase 2 (opt-in via core/decisions.md). Unknown values rank 0 (degrade gracefully).
-Canonical evidence_type values carry an '_evidence' suffix (cli.py:1646); we normalize.
+The evidence vocabularies are owned by ``science_model.reasoning`` (EvidenceType /
+EvidenceRole / EvidenceStrength); the rank tables below key off those enum members and
+are kept in lock-step by ``_reconcile_evidence_vocab``. Authored evidence_type values may
+carry an '_evidence' suffix; ``normalize_evidence_type`` delegates suffix-stripping to the
+model's ``canonical_evidence_type_token``.
 """
 from __future__ import annotations
 
