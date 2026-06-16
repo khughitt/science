@@ -70,3 +70,27 @@ def test_scaffold_rejects_digest_id_colliding_with_archived(tmp_path: Path) -> N
     )
     with pytest.raises(ConsolidateError, match="collides with an archived"):
         scaffold_digest(root, digest_id="synthesis:0001-digest", member_ids=["finding:0001-a"], title="D")
+
+
+def test_local_closed_vocab_kind_is_not_consolidatable(tmp_path: Path) -> None:
+    from science_tool.consolidate import _is_consolidatable
+
+    (tmp_path / "science.yaml").write_text("name: t\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    manifest_dir = tmp_path / "knowledge" / "sources" / "local"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    (manifest_dir / "manifest.yaml").write_text(
+        "name: t-local\n"
+        "imports:\n"
+        "  - core\n"
+        "strictness: typed-extension\n"
+        "entity_kinds:\n"
+        "  - name: gadget\n"
+        "    canonical_prefix: gadget\n"
+        "    layer: layer/local\n"
+        "    description: Gadget.\n"
+        "    home: entities/gadgets\n"
+        "    statuses: [draft, active]\n"
+        "relation_kinds: []\n",
+        encoding="utf-8",
+    )
+    assert _is_consolidatable(tmp_path, "gadget") is False  # closed vocab, no 'archived'

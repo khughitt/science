@@ -144,7 +144,14 @@ def apply_consolidation(
 
     Per-member transaction: snapshot bytes -> rewrite frontmatter (status/consolidated_into)
     -> relocate via _relocate_rows. On any exception, restore the snapshotted bytes at the
-    live original_path (the move-rollback / un-executed move leaves the file there)."""
+    live original_path (the move-rollback / un-executed move leaves the file there).
+
+    Members are committed one at a time and each member is atomic, but the loop is
+    NOT all-or-nothing: if member N fails, members 1..N-1 remain archived+indexed
+    while member N (and beyond) are untouched. The digest still lists every member,
+    so the operation is not auto-resumable — recovery is to `entities unarchive` the
+    already-archived members (or hand-fix) and re-run, or to leave the partial
+    consolidation and adjust the digest. No index drift or data loss occurs either way."""
     project_root = Path(project_root).resolve()
     digest = find_entity(project_root, digest_id)
     if digest.frontmatter.get("report_kind") != CLUSTER_DIGEST_REPORT_KIND:
