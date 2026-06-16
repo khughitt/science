@@ -95,6 +95,7 @@ class Annotation:
     modified_by: Optional[str] = None     # actor of most recent status mutation
     description: Optional[str] = None
     lifted_from: Optional[str] = None
+    promoted_to: Optional[str] = None     # proposition:<slug> this span was promoted into (Phase 4a)
     match_text: Optional[str] = None      # per-finding identity (P3.2 dedupe key)
     prior_states: tuple[PriorState, ...] = ()
 

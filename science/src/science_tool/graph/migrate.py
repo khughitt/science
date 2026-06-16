@@ -850,6 +850,10 @@ def _audit_reference(
     allow_cross_project_address: bool = False,
     peer_ids: frozenset[str] = frozenset(),
 ) -> list[AuditRow]:
+    if field_name == "source_refs" and raw_target.startswith("annotation:"):
+        # An `annotation:<relpath>#<frag>` source ref points back to a source-annotation,
+        # which is not an entity; the materializer mints a stable annotation URI directly.
+        return []
     if field_name in {"source_refs", "evidence_refs"} and is_bibliography_reference(raw_target):
         return []
     if is_external_reference(raw_target, known_prefixes=ext_prefixes):

@@ -192,20 +192,11 @@ class CompileResult:
 
 
 def _slug_for_triple(subject: str | None, predicate: str | None, obj: str | None) -> str:
-    """Deterministic slug from a row's triple (`<subject>-<predicate>-<object>`).
-
-    Reuses the entity-layer slug helpers so a workbench-minted id is shaped
-    exactly like any other slug-strategy entity id.
-    """
-    from science_tool.entities import (
-        DERIVED_SLUG_MAX_LENGTH,
-        EntityCommandError,
-        normalize_to_slug,
-        truncate_slug_on_word_boundary,
-    )
+    """Deterministic slug from a row's triple (`<subject>-<predicate>-<object>`)."""
+    from science_tool.entities import EntityCommandError, slug_from_raw
 
     raw = "-".join(part for part in (subject, predicate, obj) if part)
-    slug = truncate_slug_on_word_boundary(normalize_to_slug(raw), DERIVED_SLUG_MAX_LENGTH)
+    slug = slug_from_raw(raw)
     if len(slug) < 2:
         raise EntityCommandError("row triple cannot derive a stable proposition slug; set an explicit id")
     return slug
@@ -298,63 +289,13 @@ def _write_entity_file(
     project_root: Path,
     as_of: date | None = None,
 ) -> None:
-    """Write a typed entity to its canonical ``entities/<kind>/<slug>.md`` file.
+    """Workbench writer: delegates to the shared entity writer with the legacy body."""
+    from science_tool.entities import write_entity_file
 
-    Reuses the entity-layer path policy and markdown writer primitives so this
-    is not a parallel writer: the path comes from ``resolve_path_policy`` and the
-    bytes from the same frontmatter dump + atomic replace used by ``create_entity``.
-    Frontmatter is the typed model's ``model_dump`` (the flat key/value shape the
-    validate checks and ``parse_entity_file`` consume).
-
-    ``as_of`` controls the ``created``/``updated`` stamps.  On upsert the
-    existing file's ``created`` is preserved so it is stable across re-compiles;
-    ``updated`` always advances to ``as_of`` (or ``date.today()`` when None).
-    """
-    from science_tool.entities import (
-        _atomic_replace_text,
-        _parse_markdown_file,
-        _render_markdown,
-        default_status,
-        resolve_path_policy,
-    )
-
-    today = as_of or date.today()
-    kind = entity.kind
     assert entity.id is not None
     local_part = entity.id.split(":", 1)[1]
-    policy = resolve_path_policy(kind, project_root=project_root)
-    dest = project_root / policy.root / f"{local_part}.md"
-
-    # Preserve `created` from an existing file on upsert.
-    # Guard against a corrupt/unparseable existing file — fall back to today.
-    existing_created: str | None = None
-    if dest.exists():
-        try:
-            existing_fm, _ = _parse_markdown_file(dest)
-            existing_created = existing_fm.get("created")
-            if existing_created is not None:
-                existing_created = str(existing_created)
-        except (yaml.YAMLError, ValueError, OSError):
-            existing_created = None
-
-    frontmatter = entity.model_dump(mode="json", exclude_none=True, exclude_defaults=False)
-    # Identity/typing the loaders key on; status from the per-kind default.
-    frontmatter["id"] = entity.id
-    frontmatter["kind"] = kind
-    frontmatter.setdefault("status", default_status(kind))
-    # Drop fields that are not authored frontmatter (defaults that re-derive on load).
-    # NOTE: `type` is intentionally NOT popped — it is required by entity-conformance.
-    for derived in ("canonical_id", "content_preview", "content", "file_path"):
-        frontmatter.pop(derived, None)
-
-    # Stamp created/updated (mirrors create_entity / build_entity_markdown).
-    frontmatter["created"] = existing_created if existing_created is not None else today.isoformat()
-    frontmatter["updated"] = today.isoformat()
-
     body = f"# {entity.title or local_part}\n\n## Summary\n\n\n## Notes\n"
-    text = _render_markdown(frontmatter, body)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_replace_text(dest, text)
+    write_entity_file(entity, project_root=project_root, body=body, as_of=as_of)
 
 
 def compile_workbench(

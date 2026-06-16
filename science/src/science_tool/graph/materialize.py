@@ -601,6 +601,9 @@ def _add_relations(
         knowledge.add((entity_uri, SKOS.exactMatch, _entity_uri(target.canonical_id)))
 
     for raw_target in sorted(entity.source_refs):
+        if raw_target.startswith("annotation:"):
+            provenance.add((entity_uri, PROV.wasDerivedFrom, _annotation_uri(raw_target)))
+            continue
         if is_bibliography_reference(raw_target):
             continue
         if is_external_reference(raw_target, known_prefixes=ext_prefixes):
@@ -1295,6 +1298,15 @@ def _resolve_relation_term(value: str) -> URIRef:
 
 def _entity_uri(canonical_id: str) -> URIRef:
     return entity_uri_for_ref(canonical_id)
+
+
+def _annotation_uri(ref: str) -> URIRef:
+    """Mint a stable project URI for an `annotation:<relpath>#<frag>` source ref.
+
+    Bypasses entity resolution (an annotation is not an entity). Case/`/` of the relpath
+    are preserved (unlike `entity_uri_for_ref`, which lowercases)."""
+    body = ref.removeprefix("annotation:")
+    return URIRef(PROJECT_NS[f"annotation/{body}"])
 
 
 def _external_uri(raw_target: str) -> URIRef:

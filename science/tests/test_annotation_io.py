@@ -190,3 +190,34 @@ def test_writer_escapes_carriage_return(tmp_path: Path) -> None:
     write_sidecar(out, sc_cr)
     re_read = read_sidecar(out)
     assert re_read.shared_targets[0].selector.exact == "line one\r\nline two"
+
+
+def test_promoted_to_round_trips(tmp_path):
+    # Build a minimal sidecar with one annotation carrying promoted_to, write, re-read.
+    from science_tool.annotation import io as anno_io
+    from science_tool.annotation.model import (
+        Annotation, Motivation, SpecificResource, Status, TextQuoteSelector, TextualBody,
+    )
+    from datetime import datetime, timezone
+
+    md = tmp_path / "paper.md"
+    md.write_text("Alpha beta gamma.\n", encoding="utf-8")
+    sidecar_path = anno_io.sidecar_for_markdown(md)
+    ann = Annotation(
+        id="a-0001",
+        target=SpecificResource(source="paper.md", selector=TextQuoteSelector(exact="Alpha", prefix="", suffix=" beta")),
+        bodies=(TextualBody(value='{"section":"abstract"}', format="application/json"),),
+        motivation=Motivation.CLASSIFYING,
+        annotation_type="proposition",
+        source="llm-annot:m:paper-annotate-v1",
+        status=Status.OPEN,
+        creator="paper-annotate",
+        created=datetime(2026, 6, 16, tzinfo=timezone.utc),
+        content_hash="0" * 64,  # required for llm-annot: source
+        promoted_to="proposition:alpha",
+    )
+    sidecar = anno_io.Sidecar(annotations=(ann,))
+    anno_io.write_sidecar(sidecar_path, sidecar)
+    from science_tool.annotation.query import read_sidecar_strict
+    reread = read_sidecar_strict(sidecar_path)
+    assert reread.annotations[0].promoted_to == "proposition:alpha"

@@ -354,6 +354,80 @@ def normalize_to_slug(title: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", ascii_title.lower()).strip("-")
 
 
+def slug_from_raw(raw: str) -> str:
+    """Normalize + word-boundary-truncate a raw string to an entity slug (no length guard)."""
+    return truncate_slug_on_word_boundary(normalize_to_slug(raw), DERIVED_SLUG_MAX_LENGTH)
+
+
+def slug_for_claim_text(claim: str) -> str:
+    """Deterministic proposition slug from a claim sentence; fail loud if it can't form one."""
+    slug = slug_from_raw(claim)
+    if len(slug) < 2:
+        raise EntityCommandError("claim text cannot derive a stable proposition slug; set an explicit id")
+    return slug
+
+
+def write_entity_file(
+    entity: Any,  # any typed entity exposing .kind, .id, and Pydantic .model_dump()
+    *,
+    project_root: Path,
+    body: str,
+    as_of: date | None = None,
+) -> None:
+    """Write a typed entity to its canonical ``entities/<kind>/<slug>.md`` file.
+
+    Single canonical entity writer (also used by ``dag.workbench``). Path from
+    ``resolve_path_policy``; frontmatter from the typed model's ``model_dump``; the
+    Markdown ``body`` is supplied by the caller. ``created`` is preserved on upsert;
+    ``updated`` advances to ``as_of`` (or today).
+    """
+    today = as_of or date.today()
+    kind = entity.kind
+    assert entity.id is not None
+    local_part = entity.id.split(":", 1)[1]
+    policy = resolve_path_policy(kind, project_root=project_root)
+    dest = project_root / policy.root / f"{local_part}.md"
+
+    existing_created: str | None = None
+    if dest.exists():
+        try:
+            existing_fm, _ = _parse_markdown_file(dest)
+            existing_created = existing_fm.get("created")
+            if existing_created is not None:
+                existing_created = str(existing_created)
+        except (yaml.YAMLError, ValueError, OSError):
+            existing_created = None
+
+    frontmatter = entity.model_dump(mode="json", exclude_none=True, exclude_defaults=False)
+    frontmatter["id"] = entity.id
+    frontmatter["kind"] = kind
+    frontmatter.setdefault("status", default_status(kind))
+    for derived in ("canonical_id", "content_preview", "content", "file_path"):
+        frontmatter.pop(derived, None)
+    frontmatter["created"] = existing_created if existing_created is not None else today.isoformat()
+    frontmatter["updated"] = today.isoformat()
+
+    text = _render_markdown(frontmatter, body)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_replace_text(dest, text)
+
+
+def append_entity_source_ref(file_path: Path, ref: str, *, as_of: date | None = None) -> bool:
+    """Append ``ref`` to an existing entity file's ``source_refs`` frontmatter, preserving
+    the body. Returns True if added, False if already present. Used by promotion LINK so a
+    hand-authored proposition's prose is never clobbered. When a ref is added, `updated`
+    advances to ``as_of`` (or today), matching other entity mutations."""
+    frontmatter, body = _parse_markdown_file(file_path)
+    refs = list(frontmatter.get("source_refs") or [])
+    if ref in refs:
+        return False
+    refs.append(ref)
+    frontmatter["source_refs"] = refs
+    frontmatter["updated"] = (as_of or date.today()).isoformat()
+    _atomic_replace_text(file_path, _render_markdown(frontmatter, body))
+    return True
+
+
 def derive_slug(title: str) -> str:
     slug = truncate_slug_on_word_boundary(normalize_to_slug(title), DERIVED_SLUG_MAX_LENGTH)
     if len(slug) < 2:
