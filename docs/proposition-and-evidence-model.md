@@ -56,8 +56,7 @@ Every evidence edge should use one of these types:
 | `benchmark_evidence` | Evidence from benchmark tasks, evaluation suites, or standardized comparisons. This is useful for model comparison and operational performance propositions. |
 | `expert_judgment` | A structured assessment from domain experts. This can guide inquiry and interpretation, but should not silently substitute for empirical support. |
 
-`negative_result` is not a separate evidence type.
-It is a result or interpretation pattern: an observation can report no observed effect, and the resulting evidence edge will usually have `stance: disputes` or weaken support for the target proposition.
+`negative_result` is accepted as a valid-but-unranked `evidence_type` token (it contributes no ordinal weight, i.e. rank 0), kept for compatibility with the authored CLI vocabulary. Semantically it remains a result or interpretation pattern rather than a true evidence category: an observation can report no observed effect, and the resulting evidence edge will usually have `stance: disputes` or weaken support for the target proposition. Re-modeling it (e.g. as `stance: disputes` plus role/scope metadata) is deferred to a future semantics cleanup.
 
 ## Authored Versus Derived Fields
 
