@@ -11,13 +11,13 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from science_tool.archive import load_archive_index
-from science_tool.big_picture.frontmatter import read_frontmatter
+from science_tool.archive import ArchiveRow, load_archive_index
+from science_tool.big_picture.frontmatter import as_list, read_frontmatter
 from science_tool.big_picture.layout import entity_dir
 from science_tool.consolidate import (
     CLUSTER_DIGEST_REPORT_KIND,
-    CONSOLIDATES_PREDICATE,
     SYNTHESIS_KIND,
+    consolidates_targets,
 )
 from science_tool.entities import is_default_visible
 
@@ -43,26 +43,6 @@ class ClusterDigest:
     member_ids: list[str] = field(default_factory=list)
     member_count: int = 0
     members: list[MemberSummary] = field(default_factory=list)
-
-
-def _as_list(value: object) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(v) for v in value]
-    return [str(value)]
-
-
-def _consolidates_targets(fm: dict) -> list[str]:
-    """Member ids = targets of the digest's ``sci:consolidates`` relations, read off
-    the frontmatter dict in the same shape P4 ``scaffold_digest`` writes."""
-    targets: list[str] = []
-    for rel in fm.get("relations") or []:
-        if isinstance(rel, dict) and rel.get("predicate") == CONSOLIDATES_PREDICATE:
-            target = rel.get("target")
-            if isinstance(target, str):
-                targets.append(target)
-    return targets
 
 
 def redirect_refs(refs: Iterable[str], remap: Mapping[str, str]) -> list[str]:
@@ -107,6 +87,24 @@ def member_to_digest(project_root: Path) -> dict[str, str]:
     return out
 
 
+def _member_summary(
+    member_id: str,
+    resolvable: Mapping[str, str],
+    active: Mapping[str, ArchiveRow],
+) -> MemberSummary:
+    """Index-only summary for one consolidated member. The member id is resolved
+    through ``resolvable`` (alias/same_as -> canonical) before the active-index
+    lookup, so a digest that names a member by an alias still descends to the
+    archived row — symmetric with ``member_to_digest``. ``archived=False`` when the
+    member is absent (e.g. a scaffolded-but-unapplied digest whose members are live)."""
+    row = active.get(resolvable.get(member_id, member_id))
+    if row is None:
+        return MemberSummary(id=member_id, kind=None, title=None, digest_insight=None, archived=False)
+    return MemberSummary(
+        id=member_id, kind=row.kind, title=row.title,
+        digest_insight=row.digest_insight, archived=True)
+
+
 def load_cluster_digests(project_root: Path, *, deep: bool = False) -> dict[str, ClusterDigest]:
     """Scan ``entities/synthesis/`` for visible ``report_kind: cluster-digest``
     entities. ``member_ids`` come from each digest's ``sci:consolidates`` relations.
@@ -117,6 +115,8 @@ def load_cluster_digests(project_root: Path, *, deep: bool = False) -> dict[str,
     if not directory.is_dir():
         return {}
     index = load_archive_index(project_root) if deep else None
+    resolvable = index.resolvable_ids() if index is not None else {}
+    active = index.active_by_id if index is not None else {}
     out: dict[str, ClusterDigest] = {}
     for path in sorted(directory.glob("*.md")):
         fm = read_frontmatter(path)
@@ -126,22 +126,14 @@ def load_cluster_digests(project_root: Path, *, deep: bool = False) -> dict[str,
             continue
         if not is_default_visible(fm.get("status")):
             continue
-        member_ids = _consolidates_targets(fm)
-        members: list[MemberSummary] = []
-        if deep:
-            assert index is not None
-            for mid in member_ids:
-                row = index.active_by_id.get(mid)
-                if row is None:
-                    members.append(MemberSummary(
-                        id=mid, kind=None, title=None, digest_insight=None, archived=False))
-                else:
-                    members.append(MemberSummary(
-                        id=mid, kind=row.kind, title=row.title,
-                        digest_insight=row.digest_insight, archived=True))
+        member_ids = consolidates_targets(fm)
+        members = (
+            [_member_summary(mid, resolvable, active) for mid in member_ids]
+            if deep else []
+        )
         digest_id = str(fm["id"])
         title = str(fm["title"]) if fm.get("title") is not None else None
         out[digest_id] = ClusterDigest(
-            id=digest_id, title=title, related=_as_list(fm.get("related")),
+            id=digest_id, title=title, related=as_list(fm.get("related")),
             member_ids=member_ids, member_count=len(member_ids), members=members)
     return out

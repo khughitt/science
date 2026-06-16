@@ -31,3 +31,17 @@ def read_frontmatter(path: Path) -> dict[str, Any] | None:
     if not isinstance(data, dict):
         return None
     return data
+
+
+def as_list(value: object) -> list[str]:
+    """Coerce a frontmatter value into a list of strings.
+
+    ``None`` -> ``[]``; a list -> each element stringified; a scalar -> a
+    single-element list. Shared by the big-picture consumers that read authored
+    ``related:`` / ``hypothesis:`` fields.
+    """
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(v) for v in value]
+    return [str(value)]

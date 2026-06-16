@@ -11,7 +11,9 @@ two never import each other.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from science_tool.archive import (
     ArchiveRow,
@@ -122,10 +124,12 @@ def scaffold_digest(
     }
 
 
-def _consolidates_targets(loc: EntityLocation) -> list[str]:
-    """Member ids = targets of the digest's `sci:consolidates` authored relations."""
+def consolidates_targets(frontmatter: Mapping[str, Any]) -> list[str]:
+    """Member ids = targets of a digest's `sci:consolidates` authored relations,
+    read off its frontmatter dict (the shape `scaffold_digest` writes)."""
     targets: list[str] = []
-    for rel in loc.frontmatter.get("relations") or []:
+    relations = frontmatter.get("relations") or []
+    for rel in relations:
         if isinstance(rel, dict) and rel.get("predicate") == CONSOLIDATES_PREDICATE:
             target = rel.get("target")
             if isinstance(target, str):
@@ -156,7 +160,7 @@ def apply_consolidation(
     digest = find_entity(project_root, digest_id)
     if digest.frontmatter.get("report_kind") != CLUSTER_DIGEST_REPORT_KIND:
         raise ConsolidateError(f"{digest_id!r} is not a cluster-digest (report_kind)")
-    member_ids = _consolidates_targets(digest)
+    member_ids = consolidates_targets(digest.frontmatter)
     if not member_ids:
         raise ConsolidateError(f"{digest_id!r} has no sci:consolidates relation entries")
     locs = _validate_members(project_root, member_ids, digest_id)
