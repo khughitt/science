@@ -164,6 +164,9 @@ def test_paper_annotate_agent_file_has_frontmatter():
     assert text.startswith("---")
     assert "name: paper-annotate" in text
     assert "science annotate extract" in text  # documents the deterministic call
+    # Phase 3b: the agent must document figurative extraction
+    assert "metaphor" in text and "analogy" in text
+    assert "source_domain" in text and "target_domain" in text
     cmd = repo_root / "commands" / "annotate-paper.md"
     assert cmd.is_file(), "commands/annotate-paper.md must exist"
     assert "--check" in cmd.read_text(encoding="utf-8")  # documents the precheck
