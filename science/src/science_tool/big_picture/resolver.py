@@ -22,6 +22,7 @@ from science_model.aspects import (
     resolve_entity_aspects,
     validate_entity_aspects,
 )
+from science_tool.big_picture.digests import load_cluster_digests
 from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.big_picture.layout import entity_dir
 from science_tool.entities import is_default_visible
@@ -77,6 +78,18 @@ def resolve_questions(project_root: Path) -> dict[str, ResolverOutput]:
     interpretations = _load_entities(entity_dir(project_root, "interpretation"))
     for _iid, ifm in interpretations.items():
         refs = _as_list(ifm.get("related"))
+        q_refs = [r for r in refs if r in results]
+        h_refs = [r for r in refs if r in hypotheses]
+        for qid in q_refs:
+            for hid in h_refs:
+                if hid not in results[qid]:
+                    results[qid][hid] = HypothesisMatch(hid, "transitive", 0.5)
+
+    # Transitive via cluster-digests: a digest authored to bridge a question and a
+    # hypothesis inherits the bridging role its archived members used to play (P5
+    # Tier 4). Same confidence as an interpretation bridge.
+    for digest in load_cluster_digests(project_root).values():
+        refs = digest.related
         q_refs = [r for r in refs if r in results]
         h_refs = [r for r in refs if r in hypotheses]
         for qid in q_refs:
