@@ -434,6 +434,8 @@ def check_cross_references(ctx: ValidateContext) -> Iterator[Result]:
     all_ids.update(_load_task_ids(ctx))
     all_ids.update(_load_structured_ids(ctx, profile_dir / "entities.yaml"))
     all_ids.update(_load_terms_ids(ctx, profile_dir / "terms.yaml"))
+    from science_tool.archive import load_archive_index
+    all_ids.update(load_archive_index(ctx.project_root).resolvable_ids())
     project_ids = _load_project_ids(ctx)
 
     emitted = False
