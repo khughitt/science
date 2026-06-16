@@ -1623,3 +1623,49 @@ def test_source_authored_hypothesis_and_graph_added_hypothesis_do_not_double_cou
     source_type_triples = list(knowledge.triples((source_uri, RDF.type, None)))
 
     assert len(source_type_triples) == 1
+
+
+def test_annotation_uri_minter():
+    from science_tool.graph.materialize import _annotation_uri
+
+    uri = _annotation_uri("annotation:papers/smith2020.source#a-7f3a")
+    assert str(uri).startswith("http://example.org/project/annotation/")
+    assert "smith2020.source" in str(uri)
+    assert str(uri).endswith("#a-7f3a")
+
+
+def test_annotation_source_ref_materializes_wasderivedfrom(tmp_path: Path) -> None:
+    """A proposition whose source_refs include an `annotation:` ref AND a resolvable
+    entity ref produces BOTH prov:wasDerivedFrom triples in the provenance graph."""
+    from science_tool.graph.materialize import _annotation_uri
+
+    project = tmp_path / "demo"
+    _write_demo_project(project)  # provides the resolvable entity question:q01-demo
+    # Write the proposition fixture directly (NOT via _write_minimal_entity, which already
+    # emits `source_refs: []` — passing another block would duplicate the YAML key).
+    prop_path = project / "entities" / "propositions" / "demo-claim.md"
+    prop_path.parent.mkdir(parents=True, exist_ok=True)
+    prop_path.write_text(
+        "---\n"
+        'id: "proposition:demo-claim"\n'
+        'kind: "proposition"\n'
+        'title: "Demo claim"\n'
+        'status: "active"\n'
+        'created: "2026-05-01"\n'
+        'updated: "2026-05-01"\n'
+        "related: []\n"
+        "source_refs:\n"
+        '  - "annotation:papers/p.source#a-1"\n'
+        '  - "question:q01-demo"\n'
+        "---\n\nDemo claim body.\n",
+        encoding="utf-8",
+    )
+    trig_path = materialize_graph(project)
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+
+    prop_uri = PROJECT_NS["proposition/demo-claim"]
+    assert (prop_uri, PROV.wasDerivedFrom, _annotation_uri("annotation:papers/p.source#a-1")) in provenance
+    # the resolvable entity ref still materializes via the existing path (paper:<id> behaves identically)
+    assert (prop_uri, PROV.wasDerivedFrom, PROJECT_NS["question/q01-demo"]) in provenance
