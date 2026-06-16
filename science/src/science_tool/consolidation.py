@@ -21,6 +21,7 @@ from typing import Any, Mapping
 
 from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.entities import _STATUS_VALUES, edit_entity
+from science_tool.entity_scan import iter_entity_markdown
 
 _SUPERSEDED = "superseded"
 _SUPERSEDES_PREDICATE = "sci:supersedes"
@@ -30,9 +31,7 @@ def iter_entity_frontmatter(project_root: Path) -> list[tuple[Path, dict[str, An
     """All entity markdown frontmatter under entities/, as (path, frontmatter)."""
     entities_root = project_root / "entities"
     out: list[tuple[Path, dict[str, Any]]] = []
-    if not entities_root.is_dir():
-        return out
-    for path in sorted(entities_root.rglob("*.md")):
+    for path in iter_entity_markdown(entities_root):
         fm = read_frontmatter(path)
         if fm and "id" in fm:
             out.append((path, fm))

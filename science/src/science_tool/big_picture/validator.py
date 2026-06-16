@@ -14,6 +14,7 @@ from science_model.aspects import (
 )
 from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.big_picture.resolver import ResolverOutput, resolve_questions
+from science_tool.entity_scan import iter_entity_markdown
 
 IssueKind = Literal[
     "nonexistent_reference",
@@ -76,7 +77,7 @@ def _collect_project_ids(project_root: Path) -> set[str]:
     # covers all kinds whose IDs can appear in generated synthesis output.
     entities_root = project_root / "entities"
     if entities_root.is_dir():
-        for path in entities_root.rglob("*.md"):
+        for path in iter_entity_markdown(entities_root):
             fm = read_frontmatter(path)
             if fm and "id" in fm:
                 ids.add(str(fm["id"]))

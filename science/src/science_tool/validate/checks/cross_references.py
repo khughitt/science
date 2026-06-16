@@ -236,6 +236,7 @@ from pathlib import Path
 import re
 from typing import Literal
 
+from science_tool.entity_scan import iter_entity_markdown
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -421,7 +422,7 @@ def check_cross_references(ctx: ValidateContext) -> Iterator[Result]:
 
     entities_dir = ctx.project_root / "entities"
     if entities_dir.is_dir():
-        for path in sorted(entities_dir.rglob("*.md")):
+        for path in iter_entity_markdown(entities_dir):
             doc_id, related = _extract_frontmatter(ctx, path)
             if doc_id:
                 all_ids.add(doc_id)

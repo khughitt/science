@@ -16,6 +16,7 @@ from science_model.profiles.schema import EntityFilenameStrategy
 from science_model.profiles import EntityKind, ProfileManifest, load_profile_manifest
 from science_model.profiles.core import CORE_PROFILE
 from science_model.profiles.local import LOCAL_PROFILE
+from science_tool.entity_scan import iter_entity_markdown
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
@@ -965,7 +966,7 @@ def _load_markdown_entities(project_root: Path, kind: str | None = None) -> list
         root = project_root / policy.root
         if not root.is_dir():
             continue
-        for path in sorted(root.rglob("*.md")):
+        for path in iter_entity_markdown(root):
             frontmatter, _ = _parse_markdown_file(path)
             entity_id = frontmatter.get("id")
             entity_kind = frontmatter.get("type") or frontmatter.get("kind")
