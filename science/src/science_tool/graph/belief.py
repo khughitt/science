@@ -42,6 +42,10 @@ class EvidenceUnit:
     # for authored assertions. LAST field so the many positional EvidenceUnit(...) test
     # constructors (12 positional args through observability_keys) stay behavior-neutral.
     confidence: float | None = None
+    # Dataset-QA seam (Spec 5). Dependence-role datasets this EMPIRICAL line rests on whose
+    # structural QA failed (populated only for empirical lines at materialization). LAST field
+    # for positional stability of the many EvidenceUnit(...) test constructors.
+    qa_failed_datasets: tuple[str, ...] = ()
 
 
 _OBSERVABILITY = {
@@ -94,6 +98,9 @@ def _read_unit(
         quant_beta=_float_lit(provenance, line, SCI_NS.quantBeta),
         quant_prob_sign=_float_lit(provenance, line, SCI_NS.quantProbSign),
         confidence=_float_lit(provenance, line, SCI_NS.confidence),
+        qa_failed_datasets=tuple(
+            sorted(str(o) for o in provenance.objects(line, SCI_NS.qaFailedDataset))
+        ),
     )
 
 
@@ -216,6 +223,12 @@ def is_authored_assertion(u: EvidenceUnit, *, policy: BeliefPolicy = DEFAULT_BEL
     equals policy.authored_assertion_type (default 'expert_judgment'). dataset_usage is NOT
     inspected — recognition keys solely on the type (design §Goal)."""
     return normalize_evidence_type(u.evidence_type) == policy.authored_assertion_type
+
+
+def is_qa_failed(u: EvidenceUnit) -> bool:
+    """Pre-computed fact (set at materialization, empirical-only): the unit rests on >=1
+    structurally-QA-failed dependence dataset. Belief reads it; it does not recompute QA."""
+    return bool(u.qa_failed_datasets)
 
 
 def _authored_assertion_counts(u: EvidenceUnit, *, policy: BeliefPolicy = DEFAULT_BELIEF_POLICY) -> bool:
