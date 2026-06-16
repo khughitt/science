@@ -951,10 +951,14 @@ Expected: FAIL — `verify_archive` not defined.
 Append to `archive.py`:
 ```python
 def verify_archive(project_root: Path, live_alias_space: set[str]) -> list[str]:
-    """Reconcile filesystem <-> active index and detect alias collisions against
-    the live resolver's full alias space. Returns a list of problem strings
-    (empty == clean). ``live_alias_space`` = live canonical ids + aliases + same_as
-    + manual aliases (the build_alias_map domain)."""
+    """Reconcile filesystem <-> active index and detect alias collisions against the
+    caller-supplied live alias space. Returns a list of problem strings (empty ==
+    clean). The caller builds ``live_alias_space`` from live entities (canonical ids
+    + aliases + same_as); it must NOT be derived from ``sources.manual_aliases``,
+    which load_project_sources augments with archive ids (that would make every
+    archived id look like a self-collision). Project-authored manual-alias
+    collisions are caught separately and fail loud at load time (see the
+    load_project_sources merge in the graph task)."""
     project_root = Path(project_root).resolve()
     idx = load_archive_index(project_root)
     problems: list[str] = []
@@ -1265,19 +1269,29 @@ Apply the fallback **per edge site, matching that site's target graph and predic
             continue
 ```
 
-**(3) `relations[].target`** (`_add_authored_relation`, line ~920 — it does NOT `continue`; it calls `_canonical_entity(relation.object, …)` which RAISES `ValueError` on a resolved-but-not-live object). Add an archived-object branch that mirrors the external-reference branch (leaves `object_entity = None`, so `_validate_authored_relation_endpoint` skips object-kind validation exactly as it already does for external refs):
+**(3) `relations[].target`** (`_add_authored_relation`, line ~920 — it does NOT `continue`; it calls `_canonical_entity(relation.object, …)` which RAISES `ValueError` on a resolved-but-not-live object). An archived object must **NOT** be treated like an external ref: `_validate_authored_relation_endpoint` raises for `object_entity=None` when the relation kind has `target_kinds`/`allowed_kind_pairs` (line 994-1001), and `sci:supersedes` is exactly such a constrained relation. Instead, pass a lightweight stand-in carrying the archived entity's recorded kind so the existing endpoint validation (`relation_allows_kinds(...)` on `object_entity.kind`, plus the self-ref check on `.canonical_id`) runs against `ArchiveRow.kind`:
+```python
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class _ArchivedEndpoint:  # duck-typed stand-in: only .canonical_id + .kind are read by endpoint validation
+    canonical_id: str
+    kind: str
+```
 ```python
     else:
         obj_res = resolver.resolve(relation.object, allow_cross_kind_fallback=True)
         obj_cid = obj_res.canonical_id if obj_res.status == "resolved" else None
         if obj_cid is not None and obj_cid not in entity_index and obj_cid in archive_active:
-            object_uri = _entity_uri(obj_cid)          # object_entity stays None (like external)
+            arow = archive_active[obj_cid]
+            object_uri = _entity_uri(obj_cid)
+            object_entity = _ArchivedEndpoint(canonical_id=obj_cid, kind=arow.kind or "")  # validated by kind below
             referenced_archived.add(obj_cid)
         else:
             object_entity = _canonical_entity(relation.object, entity_index=entity_index, resolver=resolver)
             object_uri = _entity_uri(object_entity.canonical_id)
 ```
-Thread `archive_active` and the shared `referenced_archived` set into `_add_authored_relation` (it is called from the build loop, ~line 171). Confirm `_validate_authored_relation_endpoint` tolerates `object_entity=None` (it must — the external-ref path already passes None).
+Thread `archive_active` and the shared `referenced_archived` set into `_add_authored_relation` (it is called from the build loop, ~line 171). The downstream `_validate_authored_relation_endpoint(relation, relation_kind=…, subject_entity=…, object_entity=object_entity)` then validates the archived endpoint by kind exactly like a live one — a valid `interpretation —supersedes→ interpretation` passes; a disallowed kind pair (or a kind-less archived row) fails loud. `object_entity` is typed `Entity | None`, but only `.canonical_id`/`.kind` are read, so the duck-typed stand-in is safe (add `# type: ignore[arg-type]` at the validation call if the type checker objects).
 
 After the per-entity loop AND the authored-relation loop (so both edge sources have populated `referenced_archived`), emit one stub node per referenced archived id into the **knowledge** graph:
 ```python
@@ -1755,5 +1769,6 @@ git commit -m "test(archive): P3 acceptance invariant — referenced superseded 
 - **Type consistency:** `iter_entity_markdown(root, *, include_archived)`, `ArchiveRow`, `load_archive_index().active_by_id` / `.resolvable_ids()`, `archive_entities(...apply, now)`, `unarchive_entities(ids, ...)`, `verify_archive(project_root, live_alias_space)`, `search_archive(project_root, query)` are used identically across tasks.
 - **Pinned APIs** (verified against the repo): `ValidateContext.from_project_root(root, *, strict, verbose)` (`validate/context.py`); `materialize_graph(project_root, *, strict=True) -> Path` writes/returns `knowledge/graph.trig` and **runs `audit_project_sources` first, raising on unresolved refs** (`graph/materialize.py:219,247`); the audit + materialize resolvers are both built from `sources.entities`+`sources.manual_aliases` (`migrate.py:175`), so the High-1 fix is the single `load_project_sources` alias augmentation; root group is `main`, archive/unarchive on `entities_group` (`cli.py:232`), `search` on `main`; the list command is `entity list` (`entity_group`, `entity_list`, `cli.py:637`, uses `Path.cwd()`).
 - **Review fixes folded in (2nd-round):** graph **audit** archive-awareness (High-1, Task 8 Step 3a); `verify_archive` walks active rows for archive-vs-archive collisions (High-2, Task 6); validate subcheck no fail-open + `same_as` in live-space (Medium-3, Task 6); frozen-inventory + SSOT-usage guard pair (Medium-4, Task 3); inbound-live-refs in archive report (Medium-5, Task 5); `~/d/` paths + `rtk` note (Low-6, header).
-- **Review fixes folded in (3rd-round):** archive→manual-alias merge raises instead of `setdefault`-masking (High, Task 8 3a) — closing the masking gap with verify; `_add_authored_relation` gains an explicit archived-object branch (mirrors external-ref, `object_entity=None`) since it raises rather than `continue`s (High, Task 8 3b); per-edge graph/predicate fallbacks — `related`→knowledge `skos:related`/`sci:tests`, `source_refs`→**provenance** `prov:wasDerivedFrom`, `relations[].target`→relation layer — with per-edge test assertions (Medium, Task 8); `supersededBy` emitted for live-or-archived successor; Task 6 count 4→5 (Low).
+- **Review fixes folded in (3rd-round):** archive→manual-alias merge raises instead of `setdefault`-masking (High, Task 8 3a) — closing the masking gap with verify; `_add_authored_relation` gains an explicit archived-object branch (High, Task 8 3b); per-edge graph/predicate fallbacks — `related`→knowledge `skos:related`/`sci:tests`, `source_refs`→**provenance** `prov:wasDerivedFrom`, `relations[].target`→relation layer — with per-edge test assertions (Medium, Task 8); `supersededBy` emitted for live-or-archived successor; Task 6 count 4→5 (Low).
+- **Review fixes folded in (4th-round):** the archived `relations[].target` branch passes a `_ArchivedEndpoint(canonical_id, kind)` stand-in (NOT `object_entity=None`), because `_validate_authored_relation_endpoint` raises on `None` for constrained relations like `sci:supersedes`; the archived endpoint is now validated by `ArchiveRow.kind` exactly like a live one (High). `verify_archive` docstring corrected to say `live_alias_space` excludes `manual_aliases` (Low).
 - **Still requires in-repo confirmation** (noted inline): the exact predicate CURIEs at the three graph edge-resolution sites + `SCI_NS`/`RDF`/`RDFS`/`Literal` imports in `materialize.py`; mutability of `ProjectSources.manual_aliases` for the in-place augmentation; whether the minimal tmp_path fixture is rich enough for `materialize_graph`/`from_project_root` (else mirror an existing graph/validate test scaffold); the actual non-entity `rglob` ALLOWLIST set (reconcile in Task 3 Step 2).
