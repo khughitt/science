@@ -65,8 +65,9 @@ def test_extract_cli_check_then_seed_round_trip(tmp_path: Path):
 def test_extract_cli_malformed_input_fails_loud(tmp_path: Path):
     src = _make_source_md(tmp_path)
     bad = tmp_path / "bad.json"
+    # metaphor is a valid type now, but this one is missing required domains -> fail loud
     bad.write_text(json.dumps({"candidates": [{"type": "metaphor", "exact": "x",
-                   "prefix": "", "suffix": "", "stance": "asserted"}]}),
+                   "prefix": "", "suffix": ""}]}),
                    encoding="utf-8")
     r = CliRunner().invoke(annotate_group, [
         "extract", "--source-md", str(src), "--model", _MODEL, "--input", str(bad),
@@ -74,6 +75,40 @@ def test_extract_cli_malformed_input_fails_loud(tmp_path: Path):
     assert r.exit_code != 0
     # nothing written: no sidecar created
     assert not src.with_name("Brca2024.source.anno.trig").exists()
+
+
+def test_extract_cli_figurative_round_trip_and_neutral_output(tmp_path: Path):
+    # source text whose abstract passage contains the figurative span
+    abstract = SourcePassages(
+        passages=(
+            Passage(section="title", bioc_offset=0, text="On immunity."),
+            Passage(section="abstract", bioc_offset=13,
+                    text="The immune system mounts an attack on pathogens."),
+        ),
+        release="2024",
+    )
+    src = write_source_md(
+        directory=tmp_path, citekey="Imm2024", abstract=abstract, fulltext=None,
+        retrieved_from="https://example.org", license_="unknown", licensed=False,
+        pmid="2", doi=None,
+    )
+    cand_file = tmp_path / "candidates.json"
+    cand_file.write_text(json.dumps({"candidates": [{
+        "type": "metaphor", "exact": "The immune system mounts an attack",
+        "prefix": "", "suffix": " on pathogens",
+        "source_domain": "warfare", "target_domain": "immune response",
+    }]}), encoding="utf-8")
+    runner = CliRunner()
+    # table output (default) must be type-neutral: "annotation(s) written"
+    r = runner.invoke(annotate_group, [
+        "extract", "--source-md", str(src), "--model", _MODEL, "--input", str(cand_file),
+    ])
+    assert r.exit_code == 0, r.output
+    assert "annotation(s) written" in r.output
+    assert "statement(s) written" not in r.output
+
+    sidecar = read_sidecar(src.with_name("Imm2024.source.anno.trig"))
+    assert any(a.annotation_type == "metaphor" for a in sidecar.annotations)
 
 
 def test_list_json_exposes_bodies_and_full_selector(tmp_path: Path):

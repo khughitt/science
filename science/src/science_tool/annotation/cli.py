@@ -1084,11 +1084,12 @@ def extract_cmd(
     actor: str,
     fmt: str,
 ) -> None:
-    """Persist agent-extracted statement candidates as anchored annotations.
+    """Persist agent-extracted annotation candidates as anchored spans.
 
-    `--check` reports changed/unchanged without writing. Otherwise reads
-    `--input candidates.json`, anchors each quote, verifies grounding, and merges
-    idempotently into `<citekey>.source.anno.trig`.
+    Handles both statement (proposition/question/hypothesis) and figurative
+    (metaphor/analogy) candidates in one mixed candidates.json. `--check` reports
+    changed/unchanged without writing. Otherwise reads `--input candidates.json`,
+    anchors each quote, and merges idempotently into `<citekey>.source.anno.trig`.
     """
     from science_tool.annotation.source_text import SourceTextError
     from science_tool.annotation.statement_extract import (
@@ -1134,7 +1135,7 @@ def extract_cmd(
     else:
         skips = ", ".join(f"{k}:{v}" for k, v in sorted(report.skipped.items())) or "none"
         click.echo(
-            f"annotate extract: {report.written} statement(s) written, "
+            f"annotate extract: {report.written} annotation(s) written, "
             f"{report.grounding_dropped} grounding field(s) dropped, "
             f"skipped [{skips}], "
             f"hash recorded: {report.source_text_hash_recorded}"
