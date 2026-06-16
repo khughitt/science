@@ -846,7 +846,7 @@ Create `tests/test_cli_evidence_type_choice.py`:
 ```python
 from click.testing import CliRunner
 
-from science_tool.cli import EVIDENCE_TYPES, cli
+from science_tool.cli import EVIDENCE_TYPES, main
 
 
 def test_evidence_types_reconciles_with_enum():
@@ -858,7 +858,7 @@ def test_evidence_types_reconciles_with_enum():
 def test_cli_rejects_out_of_vocab_evidence_type(tmp_path):
     runner = CliRunner()
     result = runner.invoke(
-        cli,
+        main,
         ["graph", "add", "proposition", "P text", "--source", "t1",
          "--evidence-type", "differential_expression"],
         catch_exceptions=False,
@@ -868,7 +868,7 @@ def test_cli_rejects_out_of_vocab_evidence_type(tmp_path):
     assert "differential_expression" in result.output
 ```
 
-Note on harness: `cli` is the root Click group exported by `science_tool.cli`. If the existing CLI tests import the group under a different name, mirror their import. The `graph add proposition` invocation only needs to reach option parsing (which is where `click.Choice` rejects), so it does not need a real project on disk.
+Note on harness: `main` is the root Click group exported by `science_tool.cli` and is what the existing CLI tests import. The `graph add proposition` invocation only needs to reach option parsing (which is where `click.Choice` rejects), so it does not need a real project on disk.
 
 - [ ] **Step 2: Run test to verify it fails**
 
