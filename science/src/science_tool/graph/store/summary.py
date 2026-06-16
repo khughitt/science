@@ -8,7 +8,10 @@ from typing import cast
 from rdflib import URIRef
 from rdflib.namespace import PROV, RDF, SKOS
 
+from science_model.reasoning import EvidenceType
+
 from science_tool.graph.belief import aggregate_belief, collect_evidence_units
+from science_tool.graph.belief_weights import normalize_evidence_type
 from science_tool.graph.io import project_root_from_graph_path as _project_root_from_graph_path
 
 from .constants import CITO_NS, PROJECT_NS, SCHEMA_NS, SCI_NS, SCIC_NS
@@ -50,15 +53,25 @@ def _summary_targets(knowledge, *, include_hypotheses: bool) -> list[URIRef]:
     return targets
 
 
+_EMPIRICAL_TYPES = frozenset({EvidenceType.EMPIRICAL_DATA, EvidenceType.BENCHMARK})
+
+
+def _is_empirical_type(evidence_type: str) -> bool:
+    """True iff the (possibly suffixed) evidence_type literal is empirical-grade data.
+
+    Normalizes first so canonical ('empirical_data') and authored-suffixed
+    ('empirical_data_evidence') literals both classify identically.
+    """
+    return normalize_evidence_type(evidence_type) in _EMPIRICAL_TYPES
+
+
 def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData | None:
     evidence_summary = _collect_evidence_signals(knowledge, provenance, uri)
     support_count = cast(int, evidence_summary["support_count"])
     dispute_count = cast(int, evidence_summary["dispute_count"])
     source_count = cast(int, evidence_summary["source_count"])
     evidence_types = sorted(_collect_evidence_types(knowledge, provenance, uri))
-    has_empirical_data = any(
-        evidence_type in {"empirical_data_evidence", "benchmark_evidence"} for evidence_type in evidence_types
-    )
+    has_empirical_data = any(_is_empirical_type(evidence_type) for evidence_type in evidence_types)
     belief = aggregate_belief(
         collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(knowledge, uri))
     )

@@ -675,3 +675,35 @@ def test_entities_proposition_source_ref_is_checked(tmp_path: Path) -> None:
 
     rules = [r.rule for r in results]
     assert "evidence.unstanced" in rules, results
+
+
+def test_dataset_usage_check_flags_canonical_empirical_spelling(tmp_path: Path):
+    from science_tool.validate.checks.evidence_lines import (
+        check_belief_eligible_empirical_has_dataset_usage,
+    )
+    # Canonical 'empirical_data' (no _evidence suffix), belief-eligible, NO dataset_usage -> must flag.
+    _write(tmp_path, "entities/evidence-lines/el01.md",
+           "---\nstance: supports\ntarget: proposition:p1\nevidence_type: empirical_data\n---\n")
+    rules = {r.rule for r in check_belief_eligible_empirical_has_dataset_usage(_ctx(tmp_path))}
+    assert "evidence.empirical.requires_dataset_usage" in rules
+
+
+def test_dataset_usage_check_flags_suffixed_empirical_spelling(tmp_path: Path):
+    from science_tool.validate.checks.evidence_lines import (
+        check_belief_eligible_empirical_has_dataset_usage,
+    )
+    # Suffixed 'empirical_data_evidence' (un-re-materialized graph) still flagged.
+    _write(tmp_path, "entities/evidence-lines/el01.md",
+           "---\nstance: supports\ntarget: proposition:p1\nevidence_type: empirical_data_evidence\n---\n")
+    rules = {r.rule for r in check_belief_eligible_empirical_has_dataset_usage(_ctx(tmp_path))}
+    assert "evidence.empirical.requires_dataset_usage" in rules
+
+
+def test_dataset_usage_check_ignores_non_empirical(tmp_path: Path):
+    from science_tool.validate.checks.evidence_lines import (
+        check_belief_eligible_empirical_has_dataset_usage,
+    )
+    _write(tmp_path, "entities/evidence-lines/el01.md",
+           "---\nstance: supports\ntarget: proposition:p1\nevidence_type: literature_evidence\n---\n")
+    rules = {r.rule for r in check_belief_eligible_empirical_has_dataset_usage(_ctx(tmp_path))}
+    assert "evidence.empirical.requires_dataset_usage" not in rules

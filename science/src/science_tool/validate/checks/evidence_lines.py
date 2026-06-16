@@ -15,6 +15,7 @@ from pathlib import Path
 from rdflib import Literal, RDF, Dataset, URIRef
 from rdflib.namespace import PROV
 
+from science_model.reasoning import EvidenceType
 from science_tool.graph.belief import (
     BeliefMagnitude,
     aggregate_belief,
@@ -579,8 +580,9 @@ def check_belief_eligible_empirical_has_dataset_usage(ctx: ValidateContext) -> I
     must declare non-empty dataset_usage. Lines with belief_eligible: false (staged) are exempt.
     Non-empirical types are not subject to this rule."""
     for path, fm in _ev_lines(ctx):
-        # Only applies to empirical evidence lines.
-        if fm.get("evidence_type") != "empirical_data_evidence":
+        # Only applies to empirical evidence lines. Normalize first so both the canonical
+        # ('empirical_data') and authored-suffixed ('empirical_data_evidence') spellings match.
+        if normalize_evidence_type(fm.get("evidence_type")) != EvidenceType.EMPIRICAL_DATA:
             continue
 
         # Determine belief_eligible; missing defaults to True.

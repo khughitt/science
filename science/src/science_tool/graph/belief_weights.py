@@ -2,18 +2,29 @@
 
 Ordering is fixed here; per-project numeric weights and the quantitative scalar are
 Phase 2 (opt-in via core/decisions.md). Unknown values rank 0 (degrade gracefully).
-Canonical evidence_type values carry an '_evidence' suffix (cli.py:1646); we normalize.
+The evidence vocabularies are owned by ``science_model.reasoning`` (EvidenceType /
+EvidenceRole / EvidenceStrength); the rank tables below key off those enum members and
+are kept in lock-step by ``_reconcile_evidence_vocab``. Authored evidence_type values may
+carry an '_evidence' suffix; ``normalize_evidence_type`` delegates suffix-stripping to the
+model's ``canonical_evidence_type_token``.
 """
 from __future__ import annotations
+
+from science_model.reasoning import (
+    EvidenceRole,
+    EvidenceStrength,
+    EvidenceType,
+    canonical_evidence_type_token,
+)
 
 STANCE_SUPPORTS = "supports"
 STANCE_DISPUTES = "disputes"
 
-ROLE_DIRECT_TEST = "direct_test"
-ROLE_PROXY_SUPPORT = "proxy_support"
-ROLE_BACKGROUND = "background_constraint"
-ROLE_NEGATIVE_CONTROL = "negative_control"
-ROLE_MODEL_CRITICISM = "model_criticism"
+ROLE_DIRECT_TEST = EvidenceRole.DIRECT_TEST
+ROLE_PROXY_SUPPORT = EvidenceRole.PROXY_SUPPORT
+ROLE_BACKGROUND = EvidenceRole.BACKGROUND_CONSTRAINT
+ROLE_NEGATIVE_CONTROL = EvidenceRole.NEGATIVE_CONTROL
+ROLE_MODEL_CRITICISM = EvidenceRole.MODEL_CRITICISM
 
 INDEPENDENT = "independent"
 SHARED_SOURCE = "shared-source"
@@ -23,18 +34,23 @@ SCOPE_WHOLE_CLAIM = "whole_claim"
 GATED_PROXY = frozenset({"indirect", "derived"})
 DIAGNOSTIC_ROLES = frozenset({ROLE_NEGATIVE_CONTROL, ROLE_MODEL_CRITICISM})
 
-_EVIDENCE_SUFFIX = "_evidence"
-
-# Keyed on NORMALIZED (suffix-stripped) tokens.
+# Keyed on EvidenceType members. StrEnum keys resolve by string value too, so
+# lookups like EVIDENCE_TYPE_RANK.get("empirical_data") still work unchanged.
 EVIDENCE_TYPE_RANK = {
-    "empirical_data": 4,
-    "benchmark": 3,
-    "simulation": 3,
-    "literature": 2,
-    "expert_judgment": 1,
+    EvidenceType.EMPIRICAL_DATA: 4,
+    EvidenceType.BENCHMARK: 3,
+    EvidenceType.SIMULATION: 3,
+    EvidenceType.LITERATURE: 2,
+    EvidenceType.EXPERT_JUDGMENT: 1,
 }
-EVIDENCE_ROLE_RANK = {ROLE_DIRECT_TEST: 3, ROLE_PROXY_SUPPORT: 2, ROLE_BACKGROUND: 1}
-STRENGTH_RANK = {"strong": 3, "moderate": 2, "weak": 1}
+# Valid-but-unranked-by-design types (rank 0), parallel to diagnostic roles.
+UNRANKED_EVIDENCE_TYPES = frozenset({EvidenceType.NEGATIVE_RESULT})
+EVIDENCE_ROLE_RANK = {
+    EvidenceRole.DIRECT_TEST: 3,
+    EvidenceRole.PROXY_SUPPORT: 2,
+    EvidenceRole.BACKGROUND_CONSTRAINT: 1,
+}
+STRENGTH_RANK = {EvidenceStrength.STRONG: 3, EvidenceStrength.MODERATE: 2, EvidenceStrength.WEAK: 1}
 # Canonical belief-magnitude names, lowest→highest. belief_weights imports nothing
 # internal, so this is the cycle-free home for the magnitude strings that belief_policy
 # validates against (BeliefMagnitude itself lives in belief.py, which would form a cycle).
@@ -43,9 +59,27 @@ MAGNITUDE_NAMES = ("speculative", "fragile", "supported", "well_supported")
 
 
 def normalize_evidence_type(value: str | None) -> str:
-    if not value:
-        return ""
-    return value[: -len(_EVIDENCE_SUFFIX)] if value.endswith(_EVIDENCE_SUFFIX) else value
+    # Delegate suffix-stripping to the model SSOT; degrade gracefully (rank 0 via .get)
+    # for empty/unknown graph literals — this reader must never raise.
+    return canonical_evidence_type_token(value) or ""
+
+
+def _reconcile_evidence_vocab() -> None:
+    """Fail-early gate: rank tables must stay in lock-step with the model enums."""
+    if set(EVIDENCE_TYPE_RANK) | UNRANKED_EVIDENCE_TYPES != set(EvidenceType):
+        raise ValueError(
+            "EVIDENCE_TYPE_RANK | UNRANKED_EVIDENCE_TYPES must cover every EvidenceType; "
+            f"got ranked={set(EVIDENCE_TYPE_RANK)} unranked={set(UNRANKED_EVIDENCE_TYPES)}"
+        )
+    if not set(EVIDENCE_TYPE_RANK).isdisjoint(UNRANKED_EVIDENCE_TYPES):
+        raise ValueError("an unranked-by-design EvidenceType must not also be ranked")
+    if set(EVIDENCE_ROLE_RANK) != set(EvidenceRole) - DIAGNOSTIC_ROLES:
+        raise ValueError("EVIDENCE_ROLE_RANK must rank exactly the non-diagnostic EvidenceRoles")
+    if set(STRENGTH_RANK) != set(EvidenceStrength):
+        raise ValueError("STRENGTH_RANK must cover every EvidenceStrength")
+
+
+_reconcile_evidence_vocab()
 
 
 PROXY_STEP_PENALTY = 2          # gated proxy counts two ordinal steps lower (logic, not a cliff)

@@ -106,6 +106,24 @@ class EvidenceStrength(StrEnum):
     WEAK = "weak"
 
 
+class EvidenceType(StrEnum):
+    """Category of evidence backing an evidence line (normalized token form).
+
+    Values are the canonical NORMALIZED tokens (no ``_evidence`` suffix). The authored
+    suffix variant (e.g. ``empirical_data_evidence``) is accepted and stripped by
+    ``canonical_evidence_type_token``. ``negative_result`` is a valid-but-unranked member
+    kept for compatibility with cli.py's authored vocabulary (see the belief_weights
+    reconciliation gate); a future semantics slice may re-model it.
+    """
+
+    EMPIRICAL_DATA = "empirical_data"
+    BENCHMARK = "benchmark"
+    SIMULATION = "simulation"
+    LITERATURE = "literature"
+    EXPERT_JUDGMENT = "expert_judgment"
+    NEGATIVE_RESULT = "negative_result"
+
+
 class IndependenceTag(StrEnum):
     """Evidence-line independence category (matches ``graph add evidence --independence``)."""
 
@@ -177,3 +195,22 @@ class PropositionMetadata(BaseModel):
     evidence_role: EvidenceRole | None = None
     measurement_model: MeasurementModel | None = None
     rival_model_packet_ref: str | None = None
+
+
+_EVIDENCE_TYPE_SUFFIX = "_evidence"
+
+
+def canonical_evidence_type_token(value: str | None) -> str | None:
+    """Strip the authored ``_evidence`` suffix to the canonical EvidenceType token.
+
+    Pure string→string (does NOT validate membership): ``"x_evidence"`` → ``"x"``,
+    ``None`` → ``None``, an already-canonical or unknown token → unchanged. Membership
+    enforcement happens where the result is coerced to ``EvidenceType`` (the model
+    validator raises on unknown); graph-literal readers in the tool degrade unknowns to
+    rank 0 instead.
+    """
+    if value is None:
+        return None
+    if value.endswith(_EVIDENCE_TYPE_SUFFIX):
+        return value[: -len(_EVIDENCE_TYPE_SUFFIX)]
+    return value
