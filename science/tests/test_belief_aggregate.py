@@ -67,3 +67,39 @@ def test_aggregate_belief_candidates_do_not_collapse_but_committed_records_do() 
     reduced = reduce_units(committed)
     assert len(reduced.kept) == 1
     assert len(reduced.collapsed) == 1
+
+
+def test_base_magnitude_matches_inline_and_qa_failed_not_qualifying():
+    from science_tool.graph.belief import (
+        BeliefMagnitude, _base_magnitude, is_qualifying_direct_test,
+    )
+    from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY as P
+
+    def unit(group=None, role="direct_test", strength="strong", qa=()):
+        from science_tool.graph.belief import EvidenceUnit
+        return EvidenceUnit(line_uri=f"u{id(group)}{role}{strength}{qa}", stance="supports",
+            strength=strength, independence="independent", independence_group=group,
+            evidence_role=role, evidence_type="empirical_data", dispute_scope=None,
+            proxy_directness=None, has_measurement_model=False, source=None,
+            observability_keys=(), qa_failed_datasets=qa)
+
+    two_clean = [unit(role="direct_test"), unit(role="proxy_support")]
+    assert _base_magnitude(two_clean, set(), policy=P) == BeliefMagnitude.WELL_SUPPORTED
+
+    # A QA-failed direct test is NOT a qualifying direct test.
+    assert is_qualifying_direct_test(unit(qa=("dataset:bad",)), policy=P) is False
+    assert is_qualifying_direct_test(unit(), policy=P) is True
+
+
+def test_contested_groups_for_intersects_support_and_dispute_groups():
+    from science_tool.graph.belief import EvidenceUnit, _contested_groups_for
+
+    def u(stance, group):
+        return EvidenceUnit(line_uri=f"{stance}-{group}", stance=stance, strength="strong",
+            independence="independent", independence_group=group, evidence_role="direct_test",
+            evidence_type="empirical_data", dispute_scope=None, proxy_directness=None,
+            has_measurement_model=False, source=None, observability_keys=())
+
+    support = [u("supports", "g1"), u("supports", "g2"), u("supports", None)]
+    dispute = [u("disputes", "g1"), u("disputes", "g3")]
+    assert _contested_groups_for(support, dispute) == {"g1"}   # only the shared group; None ignored

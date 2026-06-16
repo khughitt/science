@@ -251,6 +251,7 @@ def is_qualifying_direct_test(u: EvidenceUnit, *, policy: BeliefPolicy = DEFAULT
         u.evidence_role == policy.direct_test_role
         and not is_proxy_gated(u, policy=policy)
         and not is_authored_assertion(u, policy=policy)
+        and not is_qa_failed(u)
     )
 
 
@@ -284,6 +285,37 @@ _MAG_ORDER = [
     BeliefMagnitude.SUPPORTED,
     BeliefMagnitude.WELL_SUPPORTED,
 ]
+
+
+def _contested_groups_for(support: list[EvidenceUnit], dispute: list[EvidenceUnit]) -> set[str]:
+    """Independence groups present on BOTH a support and a dispute unit (None/empty ignored)."""
+    sup_groups = {u.independence_group for u in support if u.independence_group}
+    dis_groups = {u.independence_group for u in dispute if u.independence_group}
+    return sup_groups & dis_groups
+
+
+def _base_magnitude(
+    support: list[EvidenceUnit],
+    contested_groups: set[str],
+    *,
+    policy: BeliefPolicy = DEFAULT_BELIEF_POLICY,
+) -> BeliefMagnitude:
+    """Ordinal magnitude from clean support alone (SPECULATIVE→FRAGILE→SUPPORTED→WELL_SUPPORTED),
+    before any refutation/authored/QA cap. Units in a contested group are not clean corroboration."""
+    n_support = len(support)
+    # A support unit in a contested group is not clean corroboration (stance-aware-collapse
+    # decision): well_supported needs >=N *clean* units, one of which is a qualifying direct test.
+    clean_support = [u for u in support if u.independence_group not in contested_groups]
+    clean_direct_test = any(is_qualifying_direct_test(u, policy=policy) for u in clean_support)
+    if n_support == 0:
+        return BeliefMagnitude.SPECULATIVE
+    if n_support == 1:
+        return BeliefMagnitude.FRAGILE
+    if (not policy.well_supported_requires_direct_test or clean_direct_test) and len(
+        clean_support
+    ) >= policy.well_supported_min_clean_support:
+        return BeliefMagnitude.WELL_SUPPORTED
+    return BeliefMagnitude.SUPPORTED
 
 
 @dataclass
@@ -325,23 +357,8 @@ def aggregate_belief(units: list[EvidenceUnit], *, policy: BeliefPolicy = DEFAUL
     dispute = [u for u in reduced.kept if u.stance == "disputes" and not is_diagnostic(u, policy=policy)]
     diagnostics = [u for u in reduced.kept if is_diagnostic(u, policy=policy)]
 
-    n_support = len(support)
-    # A support unit in a contested group is not clean corroboration (stance-aware-collapse
-    # decision): well_supported needs >=N *clean* units, one of which is a qualifying direct test.
-    clean_support = [u for u in support if u.independence_group not in cg]
-    clean_direct_test = any(is_qualifying_direct_test(u, policy=policy) for u in clean_support)
     decisive = any(is_decisive_refutation(u, policy=policy) for u in dispute)
-
-    if n_support == 0:
-        magnitude = BeliefMagnitude.SPECULATIVE
-    elif n_support == 1:
-        magnitude = BeliefMagnitude.FRAGILE
-    elif (not policy.well_supported_requires_direct_test or clean_direct_test) and len(
-        clean_support
-    ) >= policy.well_supported_min_clean_support:
-        magnitude = BeliefMagnitude.WELL_SUPPORTED
-    else:
-        magnitude = BeliefMagnitude.SUPPORTED
+    magnitude = _base_magnitude(support, cg, policy=policy)
 
     capped = False
     if decisive and _MAG_ORDER.index(magnitude) > _MAG_ORDER.index(BeliefMagnitude.FRAGILE):
