@@ -685,3 +685,76 @@ def test_figurative_body_omits_absent_optionals():
         mapping=None, cue="like",
     )
     assert '"mapping"' not in body and '"cue":"like"' in body
+
+
+from science_tool.annotation.statement_extract import plan_figurative
+
+_FIG_TEXT = "We describe how the immune system mounts an attack on invading pathogens."
+_FIG_PASSAGES = [PersistedPassage(section="DISCUSS", file_char_base=0, length=len(_FIG_TEXT))]
+
+
+def _figc(**over) -> FigurativeCandidate:
+    base = dict(type="metaphor", exact="the immune system mounts an attack",
+                prefix="", suffix=" on invading",
+                source_domain="warfare", target_domain="immune response")
+    base.update(over)
+    return FigurativeCandidate(**base)  # type: ignore[arg-type]
+
+
+def test_plan_figurative_anchors_and_builds_body():
+    p, reason, dropped = plan_figurative(
+        _FIG_TEXT, _FIG_PASSAGES, _figc(),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert reason is None and dropped == 0 and p is not None
+    assert p.annotation_type == "metaphor"
+    assert p.motivation is Motivation.CLASSIFYING
+    assert p.source_name == "llm-annot:claude-sonnet-4-6:paper-annotate-v1"
+    assert '"section":"discussion"' in p.body.value
+    assert '"source_domain":"warfare"' in p.body.value
+
+
+def test_plan_figurative_quote_not_found():
+    p, reason, _ = plan_figurative(
+        _FIG_TEXT, _FIG_PASSAGES, _figc(exact="absent text"),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert p is None and reason == "extract-quote-not-found"
+
+
+def test_plan_figurative_same_span_different_domains_are_distinct():
+    # identical span, different required domains -> different match_text (must not collapse)
+    p1, _, _ = plan_figurative(
+        _FIG_TEXT, _FIG_PASSAGES, _figc(source_domain="warfare", target_domain="immune response"),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    p2, _, _ = plan_figurative(
+        _FIG_TEXT, _FIG_PASSAGES, _figc(source_domain="machinery", target_domain="immune response"),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert p1 is not None and p2 is not None
+    assert p1.match_text != p2.match_text
+
+
+def test_plan_figurative_match_text_is_delimiter_safe():
+    # a literal '|' inside a domain must not let two different pairs collide
+    p1, _, _ = plan_figurative(
+        _FIG_TEXT, _FIG_PASSAGES, _figc(source_domain="a|b", target_domain="c"),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    p2, _, _ = plan_figurative(
+        _FIG_TEXT, _FIG_PASSAGES, _figc(source_domain="a", target_domain="b|c"),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert p1 is not None and p2 is not None
+    assert p1.match_text != p2.match_text
+
+
+def test_plan_figurative_match_text_prefix_shape():
+    p, _, _ = plan_figurative(
+        _FIG_TEXT, _FIG_PASSAGES, _figc(),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert p is not None
+    file_idx = _FIG_TEXT.index("the immune system mounts an attack")
+    assert p.match_text.startswith(f"metaphor|{file_idx}:34|")

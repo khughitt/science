@@ -397,6 +397,43 @@ def active_entity_iris(sidecar: Sidecar) -> set[str]:
     return out
 
 
+def _anchor_candidate(
+    file_text: str,
+    persisted: list[PersistedPassage],
+    exact: str,
+    prefix: str,
+    suffix: str,
+) -> tuple[int, int, PersistedPassage, TextQuoteSelector] | str:
+    """Locate `exact` (bounded by prefix/suffix) at a unique in-passage offset.
+
+    Returns either a skip reason string ("extract-quote-not-found" /
+    "extract-quote-ambiguous" / "extract-anchored-outside-passage") or the anchored locus
+    `(file_idx, length, containing_passage, passage-clamped selector)`. Kind-agnostic: the
+    caller builds match_text + body. `match_text` is NOT built here because its discriminator
+    differs per kind.
+    """
+    spans = find_qualified_spans(file_text, exact, prefix, suffix)
+    if not spans:
+        return "extract-quote-not-found"
+    if len(spans) > 1:
+        return "extract-quote-ambiguous"
+    file_idx = spans[0]
+    length = len(exact)
+    pp = _containing_passage(persisted, file_idx, length)
+    if pp is None:
+        return "extract-anchored-outside-passage"
+    passage_start = pp.file_char_base
+    passage_end = pp.file_char_base + pp.length
+    prefix_start = max(passage_start, file_idx - _CONTEXT)
+    suffix_end = min(passage_end, file_idx + length + _CONTEXT)
+    selector = TextQuoteSelector(
+        exact=exact,
+        prefix=file_text[prefix_start:file_idx],
+        suffix=file_text[file_idx + length:suffix_end],
+    )
+    return (file_idx, length, pp, selector)
+
+
 def plan_statement(
     file_text: str,
     persisted: list[PersistedPassage],
@@ -412,19 +449,12 @@ def plan_statement(
     "extract-anchored-outside-passage". `dropped` counts unverified concept fields
     removed (the statement is still planned — grounding is a bonus, never a gate).
     """
-    spans = find_qualified_spans(
-        file_text, candidate.exact, candidate.prefix, candidate.suffix
+    anchored = _anchor_candidate(
+        file_text, persisted, candidate.exact, candidate.prefix, candidate.suffix
     )
-    if not spans:
-        return None, "extract-quote-not-found", 0
-    if len(spans) > 1:
-        return None, "extract-quote-ambiguous", 0
-    file_idx = spans[0]
-    length = len(candidate.exact)
-
-    pp = _containing_passage(persisted, file_idx, length)
-    if pp is None:
-        return None, "extract-anchored-outside-passage", 0
+    if isinstance(anchored, str):
+        return None, anchored, 0
+    file_idx, length, pp, selector = anchored
     section = normalize_section(pp.section)
 
     dropped = 0
@@ -446,16 +476,6 @@ def plan_statement(
         object_concept=object_concept,
     )
 
-    passage_start = pp.file_char_base
-    passage_end = pp.file_char_base + pp.length
-    prefix_start = max(passage_start, file_idx - _CONTEXT)
-    suffix_end = min(passage_end, file_idx + length + _CONTEXT)
-    selector = TextQuoteSelector(
-        exact=candidate.exact,
-        prefix=file_text[prefix_start:file_idx],
-        suffix=file_text[file_idx + length:suffix_end],
-    )
-
     # The `type|file_idx:length` prefix is already unique per anchored position (one
     # start index per occurrence), so it carries the dedup identity; the normalized-text
     # tail is descriptive (human-readable), not discriminating.
@@ -471,6 +491,53 @@ def plan_statement(
         source_name=_llm_annot_source_name(model),
     )
     return planned, None, dropped
+
+
+def plan_figurative(
+    file_text: str,
+    persisted: list[PersistedPassage],
+    candidate: FigurativeCandidate,
+    *,
+    model: str,
+    source_md_name: str,
+) -> tuple[PlannedAnnotation | None, str | None, int]:
+    """Convert a FigurativeCandidate to (PlannedAnnotation | None, skip_reason | None, 0).
+
+    No grounding (figurative domains are free-text), so the dropped count is always 0. The
+    dedup match_text JSON-encodes the (source_domain, target_domain) pair so two same-span
+    figures with different required domains stay distinct AND a literal '|' inside a domain
+    cannot create a cross-field collision.
+    """
+    anchored = _anchor_candidate(
+        file_text, persisted, candidate.exact, candidate.prefix, candidate.suffix
+    )
+    if isinstance(anchored, str):
+        return None, anchored, 0
+    file_idx, length, pp, selector = anchored
+    section = normalize_section(pp.section)
+
+    body = figurative_body_json(
+        section=section,
+        source_domain=candidate.source_domain,
+        target_domain=candidate.target_domain,
+        mapping=candidate.mapping,
+        cue=candidate.cue,
+    )
+    identity = json.dumps(
+        [_normalize_text(candidate.source_domain), _normalize_text(candidate.target_domain)],
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    match_text = f"{candidate.type}|{file_idx}:{length}|{identity}"
+    planned = PlannedAnnotation(
+        target=SpecificResource(source=source_md_name, selector=selector),
+        annotation_type=candidate.type,
+        motivation=Motivation.CLASSIFYING,
+        body=TextualBody(value=body, format="application/json"),
+        match_text=match_text,
+        source_name=_llm_annot_source_name(model),
+    )
+    return planned, None, 0
 
 
 # --- Orchestrator -------------------------------------------------------------
