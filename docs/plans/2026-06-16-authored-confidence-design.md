@@ -3,15 +3,24 @@
 > Patchwork kernel **Spec 5 — Proposition, Evidence, and Belief Semantics**, Slice B.
 > Builds directly on Slice A's `BeliefPolicy` socket
 > (`docs/plans/2026-06-16-belief-policy-keystone-{design,plan}.md`). Scope locked to
-> **standalone authored assertions** with trust/agent weighting deferred to Spec 6.
+> **authored assertions** (the `expert_judgment` evidence type) with trust/agent weighting
+> deferred to Spec 6.
 
 ## Goal
 
-Give a **standalone authored assertion** — a human or agent directly asserting belief in a
-proposition, with no dataset behind it — a real, disciplined path into `aggregate_belief`,
-weighted under the `BeliefPolicy` extended in this slice. The governing principle: an
-authored assertion can **corroborate** empirical evidence but can never **manufacture**
-empirical-grade belief.
+Give an **authored assertion** — a human or agent directly asserting belief in a proposition
+— a real, disciplined path into `aggregate_belief`, weighted under the `BeliefPolicy` extended
+in this slice. The governing principle: an authored assertion can **corroborate** empirical
+evidence but can never **manufacture** empirical-grade belief.
+
+**"Authored assertion" is a pure type contract:** a unit is an authored assertion **iff** its
+normalized `evidence_type` equals `policy.authored_assertion_type` (`expert_judgment`).
+Whether the line also declares `dataset_usage` is **not** part of belief recognition — the
+engine never inspects the line's sources for this purpose. By authoring convention an
+`expert_judgment` line is dataset-less (empirical lines carry `evidence_type:
+empirical_data_evidence` instead), but the belief engine keys solely on the type, and an
+`expert_judgment` line that also declares `dataset_usage` is a mis-authoring caught by
+validation, not a special case in aggregation.
 
 `confidence` is already an authored field on `EvidenceLineEntity` (inherited from `Entity`)
 and is materialized to `SCI_NS.confidence` (`materialize.py:447`), but the belief engine
@@ -128,12 +137,33 @@ disciplined without importing `BeliefMagnitude`.
 - New helper `_authored_assertion_counts(u, *, policy) -> bool` encoding the range-validated
   gate (`confidence is not None and 0 <= c <= 1 and c >= policy.authored_min_confidence`).
 - `is_qualifying_direct_test` excludes authored assertions (see Refutation symmetry).
-- `aggregate_belief`: before bucketing, partition authored assertions by the gate. Gate
-  failures go to `excluded_authored_confidence`; gate passers join the normal support/dispute
-  flow. After the existing magnitude + refutation-cap logic, apply the authored-only ceiling
-  and set `authored_capped`.
+- `aggregate_belief` partitions authored assertions by the gate **on the raw `units` list,
+  before `reduce_units`** (see § Pipeline ordering). Gate failures go to
+  `excluded_authored_confidence` and never enter reduction; the surviving units (all
+  empirical, plus gate-passing authored assertions) flow into `reduce_units` unchanged. After
+  the existing magnitude + refutation-cap logic, the authored-only ceiling is applied and
+  `authored_capped` set.
 - `BeliefResult` gains `authored_capped: bool = False` and
   `excluded_authored_confidence: list[EvidenceUnit] = field(default_factory=list)`.
+
+### Pipeline ordering (critical)
+
+`aggregate_belief` today runs `reduce_units()` (independence collapse → winners) and derives
+`contested_groups` **before** bucketing. The confidence gate MUST run **before**
+`reduce_units`, not merely before bucketing:
+
+```
+units
+  → partition: gate-failing authored assertions → excluded_authored_confidence
+               everything else                  → admitted
+  → reduce_units(admitted, policy=policy)        # collapse winners, contested_groups
+  → bucket magnitude → refutation cap → authored-only ceiling
+```
+
+If a gate-failing authored *dispute* reached `reduce_units`, it could win a collapse, add to
+`contested_groups`, perturb `clean_support`, or flip `contested` — so a rejected unit would
+still influence the result. Gating first guarantees a rejected authored unit has **zero**
+downstream effect.
 
 ### Modify: `graph/bundle_belief.py`
 
@@ -148,6 +178,14 @@ Persist `authored_capped` in **both** snapshot row branches (single-claim `Belie
 persisted only on the bundle branch; `authored_capped` goes on both — the single-claim branch
 needs it because authored-only single claims are exactly where the ceiling fires.)
 
+**Legacy normalization (pre-Slice-B rows have no `authored_capped`):** extend the Slice-A
+`_with_policy_defaults(row)` read-time normalizer (which `read_snapshots` already routes every
+parsed row through) to also default `authored_capped` to `False` when the key is absent. Pre-
+Slice-B belief rows were necessarily computed with no authored-only ceiling, so `False` is the
+**semantically correct** value, not a silent fallback — identical in spirit to Slice-A's
+policy-identity normalization. `authored_capped` is **not** added to the dedup `_key` (it is a
+derived flag, like `capped_by_refutation`, not part of belief identity).
+
 ### Modify: validation — `validate/checks/evidence_lines.py`
 
 - `check_evidence_unscored_line`: add an authored-assertion branch. An authored assertion is
@@ -156,14 +194,18 @@ needs it because authored-only single claims are exactly where the ceiling fires
   assertion's `confidence` is **missing or outside `[0, 1]`** (the un-gateable case).
 - `check_belief_nonreproducible`: add `authored_capped` to the compared fields, alongside the
   Slice-A `policy_id` / `policy_version` (now that `authored_capped` is persisted on both
-  branches a change in it is a real, comparable reproducibility signal).
+  branches a change in it is a real, comparable reproducibility signal). Compare with a
+  **default of `False`** on both sides (`prior.get("authored_capped", False) !=
+  now.get("authored_capped", False)`) so a pre-Slice-B prior row missing the field — already
+  normalized to `False` by `read_snapshots` — never produces a spurious `belief.nonreproducible`
+  error against a current `authored_capped == False` row.
 
 ## Worked examples
 
 | Support units (after gate) | Today | This slice |
 |---|---|---|
-| 1× empirical direct_test (clean, strong) | WELL_SUPPORTED* | WELL_SUPPORTED (unchanged) |
-| 2× empirical clean + 1 direct_test | WELL_SUPPORTED | WELL_SUPPORTED (unchanged) |
+| 1× empirical direct_test (clean, strong) | FRAGILE (`n_support == 1`) | FRAGILE (unchanged) |
+| ≥2× empirical clean, one a qualifying direct_test | WELL_SUPPORTED | WELL_SUPPORTED (unchanged) |
 | 1× authored `confidence 0.9` | n/a (inert) | FRAGILE |
 | 2× authored `confidence 0.9` | n/a (inert) | **FRAGILE (capped from SUPPORTED)** |
 | 1× authored `0.9` + 2× empirical clean direct_test | n/a | WELL_SUPPORTED (authored corroborates) |
@@ -171,7 +213,8 @@ needs it because authored-only single claims are exactly where the ceiling fires
 | 1× authored `confidence 1.2` | n/a | SPECULATIVE (range-rejected → bucket + validate WARN) |
 | 1× authored dispute `0.9`, role=direct_test | n/a | contested, **not** decisive (no refutation cap) |
 
-\* requires `n_support >= well_supported_min_clean_support`; single-line cases reach FRAGILE.
+`WELL_SUPPORTED` requires `n_support >= well_supported_min_clean_support` (default 2) with a
+clean qualifying direct test; a single support unit reaches at most `FRAGILE`.
 
 ## Boundary (explicit, deferred)
 
@@ -196,6 +239,11 @@ needs it because authored-only single claims are exactly where the ceiling fires
    `authored_capped is False` (empirical path untouched, assertion corroborates).
 4. **Refutation symmetry:** authored dispute `0.9` with role=direct_test → contested but
    `capped_by_refutation is False` (not decisive); empirical decisive refutation still caps.
+4b. **Pipeline ordering (gate before reduction):** a **gate-failing** authored dispute
+    (`confidence 0.3`) sharing an independence group with an empirical support unit leaves
+    `contested`, `contested_groups`, the collapse winners, and `clean_support` **identical** to
+    the same scenario with the authored dispute absent — proving the rejected unit never
+    reached `reduce_units`.
 5. **Policy discipline:** `BeliefPolicy(authored_min_confidence=1.5)` and
    `authored_only_ceiling="bogus"` raise `ValueError`; `MAGNITUDE_NAMES` reconciles with
    `BeliefMagnitude`.
@@ -206,11 +254,16 @@ needs it because authored-only single claims are exactly where the ceiling fires
 8. **Validation:** an authored assertion with no role/strength but valid confidence is **not**
    flagged unscored; one with missing/out-of-range confidence **is** warned;
    `check_belief_nonreproducible` flags a row whose `authored_capped` changed.
+9. **Legacy normalization:** a pre-Slice-B snapshot row (no `authored_capped` key) reads back
+   with `authored_capped == False` via `read_snapshots`, and produces **no**
+   `belief.nonreproducible` error when re-checked against a current `authored_capped == False`
+   result.
 
 ## Success criteria
 
-- A standalone authored assertion participates in belief: admitted by a range-validated
-  confidence gate, contributing exactly one unit (no magnitude scaling).
+- An authored assertion (the `expert_judgment` type) participates in belief: admitted by a
+  range-validated confidence gate **before independence reduction**, contributing exactly one
+  unit (no magnitude scaling).
 - Authored-only support is capped at `authored_only_ceiling`; mixing with empirical evidence
   is unaffected.
 - An authored assertion is never a qualifying direct test on either side (no top-tier
