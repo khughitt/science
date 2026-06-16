@@ -9,6 +9,7 @@ import yaml
 
 from science_model.source_ref import SourceRef
 
+from science_tool.entity_scan import iter_entity_markdown
 from science_tool.graph.source_records import MarkdownSourceDocument
 from science_tool.graph.storage_adapters.base import StorageAdapter
 
@@ -36,7 +37,8 @@ class MarkdownAdapter(StorageAdapter):
             root = project_root / rel
             if not root.is_dir():
                 continue
-            for path in sorted(root.rglob("*.md")):
+            scan = iter_entity_markdown(root) if rel == "entities" else sorted(root.rglob("*.md"))
+            for path in scan:
                 if path.name.endswith(SIDECAR_MARKDOWN_SUFFIX):
                     continue
                 try:

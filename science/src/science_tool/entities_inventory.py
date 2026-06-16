@@ -161,7 +161,7 @@ def _metadata_date(value: object) -> str | None:
 def _latest_activity(project_root: Path) -> datetime | None:
     latest: float = 0
     for path in project_root.rglob("*.md"):
-        if any(part in {"templates", ".venv", "data", ".git", "__pycache__", "node_modules"} for part in path.parts):
+        if any(part in {"templates", ".venv", "data", ".git", "__pycache__", "node_modules"} or part.startswith("_") for part in path.parts):
             continue
         latest = max(latest, path.stat().st_mtime)
     graph_path = project_root / "knowledge" / "graph.trig"

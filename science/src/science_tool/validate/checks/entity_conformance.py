@@ -21,6 +21,7 @@ from science_tool.entities import (
     markdown_entity_kinds,
     resolve_path_policy,
 )
+from science_tool.entity_scan import iter_entity_markdown
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -202,7 +203,7 @@ def check_overlay_of_in_owner_root(ctx: ValidateContext) -> Iterator[Result]:
     root = ctx.project_root / "entities"
     if not root.is_dir():
         return
-    for path in sorted(root.rglob("*.md")):
+    for path in iter_entity_markdown(root):
         if "templates" in path.relative_to(ctx.project_root).parts:
             continue
         text = ctx.read_text_cached(path)

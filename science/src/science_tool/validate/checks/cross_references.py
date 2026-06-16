@@ -236,6 +236,7 @@ from pathlib import Path
 import re
 from typing import Literal
 
+from science_tool.entity_scan import iter_entity_markdown
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -421,7 +422,7 @@ def check_cross_references(ctx: ValidateContext) -> Iterator[Result]:
 
     entities_dir = ctx.project_root / "entities"
     if entities_dir.is_dir():
-        for path in sorted(entities_dir.rglob("*.md")):
+        for path in iter_entity_markdown(entities_dir):
             doc_id, related = _extract_frontmatter(ctx, path)
             if doc_id:
                 all_ids.add(doc_id)
@@ -433,6 +434,8 @@ def check_cross_references(ctx: ValidateContext) -> Iterator[Result]:
     all_ids.update(_load_task_ids(ctx))
     all_ids.update(_load_structured_ids(ctx, profile_dir / "entities.yaml"))
     all_ids.update(_load_terms_ids(ctx, profile_dir / "terms.yaml"))
+    from science_tool.archive import load_archive_index
+    all_ids.update(load_archive_index(ctx.project_root).resolvable_ids())
     project_ids = _load_project_ids(ctx)
 
     emitted = False
@@ -468,3 +471,31 @@ def check_cross_references(ctx: ValidateContext) -> Iterator[Result]:
 
     if not emitted:
         yield _result(Severity.INFO, "All frontmatter cross-references valid")
+
+
+@Check(section="archive index reconciliation", order=21)
+def check_archive_index(ctx: ValidateContext) -> Iterator[Result]:
+    from science_tool.archive import verify_archive
+    from science_tool.graph.sources import load_project_sources
+
+    live_space: set[str] = set()
+    load_error: str | None = None
+    try:
+        sources = load_project_sources(ctx.project_root)
+        for e in sources.entities:
+            live_space.add(e.canonical_id)
+            live_space.update(e.aliases or [])
+            live_space.update(getattr(e, "same_as", None) or [])
+    except Exception as exc:  # degraded, but NOT silently passed
+        load_error = str(exc)
+
+    problems = verify_archive(ctx.project_root, live_alias_space=live_space)
+    if load_error is not None:
+        yield _result(
+            Severity.ERROR,
+            f"Archive index: could not load live entities for collision check ({load_error})",
+        )
+    for problem in problems:
+        yield _result(Severity.ERROR, f"Archive index: {problem}")
+    if not problems and load_error is None:
+        yield _result(Severity.INFO, "Archive index consistent")

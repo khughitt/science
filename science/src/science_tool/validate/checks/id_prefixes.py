@@ -94,6 +94,7 @@ from pathlib import Path
 import re
 
 from science_tool.entities import markdown_entity_kinds
+from science_tool.entity_scan import iter_entity_markdown
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -148,7 +149,7 @@ def check_id_prefixes(ctx: ValidateContext) -> Iterator[Result]:
     for root in (ctx.project_root / "entities",):
         if not root.is_dir():
             continue
-        for path in sorted(root.rglob("*.md")):
+        for path in iter_entity_markdown(root):
             if "templates" in _project_relative_parts(ctx.project_root, path):
                 continue
             content = ctx.read_text_cached(path)

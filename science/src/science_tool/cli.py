@@ -133,6 +133,25 @@ def main(ctx: click.Context, color_policy: str | None) -> None:
     set_color_policy(ctx, resolve_color_policy(color_policy))
 
 
+@main.command("search")
+@click.argument("query")
+@click.option("--archived", is_flag=True, default=False, help="Search the archive index (required; live search not yet implemented).")
+@click.option("--project-root", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path("."), help="Project root (default: current directory).")
+@click.option("--format", "output_format", type=click.Choice(["json", "text"]), default="json", show_default=True)
+def search_command(query: str, archived: bool, project_root: Path, output_format: str) -> None:
+    """Search entities. P3 supports --archived only (reads the archive index)."""
+    if not archived:
+        raise click.UsageError("science search currently supports only --archived (live entity search is not implemented).")
+    from science_tool.archive import search_archive
+
+    hits = search_archive(project_root, query)
+    if output_format == "json":
+        click.echo(json.dumps(hits, indent=2, sort_keys=True))
+    else:
+        for h in hits:
+            click.echo(f"{h['id']}  [{h['kind']}]  {h['title'] or ''}")
+
+
 def _parse_dataset_effects(entries: tuple[str, ...]) -> dict[str, float] | None:
     if not entries:
         return None
@@ -282,6 +301,47 @@ def entities_mark_superseded_command(project_root: Path, apply_changes: bool) ->
     from science_tool.consolidation import mark_superseded
 
     report = mark_superseded(project_root, apply=apply_changes)
+    click.echo(json.dumps(report, indent=2))
+
+
+@entities_group.command("archive")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path("."),
+    help="Project root (default: current directory).",
+)
+@click.option("--status", "statuses", multiple=True, help="Statuses to archive (default: superseded, archived).")
+@click.option("--apply", "apply_changes", is_flag=True, default=False, help="Apply changes (default: dry-run report).")
+def entities_archive_command(project_root: Path, statuses: tuple[str, ...], apply_changes: bool) -> None:
+    """Relocate hidden-status entities into entities/_archive/ (report, then --apply)."""
+    from datetime import datetime, timezone
+
+    from science_tool.archive import DEFAULT_ARCHIVE_STATUSES, archive_entities
+
+    status_set = frozenset(statuses) if statuses else DEFAULT_ARCHIVE_STATUSES
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    report = archive_entities(project_root, statuses=status_set, apply=apply_changes, now=now)
+    click.echo(json.dumps(report, indent=2))
+
+
+@entities_group.command("unarchive")
+@click.argument("ids", nargs=-1, required=True)
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path("."),
+    help="Project root (default: current directory).",
+)
+@click.option("--apply", "apply_changes", is_flag=True, default=False, help="Apply changes (default: dry-run report).")
+def entities_unarchive_command(ids: tuple[str, ...], project_root: Path, apply_changes: bool) -> None:
+    """Restore archived entities to their original path (report, then --apply)."""
+    from datetime import datetime, timezone
+
+    from science_tool.archive import unarchive_entities
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    report = unarchive_entities(project_root, list(ids), apply=apply_changes, now=now)
     click.echo(json.dumps(report, indent=2))
 
 
@@ -639,12 +699,13 @@ def entity_note(ref: str, note: str, note_date: str | None) -> None:
 @click.option("--status")
 @click.option("--related")
 @click.option("--include-hidden", is_flag=True, default=False, help="Include superseded/archived entities (hidden by default).")
+@click.option("--include-archived", is_flag=True, default=False, help="Include archived (relocated) entities from the archive index.")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def entity_list(kind: str | None, status: str | None, related: str | None, include_hidden: bool, output_format: str) -> None:
+def entity_list(kind: str | None, status: str | None, related: str | None, include_hidden: bool, include_archived: bool, output_format: str) -> None:
     """List source-authored entities."""
 
     try:
-        rows = list_entities(Path.cwd(), kind=kind, status=status, related=related, include_hidden=include_hidden)
+        rows = list_entities(Path.cwd(), kind=kind, status=status, related=related, include_hidden=include_hidden, include_archived=include_archived)
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
     emit_query_rows(

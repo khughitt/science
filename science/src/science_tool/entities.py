@@ -16,6 +16,7 @@ from science_model.profiles.schema import EntityFilenameStrategy
 from science_model.profiles import EntityKind, ProfileManifest, load_profile_manifest
 from science_model.profiles.core import CORE_PROFILE
 from science_model.profiles.local import LOCAL_PROFILE
+from science_tool.entity_scan import iter_entity_markdown
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
@@ -89,6 +90,11 @@ def _resolve_local_home(name: str, home: str | None) -> Path:
         raise EntityCommandError(
             f"local kind {name!r} home {home!r} must be a relative path of the form "
             "'entities/<segment>/...' with no parent traversal"
+        )
+    if any(seg.startswith("_") for seg in parts):
+        raise EntityCommandError(
+            f"local kind {name!r} home {home!r} may not contain a '_'-prefixed path "
+            "segment (reserved for the archive tier; mirrors the entity_scan skip rule)"
         )
     return candidate
 
@@ -797,7 +803,16 @@ def list_entities(
     related: str | None = None,
     *,
     include_hidden: bool = False,
+    include_archived: bool = False,
 ) -> list[dict[str, str]]:
+    if related is not None and include_archived:
+        # The archive index carries no relation data, so the `related` filter cannot
+        # be evaluated against archived rows. Fail loud rather than silently include
+        # unfiltered archived rows or silently drop them.
+        raise EntityCommandError(
+            "--related cannot be combined with --include-archived "
+            "(the archive index does not carry relation data)"
+        )
     sources = load_project_sources(project_root.resolve())
     resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
     related_key = _resolved_ref_key(resolver, related) if related is not None else None
@@ -821,8 +836,27 @@ def list_entities(
                 "title": entity.title,
                 "status": entity_status,
                 "path": entity.file_path,
+                "archived": False,
             }
         )
+    if include_archived:
+        from science_tool.archive import load_archive_index
+
+        for cid, arow in load_archive_index(project_root.resolve()).active_by_id.items():
+            if kind is not None and arow.kind != kind:
+                continue
+            if status is not None and (arow.status or "") != status:
+                continue
+            rows.append(
+                {
+                    "id": cid,
+                    "kind": arow.kind or "",
+                    "title": arow.title or "",
+                    "status": arow.status or "",
+                    "path": arow.original_path or "",
+                    "archived": True,
+                }
+            )
     return sorted(rows, key=lambda row: row["id"])
 
 
@@ -1034,7 +1068,7 @@ def _load_markdown_entities(project_root: Path, kind: str | None = None) -> list
         root = project_root / policy.root
         if not root.is_dir():
             continue
-        for path in sorted(root.rglob("*.md")):
+        for path in iter_entity_markdown(root):
             frontmatter, _ = _parse_markdown_file(path)
             entity_id = frontmatter.get("id")
             entity_kind = frontmatter.get("type") or frontmatter.get("kind")

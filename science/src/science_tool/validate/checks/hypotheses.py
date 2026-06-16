@@ -15,6 +15,7 @@ from typing import Any
 
 import yaml
 
+from science_tool.entity_scan import iter_entity_markdown
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -141,7 +142,7 @@ def _check_review_horizon_days(ctx: ValidateContext) -> Iterator[Result]:
     for root in (ctx.project_root / "entities",):
         if not root.is_dir():
             continue
-        for path in sorted(root.rglob("*.md")):
+        for path in iter_entity_markdown(root):
             if not path.is_file():
                 continue
             try:
