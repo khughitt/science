@@ -203,3 +203,86 @@ def test_run_qa_datapackage_reads_yaml(tmp_path):
         "        - name: id\n          type: integer\n          constraints: {required: true}\n")
     result = run_qa_datapackage(tmp_path / "datapackage.yaml", "obs", tmp_path)
     assert result.structural_failed is False and result.rows_checked == 3
+
+
+def _yaml_pkg(tmp_path, body: str) -> Path:
+    (tmp_path / "datapackage.yaml").write_text(body)
+    return tmp_path / "datapackage.yaml"
+
+
+def test_package_clean_multi_resource_ok(tmp_path):
+    from science_qa.runner import run_qa_package
+    pd.DataFrame({"id": [1, 2]}).to_parquet(tmp_path / "a.parquet")
+    pd.DataFrame({"v": [0.1, 0.2]}).to_parquet(tmp_path / "b.parquet")
+    dp = _yaml_pkg(tmp_path,
+        "name: p\nresources:\n"
+        "  - name: a\n    path: a.parquet\n    schema: {fields: [{name: id, type: integer}]}\n"
+        "  - name: b\n    path: b.parquet\n    schema: {fields: [{name: v, type: number}]}\n")
+    result = run_qa_package(dp)
+    assert result.package_structural_failed is False
+    assert {o.name: o.status for o in result.outcomes} == {"a": "ok", "b": "ok"}
+
+
+def test_package_structural_violation_fails_package(tmp_path):
+    from science_qa.runner import run_qa_package
+    pd.DataFrame({"p": [-1.0, 1.0]}).to_parquet(tmp_path / "a.parquet")
+    dp = _yaml_pkg(tmp_path,
+        "name: p\nresources:\n"
+        "  - name: a\n    path: a.parquet\n    schema:\n      fields:\n"
+        "        - name: p\n          type: number\n          constraints: {minimum: 0}\n")
+    result = run_qa_package(dp)
+    assert result.package_structural_failed is True
+    assert result.outcomes[0].status == "fail"
+
+
+def test_package_absent_data_is_blocked_not_fatal(tmp_path):
+    from science_qa.runner import run_qa_package
+    dp = _yaml_pkg(tmp_path,
+        "name: p\nresources:\n"
+        "  - name: a\n    path: missing.parquet\n    schema: {fields: [{name: id, type: integer}]}\n")
+    result = run_qa_package(dp)
+    assert result.package_structural_failed is False
+    assert result.outcomes[0].status == "blocked" and result.outcomes[0].reason == "data file absent"
+
+
+def test_package_non_tabular_is_not_applicable(tmp_path):
+    from science_qa.runner import run_qa_package
+    dp = _yaml_pkg(tmp_path,
+        "name: p\nresources:\n"
+        "  - name: v\n    path: v.qa_verdict.json\n")
+    result = run_qa_package(dp)
+    assert result.outcomes[0].status == "not-applicable" and result.outcomes[0].reason == "non-tabular"
+
+
+def test_package_schemaless_tabular_is_skipped(tmp_path):
+    from science_qa.runner import run_qa_package
+    pd.DataFrame({"x": [1]}).to_parquet(tmp_path / "a.parquet")
+    dp = _yaml_pkg(tmp_path, "name: p\nresources:\n  - name: a\n    path: a.parquet\n")
+    result = run_qa_package(dp)
+    assert result.outcomes[0].status == "skipped" and result.outcomes[0].reason == "no schema"
+
+
+def test_package_resource_selection_and_unknown(tmp_path):
+    from science_qa.compile import CompileError
+    from science_qa.runner import run_qa_package
+    pd.DataFrame({"id": [1, 2]}).to_parquet(tmp_path / "a.parquet")
+    pd.DataFrame({"v": [1.0]}).to_parquet(tmp_path / "b.parquet")
+    dp = _yaml_pkg(tmp_path,
+        "name: p\nresources:\n"
+        "  - name: a\n    path: a.parquet\n    schema: {fields: [{name: id, type: integer}]}\n"
+        "  - name: b\n    path: b.parquet\n    schema: {fields: [{name: v, type: number}]}\n")
+    result = run_qa_package(dp, resources=["a"])
+    assert [o.name for o in result.outcomes] == ["a"]
+    with pytest.raises(CompileError, match="not found"):
+        run_qa_package(dp, resources=["ghost"])
+
+
+def test_package_report_dir_none_writes_nothing(tmp_path):
+    from science_qa.runner import run_qa_package
+    pd.DataFrame({"id": [1, 2]}).to_parquet(tmp_path / "a.parquet")
+    dp = _yaml_pkg(tmp_path,
+        "name: p\nresources:\n"
+        "  - name: a\n    path: a.parquet\n    schema: {fields: [{name: id, type: integer}]}\n")
+    run_qa_package(dp)  # report_dir=None
+    assert not (tmp_path / "qa_report.json").exists()
+    assert not (tmp_path / "a").exists()

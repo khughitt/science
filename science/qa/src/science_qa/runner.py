@@ -150,3 +150,73 @@ def _resolve(spec: CheckSpec, inv: Invocation, table: pd.DataFrame, config: QACo
         return resolve_columns(spec.selector, table, column_sets=config.column_sets)
     # whole-table / fixed-column required checks have no column selection to record
     return []
+
+
+_TABULAR_SUFFIXES = {".parquet", ".csv", ".tsv"}
+
+
+@dataclass(frozen=True)
+class ResourceOutcome:
+    name: str
+    status: str            # "ok" | "fail" | "blocked" | "skipped" | "not-applicable"
+    reason: str            # "" for ok/fail; else "data file absent" | "no schema" | "non-tabular"
+    result: RunResult | None   # None for blocked/skipped/not-applicable
+
+
+@dataclass(frozen=True)
+class PackageRunResult:
+    package: str
+    outcomes: list[ResourceOutcome]
+    package_structural_failed: bool
+
+
+def _qa_one_resource(resource: dict, pkg_dir: Path, package: dict,
+                     runknobs_path: Path | None) -> ResourceOutcome:
+    name = resource.get("name", "?")
+    path = resource.get("path")
+    suffix = Path(path).suffix.lower() if path else ""
+    if suffix not in _TABULAR_SUFFIXES:
+        return ResourceOutcome(name, "not-applicable", "non-tabular", None)
+    schema = resource.get("schema") or {}
+    if not schema.get("fields"):
+        return ResourceOutcome(name, "skipped", "no schema", None)
+    table_path = pkg_dir / path
+    if not table_path.exists():
+        return ResourceOutcome(name, "blocked", "data file absent", None)
+    config = schema_to_config(resource, pkg_dir, package)
+    if runknobs_path is not None:
+        config = merge_configs(config, QAConfig.from_file(runknobs_path, require_program=False))
+    if not config.program:
+        config.program = "tabular"
+    result = _evaluate(config, table_path)
+    return ResourceOutcome(name, "fail" if result.structural_failed else "ok", "", result)
+
+
+def run_qa_package(datapackage_path: Path, report_dir: Path | None = None,
+                   resources: list[str] | None = None,
+                   runknobs_path: Path | None = None) -> PackageRunResult:
+    """Run QA across a datapackage's tabular resources (package-level).
+
+    Each resource is classified (not-applicable / skipped / blocked) or evaluated; a
+    malformed schema raises CompileError (fail early). The package is structurally failed
+    iff any evaluated resource is. When `report_dir` is given, writes per-resource subdir
+    reports + a package rollup (added in a later task); otherwise writes nothing.
+    """
+    package, pkg_dir = load_package(Path(datapackage_path))
+    all_res = package.get("resources", [])
+    by_name = {r.get("name"): r for r in all_res}
+    if resources is not None:
+        missing = [n for n in resources if n not in by_name]
+        if missing:
+            raise CompileError(f"resource(s) not found in {datapackage_path}: {missing}")
+        selected = [by_name[n] for n in resources]
+    else:
+        selected = all_res
+    outcomes = [_qa_one_resource(r, pkg_dir, package, runknobs_path) for r in selected]
+    package_structural_failed = any(o.status == "fail" for o in outcomes)
+    result = PackageRunResult(package=package.get("name") or pkg_dir.name,
+                              outcomes=outcomes,
+                              package_structural_failed=package_structural_failed)
+    if report_dir is not None:
+        write_package_report(result, Path(report_dir))
+    return result
