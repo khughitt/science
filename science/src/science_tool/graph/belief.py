@@ -38,6 +38,10 @@ class EvidenceUnit:
     target_polarity: str | None = None
     quant_beta: float | None = None
     quant_prob_sign: float | None = None
+    # Authored confidence (Spec 5 Slice B). The materialized SCI_NS.confidence value, read
+    # for authored assertions. LAST field so the many positional EvidenceUnit(...) test
+    # constructors (12 positional args through observability_keys) stay behavior-neutral.
+    confidence: float | None = None
 
 
 _OBSERVABILITY = {
@@ -89,6 +93,7 @@ def _read_unit(
         target_polarity=target_polarity,
         quant_beta=_float_lit(provenance, line, SCI_NS.quantBeta),
         quant_prob_sign=_float_lit(provenance, line, SCI_NS.quantProbSign),
+        confidence=_float_lit(provenance, line, SCI_NS.confidence),
     )
 
 
@@ -204,6 +209,21 @@ def reduce_units(units: list[EvidenceUnit], *, policy: BeliefPolicy = DEFAULT_BE
 def is_diagnostic(u: EvidenceUnit, *, policy: BeliefPolicy = DEFAULT_BELIEF_POLICY) -> bool:
     """negative_control / model_criticism: separate ledger rows, never FOR/AGAINST mass."""
     return (u.evidence_role or "") in policy.diagnostic_roles
+
+
+def is_authored_assertion(u: EvidenceUnit, *, policy: BeliefPolicy = DEFAULT_BELIEF_POLICY) -> bool:
+    """Pure type contract: a unit is an authored assertion iff its normalized evidence_type
+    equals policy.authored_assertion_type (default 'expert_judgment'). dataset_usage is NOT
+    inspected — recognition keys solely on the type (design §Goal)."""
+    return normalize_evidence_type(u.evidence_type) == policy.authored_assertion_type
+
+
+def _authored_assertion_counts(u: EvidenceUnit, *, policy: BeliefPolicy = DEFAULT_BELIEF_POLICY) -> bool:
+    """Range-validated confidence gate. Confidence is a GATE not a dial: it admits/rejects a
+    unit but never scales it. Range check precedes the threshold so confidence=1.2 cannot
+    slip past authored_min_confidence."""
+    c = u.confidence
+    return c is not None and 0.0 <= c <= 1.0 and c >= policy.authored_min_confidence
 
 
 def is_proxy_gated(u: EvidenceUnit, *, policy: BeliefPolicy = DEFAULT_BELIEF_POLICY) -> bool:
