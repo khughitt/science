@@ -48,7 +48,8 @@ The axes are orthogonal. `--include-hidden` (P1) overrides axis 1; `--include-ar
 
 - **New `science_tool/entity_scan.py`** — dependency-light **leaf** (stdlib only),
   the **sole sanctioned** recursive scanner of canonical entity markdown. After P3,
-  any direct `entities/**/*.md` rglob elsewhere is a bug (guard test enforces).
+  any recursive `entities/`-rooted `rglob("*.md")` elsewhere is a bug (scoped guard
+  test enforces; see the precise criterion and exemptions in §3).
   - `iter_entity_markdown(entities_root: Path, *, include_archived: bool = False) -> Iterator[Path]`
 - **New `science_tool/archive.py`** — `ArchiveEntry` / `ArchiveIndex` models; index
   read/append/fold; `load_archive_index()`; relocate/restore; the report-then-apply
@@ -73,22 +74,44 @@ The axes are orthogonal. `--include-hidden` (P1) overrides axis 1; `--include-ar
   `include_archived=True` un-skips **only `entities/_archive/**`**. All **other**
   `_`-prefixed segments stay skipped unconditionally (reserved, not archive).
 
-**Comprehensive coverage** — route all six direct scan sites through
-`iter_entity_markdown`. `list_entities` and curate `build_inventory` already funnel
-through `MarkdownAdapter.discover` (via `load_project_sources`), so fixing the
-adapter covers them transitively. The direct sites needing routing:
+**The risk criterion (precise).** Archived files live at `entities/_archive/<kind>/…`,
+so the *only* scans that descend into the archive are **recursive `rglob("*.md")`
+rooted at the project `entities/` directory** (or above it). A **non-recursive
+per-kind glob** (`entities/<kind>/*.md`) cannot reach `_archive/` — it is a *sibling*
+subtree, not a child of any kind dir — and is therefore **archive-safe by location**
+and intentionally out of scope (it remains subject to P1's status filter
+separately). Coverage and the guard are scoped to that criterion, not to all `*.md`
+globs.
+
+**Coverage worklist — every recursive `entities/`-rooted scan** (derived from a
+full sweep; the plan re-derives it precisely). `list_entities` and curate
+`build_inventory` funnel through `MarkdownAdapter.discover` (via
+`load_project_sources`), so #1 covers them transitively:
 
 1. `graph/storage_adapters/markdown.py::MarkdownAdapter.discover` (KG ingestion;
    the most important — relocation is what drops a file from graph build).
 2. `consolidation.py::iter_entity_frontmatter` (P1/P2 detectors).
-3. `validate/checks/cross_references.py` (`all_ids` construction).
-4. `big_picture/validator.py::_collect_project_ids`.
-5. `big_picture/resolver.py::_load_entities`.
-6. `entities.py::_load_markdown_entities` (find_entity / resolve_entity_ref).
+3. `validate/checks/cross_references.py:424` (`all_ids` construction).
+4. `validate/checks/id_prefixes.py:151` (`project_root/"entities"`).
+5. `validate/checks/entity_conformance.py:205` (`overlay_of` owner-root check).
+6. `validate/checks/hypotheses.py:144` (review-horizon scan).
+7. `big_picture/validator.py:79::_collect_project_ids`.
+8. `entities.py:963::_load_markdown_entities` (find_entity / resolve_entity_ref).
 
-**Guard test:** assert no `rglob("*.md")` / `glob("*.md")` over an `entities/` root
-survives outside `entity_scan.py` (a source-grep test), so the SSOT can't silently
-regress.
+**Explicitly *not* routed** (and why): `big_picture/resolver.py:112` and
+`entities.py:401` glob a single kind dir non-recursively (archive-safe by location);
+`validate/checks/id_prefixes.py:52`, `entity_conformance.py:89`, and
+`entity_layout_migration.py` rglob *legacy* roots (`doc`/`specs`/`_LEGACY_ROOTS`),
+not `entities/`. One peripheral case — `entities_inventory.py:163::_latest_activity`
+rglobs the whole `project_root` as an mtime heuristic; it is **not** an entity-scan
+SSOT site, so rather than route it through `entity_scan` it simply gains `_archive`
+to its existing skip-set (templates/.venv/.git/…) so archived files don't count as
+"latest activity."
+
+**Guard test (scoped to the criterion):** assert no **recursive** `rglob("*.md")`
+whose root is a project `entities/` directory survives **outside `entity_scan.py`**
+(a source-grep test over the worklist pattern), so the SSOT can't silently regress.
+Non-recursive per-kind globs and non-`entities/` roots are intentionally exempt.
 
 **Reserved-path guard (`_resolve_local_home`):** mirror the scan rule **exactly** —
 reject any `_`-prefixed segment at any depth under `entities/` (`entities/_foo` *and*
@@ -172,8 +195,13 @@ targets but are never rehydrated as live entities.
 - **Archive-verify subcheck** (fail-loud) detects:
   - a `_archive/` markdown file with **no active index row**;
   - an active index row whose file is **missing**;
-  - an **alias collision** — an archived `id`/alias/same_as that collides with a live
-    entity id or with another active archive entry.
+  - an **alias collision** — an archived `id`/`alias`/`same_as` that collides with the
+    **live resolver's full alias space** (live canonical ids, live `aliases`, live
+    `same_as`, **and** manual aliases from `knowledge/sources/<profile>/aliases.yaml`,
+    i.e. the domain of `build_alias_map`) **or** with another active archive entry.
+    A narrower check (live ids only) is insufficient — an archived alias shadowing a
+    live alias would yield ambiguous/wrong resolution while `verify_archive()` still
+    passed.
 
 - **Graph `ReferenceResolver`:** register active archive ids/aliases so a ref to an
   archived id **resolves to its canonical URI (minted from `id`+`kind`)** — replacing
@@ -229,6 +257,16 @@ It does **not** imply `--include-hidden`, so surfacing an archived entity in `li
 needs **both** flags. **Deliberately not** added to graph build (uses stub nodes, not
 rehydration) or validate (index-only resolution).
 
+**Boundary on these read surfaces (sharpening the index-only invariant).** The two
+surfaces that *do* read archived markdown under `--include-archived` are **explicit
+archive read paths** only. They MUST: (a) tag every archived-origin result as
+`archived=True` / read-only so callers can distinguish it from live data, and (b)
+**never feed** the graph builder, `validate`, or any live-source loader
+(`load_project_sources`). In other words, `include_archived=True` is permitted solely
+for human-facing read/inspection output; the live-entity ingestion path
+(`MarkdownAdapter.discover`) always passes `include_archived=False`, so archived
+markdown can never re-enter resolution as a live entity through a flag.
+
 **Grep honesty.** `_archive/` is tracked, so raw `rg`/`grep` still matches it — the
 guarantee is **tool-mediated** retrieval only. Ship an `.rgignore`/`.ignore` entry
 for `entities/_archive/` (with `rg --no-ignore` as the documented override) as an
@@ -239,8 +277,10 @@ ergonomic add, but the contract is the tool surface, not raw grep.
 ## 8. Testing (TDD, synthetic `entities/` fixtures)
 
 - **`entity_scan`:** default skips `_archive/`; `include_archived` un-skips **only**
-  `_archive/`; **always** skips other `_`-prefixed (`_foo`); + **guard test** — no
-  direct entity-`rglob`/`glob` survives outside `entity_scan.py`.
+  `_archive/`; **always** skips other `_`-prefixed (`_foo`); + **scoped guard test** —
+  no **recursive** `rglob("*.md")` rooted at a project `entities/` dir survives
+  outside `entity_scan.py` (non-recursive per-kind globs and non-`entities/` roots
+  exempt, per §3).
 - **`_resolve_local_home`:** rejects `_foo` *and* `foo/_bar`; accepts normal homes.
 - **Index:** append→fold→tombstone last-write-wins; `schema_version` on every row;
   derived archive path mirrors the kind subtree.
