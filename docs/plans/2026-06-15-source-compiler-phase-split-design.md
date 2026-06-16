@@ -82,8 +82,8 @@ The compiler pipeline is five ordered phases. All functions live in
 |---|---|---|
 | Load | `load_project_sources` (existing) | `project_root → ProjectSources`. Called as `load_project_sources(project_root.resolve(), strict_identity=False)` — the **single** load call site. |
 | Audit | `_audit_phase(sources) -> tuple[list[AuditRow], bool]` | Wraps `audit_project_sources`. The **single** audit call site. |
-| Emit | `_emit_phase(sources) -> Dataset` | Base authored graph: entity emission, relations, produced_by/dataset_usage/sub-cohort/dataset-resource edges, authored relations, bindings, and `_validate_no_amendment_cycles`. |
-| Derive | `_derive_phase(dataset, *, sources, source_snapshots)` | Epistemic layers in the existing load-bearing order: snapshot-layer emission → `_derive_bears_on_layer` → `_derive_patch_membership_layer` → dataset-independence → freshness. Mutates `dataset`. |
+| Emit | `_emit_phase(sources) -> EmitResult` | Base authored graph **plus the build context Derive needs**: entity emission, relations, produced_by/dataset_usage/sub-cohort/dataset-resource edges, authored relations, bindings, and `_validate_no_amendment_cycles`; constructs `kind_class` (`_classify_entities`) and `pre_registration_targets` (`_pre_registration_commitment_targets`, which depends on the emit-time `resolver` + `entity_index`). Returns `EmitResult(dataset, kind_class, pre_registration_targets)`. |
+| Derive | `_derive_phase(emit, *, sources, source_snapshots)` | Epistemic layers in the existing load-bearing order: snapshot-layer emission → `_derive_bears_on_layer` (consumes `emit.kind_class` + `emit.pre_registration_targets`) → `_derive_patch_membership_layer` → dataset-independence → freshness (consumes `emit.kind_class` via `_build_entity_meta`). Mutates `emit.dataset`. |
 | Write | `_write_phase(dataset, trig_path) -> Path` | `save_graph_dataset`, returns the path. |
 
 `load_project_sources` is reused as-is (it already *is* the load phase). The new
@@ -215,16 +215,28 @@ compose the two new phase functions, making the split real while keeping the pub
 `build_dataset_from_sources` projection spanning both:
 
 ```python
+@dataclass(frozen=True)
+class EmitResult:
+    dataset: Dataset
+    kind_class: dict[str, EntityClass]
+    pre_registration_targets: set[URIRef]
+
+
 def _build_dataset_from_sources(sources, *, source_snapshots=None) -> Dataset:
-    dataset = _emit_phase(sources)
-    _derive_phase(dataset, sources=sources, source_snapshots=source_snapshots)
-    return dataset
+    emit = _emit_phase(sources)
+    _derive_phase(emit, sources=sources, source_snapshots=source_snapshots)
+    return emit.dataset
 ```
 
-- `_emit_phase` owns dataset/named-graph setup, resolver/index construction, and
-  all base-graph emission through `_validate_no_amendment_cycles`.
+- `_emit_phase` owns dataset/named-graph setup, resolver/index construction, all
+  base-graph emission through `_validate_no_amendment_cycles`, and computation of
+  `kind_class` (`_classify_entities`) and `pre_registration_targets`
+  (`_pre_registration_commitment_targets`, built from the emit-time `resolver` +
+  `entity_index`). It returns these in `EmitResult` so Derive consumes them
+  without recomputation — the phase boundary carries the build context forward.
 - `_derive_phase` owns the snapshot-layer emission and the epistemic derivations,
-  preserving the load-bearing ordering (snapshot layer emitted before
+  reading `emit.dataset`, `emit.kind_class`, and `emit.pre_registration_targets`
+  and preserving the load-bearing ordering (snapshot layer emitted before
   `_derive_bears_on_layer`; `source_changes` threaded into the freshness layer;
   the `if sources.freshness_enabled` gate unchanged).
 
@@ -242,8 +254,8 @@ The refactor must not change any output or observable behavior:
    `has_failures` flag.
 3. The materialize path still raises the **exact** `ValueError` message on
    unresolved references, before any emit/derive/write.
-4. The audit-only path neither raises on audit failures, runs the project-root
-   preflight, nor writes `graph.trig`.
+4. The audit-only path does **not** raise on audit failures, does **not** run the
+   project-root preflight, and does **not** write `graph.trig`.
 5. `build_dataset_from_sources(sources)` performs no load and no audit.
 6. The strict data-package preflight still raises its `RuntimeError` for
    unmigrated packages on the materialize path, and is absent on the audit path.
@@ -274,8 +286,9 @@ Mirrors Slice A/B discipline (characterization + structural guard):
 
 All changes are within `graph/materialize.py`:
 
-- **Add:** `CompilationResult` dataclass; `_compile`, `_preflight_migration`,
-  `_audit_phase`, `_emit_phase`, `_derive_phase`, `_write_phase`.
+- **Add:** `CompilationResult` and `EmitResult` dataclasses; `_compile`,
+  `_preflight_migration`, `_audit_phase`, `_emit_phase`, `_derive_phase`,
+  `_write_phase`.
 - **Rewrite (thin):** `materialize_graph`, `materialization_audit`.
 - **Refactor (compose phases):** `_build_dataset_from_sources`.
 - **Unchanged:** `build_dataset_from_sources`, all `_add_*` / `_derive_*` emission
