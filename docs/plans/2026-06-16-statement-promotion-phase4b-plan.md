@@ -1037,6 +1037,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from click.testing import CliRunner
+from rdflib import Dataset, Namespace
 
 from science_tool.annotation import io as anno_io
 from science_tool.annotation.cli import annotate_group
@@ -1044,10 +1045,15 @@ from science_tool.annotation.model import (
     Annotation, Motivation, SpecificResource, Status, TextQuoteSelector, TextualBody,
 )
 from science_tool.annotation.query import read_sidecar_strict
+from science_tool.graph.materialize import _annotation_uri, materialize_graph
+
+PROJECT_NS = Namespace("http://example.org/project/")
+PROV = Namespace("http://www.w3.org/ns/prov#")
 
 
 def _setup_statement(tmp_path: Path, *, atype: str, exact: str, frag: str = "s1"):
     """Minimal project: a papers/p.source.md sidecar with one OPEN statement annotation."""
+    (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
     (tmp_path / "entities" / "propositions").mkdir(parents=True)
     (tmp_path / "papers").mkdir()
     md = tmp_path / "papers" / "p.source.md"
@@ -1068,7 +1074,6 @@ def _setup_statement(tmp_path: Path, *, atype: str, exact: str, frag: str = "s1"
 
 
 def test_question_promote_round_trip(tmp_path):
-    from science_tool.graph.materialize import _annotation_uri
     md, sp = _setup_statement(tmp_path, atype="question", exact="What regulates X", frag="q1")
     r = CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path), "--apply"])
     assert r.exit_code == 0, r.output
@@ -1088,6 +1093,14 @@ def test_question_promote_round_trip(tmp_path):
     ann = read_sidecar_strict(sp).annotations[0]
     assert ann.promoted_to is not None and ann.promoted_to.startswith("question:0001-")
     assert ann.status == Status.OPEN
+    # graph provenance: the promoted question points back to the exact source annotation.
+    trig_path = materialize_graph(tmp_path)
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+    question_local_part = ann.promoted_to.split(":", 1)[1]
+    question_uri = PROJECT_NS[f"question/{question_local_part}"]
+    assert (question_uri, PROV.wasDerivedFrom, _annotation_uri("annotation:papers/p.source#q1")) in provenance
 
     # second --apply is a no-op (idempotent): still exactly one question entity total
     r2 = CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path), "--apply"])
@@ -1220,6 +1233,5 @@ git commit -m "doc(promote): document Phase 4b question/hypothesis promotion in 
   as_of) -> entity_id`; LINK `slug` is the full `<kind>:<local_part>`, MINT `slug` is the bare
   local-part; `entity_dest` consumes a full `<kind>:<local_part>`. These are used consistently
   across Tasks 1–7.
-- **No placeholders:** the only deliberately under-specified spot is the Task 7 test scaffold
-  helper names (the executor reads `test_annotate_promote_cli.py` and reuses its real helpers) —
-  flagged inline, not a silent gap.
+- **No placeholders:** Task 7 now inlines its concrete project/sidecar scaffold and graph
+  provenance assertion instead of depending on private helpers from another test module.
