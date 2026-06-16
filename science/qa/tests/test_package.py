@@ -30,3 +30,9 @@ def test_unknown_extension_rejected(tmp_path):
     (tmp_path / "datapackage.txt").write_text("nope")
     with pytest.raises(ValueError, match="extension"):
         load_package(tmp_path / "datapackage.txt")
+
+
+def test_malformed_yaml_rejected_as_value_error(tmp_path):
+    (tmp_path / "datapackage.yaml").write_text("name: [unterminated\n")
+    with pytest.raises(ValueError, match="malformed yaml descriptor"):
+        load_package(tmp_path / "datapackage.yaml")

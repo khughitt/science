@@ -1,11 +1,11 @@
 # science/qa/src/science_qa/package.py
 """Neutral datapackage descriptor loader for science_qa (JSON or YAML).
 
-Kept inside science_qa so the QA engine never imports science_tool (the one-way
-boundary). Mirrors science_tool.datasets.infer_schema._RoundTripSafeLoader: the implicit
-*timestamp* resolver is removed so an unquoted ISO-8601 scalar stays a str — otherwise a
-YAML date bound (e.g. `maximum: 2020-01-01`) would parse to a datetime.date and the Spec 2
-compiler (which accepts only str|int|float bound values) would raise a false CompileError.
+Kept inside science_qa so the QA engine owns descriptor loading without depending on the
+main CLI package. The implicit *timestamp* resolver is removed so an unquoted ISO-8601
+scalar stays a str — otherwise a YAML date bound (e.g. `maximum: 2020-01-01`) would parse
+to a datetime.date and the Spec 2 compiler (which accepts only str|int|float bound values)
+would raise a false CompileError.
 """
 
 from __future__ import annotations
@@ -40,7 +40,12 @@ def load_package(path: Path) -> tuple[dict, Path]:
     if fmt is None:
         raise ValueError(f"unsupported descriptor extension {path.suffix!r} (want .json/.yaml/.yml)")
     text = path.read_text(encoding="utf-8")
-    mapping = json.loads(text) if fmt == "json" else yaml.load(text, Loader=_TimestampSafeLoader)
+    try:
+        mapping = json.loads(text) if fmt == "json" else yaml.load(text, Loader=_TimestampSafeLoader)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"malformed json descriptor {path}: {exc}") from exc
+    except yaml.YAMLError as exc:
+        raise ValueError(f"malformed yaml descriptor {path}: {exc}") from exc
     if not isinstance(mapping, dict):
         raise ValueError(f"descriptor {path} did not parse to a mapping")
     return mapping, path.parent

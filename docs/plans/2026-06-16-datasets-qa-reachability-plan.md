@@ -223,6 +223,12 @@ def test_unknown_extension_rejected(tmp_path):
     (tmp_path / "datapackage.txt").write_text("nope")
     with pytest.raises(ValueError, match="extension"):
         load_package(tmp_path / "datapackage.txt")
+
+
+def test_malformed_yaml_rejected_as_value_error(tmp_path):
+    (tmp_path / "datapackage.yaml").write_text("name: [unterminated\n")
+    with pytest.raises(ValueError, match="malformed yaml descriptor"):
+        load_package(tmp_path / "datapackage.yaml")
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -238,11 +244,11 @@ Create `science/qa/src/science_qa/package.py`:
 # science/qa/src/science_qa/package.py
 """Neutral datapackage descriptor loader for science_qa (JSON or YAML).
 
-Kept inside science_qa so the QA engine never imports science_tool (the one-way
-boundary). Mirrors science_tool.datasets.infer_schema._RoundTripSafeLoader: the implicit
-*timestamp* resolver is removed so an unquoted ISO-8601 scalar stays a str — otherwise a
-YAML date bound (e.g. `maximum: 2020-01-01`) would parse to a datetime.date and the Spec 2
-compiler (which accepts only str|int|float bound values) would raise a false CompileError.
+Kept inside science_qa so the QA engine owns descriptor loading without depending on the
+main CLI package. The implicit *timestamp* resolver is removed so an unquoted ISO-8601
+scalar stays a str — otherwise a YAML date bound (e.g. `maximum: 2020-01-01`) would parse
+to a datetime.date and the Spec 2 compiler (which accepts only str|int|float bound values)
+would raise a false CompileError.
 """
 
 from __future__ import annotations
@@ -277,7 +283,12 @@ def load_package(path: Path) -> tuple[dict, Path]:
     if fmt is None:
         raise ValueError(f"unsupported descriptor extension {path.suffix!r} (want .json/.yaml/.yml)")
     text = path.read_text(encoding="utf-8")
-    mapping = json.loads(text) if fmt == "json" else yaml.load(text, Loader=_TimestampSafeLoader)
+    try:
+        mapping = json.loads(text) if fmt == "json" else yaml.load(text, Loader=_TimestampSafeLoader)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"malformed json descriptor {path}: {exc}") from exc
+    except yaml.YAMLError as exc:
+        raise ValueError(f"malformed yaml descriptor {path}: {exc}") from exc
     if not isinstance(mapping, dict):
         raise ValueError(f"descriptor {path} did not parse to a mapping")
     return mapping, path.parent
@@ -286,7 +297,7 @@ def load_package(path: Path) -> tuple[dict, Path]:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cd "$WT/science/qa" && PYTHONPATH=src $PY -m pytest tests/test_package.py -v`
-Expected: PASS (4 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -808,10 +819,12 @@ in-process, and apply the build-fatal exit-code policy. No QA logic lives here."
 from __future__ import annotations
 
 from pathlib import Path
-
-from science_qa.runner import PackageRunResult, run_qa_package
+from typing import TYPE_CHECKING
 
 from science_tool.datasets.validate import DESCRIPTOR_NAMES
+
+if TYPE_CHECKING:
+    from science_qa.runner import PackageRunResult
 
 
 def _resolve_descriptor(path: Path) -> Path:
@@ -829,9 +842,11 @@ def _resolve_descriptor(path: Path) -> Path:
 
 def run_package_qa(path: Path, *, resource: str | None = None,
                    report_dir: Path | None = None, runknobs: Path | None = None,
-                   no_strict: bool = False) -> tuple[PackageRunResult, int]:
+                   no_strict: bool = False) -> tuple["PackageRunResult", int]:
     """Resolve, run, and compute the exit code. Raises (CompileError / RunnerError /
     ValueError / FileNotFoundError) on bad input — the CLI maps those to exit 2."""
+    from science_qa.runner import run_qa_package
+
     descriptor = _resolve_descriptor(Path(path))
     resources = [resource] if resource else None
     result = run_qa_package(descriptor, report_dir=report_dir, resources=resources,
@@ -862,6 +877,9 @@ def render_package_summary(result: PackageRunResult) -> str:
 Note: `render_resource_line` compares `f.severity` to the string literals `"structural"`/
 `"distribution"` — these are the values of `SEVERITY_STRUCTURAL`/`SEVERITY_DISTRIBUTION`
 in `science_qa.flags` (verify once: `grep SEVERITY_ science/qa/src/science_qa/flags.py`).
+The wrapper intentionally imports `run_qa_package` inside `run_package_qa`, so merely
+importing `science_tool.datasets.qa` does not require importing the QA engine; this keeps
+the command's dependency on `science_qa` at call time as specified by the design.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -1032,7 +1050,7 @@ The new `science_qa` code (`package.py`, the `runner.py` additions) must not imp
 
 ```bash
 cd "$WT/science/qa"
-grep -rn "science_tool" src/ && echo "LEAK" || echo "clean (no science_tool import)"
+grep -rnE --exclude-dir=__pycache__ "^[[:space:]]*(from[[:space:]]+science_tool([.][A-Za-z0-9_]+)*[[:space:]]+import|import[[:space:]]+science_tool([.]|[[:space:]]|$))" src/ && echo "LEAK" || echo "clean (no science_tool import)"
 ```
 Expected: `clean (no science_tool import)`.
 
@@ -1094,7 +1112,7 @@ cd "$WT/science" && PYTHONPATH=src:qa/src $PY -m pytest tests/test_datasets_qa.p
 
 - [ ] One-way dependency intact:
 ```bash
-cd "$WT/science/qa" && grep -rn "science_tool" src/ && echo "LEAK" || echo "clean"
+cd "$WT/science/qa" && grep -rnE --exclude-dir=__pycache__ "^[[:space:]]*(from[[:space:]]+science_tool([.][A-Za-z0-9_]+)*[[:space:]]+import|import[[:space:]]+science_tool([.]|[[:space:]]|$))" src/ && echo "LEAK" || echo "clean"
 ```
 Expected: `clean`.
 

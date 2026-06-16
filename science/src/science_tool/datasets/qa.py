@@ -5,11 +5,12 @@ in-process, and apply the build-fatal exit-code policy. No QA logic lives here."
 from __future__ import annotations
 
 from pathlib import Path
-
-from science_qa.flags import SEVERITY_DISTRIBUTION, SEVERITY_STRUCTURAL
-from science_qa.runner import PackageRunResult, run_qa_package
+from typing import TYPE_CHECKING
 
 from science_tool.datasets.validate import DESCRIPTOR_NAMES
+
+if TYPE_CHECKING:
+    from science_qa.runner import PackageRunResult
 
 
 def _resolve_descriptor(path: Path) -> Path:
@@ -27,9 +28,11 @@ def _resolve_descriptor(path: Path) -> Path:
 
 def run_package_qa(path: Path, *, resource: str | None = None,
                    report_dir: Path | None = None, runknobs: Path | None = None,
-                   no_strict: bool = False) -> tuple[PackageRunResult, int]:
+                   no_strict: bool = False) -> tuple["PackageRunResult", int]:
     """Resolve, run, and compute the exit code. Raises (CompileError / RunnerError /
     ValueError / FileNotFoundError) on bad input — the CLI maps those to exit 2."""
+    from science_qa.runner import run_qa_package
+
     descriptor = _resolve_descriptor(Path(path))
     resources = [resource] if resource else None
     result = run_qa_package(descriptor, report_dir=report_dir, resources=resources,
@@ -39,9 +42,9 @@ def run_package_qa(path: Path, *, resource: str | None = None,
 
 
 def render_resource_line(outcome) -> str:
-    n_struct = (sum(1 for f in outcome.result.flags if f.severity == SEVERITY_STRUCTURAL)
+    n_struct = (sum(1 for f in outcome.result.flags if f.severity == "structural")
                 if outcome.result else 0)
-    n_dist = (sum(1 for f in outcome.result.flags if f.severity == SEVERITY_DISTRIBUTION)
+    n_dist = (sum(1 for f in outcome.result.flags if f.severity == "distribution")
               if outcome.result else 0)
     label = "FAIL" if outcome.status == "fail" else outcome.status
     detail = outcome.reason if outcome.reason else f"{n_struct} structural, {n_dist} distribution"
