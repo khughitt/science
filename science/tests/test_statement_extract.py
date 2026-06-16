@@ -650,3 +650,38 @@ def test_extract_reports_grounding_dropped(tmp_path: Path):
         source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
     )
     assert report.written == 1 and report.grounding_dropped == 1
+
+
+from science_tool.annotation.statement_extract import figurative_body_json
+
+
+def test_figurative_body_minimal_sorted_compact():
+    body = figurative_body_json(
+        section="discussion", source_domain="warfare",
+        target_domain="immune response", mapping=None, cue=None,
+    )
+    # keys sorted: section, source_domain, target_domain
+    assert body == (
+        '{"section":"discussion","source_domain":"warfare",'
+        '"target_domain":"immune response"}'
+    )
+
+
+def test_figurative_body_includes_present_optionals_sorted():
+    body = figurative_body_json(
+        section="results", source_domain="a factory", target_domain="the cell",
+        mapping="ribosome as machine", cue="like",
+    )
+    # keys sorted: cue, mapping, section, source_domain, target_domain
+    assert body == (
+        '{"cue":"like","mapping":"ribosome as machine","section":"results",'
+        '"source_domain":"a factory","target_domain":"the cell"}'
+    )
+
+
+def test_figurative_body_omits_absent_optionals():
+    body = figurative_body_json(
+        section="results", source_domain="a", target_domain="b",
+        mapping=None, cue="like",
+    )
+    assert '"mapping"' not in body and '"cue":"like"' in body

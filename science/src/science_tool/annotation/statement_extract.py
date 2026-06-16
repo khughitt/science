@@ -309,6 +309,32 @@ def statement_body_json(
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
+def figurative_body_json(
+    *,
+    section: str,
+    source_domain: str,
+    target_domain: str,
+    mapping: str | None,
+    cue: str | None,
+) -> str:
+    """Build the deterministic JSON for a figurative annotation's TextualBody.
+
+    Always carries section + source_domain + target_domain. Optional mapping/cue are
+    included only when present. Sorted keys + compact separators + allow_nan=False give
+    finite, byte-stable serialization (clean diffs). No grounding/concept fields.
+    """
+    obj: dict[str, Any] = {
+        "section": section,
+        "source_domain": source_domain,
+        "target_domain": target_domain,
+    }
+    if mapping is not None:
+        obj["mapping"] = mapping
+    if cue is not None:
+        obj["cue"] = cue
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
 # --- Anchoring ----------------------------------------------------------------
 
 
