@@ -358,7 +358,7 @@ def entities_consolidate_group() -> None:
     help="Project root (default: current directory).",
 )
 @click.option("--into", "digest_id", required=True, help="Id to mint for the cluster-digest entity.")
-@click.option("--members", "members", required=True, help="Comma-separated member entity ids.")
+@click.option("--members", required=True, help="Comma-separated member entity ids.")
 @click.option("--title", default=None, help="Digest title (default: derived placeholder).")
 def entities_consolidate_scaffold_command(
     project_root: Path, digest_id: str, members: str, title: str | None
