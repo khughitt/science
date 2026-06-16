@@ -3287,6 +3287,48 @@ def datasets_validate(data_path: Path, output_format: str) -> None:
         raise click.exceptions.Exit(1)
 
 
+@datasets.command("qa")
+@click.argument("path", type=click.Path(path_type=Path))
+@click.option("--resource", "resource", default=None, help="Restrict QA to one resource (default: all tabular).")
+@click.option("--report-dir", "report_dir", default=None, type=click.Path(path_type=Path),
+              help="Persist qa_report.{json,md} (+ per-resource subdirs). Default: print only.")
+@click.option("--config", "runknobs", default=None,
+              type=click.Path(path_type=Path, exists=True, dir_okay=False),
+              help="Optional operational run-knobs YAML overlaid on the schema-derived config.")
+@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text", show_default=True)
+@click.option("--no-strict", is_flag=True, default=False, help="Suppress the build-fatal exit 1 (local inspection).")
+def datasets_qa(path: Path, resource: str | None, report_dir: Path | None,
+                runknobs: Path | None, output_format: str, no_strict: bool) -> None:
+    """Run schema-driven QA over a datapackage's tabular resources (package-level).
+
+    Exit codes: 0 ok · 1 structural flag fired (build-fatal; --no-strict forces 0) ·
+    2 bad input (missing descriptor / unknown resource / unreadable data).
+    """
+    from science_qa.compile import CompileError
+    from science_qa.runner import RunnerError, package_report_dict
+
+    from science_tool.datasets import qa as _qa
+
+    try:
+        result, code = _qa.run_package_qa(
+            path, resource=resource, report_dir=report_dir, runknobs=runknobs, no_strict=no_strict)
+    except (CompileError, RunnerError, ValueError, FileNotFoundError) as exc:
+        click.echo(str(exc), err=True)
+        raise click.exceptions.Exit(2) from exc
+
+    if output_format == "json":
+        click.echo(json.dumps(package_report_dict(result), indent=2, sort_keys=True))
+    else:
+        for outcome in result.outcomes:
+            if outcome.status == "not-applicable":
+                continue
+            click.echo(_qa.render_resource_line(outcome))
+        click.echo(_qa.render_package_summary(result))
+
+    if code:
+        raise click.exceptions.Exit(code)
+
+
 @datasets.command("infer-schema")
 @click.argument("datapackage", type=click.Path(path_type=Path))
 @click.option("--resource", "resource", required=True, help="Resource name (or path) to infer.")

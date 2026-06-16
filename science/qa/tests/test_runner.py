@@ -181,3 +181,155 @@ def test_datapackage_numeric_missing_sentinel_fires_structural(tmp_path):
     assert result.structural_failed is True
     ids = {f["flag_id"] for f in json.loads((tmp_path / "qa_report.json").read_text())["flags"]}
     assert "numeric-column/missing_sentinel/v/-" in ids
+
+
+def test_run_qa_datapackage_exposes_rows_checked(tmp_path):
+    import json as _json
+    from science_qa.runner import run_qa_datapackage
+    res = {"name": "obs", "path": "obs.parquet",
+           "schema": {"fields": [{"name": "id", "type": "integer"}]}}
+    pd.DataFrame({"id": [1, 2, 3, 4]}).to_parquet(tmp_path / "obs.parquet")
+    (tmp_path / "datapackage.json").write_text(_json.dumps({"name": "p", "resources": [res]}))
+    result = run_qa_datapackage(tmp_path / "datapackage.json", "obs", tmp_path)
+    assert result.rows_checked == 4
+
+
+def test_run_qa_datapackage_reads_yaml(tmp_path):
+    from science_qa.runner import run_qa_datapackage
+    pd.DataFrame({"id": [1, 2, 3]}).to_parquet(tmp_path / "obs.parquet")
+    (tmp_path / "datapackage.yaml").write_text(
+        "name: p\nresources:\n"
+        "  - name: obs\n    path: obs.parquet\n    schema:\n      fields:\n"
+        "        - name: id\n          type: integer\n          constraints: {required: true}\n")
+    result = run_qa_datapackage(tmp_path / "datapackage.yaml", "obs", tmp_path)
+    assert result.structural_failed is False and result.rows_checked == 3
+
+
+def _yaml_pkg(tmp_path, body: str) -> Path:
+    (tmp_path / "datapackage.yaml").write_text(body)
+    return tmp_path / "datapackage.yaml"
+
+
+def test_package_clean_multi_resource_ok(tmp_path):
+    from science_qa.runner import run_qa_package
+    pd.DataFrame({"id": [1, 2]}).to_parquet(tmp_path / "a.parquet")
+    pd.DataFrame({"v": [0.1, 0.2]}).to_parquet(tmp_path / "b.parquet")
+    dp = _yaml_pkg(tmp_path,
+        "name: p\nresources:\n"
+        "  - name: a\n    path: a.parquet\n    schema: {fields: [{name: id, type: integer}]}\n"
+        "  - name: b\n    path: b.parquet\n    schema: {fields: [{name: v, type: number}]}\n")
+    result = run_qa_package(dp)
+    assert result.package_structural_failed is False
+    assert {o.name: o.status for o in result.outcomes} == {"a": "ok", "b": "ok"}
+
+
+def test_package_structural_violation_fails_package(tmp_path):
+    from science_qa.runner import run_qa_package
+    pd.DataFrame({"p": [-1.0, 1.0]}).to_parquet(tmp_path / "a.parquet")
+    dp = _yaml_pkg(tmp_path,
+        "name: p\nresources:\n"
+        "  - name: a\n    path: a.parquet\n    schema:\n      fields:\n"
+        "        - name: p\n          type: number\n          constraints: {minimum: 0}\n")
+    result = run_qa_package(dp)
+    assert result.package_structural_failed is True
+    assert result.outcomes[0].status == "fail"
+
+
+def test_package_absent_data_is_blocked_not_fatal(tmp_path):
+    from science_qa.runner import run_qa_package
+    dp = _yaml_pkg(tmp_path,
+        "name: p\nresources:\n"
+        "  - name: a\n    path: missing.parquet\n    schema: {fields: [{name: id, type: integer}]}\n")
+    result = run_qa_package(dp)
+    assert result.package_structural_failed is False
+    assert result.outcomes[0].status == "blocked" and result.outcomes[0].reason == "data file absent"
+
+
+def test_package_non_tabular_is_not_applicable(tmp_path):
+    from science_qa.runner import run_qa_package
+    dp = _yaml_pkg(tmp_path,
+        "name: p\nresources:\n"
+        "  - name: v\n    path: v.qa_verdict.json\n")
+    result = run_qa_package(dp)
+    assert result.outcomes[0].status == "not-applicable" and result.outcomes[0].reason == "non-tabular"
+
+
+def test_package_schemaless_tabular_is_skipped(tmp_path):
+    from science_qa.runner import run_qa_package
+    pd.DataFrame({"x": [1]}).to_parquet(tmp_path / "a.parquet")
+    dp = _yaml_pkg(tmp_path, "name: p\nresources:\n  - name: a\n    path: a.parquet\n")
+    result = run_qa_package(dp)
+    assert result.outcomes[0].status == "skipped" and result.outcomes[0].reason == "no schema"
+
+
+def test_package_resource_selection_and_unknown(tmp_path):
+    from science_qa.compile import CompileError
+    from science_qa.runner import run_qa_package
+    pd.DataFrame({"id": [1, 2]}).to_parquet(tmp_path / "a.parquet")
+    pd.DataFrame({"v": [1.0]}).to_parquet(tmp_path / "b.parquet")
+    dp = _yaml_pkg(tmp_path,
+        "name: p\nresources:\n"
+        "  - name: a\n    path: a.parquet\n    schema: {fields: [{name: id, type: integer}]}\n"
+        "  - name: b\n    path: b.parquet\n    schema: {fields: [{name: v, type: number}]}\n")
+    result = run_qa_package(dp, resources=["a"])
+    assert [o.name for o in result.outcomes] == ["a"]
+    with pytest.raises(CompileError, match="not found"):
+        run_qa_package(dp, resources=["ghost"])
+
+
+def test_package_report_dir_none_writes_nothing(tmp_path):
+    from science_qa.runner import run_qa_package
+    pd.DataFrame({"id": [1, 2]}).to_parquet(tmp_path / "a.parquet")
+    dp = _yaml_pkg(tmp_path,
+        "name: p\nresources:\n"
+        "  - name: a\n    path: a.parquet\n    schema: {fields: [{name: id, type: integer}]}\n")
+    run_qa_package(dp)  # report_dir=None
+    assert not (tmp_path / "qa_report.json").exists()
+    assert not (tmp_path / "a").exists()
+
+
+def test_package_report_writes_subdirs_and_rollup(tmp_path):
+    import json as _json
+    from science_qa.runner import run_qa_package
+    pd.DataFrame({"id": [1, 2]}).to_parquet(tmp_path / "a.parquet")
+    pd.DataFrame({"p": [-1.0, 1.0]}).to_parquet(tmp_path / "b.parquet")
+    (tmp_path / "datapackage.yaml").write_text(
+        "name: p\nresources:\n"
+        "  - name: a\n    path: a.parquet\n    schema: {fields: [{name: id, type: integer}]}\n"
+        "  - name: b\n    path: b.parquet\n    schema:\n      fields:\n"
+        "        - name: p\n          type: number\n          constraints: {minimum: 0}\n")
+    out = tmp_path / "out"
+    result = run_qa_package(tmp_path / "datapackage.yaml", report_dir=out)
+    # per-resource subdir reports exist
+    assert (out / "a" / "qa_report.json").exists()
+    assert (out / "b" / "qa_report.json").exists()
+    # package rollup
+    rollup = _json.loads((out / "qa_report.json").read_text())
+    assert rollup["package"] == "p" and rollup["package_structural_failed"] is True
+    sections = {s["resource"]: s for s in rollup["resources"]}
+    assert sections["b"]["status"] == "fail" and sections["b"]["flags"]
+    assert sections["a"]["status"] == "ok" and sections["a"]["flags"] == []
+
+
+def test_package_same_flag_id_two_resources_does_not_merge(tmp_path):
+    # collision regression: identical flag_id in two resources -> separate subdir ledgers
+    import json as _json
+    from science_qa.runner import run_qa_package
+    pd.DataFrame({"p": [-1.0, 1.0]}).to_parquet(tmp_path / "a.parquet")
+    pd.DataFrame({"p": [-2.0, 1.0]}).to_parquet(tmp_path / "b.parquet")
+    field = ("        - name: p\n          type: number\n"
+             "          constraints: {minimum: 0}\n")
+    (tmp_path / "datapackage.yaml").write_text(
+        "name: p\nresources:\n"
+        f"  - name: a\n    path: a.parquet\n    schema:\n      fields:\n{field}"
+        f"  - name: b\n    path: b.parquet\n    schema:\n      fields:\n{field}")
+    out = tmp_path / "out"
+    run_qa_package(tmp_path / "datapackage.yaml", report_dir=out)
+    a_ids = {f["flag_id"] for f in _json.loads((out / "a" / "qa_report.json").read_text())["flags"]}
+    b_ids = {f["flag_id"] for f in _json.loads((out / "b" / "qa_report.json").read_text())["flags"]}
+    # same flag_id present in BOTH, each in its own resource-scoped report (not merged)
+    assert "numeric-column/bounds/p/minimum" in a_ids
+    assert "numeric-column/bounds/p/minimum" in b_ids
+    # each resource gets its OWN disposition ledger (proves no shared/merged ledger)
+    assert (out / "a" / "qa_dispositions.yaml").exists()
+    assert (out / "b" / "qa_dispositions.yaml").exists()
