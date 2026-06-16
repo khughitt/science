@@ -11,12 +11,14 @@ from datetime import date
 from pathlib import Path
 
 from science_model.propositions import PropositionEntity
+from science_model.templates import Renderer
 
 from science_tool.annotation import io as anno_io
 from science_tool.annotation.model import Status, TextualBody
 from science_tool.annotation.query import entity_relpath_for_sidecar, read_sidecar_strict
 from science_tool.entities import (
     EntityCommandError,
+    _atomic_replace_text,
     _parse_markdown_file,
     append_entity_source_ref,
     default_status,
@@ -24,6 +26,7 @@ from science_tool.entities import (
     slug_for_claim_text,
     write_entity_file,
 )
+from science_tool.entity_reservation import reserve_entity
 
 
 def normalize_claim(text: str) -> str:
@@ -244,9 +247,75 @@ def proposition_target() -> PromotionTarget:
     return PromotionTarget(kind="proposition", slug_addressed=True, mint=_mint_proposition)
 
 
+_LEAD_SECTION: dict[str, str] = {
+    "question": "Summary",
+    "hypothesis": "Organizing Conjecture",
+}
+
+
+def _insert_claim_into_lead(rendered: str, section_name: str, claim: str) -> str:
+    """Insert the verbatim claim as the first body line under `## {section_name}`."""
+    marker = f"## {section_name}\n"
+    idx = rendered.find(marker)
+    if idx == -1:
+        raise PromotionApplyError(f"rendered template missing lead section '## {section_name}'")
+    at = idx + len(marker)
+    return f"{rendered[:at]}\n{claim}\n{rendered[at:]}"
+
+
+def _mint_numeric(kind: str) -> MintFn:
+    lead = _LEAD_SECTION[kind]
+
+    def mint(c: PromotionCandidate, source_refs: list[str], project_root: Path, as_of: date | None) -> str:
+        assert c.slug is not None
+        today = (as_of or date.today()).isoformat()
+        # (1) Preflight the template (pure read, no number consumed). Raises if the packaged
+        #     template is missing/malformed — a loud environment error.
+        renderer = Renderer()
+        renderer.sections(kind)
+        # (2) Reserve the number atomically (empty placeholder .md backs the claimed number).
+        reservation = reserve_entity(project_root, kind, title=c.claim, slug=c.slug)
+        try:
+            # (3) Render template-faithful with the real id, then insert the claim into the lead.
+            fields: dict[str, object] = {
+                "entity_id": reservation.entity_id,
+                "title": c.claim,
+                "status": default_status(kind),
+                "source_refs": list(source_refs),
+                "related": [],
+                "created": today,
+                "updated": today,
+            }
+            if kind == "hypothesis":
+                fields["phase"] = "candidate"
+            rendered = renderer.render(kind, fields=fields)
+            rendered = _insert_claim_into_lead(rendered, lead, c.claim)
+            # (4) Final write — overwrites the empty placeholder. Last step.
+            _atomic_replace_text(reservation.path, rendered)
+        except Exception as exc:  # explicit post-reservation rollback, then fail loud
+            reservation.path.unlink(missing_ok=True)
+            if isinstance(exc, PromotionApplyError):
+                raise
+            raise PromotionApplyError(
+                f"failed to write {kind} {reservation.entity_id}: {exc}"
+            ) from exc
+        return reservation.entity_id
+
+    return mint
+
+
+def numeric_target(kind: str) -> PromotionTarget:
+    if kind not in ("question", "hypothesis"):
+        raise ValueError(f"numeric_target supports question/hypothesis, got {kind!r}")
+    return PromotionTarget(kind=kind, slug_addressed=False, mint=_mint_numeric(kind))
+
+
 def build_targets() -> dict[str, PromotionTarget]:
-    # numeric_target is added in Task 3; until then question/hypothesis raise on mint.
-    return {"proposition": proposition_target()}
+    return {
+        "proposition": proposition_target(),
+        "question": numeric_target("question"),
+        "hypothesis": numeric_target("hypothesis"),
+    }
 
 
 def apply_candidates(
