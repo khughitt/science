@@ -371,3 +371,74 @@ def test_apply_is_atomic_on_interlock_error(tmp_path):
     # good was NOT written (validate-before-write): no claim_layer on disk
     fm, _ = _parse_markdown_file(root / "entities/propositions/good.md")
     assert "claim_layer" not in fm
+
+
+import json as _json
+from click.testing import CliRunner
+from science_tool.annotation import io as anno_io
+from science_tool.annotation.cli import annotate_group
+from science_tool.annotation.model import (
+    Annotation, Motivation, SpecificResource, Status, TextQuoteSelector, TextualBody, Sidecar,
+)
+
+
+def _scaffold_project(tmp_path: Path):
+    root = _project(tmp_path)
+    _write_prop(root, "brca1", title="BRCA1 affects instability", subject="BRCA1")
+    (root / "papers").mkdir()
+    md = root / "papers" / "p.source.md"
+    md.write_text("BRCA1 affects instability\n", encoding="utf-8")
+    sp = anno_io.sidecar_for_markdown(md)
+    stmt = Annotation(
+        id="s1",
+        target=SpecificResource(source="p.source.md",
+                                selector=TextQuoteSelector(exact="BRCA1 affects instability",
+                                                           prefix="", suffix="")),
+        bodies=(TextualBody(value='{"section":"results","stance":"asserted","subject":"BRCA1"}',
+                            format="application/json"),),
+        motivation=Motivation.CLASSIFYING, annotation_type="proposition",
+        source="llm-annot:m:paper-annotate-v1", status=Status.OPEN,
+        creator="paper-annotate", created=datetime(2026, 6, 16, tzinfo=timezone.utc),
+        content_hash="0" * 64, promoted_to="proposition:brca1",
+    )
+    anno_io.write_sidecar(sp, Sidecar(annotations=(stmt,)))
+    return root, md
+
+
+def test_cli_scaffold_lists_in_scope_proposition(tmp_path):
+    root, md = _scaffold_project(tmp_path)
+    r = CliRunner().invoke(annotate_group,
+                           ["synthesize", str(md), "--root", str(root), "--format", "json"])
+    assert r.exit_code == 0, r.output
+    payload = _json.loads(r.output)
+    assert payload["source"] == "llm-synth:<MODEL>:proposition-synthesize-v1"
+    [entry] = payload["propositions"]
+    assert entry["proposition"] == "proposition:brca1"
+    assert entry["statements"][0]["annotation"] == "annotation:papers/p.source#s1"
+
+
+def test_cli_apply_writes_reasoning_fields(tmp_path):
+    root, md = _scaffold_project(tmp_path)
+    cand = {
+        "source": "llm-synth:m:proposition-synthesize-v1",
+        "candidates": [{
+            "proposition": "proposition:brca1",
+            "annotation": "annotation:papers/p.source#s1",
+            "subject": "BRCA1", "object": "genomic instability",
+            "predicate": "affects", "polarity": "positive", "claim_layer": "causal_effect",
+        }],
+    }
+    cpath = root / "cand.json"
+    cpath.write_text(_json.dumps(cand), encoding="utf-8")
+    r = CliRunner().invoke(annotate_group, ["synthesize", str(md), "--root", str(root),
+                                            "--apply", "--input", str(cpath)])
+    assert r.exit_code == 0, r.output
+    fm, _ = _parse_markdown_file(root / "entities/propositions/brca1.md")
+    assert fm["predicate"] == "affects" and fm["polarity"] == "positive"
+    assert fm["object"] == "genomic instability"
+    assert fm["reasoning_source"] == "llm-synth:m:proposition-synthesize-v1"
+    # second apply is a clean no-op (everything filled)
+    r2 = CliRunner().invoke(annotate_group, ["synthesize", str(md), "--root", str(root),
+                                             "--apply", "--input", str(cpath), "--format", "json"])
+    assert r2.exit_code == 0, r2.output
+    assert _json.loads(r2.output)["updated"] == 0

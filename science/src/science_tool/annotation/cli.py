@@ -1233,3 +1233,82 @@ def promote_cmd(source_md: Path, root: Path | None, paper_ref: str | None,
     else:
         click.echo(f"annotate promote: {report.minted} minted, {report.linked} linked, "
                    f"skipped {dict(report.skipped) | dict(skipped)}")
+
+
+@annotate_group.command("synthesize")
+@click.argument("source_md", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path),
+              help="Project root (default: cwd). Used to read/write proposition entities.")
+@click.option("--apply", "do_apply", is_flag=True, default=False,
+              help="Apply the curator-reviewed --input candidates. Default is read-only scaffold.")
+@click.option("--input", "input_path", default=None,
+              type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="Edited candidates.json (required with --apply).")
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="json")
+def synthesize_cmd(source_md: Path, root: Path | None, do_apply: bool,
+                   input_path: Path | None, fmt: str) -> None:
+    """Synthesize predicate/polarity/claim_layer on promoted propositions (curator-reviewed)."""
+    from science_tool.annotation.io import sidecar_for_markdown
+    from science_tool.annotation.query import entity_relpath_for_sidecar, read_sidecar_strict
+    from science_tool.annotation.promote import entity_dest
+    from science_tool.annotation.synthesize import (
+        SynthesisApplyError, SynthesisReadError, apply_synthesis, build_scaffold,
+        in_scope_propositions, parse_candidates_doc,
+    )
+    from science_tool.entities import _parse_markdown_file
+
+    if do_apply and input_path is None:
+        raise click.ClickException("--apply requires --input (the curator-reviewed candidates file)")
+    if input_path is not None and not do_apply:
+        raise click.ClickException("--input requires --apply")
+
+    project_root = (root or Path.cwd()).resolve()
+    sidecar_path = sidecar_for_markdown(source_md)
+    sidecar = read_sidecar_strict(sidecar_path)
+    relpath = entity_relpath_for_sidecar(sidecar_path, project_root)
+
+    def ref_for(frag: str) -> str:
+        return f"annotation:{relpath}#{frag}"
+
+    scope = in_scope_propositions(sidecar)
+    # current frontmatter for each in-scope proposition (read once)
+    current: dict[str, dict] = {}
+    for prop_ref in scope:
+        dest = entity_dest(prop_ref, project_root)
+        if not dest.exists():
+            raise click.ClickException(f"in-scope proposition {prop_ref} has no file at {dest}")
+        current[prop_ref], _ = _parse_markdown_file(dest)
+
+    if not do_apply:
+        file_text = source_md.read_text(encoding="utf-8")
+        scaffold, unresolved = build_scaffold(sidecar, file_text, current, ref_for=ref_for)
+        if fmt == "json":
+            click.echo(json.dumps(scaffold, indent=2))
+        else:
+            for e in scaffold["propositions"]:
+                click.echo(f"{e['proposition']:50} statements={len(e['statements'])} "
+                           f"hints={len(e['relation_hints'])}")
+            click.echo(f"unresolved relation hints: {unresolved}")
+        return
+
+    assert input_path is not None
+    try:
+        doc = json.loads(input_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise click.ClickException(f"--input is not valid JSON: {exc}") from exc
+    scope_refs = {p: {ref_for(a.id) for a in anns} for p, anns in scope.items()}
+    try:
+        source, candidates = parse_candidates_doc(doc, scope_refs)
+        report = apply_synthesis(candidates, current=current, project_root=project_root,
+                                 source=source, in_scope=set(scope))
+    except SynthesisReadError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except SynthesisApplyError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if fmt == "json":
+        click.echo(json.dumps({"updated": report.updated, "skipped": dict(report.skipped),
+                               "written": report.written_paths}, indent=2))
+    else:
+        click.echo(f"annotate synthesize: {report.updated} updated, "
+                   f"skipped {dict(report.skipped) or 'none'}")
