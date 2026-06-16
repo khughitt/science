@@ -8,11 +8,8 @@ from enum import StrEnum
 from rdflib import Graph, Literal, RDF, URIRef
 from rdflib.namespace import PROV
 
-from .belief_weights import (
-    CIRCULAR, CURATION_STEP_PENALTY, DIAGNOSTIC_ROLES, EVIDENCE_ROLE_RANK, EVIDENCE_TYPE_RANK,
-    GATED_PROXY, INDEPENDENT, ROLE_DIRECT_TEST, SCOPE_WHOLE_CLAIM, SHARED_SOURCE,
-    STRENGTH_RANK, normalize_evidence_type,
-)
+from .belief_policy import BeliefPolicy, DEFAULT_BELIEF_POLICY
+from .belief_weights import CIRCULAR, INDEPENDENT, SHARED_SOURCE, normalize_evidence_type
 from .dataset_independence import DerivedCommitmentMetadata, committed_metadata_by_line
 from .io import CITO_NS, SCI_NS
 
@@ -146,15 +143,15 @@ def collect_evidence_units(
     return [_with_derived_commitment(unit, derived) for unit in units]
 
 
-def quality_key(u: EvidenceUnit) -> tuple[int, int, int, int]:
+def quality_key(u: EvidenceUnit, *, policy: BeliefPolicy = DEFAULT_BELIEF_POLICY) -> tuple[int, int, int, int]:
     # A-D4: the curation discount also routes through winner-selection. It is the LAST
     # (least-significant) component, so a reference-backed unit loses only to an otherwise
     # equal (type/role/strength) non-reference unit — it never crosses those axes.
     return (
-        EVIDENCE_TYPE_RANK.get(normalize_evidence_type(u.evidence_type), 0),
-        EVIDENCE_ROLE_RANK.get(u.evidence_role or "", 0),
-        STRENGTH_RANK.get(u.strength or "", 0),
-        -CURATION_STEP_PENALTY if u.is_reference_dataset else 0,
+        policy.evidence_type_rank.get(normalize_evidence_type(u.evidence_type), 0),
+        policy.evidence_role_rank.get(u.evidence_role or "", 0),
+        policy.strength_rank.get(u.strength or "", 0),
+        -policy.curation_step_penalty if u.is_reference_dataset else 0,
     )
 
 
@@ -167,7 +164,7 @@ class ReducedUnits:
     contested_groups: set[str]          # real groups holding BOTH a support and a dispute winner
 
 
-def reduce_units(units: list[EvidenceUnit]) -> ReducedUnits:
+def reduce_units(units: list[EvidenceUnit], *, policy: BeliefPolicy = DEFAULT_BELIEF_POLICY) -> ReducedUnits:
     excluded_circular: list[EvidenceUnit] = []
     flagged_ungrouped: list[EvidenceUnit] = []
     collapsed: list[EvidenceUnit] = []
@@ -175,10 +172,10 @@ def reduce_units(units: list[EvidenceUnit]) -> ReducedUnits:
     real_groups_by_stance: dict[str, set[str]] = {"supports": set(), "disputes": set()}
 
     for u in units:
-        if u.independence in (SHARED_SOURCE, CIRCULAR) and not u.independence_group:
+        if u.independence in (policy.shared_source_token, policy.circular_token) and not u.independence_group:
             flagged_ungrouped.append(u)                    # "collapse to what?" undefined (QA #2b)
             continue
-        if u.independence == CIRCULAR:
+        if u.independence == policy.circular_token:
             excluded_circular.append(u)
             continue
         if u.independence_group:
@@ -188,7 +185,7 @@ def reduce_units(units: list[EvidenceUnit]) -> ReducedUnits:
             key = (f"__line__:{u.line_uri}", u.stance)      # ungrouped lines never merge
         if key not in winners:
             winners[key] = u
-        elif quality_key(u) > quality_key(winners[key]):
+        elif quality_key(u, policy=policy) > quality_key(winners[key], policy=policy):
             collapsed.append(winners[key])
             winners[key] = u
         else:
@@ -204,21 +201,21 @@ def reduce_units(units: list[EvidenceUnit]) -> ReducedUnits:
     )
 
 
-def is_diagnostic(u: EvidenceUnit) -> bool:
+def is_diagnostic(u: EvidenceUnit, *, policy: BeliefPolicy = DEFAULT_BELIEF_POLICY) -> bool:
     """negative_control / model_criticism: separate ledger rows, never FOR/AGAINST mass."""
-    return (u.evidence_role or "") in DIAGNOSTIC_ROLES
+    return (u.evidence_role or "") in policy.diagnostic_roles
 
 
-def is_proxy_gated(u: EvidenceUnit) -> bool:
+def is_proxy_gated(u: EvidenceUnit, *, policy: BeliefPolicy = DEFAULT_BELIEF_POLICY) -> bool:
     """Rule 5: indirect/derived proxy with no measurement_model cannot contribute at full weight."""
-    return (u.proxy_directness or "") in GATED_PROXY and not u.has_measurement_model
+    return (u.proxy_directness or "") in policy.gated_proxy and not u.has_measurement_model
 
 
-def is_qualifying_direct_test(u: EvidenceUnit) -> bool:
-    return u.evidence_role == ROLE_DIRECT_TEST and not is_proxy_gated(u)
+def is_qualifying_direct_test(u: EvidenceUnit, *, policy: BeliefPolicy = DEFAULT_BELIEF_POLICY) -> bool:
+    return u.evidence_role == policy.direct_test_role and not is_proxy_gated(u, policy=policy)
 
 
-def is_decisive_refutation(u: EvidenceUnit) -> bool:
+def is_decisive_refutation(u: EvidenceUnit, *, policy: BeliefPolicy = DEFAULT_BELIEF_POLICY) -> bool:
     """Rule 3: ONLY an independent strong direct_test whole_claim dispute caps belief.
 
     whole_claim is the default when scope is unset; model_criticism and scoped disputes
@@ -228,10 +225,10 @@ def is_decisive_refutation(u: EvidenceUnit) -> bool:
     """
     return (
         u.stance == "disputes"
-        and u.independence == INDEPENDENT
-        and u.strength == "strong"
-        and is_qualifying_direct_test(u)
-        and (u.dispute_scope or SCOPE_WHOLE_CLAIM) == SCOPE_WHOLE_CLAIM
+        and u.independence == policy.independent_token
+        and u.strength == policy.decisive_strength
+        and is_qualifying_direct_test(u, policy=policy)
+        and (u.dispute_scope or policy.scope_whole_claim) == policy.scope_whole_claim
     )
 
 
@@ -261,31 +258,35 @@ class BeliefResult:
     contested_groups: set[str]
     excluded: list[EvidenceUnit]
     flagged_ungrouped: list[EvidenceUnit]
+    policy_id: str = DEFAULT_BELIEF_POLICY.policy_id
+    policy_version: str = DEFAULT_BELIEF_POLICY.version
 
     def display(self) -> str:
         return f"{self.magnitude.value} (contested)" if self.contested else self.magnitude.value
 
 
-def aggregate_belief(units: list[EvidenceUnit]) -> BeliefResult:
-    reduced = reduce_units(units)
+def aggregate_belief(units: list[EvidenceUnit], *, policy: BeliefPolicy = DEFAULT_BELIEF_POLICY) -> BeliefResult:
+    reduced = reduce_units(units, policy=policy)
     cg = reduced.contested_groups
 
-    support = [u for u in reduced.kept if u.stance == "supports" and not is_diagnostic(u)]
-    dispute = [u for u in reduced.kept if u.stance == "disputes" and not is_diagnostic(u)]
-    diagnostics = [u for u in reduced.kept if is_diagnostic(u)]
+    support = [u for u in reduced.kept if u.stance == "supports" and not is_diagnostic(u, policy=policy)]
+    dispute = [u for u in reduced.kept if u.stance == "disputes" and not is_diagnostic(u, policy=policy)]
+    diagnostics = [u for u in reduced.kept if is_diagnostic(u, policy=policy)]
 
     n_support = len(support)
     # A support unit in a contested group is not clean corroboration (stance-aware-collapse
-    # decision): well_supported needs >=2 *clean* units, one of which is a qualifying direct test.
+    # decision): well_supported needs >=N *clean* units, one of which is a qualifying direct test.
     clean_support = [u for u in support if u.independence_group not in cg]
-    clean_direct_test = any(is_qualifying_direct_test(u) for u in clean_support)
-    decisive = any(is_decisive_refutation(u) for u in dispute)
+    clean_direct_test = any(is_qualifying_direct_test(u, policy=policy) for u in clean_support)
+    decisive = any(is_decisive_refutation(u, policy=policy) for u in dispute)
 
     if n_support == 0:
         magnitude = BeliefMagnitude.SPECULATIVE
     elif n_support == 1:
         magnitude = BeliefMagnitude.FRAGILE
-    elif clean_direct_test and len(clean_support) >= 2:
+    elif (not policy.well_supported_requires_direct_test or clean_direct_test) and len(
+        clean_support
+    ) >= policy.well_supported_min_clean_support:
         magnitude = BeliefMagnitude.WELL_SUPPORTED
     else:
         magnitude = BeliefMagnitude.SUPPORTED
@@ -311,4 +312,6 @@ def aggregate_belief(units: list[EvidenceUnit]) -> BeliefResult:
         contested_groups=cg,
         excluded=reduced.excluded_circular,
         flagged_ungrouped=reduced.flagged_ungrouped,
+        policy_id=policy.policy_id,
+        policy_version=policy.version,
     )
