@@ -262,6 +262,13 @@ def test_parse_figurative_blank_optional_fails():
         parse_candidates(_fig(mapping="   "))
 
 
+def test_parse_figurative_stores_trimmed_value():
+    # a valid field with surrounding whitespace is STORED trimmed (not just non-blank)
+    [c] = parse_candidates(_fig(source_domain="  warfare  ", mapping="  cells as soldiers  "))
+    assert c.source_domain == "warfare"
+    assert c.mapping == "cells as soldiers"
+
+
 def test_parse_figurative_rejects_statement_field():
     # `stance` is a statement-only field -> unknown for figurative
     with pytest.raises(CandidateError, match="unknown fields"):
