@@ -251,3 +251,61 @@ annotations into `question` / `hypothesis` entities, alongside `proposition`:
   `--apply` is a no-op.
 - **Non-promotable:** metaphor/analogy and entity/relation seeder annotations are skipped
   `promote-non-promotable-type` (no truth/inquiry-apt target).
+
+## Proposition reasoning synthesis (Phase 4c)
+
+`science annotate synthesize <source.md>` is a **curator-reviewed** step that fills the reasoning
+fields a promoted proposition left unset — `predicate`, `polarity`, `claim_layer` — and refines
+`subject` / `object`. It is **read-only by default** (a scaffold of the in-scope propositions);
+`--apply --input <candidates.json>` validates the candidates and writes. The brain/hands split:
+the `proposition-synthesize` subagent proposes an **untrusted** candidates file, the deterministic
+CLI validates + writes, and the curator runs `--apply`.
+
+- **Source identity**: `llm-synth:<model>:proposition-synthesize-v1`, where `<model>` is the exact
+  proposing model id (e.g. `claude-sonnet-4-6`). Bump the `proposition-synthesize-vN` segment when
+  the agent prompt, the controlled vocabularies, or the candidate schema change. On `--apply` this
+  string is stamped into each touched proposition's `PropositionEntity.reasoning_source`.
+- **Candidate file shape**: a top-level `source` (the identity above) plus `candidates[]`. Each
+  candidate is one patch for one proposition:
+
+  ```json
+  {"source": "llm-synth:claude-sonnet-4-6:proposition-synthesize-v1",
+   "candidates": [
+     {"proposition": "proposition:<slug>", "annotation": "annotation:<relpath>#<frag>",
+      "subject": "BRCA1 loss", "object": "genomic instability",
+      "predicate": "affects", "polarity": "positive", "claim_layer": "causal_effect",
+      "override": ["claim_layer"]}
+   ]}
+  ```
+
+  - `proposition` (required): the target proposition id from the scaffold.
+  - `annotation` (required): one of *that proposition's own* statement refs from the scaffold —
+    the anchor for the patch.
+  - `subject` / `object` / `predicate` / `polarity` / `claim_layer` (each optional): the fields
+    the patch proposes. An omitted field is left unset — `null` / empty string are rejected
+    (fail loud), never written.
+  - `override` (optional): a closed set `{subject, object, predicate, polarity, claim_layer}`
+    naming already-set fields the curator/agent is deliberately replacing. By default apply fills
+    only **unset** fields; a field is overwritten only when listed here. **`reasoning_source` is
+    never overrideable.**
+- **Controlled vocabularies + interlocks** (enforced by the CLI, fail loud):
+  - `predicate` ∈
+    `{affects, regulates, associates_with, binds, is_proxy_for, induces_state, transitions_to, subtype_of, part_of}`.
+    Setting `predicate` requires an **effective subject AND object** (already in `current`, or
+    supplied in the same patch).
+  - **Sign-meaningful** predicates `affects` / `regulates` / `associates_with` **require**
+    `polarity` ∈ `{positive, negative, unsigned}`. ALL other (**sign-less**) predicates take no
+    polarity — the tool writes `not_applicable` automatically; a patch must not send a polarity
+    for them. A bare `polarity` with no `predicate` is rejected.
+  - `claim_layer` ∈
+    `{empirical_regularity, causal_effect, mechanistic_narrative, structural_claim}` —
+    independent of subject/object.
+- **Skip / error reason tokens**:
+  - `synthesize-existing-value-blocks` — the patch sets a field already non-null in `current`
+    without listing it in `override`.
+  - `synthesize-nothing-to-fill` — the patch contributes no field the proposition can accept
+    (all proposed fields already set, none overridden).
+  - `synthesize-proposition-uncovered` — the `proposition` id is not one of the in-scope
+    propositions for this paper.
+  - `synthesize-relation-hint-unresolved` — a referenced relation hint did not resolve to a
+    usable subject/object in scope.
