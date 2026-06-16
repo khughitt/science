@@ -1,0 +1,3 @@
+# Archived entities are tool-retrievable via `science search --archived`.
+# Hidden from plain ripgrep for ergonomics; override with `rg --no-ignore`.
+entities/_archive/

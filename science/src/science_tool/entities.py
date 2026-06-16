@@ -729,7 +729,16 @@ def list_entities(
     related: str | None = None,
     *,
     include_hidden: bool = False,
+    include_archived: bool = False,
 ) -> list[dict[str, str]]:
+    if related is not None and include_archived:
+        # The archive index carries no relation data, so the `related` filter cannot
+        # be evaluated against archived rows. Fail loud rather than silently include
+        # unfiltered archived rows or silently drop them.
+        raise EntityCommandError(
+            "--related cannot be combined with --include-archived "
+            "(the archive index does not carry relation data)"
+        )
     sources = load_project_sources(project_root.resolve())
     resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
     related_key = _resolved_ref_key(resolver, related) if related is not None else None
@@ -753,8 +762,27 @@ def list_entities(
                 "title": entity.title,
                 "status": entity_status,
                 "path": entity.file_path,
+                "archived": False,
             }
         )
+    if include_archived:
+        from science_tool.archive import load_archive_index
+
+        for cid, arow in load_archive_index(project_root.resolve()).active_by_id.items():
+            if kind is not None and arow.kind != kind:
+                continue
+            if status is not None and (arow.status or "") != status:
+                continue
+            rows.append(
+                {
+                    "id": cid,
+                    "kind": arow.kind or "",
+                    "title": arow.title or "",
+                    "status": arow.status or "",
+                    "path": arow.original_path or "",
+                    "archived": True,
+                }
+            )
     return sorted(rows, key=lambda row: row["id"])
 
 

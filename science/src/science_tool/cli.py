@@ -699,12 +699,13 @@ def entity_note(ref: str, note: str, note_date: str | None) -> None:
 @click.option("--status")
 @click.option("--related")
 @click.option("--include-hidden", is_flag=True, default=False, help="Include superseded/archived entities (hidden by default).")
+@click.option("--include-archived", is_flag=True, default=False, help="Include archived (relocated) entities from the archive index.")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def entity_list(kind: str | None, status: str | None, related: str | None, include_hidden: bool, output_format: str) -> None:
+def entity_list(kind: str | None, status: str | None, related: str | None, include_hidden: bool, include_archived: bool, output_format: str) -> None:
     """List source-authored entities."""
 
     try:
-        rows = list_entities(Path.cwd(), kind=kind, status=status, related=related, include_hidden=include_hidden)
+        rows = list_entities(Path.cwd(), kind=kind, status=status, related=related, include_hidden=include_hidden, include_archived=include_archived)
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
     emit_query_rows(
