@@ -120,3 +120,74 @@ def scaffold_digest(
         "digest_path": str(path),
         "members": list(member_ids),
     }
+
+
+def _consolidates_targets(loc: EntityLocation) -> list[str]:
+    """Member ids = targets of the digest's `sci:consolidates` authored relations."""
+    targets: list[str] = []
+    for rel in loc.frontmatter.get("relations") or []:
+        if isinstance(rel, dict) and rel.get("predicate") == CONSOLIDATES_PREDICATE:
+            target = rel.get("target")
+            if isinstance(target, str):
+                targets.append(target)
+    return targets
+
+
+def apply_consolidation(
+    project_root: Path,
+    digest_id: str,
+    *,
+    apply: bool = False,
+    now: str | None = None,
+) -> dict:
+    """Demote + relocate the digest's consolidated members (report, then --apply).
+
+    Per-member transaction: snapshot bytes -> rewrite frontmatter (status/consolidated_into)
+    -> relocate via _relocate_rows. On any exception, restore the snapshotted bytes at the
+    live original_path (the move-rollback / un-executed move leaves the file there)."""
+    project_root = Path(project_root).resolve()
+    digest = find_entity(project_root, digest_id)
+    if digest.frontmatter.get("report_kind") != CLUSTER_DIGEST_REPORT_KIND:
+        raise ConsolidateError(f"{digest_id!r} is not a cluster-digest (report_kind)")
+    member_ids = _consolidates_targets(digest)
+    if not member_ids:
+        raise ConsolidateError(f"{digest_id!r} has no sci:consolidates relation entries")
+    locs = _validate_members(project_root, member_ids, digest_id)
+
+    report: dict = {
+        "digest_id": digest_id,
+        "members": [loc.entity_id for loc in locs],
+        "destinations": {loc.entity_id: derive_archive_path(loc.rel_path) for loc in locs},
+        "applied": [],
+        "skipped": [],
+    }
+    if not apply:
+        return report
+
+    index_path = archive_index_path(project_root)
+    for loc in locs:
+        original_bytes = loc.path.read_bytes()
+        fm = dict(loc.frontmatter)
+        fm["status"] = "archived"
+        fm["consolidated_into"] = digest_id
+        _atomic_replace_text(loc.path, _render_markdown(fm, loc.body))
+        row = ArchiveRow(
+            op="archive",
+            id=loc.entity_id,
+            kind=loc.kind,
+            title=loc.title or None,
+            aliases=[a for a in (loc.frontmatter.get("aliases") or []) if isinstance(a, str)],
+            same_as=[s for s in (loc.frontmatter.get("same_as") or []) if isinstance(s, str)],
+            status="archived",
+            original_path=loc.rel_path,
+            consolidated_into=digest_id,
+            digest_insight=loc.title or None,
+            reason="consolidated",
+        )
+        try:
+            _relocate_rows(index_path, project_root, [row], now=now)
+        except Exception:
+            loc.path.write_bytes(original_bytes)  # restore the frontmatter rewrite
+            raise
+        report["applied"].append(loc.entity_id)
+    return report
