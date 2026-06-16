@@ -99,13 +99,13 @@ def test_id_stem_does_not_cross_kinds(tmp_path: Path) -> None:
     assert [c for c in report.semantic_clusters if c.signal == "structural-family"] == []
 
 
-def test_group_and_task_family_are_basis_namespaced(tmp_path: Path) -> None:
+def test_group_qualifies_task_family_only_suppressed(tmp_path: Path) -> None:
     _seed(tmp_path)
-    # Same value "alpha" reached by DIFFERENT bases must NOT merge into one cluster:
-    #   - h1/h2 share group: alpha
-    #   - h3/h4 share task:alpha in related
-    # id-stems are distinct, so the only structural keys are (group, alpha) and
-    # (task-family, task:alpha) -> two separate clusters.
+    # Same value "alpha" reached by DIFFERENT bases is basis-namespaced internally so
+    # the two groups never collide. Post-tuning gating: `group` is a PRIMARY basis so
+    # h1/h2 are reported; `task-family` alone is corroborating-only, so the h3/h4
+    # task-family cluster is SUPPRESSED (task:alpha is not a resolvable entity, so no
+    # shared-anchor / related-overlap co-signal rescues it).
     _write(tmp_path, "hypotheses", "0001-aa", {"id": "hypothesis:0001-aa", "type": "hypothesis", "group": "alpha"})
     _write(tmp_path, "hypotheses", "0002-bb", {"id": "hypothesis:0002-bb", "type": "hypothesis", "group": "alpha"})
     _write(tmp_path, "hypotheses", "0003-cc", {"id": "hypothesis:0003-cc", "type": "hypothesis", "related": ["task:alpha"]})
@@ -114,12 +114,127 @@ def test_group_and_task_family_are_basis_namespaced(tmp_path: Path) -> None:
     from science_tool.consolidation_candidates import detect_consolidation_candidates
 
     report = detect_consolidation_candidates(tmp_path)
-    family = sorted((c for c in report.semantic_clusters if c.signal == "structural-family"), key=lambda c: c.members)
-    assert len(family) == 2
+    family = [c for c in report.semantic_clusters if c.signal == "structural-family"]
+    assert len(family) == 1
     assert family[0].members == ["hypothesis:0001-aa", "hypothesis:0002-bb"]
     assert "group 'alpha'" in family[0].evidence
-    assert family[1].members == ["hypothesis:0003-cc", "hypothesis:0004-dd"]
-    assert "task-family 'task:alpha'" in family[1].evidence
+
+
+def test_task_family_only_cluster_is_suppressed(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    # Two distinct-stem interpretations sharing only task:t99 (a non-entity prefix
+    # ref) have no primary basis and no co-signal -> nothing reported.
+    _write(tmp_path, "interpretations", "0001-alpha", {"id": "interpretation:0001-alpha", "type": "interpretation", "related": ["task:t99"]})
+    _write(tmp_path, "interpretations", "0002-beta", {"id": "interpretation:0002-beta", "type": "interpretation", "related": ["task:t99"]})
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    report = detect_consolidation_candidates(tmp_path)
+    assert report.semantic_clusters == []
+
+
+def test_single_shared_anchor_only_is_suppressed(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    # Two distinct-stem interpretations each referencing the SAME single anchor plus
+    # their own distinct resolvable refs: one shared anchor, Jaccard below threshold,
+    # distinct id-stems -> shared-anchor is corroborating-only, nothing qualifies.
+    _write(tmp_path, "hypotheses", "0005-anchor", {"id": "hypothesis:0005-anchor", "type": "hypothesis"})
+    for c in ("p", "q", "r", "s"):
+        _write(tmp_path, "concepts", f"c-{c}", {"id": f"concept:c-{c}", "type": "concept"})
+    _write(tmp_path, "interpretations", "0001-alpha", {"id": "interpretation:0001-alpha", "type": "interpretation",
+        "related": ["hypothesis:0005-anchor", "concept:c-p", "concept:c-q"]})
+    _write(tmp_path, "interpretations", "0002-beta", {"id": "interpretation:0002-beta", "type": "interpretation",
+        "related": ["hypothesis:0005-anchor", "concept:c-r", "concept:c-s"]})
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    report = detect_consolidation_candidates(tmp_path)
+    assert report.semantic_clusters == []
+
+
+def test_two_shared_anchors_qualify_standalone(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    # Same two interpretations share TWO common anchors but also carry distinct extra
+    # refs, so related Jaccard (2/6 = 0.33) stays below threshold and related-overlap
+    # does NOT fire. The two single-anchor shared-anchor clusters have identical
+    # member-sets and merge; >=2 distinct anchors makes shared-anchor self-qualifying
+    # WITHOUT any primary basis -- isolating the anchor-count gate.
+    _write(tmp_path, "hypotheses", "0005-a1", {"id": "hypothesis:0005-a1", "type": "hypothesis"})
+    _write(tmp_path, "hypotheses", "0006-a2", {"id": "hypothesis:0006-a2", "type": "hypothesis"})
+    for c in ("p", "q", "r", "s"):
+        _write(tmp_path, "concepts", f"c-{c}", {"id": f"concept:c-{c}", "type": "concept"})
+    _write(tmp_path, "interpretations", "0001-alpha", {"id": "interpretation:0001-alpha", "type": "interpretation",
+        "related": ["hypothesis:0005-a1", "hypothesis:0006-a2", "concept:c-p", "concept:c-q"]})
+    _write(tmp_path, "interpretations", "0002-beta", {"id": "interpretation:0002-beta", "type": "interpretation",
+        "related": ["hypothesis:0005-a1", "hypothesis:0006-a2", "concept:c-r", "concept:c-s"]})
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    report = detect_consolidation_candidates(tmp_path)
+    members = ["interpretation:0001-alpha", "interpretation:0002-beta"]
+    matching = [c for c in report.semantic_clusters if c.members == members]
+    assert len(matching) == 1
+    assert matching[0].signal == "shared-anchor"
+    assert "hypothesis:0005-a1" in matching[0].evidence
+    assert "hypothesis:0006-a2" in matching[0].evidence
+
+
+def test_oversized_cluster_suppressed_and_counted(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    # An id-stem family larger than max_cluster_size is suppressed but counted (no
+    # silent caps): with 4 members and max_cluster_size=3, it drops and is tallied.
+    for n in range(1, 5):
+        _write(tmp_path, "interpretations", f"000{n}-foo-v{n}", {"id": f"interpretation:000{n}-foo-v{n}", "type": "interpretation"})
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    report = detect_consolidation_candidates(tmp_path, max_cluster_size=3)
+    assert report.semantic_clusters == []
+    assert report.counts["suppressed_oversized"] == 1
+    # Raising the ceiling re-admits it.
+    report2 = detect_consolidation_candidates(tmp_path, max_cluster_size=4)
+    assert len(report2.semantic_clusters) == 1
+    assert report2.counts["suppressed_oversized"] == 0
+
+
+def test_id_stem_clusters_sort_first(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    # An id-stem family and a related-overlap cluster. "related-overlap" sorts before
+    # "structural-family" alphabetically, but id-stem clusters must surface FIRST.
+    _write(tmp_path, "interpretations", "0001-foo-v1", {"id": "interpretation:0001-foo-v1", "type": "interpretation"})
+    _write(tmp_path, "interpretations", "0002-foo-v2", {"id": "interpretation:0002-foo-v2", "type": "interpretation"})
+    for a in ("a", "b", "c"):
+        _write(tmp_path, "concepts", f"anchor-{a}", {"id": f"concept:anchor-{a}", "type": "concept"})
+    # Distinct-stem pair sharing 3 concept anchors -> related-overlap (Jaccard 1.0),
+    # but >=2 anchors so it also stands as shared-anchor; either way it is non-id-stem.
+    _write(tmp_path, "questions", "0001-zeta", {"id": "question:0001-zeta", "type": "question",
+        "related": ["concept:anchor-a", "concept:anchor-b", "concept:anchor-c"]})
+    _write(tmp_path, "questions", "0002-omega", {"id": "question:0002-omega", "type": "question",
+        "related": ["concept:anchor-a", "concept:anchor-b", "concept:anchor-c"]})
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    report = detect_consolidation_candidates(tmp_path)
+    assert len(report.semantic_clusters) == 2
+    assert "id-stem" in report.semantic_clusters[0].evidence
+
+
+def test_default_related_jaccard_is_point_seven(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    for a in ("a", "b", "c", "d", "e"):
+        _write(tmp_path, "concepts", f"anchor-{a}", {"id": f"concept:anchor-{a}", "type": "concept"})
+    # x={a,b,c}, y={a,b,c,d,e} -> Jaccard 3/5 = 0.6 < 0.7 default : no related-overlap.
+    # Distinct stems, three shared anchors so shared-anchor self-qualifies instead —
+    # confirming the threshold change without losing the pair entirely.
+    _write(tmp_path, "interpretations", "0001-alpha", {"id": "interpretation:0001-alpha", "type": "interpretation",
+        "related": ["concept:anchor-a", "concept:anchor-b", "concept:anchor-c"]})
+    _write(tmp_path, "interpretations", "0002-beta", {"id": "interpretation:0002-beta", "type": "interpretation",
+        "related": ["concept:anchor-a", "concept:anchor-b", "concept:anchor-c", "concept:anchor-d", "concept:anchor-e"]})
+
+    from science_tool.consolidation_candidates import detect_consolidation_candidates
+
+    report = detect_consolidation_candidates(tmp_path)
+    assert [c for c in report.semantic_clusters if "related-overlap" in c.signal] == []
 
 
 def test_shared_anchor_clusters_same_kind(tmp_path: Path) -> None:

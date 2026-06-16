@@ -233,6 +233,64 @@ The expectation (per the design author) is that manual inspection will turn up
 related groups that slip through the initial three signals; the heuristics adapt
 to real-world needs in this round rather than being over-tuned up front.
 
+### 7.1 Tuning-round outcome (2026-06-15) — precision-first pivot
+
+Ran the detector across five recently-active, high-churn projects
+(`natural-systems` 729 files, `multiple-myeloma` 1984, `health/meta` 349,
+`health/processes/cycles` 357, `cancer/mechanisms/evolution` 218 — ~3,600 entities).
+The validation surfaced one conceptual flaw: **most signals conflated _topically
+related_ with _redundant/consolidation-worthy_.** Manual inspection of cluster
+samples showed:
+
+- **Lineage finds nothing** (0 clusters in all 5). The mechanical `sci:supersedes`
+  path is unused in practice; the motivating vN snapshot families are **not**
+  encoded as supersedes chains (already noted in §5). Semantic signals carry all
+  the weight.
+- **`id-stem` is the precision signal** — it caught exactly the real vN families
+  (`parameter-derivation-dag` v2–v5, `h05-predictions-vs-dag` v3–v12). Rare but
+  near-zero false positives.
+- **`task-family` is ~95% noise** — it groups co-tasked but semantically distinct
+  work products (e.g. 20 unrelated `interpretation`s under one `task:`), and the
+  oversized task-family clusters _obscured_ the precise id-stem families nested
+  inside them.
+- **single `shared-anchor` is ~95% noise** — sharing one anchor means "same topic,"
+  not "redundant" (two analysis-plans citing one inquiry but doing different
+  analyses). It was the dominant signal (~70% of all clusters), almost all false
+  positives. Requiring **≥2 distinct shared anchors** cut it ~93% while keeping the
+  genuinely-related pairs.
+- **`related-overlap` single-linkage chains into mega-blobs** (one 385-member
+  cluster) — union-find connects pairwise-similar entities transitively across
+  unrelated kinds.
+
+**Implemented tuning (A–E), precision-first:**
+
+- **(A)** `id-stem`-bearing clusters sort first (the redundancy signal worth a
+  first look).
+- **(B)** `task-family` dropped as a *standalone* qualifying basis — it now only
+  enriches the evidence of a cluster that already qualifies.
+- **(C)** `shared-anchor` self-qualifies only with **≥2 distinct anchors**; a single
+  shared anchor is corroborating-only.
+- **(D)** `--max-cluster-size` (default **15**) suppresses but **counts**
+  (`counts.suppressed_oversized`, no silent caps) oversized clusters — backstops
+  any residual chaining. Default chosen so real id-stem families (observed max 11)
+  survive.
+- **(E)** `--related-jaccard` default raised **0.5 → 0.7**; this alone fragmented the
+  single-linkage blobs (so the size ceiling rarely fires).
+
+Gating rule (post-merge): a cluster qualifies iff it carries a **primary basis**
+(`id-stem` / `group` / `related-overlap`) **or** shares ≥2 anchors.
+
+**Before → after cluster counts:** natural-systems 805→112, multiple-myeloma
+778→151, meta 201→49, cycles 207→58, evolution 172→39 (~80% noise removed); the
+gold id-stem vN families are preserved and surface first; largest remaining cluster
+is 14 (was 385).
+
+**Deferred (next tuning iteration):** `paper:` entities still form
+`related-overlap` clusters by thematic co-citation — informational but less
+"consolidation-worthy" than authored-artifact families; consider a kind-aware
+exclusion. Fuzzy title-token overlap / embeddings / external-citation anchors
+remain unimplemented.
+
 ## 8. Testing (TDD, synthetic `entities/` fixtures)
 
 - **Lineage, linear:** reuse a P1-style chain fixture → one `LinearChain` with
