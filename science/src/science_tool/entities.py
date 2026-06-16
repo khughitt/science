@@ -90,6 +90,11 @@ def _resolve_local_home(name: str, home: str | None) -> Path:
             f"local kind {name!r} home {home!r} must be a relative path of the form "
             "'entities/<segment>/...' with no parent traversal"
         )
+    if any(seg.startswith("_") for seg in parts):
+        raise EntityCommandError(
+            f"local kind {name!r} home {home!r} may not contain a '_'-prefixed path "
+            "segment (reserved for the archive tier; mirrors the entity_scan skip rule)"
+        )
     return candidate
 
 
