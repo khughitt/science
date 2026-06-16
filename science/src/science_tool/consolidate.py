@@ -170,7 +170,6 @@ def apply_consolidation(
         fm = dict(loc.frontmatter)
         fm["status"] = "archived"
         fm["consolidated_into"] = digest_id
-        _atomic_replace_text(loc.path, _render_markdown(fm, loc.body))
         row = ArchiveRow(
             op="archive",
             id=loc.entity_id,
@@ -185,9 +184,14 @@ def apply_consolidation(
             reason="consolidated",
         )
         try:
-            _relocate_rows(index_path, project_root, [row], now=now)
+            # Frontmatter rewrite + relocation share one guard: on ANY failure restore
+            # the snapshotted bytes at the live path (move-rollback or un-executed move
+            # leaves the file there) so a partial member is fully reverted.
+            _atomic_replace_text(loc.path, _render_markdown(fm, loc.body))
+            result = _relocate_rows(index_path, project_root, [row], now=now)
         except Exception:
-            loc.path.write_bytes(original_bytes)  # restore the frontmatter rewrite
+            loc.path.write_bytes(original_bytes)
             raise
-        report["applied"].append(loc.entity_id)
+        report["applied"].extend(result["applied"])
+        report["skipped"].extend(result["skipped"])
     return report

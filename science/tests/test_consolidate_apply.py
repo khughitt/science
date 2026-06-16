@@ -7,7 +7,7 @@ import pytest
 
 from science_tool.archive import derive_archive_path, load_archive_index
 from science_tool.consolidate import ConsolidateError, apply_consolidation, scaffold_digest
-from science_tool.entities import _parse_markdown_file, create_entity
+from science_tool.entities import _atomic_replace_text, _parse_markdown_file, _render_markdown, create_entity
 
 
 def _project(tmp_path: Path) -> Path:
@@ -29,6 +29,7 @@ def test_dry_run_reports_without_mutation(tmp_path: Path) -> None:
     report = apply_consolidation(root, digest, apply=False, now="T1")
     assert set(report["members"]) == {"finding:0001-a", "finding:0002-b"}
     assert report["applied"] == []
+    assert set(report["destinations"]) == {"finding:0001-a", "finding:0002-b"}
     assert (root / "entities" / "findings" / "0001-a.md").exists()  # not moved
     assert not load_archive_index(root).active_by_id
 
@@ -68,7 +69,6 @@ def test_apply_rejects_digest_without_consolidates_relation(tmp_path: Path) -> N
     path = root / "entities" / "synthesis" / "0003-empty.md"
     fm, body = _parse_markdown_file(path)
     fm["report_kind"] = "cluster-digest"  # but no relations
-    from science_tool.entities import _atomic_replace_text, _render_markdown
     _atomic_replace_text(path, _render_markdown(fm, body))
     with pytest.raises(ConsolidateError, match="no sci:consolidates"):
         apply_consolidation(root, "synthesis:0003-empty", apply=True, now="T1")
