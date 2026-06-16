@@ -173,7 +173,7 @@ def _relocate_rows(
     rows: list[ArchiveRow],
     *,
     now: str | None,
-) -> dict:
+) -> dict[str, list[str]]:
     """Content-agnostic relocation: move each row's file under _archive/ (move-first),
     append its index row, and roll the move back if the append fails. Performs NO
     frontmatter edits and owns no content snapshot — callers that mutate file content
