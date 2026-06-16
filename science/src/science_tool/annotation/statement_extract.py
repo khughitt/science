@@ -1,12 +1,13 @@
-"""Phase 3a: agent statement-extraction persistence.
+"""Agent annotation-extraction persistence (paper-annotate).
 
-Turn an LLM agent's candidate proposition/question/hypothesis spans into
-oa:TextQuoteSelector annotations anchored in an existing `<citekey>.source.md`,
-written to its `.source.anno.trig` sidecar via the existing annotation machinery.
-The agent decides; this module owns anchoring, section derivation, grounding
-verification, dedup, and document-level idempotency.
+Turn an LLM agent's candidate spans — statements (proposition/question/hypothesis)
+and figures (metaphor/analogy) — into oa:TextQuoteSelector annotations anchored in
+an existing `<citekey>.source.md`, written to its `.source.anno.trig` sidecar via the
+existing annotation machinery. The agent decides; this module owns anchoring, section
+derivation, grounding verification, dedup, and document-level idempotency.
 
-See docs/plans/2026-06-15-paper-annotate-phase3a-design.md.
+See docs/plans/2026-06-15-paper-annotate-phase3a-design.md (statements) and
+docs/plans/2026-06-15-paper-annotate-phase3b-design.md (figures).
 """
 
 from __future__ import annotations
@@ -572,7 +573,7 @@ def extract_candidates(
     now: datetime,
     actor: str,
 ) -> ExtractReport:
-    """Anchor + persist statement candidates into `<citekey>.source.anno.trig`.
+    """Anchor + persist statement and figurative candidates into `<citekey>.source.anno.trig`.
 
     Document idempotency: the source_text_hash is advanced only when the document was
     FULLY processed (no candidate hit an anchoring failure) — incl. empty / all-duplicate
