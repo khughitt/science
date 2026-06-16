@@ -219,7 +219,6 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 from typing import Any
 
 from science_model.reasoning import (
@@ -227,6 +226,13 @@ from science_model.reasoning import (
 )
 
 from science_tool.annotation.model import Annotation, Sidecar, TextualBody
+```
+
+> Later tasks add their own imports to **this same top-of-file block** (never append an `import` lower in the file — Ruff E402). The full final import set is: `json`, `re`, `from collections import Counter`, `from dataclasses import dataclass, field`, `from datetime import date`, `from pathlib import Path`, `from typing import Any`; `from pydantic import ValidationError`; `from science_model.reasoning import (...)`, `from science_model.propositions import PropositionEntity`; `from science_tool.annotation.model import Annotation, Sidecar, TextualBody`, `from science_tool.annotation.promote import entity_dest`, `from science_tool.annotation.statement_extract import find_qualified_spans`, `from science_tool.entities import _parse_markdown_file, write_entity_file`.
+
+Continue the same `synthesize.py` file with the module constants and read-side functions:
+
+```python
 
 SYNTH_SOURCE_RE = re.compile(r"^llm-synth:[A-Za-z0-9._-]+:proposition-synthesize-v1$")
 SYNTH_FIELDS: tuple[str, ...] = ("subject", "object", "predicate", "polarity", "claim_layer")
@@ -362,7 +368,8 @@ def test_build_scaffold_shape():
     [entry] = scaffold["propositions"]
     assert entry["proposition"] == "proposition:brca1"
     assert entry["title"] == "BRCA1 claim"
-    assert entry["current"] == {"subject": "BRCA1"}
+    assert entry["current"] == {"subject": "BRCA1", "object": None, "predicate": None,
+                                "polarity": None, "claim_layer": None}
     assert entry["statements"][0]["annotation"] == "annotation:papers/p.source#s1"
     assert entry["relation_hints"] == []
 ```
@@ -374,11 +381,15 @@ Expected: FAIL — `ImportError: cannot import name 'build_scaffold'`.
 
 - [ ] **Step 3: Implement resolution, hints, and `build_scaffold`**
 
-Append to `science/src/science_tool/annotation/synthesize.py`:
+First add this import to the **import block at the top** of `synthesize.py` (keep all imports at the top — never append an `import` mid-file; Ruff E402 rejects it), in the `science_tool.annotation` import group:
 
 ```python
 from science_tool.annotation.statement_extract import find_qualified_spans
+```
 
+Then append the following to the **end** of `science/src/science_tool/annotation/synthesize.py`:
+
+```python
 SCAFFOLD_SOURCE_PLACEHOLDER = "llm-synth:<MODEL>:proposition-synthesize-v1"
 RELATION_TYPE = "relation"
 
@@ -450,7 +461,9 @@ def build_scaffold(
 
     `current[prop_ref]` is that proposition's current frontmatter (subject/object/predicate/
     polarity/claim_layer/title); missing keys are simply absent. `ref_for(frag)` builds the
-    `annotation:<relpath>#<frag>` ref for a sidecar annotation.
+    `annotation:<relpath>#<frag>` ref for a sidecar annotation. Per design §5 the scaffold
+    shows EVERY synthesis field in `current` (unset → `null`) so the agent sees explicitly
+    which fields are already set vs available.
     """
     scope = in_scope_propositions(sidecar)
     relations = [a for a in sidecar.annotations if a.annotation_type == RELATION_TYPE]
@@ -458,7 +471,7 @@ def build_scaffold(
     total_unresolved = 0
     for prop_ref, statements in scope.items():
         fm = current.get(prop_ref, {})
-        cur = {f: fm[f] for f in SYNTH_FIELDS if fm.get(f) is not None}
+        cur = {f: fm.get(f) for f in SYNTH_FIELDS}   # all 5 fields; unset → None (design §5)
         hints, unresolved = relation_hints(file_text, statements, relations)
         total_unresolved += unresolved
         entries.append({
@@ -600,18 +613,29 @@ Expected: FAIL — `ImportError: cannot import name 'parse_candidates_doc'`.
 
 - [ ] **Step 3: Implement the candidate dataclass, error classes, and parser**
 
-Append to `science/src/science_tool/annotation/synthesize.py`:
+First add this import to the **import block at the top** of `synthesize.py` (stdlib group):
 
 ```python
 from dataclasses import dataclass, field
+```
 
+Then append the following to the **end** of `science/src/science_tool/annotation/synthesize.py`:
 
+```python
 class SynthesisReadError(Exception):
-    """Malformed candidates file / bad source / scope / annotation / override (fail loud)."""
+    """Malformed candidates file / bad source / scope / annotation (fail loud)."""
 
 
 class SynthesisApplyError(Exception):
     """Interlock / operand / polarity-without-predicate / write-boundary failure (fail loud)."""
+
+
+class SynthesisOverrideError(SynthesisReadError):
+    """Illegal override: unknown field, field not in patch, currently-unset, or reasoning_source.
+
+    Subclasses SynthesisReadError so the CLI catch and `pytest.raises(SynthesisReadError)`
+    cover it; the dedicated type matches design §10's three-class taxonomy.
+    """
 
 
 @dataclass(frozen=True)
@@ -625,6 +649,11 @@ class SynthesisCandidate:
 def _require(cond: bool, msg: str) -> None:
     if not cond:
         raise SynthesisReadError(msg)
+
+
+def _require_override(cond: bool, msg: str) -> None:
+    if not cond:
+        raise SynthesisOverrideError(msg)
 
 
 def parse_candidates_doc(
@@ -682,14 +711,14 @@ def _parse_candidate(
         fields[f] = val
 
     override = item.get("override", [])
-    _require(isinstance(override, list) and all(isinstance(x, str) for x in override),
-             f"candidate[{idx}].override must be a list of field names")
+    _require_override(isinstance(override, list) and all(isinstance(x, str) for x in override),
+                      f"candidate[{idx}].override must be a list of field names")
     for name in override:
-        _require(name in SYNTH_FIELDS,
-                 f"candidate[{idx}].override {name!r} not in {sorted(SYNTH_FIELDS)} "
-                 f"(reasoning_source is never overrideable)")
-        _require(name in fields,
-                 f"candidate[{idx}].override names {name!r} which is not present in the patch")
+        _require_override(name in SYNTH_FIELDS,
+                          f"candidate[{idx}].override {name!r} not in {sorted(SYNTH_FIELDS)} "
+                          f"(reasoning_source is never overrideable)")
+        _require_override(name in fields,
+                          f"candidate[{idx}].override names {name!r} which is not present in the patch")
     return SynthesisCandidate(
         proposition=prop, annotation=ann, fields=fields, override=frozenset(override),
     )
@@ -728,7 +757,7 @@ Append to `science/tests/test_proposition_synthesize.py`:
 
 ```python
 from science_tool.annotation.synthesize import (
-    SynthesisApplyError, WritePlan, plan_writes, validate_candidate,
+    SynthesisApplyError, SynthesisOverrideError, WritePlan, plan_writes, validate_candidate,
 )
 
 
@@ -781,6 +810,13 @@ def test_validate_sign_meaningful_missing_polarity_fails():
         validate_candidate(current, cand)
 
 
+def test_validate_override_of_unset_field_rejected():
+    # override may only name a CURRENTLY-SET field; current={} ⇒ hard error (design §6/§7).
+    cand = _cand({"claim_layer": "causal_effect"}, override=frozenset({"claim_layer"}))
+    with pytest.raises(SynthesisOverrideError, match="override|unset"):
+        validate_candidate({}, cand)
+
+
 def test_validate_ok_returns_plan():
     current = {"subject": "X", "object": "Y"}
     cand = _cand({"predicate": "regulates", "polarity": "negative", "claim_layer": "causal_effect"})
@@ -796,12 +832,16 @@ Expected: FAIL — `ImportError: cannot import name 'plan_writes'`.
 
 - [ ] **Step 3: Implement `plan_writes` + `validate_candidate`**
 
-Append to `science/src/science_tool/annotation/synthesize.py` (note the new import of `PropositionEntity` and `ValidationError`):
+First add these imports to the **import block at the top** of `synthesize.py` (third-party + science_model groups):
 
 ```python
 from pydantic import ValidationError
 from science_model.propositions import PropositionEntity
+```
 
+Then append the following to the **end** of `science/src/science_tool/annotation/synthesize.py`:
+
+```python
 NOT_APPLICABLE = Polarity.NOT_APPLICABLE.value
 
 
@@ -847,8 +887,17 @@ def validate_candidate(current: dict[str, Any], cand: SynthesisCandidate) -> Wri
     """Validate one candidate against current frontmatter; return its WritePlan.
 
     Enforces the design §7 contracts on the *effective* (post-write) state and the model's
-    own relational interlocks. Raises SynthesisApplyError on any violation. Pure (no writes).
+    own relational interlocks. Raises SynthesisOverrideError (override of a currently-unset
+    field) or SynthesisApplyError (operand/polarity/interlock). Pure (no writes).
     """
+    # override may only target a field that is CURRENTLY set (design §6/§7). The parser
+    # checks present-in-patch; the currently-set check needs `current`, so it lives here.
+    for name in cand.override:
+        if current.get(name) is None:
+            raise SynthesisOverrideError(
+                f"{cand.proposition}: override names {name!r} but it is currently unset "
+                f"(nothing to override — omit it to fill normally)"
+            )
     plan = plan_writes(current, cand)
     eff = {f: _effective(current, plan.writes, f) for f in SYNTH_FIELDS}
 
@@ -879,7 +928,7 @@ def validate_candidate(current: dict[str, Any], cand: SynthesisCandidate) -> Wri
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
-Expected: PASS (20 passed).
+Expected: PASS (21 passed).
 
 - [ ] **Step 5: Lint + types**
 
@@ -1013,7 +1062,7 @@ Expected: FAIL — `ImportError: cannot import name 'apply_synthesis'`.
 
 - [ ] **Step 3: Implement the report + two-pass apply**
 
-Append to `science/src/science_tool/annotation/synthesize.py`:
+First add these imports to the **import block at the top** of `synthesize.py` (stdlib + science_tool groups):
 
 ```python
 from collections import Counter
@@ -1021,6 +1070,11 @@ from datetime import date
 
 from science_tool.annotation.promote import entity_dest
 from science_tool.entities import _parse_markdown_file, write_entity_file
+```
+
+Then append the following to the **end** of `science/src/science_tool/annotation/synthesize.py`:
+
+```python
 
 
 @dataclass
@@ -1503,11 +1557,15 @@ Expected: 0 errors. (`cli.py` may carry pre-existing F401s inherited from the br
 - §3 architecture (agent + CLI + module) → Tasks 7, 8, 2–6.
 - §4 scope (promotedTo, proposition-only) → Task 2 `in_scope_propositions`.
 - §5 scaffold + relation-hint resolution/omission → Task 3.
-- §6 candidate shape (source, annotation, override, null rule, coverage) → Task 4.
+- §6 candidate shape (source, annotation, override present-in-patch + currently-set, null rule, coverage) → Task 4 (parse-time: present-in-patch, unknown-field, reasoning_source) + Task 5 (currently-set, needs `current`).
 - §7 two-pass apply (operand/polarity contracts, interlocks, fill-only-unset, canonicalization, provenance stamp, body preservation, failure boundary) → Tasks 5 + 6.
 - §8 idempotency → Tasks 6 (no-op) + 7/9 (re-apply tests).
 - §9 model field → Task 1.
-- §10 error classes + skip reasons → Tasks 4 (`SynthesisReadError`), 5 (`SynthesisApplyError`), 6 (reason counters).
+- §10 error classes + skip reasons → Tasks 4 (`SynthesisReadError`, `SynthesisOverrideError(SynthesisReadError)`), 5 (`SynthesisApplyError` + override-currently-unset → `SynthesisOverrideError`), 6 (reason counters). The three-class taxonomy matches the design; `SynthesisOverrideError` subclasses `SynthesisReadError` so one CLI catch covers it.
+
+**Imports:** every import lives in the single top-of-file block in `synthesize.py`; later tasks ADD to that block (never append an `import` mid-file) so each task's own Ruff gate stays clean (no E402, no premature F401 — `Path`/`Counter`/`date`/`ValidationError`/`PropositionEntity`/`entity_dest`/`find_qualified_spans`/`write_entity_file` are each introduced in the task that first uses them).
+
+**Scaffold `current`:** emits all five synthesis fields with `null` for unset (design §5), so the agent sees set-vs-available explicitly (Task 3).
 - §12 tests → Tasks 2–7, 9.
 
 **Type/name consistency:** `SynthesisCandidate(proposition, annotation, fields, override)`, `WritePlan(writes, blocked)`, `SynthReport(updated, skipped, written_paths)`, `plan_writes`/`validate_candidate`/`apply_synthesis`/`build_scaffold`/`in_scope_propositions`/`parse_candidates_doc` are used identically across tasks. `source` regex, `SYNTH_FIELDS`, and the four skip reasons match the design verbatim.
