@@ -46,3 +46,55 @@ def test_statement_context_extracts_body_fields():
         "exact": "X drives Y", "section": "results", "stance": "asserted",
         "subject": "X", "object": "Y",
     }
+
+
+from science_tool.annotation.synthesize import build_scaffold, relation_hints
+
+
+def _rel(frag, exact, *, predicate, subj, obj):
+    body = (
+        '{"object":"%s","predicate":"%s","predicate_source":"biored",'
+        '"subject":"%s"}' % (obj, predicate, subj)
+    )
+    return _ann(frag, "relation", exact, body=body)
+
+
+def test_relation_hints_overlap_and_unresolved_count():
+    file_text = "alpha BRCA1 affects genomic instability omega"
+    stmt = _ann("s1", "proposition", "BRCA1 affects genomic instability",
+                body='{"section":"results","stance":"asserted"}',
+                promoted_to="proposition:p")
+    # overlapping relation (its exact lies inside the statement span)
+    hit = _rel("r1", "BRCA1 affects", predicate="biolink:affects",
+               subj="ncbigene:672", obj="GO:0006281")
+    # relation whose exact is not in file_text → unresolved, counted, omitted
+    miss = _rel("r2", "NOT PRESENT", predicate="biolink:regulates",
+                subj="a", obj="b")
+    hints, unresolved = relation_hints(file_text, [stmt], [hit, miss])
+    assert unresolved == 1
+    assert hints == [{
+        "annotation_frag": "r1", "predicate": "biolink:affects",
+        "subject": "ncbigene:672", "object": "GO:0006281",
+    }]
+
+
+def test_build_scaffold_shape():
+    file_text = "BRCA1 affects genomic instability"
+    stmt = _ann("s1", "proposition", "BRCA1 affects genomic instability",
+                body='{"section":"results","stance":"asserted","subject":"BRCA1"}',
+                promoted_to="proposition:brca1")
+    sc = Sidecar(annotations=(stmt,))
+    current = {"proposition:brca1": {"title": "BRCA1 claim", "subject": "BRCA1"}}
+    scaffold, unresolved = build_scaffold(
+        sc, file_text, current,
+        ref_for=lambda frag: f"annotation:papers/p.source#{frag}",
+    )
+    assert scaffold["source"] == "llm-synth:<MODEL>:proposition-synthesize-v1"
+    assert unresolved == 0
+    [entry] = scaffold["propositions"]
+    assert entry["proposition"] == "proposition:brca1"
+    assert entry["title"] == "BRCA1 claim"
+    assert entry["current"] == {"subject": "BRCA1", "object": None, "predicate": None,
+                                "polarity": None, "claim_layer": None}
+    assert entry["statements"][0]["annotation"] == "annotation:papers/p.source#s1"
+    assert entry["relation_hints"] == []
