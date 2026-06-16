@@ -285,6 +285,47 @@ def entities_mark_superseded_command(project_root: Path, apply_changes: bool) ->
     click.echo(json.dumps(report, indent=2))
 
 
+@entities_group.command("archive")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path("."),
+    help="Project root (default: current directory).",
+)
+@click.option("--status", "statuses", multiple=True, help="Statuses to archive (default: superseded, archived).")
+@click.option("--apply", "apply_changes", is_flag=True, default=False, help="Apply changes (default: dry-run report).")
+def entities_archive_command(project_root: Path, statuses: tuple[str, ...], apply_changes: bool) -> None:
+    """Relocate hidden-status entities into entities/_archive/ (report, then --apply)."""
+    from datetime import datetime, timezone
+
+    from science_tool.archive import DEFAULT_ARCHIVE_STATUSES, archive_entities
+
+    status_set = frozenset(statuses) if statuses else DEFAULT_ARCHIVE_STATUSES
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    report = archive_entities(project_root, statuses=status_set, apply=apply_changes, now=now)
+    click.echo(json.dumps(report, indent=2))
+
+
+@entities_group.command("unarchive")
+@click.argument("ids", nargs=-1, required=True)
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path("."),
+    help="Project root (default: current directory).",
+)
+@click.option("--apply", "apply_changes", is_flag=True, default=False, help="Apply changes (default: dry-run report).")
+def entities_unarchive_command(ids: tuple[str, ...], project_root: Path, apply_changes: bool) -> None:
+    """Restore archived entities to their original path (report, then --apply)."""
+    from datetime import datetime, timezone
+
+    from science_tool.archive import unarchive_entities
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    report = unarchive_entities(project_root, list(ids), apply=apply_changes, now=now)
+    click.echo(json.dumps(report, indent=2))
+
+
 @entities_group.command("migrate")
 @click.option("--apply", "apply_changes", is_flag=True, help="Apply the migration (default: dry run).")
 @click.option(
