@@ -49,8 +49,22 @@ def test_constructor_normalizes_mutable_containers():
         authored_assertion_type="expert_judgment",
         authored_min_confidence=0.5,
         authored_only_ceiling="fragile",
+        qa_failed_dataset_ceiling="fragile",
     )
     assert isinstance(p.evidence_type_rank, MappingProxyType)
     assert isinstance(p.gated_proxy, frozenset)
     with pytest.raises(TypeError):
         p.evidence_type_rank["b"] = 2
+
+
+def test_default_policy_has_qa_failed_dataset_ceiling():
+    from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
+    assert DEFAULT_BELIEF_POLICY.qa_failed_dataset_ceiling == "fragile"
+
+
+def test_policy_rejects_out_of_vocab_qa_ceiling():
+    import dataclasses
+    import pytest
+    from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
+    with pytest.raises(ValueError):
+        dataclasses.replace(DEFAULT_BELIEF_POLICY, qa_failed_dataset_ceiling="bogus")
