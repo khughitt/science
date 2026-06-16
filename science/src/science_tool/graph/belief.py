@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 from rdflib import Graph, Literal, RDF, URIRef
@@ -232,7 +232,13 @@ def is_proxy_gated(u: EvidenceUnit, *, policy: BeliefPolicy = DEFAULT_BELIEF_POL
 
 
 def is_qualifying_direct_test(u: EvidenceUnit, *, policy: BeliefPolicy = DEFAULT_BELIEF_POLICY) -> bool:
-    return u.evidence_role == policy.direct_test_role and not is_proxy_gated(u, policy=policy)
+    # Refutation symmetry (Slice B): an authored assertion is never a qualifying direct test,
+    # so it can neither satisfy WELL_SUPPORTED's direct-test gate nor be a decisive refutation.
+    return (
+        u.evidence_role == policy.direct_test_role
+        and not is_proxy_gated(u, policy=policy)
+        and not is_authored_assertion(u, policy=policy)
+    )
 
 
 def is_decisive_refutation(u: EvidenceUnit, *, policy: BeliefPolicy = DEFAULT_BELIEF_POLICY) -> bool:
@@ -280,13 +286,26 @@ class BeliefResult:
     flagged_ungrouped: list[EvidenceUnit]
     policy_id: str = DEFAULT_BELIEF_POLICY.policy_id
     policy_version: str = DEFAULT_BELIEF_POLICY.version
+    authored_capped: bool = False
+    excluded_authored_confidence: list[EvidenceUnit] = field(default_factory=list)
 
     def display(self) -> str:
         return f"{self.magnitude.value} (contested)" if self.contested else self.magnitude.value
 
 
 def aggregate_belief(units: list[EvidenceUnit], *, policy: BeliefPolicy = DEFAULT_BELIEF_POLICY) -> BeliefResult:
-    reduced = reduce_units(units, policy=policy)
+    # Gate authored assertions on the RAW units list, BEFORE reduce_units (design §Pipeline
+    # ordering). A gate-failing authored unit must have zero downstream effect — it must not
+    # win a collapse, perturb contested_groups, or flip contested — so it never enters reduction.
+    admitted: list[EvidenceUnit] = []
+    excluded_authored_confidence: list[EvidenceUnit] = []
+    for u in units:
+        if is_authored_assertion(u, policy=policy) and not _authored_assertion_counts(u, policy=policy):
+            excluded_authored_confidence.append(u)
+        else:
+            admitted.append(u)
+
+    reduced = reduce_units(admitted, policy=policy)
     cg = reduced.contested_groups
 
     support = [u for u in reduced.kept if u.stance == "supports" and not is_diagnostic(u, policy=policy)]
@@ -316,6 +335,16 @@ def aggregate_belief(units: list[EvidenceUnit], *, policy: BeliefPolicy = DEFAUL
         magnitude = BeliefMagnitude.FRAGILE
         capped = True
 
+    # Authored-only ceiling (design §The ceiling): when EVERY counted support unit is an
+    # authored assertion, belief cannot exceed authored_only_ceiling. Applied after the
+    # refutation cap; a no-op when the magnitude is already at/below the ceiling.
+    authored_capped = False
+    if support and all(is_authored_assertion(u, policy=policy) for u in support):
+        ceiling = BeliefMagnitude(policy.authored_only_ceiling)
+        if _MAG_ORDER.index(magnitude) > _MAG_ORDER.index(ceiling):
+            magnitude = ceiling
+            authored_capped = True
+
     contested = (
         bool(dispute)
         or any(u.stance == "disputes" for u in diagnostics)
@@ -334,4 +363,6 @@ def aggregate_belief(units: list[EvidenceUnit], *, policy: BeliefPolicy = DEFAUL
         flagged_ungrouped=reduced.flagged_ungrouped,
         policy_id=policy.policy_id,
         policy_version=policy.version,
+        authored_capped=authored_capped,
+        excluded_authored_confidence=excluded_authored_confidence,
     )
