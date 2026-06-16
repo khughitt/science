@@ -251,3 +251,50 @@ def unarchive_entities(
                                           restored_path=row.original_path, unarchived_at=now))
         report["applied"].append(row.id)
     return report
+
+
+def verify_archive(project_root: Path, live_alias_space: set[str]) -> list[str]:
+    """Reconcile filesystem <-> active index and detect alias collisions against the
+    caller-supplied live alias space. Returns a list of problem strings (empty ==
+    clean). The caller builds ``live_alias_space`` from live entities (canonical ids
+    + aliases + same_as); it must NOT be derived from ``sources.manual_aliases``,
+    which load_project_sources augments with archive ids (that would make every
+    archived id look like a self-collision). Project-authored manual-alias
+    collisions are caught separately and fail loud at load time (see the
+    load_project_sources merge in the graph task)."""
+    project_root = Path(project_root).resolve()
+    idx = load_archive_index(project_root)
+    problems: list[str] = []
+
+    # (a) every active row's file must exist at its derived archive path
+    archived_present: set[str] = set()
+    for eid, row in idx.active_by_id.items():
+        assert row.original_path is not None
+        dst = project_root / derive_archive_path(row.original_path)
+        if dst.exists():
+            archived_present.add(dst.resolve().as_posix())
+        else:
+            problems.append(f"active archive row {eid!r}: file missing at {derive_archive_path(row.original_path)}")
+
+    # (b) every _archive/ markdown file must have an active row
+    archive_root = project_root / "entities" / ARCHIVE_SEGMENT
+    if archive_root.is_dir():
+        for path in sorted(archive_root.rglob("*.md")):
+            if path.resolve().as_posix() not in archived_present:
+                rel = path.relative_to(project_root).as_posix()
+                problems.append(f"archived file {rel} has no active index row")
+
+    # (c) alias collisions — walk ACTIVE ROWS directly (NOT resolvable_ids(), which
+    # already deduped tokens, hiding archive-vs-archive conflicts). Build
+    # token -> set(owning canonical ids); >1 owner is an archive-vs-archive
+    # collision; membership in live_alias_space is an archive-vs-live collision.
+    owners: dict[str, set[str]] = {}
+    for cid, row in idx.active_by_id.items():
+        for token in (cid, *row.aliases, *row.same_as):
+            owners.setdefault(token, set()).add(cid)
+    for token, owning in sorted(owners.items()):
+        if len(owning) > 1:
+            problems.append(f"archive token {token!r} claimed by multiple active entries: {sorted(owning)}")
+        if token in live_alias_space:
+            problems.append(f"archive id/alias {token!r} collides with the live alias space")
+    return problems

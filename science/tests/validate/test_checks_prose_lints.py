@@ -140,7 +140,14 @@ def test_registration_includes_prose_lints_after_cross_references() -> None:
         )
         prose_lints_index = next(index for index, entry in enumerate(ordered) if entry[0] == "prose quality lints...")
 
-        assert prose_lints_index == cross_references_index + 1
+        # cross_references.py also registers the archive-index reconciliation check
+        # (a sibling in the same module, order=21); it sorts between cross-references
+        # and prose lints. prose lints must still follow the cross-references section.
+        assert prose_lints_index > cross_references_index
+        archive_index = next(
+            index for index, entry in enumerate(ordered) if entry[0] == "archive index reconciliation"
+        )
+        assert cross_references_index < archive_index < prose_lints_index
         assert ordered[prose_lints_index] == (
             "prose quality lints...",
             21,

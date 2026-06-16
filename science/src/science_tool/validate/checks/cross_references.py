@@ -469,3 +469,31 @@ def check_cross_references(ctx: ValidateContext) -> Iterator[Result]:
 
     if not emitted:
         yield _result(Severity.INFO, "All frontmatter cross-references valid")
+
+
+@Check(section="archive index reconciliation", order=21)
+def check_archive_index(ctx: ValidateContext) -> Iterator[Result]:
+    from science_tool.archive import verify_archive
+    from science_tool.graph.sources import load_project_sources
+
+    live_space: set[str] = set()
+    load_error: str | None = None
+    try:
+        sources = load_project_sources(ctx.project_root)
+        for e in sources.entities:
+            live_space.add(e.canonical_id)
+            live_space.update(e.aliases or [])
+            live_space.update(getattr(e, "same_as", None) or [])
+    except Exception as exc:  # degraded, but NOT silently passed
+        load_error = str(exc)
+
+    problems = verify_archive(ctx.project_root, live_alias_space=live_space)
+    if load_error is not None:
+        yield _result(
+            Severity.ERROR,
+            f"Archive index: could not load live entities for collision check ({load_error})",
+        )
+    for problem in problems:
+        yield _result(Severity.ERROR, f"Archive index: {problem}")
+    if not problems and load_error is None:
+        yield _result(Severity.INFO, "Archive index consistent")

@@ -24,6 +24,7 @@ _RGLOB = re.compile(r'\.rglob\(\s*["\']\*\.md["\']\s*\)')
 # the actual collector output in Step 3.
 ALLOWLIST: set[str] = {
     "entity_scan.py",  # SSOT
+    "archive.py",  # verify_archive scans the _archive subtree itself, not live entities
     # --- known non-entity / legacy recursive markdown scanners (reason each) ---
     "big_picture/validator.py",             # tasks/ rglob (entities branch routed)
     "graph/storage_adapters/markdown.py",   # research/packages else-branch (entities branch routed)
