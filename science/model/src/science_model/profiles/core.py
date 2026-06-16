@@ -787,9 +787,9 @@ CORE_PROFILE = ProfileManifest(
             name="consolidates",
             predicate="sci:consolidates",
             source_kinds=["synthesis"],
-            target_kinds=[],  # unrestricted target: a digest may consolidate any consolidatable kind
+            target_kinds=[],  # empty list = unrestricted target
             layer="layer/core",
-            description="A cluster-digest synthesis subsumes the entities it consolidates (live->archived).",
+            description="A cluster-digest synthesis consolidates the entities it absorbs (live → archived).",
         ),
     ],
 )
