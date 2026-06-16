@@ -173,4 +173,37 @@ Agent-extracted sub-article statements. Produced by the `paper-annotate` subagen
   agent when unchanged. Advanced for any validly-processed document (incl. empty / all-duplicate)
   but not when a candidate fails to anchor.
 
-`metaphor` / `analogy` statement types are Phase 3b (additive), not registered here yet.
+## Figurative annotations (paper-annotate Phase 3b)
+
+Agent-extracted metaphors and analogies. Same `paper-annotate` subagent + `science annotate extract`
+command + `llm-annot:<model>:paper-annotate-v1` source as statements — emitted in the **same**
+`candidates.json`, discriminated by `type`.
+
+- **`annotation_type`**: `metaphor` | `analogy` (kebab; no `sci:` prefix).
+  - **metaphor**: figurative framing / identity transfer between two domains, often *implicit*
+    ("the cell is a factory").
+  - **analogy**: an *explicit* comparison or structural mapping between two domains
+    ("like a factory line, the ribosome assembles ...").
+- **Motivation**: `oa:classifying`.
+- **Body**: a single `TextualBody` (`format = application/json`), sorted keys + compact separators
+  + `allow_nan=False`:
+
+  ```json
+  {"section":"discussion","source_domain":"warfare","target_domain":"immune response",
+   "mapping":"immune cells framed as soldiers","cue":"attack"}
+  ```
+
+  - `section` (required, CLI-derived): same closed vocabulary as statements.
+  - `source_domain` / `target_domain` (required, non-empty after trim): the domain borrowed FROM
+    (the vehicle) and the actual subject described (the tenor).
+  - `mapping` (optional, non-empty if present): the correspondence being transferred.
+  - `cue` (optional, non-empty if present): the lexical trigger (e.g. "like" / "as" / "mounts").
+  - **No `stance`, no concept grounding** — figurative domains are free-text (entity linking is
+    Phase 4). A blank/whitespace-only required-or-present field is rejected (fail loud), not stored.
+
+- **Dedup**: `match_text` for figurative is
+  `type|file_idx:length|json([normalized_source_domain, normalized_target_domain])` — the
+  whitespace-normalized, JSON-encoded domain pair is the semantic identity (delimiter-safe), so two
+  same-span figures with different domains both persist. `mapping`/`cue` are enrichment, not identity.
+- **Document guard**: identical to statements (`sci:sourceTextHash`); a mixed statement+figurative
+  run advances the hash only when no candidate fails to anchor.
