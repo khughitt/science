@@ -102,7 +102,7 @@ def test_row_with_evidence_stubs() -> None:
                 {
                     "stance": "supports",
                     "source": "dataset:GSE12345",
-                    "evidence_type": "differential_expression",
+                    "evidence_type": "empirical_data_evidence",
                     "dataset_usage": "primary",
                     "quantitative_result": {"beta": 0.9, "prob_sign": 0.95},
                 },
@@ -290,3 +290,15 @@ def test_workbench_file_patch_header_optional() -> None:
     )
     assert wf.patch is None
     assert len(wf.rows) == 1
+
+
+def test_evidence_stub_canonicalizes_evidence_type() -> None:
+    from science_model.reasoning import EvidenceType
+    stub = EvidenceStub.model_validate({"stance": "supports", "evidence_type": "empirical_data_evidence"})
+    assert stub.evidence_type is EvidenceType.EMPIRICAL_DATA
+
+
+def test_evidence_stub_rejects_unknown_evidence_type() -> None:
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        EvidenceStub.model_validate({"stance": "supports", "evidence_type": "differential_expression"})

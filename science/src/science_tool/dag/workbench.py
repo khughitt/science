@@ -26,10 +26,11 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from science_model.entities import EntityType, EvidenceLineEntity, QuantitativeResult
 from science_model.propositions import PropositionEntity
+from science_model.reasoning import EvidenceType, canonical_evidence_type_token
 
 
 # ---------------------------------------------------------------------------
@@ -92,9 +93,16 @@ class EvidenceStub(BaseModel):
 
     stance: str | None = None
     source: str | None = None
-    evidence_type: str | None = None
+    evidence_type: EvidenceType | None = None
     dataset_usage: str | None = None
     quantitative_result: QuantitativeResult | None = None
+
+    @field_validator("evidence_type", mode="before")
+    @classmethod
+    def _canonicalize_evidence_type(cls, value: object) -> object:
+        if isinstance(value, str):
+            return canonical_evidence_type_token(value)
+        return value
 
 
 class WorkbenchRow(BaseModel):
@@ -260,7 +268,7 @@ def _evidence_line_for_stub(stub: EvidenceStub, *, target_id: str, index: int) -
     """
     target_slug = target_id.split(":", 1)[1]
     line_id = f"evidence-line:{target_slug}-ev{index}"
-    is_staged_empirical = stub.evidence_type == "empirical_data_evidence" and not stub.dataset_usage
+    is_staged_empirical = stub.evidence_type == EvidenceType.EMPIRICAL_DATA and not stub.dataset_usage
     return EvidenceLineEntity(
         id=line_id,
         kind="evidence-line",
