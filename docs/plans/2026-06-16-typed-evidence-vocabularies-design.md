@@ -15,7 +15,7 @@ Scope is the **three belief-scoring vocabularies**: `evidence_type`, `evidence_r
 - **`EvidenceLineEntity`** (`science_model/entities.py`) types `evidence_role: EvidenceRole`, `strength: EvidenceStrength`, `independence: IndependenceTag`, `dispute_scope: DisputeScope` — but `evidence_type: str | None` (untyped).
 - **`belief_weights.py`** (tool) re-declares the same tokens as bare string constants (`ROLE_DIRECT_TEST = "direct_test"`, …) and rank dicts (`EVIDENCE_TYPE_RANK`, `EVIDENCE_ROLE_RANK`, `STRENGTH_RANK`) with **no linkage** back to the model enums — drift-prone.
 
-The canonical `evidence_type` value set is confirmed by both `EVIDENCE_TYPE_RANK` and `model/templates/proposition.md`: `empirical_data`, `benchmark`, `simulation`, `literature`, `expert_judgment` (authored with an `_evidence` suffix for all but `expert_judgment`).
+The **ranked/template** value set is confirmed by both `EVIDENCE_TYPE_RANK` and `model/templates/proposition.md`: `empirical_data`, `benchmark`, `simulation`, `literature`, `expert_judgment` (authored with an `_evidence` suffix for all but `expert_judgment`). The **accepted typed vocabulary** is this set **plus** the valid-but-unranked `negative_result` (§1), which `cli.py` already offers as an authored value — six members total.
 
 ## §1 Vocabulary SSOT (model)
 
@@ -80,7 +80,7 @@ Canonicalize-at-parse changes the materialized literal (`empirical_data_evidence
 - **`graph/store/summary.py:60`** `has_empirical_data` — normalize each collected type, then test membership in the canonical `{EvidenceType.EMPIRICAL_DATA, EvidenceType.BENCHMARK}` set. This is a risk-signal/dashboard correctness fix (mis-counting empirical evidence as absent), not byte drift. Tests for canonical and suffixed literals.
 - **`dag/workbench.py:263`** `_evidence_line_for_stub` staging — normalize `stub.evidence_type` before the `empirical_data` comparison so canonical stubs still stage `belief_eligible=False` when they lack `dataset_usage`.
 - **`dag/workbench.py` `EvidenceStub.evidence_type`** — type it to `EvidenceType | None` with the same suffix-normalizing validator (consistent with the slice's typed-authored-surface principle). This makes the existing `test_workbench_schema.py:105` fixture (`evidence_type: "differential_expression"`) an **intentional** invalid-type rejection; fix the fixture to a valid type (reorganize misclassified content).
-- **`cli.py:2203` `EVIDENCE_TYPES`** — this is the authored-alias list (suffixed spellings + `expert_judgment` + `negative_result`). Do **not** regenerate it from `EvidenceType.value` (that would drop the suffixed authoring spellings). Keep it explicit, but add a **reconciliation gate**: every CLI token normalizes to a valid `EvidenceType` member, and the CLI list covers every member under normalization (`{canonical_evidence_type_token(t) for t in EVIDENCE_TYPES} == {m.value for m in EvidenceType}`). This keeps authoring behavior unchanged while gating the CLI against the enum SSOT.
+- **`cli.py` `--evidence-type` ingress (`cli.py:2272`, `graph add proposition`)** — today this is a plain `@click.option("--evidence-type", default=None)` that writes the value **directly to RDF** (`graph/store/mutations.py:156`), and the `EVIDENCE_TYPES` tuple (`cli.py:2203`) is **defined but unused** — so a reconciliation test alone would gate dead code. This slice **wires the ingress**: make `--evidence-type` a `click.Choice(EVIDENCE_TYPES)`, so the CLI rejects out-of-vocabulary values (e.g. `differential_expression`) at input — the write-side counterpart to model parse enforcement. `EVIDENCE_TYPES` stays the explicit authored-alias list (suffixed spellings + `expert_judgment` + `negative_result`); do **not** regenerate it from `EvidenceType.value` (that would drop the suffixed authoring spellings). It keeps writing the alias literal to the graph (lenient readers normalize, per §3), preserving current write behavior. A **reconciliation gate** then meaningfully constrains a *live* tuple: every CLI token normalizes to a valid `EvidenceType` member, and the list covers every member under normalization (`{canonical_evidence_type_token(t) for t in EVIDENCE_TYPES} == {m.value for m in EvidenceType}`).
 
 ## §5 Behavior
 
@@ -101,13 +101,16 @@ Tool (`science_tool`):
 - `graph/store/summary.py` — normalize before the `has_empirical_data` membership test.
 - `validate/checks/evidence_lines.py` — normalize before the dataset-usage empirical comparison.
 - `dag/workbench.py` — type `EvidenceStub.evidence_type` to `EvidenceType` (suffix-normalizing); normalize before the staging comparison.
-- `cli.py` — keep `EVIDENCE_TYPES` explicit; add the enum-reconciliation gate.
+- `cli.py` — wire `--evidence-type` to `click.Choice(EVIDENCE_TYPES)` (makes the dead tuple live + gates the ingress); add the enum-reconciliation gate over `EVIDENCE_TYPES`.
+
+Docs:
+- `docs/proposition-and-evidence-model.md` — the taxonomy doc currently states "`negative_result` is not a separate evidence type" (line 59), which now contradicts its admission as a valid-but-unranked `EvidenceType`. Update that paragraph to say `negative_result` is accepted as a valid-but-unranked evidence_type token **for compatibility**, while semantically it remains a result/interpretation pattern slated for future re-modeling (§Boundary). The deeper re-modeling stays deferred; only the one-paragraph reconciliation is in scope.
 
 Tests:
 - model tests for `EvidenceType` + the validator (both forms → canonical; unknown raises; `negative_result` parses as a valid member and stays unranked).
 - tool reconciliation tests (type incl. `UNRANKED_EVIDENCE_TYPES`, role w/ diagnostic exclusion, strength).
 - §4b consumer tests: dataset-usage check, `has_empirical_data`, workbench staging — each for **both** canonical and suffixed literals.
-- `cli.py` `EVIDENCE_TYPES` ↔ enum reconciliation test.
+- `cli.py` `EVIDENCE_TYPES` ↔ enum reconciliation test; `--evidence-type` rejects an out-of-vocabulary value (`click.Choice`) and accepts a valid alias.
 - Slice B contract: `is_authored_assertion` still recognizes both `expert_judgment` spellings.
 - belief regression net for scoring neutrality.
 - fixture sweep: tests constructing `EvidenceLineEntity`/`EvidenceStub` with non-canonical or bogus types — incl. fixing `test_workbench_schema.py:105` (`differential_expression`).
@@ -126,13 +129,14 @@ Tests:
 - The descriptor-table enrichment (brainstorming Approach B) — three small vocabularies don't warrant the Kind-Descriptor framework.
 - Typing the **tool-internal** `EvidenceUnit.evidence_type` — it is a graph-literal projection, guaranteed canonical upstream once parse enforces the vocabulary; typing it now would expand blast radius for no semantic gain. Stays `str | None` this slice.
 - Normalizing the authored `_evidence` suffix convention in project files — unnecessary, since both spellings are accepted and canonicalized at parse.
-- Re-modeling `negative_result` (e.g. as `stance=disputes` + role/scope metadata) and retiring it as an evidence type — a future semantics cleanup. This slice only *types* it as a valid, unranked member to preserve existing authored data.
+- Re-modeling `negative_result` (e.g. as `stance=disputes` + role/scope metadata) and retiring it as an evidence type — a future semantics cleanup. This slice only *types* it as a valid, unranked member to preserve existing authored data, and reconciles the one contradicting paragraph in `proposition-and-evidence-model.md` (§6); broader taxonomy-doc rewrites stay deferred.
 
 ## Success criteria
 
-1. `EvidenceType` (6 members) is the sole vocabulary home for evidence types; `belief_weights` token constants/ranks derive from the model enums; `cli.py` `EVIDENCE_TYPES` is reconciled against the enum under normalization.
+1. `EvidenceType` (6 members) is the sole vocabulary home for evidence types; `belief_weights` token constants/ranks derive from the model enums; `cli.py` `--evidence-type` is wired to `click.Choice(EVIDENCE_TYPES)` and `EVIDENCE_TYPES` is reconciled against the enum under normalization (no unvalidated ingress, no dead tuple).
 2. `EvidenceLineEntity.evidence_type` and `EvidenceStub.evidence_type` are typed and enforced at parse; both authored spellings accepted and stored as the canonical member; unknowns raise.
 3. One suffix-normalization SSOT (model), with model-validator-raises vs. tool-reader-degrades policies explicit.
 4. Reconciliation gate (assert + tests) keeps rank tables in lock-step with the enums, accounting for unranked diagnostic roles and `UNRANKED_EVIDENCE_TYPES` (`negative_result`).
 5. The §4b empirical-side contracts (dataset-usage, `has_empirical_data`, workbench staging) preserve their behavior across both spellings.
 6. Belief scoring behavior-neutral on conforming data (incl. `negative_result` at rank 0); the materialized-literal representation change is the one documented, intentional difference.
+7. `proposition-and-evidence-model.md` no longer contradicts the typed vocabulary (the `negative_result` paragraph reconciled).
