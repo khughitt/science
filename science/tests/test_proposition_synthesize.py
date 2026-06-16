@@ -188,3 +188,72 @@ def test_override_rejects_reasoning_source():
             "proposition": "proposition:p", "annotation": "annotation:papers/p.source#s1",
             "claim_layer": "causal_effect", "override": ["reasoning_source"],
         }]), SCOPE)
+
+
+from science_tool.annotation.synthesize import (
+    SynthesisApplyError, SynthesisOverrideError, WritePlan, plan_writes, validate_candidate,
+)
+
+
+def _cand(fields, override=frozenset(), prop="proposition:p",
+          ann="annotation:papers/p.source#s1"):
+    return SynthesisCandidate(proposition=prop, annotation=ann, fields=fields, override=override)
+
+
+def test_plan_writes_fill_only_unset():
+    current = {"subject": "X"}                      # object/predicate/... unset
+    cand = _cand({"subject": "X2", "object": "Y", "claim_layer": "causal_effect"})
+    plan = plan_writes(current, cand)
+    # subject already set & different & no override → blocked; object/claim_layer fill
+    assert plan.writes == {"object": "Y", "claim_layer": "causal_effect"}
+    assert plan.blocked == ("subject",)
+
+
+def test_plan_writes_override_replaces():
+    current = {"claim_layer": "empirical_regularity"}
+    cand = _cand({"claim_layer": "causal_effect"}, override=frozenset({"claim_layer"}))
+    plan = plan_writes(current, cand)
+    assert plan.writes == {"claim_layer": "causal_effect"} and plan.blocked == ()
+
+
+def test_plan_writes_signless_canonicalizes_polarity():
+    current: dict = {}
+    cand = _cand({"subject": "X", "object": "Y", "predicate": "binds"})   # sign-less
+    plan = plan_writes(current, cand)
+    assert plan.writes["polarity"] == "not_applicable"
+
+
+def test_validate_predicate_requires_operands():
+    current: dict = {}
+    cand = _cand({"predicate": "affects", "subject": "X", "polarity": "positive"})  # no object
+    with pytest.raises(SynthesisApplyError, match="subject and object|object"):
+        validate_candidate(current, cand)
+
+
+def test_validate_polarity_requires_predicate():
+    current: dict = {}
+    cand = _cand({"polarity": "positive"})         # bare polarity, no predicate
+    with pytest.raises(SynthesisApplyError, match="predicate"):
+        validate_candidate(current, cand)
+
+
+def test_validate_sign_meaningful_missing_polarity_fails():
+    current: dict = {}
+    cand = _cand({"subject": "X", "object": "Y", "predicate": "affects"})  # needs signed polarity
+    with pytest.raises(SynthesisApplyError):
+        validate_candidate(current, cand)
+
+
+def test_validate_override_of_unset_field_rejected():
+    # override may only name a CURRENTLY-SET field; current={} ⇒ hard error (design §6/§7).
+    cand = _cand({"claim_layer": "causal_effect"}, override=frozenset({"claim_layer"}))
+    with pytest.raises(SynthesisOverrideError, match="override|unset"):
+        validate_candidate({}, cand)
+
+
+def test_validate_ok_returns_plan():
+    current = {"subject": "X", "object": "Y"}
+    cand = _cand({"predicate": "regulates", "polarity": "negative", "claim_layer": "causal_effect"})
+    plan = validate_candidate(current, cand)
+    assert plan.writes == {"predicate": "regulates", "polarity": "negative",
+                           "claim_layer": "causal_effect"}

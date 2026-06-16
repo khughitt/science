@@ -14,6 +14,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic import ValidationError
+
+from science_model.propositions import PropositionEntity
 from science_model.reasoning import (
     ClaimLayer, Polarity, Predicate, SIGN_MEANINGFUL_PREDICATES,
 )
@@ -272,3 +275,86 @@ def _parse_candidate(
     return SynthesisCandidate(
         proposition=prop, annotation=ann, fields=fields, override=frozenset(override),
     )
+
+
+NOT_APPLICABLE = Polarity.NOT_APPLICABLE.value
+
+
+@dataclass(frozen=True)
+class WritePlan:
+    writes: dict[str, str]          # field -> value to persist (synthesis-owned only)
+    blocked: tuple[str, ...]        # proposed fields blocked by an existing differing value
+
+
+def _effective(current: dict[str, Any], writes: dict[str, str], field_name: str) -> Any:
+    if field_name in writes:
+        return writes[field_name]
+    val = current.get(field_name)
+    return None if val is None else str(val)
+
+
+def plan_writes(current: dict[str, Any], cand: SynthesisCandidate) -> WritePlan:
+    """Pure fill-only-unset + override + sign-less-canonicalization plan. No validation."""
+    writes: dict[str, str] = {}
+    blocked: list[str] = []
+    for f in SYNTH_FIELDS:
+        if f not in cand.fields:
+            continue                                  # omitted → leave unset/unchanged
+        proposed = cand.fields[f]
+        cur = current.get(f)
+        if cur is None:
+            writes[f] = proposed                      # unset → fill
+        elif str(cur) == proposed:
+            continue                                  # already equal → nothing to do
+        elif f in cand.override:
+            writes[f] = proposed                      # curator-authorised replace
+        else:
+            blocked.append(f)                         # existing value blocks default apply
+    # Sign-less predicate ⇒ canonicalize an omitted polarity to not_applicable (validate-clean).
+    eff_pred = _effective(current, writes, "predicate")
+    if eff_pred is not None and eff_pred not in _SIGN_MEANINGFUL_VALUES:
+        if _effective(current, writes, "polarity") is None:
+            writes["polarity"] = NOT_APPLICABLE
+    return WritePlan(writes=writes, blocked=tuple(blocked))
+
+
+def validate_candidate(current: dict[str, Any], cand: SynthesisCandidate) -> WritePlan:
+    """Validate one candidate against current frontmatter; return its WritePlan.
+
+    Enforces the design §7 contracts on the *effective* (post-write) state and the model's
+    own relational interlocks. Raises SynthesisOverrideError (override of a currently-unset
+    field) or SynthesisApplyError (operand/polarity/interlock). Pure (no writes).
+    """
+    # override may only target a field that is CURRENTLY set (design §6/§7). The parser
+    # checks present-in-patch; the currently-set check needs `current`, so it lives here.
+    for name in cand.override:
+        if current.get(name) is None:
+            raise SynthesisOverrideError(
+                f"{cand.proposition}: override names {name!r} but it is currently unset "
+                f"(nothing to override — omit it to fill normally)"
+            )
+    plan = plan_writes(current, cand)
+    eff = {f: _effective(current, plan.writes, f) for f in SYNTH_FIELDS}
+
+    # predicate → operands contract (effective subject AND object must exist)
+    if "predicate" in cand.fields:
+        if eff["subject"] is None or eff["object"] is None:
+            raise SynthesisApplyError(
+                f"{cand.proposition}: predicate {cand.fields['predicate']!r} requires an "
+                f"effective subject and object"
+            )
+    # polarity → predicate contract (no bare polarity)
+    if "polarity" in cand.fields and eff["predicate"] is None:
+        raise SynthesisApplyError(
+            f"{cand.proposition}: polarity requires an effective predicate"
+        )
+    # interlocks: construct the would-be entity and let the model validator run
+    try:
+        PropositionEntity(
+            id=cand.proposition, title=str(current.get("title") or ""),
+            subject=eff["subject"], object=eff["object"], predicate=eff["predicate"],
+            polarity=eff["polarity"], claim_layer=eff["claim_layer"],
+        )
+    except ValidationError as exc:
+        raise SynthesisApplyError(f"{cand.proposition}: {exc}") from exc
+    return plan
