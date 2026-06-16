@@ -52,11 +52,19 @@ group, alongside `extract`/`pubtator`). Mirrors the established `consolidate`
 candidate→apply idiom.
 
 - **Read-only by default.** Scans the sidecar's *promotable* proposition annotations (queue
-  rule below) and prints a **candidate list** — each row is `MINT <new-slug>` or
-  `LINK <existing-slug>`, with the claim text and the decision reason. `--json` emits the
-  same for tooling/agents. **Writes nothing.**
+  rule below) and prints a **candidate list** — each row is `MINT <new-slug>`,
+  `LINK <existing-slug>`, or `COLLISION (needs explicit id)`, with the annotation id, claim
+  text, and decision reason. `--json` emits the same structured candidates. **Writes nothing.**
 - **`--apply`.** Executes the candidates: mints/links propositions, writes the provenance
-  edge, adds the sidecar backlink. Idempotent (see below).
+  refs, adds the sidecar backlink. Idempotent (see below).
+- **Curator override via `--apply --input <candidates.json>`.** The default decisions are not
+  always right (precision-first dedup under-links paraphrases; collisions need a chosen id).
+  The curator takes the read-only `--json` output, edits decisions in place, and feeds it
+  back. Each row supports: flip `MINT`→`LINK` with a `link: proposition:<slug>` target;
+  resolve a `COLLISION` (or rename any mint) with an explicit `id: proposition:<slug>`. Rows
+  are matched to annotations by annotation id; an edited target/id that doesn't exist (for
+  `LINK`) or already exists with a different claim (for an explicit mint `id`) fails loud.
+  Without `--input`, `--apply` executes the default decisions and skips collisions.
 
 **Run scope & granularity.** One sidecar (one paper) per invocation. The mint-or-link
 dedup checks against the **whole project's** proposition corpus (not just this sidecar).
@@ -68,11 +76,16 @@ dedup checks against the **whole project's** proposition corpus (not just this s
 
 For each promotable annotation:
 
-1. Compute `key = normalize_text(claim_exact)` (reuse the existing `_normalize_text` from
-   `statement_extract` — lowercase + whitespace-collapse).
-2. If `key` equals `normalize_text(title)` of an **existing proposition** → **LINK**
+1. Compute `key = normalize_claim(claim_exact)` using a **promotion-specific normalizer**
+   `normalize_claim(t) = " ".join(t.casefold().split())` (casefold + whitespace-collapse).
+   This is **deliberately separate** from `statement_extract._normalize_text`, which is
+   whitespace-collapse *only* (no casefold) and is baked into Phase 3 `match_text`. 4a must
+   **not** touch `_normalize_text` — changing it would alter existing annotation identities
+   and break `extract` idempotency. Promotion owns its own normalizer; casefold gives
+   case-insensitive title dedup without any downstream effect.
+2. If `key` equals `normalize_claim(title)` of an **existing proposition** → **LINK**
    (suggest that slug).
-3. Else → **MINT** a new proposition.
+3. Else → **MINT** a new proposition (subject to the slug-collision rule below).
 
 **Match target is the proposition `title`** specifically. Because 4a mints `title = claim`,
 two papers asserting the *identical* sentence dedup to one proposition — the main
@@ -110,22 +123,52 @@ for that one field and note it; otherwise leave unset.
 Persisted through the canonical entity writer (path policy + frontmatter dump + atomic
 replace) — **not** a parallel writer.
 
+**Slug-collision rule (never overwrite).** The shared entity writer is an *upsert by slug*
+(`dest = entities/propositions/<slug>.md`, atomic overwrite), and `slug_for_claim_text`
+truncates to `DERIVED_SLUG_MAX_LENGTH = 72`. Two *different* long claims can truncate to the
+same slug — a blind mint would silently overwrite an unrelated proposition. So at MINT:
+
+- Compute `slug = slug_for_claim_text(claim)`. If `entities/propositions/<slug>.md` does not
+  exist → mint there.
+- If it exists **and** its `normalize_claim(title)` equals this claim's key → that is the
+  **LINK** case (Decision 1), not a collision.
+- If it exists **and** its `normalize_claim(title)` differs → **collision**: **skip and
+  count `promote-slug-collision`** (never overwrite). The curator resolves it by supplying an
+  explicit id via the edited-candidates `--input` path (command surface below).
+- The read-only pass detects collisions both against the existing corpus **and**
+  intra-batch (two `MINT` candidates in the same run proposing the same slug → both reported
+  as collisions needing explicit ids).
+
+This is the fail-loud / no-silent-fallback choice: a colliding claim is surfaced, never
+auto-suffixed and never overwritten.
+
 ## Decision 3 — provenance (a materialization fact, orthogonal to status)
 
 Promotion is recorded as a *materialization fact*, never as a status disposition (the
 `Status` enum keeps meaning annotation disposition: `open`/`ack`/`fixed`/`dismissed`/
 `superseded`). Both sides of the link are recorded so idempotency is robust if one side is
-missing or repaired:
+missing or repaired.
 
-- **Entity side:** the proposition gets `prov:wasDerivedFrom` → the source annotation, and
-  references the source paper via `source_refs`. *(Plan resolves the exact frontmatter
-  representation that materializes this edge, and confirms the existing
-  `graph/materialize` provenance path supports an entity→annotation `wasDerivedFrom` edge;
-  if it does not, the spine records the link from the annotation `sci:promotedTo` side and
-  materializes the inverse — the entity→annotation edge is the requirement, the carrier is
-  a plan detail.)*
-- **Annotation side:** the sidecar annotation gets a `sci:promotedTo "proposition:<slug>"`
-  backlink (new annotation metadata; status untouched).
+This is a **data contract** (not a plan-only detail), because the existing
+`graph/materialize` provenance loop only emits `wasDerivedFrom` for `source_refs` that
+resolve to a **known entity** — an annotation is not an entity, so a bare annotation ref
+would be silently dropped (`continue`). The contract:
+
+- **Stable annotation ref syntax:** `annotation:<sidecar-rel-path>#<frag>` — the sidecar path
+  relative to the project root, `#`, and the annotation's opaque `frag`. The `annotation:`
+  prefix disambiguates it from entity refs; the pair `(sidecar, frag)` is exactly what
+  `annotation/query` already resolves, so the ref round-trips to a concrete annotation.
+- **Entity side (carrier):** the proposition lists this ref in `source_refs` *alongside* the
+  source paper citekey. `graph/materialize` is **extended** (plan task) so the `source_refs`
+  loop recognizes an `annotation:`-prefixed ref, **bypasses** the entity resolver, mints the
+  annotation URI, and emits `entity_uri PROV.wasDerivedFrom <annotation-uri>`. The paper
+  citekey continues to materialize `wasDerivedFrom → paper` via the existing path.
+- **Annotation side (carrier):** a **new** `sci:promotedTo` predicate on the annotation
+  (`io.py` read/write round-trip + an optional `promoted_to: str | None` field on the
+  `Annotation` model), holding `proposition:<slug>`. Status untouched.
+
+Both carriers are written on `--apply`; the two together make the link robust if one side is
+later edited or repaired.
 
 **Idempotency / promote queue.** The promote queue is: active (`OPEN`/`ACK`)
 `proposition`-type annotations with **no `sci:promotedTo` AND no existing derived
@@ -169,6 +212,7 @@ candidate list + `--json`, nothing silent):
 
 - `promote-already-promoted` — has `sci:promotedTo` or an existing derived proposition (queue exclusion, reported as skipped not error).
 - `promote-claim-unsluggable` — claim text cannot derive a stable slug (`len < 2`).
+- `promote-slug-collision` — mint slug path is occupied by a different proposition; never overwritten; resolve with an explicit `id` via `--input`.
 - `promote-not-proposition-type` — annotation is `question`/`hypothesis`/figurative (out of 4a scope; skipped).
 - `promote-inactive-status` — not `OPEN`/`ACK`.
 
@@ -177,10 +221,12 @@ A malformed sidecar / unparseable annotation body is a **hard, loud failure** (n
 ## Output
 
 - **Default (read-only):** a table — one row per promotable annotation: `{annotation id,
-  decision (MINT <slug> | LINK <slug>), claim (truncated), reason}` — plus a skipped-count
-  summary by reason. `--json` emits the structured candidate list.
+  decision (MINT <slug> | LINK <slug> | COLLISION), claim (truncated), reason}` — plus a
+  skipped-count summary by reason. `--json` emits the structured candidate list (the same
+  shape the curator edits for `--input`).
 - **`--apply`:** the same candidate list, then an applied summary
-  (`minted` / `linked` / `skipped`), and the written entity paths.
+  (`minted` / `linked` / `skipped`, with `skipped` broken out by reason incl. collisions),
+  and the written entity paths.
 
 ---
 
@@ -192,8 +238,21 @@ A malformed sidecar / unparseable annotation body is a **hard, loud failure** (n
 - **Minimal-proposition unit:** minted entity is a valid `PropositionEntity` with
   `title=claim`, Claim section = claim text, `subject`/`object` copied when present,
   relational/reasoning fields unset, `status=draft`.
-- **Provenance unit:** entity carries `prov:wasDerivedFrom` → annotation + paper
-  `source_refs`; sidecar gains `sci:promotedTo`; annotation status unchanged.
+- **Normalizer unit:** `normalize_claim` casefolds + collapses whitespace; `"The  Cat"`
+  and `"the cat"` collapse equal; assert `statement_extract._normalize_text` is **unchanged**
+  (case-sensitive) so Phase 3 `match_text` is untouched.
+- **Slug-collision unit:** two different long claims that truncate to the same 72-char slug →
+  first MINTs, second is `promote-slug-collision` (skipped, original file untouched); an
+  explicit `id` via `--input` resolves it; intra-batch collision among two MINTs is detected
+  in the read-only pass.
+- **Provenance unit:** entity carries the `annotation:<sidecar>#<frag>` ref + paper in
+  `source_refs`; sidecar gains `sci:promotedTo`; annotation status unchanged. **Materialize
+  test:** an `annotation:`-prefixed `source_ref` emits `proposition prov:wasDerivedFrom
+  <annotation-uri>` (the new bypass branch), and the `io.py` round-trip preserves
+  `sci:promotedTo`.
+- **Override unit:** an edited `--input` flips a `MINT` to `LINK <slug>` (and a bad link
+  target fails loud); an explicit mint `id` is honored; a re-used explicit id whose existing
+  proposition has a different claim fails loud.
 - **Idempotency:** second `--apply` is a no-op (skip `promote-already-promoted`); the
   backlink-present and derived-proposition-present paths each independently suppress
   re-mint; a half-written pair (only one side) still suppresses.
