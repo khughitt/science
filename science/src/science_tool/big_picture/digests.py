@@ -76,3 +76,32 @@ def redirect_refs(refs: Iterable[str], remap: Mapping[str, str]) -> list[str]:
             seen.add(target)
             out.append(target)
     return out
+
+
+def member_to_digest(project_root: Path) -> dict[str, str]:
+    """``member_id -> digest_id`` built from the ACTIVE archive index.
+
+    For each active ``ArchiveRow`` whose ``consolidated_into`` is set, map
+    ``row.id`` plus each of ``row.aliases`` / ``row.same_as`` to
+    ``consolidated_into``. Building from the index (not from digest
+    ``sci:consolidates`` relations) guarantees only genuinely-archived members
+    redirect; a scaffolded-but-unapplied digest's members are absent from the index
+    and resolve normally as live.
+
+    Raises ``ValueError`` if a key maps to two different digests — an index
+    integrity violation P4 ``apply_consolidation`` makes impossible for applied
+    members (it fails loud on an already-archived member)."""
+    index = load_archive_index(project_root)
+    out: dict[str, str] = {}
+    for canonical, row in index.active_by_id.items():
+        digest = row.consolidated_into
+        if not digest:
+            continue
+        for key in (canonical, *row.aliases, *row.same_as):
+            existing = out.get(key)
+            if existing is not None and existing != digest:
+                raise ValueError(
+                    f"member {key!r} maps to two digests: {existing!r} and {digest!r}"
+                )
+            out[key] = digest
+    return out
