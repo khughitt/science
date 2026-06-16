@@ -14,13 +14,13 @@
 
 ## Environment & conventions (read once)
 
-- **Worktree:** all work happens in `/mnt/ssd/Dropbox/science/.worktrees/sub-article-annotation-phase4c` on branch `feat/sub-article-annotation-phase4c`. Subagents MUST `cd` there and confirm `git branch --show-current` prints `feat/sub-article-annotation-phase4c` before any edit/commit (the main checkout is Dropbox-synced; commits leak to `main` otherwise).
-- **Commands run from `science/`:** `cd /mnt/ssd/Dropbox/science/.worktrees/sub-article-annotation-phase4c/science`. Use `uv run --frozen` for everything:
-  - test one: `uv run --frozen pytest tests/<file>::<test> -q -p no:warnings`
-  - test file: `uv run --frozen pytest tests/<file> -q -p no:warnings`
-  - types: `uv run --frozen pyright src/science_tool/annotation/synthesize.py`
-  - lint: `uv run --frozen ruff check src/science_tool/annotation/synthesize.py`
-  - **Rely on the exit code (0 = pass).** The printed pytest summary may be swallowed when piped; `echo "rc=$?"` if unsure.
+- **Worktree:** all work happens in `~/d/science/.worktrees/sub-article-annotation-phase4c` on branch `feat/sub-article-annotation-phase4c`. Subagents MUST `cd` there and confirm `rtk git branch --show-current` prints `feat/sub-article-annotation-phase4c` before any edit/commit (the main checkout is Dropbox-synced; commits leak to `main` otherwise).
+- **Commands run from `science/`:** `cd ~/d/science/.worktrees/sub-article-annotation-phase4c/science`. Use `rtk uv run --frozen` for everything:
+  - test one: `rtk uv run --frozen pytest tests/<file>::<test> -q -p no:warnings`
+  - test file: `rtk uv run --frozen pytest tests/<file> -q -p no:warnings`
+  - types: `rtk uv run --frozen pyright src/science_tool/annotation/synthesize.py`
+  - lint: `rtk uv run --frozen ruff check src/science_tool/annotation/synthesize.py`
+  - **Rely on the exit code (0 = pass).** The printed pytest summary may be swallowed when piped; `rtk echo "rc=$?"` if unsure.
 - **No `Co-Authored-By` trailers** in commits. Keep science local — **do not push**.
 - Shell aliases map `grep`→`rg` and `find`→`rtk`; prefer `rg`.
 
@@ -97,7 +97,7 @@ def test_reasoning_source_serializes_when_set():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest tests/test_proposition_reasoning_source.py -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/test_proposition_reasoning_source.py -q -p no:warnings`
 Expected: FAIL — `TypeError`/`ValidationError` (unexpected keyword `reasoning_source`) on the second test.
 
 - [ ] **Step 3: Add the field**
@@ -116,19 +116,19 @@ In `science/model/src/science_model/propositions.py`, in the `# Reasoning metada
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest tests/test_proposition_reasoning_source.py -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/test_proposition_reasoning_source.py -q -p no:warnings`
 Expected: PASS (2 passed).
 
 - [ ] **Step 5: Guard — proposition QA checks still pass**
 
-Run: `uv run --frozen pytest tests/validate/test_check_propositions.py tests/test_proposition_relational_fields.py -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/validate/test_check_propositions.py tests/test_proposition_relational_fields.py -q -p no:warnings`
 Expected: PASS (the new field is a free string the checks ignore).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science/model/src/science_model/propositions.py science/tests/test_proposition_reasoning_source.py
-git commit -m "feat(model): add PropositionEntity.reasoning_source (Phase 4c)"
+rtk git add science/model/src/science_model/propositions.py science/tests/test_proposition_reasoning_source.py
+rtk git commit -m "feat(model): add PropositionEntity.reasoning_source (Phase 4c)"
 ```
 
 ---
@@ -198,7 +198,7 @@ def test_statement_context_extracts_body_fields():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
 Expected: FAIL — `ModuleNotFoundError: science_tool.annotation.synthesize`.
 
 - [ ] **Step 3: Create the module with the read-side core**
@@ -292,19 +292,19 @@ def statement_context(ann: Annotation, ref: str) -> dict[str, Any]:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
 Expected: PASS (2 passed).
 
 - [ ] **Step 5: Lint + types**
 
-Run: `uv run --frozen ruff check src/science_tool/annotation/synthesize.py && uv run --frozen pyright src/science_tool/annotation/synthesize.py`
+Run: `rtk uv run --frozen ruff check src/science_tool/annotation/synthesize.py && rtk uv run --frozen pyright src/science_tool/annotation/synthesize.py`
 Expected: 0 errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science/src/science_tool/annotation/synthesize.py science/tests/test_proposition_synthesize.py
-git commit -m "feat(synthesize): in-scope proposition discovery + statement context (Phase 4c)"
+rtk git add science/src/science_tool/annotation/synthesize.py science/tests/test_proposition_synthesize.py
+rtk git commit -m "feat(synthesize): in-scope proposition discovery + statement context (Phase 4c)"
 ```
 
 ---
@@ -376,7 +376,7 @@ def test_build_scaffold_shape():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
 Expected: FAIL — `ImportError: cannot import name 'build_scaffold'`.
 
 - [ ] **Step 3: Implement resolution, hints, and `build_scaffold`**
@@ -486,19 +486,19 @@ def build_scaffold(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
 Expected: PASS (4 passed).
 
 - [ ] **Step 5: Lint + types**
 
-Run: `uv run --frozen ruff check src/science_tool/annotation/synthesize.py && uv run --frozen pyright src/science_tool/annotation/synthesize.py`
+Run: `rtk uv run --frozen ruff check src/science_tool/annotation/synthesize.py && rtk uv run --frozen pyright src/science_tool/annotation/synthesize.py`
 Expected: 0 errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science/src/science_tool/annotation/synthesize.py science/tests/test_proposition_synthesize.py
-git commit -m "feat(synthesize): relation-hint co-location + build_scaffold (Phase 4c)"
+rtk git add science/src/science_tool/annotation/synthesize.py science/tests/test_proposition_synthesize.py
+rtk git commit -m "feat(synthesize): relation-hint co-location + build_scaffold (Phase 4c)"
 ```
 
 ---
@@ -608,7 +608,7 @@ def test_override_rejects_reasoning_source():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
 Expected: FAIL — `ImportError: cannot import name 'parse_candidates_doc'`.
 
 - [ ] **Step 3: Implement the candidate dataclass, error classes, and parser**
@@ -726,19 +726,19 @@ def _parse_candidate(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
 Expected: PASS (13 passed).
 
 - [ ] **Step 5: Lint + types**
 
-Run: `uv run --frozen ruff check src/science_tool/annotation/synthesize.py && uv run --frozen pyright src/science_tool/annotation/synthesize.py`
+Run: `rtk uv run --frozen ruff check src/science_tool/annotation/synthesize.py && rtk uv run --frozen pyright src/science_tool/annotation/synthesize.py`
 Expected: 0 errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science/src/science_tool/annotation/synthesize.py science/tests/test_proposition_synthesize.py
-git commit -m "feat(synthesize): candidate parse + structural validation (Phase 4c)"
+rtk git add science/src/science_tool/annotation/synthesize.py science/tests/test_proposition_synthesize.py
+rtk git commit -m "feat(synthesize): candidate parse + structural validation (Phase 4c)"
 ```
 
 ---
@@ -827,7 +827,7 @@ def test_validate_ok_returns_plan():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
 Expected: FAIL — `ImportError: cannot import name 'plan_writes'`.
 
 - [ ] **Step 3: Implement `plan_writes` + `validate_candidate`**
@@ -927,19 +927,19 @@ def validate_candidate(current: dict[str, Any], cand: SynthesisCandidate) -> Wri
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
 Expected: PASS (21 passed).
 
 - [ ] **Step 5: Lint + types**
 
-Run: `uv run --frozen ruff check src/science_tool/annotation/synthesize.py && uv run --frozen pyright src/science_tool/annotation/synthesize.py`
+Run: `rtk uv run --frozen ruff check src/science_tool/annotation/synthesize.py && rtk uv run --frozen pyright src/science_tool/annotation/synthesize.py`
 Expected: 0 errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science/src/science_tool/annotation/synthesize.py science/tests/test_proposition_synthesize.py
-git commit -m "feat(synthesize): write-plan + contracts + interlock validation (Phase 4c)"
+rtk git add science/src/science_tool/annotation/synthesize.py science/tests/test_proposition_synthesize.py
+rtk git commit -m "feat(synthesize): write-plan + contracts + interlock validation (Phase 4c)"
 ```
 
 ---
@@ -1025,6 +1025,22 @@ def test_apply_existing_value_blocks(tmp_path):
     assert fm["claim_layer"] == "empirical_regularity"        # unchanged
 
 
+def test_apply_reports_blocked_fields_even_when_other_fields_write(tmp_path):
+    root = _project(tmp_path)
+    ref = _write_prop(root, "p", title="claim", claim_layer="empirical_regularity")
+    cand = _cand({"subject": "X", "claim_layer": "causal_effect"}, prop=ref)
+    report = apply_synthesis(
+        [cand], current={ref: _parse_markdown_file(root / "entities/propositions/p.md")[0]},
+        project_root=root, source="llm-synth:m:proposition-synthesize-v1", in_scope={ref},
+    )
+    assert report.updated == 1
+    assert report.skipped.get("synthesize-existing-value-blocks") == 1
+    fm, _ = _parse_markdown_file(root / "entities/propositions/p.md")
+    assert fm["subject"] == "X"
+    assert fm["claim_layer"] == "empirical_regularity"        # blocked value preserved
+    assert fm["reasoning_source"] == "llm-synth:m:proposition-synthesize-v1"
+
+
 def test_apply_uncovered_proposition_counted(tmp_path):
     root = _project(tmp_path)
     ref = _write_prop(root, "p", title="claim")
@@ -1057,7 +1073,7 @@ def test_apply_is_atomic_on_interlock_error(tmp_path):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
 Expected: FAIL — `ImportError: cannot import name 'apply_synthesis'`.
 
 - [ ] **Step 3: Implement the report + two-pass apply**
@@ -1105,9 +1121,14 @@ def apply_synthesis(
     # Pass 2 — apply.
     report = SynthReport()
     for cand, plan in zip(candidates, plans):
+        if plan.blocked:
+            # Count every proposed field blocked by an existing differing value, even when
+            # other fields on the same candidate are written. This keeps curator-visible
+            # conflict reporting from disappearing in mixed write/skip patches.
+            report.skipped["synthesize-existing-value-blocks"] += len(plan.blocked)
         if not plan.writes:
-            report.skipped["synthesize-existing-value-blocks" if plan.blocked
-                           else "synthesize-nothing-to-fill"] += 1
+            if not plan.blocked:
+                report.skipped["synthesize-nothing-to-fill"] += 1
             continue
         fm = dict(current[cand.proposition])
         fm.update(plan.writes)
@@ -1141,19 +1162,19 @@ def _write_proposition(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
-Expected: PASS (25 passed).
+Run: `rtk uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
+Expected: PASS (27 passed).
 
 - [ ] **Step 5: Lint + types**
 
-Run: `uv run --frozen ruff check src/science_tool/annotation/synthesize.py && uv run --frozen pyright src/science_tool/annotation/synthesize.py`
+Run: `rtk uv run --frozen ruff check src/science_tool/annotation/synthesize.py && rtk uv run --frozen pyright src/science_tool/annotation/synthesize.py`
 Expected: 0 errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science/src/science_tool/annotation/synthesize.py science/tests/test_proposition_synthesize.py
-git commit -m "feat(synthesize): two-pass validate-before-write apply + report (Phase 4c)"
+rtk git add science/src/science_tool/annotation/synthesize.py science/tests/test_proposition_synthesize.py
+rtk git commit -m "feat(synthesize): two-pass validate-before-write apply + report (Phase 4c)"
 ```
 
 ---
@@ -1217,7 +1238,7 @@ def test_cli_scaffold_lists_in_scope_proposition(tmp_path):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest tests/test_proposition_synthesize.py::test_cli_scaffold_lists_in_scope_proposition -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/test_proposition_synthesize.py::test_cli_scaffold_lists_in_scope_proposition -q -p no:warnings`
 Expected: FAIL — `No such command 'synthesize'`.
 
 - [ ] **Step 3: Implement `synthesize_cmd`**
@@ -1306,7 +1327,7 @@ def synthesize_cmd(source_md: Path, root: Path | None, do_apply: bool,
 
 - [ ] **Step 4: Run the read-only test to verify it passes**
 
-Run: `uv run --frozen pytest tests/test_proposition_synthesize.py::test_cli_scaffold_lists_in_scope_proposition -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/test_proposition_synthesize.py::test_cli_scaffold_lists_in_scope_proposition -q -p no:warnings`
 Expected: PASS.
 
 - [ ] **Step 5: Write the failing CLI apply test (round-trip)**
@@ -1343,19 +1364,19 @@ def test_cli_apply_writes_reasoning_fields(tmp_path):
 
 - [ ] **Step 6: Run it to verify it passes**
 
-Run: `uv run --frozen pytest tests/test_proposition_synthesize.py::test_cli_apply_writes_reasoning_fields -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/test_proposition_synthesize.py::test_cli_apply_writes_reasoning_fields -q -p no:warnings`
 Expected: PASS.
 
 - [ ] **Step 7: Lint + types + full unit file**
 
-Run: `uv run --frozen ruff check src/science_tool/annotation/cli.py src/science_tool/annotation/synthesize.py && uv run --frozen pyright src/science_tool/annotation/synthesize.py && uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
+Run: `rtk uv run --frozen ruff check src/science_tool/annotation/cli.py src/science_tool/annotation/synthesize.py && rtk uv run --frozen pyright src/science_tool/annotation/synthesize.py && rtk uv run --frozen pytest tests/test_proposition_synthesize.py -q -p no:warnings`
 Expected: 0 lint/type errors; all unit tests pass.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add science/src/science_tool/annotation/cli.py science/tests/test_proposition_synthesize.py
-git commit -m "feat(synthesize): science annotate synthesize CLI (Phase 4c)"
+rtk git add science/src/science_tool/annotation/cli.py science/tests/test_proposition_synthesize.py
+rtk git commit -m "feat(synthesize): science annotate synthesize CLI (Phase 4c)"
 ```
 
 ---
@@ -1371,13 +1392,13 @@ No test (prose/agent prompts). Model the agent file on the existing `agents/pape
 
 - [ ] **Step 1: Read the sibling agent + command for house style**
 
-Run: `sed -n '1,40p' agents/paper-annotate.md && echo '---CMD---' && sed -n '1,40p' commands/annotate-paper.md && echo '---DOC---' && rg -n "Statement promotion|Phase 4" docs/conventions/annotation-tokens.md`
+Run: `rtk sed -n '1,40p' agents/paper-annotate.md && rtk echo '---CMD---' && rtk sed -n '1,40p' commands/annotate-paper.md && rtk echo '---DOC---' && rtk rg -n "Statement promotion|Phase 4" docs/conventions/annotation-tokens.md`
 Expected: see the frontmatter keys, section structure, and where the Phase-4a/4b promotion sections live.
 
 - [ ] **Step 2: Create the agent prompt**
 
 Create `agents/proposition-synthesize.md` — frontmatter matching the sibling agent's keys (e.g. `name: proposition-synthesize`, `description`, `model: sonnet`), then a body that instructs the agent to:
-  - run `science annotate synthesize <source.md> --root <root> --format json` to get the scaffold;
+  - run `rtk uv run --frozen science annotate synthesize <source.md> --root <root> --format json` to get the scaffold;
   - for **each** proposition, read its `title`, `current`, `statements` (exact/stance/section/subject/object), and `relation_hints` (treat hints as **non-authoritative** context, not authority);
   - emit a candidates file `{ "source": "llm-synth:<your-model>:proposition-synthesize-v1", "candidates": [ ... ] }` with **exactly one** patch per proposition it can factor, each carrying `proposition`, the anchoring `annotation` (one of that proposition's statement refs), and any of `subject`/`object`/`predicate`/`polarity`/`claim_layer` it is confident about (omit a field to leave it unset — never guess, never send `null`);
   - obey the controlled vocabularies and interlocks verbatim:
@@ -1385,7 +1406,7 @@ Create `agents/proposition-synthesize.md` — frontmatter matching the sibling a
     - `affects`/`regulates`/`associates_with` require `polarity` ∈ {positive, negative, unsigned}; all other predicates take no polarity (the tool writes `not_applicable`);
     - `claim_layer` ∈ {empirical_regularity, causal_effect, mechanistic_narrative, structural_claim}; independent of subject/object;
     - never propose a bare `polarity` without a `predicate`;
-  - hand the candidates file to the curator, who runs `science annotate synthesize <source.md> --apply --input <file>` after review.
+  - hand the candidates file to the curator, who runs `rtk uv run --frozen science annotate synthesize <source.md> --apply --input <file>` after review.
   - State that the agent must NOT call `--apply` itself.
 
 - [ ] **Step 3: Create the orchestrator command**
@@ -1401,14 +1422,14 @@ In `docs/conventions/annotation-tokens.md`, add a `## Proposition reasoning synt
 
 - [ ] **Step 5: Sanity-check the docs render**
 
-Run: `rg -n "Phase 4c|llm-synth|synthesize-" docs/conventions/annotation-tokens.md`
+Run: `rtk rg -n "Phase 4c|llm-synth|synthesize-" docs/conventions/annotation-tokens.md`
 Expected: the new section + source string + the four reason tokens are present.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add agents/proposition-synthesize.md commands/synthesize-propositions.md docs/conventions/annotation-tokens.md
-git commit -m "docs(synthesize): proposition-synthesize agent + command + tokens (Phase 4c)"
+rtk git add agents/proposition-synthesize.md commands/synthesize-propositions.md docs/conventions/annotation-tokens.md
+rtk git commit -m "docs(synthesize): proposition-synthesize agent + command + tokens (Phase 4c)"
 ```
 
 ---
@@ -1517,19 +1538,19 @@ def test_promote_then_synthesize_validates_clean(tmp_path):
 
 - [ ] **Step 2: Run it to verify it passes**
 
-Run: `uv run --frozen pytest tests/test_synthesize_integration.py -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/test_synthesize_integration.py -q -p no:warnings`
 Expected: PASS. (`ValidateContext.from_project_root(root, strict=False, verbose=False)` is the verified constructor — same call `tests/validate/test_check_propositions.py` uses; it works with the minimal `name: demo` manifest.) Do **not** change production code to satisfy the test.
 
 - [ ] **Step 3: Full regression gate**
 
-Run: `uv run --frozen pytest tests/test_proposition_synthesize.py tests/test_synthesize_integration.py tests/test_annotation_promote.py tests/test_promote_qh_integration.py tests/test_promote_numeric_mint.py tests/validate/test_check_propositions.py -q -p no:warnings`
+Run: `rtk uv run --frozen pytest tests/test_proposition_synthesize.py tests/test_synthesize_integration.py tests/test_annotation_promote.py tests/test_promote_qh_integration.py tests/test_promote_numeric_mint.py tests/validate/test_check_propositions.py -q -p no:warnings`
 Expected: all pass (4c unit + integration + 4a/4b promote regression + proposition QA).
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add science/tests/test_synthesize_integration.py
-git commit -m "test(synthesize): end-to-end promote→synthesize→validate integration (Phase 4c)"
+rtk git add science/tests/test_synthesize_integration.py
+rtk git commit -m "test(synthesize): end-to-end promote→synthesize→validate integration (Phase 4c)"
 ```
 
 ---
@@ -1538,12 +1559,12 @@ git commit -m "test(synthesize): end-to-end promote→synthesize→validate inte
 
 - [ ] **Broader regression** (annotation + entities + model + validate surfaces):
 
-Run: `uv run --frozen pytest tests/ -q -p no:warnings -k "annotation or promote or synthesize or proposition or validate or entities"`
+Run: `rtk uv run --frozen pytest tests/ -q -p no:warnings -k "annotation or promote or synthesize or proposition or validate or entities"`
 Expected: green.
 
 - [ ] **Lint + types on all touched production files:**
 
-Run: `uv run --frozen ruff check src/science_tool/annotation/synthesize.py src/science_tool/annotation/cli.py && uv run --frozen pyright src/science_tool/annotation/synthesize.py`
+Run: `rtk uv run --frozen ruff check src/science_tool/annotation/synthesize.py src/science_tool/annotation/cli.py && rtk uv run --frozen pyright src/science_tool/annotation/synthesize.py`
 Expected: 0 errors. (`cli.py` may carry pre-existing F401s inherited from the branch base — confirm any finding predates this branch before touching it.)
 
 - [ ] **Hand off** to `superpowers:finishing-a-development-branch`.
