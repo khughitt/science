@@ -49,6 +49,10 @@ A new sub-group under `entities_group`, sibling to `migrate` /
   from the active archive index), is not the digest id itself, and its kind is
   consolidatable (status vocab includes `archived` — see §6; **fail loud**
   otherwise, naming the offending kind).
+- Validates the **digest id** does not collide with an active archived id/alias
+  (`load_archive_index(...).resolvable_ids()`) — `create_entity` only guards a live
+  destination path, so without this an archived id could be reborn as a live digest
+  with the same canonical id. **Fail loud** before any file is written.
 - Mints a live `synthesis` entity at its canonical home `entities/synthesis/`
   (the `synthesis` kind's `home`) by **create-then-rewrite**: call the existing
   `create_entity` path to mint the file (id minting, home placement, template
@@ -83,8 +87,11 @@ Report-then-apply, matching the `mark_superseded` / `archive_entities`
 
 - Re-reads the digest entity on **live state**; fails loud if the digest is
   missing, is not `report_kind: cluster-digest`, or has no `relations:` entry whose
-  `predicate` resolves to `sci:consolidates`. The member list is the set of those
-  entries' `target`s.
+  `predicate` **equals the canonical CURIE `sci:consolidates`** (the exact form
+  `scaffold` writes — apply matches that string, not the expanded URI, so the digest
+  must use the CURIE form; this keeps the apply path decoupled from graph
+  predicate-resolution internals). The member list is the set of those entries'
+  `target`s.
 - Re-validates each member exactly as scaffold does (exists, live, not already
   archived, consolidatable, not the digest).
 - Dry-run (default): reports the digest, the members, and per-member
@@ -227,8 +234,11 @@ validated nor emitted. So the linkage is modeled explicitly:
 
 - Member must exist, be live, not already in the active archive index, not the
   digest id, and its kind must allow `archived` (else fail loud).
+- Digest id must not collide with an active archived id/alias (scaffold step,
+  checked against `load_archive_index(...).resolvable_ids()`).
 - Digest must exist, be `report_kind: cluster-digest`, and carry at least one
-  `relations:` entry whose `predicate` resolves to `sci:consolidates` (apply step).
+  `relations:` entry whose `predicate` equals the canonical CURIE
+  `sci:consolidates` (apply step).
 - Dry-run by default; mutation only under `--apply`.
 - Append-only index; move-first-then-append with per-member rollback (incl.
   frontmatter restore).
@@ -250,9 +260,10 @@ validated nor emitted. So the linkage is modeled explicitly:
 - **apply --apply:** each member stamped `status: archived` + `consolidated_into`;
   relocated under `_archive/`; index rows carry `consolidated_into` +
   `digest_insight`; digest stays live and unmoved.
-- **fail-loud:** member already archived; member is the digest; digest has no
-  `sci:consolidates` relation entry; digest not `cluster-digest`; member kind
-  closed-vocab lacking `archived` (local + non-epistemic core).
+- **fail-loud:** member already archived; member is the digest; digest id collides
+  with an active archived id; digest has no `sci:consolidates` relation entry;
+  digest not `cluster-digest`; member kind closed-vocab lacking `archived` (local +
+  non-epistemic core).
 - **atomic rollback:** simulate an append failure mid-apply → member file is back
   at its original path with original bytes (frontmatter rewrite reverted); index
   unchanged for that member.

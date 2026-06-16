@@ -3,7 +3,7 @@ id: "synthesis:{{nn}}-{{slug}}"    # synthesis:<hyp-id> | synthesis:rollup | syn
 type: "synthesis"
 title: "{{title}}"
 status: "active"
-report_kind: "hypothesis-synthesis"   # hypothesis-synthesis | synthesis-rollup | emergent-threads
+report_kind: "hypothesis-synthesis"   # hypothesis-synthesis | synthesis-rollup | emergent-threads | cluster-digest
 generated_at: "{{YYYY-MM-DD}}"
 source_commit: ""                  # 40-char sha
 phase: "active"

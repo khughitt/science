@@ -40,6 +40,8 @@ class ArchiveRow(BaseModel):
     reason: str | None = None
     restored_path: str | None = None
     unarchived_at: str | None = None
+    consolidated_into: str | None = None
+    digest_insight: str | None = None
 
 
 class ArchiveIndex(BaseModel):
@@ -165,6 +167,44 @@ def _inbound_live_refs(project_root: Path, candidate_ids: set[str]) -> dict[str,
     return {cid: sorted(ids) for cid, ids in inbound.items()}
 
 
+def _relocate_rows(
+    index_path: Path,
+    project_root: Path,
+    rows: list[ArchiveRow],
+    *,
+    now: str | None,
+) -> dict[str, list[str]]:
+    """Content-agnostic relocation: move each row's file under _archive/ (move-first),
+    append its index row, and roll the move back if the append fails. Performs NO
+    frontmatter edits and owns no content snapshot — callers that mutate file content
+    (e.g. consolidation) snapshot/restore around this call. Raises ArchiveError on a
+    destination collision (never overwrites)."""
+    applied: list[str] = []
+    skipped: list[str] = []
+    for row in rows:
+        assert row.original_path is not None
+        src = project_root / row.original_path
+        dst = project_root / derive_archive_path(row.original_path)
+        if not src.exists():
+            skipped.append(row.id)
+            continue
+        if dst.exists():
+            raise ArchiveError(
+                f"cannot archive {row.id!r}: archive path {derive_archive_path(row.original_path)} "
+                "already exists (run `science validate` to reconcile the archive index)"
+            )
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(dst))  # move first
+        _fsync_dir(dst.parent)
+        try:
+            append_row(index_path, row.model_copy(update={"archived_at": now}))
+        except Exception:
+            shutil.move(str(dst), str(src))  # roll back the move
+            raise
+        applied.append(row.id)
+    return {"applied": applied, "skipped": skipped}
+
+
 def archive_entities(
     project_root: Path,
     *,
@@ -187,29 +227,9 @@ def archive_entities(
         return report
 
     index_path = archive_index_path(project_root)
-    for row in rows:
-        assert row.original_path is not None
-        src = project_root / row.original_path
-        dst = project_root / derive_archive_path(row.original_path)
-        if not src.exists():
-            report["skipped"].append(row.id)
-            continue
-        if dst.exists():
-            # A stale archive file (crash recovery, manual mess) — never overwrite.
-            # shutil.move would clobber an existing destination file on POSIX.
-            raise ArchiveError(
-                f"cannot archive {row.id!r}: archive path {derive_archive_path(row.original_path)} "
-                "already exists (run `science validate` to reconcile the archive index)"
-            )
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(src), str(dst))  # move first
-        _fsync_dir(dst.parent)
-        try:
-            append_row(index_path, row.model_copy(update={"archived_at": now}))
-        except Exception:
-            shutil.move(str(dst), str(src))  # roll back the move
-            raise
-        report["applied"].append(row.id)
+    result = _relocate_rows(index_path, project_root, rows, now=now)
+    report["applied"] = result["applied"]
+    report["skipped"] = result["skipped"]
     return report
 
 

@@ -48,6 +48,7 @@ CORE_PROFILE = ProfileManifest(
                 "supported",
                 "weakened",
                 "refuted",
+                "archived",
             ],
         ),
         EntityKind(
@@ -62,7 +63,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/questions",
             strategy="numeric",
             default_status="active",
-            statuses=["active", "partially-answered", "answered", "deferred", "retired"],
+            statuses=["active", "partially-answered", "answered", "deferred", "retired", "archived"],
         ),
         EntityKind(
             name="research-question",
@@ -94,7 +95,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/propositions",
             strategy="slug",
             default_status="draft",
-            statuses=["draft", "active", "supported", "contested", "weakened", "retired", "superseded"],
+            statuses=["draft", "active", "supported", "contested", "weakened", "retired", "superseded", "archived"],
         ),
         EntityKind(
             name="observation",
@@ -106,7 +107,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/observations",
             strategy="slug",
             default_status="active",
-            statuses=["active", "superseded", "retired"],
+            statuses=["active", "superseded", "retired", "archived"],
         ),
         EntityKind(
             name="finding",
@@ -119,7 +120,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/findings",
             strategy="numeric",
             default_status="active",
-            statuses=["active", "superseded", "retired"],
+            statuses=["active", "superseded", "retired", "archived"],
         ),
         EntityKind(
             name="interpretation",
@@ -133,7 +134,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/interpretations",
             strategy="numeric",
             default_status="active",
-            statuses=["active", "complete", "superseded"],
+            statuses=["active", "complete", "superseded", "archived"],
         ),
         EntityKind(
             name="story",
@@ -154,7 +155,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/synthesis",
             strategy="numeric",
             default_status="active",
-            statuses=["active", "superseded", "retired"],
+            statuses=["active", "superseded", "retired", "archived"],
         ),
         EntityKind(
             name="report",
@@ -166,7 +167,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/reports",
             strategy="numeric",
             default_status="active",
-            statuses=["active", "superseded", "retired"],
+            statuses=["active", "superseded", "retired", "archived"],
         ),
         EntityKind(
             name="validation-report",
@@ -188,7 +189,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/discussions",
             strategy="numeric",
             default_status="active",
-            statuses=["active", "complete", "superseded"],
+            statuses=["active", "complete", "superseded", "archived"],
         ),
         EntityKind(
             name="inquiry",
@@ -200,7 +201,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/inquiries",
             strategy="numeric",
             default_status="active",
-            statuses=["active", "complete", "superseded"],
+            statuses=["active", "complete", "superseded", "archived"],
         ),
         EntityKind(
             name="mechanism",
@@ -212,7 +213,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/mechanisms",
             strategy="numeric",
             default_status="active",
-            statuses=["active", "superseded", "retired"],
+            statuses=["active", "superseded", "retired", "archived"],
         ),
         EntityKind(
             name="theme",
@@ -226,7 +227,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/themes",
             strategy="numeric",
             default_status="active",
-            statuses=["draft", "active", "superseded", "retired"],
+            statuses=["draft", "active", "superseded", "retired", "archived"],
         ),
         EntityKind(
             name="assumption",
@@ -340,7 +341,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/topics",
             strategy="slug",
             default_status="active",
-            statuses=["active", "superseded", "retired"],
+            statuses=["active", "superseded", "retired", "archived"],
         ),
         EntityKind(
             name="variable",
@@ -369,7 +370,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/methods",
             strategy="slug",
             default_status="active",
-            statuses=["active", "superseded", "retired"],
+            statuses=["active", "superseded", "retired", "archived"],
         ),
         EntityKind(
             name="pre-registration",
@@ -394,7 +395,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/plans",
             strategy="numeric",
             default_status="active",
-            statuses=["active", "complete", "superseded", "retired"],
+            statuses=["active", "complete", "superseded", "retired", "archived"],
         ),
         EntityKind(
             name="search",
@@ -406,7 +407,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/searches",
             strategy="numeric",
             default_status="active",
-            statuses=["active", "complete", "retired"],
+            statuses=["active", "complete", "retired", "archived"],
         ),
         EntityKind(
             name="decision",
@@ -418,7 +419,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/decision",
             strategy="verbatim",
             default_status="active",
-            statuses=["active", "superseded", "abandoned"],
+            statuses=["active", "superseded", "abandoned", "archived"],
         ),
         EntityKind(
             name="claim-registry",
@@ -537,7 +538,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/evidence-lines",
             strategy="slug",
             default_status="draft",
-            statuses=["draft", "active", "retired"],
+            statuses=["draft", "active", "retired", "archived"],
         ),
         EntityKind(
             name="unknown",
@@ -781,6 +782,14 @@ CORE_PROFILE = ProfileManifest(
             target_kinds=["workflow"],
             layer="layer/core",
             description="A code file defines a workflow.",
+        ),
+        RelationKind(
+            name="consolidates",
+            predicate="sci:consolidates",
+            source_kinds=["synthesis"],
+            target_kinds=[],  # empty list = unrestricted target
+            layer="layer/core",
+            description="A cluster-digest synthesis consolidates the entities it absorbs (live → archived).",
         ),
     ],
 )
