@@ -690,6 +690,7 @@ class DatasetEntity(ProjectEntity):
 
     tier: str = ""
     update_cadence: str = ""
+    qa_report: str = ""  # project-root-relative path to a qa_report.json from `science datasets qa`
 
     @model_validator(mode="after")
     def _enforce_dataset_invariants(self) -> "DatasetEntity":
