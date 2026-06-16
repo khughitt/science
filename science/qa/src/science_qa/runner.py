@@ -220,3 +220,52 @@ def run_qa_package(datapackage_path: Path, report_dir: Path | None = None,
     if report_dir is not None:
         write_package_report(result, Path(report_dir))
     return result
+
+
+def package_report_dict(result: PackageRunResult) -> dict:
+    """Serializable package rollup — the SAME schema persisted to qa_report.json and
+    emitted by `science datasets qa --format json`. Each Flag via its existing to_dict()."""
+    return {
+        "package": result.package,
+        "package_structural_failed": result.package_structural_failed,
+        "resources": [
+            {
+                "resource": o.name,
+                "status": o.status,
+                "reason": o.reason,
+                "flags": [f.to_dict() for f in (o.result.flags if o.result else [])],
+                "coverage": o.result.coverage.to_dict() if o.result else None,
+            }
+            for o in result.outcomes
+        ],
+    }
+
+
+def _package_md(result: PackageRunResult) -> str:
+    lines = [f"# QA report — package `{result.package}`", "",
+             f"- Package status: **{'FAIL' if result.package_structural_failed else 'ok'}**", ""]
+    for o in result.outcomes:
+        n_struct = sum(1 for f in o.result.flags if f.severity == SEVERITY_STRUCTURAL) if o.result else 0
+        suffix = f" — {o.reason}" if o.reason else ""
+        lines.append(f"- `{o.name}`: {o.status} ({n_struct} structural){suffix}")
+    return "\n".join(lines) + "\n"
+
+
+def write_package_report(result: PackageRunResult, report_dir: Path) -> None:
+    """Persist per-resource reports into resource-scoped subdirs (reusing the exact
+    single-resource writer + disposition ledger, so no cross-resource flag_id collision),
+    plus one package rollup at report_dir/qa_report.{json,md}."""
+    report_dir = Path(report_dir)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    for o in result.outcomes:
+        if o.result is None:
+            continue
+        sub = report_dir / o.name
+        write_reports(o.result.flags, report_dir=sub,
+                      rows_checked=o.result.rows_checked, coverage=o.result.coverage)
+        reconcile_dispositions(
+            sub, [f.flag_id for f in o.result.flags if f.severity == SEVERITY_DISTRIBUTION])
+    payload = package_report_dict(result)
+    (report_dir / "qa_report.json").write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (report_dir / "qa_report.md").write_text(_package_md(result), encoding="utf-8")
