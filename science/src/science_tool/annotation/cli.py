@@ -1142,3 +1142,91 @@ def extract_cmd(
         )
         if report.note:
             click.echo(report.note)
+
+
+@annotate_group.command("promote")
+@click.argument(
+    "source_md",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--root", "root", default=None,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Project root (default: cwd). Used to scan the proposition corpus + write entities.",
+)
+@click.option("--paper-ref", "paper_ref", default=None,
+              help="Resolvable paper entity ref (paper:<id>) recorded in source_refs. "
+                   "Defaults to paper:<source path stem minus .source>.")
+@click.option("--apply", "do_apply", is_flag=True, default=False,
+              help="Execute candidates (mint/link + backlink). Default is read-only.")
+@click.option("--input", "input_path", default=None,
+              type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="Edited candidates.json with curator overrides (use with --apply).")
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def promote_cmd(source_md: Path, root: Path | None, paper_ref: str | None,
+                do_apply: bool, input_path: Path | None, fmt: str) -> None:
+    """Promote proposition-type statement annotations into proposition entities (mint-or-link)."""
+    from science_tool.annotation.io import sidecar_for_markdown
+    from science_tool.annotation.query import read_sidecar_strict
+    from science_tool.annotation.promote import (
+        PromotionApplyError, PromotionOverrideError, PromotionReadError, apply_candidates,
+        apply_overrides, collect_promotable, decide_candidates, load_corpus,
+    )
+
+    if input_path is not None and not do_apply:
+        raise click.ClickException("--input requires --apply (curator overrides only apply when writing)")
+
+    project_root = (root or Path.cwd()).resolve()
+    if paper_ref is None:
+        # citekey = <citekey>.source.md → <citekey>; the owning paper entity is paper:<citekey>.
+        citekey = source_md.name[: -len(".source.md")] if source_md.name.endswith(".source.md") else source_md.stem
+        paper_ref = f"paper:{citekey}"
+
+    sidecar_path = sidecar_for_markdown(source_md)
+    sidecar = read_sidecar_strict(sidecar_path)
+    corpus = load_corpus(project_root)
+    try:
+        promotable, skipped = collect_promotable(sidecar, sidecar_path, project_root, derived_refs=corpus.derived_refs)
+    except PromotionReadError as exc:
+        raise click.ClickException(str(exc)) from exc
+    candidates = decide_candidates(promotable, corpus)
+
+    if do_apply and input_path is not None:
+        try:
+            raw = json.loads(input_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise click.ClickException(f"--input is not valid JSON: {exc}") from exc
+        # Accept either the full read-only output object or a bare candidates list.
+        edited_rows = raw.get("candidates") if isinstance(raw, dict) else raw
+        if not isinstance(edited_rows, list):
+            raise click.ClickException("--input must be the read-only output object or a candidates list")
+        existing_refs = {f"proposition:{s}" for s in corpus.existing_slugs}
+        try:
+            candidates = apply_overrides(candidates, edited_rows, existing_refs=existing_refs)
+        except PromotionOverrideError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+    rows = [{"annotation": c.ref, "decision": c.decision, "slug": c.slug,
+             "claim": c.claim[:80], "reason": c.reason} for c in candidates]
+
+    if not do_apply:
+        if fmt == "json":
+            click.echo(json.dumps({"candidates": rows, "skipped": dict(skipped)}, indent=2))
+        else:
+            for r in rows:
+                click.echo(f"{r['decision']:9} {r['slug'] or '-':40} {r['annotation']}  {r['claim']}")
+            click.echo(f"skipped: {dict(skipped) or 'none'}")
+        return
+
+    try:
+        report = apply_candidates(candidates, sidecar_path=sidecar_path,
+                                  project_root=project_root, paper_ref=paper_ref)
+    except PromotionApplyError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if fmt == "json":
+        click.echo(json.dumps({"minted": report.minted, "linked": report.linked,
+                               "skipped": dict(report.skipped) | dict(skipped),
+                               "written": report.written_paths}, indent=2))
+    else:
+        click.echo(f"annotate promote: {report.minted} minted, {report.linked} linked, "
+                   f"skipped {dict(report.skipped) | dict(skipped)}")
