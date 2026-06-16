@@ -165,26 +165,44 @@ def collect_promotable(sidecar, sidecar_path: Path, root: Path, *, derived_refs:
     return out, skipped
 
 
-def load_corpus(project_root: Path) -> PromotionCorpus:
-    """Build the proposition corpus (title index, slug set, already-derived refs) from disk."""
+def load_corpora(project_root: Path) -> tuple[dict[str, PromotionCorpus], set[str]]:
+    """Build a per-kind corpus for every promotable kind + a single global derived-refs set.
+
+    `derived_refs` (annotation refs already in some entity's source_refs) is global: an
+    annotation is "already promoted" if ANY entity carries its ref, independent of kind.
+    """
     from science_tool.graph.sources import load_project_sources
 
     sources = load_project_sources(project_root.resolve())
-    title_to_ref: dict[str, str] = {}
-    existing_slugs: set[str] = set()
-    derived_refs: set[str] = set()
+    title_first: dict[str, dict[str, str]] = {k: {} for k in PROMOTABLE_KINDS}
+    title_seen: dict[str, set[str]] = {k: set() for k in PROMOTABLE_KINDS}
+    ambiguous: dict[str, set[str]] = {k: set() for k in PROMOTABLE_KINDS}
+    slugs: dict[str, set[str]] = {k: set() for k in PROMOTABLE_KINDS}
+    derived: set[str] = set()
     for entity in sources.entities:
-        if entity.kind != "proposition":
-            continue
-        ref = entity.canonical_id  # "proposition:<slug>"
-        existing_slugs.add(ref.split(":", 1)[1])
-        title = (entity.title or "").strip()
-        if title:
-            title_to_ref.setdefault(normalize_claim(title), ref)
+        kind = entity.kind
+        if kind in PROMOTABLE_KINDS:
+            ref = entity.canonical_id  # "<kind>:<local_part>"
+            slugs[kind].add(ref.split(":", 1)[1])
+            title = (entity.title or "").strip()
+            if title:
+                key = normalize_claim(title)
+                if key in title_seen[kind]:
+                    ambiguous[kind].add(key)
+                else:
+                    title_seen[kind].add(key)
+                    title_first[kind][key] = ref
         for sref in entity.source_refs:
             if isinstance(sref, str) and sref.startswith("annotation:"):
-                derived_refs.add(sref)
-    return PromotionCorpus(title_to_ref=title_to_ref, existing_slugs=existing_slugs, derived_refs=derived_refs)
+                derived.add(sref)
+    corpora = {
+        k: PromotionCorpus(
+            title_to_ref=title_first[k], existing_slugs=slugs[k],
+            derived_refs=derived, ambiguous_titles=ambiguous[k],
+        )
+        for k in PROMOTABLE_KINDS
+    }
+    return corpora, derived
 
 
 class PromotionApplyError(Exception):

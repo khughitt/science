@@ -84,6 +84,33 @@ def test_unsluggable_claim_skipped():
     assert c.decision == "SKIP" and c.reason == "promote-claim-unsluggable"
 
 
+def test_load_corpora_indexes_each_kind(tmp_path):
+    from science_tool.annotation.promote import PROMOTABLE_KINDS, load_corpora
+
+    # Two questions sharing a normalized title -> ambiguous; one hypothesis; one proposition.
+    (tmp_path / "entities" / "questions").mkdir(parents=True)
+    (tmp_path / "entities" / "hypotheses").mkdir(parents=True)
+    (tmp_path / "entities" / "propositions").mkdir(parents=True)
+    q1 = "---\nid: \"question:0001-dup\"\ntype: question\ntitle: \"Same question\"\nstatus: active\n---\n# Same question\n"
+    q2 = "---\nid: \"question:0002-dup\"\ntype: question\ntitle: \"same QUESTION\"\nstatus: active\n---\n# same QUESTION\n"
+    (tmp_path / "entities" / "questions" / "0001-dup.md").write_text(q1, encoding="utf-8")
+    (tmp_path / "entities" / "questions" / "0002-dup.md").write_text(q2, encoding="utf-8")
+    hyp = ("---\nid: \"hypothesis:0001-h\"\ntype: hypothesis\ntitle: \"A hypothesis\"\nstatus: proposed\n"
+           "source_refs: [\"annotation:papers/p#fx\"]\n---\n# A hypothesis\n")
+    (tmp_path / "entities" / "hypotheses" / "0001-h.md").write_text(hyp, encoding="utf-8")
+    prop = "---\nid: \"proposition:a-claim\"\ntype: proposition\ntitle: \"A claim\"\nstatus: draft\n---\n# A claim\n"
+    (tmp_path / "entities" / "propositions" / "a-claim.md").write_text(prop, encoding="utf-8")
+
+    corpora, derived = load_corpora(tmp_path)
+    assert set(corpora) == set(PROMOTABLE_KINDS)
+    assert normalize_claim("Same question") in corpora["question"].ambiguous_titles
+    assert corpora["hypothesis"].title_to_ref[normalize_claim("A hypothesis")] == "hypothesis:0001-h"
+    assert "0001-h" in corpora["hypothesis"].existing_slugs
+    # derived_refs are global (annotation ref from the hypothesis is visible kind-independently).
+    assert "annotation:papers/p#fx" in derived
+    assert "annotation:papers/p#fx" in corpora["question"].derived_refs
+
+
 def _statement_ann(frag, exact, *, status, atype="proposition", subject=None, promoted_to=None):
     import json as _json
     from datetime import datetime, timezone
@@ -166,7 +193,7 @@ def test_apply_mints_proposition_and_backlinks(tmp_path):
     from science_tool.annotation import io as anno_io
     from science_tool.annotation.model import Status
     from science_tool.annotation.promote import (
-        apply_candidates, collect_promotable, decide_candidates, load_corpus,
+        apply_candidates, collect_promotable, decide_candidates, load_corpora,
     )
     from science_tool.annotation.query import read_sidecar_strict
 
@@ -180,9 +207,9 @@ def test_apply_mints_proposition_and_backlinks(tmp_path):
     ann = _statement_ann("a-1", "Cells divide rapidly", status=Status.OPEN, subject="Cells")
     anno_io.write_sidecar(sidecar_path, anno_io.Sidecar(annotations=(ann,)))
 
-    corpus = load_corpus(tmp_path)
-    promotable, _ = collect_promotable(read_sidecar_strict(sidecar_path), sidecar_path, tmp_path, derived_refs=corpus.derived_refs)
-    candidates = decide_candidates(promotable, corpus)
+    corpora, derived = load_corpora(tmp_path)
+    promotable, _ = collect_promotable(read_sidecar_strict(sidecar_path), sidecar_path, tmp_path, derived_refs=derived)
+    candidates = decide_candidates(promotable, corpora["proposition"])
     report = apply_candidates(
         candidates, sidecar_path=sidecar_path, project_root=tmp_path,
         paper_ref="paper:smith2020", as_of=date(2026, 6, 16),
@@ -206,7 +233,7 @@ def test_apply_links_to_existing_appends_both_refs_preserves_prose(tmp_path):
     from science_tool.annotation.model import Status
     from science_tool.annotation.query import read_sidecar_strict
     from science_tool.annotation.promote import (
-        apply_candidates, collect_promotable, decide_candidates, load_corpus,
+        apply_candidates, collect_promotable, decide_candidates, load_corpora,
     )
 
     (tmp_path / "entities" / "propositions").mkdir(parents=True)
@@ -225,9 +252,9 @@ def test_apply_links_to_existing_appends_both_refs_preserves_prose(tmp_path):
     ann = _statement_ann("a-1", "Known claim", status=Status.OPEN)
     anno_io.write_sidecar(sp, anno_io.Sidecar(annotations=(ann,)))
 
-    corpus = load_corpus(tmp_path)
-    promotable, _ = collect_promotable(read_sidecar_strict(sp), sp, tmp_path, derived_refs=corpus.derived_refs)
-    candidates = decide_candidates(promotable, corpus)
+    corpora, derived = load_corpora(tmp_path)
+    promotable, _ = collect_promotable(read_sidecar_strict(sp), sp, tmp_path, derived_refs=derived)
+    candidates = decide_candidates(promotable, corpora["proposition"])
     assert candidates[0].decision == "LINK"
 
     report = apply_candidates(candidates, sidecar_path=sp, project_root=tmp_path,
@@ -268,7 +295,7 @@ def test_apply_is_idempotent(tmp_path):
     from science_tool.annotation import io as anno_io
     from science_tool.annotation.model import Status
     from science_tool.annotation.promote import (
-        apply_candidates, collect_promotable, decide_candidates, load_corpus,
+        apply_candidates, collect_promotable, decide_candidates, load_corpora,
     )
     from science_tool.annotation.query import read_sidecar_strict
     (tmp_path / "entities" / "propositions").mkdir(parents=True)
@@ -280,9 +307,9 @@ def test_apply_is_idempotent(tmp_path):
     anno_io.write_sidecar(sp, anno_io.Sidecar(annotations=(ann,)))
 
     def run():
-        corpus = load_corpus(tmp_path)
-        pr, _ = collect_promotable(read_sidecar_strict(sp), sp, tmp_path, derived_refs=corpus.derived_refs)
-        return apply_candidates(decide_candidates(pr, corpus), sidecar_path=sp,
+        corpora, derived = load_corpora(tmp_path)
+        pr, _ = collect_promotable(read_sidecar_strict(sp), sp, tmp_path, derived_refs=derived)
+        return apply_candidates(decide_candidates(pr, corpora["proposition"]), sidecar_path=sp,
                                 project_root=tmp_path, paper_ref="paper:p", as_of=date(2026, 6, 16))
 
     assert run().minted == 1
