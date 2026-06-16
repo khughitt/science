@@ -271,6 +271,7 @@ def test_promoted_to_round_trips(tmp_path):
         status=Status.OPEN,
         creator="paper-annotate",
         created=datetime(2026, 6, 16, tzinfo=timezone.utc),
+        content_hash="0" * 64,  # required for llm-annot: source
         promoted_to="proposition:alpha",
     )
     sidecar = anno_io.Sidecar(annotations=(ann,))
@@ -354,14 +355,24 @@ def test_annotation_source_ref_materializes_wasderivedfrom(tmp_path: Path) -> No
 
     project = tmp_path / "demo"
     _write_demo_project(project)  # provides the resolvable entity question:q01-demo
-    _write_minimal_entity(
-        project / "entities" / "propositions" / "demo-claim.md",
-        "proposition:demo-claim", "proposition", "Demo claim",
-        extra_frontmatter=[
-            "source_refs:",
-            '  - "annotation:papers/p.source#a-1"',
-            '  - "question:q01-demo"',
-        ],
+    # Write the proposition fixture directly (NOT via _write_minimal_entity, which already
+    # emits `source_refs: []` — passing another block would duplicate the YAML key).
+    prop_path = project / "entities" / "propositions" / "demo-claim.md"
+    prop_path.parent.mkdir(parents=True, exist_ok=True)
+    prop_path.write_text(
+        "---\n"
+        'id: "proposition:demo-claim"\n'
+        'kind: "proposition"\n'
+        'title: "Demo claim"\n'
+        'status: "active"\n'
+        'created: "2026-05-01"\n'
+        'updated: "2026-05-01"\n'
+        "related: []\n"
+        "source_refs:\n"
+        '  - "annotation:papers/p.source#a-1"\n'
+        '  - "question:q01-demo"\n'
+        "---\n\nDemo claim body.\n",
+        encoding="utf-8",
     )
     trig_path = materialize_graph(project)
     dataset = Dataset()
@@ -615,20 +626,25 @@ git commit -m "feat(promote): normalize_claim + mint/link/collision decision cor
 ```python
 def _statement_ann(frag, exact, *, status, atype="proposition", subject=None, promoted_to=None):
     import json as _json
-    from science_tool.annotation.model import (
-        Annotation, Motivation, SpecificResource, TextQuoteSelector, TextualBody,
-    )
     from datetime import datetime, timezone
+    from science_tool.annotation.model import (
+        Annotation, Motivation, SpecificResource, Status, TextQuoteSelector, TextualBody,
+    )
     body = {"section": "abstract", "stance": "asserted"}
     if subject is not None:
         body["subject"] = subject
+    created = datetime(2026, 6, 16, tzinfo=timezone.utc)
+    non_open = status is not Status.OPEN  # the model requires modified/modified_by when not OPEN
     return Annotation(
         id=frag,
         target=SpecificResource(source="paper.md", selector=TextQuoteSelector(exact=exact, prefix="", suffix="")),
         bodies=(TextualBody(value=_json.dumps(body), format="application/json"),),
         motivation=Motivation.CLASSIFYING, annotation_type=atype,
         source="llm-annot:m:paper-annotate-v1", status=status,
-        creator="paper-annotate", created=datetime(2026, 6, 16, tzinfo=timezone.utc),
+        creator="paper-annotate", created=created,
+        content_hash="0" * 64,  # llm-annot: sources require a content_hash (model __post_init__)
+        modified=created if non_open else None,
+        modified_by="curator" if non_open else None,
         promoted_to=promoted_to,
     )
 
@@ -676,6 +692,7 @@ def test_malformed_statement_body_hard_fails(tmp_path):
         motivation=Motivation.CLASSIFYING, annotation_type="proposition",
         source="llm-annot:m:paper-annotate-v1", status=Status.OPEN,
         creator="paper-annotate", created=datetime(2026, 6, 16, tzinfo=timezone.utc),
+        content_hash="0" * 64,  # required for llm-annot: source
     )
     with pytest.raises(PromotionReadError):
         collect_promotable(anno_io.Sidecar(annotations=(bad,)), sp, tmp_path, derived_refs=set())
@@ -1088,6 +1105,26 @@ def test_override_unknown_ref_fails_loud():
 
     with pytest.raises(PromotionOverrideError):
         apply_overrides([], [{"annotation": "annotation:zzz#f9", "decision": "MINT", "slug": "x"}], existing_refs=set())
+
+
+def test_override_untouched_collision_row_passes_through():
+    # A fed-back file mixes one edited row with an untouched COLLISION row; the latter must
+    # pass through (not raise) so apply_candidates can skip it.
+    from science_tool.annotation.promote import PromotionCandidate, apply_overrides
+
+    base = [
+        PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="A", subject=None, object=None,
+                           decision="COLLISION", slug="a", reason="promote-slug-collision"),
+        PromotionCandidate(ref="annotation:a#f2", frag="f2", claim="B", subject=None, object=None,
+                           decision="MINT", slug="b", reason="new"),
+    ]
+    edited = [
+        {"annotation": "annotation:a#f1", "decision": "COLLISION", "slug": "a"},   # untouched
+        {"annotation": "annotation:a#f2", "decision": "MINT", "slug": "proposition:b-2"},  # renamed
+    ]
+    out = apply_overrides(base, edited, existing_refs=set())
+    assert out[0].decision == "COLLISION"
+    assert out[1].decision == "MINT" and out[1].slug == "b-2"
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -1131,6 +1168,9 @@ def apply_overrides(
             continue
         decision = row.get("decision", c.decision)
         slug = row.get("slug", c.slug)
+        if decision == c.decision and slug == c.slug:
+            out.append(c)  # untouched row (incl. unedited COLLISION/SKIP) — passthrough
+            continue
         if decision == "LINK":
             if not slug or slug not in existing_refs:
                 raise PromotionOverrideError(f"LINK target {slug!r} is not an existing proposition")
@@ -1199,6 +1239,7 @@ def _setup(tmp_path: Path):
         motivation=Motivation.CLASSIFYING, annotation_type="proposition",
         source="llm-annot:m:paper-annotate-v1", status=Status.OPEN,
         creator="paper-annotate", created=datetime(2026, 6, 16, tzinfo=timezone.utc),
+        content_hash="0" * 64,  # required for llm-annot: source
     )
     anno_io.write_sidecar(sp, anno_io.Sidecar(annotations=(ann,)))
     return md, sp
