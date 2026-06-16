@@ -207,3 +207,27 @@ command + `llm-annot:<model>:paper-annotate-v1` source as statements — emitted
   same-span figures with different domains both persist. `mapping`/`cue` are enrichment, not identity.
 - **Document guard**: identical to statements (`sci:sourceTextHash`); a mixed statement+figurative
   run advances the hash only when no candidate fails to anchor.
+
+## Statement promotion (Phase 4a)
+
+`science annotate promote <source.md>` turns `proposition`-type statement annotations into
+`proposition` entities (mint-or-link). It is **read-only by default**; `--apply` writes,
+`--apply --input <candidates.json>` applies curator overrides.
+
+- **Mint-or-link:** a statement LINKs to an existing proposition when `normalize_claim(claim)`
+  (casefold + whitespace-collapse) equals `normalize_claim(title)` of an existing proposition;
+  otherwise it MINTs `proposition:<slug>` (`slug_for_claim_text`, ≤72 chars). A slug already
+  taken by a different-titled proposition is a `promote-slug-collision` (never overwritten;
+  resolve with an explicit `id` via `--input`).
+- **Minted proposition:** `title` = claim, `## Claim` = claim text, `subject`/`object` copied
+  from the statement body when present; `predicate`/`polarity`/`claim_layer`/… left unset
+  (Phase 4c). `status: draft`.
+- **Provenance (materialization fact, not a status change):** the proposition's `source_refs`
+  carries `paper:<paper-id>` (→ `prov:wasDerivedFrom` paper) and the new
+  `annotation:<entity-relpath>#<frag>` source ref (→ `prov:wasDerivedFrom` annotation, via the
+  materialize bypass branch). The annotation gains a `sci:promotedTo "proposition:<slug>"`
+  backlink. Annotation `status` is untouched.
+- **Promote queue / idempotency:** active (`open`/`ack`) `proposition` annotations with no
+  `sci:promotedTo` and no existing derived proposition. Re-running skips already-promoted rows.
+- **Out of scope (later slices):** question/hypothesis promotion (4b), factoring (4c),
+  cross-paper evidence (4d), embedding/paraphrase dedup, figurative promotion.
