@@ -89,6 +89,7 @@ class BundleBeliefResult:
     policy_id: str
     policy_version: str
     authored_capped: bool
+    qa_dataset_capped: bool
 
 
 def member_rank_key(belief: BeliefResult, scalar: BeliefScalar | None, member_uri: str) -> tuple:
@@ -133,6 +134,7 @@ def roll_up_weakest_link(members: list[MemberBelief], *, rule: CompositionRule) 
         policy_id=ordered[0].belief.policy_id,
         policy_version=ordered[0].belief.policy_version,
         authored_capped=any(m.belief.authored_capped for m in ordered),
+        qa_dataset_capped=any(m.belief.qa_dataset_capped for m in ordered),
     )
 
 
