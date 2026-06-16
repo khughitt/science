@@ -8,13 +8,14 @@
 
 **Tech Stack:** Python 3.13, pydantic v2, Click CLI, pytest, rdflib (graph), PyYAML. Design spec: `docs/plans/2026-06-15-entity-consolidation-p3-archive-design.md`.
 
-**Test command (worktree has NO `.venv` — use the main repo venv with `PYTHONPATH=src` from the worktree `science/` dir, all `rtk`-prefixed):**
+**Commands & conventions:** all shell commands (incl. `git`, `pytest`) run through the `rtk` proxy; paths use `~/d/`. The worktree has NO `.venv` — use the main repo venv with `PYTHONPATH=src` from the worktree `science/` dir:
 ```
-cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest <path> -v
+cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest <path> -v
 ```
+The `git add`/`git commit` snippets below run via the `rtk` proxy too (written bare for readability).
 
 **Scope notes (deviations from the spec, flagged per writing-plans):**
-- `--include-archived` is implemented on `science entities list` (index-merge, archive-origin tagged) in P3. **Big-picture bundle `--include-archived` deep-read is deferred to P4**, where archived members become relevant via digests (YAGNI — nothing in P3 needs archived bodies in bundles). The `iter_entity_markdown(include_archived=True)` capability is still built and unit-tested.
+- `--include-archived` is implemented on `science entity list` (index-merge, archive-origin tagged) in P3. **Big-picture bundle `--include-archived` deep-read is deferred to P4**, where archived members become relevant via digests (YAGNI — nothing in P3 needs archived bodies in bundles). The `iter_entity_markdown(include_archived=True)` capability is still built and unit-tested.
 - Graph archive-aware resolution + stub node covers the **three acceptance edge types** the spec names — `related:`, `source_refs:`, `relations[].target`. The remaining kind-specific edge predicates (participants/propositions/discusses/…) rarely reference superseded entities; routing them is a documented additive follow-up, not a P3 gate.
 
 ---
@@ -34,6 +35,7 @@ cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest 
 - `validate/checks/id_prefixes.py`, `entity_conformance.py`, `hypotheses.py` — route the recursive `entities/` scans.
 - `big_picture/validator.py` — route `_collect_project_ids`.
 - `entities_inventory.py` — add `_archive` to `_latest_activity` skip-set.
+- `graph/sources.py` — `load_project_sources` folds archive resolvable-ids into `manual_aliases` (makes audit + resolution archive-aware).
 - `graph/materialize.py` — archive-aware edge resolution + stub node (3 edge types).
 - `cli.py` — `entities archive` / `entities unarchive`; new top-level `search`.
 - `.rgignore` (repo root) — ergonomic `entities/_archive/` entry.
@@ -103,7 +105,7 @@ def test_deterministic_sorted_order(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_entity_scan.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_entity_scan.py -v`
 Expected: FAIL — `ModuleNotFoundError: science_tool.entity_scan`.
 
 - [ ] **Step 3: Write the implementation**
@@ -147,7 +149,7 @@ def iter_entity_markdown(entities_root: Path, *, include_archived: bool = False)
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_entity_scan.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_entity_scan.py -v`
 Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
@@ -202,7 +204,7 @@ def test_default_home_unchanged() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_resolve_local_home_reserved.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_resolve_local_home_reserved.py -v`
 Expected: FAIL — the two `_`-prefixed cases are currently accepted (no underscore rule).
 
 - [ ] **Step 3: Add the guard**
@@ -229,7 +231,7 @@ In `entities.py`, replace the rejection condition in `_resolve_local_home` (curr
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_resolve_local_home_reserved.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_resolve_local_home_reserved.py -v`
 Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
@@ -253,56 +255,91 @@ This refactor is behaviour-neutral today (no `_archive/` exists in fixtures); it
 
 ```python
 # science/tests/test_entity_scan_guard.py
-"""Guard: no recursive entities/-rooted rglob('*.md') outside entity_scan.py (P3)."""
+"""Guard: every recursive rglob('*.md') in src is classified (P3).
+
+This is a FROZEN-INVENTORY guard, not a heuristic: it collects the set of source
+files containing a recursive `rglob("*.md")` and asserts it equals an explicit
+ALLOWLIST. After Task 3 routes the entities/-rooted scans through
+entity_scan.iter_entity_markdown, those files drop out of the rglob inventory; the
+remaining members are entity_scan itself plus known NON-entity scanners (health,
+migrations, tasks, papers, prose, etc.). When a new rglob appears the test fails,
+forcing a deliberate decision: route it through entity_scan (if it scans
+entities/) or add it to ALLOWLIST with a one-line reason (if it does not).
+"""
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "science_tool"
-
-# Files whose `entities`-recursive scans are legitimately their own (entity_scan
-# itself) or scan NON-entities/legacy roots (doc/specs/_LEGACY_ROOTS) or scan a
-# single kind dir non-recursively. See design §3 exemptions.
-_EXEMPT = {
-    "entity_scan.py",            # the SSOT itself
-    "entity_layout_migration.py",  # legacy roots migration
-    "entities_inventory.py",     # _latest_activity scans project_root (skip-set, not entity_scan)
-}
-# Sites that scan legacy doc/specs roots, not entities/ (rglob present but exempt).
-_EXEMPT_LINES = {
-    ("validate/checks/id_prefixes.py", 52),       # doc/specs roots
-    ("validate/checks/entity_conformance.py", 89),  # _LEGACY_ROOTS
-}
-
 _RGLOB = re.compile(r'\.rglob\(\s*["\']\*\.md["\']\s*\)')
 
+# Files that legitimately contain a recursive `rglob("*.md")` AFTER Task 3 routing.
+# entity_scan.py is the SSOT (its rglob IS the sanctioned one). Every other entry
+# scans a NON-entities/ root (or a legacy doc/specs root). Reconcile this set with
+# the actual collector output in Step 3 — do not guess; run the test and read the
+# failure, then route entities/ scanners and list the genuine non-entity ones here.
+ALLOWLIST: set[str] = {
+    "entity_scan.py",  # SSOT
+    # --- known non-entity / legacy recursive markdown scanners (reason each) ---
+    "graph/storage_adapters/markdown.py",   # research/packages else-branch (entities branch routed)
+    "graph/storage_adapters/task.py",       # tasks/ root
+    "graph/health.py",                      # health/datasets/runs roots
+    "graph/materialize.py",                 # doc/data-packages migration gate
+    "graph/migrate.py",                     # migration roots
+    "graph/paper_dataset_migration.py",
+    "graph/project_model_migration.py",
+    "graph/tags_migration.py",
+    "validate/checks/id_prefixes.py",       # doc/specs legacy roots (line 52)
+    "validate/checks/entity_conformance.py",  # _LEGACY_ROOTS (line 89)
+    "validate/_helpers.py",
+    "entities_inventory.py",                # _latest_activity scans project_root (skip-set added)
+    "entity_layout_migration.py",           # legacy migration roots
+    "prose.py", "prose_lint.py", "markers.py", "refs.py", "refs_migrate.py",
+    "datapackage_migrate.py", "skills_lint/lint.py", "cli.py",
+}
 
-def test_no_recursive_entities_rglob_outside_entity_scan() -> None:
-    offenders: list[str] = []
+
+# The eight files that scan entities/ — each MUST route through the SSOT. Files
+# that ALSO keep a non-entity rglob (markdown/id_prefixes/entity_conformance/
+# validator) still appear in the inventory below; this positive check proves their
+# entities scan specifically was routed.
+ENTITY_SCANNERS: set[str] = {
+    "consolidation.py",
+    "graph/storage_adapters/markdown.py",
+    "validate/checks/cross_references.py",
+    "validate/checks/id_prefixes.py",
+    "validate/checks/entity_conformance.py",
+    "validate/checks/hypotheses.py",
+    "big_picture/validator.py",
+    "entities.py",
+}
+
+
+def test_entity_scanners_use_the_ssot() -> None:
+    missing = sorted(f for f in ENTITY_SCANNERS if "iter_entity_markdown" not in (SRC / f).read_text(encoding="utf-8"))
+    assert not missing, f"these files scan entities/ and must use entity_scan.iter_entity_markdown: {missing}"
+
+
+def test_recursive_md_rglob_inventory_is_frozen() -> None:
+    found: set[str] = set()
     for py in sorted(SRC.rglob("*.py")):
-        rel = py.relative_to(SRC).as_posix()
-        if py.name in _EXEMPT:
-            continue
-        for i, line in enumerate(py.read_text(encoding="utf-8").splitlines(), 1):
-            if not _RGLOB.search(line):
-                continue
-            # Only flag scans whose root is an entities/ tree. Heuristic: the line
-            # (or this file) references an entities root variable. We approve by an
-            # explicit allowlist of legacy/non-entities sites; everything else that
-            # rglobs *.md in a file touching entities must route through entity_scan.
-            if (rel, i) in {(f, n) for f, n in _EXEMPT_LINES}:
-                continue
-            offenders.append(f"{rel}:{i}: {line.strip()}")
-    assert offenders == [], "Route these through entity_scan.iter_entity_markdown:\n" + "\n".join(offenders)
+        if any(_RGLOB.search(line) for line in py.read_text(encoding="utf-8").splitlines()):
+            found.add(py.relative_to(SRC).as_posix())
+    new = sorted(found - ALLOWLIST)
+    assert not new, (
+        "New recursive rglob('*.md') site(s). If it scans entities/, route it through "
+        "entity_scan.iter_entity_markdown (and ensure it is in ENTITY_SCANNERS); otherwise "
+        "add it to ALLOWLIST with a reason:\n" + "\n".join(new)
+    )
 ```
 
-Note: this guard is intentionally strict — after routing the 8 sites, the only `rglob("*.md")` survivors in non-exempt files will be the legacy-root sites in the `_EXEMPT_LINES` allowlist. If a legitimate non-entities rglob exists elsewhere, add it to `_EXEMPT_LINES` with a comment (forces a deliberate decision).
+Note: `ALLOWLIST` is seeded from the design sweep — the implementer MUST run the test in Step 3 and reconcile it with the actual collector output. The two checks are complementary: `test_entity_scanners_use_the_ssot` forces routing in the 8 known entity-scanners (even dual-scan files that keep a legacy rglob), and `test_recursive_md_rglob_inventory_is_frozen` blocks any unclassified NEW recursive scanner.
 
 - [ ] **Step 2: Run guard to verify it fails**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_entity_scan_guard.py -v`
-Expected: FAIL — lists the unrouted entities-recursive sites (markdown.py, cross_references.py, id_prefixes.py:151, entity_conformance.py:205, hypotheses.py:144, big_picture/validator.py, entities.py, consolidation.py).
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_entity_scan_guard.py -v`
+Expected: FAIL — `test_entity_scanners_use_the_ssot` lists the 8 entity-scanner files (none use `iter_entity_markdown` yet). Also reconcile `ALLOWLIST` against the inventory: run a one-off `python -c` collector to print the actual set of files containing `rglob("*.md")` and fix `ALLOWLIST` to match the genuine non-entity scanners before Step 4.
 
 - [ ] **Step 3: Route each site through `entity_scan`**
 
@@ -346,7 +383,7 @@ For each file, add `from science_tool.entity_scan import iter_entity_markdown` a
 
 - [ ] **Step 4: Run guard + a broad regression slice**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_entity_scan_guard.py tests/test_consolidation_graph.py tests/test_consolidation_candidates.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_entity_scan_guard.py tests/test_consolidation_graph.py tests/test_consolidation_candidates.py -v`
 Expected: guard PASSES; P1/P2 consolidation tests still PASS (behaviour-neutral).
 
 - [ ] **Step 5: Commit**
@@ -439,7 +476,7 @@ def test_missing_index_loads_empty(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_archive_index.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_archive_index.py -v`
 Expected: FAIL — `ModuleNotFoundError: science_tool.archive`.
 
 - [ ] **Step 3: Write the implementation**
@@ -553,7 +590,7 @@ def load_archive_index(project_root: Path) -> ArchiveIndex:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_archive_index.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_archive_index.py -v`
 Expected: PASS (7 tests).
 
 - [ ] **Step 5: Commit**
@@ -639,6 +676,18 @@ def test_only_hidden_statuses_are_candidates(tmp_path: Path) -> None:
     assert [c["id"] for c in report["candidates"]] == ["interpretation:0002-b"]
 
 
+def test_report_surfaces_inbound_live_refs(tmp_path: Path) -> None:
+    # A live survivor references the superseded candidate via relations[].target.
+    _superseded(tmp_path, "interpretations", "0002-old", "interpretation:0002-old")
+    _write(tmp_path, "interpretations", "0003-new",
+           "---\nid: interpretation:0003-new\ntype: interpretation\nstatus: complete\n"
+           "relations:\n  - predicate: sci:supersedes\n    target: interpretation:0002-old\n"
+           "related:\n  - interpretation:0002-old\n---\n")
+    report = archive_entities(tmp_path, apply=False, now="T1")
+    cand = next(c for c in report["candidates"] if c["id"] == "interpretation:0002-old")
+    assert cand["inbound_live_refs"] == ["interpretation:0003-new"]
+
+
 def test_unarchive_restores_and_tombstones(tmp_path: Path) -> None:
     _superseded(tmp_path, "interpretations", "0001-x", "interpretation:0001-x")
     archive_entities(tmp_path, apply=True, now="T1")
@@ -662,7 +711,7 @@ def test_unarchive_collision_fails_before_moving(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_archive_mutators.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_archive_mutators.py -v`
 Expected: FAIL — `archive_entities` / `unarchive_entities` not defined.
 
 - [ ] **Step 3: Add mutators to `archive.py`**
@@ -708,6 +757,30 @@ def _candidate_rows(project_root: Path, statuses: frozenset[str]) -> list[Archiv
     return sorted(rows, key=lambda r: r.id)
 
 
+def _inbound_live_refs(project_root: Path, candidate_ids: set[str]) -> dict[str, list[str]]:
+    """Map each candidate id -> sorted live entity ids that reference it via
+    related: / source_refs: / relations[].target. Decision support: a survivor
+    that still points at a to-be-archived entity shows up here (those refs stay
+    resolvable post-archive via the index, but a human should see them)."""
+    inbound: dict[str, set[str]] = {cid: set() for cid in candidate_ids}
+    for path in iter_entity_markdown(project_root / "entities"):
+        fm = read_frontmatter(path)
+        if not fm or "id" not in fm:
+            continue
+        eid = str(fm["id"])
+        if eid in candidate_ids:
+            continue  # a candidate referencing another candidate is not a LIVE inbound ref
+        refs: set[str] = set()
+        for field in ("related", "source_refs"):
+            refs.update(r for r in (fm.get(field) or []) if isinstance(r, str))
+        for rel in fm.get("relations") or []:
+            if isinstance(rel, dict) and isinstance(rel.get("target"), str):
+                refs.add(rel["target"])
+        for cid in refs & candidate_ids:
+            inbound[cid].add(eid)
+    return {cid: sorted(ids) for cid, ids in inbound.items()}
+
+
 def archive_entities(
     project_root: Path,
     *,
@@ -720,8 +793,10 @@ def archive_entities(
     index append fails."""
     project_root = Path(project_root).resolve()
     rows = _candidate_rows(project_root, statuses)
+    inbound = _inbound_live_refs(project_root, {r.id for r in rows})
     report: dict = {"candidates": [{"id": r.id, "kind": r.kind, "status": r.status,
-                                    "original_path": r.original_path, "superseded_by": r.superseded_by}
+                                    "original_path": r.original_path, "superseded_by": r.superseded_by,
+                                    "inbound_live_refs": inbound.get(r.id, [])}
                                    for r in rows],
                     "applied": [], "skipped": []}
     if not apply:
@@ -789,7 +864,7 @@ def unarchive_entities(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_archive_mutators.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_archive_mutators.py -v`
 Expected: PASS (6 tests).
 
 - [ ] **Step 5: Commit**
@@ -852,11 +927,23 @@ def test_alias_collision_with_live_space_detected(tmp_path: Path) -> None:
                aliases=["shared-alias"], original_path="entities/interpretations/0001-x.md", archived_at="T1"))
     problems = verify_archive(tmp_path, live_alias_space={"shared-alias"})
     assert any("collides" in p for p in problems)
+
+
+def test_archive_vs_archive_alias_collision_detected(tmp_path: Path) -> None:
+    # Two ACTIVE archive rows share an alias/same_as -> archive-vs-archive collision.
+    _archived_file(tmp_path, "entities/_archive/interpretations/0001-x.md")
+    _archived_file(tmp_path, "entities/_archive/interpretations/0002-y.md")
+    append_row(archive_index_path(tmp_path), ArchiveRow(op="archive", id="interpretation:0001-x",
+               aliases=["dup"], original_path="entities/interpretations/0001-x.md", archived_at="T1"))
+    append_row(archive_index_path(tmp_path), ArchiveRow(op="archive", id="interpretation:0002-y",
+               same_as=["dup"], original_path="entities/interpretations/0002-y.md", archived_at="T1"))
+    problems = verify_archive(tmp_path, live_alias_space=set())
+    assert any("multiple active entries" in p for p in problems)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_archive_verify.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_archive_verify.py -v`
 Expected: FAIL — `verify_archive` not defined.
 
 - [ ] **Step 3: Implement `verify_archive` and wire the subcheck**
@@ -890,39 +977,54 @@ def verify_archive(project_root: Path, live_alias_space: set[str]) -> list[str]:
                 rel = path.relative_to(project_root).as_posix()
                 problems.append(f"archived file {rel} has no active index row")
 
-    # (c) alias collisions: archive id/alias/same_as vs the live alias space
-    resolvable = idx.resolvable_ids()
-    for token, canonical in sorted(resolvable.items()):
-        if token != canonical and token in resolvable and resolvable[token] != canonical:
-            problems.append(f"archive alias {token!r} maps to multiple canonical ids")
+    # (c) alias collisions — walk ACTIVE ROWS directly (NOT resolvable_ids(), which
+    # already deduped tokens, hiding archive-vs-archive conflicts). Build
+    # token -> set(owning canonical ids); >1 owner is an archive-vs-archive
+    # collision; membership in live_alias_space is an archive-vs-live collision.
+    owners: dict[str, set[str]] = {}
+    for cid, row in idx.active_by_id.items():
+        for token in (cid, *row.aliases, *row.same_as):
+            owners.setdefault(token, set()).add(cid)
+    for token, owning in sorted(owners.items()):
+        if len(owning) > 1:
+            problems.append(f"archive token {token!r} claimed by multiple active entries: {sorted(owning)}")
         if token in live_alias_space:
             problems.append(f"archive id/alias {token!r} collides with the live alias space")
     return problems
 ```
 
-In `validate/checks/cross_references.py`, add a new Check that runs `verify_archive` with the live alias space assembled from `all_ids` plus loaded aliases. Add after `check_cross_references`:
+In `validate/checks/cross_references.py`, add a new Check after `check_cross_references`. Build `live_space` from `sources.entities` directly — canonical id + aliases + **same_as** — NOT from `sources.manual_aliases` (which Task 8 augments with archive ids, and which omits `same_as`). Do NOT fail open: a load error emits an ERROR, never a silent pass.
 ```python
 @Check(section="archive index reconciliation", order=21)
 def check_archive_index(ctx: ValidateContext) -> Iterator[Result]:
     from science_tool.archive import verify_archive
-    from science_tool.graph.sources import build_alias_map, load_project_sources
+    from science_tool.graph.sources import load_project_sources
 
+    live_space: set[str] = set()
+    load_error: str | None = None
     try:
         sources = load_project_sources(ctx.project_root)
-        live_space = set(build_alias_map(sources.entities, manual_aliases=sources.manual_aliases))
-    except Exception:
-        live_space = set()
+        for e in sources.entities:
+            live_space.add(e.canonical_id)
+            live_space.update(e.aliases or [])
+            live_space.update(getattr(e, "same_as", None) or [])
+    except Exception as exc:  # degraded, but NOT silently passed
+        load_error = str(exc)
+
     problems = verify_archive(ctx.project_root, live_alias_space=live_space)
-    if not problems:
-        yield _result(Severity.INFO, "Archive index consistent")
-        return
+    if load_error is not None:
+        yield _result(Severity.ERROR,
+                      f"Archive index: could not load live entities for collision check ({load_error})")
     for problem in problems:
         yield _result(Severity.ERROR, f"Archive index: {problem}")
+    if not problems and load_error is None:
+        yield _result(Severity.INFO, "Archive index consistent")
 ```
+(Note: archive-vs-live alias collisions are *also* enforced primarily at load time — Task 8 puts archive ids into `manual_aliases`, so `ReferenceResolver.from_entities` raises `AliasCollisionError` on a real collision, failing the build loud. This subcheck is the friendly diagnostic + the filesystem reconciler.)
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_archive_verify.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_archive_verify.py -v`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: Commit**
@@ -985,7 +1087,7 @@ Note: `ValidateContext.from_project_root(root, *, strict, verbose)` calls `resol
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_archive_resolution_validate.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_archive_resolution_validate.py -v`
 Expected: FAIL — the archived ref is reported "not found".
 
 - [ ] **Step 3: Union archive resolvable ids into `all_ids`**
@@ -998,7 +1100,7 @@ In `check_cross_references`, after `all_ids.update(_load_terms_ids(...))` (line 
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_archive_resolution_validate.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_archive_resolution_validate.py -v`
 Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
@@ -1010,13 +1112,14 @@ git commit -m "feat(archive): validate resolves refs to archived ids via the ind
 
 ---
 
-### Task 8: Graph archive-aware resolution + tombstone stub node
+### Task 8: Graph archive-aware resolution (audit + materialize) + tombstone stub node
 
 **Files:**
-- Modify: `science/src/science_tool/graph/materialize.py`
+- Modify: `science/src/science_tool/graph/sources.py` (`load_project_sources` — alias augmentation)
+- Modify: `science/src/science_tool/graph/materialize.py` (stub + edge fallback)
 - Test: `science/tests/test_archive_resolution_graph.py`
 
-Covers the three acceptance edge types (`related:`, `source_refs:`, `relations[].target`). The graph build pre-loads the active archive index and, where an edge target resolves to an active archived id with no live entity, materializes the edge to the canonical URI and emits a tombstone stub node from index metadata only.
+**Critical ordering fact:** `materialize_graph` (`materialize.py:247`) runs `audit_project_sources(sources)` FIRST and **raises `ValueError("Cannot materialize graph with unresolved references")`** if any ref is unresolved — *before* the dataset (and any stub code) is built. The audit resolver (`migrate.py:175`) is built from `sources.entities` + `sources.manual_aliases`. So making the audit archive-aware is the actual unblocker, and it is done in ONE place: inject the archive index's resolvable-ids into `sources.manual_aliases` inside `load_project_sources`. Every resolver built from sources (audit, materialize, and `validate`'s graph-audit path) then resolves archived refs uniformly. This is index-only resolution metadata — it does NOT load archived markdown as live entities (`sources.entities` stays archive-free), so it does not violate the §7 boundary. A genuine archive-vs-live alias collision now raises `AliasCollisionError` at load → fail-loud (good). Then materialization additionally emits, for the three acceptance edge types (`related:` / `source_refs:` / `relations[].target`), an edge to the canonical URI plus a tombstone stub node from index metadata only.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1081,19 +1184,38 @@ Notes for the implementer: (1) asserts on serialized TriG substrings to stay rob
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_archive_resolution_graph.py -v`
-Expected: FAIL — no stub node emitted (edge currently dropped silently).
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_archive_resolution_graph.py -v`
+Expected: FAIL — `materialize_graph` raises `ValueError: Cannot materialize graph with unresolved references` (the audit rejects the archived ref before any stub is built). This is exactly the High-severity bug the fix targets.
 
-- [ ] **Step 3: Implement archive-aware resolution + stub emission**
+- [ ] **Step 3a: Make the audit archive-aware (`load_project_sources`)**
 
-In `materialize.py`, the edge-resolution logic lives in the inner materialization function (where `resolver` and `entity_index` are created, ~line 126), while `project_root` enters at the public `materialize_graph` (line 219). Thread `project_root` (or the loaded `archive_active`/`archive_resolvable`) into that inner function. Load the active archive index once near the resolver:
+In `graph/sources.py::load_project_sources`, after the `ProjectSources` is assembled and before it is returned, fold the archive index's resolvable-ids into `manual_aliases` so every downstream resolver (audit + materialize + validate graph-audit) resolves archived refs:
 ```python
+    # Archived ids remain resolvable reference targets (index-only; archived
+    # markdown is NOT loaded as a live entity). Folding them into manual_aliases
+    # makes the audit + materialization resolvers treat refs to archived ids as
+    # resolved instead of unresolved_reference. A real collision with a live alias
+    # raises AliasCollisionError downstream (fail-loud).
     from science_tool.archive import load_archive_index
-    archive_active = load_archive_index(project_root).active_by_id  # canonical_id -> ArchiveRow
-    archive_resolvable = {  # alias/same_as/canonical -> canonical archived id
-        token: cid for cid, row in archive_active.items()
-        for token in (cid, *row.aliases, *row.same_as)
-    }
+    for token, canonical in load_archive_index(project_root).resolvable_ids().items():
+        sources.manual_aliases.setdefault(token, canonical)
+```
+(Place this where `sources` is the assembled `ProjectSources` and `sources.manual_aliases` is a mutable dict. If `manual_aliases` is immutable in your `ProjectSources`, build the merged dict before constructing `sources`. Guard against import cycles: `archive.py` imports `entity_scan` + `big_picture.frontmatter`, not `graph.sources`, so a local import here is safe.)
+
+- [ ] **Step 3b: Thread `archive_active` into the dataset build + emit stub/edges (`materialize.py`)**
+
+`materialize_graph` (line 219) has `project_root`; the dataset is built by `_build_dataset_from_sources(sources, source_snapshots=...)` (~line 263). Load the archive active map in `materialize_graph` and pass it down (add an `archive_active: dict | None = None` param to `_build_dataset_from_sources`, default `{}`):
+```python
+    # in materialize_graph, before _build_dataset_from_sources(...):
+    from science_tool.archive import load_archive_index
+    archive_active = load_archive_index(project_root).active_by_id
+    ...
+    dataset = _build_dataset_from_sources(sources, source_snapshots=snapshots, archive_active=archive_active)
+```
+Inside `_build_dataset_from_sources`, build the resolvable map + a stub-collection set near where `resolver`/`entity_index` are created (~line 126):
+```python
+    archive_resolvable = {token: cid for cid, row in archive_active.items()
+                          for token in (cid, *row.aliases, *row.same_as)}
     referenced_archived: set[str] = set()
 ```
 
@@ -1141,14 +1263,14 @@ Confirm `RDF`, `RDFS`, `Literal`, and `SCI_NS` are imported at the top of `mater
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_archive_resolution_graph.py -v`
-Expected: PASS (2 tests).
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_archive_resolution_graph.py -v`
+Expected: PASS (2 tests) — graph build no longer raises in the audit (3a), and the stub/edge are emitted (3b). Also re-run the validate resolution test to confirm 3a didn't regress it: `… pytest tests/test_archive_resolution_validate.py -v`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/graph/materialize.py science/tests/test_archive_resolution_graph.py
-git commit -m "feat(archive): graph resolves archived refs to canonical URI + tombstone stub node"
+git add science/src/science_tool/graph/sources.py science/src/science_tool/graph/materialize.py science/tests/test_archive_resolution_graph.py
+git commit -m "feat(archive): archive-aware graph audit + resolution (canonical URI + tombstone stub node)"
 ```
 
 ---
@@ -1203,7 +1325,7 @@ def test_unarchive_restores(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_archive_cli.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_archive_cli.py -v`
 Expected: FAIL — `No such command 'archive'`.
 
 - [ ] **Step 3: Add the commands (mirror `mark-superseded`)**
@@ -1240,7 +1362,7 @@ def entities_unarchive_command(ids: tuple[str, ...], project_root: Path, apply_c
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_archive_cli.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_archive_cli.py -v`
 Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
@@ -1305,7 +1427,7 @@ def test_search_without_archived_fails_loud(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_search_cli.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_search_cli.py -v`
 Expected: FAIL — `No such command 'search'`.
 
 - [ ] **Step 3: Add the command + the search function**
@@ -1350,7 +1472,7 @@ def search_command(query: str, archived: bool, project_root: Path, output_format
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_search_cli.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_search_cli.py -v`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
@@ -1410,7 +1532,7 @@ def test_include_archived_merges_tagged_rows(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_list_include_archived.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_list_include_archived.py -v`
 Expected: FAIL — `list_entities` has no `include_archived` parameter.
 
 - [ ] **Step 3: Add the index-merge to `list_entities`**
@@ -1477,7 +1599,7 @@ Add `--include-archived` to the `entity list` CLI command (`entity_list` at `cli
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_list_include_archived.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_list_include_archived.py -v`
 Expected: PASS (2 tests).
 
 - [ ] **Step 5: Add `.rgignore` and commit**
@@ -1570,12 +1692,12 @@ Note: same fixture-completeness caveat as Task 8 — if `materialize_graph` / `f
 
 - [ ] **Step 2: Run the acceptance test**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_archive_acceptance.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_archive_acceptance.py -v`
 Expected: PASS (3 tests).
 
 - [ ] **Step 3: Run the full archive suite + a regression slice**
 
-Run: `cd science && PYTHONPATH=src rtk /home/keith/d/science/science/.venv/bin/pytest tests/test_entity_scan.py tests/test_entity_scan_guard.py tests/test_archive_index.py tests/test_archive_mutators.py tests/test_archive_verify.py tests/test_archive_resolution_validate.py tests/test_archive_resolution_graph.py tests/test_archive_cli.py tests/test_search_cli.py tests/test_list_include_archived.py tests/test_archive_acceptance.py tests/test_consolidation_candidates.py -v`
+Run: `cd science && PYTHONPATH=src rtk ~/d/science/science/.venv/bin/pytest tests/test_entity_scan.py tests/test_entity_scan_guard.py tests/test_archive_index.py tests/test_archive_mutators.py tests/test_archive_verify.py tests/test_archive_resolution_validate.py tests/test_archive_resolution_graph.py tests/test_archive_cli.py tests/test_search_cli.py tests/test_list_include_archived.py tests/test_archive_acceptance.py tests/test_consolidation_candidates.py -v`
 Expected: all PASS.
 
 - [ ] **Step 4: Commit**
@@ -1592,5 +1714,6 @@ git commit -m "test(archive): P3 acceptance invariant — referenced superseded 
 - **Spec coverage:** §1 two-axis (Tasks 1, 11) · §2 modules (1, 4) · §3 iterator + reserved-path + guard (1, 2, 3) · §4 index schema/atomicity (4, 5) · §5 resolution invariant + verify + stub (6, 7, 8) · §6 mutators (5, 9) · §7 search + include-archived + .rgignore (10, 11) · §8 tests (every task) · acceptance invariant (12).
 - **Deferred (flagged):** big-picture `--include-archived` deep-read → P4; non-acceptance graph edge predicates → additive follow-up.
 - **Type consistency:** `iter_entity_markdown(root, *, include_archived)`, `ArchiveRow`, `load_archive_index().active_by_id` / `.resolvable_ids()`, `archive_entities(...apply, now)`, `unarchive_entities(ids, ...)`, `verify_archive(project_root, live_alias_space)`, `search_archive(project_root, query)` are used identically across tasks.
-- **Pinned APIs** (verified against the repo): `ValidateContext.from_project_root(root, *, strict, verbose)` (`validate/context.py`); `materialize_graph(project_root, *, strict=True) -> Path` writes/returns `knowledge/graph.trig` (`graph/materialize.py:219`); root group is `main`, archive/unarchive go on `entities_group` (`@main.group("entities")`, `cli.py:232`), `search` on `main`; the list command is `entity list` (`entity_group`, `entity_list`, `cli.py:637`, uses `Path.cwd()`).
-- **Still requires in-repo confirmation** (noted inline): the exact predicate CURIEs at the three graph edge-resolution sites + `SCI_NS`/`RDF`/`RDFS`/`Literal` imports in `materialize.py`; whether the minimal tmp_path fixture is rich enough for `materialize_graph`/`from_project_root` (else mirror an existing graph/validate test scaffold).
+- **Pinned APIs** (verified against the repo): `ValidateContext.from_project_root(root, *, strict, verbose)` (`validate/context.py`); `materialize_graph(project_root, *, strict=True) -> Path` writes/returns `knowledge/graph.trig` and **runs `audit_project_sources` first, raising on unresolved refs** (`graph/materialize.py:219,247`); the audit + materialize resolvers are both built from `sources.entities`+`sources.manual_aliases` (`migrate.py:175`), so the High-1 fix is the single `load_project_sources` alias augmentation; root group is `main`, archive/unarchive on `entities_group` (`cli.py:232`), `search` on `main`; the list command is `entity list` (`entity_group`, `entity_list`, `cli.py:637`, uses `Path.cwd()`).
+- **Review fixes folded in (2nd-round):** graph **audit** archive-awareness (High-1, Task 8 Step 3a); `verify_archive` walks active rows for archive-vs-archive collisions (High-2, Task 6); validate subcheck no fail-open + `same_as` in live-space (Medium-3, Task 6); frozen-inventory + SSOT-usage guard pair (Medium-4, Task 3); inbound-live-refs in archive report (Medium-5, Task 5); `~/d/` paths + `rtk` note (Low-6, header).
+- **Still requires in-repo confirmation** (noted inline): the exact predicate CURIEs at the three graph edge-resolution sites + `SCI_NS`/`RDF`/`RDFS`/`Literal` imports in `materialize.py`; mutability of `ProjectSources.manual_aliases` for the in-place augmentation; whether the minimal tmp_path fixture is rich enough for `materialize_graph`/`from_project_root` (else mirror an existing graph/validate test scaffold); the actual non-entity `rglob` ALLOWLIST set (reconcile in Task 3 Step 2).
