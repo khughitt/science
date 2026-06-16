@@ -62,3 +62,30 @@ def test_append_is_idempotent_then_grows_on_change(tmp_path: Path):
     stored = read_snapshots(out)
     assert len(stored) == 2
     assert {r["scalar_enabled"] for r in stored} == {True, False}
+
+
+def test_snapshot_single_row_persists_authored_capped():
+    k, p = _graphs()
+    row = snapshot_records(k, p, scalar_enabled=False, as_of="2026-05-24")[0]
+    assert row["is_bundle"] is False
+    assert row["authored_capped"] is False  # empirical support -> ceiling never fires
+
+
+def test_with_policy_defaults_backfills_authored_capped():
+    from science_tool.graph.belief_snapshot import _with_policy_defaults
+
+    legacy = {"as_of": "x", "claim": "c", "belief_state": "fragile"}  # pre-Slice-B row
+    out = _with_policy_defaults(legacy)
+    assert out["authored_capped"] is False
+    # Slice-A policy identity still backfilled too.
+    assert out["policy_id"] == "core-default"
+    assert out["policy_version"] == "1"
+
+
+def test_existing_authored_capped_is_preserved():
+    from science_tool.graph.belief_snapshot import _with_policy_defaults
+
+    row = {"as_of": "x", "claim": "c", "policy_id": "p", "policy_version": "2",
+           "authored_capped": True}
+    out = _with_policy_defaults(row)
+    assert out["authored_capped"] is True

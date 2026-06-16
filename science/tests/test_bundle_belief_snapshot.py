@@ -60,3 +60,17 @@ def test_snapshot_bundle_rows_are_appendable(tmp_path):
     path = tmp_path / "snapshots.jsonl"
     assert append_snapshots(path, rows) == len(rows)   # no KeyError; all rows written
     assert append_snapshots(path, rows) == 0           # idempotent: same key dedupes
+
+
+def test_snapshot_bundle_row_persists_authored_capped():
+    k, prov = Graph(), Graph()
+    k.add((MECH, RDF.type, SCI_NS.Mechanism))
+    for p in (PA, PB):
+        k.add((p, RDF.type, SCI_NS.Proposition))
+        k.add((MECH, SCI_NS.hasProposition, p))
+    _strong(k, prov, PA, "g1")
+    _strong(k, prov, PA, "g2")
+    _strong(k, prov, PB, "g3")
+    rows = snapshot_records(k, prov, scalar_enabled=False, as_of="2026-06-11")
+    row = next(r for r in rows if r["is_bundle"])
+    assert row["authored_capped"] is False  # strong empirical members -> ceiling never fires
