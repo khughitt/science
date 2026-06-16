@@ -502,6 +502,7 @@ from pathlib import Path
 
 import pytest
 
+from science_tool.archive import ArchiveRow, append_row, archive_index_path
 from science_tool.consolidate import ConsolidateError, scaffold_digest
 from science_tool.entities import _parse_markdown_file, create_entity
 
@@ -553,6 +554,19 @@ def test_consolidatable_predicate_fails_loud_for_closed_vocab_without_archived(t
     root = _project(tmp_path)
     assert _is_consolidatable(root, "finding") is True   # gained archived in Task 1
     assert _is_consolidatable(root, "paper") is False     # closed vocab ["active","retired"], no archived
+
+
+def test_scaffold_rejects_digest_id_colliding_with_archived(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    _member(root, "finding", "finding:0001-a", "A")
+    # An entity with the chosen digest id is already ACTIVE in the archive index.
+    append_row(
+        archive_index_path(root),
+        ArchiveRow(op="archive", id="synthesis:0001-digest", kind="synthesis",
+                   original_path="entities/synthesis/0001-digest.md", archived_at="T1"),
+    )
+    with pytest.raises(ConsolidateError, match="collides with an archived"):
+        scaffold_digest(root, digest_id="synthesis:0001-digest", member_ids=["finding:0001-a"], title="D")
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -656,6 +670,15 @@ def scaffold_digest(
     """Mint a live cluster-digest synthesis entity (create-then-rewrite, atomic)."""
     project_root = Path(project_root).resolve()
     _validate_members(project_root, member_ids, digest_id)
+    # The digest id must not collide with an ACTIVE archived id/alias. create_entity
+    # only guards against a live destination path, so without this an archived id
+    # could be reborn as a live digest with the same canonical id (validate would
+    # only catch it after the bad state was written).
+    if digest_id in load_archive_index(project_root).resolvable_ids():
+        raise ConsolidateError(
+            f"digest id {digest_id!r} collides with an archived entity id/alias; "
+            "choose a fresh id or unarchive the colliding entity first"
+        )
 
     result = create_entity(project_root, SYNTHESIS_KIND, title, entity_id=digest_id)
     path = result.path
