@@ -18,6 +18,7 @@ def test_belief_snapshot_writes_jsonl(tmp_path: Path, monkeypatch):
         "massed_support_band": None, "massed_dispute_band": None,
         "net_band": None, "net_robust": None,
         "input_hashes": ["sha256:abc"], "config_version": "belief-logodds-v3",
+        "policy_id": "core-default", "policy_version": "1",
     }]
     monkeypatch.setattr(belief_snapshot, "make_snapshots", lambda *a, **k: canned)
 

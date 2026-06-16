@@ -8,6 +8,7 @@ from pathlib import Path
 from rdflib import RDF, URIRef
 
 from .belief import collect_evidence_units
+from .belief_policy import DEFAULT_BELIEF_POLICY
 from .belief_scalar import belief_scalar, belief_scalar_enabled
 from .belief_weights import CONFIG_VERSION
 from .bundle_belief import BundleBeliefResult, belief_for_entity
@@ -68,6 +69,8 @@ def snapshot_records(knowledge, provenance, *, scalar_enabled: bool, as_of: str)
                 "net_robust": scalar.net_robust if (scalar_enabled and scalar) else None,
                 "input_hashes": input_hashes,
                 "config_version": CONFIG_VERSION,
+                "policy_id": result.policy_id,
+                "policy_version": result.policy_version,
             })
             continue
 
@@ -93,6 +96,8 @@ def snapshot_records(knowledge, provenance, *, scalar_enabled: bool, as_of: str)
             "net_robust": scalar.net_robust if scalar_enabled else None,
             "input_hashes": input_hashes,
             "config_version": CONFIG_VERSION,
+            "policy_id": result.policy_id,
+            "policy_version": result.policy_version,
         })
     rows.sort(key=lambda r: r["claim"])
     return rows
@@ -108,7 +113,18 @@ def make_snapshots(graph_path: Path, *, as_of: str) -> list[dict]:
 
 def _key(row: dict):
     return (row["as_of"], row["claim"], tuple(row["input_hashes"]),
-            row["config_version"], row["scalar_enabled"])
+            row["config_version"], row["scalar_enabled"],
+            row["policy_id"], row["policy_version"])
+
+
+def _with_policy_defaults(row: dict) -> dict:
+    # Pre-policy snapshot rows predate Spec 5 Slice A; they were computed by the
+    # core-default policy. Stamp that identity explicitly so dedup and reproducibility
+    # checks are policy-aware without rejecting or KeyError-ing on legacy history.
+    if "policy_id" not in row:
+        row["policy_id"] = DEFAULT_BELIEF_POLICY.policy_id
+        row["policy_version"] = DEFAULT_BELIEF_POLICY.version
+    return row
 
 
 def _dump(row: dict) -> str:
@@ -118,7 +134,11 @@ def _dump(row: dict) -> str:
 def read_snapshots(path: Path) -> list[dict]:
     if not path.is_file():
         return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [
+        _with_policy_defaults(json.loads(line))
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
 
 
 def append_snapshots(path: Path, rows: list[dict]) -> int:

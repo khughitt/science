@@ -189,3 +189,38 @@ def test_nonreproducible_uses_latest_matching_row_not_latest_per_claim(tmp_path:
     )
     results = list(check_belief_nonreproducible(ctx))
     assert any(r.severity is Severity.ERROR for r in results)
+
+
+def test_nonreproducible_silent_when_policy_identity_differs(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_two_support_graph(tmp_path)
+    ctx = _ctx(tmp_path)
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    # Same inputs, WRONG belief, but a different policy_version -> not comparable, no error.
+    other_policy = rows[0] | {"belief_state": "speculative", "policy_version": "2"}
+    snap.write_text(json.dumps(other_policy) + "\n", encoding="utf-8")
+    assert list(check_belief_nonreproducible(ctx)) == []
+
+
+def test_nonreproducible_normalizes_pre_policy_stored_row(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_two_support_graph(tmp_path)
+    ctx = _ctx(tmp_path)
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    # A legacy stored row (no policy fields) with corrupted belief. read_snapshots normalizes
+    # it to core-default/1 == the recomputed identity, so corruption is still caught.
+    legacy = {k: v for k, v in rows[0].items() if k not in ("policy_id", "policy_version")}
+    legacy["belief_state"] = "speculative"
+    snap.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
+    results = list(check_belief_nonreproducible(ctx))
+    assert any(r.severity is Severity.ERROR for r in results)
