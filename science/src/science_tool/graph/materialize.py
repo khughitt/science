@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from datetime import date as _date
 from pathlib import Path
 from urllib.parse import quote
 
 from rdflib import Dataset, Literal, URIRef
-from rdflib.namespace import PROV, RDF, SKOS, XSD
+from rdflib.namespace import PROV, RDF, RDFS, SKOS, XSD
 from science_model.entities import Entity, EntityClass, EvidenceLineEntity
 from science_model.identity import EntityScope
 from science_model.ontologies.schema import OntologyCatalog
@@ -87,6 +88,28 @@ from science_tool.graph.store import (
 )
 
 
+@dataclass(frozen=True)
+class _ArchivedEndpoint:
+    """Duck-typed stand-in for an archived relation object: only ``.canonical_id``
+    and ``.kind`` are read by ``_validate_authored_relation_endpoint``."""
+
+    canonical_id: str
+    kind: str
+
+
+def _archived_uri_if_active(
+    canonical_id: str | None,
+    archive_active: dict,
+    referenced_archived: set[str],
+) -> URIRef | None:
+    """``canonical_id`` is a RESOLVED id with no live entity. If it is an active
+    archived id, record it for stub emission and return its URI; else None."""
+    if canonical_id is not None and canonical_id in archive_active:
+        referenced_archived.add(canonical_id)
+        return _entity_uri(canonical_id)
+    return None
+
+
 def build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     """Public wrapper for diagnostic re-derivation (e.g. `patch check`).
 
@@ -97,7 +120,10 @@ def build_dataset_from_sources(sources: ProjectSources) -> Dataset:
 
 
 def _build_dataset_from_sources(
-    sources: ProjectSources, *, source_snapshots: SourceSnapshotResult | None = None
+    sources: ProjectSources,
+    *,
+    source_snapshots: SourceSnapshotResult | None = None,
+    archive_active: dict | None = None,
 ) -> Dataset:
     """Build the in-memory rdflib Dataset that `materialize_graph` would write.
 
@@ -122,6 +148,9 @@ def _build_dataset_from_sources(
     provenance = dataset.graph(PROJECT_NS["graph/provenance"])
     dataset.graph(PROJECT_NS["graph/causal"])
     datasets = dataset.graph(PROJECT_NS["graph/datasets"])
+
+    archive_active = archive_active or {}
+    referenced_archived: set[str] = set()
 
     resolver = ReferenceResolver.from_entities(
         sources.entities, manual_aliases=sources.manual_aliases, identity_table=build_identity_table(sources)
@@ -153,6 +182,8 @@ def _build_dataset_from_sources(
             provenance=provenance,
             ontology_catalogs=sources.ontology_catalogs,
             ext_prefixes=ext_prefixes,
+            archive_active=archive_active,
+            referenced_archived=referenced_archived,
         )
 
     _add_produced_by_edges(sources, entity_index=entity_index, knowledge=knowledge)
@@ -177,7 +208,26 @@ def _build_dataset_from_sources(
             ontology_catalogs=sources.ontology_catalogs,
             ext_prefixes=ext_prefixes,
             kind_class=kind_class,
+            archive_active=archive_active,
+            referenced_archived=referenced_archived,
         )
+
+    # Emit one tombstone stub node per referenced active archived id into the
+    # knowledge graph. Runs AFTER both the per-entity relation loop and the
+    # authored-relation loop have populated `referenced_archived`.
+    for archived_id in sorted(referenced_archived):
+        row = archive_active[archived_id]
+        uri = _entity_uri(archived_id)
+        knowledge.add((uri, RDF.type, SCI_NS.ArchivedEntity))
+        if row.kind:
+            knowledge.add((uri, SCI_NS.entityKind, Literal(row.kind)))
+        if row.title:
+            knowledge.add((uri, RDFS.label, Literal(row.title)))
+        knowledge.add((uri, SCI_NS.archived, Literal(True)))
+        # superseded_by emitted only when it resolves to a known id — a live entity OR
+        # another active archived id. Unresolvable/dangling successor -> omitted.
+        if row.superseded_by and (row.superseded_by in entity_index or row.superseded_by in archive_active):
+            knowledge.add((uri, SCI_NS.supersededBy, _entity_uri(row.superseded_by)))
 
     for binding in sources.bindings:
         _add_binding(
@@ -260,7 +310,10 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
     # miss every intervening content change. Only the freshness-STATE derivation (inside
     # `_build_dataset_from_sources`, the `if sources.freshness_enabled` block) is gated.
     snapshots = compute_source_snapshots(sources, prior_graph_path=trig_path, today=_date.today())
-    dataset = _build_dataset_from_sources(sources, source_snapshots=snapshots)
+    from science_tool.archive import load_archive_index
+
+    archive_active = load_archive_index(project_root).active_by_id
+    dataset = _build_dataset_from_sources(sources, source_snapshots=snapshots, archive_active=archive_active)
 
     trig_path.parent.mkdir(parents=True, exist_ok=True)
     save_graph_dataset(dataset, trig_path)
@@ -355,7 +408,12 @@ def _add_relations(
     provenance,
     ontology_catalogs: list[OntologyCatalog],
     ext_prefixes: frozenset[str],
+    archive_active: dict | None = None,
+    referenced_archived: set[str] | None = None,
 ) -> None:
+    archive_active = archive_active or {}
+    if referenced_archived is None:
+        referenced_archived = set()
     entity_uri = _entity_uri(entity.canonical_id)
 
     if entity.kind == "structural-chain":
@@ -435,6 +493,15 @@ def _add_relations(
         assert resolution.canonical_id is not None
         target = entity_index.get(resolution.canonical_id)
         if target is None:
+            archived_uri = _archived_uri_if_active(resolution.canonical_id, archive_active, referenced_archived)
+            if archived_uri is not None:
+                akind = archive_active[resolution.canonical_id].kind
+                predicate = (
+                    SCI_NS.tests
+                    if entity.kind == "task" and akind in {"hypothesis", "question"}
+                    else SKOS.related
+                )
+                knowledge.add((entity_uri, predicate, archived_uri))
             continue
 
         target_uri = _entity_uri(target.canonical_id)
@@ -501,6 +568,9 @@ def _add_relations(
         assert resolution.canonical_id is not None
         target = entity_index.get(resolution.canonical_id)
         if target is None:
+            archived_uri = _archived_uri_if_active(resolution.canonical_id, archive_active, referenced_archived)
+            if archived_uri is not None:
+                provenance.add((entity_uri, PROV.wasDerivedFrom, archived_uri))
             continue
         provenance.add((entity_uri, PROV.wasDerivedFrom, _entity_uri(target.canonical_id)))
 
@@ -927,27 +997,42 @@ def _add_authored_relation(
     ontology_catalogs: list[OntologyCatalog],
     ext_prefixes: frozenset[str],
     kind_class: dict[str, EntityClass] | None = None,
+    archive_active: dict | None = None,
+    referenced_archived: set[str] | None = None,
 ) -> None:
     del kind_class  # endpoint validation is now driven by the relation profile
+    archive_active = archive_active or {}
+    if referenced_archived is None:
+        referenced_archived = set()
     graph = dataset.graph(_graph_uri(relation.graph_layer))
     subject_entity = _canonical_entity(relation.subject, entity_index=entity_index, resolver=resolver)
     subject_uri = _entity_uri(subject_entity.canonical_id)
     predicate_uri = _resolve_relation_term(relation.predicate)
 
-    object_entity: Entity | None = None
+    object_entity: Entity | _ArchivedEndpoint | None = None
     if is_external_reference(relation.object, known_prefixes=ext_prefixes):
         object_uri = _external_uri(relation.object)
         _register_external_term(object_uri, relation.object, bridge=bridge, ontology_catalogs=ontology_catalogs)
     else:
-        object_entity = _canonical_entity(relation.object, entity_index=entity_index, resolver=resolver)
-        object_uri = _entity_uri(object_entity.canonical_id)
+        obj_res = resolver.resolve(relation.object)
+        obj_cid = obj_res.canonical_id if obj_res.status == "resolved" else None
+        if obj_cid is not None and obj_cid not in entity_index and obj_cid in archive_active:
+            # Resolved-but-not-live: an active archived id. Materialize the edge to its
+            # canonical URI and validate the endpoint by the archived row's kind.
+            arow = archive_active[obj_cid]
+            object_uri = _entity_uri(obj_cid)
+            object_entity = _ArchivedEndpoint(canonical_id=obj_cid, kind=arow.kind or "")
+            referenced_archived.add(obj_cid)
+        else:
+            object_entity = _canonical_entity(relation.object, entity_index=entity_index, resolver=resolver)
+            object_uri = _entity_uri(object_entity.canonical_id)
 
     relation_kind = _profile_relation_for_predicate(predicate_uri)
     _validate_authored_relation_endpoint(
         relation,
         relation_kind=relation_kind,
         subject_entity=subject_entity,
-        object_entity=object_entity,
+        object_entity=object_entity,  # type: ignore[arg-type]
     )
 
     graph.add((subject_uri, predicate_uri, object_uri))

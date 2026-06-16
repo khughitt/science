@@ -611,6 +611,24 @@ def load_project_sources(
 
     dataset_parents = {e.canonical_id: e.parent_dataset for e in entities if e.kind == "dataset" and e.parent_dataset}
 
+    # Archived ids remain resolvable reference targets (index-only; archived
+    # markdown is NOT loaded as a live entity). Folding them into manual_aliases
+    # makes the audit + materialization resolvers treat refs to archived ids as
+    # resolved instead of unresolved_reference. Fail loud on a real collision with a
+    # project-authored manual alias (archive-vs-entity collisions surface separately
+    # as AliasCollisionError when ReferenceResolver.from_entities runs).
+    from science_tool.archive import load_archive_index
+
+    manual_aliases = _load_manual_aliases(project_root, local_profile=local_profile)
+    for token, canonical in load_archive_index(project_root).resolvable_ids().items():
+        existing = manual_aliases.get(token)
+        if existing is not None and existing != canonical:
+            raise ValueError(
+                f"archive token {token!r} -> {canonical!r} collides with project manual "
+                f"alias -> {existing!r}; unarchive or rename before archiving"
+            )
+        manual_aliases[token] = canonical
+
     return ProjectSources(
         project_name=str(config["name"]),
         project_root=str(project_root),
@@ -620,7 +638,7 @@ def load_project_sources(
         dataset_datapackages=dataset_datapackages,
         relations=relations,
         bindings=bindings,
-        manual_aliases=_load_manual_aliases(project_root, local_profile=local_profile),
+        manual_aliases=manual_aliases,
         ontology_catalogs=ontology_catalogs,
         registry=registry,
         markdown_documents=markdown_documents,
