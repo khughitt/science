@@ -345,6 +345,54 @@ def entities_unarchive_command(ids: tuple[str, ...], project_root: Path, apply_c
     click.echo(json.dumps(report, indent=2))
 
 
+@entities_group.group("consolidate")
+def entities_consolidate_group() -> None:
+    """Collapse a cluster of entities into one cluster-digest (scaffold, then apply)."""
+
+
+@entities_consolidate_group.command("scaffold")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path("."),
+    help="Project root (default: current directory).",
+)
+@click.option("--into", "digest_id", required=True, help="Id to mint for the cluster-digest entity.")
+@click.option("--members", "members", required=True, help="Comma-separated member entity ids.")
+@click.option("--title", default=None, help="Digest title (default: derived placeholder).")
+def entities_consolidate_scaffold_command(
+    project_root: Path, digest_id: str, members: str, title: str | None
+) -> None:
+    """Mint a cluster-digest stub with consolidates relations (touches no members)."""
+    from science_tool.consolidate import scaffold_digest
+
+    member_ids = [m.strip() for m in members.split(",") if m.strip()]
+    report = scaffold_digest(
+        project_root, digest_id=digest_id, member_ids=member_ids, title=title or digest_id
+    )
+    click.echo(json.dumps(report, indent=2))
+
+
+@entities_consolidate_group.command("apply")
+@click.argument("digest_id")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path("."),
+    help="Project root (default: current directory).",
+)
+@click.option("--apply", "apply_changes", is_flag=True, default=False, help="Apply changes (default: dry-run report).")
+def entities_consolidate_apply_command(digest_id: str, project_root: Path, apply_changes: bool) -> None:
+    """Demote + relocate the digest's consolidated members (report, then --apply)."""
+    from datetime import datetime, timezone
+
+    from science_tool.consolidate import apply_consolidation
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    report = apply_consolidation(project_root, digest_id, apply=apply_changes, now=now)
+    click.echo(json.dumps(report, indent=2))
+
+
 @entities_group.command("migrate")
 @click.option("--apply", "apply_changes", is_flag=True, help="Apply the migration (default: dry run).")
 @click.option(
