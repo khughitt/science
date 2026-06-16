@@ -104,15 +104,9 @@ Expected: FAIL — `ImportError: cannot import name 'write_entity_file'` (and `s
 
 - [ ] **Step 3: Add the shared primitives to `entities.py`**
 
-Add near the existing slug helpers (after `truncate_slug_on_word_boundary`, ~line 360). `date`, `yaml`, `Path`, `Protocol`, `Any` must be imported at the top (add any missing: `from typing import Protocol`; `import yaml`; `from datetime import date` — check existing imports first and only add what's absent).
+Add near the existing slug helpers (after `truncate_slug_on_word_boundary`, ~line 360). `date`, `yaml`, `Path`, `Any` must be importable at the top (add any missing: `import yaml`; `from datetime import date`; `from typing import Any` — check existing imports first and only add what's absent).
 
 ```python
-class _WritableEntity(Protocol):
-    kind: str
-    id: str | None
-    def model_dump(self, *, mode: str, exclude_none: bool, exclude_defaults: bool) -> dict[str, Any]: ...
-
-
 def slug_from_raw(raw: str) -> str:
     """Normalize + word-boundary-truncate a raw string to an entity slug (no length guard)."""
     return truncate_slug_on_word_boundary(normalize_to_slug(raw), DERIVED_SLUG_MAX_LENGTH)
@@ -127,7 +121,7 @@ def slug_for_claim_text(claim: str) -> str:
 
 
 def write_entity_file(
-    entity: _WritableEntity,
+    entity: Any,  # any typed entity exposing .kind, .id, and Pydantic .model_dump()
     *,
     project_root: Path,
     body: str,
@@ -281,11 +275,12 @@ def test_promoted_to_round_trips(tmp_path):
     )
     sidecar = anno_io.Sidecar(annotations=(ann,))
     anno_io.write_sidecar(sidecar_path, sidecar)
-    reread = anno_io.read_sidecar_strict(sidecar_path)
+    from science_tool.annotation.query import read_sidecar_strict
+    reread = read_sidecar_strict(sidecar_path)
     assert reread.annotations[0].promoted_to == "proposition:alpha"
 ```
 
-> Confirmed APIs: `Sidecar(annotations=(...), ledgers=(...), shared_targets=(...))` is a frozen dataclass in `model.py` (re-exported via `io.py`); `write_sidecar(path, sidecar)` and `read_sidecar_strict(path)` are positional.
+> Confirmed APIs: `Sidecar(annotations=(...), ledgers=(...), shared_targets=(...))` is a frozen dataclass in `model.py` (re-exported via `io.py`); `write_sidecar(path, sidecar)` lives in `annotation/io.py`; **`read_sidecar_strict(path)` lives in `annotation/query.py`** (io has only `read_sidecar`). All positional.
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -340,25 +335,50 @@ git commit -m "feat(annotation): sci:promotedTo backlink field + io round-trip"
 - Modify: `science/src/science_tool/graph/materialize.py:490-505` (+ a helper near `_entity_uri:1183`)
 - Test: `science/tests/test_graph_materialize.py`
 
-- [ ] **Step 1: Write the failing test** — append to `science/tests/test_graph_materialize.py`
+- [ ] **Step 1: Write the failing tests** — append to `science/tests/test_graph_materialize.py`
 
 ```python
-def test_annotation_source_ref_emits_wasderivedfrom():
-    from rdflib.namespace import PROV
+def test_annotation_uri_minter():
     from science_tool.graph.materialize import _annotation_uri
 
-    ref = "annotation:papers/smith2020.source#a-7f3a"
-    uri = _annotation_uri(ref)
+    uri = _annotation_uri("annotation:papers/smith2020.source#a-7f3a")
     assert str(uri).startswith("http://example.org/project/annotation/")
     assert "smith2020.source" in str(uri)
     assert str(uri).endswith("#a-7f3a")
+
+
+def test_annotation_source_ref_materializes_wasderivedfrom(tmp_path: Path) -> None:
+    """A proposition whose source_refs include an `annotation:` ref AND a resolvable
+    entity ref produces BOTH prov:wasDerivedFrom triples in the provenance graph."""
+    from science_tool.graph.materialize import _annotation_uri
+
+    project = tmp_path / "demo"
+    _write_demo_project(project)  # provides the resolvable entity question:q01-demo
+    _write_minimal_entity(
+        project / "entities" / "propositions" / "demo-claim.md",
+        "proposition:demo-claim", "proposition", "Demo claim",
+        extra_frontmatter=[
+            "source_refs:",
+            '  - "annotation:papers/p.source#a-1"',
+            '  - "question:q01-demo"',
+        ],
+    )
+    trig_path = materialize_graph(project)
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+
+    prop_uri = PROJECT_NS["proposition/demo-claim"]
+    assert (prop_uri, PROV.wasDerivedFrom, _annotation_uri("annotation:papers/p.source#a-1")) in provenance
+    # the resolvable entity ref still materializes via the existing path (paper:<id> behaves identically)
+    assert (prop_uri, PROV.wasDerivedFrom, PROJECT_NS["question/q01-demo"]) in provenance
 ```
 
-> This unit-tests the URI minter directly (the full materialize integration is exercised by the promote CLI round-trip in Task 8). A `cite:<key>` ref must remain a no-op (asserted in Task 8's provenance check).
+> The integration test reuses the file's `_write_demo_project` / `_write_minimal_entity` helpers and the `PROV`/`PROJECT_NS` names already imported at the top of `test_graph_materialize.py`. It uses `question:q01-demo` as the resolvable companion ref (a real entity in the demo project) to prove the new `annotation:` branch coexists with the existing resolved-entity branch; `paper:<paper-id>` follows the identical resolvable-entity path.
 
-- [ ] **Step 2: Run to verify it fails**
+- [ ] **Step 2: Run to verify they fail**
 
-Run: `cd science && uv run --frozen pytest tests/test_graph_materialize.py::test_annotation_source_ref_emits_wasderivedfrom -v`
+Run: `cd science && uv run --frozen pytest tests/test_graph_materialize.py -k "annotation_uri or annotation_source_ref" -v`
 Expected: FAIL — `ImportError: cannot import name '_annotation_uri'`.
 
 - [ ] **Step 3: Add the helper + loop branch** — `graph/materialize.py`.
@@ -389,10 +409,10 @@ Insert the branch as the FIRST check in the `source_refs` loop (line ~490), befo
         # ... rest unchanged ...
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [ ] **Step 4: Run to verify they pass**
 
-Run: `cd science && uv run --frozen pytest tests/test_graph_materialize.py -v`
-Expected: PASS (new test + existing materialize tests green).
+Run: `cd science && uv run --frozen pytest tests/test_graph_materialize.py -k "annotation_uri or annotation_source_ref" -v`
+Expected: PASS (both new tests). Then `cd science && uv run --frozen pytest tests/test_graph_materialize.py -q` → existing materialize tests still green.
 
 - [ ] **Step 5: Lint + commit**
 
@@ -635,6 +655,30 @@ def test_promotable_filters_queue(tmp_path):
     assert skipped["promote-already-promoted"] == 1
     assert skipped["promote-not-proposition-type"] == 1
     assert skipped["promote-inactive-status"] == 1
+
+
+def test_malformed_statement_body_hard_fails(tmp_path):
+    import pytest
+    from datetime import datetime, timezone
+    from science_tool.annotation import io as anno_io
+    from science_tool.annotation.model import (
+        Annotation, Motivation, SpecificResource, Status, TextQuoteSelector, TextualBody,
+    )
+    from science_tool.annotation.promote import PromotionReadError, collect_promotable
+
+    md = tmp_path / "paper.md"
+    md.write_text("x\n", encoding="utf-8")
+    sp = anno_io.sidecar_for_markdown(md)
+    bad = Annotation(
+        id="a-1",
+        target=SpecificResource(source="paper.md", selector=TextQuoteSelector(exact="x", prefix="", suffix="")),
+        bodies=(TextualBody(value="{ not json", format="application/json"),),
+        motivation=Motivation.CLASSIFYING, annotation_type="proposition",
+        source="llm-annot:m:paper-annotate-v1", status=Status.OPEN,
+        creator="paper-annotate", created=datetime(2026, 6, 16, tzinfo=timezone.utc),
+    )
+    with pytest.raises(PromotionReadError):
+        collect_promotable(anno_io.Sidecar(annotations=(bad,)), sp, tmp_path, derived_refs=set())
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -653,21 +697,30 @@ from science_tool.annotation.model import Status, TextualBody
 from science_tool.annotation.query import entity_relpath_for_sidecar
 
 
+class PromotionReadError(Exception):
+    """Raised when a promotable annotation's statement body cannot be read (fail loud)."""
+
+
 def _annotation_ref(sidecar_path: Path, root: Path, frag: str) -> str:
     return f"annotation:{entity_relpath_for_sidecar(sidecar_path, root)}#{frag}"
 
 
 def _statement_subject_object(ann) -> tuple[str | None, str | None]:
-    """Parse the annotation's JSON TextualBody for free-text subject/object phrases."""
+    """Parse the annotation's JSON statement body for free-text subject/object phrases.
+
+    The statement body is REQUIRED on a proposition annotation: a missing or unparseable
+    body is a hard failure (per spec), not a silent subject/object drop.
+    """
     for body in ann.bodies:
         if isinstance(body, TextualBody) and body.format == "application/json":
             try:
                 data = json.loads(body.value)
-            except json.JSONDecodeError:
-                return None, None
-            if isinstance(data, dict):
-                return data.get("subject"), data.get("object")
-    return None, None
+            except json.JSONDecodeError as exc:
+                raise PromotionReadError(f"annotation {ann.id}: malformed JSON statement body: {exc}") from exc
+            if not isinstance(data, dict):
+                raise PromotionReadError(f"annotation {ann.id}: statement body is not a JSON object")
+            return data.get("subject"), data.get("object")
+    raise PromotionReadError(f"annotation {ann.id}: no application/json statement body")
 
 
 def collect_promotable(sidecar, sidecar_path: Path, root: Path, *, derived_refs: set[str]) -> tuple[list[Promotable], Counter]:
@@ -744,8 +797,9 @@ def test_apply_mints_proposition_and_backlinks(tmp_path):
     from science_tool.annotation import io as anno_io
     from science_tool.annotation.model import Status
     from science_tool.annotation.promote import (
-        PromotionCandidate, apply_candidates, collect_promotable, decide_candidates, load_corpus,
+        apply_candidates, collect_promotable, decide_candidates, load_corpus,
     )
+    from science_tool.annotation.query import read_sidecar_strict
 
     # project layout
     (tmp_path / "entities" / "propositions").mkdir(parents=True)
@@ -758,7 +812,7 @@ def test_apply_mints_proposition_and_backlinks(tmp_path):
     anno_io.write_sidecar(sidecar_path, anno_io.Sidecar(annotations=(ann,)))
 
     corpus = load_corpus(tmp_path)
-    promotable, _ = collect_promotable(anno_io.read_sidecar_strict(sidecar_path), sidecar_path, tmp_path, derived_refs=corpus.derived_refs)
+    promotable, _ = collect_promotable(read_sidecar_strict(sidecar_path), sidecar_path, tmp_path, derived_refs=corpus.derived_refs)
     candidates = decide_candidates(promotable, corpus)
     report = apply_candidates(
         candidates, sidecar_path=sidecar_path, root=tmp_path, project_root=tmp_path,
@@ -772,9 +826,49 @@ def test_apply_mints_proposition_and_backlinks(tmp_path):
     assert "annotation:papers/smith2020.source#a-1" in prop
     assert "paper:smith2020" in prop
     # backlink written into sidecar; status unchanged
-    re_ann = anno_io.read_sidecar_strict(sidecar_path).annotations[0]
+    re_ann = read_sidecar_strict(sidecar_path).annotations[0]
     assert re_ann.promoted_to == "proposition:cells-divide-rapidly"
     assert re_ann.status == Status.OPEN
+
+
+def test_apply_links_to_existing_appends_both_refs_preserves_prose(tmp_path):
+    from datetime import date
+    from science_tool.annotation import io as anno_io
+    from science_tool.annotation.model import Status
+    from science_tool.annotation.query import read_sidecar_strict
+    from science_tool.annotation.promote import (
+        apply_candidates, collect_promotable, decide_candidates, load_corpus,
+    )
+
+    (tmp_path / "entities" / "propositions").mkdir(parents=True)
+    existing = tmp_path / "entities" / "propositions" / "known-claim.md"
+    existing.write_text(
+        '---\nid: proposition:known-claim\ntype: proposition\ntitle: Known claim\n'
+        'status: draft\nsource_refs:\n  - "paper:other"\n'
+        'created: "2026-06-16"\nupdated: "2026-06-16"\n---\n'
+        "# Known claim\n\n## Claim\n\nHand-authored prose.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "papers").mkdir()
+    md = tmp_path / "papers" / "p.source.md"
+    md.write_text("Known claim.\n", encoding="utf-8")
+    sp = anno_io.sidecar_for_markdown(md)
+    ann = _statement_ann("a-1", "Known claim", status=Status.OPEN)
+    anno_io.write_sidecar(sp, anno_io.Sidecar(annotations=(ann,)))
+
+    corpus = load_corpus(tmp_path)
+    promotable, _ = collect_promotable(read_sidecar_strict(sp), sp, tmp_path, derived_refs=corpus.derived_refs)
+    candidates = decide_candidates(promotable, corpus)
+    assert candidates[0].decision == "LINK"
+
+    report = apply_candidates(candidates, sidecar_path=sp, root=tmp_path, project_root=tmp_path,
+                              paper_ref="paper:p", as_of=date(2026, 6, 16))
+    assert report.linked == 1
+    text = existing.read_text(encoding="utf-8")
+    assert "Hand-authored prose." in text                 # prose preserved (no clobber)
+    assert "annotation:papers/p.source#a-1" in text        # annotation ref appended
+    assert "paper:p" in text and "paper:other" in text     # paper ref appended; original kept
+    assert read_sidecar_strict(sp).annotations[0].promoted_to == "proposition:known-claim"
 
 
 def test_apply_refuses_overwrite_of_different_claim(tmp_path):
@@ -806,6 +900,7 @@ def test_apply_is_idempotent(tmp_path):
     from science_tool.annotation.promote import (
         apply_candidates, collect_promotable, decide_candidates, load_corpus,
     )
+    from science_tool.annotation.query import read_sidecar_strict
     (tmp_path / "entities" / "propositions").mkdir(parents=True)
     (tmp_path / "papers").mkdir()
     md = tmp_path / "papers" / "p.source.md"
@@ -816,7 +911,7 @@ def test_apply_is_idempotent(tmp_path):
 
     def run():
         corpus = load_corpus(tmp_path)
-        pr, _ = collect_promotable(anno_io.read_sidecar_strict(sp), sp, tmp_path, derived_refs=corpus.derived_refs)
+        pr, _ = collect_promotable(read_sidecar_strict(sp), sp, tmp_path, derived_refs=corpus.derived_refs)
         return apply_candidates(decide_candidates(pr, corpus), sidecar_path=sp, root=tmp_path,
                                 project_root=tmp_path, paper_ref="paper:p", as_of=date(2026, 6, 16))
 
@@ -838,6 +933,7 @@ from datetime import date
 
 from science_model.propositions import PropositionEntity
 from science_tool.annotation import io as anno_io
+from science_tool.annotation.query import read_sidecar_strict
 from science_tool.entities import (
     _parse_markdown_file, append_entity_source_ref, resolve_path_policy, write_entity_file,
 )
@@ -898,14 +994,17 @@ def apply_candidates(
             assert c.slug is not None  # "proposition:<slug>"
             policy = resolve_path_policy("proposition", project_root=project_root)
             dest = project_root / policy.root / f"{c.slug.split(':', 1)[1]}.md"
-            append_entity_source_ref(dest, c.ref)
+            # Accrue BOTH provenance refs onto the existing proposition; append_entity_source_ref
+            # dedups and preserves the (possibly hand-authored) prose body.
+            for ref in (paper_ref, c.ref):
+                append_entity_source_ref(dest, ref)
             report.linked += 1
             backlinks[c.frag] = c.slug
         else:  # COLLISION / SKIP — not applied
             report.skipped[c.reason] += 1
 
     if backlinks:
-        sidecar = anno_io.read_sidecar_strict(sidecar_path)
+        sidecar = read_sidecar_strict(sidecar_path)
         new_anns = tuple(
             dataclasses.replace(a, promoted_to=backlinks[a.id]) if a.id in backlinks else a
             for a in sidecar.annotations
@@ -940,35 +1039,55 @@ git commit -m "feat(promote): apply mint/link + sci:promotedTo backlink (idempot
 
 - [ ] **Step 1: Write the failing test** — append to `test_annotation_promote.py`
 
+The override input is the SAME row shape the read-only `--json` emits (the curator edits
+`decision`/`slug` in place and feeds the file back).
+
 ```python
 def test_override_flips_mint_to_link():
     from science_tool.annotation.promote import PromotionCandidate, apply_overrides
 
-    cands = [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="C", subject=None, object=None,
-                                decision="MINT", slug="c", reason="new proposition")]
-    overrides = {"annotation:a#f1": {"link": "proposition:existing"}}
-    [out] = apply_overrides(cands, overrides, existing_refs={"proposition:existing"})
+    base = [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="C", subject=None, object=None,
+                               decision="MINT", slug="c", reason="new proposition")]
+    edited = [{"annotation": "annotation:a#f1", "decision": "LINK", "slug": "proposition:existing"}]
+    [out] = apply_overrides(base, edited, existing_refs={"proposition:existing"})
     assert out.decision == "LINK" and out.slug == "proposition:existing"
 
 
 def test_override_explicit_id_resolves_collision():
     from science_tool.annotation.promote import PromotionCandidate, apply_overrides
 
-    cands = [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="C", subject=None, object=None,
-                                decision="COLLISION", slug="c", reason="slug occupied")]
-    overrides = {"annotation:a#f1": {"id": "proposition:c-2"}}
-    [out] = apply_overrides(cands, overrides, existing_refs=set())
+    base = [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="C", subject=None, object=None,
+                               decision="COLLISION", slug="c", reason="promote-slug-collision")]
+    edited = [{"annotation": "annotation:a#f1", "decision": "MINT", "slug": "proposition:c-2"}]
+    [out] = apply_overrides(base, edited, existing_refs=set())
     assert out.decision == "MINT" and out.slug == "c-2"
+
+
+def test_override_unchanged_row_passthrough():
+    from science_tool.annotation.promote import PromotionCandidate, apply_overrides
+
+    base = [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="C", subject=None, object=None,
+                               decision="MINT", slug="c", reason="new")]
+    [out] = apply_overrides(base, [{"annotation": "annotation:a#f1", "decision": "MINT", "slug": "c"}], existing_refs=set())
+    assert out.decision == "MINT" and out.slug == "c"
 
 
 def test_override_bad_link_target_fails_loud():
     import pytest
     from science_tool.annotation.promote import PromotionCandidate, PromotionOverrideError, apply_overrides
 
-    cands = [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="C", subject=None, object=None,
-                                decision="MINT", slug="c", reason="new")]
+    base = [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="C", subject=None, object=None,
+                               decision="MINT", slug="c", reason="new")]
     with pytest.raises(PromotionOverrideError):
-        apply_overrides(cands, {"annotation:a#f1": {"link": "proposition:missing"}}, existing_refs=set())
+        apply_overrides(base, [{"annotation": "annotation:a#f1", "decision": "LINK", "slug": "proposition:missing"}], existing_refs=set())
+
+
+def test_override_unknown_ref_fails_loud():
+    import pytest
+    from science_tool.annotation.promote import PromotionOverrideError, apply_overrides
+
+    with pytest.raises(PromotionOverrideError):
+        apply_overrides([], [{"annotation": "annotation:zzz#f9", "decision": "MINT", "slug": "x"}], existing_refs=set())
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -984,37 +1103,45 @@ class PromotionOverrideError(Exception):
 
 
 def apply_overrides(
-    candidates: list[PromotionCandidate],
-    overrides: dict[str, dict[str, str]],
+    base: list[PromotionCandidate],
+    edited_rows: list[dict],
     *,
     existing_refs: set[str],
 ) -> list[PromotionCandidate]:
-    """Apply curator edits keyed by annotation ref. Each override may set `link` (force LINK to
-    an existing proposition) or `id` (explicit mint slug, also resolving COLLISION). Unknown
-    annotation refs or unknown link targets fail loud."""
-    by_ref = {c.ref: c for c in candidates}
-    for ref in overrides:
+    """Overlay curator edits onto freshly computed base candidates, matched by `annotation` ref.
+
+    `edited_rows` is the SAME row shape the read-only `--json` emits
+    (`{annotation, decision, slug, ...}`); the curator edits `decision`/`slug` in place. A row
+    may switch a candidate to LINK (`slug` = an existing `proposition:<slug>`) or MINT (`slug`
+    = the explicit mint slug, bare or `proposition:`-prefixed). Unknown refs and unknown LINK
+    targets fail loud. The explicit-id overwrite guard lives at the write boundary
+    (`apply_candidates`)."""
+    by_ref = {c.ref: c for c in base}
+    edited: dict[str, dict] = {}
+    for row in edited_rows:
+        ref = row.get("annotation")
         if ref not in by_ref:
-            raise PromotionOverrideError(f"override names unknown annotation ref {ref!r}")
+            raise PromotionOverrideError(f"override row names unknown annotation ref {ref!r}")
+        edited[ref] = row
     out: list[PromotionCandidate] = []
-    for c in candidates:
-        ov = overrides.get(c.ref)
-        if ov is None:
+    for c in base:
+        row = edited.get(c.ref)
+        if row is None:
             out.append(c)
             continue
-        if "link" in ov:
-            target = ov["link"]
-            if target not in existing_refs:
-                raise PromotionOverrideError(f"override link target {target!r} is not an existing proposition")
-            out.append(dataclasses.replace(c, decision="LINK", slug=target, reason="curator override: link"))
-        elif "id" in ov:
-            explicit = ov["id"]
-            if not explicit.startswith("proposition:"):
-                raise PromotionOverrideError(f"override id {explicit!r} must be 'proposition:<slug>'")
-            out.append(dataclasses.replace(c, decision="MINT", slug=explicit.split(":", 1)[1],
-                                           reason="curator override: explicit id"))
+        decision = row.get("decision", c.decision)
+        slug = row.get("slug", c.slug)
+        if decision == "LINK":
+            if not slug or slug not in existing_refs:
+                raise PromotionOverrideError(f"LINK target {slug!r} is not an existing proposition")
+            out.append(dataclasses.replace(c, decision="LINK", slug=slug, reason="curator override: link"))
+        elif decision == "MINT":
+            bare = slug.split(":", 1)[1] if isinstance(slug, str) and slug.startswith("proposition:") else slug
+            if not bare:
+                raise PromotionOverrideError(f"MINT override for {c.ref!r} requires a slug")
+            out.append(dataclasses.replace(c, decision="MINT", slug=bare, reason="curator override: mint"))
         else:
-            raise PromotionOverrideError(f"override for {c.ref!r} must set 'link' or 'id'")
+            raise PromotionOverrideError(f"override decision for {c.ref!r} must be LINK or MINT, got {decision!r}")
     return out
 ```
 
@@ -1056,6 +1183,7 @@ from science_tool.annotation.cli import annotate_group
 from science_tool.annotation.model import (
     Annotation, Motivation, SpecificResource, Status, TextQuoteSelector, TextualBody,
 )
+from science_tool.annotation.query import read_sidecar_strict
 
 
 def _setup(tmp_path: Path):
@@ -1084,7 +1212,7 @@ def test_promote_readonly_writes_nothing(tmp_path):
     assert payload["candidates"][0]["decision"] == "MINT"
     # nothing written
     assert not list((tmp_path / "entities" / "propositions").glob("*.md"))
-    assert anno_io.read_sidecar_strict(sp).annotations[0].promoted_to is None
+    assert read_sidecar_strict(sp).annotations[0].promoted_to is None
 
 
 def test_promote_apply_mints_and_backlinks(tmp_path):
@@ -1095,7 +1223,29 @@ def test_promote_apply_mints_and_backlinks(tmp_path):
     prop = (tmp_path / "entities" / "propositions" / "genes-encode-proteins.md")
     assert prop.exists()
     assert "annotation:papers/p.source#a-1" in prop.read_text(encoding="utf-8")
-    assert anno_io.read_sidecar_strict(sp).annotations[0].promoted_to == "proposition:genes-encode-proteins"
+    assert read_sidecar_strict(sp).annotations[0].promoted_to == "proposition:genes-encode-proteins"
+
+
+def test_promote_apply_input_override_links(tmp_path):
+    # End-to-end --input contract: read-only JSON → edit a row to LINK → feed back via --apply.
+    md, sp = _setup(tmp_path)
+    (tmp_path / "entities" / "propositions" / "preexisting.md").write_text(
+        '---\nid: proposition:preexisting\ntype: proposition\ntitle: Preexisting\n'
+        'status: draft\ncreated: "2026-06-16"\nupdated: "2026-06-16"\n---\n# Preexisting\n',
+        encoding="utf-8",
+    )
+    ro = CliRunner().invoke(annotate_group, ["promote", "--source-md", str(md), "--root", str(tmp_path), "--format", "json"])
+    assert ro.exit_code == 0, ro.output
+    payload = json.loads(ro.output)
+    payload["candidates"][0]["decision"] = "LINK"
+    payload["candidates"][0]["slug"] = "proposition:preexisting"
+    edited = tmp_path / "edited.json"
+    edited.write_text(json.dumps(payload), encoding="utf-8")
+    r = CliRunner().invoke(annotate_group, ["promote", "--source-md", str(md), "--root", str(tmp_path),
+                                            "--apply", "--input", str(edited)])
+    assert r.exit_code == 0, r.output
+    assert read_sidecar_strict(sp).annotations[0].promoted_to == "proposition:preexisting"
+    assert "annotation:papers/p.source#a-1" in (tmp_path / "entities" / "propositions" / "preexisting.md").read_text(encoding="utf-8")
 
 
 def test_promote_malformed_input_fails_loud(tmp_path):
@@ -1138,10 +1288,11 @@ Expected: FAIL — no such command `promote`.
 def promote_cmd(source_md: Path, root: Path | None, paper_ref: str | None,
                 do_apply: bool, input_path: Path | None, fmt: str) -> None:
     """Promote proposition-type statement annotations into proposition entities (mint-or-link)."""
-    from science_tool.annotation.io import read_sidecar_strict, sidecar_for_markdown
+    from science_tool.annotation.io import sidecar_for_markdown
+    from science_tool.annotation.query import read_sidecar_strict
     from science_tool.annotation.promote import (
-        PromotionApplyError, PromotionOverrideError, apply_candidates, apply_overrides,
-        collect_promotable, decide_candidates, load_corpus,
+        PromotionApplyError, PromotionOverrideError, PromotionReadError, apply_candidates,
+        apply_overrides, collect_promotable, decide_candidates, load_corpus,
     )
 
     project_root = (root or Path.cwd()).resolve()
@@ -1153,19 +1304,24 @@ def promote_cmd(source_md: Path, root: Path | None, paper_ref: str | None,
     sidecar_path = sidecar_for_markdown(source_md)
     sidecar = read_sidecar_strict(sidecar_path)
     corpus = load_corpus(project_root)
-    promotable, skipped = collect_promotable(sidecar, sidecar_path, project_root, derived_refs=corpus.derived_refs)
+    try:
+        promotable, skipped = collect_promotable(sidecar, sidecar_path, project_root, derived_refs=corpus.derived_refs)
+    except PromotionReadError as exc:
+        raise click.ClickException(str(exc)) from exc
     candidates = decide_candidates(promotable, corpus)
 
     if do_apply and input_path is not None:
         try:
-            overrides = json.loads(input_path.read_text(encoding="utf-8"))
+            raw = json.loads(input_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise click.ClickException(f"--input is not valid JSON: {exc}") from exc
-        if not isinstance(overrides, dict):
-            raise click.ClickException("--input must be a JSON object keyed by annotation ref")
+        # Accept either the full read-only output object or a bare candidates list.
+        edited_rows = raw.get("candidates") if isinstance(raw, dict) else raw
+        if not isinstance(edited_rows, list):
+            raise click.ClickException("--input must be the read-only output object or a candidates list")
         existing_refs = {f"proposition:{s}" for s in corpus.existing_slugs}
         try:
-            candidates = apply_overrides(candidates, overrides, existing_refs=existing_refs)
+            candidates = apply_overrides(candidates, edited_rows, existing_refs=existing_refs)
         except PromotionOverrideError as exc:
             raise click.ClickException(str(exc)) from exc
 
@@ -1198,7 +1354,7 @@ def promote_cmd(source_md: Path, root: Path | None, paper_ref: str | None,
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_annotate_promote_cli.py -v`
-Expected: PASS (3 tests).
+Expected: PASS (4 tests: read-only, apply, override-link, malformed).
 
 - [ ] **Step 5: Provenance integration test** — append to `test_annotate_promote_cli.py`
 
@@ -1218,7 +1374,7 @@ def test_minted_proposition_materializes_wasderivedfrom(tmp_path):
 ```
 
 Run: `cd science && uv run --frozen pytest tests/test_annotate_promote_cli.py -v`
-Expected: PASS (4 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 6: Lint + typecheck + commit**
 

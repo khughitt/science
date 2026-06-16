@@ -59,12 +59,15 @@ candidate→apply idiom.
   refs, adds the sidecar backlink. Idempotent (see below).
 - **Curator override via `--apply --input <candidates.json>`.** The default decisions are not
   always right (precision-first dedup under-links paraphrases; collisions need a chosen id).
-  The curator takes the read-only `--json` output, edits decisions in place, and feeds it
-  back. Each row supports: flip `MINT`→`LINK` with a `link: proposition:<slug>` target;
-  resolve a `COLLISION` (or rename any mint) with an explicit `id: proposition:<slug>`. Rows
-  are matched to annotations by annotation id; an edited target/id that doesn't exist (for
-  `LINK`) or already exists with a different claim (for an explicit mint `id`) fails loud.
-  Without `--input`, `--apply` executes the default decisions and skips collisions.
+  The curator takes the read-only `--json` output (`{"candidates": [...], "skipped": {...}}`)
+  and edits candidate rows **in place** — changing a row's `decision`/`slug`: set
+  `decision: "LINK"`, `slug: "proposition:<slug>"` to link to an existing proposition, or
+  `decision: "MINT"`, `slug: "proposition:<slug>"` to rename a mint or resolve a `COLLISION`.
+  The edited object (or bare candidates list) is fed back via `--input`. Rows are matched to
+  candidates by annotation ref; an edited `LINK` target that doesn't exist — or an explicit
+  mint slug whose file already holds a different claim — fails loud (the latter at the
+  write-boundary guard). Without `--input`, `--apply` executes the default decisions and skips
+  collisions.
 
 **Run scope & granularity.** One sidecar (one paper) per invocation. The mint-or-link
 dedup checks against the **whole project's** proposition corpus (not just this sidecar).
@@ -219,7 +222,7 @@ candidate list + `--json`, nothing silent):
 
 - `promote-already-promoted` — has `sci:promotedTo` or an existing derived proposition (queue exclusion, reported as skipped not error).
 - `promote-claim-unsluggable` — claim text cannot derive a stable slug (`len < 2`).
-- `promote-slug-collision` — mint slug path is occupied by a different proposition; never overwritten; resolve with an explicit `id` via `--input`.
+- `promote-slug-collision` — mint slug path is occupied by a different proposition; never overwritten; resolve with an explicit `slug` via `--input`.
 - `promote-not-proposition-type` — annotation is `question`/`hypothesis`/figurative (out of 4a scope; skipped).
 - `promote-inactive-status` — not `OPEN`/`ACK`.
 
@@ -250,7 +253,7 @@ A malformed sidecar / unparseable annotation body is a **hard, loud failure** (n
   (case-sensitive) so Phase 3 `match_text` is untouched.
 - **Slug-collision unit:** two different long claims that truncate to the same 72-char slug →
   first MINTs, second is `promote-slug-collision` (skipped, original file untouched); an
-  explicit `id` via `--input` resolves it; intra-batch collision among two MINTs is detected
+  explicit `slug` via `--input` resolves it; intra-batch collision among two MINTs is detected
   in the read-only pass.
 - **Provenance unit:** entity carries the `annotation:<entity-relpath>#<frag>` ref +
   `paper:<paper-id>` in `source_refs`; sidecar gains `sci:promotedTo`; annotation status
