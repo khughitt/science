@@ -828,7 +828,7 @@ def archive_entities(
             # shutil.move would clobber an existing destination file on POSIX.
             raise ArchiveError(
                 f"cannot archive {row.id!r}: archive path {derive_archive_path(row.original_path)} "
-                "already exists (run `science archive verify` to reconcile)"
+                "already exists (run `science validate` to reconcile the archive index)"
             )
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(src), str(dst))  # move first
@@ -1777,7 +1777,7 @@ def test_archive_then_validate_no_new_dangling(tmp_path: Path) -> None:
     xref = [r.message for r in check_cross_references(ctx)]
     assert not any("0002-gone" in m and "not found" in m for m in xref)
     # (b) the archive-index subcheck reports the archive consistent (no ERRORs)
-    from science_tool.validate.context import Severity  # adjust import to repo's Severity location
+    from science_tool.validate.result import Severity
     arch = list(check_archive_index(ctx))
     assert not any(r.severity == Severity.ERROR for r in arch)
 ```
