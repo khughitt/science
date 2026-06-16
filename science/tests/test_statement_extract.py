@@ -113,6 +113,7 @@ import pytest
 
 from science_tool.annotation.statement_extract import (
     CandidateError,
+    FigurativeCandidate,
     MAX_CANDIDATES,
     MAX_FIELD_CHARS,
     StatementCandidate,
@@ -157,7 +158,7 @@ def test_parse_rejects_unknown_candidate_field():
 
 def test_parse_rejects_unknown_type():
     with pytest.raises(CandidateError, match="type"):
-        parse_candidates(_one(type="metaphor"))
+        parse_candidates(_one(type="banana"))
 
 
 def test_parse_rejects_unknown_stance():
@@ -204,6 +205,78 @@ def test_parse_rejects_non_object_input():
 def test_parse_rejects_bad_json():
     with pytest.raises(CandidateError, match="not valid JSON"):
         parse_candidates("{not json")
+
+
+def _fig(**over):
+    base = {
+        "type": "metaphor", "exact": "the immune system mounts an attack",
+        "prefix": "", "suffix": " on pathogens.",
+        "source_domain": "warfare", "target_domain": "immune response",
+    }
+    base.update(over)
+    return json.dumps({"candidates": [base]})
+
+
+def test_parse_figurative_minimal_valid():
+    [c] = parse_candidates(_fig())
+    assert isinstance(c, FigurativeCandidate)
+    assert c.type == "metaphor"
+    assert c.source_domain == "warfare" and c.target_domain == "immune response"
+    assert c.mapping is None and c.cue is None
+
+
+def test_parse_analogy_with_optionals():
+    [c] = parse_candidates(_fig(type="analogy", mapping="cells as soldiers", cue="like"))
+    assert isinstance(c, FigurativeCandidate)
+    assert c.type == "analogy" and c.mapping == "cells as soldiers" and c.cue == "like"
+
+
+def test_parse_mixed_statement_and_figurative():
+    raw = json.dumps({"candidates": [
+        {"type": "proposition", "exact": "X drives Y", "prefix": "", "suffix": ".",
+         "stance": "asserted"},
+        {"type": "metaphor", "exact": "a cellular factory", "prefix": "", "suffix": ".",
+         "source_domain": "manufacturing", "target_domain": "the cell"},
+    ]})
+    cands = parse_candidates(raw)
+    assert isinstance(cands[0], StatementCandidate)
+    assert isinstance(cands[1], FigurativeCandidate)
+
+
+def test_parse_figurative_missing_domain_fails():
+    bad = json.dumps({"candidates": [{
+        "type": "metaphor", "exact": "x", "prefix": "", "suffix": "",
+        "source_domain": "warfare",  # target_domain missing
+    }]})
+    with pytest.raises(CandidateError, match="missing required"):
+        parse_candidates(bad)
+
+
+def test_parse_figurative_blank_required_domain_fails():
+    with pytest.raises(CandidateError, match="non-empty"):
+        parse_candidates(_fig(target_domain="   "))
+
+
+def test_parse_figurative_blank_optional_fails():
+    with pytest.raises(CandidateError, match="non-empty"):
+        parse_candidates(_fig(mapping="   "))
+
+
+def test_parse_figurative_rejects_statement_field():
+    # `stance` is a statement-only field -> unknown for figurative
+    with pytest.raises(CandidateError, match="unknown fields"):
+        parse_candidates(_fig(stance="asserted"))
+
+
+def test_parse_statement_rejects_figurative_field():
+    # `source_domain` is figurative-only -> unknown for a statement
+    with pytest.raises(CandidateError, match="unknown fields"):
+        parse_candidates(_one(source_domain="warfare"))
+
+
+def test_parse_figurative_over_length_field():
+    with pytest.raises(CandidateError, match="exceeds"):
+        parse_candidates(_fig(source_domain="z" * (MAX_FIELD_CHARS + 1)))
 
 
 from science_tool.annotation.statement_extract import statement_body_json
