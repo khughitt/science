@@ -523,6 +523,8 @@ def plan_figurative(
         mapping=candidate.mapping,
         cue=candidate.cue,
     )
+    # JSON-array the domain pair, NOT '|'-join: keeps the two free-text domains
+    # delimiter-safe (a literal '|' inside a domain can't collide) and distinct.
     identity = json.dumps(
         [_normalize_text(candidate.source_domain), _normalize_text(candidate.target_domain)],
         separators=(",", ":"),
