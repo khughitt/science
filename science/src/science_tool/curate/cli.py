@@ -49,19 +49,24 @@ def inventory_cmd(
 @curate_group.command("consolidation-candidates")
 @click.option("--project-root", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path("."), show_default=True)
 @click.option("--format", "output_format", type=click.Choice(["json", "text"]), default="json", show_default=True)
-@click.option("--related-jaccard", type=float, default=0.5, show_default=True, help="Jaccard threshold for the related-overlap signal.")
+@click.option("--related-jaccard", type=float, default=0.7, show_default=True, help="Jaccard threshold for the related-overlap signal.")
 @click.option("--min-cluster-size", type=int, default=2, show_default=True, help="Minimum members for a reported cluster.")
+@click.option("--max-cluster-size", type=int, default=15, show_default=True, help="Suppress (but count) qualifying clusters larger than this.")
 def consolidation_candidates_cmd(
     project_root: Path,
     output_format: str,
     related_jaccard: float,
     min_cluster_size: int,
+    max_cluster_size: int,
 ) -> None:
     """Report consolidation candidates (read-only; superseded-lineage + semantic)."""
     from science_tool.consolidation_candidates import detect_consolidation_candidates, render_text
 
     report = detect_consolidation_candidates(
-        project_root, related_jaccard=related_jaccard, min_cluster_size=min_cluster_size
+        project_root,
+        related_jaccard=related_jaccard,
+        min_cluster_size=min_cluster_size,
+        max_cluster_size=max_cluster_size,
     )
     if output_format == "json":
         click.echo(json.dumps(report.model_dump(mode="json"), indent=2, sort_keys=True))
