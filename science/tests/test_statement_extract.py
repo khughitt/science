@@ -112,10 +112,11 @@ def test_containing_passage_finds_enclosing():
 import pytest
 
 from science_tool.annotation.statement_extract import (
-    Candidate,
     CandidateError,
+    FigurativeCandidate,
     MAX_CANDIDATES,
     MAX_FIELD_CHARS,
+    StatementCandidate,
     parse_candidates,
 )
 
@@ -131,7 +132,7 @@ def _one(**over):
 
 def test_parse_minimal_valid():
     [c] = parse_candidates(_one())
-    assert isinstance(c, Candidate)
+    assert isinstance(c, StatementCandidate)
     assert c.type == "proposition" and c.stance == "asserted"
     assert c.subject is None and c.subject_concept is None
 
@@ -157,7 +158,7 @@ def test_parse_rejects_unknown_candidate_field():
 
 def test_parse_rejects_unknown_type():
     with pytest.raises(CandidateError, match="type"):
-        parse_candidates(_one(type="metaphor"))
+        parse_candidates(_one(type="banana"))
 
 
 def test_parse_rejects_unknown_stance():
@@ -204,6 +205,85 @@ def test_parse_rejects_non_object_input():
 def test_parse_rejects_bad_json():
     with pytest.raises(CandidateError, match="not valid JSON"):
         parse_candidates("{not json")
+
+
+def _fig(**over):
+    base = {
+        "type": "metaphor", "exact": "the immune system mounts an attack",
+        "prefix": "", "suffix": " on pathogens.",
+        "source_domain": "warfare", "target_domain": "immune response",
+    }
+    base.update(over)
+    return json.dumps({"candidates": [base]})
+
+
+def test_parse_figurative_minimal_valid():
+    [c] = parse_candidates(_fig())
+    assert isinstance(c, FigurativeCandidate)
+    assert c.type == "metaphor"
+    assert c.source_domain == "warfare" and c.target_domain == "immune response"
+    assert c.mapping is None and c.cue is None
+
+
+def test_parse_analogy_with_optionals():
+    [c] = parse_candidates(_fig(type="analogy", mapping="cells as soldiers", cue="like"))
+    assert isinstance(c, FigurativeCandidate)
+    assert c.type == "analogy" and c.mapping == "cells as soldiers" and c.cue == "like"
+
+
+def test_parse_mixed_statement_and_figurative():
+    raw = json.dumps({"candidates": [
+        {"type": "proposition", "exact": "X drives Y", "prefix": "", "suffix": ".",
+         "stance": "asserted"},
+        {"type": "metaphor", "exact": "a cellular factory", "prefix": "", "suffix": ".",
+         "source_domain": "manufacturing", "target_domain": "the cell"},
+    ]})
+    cands = parse_candidates(raw)
+    assert isinstance(cands[0], StatementCandidate)
+    assert isinstance(cands[1], FigurativeCandidate)
+
+
+def test_parse_figurative_missing_domain_fails():
+    bad = json.dumps({"candidates": [{
+        "type": "metaphor", "exact": "x", "prefix": "", "suffix": "",
+        "source_domain": "warfare",  # target_domain missing
+    }]})
+    with pytest.raises(CandidateError, match="missing required"):
+        parse_candidates(bad)
+
+
+def test_parse_figurative_blank_required_domain_fails():
+    with pytest.raises(CandidateError, match="non-empty"):
+        parse_candidates(_fig(target_domain="   "))
+
+
+def test_parse_figurative_blank_optional_fails():
+    with pytest.raises(CandidateError, match="non-empty"):
+        parse_candidates(_fig(mapping="   "))
+
+
+def test_parse_figurative_stores_trimmed_value():
+    # a valid field with surrounding whitespace is STORED trimmed (not just non-blank)
+    [c] = parse_candidates(_fig(source_domain="  warfare  ", mapping="  cells as soldiers  "))
+    assert c.source_domain == "warfare"
+    assert c.mapping == "cells as soldiers"
+
+
+def test_parse_figurative_rejects_statement_field():
+    # `stance` is a statement-only field -> unknown for figurative
+    with pytest.raises(CandidateError, match="unknown fields"):
+        parse_candidates(_fig(stance="asserted"))
+
+
+def test_parse_statement_rejects_figurative_field():
+    # `source_domain` is figurative-only -> unknown for a statement
+    with pytest.raises(CandidateError, match="unknown fields"):
+        parse_candidates(_one(source_domain="warfare"))
+
+
+def test_parse_figurative_over_length_field():
+    with pytest.raises(CandidateError, match="exceeds"):
+        parse_candidates(_fig(source_domain="z" * (MAX_FIELD_CHARS + 1)))
 
 
 from science_tool.annotation.statement_extract import statement_body_json
@@ -344,11 +424,11 @@ def test_active_entity_iris_includes_open_and_ack_excludes_others():
     assert "https://identifiers.org/mesh:D3" not in iris
 
 
-def _cand(**over) -> Candidate:
+def _cand(**over) -> StatementCandidate:
     base = dict(type="proposition", exact="BRCA1 loss drives genomic instability",
                 prefix="", suffix=" in these", stance="asserted")
     base.update(over)
-    return Candidate(**base)  # type: ignore[arg-type]
+    return StatementCandidate(**base)  # type: ignore[arg-type]
 
 
 def test_plan_statement_anchors_and_builds_body():
@@ -447,7 +527,7 @@ from science_tool.annotation.source_text import Passage, SourcePassages, write_s
 from science_tool.annotation.statement_extract import (
     ExtractReport,
     check_source_changed,
-    extract_statements,
+    extract_candidates,
 )
 
 
@@ -469,8 +549,8 @@ def _make_source_md(tmp_path: Path) -> Path:
     )
 
 
-def _cands(*objs) -> list[Candidate]:
-    return [Candidate(**o) for o in objs]  # type: ignore[arg-type]
+def _cands(*objs) -> list[StatementCandidate]:
+    return [StatementCandidate(**o) for o in objs]  # type: ignore[arg-type]
 
 
 def test_extract_end_to_end_writes_and_records_hash(tmp_path: Path):
@@ -479,7 +559,7 @@ def test_extract_end_to_end_writes_and_records_hash(tmp_path: Path):
         type="proposition", exact="BRCA1 loss drives genomic instability",
         prefix="", suffix=" in tumors", stance="asserted",
     ))
-    report = extract_statements(
+    report = extract_candidates(
         source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="paper-annotate",
     )
     assert isinstance(report, ExtractReport)
@@ -501,8 +581,8 @@ def test_extract_identical_rerun_is_idempotent(tmp_path: Path):
         type="proposition", exact="BRCA1 loss drives genomic instability",
         prefix="", suffix=" in tumors", stance="asserted",
     ))
-    extract_statements(source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a")
-    again = extract_statements(
+    extract_candidates(source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a")
+    again = extract_candidates(
         source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
     )
     assert again.written == 0  # all-duplicate
@@ -511,7 +591,7 @@ def test_extract_identical_rerun_is_idempotent(tmp_path: Path):
 
 def test_extract_empty_candidates_records_hash(tmp_path: Path):
     src = _make_source_md(tmp_path)
-    report = extract_statements(
+    report = extract_candidates(
         source_md=src, model=_MODEL, candidates=[], now=_NOW, actor="a",
     )
     assert report.written == 0
@@ -526,7 +606,7 @@ def test_extract_all_unanchored_does_not_record_hash(tmp_path: Path):
         type="proposition", exact="text that is absent from the document",
         prefix="", suffix="", stance="asserted",
     ))
-    report = extract_statements(
+    report = extract_candidates(
         source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
     )
     assert report.written == 0
@@ -545,7 +625,7 @@ def test_extract_partial_anchor_failure_does_not_record_hash(tmp_path: Path):
         dict(type="hypothesis", exact="a clause that is absent from the document",
              prefix="", suffix="", stance="hypothesized"),
     )
-    report = extract_statements(
+    report = extract_candidates(
         source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
     )
     assert report.written == 1  # the good one persisted
@@ -566,7 +646,180 @@ def test_extract_reports_grounding_dropped(tmp_path: Path):
         prefix="", suffix=" in tumors", stance="asserted",
         subject_concept="https://identifiers.org/ncbigene:999",  # not a persisted entity
     ))
-    report = extract_statements(
+    report = extract_candidates(
         source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
     )
     assert report.written == 1 and report.grounding_dropped == 1
+
+
+from science_tool.annotation.statement_extract import figurative_body_json
+
+
+def test_figurative_body_minimal_sorted_compact():
+    body = figurative_body_json(
+        section="discussion", source_domain="warfare",
+        target_domain="immune response", mapping=None, cue=None,
+    )
+    # keys sorted: section, source_domain, target_domain
+    assert body == (
+        '{"section":"discussion","source_domain":"warfare",'
+        '"target_domain":"immune response"}'
+    )
+
+
+def test_figurative_body_includes_present_optionals_sorted():
+    body = figurative_body_json(
+        section="results", source_domain="a factory", target_domain="the cell",
+        mapping="ribosome as machine", cue="like",
+    )
+    # keys sorted: cue, mapping, section, source_domain, target_domain
+    assert body == (
+        '{"cue":"like","mapping":"ribosome as machine","section":"results",'
+        '"source_domain":"a factory","target_domain":"the cell"}'
+    )
+
+
+def test_figurative_body_omits_absent_optionals():
+    body = figurative_body_json(
+        section="results", source_domain="a", target_domain="b",
+        mapping=None, cue="like",
+    )
+    assert '"mapping"' not in body and '"cue":"like"' in body
+
+
+from science_tool.annotation.statement_extract import plan_figurative
+
+_FIG_TEXT = "We describe how the immune system mounts an attack on invading pathogens."
+_FIG_PASSAGES = [PersistedPassage(section="DISCUSS", file_char_base=0, length=len(_FIG_TEXT))]
+
+
+def _figc(**over) -> FigurativeCandidate:
+    base = dict(type="metaphor", exact="the immune system mounts an attack",
+                prefix="", suffix=" on invading",
+                source_domain="warfare", target_domain="immune response")
+    base.update(over)
+    return FigurativeCandidate(**base)  # type: ignore[arg-type]
+
+
+def test_plan_figurative_anchors_and_builds_body():
+    p, reason, dropped = plan_figurative(
+        _FIG_TEXT, _FIG_PASSAGES, _figc(),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert reason is None and dropped == 0 and p is not None
+    assert p.annotation_type == "metaphor"
+    assert p.motivation is Motivation.CLASSIFYING
+    assert p.source_name == "llm-annot:claude-sonnet-4-6:paper-annotate-v1"
+    assert '"section":"discussion"' in p.body.value
+    assert '"source_domain":"warfare"' in p.body.value
+
+
+def test_plan_figurative_quote_not_found():
+    p, reason, _ = plan_figurative(
+        _FIG_TEXT, _FIG_PASSAGES, _figc(exact="absent text"),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert p is None and reason == "extract-quote-not-found"
+
+
+def test_plan_figurative_same_span_different_domains_are_distinct():
+    # identical span, different required domains -> different match_text (must not collapse)
+    p1, _, _ = plan_figurative(
+        _FIG_TEXT, _FIG_PASSAGES, _figc(source_domain="warfare", target_domain="immune response"),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    p2, _, _ = plan_figurative(
+        _FIG_TEXT, _FIG_PASSAGES, _figc(source_domain="machinery", target_domain="immune response"),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert p1 is not None and p2 is not None
+    assert p1.match_text != p2.match_text
+
+
+def test_plan_figurative_match_text_is_delimiter_safe():
+    # a literal '|' inside a domain must not let two different pairs collide
+    p1, _, _ = plan_figurative(
+        _FIG_TEXT, _FIG_PASSAGES, _figc(source_domain="a|b", target_domain="c"),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    p2, _, _ = plan_figurative(
+        _FIG_TEXT, _FIG_PASSAGES, _figc(source_domain="a", target_domain="b|c"),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert p1 is not None and p2 is not None
+    assert p1.match_text != p2.match_text
+
+
+def test_plan_figurative_match_text_prefix_shape():
+    p, _, _ = plan_figurative(
+        _FIG_TEXT, _FIG_PASSAGES, _figc(),
+        model=_MODEL, source_md_name="P.source.md",
+    )
+    assert p is not None
+    file_idx = _FIG_TEXT.index("the immune system mounts an attack")
+    assert p.match_text.startswith(f"metaphor|{file_idx}:34|")
+
+
+def _make_fig_source_md(tmp_path: Path) -> Path:
+    abstract = SourcePassages(
+        passages=(
+            Passage(section="title", bioc_offset=0, text="On immunity."),
+            Passage(section="discussion", bioc_offset=13,
+                    text="The immune system mounts an attack on pathogens."),
+        ),
+        release="2024",
+    )
+    return write_source_md(
+        directory=tmp_path, citekey="Imm2024", abstract=abstract, fulltext=None,
+        retrieved_from="https://example.org", license_="unknown", licensed=False,
+        pmid="2", doi=None,
+    )
+
+
+def test_extract_mixed_statement_and_figurative_persist(tmp_path: Path):
+    src = _make_source_md(tmp_path)  # text: "BRCA1 loss drives genomic instability in tumors."
+    cands = parse_candidates(json.dumps({"candidates": [
+        {"type": "proposition", "exact": "BRCA1 loss drives genomic instability",
+         "prefix": "", "suffix": " in tumors", "stance": "asserted"},
+        {"type": "metaphor", "exact": "BRCA1 loss drives genomic instability",
+         "prefix": "", "suffix": " in tumors",
+         "source_domain": "a driver", "target_domain": "BRCA1 loss"},
+    ]}))
+    report = extract_candidates(
+        source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
+    )
+    assert report.written == 2  # same span, different type -> both persist
+    assert report.grounding_dropped == 0
+    sidecar = read_sidecar(src.with_name("Brca2024.source.anno.trig"))
+    types = {a.annotation_type for a in sidecar.annotations}
+    assert {"proposition", "metaphor"} <= types
+
+
+def test_extract_figurative_only_records_hash_no_grounding(tmp_path: Path):
+    src = _make_fig_source_md(tmp_path)
+    cands = parse_candidates(json.dumps({"candidates": [
+        {"type": "analogy", "exact": "The immune system mounts an attack",
+         "prefix": "", "suffix": " on pathogens",
+         "source_domain": "warfare", "target_domain": "immune response"},
+    ]}))
+    report = extract_candidates(
+        source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
+    )
+    assert report.written == 1
+    assert report.grounding_dropped == 0
+    assert report.source_text_hash_recorded is True
+
+
+def test_extract_figurative_unanchored_does_not_record_hash(tmp_path: Path):
+    src = _make_fig_source_md(tmp_path)
+    cands = parse_candidates(json.dumps({"candidates": [
+        {"type": "metaphor", "exact": "a phrase absent from the document",
+         "prefix": "", "suffix": "",
+         "source_domain": "warfare", "target_domain": "immune response"},
+    ]}))
+    report = extract_candidates(
+        source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
+    )
+    assert report.written == 0
+    assert report.skipped == {"extract-quote-not-found": 1}
+    assert report.source_text_hash_recorded is False

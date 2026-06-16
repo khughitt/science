@@ -1,7 +1,8 @@
 # /annotate-paper
 
-Extract sub-article **statements** (propositions/questions/hypotheses) from a paper that already
-has a persisted `.source.md` and PubTator annotations, via the `paper-annotate` subagent.
+Extract sub-article **statements** (propositions/questions/hypotheses) and **figures**
+(metaphors/analogies) from a paper that already has a persisted `.source.md` and PubTator
+annotations, via the `paper-annotate` subagent.
 
 ## Usage
 
