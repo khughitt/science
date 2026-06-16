@@ -146,3 +146,38 @@ def test_evidence_line_entity_dataset_usage_roundtrip() -> None:
     assert el2.dataset_usage[0].ref == "dataset:mmrf"
     assert el2.dataset_usage[0].role == "analyzed"
     assert el2.dataset_usage[0].overlap == "full"
+
+
+def test_evidence_type_canonicalizes_suffixed_spelling():
+    from science_model.reasoning import EvidenceType
+    el = EvidenceLineEntity(**{**_minimal_evidence_line(), "evidence_type": "empirical_data_evidence"})
+    assert el.evidence_type is EvidenceType.EMPIRICAL_DATA
+
+
+def test_evidence_type_accepts_normalized_spelling():
+    from science_model.reasoning import EvidenceType
+    el = EvidenceLineEntity(**{**_minimal_evidence_line(), "evidence_type": "empirical_data"})
+    assert el.evidence_type is EvidenceType.EMPIRICAL_DATA
+
+
+def test_evidence_type_expert_judgment_both_spellings():
+    from science_model.reasoning import EvidenceType
+    for spelling in ("expert_judgment", "expert_judgment_evidence"):
+        el = EvidenceLineEntity(**{**_minimal_evidence_line(), "evidence_type": spelling})
+        assert el.evidence_type is EvidenceType.EXPERT_JUDGMENT
+
+
+def test_evidence_type_negative_result_is_valid():
+    from science_model.reasoning import EvidenceType
+    el = EvidenceLineEntity(**{**_minimal_evidence_line(), "evidence_type": "negative_result"})
+    assert el.evidence_type is EvidenceType.NEGATIVE_RESULT
+
+
+def test_evidence_type_none_allowed():
+    el = EvidenceLineEntity(**_minimal_evidence_line())
+    assert el.evidence_type is None
+
+
+def test_evidence_type_unknown_rejected():
+    with pytest.raises(ValidationError):
+        EvidenceLineEntity(**{**_minimal_evidence_line(), "evidence_type": "differential_expression"})

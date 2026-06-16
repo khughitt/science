@@ -24,6 +24,7 @@ from science_model.reasoning import (
     EvidenceRole,
     EvidenceStance,
     EvidenceStrength,
+    EvidenceType,
     IdentificationStrength,
     IndependenceTag,
     MeasurementModel,
@@ -31,6 +32,7 @@ from science_model.reasoning import (
     RESERVED_COMPOSITION_RULES,
     RivalModelPacket,
     SupportScope,
+    canonical_evidence_type_token,
 )
 from science_model.source_contracts import AuthoredTargetedRelation
 from science_model.sync import SyncSource
@@ -861,9 +863,18 @@ class EvidenceLineEntity(ProjectEntity):
     shared_lab: str | None = None
     shared_platform: str | None = None
     shared_cohort: str | None = None
-    evidence_type: str | None = None
+    evidence_type: EvidenceType | None = None
     quantitative_result: QuantitativeResult | None = None
     belief_eligible: bool = True
+
+    @field_validator("evidence_type", mode="before")
+    @classmethod
+    def _canonicalize_evidence_type(cls, value: object) -> object:
+        # Strip the authored ``_evidence`` suffix so both spellings parse to the same
+        # EvidenceType member; an unknown token falls through to enum coercion, which raises.
+        if isinstance(value, str):
+            return canonical_evidence_type_token(value)
+        return value
 
 
 class InquiryEntity(ProjectEntity):
