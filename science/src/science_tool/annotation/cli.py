@@ -1094,7 +1094,7 @@ def extract_cmd(
     from science_tool.annotation.statement_extract import (
         CandidateError,
         check_source_changed,
-        extract_statements,
+        extract_candidates,
         parse_candidates,
     )
 
@@ -1116,7 +1116,7 @@ def extract_cmd(
         raise click.ClickException(str(exc)) from exc
 
     try:
-        report = extract_statements(
+        report = extract_candidates(
             source_md=source_md, model=model, candidates=candidates,
             now=datetime.now(timezone.utc), actor=actor,
         )

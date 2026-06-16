@@ -115,7 +115,7 @@ class CandidateError(ValueError):
 
 
 @dataclass(frozen=True)
-class Candidate:
+class StatementCandidate:
     type: str
     exact: str
     prefix: str
@@ -127,8 +127,8 @@ class Candidate:
     object_concept: str | None = None
 
 
-def parse_candidates(raw: str) -> list[Candidate]:
-    """Parse + strictly validate a candidates.json string into Candidate rows.
+def parse_candidates(raw: str) -> list[StatementCandidate]:
+    """Parse + strictly validate a candidates.json string into StatementCandidate rows.
 
     Any structural problem (bad JSON, unknown key, unknown type/stance, wrong field
     type, over-count, over-length, empty exact) raises CandidateError — no silent
@@ -151,7 +151,7 @@ def parse_candidates(raw: str) -> list[Candidate]:
     return [_parse_one(item, idx) for idx, item in enumerate(items)]
 
 
-def _parse_one(item: Any, idx: int) -> Candidate:
+def _parse_one(item: Any, idx: int) -> StatementCandidate:
     if not isinstance(item, dict):
         raise CandidateError(f"candidate[{idx}] must be a JSON object")
     keys = set(item)
@@ -196,7 +196,7 @@ def _parse_one(item: Any, idx: int) -> Candidate:
         raise CandidateError(
             f"candidate[{idx}].stance {stance!r} not in {sorted(STANCES)}"
         )
-    return Candidate(
+    return StatementCandidate(
         type=ctype,
         exact=exact,
         prefix=_req("prefix"),
@@ -304,13 +304,13 @@ def active_entity_iris(sidecar: Sidecar) -> set[str]:
 def plan_statement(
     file_text: str,
     persisted: list[PersistedPassage],
-    candidate: Candidate,
+    candidate: StatementCandidate,
     *,
     active_iris: set[str],
     model: str,
     source_md_name: str,
 ) -> tuple[PlannedAnnotation | None, str | None, int]:
-    """Convert a Candidate to (PlannedAnnotation | None, skip_reason | None, dropped).
+    """Convert a StatementCandidate to (PlannedAnnotation | None, skip_reason | None, dropped).
 
     skip reasons: "extract-quote-not-found", "extract-quote-ambiguous",
     "extract-anchored-outside-passage". `dropped` counts unverified concept fields
@@ -399,11 +399,11 @@ def _read_text_sha256(source_md: Path) -> str:
     return value
 
 
-def extract_statements(
+def extract_candidates(
     *,
     source_md: Path,
     model: str,
-    candidates: list[Candidate],
+    candidates: list[StatementCandidate],
     now: datetime,
     actor: str,
 ) -> ExtractReport:

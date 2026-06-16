@@ -112,10 +112,10 @@ def test_containing_passage_finds_enclosing():
 import pytest
 
 from science_tool.annotation.statement_extract import (
-    Candidate,
     CandidateError,
     MAX_CANDIDATES,
     MAX_FIELD_CHARS,
+    StatementCandidate,
     parse_candidates,
 )
 
@@ -131,7 +131,7 @@ def _one(**over):
 
 def test_parse_minimal_valid():
     [c] = parse_candidates(_one())
-    assert isinstance(c, Candidate)
+    assert isinstance(c, StatementCandidate)
     assert c.type == "proposition" and c.stance == "asserted"
     assert c.subject is None and c.subject_concept is None
 
@@ -344,11 +344,11 @@ def test_active_entity_iris_includes_open_and_ack_excludes_others():
     assert "https://identifiers.org/mesh:D3" not in iris
 
 
-def _cand(**over) -> Candidate:
+def _cand(**over) -> StatementCandidate:
     base = dict(type="proposition", exact="BRCA1 loss drives genomic instability",
                 prefix="", suffix=" in these", stance="asserted")
     base.update(over)
-    return Candidate(**base)  # type: ignore[arg-type]
+    return StatementCandidate(**base)  # type: ignore[arg-type]
 
 
 def test_plan_statement_anchors_and_builds_body():
@@ -447,7 +447,7 @@ from science_tool.annotation.source_text import Passage, SourcePassages, write_s
 from science_tool.annotation.statement_extract import (
     ExtractReport,
     check_source_changed,
-    extract_statements,
+    extract_candidates,
 )
 
 
@@ -469,8 +469,8 @@ def _make_source_md(tmp_path: Path) -> Path:
     )
 
 
-def _cands(*objs) -> list[Candidate]:
-    return [Candidate(**o) for o in objs]  # type: ignore[arg-type]
+def _cands(*objs) -> list[StatementCandidate]:
+    return [StatementCandidate(**o) for o in objs]  # type: ignore[arg-type]
 
 
 def test_extract_end_to_end_writes_and_records_hash(tmp_path: Path):
@@ -479,7 +479,7 @@ def test_extract_end_to_end_writes_and_records_hash(tmp_path: Path):
         type="proposition", exact="BRCA1 loss drives genomic instability",
         prefix="", suffix=" in tumors", stance="asserted",
     ))
-    report = extract_statements(
+    report = extract_candidates(
         source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="paper-annotate",
     )
     assert isinstance(report, ExtractReport)
@@ -501,8 +501,8 @@ def test_extract_identical_rerun_is_idempotent(tmp_path: Path):
         type="proposition", exact="BRCA1 loss drives genomic instability",
         prefix="", suffix=" in tumors", stance="asserted",
     ))
-    extract_statements(source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a")
-    again = extract_statements(
+    extract_candidates(source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a")
+    again = extract_candidates(
         source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
     )
     assert again.written == 0  # all-duplicate
@@ -511,7 +511,7 @@ def test_extract_identical_rerun_is_idempotent(tmp_path: Path):
 
 def test_extract_empty_candidates_records_hash(tmp_path: Path):
     src = _make_source_md(tmp_path)
-    report = extract_statements(
+    report = extract_candidates(
         source_md=src, model=_MODEL, candidates=[], now=_NOW, actor="a",
     )
     assert report.written == 0
@@ -526,7 +526,7 @@ def test_extract_all_unanchored_does_not_record_hash(tmp_path: Path):
         type="proposition", exact="text that is absent from the document",
         prefix="", suffix="", stance="asserted",
     ))
-    report = extract_statements(
+    report = extract_candidates(
         source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
     )
     assert report.written == 0
@@ -545,7 +545,7 @@ def test_extract_partial_anchor_failure_does_not_record_hash(tmp_path: Path):
         dict(type="hypothesis", exact="a clause that is absent from the document",
              prefix="", suffix="", stance="hypothesized"),
     )
-    report = extract_statements(
+    report = extract_candidates(
         source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
     )
     assert report.written == 1  # the good one persisted
@@ -566,7 +566,7 @@ def test_extract_reports_grounding_dropped(tmp_path: Path):
         prefix="", suffix=" in tumors", stance="asserted",
         subject_concept="https://identifiers.org/ncbigene:999",  # not a persisted entity
     ))
-    report = extract_statements(
+    report = extract_candidates(
         source_md=src, model=_MODEL, candidates=cands, now=_NOW, actor="a",
     )
     assert report.written == 1 and report.grounding_dropped == 1
