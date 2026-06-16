@@ -333,6 +333,8 @@ class BeliefResult:
     policy_version: str = DEFAULT_BELIEF_POLICY.version
     authored_capped: bool = False
     excluded_authored_confidence: list[EvidenceUnit] = field(default_factory=list)
+    qa_dataset_capped: bool = False
+    qa_failed_datasets: tuple[str, ...] = ()
 
     def display(self) -> str:
         return f"{self.magnitude.value} (contested)" if self.contested else self.magnitude.value
@@ -375,6 +377,26 @@ def aggregate_belief(units: list[EvidenceUnit], *, policy: BeliefPolicy = DEFAUL
             magnitude = ceiling
             authored_capped = True
 
+    # Dataset-QA ceiling (design §The QA ceiling). When counted empirical support rests on a
+    # structurally-QA-failed dataset and the QA-clean support cannot reach the achieved
+    # magnitude alone, hard-cap to qa_failed_dataset_ceiling. Applied after the refutation and
+    # authored caps.
+    qa_dataset_capped = False
+    qa_failed_datasets: tuple[str, ...] = ()
+    qa_failed_support = [u for u in support if is_qa_failed(u)]
+    if qa_failed_support:
+        clean_support_units = [u for u in support if not is_qa_failed(u)]
+        clean_cg = _contested_groups_for(clean_support_units, dispute)
+        clean_only = _base_magnitude(clean_support_units, clean_cg, policy=policy)
+        if _MAG_ORDER.index(clean_only) < _MAG_ORDER.index(magnitude):
+            ceiling = BeliefMagnitude(policy.qa_failed_dataset_ceiling)
+            if _MAG_ORDER.index(magnitude) > _MAG_ORDER.index(ceiling):
+                magnitude = ceiling
+                qa_dataset_capped = True
+                qa_failed_datasets = tuple(
+                    sorted({d for u in qa_failed_support for d in u.qa_failed_datasets})
+                )
+
     contested = (
         bool(dispute)
         or any(u.stance == "disputes" for u in diagnostics)
@@ -395,4 +417,6 @@ def aggregate_belief(units: list[EvidenceUnit], *, policy: BeliefPolicy = DEFAUL
         policy_version=policy.version,
         authored_capped=authored_capped,
         excluded_authored_confidence=excluded_authored_confidence,
+        qa_dataset_capped=qa_dataset_capped,
+        qa_failed_datasets=qa_failed_datasets,
     )

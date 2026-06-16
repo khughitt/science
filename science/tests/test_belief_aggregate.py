@@ -103,3 +103,81 @@ def test_contested_groups_for_intersects_support_and_dispute_groups():
     support = [u("supports", "g1"), u("supports", "g2"), u("supports", None)]
     dispute = [u("disputes", "g1"), u("disputes", "g3")]
     assert _contested_groups_for(support, dispute) == {"g1"}   # only the shared group; None ignored
+
+
+def test_qa_ceiling_caps_when_belief_depends_on_failed_qa():
+    from science_tool.graph.belief import BeliefMagnitude, EvidenceUnit, aggregate_belief
+    from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY as P
+
+    def sup(uri, role="direct_test", qa=()):
+        return EvidenceUnit(line_uri=uri, stance="supports", strength="strong",
+            independence="independent", independence_group=None, evidence_role=role,
+            evidence_type="empirical_data", dispute_scope=None, proxy_directness=None,
+            has_measurement_model=False, source=None, observability_keys=(),
+            qa_failed_datasets=qa)
+
+    res = aggregate_belief([sup("a", "direct_test", qa=("dataset:bad",)), sup("b", "proxy_support")], policy=P)
+    assert res.magnitude == BeliefMagnitude.FRAGILE
+    assert res.qa_dataset_capped is True
+    assert res.qa_failed_datasets == ("dataset:bad",)
+
+
+def test_qa_ceiling_no_cap_when_clean_support_stands_on_its_own():
+    from science_tool.graph.belief import BeliefMagnitude, EvidenceUnit, aggregate_belief
+    from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY as P
+
+    def sup(uri, role, qa=()):
+        return EvidenceUnit(line_uri=uri, stance="supports", strength="strong",
+            independence="independent", independence_group=None, evidence_role=role,
+            evidence_type="empirical_data", dispute_scope=None, proxy_directness=None,
+            has_measurement_model=False, source=None, observability_keys=(),
+            qa_failed_datasets=qa)
+
+    res = aggregate_belief(
+        [sup("a", "direct_test"), sup("b", "proxy_support"), sup("c", "proxy_support", qa=("dataset:bad",))],
+        policy=P)
+    assert res.magnitude == BeliefMagnitude.WELL_SUPPORTED
+    assert res.qa_dataset_capped is False
+    assert res.qa_failed_datasets == ()
+
+
+def test_qa_hard_ceiling_edge_clean_supported_failed_lifts_to_well_supported():
+    from science_tool.graph.belief import BeliefMagnitude, EvidenceUnit, aggregate_belief
+    from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY as P
+    def sup(uri, role, qa=()):
+        return EvidenceUnit(line_uri=uri, stance="supports", strength="strong",
+            independence="independent", independence_group=None, evidence_role=role,
+            evidence_type="empirical_data", dispute_scope=None, proxy_directness=None,
+            has_measurement_model=False, source=None, observability_keys=(), qa_failed_datasets=qa)
+    # A clean qualifying direct test (a) plus a qa-failed corroborating proxy (c). The qa-failed
+    # unit lifts the clean *count* to 2 -> full magnitude WELL_SUPPORTED; dropping it leaves a
+    # single clean unit -> FRAGILE, so the QA ceiling caps to FRAGILE. (A qa-failed *direct_test*
+    # cannot drive this: is_qualifying_direct_test already excludes qa-failed units, so it would
+    # never satisfy the WELL_SUPPORTED direct-test gate.)
+    res = aggregate_belief(
+        [sup("a", "direct_test"), sup("c", "proxy_support", qa=("dataset:bad",))],
+        policy=P)
+    assert res.magnitude == BeliefMagnitude.FRAGILE
+    assert res.qa_dataset_capped is True
+
+
+def test_qa_no_cap_with_contested_group_present_clean_stands_on_its_own():
+    from science_tool.graph.belief import BeliefMagnitude, EvidenceUnit, aggregate_belief
+    from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY as P
+
+    def u(uri, stance, role, group=None, qa=()):
+        return EvidenceUnit(line_uri=uri, stance=stance, strength="strong",
+            independence="independent", independence_group=group, evidence_role=role,
+            evidence_type="empirical_data", dispute_scope=None, proxy_directness=None,
+            has_measurement_model=False, source=None, observability_keys=(), qa_failed_datasets=qa)
+
+    units = [
+        u("s1", "supports", "direct_test"),
+        u("s2", "supports", "proxy_support"),
+        u("s3", "supports", "proxy_support", qa=("dataset:bad",)),
+        u("s4", "supports", "direct_test", group="g1"),
+        u("d1", "disputes", "proxy_support", group="g1"),
+    ]
+    res = aggregate_belief(units, policy=P)
+    assert res.magnitude == BeliefMagnitude.WELL_SUPPORTED
+    assert res.qa_dataset_capped is False
