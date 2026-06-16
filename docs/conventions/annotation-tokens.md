@@ -231,3 +231,23 @@ command + `llm-annot:<model>:paper-annotate-v1` source as statements — emitted
   `sci:promotedTo` and no existing derived proposition. Re-running skips already-promoted rows.
 - **Out of scope (later slices):** question/hypothesis promotion (4b), factoring (4c),
   cross-paper evidence (4d), embedding/paraphrase dedup, figurative promotion.
+
+## Question / hypothesis promotion (Phase 4b)
+
+`science annotate promote` also promotes `question`- and `hypothesis`-type statement
+annotations into `question` / `hypothesis` entities, alongside `proposition`:
+
+- **Mint-or-link is kind-local.** A claim links only to an existing entity *of the same kind*
+  with an equal normalized title; otherwise it mints. A normalized title held by ≥2 same-kind
+  entities is skipped `promote-link-ambiguous` (resolve with an explicit id via `--apply --input`).
+- **Numeric identity.** Question/hypothesis entities are minted at `entities/questions/NNNN-slug.md`
+  / `entities/hypotheses/NNNN-slug.md` via atomic number reservation (no slug-collision case).
+- **Template-faithful.** A minted entity carries every required section (claim text in the lead
+  section — question `## Summary`, hypothesis `## Organizing Conjecture`) and the descriptor
+  default status (`active` / `proposed`). A promoted **hypothesis** is minted `phase: candidate`
+  (a literature-sourced framing the project has not committed to).
+- **Provenance & idempotency** match Phase 4a: `source_refs` carry `paper:<id>` +
+  `annotation:<relpath>#<frag>`; the annotation gains `sci:promotedTo "<kind>:<id>"`; a second
+  `--apply` is a no-op.
+- **Non-promotable:** metaphor/analogy and entity/relation seeder annotations are skipped
+  `promote-non-promotable-type` (no truth/inquiry-apt target).
