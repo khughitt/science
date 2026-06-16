@@ -219,7 +219,7 @@ compose the two new phase functions, making the split real while keeping the pub
 class EmitResult:
     dataset: Dataset
     kind_class: dict[str, EntityClass]
-    pre_registration_targets: set[URIRef]
+    pre_registration_targets: dict[URIRef, list[URIRef]]
 
 
 def _build_dataset_from_sources(sources, *, source_snapshots=None) -> Dataset:
