@@ -42,6 +42,17 @@ def test_steps_are_rank_minus_one_floored_at_zero():
     assert strength_steps("") == 0
 
 
+def test_magnitude_names_reconcile_with_enum():
+    from science_tool.graph.belief import BeliefMagnitude
+    from science_tool.graph.belief_weights import MAGNITUDE_NAMES
+
+    # MAGNITUDE_NAMES is the cycle-free home for the magnitude strings (belief_weights
+    # imports nothing internal); it must stay in lock-step with the BeliefMagnitude enum.
+    assert set(MAGNITUDE_NAMES) == {m.value for m in BeliefMagnitude}
+    # Ordering matches the ordinal ladder used by aggregate_belief.
+    assert MAGNITUDE_NAMES == ("speculative", "fragile", "supported", "well_supported")
+
+
 def test_phase2_constants_present():
     from science_tool.graph import belief_weights as bw
     assert bw.PROXY_STEP_PENALTY == 2

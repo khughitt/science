@@ -58,6 +58,7 @@ def snapshot_records(knowledge, provenance, *, scalar_enabled: bool, as_of: str)
                 "composition_rule": result.composition_rule,
                 "belief_state": result.magnitude.value,
                 "capped_by_refutation": result.capped_by_refutation,
+                "authored_capped": result.authored_capped,
                 "contested": result.contested,
                 "bottleneck_members": result.bottleneck_members,
                 "scalar_driver_member": (result.member_results[0].member_uri if result.member_results else None),
@@ -86,6 +87,7 @@ def snapshot_records(knowledge, provenance, *, scalar_enabled: bool, as_of: str)
             "is_bundle": False,
             "belief_state": result.magnitude.value,
             "contested": result.contested,
+            "authored_capped": result.authored_capped,
             "diagnostic_dispute_count": scalar.diagnostic_dispute_count,
             "scalar_enabled": scalar_enabled,
             "massed_support_score": scalar.massed_support_score if scalar_enabled else None,
@@ -124,6 +126,11 @@ def _with_policy_defaults(row: dict) -> dict:
     if "policy_id" not in row:
         row["policy_id"] = DEFAULT_BELIEF_POLICY.policy_id
         row["policy_version"] = DEFAULT_BELIEF_POLICY.version
+    # Pre-Slice-B rows have no authored-only ceiling: False is the semantically correct
+    # value, not a silent fallback. NOT added to _key (a derived flag, like
+    # capped_by_refutation, not part of belief identity).
+    if "authored_capped" not in row:
+        row["authored_capped"] = False
     return row
 
 

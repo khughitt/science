@@ -166,3 +166,26 @@ def test_composition_rule_on_non_bundle_in_graph_raises():
     prov.add((PA, SCI_NS.compositionRule, Literal("conjunctive")))
     with pytest.raises(ValueError, match="not a bundle"):
         belief_for_entity(k, prov, PA, scalar_enabled=False)
+
+
+def test_bundle_rolls_up_authored_capped_as_or():
+    def _capped_member(uri: str, *, authored_capped: bool) -> MemberBelief:
+        belief = BeliefResult(
+            magnitude=BeliefMagnitude.FRAGILE, contested=False, capped_by_refutation=False,
+            support_units=[], dispute_units=[], diagnostics=[], contested_groups=set(),
+            excluded=[], flagged_ungrouped=[], authored_capped=authored_capped,
+        )
+        return MemberBelief(member_uri=uri, belief=belief, scalar=None,
+                            rank_key=member_rank_key(belief, None, uri))
+
+    none_capped = roll_up_weakest_link(
+        [_capped_member("p:a", authored_capped=False), _capped_member("p:b", authored_capped=False)],
+        rule=CompositionRule.ALL_STEPS,
+    )
+    assert none_capped.authored_capped is False
+
+    one_capped = roll_up_weakest_link(
+        [_capped_member("p:a", authored_capped=False), _capped_member("p:b", authored_capped=True)],
+        rule=CompositionRule.ALL_STEPS,
+    )
+    assert one_capped.authored_capped is True  # OR across members, mirroring capped_by_refutation

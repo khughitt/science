@@ -46,6 +46,9 @@ def test_constructor_normalizes_mutable_containers():
         shared_source_token="shared-source", circular_token="circular",
         scope_whole_claim="whole_claim", decisive_strength="strong",
         well_supported_min_clean_support=2, well_supported_requires_direct_test=True,
+        authored_assertion_type="expert_judgment",
+        authored_min_confidence=0.5,
+        authored_only_ceiling="fragile",
     )
     assert isinstance(p.evidence_type_rank, MappingProxyType)
     assert isinstance(p.gated_proxy, frozenset)

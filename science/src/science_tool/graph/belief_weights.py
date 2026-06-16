@@ -35,6 +35,11 @@ EVIDENCE_TYPE_RANK = {
 }
 EVIDENCE_ROLE_RANK = {ROLE_DIRECT_TEST: 3, ROLE_PROXY_SUPPORT: 2, ROLE_BACKGROUND: 1}
 STRENGTH_RANK = {"strong": 3, "moderate": 2, "weak": 1}
+# Canonical belief-magnitude names, lowest→highest. belief_weights imports nothing
+# internal, so this is the cycle-free home for the magnitude strings that belief_policy
+# validates against (BeliefMagnitude itself lives in belief.py, which would form a cycle).
+# A reconciliation test (tests/test_belief_weights.py) keeps this in lock-step with the enum.
+MAGNITUDE_NAMES = ("speculative", "fragile", "supported", "well_supported")
 
 
 def normalize_evidence_type(value: str | None) -> str:
