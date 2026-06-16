@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from science_qa.flags import SEVERITY_DISTRIBUTION, SEVERITY_STRUCTURAL
 from science_qa.runner import PackageRunResult, run_qa_package
 
 from science_tool.datasets.validate import DESCRIPTOR_NAMES
@@ -38,9 +39,9 @@ def run_package_qa(path: Path, *, resource: str | None = None,
 
 
 def render_resource_line(outcome) -> str:
-    n_struct = (sum(1 for f in outcome.result.flags if f.severity == "structural")
+    n_struct = (sum(1 for f in outcome.result.flags if f.severity == SEVERITY_STRUCTURAL)
                 if outcome.result else 0)
-    n_dist = (sum(1 for f in outcome.result.flags if f.severity == "distribution")
+    n_dist = (sum(1 for f in outcome.result.flags if f.severity == SEVERITY_DISTRIBUTION)
               if outcome.result else 0)
     label = "FAIL" if outcome.status == "fail" else outcome.status
     detail = outcome.reason if outcome.reason else f"{n_struct} structural, {n_dist} distribution"
