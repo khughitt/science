@@ -28,7 +28,7 @@ data-model change — P4 already shipped every field this reads. Design:
 - **Worktree & branch.** All work happens in the worktree
   `~/d/science/.worktrees/entity-consolidation-p5-tier4-substitution` on branch
   `feat/entity-consolidation-p5-tier4-substitution`. Before any commit, verify:
-  `cd ~/d/science/.worktrees/entity-consolidation-p5-tier4-substitution && git branch --show-current`
+  `cd ~/d/science/.worktrees/entity-consolidation-p5-tier4-substitution && rtk git branch --show-current`
   must print `feat/entity-consolidation-p5-tier4-substitution`. The repo is
   Dropbox-synced and `~/d/science` is the MAIN checkout — never edit there; edit the
   worktree path explicitly.
@@ -36,7 +36,7 @@ data-model change — P4 already shipped every field this reads. Design:
   worktree's source on the path, from the worktree's `science/` dir:
   ```bash
   cd ~/d/science/.worktrees/entity-consolidation-p5-tier4-substitution/science
-  PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/<file> -q
+  rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/<file> -q
   ```
   `PYTHONPATH=src:model/src` is the standing convention (the `science_model`
   editable-install-from-main shadowing gotcha). P5 touches **no** `science_model`
@@ -117,7 +117,7 @@ def test_dataclasses_are_frozen_with_defaults() -> None:
 
 - [ ] **Step 2: Run it; expect failure**
 
-Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_big_picture_digests.py -q`
+Run: `rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_big_picture_digests.py -q`
 Expected: FAIL — `ModuleNotFoundError: science_tool.big_picture.digests`.
 
 - [ ] **Step 3: Create the module**
@@ -205,14 +205,14 @@ def redirect_refs(refs: Iterable[str], remap: Mapping[str, str]) -> list[str]:
 
 - [ ] **Step 4: Run it; expect pass**
 
-Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_big_picture_digests.py -q`
+Run: `rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_big_picture_digests.py -q`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/science_tool/big_picture/digests.py tests/test_big_picture_digests.py
-git commit -m "feat(big-picture): digests leaf — ClusterDigest/MemberSummary + redirect_refs"
+rtk git add src/science_tool/big_picture/digests.py tests/test_big_picture_digests.py
+rtk git commit -m "feat(big-picture): digests leaf — ClusterDigest/MemberSummary + redirect_refs"
 ```
 
 ---
@@ -261,7 +261,7 @@ def test_member_to_digest_empty_when_no_index(tmp_path) -> None:
 
 - [ ] **Step 2: Run; expect failure**
 
-Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_big_picture_digests.py -q`
+Run: `rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_big_picture_digests.py -q`
 Expected: FAIL — `ImportError: cannot import name 'member_to_digest'`.
 
 - [ ] **Step 3: Add the function to `digests.py`**
@@ -298,14 +298,14 @@ def member_to_digest(project_root: Path) -> dict[str, str]:
 
 - [ ] **Step 4: Run; expect pass**
 
-Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_big_picture_digests.py -q`
+Run: `rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_big_picture_digests.py -q`
 Expected: PASS (6 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/science_tool/big_picture/digests.py tests/test_big_picture_digests.py
-git commit -m "feat(big-picture): member_to_digest map from the active archive index"
+rtk git add src/science_tool/big_picture/digests.py tests/test_big_picture_digests.py
+rtk git commit -m "feat(big-picture): member_to_digest map from the active archive index"
 ```
 
 ---
@@ -374,7 +374,7 @@ def test_load_cluster_digests_empty_without_synthesis_dir(tmp_path) -> None:
 
 - [ ] **Step 2: Run; expect failure**
 
-Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_big_picture_digests.py -q`
+Run: `rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_big_picture_digests.py -q`
 Expected: FAIL — `ImportError: cannot import name 'load_cluster_digests'`.
 
 - [ ] **Step 3: Add the function to `digests.py`**
@@ -422,14 +422,14 @@ def load_cluster_digests(project_root: Path, *, deep: bool = False) -> dict[str,
 
 - [ ] **Step 4: Run; expect pass**
 
-Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_big_picture_digests.py -q`
+Run: `rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_big_picture_digests.py -q`
 Expected: PASS (9 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/science_tool/big_picture/digests.py tests/test_big_picture_digests.py
-git commit -m "feat(big-picture): load_cluster_digests (default + index-only --deep)"
+rtk git add src/science_tool/big_picture/digests.py tests/test_big_picture_digests.py
+rtk git commit -m "feat(big-picture): load_cluster_digests (default + index-only --deep)"
 ```
 
 ---
@@ -490,7 +490,7 @@ def test_non_cluster_digest_synthesis_does_not_bridge(tmp_path) -> None:
 
 - [ ] **Step 2: Run; expect failure**
 
-Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_resolver_digest_bridge.py -q`
+Run: `rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_resolver_digest_bridge.py -q`
 Expected: FAIL on `test_digest_bridges_question_to_hypothesis` (no bridge yet → empty hypotheses).
 
 - [ ] **Step 3: Add the digest-as-bridge pass to `resolve_questions`**
@@ -524,12 +524,12 @@ insert:
 
 - [ ] **Step 4: Run; expect pass**
 
-Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_resolver_digest_bridge.py -q`
+Run: `rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_resolver_digest_bridge.py -q`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Regression — the existing resolver suite must stay green**
 
-Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_big_picture_resolver.py -q`
+Run: `rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_big_picture_resolver.py -q`
 Expected: PASS, unchanged count. (The `minimal_project` fixture has no
 `cluster-digest` synthesis, so the new pass is a no-op there — this is the
 zero-consolidation regression guard.)
@@ -537,8 +537,8 @@ zero-consolidation regression guard.)
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/science_tool/big_picture/resolver.py tests/test_resolver_digest_bridge.py
-git commit -m "feat(big-picture): digest-as-bridge in question->hypothesis resolver"
+rtk git add src/science_tool/big_picture/resolver.py tests/test_resolver_digest_bridge.py
+rtk git commit -m "feat(big-picture): digest-as-bridge in question->hypothesis resolver"
 ```
 
 ---
@@ -589,21 +589,21 @@ def test_topic_gap_hypotheses_include_a_digest_bridged_hypothesis(tmp_path) -> N
 
 - [ ] **Step 2: Run; expect pass with NO production change**
 
-Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_knowledge_gaps_digest_bridge.py -q`
+Run: `rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_knowledge_gaps_digest_bridge.py -q`
 Expected: PASS. If it fails, do NOT add redirect plumbing to `knowledge_gaps.py`
 (that would be the dead code §3.3 rejects); instead verify Task 4 landed correctly
 — the bridge must come through `resolve_questions`.
 
 - [ ] **Step 3: Regression — existing knowledge-gaps suite stays green**
 
-Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_knowledge_gaps.py tests/test_knowledge_gaps_visibility.py -q`
+Run: `rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_knowledge_gaps.py tests/test_knowledge_gaps_visibility.py -q`
 Expected: PASS, unchanged.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add tests/test_knowledge_gaps_digest_bridge.py
-git commit -m "test(big-picture): knowledge-gaps inherits the digest q<->h bridge"
+rtk git add tests/test_knowledge_gaps_digest_bridge.py
+rtk git commit -m "test(big-picture): knowledge-gaps inherits the digest q<->h bridge"
 ```
 
 ---
@@ -681,7 +681,7 @@ def test_cluster_digests_deep_attaches_member_summaries(tmp_path) -> None:
 
 - [ ] **Step 2: Run; expect failure**
 
-Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_cluster_digests_cli.py -q`
+Run: `rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_cluster_digests_cli.py -q`
 Expected: FAIL — `cluster-digests` not a registered command.
 
 - [ ] **Step 3: Add the subcommand to `cli.py`**
@@ -725,19 +725,19 @@ def cluster_digests_cmd(project_root: Path, deep: bool) -> None:
 
 - [ ] **Step 4: Run; expect pass**
 
-Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_cluster_digests_cli.py -q`
-Expected: PASS (4 tests).
+Run: `rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_cluster_digests_cli.py -q`
+Expected: PASS (3 tests).
 
 - [ ] **Step 5: Regression — existing big-picture CLI suite stays green**
 
-Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_big_picture_cli.py -q`
+Run: `rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_big_picture_cli.py -q`
 Expected: PASS, unchanged (`resolve-questions` / `validate` output shapes intact).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/science_tool/big_picture/cli.py tests/test_cluster_digests_cli.py
-git commit -m "feat(big-picture): cluster-digests CLI emitting {digests, member_to_digest}"
+rtk git add src/science_tool/big_picture/cli.py tests/test_cluster_digests_cli.py
+rtk git commit -m "feat(big-picture): cluster-digests CLI emitting {digests, member_to_digest}"
 ```
 
 ---
@@ -822,7 +822,7 @@ def test_bridge_survives_consolidation(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run; expect pass**
 
-Run: `PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_p5_tier4_acceptance.py -q`
+Run: `rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest tests/test_p5_tier4_acceptance.py -q`
 Expected: PASS. If `create_entity` rejects an id (format/slug), keep the
 `<kind>:0001-x` shape used here (P4's `test_consolidate_acceptance.py` proves it),
 and adjust only the stem — do not change the assertions.
@@ -830,8 +830,8 @@ and adjust only the stem — do not change the assertions.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add tests/test_p5_tier4_acceptance.py
-git commit -m "test(big-picture): P5 acceptance — q<->h bridge survives consolidation via authored digest"
+rtk git add tests/test_p5_tier4_acceptance.py
+rtk git commit -m "test(big-picture): P5 acceptance — q<->h bridge survives consolidation via authored digest"
 ```
 
 ---
@@ -842,7 +842,7 @@ git commit -m "test(big-picture): P5 acceptance — q<->h bridge survives consol
 
 ```bash
 cd ~/d/science/.worktrees/entity-consolidation-p5-tier4-substitution/science
-PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest \
+rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest \
   tests/test_big_picture_digests.py tests/test_resolver_digest_bridge.py \
   tests/test_knowledge_gaps_digest_bridge.py tests/test_cluster_digests_cli.py \
   tests/test_p5_tier4_acceptance.py tests/test_big_picture_resolver.py \
@@ -855,7 +855,7 @@ Expected: all green.
   (6× `test_codex_skills`, `test_full_lifecycle`, `test_meta_validate_smoke_runs`):
 
 ```bash
-PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest \
+rtk env PYTHONPATH=src:model/src ~/d/science/science/.venv/bin/pytest \
   tests/ -k "big_picture or consolidate or archive or knowledge_gaps or digest" -q
 ```
 
