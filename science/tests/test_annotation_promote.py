@@ -265,3 +265,70 @@ def test_apply_is_idempotent(tmp_path):
     assert run().minted == 1
     second = run()
     assert second.minted == 0 and second.linked == 0
+
+
+def test_override_flips_mint_to_link():
+    from science_tool.annotation.promote import PromotionCandidate, apply_overrides
+
+    base = [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="C", subject=None, object=None,
+                               decision="MINT", slug="c", reason="new proposition")]
+    edited = [{"annotation": "annotation:a#f1", "decision": "LINK", "slug": "proposition:existing"}]
+    [out] = apply_overrides(base, edited, existing_refs={"proposition:existing"})
+    assert out.decision == "LINK" and out.slug == "proposition:existing"
+
+
+def test_override_explicit_id_resolves_collision():
+    from science_tool.annotation.promote import PromotionCandidate, apply_overrides
+
+    base = [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="C", subject=None, object=None,
+                               decision="COLLISION", slug="c", reason="promote-slug-collision")]
+    edited = [{"annotation": "annotation:a#f1", "decision": "MINT", "slug": "proposition:c-2"}]
+    [out] = apply_overrides(base, edited, existing_refs=set())
+    assert out.decision == "MINT" and out.slug == "c-2"
+
+
+def test_override_unchanged_row_passthrough():
+    from science_tool.annotation.promote import PromotionCandidate, apply_overrides
+
+    base = [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="C", subject=None, object=None,
+                               decision="MINT", slug="c", reason="new")]
+    [out] = apply_overrides(base, [{"annotation": "annotation:a#f1", "decision": "MINT", "slug": "c"}], existing_refs=set())
+    assert out.decision == "MINT" and out.slug == "c"
+
+
+def test_override_bad_link_target_fails_loud():
+    import pytest
+    from science_tool.annotation.promote import PromotionCandidate, PromotionOverrideError, apply_overrides
+
+    base = [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="C", subject=None, object=None,
+                               decision="MINT", slug="c", reason="new")]
+    with pytest.raises(PromotionOverrideError):
+        apply_overrides(base, [{"annotation": "annotation:a#f1", "decision": "LINK", "slug": "proposition:missing"}], existing_refs=set())
+
+
+def test_override_unknown_ref_fails_loud():
+    import pytest
+    from science_tool.annotation.promote import PromotionOverrideError, apply_overrides
+
+    with pytest.raises(PromotionOverrideError):
+        apply_overrides([], [{"annotation": "annotation:zzz#f9", "decision": "MINT", "slug": "x"}], existing_refs=set())
+
+
+def test_override_untouched_collision_row_passes_through():
+    # A fed-back file mixes one edited row with an untouched COLLISION row; the latter must
+    # pass through (not raise) so apply_candidates can skip it.
+    from science_tool.annotation.promote import PromotionCandidate, apply_overrides
+
+    base = [
+        PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="A", subject=None, object=None,
+                           decision="COLLISION", slug="a", reason="promote-slug-collision"),
+        PromotionCandidate(ref="annotation:a#f2", frag="f2", claim="B", subject=None, object=None,
+                           decision="MINT", slug="b", reason="new"),
+    ]
+    edited = [
+        {"annotation": "annotation:a#f1", "decision": "COLLISION", "slug": "a"},   # untouched
+        {"annotation": "annotation:a#f2", "decision": "MINT", "slug": "proposition:b-2"},  # renamed
+    ]
+    out = apply_overrides(base, edited, existing_refs=set())
+    assert out[0].decision == "COLLISION"
+    assert out[1].decision == "MINT" and out[1].slug == "b-2"

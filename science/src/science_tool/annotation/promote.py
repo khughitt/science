@@ -234,3 +234,53 @@ def apply_candidates(
         )
         anno_io.write_sidecar(sidecar_path, dataclasses.replace(sidecar, annotations=new_anns))
     return report
+
+
+class PromotionOverrideError(Exception):
+    """Raised when an edited candidate override is invalid (fail loud)."""
+
+
+def apply_overrides(
+    base: list[PromotionCandidate],
+    edited_rows: list[dict],
+    *,
+    existing_refs: set[str],
+) -> list[PromotionCandidate]:
+    """Overlay curator edits onto freshly computed base candidates, matched by `annotation` ref.
+
+    `edited_rows` is the SAME row shape the read-only `--json` emits
+    (`{annotation, decision, slug, ...}`); the curator edits `decision`/`slug` in place. A row
+    may switch a candidate to LINK (`slug` = an existing `proposition:<slug>`) or MINT (`slug`
+    = the explicit mint slug, bare or `proposition:`-prefixed). Unknown refs and unknown LINK
+    targets fail loud. The explicit-id overwrite guard lives at the write boundary
+    (`apply_candidates`)."""
+    by_ref = {c.ref: c for c in base}
+    edited: dict[str, dict] = {}
+    for row in edited_rows:
+        ref = row.get("annotation")
+        if ref not in by_ref:
+            raise PromotionOverrideError(f"override row names unknown annotation ref {ref!r}")
+        edited[ref] = row
+    out: list[PromotionCandidate] = []
+    for c in base:
+        row = edited.get(c.ref)
+        if row is None:
+            out.append(c)
+            continue
+        decision = row.get("decision", c.decision)
+        slug = row.get("slug", c.slug)
+        if decision == c.decision and slug == c.slug:
+            out.append(c)  # untouched row (incl. unedited COLLISION/SKIP) — passthrough
+            continue
+        if decision == "LINK":
+            if not slug or slug not in existing_refs:
+                raise PromotionOverrideError(f"LINK target {slug!r} is not an existing proposition")
+            out.append(dataclasses.replace(c, decision="LINK", slug=slug, reason="curator override: link"))
+        elif decision == "MINT":
+            bare = slug.split(":", 1)[1] if isinstance(slug, str) and slug.startswith("proposition:") else slug
+            if not bare:
+                raise PromotionOverrideError(f"MINT override for {c.ref!r} requires a slug")
+            out.append(dataclasses.replace(c, decision="MINT", slug=bare, reason="curator override: mint"))
+        else:
+            raise PromotionOverrideError(f"override decision for {c.ref!r} must be LINK or MINT, got {decision!r}")
+    return out
