@@ -136,3 +136,132 @@ def test_malformed_statement_body_hard_fails(tmp_path):
     )
     with pytest.raises(PromotionReadError):
         collect_promotable(anno_io.Sidecar(annotations=(bad,)), sp, tmp_path, derived_refs=set())
+
+
+def test_apply_mints_proposition_and_backlinks(tmp_path):
+    from datetime import date
+    from science_tool.annotation import io as anno_io
+    from science_tool.annotation.model import Status
+    from science_tool.annotation.promote import (
+        apply_candidates, collect_promotable, decide_candidates, load_corpus,
+    )
+    from science_tool.annotation.query import read_sidecar_strict
+
+    # project layout
+    (tmp_path / "entities" / "propositions").mkdir(parents=True)
+    paper_dir = tmp_path / "papers"
+    paper_dir.mkdir()
+    md = paper_dir / "smith2020.source.md"
+    md.write_text("Cells divide rapidly.\n", encoding="utf-8")
+    sidecar_path = anno_io.sidecar_for_markdown(md)
+    ann = _statement_ann("a-1", "Cells divide rapidly", status=Status.OPEN, subject="Cells")
+    anno_io.write_sidecar(sidecar_path, anno_io.Sidecar(annotations=(ann,)))
+
+    corpus = load_corpus(tmp_path)
+    promotable, _ = collect_promotable(read_sidecar_strict(sidecar_path), sidecar_path, tmp_path, derived_refs=corpus.derived_refs)
+    candidates = decide_candidates(promotable, corpus)
+    report = apply_candidates(
+        candidates, sidecar_path=sidecar_path, project_root=tmp_path,
+        paper_ref="paper:smith2020", as_of=date(2026, 6, 16),
+    )
+
+    assert report.minted == 1
+    prop = (tmp_path / "entities" / "propositions" / "cells-divide-rapidly.md").read_text(encoding="utf-8")
+    assert "## Claim\n\nCells divide rapidly" in prop
+    assert "subject: Cells" in prop
+    assert "annotation:papers/smith2020.source#a-1" in prop
+    assert "paper:smith2020" in prop
+    # backlink written into sidecar; status unchanged
+    re_ann = read_sidecar_strict(sidecar_path).annotations[0]
+    assert re_ann.promoted_to == "proposition:cells-divide-rapidly"
+    assert re_ann.status == Status.OPEN
+
+
+def test_apply_links_to_existing_appends_both_refs_preserves_prose(tmp_path):
+    from datetime import date
+    from science_tool.annotation import io as anno_io
+    from science_tool.annotation.model import Status
+    from science_tool.annotation.query import read_sidecar_strict
+    from science_tool.annotation.promote import (
+        apply_candidates, collect_promotable, decide_candidates, load_corpus,
+    )
+
+    (tmp_path / "entities" / "propositions").mkdir(parents=True)
+    existing = tmp_path / "entities" / "propositions" / "known-claim.md"
+    existing.write_text(
+        '---\nid: proposition:known-claim\ntype: proposition\ntitle: Known claim\n'
+        'status: draft\nsource_refs:\n  - "paper:other"\n'
+        'created: "2026-06-01"\nupdated: "2026-06-01"\n---\n'
+        "# Known claim\n\n## Claim\n\nHand-authored prose.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "papers").mkdir()
+    md = tmp_path / "papers" / "p.source.md"
+    md.write_text("Known claim.\n", encoding="utf-8")
+    sp = anno_io.sidecar_for_markdown(md)
+    ann = _statement_ann("a-1", "Known claim", status=Status.OPEN)
+    anno_io.write_sidecar(sp, anno_io.Sidecar(annotations=(ann,)))
+
+    corpus = load_corpus(tmp_path)
+    promotable, _ = collect_promotable(read_sidecar_strict(sp), sp, tmp_path, derived_refs=corpus.derived_refs)
+    candidates = decide_candidates(promotable, corpus)
+    assert candidates[0].decision == "LINK"
+
+    report = apply_candidates(candidates, sidecar_path=sp, project_root=tmp_path,
+                              paper_ref="paper:p", as_of=date(2026, 6, 16))
+    assert report.linked == 1
+    text = existing.read_text(encoding="utf-8")
+    assert "Hand-authored prose." in text                 # prose preserved (no clobber)
+    assert "annotation:papers/p.source#a-1" in text        # annotation ref appended
+    assert "paper:p" in text and "paper:other" in text     # paper ref appended; original kept
+    assert "2026-06-16" in text and "updated:" in text  # `updated` advanced (renderer quote-style agnostic)
+    assert read_sidecar_strict(sp).annotations[0].promoted_to == "proposition:known-claim"
+
+
+def test_apply_refuses_overwrite_of_different_claim(tmp_path):
+    # An explicit-id MINT (e.g. from a curator override) must never clobber an unrelated proposition.
+    import pytest
+    from datetime import date
+    from science_tool.annotation.promote import PromotionApplyError, PromotionCandidate, apply_candidates
+
+    (tmp_path / "entities" / "propositions").mkdir(parents=True)
+    existing = tmp_path / "entities" / "propositions" / "shared.md"
+    existing.write_text(
+        '---\nid: proposition:shared\ntype: proposition\ntitle: Totally different claim\n'
+        'status: draft\ncreated: "2026-06-16"\nupdated: "2026-06-16"\n---\n# x\n',
+        encoding="utf-8",
+    )
+    cand = PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="A brand new claim",
+                              subject=None, object=None, decision="MINT", slug="shared",
+                              reason="override explicit id")
+    with pytest.raises(PromotionApplyError):
+        apply_candidates([cand], sidecar_path=tmp_path / "x.anno.trig",
+                         project_root=tmp_path, paper_ref="paper:p", as_of=date(2026, 6, 16))
+
+
+def test_apply_is_idempotent(tmp_path):
+    # Running the full flow twice mints once; the second run's queue is empty.
+    from datetime import date
+    from science_tool.annotation import io as anno_io
+    from science_tool.annotation.model import Status
+    from science_tool.annotation.promote import (
+        apply_candidates, collect_promotable, decide_candidates, load_corpus,
+    )
+    from science_tool.annotation.query import read_sidecar_strict
+    (tmp_path / "entities" / "propositions").mkdir(parents=True)
+    (tmp_path / "papers").mkdir()
+    md = tmp_path / "papers" / "p.source.md"
+    md.write_text("Claim text body.\n", encoding="utf-8")
+    sp = anno_io.sidecar_for_markdown(md)
+    ann = _statement_ann("a-1", "Claim text body", status=Status.OPEN)
+    anno_io.write_sidecar(sp, anno_io.Sidecar(annotations=(ann,)))
+
+    def run():
+        corpus = load_corpus(tmp_path)
+        pr, _ = collect_promotable(read_sidecar_strict(sp), sp, tmp_path, derived_refs=corpus.derived_refs)
+        return apply_candidates(decide_candidates(pr, corpus), sidecar_path=sp,
+                                project_root=tmp_path, paper_ref="paper:p", as_of=date(2026, 6, 16))
+
+    assert run().minted == 1
+    second = run()
+    assert second.minted == 0 and second.linked == 0

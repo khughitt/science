@@ -2,14 +2,26 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 
+from science_model.propositions import PropositionEntity
+
+from science_tool.annotation import io as anno_io
 from science_tool.annotation.model import Status, TextualBody
-from science_tool.annotation.query import entity_relpath_for_sidecar
-from science_tool.entities import EntityCommandError, slug_for_claim_text
+from science_tool.annotation.query import entity_relpath_for_sidecar, read_sidecar_strict
+from science_tool.entities import (
+    EntityCommandError,
+    _parse_markdown_file,
+    append_entity_source_ref,
+    resolve_path_policy,
+    slug_for_claim_text,
+    write_entity_file,
+)
 
 
 def normalize_claim(text: str) -> str:
@@ -148,3 +160,77 @@ def load_corpus(project_root: Path) -> PromotionCorpus:
             if isinstance(sref, str) and sref.startswith("annotation:"):
                 derived_refs.add(sref)
     return PromotionCorpus(title_to_ref=title_to_ref, existing_slugs=existing_slugs, derived_refs=derived_refs)
+
+
+class PromotionApplyError(Exception):
+    """Raised at write time when applying a candidate would overwrite an unrelated proposition."""
+
+
+@dataclass
+class ApplyReport:
+    minted: int = 0
+    linked: int = 0
+    skipped: Counter = field(default_factory=Counter)
+    written_paths: list[str] = field(default_factory=list)
+
+
+def _proposition_body(claim: str) -> str:
+    return f"# {claim}\n\n## Claim\n\n{claim}\n\n## Evidence Summary\n\n\n## Caveats\n"
+
+
+def apply_candidates(
+    candidates: list[PromotionCandidate],
+    *,
+    sidecar_path: Path,
+    project_root: Path,
+    paper_ref: str,
+    as_of: date | None = None,
+) -> ApplyReport:
+    """Execute MINT/LINK candidates: write entities, accrue provenance, set the sidecar backlink."""
+    report = ApplyReport()
+    backlinks: dict[str, str] = {}  # frag -> proposition:<slug>
+
+    for c in candidates:
+        if c.decision == "MINT":
+            assert c.slug is not None
+            prop_ref = f"proposition:{c.slug}"
+            policy = resolve_path_policy("proposition", project_root=project_root)
+            dest = project_root / policy.root / f"{c.slug}.md"
+            # Never-overwrite guard: a MINT slug colliding with a DIFFERENT-claim proposition
+            # (only reachable via an explicit-id override; auto mints are pre-screened) fails loud.
+            if dest.exists():
+                existing_fm, _ = _parse_markdown_file(dest)
+                if normalize_claim(str(existing_fm.get("title") or "")) != normalize_claim(c.claim):
+                    raise PromotionApplyError(
+                        f"refusing to overwrite {dest.name}: it holds a different proposition"
+                    )
+            prop = PropositionEntity(
+                id=prop_ref, title=c.claim, subject=c.subject, object=c.object,
+                source_refs=[paper_ref, c.ref],
+            )
+            write_entity_file(prop, project_root=project_root, body=_proposition_body(c.claim), as_of=as_of)
+            report.written_paths.append(str(dest))
+            report.minted += 1
+            backlinks[c.frag] = prop_ref
+        elif c.decision == "LINK":
+            assert c.slug is not None  # "proposition:<slug>"
+            policy = resolve_path_policy("proposition", project_root=project_root)
+            dest = project_root / policy.root / f"{c.slug.split(':', 1)[1]}.md"
+            # Accrue BOTH provenance refs onto the existing proposition; append_entity_source_ref
+            # dedups, preserves the (possibly hand-authored) prose body, and advances `updated`
+            # whenever it actually appends a ref.
+            for ref in (paper_ref, c.ref):
+                append_entity_source_ref(dest, ref, as_of=as_of)
+            report.linked += 1
+            backlinks[c.frag] = c.slug
+        else:  # COLLISION / SKIP — not applied
+            report.skipped[c.reason] += 1
+
+    if backlinks:
+        sidecar = read_sidecar_strict(sidecar_path)
+        new_anns = tuple(
+            dataclasses.replace(a, promoted_to=backlinks[a.id]) if a.id in backlinks else a
+            for a in sidecar.annotations
+        )
+        anno_io.write_sidecar(sidecar_path, dataclasses.replace(sidecar, annotations=new_anns))
+    return report
