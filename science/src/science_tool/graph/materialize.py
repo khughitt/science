@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import date as _date
 import hashlib
 import json
-from datetime import date as _date
 from pathlib import Path
 from urllib.parse import quote
 
@@ -96,25 +97,23 @@ def build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     return _build_dataset_from_sources(sources)
 
 
-def _build_dataset_from_sources(
-    sources: ProjectSources, *, source_snapshots: SourceSnapshotResult | None = None
-) -> Dataset:
-    """Build the in-memory rdflib Dataset that `materialize_graph` would write.
+@dataclass(frozen=True)
+class EmitResult:
+    """Output of the Emit phase: the base authored graph plus the build context
+    the Derive phase consumes (so Derive never recomputes `kind_class` or
+    `pre_registration_targets`)."""
 
-    Composes the existing emission helpers (`_add_entity`, `_add_relations`,
-    `_add_authored_relation`, `_add_binding`) and the epistemic derivation
-    helpers (`_classify_entities`, `_derive_bears_on_layer`,
-    `_derive_patch_membership_layer`, `_derive_freshness_layer`). Pure: takes
-    `ProjectSources`, returns a populated `Dataset`. Never touches the filesystem.
+    dataset: Dataset
+    kind_class: dict[str, EntityClass]
+    pre_registration_targets: dict[URIRef, list[URIRef]]
 
-    When `source_snapshots` is provided (precomputed by `compute_source_snapshots`,
-    which does the filesystem work upstream), the snapshot layer is emitted ahead of
-    `_derive_bears_on_layer` — load-bearing ordering, so each `SourceSnapshot` node's
-    `bears_on` edge exists before closure and feeds `_derive_freshness_layer` via
-    `source_changes`. When None, no snapshot layer is emitted (pre-Slice-B behavior).
 
-    Used by both `materialize_graph` (which writes to disk) and the
-    `propagate_freshness_in_memory` sweep (which discards the dataset).
+def _emit_phase(sources: ProjectSources) -> EmitResult:
+    """Emit the base authored graph and build the context Derive consumes.
+
+    Owns dataset/named-graph setup, resolver/index construction, all base-graph
+    emission through `_validate_no_amendment_cycles`, and the `kind_class` /
+    `pre_registration_targets` build context.
     """
     dataset = Dataset()
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
@@ -190,15 +189,36 @@ def _build_dataset_from_sources(
 
     _validate_no_amendment_cycles(dataset)
 
-    # Load-bearing ordering: emit the snapshot layer BEFORE `_derive_bears_on_layer`
-    # so each SourceSnapshot's `bears_on` edge is present for transitive closure.
+    return EmitResult(
+        dataset=dataset,
+        kind_class=kind_class,
+        pre_registration_targets=pre_registration_targets,
+    )
+
+
+def _derive_phase(
+    emit: EmitResult,
+    *,
+    sources: ProjectSources,
+    source_snapshots: SourceSnapshotResult | None,
+) -> None:
+    """Emit the snapshot layer and derive the epistemic layers onto `emit.dataset`.
+
+    Preserves the load-bearing ordering: snapshot layer before `_derive_bears_on_layer`
+    (so each SourceSnapshot's `bears_on` edge exists for closure); `source_changes`
+    threaded into the freshness layer; the `freshness_enabled` gate intact.
+    """
+    dataset = emit.dataset
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+
     if source_snapshots is not None:
         emit_source_snapshots(dataset, source_snapshots)
 
     _derive_bears_on_layer(
         dataset,
-        kind_class=kind_class,
-        pre_registration_targets=pre_registration_targets,
+        kind_class=emit.kind_class,
+        pre_registration_targets=emit.pre_registration_targets,
         eligible_code_files=_eligible_code_files(sources),
     )
     _derive_patch_membership_layer(dataset, sources=sources)
@@ -207,13 +227,28 @@ def _build_dataset_from_sources(
         derive_dataset_independence_records(knowledge, provenance),
     )
     if sources.freshness_enabled:
-        entity_meta = _build_entity_meta(sources, kind_class)
+        entity_meta = _build_entity_meta(sources, emit.kind_class)
         source_changes = source_snapshots.source_changes if source_snapshots is not None else {}
         _derive_freshness_layer(
             dataset, entities=entity_meta, today=_date.today(), source_changes=source_changes
         )
 
-    return dataset
+
+def _build_dataset_from_sources(
+    sources: ProjectSources, *, source_snapshots: SourceSnapshotResult | None = None
+) -> Dataset:
+    """Build the in-memory rdflib Dataset that `materialize_graph` would write.
+
+    Composes the Emit phase (`_emit_phase`) and the Derive phase (`_derive_phase`).
+    Pure: takes `ProjectSources`, returns a populated `Dataset`, never touches the
+    filesystem. When `source_snapshots` is provided, the snapshot layer is emitted
+    ahead of `_derive_bears_on_layer`; when None, no snapshot layer is emitted
+    (pre-Slice-B behavior). Used by both `materialize_graph` (writes to disk) and
+    the `propagate_freshness_in_memory` sweep (discards the dataset).
+    """
+    emit = _emit_phase(sources)
+    _derive_phase(emit, sources=sources, source_snapshots=source_snapshots)
+    return emit.dataset
 
 
 def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
