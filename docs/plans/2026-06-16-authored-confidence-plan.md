@@ -32,8 +32,10 @@
 | `tests/test_authored_confidence_policy.py` | policy-knob validation | **Create** |
 | `tests/test_authored_confidence.py` | gate/ceiling/symmetry/ordering/recognition | **Create** |
 | `tests/test_bundle_belief_rollup.py` | bundle rollup tests | **Modify**: `authored_capped` rollup |
-| `tests/test_belief_snapshot.py` | snapshot persistence tests | **Modify**: persistence + legacy normalization |
-| `tests/test_evidence_line_belief_checks.py` | validator tests | **Modify**: unscored-line + nonreproducible |
+| `tests/test_belief_snapshot.py` | single-claim snapshot tests | **Modify**: single-row persistence + legacy normalization |
+| `tests/test_bundle_belief_snapshot.py` | bundle snapshot tests | **Modify**: bundle-row persistence |
+| `tests/validate/test_checks_evidence_lines.py` | `check_evidence_unscored_line` tests | **Modify**: authored-assertion branch |
+| `tests/validate/test_checks_belief_sensitivity.py` | `belief.nonreproducible` tests | **Modify**: legacy `authored_capped` reproducibility |
 
 Tasks are ordered by dependency: 1 → 2 → 3 → 4 → 5 → 6 → 7. Do them in order.
 
@@ -194,6 +196,16 @@ from .belief_weights import (
     authored_only_ceiling="fragile",
 ```
 
+3e. The new fields are **required** (no defaults — matching the keystone's all-fields-required discipline). Exactly one direct `BeliefPolicy(...)` constructor exists outside `DEFAULT_BELIEF_POLICY`: `tests/test_belief_policy.py` `test_constructor_normalizes_mutable_containers` (~line 41). Add the three kwargs to that constructor, after `well_supported_min_clean_support=2, well_supported_requires_direct_test=True,`:
+
+```python
+        authored_assertion_type="expert_judgment",
+        authored_min_confidence=0.5,
+        authored_only_ceiling="fragile",
+```
+
+(All other `BeliefPolicy` instances are built via `DEFAULT_BELIEF_POLICY` or `dataclasses.replace(DEFAULT_BELIEF_POLICY, ...)`, which already carry the new fields — no other call site changes.)
+
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `rtk proxy uv run --frozen pytest tests/test_authored_confidence_policy.py -v`
@@ -202,12 +214,12 @@ Expected: PASS (5 tests).
 - [ ] **Step 5: Run the Slice-A policy suite to confirm no regression**
 
 Run: `rtk proxy uv run --frozen pytest tests/test_belief_policy.py tests/test_belief_policy_aggregate.py -v`
-Expected: PASS (all existing policy tests still green — the new fields have no default but every `BeliefPolicy(...)` / `replace(...)` call site supplies them via `DEFAULT_BELIEF_POLICY`).
+Expected: PASS (all existing policy tests still green — `test_belief_policy.py`'s direct constructor was updated in Step 3e; every other call site builds from `DEFAULT_BELIEF_POLICY`).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-rtk git add src/science_tool/graph/belief_policy.py tests/test_authored_confidence_policy.py
+rtk git add src/science_tool/graph/belief_policy.py tests/test_authored_confidence_policy.py tests/test_belief_policy.py
 rtk git commit -m "feat(belief): add authored-confidence knobs to BeliefPolicy with construction validation (Slice B t2)"
 ```
 
@@ -637,13 +649,21 @@ rtk git commit -m "feat(belief): roll up authored_capped onto BundleBeliefResult
 
 **Files:**
 - Modify: `src/science_tool/graph/belief_snapshot.py`
-- Test: `tests/test_belief_snapshot.py` (extend)
+- Test: `tests/test_belief_snapshot.py` (extend — single-claim row + normalizer)
+- Test: `tests/test_bundle_belief_snapshot.py` (extend — bundle row)
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `tests/test_belief_snapshot.py`:
+1a. Append to `tests/test_belief_snapshot.py`. The first test proves the **single-claim** row branch persists the flag (`_graphs()` builds one empirical support line → FRAGILE, single-claim branch); the other two cover the legacy normalizer:
 
 ```python
+def test_snapshot_single_row_persists_authored_capped():
+    k, p = _graphs()
+    row = snapshot_records(k, p, scalar_enabled=False, as_of="2026-05-24")[0]
+    assert row["is_bundle"] is False
+    assert row["authored_capped"] is False  # empirical support -> ceiling never fires
+
+
 def test_with_policy_defaults_backfills_authored_capped():
     from science_tool.graph.belief_snapshot import _with_policy_defaults
 
@@ -664,10 +684,24 @@ def test_existing_authored_capped_is_preserved():
     assert out["authored_capped"] is True
 ```
 
+1b. Append to `tests/test_bundle_belief_snapshot.py` a test proving the **bundle** row branch persists the flag. Reuse the file's existing bundle-graph harness (the same `k, prov` setup `test_snapshot_emits_mechanism_bundle_row` uses — copy its graph-construction lines, then assert on the row):
+
+```python
+def test_snapshot_bundle_row_persists_authored_capped():
+    # Build the same mechanism-bundle graph the existing bundle-row test uses, then assert the
+    # emitted bundle row carries authored_capped (False — strong empirical members).
+    k, prov, target = _bundle_graph()   # use the file's existing builder / inline its setup
+    rows = snapshot_records(k, prov, scalar_enabled=False, as_of="2026-06-11")
+    row = next(r for r in rows if r["is_bundle"])
+    assert row["authored_capped"] is False
+```
+
+If `tests/test_bundle_belief_snapshot.py` has no reusable `_bundle_graph()` helper, inline the exact graph-construction lines from `test_snapshot_emits_mechanism_bundle_row` (the `_strong(k, prov, target, gid)` calls plus the mechanism/step wiring) into the new test before calling `snapshot_records`.
+
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `rtk proxy uv run --frozen pytest tests/test_belief_snapshot.py -k authored_capped -v`
-Expected: FAIL — `KeyError: 'authored_capped'` (the normalizer does not add it yet).
+Run: `rtk proxy uv run --frozen pytest tests/test_belief_snapshot.py -k authored_capped tests/test_bundle_belief_snapshot.py -k authored_capped -v`
+Expected: FAIL — `KeyError: 'authored_capped'` on the row dicts (snapshot_records does not persist it yet) and on `_with_policy_defaults` (normalizer does not add it yet).
 
 - [ ] **Step 3: Persist + normalize**
 
@@ -707,8 +741,8 @@ Note: do **not** touch `_key` — `authored_capped` is a derived flag, not part 
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `rtk proxy uv run --frozen pytest tests/test_belief_snapshot.py -k authored_capped -v`
-Expected: PASS (2 tests).
+Run: `rtk proxy uv run --frozen pytest tests/test_belief_snapshot.py tests/test_bundle_belief_snapshot.py -k "authored_capped or persists_authored" -v`
+Expected: PASS (single-claim row + bundle row + 2 normalizer tests).
 
 - [ ] **Step 5: Run the full snapshot suite for no regression**
 
@@ -718,7 +752,7 @@ Expected: PASS. (If `tests/test_belief_cli.py` has a canned snapshot-row fixture
 - [ ] **Step 6: Commit**
 
 ```bash
-rtk git add src/science_tool/graph/belief_snapshot.py tests/test_belief_snapshot.py tests/test_belief_cli.py
+rtk git add src/science_tool/graph/belief_snapshot.py tests/test_belief_snapshot.py tests/test_bundle_belief_snapshot.py tests/test_belief_cli.py
 rtk git commit -m "feat(belief): persist authored_capped on both snapshot branches + legacy default normalization (Slice B t6)"
 ```
 
@@ -728,48 +762,52 @@ rtk git commit -m "feat(belief): persist authored_capped on both snapshot branch
 
 **Files:**
 - Modify: `src/science_tool/validate/checks/evidence_lines.py`
-- Test: `tests/test_evidence_line_belief_checks.py` (extend)
+- Test: `tests/validate/test_checks_evidence_lines.py` (extend — `check_evidence_unscored_line` lives here)
+- Test: `tests/validate/test_checks_belief_sensitivity.py` (extend — `belief.nonreproducible` lives here)
 
-- [ ] **Step 1: Write the failing tests**
+> The two validator suites are **split** by check. Put the unscored-line tests beside the existing unscored-line tests in `tests/validate/test_checks_evidence_lines.py` (harness: module-level `_write(root, rel, body)` writes a `.md` under the temp project, `_ctx(root)` builds the `ValidateContext`). Put the nonreproducible test beside the existing golden tests in `tests/validate/test_checks_belief_sensitivity.py` (harness: `_write_two_support_graph(root)` + `_ctx(root)` + `make_snapshots(...)`).
 
-First read `tests/test_evidence_line_belief_checks.py` to learn how it builds a `ValidateContext` with evidence-line frontmatter (the `_ev_lines` fixture pattern). Append tests mirroring that idiom. The shape below assumes a helper that runs `check_evidence_unscored_line` over authored frontmatter; adapt the harness call to the file's existing pattern:
+- [ ] **Step 1: Write the failing unscored-line tests**
+
+Append to `tests/validate/test_checks_evidence_lines.py`, mirroring the existing `test_unscored_line_*` tests (which use `_write(...)` + `_ctx(...)`):
 
 ```python
-def test_authored_assertion_with_valid_confidence_not_flagged_unscored(tmp_path):
-    # An authored assertion (expert_judgment) with a valid confidence and NO role/strength is
-    # admitted by confidence -> must NOT be flagged 'evidence.unscored-line'.
-    ctx = _ctx_with_evidence_line(tmp_path, {
-        "stance": "supports", "evidence_type": "expert_judgment", "confidence": 0.8,
-    })
+def test_unscored_line_skips_authored_assertion_with_valid_confidence(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
-    rules = {r.rule for r in check_evidence_unscored_line(ctx)}
+
+    # An authored assertion (expert_judgment) with valid confidence and NO role/strength is
+    # admitted by confidence -> not flagged unscored, not flagged invalid-confidence.
+    _write(tmp_path, "entities/evidence-lines/el01.md",
+           "---\nstance: supports\ntarget: proposition:p1\n"
+           "evidence_type: expert_judgment\nconfidence: 0.8\n---\n")
+    rules = {r.rule for r in check_evidence_unscored_line(_ctx(tmp_path))}
     assert "evidence.unscored-line" not in rules
     assert "evidence.authored-confidence-invalid" not in rules
 
 
-def test_authored_assertion_missing_confidence_warned(tmp_path):
-    ctx = _ctx_with_evidence_line(tmp_path, {
-        "stance": "supports", "evidence_type": "expert_judgment",
-    })
+def test_authored_assertion_missing_confidence_warned(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
-    rules = {r.rule for r in check_evidence_unscored_line(ctx)}
-    assert "evidence.authored-confidence-invalid" in rules
+
+    _write(tmp_path, "entities/evidence-lines/el01.md",
+           "---\nstance: supports\ntarget: proposition:p1\nevidence_type: expert_judgment\n---\n")
+    results = list(check_evidence_unscored_line(_ctx(tmp_path)))
+    assert any(r.rule == "evidence.authored-confidence-invalid" for r in results)
+    assert all(r.severity is Severity.WARN for r in results)
 
 
-def test_authored_assertion_out_of_range_confidence_warned(tmp_path):
-    ctx = _ctx_with_evidence_line(tmp_path, {
-        "stance": "supports", "evidence_type": "expert_judgment", "confidence": 1.4,
-    })
+def test_authored_assertion_out_of_range_confidence_warned(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
-    rules = {r.rule for r in check_evidence_unscored_line(ctx)}
+
+    _write(tmp_path, "entities/evidence-lines/el01.md",
+           "---\nstance: supports\ntarget: proposition:p1\n"
+           "evidence_type: expert_judgment\nconfidence: 1.4\n---\n")
+    rules = {r.rule for r in check_evidence_unscored_line(_ctx(tmp_path))}
     assert "evidence.authored-confidence-invalid" in rules
 ```
 
-`_ctx_with_evidence_line` is a thin helper you write to match the file's existing fixture style (most belief-check tests already write a `.md` evidence-line file under a temp project and build a `ValidateContext`). If the file already exposes such a helper, reuse it instead of writing a new one.
+- [ ] **Step 2: Run unscored-line tests to verify they fail**
 
-- [ ] **Step 2: Run tests to verify they fail**
-
-Run: `rtk proxy uv run --frozen pytest tests/test_evidence_line_belief_checks.py -k authored -v`
+Run: `rtk proxy uv run --frozen pytest tests/validate/test_checks_evidence_lines.py -k authored -v`
 Expected: FAIL — the authored assertion with valid confidence is currently flagged `evidence.unscored-line` (missing role/strength), and the `evidence.authored-confidence-invalid` rule does not exist yet.
 
 - [ ] **Step 3: Add the authored branch to `check_evidence_unscored_line`**
@@ -813,9 +851,9 @@ Insert between the `continue` and the `role = ...` line:
             continue
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 4: Run unscored-line tests to verify they pass**
 
-Run: `rtk proxy uv run --frozen pytest tests/test_evidence_line_belief_checks.py -k authored -v`
+Run: `rtk proxy uv run --frozen pytest tests/validate/test_checks_evidence_lines.py -k authored -v`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Add `authored_capped` to the nonreproducible comparison**
@@ -843,22 +881,28 @@ Insert, immediately after the first `diffs = [...]` list comprehension:
 
 - [ ] **Step 6: Write + run the legacy-normalization reproducibility test**
 
-Append to `tests/test_evidence_line_belief_checks.py` a test proving a legacy snapshot row (no `authored_capped`) does not trip `belief.nonreproducible`. Reuse the file's existing belief-snapshot golden-test harness (the test that already exercises `check_belief_nonreproducible` round-trips a graph + snapshot file). Pattern:
+Append to `tests/validate/test_checks_belief_sensitivity.py`, mirroring the existing `test_nonreproducible_*` tests (harness: `_write_two_support_graph` + `_ctx` + `make_snapshots`, then write a corrupted/stale JSONL row and assert). This proves a pre-Slice-B row lacking `authored_capped` does NOT trip `belief.nonreproducible`:
 
 ```python
-def test_nonreproducible_ignores_missing_authored_capped(tmp_path):
-    # A legacy snapshot row lacking authored_capped, with everything else matching the current
-    # (empirical, authored_capped == False) result, must NOT raise belief.nonreproducible.
-    # Build via the same helper the existing golden test uses; then DELETE the authored_capped
-    # key from the persisted row to simulate a pre-Slice-B history line, and assert no
-    # belief.nonreproducible Result is produced.
-    ...
+def test_nonreproducible_silent_when_authored_capped_absent(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_two_support_graph(tmp_path)
+    ctx = _ctx(tmp_path)
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    # Simulate a pre-Slice-B history line: strip authored_capped from the (otherwise correct)
+    # row. read_snapshots normalizes it back to False, matching the current empirical result.
+    legacy = {k: v for k, v in rows[0].items() if k != "authored_capped"}
+    snap.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
+    assert list(check_belief_nonreproducible(ctx)) == []
 ```
 
-Implement it concretely against the existing harness in the file (do not leave the `...`). If the file's golden harness writes the snapshot JSONL via `append_snapshots`/`snapshot_records`, write the row, then rewrite the JSONL line with the `authored_capped` key stripped, run `check_belief_nonreproducible`, and assert `"belief.nonreproducible" not in {r.rule for r in results}`.
-
-Run: `rtk proxy uv run --frozen pytest tests/test_evidence_line_belief_checks.py -v`
-Expected: PASS (existing + new tests).
+Run: `rtk proxy uv run --frozen pytest tests/validate/test_checks_belief_sensitivity.py -v`
+Expected: PASS (existing golden tests + the new legacy test).
 
 - [ ] **Step 7: Lint the touched source files**
 
@@ -868,7 +912,8 @@ Expected: PASS (no errors).
 - [ ] **Step 8: Commit**
 
 ```bash
-rtk git add src/science_tool/validate/checks/evidence_lines.py tests/test_evidence_line_belief_checks.py
+rtk git add src/science_tool/validate/checks/evidence_lines.py \
+  tests/validate/test_checks_evidence_lines.py tests/validate/test_checks_belief_sensitivity.py
 rtk git commit -m "feat(belief): validator authored-confidence branch + nonreproducible authored_capped comparison (Slice B t7)"
 ```
 
@@ -901,6 +946,8 @@ rtk proxy uv run --frozen pytest \
   tests/test_evidence_line_belief_checks.py \
   tests/test_evidence_line_e2e.py \
   tests/test_dataset_evidence_flow_e2e.py \
+  tests/validate/test_checks_evidence_lines.py \
+  tests/validate/test_checks_belief_sensitivity.py \
   -v
 ```
 
@@ -925,6 +972,8 @@ Then finish the branch with **superpowers:finishing-a-development-branch**.
 - Validator unscored-line authored branch + nonreproducible `authored_capped` (default-False) → Task 7.
 - Behavior-neutral for empirical evidence → Steps 5/7 regression runs throughout + final net.
 
-**Placeholder scan:** every code step shows complete code. Two test harness helpers (`_ctx_with_evidence_line` in Task 7, the legacy-normalization test body in Task 7 Step 6) are explicitly delegated to the existing fixture style in `tests/test_evidence_line_belief_checks.py` because that file's harness must be read first; the steps state exactly what the test must assert and how to simulate the legacy row — the implementer fills the harness call, not the behavior.
+**Placeholder scan:** every code step shows complete, runnable code against the verified harnesses — `_write`/`_ctx` in `tests/validate/test_checks_evidence_lines.py` (unscored-line), `_write_two_support_graph`/`_ctx`/`make_snapshots` in `tests/validate/test_checks_belief_sensitivity.py` (nonreproducible), `_graphs()` in `tests/test_belief_snapshot.py` (single-claim row), and the mechanism-bundle builder in `tests/test_bundle_belief_snapshot.py` (bundle row). The only delegated detail is reusing/inlining the existing bundle-graph construction in Task 6 Step 1b (the file may or may not expose a named helper); the assertion is fully specified.
+
+**Validator suites correctly targeted:** `check_evidence_unscored_line` tests → `tests/validate/test_checks_evidence_lines.py`; `belief.nonreproducible` test → `tests/validate/test_checks_belief_sensitivity.py`; both included in the final regression net.
 
 **Type consistency:** `is_authored_assertion` / `_authored_assertion_counts` signatures `(u, *, policy)` are identical across Tasks 3, 4, 7. `authored_capped: bool` and `excluded_authored_confidence: list[EvidenceUnit]` names match across `BeliefResult` (Task 4), bundle rollup (Task 5), snapshot rows (Task 6), and validator (Task 7). `authored_only_ceiling` is a magnitude **string** everywhere; `BeliefMagnitude(policy.authored_only_ceiling)` is the only string→enum conversion (Task 4). Rule string `evidence.authored-confidence-invalid` matches between Task 7 implementation and tests.
