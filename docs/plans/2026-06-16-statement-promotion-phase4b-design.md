@@ -151,7 +151,7 @@ chosen so **everything that can fail does so before any number is consumed**, an
 5. **Final write:** `_atomic_replace_text(path, rendered)` — overwrites the empty placeholder
    with the full entity. This is the **last step**.
 
-   **Post-reservation failure policy (explicit, pick-one):** if step 4 or 5 raises (e.g. an IO
+   **Post-reservation failure policy:** if step 4 or 5 raises (e.g. an IO
    error), the helper **unlinks the just-reserved placeholder `path` (intentional rollback) and
    re-raises loudly** (`PromotionApplyError`). The number+path were claimed by this process, so
    removing our own empty placeholder is safe and leaves the corpus clean and re-runnable — no
