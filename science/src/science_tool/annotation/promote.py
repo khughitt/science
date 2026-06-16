@@ -40,13 +40,15 @@ class Promotable:
     claim: str          # the TextQuoteSelector exact span
     subject: str | None
     object: str | None
+    kind: str = "proposition"   # promotable kind: proposition | question | hypothesis
 
 
 @dataclass(frozen=True)
 class PromotionCorpus:
-    title_to_ref: dict[str, str]   # normalize_claim(title) -> "proposition:<slug>"
-    existing_slugs: set[str]       # bare slugs of existing propositions
-    derived_refs: set[str]         # annotation: refs already in some proposition's source_refs
+    title_to_ref: dict[str, str]      # normalize_claim(title) -> "<kind>:<local_part>" (first-wins)
+    existing_slugs: set[str]          # bare local-parts of existing entities of this kind
+    derived_refs: set[str]            # annotation: refs already in some entity's source_refs (global)
+    ambiguous_titles: set[str] = field(default_factory=set)  # normalized titles held by >=2 entities
 
 
 @dataclass(frozen=True)
@@ -57,40 +59,55 @@ class PromotionCandidate:
     subject: str | None
     object: str | None
     decision: str           # MINT | LINK | COLLISION | SKIP
-    slug: str | None        # MINT: new bare slug; LINK: "proposition:<slug>"; else None
+    slug: str | None        # MINT: new bare local-part; LINK: "<kind>:<local_part>"; else None
     reason: str             # short explanation / skip reason
+    kind: str = "proposition"
 
 
-def decide_candidates(promotables: list[Promotable], corpus: PromotionCorpus) -> list[PromotionCandidate]:
-    """Pure mint-or-link-or-collision decision. Detects intra-batch slug collisions."""
+def decide_candidates(
+    promotables: list[Promotable],
+    corpus: PromotionCorpus,
+    *,
+    slug_addressed: bool = True,
+) -> list[PromotionCandidate]:
+    """Pure mint-or-link-or-collision decision for one kind's promotables.
+
+    Detects intra-batch slug collisions. `slug_addressed` True (proposition) keeps the 4a
+    slug-collision detection; False (numeric question/hypothesis) skips it — numeric
+    reservation cannot collide.
+    """
     out: list[PromotionCandidate] = []
     minted_slugs: set[str] = set()
     for p in promotables:
         key = normalize_claim(p.claim)
+        if key in corpus.ambiguous_titles:
+            out.append(_cand(p, "SKIP", None, "promote-link-ambiguous"))
+            continue
         existing = corpus.title_to_ref.get(key)
         if existing is not None:
-            out.append(_cand(p, "LINK", existing, "normalized claim equals existing proposition title"))
+            out.append(_cand(p, "LINK", existing, "normalized claim equals existing entity title"))
             continue
         try:
             slug = slug_for_claim_text(p.claim)
         except EntityCommandError:
             out.append(_cand(p, "SKIP", None, "promote-claim-unsluggable"))
             continue
-        if slug in corpus.existing_slugs:
-            out.append(_cand(p, "COLLISION", slug, "promote-slug-collision"))  # vs existing corpus
-            continue
-        if slug in minted_slugs:
-            out.append(_cand(p, "COLLISION", slug, "promote-slug-collision"))  # intra-batch
-            continue
-        minted_slugs.add(slug)
-        out.append(_cand(p, "MINT", slug, "new proposition"))
+        if slug_addressed:
+            if slug in corpus.existing_slugs:
+                out.append(_cand(p, "COLLISION", slug, "promote-slug-collision"))  # vs existing corpus
+                continue
+            if slug in minted_slugs:
+                out.append(_cand(p, "COLLISION", slug, "promote-slug-collision"))  # intra-batch
+                continue
+            minted_slugs.add(slug)
+        out.append(_cand(p, "MINT", slug, "new entity"))
     return out
 
 
 def _cand(p: Promotable, decision: str, slug: str | None, reason: str) -> PromotionCandidate:
     return PromotionCandidate(
         ref=p.ref, frag=p.frag, claim=p.claim, subject=p.subject, object=p.object,
-        decision=decision, slug=slug, reason=reason,
+        decision=decision, slug=slug, reason=reason, kind=p.kind,
     )
 
 

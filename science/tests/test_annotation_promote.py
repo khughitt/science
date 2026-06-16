@@ -4,12 +4,31 @@ from science_tool.annotation.promote import (
 )
 
 
-def _corpus(titles_to_slug=None, slugs=None, derived=None):
+def _corpus(titles_to_slug=None, slugs=None, derived=None, ambiguous=None):
     return PromotionCorpus(
         title_to_ref={normalize_claim(t): s for t, s in (titles_to_slug or {}).items()},
         existing_slugs=set(slugs or []),
         derived_refs=set(derived or []),
+        ambiguous_titles={normalize_claim(t) for t in (ambiguous or [])},
     )
+
+
+def test_ambiguous_title_skips_not_links():
+    # Corpus already holds two same-kind entities with the same normalized title.
+    p = Promotable(ref="annotation:a#f1", frag="f1", claim="Shared claim text", subject=None, object=None)
+    corp = _corpus(titles_to_slug={"Shared claim text": "proposition:shared-claim-text"},
+                   ambiguous=["Shared claim text"])
+    [c] = decide_candidates([p], corp)
+    assert c.decision == "SKIP" and c.reason == "promote-link-ambiguous"
+
+
+def test_numeric_kind_never_collides():
+    # slug_addressed=False: an occupied slug does NOT become a COLLISION (numeric reserves a number).
+    p = Promotable(kind="question", ref="annotation:a#f1", frag="f1",
+                   claim="Alpha beta", subject=None, object=None)
+    corp = _corpus(slugs={"alpha-beta"})
+    [c] = decide_candidates([p], corp, slug_addressed=False)
+    assert c.decision == "MINT" and c.slug == "alpha-beta" and c.kind == "question"
 
 
 def test_normalize_claim_casefolds_and_collapses():
