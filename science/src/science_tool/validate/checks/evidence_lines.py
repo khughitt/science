@@ -552,6 +552,8 @@ def check_belief_nonreproducible(ctx: ValidateContext) -> Iterator[Result]:
         # belief.nonreproducible error against a current authored_capped == False result.
         if prior.get("authored_capped", False) != now.get("authored_capped", False):
             diffs.append("authored_capped")
+        if prior.get("qa_dataset_capped", False) != now.get("qa_dataset_capped", False):
+            diffs.append("qa_dataset_capped")
         if now["scalar_enabled"]:
             diffs += [f for f in _GOLDEN_SCALAR_FIELDS if prior.get(f) != now.get(f)]
         if diffs:

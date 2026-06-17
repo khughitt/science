@@ -189,3 +189,26 @@ def test_bundle_rolls_up_authored_capped_as_or():
         rule=CompositionRule.ALL_STEPS,
     )
     assert one_capped.authored_capped is True  # OR across members, mirroring capped_by_refutation
+
+
+def test_bundle_rolls_up_qa_dataset_capped_as_or():
+    def _capped_member(uri: str, *, qa_dataset_capped: bool) -> MemberBelief:
+        belief = BeliefResult(
+            magnitude=BeliefMagnitude.FRAGILE, contested=False, capped_by_refutation=False,
+            support_units=[], dispute_units=[], diagnostics=[], contested_groups=set(),
+            excluded=[], flagged_ungrouped=[], qa_dataset_capped=qa_dataset_capped,
+        )
+        return MemberBelief(member_uri=uri, belief=belief, scalar=None,
+                            rank_key=member_rank_key(belief, None, uri))
+
+    none_capped = roll_up_weakest_link(
+        [_capped_member("p:a", qa_dataset_capped=False), _capped_member("p:b", qa_dataset_capped=False)],
+        rule=CompositionRule.ALL_STEPS,
+    )
+    assert none_capped.qa_dataset_capped is False
+
+    one_capped = roll_up_weakest_link(
+        [_capped_member("p:a", qa_dataset_capped=False), _capped_member("p:b", qa_dataset_capped=True)],
+        rule=CompositionRule.ALL_STEPS,
+    )
+    assert one_capped.qa_dataset_capped is True  # OR across members, mirroring capped_by_refutation

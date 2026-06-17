@@ -460,3 +460,16 @@ def test_parse_dataset_usage_bad_role_raises(tmp_path: Path) -> None:
     md = _write_dataset_md(tmp_path, "dataset_usage:", "  - ref: dataset:x", "    role: consulted")
     with pytest.raises(ValidationError):
         parse_entity_file(md, project_slug="testproj")
+
+
+def test_dataset_qa_report_field_defaults_empty_and_parses() -> None:
+    bare = DatasetEntity(**_entity_kwargs(), origin="external", access=_ext_access())
+    assert bare.qa_report == ""
+
+    withqa = DatasetEntity(
+        **_entity_kwargs(),
+        origin="external",
+        access=_ext_access(),
+        qa_report="knowledge/qa/ds-qa/qa_report.json",
+    )
+    assert withqa.qa_report == "knowledge/qa/ds-qa/qa_report.json"

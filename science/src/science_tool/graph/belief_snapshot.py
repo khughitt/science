@@ -59,6 +59,7 @@ def snapshot_records(knowledge, provenance, *, scalar_enabled: bool, as_of: str)
                 "belief_state": result.magnitude.value,
                 "capped_by_refutation": result.capped_by_refutation,
                 "authored_capped": result.authored_capped,
+                "qa_dataset_capped": result.qa_dataset_capped,
                 "contested": result.contested,
                 "bottleneck_members": result.bottleneck_members,
                 "scalar_driver_member": (result.member_results[0].member_uri if result.member_results else None),
@@ -88,6 +89,7 @@ def snapshot_records(knowledge, provenance, *, scalar_enabled: bool, as_of: str)
             "belief_state": result.magnitude.value,
             "contested": result.contested,
             "authored_capped": result.authored_capped,
+            "qa_dataset_capped": result.qa_dataset_capped,
             "diagnostic_dispute_count": scalar.diagnostic_dispute_count,
             "scalar_enabled": scalar_enabled,
             "massed_support_score": scalar.massed_support_score if scalar_enabled else None,
@@ -131,6 +133,8 @@ def _with_policy_defaults(row: dict) -> dict:
     # capped_by_refutation, not part of belief identity).
     if "authored_capped" not in row:
         row["authored_capped"] = False
+    if "qa_dataset_capped" not in row:
+        row["qa_dataset_capped"] = False
     return row
 
 

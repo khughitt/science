@@ -209,6 +209,20 @@ def derive_dataset_independence_records(knowledge: Graph, provenance: Graph) -> 
     )
 
 
+def dependence_datasets_by_line(knowledge: Graph, provenance: Graph) -> dict[URIRef, set[URIRef]]:
+    """Per evidence line, the datasets it rests on via a direct/virtual DEPENDENCE-role usage.
+
+    Reuses the line-ancestor resolution that drives B2 independence; ``indirect-bears-on``
+    linkage is deliberately excluded (too tenuous for the QA quality ceiling)."""
+    reduced = reduce_usage_facts(read_dataset_usage_facts(provenance))
+    line_targets = _evidence_line_targets(knowledge)
+    out: dict[URIRef, set[URIRef]] = defaultdict(set)
+    for ancestor in _line_ancestors(knowledge, provenance, reduced, line_targets):
+        if ancestor.path in ("direct", "virtual") and ancestor.usage.interpretation == "dependence":
+            out[ancestor.line].add(ancestor.dataset)
+    return dict(out)
+
+
 def emit_dataset_independence_records(provenance: Graph, records: list[DatasetIndependenceRecord]) -> None:
     for record in records:
         node = _record_uri(record)

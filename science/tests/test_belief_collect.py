@@ -264,3 +264,27 @@ def test_lineage_sibling_candidate_does_not_collapse_lines() -> None:
     assert all(u.independence_group is None for u in units), (
         f"Expected no independence_group from a candidate record, got {[(u.line_uri, u.independence_group) for u in units]}"
     )
+
+
+def test_read_unit_reads_qa_failed_datasets_and_predicate():
+    from rdflib import Graph, URIRef
+    from science_tool.graph.belief import (
+        EvidenceUnit, _read_unit, is_qa_failed,
+    )
+    from science_tool.graph.io import SCI_NS
+
+    line = URIRef("https://example.org/p/evidence-line/ev1")
+    prov = Graph()
+    ds_a = URIRef("https://example.org/p/dataset/a")
+    ds_b = URIRef("https://example.org/p/dataset/b")
+    prov.add((line, SCI_NS.qaFailedDataset, ds_b))
+    prov.add((line, SCI_NS.qaFailedDataset, ds_a))
+
+    unit = _read_unit(prov, line, "supports", frozenset(), None)
+    assert unit.qa_failed_datasets == (str(ds_a), str(ds_b))   # sorted
+    assert is_qa_failed(unit) is True
+    assert is_qa_failed(EvidenceUnit(
+        line_uri="x", stance="supports", strength=None,
+        independence=None, independence_group=None, evidence_role=None, evidence_type=None,
+        dispute_scope=None, proxy_directness=None, has_measurement_model=False, source=None,
+        observability_keys=())) is False

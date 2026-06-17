@@ -55,6 +55,10 @@ class BeliefPolicy:
     authored_assertion_type: str
     authored_min_confidence: float
     authored_only_ceiling: str
+    # Dataset-QA seam (Spec 5). When counted empirical support rests on a structurally-QA-failed
+    # dataset and QA-clean support cannot reach the achieved magnitude alone, belief is hard-capped
+    # to this ceiling. Magnitude STRING (validated against MAGNITUDE_NAMES, no belief.py import).
+    qa_failed_dataset_ceiling: str
 
     def __post_init__(self) -> None:
         # A frozen dataclass does not stop a caller mutating a dict/set it was handed.
@@ -74,6 +78,11 @@ class BeliefPolicy:
             raise ValueError(
                 f"authored_only_ceiling must be one of {MAGNITUDE_NAMES}, "
                 f"got {self.authored_only_ceiling!r}"
+            )
+        if self.qa_failed_dataset_ceiling not in MAGNITUDE_NAMES:
+            raise ValueError(
+                f"qa_failed_dataset_ceiling must be one of {MAGNITUDE_NAMES}, "
+                f"got {self.qa_failed_dataset_ceiling!r}"
             )
 
 
@@ -97,4 +106,5 @@ DEFAULT_BELIEF_POLICY = BeliefPolicy(
     authored_assertion_type="expert_judgment",
     authored_min_confidence=0.5,
     authored_only_ceiling="fragile",
+    qa_failed_dataset_ceiling="fragile",
 )

@@ -707,3 +707,68 @@ def test_dataset_usage_check_ignores_non_empirical(tmp_path: Path):
            "---\nstance: supports\ntarget: proposition:p1\nevidence_type: literature_evidence\n---\n")
     rules = {r.rule for r in check_belief_eligible_empirical_has_dataset_usage(_ctx(tmp_path))}
     assert "evidence.empirical.requires_dataset_usage" not in rules
+
+
+# ---------------------------------------------------------------------------
+# Rule: belief.nonreproducible — golden snapshot comparison of qa_dataset_capped
+# ---------------------------------------------------------------------------
+
+def _nonrepro_line(p, k, uri, target, **meta):
+    k.add((uri, RDF.type, SCI_NS.EvidenceLine))
+    k.add((uri, CITO_NS.supports if meta.get("stance", "supports") == "supports" else CITO_NS.disputes, target))
+    for pred, val in (
+        (SCI_NS.evidenceStrength, meta.get("strength", "strong")),
+        (SCI_NS.evidenceIndependence, meta.get("independence", "independent")),
+        (SCI_NS.independenceGroup, meta["group"]),
+        (SCI_NS.evidenceRole, meta.get("role", "direct_test")),
+        (SCI_NS.evidenceType, meta.get("etype", "empirical_data_evidence")),
+    ):
+        p.add((uri, pred, Literal(val)))
+
+
+def _write_two_support_graph(root: Path) -> None:
+    ds = Dataset()
+    k = ds.graph(_graph_uri("graph/knowledge"))
+    p = ds.graph(_graph_uri("graph/provenance"))
+    prop = URIRef("https://example.org/prop/p1")
+    k.add((prop, RDF.type, SCI_NS.Proposition))
+    # two independent direct-test empirical supports -> qa_dataset_capped is False on recompute.
+    _nonrepro_line(p, k, URIRef("https://example.org/el/a"), prop, group="g1")
+    _nonrepro_line(p, k, URIRef("https://example.org/el/b"), prop, group="g2")
+    (root / "knowledge").mkdir(parents=True, exist_ok=True)
+    ds.serialize(destination=str(root / "knowledge" / "graph.trig"), format="trig")
+
+
+def test_nonreproducible_errors_when_qa_dataset_capped_mismatches(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_two_support_graph(tmp_path)
+    ctx = _ctx(tmp_path)
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    # Same inputs, but stored qa_dataset_capped=True while the empirical recompute is False.
+    # qa_dataset_capped is a golden output, so the divergence must be flagged.
+    corrupted = rows[0] | {"qa_dataset_capped": True}
+    snap.write_text(json.dumps(corrupted) + "\n", encoding="utf-8")
+    results = list(check_belief_nonreproducible(ctx))
+    assert any(r.severity is Severity.ERROR for r in results)
+
+
+def test_nonreproducible_silent_when_qa_dataset_capped_absent(tmp_path: Path):
+    import json
+
+    from science_tool.graph.belief_snapshot import make_snapshots
+    from science_tool.validate.checks.evidence_lines import check_belief_nonreproducible
+
+    _write_two_support_graph(tmp_path)
+    ctx = _ctx(tmp_path)
+    rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
+    snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
+    # Pre-feature history line: strip qa_dataset_capped from the (otherwise correct) row.
+    # read_snapshots normalizes it back to False, matching the current empirical result.
+    legacy = {k: v for k, v in rows[0].items() if k != "qa_dataset_capped"}
+    snap.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
+    assert list(check_belief_nonreproducible(ctx)) == []
