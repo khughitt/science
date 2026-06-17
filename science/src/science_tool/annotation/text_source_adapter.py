@@ -139,3 +139,19 @@ class PaperSourceAdapter(TextSourceAdapter):
             now=now,
             actor=actor,
         )
+
+
+class TextSourceAdapterError(ValueError):
+    """Raised when no adapter handles a source (fail-loud)."""
+
+
+# Ordered registry; first match wins (mirrors graph/sources.py adapter list).
+TEXT_SOURCE_ADAPTERS: list[TextSourceAdapter] = [PaperSourceAdapter()]
+
+
+def resolve_adapter(source_md: Path) -> TextSourceAdapter:
+    """Return the first registered adapter that handles `source_md`."""
+    for adapter in TEXT_SOURCE_ADAPTERS:
+        if adapter.handles(source_md):
+            return adapter
+    raise TextSourceAdapterError(f"no text source adapter handles {source_md}")

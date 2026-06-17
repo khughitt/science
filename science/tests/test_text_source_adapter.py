@@ -83,3 +83,25 @@ def test_paper_adapter_source_ref_rejects_non_source_md():
     a = PaperSourceAdapter()
     with pytest.raises(ValueError, match=r"expects a \.source\.md path"):
         a.source_ref(Path("/x/plain.md"))
+
+
+# append to science/tests/test_text_source_adapter.py
+from science_tool.annotation.text_source_adapter import (
+    TEXT_SOURCE_ADAPTERS,
+    TextSourceAdapterError,
+    resolve_adapter,
+)
+
+
+def test_registry_contains_paper_adapter():
+    assert any(isinstance(a, PaperSourceAdapter) for a in TEXT_SOURCE_ADAPTERS)
+
+
+def test_resolve_adapter_returns_paper_for_source_md():
+    adapter = resolve_adapter(Path("/x/smith2020.source.md"))
+    assert isinstance(adapter, PaperSourceAdapter)
+
+
+def test_resolve_adapter_fails_loud_when_unhandled():
+    with pytest.raises(TextSourceAdapterError, match="no text source adapter handles"):
+        resolve_adapter(Path("/x/unknown.txt"))
