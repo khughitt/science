@@ -1,8 +1,8 @@
 # Entity Consolidation & Archive — Design
 
-> **Status:** SHIPPED — P1–P5 + tidy-up + G1 freeze guard (local `main`, not
-> pushed). See **§12** for as-built status and ratified deviations; §12 is
-> authoritative where it differs from §1–§11.
+> **Status:** SHIPPED — P1–P5 + tidy-up + G1 freeze guard + G2 curate inventory
+> migration (local `main`, not pushed). See **§12** for as-built status and
+> ratified deviations; §12 is authoritative where it differs from §1–§11.
 > **Motivation:** keep a growing entity corpus legible to humans and to
 > entity-consuming operations (big-picture, curate, grep, the KG) as projects
 > accumulate hundreds of questions / interpretations / reports.
@@ -484,13 +484,18 @@ shipped phases P1–P5 realize the four design phases.
    `consolidated_into` (a pointer to the digest), which subsumes cluster identity —
    the digest *is* the cluster. `cluster_id` is intentionally not minted.
 
-3. **G2 — curate inventory NOT migrated to canonical `entities/` (accepted gap vs
-   §5).** The candidate detector (`consolidation_candidates.py`) reads the
-   materialized graph directly and is complete, but `curate/inventory.py` still
-   scans only legacy `specs/**`/`doc/**` roots — the §5 "migrate inventory first"
-   step was skipped because the detector did not need it. Accepted: detection
-   works; migrating curate's inventory is independent future work affecting only
-   curate's *other* signals, not consolidation.
+3. **G2 — curate inventory migrated to canonical `entities/` (RESOLVED 2026-06-17).**
+   `curate/inventory.py` now discovers entities via the shared
+   `iter_entity_markdown(entities/)` iterator and classifies them by frontmatter
+   (`type` → `kind` → colon-prefixed `id` prefix) instead of by path; the legacy
+   `specs/**`/`doc/**` globs, the `_DOC_KIND_BY_DIR` map, and the obsolete `spec`
+   artifact class are deleted. Archived members (under `entities/_archive/`) drop
+   out via the iterator; there is no status filter (a superseded-but-not-relocated
+   entity stays visible for curation). `curate/inventory.py` is registered in the
+   entity-scan guard's `ENTITY_SCANNERS`. This was the last consumer reading the
+   retired layout. Tasks/knowledge-source/agents_md/emergent-threads surfaces and
+   the `science curate inventory` JSON contract are unchanged. See
+   `docs/plans/2026-06-17-curate-canonical-entity-inventory-design.md`.
 
 4. **G3 — `--include-archived` is on `entities list` only (accepted scope vs §4
    Tier 1).** Archived-content recall is via `science search --archived` and
