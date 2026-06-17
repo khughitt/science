@@ -18,7 +18,7 @@ The worktree has no `.venv`; the command above points at the main checkout's int
 
 **Key facts the implementer needs:**
 - `iter_entity_markdown(entities_root: Path, *, include_archived: bool = False) -> Iterator[Path]` lives in `science_tool/entity_scan.py`. It yields `*.md` under `entities_root` in **sorted** order, **skips any `_`-prefixed path segment** (so `entities/_archive/` is excluded by default), and yields nothing if the root is missing. It is stdlib-only (safe to import — no cycles).
-- `parse_frontmatter(path)` (from `science_model.frontmatter`, already imported in `inventory.py`) returns `(frontmatter_dict, body)` or `None` when the file has no parseable frontmatter.
+- `parse_frontmatter(path)` (from `science_model.frontmatter`, already imported in `inventory.py`) returns `(frontmatter_dict, body)` for existing files; files without a frontmatter delimiter or with an incomplete delimiter return an empty dict. It returns `None` only when the file does not exist. Use `_has_frontmatter` to distinguish entity-file drift from an empty frontmatter dict.
 - The signal-eligibility sets are kind-name keyed and stay unchanged: `_RELATED_CLASSES = {"hypothesis", "interpretation", "paper", "question"}`, `_SOURCE_REF_CLASSES = {"interpretation", "paper"}`.
 - `artifact_class` for an entity is its **kind string**, so these sets keep matching.
 
@@ -269,8 +269,8 @@ Expected: PASS (all tests in the file).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/curate/inventory.py science/tests/test_curate_inventory.py
-git commit -m "feat(curate): scan canonical entities/ for inventory, not legacy doc/specs (G2)"
+rtk git add science/src/science_tool/curate/inventory.py science/tests/test_curate_inventory.py
+rtk git commit -m "feat(curate): scan canonical entities/ for inventory, not legacy doc/specs (G2)"
 ```
 
 ---
@@ -378,8 +378,8 @@ Expected: PASS (all, including the six new tests). If `test_record_with_frontmat
 - [ ] **Step 3: Commit**
 
 ```bash
-git add science/tests/test_curate_inventory.py
-git commit -m "test(curate): lock derivation paths, archive skip, superseded visibility, no-legacy (G2)"
+rtk git add science/tests/test_curate_inventory.py
+rtk git commit -m "test(curate): lock derivation paths, archive skip, superseded visibility, no-legacy (G2)"
 ```
 
 ---
@@ -421,8 +421,8 @@ Expected: PASS. `test_entity_scanners_use_the_ssot` confirms `curate/inventory.p
 - [ ] **Step 3: Commit**
 
 ```bash
-git add science/tests/test_entity_scan_guard.py
-git commit -m "test(guard): register curate/inventory.py as an entity scanner (G2)"
+rtk git add science/tests/test_entity_scan_guard.py
+rtk git commit -m "test(guard): register curate/inventory.py as an entity scanner (G2)"
 ```
 
 ---
