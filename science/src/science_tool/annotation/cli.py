@@ -1095,7 +1095,6 @@ def extract_cmd(
     from science_tool.annotation.statement_extract import (
         CandidateError,
         check_source_changed,
-        extract_candidates,
         parse_candidates,
     )
 
@@ -1116,8 +1115,17 @@ def extract_cmd(
     except CandidateError as exc:
         raise click.ClickException(str(exc)) from exc
 
+    from science_tool.annotation.text_source_adapter import (
+        TextSourceAdapterError,
+        resolve_adapter,
+    )
+
     try:
-        report = extract_candidates(
+        adapter = resolve_adapter(source_md)
+    except TextSourceAdapterError as exc:
+        raise click.ClickException(str(exc)) from exc
+    try:
+        report = adapter.extract(
             source_md=source_md, model=model, candidates=candidates,
             now=datetime.now(timezone.utc), actor=actor,
         )
@@ -1156,7 +1164,8 @@ def extract_cmd(
 )
 @click.option("--paper-ref", "paper_ref", default=None,
               help="Resolvable paper entity ref (paper:<id>) recorded in source_refs. "
-                   "Defaults to paper:<source path stem minus .source>.")
+                   "Defaults to the source adapter's ref (paper:<citekey> for a "
+                   "<citekey>.source.md); a source no adapter handles fails loud.")
 @click.option("--apply", "do_apply", is_flag=True, default=False,
               help="Execute candidates (mint/link + backlink). Default is read-only.")
 @click.option("--input", "input_path", default=None,
@@ -1172,15 +1181,20 @@ def promote_cmd(source_md: Path, root: Path | None, paper_ref: str | None,
         PromotionApplyError, PromotionOverrideError, PromotionReadError, apply_candidates,
         apply_overrides, build_targets, collect_promotable, decide_all, load_corpora,
     )
+    from science_tool.annotation.text_source_adapter import (
+        TextSourceAdapterError,
+        resolve_adapter,
+    )
 
     if input_path is not None and not do_apply:
         raise click.ClickException("--input requires --apply (curator overrides only apply when writing)")
 
     project_root = (root or Path.cwd()).resolve()
     if paper_ref is None:
-        # citekey = <citekey>.source.md → <citekey>; the owning paper entity is paper:<citekey>.
-        citekey = source_md.name[: -len(".source.md")] if source_md.name.endswith(".source.md") else source_md.stem
-        paper_ref = f"paper:{citekey}"
+        try:
+            paper_ref = resolve_adapter(source_md).source_ref(source_md)
+        except TextSourceAdapterError as exc:
+            raise click.ClickException(str(exc)) from exc
 
     sidecar_path = sidecar_for_markdown(source_md)
     sidecar = read_sidecar_strict(sidecar_path)

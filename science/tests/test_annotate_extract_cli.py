@@ -170,3 +170,47 @@ def test_paper_annotate_agent_file_has_frontmatter():
     cmd = repo_root / "commands" / "annotate-paper.md"
     assert cmd.is_file(), "commands/annotate-paper.md must exist"
     assert "--check" in cmd.read_text(encoding="utf-8")  # documents the precheck
+
+
+def test_extract_cmd_routes_through_resolve_adapter(tmp_path: Path, monkeypatch):
+    import science_tool.annotation.text_source_adapter as sa
+
+    calls = {}
+    real_resolve = sa.resolve_adapter
+
+    def spy_resolve(source_md):
+        calls["source_md"] = source_md
+        return real_resolve(source_md)
+
+    monkeypatch.setattr(sa, "resolve_adapter", spy_resolve)
+
+    src = _make_source_md(tmp_path)
+    cand = tmp_path / "candidates.json"
+    cand.write_text(json.dumps({"candidates": [{
+        "type": "proposition",
+        "exact": "BRCA1 loss drives genomic instability",
+        "prefix": "", "suffix": " in tumors", "stance": "asserted",
+    }]}), encoding="utf-8")
+
+    r = CliRunner().invoke(annotate_group, [
+        "extract", "--source-md", str(src), "--model", _MODEL,
+        "--input", str(cand), "--format", "json",
+    ])
+    assert r.exit_code == 0, r.output
+    assert calls.get("source_md") == src          # the CLI actually called resolve_adapter
+    assert json.loads(r.output)["written"] == 1   # and produced the real result
+
+
+def test_extract_unhandled_source_fails_loud(tmp_path: Path):
+    # A source no adapter handles must surface as a clean CLI error, not a traceback.
+    notes = tmp_path / "notes.md"
+    notes.write_text("Some prose.\n", encoding="utf-8")
+    cand = tmp_path / "candidates.json"
+    cand.write_text(json.dumps({"candidates": [{
+        "type": "proposition", "exact": "x", "prefix": "", "suffix": "", "stance": "asserted",
+    }]}), encoding="utf-8")
+    r = CliRunner().invoke(annotate_group, [
+        "extract", "--source-md", str(notes), "--model", _MODEL, "--input", str(cand),
+    ])
+    assert r.exit_code != 0
+    assert "no text source adapter handles" in r.output
