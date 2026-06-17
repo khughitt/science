@@ -1,10 +1,15 @@
-# science/src/science_tool/annotation/text_source_adapter.py
 """Source adapters — turn a specific kind of text source into source-neutral
 annotation candidates (the text-layer side of the prose-epistemics seam).
 
 Mirrors the StorageAdapter "declared-policy, no-isinstance" pattern
 (graph/storage_adapters/base.py): capabilities are class attributes and
 polymorphic methods; dispatch is a registry list + first-match.
+
+P1/P2 boundary: the OFFSET_ANCHORED regime is fully implemented (PaperSourceAdapter
+delegates to the existing extract_candidates); REGENERABLE/NONE are declared but
+unimplemented (the base `extract` raises) until P2 designs the regenerable locator
+artifact. `can_fetch`/`can_seed` are declared for P2 dispatch, but persist-source and
+pubtator remain paper-specific in P1.
 """
 
 from __future__ import annotations
