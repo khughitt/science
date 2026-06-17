@@ -52,3 +52,34 @@ def test_base_extract_raises_not_implemented():
             now=None,
             actor="t",
         )
+
+
+# append to science/tests/test_text_source_adapter.py
+from science_tool.annotation.text_source_adapter import PaperSourceAdapter
+
+
+def test_paper_adapter_capabilities():
+    a = PaperSourceAdapter()
+    assert a.name == "paper"
+    assert a.locator_regime is LocatorRegime.OFFSET_ANCHORED
+    assert a.can_fetch is True
+    assert a.can_seed is True
+
+
+def test_paper_adapter_handles_source_md():
+    a = PaperSourceAdapter()
+    assert a.handles(Path("/x/smith2020.source.md")) is True
+    assert a.handles(Path("/x/smith2020.v1.source.md")) is True
+    assert a.handles(Path("/x/notes.md")) is False
+
+
+def test_paper_adapter_source_ref_strips_source_suffix():
+    a = PaperSourceAdapter()
+    assert a.source_ref(Path("/x/smith2020.source.md")) == "paper:smith2020"
+    assert a.source_ref(Path("/x/smith2020.v1.source.md")) == "paper:smith2020.v1"
+
+
+def test_paper_adapter_source_ref_rejects_non_source_md():
+    a = PaperSourceAdapter()
+    with pytest.raises(ValueError, match=r"expects a \.source\.md path"):
+        a.source_ref(Path("/x/plain.md"))

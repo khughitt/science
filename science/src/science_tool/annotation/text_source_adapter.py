@@ -91,3 +91,51 @@ class TextSourceAdapter(ABC):
             f"adapter {self.name!r} does not implement extract "
             f"(locator_regime={self.locator_regime.value})"
         )
+
+
+_SOURCE_MD_SUFFIX = ".source.md"
+
+
+class PaperSourceAdapter(TextSourceAdapter):
+    """The shipped paper pipeline as a TextSourceAdapter — behavior-neutral.
+
+    Sources are `<citekey>.source.md`; locators are offset-anchored
+    (oa:TextQuoteSelector); the provenance ref is `paper:<citekey>`, resolvable
+    to the existing paper entity persist-source already resolved.
+    """
+
+    name = "paper"
+    locator_regime = LocatorRegime.OFFSET_ANCHORED
+    can_fetch = True
+    can_seed = True
+
+    def handles(self, source_md: Path) -> bool:
+        return source_md.name.endswith(_SOURCE_MD_SUFFIX)
+
+    def source_ref(self, source_md: Path) -> str:
+        name = source_md.name
+        if not name.endswith(_SOURCE_MD_SUFFIX):
+            raise ValueError(
+                f"PaperSourceAdapter.source_ref expects a {_SOURCE_MD_SUFFIX} path: {source_md}"
+            )
+        return f"paper:{name[: -len(_SOURCE_MD_SUFFIX)]}"
+
+    def extract(
+        self,
+        *,
+        source_md: Path,
+        model: str,
+        candidates: "list[StatementCandidate | FigurativeCandidate]",
+        now: datetime,
+        actor: str,
+    ) -> "ExtractReport":
+        # Delegate to the offset-anchored implementation; behavior-neutral.
+        from science_tool.annotation.statement_extract import extract_candidates
+
+        return extract_candidates(
+            source_md=source_md,
+            model=model,
+            candidates=candidates,
+            now=now,
+            actor=actor,
+        )
