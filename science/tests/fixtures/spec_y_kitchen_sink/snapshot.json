@@ -43,7 +43,8 @@
     "evidence_role": null,
     "rival_model_packet": null,
     "tier": "",
-    "update_cadence": ""
+    "update_cadence": "",
+    "qa_report": ""
   },
   {
     "canonical_id": "hypothesis:h01",
