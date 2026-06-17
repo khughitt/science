@@ -65,7 +65,13 @@ now, stop and revise this plan; otherwise the tasks below proceed on the interfa
 |---|---|---|
 | `science/src/science_tool/annotation/source_adapter.py` | `LocatorRegime`, `SourceAdapter` ABC, `PaperSourceAdapter`, `SOURCE_ADAPTERS`, `resolve_adapter`, `SourceAdapterError` | **Create** |
 | `science/src/science_tool/annotation/cli.py` | `promote_cmd` derives `paper_ref` via the adapter; `extract_cmd` extracts via the adapter | **Modify** (`promote_cmd` ~1180-1183; `extract_cmd` ~1119-1125) |
-| `science/tests/test_source_adapter.py` | Unit tests for the adapter, registry, and behavior-neutral re-wiring | **Create** |
+| `science/tests/test_source_adapter.py` | Unit tests for the adapter, registry, and delegation | **Create** |
+| `science/tests/test_annotate_promote_cli.py` | **Add** two runtime tests (default-ref + explicit-ref-bypass), reusing `_setup`. Existing tests untouched. | **Modify (append-only)** |
+| `science/tests/test_annotate_extract_cli.py` | **Add** one runtime seam test, reusing `_make_source_md`. Existing tests untouched. | **Modify (append-only)** |
+
+> "Behavior-neutral / no editing existing tests" means **existing test assertions are never
+> changed**; appending *new* test functions to these files (reusing their fixtures) is allowed and
+> is how the runtime seam tests get real fixtures without duplication.
 
 ## Running tests (worktree gotcha)
 
@@ -325,12 +331,20 @@ def test_paper_adapter_handles_source_md():
     assert a.handles(Path("/x/notes.md")) is False
 
 
-def test_paper_adapter_source_ref_matches_legacy_derivation():
+def test_paper_adapter_source_ref_strips_source_suffix():
     a = PaperSourceAdapter()
-    # legacy promote_cmd behavior: strip ".source.md", else .stem
     assert a.source_ref(Path("/x/smith2020.source.md")) == "paper:smith2020"
     assert a.source_ref(Path("/x/smith2020.v1.source.md")) == "paper:smith2020.v1"
-    assert a.source_ref(Path("/x/plain.md")) == "paper:plain"
+
+
+def test_paper_adapter_source_ref_rejects_non_source_md():
+    # source_ref is only ever reached via resolve_adapter, which gates on handles();
+    # so a non-.source.md path can never reach it in practice. The old `.stem`
+    # fallback was therefore dead code — make the contract explicit and fail loud
+    # (matches sidecar_for_markdown, which raises on a non-.md path).
+    a = PaperSourceAdapter()
+    with pytest.raises(ValueError, match=r"expects a \.source\.md path"):
+        a.source_ref(Path("/x/plain.md"))
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -364,12 +378,11 @@ class PaperSourceAdapter(SourceAdapter):
 
     def source_ref(self, source_md: Path) -> str:
         name = source_md.name
-        citekey = (
-            name[: -len(_SOURCE_MD_SUFFIX)]
-            if name.endswith(_SOURCE_MD_SUFFIX)
-            else source_md.stem
-        )
-        return f"paper:{citekey}"
+        if not name.endswith(_SOURCE_MD_SUFFIX):
+            raise ValueError(
+                f"PaperSourceAdapter.source_ref expects a {_SOURCE_MD_SUFFIX} path: {source_md}"
+            )
+        return f"paper:{name[: -len(_SOURCE_MD_SUFFIX)]}"
 
     def extract(
         self,
@@ -481,16 +494,23 @@ git commit -m "feat(source-adapter): add registry + resolve_adapter (fail-loud)"
 
 **Files:**
 - Modify: `science/src/science_tool/annotation/cli.py:1166-1183` (`promote_cmd`)
-- Test: `science/tests/test_source_adapter.py`
+- Test: `science/tests/test_annotate_promote_cli.py` (add new tests, reusing the existing `_setup` fixture)
 
-Replace the inline `paper:` derivation with the adapter's `source_ref`. **Behavior-neutral**:
-`PaperSourceAdapter.source_ref` returns the identical string for `.source.md` inputs.
+This is a **behavior-neutral refactor guarded by the existing suite** plus two new *runtime*
+tests that reuse the real `_setup` fixture in `test_annotate_promote_cli.py`. The discipline is
+baseline-green → write runtime tests → edit → green.
 
-This is a **behavior-neutral refactor guarded by the existing suite**, not new-behavior TDD —
-`source_ref` parity is already unit-tested in Task 3, and `test_annotate_promote_cli.py` already
-exercises promote both with and without `--paper-ref`. So the discipline here is
-baseline-green → edit → still-green, plus one unit test that `promote_cmd` actually routes
-through `resolve_adapter` (so the seam can't silently regress to the inline string).
+**Critical detail (High-severity fix):** `resolve_adapter` must be called **only inside** the
+`if paper_ref is None:` branch. `PaperSourceAdapter.handles()` rejects non-`.source.md` paths, so
+resolving unconditionally would make an explicit `--paper-ref` on a non-`.source.md` source fail
+before the ref is even used. Keeping the call inside the `None` branch means an explicit
+`--paper-ref` never touches the adapter — fully behavior-neutral.
+
+**Sanctioned deviation:** for the *no*-`--paper-ref` + *non*-`.source.md` case, the old code
+silently derived `paper:<stem>`; the new code routes through `resolve_adapter`, which fails loud
+(`SourceAdapterError`). No existing test exercises that case (every promote test uses
+`p.source.md`), and fail-loud is the intended behavior (avoid silent fallbacks). Recorded here so
+it is not mistaken for an accidental regression.
 
 - [ ] **Step 1: Record the baseline (existing suite is the spec)**
 
@@ -498,51 +518,52 @@ Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pyt
 Expected: PASS (all existing promote tests). This green run is the behavior-neutral baseline the
 edit must preserve.
 
-- [ ] **Step 2: Write the seam-guard test**
+- [ ] **Step 2: Write the runtime tests**
+
+Append to `science/tests/test_annotate_promote_cli.py` (it already imports `CliRunner`,
+`annotate_group`, `json`, `Path`, and defines `_setup`):
 
 ```python
-# append to science/tests/test_source_adapter.py
-import science_tool.annotation.source_adapter as sa
+def test_promote_apply_without_paper_ref_uses_adapter_default(tmp_path):
+    # No --paper-ref: the default must come from PaperSourceAdapter.source_ref,
+    # i.e. p.source.md -> paper:p, recorded in the minted proposition body.
+    md, sp = _setup(tmp_path)
+    r = CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path), "--apply"])
+    assert r.exit_code == 0, r.output
+    text = (tmp_path / "entities" / "propositions" / "genes-encode-proteins.md").read_text(encoding="utf-8")
+    assert "paper:p" in text
 
 
-def test_promote_cmd_routes_through_resolve_adapter(monkeypatch):
-    """promote_cmd must derive its default ref via resolve_adapter, not inline."""
-    calls = {}
-    real_resolve = sa.resolve_adapter
+def test_promote_explicit_paper_ref_does_not_touch_adapter(tmp_path, monkeypatch):
+    # An explicit --paper-ref must bypass resolve_adapter entirely (High-severity guard):
+    # if the code wrongly resolves an adapter, this raises and the command fails.
+    import science_tool.annotation.source_adapter as sa
 
-    def spy_resolve(source_md):
-        calls["source_md"] = source_md
-        return real_resolve(source_md)
+    def boom(_source_md):
+        raise sa.SourceAdapterError("resolve_adapter must not be called when --paper-ref is given")
 
-    monkeypatch.setattr(sa, "resolve_adapter", spy_resolve)
-
-    from click.testing import CliRunner
-    from science_tool.annotation.cli import annotate_group
-
-    # A nonexistent .source.md: click rejects the path arg before promote logic,
-    # OR promote runs and calls resolve_adapter. We only assert the seam is wired:
-    # invoke read-only against any existing promote fixture is heavier than needed,
-    # so assert at import-edge — resolve_adapter is imported into cli at call time.
-    # Minimal proof: the symbol promote_cmd imports is sa.resolve_adapter.
-    import inspect
-    src = inspect.getsource(annotate_group.commands["promote"].callback)
-    assert "resolve_adapter(source_md)" in src
-    assert "adapter.source_ref(source_md)" in src
+    monkeypatch.setattr(sa, "resolve_adapter", boom)
+    md, sp = _setup(tmp_path)
+    r = CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path),
+                                            "--paper-ref", "paper:x", "--apply"])
+    assert r.exit_code == 0, r.output
+    text = (tmp_path / "entities" / "propositions" / "genes-encode-proteins.md").read_text(encoding="utf-8")
+    assert "paper:x" in text
 ```
 
-> Implementer note: the `inspect.getsource` assertion is a lightweight guard that the inline
-> derivation was actually replaced by the adapter call (it would fail today, pass after Step 3).
-> The real integration guarantee is the unchanged `test_annotate_promote_cli.py` suite in Step 4.
-> If you prefer a stronger behavioral test, copy the fixture from
-> `test_annotate_promote_cli.py::test_promote_apply_mints_and_backlinks`, drop `--paper-ref`, and
-> assert the minted entity body contains `paper:<citekey>` — but do not invent a new fixture from
-> scratch; reuse that file's existing helper verbatim.
+> Why `monkeypatch.setattr(sa, "resolve_adapter", ...)` works: `promote_cmd` does
+> `from science_tool.annotation.source_adapter import resolve_adapter` *inside* the function, so
+> the name is rebound from the (patched) module attribute on every invocation.
 
-- [ ] **Step 3: Run the guard test to verify it fails**
+- [ ] **Step 3: Run the new tests (behavior-lock guards — expected green)**
 
-Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_source_adapter.py -k "routes_through_resolve_adapter"`
-Expected: FAIL — the source still contains the inline `citekey = ...` derivation, not
-`resolve_adapter(source_md)`.
+Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_annotate_promote_cli.py -k "without_paper_ref or does_not_touch_adapter"`
+Expected: PASS already. These are **behavior-lock guards**, not red-first TDD: the legacy `.stem`
+default also yields `paper:p`, and before the edit `promote_cmd` never calls `resolve_adapter` (so
+the explicit-ref monkeypatch is inert). Their job is to stay green *through* the edit and catch a
+regression where `resolve_adapter` is wrongly called outside the `None` branch (which would break
+`does_not_touch_adapter`) or the default ref changes (which would break `without_paper_ref`).
+Proceed to Step 4 — the edit must keep both green.
 
 - [ ] **Step 4: Write the implementation**
 
@@ -561,24 +582,23 @@ Replace the current default-derivation block (`cli.py:1180-1183`):
         paper_ref = f"paper:{citekey}"
 ```
 
-with:
+with (note `resolve_adapter` is called **only** when no explicit ref was passed):
 
 ```python
-    adapter = resolve_adapter(source_md)
     if paper_ref is None:
-        paper_ref = adapter.source_ref(source_md)
+        paper_ref = resolve_adapter(source_md).source_ref(source_md)
 ```
 
-- [ ] **Step 5: Run guard + full promote suite to verify green**
+- [ ] **Step 5: Run new + full promote suite to verify green**
 
-Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_source_adapter.py -k "routes_through_resolve_adapter" science/tests/test_annotate_promote_cli.py`
-Expected: PASS (the guard test now passes, and **all** existing promote tests are unchanged-green)
+Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_annotate_promote_cli.py`
+Expected: PASS (new runtime tests + **all** existing promote tests unchanged-green)
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science/src/science_tool/annotation/cli.py science/tests/test_source_adapter.py
-git commit -m "refactor(promote): derive source ref via resolve_adapter (behavior-neutral)"
+git add science/src/science_tool/annotation/cli.py science/tests/test_annotate_promote_cli.py
+git commit -m "refactor(promote): derive default source ref via resolve_adapter (behavior-neutral)"
 ```
 
 ---
@@ -587,26 +607,30 @@ git commit -m "refactor(promote): derive source ref via resolve_adapter (behavio
 
 **Files:**
 - Modify: `science/src/science_tool/annotation/cli.py:1119-1125` (`extract_cmd`)
-- Test: `science/tests/test_source_adapter.py`
+- Test: `science/tests/test_source_adapter.py` (delegation unit test) and
+  `science/tests/test_annotate_extract_cli.py` (runtime seam test, reuses `_make_source_md`)
 
 Replace the direct `extract_candidates(...)` call with `resolve_adapter(source_md).extract(...)`.
 **Behavior-neutral**: `PaperSourceAdapter.extract` delegates to the same `extract_candidates`.
-Like Task 5, this is a refactor guarded by the existing `test_annotate_extract_cli.py` suite,
-plus two new guards: a delegation unit test and a CLI seam test.
+Guarded by the existing `test_annotate_extract_cli.py` suite, a delegation unit test, and a
+runtime seam test that proves the CLI actually routes through `resolve_adapter`.
 
 - [ ] **Step 1: Record the baseline**
 
 Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_annotate_extract_cli.py`
 Expected: PASS (all existing extract tests) — the behavior-neutral baseline.
 
-- [ ] **Step 2: Write the delegation + seam guard tests**
+- [ ] **Step 2: Write the delegation unit test**
 
-The delegation test proves `PaperSourceAdapter.extract` forwards identical kwargs to
-`extract_candidates` (so it already passes after Task 3); the seam test proves `extract_cmd` was
-re-wired to call the adapter (fails until Step 4).
+Append to `science/tests/test_source_adapter.py`. **Add the imports** `from datetime import
+datetime, timezone` at the top of that file if not already present (the delegation test needs
+them):
 
 ```python
-# append to science/tests/test_source_adapter.py
+# (ensure at top of science/tests/test_source_adapter.py)
+from datetime import datetime, timezone
+
+
 def test_paper_adapter_extract_delegates(monkeypatch):
     import science_tool.annotation.statement_extract as se
 
@@ -632,25 +656,57 @@ def test_paper_adapter_extract_delegates(monkeypatch):
         "now": now,
         "actor": "paper-annotate",
     }
-
-
-def test_extract_cmd_routes_through_resolve_adapter():
-    import inspect
-    from science_tool.annotation.cli import annotate_group
-
-    src = inspect.getsource(annotate_group.commands["extract"].callback)
-    assert "resolve_adapter(source_md)" in src
-    assert "adapter.extract(" in src
 ```
 
-- [ ] **Step 3: Run the new tests — delegation passes, seam fails**
+- [ ] **Step 3: Write the runtime seam test**
 
-Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_source_adapter.py -k "extract_delegates or extract_cmd_routes"`
-Expected: `extract_delegates` PASSES (Task 3 already implemented `extract`); `extract_cmd_routes`
-FAILS (the CLI still calls `extract_candidates` directly). If `extract_delegates` fails, the
-Task-3 `extract` method is wrong — fix it before proceeding.
+Append to `science/tests/test_annotate_extract_cli.py` (it already imports `json`, `Path`,
+`CliRunner`, `annotate_group`, and defines `_make_source_md` + `_MODEL`). A spy on
+`resolve_adapter` that the CLI must actually call, asserting both that it was invoked **and** that
+the command produced the real result (`written == 1`):
 
-- [ ] **Step 4: Write the implementation**
+```python
+def test_extract_cmd_routes_through_resolve_adapter(tmp_path: Path, monkeypatch):
+    import science_tool.annotation.source_adapter as sa
+
+    calls = {}
+    real_resolve = sa.resolve_adapter
+
+    def spy_resolve(source_md):
+        calls["source_md"] = source_md
+        return real_resolve(source_md)
+
+    monkeypatch.setattr(sa, "resolve_adapter", spy_resolve)
+
+    src = _make_source_md(tmp_path)
+    cand = tmp_path / "candidates.json"
+    cand.write_text(json.dumps({"candidates": [{
+        "type": "proposition",
+        "exact": "BRCA1 loss drives genomic instability",
+        "prefix": "", "suffix": " in tumors", "stance": "asserted",
+    }]}), encoding="utf-8")
+
+    r = CliRunner().invoke(annotate_group, [
+        "extract", "--source-md", str(src), "--model", _MODEL,
+        "--input", str(cand), "--format", "json",
+    ])
+    assert r.exit_code == 0, r.output
+    assert calls.get("source_md") == src          # the CLI actually called resolve_adapter
+    assert json.loads(r.output)["written"] == 1   # and produced the real result
+```
+
+> `monkeypatch.setattr(sa, "resolve_adapter", ...)` is picked up because `extract_cmd` does
+> `from science_tool.annotation.source_adapter import resolve_adapter` *inside* the function.
+
+- [ ] **Step 4: Run the new tests — delegation passes, seam fails**
+
+Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_source_adapter.py::test_paper_adapter_extract_delegates science/tests/test_annotate_extract_cli.py::test_extract_cmd_routes_through_resolve_adapter`
+Expected: `test_paper_adapter_extract_delegates` PASSES (Task 3 implemented `extract`);
+`test_extract_cmd_routes_through_resolve_adapter` FAILS — `calls` is empty because the CLI still
+calls `extract_candidates` directly. If the delegation test fails, the Task-3 `extract` method is
+wrong — fix it before proceeding.
+
+- [ ] **Step 5: Write the implementation**
 
 In `cli.py` `extract_cmd`, after `candidates = parse_candidates(...)` succeeds, replace the
 extract call block (`cli.py:1119-1125`):
@@ -685,15 +741,15 @@ remain; it is still used for the `check_source_changed`/`parse_candidates` sibli
 unused import is acceptable but prefer dropping `extract_candidates` from that block since the
 adapter now owns the call. `check_source_changed` and `parse_candidates` stay.)
 
-- [ ] **Step 5: Run guards + full extract suite to verify green**
+- [ ] **Step 6: Run guards + full extract suite to verify green**
 
-Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_source_adapter.py -k "extract_delegates or extract_cmd_routes" science/tests/test_annotate_extract_cli.py`
-Expected: PASS (both guard tests now pass + **all** existing extract CLI tests unchanged-green)
+Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_source_adapter.py::test_paper_adapter_extract_delegates science/tests/test_annotate_extract_cli.py`
+Expected: PASS (delegation unit test + the runtime seam test now pass + **all** existing extract CLI tests unchanged-green)
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add science/src/science_tool/annotation/cli.py science/tests/test_source_adapter.py
+git add science/src/science_tool/annotation/cli.py science/tests/test_source_adapter.py science/tests/test_annotate_extract_cli.py
 git commit -m "refactor(extract): extract via resolve_adapter (behavior-neutral)"
 ```
 
@@ -753,7 +809,10 @@ git commit -m "docs(source-adapter): record P1/P2 regime + capability boundary"
 2. **No isinstance dispatch:** `resolve_adapter` selects by `handles()`, not type checks; the CLI
    reads `adapter.locator_regime`/capabilities, never `isinstance`.
 3. **Source-ref parity:** `PaperSourceAdapter.source_ref` returns byte-identical strings to the
-   old inline derivation for every `.source.md` and fallback case (Task 3 tests).
+   old inline derivation for every `.source.md` input (Task 3 tests), and `resolve_adapter` is
+   called **only** inside `if paper_ref is None:` so an explicit `--paper-ref` is untouched. The
+   one sanctioned deviation (no-ref + non-`.source.md` → fail-loud instead of silent `paper:<stem>`)
+   is documented in Task 5 and exercised by `test_promote_explicit_paper_ref_does_not_touch_adapter`.
 4. **Seam completeness for P2:** `extract` and `source_ref` go through the adapter; `LocatorRegime`
    and `can_fetch`/`can_seed` are declared so P2's `InternalProseAdapter` is an additive change
    (new adapter + registry entry), touching no CLI command body.
