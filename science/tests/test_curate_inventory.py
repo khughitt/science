@@ -275,3 +275,83 @@ def test_collect_inventory_surfaces_agents_md_drift(curated_project: Path) -> No
     ]
     assert "agents_md_legacy_includes" in inventory.agents_md.drift_signals
     assert "markers_missing" in inventory.agents_md.drift_signals
+
+
+def test_artifact_class_prefers_type_over_dir_and_id(tmp_path: Path) -> None:
+    # `type:` wins even when the dir name and id prefix disagree.
+    _write(tmp_path / "science.yaml", "name: p\nprofile: research\n")
+    _write(
+        tmp_path / "entities/questions/m1.md",
+        "---\nid: question:m1\ntype: mechanism\ntitle: M\n---\nBody.\n",
+    )
+    inventory = collect_inventory(tmp_path, today=date(2026, 4, 21))
+    cls = {a.path: a.artifact_class for a in inventory.artifacts}
+    assert cls["entities/questions/m1.md"] == "mechanism"
+
+
+def test_artifact_class_falls_back_to_kind_then_id_prefix(tmp_path: Path) -> None:
+    _write(tmp_path / "science.yaml", "name: p\nprofile: research\n")
+    # No `type:` -> use `kind:`.
+    _write(
+        tmp_path / "entities/findings/f1.md",
+        "---\nid: finding:f1\nkind: finding\ntitle: F\n---\nBody.\n",
+    )
+    # No `type:`/`kind:` -> use the colon-prefixed id prefix.
+    _write(
+        tmp_path / "entities/observations/o1.md",
+        "---\nid: observation:o1\ntitle: O\n---\nBody.\n",
+    )
+    inventory = collect_inventory(tmp_path, today=date(2026, 4, 21))
+    cls = {a.path: a.artifact_class for a in inventory.artifacts}
+    assert cls["entities/findings/f1.md"] == "finding"
+    assert cls["entities/observations/o1.md"] == "observation"
+
+
+def test_record_with_frontmatter_but_no_classifiable_kind_is_skipped(tmp_path: Path) -> None:
+    # Has frontmatter (so not no_frontmatter) but no type/kind and a bare id ->
+    # unclassifiable -> skipped (keys no signal, not counted).
+    _write(tmp_path / "science.yaml", "name: p\nprofile: research\n")
+    _write(
+        tmp_path / "entities/misc/x1.md",
+        "---\nid: bare-no-colon\ntitle: X\n---\nBody.\n",
+    )
+    inventory = collect_inventory(tmp_path, today=date(2026, 4, 21))
+    assert [a.path for a in inventory.artifacts] == []
+    assert inventory.candidate_signals.no_frontmatter_files == []
+
+
+def test_archived_member_is_absent_from_inventory(tmp_path: Path) -> None:
+    # A relocated archived member under entities/_archive/ is skipped by the iterator.
+    _write(tmp_path / "science.yaml", "name: p\nprofile: research\n")
+    _write(
+        tmp_path / "entities/_archive/interpretations/old.md",
+        "---\nid: interpretation:old\ntype: interpretation\nstatus: archived\n---\nBody.\n",
+    )
+    inventory = collect_inventory(tmp_path, today=date(2026, 4, 21))
+    assert [a.path for a in inventory.artifacts] == []
+
+
+def test_superseded_status_entity_is_present(tmp_path: Path) -> None:
+    # No status filter: a superseded-but-not-relocated entity stays visible so a
+    # human can act on it in curate.
+    _write(tmp_path / "science.yaml", "name: p\nprofile: research\n")
+    _write(
+        tmp_path / "entities/interpretations/s1.md",
+        "---\nid: interpretation:s1\ntype: interpretation\nstatus: superseded\n---\nBody.\n",
+    )
+    inventory = collect_inventory(tmp_path, today=date(2026, 4, 21))
+    assert [a.path for a in inventory.artifacts] == ["entities/interpretations/s1.md"]
+
+
+def test_legacy_specs_and_doc_are_no_longer_scanned(tmp_path: Path) -> None:
+    # The retired layout is ignored: a doc/ entity and a depth-2 specs/*.md "spec"
+    # contribute nothing.
+    _write(tmp_path / "science.yaml", "name: p\nprofile: research\n")
+    _write(
+        tmp_path / "doc/questions/q9.md",
+        "---\nid: question:q9\ntype: question\n---\nBody.\n",
+    )
+    _write(tmp_path / "specs/overview.md", "---\nid: spec:overview\n---\nBody.\n")
+    inventory = collect_inventory(tmp_path, today=date(2026, 4, 21))
+    assert [a.path for a in inventory.artifacts] == []
+    assert "spec" not in inventory.artifact_counts
