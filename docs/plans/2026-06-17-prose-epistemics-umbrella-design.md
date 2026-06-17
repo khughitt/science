@@ -65,7 +65,7 @@ replaceable per source; the graph layer never changes.
                                            │
  source ──▶ normalized repr ──▶ decompose ─┼─▶ candidates.json ──▶ extract / persist
    │            │                 (agent)  │     (THE SEAM)              │
-   fetch?     anchor?                      │   units-of-thought       promote (mint / link)
+   fetch?   locator_regime?                │   units-of-thought       promote (mint / link)
    seed?      (im/mutable)                 │                             │
                                            │                          synthesize
                                            │                             │
@@ -79,10 +79,17 @@ capabilities, each opt-in and **declared** (no `isinstance`/name branching — t
 "declared policy" pattern the Source Compiler used for `StorageAdapter`):
 
 - **fetch** — acquire the text. Papers fetch via DOI/PMID; internal prose reads repo files.
-- **anchor** — produce locators. *Immutable* sources (papers, books) anchor with
-  `oa:TextQuoteSelector`/offsets because the text is not ours and must survive re-audit.
-  *Mutable* internal prose uses cheap **regenerable** locators (heading/section + quoted
-  text) and **opts out** of the anchoring stack entirely (spike finding 6).
+- **`locator_regime`** — *how* spans are located, declared as an explicit enum (not a
+  boolean), with three values:
+  - `offset_anchored` — `oa:TextQuoteSelector`/offsets + content-hash re-audit (the
+    **anchoring stack**). For *immutable* sources whose text is not ours and must survive
+    re-audit (papers, books).
+  - `regenerable` — cheap heading/section + quoted-text locators, **no** offset/hash
+    machinery. For *mutable* internal prose we own and re-decompose (spike finding 6).
+  - `none` — no locators at all (a source that yields candidates without span provenance).
+
+  "Anchoring stack" is reserved hereafter for the `offset_anchored` machinery only — a
+  `regenerable` adapter still produces locators, it simply does not anchor.
 - **seed** — entity-mention pre-annotation. PubTator3 for bio papers; nothing for prose.
 
 Each adapter also declares its **`source_ref` scheme** (`paper:<citekey>`, `doc:<slug>`, …),
@@ -100,8 +107,8 @@ the text↔graph boundary.
 
 Therefore **P1 must generalize the locator/annotation artifact**, not merely wrap
 `persist-source` / `extract` / `pubtator`. Concretely the artifact must support two
-locator regimes behind the adapter's `anchor` capability: **offset-anchored** (immutable
-sources — today's `TextQuoteSelector` + content-hash re-audit) and **regenerable**
+locator regimes behind the adapter's `locator_regime` (§3.1): **`offset_anchored`**
+(immutable sources — today's `TextQuoteSelector` + content-hash re-audit) and **`regenerable`**
 (mutable internal prose — heading/section + quoted text, no hash re-audit). Promotion must
 consume either regime through one interface. Designing this generalized artifact is the
 core of P1, alongside the adapter abstraction.
@@ -129,10 +136,10 @@ Decision (brainstorming): generalize the shipped pipeline around a source-agnost
 - Introduce a `SourceAdapter` abstraction carrying the **declared capability profile**
   from §3.1.
 - Re-seat today's pipeline as **`PaperSourceAdapter`** (DOI/PMID fetch → `.source.md`,
-  `TextQuoteSelector` anchoring, PubTator seeding, `paper:<citekey>` ref). This is a
+  `locator_regime = offset_anchored`, PubTator seeding, `paper:<citekey>` ref). This is a
   **behavior-neutral extraction refactor** — papers must behave byte-for-byte as before.
-- **`InternalProseAdapter`** (P2) declares: no fetch (reads repo files), no anchor
-  (mutable → regenerable locators), no seed, `doc:`/`prose:` ref scheme.
+- **`InternalProseAdapter`** (P2) declares: no fetch (reads repo files),
+  `locator_regime = regenerable` (mutable prose), no seed, `doc:`/`prose:` ref scheme.
 - Books, talks, datasets, etc. become future adapters for free.
 
 The three paper-coupled spots that move behind the adapter boundary: `persist-source`
@@ -196,8 +203,8 @@ Each phase gets its own spec → plan in a later session.
 
 | Phase | Delivers | Depends on |
 |---|---|---|
-| **P1 — Source-agnostic core** | The §4 refactor. `SourceAdapter` + declared capability profile (fetch/anchor/seed **+ source-ref resolvability**, §4.1); **generalize the locator/annotation artifact** to support offset-anchored *and* regenerable regimes through one promotion interface (§3.2); re-seat today's pipeline as `PaperSourceAdapter`. **Behavior-neutral for papers.** No new content — pure shape. | — |
-| **P2 — Internal-prose adapter** | `InternalProseAdapter` (reads repo prose, mutable, regenerable locators, no anchor/seed) + a decompose-agent variant that discriminates meta vs. domain. Output: domain propositions minted from our own prose through the *unchanged* graph layer. | P1 |
+| **P1 — Source-agnostic core** | The §4 refactor. `SourceAdapter` + declared capability profile (fetch / `locator_regime` / seed **+ source-ref resolvability**, §4.1); **generalize the locator/annotation artifact** to support offset-anchored *and* regenerable regimes through one promotion interface (§3.2); re-seat today's pipeline as `PaperSourceAdapter`. **Behavior-neutral for papers.** No new content — pure shape. | — |
+| **P2 — Internal-prose adapter** | `InternalProseAdapter` (reads repo prose, mutable, `locator_regime = regenerable`, no seed) + a decompose-agent variant that discriminates meta vs. domain. Output: domain propositions minted from our own prose through the *unchanged* graph layer. | P1 |
 | **P3 — Domain grounding** | Belief-as-grounding read; the evidence-line authoring path (closing the `_lift_evidence_line` structural-defaults gap, spike finding 8); domain-source ingestion so `aggregate_belief` has real inputs. Makes "grounded in evidence" honest. | P2 |
 | **P4 — Health coverage-ramp** | A `prose-health.json`-style artifact (Python-produced, TS-consumed) carrying per-claim grounding; the coverage-ramp metric; stylized marking of unbacked claims in rendered prose. | P3 |
 
