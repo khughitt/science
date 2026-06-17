@@ -1,6 +1,8 @@
 # Entity Consolidation & Archive — Design
 
-> **Status:** proposed design, pre-implementation. Feeds the writing-plans step.
+> **Status:** SHIPPED — P1–P5 + tidy-up + G1 freeze guard (local `main`, not
+> pushed). See **§12** for as-built status and ratified deviations; §12 is
+> authoritative where it differs from §1–§11.
 > **Motivation:** keep a growing entity corpus legible to humans and to
 > entity-consuming operations (big-picture, curate, grep, the KG) as projects
 > accumulate hundreds of questions / interpretations / reports.
@@ -337,6 +339,10 @@ files). Consequences for this design:
   *patches the local manifest* to append `archived` to a closed-vocab local kind's
   `statuses` (idempotent; logged), rather than rejecting it or silently widening at
   write time. Local kinds with an open vocab (`statuses: None`) need no change.
+  **As-built (ratified, supersedes this paragraph): fail-loud, no auto-patch — see
+  §12.1.** `consolidate` *refuses* a closed-vocab member lacking `archived` with an
+  actionable error; auto-mutating a user's manifest mid-consolidate is the implicit
+  widening this design otherwise fights.
   Local kinds are therefore **in scope**, gated on this manifest patch.
   **The visibility guards must extend to local manifests, not just `CORE_PROFILE`.**
   A local `EntityKind` can declare its own `default_status` and a closed
@@ -448,4 +454,67 @@ files). Consequences for this design:
   excludes explicit hidden states; live non-`active` statuses stay visible.
 - **Curate missing canonical entities.** Mitigated: P2 first migrates curate
   inventory to the canonical `entities/` iterator before adding candidate
-  detection.
+  detection. (As-built: detector reads the graph directly; inventory migration
+  deferred — see §12.3.)
+
+## 12. As-built status & ratified deviations (2026-06-16)
+
+Implemented across P1–P5 plus a tidy-up pass and the G1 freeze guard (local
+`main`, not pushed). The four-tier architecture shipped faithfully; an audit
+against §1–§11 found the deviations below, **ratified here as the intended end
+state.** This section is authoritative where it differs from the design above.
+
+**Phasing as built.** The design's P4 ("apply + Tier 4") was split into two
+shipped phases: **P4** = `entities consolidate scaffold/apply` (digest + demote +
+relocate); **P5** = Tier 4 big-picture digest substitution (digest-as-bridge
+restoration, `cluster-digest` recognition, `cluster-digests` CLI). The five
+shipped phases P1–P5 realize the four design phases.
+
+1. **Local-kind closed-vocab → fail-loud, not manifest-patch (supersedes §8).**
+   `entities consolidate` *refuses* a member whose local kind has a closed status
+   vocabulary lacking `archived` (`consolidate.py::_is_consolidatable` /
+   `_validate_members`), with an actionable "add 'archived' to that kind's
+   statuses first" error — it does **not** auto-patch the manifest. Ratified:
+   silently widening a user's manifest mid-consolidate is exactly the implicit
+   mutation the rest of this design fights (Explicit > Defensive; fail early). The
+   §4-Tier-1 visibility guards still apply at manifest load.
+
+2. **`cluster_id` omitted from the archive index row (refines §4/§8).** The §4
+   schema listed `cluster_id`; the shipped `ArchiveRow` instead carries
+   `consolidated_into` (a pointer to the digest), which subsumes cluster identity —
+   the digest *is* the cluster. `cluster_id` is intentionally not minted.
+
+3. **G2 — curate inventory NOT migrated to canonical `entities/` (accepted gap vs
+   §5).** The candidate detector (`consolidation_candidates.py`) reads the
+   materialized graph directly and is complete, but `curate/inventory.py` still
+   scans only legacy `specs/**`/`doc/**` roots — the §5 "migrate inventory first"
+   step was skipped because the detector did not need it. Accepted: detection
+   works; migrating curate's inventory is independent future work affecting only
+   curate's *other* signals, not consolidation.
+
+4. **G3 — `--include-archived` is on `entities list` only (accepted scope vs §4
+   Tier 1).** Archived-content recall is via `science search --archived` and
+   `entities list --include-archived`. The design's mention of `--include-archived`
+   on "KG materialization / view assembly" is narrowed to the list surface;
+   re-materializing archived nodes into the live graph is not a supported recall
+   mode (tombstone stubs already preserve `consolidates` edges). Revisit only if a
+   concrete recall use-case appears.
+
+5. **G1 — archived-member freeze made explicit (closes §6 / risk #2).** Editing an
+   archived member was already incidentally blocked (the live scan skips
+   `_archive/`, so resolution raised a bare `Entity not found`). A guard
+   (`entities.py::_reject_if_archived`, called by `edit_entity` /
+   `append_entity_note`) now makes the freeze an explicit, tested contract,
+   failing loud with the `consolidated_into`/`superseded_by` target and an
+   "unarchive first" pointer. Raw filesystem edits under `_archive/` remain out of
+   scope, as with the raw-grep caveat (§4 Tier 2).
+
+**Non-deviation worth recording.** The `redirect_refs` / `member_to_digest`
+primitives are deliberately exposed (via the `cluster-digests` CLI) but **not**
+wired into the resolver / knowledge-gaps: those surfaces do membership-matching
+only, so a member→digest remap there is a provable no-op (Explicit > Defensive).
+One latent fragility: resolver/digests/knowledge-gaps load per-kind via
+`glob("entities/<kind>/*.md")` rather than the shared `iter_entity_markdown`; safe
+today only because archived files relocate to the sibling `entities/_archive/`,
+which a per-kind glob never sees. If archiving ever became in-place, these would
+re-expose members — cheap insurance would be a layout-assertion test.

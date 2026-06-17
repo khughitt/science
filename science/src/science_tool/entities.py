@@ -734,6 +734,33 @@ def create_entity(
     return EntityWriteResult(entity_id=entity_id_value, path=destination, warnings=warnings)
 
 
+def _reject_if_archived(project_root: Path, ref: str) -> None:
+    """Archived members are frozen: tool-mediated content edits must go through
+    ``entities unarchive`` -> edit -> re-archive, so the index ``digest_insight``
+    cannot silently drift from the relocated file. The live scan already skips
+    ``_archive/`` (so an archived ref otherwise surfaces only as a bare
+    ``Entity not found``); this converts that incidental block into an explicit,
+    actionable error. Raw filesystem edits under ``_archive/`` remain out of scope,
+    like raw grep — the contract is the tool surface."""
+    from science_tool.archive import load_archive_index
+
+    index = load_archive_index(project_root)
+    canonical = index.resolvable_ids().get(ref)
+    if canonical is None:
+        return
+    row = index.active_by_id[canonical]
+    if row.consolidated_into:
+        why = f"consolidated into {row.consolidated_into}"
+    elif row.superseded_by:
+        why = f"superseded by {row.superseded_by}"
+    else:
+        why = "archived"
+    raise EntityCommandError(
+        f"{ref} is archived ({why}); archived entities are frozen. "
+        f"Run `science entities unarchive {canonical}`, edit, then re-archive."
+    )
+
+
 def edit_entity(
     project_root: Path,
     ref: str,
@@ -746,6 +773,7 @@ def edit_entity(
     today: date | None = None,
 ) -> EntityWriteResult:
     project_root = project_root.resolve()
+    _reject_if_archived(project_root, ref)
     location = find_entity(project_root, ref)
     frontmatter = dict(location.frontmatter)
     if title is not None:
@@ -780,6 +808,7 @@ def append_entity_note(
     if not note_text:
         raise EntityCommandError("Note cannot be empty")
     project_root = project_root.resolve()
+    _reject_if_archived(project_root, ref)
     location = find_entity(project_root, ref)
     frontmatter = dict(location.frontmatter)
     date_value = note_date or date.today()
