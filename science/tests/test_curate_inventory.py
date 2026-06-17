@@ -27,15 +27,15 @@ def curated_project(tmp_path: Path) -> Path:
         "name: curated-project\nprofile: research\n",
     )
     _write(
-        project_root / "specs/hypotheses/h1.md",
+        project_root / "entities/hypotheses/h1.md",
         "---\nid: hypothesis:h1\ntitle: Hypothesis One\nrelated:\n  - question:q1\n---\nHypothesis body.\n",
     )
     _write(
-        project_root / "doc/questions/q1.md",
+        project_root / "entities/questions/q1.md",
         "---\nid: question:q1\ntitle: Question One\n---\nQuestion body.\n",
     )
     _write(
-        project_root / "doc/papers/p1.md",
+        project_root / "entities/papers/p1.md",
         "---\n"
         "id: paper:p1\n"
         "title: Paper One\n"
@@ -47,11 +47,11 @@ def curated_project(tmp_path: Path) -> Path:
         "Paper body.\n",
     )
     _write(
-        project_root / "doc/interpretations/i1.md",
+        project_root / "entities/interpretations/i1.md",
         "---\nid: interpretation:i1\ntitle: Interpretation One\nrelated:\n  - question:q1\n---\nInterpretation body.\n",
     )
     _write(
-        project_root / "doc/topics/topic-a.md",
+        project_root / "entities/topics/topic-a.md",
         "---\n"
         "id: topic:topic-a\n"
         "title: Topic A\n"
@@ -63,7 +63,7 @@ def curated_project(tmp_path: Path) -> Path:
         "Topic body.\n",
     )
     _write(
-        project_root / "doc/discussions/d1.md",
+        project_root / "entities/discussions/d1.md",
         "---\n"
         "id: discussion:d1\n"
         "title: Discussion One\n"
@@ -110,12 +110,12 @@ def curated_project(tmp_path: Path) -> Path:
     )
 
     today = date(2026, 4, 21)
-    _set_mtime(project_root / "specs/hypotheses/h1.md", today - timedelta(days=9))
-    _set_mtime(project_root / "doc/questions/q1.md", today)
-    _set_mtime(project_root / "doc/papers/p1.md", today - timedelta(days=2))
-    _set_mtime(project_root / "doc/interpretations/i1.md", today - timedelta(days=45))
-    _set_mtime(project_root / "doc/topics/topic-a.md", today - timedelta(days=4))
-    _set_mtime(project_root / "doc/discussions/d1.md", today - timedelta(days=6))
+    _set_mtime(project_root / "entities/hypotheses/h1.md", today - timedelta(days=9))
+    _set_mtime(project_root / "entities/questions/q1.md", today)
+    _set_mtime(project_root / "entities/papers/p1.md", today - timedelta(days=2))
+    _set_mtime(project_root / "entities/interpretations/i1.md", today - timedelta(days=45))
+    _set_mtime(project_root / "entities/topics/topic-a.md", today - timedelta(days=4))
+    _set_mtime(project_root / "entities/discussions/d1.md", today - timedelta(days=6))
     _set_mtime(project_root / "knowledge/sources/local/entities.yaml", today - timedelta(days=60))
     _set_mtime(project_root / "tasks/active.md", today - timedelta(days=1))
     _set_mtime(project_root / "tasks/done/2026-04-01.md", today - timedelta(days=90))
@@ -139,34 +139,34 @@ def test_collect_inventory_tracks_counts_and_candidate_signals(curated_project: 
     }
 
     assert [artifact.path for artifact in inventory.artifacts] == [
-        "doc/discussions/d1.md",
-        "doc/interpretations/i1.md",
-        "doc/papers/p1.md",
-        "doc/questions/q1.md",
-        "doc/topics/topic-a.md",
+        "entities/discussions/d1.md",
+        "entities/hypotheses/h1.md",
+        "entities/interpretations/i1.md",
+        "entities/papers/p1.md",
+        "entities/questions/q1.md",
+        "entities/topics/topic-a.md",
         "knowledge/sources/local/entities.yaml",
-        "specs/hypotheses/h1.md",
         "tasks/active.md#t001",
         "tasks/done/2026-04-01.md#t002",
     ]
 
-    assert inventory.candidate_signals.missing_related == ["doc/questions/q1.md"]
-    assert inventory.candidate_signals.missing_source_refs == ["doc/interpretations/i1.md"]
-    assert inventory.candidate_signals.no_outbound_links == ["doc/questions/q1.md"]
+    assert inventory.candidate_signals.missing_related == ["entities/questions/q1.md"]
+    assert inventory.candidate_signals.missing_source_refs == ["entities/interpretations/i1.md"]
+    assert inventory.candidate_signals.no_outbound_links == ["entities/questions/q1.md"]
     assert inventory.candidate_signals.recently_modified == [
-        "doc/questions/q1.md",
+        "entities/questions/q1.md",
         "tasks/active.md#t001",
-        "doc/papers/p1.md",
-        "doc/topics/topic-a.md",
-        "doc/discussions/d1.md",
+        "entities/papers/p1.md",
+        "entities/topics/topic-a.md",
+        "entities/discussions/d1.md",
     ]
     assert inventory.candidate_signals.long_idle == [
-        "doc/interpretations/i1.md",
+        "entities/interpretations/i1.md",
         "knowledge/sources/local/entities.yaml",
         "tasks/done/2026-04-01.md#t002",
     ]
 
-    assert [artifact.modified_days_ago for artifact in inventory.artifacts] == [6, 45, 2, 0, 4, 60, 9, 1, 90]
+    assert [artifact.modified_days_ago for artifact in inventory.artifacts] == [6, 9, 45, 2, 0, 4, 60, 1, 90]
 
     knowledge_source = next(
         artifact for artifact in inventory.artifacts if artifact.path == "knowledge/sources/local/entities.yaml"
@@ -205,7 +205,7 @@ def test_collect_inventory_ignores_stale_emergent_threads(curated_project: Path)
     _set_mtime(threads, date(2026, 1, 1))  # >30 days before 2026-04-21
 
     inventory = collect_inventory(curated_project, today=date(2026, 4, 21))
-    assert inventory.candidate_signals.missing_source_refs == ["doc/interpretations/i1.md"]
+    assert inventory.candidate_signals.missing_source_refs == ["entities/interpretations/i1.md"]
 
 
 def test_collect_inventory_recent_top_k_caps_recently_modified(curated_project: Path) -> None:
@@ -214,7 +214,7 @@ def test_collect_inventory_recent_top_k_caps_recently_modified(curated_project: 
     assert len(inventory.candidate_signals.recently_modified) == 2
     # Ensure the cap kept the most-recent (smallest modified_days_ago).
     assert inventory.candidate_signals.recently_modified == [
-        "doc/questions/q1.md",
+        "entities/questions/q1.md",
         "tasks/active.md#t001",
     ]
 
@@ -224,7 +224,7 @@ def test_collect_inventory_recent_days_tightens_window(curated_project: Path) ->
     inventory = collect_inventory(curated_project, today=date(2026, 4, 21), recent_days=1, recent_top_k=None)
     # With a 1-day window, only artifacts modified within 1 day qualify.
     assert inventory.candidate_signals.recently_modified == [
-        "doc/questions/q1.md",
+        "entities/questions/q1.md",
         "tasks/active.md#t001",
     ]
 
@@ -233,16 +233,16 @@ def test_collect_inventory_surfaces_frontmatter_less_files(curated_project: Path
     """fb-2026-05-01-002: markdown files in known doc roots without frontmatter
     must surface in candidate_signals.no_frontmatter_files so curation catches drift."""
     _write(
-        curated_project / "doc/reports/2026-05-01-untracked-report.md",
+        curated_project / "entities/reports/2026-05-01-untracked-report.md",
         "# Untracked report\n\nSome body without frontmatter.\n",
     )
     _write(
-        curated_project / "doc/reports/2026-05-01-with-fm.md",
+        curated_project / "entities/reports/2026-05-01-with-fm.md",
         "---\nid: report:r1\ntitle: Tracked\n---\nBody.\n",
     )
     inventory = collect_inventory(curated_project, today=date(2026, 5, 1))
     assert inventory.candidate_signals.no_frontmatter_files == [
-        "doc/reports/2026-05-01-untracked-report.md",
+        "entities/reports/2026-05-01-untracked-report.md",
     ]
 
 
