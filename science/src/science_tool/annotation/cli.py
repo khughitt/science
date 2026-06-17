@@ -1164,7 +1164,8 @@ def extract_cmd(
 )
 @click.option("--paper-ref", "paper_ref", default=None,
               help="Resolvable paper entity ref (paper:<id>) recorded in source_refs. "
-                   "Defaults to paper:<source path stem minus .source>.")
+                   "Defaults to the source adapter's ref (paper:<citekey> for a "
+                   "<citekey>.source.md); a source no adapter handles fails loud.")
 @click.option("--apply", "do_apply", is_flag=True, default=False,
               help="Execute candidates (mint/link + backlink). Default is read-only.")
 @click.option("--input", "input_path", default=None,
