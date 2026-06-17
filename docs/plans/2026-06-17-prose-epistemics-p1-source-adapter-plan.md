@@ -80,8 +80,8 @@ points (YAGNI — no second source exists yet).
 | `science/src/science_tool/annotation/text_source_adapter.py` | `LocatorRegime`, `TextSourceAdapter` ABC, `PaperSourceAdapter`, `TEXT_SOURCE_ADAPTERS`, `resolve_adapter`, `TextSourceAdapterError` | **Create** |
 | `science/src/science_tool/annotation/cli.py` | `promote_cmd` derives `paper_ref` via the adapter; `extract_cmd` extracts via the adapter | **Modify** (`promote_cmd` ~1180-1183; `extract_cmd` ~1119-1125) |
 | `science/tests/test_text_source_adapter.py` | Unit tests for the adapter, registry, and delegation | **Create** |
-| `science/tests/test_annotate_promote_cli.py` | **Add** two runtime tests (default-ref + explicit-ref-bypass), reusing `_setup`. Existing tests untouched. | **Modify (append-only)** |
-| `science/tests/test_annotate_extract_cli.py` | **Add** one runtime seam test, reusing `_make_source_md`. Existing tests untouched. | **Modify (append-only)** |
+| `science/tests/test_annotate_promote_cli.py` | **Add** three runtime tests (default-ref, explicit-ref-bypass, unhandled-source error), reusing `_setup`. Existing tests untouched. | **Modify (append-only)** |
+| `science/tests/test_annotate_extract_cli.py` | **Add** two runtime seam/error tests, reusing `_make_source_md`. Existing tests untouched. | **Modify (append-only)** |
 
 > "Behavior-neutral / no editing existing tests" means **existing test assertions are never
 > changed**; appending *new* test functions to these files (reusing their fixtures) is allowed and
@@ -89,7 +89,7 @@ points (YAGNI — no second source exists yet).
 
 ## Running tests (worktree gotcha)
 
-Run from the worktree root `/mnt/ssd/Dropbox/science/.worktrees/prose-epistemics`. `PYTHONPATH`
+Run from the worktree root `~/d/science/.worktrees/prose-epistemics`. `PYTHONPATH`
 **must** list the worktree's `science/src` and `science/model/src` first — `science_model` is
 editable-installed from the main checkout and otherwise shadows worktree edits:
 
@@ -332,9 +332,10 @@ git commit -m "feat(source-adapter): add TextSourceAdapter ABC with declared cap
 - Modify: `science/src/science_tool/annotation/text_source_adapter.py`
 - Test: `science/tests/test_text_source_adapter.py`
 
-The `source_ref` logic is moved **verbatim** from `promote_cmd` (`cli.py:1180-1183`):
-`citekey = name[:-len(".source.md")] if name.endswith(".source.md") else stem`, then
-`paper:<citekey>`.
+The `source_ref` logic preserves the old `promote_cmd` default for handled `.source.md`
+inputs (`cli.py:1180-1183`): strip the `.source.md` suffix, then emit `paper:<citekey>`.
+Non-`.source.md` paths are now rejected fail-loud instead of taking the old dead-code
+`.stem` fallback; `resolve_adapter()` gates normal access to this method.
 
 - [ ] **Step 1: Write the failing test**
 
