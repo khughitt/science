@@ -88,3 +88,15 @@ def test_patch_trig_emits_policy_identity(tmp_path: Path):
     vers = [str(o) for o in g.objects(edge.iri, URIRef(sci + "beliefPolicyVersion"))]
     assert ids == [DEFAULT_BELIEF_POLICY.policy_id]
     assert vers == [DEFAULT_BELIEF_POLICY.version]
+
+
+def test_snapshot_persists_qa_dataset_capped_and_legacy_normalizes(tmp_path):
+    from science_tool.graph.belief_snapshot import _with_policy_defaults, _key
+
+    legacy = _with_policy_defaults({"as_of": "x", "claim": "c", "input_hashes": [],
+        "config_version": "v", "scalar_enabled": False, "policy_id": "core-default",
+        "policy_version": "1"})
+    assert legacy["qa_dataset_capped"] is False
+    with_flag = dict(legacy)
+    with_flag["qa_dataset_capped"] = True
+    assert _key(legacy) == _key(with_flag)   # derived flag, not identity
