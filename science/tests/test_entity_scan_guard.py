@@ -45,12 +45,13 @@ ALLOWLIST: set[str] = {
 }
 
 
-# The eight files that scan entities/ — each MUST route through the SSOT. Files
+# The nine files that scan entities/ — each MUST route through the SSOT. Files
 # that ALSO keep a non-entity rglob (markdown/id_prefixes/entity_conformance/
 # validator) still appear in the inventory below; this positive check proves their
 # entities scan specifically was routed.
 ENTITY_SCANNERS: set[str] = {
     "consolidation.py",
+    "curate/inventory.py",
     "graph/storage_adapters/markdown.py",
     "validate/checks/cross_references.py",
     "validate/checks/id_prefixes.py",
