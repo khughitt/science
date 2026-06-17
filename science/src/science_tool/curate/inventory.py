@@ -13,6 +13,7 @@ from science_model.frontmatter import parse_frontmatter
 
 from science_tool.tasks import parse_tasks
 from science_tool.curate.agents_md import AgentsMdDigestState, collect_agents_md_state
+from science_tool.entity_scan import iter_entity_markdown
 
 ArtifactClass: TypeAlias = str
 
@@ -23,32 +24,6 @@ _EMERGENT_THREADS_PATH = Path("doc/reports/synthesis/_emergent-threads.md")
 _EMERGENT_THREADS_FRESH_DAYS = 30
 _RELATED_CLASSES = {"hypothesis", "interpretation", "paper", "question"}
 _SOURCE_REF_CLASSES = {"interpretation", "paper"}
-_DOC_KIND_BY_DIR = {
-    "discussions": "discussion",
-    "interpretations": "interpretation",
-    "questions": "question",
-    "hypotheses": "hypothesis",
-    "topics": "topic",
-    "concepts": "concept",
-    "observations": "observation",
-    "inquiries": "inquiry",
-    "propositions": "proposition",
-    "plans": "plan",
-    "models": "model",
-    "reports": "report",
-    "stories": "story",
-    "experiments": "experiment",
-    "methods": "method",
-    "datasets": "dataset",
-    "workflows": "workflow",
-    "findings": "finding",
-    "papers": "paper",
-    "articles": "article",
-}
-
-# `topic` remains in inventory so curate can report legacy topic artifacts that
-# still exist in projects. This is an inventory surface, not a recommendation
-# that unresolved semantic refs should be migrated into more `topic` entities.
 
 
 class InventoryArtifact(BaseModel):
@@ -98,16 +73,14 @@ def collect_inventory(
     records: list[InventoryArtifact] = []
     candidate_signals = CandidateSignals()
 
-    for path in _collect_markdown_paths(project_root):
+    for path in _collect_entity_paths(project_root):
         rel_path = path.relative_to(project_root)
-        # Surface markdown files in known doc roots that lack YAML frontmatter
-        # so curation can catch drift the inventory would otherwise hide
-        # (fb-2026-05-01-002). _has_frontmatter is independent of the artifact
-        # parser so we don't depend on its tolerance for empty fm.
-        if _markdown_artifact_class(rel_path) is not None and not _has_frontmatter(path):
+        # Any *.md under entities/ without YAML frontmatter is entity-file drift
+        # (fb-2026-05-01-002 generalized from doc roots to the canonical home).
+        if not _has_frontmatter(path):
             candidate_signals.no_frontmatter_files.append(str(rel_path))
             continue
-        record = _record_markdown(project_root, path, today)
+        record = _record_entity(project_root, path, today)
         if record is None:
             continue
         records.append(record)
@@ -170,13 +143,29 @@ def collect_inventory(
     )
 
 
-def _collect_markdown_paths(project_root: Path) -> list[Path]:
-    paths: dict[Path, None] = {}
-    for pattern in ("specs/**/*.md", "doc/**/*.md"):
-        for path in project_root.glob(pattern):
-            if path.is_file():
-                paths[path] = None
-    return sorted(paths)
+def _collect_entity_paths(project_root: Path) -> list[Path]:
+    """Canonical entity markdown under entities/<kind>/, via the shared iterator.
+
+    The iterator skips _archive/ and every _-prefixed segment, so relocated
+    (archived) members and reserved dirs drop out; it returns nothing when
+    entities/ is absent (a legacy-layout project reports zero entities — the
+    intended posture, matching big-picture's v2->v3 read).
+    """
+    return list(iter_entity_markdown(project_root / "entities"))
+
+
+def _entity_artifact_class(frontmatter: dict[str, object]) -> str | None:
+    """Entity kind from frontmatter: `type`, then `kind`, then the `id` prefix
+    before ':'. A bare/unprefixed `id` (no colon) yields no kind. Returns None
+    when none applies — the record is then skipped (it can key no signal)."""
+    for key in ("type", "kind"):
+        value = frontmatter.get(key)
+        if isinstance(value, str) and value:
+            return value
+    raw_id = frontmatter.get("id")
+    if isinstance(raw_id, str) and ":" in raw_id:
+        return raw_id.split(":", 1)[0]
+    return None
 
 
 def _collect_task_paths(project_root: Path) -> list[Path]:
@@ -196,15 +185,15 @@ def _collect_knowledge_source_paths(project_root: Path) -> list[Path]:
     return sorted(paths)
 
 
-def _record_markdown(project_root: Path, path: Path, today: date) -> InventoryArtifact | None:
+def _record_entity(project_root: Path, path: Path, today: date) -> InventoryArtifact | None:
     fm_body = parse_frontmatter(path)
     if fm_body is None:
         return None
     fm, _body = fm_body
-    rel_path = path.relative_to(project_root)
-    artifact_class = _markdown_artifact_class(rel_path)
+    artifact_class = _entity_artifact_class(fm)
     if artifact_class is None:
         return None
+    rel_path = path.relative_to(project_root)
     return InventoryArtifact(
         path=str(rel_path),
         artifact_class=artifact_class,
@@ -306,14 +295,3 @@ def _modified_days_ago(path: Path, today: date) -> int | None:
         return None
     modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).date()
     return (today - modified).days
-
-
-def _markdown_artifact_class(path: Path) -> str | None:
-    parts = path.parts
-    if len(parts) >= 3 and parts[0] == "specs" and parts[1] == "hypotheses":
-        return "hypothesis"
-    if len(parts) >= 3 and parts[0] == "doc":
-        return _DOC_KIND_BY_DIR.get(parts[1])
-    if len(parts) == 2 and parts[0] == "specs":
-        return "spec"
-    return None
