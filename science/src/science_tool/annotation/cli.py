@@ -1172,15 +1172,20 @@ def promote_cmd(source_md: Path, root: Path | None, paper_ref: str | None,
         PromotionApplyError, PromotionOverrideError, PromotionReadError, apply_candidates,
         apply_overrides, build_targets, collect_promotable, decide_all, load_corpora,
     )
+    from science_tool.annotation.text_source_adapter import (
+        TextSourceAdapterError,
+        resolve_adapter,
+    )
 
     if input_path is not None and not do_apply:
         raise click.ClickException("--input requires --apply (curator overrides only apply when writing)")
 
     project_root = (root or Path.cwd()).resolve()
     if paper_ref is None:
-        # citekey = <citekey>.source.md → <citekey>; the owning paper entity is paper:<citekey>.
-        citekey = source_md.name[: -len(".source.md")] if source_md.name.endswith(".source.md") else source_md.stem
-        paper_ref = f"paper:{citekey}"
+        try:
+            paper_ref = resolve_adapter(source_md).source_ref(source_md)
+        except TextSourceAdapterError as exc:
+            raise click.ClickException(str(exc)) from exc
 
     sidecar_path = sidecar_for_markdown(source_md)
     sidecar = read_sidecar_strict(sidecar_path)

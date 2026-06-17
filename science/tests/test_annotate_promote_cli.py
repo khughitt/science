@@ -106,3 +106,41 @@ def test_minted_proposition_materializes_wasderivedfrom(tmp_path):
     assert "annotation:papers/p.source#a-1" in text and "paper:p" in text
     # URI minter is stable + distinct from a bibliography ref
     assert str(_annotation_uri("annotation:papers/p.source#a-1")).endswith("#a-1")
+
+
+def test_promote_apply_without_paper_ref_uses_adapter_default(tmp_path):
+    # No --paper-ref: the default must come from PaperSourceAdapter.source_ref,
+    # i.e. p.source.md -> paper:p, recorded in the minted proposition body.
+    md, sp = _setup(tmp_path)
+    r = CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path), "--apply"])
+    assert r.exit_code == 0, r.output
+    text = (tmp_path / "entities" / "propositions" / "genes-encode-proteins.md").read_text(encoding="utf-8")
+    assert "paper:p" in text
+
+
+def test_promote_explicit_paper_ref_does_not_touch_adapter(tmp_path, monkeypatch):
+    # An explicit --paper-ref must bypass resolve_adapter entirely (High-severity guard):
+    # if the code wrongly resolves an adapter, this raises and the command fails.
+    import science_tool.annotation.text_source_adapter as sa
+
+    def boom(_source_md):
+        raise sa.TextSourceAdapterError("resolve_adapter must not be called when --paper-ref is given")
+
+    monkeypatch.setattr(sa, "resolve_adapter", boom)
+    md, sp = _setup(tmp_path)
+    r = CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path),
+                                            "--paper-ref", "paper:x", "--apply"])
+    assert r.exit_code == 0, r.output
+    text = (tmp_path / "entities" / "propositions" / "genes-encode-proteins.md").read_text(encoding="utf-8")
+    assert "paper:x" in text
+
+
+def test_promote_unhandled_source_fails_loud(tmp_path):
+    # No adapter handles a non-.source.md file and no --paper-ref given:
+    # the TextSourceAdapterError must surface as a clean CLI error, not a traceback.
+    (tmp_path / "entities" / "propositions").mkdir(parents=True)
+    notes = tmp_path / "notes.md"
+    notes.write_text("Some prose.\n", encoding="utf-8")
+    r = CliRunner().invoke(annotate_group, ["promote", str(notes), "--root", str(tmp_path)])
+    assert r.exit_code != 0
+    assert "no text source adapter handles" in r.output
