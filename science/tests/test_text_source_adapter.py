@@ -1,4 +1,6 @@
 # science/tests/test_text_source_adapter.py
+from datetime import datetime, timezone
+
 from science_tool.annotation.text_source_adapter import LocatorRegime
 
 
@@ -105,3 +107,30 @@ def test_resolve_adapter_returns_paper_for_source_md():
 def test_resolve_adapter_fails_loud_when_unhandled():
     with pytest.raises(TextSourceAdapterError, match="no text source adapter handles"):
         resolve_adapter(Path("/x/unknown.txt"))
+
+
+def test_paper_adapter_extract_delegates(monkeypatch):
+    import science_tool.annotation.statement_extract as se
+
+    captured = {}
+
+    def fake_extract_candidates(*, source_md, model, candidates, now, actor):
+        captured.update(
+            source_md=source_md, model=model, candidates=candidates, now=now, actor=actor
+        )
+        return "SENTINEL_REPORT"
+
+    monkeypatch.setattr(se, "extract_candidates", fake_extract_candidates)
+
+    now = datetime.now(timezone.utc)
+    out = PaperSourceAdapter().extract(
+        source_md=Path("/x/p.source.md"), model="m", candidates=[], now=now, actor="paper-annotate"
+    )
+    assert out == "SENTINEL_REPORT"
+    assert captured == {
+        "source_md": Path("/x/p.source.md"),
+        "model": "m",
+        "candidates": [],
+        "now": now,
+        "actor": "paper-annotate",
+    }

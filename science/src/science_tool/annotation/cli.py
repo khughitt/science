@@ -1095,7 +1095,6 @@ def extract_cmd(
     from science_tool.annotation.statement_extract import (
         CandidateError,
         check_source_changed,
-        extract_candidates,
         parse_candidates,
     )
 
@@ -1116,8 +1115,17 @@ def extract_cmd(
     except CandidateError as exc:
         raise click.ClickException(str(exc)) from exc
 
+    from science_tool.annotation.text_source_adapter import (
+        TextSourceAdapterError,
+        resolve_adapter,
+    )
+
     try:
-        report = extract_candidates(
+        adapter = resolve_adapter(source_md)
+    except TextSourceAdapterError as exc:
+        raise click.ClickException(str(exc)) from exc
+    try:
+        report = adapter.extract(
             source_md=source_md, model=model, candidates=candidates,
             now=datetime.now(timezone.utc), actor=actor,
         )
