@@ -1,13 +1,13 @@
-# P1 — Source-agnostic core (SourceAdapter) Implementation Plan
+# P1 — Source-agnostic core (TextSourceAdapter) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Introduce a `SourceAdapter` abstraction (capability profile + registry) and re-seat
+**Goal:** Introduce a `TextSourceAdapter` abstraction (capability profile + registry) and re-seat
 the paper annotation pipeline as `PaperSourceAdapter`, so the text→graph machinery is
 source-agnostic — with **zero behavior change** for papers.
 
-**Architecture:** A new `annotation/source_adapter.py` declares a `LocatorRegime` enum and a
-`SourceAdapter` ABC mirroring the existing `StorageAdapter` "declared-policy, no-isinstance"
+**Architecture:** A new `annotation/text_source_adapter.py` declares a `LocatorRegime` enum and a
+`TextSourceAdapter` ABC mirroring the existing `StorageAdapter` "declared-policy, no-isinstance"
 pattern. `PaperSourceAdapter` captures today's two source-coupled seams — the `paper:<citekey>`
 **source-ref scheme** (used by `promote`) and the **offset-anchored locator/extract path**
 (used by `extract`) — by delegating to the existing functions. The `extract` and `promote` CLI
@@ -26,15 +26,15 @@ plan are separate.
 
 **Locked design decisions (the umbrella deferred these to "the P1 spec"; this plan IS that spec):**
 
-1. **Where it lives:** one new module `science/src/science_tool/annotation/source_adapter.py`
+1. **Where it lives:** one new module `science/src/science_tool/annotation/text_source_adapter.py`
    (all annotation source-side commands already live under `annotation/`).
-2. **Interface shape:** `SourceAdapter` mirrors `StorageAdapter`
+2. **Interface shape:** `TextSourceAdapter` mirrors `StorageAdapter`
    (`graph/storage_adapters/base.py`) — capabilities are **class attributes** (`name`,
    `locator_regime`, `can_fetch`, `can_seed`) and **polymorphic methods** (`handles`,
    `source_ref`, `extract`); dispatch is a registry list + first-match, **no `isinstance`/name
    branching**.
-3. **Registry + dispatch:** a module-level `SOURCE_ADAPTERS: list[SourceAdapter]` and
-   `resolve_adapter(source_md) -> SourceAdapter` (first whose `handles()` is True; fail-loud
+3. **Registry + dispatch:** a module-level `TEXT_SOURCE_ADAPTERS: list[TextSourceAdapter]` and
+   `resolve_adapter(source_md) -> TextSourceAdapter` (first whose `handles()` is True; fail-loud
    otherwise) — the same shape as the `adapters: list[StorageAdapter]` loop in
    `graph/sources.py`.
 4. **Source-ref resolvability (umbrella §4.1):** in P1 the only adapter is `PaperSourceAdapter`,
@@ -46,13 +46,27 @@ plan are separate.
 **⚠️ Refinement to confirm before implementing — narrows the umbrella's P1 wording.**
 The umbrella P1 row says "generalize the locator/annotation artifact to support
 offset-anchored *and* regenerable regimes." On contact with the code, the YAGNI-correct split
-is: **P1 delivers the polymorphic interface that admits both regimes** (`SourceAdapter.extract`
+is: **P1 delivers the polymorphic interface that admits both regimes** (`TextSourceAdapter.extract`
 + the `LocatorRegime` enum), with `offset_anchored` fully implemented (delegating to today's
 `extract_candidates`) and `regenerable`/`none` **declared but unimplemented** (the base
 `extract` raises `NotImplementedError`). The regenerable *planner and its sidecar
 representation* are P2 work — there is no consumer in P1, and the regenerable sidecar schema is
 a genuine P2 design question. If you want P1 to instead build a speculative regenerable artifact
 now, stop and revise this plan; otherwise the tasks below proceed on the interface-only reading.
+
+**What P1 does NOT make additive for P2 (honest scope).** P1 routes only the **`extract`** and
+**`source_ref`** seams through the adapter. Two other paper-coupled paths remain untouched and
+P2 will own extending them when `InternalProseAdapter` lands:
+- **`--check` / source-change detection** (`extract_cmd` `check_source_changed`, `cli.py:1102`) is
+  built on `.source.md` text-hash re-audit — meaningless for the `regenerable` regime, so P2 must
+  add a regime-appropriate change-check (likely a new adapter method).
+- **Promotion's sidecar read** (`promote_cmd` `sidecar_for_markdown` + `read_sidecar_strict`,
+  `cli.py:1185`) assumes the offset-anchored `.anno.trig` shape; P2's regenerable artifact may
+  need its own read path.
+
+So P2 is **not** merely "new adapter + registry entry": it adds the regenerable locator artifact
+*and* the `--check`/promotion wiring above. P1 deliberately does not pre-build those extension
+points (YAGNI — no second source exists yet).
 
 **Behavior-neutral contract (the safety net):** the full existing annotation suite must pass
 **unchanged** after every task —
@@ -63,9 +77,9 @@ now, stop and revise this plan; otherwise the tasks below proceed on the interfa
 
 | File | Responsibility | Action |
 |---|---|---|
-| `science/src/science_tool/annotation/source_adapter.py` | `LocatorRegime`, `SourceAdapter` ABC, `PaperSourceAdapter`, `SOURCE_ADAPTERS`, `resolve_adapter`, `SourceAdapterError` | **Create** |
+| `science/src/science_tool/annotation/text_source_adapter.py` | `LocatorRegime`, `TextSourceAdapter` ABC, `PaperSourceAdapter`, `TEXT_SOURCE_ADAPTERS`, `resolve_adapter`, `TextSourceAdapterError` | **Create** |
 | `science/src/science_tool/annotation/cli.py` | `promote_cmd` derives `paper_ref` via the adapter; `extract_cmd` extracts via the adapter | **Modify** (`promote_cmd` ~1180-1183; `extract_cmd` ~1119-1125) |
-| `science/tests/test_source_adapter.py` | Unit tests for the adapter, registry, and delegation | **Create** |
+| `science/tests/test_text_source_adapter.py` | Unit tests for the adapter, registry, and delegation | **Create** |
 | `science/tests/test_annotate_promote_cli.py` | **Add** two runtime tests (default-ref + explicit-ref-bypass), reusing `_setup`. Existing tests untouched. | **Modify (append-only)** |
 | `science/tests/test_annotate_extract_cli.py` | **Add** one runtime seam test, reusing `_make_source_md`. Existing tests untouched. | **Modify (append-only)** |
 
@@ -88,14 +102,14 @@ PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q
 ## Task 1: `LocatorRegime` enum
 
 **Files:**
-- Create: `science/src/science_tool/annotation/source_adapter.py`
-- Test: `science/tests/test_source_adapter.py`
+- Create: `science/src/science_tool/annotation/text_source_adapter.py`
+- Test: `science/tests/test_text_source_adapter.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science/tests/test_source_adapter.py
-from science_tool.annotation.source_adapter import LocatorRegime
+# science/tests/test_text_source_adapter.py
+from science_tool.annotation.text_source_adapter import LocatorRegime
 
 
 def test_locator_regime_values():
@@ -108,13 +122,13 @@ def test_locator_regime_values():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_source_adapter.py::test_locator_regime_values`
-Expected: FAIL — `ModuleNotFoundError: No module named 'science_tool.annotation.source_adapter'`
+Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_text_source_adapter.py::test_locator_regime_values`
+Expected: FAIL — `ModuleNotFoundError: No module named 'science_tool.annotation.text_source_adapter'`
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# science/src/science_tool/annotation/source_adapter.py
+# science/src/science_tool/annotation/text_source_adapter.py
 """Source adapters — turn a specific kind of text source into source-neutral
 annotation candidates (the text-layer side of the prose-epistemics seam).
 
@@ -145,34 +159,34 @@ class LocatorRegime(Enum):
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_source_adapter.py::test_locator_regime_values`
+Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_text_source_adapter.py::test_locator_regime_values`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/annotation/source_adapter.py science/tests/test_source_adapter.py
+git add science/src/science_tool/annotation/text_source_adapter.py science/tests/test_text_source_adapter.py
 git commit -m "feat(source-adapter): add LocatorRegime enum"
 ```
 
 ---
 
-## Task 2: `SourceAdapter` ABC + capability profile
+## Task 2: `TextSourceAdapter` ABC + capability profile
 
 **Files:**
-- Modify: `science/src/science_tool/annotation/source_adapter.py`
-- Test: `science/tests/test_source_adapter.py`
+- Modify: `science/src/science_tool/annotation/text_source_adapter.py`
+- Test: `science/tests/test_text_source_adapter.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# append to science/tests/test_source_adapter.py
+# append to science/tests/test_text_source_adapter.py
 from pathlib import Path
 import pytest
-from science_tool.annotation.source_adapter import SourceAdapter, LocatorRegime
+from science_tool.annotation.text_source_adapter import TextSourceAdapter, LocatorRegime
 
 
-class _DummyAdapter(SourceAdapter):
+class _DummyAdapter(TextSourceAdapter):
     name = "dummy"
     locator_regime = LocatorRegime.NONE
 
@@ -212,16 +226,16 @@ def test_base_extract_raises_not_implemented():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_source_adapter.py -k "capability or dispatch or base_extract"`
-Expected: FAIL — `ImportError: cannot import name 'SourceAdapter'`
+Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_text_source_adapter.py -k "capability or dispatch or base_extract"`
+Expected: FAIL — `ImportError: cannot import name 'TextSourceAdapter'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Append to `source_adapter.py` (after the `LocatorRegime` enum; add the two imports at the top of the file):
+Append to `text_source_adapter.py` (after the `LocatorRegime` enum; add the two imports at the top of the file):
 
 ```python
 # add to the top-of-file imports
-from abc import ABC
+from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -234,13 +248,24 @@ if TYPE_CHECKING:
     )
 ```
 
+> **Naming note (intentional, do not "simplify" to `SourceAdapter`):** the audit subsystem
+> already defines a *different* `SourceAdapter` Protocol in
+> `science_tool/annotation/sources/base.py` (a per-file lint scanner that emits
+> `PlannedAnnotation` rows). This class is a distinct concept — a *text source* (paper, book,
+> internal prose) feeding the extract→promote pipeline — so it is named `TextSourceAdapter` to
+> avoid two `SourceAdapter` names in the same package.
+
 ```python
 # append after LocatorRegime
-class SourceAdapter(ABC):
+class TextSourceAdapter(ABC):
     """Turn one kind of text source into source-neutral annotation candidates.
 
-    Subclasses MUST override `handles()` and `source_ref()`, and SHOULD override
-    `extract()` for whatever locator regime they declare. Capabilities are
+    Distinct from the audit-subsystem `SourceAdapter` Protocol in
+    `annotation/sources/base.py` (a lint scanner). This is the adapter for a *text
+    source* (paper, book, internal prose) feeding the extract→promote pipeline.
+
+    Subclasses MUST implement `handles()` and `source_ref()` (abstract), and SHOULD
+    override `extract()` for whatever locator regime they declare. Capabilities are
     declared as class attributes so the CLI reads them instead of branching on
     adapter type (mirrors StorageAdapter, Spec 3 Slice A).
     """
@@ -254,10 +279,12 @@ class SourceAdapter(ABC):
     can_fetch: bool = False
     can_seed: bool = False
 
+    @abstractmethod
     def handles(self, source_md: Path) -> bool:
         """Return True if this adapter owns `source_md`."""
         raise NotImplementedError
 
+    @abstractmethod
     def source_ref(self, source_md: Path) -> str:
         """The resolvable provenance ref recorded in minted entities' source_refs.
 
@@ -287,14 +314,14 @@ class SourceAdapter(ABC):
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_source_adapter.py -k "capability or dispatch or base_extract"`
+Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_text_source_adapter.py -k "capability or dispatch or base_extract"`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/annotation/source_adapter.py science/tests/test_source_adapter.py
-git commit -m "feat(source-adapter): add SourceAdapter ABC with declared capabilities"
+git add science/src/science_tool/annotation/text_source_adapter.py science/tests/test_text_source_adapter.py
+git commit -m "feat(source-adapter): add TextSourceAdapter ABC with declared capabilities"
 ```
 
 ---
@@ -302,8 +329,8 @@ git commit -m "feat(source-adapter): add SourceAdapter ABC with declared capabil
 ## Task 3: `PaperSourceAdapter`
 
 **Files:**
-- Modify: `science/src/science_tool/annotation/source_adapter.py`
-- Test: `science/tests/test_source_adapter.py`
+- Modify: `science/src/science_tool/annotation/text_source_adapter.py`
+- Test: `science/tests/test_text_source_adapter.py`
 
 The `source_ref` logic is moved **verbatim** from `promote_cmd` (`cli.py:1180-1183`):
 `citekey = name[:-len(".source.md")] if name.endswith(".source.md") else stem`, then
@@ -312,8 +339,8 @@ The `source_ref` logic is moved **verbatim** from `promote_cmd` (`cli.py:1180-11
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# append to science/tests/test_source_adapter.py
-from science_tool.annotation.source_adapter import PaperSourceAdapter
+# append to science/tests/test_text_source_adapter.py
+from science_tool.annotation.text_source_adapter import PaperSourceAdapter
 
 
 def test_paper_adapter_capabilities():
@@ -349,19 +376,19 @@ def test_paper_adapter_source_ref_rejects_non_source_md():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_source_adapter.py -k "paper_adapter"`
+Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_text_source_adapter.py -k "paper_adapter"`
 Expected: FAIL — `ImportError: cannot import name 'PaperSourceAdapter'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Append to `source_adapter.py`:
+Append to `text_source_adapter.py`:
 
 ```python
 _SOURCE_MD_SUFFIX = ".source.md"
 
 
-class PaperSourceAdapter(SourceAdapter):
-    """The shipped paper pipeline as a SourceAdapter — behavior-neutral.
+class PaperSourceAdapter(TextSourceAdapter):
+    """The shipped paper pipeline as a TextSourceAdapter — behavior-neutral.
 
     Sources are `<citekey>.source.md`; locators are offset-anchored
     (oa:TextQuoteSelector); the provenance ref is `paper:<citekey>`, resolvable
@@ -407,13 +434,13 @@ class PaperSourceAdapter(SourceAdapter):
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_source_adapter.py -k "paper_adapter"`
+Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_text_source_adapter.py -k "paper_adapter"`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/annotation/source_adapter.py science/tests/test_source_adapter.py
+git add science/src/science_tool/annotation/text_source_adapter.py science/tests/test_text_source_adapter.py
 git commit -m "feat(source-adapter): add PaperSourceAdapter (behavior-neutral paper seams)"
 ```
 
@@ -422,22 +449,22 @@ git commit -m "feat(source-adapter): add PaperSourceAdapter (behavior-neutral pa
 ## Task 4: registry + `resolve_adapter`
 
 **Files:**
-- Modify: `science/src/science_tool/annotation/source_adapter.py`
-- Test: `science/tests/test_source_adapter.py`
+- Modify: `science/src/science_tool/annotation/text_source_adapter.py`
+- Test: `science/tests/test_text_source_adapter.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# append to science/tests/test_source_adapter.py
-from science_tool.annotation.source_adapter import (
-    SOURCE_ADAPTERS,
-    SourceAdapterError,
+# append to science/tests/test_text_source_adapter.py
+from science_tool.annotation.text_source_adapter import (
+    TEXT_SOURCE_ADAPTERS,
+    TextSourceAdapterError,
     resolve_adapter,
 )
 
 
 def test_registry_contains_paper_adapter():
-    assert any(isinstance(a, PaperSourceAdapter) for a in SOURCE_ADAPTERS)
+    assert any(isinstance(a, PaperSourceAdapter) for a in TEXT_SOURCE_ADAPTERS)
 
 
 def test_resolve_adapter_returns_paper_for_source_md():
@@ -446,45 +473,45 @@ def test_resolve_adapter_returns_paper_for_source_md():
 
 
 def test_resolve_adapter_fails_loud_when_unhandled():
-    with pytest.raises(SourceAdapterError, match="no source adapter handles"):
+    with pytest.raises(TextSourceAdapterError, match="no text source adapter handles"):
         resolve_adapter(Path("/x/unknown.txt"))
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_source_adapter.py -k "registry or resolve_adapter"`
+Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_text_source_adapter.py -k "registry or resolve_adapter"`
 Expected: FAIL — `ImportError: cannot import name 'resolve_adapter'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Append to `source_adapter.py`:
+Append to `text_source_adapter.py`:
 
 ```python
-class SourceAdapterError(ValueError):
+class TextSourceAdapterError(ValueError):
     """Raised when no adapter handles a source (fail-loud)."""
 
 
 # Ordered registry; first match wins (mirrors graph/sources.py adapter list).
-SOURCE_ADAPTERS: list[SourceAdapter] = [PaperSourceAdapter()]
+TEXT_SOURCE_ADAPTERS: list[TextSourceAdapter] = [PaperSourceAdapter()]
 
 
-def resolve_adapter(source_md: Path) -> SourceAdapter:
+def resolve_adapter(source_md: Path) -> TextSourceAdapter:
     """Return the first registered adapter that handles `source_md`."""
-    for adapter in SOURCE_ADAPTERS:
+    for adapter in TEXT_SOURCE_ADAPTERS:
         if adapter.handles(source_md):
             return adapter
-    raise SourceAdapterError(f"no source adapter handles {source_md}")
+    raise TextSourceAdapterError(f"no text source adapter handles {source_md}")
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_source_adapter.py -k "registry or resolve_adapter"`
+Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_text_source_adapter.py -k "registry or resolve_adapter"`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/annotation/source_adapter.py science/tests/test_source_adapter.py
+git add science/src/science_tool/annotation/text_source_adapter.py science/tests/test_text_source_adapter.py
 git commit -m "feat(source-adapter): add registry + resolve_adapter (fail-loud)"
 ```
 
@@ -508,7 +535,7 @@ before the ref is even used. Keeping the call inside the `None` branch means an 
 
 **Sanctioned deviation:** for the *no*-`--paper-ref` + *non*-`.source.md` case, the old code
 silently derived `paper:<stem>`; the new code routes through `resolve_adapter`, which fails loud
-(`SourceAdapterError`). No existing test exercises that case (every promote test uses
+(`TextSourceAdapterError`). No existing test exercises that case (every promote test uses
 `p.source.md`), and fail-loud is the intended behavior (avoid silent fallbacks). Recorded here so
 it is not mistaken for an accidental regression.
 
@@ -537,10 +564,10 @@ def test_promote_apply_without_paper_ref_uses_adapter_default(tmp_path):
 def test_promote_explicit_paper_ref_does_not_touch_adapter(tmp_path, monkeypatch):
     # An explicit --paper-ref must bypass resolve_adapter entirely (High-severity guard):
     # if the code wrongly resolves an adapter, this raises and the command fails.
-    import science_tool.annotation.source_adapter as sa
+    import science_tool.annotation.text_source_adapter as sa
 
     def boom(_source_md):
-        raise sa.SourceAdapterError("resolve_adapter must not be called when --paper-ref is given")
+        raise sa.TextSourceAdapterError("resolve_adapter must not be called when --paper-ref is given")
 
     monkeypatch.setattr(sa, "resolve_adapter", boom)
     md, sp = _setup(tmp_path)
@@ -549,10 +576,21 @@ def test_promote_explicit_paper_ref_does_not_touch_adapter(tmp_path, monkeypatch
     assert r.exit_code == 0, r.output
     text = (tmp_path / "entities" / "propositions" / "genes-encode-proteins.md").read_text(encoding="utf-8")
     assert "paper:x" in text
+
+
+def test_promote_unhandled_source_fails_loud(tmp_path):
+    # No adapter handles a non-.source.md file and no --paper-ref given:
+    # the TextSourceAdapterError must surface as a clean CLI error, not a traceback.
+    (tmp_path / "entities" / "propositions").mkdir(parents=True)
+    notes = tmp_path / "notes.md"
+    notes.write_text("Some prose.\n", encoding="utf-8")
+    r = CliRunner().invoke(annotate_group, ["promote", str(notes), "--root", str(tmp_path)])
+    assert r.exit_code != 0
+    assert "no text source adapter handles" in r.output
 ```
 
 > Why `monkeypatch.setattr(sa, "resolve_adapter", ...)` works: `promote_cmd` does
-> `from science_tool.annotation.source_adapter import resolve_adapter` *inside* the function, so
+> `from science_tool.annotation.text_source_adapter import resolve_adapter` *inside* the function, so
 > the name is rebound from the (patched) module attribute on every invocation.
 
 - [ ] **Step 3: Run the new tests (behavior-lock guards — expected green)**
@@ -570,7 +608,10 @@ Proceed to Step 4 — the edit must keep both green.
 In `cli.py`, add to `promote_cmd`'s local imports (the block at lines 1169-1174):
 
 ```python
-    from science_tool.annotation.source_adapter import resolve_adapter
+    from science_tool.annotation.text_source_adapter import (
+        TextSourceAdapterError,
+        resolve_adapter,
+    )
 ```
 
 Replace the current default-derivation block (`cli.py:1180-1183`):
@@ -582,11 +623,15 @@ Replace the current default-derivation block (`cli.py:1180-1183`):
         paper_ref = f"paper:{citekey}"
 ```
 
-with (note `resolve_adapter` is called **only** when no explicit ref was passed):
+with (note `resolve_adapter` is called **only** when no explicit ref was passed, and its
+fail-loud error is converted to a clean CLI error):
 
 ```python
     if paper_ref is None:
-        paper_ref = resolve_adapter(source_md).source_ref(source_md)
+        try:
+            paper_ref = resolve_adapter(source_md).source_ref(source_md)
+        except TextSourceAdapterError as exc:
+            raise click.ClickException(str(exc)) from exc
 ```
 
 - [ ] **Step 5: Run new + full promote suite to verify green**
@@ -607,7 +652,7 @@ git commit -m "refactor(promote): derive default source ref via resolve_adapter 
 
 **Files:**
 - Modify: `science/src/science_tool/annotation/cli.py:1119-1125` (`extract_cmd`)
-- Test: `science/tests/test_source_adapter.py` (delegation unit test) and
+- Test: `science/tests/test_text_source_adapter.py` (delegation unit test) and
   `science/tests/test_annotate_extract_cli.py` (runtime seam test, reuses `_make_source_md`)
 
 Replace the direct `extract_candidates(...)` call with `resolve_adapter(source_md).extract(...)`.
@@ -622,12 +667,12 @@ Expected: PASS (all existing extract tests) — the behavior-neutral baseline.
 
 - [ ] **Step 2: Write the delegation unit test**
 
-Append to `science/tests/test_source_adapter.py`. **Add the imports** `from datetime import
+Append to `science/tests/test_text_source_adapter.py`. **Add the imports** `from datetime import
 datetime, timezone` at the top of that file if not already present (the delegation test needs
 them):
 
 ```python
-# (ensure at top of science/tests/test_source_adapter.py)
+# (ensure at top of science/tests/test_text_source_adapter.py)
 from datetime import datetime, timezone
 
 
@@ -667,7 +712,7 @@ the command produced the real result (`written == 1`):
 
 ```python
 def test_extract_cmd_routes_through_resolve_adapter(tmp_path: Path, monkeypatch):
-    import science_tool.annotation.source_adapter as sa
+    import science_tool.annotation.text_source_adapter as sa
 
     calls = {}
     real_resolve = sa.resolve_adapter
@@ -693,14 +738,29 @@ def test_extract_cmd_routes_through_resolve_adapter(tmp_path: Path, monkeypatch)
     assert r.exit_code == 0, r.output
     assert calls.get("source_md") == src          # the CLI actually called resolve_adapter
     assert json.loads(r.output)["written"] == 1   # and produced the real result
+
+
+def test_extract_unhandled_source_fails_loud(tmp_path: Path):
+    # A source no adapter handles must surface as a clean CLI error, not a traceback.
+    notes = tmp_path / "notes.md"
+    notes.write_text("Some prose.\n", encoding="utf-8")
+    cand = tmp_path / "candidates.json"
+    cand.write_text(json.dumps({"candidates": [{
+        "type": "proposition", "exact": "x", "prefix": "", "suffix": "", "stance": "asserted",
+    }]}), encoding="utf-8")
+    r = CliRunner().invoke(annotate_group, [
+        "extract", "--source-md", str(notes), "--model", _MODEL, "--input", str(cand),
+    ])
+    assert r.exit_code != 0
+    assert "no text source adapter handles" in r.output
 ```
 
 > `monkeypatch.setattr(sa, "resolve_adapter", ...)` is picked up because `extract_cmd` does
-> `from science_tool.annotation.source_adapter import resolve_adapter` *inside* the function.
+> `from science_tool.annotation.text_source_adapter import resolve_adapter` *inside* the function.
 
 - [ ] **Step 4: Run the new tests — delegation passes, seam fails**
 
-Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_source_adapter.py::test_paper_adapter_extract_delegates science/tests/test_annotate_extract_cli.py::test_extract_cmd_routes_through_resolve_adapter`
+Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_text_source_adapter.py::test_paper_adapter_extract_delegates science/tests/test_annotate_extract_cli.py::test_extract_cmd_routes_through_resolve_adapter`
 Expected: `test_paper_adapter_extract_delegates` PASSES (Task 3 implemented `extract`);
 `test_extract_cmd_routes_through_resolve_adapter` FAILS — `calls` is empty because the CLI still
 calls `extract_candidates` directly. If the delegation test fails, the Task-3 `extract` method is
@@ -721,12 +781,18 @@ extract call block (`cli.py:1119-1125`):
         raise click.ClickException(str(exc)) from exc
 ```
 
-with:
+with (the `TextSourceAdapterError` from an unhandled source is converted to a clean CLI error):
 
 ```python
-    from science_tool.annotation.source_adapter import resolve_adapter
+    from science_tool.annotation.text_source_adapter import (
+        TextSourceAdapterError,
+        resolve_adapter,
+    )
 
-    adapter = resolve_adapter(source_md)
+    try:
+        adapter = resolve_adapter(source_md)
+    except TextSourceAdapterError as exc:
+        raise click.ClickException(str(exc)) from exc
     try:
         report = adapter.extract(
             source_md=source_md, model=model, candidates=candidates,
@@ -743,13 +809,13 @@ adapter now owns the call. `check_source_changed` and `parse_candidates` stay.)
 
 - [ ] **Step 6: Run guards + full extract suite to verify green**
 
-Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_source_adapter.py::test_paper_adapter_extract_delegates science/tests/test_annotate_extract_cli.py`
+Run: `PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q science/tests/test_text_source_adapter.py::test_paper_adapter_extract_delegates science/tests/test_annotate_extract_cli.py`
 Expected: PASS (delegation unit test + the runtime seam test now pass + **all** existing extract CLI tests unchanged-green)
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add science/src/science_tool/annotation/cli.py science/tests/test_source_adapter.py science/tests/test_annotate_extract_cli.py
+git add science/src/science_tool/annotation/cli.py science/tests/test_text_source_adapter.py science/tests/test_annotate_extract_cli.py
 git commit -m "refactor(extract): extract via resolve_adapter (behavior-neutral)"
 ```
 
@@ -758,7 +824,7 @@ git commit -m "refactor(extract): extract via resolve_adapter (behavior-neutral)
 ## Task 7: full-suite behavior-neutrality gate + module docstring
 
 **Files:**
-- Modify: `science/src/science_tool/annotation/source_adapter.py` (docstring only, if needed)
+- Modify: `science/src/science_tool/annotation/text_source_adapter.py` (docstring only, if needed)
 - Test: (no new test — this is the regression gate)
 
 - [ ] **Step 1: Run the full annotation suite**
@@ -778,7 +844,7 @@ PYTHONPATH=science/src:science/model/src ~/d/science/science/.venv/bin/pytest -q
   science/tests/test_annotation_model.py \
   science/tests/test_annotation_io.py \
   science/tests/test_annotation_promote.py \
-  science/tests/test_source_adapter.py
+  science/tests/test_text_source_adapter.py
 ```
 Expected: ALL PASS, zero failures. This is the behavior-neutral proof.
 
@@ -789,14 +855,14 @@ behavior-neutral — revert to the offending task and correct the delegation.
 
 - [ ] **Step 3: Confirm the module docstring states the P1/P2 boundary**
 
-Ensure `source_adapter.py`'s top docstring notes: `offset_anchored` implemented; `regenerable`
+Ensure `text_source_adapter.py`'s top docstring notes: `offset_anchored` implemented; `regenerable`
 declared-but-unimplemented until P2; `fetch`/`seed` declared but `persist-source`/`pubtator`
 remain paper-specific in P1.
 
 - [ ] **Step 4: Commit (if the docstring changed)**
 
 ```bash
-git add science/src/science_tool/annotation/source_adapter.py
+git add science/src/science_tool/annotation/text_source_adapter.py
 git commit -m "docs(source-adapter): record P1/P2 regime + capability boundary"
 ```
 
@@ -813,6 +879,8 @@ git commit -m "docs(source-adapter): record P1/P2 regime + capability boundary"
    called **only** inside `if paper_ref is None:` so an explicit `--paper-ref` is untouched. The
    one sanctioned deviation (no-ref + non-`.source.md` → fail-loud instead of silent `paper:<stem>`)
    is documented in Task 5 and exercised by `test_promote_explicit_paper_ref_does_not_touch_adapter`.
-4. **Seam completeness for P2:** `extract` and `source_ref` go through the adapter; `LocatorRegime`
-   and `can_fetch`/`can_seed` are declared so P2's `InternalProseAdapter` is an additive change
-   (new adapter + registry entry), touching no CLI command body.
+4. **Seam scope for P2 (honest):** `extract` and `source_ref` go through the adapter, and
+   `LocatorRegime`/`can_fetch`/`can_seed` are declared. P2's `InternalProseAdapter` reuses those
+   two seams *without* editing the extract/promote ref-derivation bodies — but P2 is **not** purely
+   additive: it must also build the regenerable locator artifact and extend the still-paper-coupled
+   `--check` and promotion sidecar-read paths (see "What P1 does NOT make additive for P2" above).

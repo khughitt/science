@@ -134,7 +134,9 @@ Decision (brainstorming): generalize the shipped pipeline around a source-agnost
 **paper becomes one `SourceAdapter` among several**, not a special case.
 
 - Introduce a `SourceAdapter` abstraction carrying the **declared capability profile**
-  from §3.1.
+  from §3.1. (Implementation name: **`TextSourceAdapter`** — the bare `SourceAdapter` is already
+  taken by the audit-subsystem lint-scanner Protocol in `annotation/sources/base.py`. "Source
+  adapter" is the concept throughout this doc; `TextSourceAdapter` is the class.)
 - Re-seat today's pipeline as **`PaperSourceAdapter`** (DOI/PMID fetch → `.source.md`,
   `locator_regime = offset_anchored`, PubTator seeding, `paper:<citekey>` ref). This is a
   **behavior-neutral extraction refactor** — papers must behave byte-for-byte as before.
@@ -203,8 +205,8 @@ Each phase gets its own spec → plan in a later session.
 
 | Phase | Delivers | Depends on |
 |---|---|---|
-| **P1 — Source-agnostic core** | The §4 refactor. `SourceAdapter` + declared capability profile (fetch / `locator_regime` / seed **+ source-ref resolvability**, §4.1); **generalize the locator/annotation artifact** to support offset-anchored *and* regenerable regimes through one promotion interface (§3.2); re-seat today's pipeline as `PaperSourceAdapter`. **Behavior-neutral for papers.** No new content — pure shape. | — |
-| **P2 — Internal-prose adapter** | `InternalProseAdapter` (reads repo prose, mutable, `locator_regime = regenerable`, no seed) + a decompose-agent variant that discriminates meta vs. domain. Output: domain propositions minted from our own prose through the *unchanged* graph layer. | P1 |
+| **P1 — Source-agnostic core** | The §4 refactor. `TextSourceAdapter` (named to avoid colliding with the audit-scanner `SourceAdapter`) + declared capability profile (fetch / `locator_regime` / seed **+ source-ref resolvability**, §4.1); establish the **polymorphic interface that admits both locator regimes** through one extract/promote seam (§3.2) — `offset_anchored` fully implemented, `regenerable` declared-but-unimplemented; re-seat today's pipeline as `PaperSourceAdapter`. **Behavior-neutral for papers.** No new content — pure shape. | — |
+| **P2 — Internal-prose adapter** | `InternalProseAdapter` (reads repo prose, mutable, `locator_regime = regenerable`, no seed) + a decompose-agent variant that discriminates meta vs. domain. **P2 owns the regenerable locator artifact itself** (its sidecar representation) and must extend the still-paper-coupled `--check` (source-change detection) and promotion sidecar-read paths that P1 leaves untouched — so P2 is not purely additive. Output: domain propositions minted from our own prose through the *unchanged* graph layer. | P1 |
 | **P3 — Domain grounding** | Belief-as-grounding read; the evidence-line authoring path (closing the `_lift_evidence_line` structural-defaults gap, spike finding 8); domain-source ingestion so `aggregate_belief` has real inputs. Makes "grounded in evidence" honest. | P2 |
 | **P4 — Health coverage-ramp** | A `prose-health.json`-style artifact (Python-produced, TS-consumed) carrying per-claim grounding; the coverage-ramp metric; stylized marking of unbacked claims in rendered prose. | P3 |
 
