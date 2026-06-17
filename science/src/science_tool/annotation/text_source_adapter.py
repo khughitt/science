@@ -9,7 +9,18 @@ polymorphic methods; dispatch is a registry list + first-match.
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
+from datetime import datetime
 from enum import Enum
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from science_tool.annotation.statement_extract import (
+        ExtractReport,
+        FigurativeCandidate,
+        StatementCandidate,
+    )
 
 
 class LocatorRegime(Enum):
@@ -25,3 +36,58 @@ class LocatorRegime(Enum):
     OFFSET_ANCHORED = "offset_anchored"
     REGENERABLE = "regenerable"
     NONE = "none"
+
+
+class TextSourceAdapter(ABC):
+    """Turn one kind of text source into source-neutral annotation candidates.
+
+    Distinct from the audit-subsystem `SourceAdapter` Protocol in
+    `annotation/sources/base.py` (a lint scanner). This is the adapter for a *text
+    source* (paper, book, internal prose) feeding the extract→promote pipeline.
+
+    Subclasses MUST implement `handles()` and `source_ref()` (abstract), and SHOULD
+    override `extract()` for whatever locator regime they declare. Capabilities are
+    declared as class attributes so the CLI reads them instead of branching on
+    adapter type (mirrors StorageAdapter, Spec 3 Slice A).
+    """
+
+    name: str  # human-readable adapter name
+    locator_regime: LocatorRegime
+
+    # Declared capabilities. P1 dispatches `extract`/`source_ref` through the
+    # adapter; `fetch`/`seed` are declared for P2 (persist-source / pubtator stay
+    # paper-specific until a second source needs them).
+    can_fetch: bool = False
+    can_seed: bool = False
+
+    @abstractmethod
+    def handles(self, source_md: Path) -> bool:
+        """Return True if this adapter owns `source_md`."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def source_ref(self, source_md: Path) -> str:
+        """The resolvable provenance ref recorded in minted entities' source_refs.
+
+        The adapter guarantees this ref resolves to a materializable entity
+        (umbrella §4.1).
+        """
+        raise NotImplementedError
+
+    def extract(
+        self,
+        *,
+        source_md: Path,
+        model: str,
+        candidates: "list[StatementCandidate | FigurativeCandidate]",
+        now: datetime,
+        actor: str,
+    ) -> "ExtractReport":
+        """Persist agent-extracted candidates as located annotations.
+
+        Base raises: an adapter must implement extraction for its regime.
+        """
+        raise NotImplementedError(
+            f"adapter {self.name!r} does not implement extract "
+            f"(locator_regime={self.locator_regime.value})"
+        )
