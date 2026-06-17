@@ -45,6 +45,8 @@ _ENTITY_FIELDS = (
     "n_sets",
     "set_size_summary",
     "identifier_space",
+    "tier",
+    "update_cadence",
     "qa_report",
 )
 
