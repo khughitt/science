@@ -88,19 +88,38 @@ capabilities, each opt-in and **declared** (no `isinstance`/name branching — t
 Each adapter also declares its **`source_ref` scheme** (`paper:<citekey>`, `doc:<slug>`, …),
 which the graph layer consumes as an injected string.
 
-### 3.2 Candidate artifact — the seam
+### 3.2 Candidate artifact — the seam (and the locator artifact behind it)
 
-The frozen `candidates.json` contract (`StatementCandidate` / `FigurativeCandidate`).
-Nothing downstream knows or cares what produced it. This already exists and is already
-source-neutral; the program **formalizes it as the boundary** rather than inventing a new one.
+The frozen `candidates.json` contract (`StatementCandidate` / `FigurativeCandidate`) is
+the *conceptual* seam — nothing downstream cares what produced it. **But the seam is wider
+than `candidates.json` today**, and the umbrella must not understate that: current
+extraction requires a persisted `source_md`, computes passages/text-hash, and writes a
+**source-annotation sidecar** (`statement_extract.py`), which promotion then *reads back*
+(`cli.py`). So the locator/annotation artifact — not just the candidate JSON — is part of
+the text↔graph boundary.
 
-### 3.3 Graph layer — source-agnostic (already true today)
+Therefore **P1 must generalize the locator/annotation artifact**, not merely wrap
+`persist-source` / `extract` / `pubtator`. Concretely the artifact must support two
+locator regimes behind the adapter's `anchor` capability: **offset-anchored** (immutable
+sources — today's `TextQuoteSelector` + content-hash re-audit) and **regenerable**
+(mutable internal prose — heading/section + quoted text, no hash re-audit). Promotion must
+consume either regime through one interface. Designing this generalized artifact is the
+core of P1, alongside the adapter abstraction.
+
+### 3.3 Graph layer — source-agnostic, with one real obligation on the source ref
 
 `extract → promote → synthesize → aggregate_belief`. The map confirmed this layer is
-already source-agnostic: `promote.apply_candidates` takes `paper_ref` as an injected
+largely source-agnostic: `promote.apply_candidates` takes the source ref as an injected
 string, mint logic never reaches back into `.source.md`, and `aggregate_belief` runs
-standalone with no graph materialization. The only change needed is that the `source_ref`
-becomes **adapter-supplied** rather than paper-derived.
+standalone with no graph materialization.
+
+The one thing the umbrella initially understated: the source ref is **not** a free string.
+Promotion appends it into each minted entity's `source_refs` (`promote.py`), and at
+materialization an unresolved, non-special ref **hard-fails** the build
+(`materialize.py`). A `paper:<citekey>` ref works only because it resolves to a first-class
+bib-paper entity (materialized as an `EXTERNAL_REFERENCE`-participation node); `paper:` is
+*not* an ontology/external prefix. So the adapter's `source_ref` scheme carries a real
+obligation — see §4.1.
 
 ## 4. The refactor — one core, papers = one adapter
 
@@ -118,7 +137,30 @@ Decision (brainstorming): generalize the shipped pipeline around a source-agnost
 
 The three paper-coupled spots that move behind the adapter boundary: `persist-source`
 (fetch + license gating), `extract` (`TextQuoteSelector` anchoring in `.source.md`), and
-`pubtator` (BioC seeding). The graph layer is untouched.
+`pubtator` (BioC seeding). The graph-layer *computation* is untouched; its one new
+requirement is the resolvable source ref of §4.1.
+
+### 4.1 Source-ref resolvability — the `doc:` / `prose:` decision
+
+Because an unresolved `source_ref` hard-fails materialization (§3.3), each adapter's ref
+scheme must resolve to a real, materializable entity. **Decision: a `doc:`/`prose:` ref
+targets a first-class source entity**, the direct parallel of how `paper:<citekey>` targets
+a bib-paper entity — *not* a synthetic annotation ref, and *not* an ontology-style external
+prefix. Rationale: it is the only option that yields genuine provenance (the prose document
+becomes a citable node, propositions are `wasDerivedFrom` it) and reuses the existing
+external-reference / participation-mode resolution path instead of bolting on a new
+resolver branch.
+
+This makes source-ref handling a **declared adapter responsibility**, promoted into the
+capability profile: an adapter must *guarantee its `source_ref` resolves* (mint-or-link the
+source entity) before promotion writes it. `PaperSourceAdapter` already satisfies this via
+the bib-paper entity; `InternalProseAdapter` satisfies it by mint-or-linking a source
+entity for the prose document.
+
+Deferred to the P1 spec (interface detail, not the directional choice): whether the prose
+source entity reuses an existing kind or needs a new one, and its exact participation mode.
+The *directional* choice — first-class source entity — is fixed here because it shapes the
+adapter interface.
 
 ## 5. The domain-proposition layer & the grounding bar
 
@@ -127,10 +169,18 @@ The three paper-coupled spots that move behind the adapter boundary: `persist-so
   is a domain claim type. The domain-proposition layer is simply *propositions minted from
   our own prose*, produced by the P2 adapter flowing through the unchanged graph layer.
   The existing meta entities (questions/hypotheses/interpretations) stay as they are.
-- **Meta vs. domain is an extraction-time discrimination, not a new field.** The decompose
-  agent simply does not emit meta-commentary as domain candidates (natural-systems prose
-  mixes both). **No `ClaimScope` field** is added — we revisit only if a real need for
-  meta-propositions appears. (Deferred option, §8.)
+- **Meta vs. domain is an extraction-time discrimination, not a persistent field — but it
+  must be *recorded*, not silently dropped.** The decompose agent does not *promote*
+  meta-commentary as a domain proposition (natural-systems prose mixes both), and **no
+  `ClaimScope` field** is added to the entity model. However, dropping meta sentences at the
+  floor would make P4's per-claim grounding denominator ambiguous — health could silently
+  ignore real prose assertions it failed to classify. So decomposition must **emit a
+  reason-coded skip record for every non-promoted span** (`meta_commentary`,
+  `not_a_claim`, …), the same skip-reason-token pattern the synthesize/promote paths already
+  use. P4 then reports against the *full* set of decomposed spans (promoted + skipped +
+  grounded), so "what the pipeline ignored, and why" is always visible. The discrimination
+  is transient (lives in the decomposition artifact, not the proposition); the *audit trail*
+  is durable.
 - **Grounding bar = strict; grounding = belief.** A prose claim is grounded **iff** it
   links to a domain proposition carrying real belief support from `aggregate_belief` (a
   magnitude at/above a configured floor). This explicitly rejects (a) provenance/`bearsOn`
@@ -146,7 +196,7 @@ Each phase gets its own spec → plan in a later session.
 
 | Phase | Delivers | Depends on |
 |---|---|---|
-| **P1 — Source-agnostic core** | The §4 refactor. `SourceAdapter` + declared capability profile; re-seat today's pipeline as `PaperSourceAdapter`; formalize the candidate artifact as the seam. **Behavior-neutral for papers.** No new content — pure shape. | — |
+| **P1 — Source-agnostic core** | The §4 refactor. `SourceAdapter` + declared capability profile (fetch/anchor/seed **+ source-ref resolvability**, §4.1); **generalize the locator/annotation artifact** to support offset-anchored *and* regenerable regimes through one promotion interface (§3.2); re-seat today's pipeline as `PaperSourceAdapter`. **Behavior-neutral for papers.** No new content — pure shape. | — |
 | **P2 — Internal-prose adapter** | `InternalProseAdapter` (reads repo prose, mutable, regenerable locators, no anchor/seed) + a decompose-agent variant that discriminates meta vs. domain. Output: domain propositions minted from our own prose through the *unchanged* graph layer. | P1 |
 | **P3 — Domain grounding** | Belief-as-grounding read; the evidence-line authoring path (closing the `_lift_evidence_line` structural-defaults gap, spike finding 8); domain-source ingestion so `aggregate_belief` has real inputs. Makes "grounded in evidence" honest. | P2 |
 | **P4 — Health coverage-ramp** | A `prose-health.json`-style artifact (Python-produced, TS-consumed) carrying per-claim grounding; the coverage-ramp metric; stylized marking of unbacked claims in rendered prose. | P3 |
@@ -180,11 +230,19 @@ plan; **B** (shared cross-language core) **deferred**; **C** (prose grounding in
   content-hash re-audit on text we own and regenerate.
 - **No `ClaimScope` field** unless a concrete need for meta-propositions appears;
   discriminate at extraction instead.
-- **No new candidate contract** — formalize and reuse the existing one.
+- **No new *candidate* contract** — reuse the existing `candidates.json`
+  (`StatementCandidate`/`FigurativeCandidate`). This is distinct from the *locator/annotation*
+  artifact, which P1 *does* generalize (§3.2) — generalizing the locator regime is not the
+  same as inventing a new candidate schema.
 
 ## 9. Open decisions deferred to phase specs
 
 - The exact `SourceAdapter` interface surface and where it lives (P1 spec).
+- The generalized locator/annotation artifact's concrete schema spanning both regimes, and
+  whether promotion reads it via a thin adapter shim over today's sidecar reader (P1 spec).
+- The prose source entity's kind (reuse vs. new) and participation mode (P1 spec); the
+  *directional* choice — first-class source entity — is fixed in §4.1.
+- The skip-record schema and its reason-token vocabulary (P2 spec).
 - The regenerable-locator format for mutable prose, and how re-decomposition reconciles
   with already-minted propositions when prose changes (P2 spec).
 - The grounding-floor magnitude and the precise coverage-ramp metric shape (P3/P4 specs).
