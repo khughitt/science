@@ -1,3 +1,7 @@
+---
+description: Propose the reasoning fields (predicate, polarity, claim_layer, refined subject/object) of a paper's promoted propositions, via the proposition-synthesize subagent.
+---
+
 # /synthesize-propositions
 
 Propose the *reasoning fields* — `predicate`, `polarity`, `claim_layer`, and refined

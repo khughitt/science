@@ -339,7 +339,11 @@ source: dataset:refset
 
 
 def test_evidence_line_evidence_type_in_provenance(tmp_path: Path) -> None:
-    """evidence_type: empirical_data_evidence → sci:evidenceType Literal in provenance."""
+    """Authored evidence_type: empirical_data_evidence → canonical sci:evidenceType Literal.
+
+    The typed-evidence vocabulary canonicalizes the authored `_evidence`-suffixed spelling at
+    parse, so the materialized provenance Literal is the bare token `empirical_data`.
+    """
     _write(tmp_path, "science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
     _write(
         tmp_path,
@@ -381,8 +385,8 @@ evidence_type: empirical_data_evidence
 
     line_uri = URIRef(PROJECT_NS["evidence-line/et"])
     values = {str(o) for _, _, o in provenance.triples((line_uri, SCI_NS.evidenceType, None))}
-    assert "empirical_data_evidence" in values, (
-        f"Expected sci:evidenceType 'empirical_data_evidence', got {values}"
+    assert "empirical_data" in values, (
+        f"Expected canonical sci:evidenceType 'empirical_data', got {values}"
     )
 
 

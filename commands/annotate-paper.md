@@ -1,3 +1,7 @@
+---
+description: Extract sub-article statements and figures from a paper that already has a persisted .source.md and PubTator annotations, via the paper-annotate subagent.
+---
+
 # /annotate-paper
 
 Extract sub-article **statements** (propositions/questions/hypotheses) and **figures**
