@@ -91,6 +91,13 @@ class DecompositionArtifact:
         return f"{self.source.kind}:{self.source.slug}"
 
 
+@dataclass(frozen=True)
+class StorePersistReport:
+    source_slug: str
+    artifact_id: str
+    stale_fingerprints: list[str]
+
+
 _SPACE_RE = re.compile(r"\s+")
 
 
@@ -134,6 +141,82 @@ def artifact_generation_relpath(artifact: DecompositionArtifact) -> Path:
 
 def artifact_unit_ref(artifact: DecompositionArtifact, unit: DecompositionUnit) -> str:
     return f"annotation:{artifact_generation_relpath(artifact).as_posix()}#{unit.unit_id}"
+
+
+class ProseDecompositionStore:
+    def __init__(self, project_root: Path) -> None:
+        self.project_root = project_root.resolve()
+
+    def source_dir(self, slug: str) -> Path:
+        return artifact_storage_root(self.project_root, slug)
+
+    def generation_path(self, artifact: DecompositionArtifact) -> Path:
+        return self.project_root / artifact_generation_relpath(artifact)
+
+    def index_path(self, slug: str) -> Path:
+        return self.source_dir(slug) / "index.json"
+
+    def load_index(self, slug: str) -> dict[str, Any]:
+        path = self.index_path(slug)
+        if not path.exists():
+            return {
+                "schema_version": 1,
+                "source_ref": f"prose-source:{slug}",
+                "latest_artifact_id": "",
+                "artifacts": [],
+                "units": {},
+            }
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def persist(self, artifact: DecompositionArtifact) -> StorePersistReport:
+        slug = artifact.source.slug
+        artifact_id = artifact.artifact.artifact_id
+        _atomic_write_json(self.generation_path(artifact), _artifact_to_json_payload(artifact))
+
+        state = self.load_index(slug)
+        if artifact_id not in state["artifacts"]:
+            state["artifacts"].append(artifact_id)
+        state["latest_artifact_id"] = artifact_id
+
+        unit_rows = state["units"]
+        current_fingerprints = {unit.fingerprint for unit in artifact.units}
+        stale_fingerprints = sorted(set(unit_rows) - current_fingerprints)
+        for fingerprint in stale_fingerprints:
+            unit_rows[fingerprint]["stale"] = True
+
+        for unit in artifact.units:
+            existing = unit_rows.get(unit.fingerprint, {})
+            row = dict(existing)
+            row.update(
+                {
+                    "latest_unit_id": unit.unit_id,
+                    "latest_artifact_id": artifact_id,
+                    "latest_disposition": unit.disposition,
+                    "artifact_unit_ref": artifact_unit_ref(artifact, unit),
+                    "stale": False,
+                }
+            )
+            unit_rows[unit.fingerprint] = row
+
+        _atomic_write_json(self.index_path(slug), state)
+        return StorePersistReport(source_slug=slug, artifact_id=artifact_id, stale_fingerprints=stale_fingerprints)
+
+    def record_promotion(self, source_slug: str, fingerprint: str, promoted_to: str) -> None:
+        state = self.load_index(source_slug)
+        if fingerprint not in state["units"]:
+            raise DecompositionError(f"unknown decomposition unit fingerprint: {fingerprint}")
+        state["units"][fingerprint]["promoted_to"] = promoted_to
+        _atomic_write_json(self.index_path(source_slug), state)
+
+    def load_latest(self, slug: str) -> DecompositionArtifact:
+        index = self.load_index(slug)
+        artifact_id = index["latest_artifact_id"]
+        if not artifact_id:
+            raise DecompositionError(f"no prose decomposition index exists for source slug: {slug}")
+        path = self.source_dir(slug) / "generations" / f"{artifact_id}.json"
+        if not path.exists():
+            raise DecompositionError(f"latest prose decomposition generation is missing: {path}")
+        return parse_submitted_decomposition(path.read_text(encoding="utf-8"), project_root=self.project_root)
 
 
 def compute_source_hash(path: Path) -> str:
@@ -359,6 +442,82 @@ def _reject_unknown_keys(raw: dict[str, Any], *, allowed: frozenset[str], label:
     extra = set(raw) - allowed
     if extra:
         raise DecompositionError(f"unknown {label} keys: {sorted(extra)}")
+
+
+def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
+def _artifact_to_json_payload(artifact: DecompositionArtifact) -> dict[str, Any]:
+    return {
+        "schema_version": artifact.schema_version,
+        "source": {
+            "kind": artifact.source.kind,
+            "slug": artifact.source.slug,
+            "path": str(artifact.source.path),
+            "title": artifact.source.title,
+            "content_hash": artifact.source.content_hash,
+        },
+        "artifact": {
+            "id": artifact.artifact.artifact_id,
+            "generated_at": artifact.artifact.generated_at,
+            "producer": artifact.artifact.producer,
+        },
+        "units": [_unit_to_json_payload(unit) for unit in artifact.units],
+    }
+
+
+def _unit_to_json_payload(unit: DecompositionUnit) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "unit_id": unit.unit_id,
+        "disposition": unit.disposition,
+        "locator": _locator_to_json_payload(unit.locator),
+    }
+    if unit.disposition == "candidate":
+        if unit.candidate is None:
+            raise DecompositionError(f"candidate unit {unit.unit_id} is missing candidate payload")
+        payload["payload"] = _candidate_to_json_payload(unit.candidate)
+        return payload
+    if unit.reason_code is None:
+        raise DecompositionError(f"skip unit {unit.unit_id} is missing skip reason")
+    payload["reason"] = {"code": unit.reason_code, "detail": unit.reason_detail}
+    return payload
+
+
+def _locator_to_json_payload(locator: MarkdownLocator) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "regime": locator.regime,
+        "value": list(locator.heading_path),
+    }
+    if locator.quote is not None:
+        payload["quote"] = _quote_to_json_payload(locator.quote)
+    return payload
+
+
+def _quote_to_json_payload(quote: Quote) -> dict[str, Any]:
+    return {
+        "exact": quote.exact,
+        "prefix": quote.prefix,
+        "suffix": quote.suffix,
+    }
+
+
+def _candidate_to_json_payload(candidate: StatementCandidate) -> dict[str, Any]:
+    payload = {
+        "type": candidate.type,
+        "exact": candidate.exact,
+        "prefix": candidate.prefix,
+        "suffix": candidate.suffix,
+        "stance": candidate.stance,
+    }
+    for key in ("subject", "object", "subject_concept", "object_concept"):
+        value = getattr(candidate, key)
+        if value is not None:
+            payload[key] = value
+    return payload
 
 
 def _resolve_source_path(value: str, *, project_root: Path) -> Path:

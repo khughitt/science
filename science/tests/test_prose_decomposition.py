@@ -5,6 +5,7 @@ import pytest
 
 from science_tool.annotation.prose_decomposition import (
     DecompositionError,
+    ProseDecompositionStore,
     artifact_unit_ref,
     parse_submitted_decomposition,
 )
@@ -174,3 +175,48 @@ def test_artifact_unit_ref_uses_annotation_namespace(tmp_path):
     assert artifact_unit_ref(artifact, artifact.units[0]) == (
         "annotation:data/prose-decompositions/example/generations/decomp-1.json#u001"
     )
+
+
+def test_store_persists_generation_and_index(tmp_path):
+    artifact = parse_submitted_decomposition(json.dumps(_artifact(tmp_path)), project_root=tmp_path)
+    store = ProseDecompositionStore(tmp_path)
+    report = store.persist(artifact)
+    assert report.artifact_id == "decomp-1"
+    assert report.stale_fingerprints == []
+    assert (tmp_path / "data" / "prose-decompositions" / "example" / "generations" / "decomp-1.json").exists()
+    assert (tmp_path / "data" / "prose-decompositions" / "example" / "index.json").exists()
+
+
+def test_store_marks_missing_fingerprint_stale(tmp_path):
+    first = parse_submitted_decomposition(json.dumps(_artifact(tmp_path)), project_root=tmp_path)
+    raw_second = _artifact(tmp_path, quote="A different claim.")
+    raw_second["artifact"]["id"] = "decomp-2"
+    second = parse_submitted_decomposition(json.dumps(raw_second), project_root=tmp_path)
+    store = ProseDecompositionStore(tmp_path)
+    store.persist(first)
+    report = store.persist(second)
+    assert len(report.stale_fingerprints) == 1
+
+
+def test_store_preserves_promoted_link_across_unit_renumber(tmp_path):
+    first = parse_submitted_decomposition(json.dumps(_artifact(tmp_path, unit_id="u001")), project_root=tmp_path)
+    second_raw = _artifact(tmp_path, unit_id="u777")
+    second_raw["artifact"]["id"] = "decomp-2"
+    second = parse_submitted_decomposition(json.dumps(second_raw), project_root=tmp_path)
+    store = ProseDecompositionStore(tmp_path)
+    store.persist(first)
+    store.record_promotion(source_slug="example", fingerprint=first.units[0].fingerprint, promoted_to="proposition:x")
+    store.persist(second)
+    state = store.load_index("example")
+    assert state["units"][first.units[0].fingerprint]["promoted_to"] == "proposition:x"
+    assert state["units"][first.units[0].fingerprint]["latest_unit_id"] == "u777"
+    assert state["units"][first.units[0].fingerprint]["stale"] is False
+
+
+def test_store_load_latest_reparses_generation(tmp_path):
+    artifact = parse_submitted_decomposition(json.dumps(_artifact(tmp_path)), project_root=tmp_path)
+    store = ProseDecompositionStore(tmp_path)
+    store.persist(artifact)
+    latest = store.load_latest("example")
+    assert latest.artifact.artifact_id == "decomp-1"
+    assert latest.units[0].unit_id == "u001"
