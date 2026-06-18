@@ -40,7 +40,7 @@ Concrete implementation choices locked by this plan:
 | `science/model/src/science_model/templates/prose-source.md` | Template for auto-created source entities | Create |
 | `science/model/tests/test_kind_reconciliation.py` | Model kind reconciliation gate | Existing tests should pass after kind change |
 | `science/tests/test_kind_reconciliation_registry.py` | Tool registry reconciliation gate | Modify expected core-kind delta |
-| `science/tests/test_entity_create.py` | Entity create/template behavior for `prose-source` | Modify |
+| `science/tests/test_entities.py` | Entity create/template behavior for `prose-source` | Modify |
 | `science/src/science_tool/annotation/prose_decomposition.py` | Decomposition schema parser, fingerprinting, artifact store | Create |
 | `science/tests/test_prose_decomposition.py` | Parser, fingerprint, store tests | Create |
 | `science/src/science_tool/annotation/internal_prose_adapter.py` | Markdown heading parser, locator resolution, `InternalProseAdapter` | Create |
@@ -77,14 +77,16 @@ PYTHONPATH=science/src:science/model/src uv run --frozen pytest -q
 - Modify: `science/model/src/science_model/profiles/core.py`
 - Create: `science/model/src/science_model/templates/prose-source.md`
 - Modify: `science/tests/test_kind_reconciliation_registry.py`
-- Modify: `science/tests/test_entity_create.py`
+- Modify: `science/tests/test_entities.py`
 
 - [ ] **Step 1: Write the failing kind/template tests**
 
-Append these tests to `science/tests/test_entity_create.py`:
+Append these tests to `science/tests/test_entities.py`:
 
 ```python
 def test_create_prose_source_entity(tmp_path):
+    import yaml
+
     from science_tool.entities import create_entity
 
     result = create_entity(
@@ -99,9 +101,10 @@ def test_create_prose_source_entity(tmp_path):
     assert result.entity_id == "prose-source:example-prose-source"
     assert result.path == path
     text = path.read_text(encoding="utf-8")
-    assert 'id: prose-source:example-prose-source' in text
-    assert 'type: prose-source' in text
-    assert 'status: active' in text
+    frontmatter = yaml.safe_load(text.split("---", 2)[1])
+    assert frontmatter["id"] == "prose-source:example-prose-source"
+    assert frontmatter["type"] == "prose-source"
+    assert frontmatter["status"] == "active"
 ```
 
 Modify `INTENDED_ADDITIONS` in `science/tests/test_kind_reconciliation_registry.py` only after the implementation step. The initial failure should show the new kind is missing.
@@ -112,7 +115,7 @@ Run:
 
 ```bash
 PYTHONPATH=science/src:science/model/src science/.venv/bin/pytest -q \
-  science/tests/test_entity_create.py::test_create_prose_source_entity \
+  science/tests/test_entities.py::test_create_prose_source_entity \
   science/model/tests/test_kind_reconciliation.py \
   science/tests/test_kind_reconciliation_registry.py
 ```
@@ -252,7 +255,7 @@ Run:
 
 ```bash
 PYTHONPATH=science/src:science/model/src science/.venv/bin/pytest -q \
-  science/tests/test_entity_create.py::test_create_prose_source_entity \
+  science/tests/test_entities.py::test_create_prose_source_entity \
   science/model/tests/test_kind_reconciliation.py \
   science/tests/test_kind_reconciliation_registry.py
 ```
@@ -267,7 +270,7 @@ git add \
   science/model/src/science_model/profiles/core.py \
   science/model/src/science_model/templates/prose-source.md \
   science/tests/test_kind_reconciliation_registry.py \
-  science/tests/test_entity_create.py
+  science/tests/test_entities.py
 git commit -m "feat(prose-source): add core source entity kind"
 ```
 
@@ -364,6 +367,20 @@ def test_unknown_skip_reason_fails(tmp_path):
         parse_submitted_decomposition(json.dumps(raw), project_root=tmp_path)
 
 
+def test_candidate_payload_must_be_statement_candidate(tmp_path):
+    raw = _artifact(tmp_path)
+    raw["units"][0]["payload"] = {
+        "type": "metaphor",
+        "exact": "Basalt flows",
+        "prefix": "",
+        "suffix": "",
+        "source_domain": "geology",
+        "target_domain": "history",
+    }
+    with pytest.raises(DecompositionError, match="StatementCandidate"):
+        parse_submitted_decomposition(json.dumps(raw), project_root=tmp_path)
+
+
 def test_duplicate_unit_id_fails(tmp_path):
     raw = _artifact(tmp_path)
     raw["units"][1]["unit_id"] = "u001"
@@ -404,7 +421,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -533,7 +549,7 @@ Use private helpers with these exact validation rules:
 - `source.kind` must equal `prose-source`.
 - `source.slug`, `source.path`, and `source.content_hash` must be non-empty strings.
 - `source.path` may begin with `~/d/`; convert it to an absolute path by replacing `~/d/science` with `project_root`.
-- Candidate unit payload is validated by `parse_candidates(json.dumps({"candidates": [payload]}))`.
+- Candidate unit payload is validated by `parse_candidates(json.dumps({"candidates": [payload]}))` and the parsed result must be a `StatementCandidate`, not a `FigurativeCandidate`.
 - Candidate units reject `locator.quote`.
 - Skip units require `reason.code` in `SKIP_REASON_CODES`.
 - Unit dispositions other than `candidate` or `skip` fail.
@@ -753,6 +769,8 @@ Create `science/tests/test_prose_source_entity.py`:
 ```python
 from pathlib import Path
 
+import yaml
+
 from science_tool.annotation.prose_source_entity import resolve_or_create_prose_source
 
 
@@ -774,9 +792,10 @@ def test_resolver_creates_missing_prose_source(tmp_path):
     assert result.entity_id == "prose-source:example"
     assert path.exists()
     text = path.read_text(encoding="utf-8")
-    assert "source_path:" in text
-    assert "content_hash:" in text
-    assert "latest_decomposition_artifact: decomp-1" in text
+    frontmatter = yaml.safe_load(text.split("---", 2)[1])
+    assert frontmatter["source_path"]
+    assert frontmatter["content_hash"] == "sha256:" + "1" * 64
+    assert frontmatter["latest_decomposition_artifact"] == "decomp-1"
 
 
 def test_resolver_preserves_authored_notes(tmp_path):
@@ -814,10 +833,11 @@ def test_resolver_preserves_authored_notes(tmp_path):
     )
 
     text = existing.read_text(encoding="utf-8")
+    frontmatter = yaml.safe_load(text.split("---", 2)[1])
     assert "Curated note." in text
-    assert "title: Example\n" in text
-    assert "content_hash: sha256:222222" in text
-    assert "latest_decomposition_artifact: decomp-2" in text
+    assert frontmatter["title"] == "Example"
+    assert frontmatter["content_hash"] == "sha256:" + "2" * 64
+    assert frontmatter["latest_decomposition_artifact"] == "decomp-2"
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -966,6 +986,15 @@ def test_store_preserves_promoted_link_across_unit_renumber(tmp_path):
     assert state["units"][first.units[0].fingerprint]["promoted_to"] == "proposition:x"
     assert state["units"][first.units[0].fingerprint]["latest_unit_id"] == "u777"
     assert state["units"][first.units[0].fingerprint]["stale"] is False
+
+
+def test_store_load_latest_reparses_generation(tmp_path):
+    artifact = parse_submitted_decomposition(json.dumps(_artifact(tmp_path)), project_root=tmp_path)
+    store = ProseDecompositionStore(tmp_path)
+    store.persist(artifact)
+    latest = store.load_latest("example")
+    assert latest.artifact.artifact_id == "decomp-1"
+    assert latest.units[0].unit_id == "u001"
 ```
 
 - [ ] **Step 2: Run store tests to verify they fail**
@@ -976,7 +1005,8 @@ Run:
 PYTHONPATH=science/src:science/model/src science/.venv/bin/pytest -q \
   science/tests/test_prose_decomposition.py::test_store_persists_generation_and_index \
   science/tests/test_prose_decomposition.py::test_store_marks_missing_fingerprint_stale \
-  science/tests/test_prose_decomposition.py::test_store_preserves_promoted_link_across_unit_renumber
+  science/tests/test_prose_decomposition.py::test_store_preserves_promoted_link_across_unit_renumber \
+  science/tests/test_prose_decomposition.py::test_store_load_latest_reparses_generation
 ```
 
 Expected: FAIL because `ProseDecompositionStore` is not defined.
@@ -986,9 +1016,6 @@ Expected: FAIL because `ProseDecompositionStore` is not defined.
 In `science/src/science_tool/annotation/prose_decomposition.py`, add:
 
 ```python
-from dataclasses import asdict
-
-
 @dataclass(frozen=True)
 class StorePersistReport:
     source_slug: str
@@ -1037,6 +1064,14 @@ Implement `record_promotion(source_slug, fingerprint, promoted_to)`:
 - Fail with `DecompositionError` if fingerprint is absent.
 - Set `units[fingerprint]["promoted_to"] = promoted_to`.
 - Rewrite `index.json` atomically.
+
+Implement `load_latest(slug) -> DecompositionArtifact`:
+
+- Load `index.json`.
+- Read `latest_artifact_id`.
+- Read `generations/<latest_artifact_id>.json`.
+- Re-parse the stored generation with `parse_submitted_decomposition(..., project_root=self.project_root)`.
+- Fail with `DecompositionError` if the index or generation is missing.
 
 Use a helper:
 
@@ -1305,7 +1340,7 @@ Command body:
 
 - Validate `source_ref.startswith("prose-source:")`.
 - Load index from `ProseDecompositionStore`.
-- Load latest artifact by adding a `load_latest(slug)` method to the store if not already present.
+- Load the latest artifact with `ProseDecompositionStore.load_latest(slug)`.
 - For each unit, choose quote:
   - candidate: `Quote(unit.candidate.exact, unit.candidate.prefix, unit.candidate.suffix)`
   - skip: `unit.locator.quote`
@@ -1349,15 +1384,31 @@ Create `science/tests/test_prose_promote.py`:
 import json
 from pathlib import Path
 
+import pytest
+
 from science_tool.annotation.prose_decomposition import ProseDecompositionStore, parse_submitted_decomposition
-from science_tool.annotation.prose_promote import promote_prose_unit
+from science_tool.annotation.prose_promote import ProsePromotionError, promote_prose_unit
 
 
-def _project(tmp_path: Path) -> tuple[ProseDecompositionStore, str]:
-    (tmp_path / "entities" / "propositions").mkdir(parents=True)
+def _project(tmp_path: Path, *, units: list[dict] | None = None, artifact_id: str = "decomp-1") -> tuple[ProseDecompositionStore, str]:
+    (tmp_path / "entities" / "propositions").mkdir(parents=True, exist_ok=True)
     source = tmp_path / "docs" / "example.md"
-    source.parent.mkdir(parents=True)
+    source.parent.mkdir(parents=True, exist_ok=True)
     source.write_text("# Section\n\nBasalt flows record the cooling history.\n", encoding="utf-8")
+    default_units = [
+        {
+            "unit_id": "u001",
+            "disposition": "candidate",
+            "locator": {"regime": "markdown-heading-path", "value": ["Section"]},
+            "payload": {
+                "type": "proposition",
+                "exact": "Basalt flows record the cooling history.",
+                "prefix": "",
+                "suffix": "",
+                "stance": "asserted",
+            },
+        }
+    ]
     raw = {
         "schema_version": 1,
         "source": {
@@ -1367,21 +1418,8 @@ def _project(tmp_path: Path) -> tuple[ProseDecompositionStore, str]:
             "title": "Example",
             "content_hash": "sha256:" + "0" * 64,
         },
-        "artifact": {"id": "decomp-1", "generated_at": "2026-06-18T12:00:00Z", "producer": "offline-agent"},
-        "units": [
-            {
-                "unit_id": "u001",
-                "disposition": "candidate",
-                "locator": {"regime": "markdown-heading-path", "value": ["Section"]},
-                "payload": {
-                    "type": "proposition",
-                    "exact": "Basalt flows record the cooling history.",
-                    "prefix": "",
-                    "suffix": "",
-                    "stance": "asserted",
-                },
-            }
-        ],
+        "artifact": {"id": artifact_id, "generated_at": "2026-06-18T12:00:00Z", "producer": "offline-agent"},
+        "units": units or default_units,
     }
     artifact = parse_submitted_decomposition(json.dumps(raw), project_root=tmp_path)
     store = ProseDecompositionStore(tmp_path)
@@ -1404,6 +1442,138 @@ def test_promote_prose_unit_mints_proposition_and_records_state(tmp_path):
     assert "prose-source:example" in text
     assert "annotation:data/prose-decompositions/example/generations/decomp-1.json#u001" in text
     assert store.load_index("example")["units"][fingerprint]["promoted_to"].startswith("proposition:")
+
+
+def test_promote_prose_unit_links_existing_proposition_and_appends_two_refs(tmp_path):
+    _project(tmp_path)
+    existing = tmp_path / "entities" / "propositions" / "existing.md"
+    existing.write_text(
+        "---\n"
+        "id: proposition:existing\n"
+        "type: proposition\n"
+        "title: Basalt flows record the cooling history.\n"
+        "status: draft\n"
+        "source_refs: []\n"
+        "related: []\n"
+        "created: '2026-06-18'\n"
+        "updated: '2026-06-18'\n"
+        "---\n"
+        "# Existing\n",
+        encoding="utf-8",
+    )
+
+    report = promote_prose_unit(
+        project_root=tmp_path,
+        source_ref="prose-source:example",
+        unit_id="u001",
+        apply=True,
+    )
+
+    text = existing.read_text(encoding="utf-8")
+    assert report.linked == 1
+    assert "prose-source:example" in text
+    assert "annotation:data/prose-decompositions/example/generations/decomp-1.json#u001" in text
+    assert not (tmp_path / "entities" / "propositions" / "basalt-flows-record-the-cooling-history.md").exists()
+
+
+def test_promote_prose_unit_rejects_skip_unit(tmp_path):
+    skip_units = [
+        {
+            "unit_id": "s001",
+            "disposition": "skip",
+            "reason": {"code": "not_a_claim", "detail": "Heading only."},
+            "locator": {
+                "regime": "markdown-heading-path-with-quote",
+                "value": ["Section"],
+                "quote": {"exact": "Basalt flows", "prefix": "", "suffix": ""},
+            },
+        }
+    ]
+    _project(tmp_path, units=skip_units)
+
+    with pytest.raises(ProsePromotionError, match="non-candidate"):
+        promote_prose_unit(
+            project_root=tmp_path,
+            source_ref="prose-source:example",
+            unit_id="s001",
+            apply=True,
+        )
+
+
+def test_promote_prose_unit_rejects_missing_or_stale_previous_unit(tmp_path):
+    first_units = [
+        {
+            "unit_id": "u001",
+            "disposition": "candidate",
+            "locator": {"regime": "markdown-heading-path", "value": ["Section"]},
+            "payload": {
+                "type": "proposition",
+                "exact": "Basalt flows record the cooling history.",
+                "prefix": "",
+                "suffix": "",
+                "stance": "asserted",
+            },
+        }
+    ]
+    second_units = [
+        {
+            "unit_id": "u777",
+            "disposition": "candidate",
+            "locator": {"regime": "markdown-heading-path", "value": ["Section"]},
+            "payload": {
+                "type": "proposition",
+                "exact": "A different claim.",
+                "prefix": "",
+                "suffix": "",
+                "stance": "asserted",
+            },
+        }
+    ]
+    _project(tmp_path, units=first_units, artifact_id="decomp-1")
+    _project(tmp_path, units=second_units, artifact_id="decomp-2")
+
+    with pytest.raises(ProsePromotionError, match="not in latest artifact|stale"):
+        promote_prose_unit(
+            project_root=tmp_path,
+            source_ref="prose-source:example",
+            unit_id="u001",
+            apply=True,
+        )
+
+
+def test_promote_prose_unit_rejects_already_promoted_unit(tmp_path):
+    store, fingerprint = _project(tmp_path)
+    store.record_promotion(source_slug="example", fingerprint=fingerprint, promoted_to="proposition:existing")
+
+    with pytest.raises(ProsePromotionError, match="already promoted"):
+        promote_prose_unit(
+            project_root=tmp_path,
+            source_ref="prose-source:example",
+            unit_id="u001",
+            apply=True,
+        )
+
+
+def test_promote_prose_unit_rejects_candidate_type_not_in_targets(tmp_path, monkeypatch):
+    _project(tmp_path)
+    import science_tool.annotation.prose_promote as prose_promote
+
+    real_build_targets = prose_promote.build_targets
+
+    def targets_without_proposition():
+        targets = real_build_targets()
+        targets.pop("proposition")
+        return targets
+
+    monkeypatch.setattr(prose_promote, "build_targets", targets_without_proposition)
+
+    with pytest.raises(ProsePromotionError, match="not a promotable target"):
+        promote_prose_unit(
+            project_root=tmp_path,
+            source_ref="prose-source:example",
+            unit_id="u001",
+            apply=True,
+        )
 ```
 
 - [ ] **Step 2: Run core test to verify it fails**
@@ -1423,7 +1593,6 @@ Create `science/src/science_tool/annotation/prose_promote.py` with:
 ```python
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
 from science_tool.annotation.internal_prose_adapter import InternalProseAdapter, LocatorStatus
@@ -1435,12 +1604,12 @@ from science_tool.annotation.prose_decomposition import (
 )
 from science_tool.annotation.promote import (
     ApplyReport,
-    PromotionCandidate,
+    Promotable,
     build_targets,
     decide_all,
     load_corpora,
 )
-from science_tool.entities import append_entity_source_ref
+from science_tool.entities import append_entity_source_ref, find_entity
 
 
 class ProsePromotionError(ValueError):
@@ -1468,11 +1637,14 @@ promotable = Promotable(
 )
 ```
 
-- Use `load_corpora`, `build_targets`, and `decide_all([promotable], corpora, targets)`.
+- Build targets with `targets = build_targets()`.
+- Before calling `decide_all`, reject `unit.candidate.type` when it is not a key in `targets` with `ProsePromotionError(f"candidate type {unit.candidate.type!r} is not a promotable target")`. This keeps bad future candidate types from surfacing as `KeyError`.
+- Use `load_corpora` and `decide_all([promotable], corpora, targets)`.
 - In read-only mode, return the candidate decision without writing.
 - In apply mode:
   - For `MINT`, call `targets[c.kind].mint(c, [source_ref, c.ref], project_root, None)`.
-  - For `LINK`, append both `source_ref` and `c.ref` to the existing entity using `append_entity_source_ref`.
+  - For `LINK`, resolve the existing entity file with `dest = find_entity(project_root, c.slug).path`. In a LINK candidate, `c.slug` is the full ref string `"<kind>:<local_part>"`, not a bare slug.
+  - For `LINK`, append both provenance refs by calling `append_entity_source_ref(dest, source_ref)` and `append_entity_source_ref(dest, c.ref)`. The function accepts one ref per call and takes a file path, not `project_root`.
   - Record promotion in `ProseDecompositionStore.record_promotion(...)`.
   - Return `ApplyReport`.
 
