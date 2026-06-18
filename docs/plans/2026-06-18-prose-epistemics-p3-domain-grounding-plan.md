@@ -16,6 +16,16 @@
 - Parent umbrella: `docs/plans/2026-06-17-prose-epistemics-umbrella-design.md`
 - P2 design: `docs/plans/2026-06-18-prose-epistemics-p2-internal-prose-design.md`
 
+## Hard Preconditions
+
+- P2 internal-prose implementation must be merged before this plan starts. The implementation
+  depends on shipped P2 symbols and contracts: `ProseDecompositionStore`,
+  `parse_submitted_decomposition`, `compute_source_hash`, `artifact_unit_ref`,
+  `DecompositionUnit`, `DecompositionArtifact`, `record_promotion`, `load_latest`,
+  `load_index`, and the fingerprint-keyed index schema.
+- If P2 implementation drifted from its plan, update this P3 plan against the shipped P2
+  code before executing Task 1.
+
 ## File Structure
 
 - Create `science/src/science_tool/graph/grounding.py`
@@ -190,6 +200,27 @@ def test_ground_proposition_missing_target_fails() -> None:
         ground_proposition("proposition:missing", knowledge, provenance)
 
 
+def test_ground_proposition_ref_slug_is_case_insensitive_like_entity_uri() -> None:
+    from science_tool.graph.grounding import GroundingStatus, ground_proposition
+
+    knowledge, provenance = _graphs()
+
+    result = ground_proposition("proposition:P", knowledge, provenance)
+
+    assert result.target_ref == "proposition:p"
+    assert result.status == GroundingStatus.UNBACKED
+
+
+def test_ground_propositions_plural_intentional_public_api() -> None:
+    from science_tool.graph.grounding import ground_propositions
+
+    knowledge, provenance = _graphs()
+
+    results = ground_propositions(["proposition:p"], knowledge, provenance)
+
+    assert [result.target_ref for result in results] == ["proposition:p"]
+
+
 def test_load_grounding_graphs_reads_named_graphs(tmp_path: Path) -> None:
     from science_tool.graph.grounding import load_grounding_graphs
     from science_tool.graph.store import _graph_uri
@@ -307,6 +338,8 @@ def load_grounding_graphs(graph_path: Path) -> tuple[Graph, Graph]:
     provenance = dataset.graph(_graph_uri("graph/provenance"))
     if len(knowledge) == 0:
         raise GroundingError(f"knowledge graph is empty or missing in {graph_path}")
+    # Provenance may legitimately be sparse for an otherwise readable graph; do not require it
+    # to contain triples here.
     return knowledge, provenance
 
 
@@ -383,7 +416,7 @@ def _target_uri(ref_or_uri: str | URIRef) -> URIRef:
         return URIRef(ref_or_uri)
     if not ref_or_uri.startswith("proposition:"):
         raise GroundingError("grounding target must be a proposition:<slug> ref")
-    slug = ref_or_uri.split(":", 1)[1]
+    slug = ref_or_uri.split(":", 1)[1].lower()
     if not slug:
         raise GroundingError("grounding target proposition slug must not be empty")
     return PROJECT_NS[f"proposition/{slug}"]
@@ -568,6 +601,8 @@ def test_build_prose_grounding_report_joins_promoted_unit_by_fingerprint(tmp_pat
     assert candidate["grounding"]["belief_magnitude"] == "supported"
     skip = payload["units"][1]
     assert skip["status"] == "skipped"
+    assert skip["proposition_ref"] is None
+    assert skip["grounding"] is None
     assert skip["skip_reason"] == "not_a_claim"
 
 
@@ -807,6 +842,8 @@ def _row_for_current_unit(
         return {
             **base,
             "status": "skipped",
+            "proposition_ref": None,
+            "grounding": None,
             "skip_reason": unit.reason_code,
             "skip_detail": unit.reason_detail,
         }, None
@@ -1378,6 +1415,8 @@ Expected: commit succeeds if Step 6 changed files. If `rtk git status --short` s
 - The default grounding floor is `supported`.
 - `unbacked` means no eligible support; `below_floor` means eligible support exists but magnitude is below floor.
 - `science_tool.annotation.prose_grounding.build_prose_grounding_report(...)` joins P2 index state by fingerprint, not `unit_id`.
+- Every unit row includes `proposition_ref` and `grounding`; rows without a proposition or
+  grounding use `null` values.
 - `data/prose-grounding/<slug>/grounding.json` is written only when substantive payload changes.
 - `science annotate ground-prose-decomposition` supports JSON output and write mode.
 - P1 extract/promote, P2 prose decomposition/promote, and belief aggregation regressions pass.
