@@ -20,9 +20,27 @@ def test_ambiguous_heading_path_is_reported(tmp_path):
     md = tmp_path / "source.md"
     md.write_text("# A\n\n## Repeat\n\nOne.\n\n# B\n\n## Repeat\n\nTwo.\n", encoding="utf-8")
     locator = MarkdownLocator(regime="markdown-heading-path", heading_path=("Repeat",))
-    result = resolve_markdown_locator(md, locator, Quote(exact="One."))
+    result = resolve_markdown_locator(md, locator, Quote(exact=""))
     assert result.status is LocatorStatus.AMBIGUOUS
     assert "multiple sections" in result.message
+
+
+def test_repeated_heading_suffix_with_unique_exact_quote_resolves(tmp_path):
+    md = tmp_path / "source.md"
+    md.write_text("# A\n\n## Repeat\n\nOne.\n\n# B\n\n## Repeat\n\nTwo.\n", encoding="utf-8")
+    locator = MarkdownLocator(regime="markdown-heading-path", heading_path=("Repeat",))
+    result = resolve_markdown_locator(md, locator, Quote(exact="Two."))
+    assert result.status is LocatorStatus.RESOLVED
+    assert result.text == "Two."
+
+
+def test_repeated_heading_suffix_with_same_exact_quote_is_ambiguous(tmp_path):
+    md = tmp_path / "source.md"
+    md.write_text("# A\n\n## Repeat\n\nSame.\n\n# B\n\n## Repeat\n\nSame.\n", encoding="utf-8")
+    locator = MarkdownLocator(regime="markdown-heading-path", heading_path=("Repeat",))
+    result = resolve_markdown_locator(md, locator, Quote(exact="Same."))
+    assert result.status is LocatorStatus.AMBIGUOUS
+    assert "quote matched multiple occurrences" in result.message
 
 
 def test_quote_missing_is_reported(tmp_path):

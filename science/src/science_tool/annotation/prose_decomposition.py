@@ -173,12 +173,12 @@ class ProseDecompositionStore:
             state = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise DecompositionError(f"invalid prose decomposition index JSON: {path}: {exc}") from exc
-        return _validate_store_index(state, path=path)
+        return _validate_store_index(state, path=path, slug=slug)
 
     def persist(self, artifact: DecompositionArtifact) -> StorePersistReport:
         slug = artifact.source.slug
         artifact_id = artifact.artifact.artifact_id
-        _atomic_write_json(self.generation_path(artifact), _artifact_to_json_payload(artifact))
+        _write_immutable_json(self.generation_path(artifact), _artifact_to_json_payload(artifact))
 
         state = self.load_index(slug)
         if artifact_id not in state["artifacts"]:
@@ -456,25 +456,37 @@ def _validate_store_slug(slug: str) -> str:
     return slug
 
 
-def _validate_store_artifact_id(artifact_id: str) -> str:
+def _validate_store_artifact_id(artifact_id: str, *, label: str = "latest decomposition artifact id") -> str:
     if not _ID_RE.fullmatch(artifact_id):
-        raise DecompositionError("latest decomposition artifact id must be path and fragment safe")
+        raise DecompositionError(f"{label} must be path and fragment safe")
     return artifact_id
 
 
-def _validate_store_index(state: Any, *, path: Path) -> dict[str, Any]:
+def _validate_store_index(state: Any, *, path: Path, slug: str) -> dict[str, Any]:
     if not isinstance(state, dict):
         raise DecompositionError(f"prose decomposition index must be an object: {path}")
     if state.get("schema_version") != 1:
         raise DecompositionError(f"prose decomposition index schema_version must be 1: {path}")
-    if not isinstance(state.get("source_ref"), str):
+    source_ref = state.get("source_ref")
+    if not isinstance(source_ref, str):
         raise DecompositionError(f"prose decomposition index source_ref must be a string: {path}")
-    if not isinstance(state.get("latest_artifact_id"), str):
+    expected_source_ref = f"prose-source:{slug}"
+    if source_ref != expected_source_ref:
+        raise DecompositionError(f"prose decomposition index source_ref must be {expected_source_ref!r}: {path}")
+    latest_artifact_id = state.get("latest_artifact_id")
+    if not isinstance(latest_artifact_id, str):
         raise DecompositionError(f"prose decomposition index latest_artifact_id must be a string: {path}")
+    if latest_artifact_id:
+        _validate_store_artifact_id(
+            latest_artifact_id,
+            label="latest_artifact_id latest decomposition artifact id",
+        )
 
     artifacts = state.get("artifacts")
     if not isinstance(artifacts, list) or not all(isinstance(item, str) for item in artifacts):
         raise DecompositionError(f"prose decomposition index artifacts must be a list of strings: {path}")
+    for artifact_id in artifacts:
+        _validate_store_artifact_id(artifact_id, label="artifact id")
 
     units = state.get("units")
     if not isinstance(units, dict):
@@ -511,8 +523,25 @@ def _reject_unknown_keys(raw: dict[str, Any], *, allowed: frozenset[str], label:
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tmp.write_text(_canonical_json_text(payload), encoding="utf-8")
     tmp.replace(path)
+
+
+def _write_immutable_json(path: Path, payload: dict[str, Any]) -> None:
+    canonical_text = _canonical_json_text(payload)
+    if path.exists():
+        existing_text = path.read_text(encoding="utf-8")
+        if existing_text == canonical_text:
+            return
+        raise DecompositionError(f"prose decomposition generation already exists and is immutable: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(canonical_text, encoding="utf-8")
+    tmp.replace(path)
+
+
+def _canonical_json_text(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
 def _artifact_to_json_payload(artifact: DecompositionArtifact) -> dict[str, Any]:

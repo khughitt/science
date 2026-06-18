@@ -82,12 +82,6 @@ def resolve_markdown_locator(source_md: Path, locator: MarkdownLocator, quote: Q
             message=f"heading path not found: {' > '.join(locator.heading_path)}",
         )
 
-    if len(matching_sections) > 1 and locator.regime == "markdown-heading-path":
-        return LocatorResolution(
-            LocatorStatus.AMBIGUOUS,
-            message=f"multiple sections match heading path: {' > '.join(locator.heading_path)}",
-        )
-
     if quote.exact:
         quote_result = _search_quote_in_sections(source_text, matching_sections, quote)
         if quote_result.context_matches == 1:

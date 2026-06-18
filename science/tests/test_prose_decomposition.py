@@ -198,6 +198,42 @@ def test_store_persists_generation_and_index(tmp_path):
     assert row["stale"] is False
 
 
+def test_store_persist_allows_identical_generation_replay(tmp_path):
+    first = parse_submitted_decomposition(json.dumps(_artifact(tmp_path)), project_root=tmp_path)
+    replay = parse_submitted_decomposition(json.dumps(_artifact(tmp_path)), project_root=tmp_path)
+    store = ProseDecompositionStore(tmp_path)
+    store.persist(first)
+    generation_path = store.generation_path(first)
+    generation_text = generation_path.read_text(encoding="utf-8")
+
+    report = store.persist(replay)
+
+    assert report.artifact_id == "decomp-1"
+    assert generation_path.read_text(encoding="utf-8") == generation_text
+    state = store.load_index("example")
+    assert state["artifacts"] == ["decomp-1"]
+    assert state["latest_artifact_id"] == "decomp-1"
+    assert state["units"][first.units[0].fingerprint]["latest_unit_id"] == "u001"
+
+
+def test_store_persist_rejects_conflicting_generation_replay_without_index_update(tmp_path):
+    first = parse_submitted_decomposition(json.dumps(_artifact(tmp_path)), project_root=tmp_path)
+    conflicting_raw = _artifact(tmp_path, unit_id="u777", quote="A different claim.")
+    conflicting = parse_submitted_decomposition(json.dumps(conflicting_raw), project_root=tmp_path)
+    store = ProseDecompositionStore(tmp_path)
+    store.persist(first)
+    generation_path = store.generation_path(first)
+    index_path = store.index_path("example")
+    generation_text = generation_path.read_text(encoding="utf-8")
+    index_text = index_path.read_text(encoding="utf-8")
+
+    with pytest.raises(DecompositionError, match="generation already exists|immutable"):
+        store.persist(conflicting)
+
+    assert generation_path.read_text(encoding="utf-8") == generation_text
+    assert index_path.read_text(encoding="utf-8") == index_text
+
+
 def test_store_marks_missing_fingerprint_stale(tmp_path):
     first = parse_submitted_decomposition(json.dumps(_artifact(tmp_path)), project_root=tmp_path)
     raw_second = _artifact(tmp_path, quote="A different claim.")
@@ -279,8 +315,11 @@ def test_store_load_index_rejects_invalid_json(tmp_path):
         ({"schema_version": 2, "source_ref": "prose-source:example", "latest_artifact_id": "", "artifacts": [], "units": {}}, "schema_version"),
         ({"schema_version": 1, "source_ref": "prose-source:example", "artifacts": [], "units": {}}, "latest_artifact_id"),
         ({"schema_version": 1, "source_ref": 7, "latest_artifact_id": "", "artifacts": [], "units": {}}, "source_ref"),
+        ({"schema_version": 1, "source_ref": "prose-source:other", "latest_artifact_id": "", "artifacts": [], "units": {}}, "source_ref"),
         ({"schema_version": 1, "source_ref": "prose-source:example", "latest_artifact_id": None, "artifacts": [], "units": {}}, "latest_artifact_id"),
+        ({"schema_version": 1, "source_ref": "prose-source:example", "latest_artifact_id": "../escape", "artifacts": [], "units": {}}, "latest_artifact_id"),
         ({"schema_version": 1, "source_ref": "prose-source:example", "latest_artifact_id": "", "artifacts": ["decomp-1", 2], "units": {}}, "artifacts"),
+        ({"schema_version": 1, "source_ref": "prose-source:example", "latest_artifact_id": "", "artifacts": ["../escape"], "units": {}}, "artifact id"),
         ({"schema_version": 1, "source_ref": "prose-source:example", "latest_artifact_id": "", "artifacts": [], "units": []}, "units"),
         ({"schema_version": 1, "source_ref": "prose-source:example", "latest_artifact_id": "", "artifacts": [], "units": {"abc": []}}, "unit row"),
         ({"schema_version": 1, "source_ref": "prose-source:example", "latest_artifact_id": "", "artifacts": [], "units": {"abc": {"stale": "false"}}}, "stale"),
