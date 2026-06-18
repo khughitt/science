@@ -341,23 +341,22 @@ def test_write_prose_grounding_report_writes_canonical_json(tmp_path: Path):
 
 
 def test_write_prose_grounding_report_skips_timestamp_only_rewrite(tmp_path: Path):
-    payload = {
-        "schema_version": 1,
-        "source_ref": "prose-source:example",
-        "decomposition_artifact_id": "decomp-1",
-        "graph_path": "knowledge/graph.trig",
-        "generated_at": "2026-06-18T13:00:00Z",
-        "grounding_policy": {
-            "floor": "supported",
-            "belief_policy_id": DEFAULT_BELIEF_POLICY.policy_id,
-            "belief_policy_version": DEFAULT_BELIEF_POLICY.version,
-        },
-        "summary": {"grounded_units": 0},
-        "units": [],
-    }
-    first = ProseGroundingReport(payload)
-    second = ProseGroundingReport({**payload, "generated_at": "2026-06-18T14:00:00Z"})
-    path = tmp_path / "data" / "prose-grounding" / "example" / "grounding.json"
+    artifact, store = _persist_artifact(tmp_path, _artifact_payload(tmp_path))
+    store.record_promotion("example", artifact.units[0].fingerprint, "proposition:basalt-cooling")
+    graph_path = _write_graph(tmp_path, supports=2)
+    first = build_prose_grounding_report(
+        tmp_path,
+        "prose-source:example",
+        graph_path,
+        generated_at="2026-06-18T13:00:00Z",
+    )
+    second = build_prose_grounding_report(
+        tmp_path,
+        "prose-source:example",
+        graph_path,
+        generated_at="2026-06-18T14:00:00Z",
+    )
+    path = prose_grounding_path(tmp_path, "example")
 
     assert write_prose_grounding_report(tmp_path, first) is True
     first_text = path.read_text(encoding="utf-8")
