@@ -3,9 +3,12 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from rdflib import Dataset, Literal, RDF
 
 from science_tool.annotation.cli import annotate_group
 from science_tool.annotation.prose_decomposition import ProseDecompositionStore, compute_source_hash
+from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
+from science_tool.graph.store import _graph_uri
 
 
 def _source(tmp_path: Path) -> Path:
@@ -52,6 +55,41 @@ def _artifact_file(
     path = tmp_path / f"{artifact_id}.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
+
+
+def _write_grounding_graph(root: Path, *, supports: int) -> Path:
+    dataset = Dataset()
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    provenance = dataset.graph(_graph_uri("graph/provenance"))
+    target = PROJECT_NS["proposition/basalt-cooling"]
+    knowledge.add((target, RDF.type, SCI_NS.Proposition))
+    for index in range(supports):
+        evidence_line = PROJECT_NS[f"evidence-line/basalt-cooling-{index + 1}"]
+        knowledge.add((evidence_line, RDF.type, SCI_NS.EvidenceLine))
+        knowledge.add((evidence_line, CITO_NS.supports, target))
+        provenance.add((evidence_line, SCI_NS.evidenceStrength, Literal("strong")))
+        provenance.add((evidence_line, SCI_NS.evidenceIndependence, Literal("independent")))
+        provenance.add((evidence_line, SCI_NS.independenceGroup, Literal(f"g{index + 1}")))
+        provenance.add((evidence_line, SCI_NS.evidenceRole, Literal("proxy")))
+        provenance.add((evidence_line, SCI_NS.evidenceType, Literal("empirical_data_evidence")))
+    graph_path = root / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir(parents=True, exist_ok=True)
+    dataset.serialize(destination=str(graph_path), format="trig")
+    return graph_path
+
+
+def _ingest_and_mark_promoted(root: Path) -> None:
+    result = CliRunner().invoke(
+        annotate_group,
+        ["ingest-prose-decomposition", str(_artifact_file(root)), "--root", str(root)],
+    )
+    assert result.exit_code == 0, result.output
+    artifact = ProseDecompositionStore(root).load_latest("example")
+    ProseDecompositionStore(root).record_promotion(
+        source_slug="example",
+        fingerprint=artifact.units[0].fingerprint,
+        promoted_to="proposition:basalt-cooling",
+    )
 
 
 def test_ingest_creates_source_entity_and_artifact(tmp_path):
@@ -316,3 +354,85 @@ def test_promote_prose_decomposition_rejects_unresolved_locator(tmp_path):
     )
     assert result.exit_code != 0
     assert "locator" in result.output
+
+
+def test_ground_prose_decomposition_json_output(tmp_path):
+    _ingest_and_mark_promoted(tmp_path)
+    graph_path = _write_grounding_graph(tmp_path, supports=2)
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "ground-prose-decomposition",
+            "--source",
+            "prose-source:example",
+            "--root",
+            str(tmp_path),
+            "--graph",
+            str(graph_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["source_ref"] == "prose-source:example"
+    assert payload["summary"]["grounded_units"] == 1
+    assert payload["units"][0]["status"] == "grounded"
+
+
+def test_ground_prose_decomposition_write_persists_artifact(tmp_path):
+    _ingest_and_mark_promoted(tmp_path)
+    graph_path = _write_grounding_graph(tmp_path, supports=2)
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "ground-prose-decomposition",
+            "--source",
+            "prose-source:example",
+            "--root",
+            str(tmp_path),
+            "--graph",
+            str(graph_path),
+            "--write",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    path = tmp_path / "data" / "prose-grounding" / "example" / "grounding.json"
+    assert path.exists()
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["summary"]["grounded_units"] == 1
+    assert "wrote prose grounding" in result.output
+
+
+def test_ground_prose_decomposition_rejects_bad_source_ref(tmp_path):
+    result = CliRunner().invoke(
+        annotate_group,
+        ["ground-prose-decomposition", "--source", "paper:x", "--root", str(tmp_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "--source must use prose-source:<slug>" in result.output
+
+
+def test_ground_prose_decomposition_missing_graph_fails(tmp_path):
+    _ingest_and_mark_promoted(tmp_path)
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "ground-prose-decomposition",
+            "--source",
+            "prose-source:example",
+            "--root",
+            str(tmp_path),
+            "--graph",
+            str(tmp_path / "knowledge" / "missing.trig"),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "graph file is missing" in result.output

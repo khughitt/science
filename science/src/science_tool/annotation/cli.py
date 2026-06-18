@@ -34,6 +34,12 @@ from science_tool.annotation.prose_decomposition import (
     compute_source_hash,
     parse_submitted_decomposition,
 )
+from science_tool.annotation.prose_grounding import (
+    DEFAULT_GROUNDING_FLOOR,
+    ProseGroundingError,
+    build_prose_grounding_report,
+    write_prose_grounding_report,
+)
 from science_tool.annotation.prose_promote import ProsePromotionError, promote_prose_unit
 from science_tool.annotation.prose_source_entity import resolve_or_create_prose_source
 from science_tool.annotation.sources import LINT_SOURCES, SOURCES
@@ -212,6 +218,69 @@ def promote_prose_decomposition_cmd(
         f"{mode} prose promotion for {source_ref}#{unit_id}: "
         f"minted={report.minted} linked={report.linked} skipped={skipped}"
     )
+
+
+@annotate_group.command("ground-prose-decomposition")
+@click.option("--source", "source_ref", required=True)
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option(
+    "--graph",
+    "graph_path",
+    default=Path("knowledge/graph.trig"),
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+@click.option("--floor", "floor", default=DEFAULT_GROUNDING_FLOOR)
+@click.option("--write", "do_write", is_flag=True, default=False)
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def ground_prose_decomposition_cmd(
+    source_ref: str,
+    root: Path | None,
+    graph_path: Path,
+    floor: str,
+    do_write: bool,
+    fmt: str,
+) -> None:
+    """Ground promoted internal-prose units against the project graph."""
+    if not source_ref.startswith("prose-source:"):
+        raise click.ClickException("--source must use prose-source:<slug>")
+
+    project_root = (root or Path.cwd()).resolve()
+    if not graph_path.is_absolute():
+        graph_path = project_root / graph_path
+    if not graph_path.exists():
+        raise click.ClickException(f"graph file is missing: {graph_path}")
+
+    try:
+        report = build_prose_grounding_report(
+            project_root,
+            source_ref,
+            graph_path,
+            generated_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            floor=floor,
+        )
+        payload = report.to_json()
+        written = write_prose_grounding_report(project_root, report) if do_write else False
+    except ProseGroundingError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if fmt == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    summary = payload["summary"]
+    if not isinstance(summary, dict):
+        raise click.ClickException("prose grounding report summary must be an object")
+    click.echo(
+        f"grounded prose decomposition for {source_ref}: "
+        f"grounded={summary.get('grounded_units', 0)} "
+        f"below_floor={summary.get('below_floor_units', 0)} "
+        f"unbacked={summary.get('unbacked_units', 0)} "
+        f"unpromoted={summary.get('unpromoted_units', 0)} "
+        f"skipped={summary.get('skipped_units', 0)} "
+        f"stale={summary.get('stale_units', 0)}"
+    )
+    if do_write:
+        click.echo("wrote prose grounding artifact" if written else "unchanged prose grounding artifact")
 
 
 def _check_prose_decomposition_units(
