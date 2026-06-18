@@ -1,0 +1,321 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Literal
+
+from science_tool.annotation.statement_extract import CandidateError, StatementCandidate, parse_candidates
+
+SUPPORTED_SCHEMA_VERSION = 1
+SOURCE_KIND = "prose-source"
+SKIP_REASON_CODES = frozenset(
+    {
+        "meta_commentary",
+        "not_a_claim",
+        "duplicate_or_restatement",
+        "citation_or_reference_only",
+        "out_of_scope",
+        "unresolved_or_malformed",
+    }
+)
+LOCATOR_REGIMES = frozenset({"markdown-heading-path", "markdown-heading-path-with-quote"})
+
+
+class DecompositionError(ValueError):
+    """Raised when a prose decomposition artifact is structurally invalid."""
+
+
+@dataclass(frozen=True)
+class Quote:
+    exact: str
+    prefix: str = ""
+    suffix: str = ""
+
+
+@dataclass(frozen=True)
+class MarkdownLocator:
+    regime: str
+    heading_path: tuple[str, ...]
+    quote: Quote | None = None
+
+
+@dataclass(frozen=True)
+class DecompositionSource:
+    kind: str
+    slug: str
+    path: Path
+    title: str
+    content_hash: str
+
+
+@dataclass(frozen=True)
+class DecompositionArtifactMeta:
+    artifact_id: str
+    generated_at: str
+    producer: str
+
+
+@dataclass(frozen=True)
+class DecompositionUnit:
+    unit_id: str
+    disposition: Literal["candidate", "skip"]
+    locator: MarkdownLocator
+    fingerprint: str
+    candidate: StatementCandidate | None = None
+    reason_code: str | None = None
+    reason_detail: str = ""
+
+
+@dataclass(frozen=True)
+class DecompositionArtifact:
+    schema_version: int
+    source: DecompositionSource
+    artifact: DecompositionArtifactMeta
+    units: tuple[DecompositionUnit, ...]
+
+    @property
+    def source_ref(self) -> str:
+        return f"{self.source.kind}:{self.source.slug}"
+
+
+_SPACE_RE = re.compile(r"\s+")
+
+
+def parse_submitted_decomposition(raw: str, *, project_root: Path) -> DecompositionArtifact:
+    try:
+        doc = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise DecompositionError(f"decomposition input is not valid JSON: {exc}") from exc
+    if not isinstance(doc, dict):
+        raise DecompositionError("decomposition input must be a JSON object")
+
+    schema_version = doc.get("schema_version")
+    if schema_version != SUPPORTED_SCHEMA_VERSION:
+        raise DecompositionError(f"schema_version must be {SUPPORTED_SCHEMA_VERSION}")
+
+    source = _parse_source(doc.get("source"), project_root=project_root)
+    artifact_meta = _parse_artifact_meta(doc.get("artifact"))
+    units = _parse_units(doc.get("units"), source_ref=f"{source.kind}:{source.slug}")
+    return DecompositionArtifact(
+        schema_version=schema_version,
+        source=source,
+        artifact=artifact_meta,
+        units=units,
+    )
+
+
+def artifact_storage_root(project_root: Path, slug: str) -> Path:
+    return project_root / "data" / "prose-decompositions" / slug
+
+
+def artifact_generation_relpath(artifact: DecompositionArtifact) -> Path:
+    return (
+        Path("data")
+        / "prose-decompositions"
+        / artifact.source.slug
+        / "generations"
+        / f"{artifact.artifact.artifact_id}.json"
+    )
+
+
+def artifact_unit_ref(artifact: DecompositionArtifact, unit: DecompositionUnit) -> str:
+    return f"annotation:{artifact_generation_relpath(artifact).as_posix()}#{unit.unit_id}"
+
+
+def compute_source_hash(path: Path) -> str:
+    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def normalize_text(value: str) -> str:
+    return _SPACE_RE.sub(" ", value.strip()).casefold()
+
+
+def source_span_fingerprint(
+    *,
+    source_ref: str,
+    locator: MarkdownLocator,
+    quote: Quote,
+) -> str:
+    payload = {
+        "source_ref": source_ref,
+        "locator_regime": locator.regime,
+        "heading_path": [normalize_text(part) for part in locator.heading_path],
+        "quote": {
+            "exact": normalize_text(quote.exact),
+            "prefix": normalize_text(quote.prefix),
+            "suffix": normalize_text(quote.suffix),
+        },
+    }
+    body = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+def _parse_source(raw: Any, *, project_root: Path) -> DecompositionSource:
+    if not isinstance(raw, dict):
+        raise DecompositionError("source must be an object")
+
+    kind = _required_string(raw, "source.kind")
+    if kind != SOURCE_KIND:
+        raise DecompositionError(f"source.kind must be {SOURCE_KIND!r}")
+
+    slug = _required_string(raw, "source.slug")
+    path_text = _required_string(raw, "source.path")
+    title = _required_string(raw, "source.title")
+    content_hash = _required_string(raw, "source.content_hash")
+    return DecompositionSource(
+        kind=kind,
+        slug=slug,
+        path=_resolve_source_path(path_text, project_root=project_root),
+        title=title,
+        content_hash=content_hash,
+    )
+
+
+def _parse_artifact_meta(raw: Any) -> DecompositionArtifactMeta:
+    if not isinstance(raw, dict):
+        raise DecompositionError("artifact must be an object")
+    return DecompositionArtifactMeta(
+        artifact_id=_required_string(raw, "artifact.id"),
+        generated_at=_required_string(raw, "artifact.generated_at"),
+        producer=_required_string(raw, "artifact.producer"),
+    )
+
+
+def _parse_units(raw: Any, *, source_ref: str) -> tuple[DecompositionUnit, ...]:
+    if not isinstance(raw, list):
+        raise DecompositionError("units must be an array")
+
+    seen_unit_ids: set[str] = set()
+    units: list[DecompositionUnit] = []
+    for idx, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise DecompositionError(f"unit[{idx}] must be an object")
+        unit_id = _required_string(item, f"unit[{idx}].unit_id")
+        if unit_id in seen_unit_ids:
+            raise DecompositionError(f"duplicate unit_id: {unit_id}")
+        seen_unit_ids.add(unit_id)
+
+        disposition = _required_string(item, f"unit[{idx}].disposition")
+        locator = _parse_locator(item.get("locator"), unit_index=idx)
+        if disposition == "candidate":
+            units.append(_parse_candidate_unit(item, unit_id=unit_id, locator=locator, source_ref=source_ref))
+        elif disposition == "skip":
+            units.append(_parse_skip_unit(item, unit_id=unit_id, locator=locator, source_ref=source_ref))
+        else:
+            raise DecompositionError(f"unit[{idx}].disposition must be 'candidate' or 'skip'")
+    return tuple(units)
+
+
+def _parse_candidate_unit(
+    item: dict[str, Any],
+    *,
+    unit_id: str,
+    locator: MarkdownLocator,
+    source_ref: str,
+) -> DecompositionUnit:
+    if locator.quote is not None:
+        raise DecompositionError("candidate unit must not carry locator.quote")
+    payload = item.get("payload")
+    try:
+        candidates = parse_candidates(json.dumps({"candidates": [payload]}))
+    except (CandidateError, TypeError) as exc:
+        raise DecompositionError(f"candidate unit payload must be a StatementCandidate: {exc}") from exc
+    candidate = candidates[0]
+    if not isinstance(candidate, StatementCandidate):
+        raise DecompositionError("candidate unit payload must be a StatementCandidate")
+
+    quote = Quote(exact=candidate.exact, prefix=candidate.prefix, suffix=candidate.suffix)
+    return DecompositionUnit(
+        unit_id=unit_id,
+        disposition="candidate",
+        locator=locator,
+        fingerprint=source_span_fingerprint(source_ref=source_ref, locator=locator, quote=quote),
+        candidate=candidate,
+    )
+
+
+def _parse_skip_unit(
+    item: dict[str, Any],
+    *,
+    unit_id: str,
+    locator: MarkdownLocator,
+    source_ref: str,
+) -> DecompositionUnit:
+    raw_reason = item.get("reason")
+    if not isinstance(raw_reason, dict):
+        raise DecompositionError("skip unit reason must be an object")
+    reason_code = _required_string(raw_reason, "reason.code")
+    if reason_code not in SKIP_REASON_CODES:
+        raise DecompositionError(f"unknown skip reason: {reason_code}")
+    reason_detail = raw_reason.get("detail", "")
+    if not isinstance(reason_detail, str):
+        raise DecompositionError("reason.detail must be a string")
+    if locator.quote is None:
+        raise DecompositionError("skip unit must carry locator.quote")
+
+    return DecompositionUnit(
+        unit_id=unit_id,
+        disposition="skip",
+        locator=locator,
+        fingerprint=source_span_fingerprint(source_ref=source_ref, locator=locator, quote=locator.quote),
+        reason_code=reason_code,
+        reason_detail=reason_detail,
+    )
+
+
+def _parse_locator(raw: Any, *, unit_index: int) -> MarkdownLocator:
+    if not isinstance(raw, dict):
+        raise DecompositionError(f"unit[{unit_index}].locator must be an object")
+
+    regime = _required_string(raw, f"unit[{unit_index}].locator.regime")
+    if regime not in LOCATOR_REGIMES:
+        raise DecompositionError(f"unknown locator regime: {regime}")
+
+    value = raw.get("value")
+    if not isinstance(value, list) or not value:
+        raise DecompositionError(f"unit[{unit_index}].locator.value must be a non-empty list")
+    heading_path = []
+    for part_idx, part in enumerate(value):
+        if not isinstance(part, str) or not part:
+            raise DecompositionError(f"unit[{unit_index}].locator.value[{part_idx}] must be a non-empty string")
+        heading_path.append(part)
+
+    quote = None
+    if "quote" in raw:
+        quote = _parse_quote(raw["quote"], field_name=f"unit[{unit_index}].locator.quote")
+    return MarkdownLocator(regime=regime, heading_path=tuple(heading_path), quote=quote)
+
+
+def _parse_quote(raw: Any, *, field_name: str) -> Quote:
+    if not isinstance(raw, dict):
+        raise DecompositionError(f"{field_name} must be an object")
+    exact = _required_string(raw, f"{field_name}.exact")
+    prefix = _optional_string(raw, f"{field_name}.prefix")
+    suffix = _optional_string(raw, f"{field_name}.suffix")
+    return Quote(exact=exact, prefix=prefix, suffix=suffix)
+
+
+def _required_string(raw: dict[str, Any], dotted_name: str) -> str:
+    key = dotted_name.rsplit(".", 1)[-1]
+    value = raw.get(key)
+    if not isinstance(value, str) or not value:
+        raise DecompositionError(f"{dotted_name} must be a non-empty string")
+    return value
+
+
+def _optional_string(raw: dict[str, Any], dotted_name: str) -> str:
+    key = dotted_name.rsplit(".", 1)[-1]
+    value = raw.get(key, "")
+    if not isinstance(value, str):
+        raise DecompositionError(f"{dotted_name} must be a string")
+    return value
+
+
+def _resolve_source_path(value: str, *, project_root: Path) -> Path:
+    if value.startswith("~/d/science"):
+        suffix = value.removeprefix("~/d/science").lstrip("/")
+        return project_root / suffix
+    return Path(value).expanduser()
