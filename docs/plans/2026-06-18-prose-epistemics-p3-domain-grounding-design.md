@@ -42,6 +42,12 @@ prose-source:<slug>
 P3 is framework-only. It proves the read path and artifact seam without running a
 natural-systems evidence campaign.
 
+This deliberately narrows the umbrella's original P3 row. The umbrella listed evidence-line
+authoring and domain-source ingestion as part of P3, but this design moves those content
+creation paths out of the framework phase and into the downstream campaign. P3 therefore
+may honestly report many `unpromoted`, `unbacked`, or `below_floor` rows at first; producing
+real belief inputs is separate follow-on work.
+
 ## 2. Decisions
 
 ### 2.1 Build the grounding core first
@@ -141,7 +147,8 @@ Responsibilities:
 - Accept proposition refs or graph URIs.
 - Validate the grounding floor against known belief magnitudes.
 - Resolve proposition refs through existing graph/entity URI conventions.
-- Read evidence via `collect_evidence_units(knowledge, provenance, [target])`.
+- Expand the target with the canonical evidence-target helper, then read evidence via
+  `collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(knowledge, target))`.
 - Compute belief via `aggregate_belief(units)`.
 - Return a typed `GroundingResult`.
 
@@ -175,6 +182,9 @@ Responsibilities:
 - Accept `prose-source:<slug>`.
 - Load the latest P2 artifact with `ProseDecompositionStore.load_latest(...)`.
 - Load the P2 index to read unit fingerprints, stale state, and `promoted_to`.
+- Join unit state to `promoted_to` by **fingerprint**. `unit_id` is artifact-local and
+  display-only; using it for cross-generation lookup would reintroduce the renumbering bug
+  P2's index design avoids.
 - Build one output row for each relevant latest or stale unit.
 - Call the grounding kernel for promoted proposition units.
 - Compute summary counts.
@@ -185,8 +195,8 @@ Unit classification:
 | P2 unit state | P3 status | Counted in current domain denominator? |
 |---|---|---|
 | candidate + `promoted_to` + belief >= floor | `grounded` | yes |
-| candidate + `promoted_to` + belief `fragile` | `below_floor` | yes |
-| candidate + `promoted_to` + belief `speculative` | `unbacked` | yes |
+| candidate + `promoted_to` + eligible evidence below floor | `below_floor` | yes |
+| candidate + `promoted_to` + no eligible support | `unbacked` | yes |
 | candidate + no `promoted_to` | `unpromoted` | yes |
 | skip | `skipped` with reason | no |
 | stale | `stale` | no |
@@ -240,7 +250,7 @@ Schema version 1:
     "current_candidate_units": 10,
     "promoted_units": 8,
     "grounded_units": 3,
-    "fragile_units": 2,
+    "below_floor_units": 2,
     "unbacked_units": 3,
     "unpromoted_units": 2,
     "skipped_units": 4,
@@ -277,8 +287,10 @@ Notes:
 
 - `generated_at` is metadata, not identity.
 - The artifact is a latest-state file, not an immutable generation.
+- The writer should avoid timestamp-only churn: either omit rewriting when the substantive
+  payload is unchanged or keep `generated_at` out of the diff-driving identity comparison.
 - `graph_path` should be project-relative.
-- `fragile_units` are below-floor units, not grounded units.
+- `below_floor_units` are evidence-present units below the configured floor.
 - Skip rows preserve the P2 skip reason.
 - Stale rows may be included for audit, but are excluded from current coverage metrics.
 
@@ -343,6 +355,8 @@ CLI:
 - `--format json` prints the payload shape.
 - `--write` persists the payload.
 - Bad source ref, missing graph, and missing decomposition produce clean CLI errors.
+- Graph loading turns `--graph knowledge/graph.trig` into the named `(knowledge, provenance)`
+  pair before calling the kernel; the kernel itself receives split graphs.
 
 Regression:
 
@@ -390,9 +404,12 @@ artifact is the right first contract.
 
 - Exact dataclass names and field names for `GroundingResult`.
 - Whether the CLI command is named `ground-prose`, `grounding-report`, or another
-  annotation-group verb.
+  annotation-group verb. `ground-prose-decomposition` is the naming-compatible option with
+  P2's `ingest-/check-/promote-prose-decomposition` family.
 - Whether stale rows are physically included in `units[]` or summarized from index state
   only. The logical status must exist either way.
 - Whether `support_units` and `dispute_units` count reduced units only or include a richer
   split of reduced/collapsed/excluded counts. The artifact should not hide excluded or
   diagnostic evidence, but the exact row shape can be settled in the plan.
+- The exact graph-loader helper, following the existing belief snapshot/store graph-loading
+  pattern rather than parsing ad hoc in the CLI.
