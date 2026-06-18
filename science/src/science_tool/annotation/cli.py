@@ -26,6 +26,13 @@ from science_tool.annotation.io import (
     write_sidecar,
 )
 from science_tool.annotation.model import Annotation, Body, IriBody, Sidecar, Status
+from science_tool.annotation.prose_decomposition import (
+    DecompositionError,
+    ProseDecompositionStore,
+    compute_source_hash,
+    parse_submitted_decomposition,
+)
+from science_tool.annotation.prose_source_entity import resolve_or_create_prose_source
 from science_tool.annotation.sources import LINT_SOURCES, SOURCES
 from science_tool.annotation.sources.marker_token import (
     MarkerTokenSource,
@@ -43,12 +50,72 @@ from science_tool.annotation.verify import (
     apply_supersessions,
     verify_path,
 )
+from science_tool.entities import EntityCommandError
 from science_tool.output import OUTPUT_FORMATS
 
 
 @click.group("annotate")
 def annotate_group() -> None:
     """Annotation-system tooling (W3C Web Annotation sidecars)."""
+
+
+@annotate_group.command("ingest-prose-decomposition")
+@click.argument("artifact_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--allow-changed", is_flag=True, default=False)
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def ingest_prose_decomposition_cmd(
+    artifact_path: Path,
+    root: Path | None,
+    allow_changed: bool,
+    fmt: str,
+) -> None:
+    """Ingest an offline internal-prose decomposition JSON artifact."""
+    project_root = (root or Path.cwd()).resolve()
+    try:
+        artifact = parse_submitted_decomposition(
+            artifact_path.read_text(encoding="utf-8"),
+            project_root=project_root,
+        )
+        current_hash = compute_source_hash(artifact.source.path)
+        if current_hash != artifact.source.content_hash and not allow_changed:
+            raise click.ClickException(
+                "content hash mismatch: "
+                f"artifact has {artifact.source.content_hash}; current source is {current_hash}"
+            )
+
+        source_resolution = resolve_or_create_prose_source(
+            project_root=project_root,
+            slug=artifact.source.slug,
+            title=artifact.source.title,
+            source_path=artifact.source.path,
+            content_hash=artifact.source.content_hash,
+            artifact_id=artifact.artifact.artifact_id,
+        )
+        report = ProseDecompositionStore(project_root).persist(artifact)
+    except (DecompositionError, EntityCommandError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if fmt == "json":
+        click.echo(
+            json.dumps(
+                {
+                    "source_ref": artifact.source_ref,
+                    "artifact_id": artifact.artifact.artifact_id,
+                    "stale": report.stale_fingerprints,
+                    "source_entity_created": source_resolution.created,
+                },
+                indent=2,
+            )
+        )
+        return
+
+    click.echo(
+        "ingested prose decomposition "
+        f"{report.artifact_id} for {artifact.source_ref} "
+        f"({len(artifact.units)} units; {len(report.stale_fingerprints)} stale; "
+        f"source_entity_created={source_resolution.created})"
+    )
 
 
 @annotate_group.command("verify")
