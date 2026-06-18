@@ -19,16 +19,18 @@ from science_tool.annotation import crud, query
 from science_tool.annotation.audit import audit_file, merge_planned
 from science_tool.annotation.io import (
     atomic_write_text,
-    markdown_for_sidecar,
     read_sidecar,
     serialize_sidecar,
     sidecar_for_markdown,
-    write_sidecar,
 )
+from science_tool.annotation.internal_prose_adapter import InternalProseAdapter
 from science_tool.annotation.model import Annotation, Body, IriBody, Sidecar, Status
 from science_tool.annotation.prose_decomposition import (
+    DecompositionArtifact,
     DecompositionError,
+    DecompositionUnit,
     ProseDecompositionStore,
+    Quote,
     compute_source_hash,
     parse_submitted_decomposition,
 )
@@ -116,6 +118,91 @@ def ingest_prose_decomposition_cmd(
         f"({len(artifact.units)} units; {len(report.stale_fingerprints)} stale; "
         f"source_entity_created={source_resolution.created})"
     )
+
+
+@annotate_group.command("check-prose-decomposition")
+@click.option("--source", "source_ref", required=True)
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def check_prose_decomposition_cmd(source_ref: str, root: Path | None, fmt: str) -> None:
+    """Check the latest internal-prose decomposition artifact."""
+    if not source_ref.startswith("prose-source:"):
+        raise click.ClickException("--source must use prose-source:<slug>")
+
+    slug = source_ref.split(":", 1)[1]
+    project_root = (root or Path.cwd()).resolve()
+    try:
+        store = ProseDecompositionStore(project_root)
+        index = store.load_index(slug)
+        artifact = store.load_latest(slug)
+        rows = _check_prose_decomposition_units(index=index, artifact=artifact)
+    except DecompositionError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if fmt == "json":
+        click.echo(
+            json.dumps(
+                {
+                    "source_ref": source_ref,
+                    "artifact_id": artifact.artifact.artifact_id,
+                    "units": rows,
+                },
+                indent=2,
+            )
+        )
+        return
+
+    click.echo(f"checked prose decomposition {artifact.artifact.artifact_id} for {source_ref}")
+    for row in rows:
+        message = f" - {row['message']}" if row["message"] else ""
+        click.echo(
+            f"  {row['unit_id']}: {row['status']} "
+            f"({row['locator_status']}; {row['fingerprint']}){message}"
+        )
+
+
+def _check_prose_decomposition_units(
+    *, index: dict[str, object], artifact: DecompositionArtifact
+) -> list[dict[str, object]]:
+    units_index = index.get("units")
+    if not isinstance(units_index, dict):
+        raise DecompositionError("prose decomposition index units must be an object")
+
+    adapter = InternalProseAdapter()
+    rows: list[dict[str, object]] = []
+    for unit in artifact.units:
+        index_row = units_index.get(unit.fingerprint)
+        if not isinstance(index_row, dict):
+            raise DecompositionError(f"prose decomposition index row must be an object: {unit.fingerprint}")
+
+        quote = _quote_for_decomposition_unit(unit)
+        resolution = adapter.resolve_unit(artifact.source.path, unit.locator, quote)
+        stale = bool(index_row.get("stale", False))
+        rows.append(
+            {
+                "unit_id": unit.unit_id,
+                "disposition": unit.disposition,
+                "status": "stale" if stale else unit.disposition,
+                "fingerprint": unit.fingerprint,
+                "locator_status": resolution.status.value,
+                "message": resolution.message,
+                "promoted_to": index_row.get("promoted_to"),
+                "stale": stale,
+            }
+        )
+    return rows
+
+
+def _quote_for_decomposition_unit(unit: DecompositionUnit) -> Quote:
+    if unit.disposition == "candidate":
+        if unit.candidate is None:
+            raise DecompositionError(f"candidate unit {unit.unit_id} is missing candidate payload")
+        return Quote(unit.candidate.exact, unit.candidate.prefix, unit.candidate.suffix)
+    if unit.disposition == "skip":
+        if unit.locator.quote is None:
+            raise DecompositionError(f"skip unit {unit.unit_id} is missing locator quote")
+        return unit.locator.quote
+    raise DecompositionError(f"unknown unit disposition: {unit.disposition}")
 
 
 @annotate_group.command("verify")
