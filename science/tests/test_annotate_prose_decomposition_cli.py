@@ -126,7 +126,7 @@ def test_check_reports_candidate(tmp_path):
     assert payload["units"][0]["stale"] is False
 
 
-def test_check_reports_ambiguous_heading_path(tmp_path):
+def test_check_reports_unresolved_when_repeated_heading_lacks_quote(tmp_path):
     source = _source(tmp_path)
     source.write_text("# A\n\n## Repeat\n\nOne.\n\n# B\n\n## Repeat\n\nTwo.\n", encoding="utf-8")
     path = _artifact_file(tmp_path)
@@ -145,7 +145,8 @@ def test_check_reports_ambiguous_heading_path(tmp_path):
     )
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["units"][0]["locator_status"] == "ambiguous"
+    assert payload["units"][0]["locator_status"] == "unresolved"
+    assert "quote not found" in payload["units"][0]["message"]
 
 
 def test_check_reports_stale_prior_units(tmp_path):
