@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,9 @@ from science_tool.graph.grounding import (
     ground_proposition,
     load_grounding_graphs,
 )
+
+
+_SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 
 
 class ProseGroundingError(ValueError):
@@ -230,7 +234,7 @@ def _source_slug(source_ref: str) -> str:
     if not isinstance(source_ref, str) or not source_ref.startswith("prose-source:"):
         raise ProseGroundingError(f"invalid prose source ref: {source_ref!r}")
     slug = source_ref.removeprefix("prose-source:")
-    if not slug:
+    if not _SLUG_RE.fullmatch(slug):
         raise ProseGroundingError(f"invalid prose source ref: {source_ref!r}")
     return slug
 

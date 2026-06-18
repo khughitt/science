@@ -11,7 +11,9 @@ from science_tool.annotation.prose_decomposition import (
 )
 from science_tool.annotation.prose_grounding import (
     ProseGroundingError,
+    ProseGroundingReport,
     build_prose_grounding_report,
+    write_prose_grounding_report,
 )
 from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
@@ -221,3 +223,27 @@ def test_build_prose_grounding_report_missing_promoted_proposition_fails(tmp_pat
             graph_path,
             generated_at="2026-06-18T13:00:00Z",
         )
+
+
+def test_write_prose_grounding_report_rejects_path_like_source_slug(tmp_path: Path):
+    report = ProseGroundingReport(
+        {
+            "schema_version": 1,
+            "source_ref": "prose-source:../escape",
+            "decomposition_artifact_id": "decomp-1",
+            "graph_path": "knowledge/graph.trig",
+            "generated_at": "2026-06-18T13:00:00Z",
+            "grounding_policy": {
+                "floor": "supported",
+                "belief_policy_id": DEFAULT_BELIEF_POLICY.policy_id,
+                "belief_policy_version": DEFAULT_BELIEF_POLICY.version,
+            },
+            "summary": {},
+            "units": [],
+        }
+    )
+
+    with pytest.raises(ProseGroundingError, match="invalid prose source ref"):
+        write_prose_grounding_report(tmp_path, report)
+
+    assert not (tmp_path / "data" / "escape" / "grounding.json").exists()
