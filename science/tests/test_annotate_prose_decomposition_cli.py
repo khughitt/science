@@ -5,6 +5,7 @@ import pytest
 from click.testing import CliRunner
 from rdflib import Dataset, Literal, RDF
 
+import science_tool.annotation.cli as annotation_cli
 from science_tool.annotation.cli import annotate_group
 from science_tool.annotation.prose_decomposition import ProseDecompositionStore, compute_source_hash
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
@@ -382,6 +383,31 @@ def test_ground_prose_decomposition_json_output(tmp_path):
     assert payload["units"][0]["status"] == "grounded"
 
 
+def test_ground_prose_decomposition_resolves_relative_graph_under_root(tmp_path):
+    _ingest_and_mark_promoted(tmp_path)
+    _write_grounding_graph(tmp_path, supports=2)
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "ground-prose-decomposition",
+            "--source",
+            "prose-source:example",
+            "--root",
+            str(tmp_path),
+            "--graph",
+            "knowledge/graph.trig",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["graph_path"] == "knowledge/graph.trig"
+    assert payload["summary"]["grounded_units"] == 1
+
+
 def test_ground_prose_decomposition_write_persists_artifact(tmp_path):
     _ingest_and_mark_promoted(tmp_path)
     graph_path = _write_grounding_graph(tmp_path, supports=2)
@@ -406,6 +432,42 @@ def test_ground_prose_decomposition_write_persists_artifact(tmp_path):
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["summary"]["grounded_units"] == 1
     assert "wrote prose grounding" in result.output
+
+
+def test_ground_prose_decomposition_table_requires_summary_keys(tmp_path, monkeypatch):
+    _write_grounding_graph(tmp_path, supports=0)
+
+    class Report:
+        def to_json(self):
+            return {
+                "source_ref": "prose-source:example",
+                "summary": {
+                    "below_floor_units": 0,
+                    "unbacked_units": 0,
+                    "unpromoted_units": 0,
+                    "skipped_units": 0,
+                    "stale_units": 0,
+                },
+                "units": [],
+            }
+
+    monkeypatch.setattr(annotation_cli, "build_prose_grounding_report", lambda *args, **kwargs: Report())
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "ground-prose-decomposition",
+            "--source",
+            "prose-source:example",
+            "--root",
+            str(tmp_path),
+            "--graph",
+            "knowledge/graph.trig",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "missing prose grounding summary key: grounded_units" in result.output
 
 
 def test_ground_prose_decomposition_rejects_bad_source_ref(tmp_path):

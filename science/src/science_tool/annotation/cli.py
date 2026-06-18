@@ -63,6 +63,16 @@ from science_tool.entities import EntityCommandError
 from science_tool.output import OUTPUT_FORMATS
 
 
+_GROUNDING_SUMMARY_KEYS = (
+    "grounded_units",
+    "below_floor_units",
+    "unbacked_units",
+    "unpromoted_units",
+    "skipped_units",
+    "stale_units",
+)
+
+
 @click.group("annotate")
 def annotate_group() -> None:
     """Annotation-system tooling (W3C Web Annotation sidecars)."""
@@ -267,20 +277,28 @@ def ground_prose_decomposition_cmd(
         click.echo(json.dumps(payload, indent=2, sort_keys=True))
         return
 
-    summary = payload["summary"]
-    if not isinstance(summary, dict):
-        raise click.ClickException("prose grounding report summary must be an object")
+    summary = _required_prose_grounding_summary(payload)
     click.echo(
         f"grounded prose decomposition for {source_ref}: "
-        f"grounded={summary.get('grounded_units', 0)} "
-        f"below_floor={summary.get('below_floor_units', 0)} "
-        f"unbacked={summary.get('unbacked_units', 0)} "
-        f"unpromoted={summary.get('unpromoted_units', 0)} "
-        f"skipped={summary.get('skipped_units', 0)} "
-        f"stale={summary.get('stale_units', 0)}"
+        f"grounded={summary['grounded_units']} "
+        f"below_floor={summary['below_floor_units']} "
+        f"unbacked={summary['unbacked_units']} "
+        f"unpromoted={summary['unpromoted_units']} "
+        f"skipped={summary['skipped_units']} "
+        f"stale={summary['stale_units']}"
     )
     if do_write:
         click.echo("wrote prose grounding artifact" if written else "unchanged prose grounding artifact")
+
+
+def _required_prose_grounding_summary(payload: dict[str, object]) -> dict[str, object]:
+    summary = payload.get("summary")
+    if not isinstance(summary, dict):
+        raise click.ClickException("prose grounding report summary must be an object")
+    for key in _GROUNDING_SUMMARY_KEYS:
+        if key not in summary:
+            raise click.ClickException(f"missing prose grounding summary key: {key}")
+    return summary
 
 
 def _check_prose_decomposition_units(
