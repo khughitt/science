@@ -34,6 +34,7 @@ from science_tool.annotation.prose_decomposition import (
     compute_source_hash,
     parse_submitted_decomposition,
 )
+from science_tool.annotation.prose_promote import ProsePromotionError, promote_prose_unit
 from science_tool.annotation.prose_source_entity import resolve_or_create_prose_source
 from science_tool.annotation.sources import LINT_SOURCES, SOURCES
 from science_tool.annotation.sources.marker_token import (
@@ -168,6 +169,49 @@ def check_prose_decomposition_cmd(source_ref: str, root: Path | None, fmt: str) 
             f"  {row['unit_id']}: {row['status']} "
             f"({row['locator_status']}; {row['fingerprint']}){message}"
         )
+
+
+@annotate_group.command("promote-prose-decomposition")
+@click.option("--source", "source_ref", required=True)
+@click.option("--unit", "unit_id", required=True)
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--apply", "do_apply", is_flag=True, default=False)
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def promote_prose_decomposition_cmd(
+    source_ref: str,
+    unit_id: str,
+    root: Path | None,
+    do_apply: bool,
+    fmt: str,
+) -> None:
+    """Promote one validated internal-prose decomposition candidate."""
+    project_root = (root or Path.cwd()).resolve()
+    try:
+        report = promote_prose_unit(
+            project_root=project_root,
+            source_ref=source_ref,
+            unit_id=unit_id,
+            apply=do_apply,
+        )
+    except (ProsePromotionError, DecompositionError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    payload = {
+        "minted": report.minted,
+        "linked": report.linked,
+        "skipped": dict(report.skipped),
+        "written": report.written_paths,
+    }
+    if fmt == "json":
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    skipped = ", ".join(f"{reason}={count}" for reason, count in sorted(report.skipped.items())) or "none"
+    mode = "applied" if do_apply else "planned"
+    click.echo(
+        f"{mode} prose promotion for {source_ref}#{unit_id}: "
+        f"minted={report.minted} linked={report.linked} skipped={skipped}"
+    )
 
 
 def _check_prose_decomposition_units(

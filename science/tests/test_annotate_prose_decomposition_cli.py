@@ -261,3 +261,57 @@ def test_check_rejects_invalid_source_ref(tmp_path, source_ref, message):
     )
     assert result.exit_code != 0
     assert message in result.output
+
+
+def test_promote_prose_decomposition_apply_mints(tmp_path):
+    ingest = CliRunner().invoke(
+        annotate_group,
+        ["ingest-prose-decomposition", str(_artifact_file(tmp_path)), "--root", str(tmp_path)],
+    )
+    assert ingest.exit_code == 0, ingest.output
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "promote-prose-decomposition",
+            "--source",
+            "prose-source:example",
+            "--unit",
+            "u001",
+            "--root",
+            str(tmp_path),
+            "--apply",
+            "--format",
+            "json",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["minted"] == 1
+    assert (tmp_path / "entities" / "propositions" / "basalt-flows-record-the-cooling-history.md").exists()
+
+
+def test_promote_prose_decomposition_rejects_unresolved_locator(tmp_path):
+    path = _artifact_file(tmp_path)
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["units"][0]["payload"]["exact"] = "Not present."
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    ingest = CliRunner().invoke(
+        annotate_group,
+        ["ingest-prose-decomposition", str(path), "--root", str(tmp_path)],
+    )
+    assert ingest.exit_code == 0, ingest.output
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "promote-prose-decomposition",
+            "--source",
+            "prose-source:example",
+            "--unit",
+            "u001",
+            "--root",
+            str(tmp_path),
+            "--apply",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "locator" in result.output
