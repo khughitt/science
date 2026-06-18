@@ -22,6 +22,16 @@ SKIP_REASON_CODES = frozenset(
     }
 )
 LOCATOR_REGIMES = frozenset({"markdown-heading-path", "markdown-heading-path-with-quote"})
+_TOP_LEVEL_KEYS = frozenset({"schema_version", "source", "artifact", "units"})
+_SOURCE_KEYS = frozenset({"kind", "slug", "path", "title", "content_hash"})
+_ARTIFACT_KEYS = frozenset({"id", "generated_at", "producer"})
+_CANDIDATE_UNIT_KEYS = frozenset({"unit_id", "disposition", "locator", "payload"})
+_SKIP_UNIT_KEYS = frozenset({"unit_id", "disposition", "locator", "reason"})
+_LOCATOR_KEYS = frozenset({"regime", "value", "quote"})
+_QUOTE_KEYS = frozenset({"exact", "prefix", "suffix"})
+_REASON_KEYS = frozenset({"code", "detail"})
+_SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
+_ID_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?$")
 
 
 class DecompositionError(ValueError):
@@ -91,6 +101,7 @@ def parse_submitted_decomposition(raw: str, *, project_root: Path) -> Decomposit
         raise DecompositionError(f"decomposition input is not valid JSON: {exc}") from exc
     if not isinstance(doc, dict):
         raise DecompositionError("decomposition input must be a JSON object")
+    _reject_unknown_keys(doc, allowed=_TOP_LEVEL_KEYS, label="top-level")
 
     schema_version = doc.get("schema_version")
     if schema_version != SUPPORTED_SCHEMA_VERSION:
@@ -156,12 +167,13 @@ def source_span_fingerprint(
 def _parse_source(raw: Any, *, project_root: Path) -> DecompositionSource:
     if not isinstance(raw, dict):
         raise DecompositionError("source must be an object")
+    _reject_unknown_keys(raw, allowed=_SOURCE_KEYS, label="source")
 
     kind = _required_string(raw, "source.kind")
     if kind != SOURCE_KIND:
         raise DecompositionError(f"source.kind must be {SOURCE_KIND!r}")
 
-    slug = _required_string(raw, "source.slug")
+    slug = _required_slug(raw, "source.slug")
     path_text = _required_string(raw, "source.path")
     title = _required_string(raw, "source.title")
     content_hash = _required_string(raw, "source.content_hash")
@@ -177,8 +189,9 @@ def _parse_source(raw: Any, *, project_root: Path) -> DecompositionSource:
 def _parse_artifact_meta(raw: Any) -> DecompositionArtifactMeta:
     if not isinstance(raw, dict):
         raise DecompositionError("artifact must be an object")
+    _reject_unknown_keys(raw, allowed=_ARTIFACT_KEYS, label="artifact")
     return DecompositionArtifactMeta(
-        artifact_id=_required_string(raw, "artifact.id"),
+        artifact_id=_required_identifier(raw, "artifact.id"),
         generated_at=_required_string(raw, "artifact.generated_at"),
         producer=_required_string(raw, "artifact.producer"),
     )
@@ -193,12 +206,19 @@ def _parse_units(raw: Any, *, source_ref: str) -> tuple[DecompositionUnit, ...]:
     for idx, item in enumerate(raw):
         if not isinstance(item, dict):
             raise DecompositionError(f"unit[{idx}] must be an object")
-        unit_id = _required_string(item, f"unit[{idx}].unit_id")
+        disposition = _required_string(item, f"unit[{idx}].disposition")
+        if disposition == "candidate":
+            _reject_unknown_keys(item, allowed=_CANDIDATE_UNIT_KEYS, label="unit")
+        elif disposition == "skip":
+            _reject_unknown_keys(item, allowed=_SKIP_UNIT_KEYS, label="unit")
+        else:
+            raise DecompositionError(f"unit[{idx}].disposition must be 'candidate' or 'skip'")
+
+        unit_id = _required_identifier(item, f"unit[{idx}].unit_id")
         if unit_id in seen_unit_ids:
             raise DecompositionError(f"duplicate unit_id: {unit_id}")
         seen_unit_ids.add(unit_id)
 
-        disposition = _required_string(item, f"unit[{idx}].disposition")
         locator = _parse_locator(item.get("locator"), unit_index=idx)
         if disposition == "candidate":
             units.append(_parse_candidate_unit(item, unit_id=unit_id, locator=locator, source_ref=source_ref))
@@ -216,6 +236,8 @@ def _parse_candidate_unit(
     locator: MarkdownLocator,
     source_ref: str,
 ) -> DecompositionUnit:
+    if locator.regime != "markdown-heading-path":
+        raise DecompositionError("candidate unit locator.regime must be 'markdown-heading-path'")
     if locator.quote is not None:
         raise DecompositionError("candidate unit must not carry locator.quote")
     payload = item.get("payload")
@@ -244,9 +266,12 @@ def _parse_skip_unit(
     locator: MarkdownLocator,
     source_ref: str,
 ) -> DecompositionUnit:
+    if locator.regime != "markdown-heading-path-with-quote":
+        raise DecompositionError("skip unit locator.regime must be 'markdown-heading-path-with-quote'")
     raw_reason = item.get("reason")
     if not isinstance(raw_reason, dict):
         raise DecompositionError("skip unit reason must be an object")
+    _reject_unknown_keys(raw_reason, allowed=_REASON_KEYS, label="reason")
     reason_code = _required_string(raw_reason, "reason.code")
     if reason_code not in SKIP_REASON_CODES:
         raise DecompositionError(f"unknown skip reason: {reason_code}")
@@ -269,6 +294,7 @@ def _parse_skip_unit(
 def _parse_locator(raw: Any, *, unit_index: int) -> MarkdownLocator:
     if not isinstance(raw, dict):
         raise DecompositionError(f"unit[{unit_index}].locator must be an object")
+    _reject_unknown_keys(raw, allowed=_LOCATOR_KEYS, label="locator")
 
     regime = _required_string(raw, f"unit[{unit_index}].locator.regime")
     if regime not in LOCATOR_REGIMES:
@@ -292,6 +318,7 @@ def _parse_locator(raw: Any, *, unit_index: int) -> MarkdownLocator:
 def _parse_quote(raw: Any, *, field_name: str) -> Quote:
     if not isinstance(raw, dict):
         raise DecompositionError(f"{field_name} must be an object")
+    _reject_unknown_keys(raw, allowed=_QUOTE_KEYS, label="quote")
     exact = _required_string(raw, f"{field_name}.exact")
     prefix = _optional_string(raw, f"{field_name}.prefix")
     suffix = _optional_string(raw, f"{field_name}.suffix")
@@ -314,8 +341,30 @@ def _optional_string(raw: dict[str, Any], dotted_name: str) -> str:
     return value
 
 
+def _required_slug(raw: dict[str, Any], dotted_name: str) -> str:
+    value = _required_string(raw, dotted_name)
+    if not _SLUG_RE.fullmatch(value):
+        raise DecompositionError(f"{dotted_name} must be a filesystem-safe lowercase slug")
+    return value
+
+
+def _required_identifier(raw: dict[str, Any], dotted_name: str) -> str:
+    value = _required_string(raw, dotted_name)
+    if not _ID_RE.fullmatch(value):
+        raise DecompositionError(f"{dotted_name} must be path and fragment safe")
+    return value
+
+
+def _reject_unknown_keys(raw: dict[str, Any], *, allowed: frozenset[str], label: str) -> None:
+    extra = set(raw) - allowed
+    if extra:
+        raise DecompositionError(f"unknown {label} keys: {sorted(extra)}")
+
+
 def _resolve_source_path(value: str, *, project_root: Path) -> Path:
-    if value.startswith("~/d/science"):
+    if value == "~/d/science":
+        return project_root
+    if value.startswith("~/d/science/"):
         suffix = value.removeprefix("~/d/science").lstrip("/")
         return project_root / suffix
     return Path(value).expanduser()

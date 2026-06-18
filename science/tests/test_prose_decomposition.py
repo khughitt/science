@@ -11,6 +11,10 @@ from science_tool.annotation.prose_decomposition import (
 
 
 def _artifact(tmp_path: Path, *, unit_id: str = "u001", heading=None, quote=None) -> dict:
+    if heading is None:
+        heading = ["Section"]
+    if quote is None:
+        quote = "Basalt flows record the cooling history."
     source = tmp_path / "docs" / "example.md"
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_text("# Section\n\nBasalt flows record the cooling history.\n", encoding="utf-8")
@@ -32,10 +36,10 @@ def _artifact(tmp_path: Path, *, unit_id: str = "u001", heading=None, quote=None
             {
                 "unit_id": unit_id,
                 "disposition": "candidate",
-                "locator": {"regime": "markdown-heading-path", "value": heading or ["Section"]},
+                "locator": {"regime": "markdown-heading-path", "value": heading},
                 "payload": {
                     "type": "proposition",
-                    "exact": quote or "Basalt flows record the cooling history.",
+                    "exact": quote,
                     "prefix": "",
                     "suffix": "",
                     "stance": "asserted",
@@ -97,6 +101,66 @@ def test_duplicate_unit_id_fails(tmp_path):
     raw["units"][1]["unit_id"] = "u001"
     with pytest.raises(DecompositionError, match="duplicate unit_id"):
         parse_submitted_decomposition(json.dumps(raw), project_root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "match"),
+    [
+        (lambda raw: raw.__setitem__("extra", True), "unknown top-level keys"),
+        (lambda raw: raw["source"].__setitem__("extra", True), "unknown source keys"),
+        (lambda raw: raw["artifact"].__setitem__("extra", True), "unknown artifact keys"),
+        (lambda raw: raw["units"][0].__setitem__("extra", True), "unknown unit keys"),
+        (lambda raw: raw["units"][0]["locator"].__setitem__("extra", True), "unknown locator keys"),
+        (lambda raw: raw["units"][1]["locator"]["quote"].__setitem__("extra", True), "unknown quote keys"),
+        (lambda raw: raw["units"][1]["reason"].__setitem__("extra", True), "unknown reason keys"),
+    ],
+)
+def test_unknown_keys_fail_closed_schema(tmp_path, mutate, match):
+    raw = _artifact(tmp_path)
+    mutate(raw)
+    with pytest.raises(DecompositionError, match=match):
+        parse_submitted_decomposition(json.dumps(raw), project_root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "match"),
+    [
+        ("source.slug", "../bad", "source.slug"),
+        ("artifact.id", "../bad", "artifact.id"),
+        ("unit_id", "u001#bad", "unit_id"),
+    ],
+)
+def test_path_and_fragment_identifiers_are_validated(tmp_path, field, value, match):
+    raw = _artifact(tmp_path)
+    if field == "source.slug":
+        raw["source"]["slug"] = value
+    elif field == "artifact.id":
+        raw["artifact"]["id"] = value
+    else:
+        raw["units"][0]["unit_id"] = value
+    with pytest.raises(DecompositionError, match=match):
+        parse_submitted_decomposition(json.dumps(raw), project_root=tmp_path)
+
+
+def test_candidate_must_use_heading_path_locator_regime(tmp_path):
+    raw = _artifact(tmp_path)
+    raw["units"][0]["locator"]["regime"] = "markdown-heading-path-with-quote"
+    with pytest.raises(DecompositionError, match="candidate unit locator.regime"):
+        parse_submitted_decomposition(json.dumps(raw), project_root=tmp_path)
+
+
+def test_skip_must_use_heading_path_with_quote_locator_regime(tmp_path):
+    raw = _artifact(tmp_path)
+    raw["units"][1]["locator"]["regime"] = "markdown-heading-path"
+    with pytest.raises(DecompositionError, match="skip unit locator.regime"):
+        parse_submitted_decomposition(json.dumps(raw), project_root=tmp_path)
+
+
+def test_d_science_path_rewrite_respects_path_boundary(tmp_path):
+    raw = _artifact(tmp_path)
+    raw["source"]["path"] = "~/d/science-old/foo.md"
+    artifact = parse_submitted_decomposition(json.dumps(raw), project_root=tmp_path)
+    assert artifact.source.path == Path("~/d/science-old/foo.md").expanduser()
 
 
 def test_fingerprint_ignores_artifact_local_unit_id(tmp_path):
