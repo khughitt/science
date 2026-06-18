@@ -58,6 +58,12 @@ class _MarkdownSection:
         return source_text[self.body_start : self.body_end]
 
 
+@dataclass(frozen=True)
+class _QuoteSearchResult:
+    exact_occurrences: int
+    context_matches: int
+
+
 def resolve_markdown_locator(source_md: Path, locator: MarkdownLocator, quote: Quote) -> LocatorResolution:
     if locator.regime not in _SUPPORTED_REGIMES:
         raise ValueError(f"unsupported markdown locator regime: {locator.regime}")
@@ -83,17 +89,18 @@ def resolve_markdown_locator(source_md: Path, locator: MarkdownLocator, quote: Q
         )
 
     if quote.exact:
-        quote_matches = [
-            section
-            for section in matching_sections
-            if quote.exact in section.body(source_text)
-        ]
-        if len(quote_matches) == 1:
+        quote_result = _search_quote_in_sections(source_text, matching_sections, quote)
+        if quote_result.context_matches == 1:
             return LocatorResolution(LocatorStatus.RESOLVED, text=quote.exact)
-        if len(quote_matches) > 1:
+        if quote_result.context_matches > 1:
             return LocatorResolution(
                 LocatorStatus.AMBIGUOUS,
-                message=f"quote found in multiple sections: {quote.exact}",
+                message=f"quote matched multiple occurrences: {quote.exact}",
+            )
+        if quote_result.exact_occurrences > 0:
+            return LocatorResolution(
+                LocatorStatus.UNRESOLVED,
+                message=f"quote context mismatch in matched section: {quote.exact}",
             )
         return LocatorResolution(
             LocatorStatus.UNRESOLVED,
@@ -107,6 +114,35 @@ def resolve_markdown_locator(source_md: Path, locator: MarkdownLocator, quote: Q
         )
 
     return LocatorResolution(LocatorStatus.RESOLVED, text=matching_sections[0].body(source_text).strip())
+
+
+def _search_quote_in_sections(
+    source_text: str,
+    sections: list[_MarkdownSection],
+    quote: Quote,
+) -> _QuoteSearchResult:
+    exact_occurrences = 0
+    context_matches = 0
+
+    for section in sections:
+        body = section.body(source_text)
+        start = body.find(quote.exact)
+        while start != -1:
+            exact_occurrences += 1
+            end = start + len(quote.exact)
+            if _quote_context_matches(body, start, end, quote):
+                context_matches += 1
+            start = body.find(quote.exact, start + 1)
+
+    return _QuoteSearchResult(exact_occurrences=exact_occurrences, context_matches=context_matches)
+
+
+def _quote_context_matches(body: str, start: int, end: int, quote: Quote) -> bool:
+    if quote.prefix and not body[:start].endswith(quote.prefix):
+        return False
+    if quote.suffix and not body[end:].startswith(quote.suffix):
+        return False
+    return True
 
 
 def _parse_markdown_sections(source_text: str) -> list[_MarkdownSection]:
