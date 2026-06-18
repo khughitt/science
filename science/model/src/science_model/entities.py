@@ -109,6 +109,7 @@ class EntityType(StrEnum):
     THEME = "theme"
     MECHANISM = "mechanism"
     PAPER = "paper"
+    PROSE_SOURCE = "prose-source"
     BOOK = "book"
     TALK = "talk"
     SEARCH = "search"
@@ -265,6 +266,7 @@ class Entity(BaseModel):
             "workflow-run",
             "data-package",
             "paper",
+            "prose-source",
             "book",
             "experiment",
             "code-file",

@@ -928,3 +928,26 @@ def test_cli_entity_list_include_hidden_flag(tmp_path: Path, monkeypatch: pytest
     shown = runner.invoke(main, ["entity", "list", "--include-hidden", "--format", "json"])
     assert shown.exit_code == 0, shown.output
     assert "interpretation:0002-old" in shown.output
+
+
+def test_create_prose_source_entity(tmp_path):
+    import yaml
+
+    from science_tool.entities import create_entity
+
+    result = create_entity(
+        project_root=tmp_path,
+        kind="prose-source",
+        title="Example Prose Source",
+        slug="example-prose-source",
+        no_hints=True,
+    )
+
+    path = tmp_path / "entities" / "prose-sources" / "example-prose-source.md"
+    assert result.entity_id == "prose-source:example-prose-source"
+    assert result.path == path
+    text = path.read_text(encoding="utf-8")
+    frontmatter = yaml.safe_load(text.split("---", 2)[1])
+    assert frontmatter["id"] == "prose-source:example-prose-source"
+    assert frontmatter["type"] == "prose-source"
+    assert frontmatter["status"] == "active"

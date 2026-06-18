@@ -59,6 +59,7 @@ INTENDED_ADDITIONS = frozenset(
         "patch-definition",
         "decision",
         "claim-registry",
+        "prose-source",
         "unknown",
     }
 )
