@@ -148,15 +148,18 @@ class ProseDecompositionStore:
         self.project_root = project_root.resolve()
 
     def source_dir(self, slug: str) -> Path:
+        slug = _validate_store_slug(slug)
         return artifact_storage_root(self.project_root, slug)
 
     def generation_path(self, artifact: DecompositionArtifact) -> Path:
         return self.project_root / artifact_generation_relpath(artifact)
 
     def index_path(self, slug: str) -> Path:
+        slug = _validate_store_slug(slug)
         return self.source_dir(slug) / "index.json"
 
     def load_index(self, slug: str) -> dict[str, Any]:
+        slug = _validate_store_slug(slug)
         path = self.index_path(slug)
         if not path.exists():
             return {
@@ -202,6 +205,7 @@ class ProseDecompositionStore:
         return StorePersistReport(source_slug=slug, artifact_id=artifact_id, stale_fingerprints=stale_fingerprints)
 
     def record_promotion(self, source_slug: str, fingerprint: str, promoted_to: str) -> None:
+        source_slug = _validate_store_slug(source_slug)
         state = self.load_index(source_slug)
         if fingerprint not in state["units"]:
             raise DecompositionError(f"unknown decomposition unit fingerprint: {fingerprint}")
@@ -209,10 +213,14 @@ class ProseDecompositionStore:
         _atomic_write_json(self.index_path(source_slug), state)
 
     def load_latest(self, slug: str) -> DecompositionArtifact:
+        slug = _validate_store_slug(slug)
         index = self.load_index(slug)
+        if not isinstance(index, dict):
+            raise DecompositionError(f"prose decomposition index must be an object for source slug: {slug}")
         artifact_id = index.get("latest_artifact_id")
         if not isinstance(artifact_id, str) or not artifact_id:
             raise DecompositionError(f"missing latest decomposition artifact for source slug: {slug}")
+        artifact_id = _validate_store_artifact_id(artifact_id)
         path = self.source_dir(slug) / "generations" / f"{artifact_id}.json"
         if not path.exists():
             raise DecompositionError(f"latest prose decomposition generation is missing: {path}")
@@ -436,6 +444,18 @@ def _required_identifier(raw: dict[str, Any], dotted_name: str) -> str:
     if not _ID_RE.fullmatch(value):
         raise DecompositionError(f"{dotted_name} must be path and fragment safe")
     return value
+
+
+def _validate_store_slug(slug: str) -> str:
+    if not isinstance(slug, str) or not _SLUG_RE.fullmatch(slug):
+        raise DecompositionError("store source slug must be filesystem-safe lowercase slug")
+    return slug
+
+
+def _validate_store_artifact_id(artifact_id: str) -> str:
+    if not _ID_RE.fullmatch(artifact_id):
+        raise DecompositionError("latest decomposition artifact id must be path and fragment safe")
+    return artifact_id
 
 
 def _reject_unknown_keys(raw: dict[str, Any], *, allowed: frozenset[str], label: str) -> None:

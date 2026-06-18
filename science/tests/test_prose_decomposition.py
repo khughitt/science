@@ -181,10 +181,21 @@ def test_store_persists_generation_and_index(tmp_path):
     artifact = parse_submitted_decomposition(json.dumps(_artifact(tmp_path)), project_root=tmp_path)
     store = ProseDecompositionStore(tmp_path)
     report = store.persist(artifact)
+    index_path = tmp_path / "data" / "prose-decompositions" / "example" / "index.json"
     assert report.artifact_id == "decomp-1"
     assert report.stale_fingerprints == []
     assert (tmp_path / "data" / "prose-decompositions" / "example" / "generations" / "decomp-1.json").exists()
-    assert (tmp_path / "data" / "prose-decompositions" / "example" / "index.json").exists()
+    assert index_path.exists()
+    state = json.loads(index_path.read_text(encoding="utf-8"))
+    assert state["source_ref"] == "prose-source:example"
+    assert state["artifacts"] == ["decomp-1"]
+    assert state["latest_artifact_id"] == "decomp-1"
+    row = state["units"][artifact.units[0].fingerprint]
+    assert row["latest_unit_id"] == "u001"
+    assert row["latest_artifact_id"] == "decomp-1"
+    assert row["latest_disposition"] == "candidate"
+    assert row["artifact_unit_ref"] == artifact_unit_ref(artifact, artifact.units[0])
+    assert row["stale"] is False
 
 
 def test_store_marks_missing_fingerprint_stale(tmp_path):
@@ -196,6 +207,9 @@ def test_store_marks_missing_fingerprint_stale(tmp_path):
     store.persist(first)
     report = store.persist(second)
     assert len(report.stale_fingerprints) == 1
+    state = store.load_index("example")
+    assert state["units"][first.units[0].fingerprint]["stale"] is True
+    assert state["units"][second.units[0].fingerprint]["stale"] is False
 
 
 def test_store_preserves_promoted_link_across_unit_renumber(tmp_path):
@@ -231,4 +245,59 @@ def test_store_load_latest_fails_loudly_when_index_lacks_latest_artifact(tmp_pat
         encoding="utf-8",
     )
     with pytest.raises(DecompositionError, match="missing latest decomposition artifact"):
+        store.load_latest("example")
+
+
+def test_store_rejects_invalid_slug_before_path_construction(tmp_path):
+    store = ProseDecompositionStore(tmp_path)
+    with pytest.raises(DecompositionError, match="store source slug"):
+        store.load_index("../escape")
+    assert not (tmp_path / "data" / "escape").exists()
+
+
+def test_store_load_latest_rejects_malformed_index_artifact_id(tmp_path):
+    store = ProseDecompositionStore(tmp_path)
+    index_path = store.index_path("example")
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    index_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "source_ref": "prose-source:example",
+                "latest_artifact_id": "../escape",
+                "artifacts": ["../escape"],
+                "units": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(DecompositionError, match="latest decomposition artifact id"):
+        store.load_latest("example")
+
+
+def test_store_record_promotion_unknown_fingerprint_fails(tmp_path):
+    artifact = parse_submitted_decomposition(json.dumps(_artifact(tmp_path)), project_root=tmp_path)
+    store = ProseDecompositionStore(tmp_path)
+    store.persist(artifact)
+    with pytest.raises(DecompositionError, match="unknown decomposition unit fingerprint"):
+        store.record_promotion(source_slug="example", fingerprint="missing", promoted_to="proposition:x")
+
+
+def test_store_load_latest_missing_generation_fails(tmp_path):
+    store = ProseDecompositionStore(tmp_path)
+    index_path = store.index_path("example")
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    index_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "source_ref": "prose-source:example",
+                "latest_artifact_id": "decomp-1",
+                "artifacts": ["decomp-1"],
+                "units": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(DecompositionError, match="latest prose decomposition generation is missing"):
         store.load_latest("example")
