@@ -98,6 +98,24 @@ If a newer artifact for the same `prose-source` no longer contains a prior unit,
 unit is marked stale or missing in the artifact-tracking layer. P2 must not auto-retire
 propositions, delete provenance, or rewrite old artifact content.
 
+`unit_id` is artifact-local and must not be used as the cross-generation identity key.
+Offline decomposition can renumber units between runs, so re-ingest compares units by a
+stable source-span fingerprint:
+
+- `source_ref`
+- locator regime
+- normalized Markdown heading path
+- normalized quote, using candidate `payload.exact` / `payload.prefix` /
+  `payload.suffix` for candidate units and locator quote fields for skip units
+
+For unpromoted units, that fingerprint is the cross-generation match key. For promoted
+units, the artifact state also stores the minted proposition ref; stale marks attach to
+that proposition-linked source-unit relation. A latest unit with the same fingerprint
+carries the prior promotion link forward even if its artifact-local `unit_id` changed. If a
+future phase adds explicit proposition reconciliation during ingest, an explicit match to
+the same proposition ref may supersede the fingerprint, but P2 should not depend on live
+semantic reconciliation.
+
 The source-level `content_hash` is a whole-document freshness fingerprint, not a span
 anchoring mechanism. It answers "was this decomposition produced against the current
 Markdown?" and does not resurrect the offset/re-anchoring stack ruled out by the umbrella.
@@ -303,6 +321,11 @@ Supported P2 locator regimes:
   `StatementCandidate` payload; candidate units use `payload.exact` / `payload.prefix` /
   `payload.suffix` as their within-section quote.
 
+Heading paths are not assumed globally unique. If a section-only `markdown-heading-path`
+locator resolves to multiple sections, check should report it as an unresolved or
+ambiguous locator and promotion should reject that unit until the artifact includes enough
+quote context to disambiguate it.
+
 The implementation plan may refine names if existing code has a stronger local naming
 pattern, but P2 should not add offset-based selectors for internal Markdown.
 
@@ -354,8 +377,8 @@ Ingest should:
 - Compute or verify the Markdown content hash as a whole-source freshness check.
 - Resolve or create `prose-source:<slug>`.
 - Persist a new artifact generation.
-- Compare prior unit identities for the same source with the new artifact and record
-  missing prior units as stale.
+- Compare prior source-span fingerprints for the same source with the new artifact and
+  record missing prior units as stale.
 
 Ingest should validate fully before writing. The safe write invariant is:
 validate artifact and source first, mint-or-link the source entity as an idempotent upsert,
@@ -372,6 +395,7 @@ Check should:
 - Report skip records with reasons.
 - Report stale units.
 - Report unresolved locators, quote mismatches, and invalid payloads.
+- Treat ambiguous section-only heading paths as unresolved locator findings.
 
 The old offset/hash source-change check is not meaningful for the regenerable locator
 regime. P2 must add a regime-appropriate check path instead of forcing internal prose
@@ -413,11 +437,12 @@ Hard failures:
 - Candidate payload cannot be parsed as the expected statement-candidate shape.
 - Attempting to promote a non-candidate unit.
 - Attempting to promote a stale unit.
-- Attempting to promote a unit whose locator no longer resolves.
+- Attempting to promote a unit whose locator no longer resolves or resolves ambiguously.
 
 Check/report findings:
 
 - Locator cannot resolve to Markdown text.
+- Locator resolves to multiple Markdown sections.
 - Quote text differs from located source text.
 - Earlier artifact unit is missing from the latest artifact.
 - Candidate is structurally valid but missing optional review-quality metadata.
@@ -441,7 +466,10 @@ Core tests:
 - `InternalProseAdapter` resolves supported Markdown locators.
 - Ingest auto creates a missing `prose-source:<slug>`.
 - Ingest links an existing `prose-source:<slug>` without overwriting curated metadata.
+- Re-ingest ignores artifact-local `unit_id` changes when the source-span fingerprint is
+  unchanged.
 - Check reports candidate, skip, stale, and unresolved units.
+- Check reports ambiguous section-only heading paths as unresolved locator findings.
 - Promote accepts only valid candidate units.
 - Promote records provenance to `prose-source:<slug>` plus artifact/unit identity.
 - Re-ingest marks missing previous units stale without retiring propositions or rewriting
