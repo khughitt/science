@@ -241,7 +241,15 @@ def test_store_load_latest_fails_loudly_when_index_lacks_latest_artifact(tmp_pat
     index_path = store.index_path("example")
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text(
-        json.dumps({"schema_version": 1, "source_ref": "prose-source:example", "artifacts": [], "units": {}}),
+        json.dumps(
+            {
+                "schema_version": 1,
+                "source_ref": "prose-source:example",
+                "latest_artifact_id": "",
+                "artifacts": [],
+                "units": {},
+            }
+        ),
         encoding="utf-8",
     )
     with pytest.raises(DecompositionError, match="missing latest decomposition artifact"):
@@ -253,6 +261,40 @@ def test_store_rejects_invalid_slug_before_path_construction(tmp_path):
     with pytest.raises(DecompositionError, match="store source slug"):
         store.load_index("../escape")
     assert not (tmp_path / "data" / "escape").exists()
+
+
+def test_store_load_index_rejects_invalid_json(tmp_path):
+    store = ProseDecompositionStore(tmp_path)
+    index_path = store.index_path("example")
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    index_path.write_text("{not-json", encoding="utf-8")
+    with pytest.raises(DecompositionError, match="invalid prose decomposition index JSON"):
+        store.load_index("example")
+
+
+@pytest.mark.parametrize(
+    ("state", "match"),
+    [
+        ([], "must be an object"),
+        ({"schema_version": 2, "source_ref": "prose-source:example", "latest_artifact_id": "", "artifacts": [], "units": {}}, "schema_version"),
+        ({"schema_version": 1, "source_ref": "prose-source:example", "artifacts": [], "units": {}}, "latest_artifact_id"),
+        ({"schema_version": 1, "source_ref": 7, "latest_artifact_id": "", "artifacts": [], "units": {}}, "source_ref"),
+        ({"schema_version": 1, "source_ref": "prose-source:example", "latest_artifact_id": None, "artifacts": [], "units": {}}, "latest_artifact_id"),
+        ({"schema_version": 1, "source_ref": "prose-source:example", "latest_artifact_id": "", "artifacts": ["decomp-1", 2], "units": {}}, "artifacts"),
+        ({"schema_version": 1, "source_ref": "prose-source:example", "latest_artifact_id": "", "artifacts": [], "units": []}, "units"),
+        ({"schema_version": 1, "source_ref": "prose-source:example", "latest_artifact_id": "", "artifacts": [], "units": {"abc": []}}, "unit row"),
+        ({"schema_version": 1, "source_ref": "prose-source:example", "latest_artifact_id": "", "artifacts": [], "units": {"abc": {"stale": "false"}}}, "stale"),
+        ({"schema_version": 1, "source_ref": "prose-source:example", "latest_artifact_id": "", "artifacts": [], "units": {"abc": {"latest_unit_id": 7}}}, "latest_unit_id"),
+        ({"schema_version": 1, "source_ref": "prose-source:example", "latest_artifact_id": "", "artifacts": [], "units": {"abc": {"promoted_to": 7}}}, "promoted_to"),
+    ],
+)
+def test_store_load_index_rejects_malformed_shape(tmp_path, state, match):
+    store = ProseDecompositionStore(tmp_path)
+    index_path = store.index_path("example")
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    index_path.write_text(json.dumps(state), encoding="utf-8")
+    with pytest.raises(DecompositionError, match=match):
+        store.load_index("example")
 
 
 def test_store_load_latest_rejects_malformed_index_artifact_id(tmp_path):

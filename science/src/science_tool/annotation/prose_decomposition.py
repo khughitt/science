@@ -169,7 +169,11 @@ class ProseDecompositionStore:
                 "artifacts": [],
                 "units": {},
             }
-        return json.loads(path.read_text(encoding="utf-8"))
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise DecompositionError(f"invalid prose decomposition index JSON: {path}: {exc}") from exc
+        return _validate_store_index(state, path=path)
 
     def persist(self, artifact: DecompositionArtifact) -> StorePersistReport:
         slug = artifact.source.slug
@@ -456,6 +460,46 @@ def _validate_store_artifact_id(artifact_id: str) -> str:
     if not _ID_RE.fullmatch(artifact_id):
         raise DecompositionError("latest decomposition artifact id must be path and fragment safe")
     return artifact_id
+
+
+def _validate_store_index(state: Any, *, path: Path) -> dict[str, Any]:
+    if not isinstance(state, dict):
+        raise DecompositionError(f"prose decomposition index must be an object: {path}")
+    if state.get("schema_version") != 1:
+        raise DecompositionError(f"prose decomposition index schema_version must be 1: {path}")
+    if not isinstance(state.get("source_ref"), str):
+        raise DecompositionError(f"prose decomposition index source_ref must be a string: {path}")
+    if not isinstance(state.get("latest_artifact_id"), str):
+        raise DecompositionError(f"prose decomposition index latest_artifact_id must be a string: {path}")
+
+    artifacts = state.get("artifacts")
+    if not isinstance(artifacts, list) or not all(isinstance(item, str) for item in artifacts):
+        raise DecompositionError(f"prose decomposition index artifacts must be a list of strings: {path}")
+
+    units = state.get("units")
+    if not isinstance(units, dict):
+        raise DecompositionError(f"prose decomposition index units must be an object: {path}")
+    for fingerprint, row in units.items():
+        if not isinstance(fingerprint, str):
+            raise DecompositionError(f"prose decomposition index unit fingerprint must be a string: {path}")
+        if not isinstance(row, dict):
+            raise DecompositionError(f"prose decomposition index unit row must be an object: {fingerprint}")
+        _validate_store_index_unit_row(row, fingerprint=fingerprint)
+    return state
+
+
+def _validate_store_index_unit_row(row: dict[str, Any], *, fingerprint: str) -> None:
+    stale = row.get("stale")
+    if "stale" in row and not isinstance(stale, bool):
+        raise DecompositionError(f"prose decomposition index stale must be a bool: {fingerprint}")
+
+    for key in ("latest_unit_id", "latest_artifact_id", "latest_disposition", "artifact_unit_ref"):
+        if key in row and not isinstance(row[key], str):
+            raise DecompositionError(f"prose decomposition index {key} must be a string: {fingerprint}")
+
+    promoted_to = row.get("promoted_to")
+    if promoted_to is not None and not isinstance(promoted_to, str):
+        raise DecompositionError(f"prose decomposition index promoted_to must be null or a string: {fingerprint}")
 
 
 def _reject_unknown_keys(raw: dict[str, Any], *, allowed: frozenset[str], label: str) -> None:

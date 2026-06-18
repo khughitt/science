@@ -130,6 +130,8 @@ def check_prose_decomposition_cmd(source_ref: str, root: Path | None, fmt: str) 
         raise click.ClickException("--source must use prose-source:<slug>")
 
     slug = source_ref.split(":", 1)[1]
+    if not slug:
+        raise click.ClickException("source slug must not be empty")
     project_root = (root or Path.cwd()).resolve()
     try:
         store = ProseDecompositionStore(project_root)
@@ -154,7 +156,14 @@ def check_prose_decomposition_cmd(source_ref: str, root: Path | None, fmt: str) 
 
     click.echo(f"checked prose decomposition {artifact.artifact.artifact_id} for {source_ref}")
     for row in rows:
-        message = f" - {row['message']}" if row["message"] else ""
+        detail = []
+        if row["stale"]:
+            detail.append("stale")
+        if row["promoted_to"]:
+            detail.append(f"promoted_to={row['promoted_to']}")
+        if row["message"]:
+            detail.append(str(row["message"]))
+        message = f" - {'; '.join(detail)}" if detail else ""
         click.echo(
             f"  {row['unit_id']}: {row['status']} "
             f"({row['locator_status']}; {row['fingerprint']}){message}"
@@ -170,6 +179,7 @@ def _check_prose_decomposition_units(
 
     adapter = InternalProseAdapter()
     rows: list[dict[str, object]] = []
+    current_fingerprints = {unit.fingerprint for unit in artifact.units}
     for unit in artifact.units:
         index_row = units_index.get(unit.fingerprint)
         if not isinstance(index_row, dict):
@@ -177,7 +187,9 @@ def _check_prose_decomposition_units(
 
         quote = _quote_for_decomposition_unit(unit)
         resolution = adapter.resolve_unit(artifact.source.path, unit.locator, quote)
-        stale = bool(index_row.get("stale", False))
+        stale = index_row.get("stale", False)
+        if not isinstance(stale, bool):
+            raise DecompositionError(f"prose decomposition index stale must be a bool: {unit.fingerprint}")
         rows.append(
             {
                 "unit_id": unit.unit_id,
@@ -190,7 +202,31 @@ def _check_prose_decomposition_units(
                 "stale": stale,
             }
         )
+    for fingerprint, index_row in units_index.items():
+        if fingerprint in current_fingerprints:
+            continue
+        if not isinstance(index_row, dict):
+            raise DecompositionError(f"prose decomposition index row must be an object: {fingerprint}")
+        stale = index_row.get("stale", False)
+        if stale is True:
+            rows.append(_stale_prose_decomposition_check_row(fingerprint, index_row))
     return rows
+
+
+def _stale_prose_decomposition_check_row(
+    fingerprint: str,
+    index_row: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "unit_id": index_row.get("latest_unit_id", ""),
+        "disposition": index_row.get("latest_disposition", ""),
+        "status": "stale",
+        "fingerprint": fingerprint,
+        "locator_status": "stale",
+        "message": "unit is stale in latest decomposition",
+        "promoted_to": index_row.get("promoted_to"),
+        "stale": True,
+    }
 
 
 def _quote_for_decomposition_unit(unit: DecompositionUnit) -> Quote:
