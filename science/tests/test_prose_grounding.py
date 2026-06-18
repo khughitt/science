@@ -13,6 +13,7 @@ from science_tool.annotation.prose_grounding import (
     ProseGroundingError,
     ProseGroundingReport,
     build_prose_grounding_report,
+    prose_grounding_path,
     write_prose_grounding_report,
 )
 from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
@@ -211,6 +212,67 @@ def test_build_prose_grounding_report_classifies_unpromoted_candidate(tmp_path: 
     assert candidate["proposition_ref"] is None
 
 
+def test_build_prose_grounding_report_rejects_invalid_floor_without_promotions(tmp_path: Path):
+    _persist_artifact(tmp_path, _artifact_payload(tmp_path))
+    graph_path = _write_graph(tmp_path, supports=2)
+
+    with pytest.raises(ProseGroundingError, match="unknown grounding floor"):
+        build_prose_grounding_report(
+            tmp_path,
+            "prose-source:example",
+            graph_path,
+            generated_at="2026-06-18T13:00:00Z",
+            floor="confident",
+        )
+
+
+def test_build_prose_grounding_report_rejects_missing_current_index_row(tmp_path: Path):
+    artifact, store = _persist_artifact(tmp_path, _artifact_payload(tmp_path))
+    index_path = store.index_path("example")
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    del index["units"][artifact.units[0].fingerprint]
+    index_path.write_text(json.dumps(index), encoding="utf-8")
+    graph_path = _write_graph(tmp_path, supports=2)
+
+    with pytest.raises(ProseGroundingError, match="missing current decomposition index row"):
+        build_prose_grounding_report(
+            tmp_path,
+            "prose-source:example",
+            graph_path,
+            generated_at="2026-06-18T13:00:00Z",
+        )
+
+
+def test_build_prose_grounding_report_emits_stale_rows_without_counting_current_units(tmp_path: Path):
+    first, store = _persist_artifact(tmp_path, _artifact_payload(tmp_path))
+    store.record_promotion("example", first.units[0].fingerprint, "proposition:basalt-cooling")
+    second, _store = _persist_artifact(
+        tmp_path,
+        _artifact_payload(
+            tmp_path,
+            artifact_id="decomp-2",
+            quote="A different basalt claim is present.",
+        ),
+    )
+    graph_path = _write_graph(tmp_path, supports=2)
+
+    report = build_prose_grounding_report(
+        tmp_path,
+        "prose-source:example",
+        graph_path,
+        generated_at="2026-06-18T13:00:00Z",
+    ).to_json()
+
+    stale_rows = [row for row in report["units"] if row["status"] == "stale"]
+    assert len(stale_rows) == 1
+    assert stale_rows[0]["fingerprint"] == first.units[0].fingerprint
+    assert stale_rows[0]["grounding"] is None
+    assert report["summary"]["stale_units"] == 1
+    assert report["summary"]["current_candidate_units"] == 1
+    assert report["summary"]["grounded_units"] == 0
+    assert report["units"][0]["fingerprint"] == second.units[0].fingerprint
+
+
 def test_build_prose_grounding_report_missing_promoted_proposition_fails(tmp_path: Path):
     artifact, store = _persist_artifact(tmp_path, _artifact_payload(tmp_path))
     store.record_promotion("example", artifact.units[0].fingerprint, "proposition:missing")
@@ -247,3 +309,58 @@ def test_write_prose_grounding_report_rejects_path_like_source_slug(tmp_path: Pa
         write_prose_grounding_report(tmp_path, report)
 
     assert not (tmp_path / "data" / "escape" / "grounding.json").exists()
+
+
+def test_prose_grounding_path_rejects_path_like_slug(tmp_path: Path):
+    with pytest.raises(ProseGroundingError, match="invalid prose source slug"):
+        prose_grounding_path(tmp_path, "../escape")
+
+
+def test_write_prose_grounding_report_writes_canonical_json(tmp_path: Path):
+    report = ProseGroundingReport(
+        {
+            "schema_version": 1,
+            "source_ref": "prose-source:example",
+            "decomposition_artifact_id": "decomp-1",
+            "graph_path": "knowledge/graph.trig",
+            "generated_at": "2026-06-18T13:00:00Z",
+            "grounding_policy": {
+                "floor": "supported",
+                "belief_policy_id": DEFAULT_BELIEF_POLICY.policy_id,
+                "belief_policy_version": DEFAULT_BELIEF_POLICY.version,
+            },
+            "summary": {"grounded_units": 0},
+            "units": [],
+        }
+    )
+
+    assert write_prose_grounding_report(tmp_path, report) is True
+
+    path = tmp_path / "data" / "prose-grounding" / "example" / "grounding.json"
+    assert json.loads(path.read_text(encoding="utf-8")) == report.to_json()
+
+
+def test_write_prose_grounding_report_skips_timestamp_only_rewrite(tmp_path: Path):
+    payload = {
+        "schema_version": 1,
+        "source_ref": "prose-source:example",
+        "decomposition_artifact_id": "decomp-1",
+        "graph_path": "knowledge/graph.trig",
+        "generated_at": "2026-06-18T13:00:00Z",
+        "grounding_policy": {
+            "floor": "supported",
+            "belief_policy_id": DEFAULT_BELIEF_POLICY.policy_id,
+            "belief_policy_version": DEFAULT_BELIEF_POLICY.version,
+        },
+        "summary": {"grounded_units": 0},
+        "units": [],
+    }
+    first = ProseGroundingReport(payload)
+    second = ProseGroundingReport({**payload, "generated_at": "2026-06-18T14:00:00Z"})
+    path = tmp_path / "data" / "prose-grounding" / "example" / "grounding.json"
+
+    assert write_prose_grounding_report(tmp_path, first) is True
+    first_text = path.read_text(encoding="utf-8")
+    assert write_prose_grounding_report(tmp_path, second) is False
+
+    assert path.read_text(encoding="utf-8") == first_text

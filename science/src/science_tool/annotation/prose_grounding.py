@@ -14,6 +14,7 @@ from science_tool.annotation.prose_decomposition import (
     ProseDecompositionStore,
     artifact_unit_ref,
 )
+from science_tool.graph.belief import BeliefMagnitude
 from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
 from science_tool.graph.grounding import (
     DEFAULT_GROUNDING_FLOOR,
@@ -41,7 +42,7 @@ class ProseGroundingReport:
 
 
 def prose_grounding_path(project_root: Path, source_slug: str) -> Path:
-    return project_root / "data" / "prose-grounding" / source_slug / "grounding.json"
+    return project_root / "data" / "prose-grounding" / _validate_source_slug(source_slug) / "grounding.json"
 
 
 def build_prose_grounding_report(
@@ -54,6 +55,10 @@ def build_prose_grounding_report(
     project_root = Path(project_root)
     graph_path = Path(graph_path)
     slug = _source_slug(source_ref)
+    try:
+        floor = BeliefMagnitude(floor).value
+    except ValueError as exc:
+        raise ProseGroundingError(f"unknown grounding floor: {floor}") from exc
     store = ProseDecompositionStore(project_root)
     try:
         artifact = store.load_latest(slug)
@@ -70,10 +75,12 @@ def build_prose_grounding_report(
     grounding_results: list[GroundingResult] = []
     current_fingerprints = {unit.fingerprint for unit in artifact.units}
     for unit in artifact.units:
+        if unit.fingerprint not in index_units:
+            raise ProseGroundingError(f"missing current decomposition index row: {unit.fingerprint}")
         row, result = _row_for_current_unit(
             artifact,
             unit,
-            index_units.get(unit.fingerprint, {}),
+            index_units[unit.fingerprint],
             knowledge=knowledge,
             provenance=provenance,
             floor=floor,
@@ -237,6 +244,12 @@ def _source_slug(source_ref: str) -> str:
     if not _SLUG_RE.fullmatch(slug):
         raise ProseGroundingError(f"invalid prose source ref: {source_ref!r}")
     return slug
+
+
+def _validate_source_slug(source_slug: str) -> str:
+    if not isinstance(source_slug, str) or not _SLUG_RE.fullmatch(source_slug):
+        raise ProseGroundingError(f"invalid prose source slug: {source_slug!r}")
+    return source_slug
 
 
 def _project_relative_path(project_root: Path, path: Path) -> str:
