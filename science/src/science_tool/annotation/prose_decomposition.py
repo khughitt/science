@@ -210,9 +210,9 @@ class ProseDecompositionStore:
 
     def load_latest(self, slug: str) -> DecompositionArtifact:
         index = self.load_index(slug)
-        artifact_id = index["latest_artifact_id"]
-        if not artifact_id:
-            raise DecompositionError(f"no prose decomposition index exists for source slug: {slug}")
+        artifact_id = index.get("latest_artifact_id")
+        if not isinstance(artifact_id, str) or not artifact_id:
+            raise DecompositionError(f"missing latest decomposition artifact for source slug: {slug}")
         path = self.source_dir(slug) / "generations" / f"{artifact_id}.json"
         if not path.exists():
             raise DecompositionError(f"latest prose decomposition generation is missing: {path}")

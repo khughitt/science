@@ -220,3 +220,15 @@ def test_store_load_latest_reparses_generation(tmp_path):
     latest = store.load_latest("example")
     assert latest.artifact.artifact_id == "decomp-1"
     assert latest.units[0].unit_id == "u001"
+
+
+def test_store_load_latest_fails_loudly_when_index_lacks_latest_artifact(tmp_path):
+    store = ProseDecompositionStore(tmp_path)
+    index_path = store.index_path("example")
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    index_path.write_text(
+        json.dumps({"schema_version": 1, "source_ref": "prose-source:example", "artifacts": [], "units": {}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(DecompositionError, match="missing latest decomposition artifact"):
+        store.load_latest("example")
