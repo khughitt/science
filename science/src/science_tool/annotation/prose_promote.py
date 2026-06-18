@@ -50,6 +50,7 @@ def promote_prose_unit(project_root: Path, source_ref: str, unit_id: str, apply:
     if unit.candidate is None:
         raise ProsePromotionError(f"candidate unit {unit_id!r} is missing candidate payload")
 
+    ref = artifact_unit_ref(artifact, unit)
     row = _index_row(index, unit.fingerprint)
     if row.get("stale") is True:
         raise ProsePromotionError(f"unit {unit_id!r} is stale in the decomposition index")
@@ -57,8 +58,26 @@ def promote_prose_unit(project_root: Path, source_ref: str, unit_id: str, apply:
     if promoted_to:
         raise ProsePromotionError(f"unit {unit_id!r} is already promoted to {promoted_to}")
 
+    corpora, derived_refs = load_corpora(project_root)
+    if apply and ref in derived_refs:
+        recovered_to = _entity_ref_with_source_ref(project_root, ref, kind=unit.candidate.type)
+        if recovered_to is None:
+            raise ProsePromotionError(f"artifact unit ref {ref!r} is present in derived refs but no entity was found")
+        try:
+            store.record_promotion(
+                source_slug=source_slug,
+                fingerprint=unit.fingerprint,
+                promoted_to=recovered_to,
+            )
+        except DecompositionError as exc:
+            raise ProsePromotionError(str(exc)) from exc
+        return ApplyReport()
+
     quote = Quote(unit.candidate.exact, unit.candidate.prefix, unit.candidate.suffix)
-    resolution = InternalProseAdapter().resolve_unit(artifact.source.path, unit.locator, quote)
+    try:
+        resolution = InternalProseAdapter().resolve_unit(artifact.source.path, unit.locator, quote)
+    except OSError as exc:
+        raise ProsePromotionError(f"source/locator resolution failed for unit {unit_id!r}: {exc}") from exc
     if resolution.status is not LocatorStatus.RESOLVED:
         detail = f": {resolution.message}" if resolution.message else ""
         raise ProsePromotionError(f"locator for unit {unit_id!r} is {resolution.status.value}{detail}")
@@ -67,7 +86,6 @@ def promote_prose_unit(project_root: Path, source_ref: str, unit_id: str, apply:
     if unit.candidate.type not in targets:
         raise ProsePromotionError(f"unit {unit_id!r} type {unit.candidate.type!r} is not a promotable target")
 
-    ref = artifact_unit_ref(artifact, unit)
     promotable = Promotable(
         ref=ref,
         frag=unit.unit_id,
@@ -76,7 +94,6 @@ def promote_prose_unit(project_root: Path, source_ref: str, unit_id: str, apply:
         object=unit.candidate.object,
         kind=unit.candidate.type,
     )
-    corpora, _derived = load_corpora(project_root)
     decision = decide_all([promotable], corpora, targets)[0]
 
     if not apply:
@@ -134,6 +151,16 @@ def _index_row(index: dict[str, object], fingerprint: str) -> dict[str, object]:
     if not isinstance(row, dict):
         raise ProsePromotionError(f"prose decomposition index row must be an object: {fingerprint}")
     return row
+
+
+def _entity_ref_with_source_ref(project_root: Path, ref: str, *, kind: str) -> str | None:
+    from science_tool.graph.sources import load_project_sources
+
+    sources = load_project_sources(project_root)
+    for entity in sources.entities:
+        if entity.kind == kind and ref in entity.source_refs:
+            return entity.canonical_id
+    return None
 
 
 def _read_only_report(decision: PromotionCandidate) -> ApplyReport:
