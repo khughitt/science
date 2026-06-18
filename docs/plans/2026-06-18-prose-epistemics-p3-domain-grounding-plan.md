@@ -480,6 +480,7 @@ from science_tool.annotation.prose_decomposition import (
     compute_source_hash,
     parse_submitted_decomposition,
 )
+from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
 from science_tool.graph.store import _graph_uri
 
@@ -588,8 +589,8 @@ def test_build_prose_grounding_report_joins_promoted_unit_by_fingerprint(tmp_pat
     assert payload["decomposition_artifact_id"] == "decomp-1"
     assert payload["grounding_policy"] == {
         "floor": "supported",
-        "belief_policy_id": "core-default",
-        "belief_policy_version": "1",
+        "belief_policy_id": DEFAULT_BELIEF_POLICY.policy_id,
+        "belief_policy_version": DEFAULT_BELIEF_POLICY.version,
     }
     assert payload["summary"]["grounded_units"] == 1
     assert payload["summary"]["skipped_units"] == 1
@@ -628,7 +629,7 @@ def test_build_prose_grounding_report_keeps_promoted_link_across_unit_renumber(t
     assert candidate["status"] == "grounded"
 
 
-def test_build_prose_grounding_report_classifies_unpromoted_and_below_floor(tmp_path: Path) -> None:
+def test_build_prose_grounding_report_classifies_below_floor(tmp_path: Path) -> None:
     from science_tool.annotation.prose_grounding import build_prose_grounding_report
 
     artifact, store = _persist_artifact(tmp_path, _artifact_payload(tmp_path))
@@ -662,6 +663,11 @@ def test_build_prose_grounding_report_classifies_unpromoted_candidate(tmp_path: 
     )
 
     payload = report.to_json()
+    assert payload["grounding_policy"] == {
+        "floor": "supported",
+        "belief_policy_id": DEFAULT_BELIEF_POLICY.policy_id,
+        "belief_policy_version": DEFAULT_BELIEF_POLICY.version,
+    }
     assert payload["summary"]["unpromoted_units"] == 1
     assert payload["units"][0]["status"] == "unpromoted"
     assert payload["units"][0]["proposition_ref"] is None
@@ -712,6 +718,7 @@ from science_tool.annotation.prose_decomposition import (
     ProseDecompositionStore,
     artifact_unit_ref,
 )
+from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
 from science_tool.graph.grounding import (
     DEFAULT_GROUNDING_FLOOR,
     GroundingError,
@@ -787,7 +794,11 @@ def build_prose_grounding_report(
             rows.append(_stale_row(fingerprint, raw_row))
 
     if policy is None:
-        policy = {"floor": floor, "belief_policy_id": "core-default", "belief_policy_version": "1"}
+        policy = {
+            "floor": floor,
+            "belief_policy_id": DEFAULT_BELIEF_POLICY.policy_id,
+            "belief_policy_version": DEFAULT_BELIEF_POLICY.version,
+        }
 
     graph_path_text = _project_relative_path(project_root, graph_path)
     return ProseGroundingReport(
