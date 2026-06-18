@@ -223,8 +223,8 @@ clean qualifying direct test; a single support unit reaches at most `FRAGILE`.
   ORCID and an AI agent assertion get the same gate + ceiling). Spec 6's trust policy plugs
   into the same `BeliefPolicy` socket later.
 - **Confidence on empirical lines stays inert.** This slice activates authored confidence
-  only for **standalone assertions** (`expert_judgment`, no dataset). Wiring confidence into
-  empirical-line weight is a separate future decision.
+  only for **authored assertions** (`expert_judgment`; dataset-less by convention). Wiring
+  confidence into empirical-line weight is a separate future decision.
 - **Phase-2 log-odds scalar untouched** (consistent with Slice A's boundary). `confidence`
   does not enter the scalar in this slice.
 
