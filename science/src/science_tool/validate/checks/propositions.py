@@ -10,6 +10,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from science_model.reasoning import (
+    MEMBERSHIP_ROLE_VALUES,
     SIGN_MEANINGFUL_PREDICATES,
     ClaimLayer,
     IdentificationStrength,
@@ -132,5 +133,84 @@ def check_canonical_enum_binding(ctx: ValidateContext) -> Iterator[Result]:
                         f"{sorted(_IDENTIFICATION_STRENGTH_VALUES)}"
                     ),
                     rule="proposition.identification.canonical",
+                    task=None,
+                )
+
+
+@Check(section="propositions", order=30)
+def check_discusses_membership(ctx: ValidateContext) -> Iterator[Result]:
+    """Structural QA for `discusses` membership entries (spec §5 rules 0, 1, 3, 4).
+
+    Rule 2's "frame must be a bundle kind" is enforced at graph-build time
+    (materialize), not here, since kind resolution needs the entity index.
+    """
+    for path, fm in _propositions(ctx):
+        raw_discusses = fm.get("discusses")
+        if raw_discusses is None:
+            continue
+        if not isinstance(raw_discusses, list):
+            yield Result(
+                severity=Severity.ERROR,
+                path=path,
+                line=None,
+                message=f"{path.name}: discusses must be a list of strings or {{frame, role}} objects",
+                rule="proposition.membership.shape",
+                task=None,
+            )
+            continue
+        discusses = raw_discusses
+        roles_by_frame: dict[str, set[str]] = {}
+        for entry in discusses:
+            if isinstance(entry, str):
+                frame, role = entry, "core"  # bare string => core
+            elif isinstance(entry, dict):
+                frame = entry.get("frame")
+                role = entry.get("role", "core")
+                if not frame:
+                    yield Result(
+                        severity=Severity.ERROR,
+                        path=path,
+                        line=None,
+                        message=f"{path.name}: discusses entry missing required 'frame'",
+                        rule="proposition.membership.frame",
+                        task=None,
+                    )
+                    continue
+                if str(role) not in MEMBERSHIP_ROLE_VALUES:
+                    yield Result(
+                        severity=Severity.ERROR,
+                        path=path,
+                        line=None,
+                        message=(
+                            f"{path.name}: discusses role '{role}' is not a canonical "
+                            f"MembershipRole — must be one of {sorted(MEMBERSHIP_ROLE_VALUES)}"
+                        ),
+                        rule="proposition.membership.role",
+                        task=None,
+                    )
+                    continue
+            else:
+                yield Result(
+                    severity=Severity.ERROR,
+                    path=path,
+                    line=None,
+                    message=f"{path.name}: discusses entry must be a string or a {{frame, role}} object",
+                    rule="proposition.membership.shape",
+                    task=None,
+                )
+                continue
+            roles_by_frame.setdefault(str(frame), set()).add(str(role))
+
+        for frame, roles in sorted(roles_by_frame.items()):
+            if len(roles) > 1:
+                yield Result(
+                    severity=Severity.ERROR,
+                    path=path,
+                    line=None,
+                    message=(
+                        f"{path.name}: frame '{frame}' is listed with conflicting membership "
+                        f"roles {sorted(roles)} — a proposition has exactly one role per bundle"
+                    ),
+                    rule="proposition.membership.duplicate",
                     task=None,
                 )
