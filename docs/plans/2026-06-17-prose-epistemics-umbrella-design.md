@@ -1,12 +1,13 @@
 # Prose epistemics — umbrella design
 
-**Status:** umbrella design approved (brainstorming) 2026-06-17. This is the big-picture
-tie-together; each phase below gets its own spec → plan in a later session, and the
-natural-systems application gets a separate downstream plan.
+**Status:** umbrella design approved (brainstorming) 2026-06-17. Updated 2026-06-19
+after P1-P4 shipped in `science`: the framework arc is complete enough to start the
+downstream natural-systems application campaign.
 
 **Scope of this document:** the long-term shape only — the architectural seam, the
 refactor strategy, the layer model, and the phase sequencing. It deliberately does *not*
-specify per-phase implementation detail.
+specify per-phase implementation detail. Current phase-level details live in the P1-P4
+designs/plans linked from this program.
 
 **Predecessors / context:**
 - Spike findings: `~/d/science/docs/plans/2026-06-17-prose-grounding-spike-findings.md`
@@ -92,8 +93,8 @@ capabilities, each opt-in and **declared** (no `isinstance`/name branching — t
   `regenerable` adapter still produces locators, it simply does not anchor.
 - **seed** — entity-mention pre-annotation. PubTator3 for bio papers; nothing for prose.
 
-Each adapter also declares its **`source_ref` scheme** (`paper:<citekey>`, `doc:<slug>`, …),
-which the graph layer consumes as an injected string.
+Each adapter also declares its **`source_ref` scheme** (`paper:<citekey>`,
+`prose-source:<slug>`, …), which the graph layer consumes as an injected string.
 
 ### 3.2 Candidate artifact — the seam (and the locator artifact behind it)
 
@@ -141,7 +142,7 @@ Decision (brainstorming): generalize the shipped pipeline around a source-agnost
   `locator_regime = offset_anchored`, PubTator seeding, `paper:<citekey>` ref). This is a
   **behavior-neutral extraction refactor** — papers must behave byte-for-byte as before.
 - **`InternalProseAdapter`** (P2) declares: no fetch (reads repo files),
-  `locator_regime = regenerable` (mutable prose), no seed, `doc:`/`prose:` ref scheme.
+  `locator_regime = regenerable` (mutable prose), no seed, `prose-source:` ref scheme.
 - Books, talks, datasets, etc. become future adapters for free.
 
 The three paper-coupled spots that move behind the adapter boundary: `persist-source`
@@ -149,16 +150,18 @@ The three paper-coupled spots that move behind the adapter boundary: `persist-so
 `pubtator` (BioC seeding). The graph-layer *computation* is untouched; its one new
 requirement is the resolvable source ref of §4.1.
 
-### 4.1 Source-ref resolvability — the `doc:` / `prose:` decision
+### 4.1 Source-ref resolvability — the `prose-source:` decision
 
 Because an unresolved `source_ref` hard-fails materialization (§3.3), each adapter's ref
-scheme must resolve to a real, materializable entity. **Decision: a `doc:`/`prose:` ref
+scheme must resolve to a real, materializable entity. **Decision: `prose-source:<slug>`
 targets a first-class source entity**, the direct parallel of how `paper:<citekey>` targets
 a bib-paper entity — *not* a synthetic annotation ref, and *not* an ontology-style external
-prefix. Rationale: it is the only option that yields genuine provenance (the prose document
-becomes a citable node, propositions are `wasDerivedFrom` it) and reuses the existing
-external-reference / participation-mode resolution path instead of bolting on a new
-resolver branch.
+prefix. Earlier umbrella drafts used `doc:`/`prose:` as tentative names; P2 resolved that
+to `prose-source:` because the node is an operational source record, not an authored
+conclusion. Rationale: it is the only option that yields genuine provenance (the prose
+document becomes a citable node, propositions are `wasDerivedFrom` it) and reuses the
+existing external-reference / participation-mode resolution path instead of bolting on a
+new resolver branch.
 
 This makes source-ref handling a **declared adapter responsibility**, promoted into the
 capability profile: an adapter must *guarantee its `source_ref` resolves* (mint-or-link the
@@ -201,18 +204,22 @@ adapter interface.
 
 ## 6. Phase breakdown
 
-Each phase gets its own spec → plan in a later session.
+Each framework phase got its own spec → plan. The table below preserves the umbrella-level
+intent, with shipped-scope notes where phase designs deliberately narrowed the original
+row.
 
-| Phase | Delivers | Depends on |
-|---|---|---|
-| **P1 — Source-agnostic core** | The §4 refactor. `TextSourceAdapter` (named to avoid colliding with the audit-scanner `SourceAdapter`) + declared capability profile (fetch / `locator_regime` / seed **+ source-ref resolvability**, §4.1); establish the **polymorphic interface that admits both locator regimes** through one extract/promote seam (§3.2) — `offset_anchored` fully implemented, `regenerable` declared-but-unimplemented; re-seat today's pipeline as `PaperSourceAdapter`. **Behavior-neutral for papers.** No new content — pure shape. | — |
-| **P2 — Internal-prose adapter** | `InternalProseAdapter` (reads repo prose, mutable, `locator_regime = regenerable`, no seed) + a decompose-agent variant that discriminates meta vs. domain. **P2 owns the regenerable locator artifact itself** (its sidecar representation) and must extend the still-paper-coupled `--check` (source-change detection) and promotion sidecar-read paths that P1 leaves untouched — so P2 is not purely additive. Output: domain propositions minted from our own prose through the *unchanged* graph layer. | P1 |
-| **P3 — Domain grounding** | Belief-as-grounding read; the evidence-line authoring path (closing the `_lift_evidence_line` structural-defaults gap, spike finding 8); domain-source ingestion so `aggregate_belief` has real inputs. Makes "grounded in evidence" honest. | P2 |
-| **P4 — Health coverage-ramp** | A `prose-health.json`-style artifact (Python-produced, TS-consumed) carrying per-claim grounding; the coverage-ramp metric; stylized marking of unbacked claims in rendered prose. | P3 |
+| Phase | Shipped framework responsibility | Deferred downstream responsibility | Depends on |
+|---|---|---|---|
+| **P1 — Source-agnostic core** | The §4 refactor. `TextSourceAdapter` (named to avoid colliding with the audit-scanner `SourceAdapter`) + declared capability profile (fetch / `locator_regime` / seed **+ source-ref resolvability**, §4.1); establish the **polymorphic interface that admits both locator regimes** through one extract/promote seam (§3.2) — `offset_anchored` fully implemented, `regenerable` declared-but-unimplemented; re-seat today's pipeline as `PaperSourceAdapter`. **Behavior-neutral for papers.** No new content — pure shape. | More adapters only when a real source type needs them. | — |
+| **P2 — Internal-prose adapter** | `prose-source` entities, `InternalProseAdapter`, Markdown-only `regenerable` decomposition artifacts, offline-agent-output ingest, check, promotion, skip reasons, fingerprint-based non-destructive stale tracking. Output: domain propositions minted from authored prose through the *unchanged* graph layer. | Natural-systems decomposition campaign; live LLM integration; non-Markdown prose containers. | P1 |
+| **P3 — Domain grounding** | Read-only belief-as-grounding kernel and P2 projection. Produces per-source prose-grounding JSON from existing graph evidence and latest P2 state. Records the grounding floor and policy in the artifact. | Evidence-line authoring/import and domain-paper ingestion. This deliberately narrows the original P3 row; real belief inputs are content work, not framework work. | P2 |
+| **P4 — Health coverage-ramp** | Project-level `prose-health.json`, explicit manifest denominator, coverage-ramp metrics, `science health` reader integration. Framework-only but consumer-shaped. | Downstream rendered-prose styling and `npm run health` wiring in natural-systems. | P3 |
 
-**Dependency chain is linear** (P1 → P2 → P3 → P4). Each phase produces working, testable
-software on its own: P1 is a behavior-neutral refactor verifiable by the existing paper
-suite; P2 mints propositions; P3 grounds them; P4 surfaces them.
+**Dependency chain is linear** (P1 → P2 → P3 → P4). Each framework phase produces working,
+testable software on its own: P1 is a behavior-neutral refactor verifiable by the existing
+paper suite; P2 mints propositions; P3 grounds them; P4 surfaces them. The remaining work is
+now a downstream application campaign: choose real prose, decompose it, promote it, author
+or ingest evidence, and let P4 report the coverage ramp.
 
 ## 7. Downstream natural-systems application (separate plan)
 
@@ -225,7 +232,10 @@ Project-specific, rides on P1–P4, planned separately:
 - Set the concrete grounding floor (the strict-bar magnitude threshold).
 - Wire `npm run health` to the P4 artifact.
 - Resolve the **two-graph-builders duplication**: natural-systems' TS-built
-  `knowledge/graph.trig` vs. `science materialize` (a convergence the larger program owes).
+  `knowledge/graph.trig` vs. `science graph build` (a convergence the larger program owes).
+
+Downstream design:
+`~/d/science/docs/plans/2026-06-19-natural-systems-prose-epistemics-application-design.md`.
 
 Mapping to the spike's A/B/C program: **A** (epistemic convergence) ≈ P2 + P3 + this NS
 plan; **B** (shared cross-language core) **deferred**; **C** (prose grounding in health) ≈ P4.
@@ -244,16 +254,23 @@ plan; **B** (shared cross-language core) **deferred**; **C** (prose grounding in
   artifact, which P1 *does* generalize (§3.2) — generalizing the locator regime is not the
   same as inventing a new candidate schema.
 
-## 9. Open decisions deferred to phase specs
+## 9. Decisions resolved by phase specs
 
-- The exact `SourceAdapter` interface surface and where it lives (P1 spec).
-- The generalized locator/annotation artifact's concrete schema spanning both regimes, and
-  whether promotion reads it via a thin adapter shim over today's sidecar reader (P1 spec).
-- The prose source entity's kind (reuse vs. new) and participation mode (P1 spec); the
-  *directional* choice — first-class source entity — is fixed in §4.1.
-- The skip-record schema and its reason-token vocabulary (P2 spec).
-- The regenerable-locator format for mutable prose, and how re-decomposition reconciles
-  with already-minted propositions when prose changes (P2 spec).
-- The grounding-floor magnitude and the precise coverage-ramp metric shape (P3/P4 specs).
-- Whether the decompose-agent meta/domain discrimination is a prompt concern or needs a
-  lightweight classifier step (P2 spec).
+- P1 placed the adapter surface in `TextSourceAdapter`, kept `PaperSourceAdapter` behavior
+  neutral, and declared `regenerable` without inventing its artifact prematurely.
+- P2 chose a new first-class `prose-source:<slug>` kind, Markdown-only internal prose,
+  offline agent-output ingest, `StatementCandidate` payload reuse, reason-coded skips,
+  heading-path plus quote locators, and fingerprint-based cross-generation identity.
+- P3 narrowed "domain grounding" to a read-only belief-as-grounding kernel and prose
+  projection. Evidence-line authoring and domain-source ingestion moved to the downstream
+  natural-systems campaign.
+- P4 chose an explicit manifest as the coverage denominator, project-level
+  `data/prose-health/prose-health.json`, null-not-zero empty-denominator metrics, and a
+  read-only `science health` integration.
+
+Remaining open decisions belong to downstream application work, not framework shape:
+
+- Which natural-systems prose sources enter the first manifest.
+- Which promoted propositions get evidence authored first.
+- How natural-systems wires `npm run health` and rendered prose styling to the P4 artifact.
+- When to converge natural-systems' TS graph builder with `science graph build`.
