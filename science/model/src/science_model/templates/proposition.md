@@ -7,6 +7,10 @@ claim_layer: "empirical_regularity"
 identification_strength: "observational"
 proxy_directness: "direct"
 supports_scope: "local_proposition"
+# Bundle membership. Bare string = core member (enters the bundle's belief
+# conjunction). Use {frame: <hyp/mech>, role: rival|background} to exclude a
+# non-load-bearing member. See research-proposition-schema for role semantics.
+discusses: []
 related: []
 source_refs: []
 created: "{{created}}"
@@ -21,6 +25,7 @@ _template:
     identification_strength: { default: "observational" }
     proxy_directness: { default: "direct" }
     supports_scope: { default: "local_proposition" }
+    discusses: { default: [] }
     related: { from: related }
     source_refs: { from: source_refs }
     created: { from: created }

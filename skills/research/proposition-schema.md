@@ -45,6 +45,38 @@ historical context) usually does **not** belong as a `proposition`. Use
 `method:`, `topic:`, or `discussion:` entity types instead - those don't
 require enum classification.
 
+## Bundle Membership and Roles
+
+`discusses:` declares which hypothesis/mechanism bundle(s) a proposition
+belongs to (materialized as `cito:discusses`). Each entry has a **membership
+role** that controls whether the proposition enters the bundle's weakest-link
+belief conjunction:
+
+- `core` (default) - a load-bearing claim of the bundle; **enters** the conjunction.
+- `rival` - a competing alternative to the bundle's claims; **excluded** from the conjunction.
+- `background` - contextual/governance/scoping material, not load-bearing; **excluded** from the conjunction.
+
+A bare string is sugar for `core`. Use the object form to assign a non-core role:
+
+```yaml
+discusses:
+- hypothesis:0001-foo            # core (bare string)
+- frame: hypothesis:0002-bar     # excluded from 0002's belief conjunction
+  role: background
+```
+
+A proposition has **exactly one role per bundle frame**. Excluded members are
+still listed as bundle members (they show up in coverage and neighborhood
+views); they just don't drag the weakest-link belief down.
+
+**The role only takes effect in the proposition's `discusses:` frontmatter.**
+A `cito:discusses` edge authored in the structured authored-relations store
+(`knowledge/sources/local/relations.yaml`) emits a plain edge with **no role**
+and is always treated as `core`. To mark a rival/background membership, author
+it here in frontmatter — not as a relations-store edge. Forward
+`sci:hasProposition` (mechanism steps) is always authoritatively `core` and
+cannot be demoted.
+
 ## Companion Skills
 
 - [`SKILL.md`](./SKILL.md) - generic research methodology that this schema overlays.
