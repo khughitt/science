@@ -16,6 +16,7 @@ from science_tool.annotation.prose_decomposition import (
 )
 
 _SUMMARY_KEYS = ("units", "resolved", "unresolved", "ambiguous", "stale", "hard_failures")
+_LOCATOR_SUMMARY_STATUSES = {"resolved", "unresolved", "ambiguous"}
 
 
 @dataclass(frozen=True)
@@ -63,7 +64,12 @@ def validate_latest_decomposition(
     source_slug: str,
 ) -> tuple[DecompositionArtifact, ProseValidationReport]:
     store = ProseDecompositionStore(project_root)
-    index = store.load_index(source_slug)
+    try:
+        index = store.load_index(source_slug)
+    except OSError as exc:
+        raise DecompositionError(
+            f"could not read prose decomposition index for source slug {source_slug}: {exc}"
+        ) from exc
     try:
         artifact = store.load_latest(source_slug)
     except OSError as exc:
@@ -172,15 +178,15 @@ def _resolve_unit(
 
 
 def _summarize_units(rows: list[dict[str, object]]) -> dict[str, int]:
-    summary = dict.fromkeys(_SUMMARY_KEYS, 0)
+    summary: dict[str, int] = {key: 0 for key in _SUMMARY_KEYS}
     summary["units"] = len(rows)
     for row in rows:
         if row.get("stale") is True:
             summary["stale"] += 1
             continue
         locator_status = row.get("locator_status")
-        if locator_status in {"resolved", "unresolved", "ambiguous"}:
-            summary[str(locator_status)] += 1
+        if isinstance(locator_status, str) and locator_status in _LOCATOR_SUMMARY_STATUSES:
+            summary[locator_status] += 1
         else:
             summary["hard_failures"] += 1
     return summary

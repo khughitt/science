@@ -506,6 +506,27 @@ def test_check_prose_decomposition_reports_unreadable_latest_generation(tmp_path
     assert "Traceback" not in result.output
 
 
+def test_check_prose_decomposition_reports_unreadable_index(tmp_path):
+    ingest = CliRunner().invoke(
+        annotate_group,
+        ["ingest-prose-decomposition", str(_artifact_file(tmp_path)), "--root", str(tmp_path)],
+    )
+    assert ingest.exit_code == 0, ingest.output
+    index_path = tmp_path / "data" / "prose-decompositions" / "example" / "index.json"
+    index_path.unlink()
+    index_path.mkdir()
+
+    result = CliRunner().invoke(
+        annotate_group,
+        ["check-prose-decomposition", "--source", "prose-source:example", "--root", str(tmp_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "could not read prose decomposition index for source slug example" in result.output
+    assert str(index_path) in result.output
+    assert "Traceback" not in result.output
+
+
 def test_promote_prose_decomposition_apply_mints(tmp_path):
     ingest = CliRunner().invoke(
         annotate_group,
