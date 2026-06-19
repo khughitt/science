@@ -26,6 +26,7 @@ from science_model.reasoning import (
     ClaimLayer,
     EvidenceRole,
     IdentificationStrength,
+    MembershipRole,
     ProxyDirectness,
     SupportScope,
 )
@@ -93,6 +94,7 @@ class SourceRelation(BaseModel):
     object: str
     graph_layer: str = "graph/knowledge"
     source_path: str
+    role: MembershipRole | None = None
 
 
 def known_kinds(
@@ -1093,6 +1095,11 @@ def _load_structured_relations(project_root: Path, *, local_profile: str) -> lis
         subject = canonical_paper_id(subject)
         obj = canonical_paper_id(obj)
 
+        raw_role = item.get("role")
+        role: MembershipRole | None = None
+        if raw_role is not None:
+            role = MembershipRole(str(raw_role))
+
         relations.append(
             SourceRelation(
                 subject=subject,
@@ -1100,6 +1107,7 @@ def _load_structured_relations(project_root: Path, *, local_profile: str) -> lis
                 object=obj,
                 graph_layer=str(item.get("graph_layer") or "graph/knowledge"),
                 source_path=str(item.get("source_path") or _default_local_source_path(local_profile, "relations.yaml")),
+                role=role,
             )
         )
 

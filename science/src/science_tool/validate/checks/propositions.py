@@ -214,3 +214,114 @@ def check_discusses_membership(ctx: ValidateContext) -> Iterator[Result]:
                     rule="proposition.membership.duplicate",
                     task=None,
                 )
+
+
+# Live-bundle kind prefixes that make a cito:discusses edge a membership (design §4).
+_LIVE_BUNDLE_PREFIXES = frozenset({"hypothesis", "mechanism"})
+
+
+@Check(section="propositions", order=40)
+def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Result]:
+    """Validate authored `role` fields in relations.yaml (design §4, three rules).
+
+    Rule 1: role set on a non-cito:discusses predicate → error.
+    Rule 2: role set on a cito:discusses edge that is NOT a proposition→live-bundle
+            membership (subject not a proposition, or object not a bundle) → error.
+    Rule 3: the same (proposition, frame) pair carries conflicting roles across
+            frontmatter `discusses:` and relations.yaml `role:` → error.
+    """
+    from science_tool.graph.sources import load_project_sources, SourceRelation
+
+    try:
+        sources = load_project_sources(ctx.project_root, strict_identity=False)
+    except Exception:
+        # If loading fails for unrelated reasons, skip this check gracefully —
+        # other checks (e.g. cross_references) will surface the load failure.
+        return
+
+    # Build a map of (proposition_cid, frame_cid) → role from relations.yaml.
+    # Also emit rule-1 and rule-2 errors for each relation.
+    relation_roles: dict[tuple[str, str], str] = {}
+
+    for relation in sources.relations:
+        if relation.role is None:
+            continue
+
+        # Rule 1: role is only meaningful on cito:discusses.
+        if relation.predicate != "cito:discusses":
+            yield Result(
+                severity=Severity.ERROR,
+                path=Path(relation.source_path),
+                line=None,
+                message=(
+                    f"relations.yaml: role '{relation.role.value}' set on "
+                    f"'{relation.predicate}' relation ({relation.subject} → {relation.object}); "
+                    "role is only valid on cito:discusses membership edges (design §4)"
+                ),
+                rule="relation.role.non-discusses",
+                task=None,
+            )
+            continue
+
+        # Rule 2: role on cito:discusses requires proposition subject and live-bundle object.
+        subject_prefix = relation.subject.split(":", 1)[0]
+        object_prefix = relation.object.split(":", 1)[0]
+        subject_is_proposition = subject_prefix == "proposition"
+        object_is_live_bundle = object_prefix in _LIVE_BUNDLE_PREFIXES
+
+        if not subject_is_proposition or not object_is_live_bundle:
+            yield Result(
+                severity=Severity.ERROR,
+                path=Path(relation.source_path),
+                line=None,
+                message=(
+                    f"relations.yaml: role '{relation.role.value}' set on "
+                    f"{relation.subject} cito:discusses {relation.object}, "
+                    "but this is not a proposition→live-bundle membership edge "
+                    "(subject must be a proposition and object a hypothesis/mechanism); "
+                    "membership roles are only valid on membership edges (design §4)"
+                ),
+                rule="relation.role.non-membership",
+                task=None,
+            )
+            continue
+
+        # Valid membership role — record it for cross-surface conflict check (Rule 3).
+        relation_roles[(relation.subject, relation.object)] = relation.role.value
+
+    if not relation_roles:
+        return
+
+    # Rule 3: cross-surface conflict — same (proposition, frame) pair with conflicting roles
+    # across frontmatter `discusses:` and relations.yaml `role:`.
+    # Build entity index keyed by canonical_id for quick lookup.
+    entity_index = {e.canonical_id: e for e in sources.entities}
+
+    for entity in sources.entities:
+        iter_memberships = getattr(entity, "iter_memberships", None)
+        if not callable(iter_memberships):
+            continue
+        for frame_ref, role in iter_memberships():
+            # frame_ref is a raw reference — resolve via canonical_id prefix if it matches exactly.
+            # Since we only need a prefix match with entity_index, try direct lookup first.
+            frame_entity = entity_index.get(frame_ref)
+            if frame_entity is None:
+                continue
+            frame_cid = frame_entity.canonical_id
+            pair = (entity.canonical_id, frame_cid)
+            if pair not in relation_roles:
+                continue
+            relations_role = relation_roles[pair]
+            if role.value != relations_role:
+                yield Result(
+                    severity=Severity.ERROR,
+                    path=Path(entity.file_path),
+                    line=None,
+                    message=(
+                        f"{entity.canonical_id}: conflicting membership roles for frame "
+                        f"'{frame_cid}' — frontmatter says '{role.value}' but "
+                        f"relations.yaml says '{relations_role}' (design §4 rule 3)"
+                    ),
+                    rule="relation.role.cross-surface-conflict",
+                    task=None,
+                )

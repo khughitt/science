@@ -1206,9 +1206,9 @@ def _add_authored_relation(
             frame_uri=object_uri,
             prop_cid=subject_entity.canonical_id,
             frame_cid=object_entity.canonical_id,
-            role=MembershipRole.CORE,  # finalized to `relation.role or CORE` in Task 4
+            role=relation.role or MembershipRole.CORE,
         )
-    elif predicate_uri == CITO_NS.discusses and getattr(relation, "role", None) is not None:
+    elif predicate_uri == CITO_NS.discusses and relation.role is not None:
         raise ValueError(
             f"relation {relation.subject} cito:discusses {relation.object}: role "
             f"{relation.role!r} set, but this is not a proposition→live-bundle membership "

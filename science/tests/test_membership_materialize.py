@@ -192,7 +192,7 @@ def make_project_with_relation(tmp_path: Path) -> Callable[..., object]:
     Returns the parsed graph/knowledge named graph after materialize_graph runs.
     """
 
-    def _factory(*, subject: str, predicate: str, object: str) -> object:
+    def _factory(*, subject: str, predicate: str, object: str, role: str | None = None) -> object:
         project = tmp_path / "demo"
         local_sources = _write_project_base(project)
 
@@ -204,15 +204,18 @@ def make_project_with_relation(tmp_path: Path) -> Callable[..., object]:
             else:
                 _write_subject_entity(project, ref)
 
-        # Write the single relation.
+        # Write the single relation (optionally with a role field).
+        relation_lines = [
+            "relations:",
+            f"  - subject: {subject}",
+            f"    predicate: {predicate}",
+            f"    object: {object}",
+        ]
+        if role is not None:
+            relation_lines.append(f"    role: {role}")
+        relation_lines.append("")
         (local_sources / "relations.yaml").write_text(
-            "\n".join([
-                "relations:",
-                f"  - subject: {subject}",
-                f"    predicate: {predicate}",
-                f"    object: {object}",
-                "",
-            ]),
+            "\n".join(relation_lines),
             encoding="utf-8",
         )
 
@@ -254,3 +257,17 @@ def test_relations_store_paper_to_bundle_has_no_membership_node(make_project_wit
             entity_uri_for_ref("hypothesis:0001-foo")) in knowledge
     # ...but no membership node is minted for a non-proposition subject.
     assert not list(knowledge.triples((None, SCI_NS.membershipFrame, None)))
+
+
+def test_relations_store_role_background_excluded_from_core(make_project_with_relation):
+    knowledge = make_project_with_relation(
+        subject="proposition:0011-bar", predicate="cito:discusses",
+        object="hypothesis:0001-foo", role="background",
+    )
+    from science_tool.graph.bundle_belief import core_members, membership_role
+    from science_tool.graph.io import entity_uri_for_ref
+    from science_model.reasoning import MembershipRole
+    prop = entity_uri_for_ref("proposition:0011-bar")
+    frame = entity_uri_for_ref("hypothesis:0001-foo")
+    assert membership_role(knowledge, prop, frame) == MembershipRole.BACKGROUND
+    assert prop not in core_members(knowledge, frame)
