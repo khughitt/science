@@ -303,6 +303,102 @@ def test_check_rejects_invalid_source_ref(tmp_path, source_ref, message):
     assert message in result.output
 
 
+def test_validate_prose_decomposition_artifact_reports_units_before_ingest(tmp_path):
+    artifact_path = _artifact_file(tmp_path)
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "validate-prose-decomposition-artifact",
+            str(artifact_path),
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["source_ref"] == "prose-source:example"
+    assert payload["artifact_id"] == "decomp-1"
+    assert payload["summary"] == {
+        "units": 1,
+        "resolved": 1,
+        "unresolved": 0,
+        "ambiguous": 0,
+        "stale": 0,
+        "hard_failures": 0,
+    }
+    assert payload["units"][0]["unit_id"] == "u001"
+    assert payload["units"][0]["locator_status"] == "resolved"
+    assert payload["units"][0]["promoted_to"] is None
+    assert payload["units"][0]["stale"] is False
+    assert not (tmp_path / "data" / "prose-decompositions" / "example" / "index.json").exists()
+
+
+def test_validate_prose_decomposition_artifact_hash_mismatch_fails(tmp_path):
+    artifact_path = _artifact_file(tmp_path, content_hash="sha256:" + "0" * 64)
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "validate-prose-decomposition-artifact",
+            str(artifact_path),
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "content hash mismatch" in result.output
+    assert not (tmp_path / "entities" / "prose-sources" / "example.md").exists()
+
+
+def test_validate_and_check_share_per_unit_findings_after_ingest(tmp_path):
+    artifact_path = _artifact_file(tmp_path)
+    validate = CliRunner().invoke(
+        annotate_group,
+        [
+            "validate-prose-decomposition-artifact",
+            str(artifact_path),
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+    assert validate.exit_code == 0, validate.output
+
+    ingest = CliRunner().invoke(
+        annotate_group,
+        ["ingest-prose-decomposition", str(artifact_path), "--root", str(tmp_path)],
+    )
+    assert ingest.exit_code == 0, ingest.output
+
+    check = CliRunner().invoke(
+        annotate_group,
+        [
+            "check-prose-decomposition",
+            "--source",
+            "prose-source:example",
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+    assert check.exit_code == 0, check.output
+
+    validate_payload = json.loads(validate.output)
+    check_payload = json.loads(check.output)
+    # Fresh ingest has no stale/promoted state, so raw-artifact validation and
+    # latest-artifact check should produce identical per-unit findings.
+    assert validate_payload["units"] == check_payload["units"]
+
+
 def test_promote_prose_decomposition_apply_mints(tmp_path):
     ingest = CliRunner().invoke(
         annotate_group,
