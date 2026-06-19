@@ -194,9 +194,9 @@ Initial source states:
 - `complete`
 - `missing_decomposition`
 - `missing_grounding`
-- `stale_grounding`
 - `invalid_decomposition`
 - `invalid_grounding`
+- `stale_grounding`
 
 `stale_grounding` means the P3 report does not match the latest P2 decomposition artifact
 for the manifest source.
@@ -205,9 +205,9 @@ for the manifest source.
 
 1. `missing_decomposition`
 2. `invalid_decomposition`
-3. `stale_grounding`
-4. `missing_grounding`
-5. `invalid_grounding`
+3. `missing_grounding`
+4. `invalid_grounding`
+5. `stale_grounding`
 6. `complete`
 
 For artifact findings, every non-`complete` source state emits exactly one corresponding
@@ -336,6 +336,10 @@ ramp from representing the declared denominator. `undeclared_grounding_report` i
 warning and does not count as an issue by default. A future threshold policy may promote low
 coverage to an issue, but P4 does not bake in threshold gates beyond P3's grounding floor.
 
+`sources_with_grounding` counts sources that have a P3 grounding report file, including
+`stale_grounding` sources. Freshness is represented by `state` and findings, not by hiding
+the report from the existence count.
+
 ## 5. Build and health integration
 
 ### 5.1 P4 builder
@@ -461,6 +465,9 @@ Unit tests:
 - Missing grounding produces `missing_grounding`.
 - Grounding report for an older decomposition produces `stale_grounding`.
 - Invalid grounding JSON produces `invalid_grounding`.
+- A grounding report that is both invalid and stale resolves to `invalid_grounding`.
+- A grounding report with matching source/artifact ids but mismatched unit fingerprints
+  degrades that source to `invalid_grounding` without aborting the whole report.
 - Skip rows carry skip reason and quote locator.
 - Candidate rows carry candidate quote and heading path.
 - Unit join uses `fingerprint`, not `unit_id`.

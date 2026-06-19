@@ -418,9 +418,9 @@ SUMMARY_KEYS = (
 SOURCE_STATE_PRECEDENCE = (
     "missing_decomposition",
     "invalid_decomposition",
-    "stale_grounding",
     "missing_grounding",
     "invalid_grounding",
+    "stale_grounding",
     "complete",
 )
 _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
@@ -587,7 +587,7 @@ def _build_source_rows(
     except DecompositionError as exc:
         state = "missing_decomposition" if "missing latest decomposition artifact" in str(exc) else "invalid_decomposition"
         row = {**source_base, "state": state}
-        return {"source": row, "units": [], "finding": _finding(state, source, str(exc))}
+        return {"source": row, "units": [], "finding": _finding(state, source, str(exc), project_root=project_root)}
 
     grounding_path = prose_grounding_path(project_root, source.slug)
     try:
@@ -599,7 +599,7 @@ def _build_source_rows(
             "state": state,
             "decomposition_artifact_id": artifact.artifact.artifact_id,
         }
-        return {"source": row, "units": [], "finding": _finding(state, source, str(exc))}
+        return {"source": row, "units": [], "finding": _finding(state, source, str(exc), project_root=project_root)}
 
     state = _grounding_state(source=source, artifact=artifact, grounding=grounding)
     if state != "complete":
@@ -608,9 +608,22 @@ def _build_source_rows(
             "state": state,
             "decomposition_artifact_id": artifact.artifact.artifact_id,
         }
-        return {"source": row, "units": [], "finding": _finding(state, source, f"grounding report is {state}")}
+        return {
+            "source": row,
+            "units": [],
+            "finding": _finding(state, source, f"grounding report is {state}", project_root=project_root),
+        }
 
-    rows = _unit_rows(project_root=project_root, source=source, artifact=artifact, grounding=grounding)
+    try:
+        rows = _unit_rows(project_root=project_root, source=source, artifact=artifact, grounding=grounding)
+    except ProseHealthError as exc:
+        state = "invalid_grounding"
+        row = {
+            **source_base,
+            "state": state,
+            "decomposition_artifact_id": artifact.artifact.artifact_id,
+        }
+        return {"source": row, "units": [], "finding": _finding(state, source, str(exc), project_root=project_root)}
     source_summary = _summary_from_units(rows)
     source_row = {
         **source_base,
@@ -636,10 +649,10 @@ def _load_grounding_report(path: Path, *, project_root: Path) -> dict[str, objec
 def _grounding_state(*, source: ManifestSource, artifact: DecompositionArtifact, grounding: dict[str, object]) -> str:
     if grounding.get("source_ref") != source.source_ref:
         return "invalid_grounding"
-    if grounding.get("decomposition_artifact_id") != artifact.artifact.artifact_id:
-        return "stale_grounding"
     if not isinstance(grounding.get("units"), list):
         return "invalid_grounding"
+    if grounding.get("decomposition_artifact_id") != artifact.artifact.artifact_id:
+        return "stale_grounding"
     return "complete"
 
 
@@ -727,6 +740,7 @@ def _summary(source_rows: list[dict[str, object]]) -> dict[str, int]:
     summary = {
         "declared_sources": len(source_rows),
         "sources_with_decomposition": sum(1 for row in source_rows if row.get("decomposition_artifact_id") is not None),
+        # This is an existence count: stale reports exist but are flagged separately by source state/findings.
         "sources_with_grounding": sum(1 for row in source_rows if row.get("state") in {"complete", "stale_grounding"}),
         **_empty_summary(),
     }
@@ -784,13 +798,13 @@ def _coverage_metric(numerator: int, denominator: int) -> dict[str, float | int 
     }
 
 
-def _finding(code: str, source: ManifestSource, message: str) -> dict[str, object]:
+def _finding(code: str, source: ManifestSource, message: str, *, project_root: Path) -> dict[str, object]:
     return {
         "code": code,
         "severity": "warning" if code != "invalid_decomposition" and code != "invalid_grounding" else "error",
         "counts_as_issue": True,
         "source_ref": source.source_ref,
-        "path": source.path.as_posix(),
+        "path": _project_relative_path(project_root, source.path),
         "message": message,
     }
 
@@ -893,7 +907,7 @@ def test_missing_decomposition_produces_state_and_finding(tmp_path: Path) -> Non
             "severity": "warning",
             "counts_as_issue": True,
             "source_ref": "prose-source:example",
-            "path": str(tmp_path / "docs" / "example.md"),
+            "path": "docs/example.md",
             "message": "missing latest decomposition artifact for source slug: example",
         }
     ]
@@ -926,8 +940,28 @@ def test_stale_grounding_uses_precedence_and_counts_as_issue(tmp_path: Path) -> 
 
     assert report["sources"][0]["state"] == "stale_grounding"
     assert report["sources"][0]["summary"]["current_candidate_units"] == 0
+    assert report["summary"]["sources_with_grounding"] == 1
     assert report["findings"][0]["code"] == "stale_grounding"
     assert report["findings"][0]["counts_as_issue"] is True
+
+
+def test_invalid_grounding_precedes_stale_grounding(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+    from science_tool.annotation.prose_grounding import prose_grounding_path
+
+    first, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path, artifact_id="decomp-1"))
+    _write_grounding(tmp_path, artifact=first, status="grounded")
+    _persist_decomposition(tmp_path, _artifact_payload(tmp_path, artifact_id="decomp-2", unit_id="u777"))
+    path = prose_grounding_path(tmp_path, "example")
+    report = json.loads(path.read_text(encoding="utf-8"))
+    report["source_ref"] = "prose-source:other"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    _write_manifest(tmp_path)
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "invalid_grounding"
+    assert report["findings"][0]["code"] == "invalid_grounding"
 
 
 def test_invalid_grounding_json_produces_state_and_finding(tmp_path: Path) -> None:
@@ -945,6 +979,27 @@ def test_invalid_grounding_json_produces_state_and_finding(tmp_path: Path) -> No
     assert report["sources"][0]["state"] == "invalid_grounding"
     assert report["findings"][0]["code"] == "invalid_grounding"
     assert report["findings"][0]["severity"] == "error"
+
+
+def test_grounding_fingerprint_mismatch_degrades_one_source_to_invalid_grounding(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+    from science_tool.annotation.prose_grounding import prose_grounding_path
+
+    artifact, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path))
+    _write_grounding(tmp_path, artifact=artifact, status="grounded")
+    path = prose_grounding_path(tmp_path, "example")
+    report = json.loads(path.read_text(encoding="utf-8"))
+    report["units"][0]["fingerprint"] = "sha256:missing"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    _write_manifest(tmp_path)
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "invalid_grounding"
+    assert report["sources"][0]["summary"]["current_candidate_units"] == 0
+    assert report["units"] == []
+    assert report["findings"][0]["code"] == "invalid_grounding"
+    assert "missing unit fingerprint" in report["findings"][0]["message"]
 
 
 def test_undeclared_grounding_report_is_finding_excluded_from_denominators(tmp_path: Path) -> None:
@@ -1092,16 +1147,16 @@ def _undeclared_grounding_findings(project_root: Path, declared_slugs: set[str])
     return findings
 ```
 
-Also replace `_finding` so `path` is project-readable and severity is stable:
+Also replace `_finding` so `path` is project-relative and severity is stable:
 
 ```python
-def _finding(code: str, source: ManifestSource, message: str) -> dict[str, object]:
+def _finding(code: str, source: ManifestSource, message: str, *, project_root: Path) -> dict[str, object]:
     return {
         "code": code,
         "severity": "error" if code in {"invalid_decomposition", "invalid_grounding"} else "warning",
         "counts_as_issue": True,
         "source_ref": source.source_ref,
-        "path": source.path.as_posix(),
+        "path": _project_relative_path(project_root, source.path),
         "message": message,
     }
 ```
@@ -1891,6 +1946,7 @@ Expected: commit created only if files changed.
 - `state` precedence is deterministic.
 - Each non-`complete` declared source produces exactly one same-code source-level finding.
 - `stale_grounding` counts as an issue.
+- `sources_with_grounding` counts stale reports as present but not fresh.
 - `undeclared_grounding_report` does not count as an issue and is excluded from denominators.
 - Empty denominators produce `ratio: null`.
 - `science health` reads P4 and never rebuilds it.
