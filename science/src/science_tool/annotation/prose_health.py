@@ -66,6 +66,19 @@ class ProseHealthReport:
         return self.payload
 
 
+@dataclass(frozen=True)
+class SourceRowResult:
+    source: dict[str, object]
+    units: list[dict[str, object]]
+    finding: dict[str, object] | None
+
+
+@dataclass(frozen=True)
+class ValidatedGroundingUnit:
+    row: dict[str, object]
+    fingerprint: str
+
+
 def prose_health_manifest_path(project_root: Path) -> Path:
     return Path(project_root) / DEFAULT_MANIFEST_REL
 
@@ -130,9 +143,9 @@ def build_prose_health_report(
     declared_slugs = {source.slug for source in manifest.sources}
     for source in manifest.sources:
         source_result = _build_source_rows(project_root=project_root, store=store, source=source)
-        source_rows.append(source_result["source"])
-        unit_rows.extend(source_result["units"])
-        finding = source_result["finding"]
+        source_rows.append(source_result.source)
+        unit_rows.extend(source_result.units)
+        finding = source_result.finding
         if finding is not None:
             findings.append(finding)
 
@@ -190,7 +203,7 @@ def _build_source_rows(
     project_root: Path,
     store: ProseDecompositionStore,
     source: ManifestSource,
-) -> dict[str, object]:
+) -> SourceRowResult:
     source_base = {
         "source_ref": source.source_ref,
         "title": source.title,
@@ -204,7 +217,7 @@ def _build_source_rows(
     except DecompositionError as exc:
         state = "missing_decomposition" if "missing latest decomposition artifact" in str(exc) else "invalid_decomposition"
         row = {**source_base, "state": state}
-        return {"source": row, "units": [], "finding": _finding(state, source, str(exc), project_root=project_root)}
+        return SourceRowResult(source=row, units=[], finding=_finding(state, source, str(exc), project_root=project_root))
 
     grounding_path = prose_grounding_path(project_root, source.slug)
     if not grounding_path.exists():
@@ -214,16 +227,16 @@ def _build_source_rows(
             "state": state,
             "decomposition_artifact_id": artifact.artifact.artifact_id,
         }
-        return {
-            "source": row,
-            "units": [],
-            "finding": _finding(
+        return SourceRowResult(
+            source=row,
+            units=[],
+            finding=_finding(
                 state,
                 source,
                 f"missing grounding report: {_project_relative_path(project_root, grounding_path)}",
                 project_root=project_root,
             ),
-        }
+        )
     try:
         grounding = _load_grounding_report(grounding_path, project_root=project_root)
     except ProseHealthError as exc:
@@ -233,7 +246,7 @@ def _build_source_rows(
             "state": state,
             "decomposition_artifact_id": artifact.artifact.artifact_id,
         }
-        return {"source": row, "units": [], "finding": _finding(state, source, str(exc), project_root=project_root)}
+        return SourceRowResult(source=row, units=[], finding=_finding(state, source, str(exc), project_root=project_root))
 
     try:
         state = _grounding_state(source=source, artifact=artifact, grounding=grounding)
@@ -244,18 +257,18 @@ def _build_source_rows(
             "state": state,
             "decomposition_artifact_id": artifact.artifact.artifact_id,
         }
-        return {"source": row, "units": [], "finding": _finding(state, source, str(exc), project_root=project_root)}
+        return SourceRowResult(source=row, units=[], finding=_finding(state, source, str(exc), project_root=project_root))
     if state != "complete":
         row = {
             **source_base,
             "state": state,
             "decomposition_artifact_id": artifact.artifact.artifact_id,
         }
-        return {
-            "source": row,
-            "units": [],
-            "finding": _finding(state, source, f"grounding report is {state}", project_root=project_root),
-        }
+        return SourceRowResult(
+            source=row,
+            units=[],
+            finding=_finding(state, source, f"grounding report is {state}", project_root=project_root),
+        )
 
     try:
         rows = _unit_rows(project_root=project_root, source=source, artifact=artifact, grounding=grounding)
@@ -266,7 +279,7 @@ def _build_source_rows(
             "state": state,
             "decomposition_artifact_id": artifact.artifact.artifact_id,
         }
-        return {"source": row, "units": [], "finding": _finding(state, source, str(exc), project_root=project_root)}
+        return SourceRowResult(source=row, units=[], finding=_finding(state, source, str(exc), project_root=project_root))
     source_summary = _summary_from_units(rows)
     source_row = {
         **source_base,
@@ -274,7 +287,7 @@ def _build_source_rows(
         "decomposition_artifact_id": artifact.artifact.artifact_id,
         "summary": source_summary,
     }
-    return {"source": source_row, "units": rows, "finding": None}
+    return SourceRowResult(source=source_row, units=rows, finding=None)
 
 
 def _load_grounding_report(path: Path, *, project_root: Path) -> dict[str, object]:
@@ -300,11 +313,11 @@ def _grounding_state(*, source: ManifestSource, artifact: DecompositionArtifact,
     return "complete"
 
 
-def _validate_grounding_unit_structure(grounding: dict[str, object]) -> list[dict[str, object]]:
+def _validate_grounding_unit_structure(grounding: dict[str, object]) -> list[ValidatedGroundingUnit]:
     grounding_units = grounding.get("units")
     if not isinstance(grounding_units, list):
         raise ProseHealthError("grounding report units must be an array")
-    rows: list[dict[str, object]] = []
+    rows: list[ValidatedGroundingUnit] = []
     fingerprints: set[str] = set()
     for index, row in enumerate(grounding_units):
         if not isinstance(row, dict):
@@ -315,7 +328,7 @@ def _validate_grounding_unit_structure(grounding: dict[str, object]) -> list[dic
         if fingerprint in fingerprints:
             raise ProseHealthError(f"duplicate grounding report unit fingerprint: {fingerprint}")
         fingerprints.add(fingerprint)
-        rows.append(row)
+        rows.append(ValidatedGroundingUnit(row=row, fingerprint=fingerprint))
     return rows
 
 
@@ -328,15 +341,16 @@ def _unit_rows(
 ) -> list[dict[str, object]]:
     grounding_units = _validate_grounding_unit_structure(grounding)
     grounding_by_fingerprint: dict[str, dict[str, object]] = {}
-    for row in grounding_units:
-        grounding_by_fingerprint[row["fingerprint"]] = row
+    for grounding_unit in grounding_units:
+        grounding_by_fingerprint[grounding_unit.fingerprint] = grounding_unit.row
     rows: list[dict[str, object]] = []
     for unit in artifact.units:
         grounding_row = grounding_by_fingerprint.get(unit.fingerprint)
         if not isinstance(grounding_row, dict):
             raise ProseHealthError(f"grounding report missing unit fingerprint: {unit.fingerprint}")
         rows.append(_unit_row(project_root=project_root, source=source, artifact=artifact, unit=unit, grounding_row=grounding_row))
-    for grounding_row in grounding_units:
+    for grounding_unit in grounding_units:
+        grounding_row = grounding_unit.row
         if grounding_row.get("status") == "stale":
             rows.append(_stale_unit_row(project_root=project_root, source=source, grounding_row=grounding_row))
     return rows
@@ -433,12 +447,13 @@ def _summary_from_units(rows: list[dict[str, object]]) -> dict[str, int]:
         "unpromoted_units": sum(1 for row in current if row.get("status") == "unpromoted"),
         "skipped_units": sum(1 for row in current if row.get("status") == "skipped"),
         "stale_units": sum(1 for row in rows if row.get("status") == "stale"),
-        "contested_units": sum(
-            1
-            for row in current
-            if isinstance(row.get("grounding"), dict) and row["grounding"].get("contested") is True
-        ),
+        "contested_units": sum(1 for row in current if _is_contested(row)),
     }
+
+
+def _is_contested(row: dict[str, object]) -> bool:
+    grounding = row.get("grounding")
+    return isinstance(grounding, dict) and grounding.get("contested") is True
 
 
 def _empty_summary() -> dict[str, int]:
