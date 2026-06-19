@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from rdflib import RDF, URIRef
 
-from science_model.reasoning import CompositionRule, RESERVED_COMPOSITION_RULES
+from science_model.reasoning import CompositionRule, MembershipRole, RESERVED_COMPOSITION_RULES
 from .belief import aggregate_belief, BeliefMagnitude, BeliefResult, collect_evidence_units, _MAG_ORDER
 from .belief_scalar import belief_scalar, BeliefScalar
 from .io import CITO_NS, SCI_NS
@@ -56,6 +56,37 @@ def bundle_members(knowledge, uri: URIRef) -> list[URIRef]:
 
     members.sort(key=str)
     return members
+
+
+def membership_role(knowledge, member: URIRef, frame: URIRef) -> MembershipRole:
+    """Role of `member` within `frame`'s bundle; CORE when no membership node exists.
+
+    Absence-defaults to CORE so sci:hasProposition mechanism steps (which carry no
+    membership node) and any pre-migration edge behave exactly as today.
+    """
+    for node in knowledge.subjects(SCI_NS.membershipProposition, member):
+        if (node, SCI_NS.membershipFrame, frame) in knowledge:
+            value = knowledge.value(node, SCI_NS.membershipRole)
+            if value is not None:
+                return MembershipRole(str(value))
+    return MembershipRole.CORE
+
+
+def core_members(knowledge, uri: URIRef) -> list[URIRef]:
+    """bundle_members filtered to CORE — the conjunction's membership set (spec §3.3).
+
+    Precedence: a member reached via forward sci:hasProposition is AUTHORITATIVELY
+    core (a mechanism step is structurally core), regardless of any BundleMembership
+    node. Only members reached via reverse cito:discusses consult their role. This
+    makes "hasProposition means core" exact and deterministic even when a proposition
+    is both a step of, and discussed (e.g. as a rival of) the same frame.
+    """
+    forward_core = set(knowledge.objects(uri, SCI_NS.hasProposition))
+    result: list[URIRef] = []
+    for m in bundle_members(knowledge, uri):
+        if m in forward_core or membership_role(knowledge, m, uri) == MembershipRole.CORE:
+            result.append(m)
+    return result
 
 
 def resolve_composition_rule(provenance, uri: URIRef, kind: str) -> CompositionRule:
@@ -171,14 +202,25 @@ def belief_for_entity(knowledge, provenance, uri, *, scalar_enabled: bool):
             )
         return aggregate_belief(collect_evidence_units(knowledge, provenance, [uri]))
 
-    members = bundle_members(knowledge, uri)
-    if not members:
+    all_members = bundle_members(knowledge, uri)
+    if not all_members:
         if authored_rule is not None or kind == "mechanism":
             raise UnresolvedBundleError(
                 f"{uri} is a {kind} bundle with zero resolved member propositions "
                 "(dangling has_proposition / discusses links?); refusing to collapse to "
                 "direct-evidence belief."
             )
+        return aggregate_belief(collect_evidence_units(knowledge, provenance, [uri]))
+
+    members = core_members(knowledge, uri)
+    if not members:
+        # Has members, but none are core (all rival/background).
+        if authored_rule is not None or kind == "mechanism":
+            raise UnresolvedBundleError(
+                f"{uri} is a {kind} bundle whose only members are rival/background "
+                "(zero core members); a conjunction requires at least one core member."
+            )
+        # Forgiving hypothesis case: fall back to direct evidence on the bundle IRI.
         return aggregate_belief(collect_evidence_units(knowledge, provenance, [uri]))
 
     rule = authored_rule or _KIND_DEFAULT_RULE[kind]
