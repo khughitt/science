@@ -342,6 +342,32 @@ def test_validate_prose_decomposition_artifact_reports_units_before_ingest(tmp_p
     assert not (tmp_path / "data" / "prose-decompositions" / "example" / "index.json").exists()
 
 
+def test_validate_prose_decomposition_artifact_accepts_relative_source_path_under_root(tmp_path):
+    artifact_path = _artifact_file(tmp_path)
+    raw = json.loads(artifact_path.read_text(encoding="utf-8"))
+    raw["source"]["path"] = "docs/example.md"
+    artifact_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "validate-prose-decomposition-artifact",
+            str(artifact_path),
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["source_ref"] == "prose-source:example"
+    assert payload["summary"]["resolved"] == 1
+    assert payload["units"][0]["locator_status"] == "resolved"
+    assert not (tmp_path / "entities" / "prose-sources" / "example.md").exists()
+
+
 def test_validate_prose_decomposition_artifact_hash_mismatch_fails(tmp_path):
     artifact_path = _artifact_file(tmp_path, content_hash="sha256:" + "0" * 64)
 
@@ -439,8 +465,10 @@ def test_prose_validation_report_summary_counts_stale_separately_from_hard_failu
         ],
     )
 
-    assert report.to_json()["summary"]["stale"] == 1
-    assert report.to_json()["summary"]["hard_failures"] == 1
+    summary = report.to_json()["summary"]
+    assert isinstance(summary, dict)
+    assert summary["stale"] == 1
+    assert summary["hard_failures"] == 1
 
 
 def test_validate_and_check_share_per_unit_findings_after_ingest(tmp_path):

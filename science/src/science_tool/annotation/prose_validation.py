@@ -44,14 +44,14 @@ def validate_submitted_decomposition_artifact(
         _read_decomposition_artifact(artifact_path),
         project_root=project_root,
     )
-    _ensure_source_under_project_root(artifact, project_root)
-    current_hash = _compute_source_hash(artifact.source.path)
+    source_path = _source_path_under_project_root(artifact, project_root)
+    current_hash = _compute_source_hash(source_path)
     if current_hash != artifact.source.content_hash and not allow_changed:
         raise DecompositionError(
             "content hash mismatch: "
             f"artifact has {artifact.source.content_hash}; current source is {current_hash}"
         )
-    rows = validate_decomposition_units(artifact, None)
+    rows = validate_decomposition_units(artifact, None, source_path=source_path)
     return artifact, ProseValidationReport(
         source_ref=artifact.source_ref,
         artifact_id=artifact.artifact.artifact_id,
@@ -76,8 +76,8 @@ def validate_latest_decomposition(
         raise DecompositionError(
             f"could not read latest prose decomposition for source slug {source_slug}: {exc}"
         ) from exc
-    _ensure_source_under_project_root(artifact, project_root)
-    rows = validate_decomposition_units(artifact, index)
+    source_path = _source_path_under_project_root(artifact, project_root)
+    rows = validate_decomposition_units(artifact, index, source_path=source_path)
     return artifact, ProseValidationReport(
         source_ref=artifact.source_ref,
         artifact_id=artifact.artifact.artifact_id,
@@ -88,17 +88,20 @@ def validate_latest_decomposition(
 def validate_decomposition_units(
     artifact: DecompositionArtifact,
     index: dict[str, Any] | None,
+    *,
+    source_path: Path | None = None,
 ) -> list[dict[str, object]]:
     units_index = _units_index(index)
     use_index = index is not None
     adapter = InternalProseAdapter()
     rows: list[dict[str, object]] = []
     current_fingerprints = {unit.fingerprint for unit in artifact.units}
+    resolved_source_path = source_path or artifact.source.path
 
     for unit in artifact.units:
         index_row = _index_row_for_current_unit(units_index, unit) if use_index else {"promoted_to": None, "stale": False}
         quote = quote_for_decomposition_unit(unit)
-        resolution = _resolve_unit(adapter, artifact, unit, quote)
+        resolution = _resolve_unit(adapter, artifact, unit, quote, source_path=resolved_source_path)
         stale = index_row.get("stale", False)
         if not isinstance(stale, bool):
             raise DecompositionError(f"prose decomposition index stale must be a bool: {unit.fingerprint}")
@@ -152,15 +155,19 @@ def _compute_source_hash(source_path: Path) -> str:
         raise DecompositionError(f"could not read source for hash: {source_path}: {exc}") from exc
 
 
-def _ensure_source_under_project_root(artifact: DecompositionArtifact, project_root: Path) -> None:
+def _source_path_under_project_root(artifact: DecompositionArtifact, project_root: Path) -> Path:
     root = project_root.resolve(strict=False)
-    source_path = artifact.source.path.resolve(strict=False)
+    source_path = artifact.source.path
+    if not source_path.is_absolute():
+        source_path = project_root / source_path
+    source_path = source_path.resolve(strict=False)
     try:
         source_path.relative_to(root)
     except ValueError as exc:
         raise DecompositionError(
             f"source path is outside project root: {source_path} (project root: {root})"
         ) from exc
+    return source_path
 
 
 def _resolve_unit(
@@ -168,12 +175,14 @@ def _resolve_unit(
     artifact: DecompositionArtifact,
     unit: DecompositionUnit,
     quote: Quote,
+    *,
+    source_path: Path,
 ) -> LocatorResolution:
     try:
-        return adapter.resolve_unit(artifact.source.path, unit.locator, quote)
+        return adapter.resolve_unit(source_path, unit.locator, quote)
     except OSError as exc:
         raise DecompositionError(
-            f"could not read source while resolving locator for unit {unit.unit_id}: {artifact.source.path}: {exc}"
+            f"could not read source while resolving locator for unit {unit.unit_id}: {source_path}: {exc}"
         ) from exc
 
 

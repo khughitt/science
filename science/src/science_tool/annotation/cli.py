@@ -90,6 +90,14 @@ _PROSE_HEALTH_SUMMARY_KEYS = (
     "stale_units",
     "contested_units",
 )
+_PROSE_VALIDATION_SUMMARY_KEYS = (
+    "units",
+    "resolved",
+    "unresolved",
+    "ambiguous",
+    "stale",
+    "hard_failures",
+)
 
 
 @click.group("annotate")
@@ -230,7 +238,7 @@ def validate_prose_decomposition_artifact_cmd(
         click.echo(json.dumps(payload, indent=2))
         return
 
-    summary = payload["summary"]
+    summary = _required_prose_validation_summary(payload)
     click.echo(
         f"validated prose decomposition {artifact.artifact.artifact_id} for {artifact.source_ref}: "
         f"units={summary['units']} resolved={summary['resolved']} "
@@ -250,6 +258,16 @@ def validate_prose_decomposition_artifact_cmd(
             f"  {row['unit_id']}: {row['status']} "
             f"({row['locator_status']}; {row['fingerprint']}){message}"
         )
+
+
+def _required_prose_validation_summary(payload: dict[str, object]) -> dict[str, object]:
+    summary = payload.get("summary")
+    if not isinstance(summary, dict):
+        raise click.ClickException("prose validation report summary must be an object")
+    for key in _PROSE_VALIDATION_SUMMARY_KEYS:
+        if key not in summary:
+            raise click.ClickException(f"missing prose validation summary key: {key}")
+    return summary
 
 
 @annotate_group.command("promote-prose-decomposition")
@@ -396,6 +414,8 @@ def build_prose_health_cmd(
     strict = coverage.get("strict_grounding") if isinstance(coverage, dict) else {}
     strict_ratio = strict.get("ratio") if isinstance(strict, dict) else None
     strict_text = "n/a" if strict_ratio is None else f"{strict_ratio:.1%}"
+    findings = payload.get("findings")
+    findings_count = len(findings) if isinstance(findings, list) else 0
     click.echo(
         "built prose health: "
         f"sources={summary['declared_sources']} "
@@ -403,7 +423,7 @@ def build_prose_health_cmd(
         f"promoted={summary['promoted_units']} "
         f"grounded={summary['grounded_units']} "
         f"strict_grounding={strict_text} "
-        f"findings={len(payload.get('findings') or [])}"
+        f"findings={findings_count}"
     )
     if do_write:
         click.echo("wrote prose health artifact" if written else "unchanged prose health artifact")
@@ -507,6 +527,7 @@ def verify(
     pre_apply_broken = 0
     if apply_changes:
         pre_apply_broken = report.broken
+        assert actor is not None
         rewritten = apply_supersessions(
             report,
             actor=actor,
@@ -834,6 +855,7 @@ def lift_tokens_cmd(
         if not non_doc_hits:
             continue
 
+        cleaned_text = original_text
         if remove_mode:
             cleaned_text = _strip_tokens_from_prose(original_text)
             plans = _replan_for_remove(
