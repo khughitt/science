@@ -1862,3 +1862,5 @@ def test_health_cli_table_includes_prose_epistemics_findings(tmp_path: Path) -> 
     assert "Prose Epistemics" in result.output
     assert "missing_grounding" in result.output
     assert "prose-source:example" in result.output
+    assert "Next action" in result.output
+    assert "science annotate build-prose-health --write" in result.output

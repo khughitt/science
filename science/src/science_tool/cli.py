@@ -4542,6 +4542,7 @@ def health_command(
         )
 
     if prose_epistemics_findings:
+        prose_epistemics_next = "science annotate build-prose-health --write"
         pe_table = Table(title=f"Prose Epistemics ({len(prose_epistemics_findings)})")
         pe_table.add_column("Code", style="bold")
         pe_table.add_column("Source")
@@ -4550,10 +4551,10 @@ def health_command(
             pe_table.add_row(
                 str(row.get("code", "")),
                 str(row.get("source_ref") or ""),
-                str(row.get("message", "")),
+                f"{row.get('message', '')}\nNext action: {prose_epistemics_next}",
             )
         console.print(pe_table)
-        console.print("\n[bold]Next:[/bold] run [cyan]science annotate build-prose-health --write[/cyan].")
+        console.print(f"\n[bold]Next:[/bold] run [cyan]{prose_epistemics_next}[/cyan].")
 
     if report["unresolved_refs"]:
         table = Table(title=f"Unresolved references ({len(report['unresolved_refs'])})")
