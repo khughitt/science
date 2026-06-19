@@ -498,3 +498,94 @@ def test_ground_prose_decomposition_missing_graph_fails(tmp_path):
 
     assert result.exit_code != 0
     assert "graph file is missing" in result.output
+
+
+def _write_prose_health_manifest(root: Path) -> Path:
+    path = root / "data" / "prose-health" / "manifest.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "sources": [
+                    {"source_ref": "prose-source:example", "path": "docs/example.md", "title": "Example"}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_build_prose_health_cli_json_outputs_payload(tmp_path: Path) -> None:
+    _ingest_and_mark_promoted(tmp_path)
+    graph_path = _write_grounding_graph(tmp_path, supports=2)
+    ground = CliRunner().invoke(
+        annotate_group,
+        [
+            "ground-prose-decomposition",
+            "--source",
+            "prose-source:example",
+            "--root",
+            str(tmp_path),
+            "--graph",
+            str(graph_path),
+            "--write",
+        ],
+    )
+    assert ground.exit_code == 0, ground.output
+    _write_prose_health_manifest(tmp_path)
+
+    result = CliRunner().invoke(
+        annotate_group,
+        ["build-prose-health", "--root", str(tmp_path), "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["summary"]["declared_sources"] == 1
+    assert payload["summary"]["grounded_units"] == 1
+    assert payload["coverage"]["strict_grounding"]["ratio"] == 1.0
+
+
+def test_build_prose_health_cli_write_persists_artifact(tmp_path: Path) -> None:
+    _ingest_and_mark_promoted(tmp_path)
+    graph_path = _write_grounding_graph(tmp_path, supports=2)
+    ground = CliRunner().invoke(
+        annotate_group,
+        [
+            "ground-prose-decomposition",
+            "--source",
+            "prose-source:example",
+            "--root",
+            str(tmp_path),
+            "--graph",
+            str(graph_path),
+            "--write",
+        ],
+    )
+    assert ground.exit_code == 0, ground.output
+    _write_prose_health_manifest(tmp_path)
+
+    result = CliRunner().invoke(
+        annotate_group,
+        ["build-prose-health", "--root", str(tmp_path), "--write"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "built prose health" in result.output
+    assert "wrote prose health artifact" in result.output
+    path = tmp_path / "data" / "prose-health" / "prose-health.json"
+    assert path.exists()
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["summary"]["grounded_units"] == 1
+
+
+def test_build_prose_health_cli_reports_manifest_errors(tmp_path: Path) -> None:
+    result = CliRunner().invoke(
+        annotate_group,
+        ["build-prose-health", "--root", str(tmp_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "prose health manifest is missing" in result.output

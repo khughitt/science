@@ -40,6 +40,11 @@ from science_tool.annotation.prose_grounding import (
     build_prose_grounding_report,
     write_prose_grounding_report,
 )
+from science_tool.annotation.prose_health import (
+    ProseHealthError,
+    build_prose_health_report,
+    write_prose_health_report,
+)
 from science_tool.annotation.prose_promote import ProsePromotionError, promote_prose_unit
 from science_tool.annotation.prose_source_entity import resolve_or_create_prose_source
 from science_tool.annotation.sources import LINT_SOURCES, SOURCES
@@ -70,6 +75,20 @@ _GROUNDING_SUMMARY_KEYS = (
     "unpromoted_units",
     "skipped_units",
     "stale_units",
+)
+_PROSE_HEALTH_SUMMARY_KEYS = (
+    "declared_sources",
+    "sources_with_decomposition",
+    "sources_with_grounding",
+    "current_candidate_units",
+    "promoted_units",
+    "grounded_units",
+    "below_floor_units",
+    "unbacked_units",
+    "unpromoted_units",
+    "skipped_units",
+    "stale_units",
+    "contested_units",
 )
 
 
@@ -291,6 +310,59 @@ def ground_prose_decomposition_cmd(
         click.echo("wrote prose grounding artifact" if written else "unchanged prose grounding artifact")
 
 
+@annotate_group.command("build-prose-health")
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option(
+    "--manifest",
+    "manifest_path",
+    default=Path("data/prose-health/manifest.json"),
+    type=click.Path(dir_okay=False, path_type=Path),
+)
+@click.option("--write", "do_write", is_flag=True, default=False)
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def build_prose_health_cmd(
+    root: Path | None,
+    manifest_path: Path,
+    do_write: bool,
+    fmt: str,
+) -> None:
+    """Build the project-level prose epistemics health artifact."""
+    project_root = (root or Path.cwd()).resolve()
+    if not manifest_path.is_absolute():
+        manifest_path = project_root / manifest_path
+    try:
+        report = build_prose_health_report(
+            project_root,
+            manifest_path=manifest_path,
+            generated_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        )
+        payload = report.to_json()
+        written = write_prose_health_report(project_root, report) if do_write else False
+    except ProseHealthError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if fmt == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    summary = _required_prose_health_summary(payload)
+    coverage = payload.get("coverage") if isinstance(payload.get("coverage"), dict) else {}
+    strict = coverage.get("strict_grounding") if isinstance(coverage, dict) else {}
+    strict_ratio = strict.get("ratio") if isinstance(strict, dict) else None
+    strict_text = "n/a" if strict_ratio is None else f"{strict_ratio:.1%}"
+    click.echo(
+        "built prose health: "
+        f"sources={summary['declared_sources']} "
+        f"candidates={summary['current_candidate_units']} "
+        f"promoted={summary['promoted_units']} "
+        f"grounded={summary['grounded_units']} "
+        f"strict_grounding={strict_text} "
+        f"findings={len(payload.get('findings') or [])}"
+    )
+    if do_write:
+        click.echo("wrote prose health artifact" if written else "unchanged prose health artifact")
+
+
 def _required_prose_grounding_summary(payload: dict[str, object]) -> dict[str, object]:
     summary = payload.get("summary")
     if not isinstance(summary, dict):
@@ -298,6 +370,16 @@ def _required_prose_grounding_summary(payload: dict[str, object]) -> dict[str, o
     for key in _GROUNDING_SUMMARY_KEYS:
         if key not in summary:
             raise click.ClickException(f"missing prose grounding summary key: {key}")
+    return summary
+
+
+def _required_prose_health_summary(payload: dict[str, object]) -> dict[str, object]:
+    summary = payload.get("summary")
+    if not isinstance(summary, dict):
+        raise click.ClickException("prose health report summary must be an object")
+    for key in _PROSE_HEALTH_SUMMARY_KEYS:
+        if key not in summary:
+            raise click.ClickException(f"missing prose health summary key: {key}")
     return summary
 
 
