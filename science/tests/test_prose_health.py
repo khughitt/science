@@ -443,8 +443,29 @@ def test_missing_grounding_produces_state_and_finding(tmp_path: Path) -> None:
     assert report["sources"][0]["state"] == "missing_grounding"
     assert report["summary"]["sources_with_decomposition"] == 1
     assert report["summary"]["sources_with_grounding"] == 0
+    assert report["summary"]["current_candidate_units"] == 1
+    assert report["summary"]["skipped_units"] == 1
+    assert report["summary"]["unpromoted_units"] == 1
     assert report["findings"][0]["code"] == "missing_grounding"
     assert report["findings"][0]["counts_as_issue"] is True
+
+
+def test_missing_grounding_counts_p2_promotions_in_denominator(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+
+    artifact, store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path))
+    store.record_promotion("example", artifact.units[0].fingerprint, "proposition:basalt-cooling")
+    _write_manifest(tmp_path)
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "missing_grounding"
+    assert report["summary"]["current_candidate_units"] == 1
+    assert report["summary"]["promoted_units"] == 1
+    assert report["summary"]["grounded_units"] == 0
+    assert report["summary"]["unpromoted_units"] == 0
+    assert report["coverage"]["grounding"] == {"numerator": 0, "denominator": 1, "ratio": 0.0}
+    assert report["coverage"]["strict_grounding"] == {"numerator": 0, "denominator": 1, "ratio": 0.0}
 
 
 def test_stale_grounding_uses_precedence_and_counts_as_issue(tmp_path: Path) -> None:
@@ -458,7 +479,8 @@ def test_stale_grounding_uses_precedence_and_counts_as_issue(tmp_path: Path) -> 
     report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
 
     assert report["sources"][0]["state"] == "stale_grounding"
-    assert report["sources"][0]["summary"]["current_candidate_units"] == 0
+    assert report["sources"][0]["summary"]["current_candidate_units"] == 1
+    assert report["summary"]["current_candidate_units"] == 1
     assert report["summary"]["sources_with_grounding"] == 1
     assert report["findings"][0]["code"] == "stale_grounding"
     assert report["findings"][0]["counts_as_issue"] is True
@@ -500,6 +522,41 @@ def test_invalid_grounding_precedes_stale_grounding(tmp_path: Path) -> None:
 
     assert report["sources"][0]["state"] == "invalid_grounding"
     assert report["findings"][0]["code"] == "invalid_grounding"
+
+
+def test_missing_grounding_artifact_id_is_invalid_not_stale(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+
+    first, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path, artifact_id="decomp-1"))
+    grounding_path = _write_grounding(tmp_path, artifact=first, status="grounded")
+    _persist_decomposition(tmp_path, _artifact_payload(tmp_path, artifact_id="decomp-2", unit_id="u777"))
+    report = json.loads(grounding_path.read_text(encoding="utf-8"))
+    del report["decomposition_artifact_id"]
+    grounding_path.write_text(json.dumps(report), encoding="utf-8")
+    _write_manifest(tmp_path)
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "invalid_grounding"
+    assert report["findings"][0]["code"] == "invalid_grounding"
+    assert "decomposition_artifact_id must be a non-empty string" in report["findings"][0]["message"]
+
+
+def test_invalid_grounding_status_degrades_source_to_invalid_grounding(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+
+    artifact, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path))
+    grounding_path = _write_grounding(tmp_path, artifact=artifact, status="grounded")
+    report = json.loads(grounding_path.read_text(encoding="utf-8"))
+    report["units"][0]["status"] = "mystery"
+    grounding_path.write_text(json.dumps(report), encoding="utf-8")
+    _write_manifest(tmp_path)
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "invalid_grounding"
+    assert report["findings"][0]["code"] == "invalid_grounding"
+    assert "status is invalid" in report["findings"][0]["message"]
 
 
 def test_invalid_grounding_json_produces_state_and_finding(tmp_path: Path) -> None:
@@ -550,10 +607,25 @@ def test_grounding_fingerprint_mismatch_degrades_one_source_to_invalid_grounding
     report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
 
     assert report["sources"][0]["state"] == "invalid_grounding"
-    assert report["sources"][0]["summary"]["current_candidate_units"] == 0
+    assert report["sources"][0]["summary"]["current_candidate_units"] == 1
     assert report["units"] == []
     assert report["findings"][0]["code"] == "invalid_grounding"
     assert "missing unit fingerprint" in report["findings"][0]["message"]
+
+
+def test_invalid_decomposition_finding_message_uses_relative_paths(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+
+    artifact, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path))
+    generation = tmp_path / "data" / "prose-decompositions" / "example" / "generations" / f"{artifact.artifact.artifact_id}.json"
+    generation.unlink()
+    _write_manifest(tmp_path)
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "invalid_decomposition"
+    assert str(tmp_path) not in report["findings"][0]["message"]
+    assert "data/prose-decompositions/example/generations/decomp-1.json" in report["findings"][0]["message"]
 
 
 def test_undeclared_grounding_report_is_finding_excluded_from_denominators(tmp_path: Path) -> None:

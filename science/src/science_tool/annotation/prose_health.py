@@ -29,6 +29,7 @@ SUMMARY_KEYS = (
     "stale_units",
     "contested_units",
 )
+GROUNDING_STATUSES = frozenset({"grounded", "below_floor", "unbacked", "unpromoted", "skipped", "stale"})
 SOURCE_STATE_PRECEDENCE = (
     "missing_decomposition",
     "invalid_decomposition",
@@ -217,7 +218,13 @@ def _build_source_rows(
     except DecompositionError as exc:
         state = "missing_decomposition" if "missing latest decomposition artifact" in str(exc) else "invalid_decomposition"
         row = {**source_base, "state": state}
-        return SourceRowResult(source=row, units=[], finding=_finding(state, source, str(exc), project_root=project_root))
+        return SourceRowResult(
+            source=row,
+            units=[],
+            finding=_finding(state, source, _message_from_error(exc, project_root=project_root), project_root=project_root),
+        )
+
+    p2_summary = _summary_from_decomposition(store=store, artifact=artifact)
 
     grounding_path = prose_grounding_path(project_root, source.slug)
     if not grounding_path.exists():
@@ -226,6 +233,7 @@ def _build_source_rows(
             **source_base,
             "state": state,
             "decomposition_artifact_id": artifact.artifact.artifact_id,
+            "summary": p2_summary,
         }
         return SourceRowResult(
             source=row,
@@ -245,8 +253,13 @@ def _build_source_rows(
             **source_base,
             "state": state,
             "decomposition_artifact_id": artifact.artifact.artifact_id,
+            "summary": p2_summary,
         }
-        return SourceRowResult(source=row, units=[], finding=_finding(state, source, str(exc), project_root=project_root))
+        return SourceRowResult(
+            source=row,
+            units=[],
+            finding=_finding(state, source, _message_from_error(exc, project_root=project_root), project_root=project_root),
+        )
 
     try:
         state = _grounding_state(source=source, artifact=artifact, grounding=grounding)
@@ -256,13 +269,19 @@ def _build_source_rows(
             **source_base,
             "state": state,
             "decomposition_artifact_id": artifact.artifact.artifact_id,
+            "summary": p2_summary,
         }
-        return SourceRowResult(source=row, units=[], finding=_finding(state, source, str(exc), project_root=project_root))
+        return SourceRowResult(
+            source=row,
+            units=[],
+            finding=_finding(state, source, _message_from_error(exc, project_root=project_root), project_root=project_root),
+        )
     if state != "complete":
         row = {
             **source_base,
             "state": state,
             "decomposition_artifact_id": artifact.artifact.artifact_id,
+            "summary": p2_summary,
         }
         return SourceRowResult(
             source=row,
@@ -278,8 +297,13 @@ def _build_source_rows(
             **source_base,
             "state": state,
             "decomposition_artifact_id": artifact.artifact.artifact_id,
+            "summary": p2_summary,
         }
-        return SourceRowResult(source=row, units=[], finding=_finding(state, source, str(exc), project_root=project_root))
+        return SourceRowResult(
+            source=row,
+            units=[],
+            finding=_finding(state, source, _message_from_error(exc, project_root=project_root), project_root=project_root),
+        )
     source_summary = _summary_from_units(rows)
     source_row = {
         **source_base,
@@ -308,7 +332,10 @@ def _grounding_state(*, source: ManifestSource, artifact: DecompositionArtifact,
     if grounding.get("source_ref") != source.source_ref:
         return "invalid_grounding"
     _validate_grounding_unit_structure(grounding)
-    if grounding.get("decomposition_artifact_id") != artifact.artifact.artifact_id:
+    artifact_id = grounding.get("decomposition_artifact_id")
+    if not isinstance(artifact_id, str) or not artifact_id:
+        raise ProseHealthError("grounding report decomposition_artifact_id must be a non-empty string")
+    if artifact_id != artifact.artifact.artifact_id:
         return "stale_grounding"
     return "complete"
 
@@ -327,6 +354,9 @@ def _validate_grounding_unit_structure(grounding: dict[str, object]) -> list[Val
             raise ProseHealthError(f"grounding report unit[{index}].fingerprint must be a non-empty string")
         if fingerprint in fingerprints:
             raise ProseHealthError(f"duplicate grounding report unit fingerprint: {fingerprint}")
+        status = row.get("status")
+        if not isinstance(status, str) or status not in GROUNDING_STATUSES:
+            raise ProseHealthError(f"grounding report unit[{index}].status is invalid: {status!r}")
         fingerprints.add(fingerprint)
         rows.append(ValidatedGroundingUnit(row=row, fingerprint=fingerprint))
     return rows
@@ -451,6 +481,30 @@ def _summary_from_units(rows: list[dict[str, object]]) -> dict[str, int]:
     }
 
 
+def _summary_from_decomposition(*, store: ProseDecompositionStore, artifact: DecompositionArtifact) -> dict[str, int]:
+    index = store.load_index(artifact.source.slug)
+    index_units = index.get("units")
+    if not isinstance(index_units, dict):
+        raise ProseHealthError("prose decomposition index units must be an object")
+    candidates = [unit for unit in artifact.units if unit.disposition == "candidate"]
+    promoted = 0
+    for unit in candidates:
+        index_row = index_units.get(unit.fingerprint)
+        if isinstance(index_row, dict) and isinstance(index_row.get("promoted_to"), str):
+            promoted += 1
+    return {
+        "current_candidate_units": len(candidates),
+        "promoted_units": promoted,
+        "grounded_units": 0,
+        "below_floor_units": 0,
+        "unbacked_units": 0,
+        "unpromoted_units": len(candidates) - promoted,
+        "skipped_units": sum(1 for unit in artifact.units if unit.disposition == "skip"),
+        "stale_units": 0,
+        "contested_units": 0,
+    }
+
+
 def _is_contested(row: dict[str, object]) -> bool:
     grounding = row.get("grounding")
     return isinstance(grounding, dict) and grounding.get("contested") is True
@@ -556,6 +610,12 @@ def _project_relative_path(project_root: Path, path: Path) -> str:
         return path.resolve().relative_to(project_root.resolve()).as_posix()
     except ValueError:
         return path.as_posix()
+
+
+def _message_from_error(exc: Exception, *, project_root: Path) -> str:
+    message = str(exc)
+    root = project_root.resolve().as_posix()
+    return message.replace(f"{root}/", "").replace(root, ".")
 
 
 def _canonical_json_text(payload: dict[str, object]) -> str:
