@@ -1,24 +1,24 @@
-# Unifying `cito:discusses` Emission Across Authoring Surfaces — Implementation Plan
+# Unifying Bundle-Membership Emission on `cito:discusses` — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Route every `cito:discusses` emission through one chokepoint that always writes the `BundleMembership` role node, and let the authored-relations store and the store-CLI bridge author non-`core` roles — so a membership role is honored regardless of which surface declares the edge.
+**Goal:** Route every **bundle-membership** `cito:discusses` emission (the subtype whose object is a hypothesis/mechanism) through one chokepoint that always writes the `BundleMembership` role node, and let the authored-relations store and the store-CLI bridge author non-`core` roles — so a membership role is honored regardless of which surface declares the edge. General (non-bundle) `cito:discusses` edges are untouched.
 
-**Architecture:** Extract a single `emit_discusses_membership(...)` into `graph/io.py` (the shared low-level vocabulary module). The frontmatter path (already role-aware) is refactored to call it; the authored-relations store (`_add_authored_relation`) and the store-CLI bridge (`bridge_between_refs`) are re-pointed at it, defaulting to `core`. Then `SourceRelation` gains an optional `role` field and the bridge command gains `--role`, both threaded into the chokepoint. The chokepoint loud-fails non-bundle frames uniformly. No new vocabulary, no new semantics — see the design doc.
+**Architecture:** Extract a single `emit_discusses_membership(...)` into `graph/io.py`. The frontmatter path (already role-aware) is refactored to call it; the authored-relations store (`_add_authored_relation`) and the store-CLI bridge (`bridge_between_refs`) are re-pointed at it **only when the object resolves to a bundle**, defaulting to `core`. Then `SourceRelation` gains an optional `role` and the bridge command gains `--bridge-role`. See the design doc — especially §0.1 (policy) and §2.1 (invariant).
 
-**Tech Stack:** Python ≥3.11, Pydantic v2, rdflib, pytest, `uv`. Two packages: model (`science/model`, importable as `science_model`) and tool (`science/src`, importable as `science_tool`).
+**Tech Stack:** Python ≥3.11, Pydantic v2, rdflib, pytest, `uv`. Two packages: model (`science/model`, `science_model`) and tool (`science/src`, `science_tool`).
 
 **Spec:** [`2026-06-19-discusses-membership-surfaces-design.md`](./2026-06-19-discusses-membership-surfaces-design.md). Parent feature: [`2026-06-19-contextual-structural-roles-design.md`](./2026-06-19-contextual-structural-roles-design.md).
 
 ## Global Constraints
 
-- **Working directory:** all commands run from `~/d/science` (the repo root) unless a step says otherwise. Tests run from the nested `science/` and `science/model/` package dirs.
+- **Working directory:** all commands run from `~/d/science`. Tests run from the nested `science/` and `science/model/` package dirs.
 - **Test runner:** `uv run --frozen pytest <path> -v`. Validation: `uv run --frozen science validate`.
-- **Authority boundary (design §0):** touch **only** the emission and authoring of the `cito:discusses` membership relation. Add **no** causal-edge vocabulary; do **not** make the membership node truth-apt; do **not** change the closed role vocabulary `core | rival | background`.
-- **Annotate, never replace:** the plain `(prop, cito:discusses, frame)` triple MUST always be emitted exactly as today. The role rides on a separate `BundleMembership` node.
-- **Migration default = `core`:** an unlabeled membership (bare string, missing `role`, or a forward `sci:hasProposition` member) means `core`. The conjunction result MUST be byte-for-byte unchanged on the existing corpus until a curator labels a member.
-- **One emitter:** after this work, `graph.add((_, CITO_NS.discusses, _))` appears in exactly one place — inside `emit_discusses_membership`. A grep that finds it anywhere else is a defect.
-- **Discusses targets are bundles:** a `cito:discusses` frame MUST resolve to a `hypothesis` or `mechanism`. The chokepoint loud-fails otherwise (design §3.4). Run the Task 6 corpus audit before relying on this in any non-`mm30` project.
+- **Authority boundary (design §0):** touch **only** the emission/authoring of the bundle-membership subtype of `cito:discusses`. Add **no** causal-edge vocabulary; do **not** make the membership node truth-apt; do **not** change the closed role vocabulary `core | rival | background`.
+- **`cito:discusses` stays general (design §0.1):** bundle membership = the subtype whose **object resolves to a `hypothesis`/`mechanism`**. Only that subtype gets a role node + the chokepoint. Non-bundle discusses (`paper → question`, `proposition → topic`, → external term) keeps the generic `graph.add` path **unchanged** — there is a passing test for this (`science/tests/test_graph_materialize.py:896`, `paper → discusses → question`) that MUST stay green.
+- **Annotate, never replace:** the plain `(prop, cito:discusses, frame)` triple MUST always be emitted exactly as today.
+- **Migration default = `core`:** unlabeled membership (bare string, missing `role`, forward `sci:hasProposition`) means `core`. The conjunction MUST be byte-for-byte unchanged on the existing corpus until a curator labels a member.
+- **Membership invariant (design §2.1):** every `(s, cito:discusses, o)` with `o` a bundle has a `BundleMembership` node, minted only by `emit_discusses_membership`. Verified by a graph-coverage assertion (Task 6), **not** a static grep.
 - **Style:** explicit over defensive; fail loudly, no silent fallbacks. Follow existing module idioms.
 
 ---
@@ -28,11 +28,11 @@
 | File | Responsibility | Change |
 |---|---|---|
 | `science/src/science_tool/graph/io.py` | Graph vocabulary + the membership chokepoint | Add `membership_uri_for()` + `emit_discusses_membership()` |
-| `science/src/science_tool/graph/materialize.py` | Frontmatter → RDF; authored relations | Repoint frontmatter loop (642–648) and `_add_authored_relation` (1208) at the chokepoint; remove the now-duplicated inline emit + `_membership_uri` |
+| `science/src/science_tool/graph/materialize.py` | Frontmatter → RDF; authored relations | Repoint frontmatter (642–648) at chokepoint; route bundle-object discusses in `_add_authored_relation` (1208); delete duplicated inline emit + `_membership_uri` |
 | `science/src/science_tool/graph/sources.py` | Authored-relation model | Add `role: MembershipRole | None = None` to `SourceRelation` |
-| `science/src/science_tool/graph/store/mutations.py` | Store CLI mutations | Repoint `bridge_between_refs` emit (228) at the chokepoint; add `role` param |
-| `science/src/science_tool/cli.py` | CLI surface | Add `--role` to the `--bridge-between` command |
-| `science/src/science_tool/validate/checks/propositions.py` (or relations check) | Frontmatter/relation QA | Validate `SourceRelation.role` (predicate, target, enum, cross-surface conflict) |
+| `science/src/science_tool/graph/store/mutations.py` | Store CLI mutations | Repoint `bridge_between_refs` emit (225–229) at chokepoint; add `bridge_role` param |
+| `science/src/science_tool/cli.py` | CLI surface | Add `--bridge-role` to the `--bridge-between` command |
+| `science/src/science_tool/validate/checks/propositions.py` (or relations check) | QA | Validate `SourceRelation.role` (predicate, target, cross-surface conflict) |
 | `science/tests/test_membership_chokepoint.py` | Chokepoint unit tests | Create |
 | `science/tests/test_membership_materialize.py` | Relations-store membership tests | Extend (exists) |
 | `science/tests/test_membership_bridge.py` | Bridge-role tests | Create |
@@ -40,9 +40,9 @@
 
 ---
 
-## Task 1: Extract the emission chokepoint; repoint the frontmatter path
+## Task 1: Extract the membership chokepoint; repoint the frontmatter path
 
-Pure refactor — externally behavior-preserving. The frontmatter graph output must be byte-for-byte identical; the only change is that the triple + node are emitted by one shared function.
+Pure refactor — externally behavior-preserving. Frontmatter graph output must be byte-for-byte identical; the only change is that the triple + node are emitted by one shared function.
 
 **Files:**
 - Modify: `science/src/science_tool/graph/io.py`
@@ -52,8 +52,8 @@ Pure refactor — externally behavior-preserving. The frontmatter graph output m
 **Interfaces:**
 - Produces (in `science_tool.graph.io`):
   - `membership_uri_for(prop_cid: str, frame_cid: str) -> URIRef` — moved verbatim from `materialize._membership_uri`.
-  - `emit_discusses_membership(knowledge, *, prop_uri: URIRef, frame_uri: URIRef, prop_cid: str, frame_cid: str, role: MembershipRole = MembershipRole.CORE) -> None` — loud-fails non-bundle `frame_cid`, emits the plain triple, emits the `BundleMembership` node.
-- Consumes: `materialize.py` imports both from `io`; `_membership_uri` is deleted (or re-exported as a thin alias if other modules import it — grep first).
+  - `emit_discusses_membership(knowledge, *, prop_uri: URIRef, frame_uri: URIRef, prop_cid: str, frame_cid: str, role: MembershipRole = MembershipRole.CORE) -> None` — precondition-guards non-bundle `frame_cid`, emits the plain triple, emits the `BundleMembership` node.
+- Consumes: `materialize.py` imports both from `io`; `_membership_uri` is deleted.
 
 - [ ] **Step 1: Write the failing chokepoint unit test**
 
@@ -68,7 +68,6 @@ from rdflib import Graph, Literal, RDF
 from science_model.reasoning import MembershipRole
 from science_tool.graph.io import (
     CITO_NS,
-    PROJECT_NS,
     SCI_NS,
     emit_discusses_membership,
     membership_uri_for,
@@ -92,11 +91,7 @@ def _emit(role=MembershipRole.CORE, frame_cid="hypothesis:0001-foo"):
 
 def test_plain_triple_always_emitted():
     g, prop_cid, frame_cid = _emit()
-    assert (
-        entity_uri_for_ref(prop_cid),
-        CITO_NS.discusses,
-        entity_uri_for_ref(frame_cid),
-    ) in g
+    assert (entity_uri_for_ref(prop_cid), CITO_NS.discusses, entity_uri_for_ref(frame_cid)) in g
 
 
 def test_core_membership_node_emitted():
@@ -126,7 +121,7 @@ Expected: FAIL — `ImportError: cannot import name 'emit_discusses_membership'`
 
 - [ ] **Step 3: Add the chokepoint to `io.py`**
 
-In `science/src/science_tool/graph/io.py`, ensure `RDF` and `Literal` are imported from `rdflib` and `MembershipRole` from `science_model.reasoning` (add imports if absent), then add:
+In `science/src/science_tool/graph/io.py`, ensure `RDF` and `Literal` are imported from `rdflib` and `MembershipRole` from `science_model.reasoning` (add imports if absent — `materialize.py:21` already imports `MembershipRole` from the graph layer, so the dependency is fine), then add:
 
 ```python
 def membership_uri_for(prop_cid: str, frame_cid: str) -> URIRef:
@@ -144,11 +139,13 @@ def emit_discusses_membership(
     frame_cid: str,
     role: MembershipRole = MembershipRole.CORE,
 ) -> None:
-    """The one place a cito:discusses triple is added to the knowledge graph.
+    """The one place a bundle-membership cito:discusses edge is emitted.
 
     Always emits the plain (prop, cito:discusses, frame) triple, plus a
-    non-truth-apt BundleMembership node carrying the role. Loud-fails a frame
-    that is not a bundle (hypothesis/mechanism) — design §3.4, contextual-roles §5.
+    non-truth-apt BundleMembership node carrying the role. Precondition guard:
+    the frame must be a bundle (hypothesis/mechanism) — callers route only
+    membership edges here; non-bundle discusses keeps the generic path (design
+    §0.1, §3.4).
     """
     frame_kind = frame_cid.split(":", 1)[0]
     if frame_kind not in ("hypothesis", "mechanism"):
@@ -157,9 +154,7 @@ def emit_discusses_membership(
             "bundle (hypothesis/mechanism); membership roles are only valid on bundle "
             "frames (spec §5)."
         )
-    # 1) Plain triple, emitted verbatim — annotate, never replace.
     knowledge.add((prop_uri, CITO_NS.discusses, frame_uri))
-    # 2) BundleMembership plumbing node carrying the role.
     node = membership_uri_for(prop_cid, frame_cid)
     knowledge.add((node, RDF.type, SCI_NS.BundleMembership))
     knowledge.add((node, SCI_NS.membershipProposition, prop_uri))
@@ -174,7 +169,7 @@ Expected: PASS (4 tests).
 
 - [ ] **Step 5: Repoint the frontmatter path at the chokepoint**
 
-In `materialize.py`, replace the inline block at `632–648` (the `frame_uri = …` resolution stays; the kind-check + 6 `knowledge.add` lines collapse into one call):
+In `materialize.py`, replace the inline block at `632–648` (keep the `frame_uri` resolution; the kind-check + 6 `knowledge.add` lines collapse into one call):
 
 ```python
         frame_uri = _entity_uri(target.canonical_id)
@@ -188,96 +183,110 @@ In `materialize.py`, replace the inline block at `632–648` (the `frame_uri = �
         )
 ```
 
-Delete the now-unused `_membership_uri` (107–110) and import `emit_discusses_membership`, `membership_uri_for` from `.io`. Grep `_membership_uri` across the repo first; if any other module imports it, re-point those imports at `io.membership_uri_for` instead of leaving a shim (no compatibility layer — per user rules).
+Delete `_membership_uri` (107–110) and import `emit_discusses_membership`, `membership_uri_for` from `.io`. Grep `_membership_uri` across the repo first; if any other module imports it, re-point those at `io.membership_uri_for` (no compatibility shim — per user rules).
 
 - [ ] **Step 6: Run the full materialize + belief suites to verify no behavior change**
 
-Run: `cd science && uv run --frozen pytest tests/test_membership_materialize.py tests/test_bundle_belief_membership.py tests/test_membership_chokepoint.py -v`
-Expected: PASS — all pre-existing frontmatter/belief tests green, output unchanged.
+Run: `cd science && uv run --frozen pytest tests/test_membership_materialize.py tests/test_bundle_belief_membership.py tests/test_graph_materialize.py tests/test_membership_chokepoint.py -v`
+Expected: PASS — all pre-existing frontmatter/belief tests green, including `paper → discusses → question` in `test_graph_materialize.py`.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add science/src/science_tool/graph/io.py science/src/science_tool/graph/materialize.py science/tests/test_membership_chokepoint.py
-git commit -m "refactor(membership): extract single cito:discusses emission chokepoint"
+git commit -m "refactor(membership): extract single bundle-membership emission chokepoint"
 ```
 
 ---
 
-## Task 2: Route the authored-relations store through the chokepoint
+## Task 2: Route bundle-object relations-store discusses through the chokepoint
 
-The relations.yaml surface begins emitting a `role: core` `BundleMembership` node for `cito:discusses` edges. Additive and benign (core = existing default), but it changes graph output.
+A `cito:discusses` edge in `relations.yaml` whose **object is a bundle** begins emitting a `role: core` `BundleMembership` node. Non-bundle discusses (e.g. `paper → question`) stays on the generic path, unchanged.
 
 **Files:**
 - Modify: `science/src/science_tool/graph/materialize.py:1200–1208` (`_add_authored_relation`)
 - Test: `science/tests/test_membership_materialize.py` (extend)
 
 **Interfaces:**
-- Consumes: `io.emit_discusses_membership` (Task 1), `CITO_NS` (already imported).
-- Produces: a `cito:discusses` relation whose object resolves to a **live bundle entity** routes through the chokepoint; all other predicates and non-live-bundle objects keep the generic `graph.add` path.
+- Consumes: `io.emit_discusses_membership`, `CITO_NS`.
+- Produces: routing in `_add_authored_relation` — `predicate == cito:discusses` **and** object resolves to a live bundle → chokepoint; everything else → generic `graph.add`.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests (membership routes; non-bundle does not)**
 
-Add to `science/tests/test_membership_materialize.py` — mirror the existing relations-store fixture in that file (a tiny project with a `relations.yaml`), adding a `cito:discusses` relation `proposition:0011 → hypothesis:0001`:
+Add to `science/tests/test_membership_materialize.py`, mirroring the existing relations-store fixture pattern in `test_graph_materialize.py` (`local_sources / "relations.yaml"` → `materialize_graph(project)` → parse the `graph/knowledge` graph):
 
 ```python
-def test_relations_store_discusses_emits_core_membership_node(tmp_project_with_relation):
-    knowledge = tmp_project_with_relation(  # fixture builds + returns the knowledge graph
-        subject="proposition:0011-bar",
-        predicate="cito:discusses",
-        object="hypothesis:0001-foo",
+def test_relations_store_prop_to_bundle_emits_core_node(make_project_with_relation):
+    knowledge = make_project_with_relation(
+        subject="proposition:0011-bar", predicate="cito:discusses", object="hypothesis:0001-foo",
     )
-    from science_tool.graph.io import SCI_NS, membership_uri_for, entity_uri_for_ref, CITO_NS, Literal_  # adjust to file's imports
+    from science_tool.graph.io import SCI_NS, membership_uri_for
+    from rdflib import Literal
     node = membership_uri_for("proposition:0011-bar", "hypothesis:0001-foo")
-    assert (entity_uri_for_ref("proposition:0011-bar"), CITO_NS.discusses,
-            entity_uri_for_ref("hypothesis:0001-foo")) in knowledge
     assert (node, SCI_NS.membershipRole, Literal("core")) in knowledge
+
+
+def test_relations_store_paper_to_question_has_no_membership_node(make_project_with_relation):
+    knowledge = make_project_with_relation(
+        subject="paper:legatiuk2021", predicate="cito:discusses", object="question:q01-demo",
+    )
+    from science_tool.graph.io import SCI_NS
+    # The plain structural link still materializes; no BundleMembership node exists.
+    assert not list(knowledge.triples((None, SCI_NS.membershipFrame, None)))
 ```
 
-If the file has no reusable relations-store fixture, build the graph through the same `_build_dataset_from_sources` / `materialize` entry the existing materialize tests use; copy the smallest existing example in the file and add one relation. Do not invent a new harness.
+`make_project_with_relation` builds a minimal project (entities for the subject/object + a `relations.yaml` with the one relation) and returns the parsed `graph/knowledge` graph — lift it from the existing `test_graph_materialize.py:884–913` fixture rather than inventing a harness.
 
-- [ ] **Step 2: Run it to verify it fails**
+- [ ] **Step 2: Run to verify the first fails, the second already passes**
 
-Run: `cd science && uv run --frozen pytest tests/test_membership_materialize.py -k relations_store_discusses -v`
-Expected: FAIL — no `BundleMembership` node (generic `graph.add` path took the edge).
+Run: `cd science && uv run --frozen pytest tests/test_membership_materialize.py -k "prop_to_bundle or paper_to_question" -v`
+Expected: `prop_to_bundle` FAILS (no node); `paper_to_question` PASSES (current generic path already correct — this is the regression guard).
 
-- [ ] **Step 3: Special-case `cito:discusses` in `_add_authored_relation`**
+- [ ] **Step 3: Add bundle-object routing in `_add_authored_relation`**
 
-Replace the unconditional emit at `materialize.py:1208`:
+Replace the unconditional emit at `materialize.py:1208`. Determine bundle-ness from the resolved object's canonical id (both `Entity` and `_ArchivedEndpoint` expose `canonical_id`):
 
 ```python
-    if predicate_uri == CITO_NS.discusses and isinstance(object_entity, Entity):
+    object_cid = getattr(object_entity, "canonical_id", None)
+    object_is_bundle = bool(object_cid) and object_cid.split(":", 1)[0] in ("hypothesis", "mechanism")
+    if predicate_uri == CITO_NS.discusses and object_is_bundle:
         emit_discusses_membership(
             graph,
             prop_uri=subject_uri,
             frame_uri=object_uri,
             prop_cid=subject_entity.canonical_id,
-            frame_cid=object_entity.canonical_id,
-            role=relation.role or MembershipRole.CORE,
+            frame_cid=object_cid,
+            role=MembershipRole.CORE,  # finalized to `relation.role or CORE` in Task 4
+        )
+    elif predicate_uri == CITO_NS.discusses and getattr(relation, "role", None) is not None:
+        raise ValueError(
+            f"relation {relation.subject} cito:discusses {relation.object}: role "
+            f"{relation.role!r} set, but the object is not a bundle (hypothesis/mechanism); "
+            "membership roles are only valid on bundle frames (design §4)."
         )
     else:
         graph.add((subject_uri, predicate_uri, object_uri))
 ```
 
-`relation.role` does not exist until Task 4; until then this reads `getattr(relation, "role", None) or MembershipRole.CORE` — **but** prefer to land Task 4's field first if executing in order; if Tasks are executed strictly in number, use `MembershipRole.CORE` here and add `relation.role` in Task 4. Import `MembershipRole` and `emit_discusses_membership` at module top. The `isinstance(object_entity, Entity)` guard keeps external/archived discusses targets on the generic path (membership applies only to live bundle entities); the chokepoint then loud-fails if that live entity is not a bundle.
+`getattr(relation, "role", None)` is forward-compatible: it is `None` until Task 4 adds the field, so the loud-fail branch is inert until then. Import `emit_discusses_membership` and `MembershipRole` at module top.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 4: Run the tests to verify both pass**
 
-Run: `cd science && uv run --frozen pytest tests/test_membership_materialize.py -v`
-Expected: PASS.
+Run: `cd science && uv run --frozen pytest tests/test_membership_materialize.py tests/test_graph_materialize.py -v`
+Expected: PASS — `prop_to_bundle` now emits a node; `paper_to_question` still has none.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add science/src/science_tool/graph/materialize.py science/tests/test_membership_materialize.py
-git commit -m "feat(membership): emit role node for relations-store cito:discusses edges"
+git commit -m "feat(membership): emit role node for bundle-object relations-store discusses"
 ```
 
 ---
 
 ## Task 3: Route the store-CLI bridge through the chokepoint
 
-`--bridge-between` edges begin carrying an explicit `role: core` node; the `sci:bridgeBetween` provenance triple is unchanged.
+`--bridge-between` edges (always hypothesis refs, hence bundle memberships) begin carrying an explicit `role: core` node; the `sci:bridgeBetween` provenance triple is unchanged.
 
 **Files:**
 - Modify: `science/src/science_tool/graph/store/mutations.py:114` (signature), `:225–229` (emit)
@@ -285,11 +294,14 @@ git commit -m "feat(membership): emit role node for relations-store cito:discuss
 
 **Interfaces:**
 - Consumes: `io.emit_discusses_membership`.
-- Produces: `mutations`'s proposition-creation function gains `bridge_role: MembershipRole = MembershipRole.CORE`; each bridge ref emits triple + node via the chokepoint **and** keeps `provenance.add((prop_uri, SCI_NS.bridgeBetween, bridge_uri))`.
+- Produces: the proposition-creation function gains `bridge_role: MembershipRole = MembershipRole.CORE`; each bridge ref emits triple + node via the chokepoint **and** keeps `provenance.add((prop_uri, SCI_NS.bridgeBetween, bridge_uri))`.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `science/tests/test_membership_bridge.py` — mirror the smallest existing `mutations` test that exercises a proposition mutation in the suite (find it with `grep -rln "bridge_between_refs\|def test_" science/tests | head`). Assert that creating a proposition with `bridge_between_refs=["hypothesis:0001-foo"]` produces both a `cito:discusses` triple **and** a `BundleMembership` node with `membershipRole "core"`, and still produces the `sci:bridgeBetween` provenance triple.
+Create `science/tests/test_membership_bridge.py`, mirroring the smallest existing `mutations` test that creates a proposition (find it: `grep -rln "bridge_between_refs\|def add_proposition\|def test_" science/tests | head`). Assert that creating a proposition with `bridge_between_refs=["hypothesis:0001-foo"]`:
+- adds `(prop_uri, cito:discusses, hypothesis_uri)`,
+- adds a `BundleMembership` node with `membershipRole "core"`,
+- still adds `(prop_uri, sci:bridgeBetween, hypothesis_uri)` in the provenance graph.
 
 - [ ] **Step 2: Run it to verify it fails**
 
@@ -298,24 +310,25 @@ Expected: FAIL — no `BundleMembership` node.
 
 - [ ] **Step 3: Repoint the bridge emit**
 
-In `mutations.py`, add `bridge_role: MembershipRole = MembershipRole.CORE` to the signature (near `bridge_between_refs`, line 114), and replace `225–229`:
+In `mutations.py`, add `bridge_role: MembershipRole = MembershipRole.CORE` to the signature near `bridge_between_refs` (line 114). The proposition's canonical id is `proposition:{token}` (built at `mutations.py:134–140`); the bridge ref is already a `kind:slug` ref. Replace `225–229`:
 
 ```python
     if bridge_between_refs is not None:
+        prop_cid = f"proposition:{token}"
         for bridge_ref in bridge_between_refs:
             bridge_uri = _resolve_term(bridge_ref)
             emit_discusses_membership(
                 knowledge,
                 prop_uri=prop_uri,
                 frame_uri=bridge_uri,
-                prop_cid=_canonical_for(prop_uri),
-                frame_cid=_canonical_for(bridge_uri),
+                prop_cid=prop_cid,
+                frame_cid=bridge_ref,
                 role=bridge_role,
             )
             provenance.add((prop_uri, SCI_NS.bridgeBetween, bridge_uri))
 ```
 
-`emit_discusses_membership` needs the **canonical id strings** (`proposition:…`, `hypothesis:…`) for `membership_uri_for`. If `mutations.py` works in URIs and has no ready canonicalizer, derive the canonical id from the bridge ref string directly (it is already a `kind:slug` ref) and from the proposition's source ref; reuse whatever canonical-id the function already holds for `prop_uri` rather than reversing the URI. Inspect the function head (mutations.py:90–130) for the proposition's canonical ref and pass it through. Import `emit_discusses_membership` and `MembershipRole`.
+`frame_cid=bridge_ref` carries the authored `hypothesis:slug` ref; the chokepoint's bundle guard rejects a non-bundle bridge ref (a typo'd `--bridge-between topic:…`) with a loud error — desired. Import `emit_discusses_membership` and `MembershipRole`.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -326,7 +339,7 @@ Expected: PASS.
 
 ```bash
 git add science/src/science_tool/graph/store/mutations.py science/tests/test_membership_bridge.py
-git commit -m "feat(membership): emit role node for store-CLI bridge cito:discusses edges"
+git commit -m "feat(membership): emit role node for store-CLI bridge discusses edges"
 ```
 
 ---
@@ -335,19 +348,19 @@ git commit -m "feat(membership): emit role node for store-CLI bridge cito:discus
 
 **Files:**
 - Modify: `science/src/science_tool/graph/sources.py:88–95` (`SourceRelation`)
-- Modify: `science/src/science_tool/graph/materialize.py` (`_add_authored_relation`, use `relation.role`)
-- Test: `science/tests/test_membership_materialize.py` (extend)
+- Modify: `science/src/science_tool/graph/materialize.py` (`_add_authored_relation`, finalize `relation.role`)
+- Test: `science/tests/test_membership_materialize.py`, `science/tests/test_membership_validation.py`
 
 **Interfaces:**
-- Produces: `SourceRelation.role: MembershipRole | None = None`. `_add_authored_relation` passes `role=relation.role or MembershipRole.CORE` to the chokepoint (replacing the Task-2 placeholder if one was used).
+- Produces: `SourceRelation.role: MembershipRole | None = None`. `_add_authored_relation` passes `role=relation.role or MembershipRole.CORE` to the chokepoint (finalizing the Task-2 `CORE` placeholder).
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `test_membership_materialize.py`: a relations.yaml `cito:discusses` edge with `role: background` produces a node with `membershipRole "background"`, and (using the bundle-belief reader from `bundle_belief.py`) is **excluded** from `core_members` of that frame.
+Add to `test_membership_materialize.py`: a relations.yaml `cito:discusses` to a bundle with `role: background` produces a node with `membershipRole "background"`, and is excluded from `core_members`:
 
 ```python
-def test_relations_store_role_background_excluded_from_core(tmp_project_with_relation):
-    knowledge = tmp_project_with_relation(
+def test_relations_store_role_background_excluded_from_core(make_project_with_relation):
+    knowledge = make_project_with_relation(
         subject="proposition:0011-bar", predicate="cito:discusses",
         object="hypothesis:0001-foo", role="background",
     )
@@ -360,12 +373,14 @@ def test_relations_store_role_background_excluded_from_core(tmp_project_with_rel
     assert prop not in core_members(knowledge, frame)
 ```
 
+(Extend `make_project_with_relation` to thread an optional `role` into the emitted `relations.yaml` entry.)
+
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `cd science && uv run --frozen pytest tests/test_membership_materialize.py -k role_background -v`
 Expected: FAIL — `SourceRelation` rejects unknown field `role`, or role is ignored (treated core).
 
-- [ ] **Step 3: Add the field and thread it**
+- [ ] **Step 3: Add the field and finalize threading**
 
 In `sources.py`, import `MembershipRole` and add to `SourceRelation`:
 
@@ -373,26 +388,24 @@ In `sources.py`, import `MembershipRole` and add to `SourceRelation`:
     role: MembershipRole | None = None
 ```
 
-In `_add_authored_relation`, ensure the chokepoint call passes `role=relation.role or MembershipRole.CORE` (finalize the Task-2 placeholder).
+In `_add_authored_relation` (Task 2 Step 3), change the chokepoint call's `role=MembershipRole.CORE` to `role=relation.role or MembershipRole.CORE`. The role-on-non-bundle loud-fail branch (already added in Task 2) now becomes reachable.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_membership_materialize.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Add cross-surface validation**
+- [ ] **Step 5: Add cross-surface validation (design §4)**
 
-In the validation layer (extend `validate/checks/propositions.py` or the relations check that already iterates `SourceRelation`s), add `check`s, with loud-fail messages, for design §4:
+Extend the validation layer (`validate/checks/propositions.py` or the relations check that iterates `SourceRelation`s) with loud-fail checks:
 
-1. `relation.role is not None and relation.predicate != "cito:discusses"` → error: role only valid on `cito:discusses`.
+1. `relation.role is not None and relation.predicate != "cito:discusses"` → error.
 2. `relation.role` set and object does not resolve to a bundle → error.
-3. The same `(subject, frame)` pair labeled with conflicting roles across frontmatter and relations.yaml → error (one role per pair).
-
-(Enum membership is already enforced by the Pydantic `MembershipRole` type at load; rule 3 of design §4 is the value check and needs no separate validate code.)
+3. The same `(subject, frame)` pair labeled with conflicting roles across frontmatter and relations.yaml → error.
 
 - [ ] **Step 6: Write + run the validation tests**
 
-Add to `science/tests/test_membership_validation.py` one test per rule above (a `role` on a `cito:supports` relation fails; a `role` to a `topic:` object fails; a frontmatter-`background` + relations-`core` conflict fails). Run:
+Add to `science/tests/test_membership_validation.py` one test per rule (a `role` on a `cito:supports` relation fails; a `role` to a `topic:` object fails; a frontmatter-`background` + relations-`core` conflict for one pair fails). Run:
 
 `cd science && uv run --frozen pytest tests/test_membership_validation.py -v`
 Expected: PASS.
@@ -401,28 +414,28 @@ Expected: PASS.
 
 ```bash
 git add science/src/science_tool/graph/sources.py science/src/science_tool/graph/materialize.py science/src/science_tool/validate/checks/propositions.py science/tests/test_membership_materialize.py science/tests/test_membership_validation.py
-git commit -m "feat(membership): authored role on relations-store cito:discusses + validation"
+git commit -m "feat(membership): authored role on relations-store discusses + validation"
 ```
 
 ---
 
-## Task 5: Add `--role` to the `--bridge-between` CLI command
+## Task 5: Add `--bridge-role` to the `--bridge-between` CLI command
 
 **Files:**
 - Modify: `science/src/science_tool/cli.py:2367–2421` (the bridge command)
 - Test: extend `science/tests/test_membership_bridge.py`
 
 **Interfaces:**
-- Produces: `--role <core|rival|background>` (default `core`) on the proposition-creation command; threaded to `mutations`'s `bridge_role`.
+- Produces: `--bridge-role <core|rival|background>` (default `core`) on the proposition-creation command; threaded to `mutations`'s `bridge_role`. Named `--bridge-role` (not `--role`) to scope it to bridge frames and avoid collision with any other `--role` option on the command (design §3.3).
 
 - [ ] **Step 1: Write the failing test**
 
-Add a CliRunner test (mirror an existing `cli.py` proposition-creation test) invoking the command with `--bridge-between hypothesis:0001-foo --role background`, asserting the resulting graph has `membershipRole "background"` for that pair.
+Add a CliRunner test (mirror an existing `cli.py` proposition-creation test) invoking the command with `--bridge-between hypothesis:0001-foo --bridge-role background`, asserting the resulting graph has `membershipRole "background"` for that pair.
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `cd science && uv run --frozen pytest tests/test_membership_bridge.py -k cli_role -v`
-Expected: FAIL — no such option `--role`.
+Run: `cd science && uv run --frozen pytest tests/test_membership_bridge.py -k bridge_role -v`
+Expected: FAIL — no such option `--bridge-role`.
 
 - [ ] **Step 3: Add the option**
 
@@ -455,43 +468,53 @@ git commit -m "feat(membership): --bridge-role on the bridge CLI command"
 
 ---
 
-## Task 6: Corpus audit, graph rebuild, and docs reconciliation
+## Task 6: Coverage-invariant check, graph rebuild, and docs reconciliation
 
 **Files:**
+- Create/extend: a coverage test asserting the membership invariant
 - Modify: `skills/research/proposition-schema.md` ("Bundle Membership and Roles" section)
-- (No new code; this is the safety + docs task.)
 
-- [ ] **Step 1: Audit all projects for non-bundle relations-store discusses edges**
+- [ ] **Step 1: Write the membership-coverage invariant test**
 
-Run (from each project root, or across the project corpus the team tracks):
+Add to `science/tests/test_membership_materialize.py` a test over a built graph (use `make_project_with_relation` or the broadest existing materialize fixture) asserting design §2.1: every `cito:discusses` triple whose object is a bundle has a `BundleMembership` node.
 
-```bash
-grep -rl "predicate: cito:discusses" */knowledge/sources/local/relations.yaml 2>/dev/null
+```python
+def test_every_bundle_discusses_has_membership_node(make_project_with_relation):
+    knowledge = make_project_with_relation(
+        subject="proposition:0011-bar", predicate="cito:discusses", object="hypothesis:0001-foo",
+    )
+    from science_tool.graph.io import CITO_NS, SCI_NS, membership_uri_for
+    def _cid(uri):  # PROJECT_NS["kind/slug"] -> "kind:slug"
+        tail = str(uri).rsplit("/project/", 1)[-1]
+        kind, _, slug = tail.partition("/")
+        return f"{kind}:{slug}"
+    for s, _, o in knowledge.triples((None, CITO_NS.discusses, None)):
+        if str(o).rsplit("/project/", 1)[-1].split("/", 1)[0] in ("hypothesis", "mechanism"):
+            node = membership_uri_for(_cid(s), _cid(o))
+            assert (node, SCI_NS.membershipFrame, o) in knowledge, f"missing membership node for {s} -> {o}"
 ```
 
-For each hit, confirm the `object:` resolves to a `hypothesis:` or `mechanism:`. Any `topic:`/other target is now a hard error under the chokepoint (design §3.4) — reconcile it (retarget to a bundle, or move to `related`/a non-membership predicate). `mm30` already has none after the pilot cleanup (`mm30@1cfa2592`).
+(Adjust `_cid`/URI parsing to the project's actual IRI scheme — see `io.entity_uri_for_ref` / `_entity_uri`. The intent is the assertion, not this exact string surgery.)
 
-- [ ] **Step 2: Rebuild graphs for any project that authored relations-store discusses edges**
+Run: `cd science && uv run --frozen pytest tests/test_membership_materialize.py -k every_bundle_discusses -v`
+Expected: PASS.
 
-For each affected project: `science graph build` (regenerates `knowledge/graph.trig` + `composite.trig` with the new `role: core` nodes). Confirm `science validate` passes and bundle belief is unchanged (all new nodes are `core`).
+- [ ] **Step 2: Rebuild graphs for projects with prop→bundle relations-store discusses**
+
+Identify affected projects: `grep -rl "predicate: cito:discusses" */knowledge/sources/local/relations.yaml 2>/dev/null`, then for each whose object is a `hypothesis:`/`mechanism:`, run `science graph build`. Confirm `science validate` passes and bundle belief is unchanged (new nodes are all `core`). `mm30` has no prop→bundle relations-store discusses after the pilot cleanup (`mm30@1cfa2592`), so no rebuild is needed there.
 
 - [ ] **Step 3: Reconcile the schema-skill caveat**
 
-In `skills/research/proposition-schema.md`, update the "Bundle Membership and Roles" section: the caveat currently says a `cito:discusses` edge authored in `relations.yaml` is "always treated as `core`." Replace it with: relations.yaml now accepts an optional `role:` on a `cito:discusses` relation (absent = `core`), and the store-CLI bridge accepts `--bridge-role`. Keep the note that forward `sci:hasProposition` is authoritatively `core`.
+In `skills/research/proposition-schema.md`, update "Bundle Membership and Roles": the caveat currently says a `cito:discusses` edge in `relations.yaml` is "always treated as `core`." Replace with: relations.yaml now accepts an optional `role:` on a `cito:discusses` relation whose object is a bundle (absent = `core`), and the store-CLI bridge accepts `--bridge-role`. Keep the note that forward `sci:hasProposition` is authoritatively `core`, and that a `cito:discusses` to a non-bundle (e.g. a question/topic) is a plain structural link with no role.
 
-- [ ] **Step 4: Verify the one-emitter invariant**
-
-Run: `cd science && grep -rn "CITO_NS.discusses)" science/src | grep "add("`
-Expected: a single hit, inside `io.emit_discusses_membership`. Any other hit is a regression.
-
-- [ ] **Step 5: Full validation + commit**
+- [ ] **Step 4: Full validation + commit**
 
 Run: `cd science && uv run --frozen pytest -q && uv run --frozen science validate`
 Expected: green (modulo the pre-existing, unrelated `test_templates.py::…[prose-source]` failure).
 
 ```bash
-git add skills/research/proposition-schema.md
-git commit -m "docs(membership): relations-store + bridge now carry roles; reconcile schema skill"
+git add skills/research/proposition-schema.md science/tests/test_membership_materialize.py
+git commit -m "docs+test(membership): coverage invariant; relations-store + bridge roles in schema skill"
 ```
 
 ---
@@ -499,17 +522,23 @@ git commit -m "docs(membership): relations-store + bridge now carry roles; recon
 ## Self-Review
 
 **Spec coverage (design doc → tasks):**
+- §0.1 policy (discusses general; membership = bundle subtype) → Tasks 2 (object-is-bundle gate), 6 (coverage test). ✅
 - §1 three-emitter table → Tasks 1 (frontmatter), 2 (relations), 3 (bridge). ✅
-- §2 single chokepoint → Task 1. ✅
-- §3.2 `SourceRelation.role` → Task 4. ✅
+- §2 + §2.1 chokepoint + narrowed invariant → Task 1 + Task 6 coverage test. ✅
+- §3.2 `SourceRelation.role` + bundle routing → Tasks 2, 4. ✅
 - §3.3 `--bridge-role` → Tasks 3 (param) + 5 (CLI). ✅
-- §3.4 non-bundle loud-fail uniform → Task 1 (chokepoint) + Task 6 audit. ✅
-- §4 validation rules → Task 4 Step 5–6. ✅
+- §3.4 chokepoint guard (not corpus-wide) → Task 1 guard + Task 2 non-bundle stays generic. ✅
+- §4 validation → Task 4 Steps 5–6. ✅
 - §6 migration/rebuild + docs → Task 6. ✅
-- §7 "explicit after compile for every surface" → achieved by Tasks 1–3. ✅
 
-**Type consistency:** `emit_discusses_membership(knowledge, *, prop_uri, frame_uri, prop_cid, frame_cid, role)` and `membership_uri_for(prop_cid, frame_cid)` are referenced identically in Tasks 1, 2, 3. `SourceRelation.role: MembershipRole | None` (Task 4) and `bridge_role: MembershipRole` (Tasks 3, 5) both feed the chokepoint's `role: MembershipRole` param.
+**Review findings addressed:**
+- *High #1 (invariant vs generic path):* invariant narrowed to bundle-membership edges; verified by the Task 6 coverage assertion, not a grep that can't see object kind. ✅
+- *High #2 (non-bundle loud-fail breaks `paper→question`):* Task 2 gates routing on object-is-bundle, so `test_graph_materialize.py:896` stays green; it is an explicit regression-guard test (Task 2 Step 1, second case) and is run in Tasks 1/2/6. No corpus audit deferral. ✅
+- *Medium (CLI naming):* standardized on `--bridge-role` in overview, §3.3, Task 5 interface/test/snippet. ✅
+- *Medium (`_canonical_for`):* replaced with `prop_cid = f"proposition:{token}"` and `frame_cid = bridge_ref` (Task 3 Step 3), grounded in `mutations.py:134–140`. ✅
 
-**Known cross-task dependency:** Task 2 Step 3 uses `relation.role`, which is not added until Task 4. The step calls this out explicitly: when executing strictly in order, emit `role=MembershipRole.CORE` in Task 2 and finalize to `relation.role or MembershipRole.CORE` in Task 4 Step 3. A task reviewer should accept the Task-2 placeholder only with that Task-4 follow-up noted.
+**Type consistency:** `emit_discusses_membership(knowledge, *, prop_uri, frame_uri, prop_cid, frame_cid, role)` and `membership_uri_for(prop_cid, frame_cid)` are referenced identically in Tasks 1, 2, 3, 6. `SourceRelation.role: MembershipRole | None` (Task 4) and `bridge_role: MembershipRole` (Tasks 3, 5) both feed the chokepoint's `role: MembershipRole`.
 
-**Placeholder scan:** the two "mirror the existing test/fixture in this file" instructions (Tasks 2, 3, 5) are deliberate — the integration fixtures (materialize harness, mutations harness, CliRunner setup) already exist in the named test files and must not be re-invented. Each such step still specifies exact assertions. No `TBD`/`handle edge cases`/bare-prose code steps remain.
+**Known cross-task dependency:** Task 2 emits `role=MembershipRole.CORE` and references `getattr(relation, "role", None)` (inert until the field exists); Task 4 adds `SourceRelation.role` and finalizes the call to `relation.role or MembershipRole.CORE`. A task reviewer should accept the Task-2 placeholder only with the Task-4 follow-up noted.
+
+**Placeholder scan:** the "mirror the existing fixture" instructions (Tasks 2, 3, 5) point at named, existing fixtures (`test_graph_materialize.py:884–913`, the `mutations`/CliRunner tests) and each still specifies exact assertions. No `TBD`/bare-prose code steps remain.
