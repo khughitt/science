@@ -36,16 +36,19 @@ discusses edges and tests them — e.g. `paper → cito:discusses → question`
 hypothesis/topic" (`store/constants.py:208`). This feature does **not** redefine `cito:discusses` as
 membership-only.
 
-A **bundle membership** is the *subtype* of `cito:discusses` whose **object resolves to a bundle**
-(`hypothesis` or `mechanism`). Only that subtype:
+A **bundle membership** is the *subtype* of `cito:discusses` whose **subject is a proposition** *and* whose
+**object resolves to a bundle** (`hypothesis` or `mechanism`). Both sides matter: `bundle_members`
+(`bundle_belief.py:47`) admits only `rdf:type sci:Proposition` subjects, so a membership node on a
+non-proposition subject would be dead, invalid data. Only the proposition→bundle subtype:
 
 - carries a `BundleMembership` role node,
 - flows through the emission chokepoint (§2),
 - participates in the bundle-belief conjunction (`bundle_belief.py`).
 
-Every other discusses edge — `paper → question`, `proposition → topic`, discusses → external ontology term —
-is a plain structural link: materialized verbatim on the existing generic path, **no membership node, no
-role, and no new restriction**. The frontmatter `discusses:` field is the one place that is membership *by
+Every other discusses edge — `paper → question`, `paper → hypothesis`, `proposition → topic`,
+discusses → external ontology term — is a plain structural link: materialized verbatim on the existing
+generic path, **no membership node, no role, and no new restriction**. Note `paper → hypothesis` in
+particular: the object *is* a bundle, but the subject is not a proposition, so it is **not** a membership. The frontmatter `discusses:` field is the one place that is membership *by
 definition* (its declared purpose is bundle membership), which is why it already loud-fails a non-bundle
 frame (`materialize.py:633-640`); that behavior is correct and unchanged. There is no "asymmetry to fix"
 between surfaces — there are two legitimate uses of one predicate, and this design preserves both.
@@ -55,7 +58,7 @@ between surfaces — there are two legitimate uses of one predicate, and this de
 `cito:discusses` is emitted from **three** independent code sites. For the **bundle-membership** subtype,
 only one of them writes the role node:
 
-| # | Surface | Emission site | Membership (object = bundle) handling | Role-aware? |
+| # | Surface | Emission site | Membership (prop→bundle) handling | Role-aware? |
 |---|---|---|---|---|
 | 1 | Proposition frontmatter `discusses:` | `graph/materialize.py:642–648` | emits `BundleMembership` node | ✅ honors `{frame, role}` |
 | 2 | Authored-relations store (`relations.yaml`) | `graph/materialize.py:1208` (generic `_add_authored_relation`) | bare triple, **no node** | ❌ → silent `core` |
@@ -69,10 +72,11 @@ the silent fallback to demote from *primary mechanism* to *safety net*.
 
 ## 2. The principle: a single chokepoint for bundle-membership emission
 
-There must be **exactly one function** that emits a **bundle-membership** discusses edge (object = bundle),
-and it **always** writes the role node. Each authoring surface decides *how it sources the role* (frontmatter
-object form; a relations.yaml field; a CLI flag), gates on *object-is-a-bundle*, and then calls the one
-chokepoint. General (non-bundle) discusses edges keep the existing generic `graph.add` path untouched.
+There must be **exactly one function** that emits a **bundle-membership** discusses edge (proposition
+subject, bundle object), and it **always** writes the role node. Each authoring surface decides *how it
+sources the role* (frontmatter object form; a relations.yaml field; a CLI flag), gates on
+*proposition→bundle*, and then calls the one chokepoint. Every other discusses edge keeps the existing
+generic `graph.add` path untouched.
 
 ```
 emit_discusses_membership(graph, *, prop_uri, frame_uri, prop_cid, frame_cid, role=CORE)
@@ -81,23 +85,23 @@ emit_discusses_membership(graph, *, prop_uri, frame_uri, prop_cid, frame_cid, ro
     └  emit BundleMembership node {membershipProposition, membershipFrame, membershipRole=role}
 ```
 
-This makes a **role-blind bundle-membership edge unrepresentable** in the codebase: any discusses edge whose
-object is a bundle is minted here, with a role. `membership_role()`'s `CORE` default (`bundle_belief.py:72`)
+This makes a **role-blind bundle-membership edge unrepresentable** in the codebase: any discusses edge from
+a proposition to a bundle is minted here, with a role. `membership_role()`'s `CORE` default (`bundle_belief.py:72`)
 then degrades to a **safety net** for the two cases that legitimately have no node — forward
 `sci:hasProposition` members (authoritatively `core` by structure) and legacy graphs.
 
 ### 2.1 Invariant (narrowed from v1) and how it is verified
 
-**Invariant:** every `(s, cito:discusses, o)` triple where `o` is a bundle has a corresponding
-`BundleMembership` node; the only emitter of such triples is `emit_discusses_membership`. Non-bundle
-discusses edges are deliberately *not* routed through it.
+**Invariant:** every `(proposition, cito:discusses, bundle)` triple has a corresponding `BundleMembership`
+node minted by `emit_discusses_membership`, and **no** `BundleMembership` node exists for a non-proposition
+subject. All other discusses edges are deliberately *not* routed through the chokepoint.
 
-Because the membership/non-membership split is dynamic (it depends on the resolved object kind), a static
-grep for `graph.add((…, cito:discusses, …))` is **not** a sufficient check — it cannot tell a bundle object
-from a question object. Verification is therefore a **coverage assertion over a built graph** (a test /
-structural validate check): for every materialized `cito:discusses` triple whose object is a `hypothesis`
-or `mechanism`, assert a `BundleMembership` node exists for that `(subject, object)` pair. See the plan's
-Task 6.
+Because the membership/non-membership split is dynamic (it depends on the resolved subject *and* object
+kinds), a static grep for `graph.add((…, cito:discusses, …))` is **not** a sufficient check — it cannot tell
+a proposition→hypothesis edge from a paper→question one. Verification is therefore a **coverage assertion
+over a built graph** (a test / structural validate check): for every materialized `cito:discusses` triple
+whose subject is a `proposition` and object is a `hypothesis`/`mechanism`, assert a `BundleMembership` node
+exists for that pair; and assert none exists for any non-proposition subject. See the plan's Task 6.
 
 ## 3. Per-surface plumbing
 
@@ -110,12 +114,14 @@ frontmatter field's existing non-bundle loud-fail, preserved.
 ### 3.2 Authored-relations store (surface #2)
 
 - `SourceRelation` (`graph/sources.py:88`) gains an optional `role: MembershipRole | None = None`.
-- In `_add_authored_relation`, route to the chokepoint **iff** `predicate == cito:discusses` *and the object
-  resolves to a live bundle entity* (`hypothesis`/`mechanism`), with `role = relation.role or CORE`. All
-  other predicates, and discusses edges to non-bundle / external / archived objects, keep the existing
-  generic `graph.add` path — so `paper → discusses → question` and friends are unchanged.
-- A `role` set on a `cito:discusses` edge whose object is **not** a bundle is a loud-fail (§4) — a role is
-  meaningless on a non-membership link.
+- In `_add_authored_relation`, route to the chokepoint **iff** `predicate == cito:discusses` *and the
+  subject is a proposition* *and the object resolves to a **live** bundle entity* (`hypothesis`/`mechanism`,
+  `isinstance(object_entity, Entity)`), with `role = relation.role or CORE`. All other predicates, and
+  discusses edges with a non-proposition subject or a non-bundle / external / **archived** object, keep the
+  existing generic `graph.add` path — so `paper → discusses → question`, `paper → discusses → hypothesis`,
+  and discusses to an archived bundle are all unchanged.
+- A `role` set on a `cito:discusses` edge whose `(subject, object)` is **not** a proposition→live-bundle
+  pair is a loud-fail (§4) — a role is meaningless on a non-membership link.
 - Authoring shape:
   ```yaml
   - subject: proposition:0011-…
@@ -139,7 +145,7 @@ frontmatter field's existing non-bundle loud-fail, preserved.
 The chokepoint loud-fails a non-bundle `frame_cid`. This is a **precondition guard on the membership
 emitter**, reached only when a caller has already decided the edge is a membership: it is *load-bearing* for
 the frontmatter `discusses:` field (where it enforces the field's bundle-only contract, as today) and
-*defensive* for surfaces #2/#3 (which pre-gate on object-is-bundle). It is **not** a new restriction on
+*defensive* for surfaces #2/#3 (which pre-gate on proposition→bundle). It is **not** a new restriction on
 `cito:discusses` in general — non-bundle discusses never reaches the chokepoint and is never rejected (§0.1).
 
 ## 4. Validation (loud-fail at load, per framework discipline)
@@ -147,8 +153,9 @@ the frontmatter `discusses:` field (where it enforces the field's bundle-only co
 Beyond the contextual-roles §5 rules already enforced on the frontmatter surface, the new field adds:
 
 1. `SourceRelation.role` set **and** `predicate != cito:discusses` → reject (role only valid on discusses).
-2. `SourceRelation.role` set **and** the object does not resolve to a bundle → reject (role only valid on a
-   membership; surfaces the chokepoint guard earlier with a clearer message).
+2. `SourceRelation.role` set **and** the `(subject, object)` is not a proposition→live-bundle membership
+   pair → reject (role only valid on a membership; surfaces the chokepoint guard earlier with a clearer
+   message).
 3. The same `(subject, frame)` pair labeled with **conflicting roles across surfaces** (e.g. frontmatter
    `background`, relations.yaml `core`) → reject. Generalizes contextual-roles §5 rule 3 across surfaces,
    since two nodes for one pair would otherwise be minted.
@@ -173,11 +180,12 @@ Beyond the contextual-roles §5 rules already enforced on the frontmatter surfac
 ## 6. Migration & corpus impact
 
 - **Frontmatter:** zero change (output identical).
-- **Relations.yaml & bridge:** discusses edges *whose object is a bundle* begin emitting a `role: core`
+- **Relations.yaml & bridge:** *proposition→bundle* discusses edges begin emitting a `role: core`
   `BundleMembership` node where none existed. Additive and benign (`core` = existing default), but it
   changes graph output (more triples) and needs a graph rebuild. The conjunction result is unchanged.
-- **Non-bundle discusses edges are untouched** — no breakage, nothing to reconcile (this is why High #2 from
-  review does not bite: the routing gates on object-is-bundle, so `paper → question` never changes).
+- **All other discusses edges are untouched** — non-proposition subjects (`paper → hypothesis`), non-bundle
+  objects (`paper → question`), and archived bundle objects all keep the generic path. No breakage, nothing
+  to reconcile (this is why High #2 from review does not bite: the routing gates on proposition→live-bundle).
 - **Rebuild (plan task):** for each project that authored a *prop→bundle* discusses edge in `relations.yaml`,
   rebuild `knowledge/graph.trig` + `composite.trig` and confirm belief is unchanged. The roles doc
   (`skills/research/proposition-schema.md`) is updated to drop the "relations.yaml is always core, author in
@@ -216,3 +224,9 @@ Review found this contradictory and breaking:
   `--bridge-role`).
 - **Medium — bridge canonical IDs (plan Task 3).** v1 referenced a non-existent `_canonical_for`; v2
   specifies `prop_cid = f"proposition:{token}"` and `frame_cid = bridge_ref`.
+
+A second review pass tightened membership to **proposition→bundle** (both sides), not any-subject→bundle:
+`bundle_members` admits only `sci:Proposition` subjects (`bundle_belief.py:47`), so a paper→hypothesis
+membership node would be dead data. Routing now also gates on `subject` being a proposition and the object
+being a **live** `Entity` bundle (archived bundles keep the generic path); the coverage invariant and
+validation rule 2 were tightened to match.

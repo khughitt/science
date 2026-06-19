@@ -15,10 +15,10 @@
 - **Working directory:** all commands run from `~/d/science`. Tests run from the nested `science/` and `science/model/` package dirs.
 - **Test runner:** `uv run --frozen pytest <path> -v`. Validation: `uv run --frozen science validate`.
 - **Authority boundary (design §0):** touch **only** the emission/authoring of the bundle-membership subtype of `cito:discusses`. Add **no** causal-edge vocabulary; do **not** make the membership node truth-apt; do **not** change the closed role vocabulary `core | rival | background`.
-- **`cito:discusses` stays general (design §0.1):** bundle membership = the subtype whose **object resolves to a `hypothesis`/`mechanism`**. Only that subtype gets a role node + the chokepoint. Non-bundle discusses (`paper → question`, `proposition → topic`, → external term) keeps the generic `graph.add` path **unchanged** — there is a passing test for this (`science/tests/test_graph_materialize.py:896`, `paper → discusses → question`) that MUST stay green.
+- **`cito:discusses` stays general (design §0.1):** bundle membership = the subtype whose **subject is a proposition** *and* whose **object resolves to a live `hypothesis`/`mechanism`**. Only that subtype gets a role node + the chokepoint (`bundle_members` admits only `sci:Proposition` subjects — `bundle_belief.py:47` — so a non-proposition membership node would be dead data). Everything else — `paper → question`, **`paper → hypothesis`**, `proposition → topic`, → external term, discusses to an *archived* bundle — keeps the generic `graph.add` path **unchanged**. The passing test `science/tests/test_graph_materialize.py:896` (`paper → discusses → question`) MUST stay green.
 - **Annotate, never replace:** the plain `(prop, cito:discusses, frame)` triple MUST always be emitted exactly as today.
 - **Migration default = `core`:** unlabeled membership (bare string, missing `role`, forward `sci:hasProposition`) means `core`. The conjunction MUST be byte-for-byte unchanged on the existing corpus until a curator labels a member.
-- **Membership invariant (design §2.1):** every `(s, cito:discusses, o)` with `o` a bundle has a `BundleMembership` node, minted only by `emit_discusses_membership`. Verified by a graph-coverage assertion (Task 6), **not** a static grep.
+- **Membership invariant (design §2.1):** every `(proposition, cito:discusses, bundle)` triple has a `BundleMembership` node minted only by `emit_discusses_membership`, and **no** membership node exists for a non-proposition subject. Verified by a graph-coverage assertion (Task 6), **not** a static grep.
 - **Style:** explicit over defensive; fail loudly, no silent fallbacks. Follow existing module idioms.
 
 ---
@@ -199,17 +199,17 @@ git commit -m "refactor(membership): extract single bundle-membership emission c
 
 ---
 
-## Task 2: Route bundle-object relations-store discusses through the chokepoint
+## Task 2: Route proposition→bundle relations-store discusses through the chokepoint
 
-A `cito:discusses` edge in `relations.yaml` whose **object is a bundle** begins emitting a `role: core` `BundleMembership` node. Non-bundle discusses (e.g. `paper → question`) stays on the generic path, unchanged.
+A `cito:discusses` edge in `relations.yaml` from a **proposition** to a **live bundle** begins emitting a `role: core` `BundleMembership` node. Every other discusses edge (`paper → question`, `paper → hypothesis`, discusses to an archived bundle) stays on the generic path, unchanged.
 
 **Files:**
 - Modify: `science/src/science_tool/graph/materialize.py:1200–1208` (`_add_authored_relation`)
 - Test: `science/tests/test_membership_materialize.py` (extend)
 
 **Interfaces:**
-- Consumes: `io.emit_discusses_membership`, `CITO_NS`.
-- Produces: routing in `_add_authored_relation` — `predicate == cito:discusses` **and** object resolves to a live bundle → chokepoint; everything else → generic `graph.add`.
+- Consumes: `io.emit_discusses_membership`, `CITO_NS`, `Entity`.
+- Produces: routing in `_add_authored_relation` — `predicate == cito:discusses` **and** subject is a proposition **and** object is a live `Entity` bundle → chokepoint; everything else → generic `graph.add`.
 
 - [ ] **Step 1: Write the failing tests (membership routes; non-bundle does not)**
 
@@ -233,42 +233,62 @@ def test_relations_store_paper_to_question_has_no_membership_node(make_project_w
     from science_tool.graph.io import SCI_NS
     # The plain structural link still materializes; no BundleMembership node exists.
     assert not list(knowledge.triples((None, SCI_NS.membershipFrame, None)))
+
+
+def test_relations_store_paper_to_bundle_has_no_membership_node(make_project_with_relation):
+    # Subject is NOT a proposition: object is a bundle but this is not a membership.
+    knowledge = make_project_with_relation(
+        subject="paper:legatiuk2021", predicate="cito:discusses", object="hypothesis:0001-foo",
+    )
+    from science_tool.graph.io import CITO_NS, SCI_NS, entity_uri_for_ref
+    # The plain structural link still materializes...
+    assert (entity_uri_for_ref("paper:legatiuk2021"), CITO_NS.discusses,
+            entity_uri_for_ref("hypothesis:0001-foo")) in knowledge
+    # ...but no membership node is minted for a non-proposition subject.
+    assert not list(knowledge.triples((None, SCI_NS.membershipFrame, None)))
 ```
 
 `make_project_with_relation` builds a minimal project (entities for the subject/object + a `relations.yaml` with the one relation) and returns the parsed `graph/knowledge` graph — lift it from the existing `test_graph_materialize.py:884–913` fixture rather than inventing a harness.
 
 - [ ] **Step 2: Run to verify the first fails, the second already passes**
 
-Run: `cd science && uv run --frozen pytest tests/test_membership_materialize.py -k "prop_to_bundle or paper_to_question" -v`
-Expected: `prop_to_bundle` FAILS (no node); `paper_to_question` PASSES (current generic path already correct — this is the regression guard).
+Run: `cd science && uv run --frozen pytest tests/test_membership_materialize.py -k "prop_to_bundle or paper_to" -v`
+Expected: `prop_to_bundle` FAILS (no node yet); `paper_to_question` and `paper_to_bundle` PASS (current generic path already correct — these are the regression guards for the proposition-subject rule).
 
 - [ ] **Step 3: Add bundle-object routing in `_add_authored_relation`**
 
-Replace the unconditional emit at `materialize.py:1208`. Determine bundle-ness from the resolved object's canonical id (both `Entity` and `_ArchivedEndpoint` expose `canonical_id`):
+Replace the unconditional emit at `materialize.py:1208`. Membership requires a **proposition** subject and a **live** bundle object — the object must be an `Entity` (not an `_ArchivedEndpoint` or external URI), matching design §3.2:
 
 ```python
-    object_cid = getattr(object_entity, "canonical_id", None)
-    object_is_bundle = bool(object_cid) and object_cid.split(":", 1)[0] in ("hypothesis", "mechanism")
-    if predicate_uri == CITO_NS.discusses and object_is_bundle:
+    subject_is_proposition = subject_entity.canonical_id.split(":", 1)[0] == "proposition"
+    object_is_live_bundle = (
+        isinstance(object_entity, Entity)
+        and object_entity.canonical_id.split(":", 1)[0] in ("hypothesis", "mechanism")
+    )
+    is_membership = (
+        predicate_uri == CITO_NS.discusses and subject_is_proposition and object_is_live_bundle
+    )
+    if is_membership:
         emit_discusses_membership(
             graph,
             prop_uri=subject_uri,
             frame_uri=object_uri,
             prop_cid=subject_entity.canonical_id,
-            frame_cid=object_cid,
+            frame_cid=object_entity.canonical_id,
             role=MembershipRole.CORE,  # finalized to `relation.role or CORE` in Task 4
         )
     elif predicate_uri == CITO_NS.discusses and getattr(relation, "role", None) is not None:
         raise ValueError(
             f"relation {relation.subject} cito:discusses {relation.object}: role "
-            f"{relation.role!r} set, but the object is not a bundle (hypothesis/mechanism); "
-            "membership roles are only valid on bundle frames (design §4)."
+            f"{relation.role!r} set, but this is not a proposition→live-bundle membership "
+            "(subject must be a proposition and object a live hypothesis/mechanism); "
+            "membership roles are only valid on membership edges (design §4)."
         )
     else:
         graph.add((subject_uri, predicate_uri, object_uri))
 ```
 
-`getattr(relation, "role", None)` is forward-compatible: it is `None` until Task 4 adds the field, so the loud-fail branch is inert until then. Import `emit_discusses_membership` and `MembershipRole` at module top.
+`Entity` is already imported in `materialize.py` (the `object_entity: Entity | _ArchivedEndpoint` annotation). `getattr(relation, "role", None)` is forward-compatible: `None` until Task 4 adds the field, so the loud-fail branch is inert until then. Import `emit_discusses_membership` and `MembershipRole` at module top.
 
 - [ ] **Step 4: Run the tests to verify both pass**
 
@@ -400,12 +420,12 @@ Expected: PASS.
 Extend the validation layer (`validate/checks/propositions.py` or the relations check that iterates `SourceRelation`s) with loud-fail checks:
 
 1. `relation.role is not None and relation.predicate != "cito:discusses"` → error.
-2. `relation.role` set and object does not resolve to a bundle → error.
+2. `relation.role` set and the `(subject, object)` is not a proposition→live-bundle membership pair → error.
 3. The same `(subject, frame)` pair labeled with conflicting roles across frontmatter and relations.yaml → error.
 
 - [ ] **Step 6: Write + run the validation tests**
 
-Add to `science/tests/test_membership_validation.py` one test per rule (a `role` on a `cito:supports` relation fails; a `role` to a `topic:` object fails; a frontmatter-`background` + relations-`core` conflict for one pair fails). Run:
+Add to `science/tests/test_membership_validation.py` one test per rule (a `role` on a `cito:supports` relation fails; a `role` to a `topic:` object fails; a `role` on a `paper → hypothesis` edge — non-proposition subject — fails; a frontmatter-`background` + relations-`core` conflict for one pair fails). Run:
 
 `cd science && uv run --frozen pytest tests/test_membership_validation.py -v`
 Expected: PASS.
@@ -476,27 +496,38 @@ git commit -m "feat(membership): --bridge-role on the bridge CLI command"
 
 - [ ] **Step 1: Write the membership-coverage invariant test**
 
-Add to `science/tests/test_membership_materialize.py` a test over a built graph (use `make_project_with_relation` or the broadest existing materialize fixture) asserting design §2.1: every `cito:discusses` triple whose object is a bundle has a `BundleMembership` node.
+Add to `science/tests/test_membership_materialize.py` a test over a built graph asserting design §2.1 in **both directions**: every proposition→bundle discusses edge has a membership node, and no membership node exists for a non-proposition subject. Build a project carrying one of each edge (extend the lifted fixture to accept a list of relations — `make_project_with_relations`).
 
 ```python
-def test_every_bundle_discusses_has_membership_node(make_project_with_relation):
-    knowledge = make_project_with_relation(
-        subject="proposition:0011-bar", predicate="cito:discusses", object="hypothesis:0001-foo",
-    )
+def test_membership_coverage_invariant(make_project_with_relations):
+    knowledge = make_project_with_relations([
+        ("proposition:0011-bar", "cito:discusses", "hypothesis:0001-foo"),  # membership
+        ("paper:legatiuk2021", "cito:discusses", "hypothesis:0001-foo"),    # NOT membership
+    ])
+    from rdflib import RDF
     from science_tool.graph.io import CITO_NS, SCI_NS, membership_uri_for
-    def _cid(uri):  # PROJECT_NS["kind/slug"] -> "kind:slug"
+
+    def _cid(uri):  # PROJECT_NS["kind/slug"] -> "kind:slug"  (match io._entity_uri's scheme)
         tail = str(uri).rsplit("/project/", 1)[-1]
         kind, _, slug = tail.partition("/")
         return f"{kind}:{slug}"
+
+    # Forward: every proposition→bundle discusses edge has a membership node.
     for s, _, o in knowledge.triples((None, CITO_NS.discusses, None)):
-        if str(o).rsplit("/project/", 1)[-1].split("/", 1)[0] in ("hypothesis", "mechanism"):
+        o_kind = str(o).rsplit("/project/", 1)[-1].split("/", 1)[0]
+        if o_kind in ("hypothesis", "mechanism") and (s, RDF.type, SCI_NS.Proposition) in knowledge:
             node = membership_uri_for(_cid(s), _cid(o))
             assert (node, SCI_NS.membershipFrame, o) in knowledge, f"missing membership node for {s} -> {o}"
+
+    # Reverse: no membership node points at a non-proposition subject.
+    for node in knowledge.subjects(RDF.type, SCI_NS.BundleMembership):
+        prop = knowledge.value(node, SCI_NS.membershipProposition)
+        assert (prop, RDF.type, SCI_NS.Proposition) in knowledge, f"membership node {node} on non-proposition {prop}"
 ```
 
-(Adjust `_cid`/URI parsing to the project's actual IRI scheme — see `io.entity_uri_for_ref` / `_entity_uri`. The intent is the assertion, not this exact string surgery.)
+(Adjust `_cid`/URI parsing to the project's actual IRI scheme — see `io.entity_uri_for_ref` / `_entity_uri`. The intent is the two assertions, not this exact string surgery.)
 
-Run: `cd science && uv run --frozen pytest tests/test_membership_materialize.py -k every_bundle_discusses -v`
+Run: `cd science && uv run --frozen pytest tests/test_membership_materialize.py -k coverage_invariant -v`
 Expected: PASS.
 
 - [ ] **Step 2: Rebuild graphs for projects with prop→bundle relations-store discusses**
@@ -522,7 +553,7 @@ git commit -m "docs+test(membership): coverage invariant; relations-store + brid
 ## Self-Review
 
 **Spec coverage (design doc → tasks):**
-- §0.1 policy (discusses general; membership = bundle subtype) → Tasks 2 (object-is-bundle gate), 6 (coverage test). ✅
+- §0.1 policy (discusses general; membership = proposition→bundle subtype) → Tasks 2 (proposition-subject + live-bundle gate), 6 (two-direction coverage test). ✅
 - §1 three-emitter table → Tasks 1 (frontmatter), 2 (relations), 3 (bridge). ✅
 - §2 + §2.1 chokepoint + narrowed invariant → Task 1 + Task 6 coverage test. ✅
 - §3.2 `SourceRelation.role` + bundle routing → Tasks 2, 4. ✅
@@ -531,11 +562,16 @@ git commit -m "docs+test(membership): coverage invariant; relations-store + brid
 - §4 validation → Task 4 Steps 5–6. ✅
 - §6 migration/rebuild + docs → Task 6. ✅
 
-**Review findings addressed:**
-- *High #1 (invariant vs generic path):* invariant narrowed to bundle-membership edges; verified by the Task 6 coverage assertion, not a grep that can't see object kind. ✅
-- *High #2 (non-bundle loud-fail breaks `paper→question`):* Task 2 gates routing on object-is-bundle, so `test_graph_materialize.py:896` stays green; it is an explicit regression-guard test (Task 2 Step 1, second case) and is run in Tasks 1/2/6. No corpus audit deferral. ✅
+**Review findings addressed (review pass 1):**
+- *High #1 (invariant vs generic path):* invariant narrowed to bundle-membership edges; verified by the Task 6 coverage assertion, not a grep that can't see object/subject kind. ✅
+- *High #2 (non-bundle loud-fail breaks `paper→question`):* Task 2 gates routing, so `test_graph_materialize.py:896` stays green; it is an explicit regression-guard test (Task 2 Step 1) and is run in Tasks 1/2/6. No corpus audit deferral. ✅
 - *Medium (CLI naming):* standardized on `--bridge-role` in overview, §3.3, Task 5 interface/test/snippet. ✅
 - *Medium (`_canonical_for`):* replaced with `prop_cid = f"proposition:{token}"` and `frame_cid = bridge_ref` (Task 3 Step 3), grounded in `mutations.py:134–140`. ✅
+
+**Review findings addressed (review pass 2 — subject typing):**
+- *High (membership is proposition→bundle, not any→bundle):* `bundle_members` admits only `sci:Proposition` subjects (`bundle_belief.py:47`), so a `paper → hypothesis` node would be dead data. Task 2 routing now also requires `subject_is_proposition`; a `paper_to_bundle_has_no_membership_node` regression test is added (Task 2 Step 1). ✅
+- *Medium (archived objects):* routing requires `isinstance(object_entity, Entity)`, so archived hypotheses/mechanisms stay on the generic path — matching design §3.2. ✅
+- *Medium (coverage test scope):* Task 6's test asserts proposition→bundle edges have a node **and** that no membership node points at a non-proposition subject. ✅
 
 **Type consistency:** `emit_discusses_membership(knowledge, *, prop_uri, frame_uri, prop_cid, frame_cid, role)` and `membership_uri_for(prop_cid, frame_cid)` are referenced identically in Tasks 1, 2, 3, 6. `SourceRelation.role: MembershipRole | None` (Task 4) and `bridge_role: MembershipRole` (Tasks 3, 5) both feed the chokepoint's `role: MembershipRole`.
 
