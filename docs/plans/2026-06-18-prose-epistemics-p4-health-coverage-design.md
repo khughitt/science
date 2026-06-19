@@ -10,6 +10,10 @@
 - P3 domain grounding:
   `~/d/science/docs/plans/2026-06-18-prose-epistemics-p3-domain-grounding-design.md`
 
+**Implementation precondition:** P4 implementation requires shipped P2 and P3 contracts.
+This design intentionally references the P2/P3 designs, but the eventual implementation
+plan must reconcile names and schemas against the shipped code before coding starts.
+
 **Scope of this document:** P4 only. P4 turns existing P2 decomposition state and P3
 grounding reports into a project-level prose-health artifact that downstream consumers can
 read without knowing P2/P3 storage internals. P4 is framework-only but consumer-shaped.
@@ -58,6 +62,11 @@ The long-term system has five separate responsibilities.
    missing-artifact diagnostics, and coverage-ramp metrics.
 5. **Downstream consumers:** read P4 JSON only. They do not learn P2/P3 layouts or
    recompute epistemic logic.
+
+P4 deliberately reads both P2 and P3. P3 is not sufficient by itself because P3 rows do not
+carry the full locator/quote information downstream renderers need. P4 therefore depends on
+the P2 store's latest decomposition, unit fingerprints, locator composition, and
+artifact-unit references, as well as P3's per-source grounding summary and status rows.
 
 `science health` is a reader/summarizer of P4. It is not the canonical prose-health data
 source and should not rebuild P4 implicitly.
@@ -192,6 +201,24 @@ Initial source states:
 `stale_grounding` means the P3 report does not match the latest P2 decomposition artifact
 for the manifest source.
 
+`state` is a single summary value, so P4 must assign it deterministically. Precedence:
+
+1. `missing_decomposition`
+2. `invalid_decomposition`
+3. `stale_grounding`
+4. `missing_grounding`
+5. `invalid_grounding`
+6. `complete`
+
+For artifact findings, every non-`complete` source state emits exactly one corresponding
+source-level finding with the same `code`, and every source-level artifact finding with one
+of those codes is reflected by the source row's `state`. Additional non-source findings
+such as `undeclared_grounding_report` do not affect a declared source's `state`.
+
+`invalid_decomposition` should be rare because P2 validates at ingest. It is still a P4
+state for later file corruption, hand-edited stored artifacts, or stricter P4 validation of
+the P2/P3 join contract.
+
 ### 3.3 Unit rows
 
 P4 enriches P3 rows by joining back to P2 locators. Downstream consumers need enough
@@ -202,7 +229,7 @@ location data to style prose without parsing P2 artifacts.
   "source_ref": "prose-source:example",
   "source_path": "docs/example.md",
   "unit_id": "u001",
-  "fingerprint": "sha-or-hex",
+  "fingerprint": "sha256:...",
   "artifact_ref": "annotation:data/prose-decompositions/example/generations/decomp-1.json#u001",
   "heading_path": ["Section"],
   "quote": {
@@ -259,6 +286,10 @@ P4 computes three primary ratios:
 - `grounding`: grounded promoted claims / promoted claims.
 - `strict_grounding`: grounded claims / current candidate claims.
 
+Here `strict_grounding` names the widest-denominator coverage metric. It is distinct from
+the umbrella's "strict grounding bar", which is the belief-floor policy for deciding whether
+an individual promoted claim counts as grounded.
+
 The distinction is load-bearing:
 
 - `promotion` measures graph adoption of decomposed domain claims.
@@ -272,13 +303,19 @@ coverage yet.
 
 P4 findings are structured diagnostic rows, not free-form prose. Initial finding codes:
 
-- `missing_decomposition`
-- `missing_grounding`
-- `stale_grounding`
-- `invalid_decomposition`
-- `invalid_grounding`
-- `undeclared_grounding_report`
-- `manifest_invalid`
+| Code | Surfaces in artifact? | Surfaces in health? | Counts as issue by default? |
+|---|---:|---:|---:|
+| `missing_decomposition` | yes | yes | yes |
+| `missing_grounding` | yes | yes | yes |
+| `stale_grounding` | yes | yes | yes |
+| `invalid_decomposition` | yes | yes | yes |
+| `invalid_grounding` | yes | yes | yes |
+| `undeclared_grounding_report` | yes | yes | no |
+| `manifest_invalid` | no | yes | yes |
+
+`manifest_invalid` is health-only because the explicit P4 builder must fail rather than
+write an artifact from an untrusted denominator. `science health` may still catch that
+failure and surface it as a finding so users get a repair path.
 
 Finding rows should carry at least:
 
@@ -294,10 +331,10 @@ Finding rows should carry at least:
 ```
 
 Low coverage is not a `total_issues` contributor by default. Missing or invalid declared
-artifacts do count as issues because they prevent the coverage ramp from representing the
-declared denominator. `undeclared_grounding_report` is a cleanup warning and does not count
-as an issue by default. A future threshold policy may promote low coverage to an issue, but
-P4 does not bake in threshold gates beyond P3's grounding floor.
+artifacts and stale grounding reports do count as issues because they prevent the coverage
+ramp from representing the declared denominator. `undeclared_grounding_report` is a cleanup
+warning and does not count as an issue by default. A future threshold policy may promote low
+coverage to an issue, but P4 does not bake in threshold gates beyond P3's grounding floor.
 
 ## 5. Build and health integration
 
@@ -418,6 +455,8 @@ Unit tests:
 - Manifest validation rejects invalid refs, duplicate sources, path traversal, and malformed
   JSON.
 - Complete source produces expected summary, coverage, and enriched rows.
+- Multi-condition source failures use the documented source-state precedence.
+- Every non-`complete` source state emits one corresponding source-level finding.
 - Missing decomposition produces `missing_decomposition`.
 - Missing grounding produces `missing_grounding`.
 - Grounding report for an older decomposition produces `stale_grounding`.
