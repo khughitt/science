@@ -414,8 +414,6 @@ def build_prose_health_cmd(
     strict = coverage.get("strict_grounding") if isinstance(coverage, dict) else {}
     strict_ratio = strict.get("ratio") if isinstance(strict, dict) else None
     strict_text = "n/a" if strict_ratio is None else f"{strict_ratio:.1%}"
-    findings = payload.get("findings")
-    findings_count = len(findings) if isinstance(findings, list) else 0
     click.echo(
         "built prose health: "
         f"sources={summary['declared_sources']} "
@@ -423,7 +421,7 @@ def build_prose_health_cmd(
         f"promoted={summary['promoted_units']} "
         f"grounded={summary['grounded_units']} "
         f"strict_grounding={strict_text} "
-        f"findings={findings_count}"
+        f"findings={len(payload.get('findings') or [])}"  # pyright: ignore[reportArgumentType]
     )
     if do_write:
         click.echo("wrote prose health artifact" if written else "unchanged prose health artifact")
@@ -527,10 +525,9 @@ def verify(
     pre_apply_broken = 0
     if apply_changes:
         pre_apply_broken = report.broken
-        assert actor is not None
         rewritten = apply_supersessions(
             report,
-            actor=actor,
+            actor=actor,  # pyright: ignore[reportArgumentType]
             now=datetime.now(timezone.utc),
         )
         rewritten_count = len(rewritten)
@@ -855,7 +852,6 @@ def lift_tokens_cmd(
         if not non_doc_hits:
             continue
 
-        cleaned_text = original_text
         if remove_mode:
             cleaned_text = _strip_tokens_from_prose(original_text)
             plans = _replan_for_remove(
@@ -878,7 +874,7 @@ def lift_tokens_cmd(
                     sidecar_path,
                     serialize_sidecar(new_sidecar),
                 )
-            atomic_write_text(md, cleaned_text)
+            atomic_write_text(md, cleaned_text)  # pyright: ignore[reportPossiblyUnboundVariable]
             summary["tokens_removed"] += len(non_doc_hits)
         else:
             if written:
