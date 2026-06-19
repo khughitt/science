@@ -18,7 +18,7 @@ from science_model.ontologies.schema import OntologyCatalog
 from science_model.patch_definition import PatchDefinitionEntity
 from science_model.profiles import CORE_PROFILE
 from science_model.profiles.schema import RelationKind
-from science_model.reasoning import EvidenceStance, MeasurementModel, RivalModelPacket
+from science_model.reasoning import EvidenceStance, MeasurementModel, MembershipRole, RivalModelPacket
 from science_model.relations import relation_allows_kinds
 
 from science_tool.addressing import is_address, parse_address
@@ -100,8 +100,6 @@ def _iter_membership_refs(entity):
     if callable(iter_memberships):
         yield from sorted(iter_memberships(), key=lambda pair: pair[0])
         return
-    from science_model.reasoning import MembershipRole
-
     for raw in sorted(getattr(entity, "discusses", []) or []):
         yield raw, MembershipRole.CORE
 
@@ -642,7 +640,7 @@ def _add_relations(
             )
         # 1) Plain triple, emitted verbatim — annotate, never replace (spec §5).
         knowledge.add((entity_uri, CITO_NS.discusses, frame_uri))
-        # 3) BundleMembership plumbing node carrying the role.
+        # 2) BundleMembership plumbing node carrying the role.
         membership_uri = _membership_uri(entity.canonical_id, resolution.canonical_id)
         knowledge.add((membership_uri, RDF.type, SCI_NS.BundleMembership))
         knowledge.add((membership_uri, SCI_NS.membershipProposition, entity_uri))

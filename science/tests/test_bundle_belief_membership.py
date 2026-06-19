@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from rdflib import Graph, Literal, RDF, URIRef
+from pathlib import Path
+
+from rdflib import Dataset, Graph, Literal, RDF, URIRef
 
 from science_model.reasoning import MembershipRole
-from science_tool.graph.bundle_belief import core_members, membership_role
+from science_tool.graph.bundle_belief import bundle_members, core_members, membership_role
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
+from science_tool.graph.materialize import _entity_uri, materialize_graph
 
 
 def _membership(g, prop, frame, role):
@@ -59,15 +62,6 @@ def test_has_proposition_is_authoritatively_core():
     _membership(g, step, mech, "rival")  # contradictory authoring; forward wins
     assert membership_role(g, step, mech) == MembershipRole.RIVAL
     assert core_members(g, mech) == [step]
-
-
-from pathlib import Path
-
-from rdflib import Dataset
-
-from science_tool.graph.bundle_belief import bundle_members, core_members
-from science_tool.graph.io import PROJECT_NS
-from science_tool.graph.materialize import _entity_uri, materialize_graph
 
 
 def _write(path: Path, lines: list[str]) -> None:
