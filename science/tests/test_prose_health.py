@@ -464,6 +464,25 @@ def test_stale_grounding_uses_precedence_and_counts_as_issue(tmp_path: Path) -> 
     assert report["findings"][0]["counts_as_issue"] is True
 
 
+def test_stale_grounding_with_invalid_unit_structure_is_invalid_grounding(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+
+    first, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path, artifact_id="decomp-1"))
+    grounding_path = _write_grounding(tmp_path, artifact=first, status="grounded")
+    _persist_decomposition(tmp_path, _artifact_payload(tmp_path, artifact_id="decomp-2", unit_id="u777"))
+    report = json.loads(grounding_path.read_text(encoding="utf-8"))
+    report["units"].append(dict(report["units"][0]))
+    grounding_path.write_text(json.dumps(report), encoding="utf-8")
+    _write_manifest(tmp_path)
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "invalid_grounding"
+    assert report["summary"]["sources_with_grounding"] == 0
+    assert report["findings"][0]["code"] == "invalid_grounding"
+    assert "duplicate grounding report unit fingerprint" in report["findings"][0]["message"]
+
+
 def test_invalid_grounding_precedes_stale_grounding(tmp_path: Path) -> None:
     from science_tool.annotation.prose_health import build_prose_health_report
     from science_tool.annotation.prose_grounding import prose_grounding_path

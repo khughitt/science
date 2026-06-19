@@ -235,7 +235,16 @@ def _build_source_rows(
         }
         return {"source": row, "units": [], "finding": _finding(state, source, str(exc), project_root=project_root)}
 
-    state = _grounding_state(source=source, artifact=artifact, grounding=grounding)
+    try:
+        state = _grounding_state(source=source, artifact=artifact, grounding=grounding)
+    except ProseHealthError as exc:
+        state = "invalid_grounding"
+        row = {
+            **source_base,
+            "state": state,
+            "decomposition_artifact_id": artifact.artifact.artifact_id,
+        }
+        return {"source": row, "units": [], "finding": _finding(state, source, str(exc), project_root=project_root)}
     if state != "complete":
         row = {
             **source_base,
@@ -285,11 +294,29 @@ def _load_grounding_report(path: Path, *, project_root: Path) -> dict[str, objec
 def _grounding_state(*, source: ManifestSource, artifact: DecompositionArtifact, grounding: dict[str, object]) -> str:
     if grounding.get("source_ref") != source.source_ref:
         return "invalid_grounding"
-    if not isinstance(grounding.get("units"), list):
-        return "invalid_grounding"
+    _validate_grounding_unit_structure(grounding)
     if grounding.get("decomposition_artifact_id") != artifact.artifact.artifact_id:
         return "stale_grounding"
     return "complete"
+
+
+def _validate_grounding_unit_structure(grounding: dict[str, object]) -> list[dict[str, object]]:
+    grounding_units = grounding.get("units")
+    if not isinstance(grounding_units, list):
+        raise ProseHealthError("grounding report units must be an array")
+    rows: list[dict[str, object]] = []
+    fingerprints: set[str] = set()
+    for index, row in enumerate(grounding_units):
+        if not isinstance(row, dict):
+            raise ProseHealthError(f"grounding report unit[{index}] must be an object")
+        fingerprint = row.get("fingerprint")
+        if not isinstance(fingerprint, str) or not fingerprint:
+            raise ProseHealthError(f"grounding report unit[{index}].fingerprint must be a non-empty string")
+        if fingerprint in fingerprints:
+            raise ProseHealthError(f"duplicate grounding report unit fingerprint: {fingerprint}")
+        fingerprints.add(fingerprint)
+        rows.append(row)
+    return rows
 
 
 def _unit_rows(
@@ -299,19 +326,10 @@ def _unit_rows(
     artifact: DecompositionArtifact,
     grounding: dict[str, object],
 ) -> list[dict[str, object]]:
-    grounding_units = grounding.get("units")
-    if not isinstance(grounding_units, list):
-        raise ProseHealthError("grounding report units must be an array")
+    grounding_units = _validate_grounding_unit_structure(grounding)
     grounding_by_fingerprint: dict[str, dict[str, object]] = {}
-    for index, row in enumerate(grounding_units):
-        if not isinstance(row, dict):
-            raise ProseHealthError(f"grounding report unit[{index}] must be an object")
-        fingerprint = row.get("fingerprint")
-        if not isinstance(fingerprint, str) or not fingerprint:
-            raise ProseHealthError(f"grounding report unit[{index}].fingerprint must be a non-empty string")
-        if fingerprint in grounding_by_fingerprint:
-            raise ProseHealthError(f"duplicate grounding report unit fingerprint: {fingerprint}")
-        grounding_by_fingerprint[fingerprint] = row
+    for row in grounding_units:
+        grounding_by_fingerprint[row["fingerprint"]] = row
     rows: list[dict[str, object]] = []
     for unit in artifact.units:
         grounding_row = grounding_by_fingerprint.get(unit.fingerprint)
@@ -319,8 +337,6 @@ def _unit_rows(
             raise ProseHealthError(f"grounding report missing unit fingerprint: {unit.fingerprint}")
         rows.append(_unit_row(project_root=project_root, source=source, artifact=artifact, unit=unit, grounding_row=grounding_row))
     for grounding_row in grounding_units:
-        if not isinstance(grounding_row, dict):
-            continue
         if grounding_row.get("status") == "stale":
             rows.append(_stale_unit_row(project_root=project_root, source=source, grounding_row=grounding_row))
     return rows
