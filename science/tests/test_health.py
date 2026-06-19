@@ -1665,3 +1665,200 @@ def test_health_cli_includes_dataset_section(tmp_path: Path) -> None:
     assert "dataset_anomalies" in result
     codes = {i["code"] for i in result["dataset_anomalies"]}
     assert "dataset_consumed_but_unverified" in codes
+
+
+def _write_prose_health_artifact(root: Path, *, findings: list[dict] | None = None) -> Path:
+    path = root / "data" / "prose-health" / "prose-health.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": "2026-06-18T14:00:00Z",
+                "manifest_path": "data/prose-health/manifest.json",
+                "summary": {
+                    "declared_sources": 1,
+                    "sources_with_decomposition": 1,
+                    "sources_with_grounding": 1,
+                    "current_candidate_units": 2,
+                    "promoted_units": 1,
+                    "grounded_units": 1,
+                    "below_floor_units": 0,
+                    "unbacked_units": 0,
+                    "unpromoted_units": 1,
+                    "skipped_units": 1,
+                    "stale_units": 0,
+                    "contested_units": 0,
+                },
+                "coverage": {
+                    "promotion": {"numerator": 1, "denominator": 2, "ratio": 0.5},
+                    "grounding": {"numerator": 1, "denominator": 1, "ratio": 1.0},
+                    "strict_grounding": {"numerator": 1, "denominator": 2, "ratio": 0.5},
+                },
+                "sources": [
+                    {
+                        "source_ref": "prose-source:example",
+                        "title": "Example",
+                        "path": "docs/example.md",
+                        "state": "complete",
+                        "decomposition_artifact_id": "decomp-1",
+                        "grounding_report_path": "data/prose-grounding/example/grounding.json",
+                        "summary": {
+                            "current_candidate_units": 2,
+                            "promoted_units": 1,
+                            "grounded_units": 1,
+                            "below_floor_units": 0,
+                            "unbacked_units": 0,
+                            "unpromoted_units": 1,
+                            "skipped_units": 1,
+                            "stale_units": 0,
+                            "contested_units": 0,
+                        },
+                    }
+                ],
+                "units": [],
+                "findings": findings or [],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_health_report_includes_prose_epistemics_artifact(tmp_path: Path) -> None:
+    from science_tool.graph.health import build_health_report
+
+    _write_prose_health_artifact(tmp_path)
+
+    report = build_health_report(tmp_path, checks={"prose_epistemics"})
+
+    assert report["prose_epistemics"]["summary"]["declared_sources"] == 1
+    assert report["prose_epistemics"]["coverage"]["strict_grounding"]["ratio"] == 0.5
+    assert report["prose_epistemics"]["findings"] == []
+    assert report["total_issues"] == 0
+
+
+def test_health_report_counts_prose_epistemics_findings_as_issues(tmp_path: Path) -> None:
+    from science_tool.graph.health import build_health_report
+
+    _write_prose_health_artifact(
+        tmp_path,
+        findings=[
+            {
+                "code": "missing_grounding",
+                "severity": "warning",
+                "counts_as_issue": True,
+                "source_ref": "prose-source:example",
+                "path": "docs/example.md",
+                "message": "Declared prose source has no P3 grounding report.",
+            },
+            {
+                "code": "undeclared_grounding_report",
+                "severity": "warning",
+                "counts_as_issue": False,
+                "source_ref": "prose-source:extra",
+                "path": "data/prose-grounding/extra/grounding.json",
+                "message": "Extra report.",
+            },
+        ],
+    )
+
+    report = build_health_report(tmp_path, checks={"prose_epistemics"})
+
+    assert len(report["prose_epistemics"]["findings"]) == 2
+    assert report["total_issues"] == 1
+
+
+def test_health_report_manifest_without_artifact_surfaces_rebuild_finding(tmp_path: Path) -> None:
+    from science_tool.graph.health import build_health_report
+
+    manifest = tmp_path / "data" / "prose-health" / "manifest.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(json.dumps({"schema_version": 1, "sources": []}), encoding="utf-8")
+
+    report = build_health_report(tmp_path, checks={"prose_epistemics"})
+
+    assert report["prose_epistemics"]["findings"][0]["code"] == "prose_health_artifact_missing"
+    assert report["prose_epistemics"]["findings"][0]["counts_as_issue"] is True
+    assert report["total_issues"] == 1
+
+
+def test_health_report_invalid_manifest_surfaces_manifest_invalid(tmp_path: Path) -> None:
+    from science_tool.graph.health import build_health_report
+
+    manifest = tmp_path / "data" / "prose-health" / "manifest.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text("{not json", encoding="utf-8")
+
+    report = build_health_report(tmp_path, checks={"prose_epistemics"})
+
+    assert report["prose_epistemics"]["findings"][0]["code"] == "manifest_invalid"
+    assert report["prose_epistemics"]["findings"][0]["counts_as_issue"] is True
+    assert report["total_issues"] == 1
+
+
+def test_health_report_no_manifest_no_artifact_is_not_applicable(tmp_path: Path) -> None:
+    from science_tool.graph.health import build_health_report
+
+    report = build_health_report(tmp_path, checks={"prose_epistemics"})
+
+    assert report["prose_epistemics"]["applicable"] is False
+    assert report["prose_epistemics"]["findings"] == []
+    assert report["total_issues"] == 0
+
+
+def test_health_cli_json_includes_prose_epistemics(tmp_path: Path) -> None:
+    from click.testing import CliRunner
+    from science_tool.cli import main
+
+    _write_prose_health_artifact(tmp_path)
+
+    result = CliRunner().invoke(
+        main,
+        ["health", "--project-root", str(tmp_path), "--format", "json", "--check", "prose_epistemics"],
+    )
+
+    assert result.exit_code == 0, result.output
+    report = json.loads(result.output)
+    assert report["prose_epistemics"]["summary"]["grounded_units"] == 1
+
+
+def test_health_list_checks_includes_prose_epistemics(tmp_path: Path) -> None:
+    from click.testing import CliRunner
+    from science_tool.cli import main
+
+    result = CliRunner().invoke(
+        main,
+        ["health", "--project-root", str(tmp_path), "--format", "json", "--list-checks"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert any(row["name"] == "prose_epistemics" for row in payload["checks"])
+
+
+def test_health_cli_table_includes_prose_epistemics_findings(tmp_path: Path) -> None:
+    from click.testing import CliRunner
+    from science_tool.cli import main
+
+    _write_prose_health_artifact(
+        tmp_path,
+        findings=[
+            {
+                "code": "missing_grounding",
+                "severity": "warning",
+                "counts_as_issue": True,
+                "source_ref": "prose-source:example",
+                "path": "docs/example.md",
+                "message": "Declared prose source has no P3 grounding report.",
+            }
+        ],
+    )
+
+    result = CliRunner().invoke(main, ["health", "--project-root", str(tmp_path), "--check", "prose_epistemics"])
+
+    assert result.exit_code == 0, result.output
+    assert "Prose Epistemics" in result.output
+    assert "missing_grounding" in result.output
+    assert "prose-source:example" in result.output

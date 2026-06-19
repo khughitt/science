@@ -4445,6 +4445,10 @@ def health_command(
     entity_identity = report.get("entity_identity") or []
     schema_invalid = report.get("schema_invalid") or []
     validation = report.get("validation") or []
+    prose_epistemics = report.get("prose_epistemics") or {}
+    prose_epistemics_findings = (
+        prose_epistemics.get("findings") if isinstance(prose_epistemics, dict) else []
+    ) or []
 
     total_issues = (
         len(report["unresolved_refs"])
@@ -4462,6 +4466,7 @@ def health_command(
         + len(tooling_scaffold)
         + len(agent_context)
         + len(validation)
+        + sum(1 for f in prose_epistemics_findings if isinstance(f, dict) and f.get("counts_as_issue") is True)
     )
     if total_issues == 0:
         click.echo("Project is clean — no issues found.")
@@ -4535,6 +4540,20 @@ def health_command(
             "(these are excluded from the graph until repaired); rerun "
             "[cyan]science validate[/cyan] for the authoritative error."
         )
+
+    if prose_epistemics_findings:
+        pe_table = Table(title=f"Prose Epistemics ({len(prose_epistemics_findings)})")
+        pe_table.add_column("Code", style="bold")
+        pe_table.add_column("Source")
+        pe_table.add_column("Detail")
+        for row in prose_epistemics_findings:
+            pe_table.add_row(
+                str(row.get("code", "")),
+                str(row.get("source_ref") or ""),
+                str(row.get("message", "")),
+            )
+        console.print(pe_table)
+        console.print("\n[bold]Next:[/bold] run [cyan]science annotate build-prose-health --write[/cyan].")
 
     if report["unresolved_refs"]:
         table = Table(title=f"Unresolved references ({len(report['unresolved_refs'])})")

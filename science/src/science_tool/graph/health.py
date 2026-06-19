@@ -334,6 +334,7 @@ class HealthReport(TypedDict):
     managed_artifacts: list[dict]
     tooling_scaffold: list[ToolingScaffoldFinding]
     validation: list[ValidationFinding]
+    prose_epistemics: dict[str, object]
     total_issues: int
     _meta: NotRequired["HealthMeta"]
 
@@ -545,6 +546,7 @@ def _empty_check_results(project_root: Path) -> dict[str, object]:
         "dataset_anomalies": [],
         "legacy_task_type": [],
         "invalid_entity_aspects": [],
+        "prose_epistemics": _empty_prose_epistemics(),
     }
 
 
@@ -644,6 +646,13 @@ def build_health_report(
     legacy_task_type = cast("list[LegacyTaskTypeFinding]", check_results["legacy_task_type"])
     invalid_entity_aspects = cast("list[InvalidEntityAspectsFinding]", check_results["invalid_entity_aspects"])
     validation = cast("list[ValidationFinding]", check_results["validate"])
+    prose_epistemics = cast("dict[str, object]", check_results["prose_epistemics"])
+    prose_epistemics_findings = prose_epistemics.get("findings") if isinstance(prose_epistemics, dict) else []
+    prose_epistemics_issue_count = (
+        sum(1 for row in prose_epistemics_findings if isinstance(row, dict) and row.get("counts_as_issue") is True)
+        if isinstance(prose_epistemics_findings, list)
+        else 0
+    )
 
     layered_claim_issue_count = len(migration_issues) + len(rival_model_gaps)
     coverage_gaps = 0
@@ -679,6 +688,7 @@ def build_health_report(
         + sum(1 for f in managed_artifacts if f["counts_as_issue"])
         + len(tooling_scaffold)
         + len(validation)
+        + prose_epistemics_issue_count
     )
 
     report: HealthReport = {
@@ -703,6 +713,7 @@ def build_health_report(
         "managed_artifacts": cast("list[dict]", managed_artifacts),
         "tooling_scaffold": tooling_scaffold,
         "validation": validation,
+        "prose_epistemics": prose_epistemics,
         "total_issues": total_issues,
     }
     if collect_timings:
@@ -1637,6 +1648,97 @@ def _collect_managed_artifacts(context: HealthContext) -> list[dict]:
     return cast("list[dict]", health_findings(context.project_root))
 
 
+def _empty_prose_epistemics() -> dict[str, object]:
+    return {
+        "applicable": False,
+        "summary": {},
+        "coverage": {},
+        "sources": [],
+        "findings": [],
+    }
+
+
+def _collect_prose_epistemics(context: HealthContext) -> dict[str, object]:
+    from science_tool.annotation.prose_health import (
+        ProseHealthError,
+        load_prose_health_artifact,
+        load_prose_health_manifest,
+        prose_health_manifest_path,
+        prose_health_path,
+    )
+
+    manifest_path = prose_health_manifest_path(context.project_root)
+    artifact_path = prose_health_path(context.project_root)
+    if not manifest_path.exists() and not artifact_path.exists():
+        return _empty_prose_epistemics()
+    if manifest_path.exists():
+        try:
+            load_prose_health_manifest(context.project_root)
+        except ProseHealthError as exc:
+            return {
+                "applicable": True,
+                "summary": {},
+                "coverage": {},
+                "sources": [],
+                "findings": [
+                    {
+                        "code": "manifest_invalid",
+                        "severity": "error",
+                        "counts_as_issue": True,
+                        "source_ref": None,
+                        "path": manifest_path.relative_to(context.project_root).as_posix(),
+                        "message": str(exc),
+                    }
+                ],
+            }
+    if not artifact_path.exists():
+        return {
+            "applicable": True,
+            "summary": {},
+            "coverage": {},
+            "sources": [],
+            "findings": [
+                {
+                    "code": "prose_health_artifact_missing",
+                    "severity": "warning",
+                    "counts_as_issue": True,
+                    "source_ref": None,
+                    "path": artifact_path.relative_to(context.project_root).as_posix(),
+                    "message": (
+                        "Prose health manifest exists but prose-health.json is missing; "
+                        "run science annotate build-prose-health --write."
+                    ),
+                }
+            ],
+        }
+    try:
+        artifact = load_prose_health_artifact(context.project_root)
+    except ProseHealthError as exc:
+        return {
+            "applicable": True,
+            "summary": {},
+            "coverage": {},
+            "sources": [],
+            "findings": [
+                {
+                    "code": "prose_health_artifact_invalid",
+                    "severity": "error",
+                    "counts_as_issue": True,
+                    "source_ref": None,
+                    "path": artifact_path.relative_to(context.project_root).as_posix(),
+                    "message": str(exc),
+                }
+            ],
+        }
+    return {
+        "applicable": True,
+        "summary": artifact.get("summary", {}),
+        "coverage": artifact.get("coverage", {}),
+        "sources": artifact.get("sources", []),
+        "findings": artifact.get("findings", []),
+    }
+
+
 HEALTH_CHECKS: tuple[HealthCheck, ...] = (
     HealthCheck(
         name="identity_policy",
@@ -1681,6 +1783,12 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
         description="Run canonical project validation and surface warnings/errors.",
         requires_sources=False,
         run=lambda context: collect_validation_findings(context.project_root),
+    ),
+    HealthCheck(
+        name="prose_epistemics",
+        description="Read the project-level prose epistemics health artifact.",
+        requires_sources=False,
+        run=_collect_prose_epistemics,
     ),
     HealthCheck(
         name="agent_context",
