@@ -43,6 +43,7 @@ def validate_submitted_decomposition_artifact(
         _read_decomposition_artifact(artifact_path),
         project_root=project_root,
     )
+    _ensure_source_under_project_root(artifact, project_root)
     current_hash = _compute_source_hash(artifact.source.path)
     if current_hash != artifact.source.content_hash and not allow_changed:
         raise DecompositionError(
@@ -63,7 +64,13 @@ def validate_latest_decomposition(
 ) -> tuple[DecompositionArtifact, ProseValidationReport]:
     store = ProseDecompositionStore(project_root)
     index = store.load_index(source_slug)
-    artifact = store.load_latest(source_slug)
+    try:
+        artifact = store.load_latest(source_slug)
+    except OSError as exc:
+        raise DecompositionError(
+            f"could not read latest prose decomposition for source slug {source_slug}: {exc}"
+        ) from exc
+    _ensure_source_under_project_root(artifact, project_root)
     rows = validate_decomposition_units(artifact, index)
     return artifact, ProseValidationReport(
         source_ref=artifact.source_ref,
@@ -137,6 +144,17 @@ def _compute_source_hash(source_path: Path) -> str:
         return compute_source_hash(source_path)
     except OSError as exc:
         raise DecompositionError(f"could not read source for hash: {source_path}: {exc}") from exc
+
+
+def _ensure_source_under_project_root(artifact: DecompositionArtifact, project_root: Path) -> None:
+    root = project_root.resolve(strict=False)
+    source_path = artifact.source.path.resolve(strict=False)
+    try:
+        source_path.relative_to(root)
+    except ValueError as exc:
+        raise DecompositionError(
+            f"source path is outside project root: {source_path} (project root: {root})"
+        ) from exc
 
 
 def _resolve_unit(

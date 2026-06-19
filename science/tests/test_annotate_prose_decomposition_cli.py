@@ -362,6 +362,32 @@ def test_validate_prose_decomposition_artifact_hash_mismatch_fails(tmp_path):
     assert not (tmp_path / "entities" / "prose-sources" / "example.md").exists()
 
 
+def test_validate_prose_decomposition_artifact_rejects_source_outside_root(tmp_path):
+    root = tmp_path / "project"
+    root.mkdir()
+    outside_source = tmp_path / "outside.md"
+    outside_source.write_text("# Section\n\nBasalt flows record the cooling history.\n", encoding="utf-8")
+    artifact_path = _artifact_file(root, content_hash=compute_source_hash(outside_source))
+    raw = json.loads(artifact_path.read_text(encoding="utf-8"))
+    raw["source"]["path"] = str(outside_source)
+    artifact_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "validate-prose-decomposition-artifact",
+            str(artifact_path),
+            "--root",
+            str(root),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "source path is outside project root" in result.output
+    assert str(outside_source) in result.output
+    assert "content hash mismatch" not in result.output
+
+
 def test_validate_prose_decomposition_artifact_missing_source_fails_without_traceback(tmp_path):
     artifact_path = _artifact_file(tmp_path)
     raw = json.loads(artifact_path.read_text(encoding="utf-8"))
@@ -457,6 +483,27 @@ def test_validate_and_check_share_per_unit_findings_after_ingest(tmp_path):
     # Fresh ingest has no stale/promoted state, so raw-artifact validation and
     # latest-artifact check should produce identical per-unit findings.
     assert validate_payload["units"] == check_payload["units"]
+
+
+def test_check_prose_decomposition_reports_unreadable_latest_generation(tmp_path):
+    ingest = CliRunner().invoke(
+        annotate_group,
+        ["ingest-prose-decomposition", str(_artifact_file(tmp_path)), "--root", str(tmp_path)],
+    )
+    assert ingest.exit_code == 0, ingest.output
+    generation = tmp_path / "data" / "prose-decompositions" / "example" / "generations" / "decomp-1.json"
+    generation.unlink()
+    generation.mkdir()
+
+    result = CliRunner().invoke(
+        annotate_group,
+        ["check-prose-decomposition", "--source", "prose-source:example", "--root", str(tmp_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "could not read latest prose decomposition for source slug example" in result.output
+    assert str(generation) in result.output
+    assert "Traceback" not in result.output
 
 
 def test_promote_prose_decomposition_apply_mints(tmp_path):
