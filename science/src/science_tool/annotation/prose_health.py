@@ -30,6 +30,7 @@ SUMMARY_KEYS = (
     "contested_units",
 )
 GROUNDING_STATUSES = frozenset({"grounded", "below_floor", "unbacked", "unpromoted", "skipped", "stale"})
+CANDIDATE_CURRENT_STATUSES = frozenset({"grounded", "below_floor", "unbacked", "unpromoted"})
 SOURCE_STATE_PRECEDENCE = (
     "missing_decomposition",
     "invalid_decomposition",
@@ -374,6 +375,7 @@ def _unit_rows(
     for grounding_unit in grounding_units:
         grounding_by_fingerprint[grounding_unit.fingerprint] = grounding_unit.row
     rows: list[dict[str, object]] = []
+    current_fingerprints = {unit.fingerprint for unit in artifact.units}
     for unit in artifact.units:
         grounding_row = grounding_by_fingerprint.get(unit.fingerprint)
         if not isinstance(grounding_row, dict):
@@ -381,7 +383,12 @@ def _unit_rows(
         rows.append(_unit_row(project_root=project_root, source=source, artifact=artifact, unit=unit, grounding_row=grounding_row))
     for grounding_unit in grounding_units:
         grounding_row = grounding_unit.row
-        if grounding_row.get("status") == "stale":
+        status = grounding_row.get("status")
+        if grounding_unit.fingerprint in current_fingerprints:
+            continue
+        if status != "stale":
+            raise ProseHealthError(f"grounding report has non-stale extra unit fingerprint: {grounding_unit.fingerprint}")
+        if status == "stale":
             rows.append(_stale_unit_row(project_root=project_root, source=source, grounding_row=grounding_row))
     return rows
 
@@ -401,6 +408,11 @@ def _unit_row(
         raise ProseHealthError(f"grounding report artifact_ref mismatch for fingerprint: {unit.fingerprint}")
     if grounding_row.get("disposition") != unit.disposition:
         raise ProseHealthError(f"grounding report disposition mismatch for fingerprint: {unit.fingerprint}")
+    status = grounding_row.get("status")
+    if unit.disposition == "candidate" and status not in CANDIDATE_CURRENT_STATUSES:
+        raise ProseHealthError(f"grounding report status mismatch for candidate fingerprint: {unit.fingerprint}")
+    if unit.disposition == "skip" and status != "skipped":
+        raise ProseHealthError(f"grounding report status mismatch for skip fingerprint: {unit.fingerprint}")
     return {
         "source_ref": source.source_ref,
         "source_path": _project_relative_path(project_root, source.path),

@@ -559,6 +559,60 @@ def test_invalid_grounding_status_degrades_source_to_invalid_grounding(tmp_path:
     assert "status is invalid" in report["findings"][0]["message"]
 
 
+def test_current_candidate_status_stale_is_invalid_grounding(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+
+    artifact, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path))
+    grounding_path = _write_grounding(tmp_path, artifact=artifact, status="grounded")
+    report = json.loads(grounding_path.read_text(encoding="utf-8"))
+    report["units"][0]["status"] = "stale"
+    grounding_path.write_text(json.dumps(report), encoding="utf-8")
+    _write_manifest(tmp_path)
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "invalid_grounding"
+    assert report["findings"][0]["code"] == "invalid_grounding"
+    assert "status mismatch for candidate fingerprint" in report["findings"][0]["message"]
+
+
+def test_skip_status_grounded_is_invalid_grounding(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+
+    artifact, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path))
+    grounding_path = _write_grounding(tmp_path, artifact=artifact, status="grounded")
+    report = json.loads(grounding_path.read_text(encoding="utf-8"))
+    report["units"][1]["status"] = "grounded"
+    grounding_path.write_text(json.dumps(report), encoding="utf-8")
+    _write_manifest(tmp_path)
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "invalid_grounding"
+    assert report["findings"][0]["code"] == "invalid_grounding"
+    assert "status mismatch for skip fingerprint" in report["findings"][0]["message"]
+
+
+def test_extra_non_stale_grounding_row_is_invalid_grounding(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+
+    artifact, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path))
+    grounding_path = _write_grounding(tmp_path, artifact=artifact, status="grounded")
+    report = json.loads(grounding_path.read_text(encoding="utf-8"))
+    extra = dict(report["units"][0])
+    extra["fingerprint"] = "sha256:extra"
+    extra["unit_id"] = "old"
+    report["units"].append(extra)
+    grounding_path.write_text(json.dumps(report), encoding="utf-8")
+    _write_manifest(tmp_path)
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "invalid_grounding"
+    assert report["findings"][0]["code"] == "invalid_grounding"
+    assert "non-stale extra unit fingerprint" in report["findings"][0]["message"]
+
+
 def test_invalid_grounding_json_produces_state_and_finding(tmp_path: Path) -> None:
     from science_tool.annotation.prose_health import build_prose_health_report
     from science_tool.annotation.prose_grounding import prose_grounding_path
