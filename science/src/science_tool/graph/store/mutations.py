@@ -8,9 +8,10 @@ from pathlib import Path
 import click
 from rdflib import Literal, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
-from science_model.reasoning import MeasurementModel, RivalModelPacket
+from science_model.reasoning import MeasurementModel, MembershipRole, RivalModelPacket
 from science_model.relations import relation_allows_kinds
 
+from science_tool.graph.io import emit_discusses_membership
 from science_tool.graph.sources import is_metadata_reference
 
 from .constants import (
@@ -112,6 +113,7 @@ def add_proposition(
     pre_registration_refs: list[str] | None = None,
     interaction_terms: list[PropositionInteractionTerm] | None = None,
     bridge_between_refs: list[str] | None = None,
+    bridge_role: MembershipRole = MembershipRole.CORE,
     claim_layer: str | None = None,
     identification_strength: str | None = None,
     proxy_directness: str | None = None,
@@ -223,9 +225,17 @@ def add_proposition(
                 normalized_term["note"] = str(term["note"])
             provenance.add((prop_uri, SCI_NS.interactionTerm, Literal(json.dumps(normalized_term))))
     if bridge_between_refs is not None:
+        prop_cid = f"proposition:{token}"
         for bridge_ref in bridge_between_refs:
             bridge_uri = _resolve_term(bridge_ref)
-            knowledge.add((prop_uri, CITO_NS.discusses, bridge_uri))
+            emit_discusses_membership(
+                knowledge,
+                prop_uri=prop_uri,
+                frame_uri=bridge_uri,
+                prop_cid=prop_cid,
+                frame_cid=bridge_ref,
+                role=bridge_role,
+            )
             provenance.add((prop_uri, SCI_NS.bridgeBetween, bridge_uri))
 
     _save_dataset(dataset, graph_path)
