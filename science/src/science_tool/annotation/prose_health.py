@@ -413,6 +413,18 @@ def _unit_row(
         raise ProseHealthError(f"grounding report status mismatch for candidate fingerprint: {unit.fingerprint}")
     if unit.disposition == "skip" and status != "skipped":
         raise ProseHealthError(f"grounding report status mismatch for skip fingerprint: {unit.fingerprint}")
+    proposition_ref = grounding_row.get("proposition_ref")
+    grounding = grounding_row.get("grounding")
+    if unit.disposition == "candidate" and status == "unpromoted":
+        if proposition_ref is not None or grounding is not None:
+            raise ProseHealthError(f"grounding report unpromoted row has proposition data: {unit.fingerprint}")
+    if unit.disposition == "candidate" and status != "unpromoted":
+        if not isinstance(proposition_ref, str) or not proposition_ref.startswith("proposition:"):
+            raise ProseHealthError(f"grounding report promoted row is missing proposition_ref: {unit.fingerprint}")
+        if not isinstance(grounding, dict):
+            raise ProseHealthError(f"grounding report promoted row is missing grounding: {unit.fingerprint}")
+    if unit.disposition == "skip" and (proposition_ref is not None or grounding is not None):
+        raise ProseHealthError(f"grounding report skipped row has proposition data: {unit.fingerprint}")
     return {
         "source_ref": source.source_ref,
         "source_path": _project_relative_path(project_root, source.path),
@@ -423,8 +435,8 @@ def _unit_row(
         "quote": _quote_payload(unit),
         "status": grounding_row.get("status"),
         "disposition": unit.disposition,
-        "proposition_ref": grounding_row.get("proposition_ref"),
-        "grounding": grounding_row.get("grounding"),
+        "proposition_ref": proposition_ref,
+        "grounding": grounding,
         "skip_reason": unit.reason_code,
         "skip_detail": unit.reason_detail if unit.disposition == "skip" else None,
     }

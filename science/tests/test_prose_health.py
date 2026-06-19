@@ -576,6 +576,40 @@ def test_current_candidate_status_stale_is_invalid_grounding(tmp_path: Path) -> 
     assert "status mismatch for candidate fingerprint" in report["findings"][0]["message"]
 
 
+def test_grounded_candidate_without_proposition_ref_is_invalid_grounding(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+
+    artifact, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path))
+    grounding_path = _write_grounding(tmp_path, artifact=artifact, status="grounded")
+    report = json.loads(grounding_path.read_text(encoding="utf-8"))
+    report["units"][0]["proposition_ref"] = None
+    grounding_path.write_text(json.dumps(report), encoding="utf-8")
+    _write_manifest(tmp_path)
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "invalid_grounding"
+    assert report["findings"][0]["code"] == "invalid_grounding"
+    assert "promoted row is missing proposition_ref" in report["findings"][0]["message"]
+
+
+def test_unpromoted_candidate_with_proposition_data_is_invalid_grounding(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+
+    artifact, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path))
+    grounding_path = _write_grounding(tmp_path, artifact=artifact, status="unpromoted")
+    report = json.loads(grounding_path.read_text(encoding="utf-8"))
+    report["units"][0]["proposition_ref"] = "proposition:basalt-cooling"
+    grounding_path.write_text(json.dumps(report), encoding="utf-8")
+    _write_manifest(tmp_path)
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "invalid_grounding"
+    assert report["findings"][0]["code"] == "invalid_grounding"
+    assert "unpromoted row has proposition data" in report["findings"][0]["message"]
+
+
 def test_skip_status_grounded_is_invalid_grounding(tmp_path: Path) -> None:
     from science_tool.annotation.prose_health import build_prose_health_report
 
