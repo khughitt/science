@@ -421,7 +421,7 @@ def build_prose_health_cmd(
         f"promoted={summary['promoted_units']} "
         f"grounded={summary['grounded_units']} "
         f"strict_grounding={strict_text} "
-        f"findings={len(payload.get('findings') or [])}"  # pyright: ignore[reportArgumentType]
+        f"findings={len(payload.get('findings') or [])}"
     )
     if do_write:
         click.echo("wrote prose health artifact" if written else "unchanged prose health artifact")
@@ -527,7 +527,7 @@ def verify(
         pre_apply_broken = report.broken
         rewritten = apply_supersessions(
             report,
-            actor=actor,  # pyright: ignore[reportArgumentType]
+            actor=actor,
             now=datetime.now(timezone.utc),
         )
         rewritten_count = len(rewritten)
@@ -874,7 +874,7 @@ def lift_tokens_cmd(
                     sidecar_path,
                     serialize_sidecar(new_sidecar),
                 )
-            atomic_write_text(md, cleaned_text)  # pyright: ignore[reportPossiblyUnboundVariable]
+            atomic_write_text(md, cleaned_text)
             summary["tokens_removed"] += len(non_doc_hits)
         else:
             if written:
