@@ -90,6 +90,28 @@ from science_tool.graph.store import (
 )
 
 
+def _iter_membership_refs(entity):
+    """Yield (frame_ref, MembershipRole) for an entity's discusses entries.
+
+    Propositions expose iter_memberships(); any other entity with a plain
+    `discusses` list is treated as all-core (defensive, no behavior change).
+    """
+    iter_memberships = getattr(entity, "iter_memberships", None)
+    if callable(iter_memberships):
+        yield from sorted(iter_memberships(), key=lambda pair: pair[0])
+        return
+    from science_model.reasoning import MembershipRole
+
+    for raw in sorted(getattr(entity, "discusses", []) or []):
+        yield raw, MembershipRole.CORE
+
+
+def _membership_uri(prop_canonical: str, frame_canonical: str):
+    """Deterministic IRI for a (proposition, frame) membership node."""
+    slug = f"{prop_canonical}__{frame_canonical}".replace(":", "_").replace("/", "_")
+    return PROJECT_NS[f"membership/{slug}"]
+
+
 @dataclass(frozen=True)
 class _ArchivedEndpoint:
     """Duck-typed stand-in for an archived relation object: only ``.canonical_id``
@@ -587,16 +609,45 @@ def _add_relations(
             continue
         knowledge.add((entity_uri, SCI_NS.hasProposition, _entity_uri(target.canonical_id)))
 
-    for raw_target in sorted(getattr(entity, "discusses", []) or []):
+    for raw_target, role in _iter_membership_refs(entity):
+        # `meta:`/`spec:` are the project-wide annotation-only escape hatch
+        # (is_metadata_reference, sources.py): intentional pointers excluded from
+        # KG materialization everywhere, NOT bundle memberships. They are skipped,
+        # not rejected — membership semantics apply only to real entity refs.
         if is_metadata_reference(raw_target):
             continue
+        # Loud-fail: a discusses frame MUST resolve (spec §5). A typo'd or dangling
+        # frame is a hard error, never a silently dropped membership, because graph
+        # audit does not currently cover PropositionEntity.discusses.
         resolution = resolver.resolve(raw_target, allow_cross_kind_fallback=True)
         if resolution.status != "resolved" or resolution.canonical_id is None:
-            continue
+            raise ValueError(
+                f"{entity.canonical_id} discusses {raw_target!r}, which does not resolve to a "
+                "known entity; a discusses frame must resolve to a bundle (spec §5)."
+            )
         target = entity_index.get(resolution.canonical_id)
         if target is None:
-            continue
-        knowledge.add((entity_uri, CITO_NS.discusses, _entity_uri(target.canonical_id)))
+            raise ValueError(
+                f"{entity.canonical_id} discusses {resolution.canonical_id!r}, which resolved but "
+                "is missing from the entity index; cannot emit membership (spec §5)."
+            )
+        frame_uri = _entity_uri(target.canonical_id)
+        # Loud-fail: a discusses frame must be a bundle (hypothesis/mechanism) (spec §5 rule 2).
+        frame_kind = resolution.canonical_id.split(":", 1)[0]
+        if frame_kind not in ("hypothesis", "mechanism"):
+            raise ValueError(
+                f"{entity.canonical_id} discusses {resolution.canonical_id!r}, which is a "
+                f"{frame_kind!r}, not a bundle (hypothesis/mechanism); membership roles are "
+                "only valid on bundle frames (spec §5)."
+            )
+        # 1) Plain triple, emitted verbatim — annotate, never replace (spec §5).
+        knowledge.add((entity_uri, CITO_NS.discusses, frame_uri))
+        # 3) BundleMembership plumbing node carrying the role.
+        membership_uri = _membership_uri(entity.canonical_id, resolution.canonical_id)
+        knowledge.add((membership_uri, RDF.type, SCI_NS.BundleMembership))
+        knowledge.add((membership_uri, SCI_NS.membershipProposition, entity_uri))
+        knowledge.add((membership_uri, SCI_NS.membershipFrame, frame_uri))
+        knowledge.add((membership_uri, SCI_NS.membershipRole, Literal(role.value)))
 
     for raw_target in sorted(entity.related):
         if is_external_reference(raw_target, known_prefixes=ext_prefixes):

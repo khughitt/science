@@ -20,6 +20,13 @@ DCTERMS_NS = Namespace("http://purl.org/dc/terms/")
 DCAT_NS = Namespace("http://www.w3.org/ns/dcat#")
 REVISION_URI = URIRef(PROJECT_NS["graph_revision"])
 
+# Bundle-membership plumbing (NON-truth-apt; carries no belief, takes no evidence).
+# A BundleMembership node annotates a (proposition, frame) cito:discusses edge with its role.
+#   SCI_NS.BundleMembership          -- rdf:type of the membership node
+#   SCI_NS.membershipProposition     -- node -> proposition IRI
+#   SCI_NS.membershipFrame           -- node -> bundle (hypothesis/mechanism) IRI
+#   SCI_NS.membershipRole            -- node -> Literal(MembershipRole value)
+
 
 def entity_uri_for_ref(ref: str) -> URIRef:
     if ":" not in ref:
