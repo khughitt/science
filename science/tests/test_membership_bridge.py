@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from rdflib import Literal, URIRef
 from rdflib.namespace import RDF
 
 from science_tool.graph.io import SCI_NS, CITO_NS, membership_uri_for
@@ -41,7 +42,6 @@ class TestBridgeBetweenMembership:
         dataset = _load_dataset(graph_path)
         knowledge = dataset.graph(_graph_uri("graph/knowledge"))
 
-        from rdflib import URIRef
         hyp_uri = URIRef(PROJECT_NS["hypothesis/0001-foo"])
 
         assert (prop_uri, CITO_NS.discusses, hyp_uri) in knowledge, (
@@ -70,7 +70,6 @@ class TestBridgeBetweenMembership:
         assert (node, RDF.type, SCI_NS.BundleMembership) in knowledge, (
             "Expected BundleMembership rdf:type triple"
         )
-        from rdflib import Literal
         assert (node, SCI_NS.membershipRole, Literal("core")) in knowledge, (
             "Expected membershipRole 'core' on the BundleMembership node"
         )
@@ -89,7 +88,6 @@ class TestBridgeBetweenMembership:
         dataset = _load_dataset(graph_path)
         provenance = dataset.graph(_graph_uri("graph/provenance"))
 
-        from rdflib import URIRef
         hyp_uri = URIRef(PROJECT_NS["hypothesis/0001-foo"])
 
         assert (prop_uri, SCI_NS.bridgeBetween, hyp_uri) in provenance, (
