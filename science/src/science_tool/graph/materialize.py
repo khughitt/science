@@ -67,7 +67,7 @@ from science_tool.graph.sources import (
     load_project_sources,
 )
 from science_tool.graph.inquiry_compile import emit_inquiry_views
-from science_tool.graph.io import CITO_NS, DCAT_NS, DCTERMS_NS, entity_uri_for_ref
+from science_tool.graph.io import CITO_NS, DCAT_NS, DCTERMS_NS, emit_discusses_membership, entity_uri_for_ref, membership_uri_for
 from science_tool.graph.source_snapshots import (
     SourceSnapshotResult,
     compute_source_snapshots,
@@ -102,12 +102,6 @@ def _iter_membership_refs(entity):
         return
     for raw in sorted(getattr(entity, "discusses", []) or []):
         yield raw, MembershipRole.CORE
-
-
-def _membership_uri(prop_canonical: str, frame_canonical: str):
-    """Deterministic IRI for a (proposition, frame) membership node."""
-    slug = f"{prop_canonical}__{frame_canonical}".replace(":", "_").replace("/", "_")
-    return PROJECT_NS[f"membership/{slug}"]
 
 
 @dataclass(frozen=True)
@@ -630,22 +624,14 @@ def _add_relations(
                 "is missing from the entity index; cannot emit membership (spec §5)."
             )
         frame_uri = _entity_uri(target.canonical_id)
-        # Loud-fail: a discusses frame must be a bundle (hypothesis/mechanism) (spec §5 rule 2).
-        frame_kind = resolution.canonical_id.split(":", 1)[0]
-        if frame_kind not in ("hypothesis", "mechanism"):
-            raise ValueError(
-                f"{entity.canonical_id} discusses {resolution.canonical_id!r}, which is a "
-                f"{frame_kind!r}, not a bundle (hypothesis/mechanism); membership roles are "
-                "only valid on bundle frames (spec §5)."
-            )
-        # 1) Plain triple, emitted verbatim — annotate, never replace (spec §5).
-        knowledge.add((entity_uri, CITO_NS.discusses, frame_uri))
-        # 2) BundleMembership plumbing node carrying the role.
-        membership_uri = _membership_uri(entity.canonical_id, resolution.canonical_id)
-        knowledge.add((membership_uri, RDF.type, SCI_NS.BundleMembership))
-        knowledge.add((membership_uri, SCI_NS.membershipProposition, entity_uri))
-        knowledge.add((membership_uri, SCI_NS.membershipFrame, frame_uri))
-        knowledge.add((membership_uri, SCI_NS.membershipRole, Literal(role.value)))
+        emit_discusses_membership(
+            knowledge,
+            prop_uri=entity_uri,
+            frame_uri=frame_uri,
+            prop_cid=entity.canonical_id,
+            frame_cid=resolution.canonical_id,
+            role=role,
+        )
 
     for raw_target in sorted(entity.related):
         if is_external_reference(raw_target, known_prefixes=ext_prefixes):

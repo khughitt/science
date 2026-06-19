@@ -9,6 +9,7 @@ from typing import Sequence
 
 from rdflib import BNode, Dataset, Literal, Namespace, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
+from science_model.reasoning import MembershipRole
 
 PROJECT_NS = Namespace("http://example.org/project/")
 SCI_NS = Namespace("http://example.org/science/vocab/")
@@ -35,6 +36,44 @@ def entity_uri_for_ref(ref: str) -> URIRef:
     if not kind or not slug:
         raise ValueError(f"invalid entity ref {ref!r}")
     return URIRef(PROJECT_NS[f"{kind}/{slug.lower()}"])
+
+
+def membership_uri_for(prop_cid: str, frame_cid: str) -> URIRef:
+    """Deterministic IRI for a (proposition, frame) BundleMembership node."""
+    slug = f"{prop_cid}__{frame_cid}".replace(":", "_").replace("/", "_")
+    return URIRef(PROJECT_NS[f"membership/{slug}"])
+
+
+def emit_discusses_membership(
+    knowledge,
+    *,
+    prop_uri: URIRef,
+    frame_uri: URIRef,
+    prop_cid: str,
+    frame_cid: str,
+    role: MembershipRole = MembershipRole.CORE,
+) -> None:
+    """The one place a bundle-membership cito:discusses edge is emitted.
+
+    Always emits the plain (prop, cito:discusses, frame) triple, plus a
+    non-truth-apt BundleMembership node carrying the role. Precondition guard:
+    the frame must be a bundle (hypothesis/mechanism) — callers route only
+    membership edges here; non-bundle discusses keeps the generic path (design
+    §0.1, §3.4).
+    """
+    frame_kind = frame_cid.split(":", 1)[0]
+    if frame_kind not in ("hypothesis", "mechanism"):
+        raise ValueError(
+            f"{prop_cid} discusses {frame_cid!r}, which is a {frame_kind!r}, not a "
+            "bundle (hypothesis/mechanism); membership roles are only valid on bundle "
+            "frames (spec §5)."
+        )
+    knowledge.add((prop_uri, CITO_NS.discusses, frame_uri))
+    node = membership_uri_for(prop_cid, frame_cid)
+    knowledge.add((node, RDF.type, SCI_NS.BundleMembership))
+    knowledge.add((node, SCI_NS.membershipProposition, prop_uri))
+    knowledge.add((node, SCI_NS.membershipFrame, frame_uri))
+    knowledge.add((node, SCI_NS.membershipRole, Literal(role.value)))
 
 
 _SERIALIZER_PREFIXES: tuple[tuple[str, str], ...] = (
