@@ -93,7 +93,7 @@ uv run science <command>
 - **MUST** evaluate all 9 rubric dimensions
 - **MUST** be critical — surface weaknesses, don't just confirm the plan is good
 - **MUST** provide specific, actionable recommendations for each issue
-- **MUST** save review report to `doc/inquiries/<slug>-review.md`
+- **MUST** save review report next to the reviewed artifact: `doc/inquiries/<slug>-review.md` for an inquiry, or `doc/plans/<stem>-review.md` for a `type: plan` document (see *Resolve the target* below)
 - **SHOULD** cross-reference claims against existing literature (LLM knowledge + web search)
 - **MUST NOT** change the inquiry or plan — only report findings
 
@@ -101,13 +101,23 @@ uv run science <command>
 
 ### Step 1: Load inquiry and plan
 
+**Resolve the target first.** Not every project routes plans through `inquiry`. If the
+artifact under review is an `inquiry` (a `doc/inquiries/<slug>.md` with an inquiry slug), use
+the inquiry commands below. If it is a standalone `type: plan` document (e.g. `doc/plans/<stem>.md`
+with no inquiry slug), the `science inquiry show/validate <slug>` calls do **not** resolve — skip
+them and instead drive the review from the plan document itself plus its frontmatter `related:`
+entities, following the repo's existing review-file convention (`doc/plans/<stem>-review.md`).
+
+For an inquiry target:
+
 ```bash
 science inquiry show "<slug>" --format table
 science inquiry validate "<slug>" --format json
 ```
 
-Also read:
-- `doc/inquiries/<slug>.md` — inquiry document
+Also read (whichever exist):
+- `doc/inquiries/<slug>.md` — inquiry document (inquiry target)
+- `doc/plans/<stem>.md` and its `related:` entities — plan document (plan target)
 - `doc/plans/*<slug>*` — implementation plan (if exists)
 - `specs/scope-boundaries.md` — project scope
 
@@ -225,7 +235,8 @@ WARN (manifest present but incomplete) / FAIL (no manifest generation)
 
 ### Step 3: Write review report
 
-Save to `doc/inquiries/<slug>-review.md`:
+Save next to the reviewed artifact: `doc/inquiries/<slug>-review.md` for an inquiry target, or
+`doc/plans/<stem>-review.md` for a plan target (match the repo's existing review-file convention):
 
 ```markdown
 # Pipeline Review: {{label}}

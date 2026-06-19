@@ -362,6 +362,13 @@ Before writing the file, list `<meta-home>/*next-steps-*.md`. **Exclude any file
 > `doc/meta/`. Globbing only `doc/meta/` on a v3 project silently finds nothing
 > and the run will wrongly conclude "no predecessor / first analysis." Always
 > scan the resolved `<meta-home>`.
+>
+> ⚠️ **Transitional fallback (v3 only):** a project migrated from v2 may still
+> have an orphaned predecessor under the legacy `doc/meta/` (e.g. a next-steps
+> file written just before the entities/ cutover). If the resolved `<meta-home>`
+> (`entities/meta/`) yields **no** predecessor, also scan `doc/meta/*next-steps-*.md`
+> before concluding "first analysis." If you find one there, use it as `prior:`
+> and flag that the orphaned file should be moved into `entities/meta/`.
 
 Delta mode (append `## Update — HH:MM` to today's existing file) does **not** change the file's `prior:` — the chain link is per-file, not per-update.
 

@@ -182,7 +182,12 @@ The body must include:
 - Feedback Reflection
 
 For `ready-with-caveats`, include `Known Limitations To Carry Forward`.
-For `not-ready`, include `Blocking Checks Before Pre-Registration`.
+For `not-ready`, include `Blocking Checks Before Pre-Registration` — **but** when a
+committed pre-registration already exists (the inverted order in *When a Pre-Registration
+Already Exists*), title this section `Blocking Checks Before Execution` instead, since the
+pre-reg is locked and the checks gate execution, not registration. For a data-gated pre-reg,
+these blocking checks **are** that pre-reg's vehicle-admissibility G-gates — reference the
+gate by name rather than restating it, so the two artifacts share one gate definition.
 
 ## Validation Pressure Scenarios
 

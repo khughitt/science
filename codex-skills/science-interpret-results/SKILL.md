@@ -350,6 +350,13 @@ After analyzing results, create structured entities in addition to the prose doc
   inspection. For anything that must survive a rebuild, author it in a source the build reads:
 
   - **Proposition** → `science propositions create "<title>"` (durable source-authored entity).
+    For a **proxy-mediated** proposition, set these in the frontmatter so it validates on the
+    first `science graph build` (otherwise `science health` fails *after* build with "Proxy-mediated
+    proposition lacks measurement metadata"):
+    - `proxy_directness:` — enum `direct | indirect | derived` (**not** `proxy`).
+    - `measurement_model:` — a mapping with `observed_entity` (required) plus optional
+      `latent_construct`, `measurement_relation`, `rationale`, `known_failure_modes` (list),
+      and `substitutable_with` (list).
   - **Observation** → it has no standalone source entity; **anchor it inside** a proposition,
     finding, or interpretation source file rather than as a free-standing `graph add observation`.
   - **Evidence with stance / strength / independence** → author an **evidence-line** entity under
