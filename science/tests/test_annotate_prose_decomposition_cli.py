@@ -8,6 +8,7 @@ from rdflib import Dataset, Literal, RDF
 import science_tool.annotation.cli as annotation_cli
 from science_tool.annotation.cli import annotate_group
 from science_tool.annotation.prose_decomposition import ProseDecompositionStore, compute_source_hash
+from science_tool.annotation.prose_validation import ProseValidationReport
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
 from science_tool.graph.store import _graph_uri
 
@@ -334,6 +335,10 @@ def test_validate_prose_decomposition_artifact_reports_units_before_ingest(tmp_p
     assert payload["units"][0]["locator_status"] == "resolved"
     assert payload["units"][0]["promoted_to"] is None
     assert payload["units"][0]["stale"] is False
+    assert not (tmp_path / "entities" / "prose-sources" / "example.md").exists()
+    assert not (
+        tmp_path / "data" / "prose-decompositions" / "example" / "generations" / "decomp-1.json"
+    ).exists()
     assert not (tmp_path / "data" / "prose-decompositions" / "example" / "index.json").exists()
 
 
@@ -355,6 +360,61 @@ def test_validate_prose_decomposition_artifact_hash_mismatch_fails(tmp_path):
     assert result.exit_code != 0
     assert "content hash mismatch" in result.output
     assert not (tmp_path / "entities" / "prose-sources" / "example.md").exists()
+
+
+def test_validate_prose_decomposition_artifact_missing_source_fails_without_traceback(tmp_path):
+    artifact_path = _artifact_file(tmp_path)
+    raw = json.loads(artifact_path.read_text(encoding="utf-8"))
+    missing_source = tmp_path / "docs" / "missing.md"
+    raw["source"]["path"] = str(missing_source)
+    artifact_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "validate-prose-decomposition-artifact",
+            str(artifact_path),
+            "--root",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "could not read source for hash" in result.output
+    assert str(missing_source) in result.output
+    assert "Traceback" not in result.output
+
+
+def test_prose_validation_report_summary_counts_stale_separately_from_hard_failures():
+    report = ProseValidationReport(
+        source_ref="prose-source:example",
+        artifact_id="decomp-1",
+        rows=[
+            {
+                "unit_id": "u001",
+                "disposition": "candidate",
+                "status": "stale",
+                "fingerprint": "fp-stale",
+                "locator_status": "stale",
+                "message": "unit is stale in latest decomposition",
+                "promoted_to": None,
+                "stale": True,
+            },
+            {
+                "unit_id": "u002",
+                "disposition": "candidate",
+                "status": "candidate",
+                "fingerprint": "fp-hard-failure",
+                "locator_status": "invalid",
+                "message": "unexpected locator state",
+                "promoted_to": None,
+                "stale": False,
+            },
+        ],
+    )
+
+    assert report.to_json()["summary"]["stale"] == 1
+    assert report.to_json()["summary"]["hard_failures"] == 1
 
 
 def test_validate_and_check_share_per_unit_findings_after_ingest(tmp_path):

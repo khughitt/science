@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from science_tool.annotation.internal_prose_adapter import InternalProseAdapter
+from science_tool.annotation.internal_prose_adapter import InternalProseAdapter, LocatorResolution
 from science_tool.annotation.prose_decomposition import (
     DecompositionArtifact,
     DecompositionError,
@@ -40,10 +40,10 @@ def validate_submitted_decomposition_artifact(
     allow_changed: bool = False,
 ) -> tuple[DecompositionArtifact, ProseValidationReport]:
     artifact = parse_submitted_decomposition(
-        artifact_path.read_text(encoding="utf-8"),
+        _read_decomposition_artifact(artifact_path),
         project_root=project_root,
     )
-    current_hash = compute_source_hash(artifact.source.path)
+    current_hash = _compute_source_hash(artifact.source.path)
     if current_hash != artifact.source.content_hash and not allow_changed:
         raise DecompositionError(
             "content hash mismatch: "
@@ -85,7 +85,7 @@ def validate_decomposition_units(
     for unit in artifact.units:
         index_row = _index_row_for_current_unit(units_index, unit) if use_index else {"promoted_to": None, "stale": False}
         quote = quote_for_decomposition_unit(unit)
-        resolution = adapter.resolve_unit(artifact.source.path, unit.locator, quote)
+        resolution = _resolve_unit(adapter, artifact, unit, quote)
         stale = index_row.get("stale", False)
         if not isinstance(stale, bool):
             raise DecompositionError(f"prose decomposition index stale must be a bool: {unit.fingerprint}")
@@ -123,6 +123,34 @@ def quote_for_decomposition_unit(unit: DecompositionUnit) -> Quote:
             raise DecompositionError(f"skip unit {unit.unit_id} is missing locator quote")
         return unit.locator.quote
     raise DecompositionError(f"unknown unit disposition: {unit.disposition}")
+
+
+def _read_decomposition_artifact(artifact_path: Path) -> str:
+    try:
+        return artifact_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise DecompositionError(f"could not read prose decomposition artifact: {artifact_path}: {exc}") from exc
+
+
+def _compute_source_hash(source_path: Path) -> str:
+    try:
+        return compute_source_hash(source_path)
+    except OSError as exc:
+        raise DecompositionError(f"could not read source for hash: {source_path}: {exc}") from exc
+
+
+def _resolve_unit(
+    adapter: InternalProseAdapter,
+    artifact: DecompositionArtifact,
+    unit: DecompositionUnit,
+    quote: Quote,
+) -> LocatorResolution:
+    try:
+        return adapter.resolve_unit(artifact.source.path, unit.locator, quote)
+    except OSError as exc:
+        raise DecompositionError(
+            f"could not read source while resolving locator for unit {unit.unit_id}: {artifact.source.path}: {exc}"
+        ) from exc
 
 
 def _summarize_units(rows: list[dict[str, object]]) -> dict[str, int]:
