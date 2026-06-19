@@ -1191,7 +1191,32 @@ def _add_authored_relation(
         object_entity=object_entity,  # type: ignore[arg-type]
     )
 
-    graph.add((subject_uri, predicate_uri, object_uri))
+    subject_is_proposition = subject_entity.canonical_id.split(":", 1)[0] == "proposition"
+    object_is_live_bundle = (
+        isinstance(object_entity, Entity)
+        and object_entity.canonical_id.split(":", 1)[0] in ("hypothesis", "mechanism")
+    )
+    is_membership = (
+        predicate_uri == CITO_NS.discusses and subject_is_proposition and object_is_live_bundle
+    )
+    if is_membership:
+        emit_discusses_membership(
+            graph,
+            prop_uri=subject_uri,
+            frame_uri=object_uri,
+            prop_cid=subject_entity.canonical_id,
+            frame_cid=object_entity.canonical_id,
+            role=MembershipRole.CORE,  # finalized to `relation.role or CORE` in Task 4
+        )
+    elif predicate_uri == CITO_NS.discusses and getattr(relation, "role", None) is not None:
+        raise ValueError(
+            f"relation {relation.subject} cito:discusses {relation.object}: role "
+            f"{relation.role!r} set, but this is not a proposition→live-bundle membership "
+            "(subject must be a proposition and object a live hypothesis/mechanism); "
+            "membership roles are only valid on membership edges (design §4)."
+        )
+    else:
+        graph.add((subject_uri, predicate_uri, object_uri))
 
 
 _AMENDMENT_RELATION_PREDICATES = frozenset({SCI_NS.amends, SCI_NS.supersedes})
