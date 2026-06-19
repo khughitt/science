@@ -127,6 +127,7 @@ def build_prose_health_report(
     unit_rows: list[dict[str, object]] = []
     findings: list[dict[str, object]] = []
 
+    declared_slugs = {source.slug for source in manifest.sources}
     for source in manifest.sources:
         source_result = _build_source_rows(project_root=project_root, store=store, source=source)
         source_rows.append(source_result["source"])
@@ -134,6 +135,8 @@ def build_prose_health_report(
         finding = source_result["finding"]
         if finding is not None:
             findings.append(finding)
+
+    findings.extend(_undeclared_grounding_findings(project_root, declared_slugs))
 
     summary = _summary(source_rows)
     return ProseHealthReport(
@@ -448,12 +451,34 @@ def _coverage_metric(numerator: int, denominator: int) -> dict[str, float | int 
 def _finding(code: str, source: ManifestSource, message: str, *, project_root: Path) -> dict[str, object]:
     return {
         "code": code,
-        "severity": "warning" if code != "invalid_decomposition" and code != "invalid_grounding" else "error",
+        "severity": "error" if code in {"invalid_decomposition", "invalid_grounding"} else "warning",
         "counts_as_issue": True,
         "source_ref": source.source_ref,
         "path": _project_relative_path(project_root, source.path),
         "message": message,
     }
+
+
+def _undeclared_grounding_findings(project_root: Path, declared_slugs: set[str]) -> list[dict[str, object]]:
+    root = project_root / "data" / "prose-grounding"
+    if not root.exists():
+        return []
+    findings: list[dict[str, object]] = []
+    for path in sorted(root.glob("*/grounding.json")):
+        slug = path.parent.name
+        if slug in declared_slugs:
+            continue
+        findings.append(
+            {
+                "code": "undeclared_grounding_report",
+                "severity": "warning",
+                "counts_as_issue": False,
+                "source_ref": f"prose-source:{slug}",
+                "path": _project_relative_path(project_root, path),
+                "message": "P3 grounding report exists for a source not declared in the prose health manifest.",
+            }
+        )
+    return findings
 
 
 def _resolve_manifest_path(project_root: Path, manifest_path: Path | None) -> Path:
