@@ -106,6 +106,10 @@ The default manifest path is:
 data/prose-health/manifest.json
 ```
 
+The manifest's `path` and `title` are authoritative for P4 display rows. P4 still validates
+and joins against P2/P3 identities, but it does not silently substitute P2's stored
+`source.path` or `source.title` into the consumer artifact.
+
 ## 3. P4 artifact
 
 P4 writes one latest-state JSON artifact:

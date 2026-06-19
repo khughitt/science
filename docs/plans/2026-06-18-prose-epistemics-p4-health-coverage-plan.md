@@ -590,10 +590,27 @@ def _build_source_rows(
         return {"source": row, "units": [], "finding": _finding(state, source, str(exc), project_root=project_root)}
 
     grounding_path = prose_grounding_path(project_root, source.slug)
+    if not grounding_path.exists():
+        state = "missing_grounding"
+        row = {
+            **source_base,
+            "state": state,
+            "decomposition_artifact_id": artifact.artifact.artifact_id,
+        }
+        return {
+            "source": row,
+            "units": [],
+            "finding": _finding(
+                state,
+                source,
+                f"missing grounding report: {_project_relative_path(project_root, grounding_path)}",
+                project_root=project_root,
+            ),
+        }
     try:
         grounding = _load_grounding_report(grounding_path, project_root=project_root)
     except ProseHealthError as exc:
-        state = "missing_grounding" if "missing" in str(exc) else "invalid_grounding"
+        state = "invalid_grounding"
         row = {
             **source_base,
             "state": state,
@@ -979,6 +996,22 @@ def test_invalid_grounding_json_produces_state_and_finding(tmp_path: Path) -> No
     assert report["sources"][0]["state"] == "invalid_grounding"
     assert report["findings"][0]["code"] == "invalid_grounding"
     assert report["findings"][0]["severity"] == "error"
+
+
+def test_invalid_grounding_json_under_missing_slug_is_not_misclassified(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+    from science_tool.annotation.prose_grounding import prose_grounding_path
+
+    _persist_decomposition(tmp_path, _artifact_payload(tmp_path, slug="missing-data"))
+    _write_manifest(tmp_path, slug="missing-data")
+    path = prose_grounding_path(tmp_path, "missing-data")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{not json", encoding="utf-8")
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "invalid_grounding"
+    assert report["findings"][0]["code"] == "invalid_grounding"
 
 
 def test_grounding_fingerprint_mismatch_degrades_one_source_to_invalid_grounding(tmp_path: Path) -> None:
