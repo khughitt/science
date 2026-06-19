@@ -274,6 +274,8 @@ def _load_grounding_report(path: Path, *, project_root: Path) -> dict[str, objec
         raise ProseHealthError(f"invalid grounding report JSON: {_project_relative_path(project_root, path)}: {exc}") from exc
     if not isinstance(raw, dict):
         raise ProseHealthError(f"invalid grounding report: {_project_relative_path(project_root, path)}")
+    if raw.get("schema_version") != 1:
+        raise ProseHealthError("grounding report schema_version must be 1")
     return raw
 
 
@@ -297,11 +299,16 @@ def _unit_rows(
     grounding_units = grounding.get("units")
     if not isinstance(grounding_units, list):
         raise ProseHealthError("grounding report units must be an array")
-    grounding_by_fingerprint = {
-        row.get("fingerprint"): row
-        for row in grounding_units
-        if isinstance(row, dict) and isinstance(row.get("fingerprint"), str)
-    }
+    grounding_by_fingerprint: dict[str, dict[str, object]] = {}
+    for index, row in enumerate(grounding_units):
+        if not isinstance(row, dict):
+            raise ProseHealthError(f"grounding report unit[{index}] must be an object")
+        fingerprint = row.get("fingerprint")
+        if not isinstance(fingerprint, str) or not fingerprint:
+            raise ProseHealthError(f"grounding report unit[{index}].fingerprint must be a non-empty string")
+        if fingerprint in grounding_by_fingerprint:
+            raise ProseHealthError(f"duplicate grounding report unit fingerprint: {fingerprint}")
+        grounding_by_fingerprint[fingerprint] = row
     rows: list[dict[str, object]] = []
     for unit in artifact.units:
         grounding_row = grounding_by_fingerprint.get(unit.fingerprint)
@@ -324,12 +331,19 @@ def _unit_row(
     unit: DecompositionUnit,
     grounding_row: dict[str, object],
 ) -> dict[str, object]:
+    expected_artifact_ref = artifact_unit_ref(artifact, unit)
+    if grounding_row.get("unit_id") != unit.unit_id:
+        raise ProseHealthError(f"grounding report unit_id mismatch for fingerprint: {unit.fingerprint}")
+    if grounding_row.get("artifact_ref") != expected_artifact_ref:
+        raise ProseHealthError(f"grounding report artifact_ref mismatch for fingerprint: {unit.fingerprint}")
+    if grounding_row.get("disposition") != unit.disposition:
+        raise ProseHealthError(f"grounding report disposition mismatch for fingerprint: {unit.fingerprint}")
     return {
         "source_ref": source.source_ref,
         "source_path": _project_relative_path(project_root, source.path),
         "unit_id": unit.unit_id,
         "fingerprint": unit.fingerprint,
-        "artifact_ref": artifact_unit_ref(artifact, unit),
+        "artifact_ref": expected_artifact_ref,
         "heading_path": list(unit.locator.heading_path),
         "quote": _quote_payload(unit),
         "status": grounding_row.get("status"),
@@ -446,7 +460,12 @@ def _resolve_manifest_path(project_root: Path, manifest_path: Path | None) -> Pa
     if manifest_path is None:
         return project_root / DEFAULT_MANIFEST_REL
     manifest_path = Path(manifest_path)
-    return manifest_path if manifest_path.is_absolute() else project_root / manifest_path
+    resolved = manifest_path.resolve() if manifest_path.is_absolute() else (project_root / manifest_path).resolve()
+    try:
+        resolved.relative_to(project_root)
+    except ValueError as exc:
+        raise ProseHealthError("manifest path must stay under project root") from exc
+    return resolved
 
 
 def _resolve_source_path(value: str, *, project_root: Path) -> Path:

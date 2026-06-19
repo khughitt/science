@@ -227,6 +227,26 @@ def test_manifest_validation_rejects_path_traversal(tmp_path: Path) -> None:
         load_prose_health_manifest(tmp_path)
 
 
+def test_manifest_validation_rejects_absolute_manifest_path_outside_project(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import ProseHealthError, load_prose_health_manifest
+
+    outside = tmp_path.parent / "outside-prose-health-manifest.json"
+    outside.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "sources": [
+                    {"source_ref": "prose-source:example", "path": "docs/example.md", "title": "Example"}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProseHealthError, match="manifest path must stay under project root"):
+        load_prose_health_manifest(tmp_path, outside)
+
+
 def test_build_prose_health_report_projects_complete_source(tmp_path: Path) -> None:
     from science_tool.annotation.prose_health import build_prose_health_report
 
@@ -301,3 +321,89 @@ def test_zero_denominator_coverage_ratios_are_null(tmp_path: Path) -> None:
         "grounding": {"numerator": 0, "denominator": 0, "ratio": None},
         "strict_grounding": {"numerator": 0, "denominator": 0, "ratio": None},
     }
+
+
+def test_malformed_grounding_unit_row_degrades_source_to_invalid_grounding(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+
+    artifact, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path))
+    grounding_path = _write_grounding(tmp_path, artifact=artifact, status="grounded")
+    report = json.loads(grounding_path.read_text(encoding="utf-8"))
+    report["units"].append("not a row")
+    grounding_path.write_text(json.dumps(report), encoding="utf-8")
+    _write_manifest(tmp_path)
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "invalid_grounding"
+    assert report["units"] == []
+    assert report["findings"][0]["code"] == "invalid_grounding"
+    assert "grounding report unit[2] must be an object" in report["findings"][0]["message"]
+
+
+def test_duplicate_grounding_fingerprint_degrades_source_to_invalid_grounding(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+
+    artifact, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path))
+    grounding_path = _write_grounding(tmp_path, artifact=artifact, status="grounded")
+    report = json.loads(grounding_path.read_text(encoding="utf-8"))
+    report["units"].append(dict(report["units"][0]))
+    grounding_path.write_text(json.dumps(report), encoding="utf-8")
+    _write_manifest(tmp_path)
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "invalid_grounding"
+    assert report["units"] == []
+    assert report["findings"][0]["code"] == "invalid_grounding"
+    assert "duplicate grounding report unit fingerprint" in report["findings"][0]["message"]
+
+
+def test_grounding_schema_version_mismatch_degrades_source_to_invalid_grounding(tmp_path: Path) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+
+    artifact, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path))
+    grounding_path = _write_grounding(tmp_path, artifact=artifact, status="grounded")
+    report = json.loads(grounding_path.read_text(encoding="utf-8"))
+    report["schema_version"] = 2
+    grounding_path.write_text(json.dumps(report), encoding="utf-8")
+    _write_manifest(tmp_path)
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "invalid_grounding"
+    assert report["units"] == []
+    assert report["findings"][0]["code"] == "invalid_grounding"
+    assert "grounding report schema_version must be 1" in report["findings"][0]["message"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("unit_id", "other-unit", "grounding report unit_id mismatch"),
+        (
+            "artifact_ref",
+            "annotation:data/prose-decompositions/example/generations/decomp-1.json#other-unit",
+            "grounding report artifact_ref mismatch",
+        ),
+        ("disposition", "skip", "grounding report disposition mismatch"),
+    ],
+)
+def test_grounding_identity_mismatch_degrades_source_to_invalid_grounding(
+    tmp_path: Path, field: str, value: str, message: str
+) -> None:
+    from science_tool.annotation.prose_health import build_prose_health_report
+
+    artifact, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path))
+    grounding_path = _write_grounding(tmp_path, artifact=artifact, status="grounded")
+    report = json.loads(grounding_path.read_text(encoding="utf-8"))
+    report["units"][0][field] = value
+    grounding_path.write_text(json.dumps(report), encoding="utf-8")
+    _write_manifest(tmp_path)
+
+    report = build_prose_health_report(tmp_path, generated_at="2026-06-18T14:00:00Z").to_json()
+
+    assert report["sources"][0]["state"] == "invalid_grounding"
+    assert report["units"] == []
+    assert report["findings"][0]["code"] == "invalid_grounding"
+    assert message in report["findings"][0]["message"]
