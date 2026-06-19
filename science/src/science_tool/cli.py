@@ -4446,9 +4446,14 @@ def health_command(
     schema_invalid = report.get("schema_invalid") or []
     validation = report.get("validation") or []
     prose_epistemics = report.get("prose_epistemics") or {}
-    prose_epistemics_findings = (
-        prose_epistemics.get("findings") if isinstance(prose_epistemics, dict) else []
-    ) or []
+    raw_prose_epistemics_findings = (
+        prose_epistemics.get("findings") if isinstance(prose_epistemics, dict) else None
+    )
+    prose_epistemics_findings: list[dict[str, object]] = (
+        [cast("dict[str, object]", row) for row in raw_prose_epistemics_findings if isinstance(row, dict)]
+        if isinstance(raw_prose_epistemics_findings, list)
+        else []
+    )
 
     total_issues = (
         len(report["unresolved_refs"])
@@ -4466,7 +4471,7 @@ def health_command(
         + len(tooling_scaffold)
         + len(agent_context)
         + len(validation)
-        + sum(1 for f in prose_epistemics_findings if isinstance(f, dict) and f.get("counts_as_issue") is True)
+        + sum(1 for f in prose_epistemics_findings if f.get("counts_as_issue") is True)
     )
     if total_issues == 0:
         click.echo("Project is clean — no issues found.")

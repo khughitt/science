@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -1726,16 +1727,37 @@ def _write_prose_health_artifact(root: Path, *, findings: list[dict] | None = No
     return path
 
 
+def _prose_epistemics_payload(report: object) -> dict[str, object]:
+    assert isinstance(report, dict)
+    prose_epistemics = report["prose_epistemics"]
+    assert isinstance(prose_epistemics, dict)
+    return cast("dict[str, object]", prose_epistemics)
+
+
+def _prose_epistemics_findings(report: object) -> list[dict[str, object]]:
+    findings = _prose_epistemics_payload(report)["findings"]
+    assert isinstance(findings, list)
+    assert all(isinstance(row, dict) for row in findings)
+    return cast("list[dict[str, object]]", findings)
+
+
 def test_health_report_includes_prose_epistemics_artifact(tmp_path: Path) -> None:
     from science_tool.graph.health import build_health_report
 
     _write_prose_health_artifact(tmp_path)
 
     report = build_health_report(tmp_path, checks={"prose_epistemics"})
+    prose_epistemics = _prose_epistemics_payload(report)
+    summary = prose_epistemics["summary"]
+    coverage = prose_epistemics["coverage"]
+    assert isinstance(summary, dict)
+    assert isinstance(coverage, dict)
+    strict_grounding = coverage["strict_grounding"]
+    assert isinstance(strict_grounding, dict)
 
-    assert report["prose_epistemics"]["summary"]["declared_sources"] == 1
-    assert report["prose_epistemics"]["coverage"]["strict_grounding"]["ratio"] == 0.5
-    assert report["prose_epistemics"]["findings"] == []
+    assert summary["declared_sources"] == 1
+    assert strict_grounding["ratio"] == 0.5
+    assert prose_epistemics["findings"] == []
     assert report["total_issues"] == 0
 
 
@@ -1766,11 +1788,11 @@ def test_health_report_counts_prose_epistemics_findings_as_issues(tmp_path: Path
 
     report = build_health_report(tmp_path, checks={"prose_epistemics"})
 
-    assert len(report["prose_epistemics"]["findings"]) == 2
+    assert len(_prose_epistemics_findings(report)) == 2
     assert report["total_issues"] == 1
 
 
-def test_health_report_manifest_without_artifact_surfaces_rebuild_finding(tmp_path: Path) -> None:
+def test_health_report_prose_health_manifest_without_artifact_surfaces_rebuild_finding(tmp_path: Path) -> None:
     from science_tool.graph.health import build_health_report
 
     manifest = tmp_path / "data" / "prose-health" / "manifest.json"
@@ -1778,13 +1800,14 @@ def test_health_report_manifest_without_artifact_surfaces_rebuild_finding(tmp_pa
     manifest.write_text(json.dumps({"schema_version": 1, "sources": []}), encoding="utf-8")
 
     report = build_health_report(tmp_path, checks={"prose_epistemics"})
+    findings = _prose_epistemics_findings(report)
 
-    assert report["prose_epistemics"]["findings"][0]["code"] == "prose_health_artifact_missing"
-    assert report["prose_epistemics"]["findings"][0]["counts_as_issue"] is True
+    assert findings[0]["code"] == "prose_health_artifact_missing"
+    assert findings[0]["counts_as_issue"] is True
     assert report["total_issues"] == 1
 
 
-def test_health_report_invalid_manifest_surfaces_manifest_invalid(tmp_path: Path) -> None:
+def test_health_report_invalid_prose_health_manifest_surfaces_manifest_invalid(tmp_path: Path) -> None:
     from science_tool.graph.health import build_health_report
 
     manifest = tmp_path / "data" / "prose-health" / "manifest.json"
@@ -1792,19 +1815,36 @@ def test_health_report_invalid_manifest_surfaces_manifest_invalid(tmp_path: Path
     manifest.write_text("{not json", encoding="utf-8")
 
     report = build_health_report(tmp_path, checks={"prose_epistemics"})
+    findings = _prose_epistemics_findings(report)
 
-    assert report["prose_epistemics"]["findings"][0]["code"] == "manifest_invalid"
-    assert report["prose_epistemics"]["findings"][0]["counts_as_issue"] is True
+    assert findings[0]["code"] == "manifest_invalid"
+    assert findings[0]["counts_as_issue"] is True
     assert report["total_issues"] == 1
 
 
-def test_health_report_no_manifest_no_artifact_is_not_applicable(tmp_path: Path) -> None:
+def test_health_report_invalid_prose_health_artifact_surfaces_artifact_invalid(tmp_path: Path) -> None:
+    from science_tool.graph.health import build_health_report
+
+    artifact = tmp_path / "data" / "prose-health" / "prose-health.json"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text("{not json", encoding="utf-8")
+
+    report = build_health_report(tmp_path, checks={"prose_epistemics"})
+    findings = _prose_epistemics_findings(report)
+
+    assert findings[0]["code"] == "prose_health_artifact_invalid"
+    assert findings[0]["counts_as_issue"] is True
+    assert report["total_issues"] == 1
+
+
+def test_health_report_no_prose_health_manifest_no_artifact_is_not_applicable(tmp_path: Path) -> None:
     from science_tool.graph.health import build_health_report
 
     report = build_health_report(tmp_path, checks={"prose_epistemics"})
+    prose_epistemics = _prose_epistemics_payload(report)
 
-    assert report["prose_epistemics"]["applicable"] is False
-    assert report["prose_epistemics"]["findings"] == []
+    assert prose_epistemics["applicable"] is False
+    assert prose_epistemics["findings"] == []
     assert report["total_issues"] == 0
 
 
