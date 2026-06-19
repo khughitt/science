@@ -29,7 +29,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from science_model.entities import EntityType, EvidenceLineEntity, QuantitativeResult
-from science_model.propositions import PropositionEntity
+from science_model.propositions import DiscussesMembership, PropositionEntity
 from science_model.reasoning import EvidenceType, canonical_evidence_type_token
 
 
@@ -150,7 +150,9 @@ class WorkbenchRow(BaseModel):
     # For migrated DAG rows (``legacy_edge_id`` set) compile fails if neither
     # this nor ``focal_hypothesis`` is present — every migrated edge-proposition
     # must declare its bundle membership.
-    discusses: list[str] | None = None
+    # A bare string means role=core; an object carries an explicit MembershipRole
+    # (same contract as PropositionEntity.discusses — spec §5).
+    discusses: list[str | DiscussesMembership] | None = None
 
     # Evidence: authored inline as ``EvidenceStub``; after ``compile`` the
     # normalized row holds evidence-line *references* (ids) instead of inline
@@ -210,7 +212,7 @@ def _slug_for_triple(subject: str | None, predicate: str | None, obj: str | None
     return slug
 
 
-def _resolve_row_discusses(row: WorkbenchRow, focal_hypothesis: str | None) -> list[str] | None:
+def _resolve_row_discusses(row: WorkbenchRow, focal_hypothesis: str | None) -> list[str | DiscussesMembership] | None:
     """Resolve a row's bundle membership (``cito:discusses`` targets).
 
     Routing rule (patch-level ``focal_hypothesis`` is a convenience default, not a
@@ -341,7 +343,9 @@ def compile_workbench(
         prop = _proposition_for_row(row)
         discusses = _resolve_row_discusses(row, wb.focal_hypothesis)
         if discusses is not None:
-            prop = prop.model_copy(update={"discusses": discusses})
+            # model_validate (not model_copy) so the membership-conflict validator
+            # runs at compile time, not only on later load (spec §5 rule 3).
+            prop = PropositionEntity.model_validate({**prop.model_dump(), "discusses": discusses})
         _write_entity_file(prop, project_root=project_root, as_of=as_of)
         propositions.append(prop)
 
