@@ -91,6 +91,21 @@ class EvidenceRole(StrEnum):
     MODEL_CRITICISM = "model_criticism"
 
 
+class MembershipRole(StrEnum):
+    """How a proposition participates in a hypothesis/mechanism bundle (spec §3.2).
+
+    Closed vocabulary. ``core`` members enter the weakest-link conjunction;
+    ``rival`` and ``background`` are excluded from it (spec §3.3).
+    """
+
+    CORE = "core"
+    RIVAL = "rival"
+    BACKGROUND = "background"
+
+
+MEMBERSHIP_ROLE_VALUES = frozenset(v.value for v in MembershipRole)
+
+
 class EvidenceStance(StrEnum):
     """Whether an evidence line supports or disputes a claim."""
 

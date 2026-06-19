@@ -2,18 +2,33 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from science_model.entities import EntityType, ProjectEntity
 from science_model.reasoning import (
     ClaimLayer,
     IdentificationStrength,
+    MembershipRole,
     Polarity,
     Predicate,
     SIGN_MEANINGFUL_PREDICATES,
 )
+
+
+class DiscussesMembership(BaseModel):
+    """Object form of a `discusses` entry: a frame plus the proposition's role in it.
+
+    `frame` is a bundle reference (hypothesis or mechanism). A bare string in the
+    `discusses` list is sugar for `{frame: <string>, role: core}`.
+    """
+
+    model_config = ConfigDict(extra="forbid")  # malformed membership hard-fails (spec §5)
+
+    frame: str = Field(min_length=1)
+    role: MembershipRole = MembershipRole.CORE
 
 
 class PropositionEntity(ProjectEntity):
@@ -49,8 +64,9 @@ class PropositionEntity(ProjectEntity):
     legacy_patch: str | None = None
     legacy_edge_id: int | None = None
 
-    # Bundle membership: focal hypothesis/mechanism this proposition discusses (→ cito:discusses).
-    discusses: list[str] = Field(default_factory=list)
+    # Bundle membership: focal hypothesis/mechanism(s) this proposition discusses (→ cito:discusses).
+    # A bare string means role=core; an object carries an explicit MembershipRole (spec §3).
+    discusses: list[str | DiscussesMembership] = Field(default_factory=list)
 
     # Reasoning metadata
     claim_layer: ClaimLayer | None = None
@@ -83,4 +99,39 @@ class PropositionEntity(ProjectEntity):
                         f"predicate {self.predicate!r} is sign-less; "
                         f"polarity must be not_applicable (got {self.polarity!r})"
                     )
+        return self
+
+    def iter_memberships(self) -> Iterator[tuple[str, MembershipRole]]:
+        """Yield de-duped (frame_ref, role) pairs; bare strings are core."""
+        seen: set[tuple[str, MembershipRole]] = set()
+        for item in self.discusses:
+            if isinstance(item, str):
+                pair = (item, MembershipRole.CORE)
+            else:
+                pair = (item.frame, item.role)
+            if pair in seen:
+                continue
+            seen.add(pair)
+            yield pair
+
+    @model_validator(mode="after")
+    def _validate_membership_roles(self) -> "PropositionEntity":
+        """A proposition has exactly one role per bundle frame (spec §5 rule 3).
+
+        Enforced here, at the model layer, so the invariant holds at EVERY load
+        site — materialize, workbench compile, and `science validate` alike — not
+        only in the standalone validator. Identical-role duplicates are harmless.
+        """
+        roles_by_frame: dict[str, set[MembershipRole]] = {}
+        for frame, role in self.iter_memberships():
+            roles_by_frame.setdefault(frame, set()).add(role)
+        conflicts = {f: r for f, r in roles_by_frame.items() if len(r) > 1}
+        if conflicts:
+            detail = ", ".join(
+                f"{f}: {sorted(x.value for x in r)}" for f, r in sorted(conflicts.items())
+            )
+            raise ValueError(
+                f"discusses lists conflicting membership roles for the same frame ({detail}); "
+                "a proposition has exactly one role per bundle"
+            )
         return self
