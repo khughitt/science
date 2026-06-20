@@ -34,8 +34,10 @@ Only category 1 is dead. Categories 2 and 3 stay.
 Remove the one-shot v2→v3 migration modules, their CLI commands, their tests,
 and the migration guide docs. Keep the generic managed-artifact update runner
 and all audit utilities. Where a module mixes one-shot migration with live
-audit code (`graph/migrate.py`, `entity_migrations.py`), split surgically and
-keep the file.
+code (`graph/migrate.py`, `entity_migrations.py`, `graph/paper_dataset_migration.py`),
+split surgically: keep/relocate the live part, remove only the one-shot apply
+code. Update retained legacy-shape guards to hard-error instead of pointing at
+removed commands.
 
 Clean break: no compatibility shims, no retired-command stubs. Removed CLI
 commands disappear entirely.
@@ -58,7 +60,6 @@ Module + its CLI command (in `cli.py` unless noted) + its tests:
 | `science/src/science_tool/peers_migrate.py` | `science peers migrate` (in `peers_cli.py`) | `test_peers_migrate.py` |
 | `science/src/science_tool/refs_migrate.py` | refs migrate command (in `refs_cli.py`) | `test_refs_migrate_cli.py`, `test_refs_migrate_paper.py` |
 | `science/src/science_tool/tasks_id_migration.py` | tasks id migrate command | `test_tasks_id_migration.py` |
-| `science/src/science_tool/graph/paper_dataset_migration.py` | command in `cli.py` | `test_paper_dataset_migration.py` |
 | `science/src/science_tool/graph/project_model_migration.py` | command in `cli.py` | `test_project_model_migration.py` |
 | `science/src/science_tool/graph/tags_migration.py` | command in `cli.py` | `test_tags_migration.py` |
 | `science/src/science_tool/aspects/migrate.py` | aspects migrate command (in `aspects/cli.py` / `big_picture/cli.py`) | `test_aspects_migrate.py` |
@@ -66,35 +67,61 @@ Module + its CLI command (in `cli.py` unless noted) + its tests:
 
 Also remove:
 
-- `science/tests/test_layered_claim_migration.py` (tests the layered-claim
-  migration removed in section B).
 - `science/tests/test_graph_migrate.py` — verify it only exercises removed CLI
-  migration commands; if it also covers audit behavior, move those cases to an
+  migration commands (project-id rewrite / `migrate-identifiers`); if it also
+  covers retained audit or layered-claim-report behavior, move those cases to an
   audit test instead of deleting them.
 - `science/tests/_fixtures/migration_add_phase.py` — remove only if used solely
   by removed tests; otherwise keep.
+- Migration cases inside broader CLI suites that the per-module tests don't
+  cover: `test_peers_cli.py` (the `test_peers_migrate*` cases, ~lines 583-786),
+  `test_entities_cli.py` (the `entities migrate` / `migrate-identifiers` cases,
+  ~line 459), and `test_aspects_cli.py` (`test_migrate_*`, ~lines 20-40). Remove
+  these cases; keep the rest of each suite.
+
+`test_layered_claim_migration.py` is **retained** (it covers the live
+layered-claim report — see section B).
 
 Before deleting each module, confirm its only non-test importers are the CLI
-command being removed and other removed modules. `paper_dataset_migration` is
-referenced by `validate/checks/dataset_influence.py`; confirm that reference is
-to a still-needed symbol or update the check. (Suspected import-time-only;
-verify during implementation.)
+command being removed and other removed modules. (`graph/paper_dataset_migration.py`
+is intentionally absent from this table — it has a live importer and is handled
+by the surgical split in section B.)
 
-### B. Surgical split — `graph/migrate.py` (keep the file)
+### B. Surgical splits — keep the file, remove only one-shot apply code
 
-`audit_project_sources`, `AuditRow`, and the `_audit_*` helpers are imported by
-`entities.py`, `graph/health.py`, `graph/materialize.py`, and
-`graph/freshness.py`. These stay.
+#### `graph/migrate.py`
 
-Remove only the one-shot layered-claim migration surface:
+Most of this module is **live**, not one-shot:
 
-- `build_layered_claim_migration_report`
-- `write_migration_report`
-- `_merge_entities` and any helpers used only by the above
-- the `cli.py` command (imported at `cli.py:42`) that calls them
+- `audit_project_sources` / `AuditRow` / `_audit_*` — imported by `entities.py`,
+  `graph/health.py`, `graph/materialize.py`, `graph/freshness.py`. **Keep.**
+- `build_layered_claim_migration_report`, `write_migration_report`,
+  `LayeredClaimMigrationReport` (and `LayeredClaimMigrationRow`) — back the live
+  `layered_claim_migration` health check (`health.py:25,1755`) and the status
+  display (`cli.py:4441+`). Despite the "migration" name this is ongoing
+  claim-layer adoption reporting. **Keep.**
 
-Keep `LayeredClaimMigrationRow` only if still referenced by retained code;
-otherwise remove it with the report builder.
+Remove only the one-shot **project-id rewrite (apply)** surface, which exists to
+rename identifiers in a pre-v3 project and is tied to the removed
+`science entities migrate-identifiers` command:
+
+- `rewrite_project_ids_in_sources`
+- `preview_project_id_rewrites`
+- `write_local_sources`
+- `_merge_entities` and helpers used only by the above
+
+The implementation plan must confirm per-symbol (via importer analysis) that
+each removed function is reachable only from the removed CLI command and other
+removed code; anything also used by `audit_*` or the layered-claim report stays.
+
+#### `graph/paper_dataset_migration.py`
+
+`is_paper_dataset_role_conflict` is a live validation predicate used by
+`validate/checks/dataset_influence.py`. Move/inline that predicate into the
+validation layer (the check module or a `validate/_helpers`-style home), update
+the import, then delete the one-shot planner (`plan_paper_dataset_migration`)
+and the rest of the module, its CLI command, and `test_paper_dataset_migration.py`
+(retaining or relocating any test coverage for the moved predicate).
 
 ### C. Surgical split — `entity_migrations.py` (keep the file)
 
@@ -113,26 +140,53 @@ otherwise remove it with the report builder.
 - `graph/aggregate_retire.py` + `test_aggregate_retire_curie_migration.py`
   (live aggregate-triage).
 - `test_graph_migrate_identity_audit.py` (tests the retained audit path).
+- `test_layered_claim_migration.py` (tests the retained, live layered-claim
+  report from section B).
 
 ### E. Docs
 
-Delete:
+`docs/migration/` contains **5** files, not all of which are v3 migration.
+Verified: only the files below have no live references in retained source.
+
+Delete (no live references; one-shot v3 layout/identity migration):
 
 - `docs/entity-layout-migration-guide.md`
-- `docs/migration/` (all 7 files:
-  `2026-05-19-validate-local-sh-porting-guide.md`,
-  `2026-05-26-assembly-identity.md`, `2026-05-27-gene-crosswalk-identity.md`,
-  `2026-05-27-protein-crosswalk-identity.md`, `managed-artifacts-template.md`,
-  and any others present)
+- `docs/migration/2026-05-26-assembly-identity.md`
+- `docs/migration/2026-05-27-gene-crosswalk-identity.md`
+- `docs/migration/2026-05-27-protein-crosswalk-identity.md`
 - `docs/audits/2026-06-06-layout-v3-migration-readiness-audit.md`
 
-Leave `archive/**` and `docs/plans/**` untouched — they are the historical
-record of past work. No current (non-archive, non-plan) doc links these files,
-so no link fixup is required. Confirm with a final grep.
+Keep (referenced by retained code / belong to kept infrastructure):
 
-Before deleting `docs/migration/managed-artifacts-template.md`, confirm it is a
-migration artifact and not a template the live managed-artifact update flow
-consumes.
+- `docs/migration/2026-05-19-validate-local-sh-porting-guide.md` — referenced by
+  `validate/runner.py:30` (`_LEGACY_SIDECAR_PORTING_GUIDE`, a live validation
+  error) and by `project_artifacts/registry.yaml` managed-artifact steps. Tied
+  to the kept managed-artifact/validate flow, not v3 layout migration.
+- `docs/migration/managed-artifacts-template.md` — managed-artifact authoring
+  template for the kept managed-artifact system, not a v3 migration guide.
+
+So `docs/migration/` is trimmed, not removed.
+
+Leave `archive/**` and `docs/plans/**` untouched — they are the historical
+record. No current (non-archive, non-plan) doc links the deleted files, so no
+doc link fixup is required (confirm with the final grep).
+
+### F. Update legacy-shape guard messages (hard errors, no recovery doc)
+
+Several retained guards currently tell the user to run a now-removed migrator.
+Per the scope decision, replace each with a hard error stating the legacy shape
+is unsupported by this Science version (which requires v3) — no command
+reference and no recovery doc. Sites:
+
+- `project_config.py:131` — removed `science.yaml` fields → drop the
+  "Run `science peers migrate`" sentence.
+- `validate/checks/manifest.py:34` — `layout_version` < 3 message.
+- `graph/materialize.py:374` and `:458` — unmigrated data-package messages.
+- `graph/health.py:1614` — unmigrated data-package message.
+- `cli.py:522` — "(`science entities migrate`) first." in the entities flow.
+
+Keep the guards' detection and severity; only the remediation text changes.
+Update any test that asserts the old message text.
 
 ## Non-Goals
 
@@ -143,27 +197,34 @@ consumes.
 
 ## Risks & Mitigations
 
+- **"migration"-named code that is actually live** (the layered-claim health
+  report; the `paper_dataset` role-conflict predicate; the validate-sidecar
+  porting guide): mitigated by the per-symbol/per-file importer checks in
+  sections A, B, and E — name alone never decides removal.
 - **Mixed-module over-deletion** (`graph/migrate.py`, `entity_migrations.py`):
   mitigated by enumerating importers before editing and running the full test
   suite after.
 - **Dangling CLI registration** after a module is removed: mitigated by a
   `science --help` smoke check across affected command groups.
-- **A "migration" module is actually a live dependency** (e.g.
-  `paper_dataset_migration` referenced by a validate check): mitigated by the
-  per-module importer check in section A before deletion.
 
 ## Validation
 
 ```bash
 # No references to any removed module remain in source:
 rg "entity_layout_migration|datapackage_migrate|peers_migrate|refs_migrate|\
-tasks_id_migration|paper_dataset_migration|project_model_migration|\
-tags_migration|aspects\.migrate|migrate_identifiers|\
-build_layered_claim_migration_report" science/src
+tasks_id_migration|project_model_migration|tags_migration|aspects\.migrate|\
+migrate_identifiers|rewrite_project_ids_in_sources|plan_paper_dataset_migration" \
+  science/src
+# (NOTE: build_layered_claim_migration_report and audit_project_sources are
+#  KEPT — they must still resolve.)
 
-# No current docs link the removed guides (archive/plans excluded):
-rg "entity-layout-migration-guide|docs/migration/" \
-  --glob '!archive/**' --glob '!docs/plans/**'
+# No retained source still tells users to run a removed command:
+rg "science peers migrate|science entities migrate|migrate-identifiers|\
+data-package migrate|aspects migrate" science/src
+
+# Only the deleted guides are gone; the porting guide + template remain:
+rg "entity-layout-migration-guide|assembly-identity|crosswalk-identity|\
+layout-v3-migration-readiness-audit" --glob '!archive/**' --glob '!docs/plans/**'
 
 # Full suite green, no import errors:
 uv run --frozen pytest science/tests
