@@ -59,10 +59,9 @@ def resolve_or_create_prose_source(
 
 def _display_path(project_root: Path, source_path: Path) -> str:
     root = project_root.resolve(strict=False)
-    candidate = source_path if source_path.is_absolute() else project_root / source_path
+    candidate = source_path if source_path.is_absolute() else root / source_path
     resolved = candidate.resolve(strict=False)
     try:
-        relative = resolved.relative_to(root)
+        return resolved.relative_to(root).as_posix()
     except ValueError:
         return str(source_path)
-    return str(Path("~/d/science") / relative)

@@ -160,6 +160,37 @@ def _two_scope_resolver() -> ReferenceResolver:
     return ReferenceResolver.from_entities(entities, identity_table=table)
 
 
+def _empty_resolver() -> ReferenceResolver:
+    return ReferenceResolver.from_entities([], identity_table=IdentityTable(rows=[]))
+
+
+def test_audit_reference_ignores_annotation_source_refs() -> None:
+    referer = _ref_entity("hypothesis:h1", "hypothesis", EntityType.HYPOTHESIS)
+    rows = _audit_reference(
+        referer,
+        "source_refs",
+        "annotation:data/prose-decompositions/example/generations/decomp-1.json#u001",
+        _empty_resolver(),
+        ext_prefixes=frozenset(),
+        allow_cross_kind_fallback=True,
+    )
+    assert rows == []
+
+
+def test_audit_reference_allows_annotation_evidence_refs_as_cross_project_addresses() -> None:
+    referer = _ref_entity("hypothesis:h1", "hypothesis", EntityType.HYPOTHESIS)
+    rows = _audit_reference(
+        referer,
+        "evidence_refs",
+        "annotation:data/prose-decompositions/example/generations/decomp-1.json#u001",
+        _empty_resolver(),
+        ext_prefixes=frozenset(),
+        allow_cross_kind_fallback=True,
+        allow_cross_project_address=True,
+    )
+    assert rows == []
+
+
 def test_audit_reference_emits_ambiguous_reference_row() -> None:
     referer = _ref_entity("hypothesis:h1", "hypothesis", EntityType.HYPOTHESIS, related=["topic:bayesian"])
     rows = _audit_reference(

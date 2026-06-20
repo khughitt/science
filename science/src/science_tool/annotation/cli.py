@@ -23,14 +23,10 @@ from science_tool.annotation.io import (
     serialize_sidecar,
     sidecar_for_markdown,
 )
-from science_tool.annotation.internal_prose_adapter import InternalProseAdapter
 from science_tool.annotation.model import Annotation, Body, IriBody, Sidecar, Status
 from science_tool.annotation.prose_decomposition import (
-    DecompositionArtifact,
     DecompositionError,
-    DecompositionUnit,
     ProseDecompositionStore,
-    Quote,
     compute_source_hash,
     parse_submitted_decomposition,
 )
@@ -46,7 +42,17 @@ from science_tool.annotation.prose_health import (
     write_prose_health_report,
 )
 from science_tool.annotation.prose_promote import ProsePromotionError, promote_prose_unit
+from science_tool.annotation.prose_promotion_batch import (
+    apply_prose_promotion_plan,
+    plan_from_json_text,
+    plan_prose_promotions,
+    plan_to_json_text,
+)
 from science_tool.annotation.prose_source_entity import resolve_or_create_prose_source
+from science_tool.annotation.prose_validation import (
+    validate_latest_decomposition,
+    validate_submitted_decomposition_artifact,
+)
 from science_tool.annotation.sources import LINT_SOURCES, SOURCES
 from science_tool.annotation.sources.marker_token import (
     MarkerTokenSource,
@@ -89,6 +95,14 @@ _PROSE_HEALTH_SUMMARY_KEYS = (
     "skipped_units",
     "stale_units",
     "contested_units",
+)
+_PROSE_VALIDATION_SUMMARY_KEYS = (
+    "units",
+    "resolved",
+    "unresolved",
+    "ambiguous",
+    "stale",
+    "hard_failures",
 )
 
 
@@ -170,10 +184,7 @@ def check_prose_decomposition_cmd(source_ref: str, root: Path | None, fmt: str) 
         raise click.ClickException("source slug must not be empty")
     project_root = (root or Path.cwd()).resolve()
     try:
-        store = ProseDecompositionStore(project_root)
-        index = store.load_index(slug)
-        artifact = store.load_latest(slug)
-        rows = _check_prose_decomposition_units(index=index, artifact=artifact)
+        artifact, report = validate_latest_decomposition(project_root, slug)
     except DecompositionError as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -183,7 +194,7 @@ def check_prose_decomposition_cmd(source_ref: str, root: Path | None, fmt: str) 
                 {
                     "source_ref": source_ref,
                     "artifact_id": artifact.artifact.artifact_id,
-                    "units": rows,
+                    "units": report.rows,
                 },
                 indent=2,
             )
@@ -191,7 +202,7 @@ def check_prose_decomposition_cmd(source_ref: str, root: Path | None, fmt: str) 
         return
 
     click.echo(f"checked prose decomposition {artifact.artifact.artifact_id} for {source_ref}")
-    for row in rows:
+    for row in report.rows:
         detail = []
         if row["stale"]:
             detail.append("stale")
@@ -204,6 +215,65 @@ def check_prose_decomposition_cmd(source_ref: str, root: Path | None, fmt: str) 
             f"  {row['unit_id']}: {row['status']} "
             f"({row['locator_status']}; {row['fingerprint']}){message}"
         )
+
+
+@annotate_group.command("validate-prose-decomposition-artifact")
+@click.argument("artifact_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--allow-changed", is_flag=True, default=False)
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def validate_prose_decomposition_artifact_cmd(
+    artifact_path: Path,
+    root: Path | None,
+    allow_changed: bool,
+    fmt: str,
+) -> None:
+    """Validate an offline internal-prose decomposition JSON artifact without ingesting it."""
+    project_root = (root or Path.cwd()).resolve()
+    try:
+        artifact, report = validate_submitted_decomposition_artifact(
+            artifact_path,
+            project_root=project_root,
+            allow_changed=allow_changed,
+        )
+    except DecompositionError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    payload = report.to_json()
+    if fmt == "json":
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    summary = _required_prose_validation_summary(payload)
+    click.echo(
+        f"validated prose decomposition {artifact.artifact.artifact_id} for {artifact.source_ref}: "
+        f"units={summary['units']} resolved={summary['resolved']} "
+        f"unresolved={summary['unresolved']} ambiguous={summary['ambiguous']} "
+        f"stale={summary['stale']} hard_failures={summary['hard_failures']}"
+    )
+    for row in report.rows:
+        detail = []
+        if row["stale"]:
+            detail.append("stale")
+        if row["promoted_to"]:
+            detail.append(f"promoted_to={row['promoted_to']}")
+        if row["message"]:
+            detail.append(str(row["message"]))
+        message = f" - {'; '.join(detail)}" if detail else ""
+        click.echo(
+            f"  {row['unit_id']}: {row['status']} "
+            f"({row['locator_status']}; {row['fingerprint']}){message}"
+        )
+
+
+def _required_prose_validation_summary(payload: dict[str, object]) -> dict[str, object]:
+    summary = payload.get("summary")
+    if not isinstance(summary, dict):
+        raise click.ClickException("prose validation report summary must be an object")
+    for key in _PROSE_VALIDATION_SUMMARY_KEYS:
+        if key not in summary:
+            raise click.ClickException(f"missing prose validation summary key: {key}")
+    return summary
 
 
 @annotate_group.command("promote-prose-decomposition")
@@ -247,6 +317,65 @@ def promote_prose_decomposition_cmd(
         f"{mode} prose promotion for {source_ref}#{unit_id}: "
         f"minted={report.minted} linked={report.linked} skipped={skipped}"
     )
+
+
+@annotate_group.command("plan-prose-promotions")
+@click.option("--source", "source_slug", required=True)
+@click.option("--unit", "unit_ids", multiple=True, required=True)
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--output", "output_path", default="-", type=click.Path(dir_okay=False, path_type=Path))
+def plan_prose_promotions_cmd(
+    source_slug: str,
+    unit_ids: tuple[str, ...],
+    root: Path | None,
+    output_path: Path,
+) -> None:
+    """Write an identity-only prose promotion plan for selected units."""
+    project_root = (root or Path.cwd()).resolve()
+    if source_slug.startswith("prose-source:"):
+        source_slug = source_slug.split(":", 1)[1]
+    try:
+        plan = plan_prose_promotions(project_root, source_slug, unit_ids)
+    except (ProsePromotionError, DecompositionError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    text = plan_to_json_text(plan)
+    if str(output_path) == "-":
+        click.echo(text, nl=False)
+        return
+    output_path.write_text(text, encoding="utf-8")
+    click.echo(f"planned {len(plan.rows)} prose promotion rows to {output_path}")
+
+
+@annotate_group.command("apply-prose-promotion-plan")
+@click.argument("plan_json", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def apply_prose_promotion_plan_cmd(plan_json: Path, root: Path | None, fmt: str) -> None:
+    """Apply an identity-only prose promotion plan after state validation."""
+    project_root = (root or Path.cwd()).resolve()
+    try:
+        plan = plan_from_json_text(plan_json.read_text(encoding="utf-8"))
+        report = apply_prose_promotion_plan(project_root, plan)
+    except (OSError, ProsePromotionError, DecompositionError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    payload = {
+        "minted": report.minted,
+        "linked": report.linked,
+        "skipped": dict(report.skipped),
+        "written": report.written_paths,
+    }
+    if fmt == "json":
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    skipped = ", ".join(f"{reason}={count}" for reason, count in sorted(report.skipped.items())) or "none"
+    click.echo(
+        f"applied prose promotion plan {plan_json}: "
+        f"minted={report.minted} linked={report.linked} skipped={skipped}"
+    )
+    click.echo("recovered link rows may report no minted/linked counter increments")
 
 
 @annotate_group.command("ground-prose-decomposition")
@@ -381,77 +510,6 @@ def _required_prose_health_summary(payload: dict[str, object]) -> dict[str, obje
         if key not in summary:
             raise click.ClickException(f"missing prose health summary key: {key}")
     return summary
-
-
-def _check_prose_decomposition_units(
-    *, index: dict[str, object], artifact: DecompositionArtifact
-) -> list[dict[str, object]]:
-    units_index = index.get("units")
-    if not isinstance(units_index, dict):
-        raise DecompositionError("prose decomposition index units must be an object")
-
-    adapter = InternalProseAdapter()
-    rows: list[dict[str, object]] = []
-    current_fingerprints = {unit.fingerprint for unit in artifact.units}
-    for unit in artifact.units:
-        index_row = units_index.get(unit.fingerprint)
-        if not isinstance(index_row, dict):
-            raise DecompositionError(f"prose decomposition index row must be an object: {unit.fingerprint}")
-
-        quote = _quote_for_decomposition_unit(unit)
-        resolution = adapter.resolve_unit(artifact.source.path, unit.locator, quote)
-        stale = index_row.get("stale", False)
-        if not isinstance(stale, bool):
-            raise DecompositionError(f"prose decomposition index stale must be a bool: {unit.fingerprint}")
-        rows.append(
-            {
-                "unit_id": unit.unit_id,
-                "disposition": unit.disposition,
-                "status": "stale" if stale else unit.disposition,
-                "fingerprint": unit.fingerprint,
-                "locator_status": resolution.status.value,
-                "message": resolution.message,
-                "promoted_to": index_row.get("promoted_to"),
-                "stale": stale,
-            }
-        )
-    for fingerprint, index_row in units_index.items():
-        if fingerprint in current_fingerprints:
-            continue
-        if not isinstance(index_row, dict):
-            raise DecompositionError(f"prose decomposition index row must be an object: {fingerprint}")
-        stale = index_row.get("stale", False)
-        if stale is True:
-            rows.append(_stale_prose_decomposition_check_row(fingerprint, index_row))
-    return rows
-
-
-def _stale_prose_decomposition_check_row(
-    fingerprint: str,
-    index_row: dict[str, object],
-) -> dict[str, object]:
-    return {
-        "unit_id": index_row.get("latest_unit_id", ""),
-        "disposition": index_row.get("latest_disposition", ""),
-        "status": "stale",
-        "fingerprint": fingerprint,
-        "locator_status": "stale",
-        "message": "unit is stale in latest decomposition",
-        "promoted_to": index_row.get("promoted_to"),
-        "stale": True,
-    }
-
-
-def _quote_for_decomposition_unit(unit: DecompositionUnit) -> Quote:
-    if unit.disposition == "candidate":
-        if unit.candidate is None:
-            raise DecompositionError(f"candidate unit {unit.unit_id} is missing candidate payload")
-        return Quote(unit.candidate.exact, unit.candidate.prefix, unit.candidate.suffix)
-    if unit.disposition == "skip":
-        if unit.locator.quote is None:
-            raise DecompositionError(f"skip unit {unit.unit_id} is missing locator quote")
-        return unit.locator.quote
-    raise DecompositionError(f"unknown unit disposition: {unit.disposition}")
 
 
 @annotate_group.command("verify")

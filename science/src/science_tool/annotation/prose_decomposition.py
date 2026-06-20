@@ -614,9 +614,19 @@ def _candidate_to_json_payload(candidate: StatementCandidate) -> dict[str, Any]:
 
 
 def _resolve_source_path(value: str, *, project_root: Path) -> Path:
-    if value == "~/d/science":
-        return project_root
-    if value.startswith("~/d/science/"):
-        suffix = value.removeprefix("~/d/science").lstrip("/")
-        return project_root / suffix
-    return Path(value).expanduser()
+    root = project_root.resolve(strict=False)
+    if value.startswith("~/d/"):
+        alias_body = value.removeprefix("~/d/").strip("/")
+        parts = Path(alias_body).parts
+        if parts and parts[0] == root.name:
+            return _require_path_under_root(root.joinpath(*parts[1:]).resolve(strict=False), root=root, source=value)
+    candidate = Path(value).expanduser()
+    if candidate.is_absolute():
+        return _require_path_under_root(candidate.resolve(strict=False), root=root, source=value)
+    return _require_path_under_root((root / candidate).resolve(strict=False), root=root, source=value)
+
+
+def _require_path_under_root(path: Path, *, root: Path, source: str) -> Path:
+    if not path.is_relative_to(root):
+        raise DecompositionError(f"source path escapes project root: {source}")
+    return path

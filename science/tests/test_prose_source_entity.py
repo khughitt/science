@@ -27,7 +27,7 @@ def test_resolver_creates_missing_prose_source(tmp_path):
     assert path.exists()
     text = path.read_text(encoding="utf-8")
     frontmatter = yaml.safe_load(text.split("---", 2)[1])
-    assert frontmatter["source_path"] == "~/d/science/docs/example.md"
+    assert frontmatter["source_path"] == "docs/example.md"
     assert frontmatter["content_hash"] == "sha256:" + "1" * 64
     assert frontmatter["latest_decomposition_artifact"] == "decomp-1"
     assert frontmatter["updated"] == "2026-06-18"
@@ -74,7 +74,7 @@ def test_resolver_preserves_authored_notes(tmp_path):
     assert "Curated note." in text
     assert frontmatter["title"] == "Example"
     assert frontmatter["status"] == "active"
-    assert frontmatter["source_path"] == "~/d/science/docs/example.md"
+    assert frontmatter["source_path"] == "docs/example.md"
     assert frontmatter["content_hash"] == "sha256:" + "2" * 64
     assert frontmatter["latest_decomposition_artifact"] == "decomp-2"
     assert frontmatter["source_refs"] == []
@@ -99,7 +99,7 @@ def test_resolver_displays_missing_project_paths_and_outside_paths(tmp_path):
     missing_entity = tmp_path / "entities" / "prose-sources" / "missing.md"
     text = missing_entity.read_text(encoding="utf-8")
     frontmatter = yaml.safe_load(text.split("---", 2)[1])
-    assert frontmatter["source_path"] == "~/d/science/docs/missing.md"
+    assert frontmatter["source_path"] == "docs/missing.md"
 
     outside_path = tmp_path.parent / "outside.md"
 
@@ -117,3 +117,24 @@ def test_resolver_displays_missing_project_paths_and_outside_paths(tmp_path):
     text = outside_entity.read_text(encoding="utf-8")
     frontmatter = yaml.safe_load(text.split("---", 2)[1])
     assert frontmatter["source_path"] == str(outside_path)
+
+
+def test_resolver_uses_project_relative_path_for_non_science_project_root(tmp_path):
+    project_root = tmp_path / "natural-systems"
+    source = project_root / "entities" / "discussions" / "example.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# Example\n", encoding="utf-8")
+
+    resolve_or_create_prose_source(
+        project_root=project_root,
+        slug="example",
+        title="Example",
+        source_path=source,
+        content_hash="sha256:" + "5" * 64,
+        artifact_id="decomp-5",
+        today=date(2026, 6, 19),
+    )
+
+    entity = project_root / "entities" / "prose-sources" / "example.md"
+    frontmatter = yaml.safe_load(entity.read_text(encoding="utf-8").split("---", 2)[1])
+    assert frontmatter["source_path"] == "entities/discussions/example.md"

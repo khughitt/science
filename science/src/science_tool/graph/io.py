@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import json
 import re
@@ -7,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
+import yaml
 from rdflib import BNode, Dataset, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
 from science_model.reasoning import MembershipRole
@@ -328,15 +330,51 @@ def build_input_manifest(graph_path: Path) -> dict[str, dict[str, int | str]]:
             if candidate.is_file():
                 files.add(candidate)
 
+    exclude_patterns = _revision_manifest_excludes(project_root)
     manifest: dict[str, dict[str, int | str]] = {}
     for file_path in sorted(files):
         rel_path = file_path.relative_to(project_root).as_posix()
+        if _matches_revision_manifest_exclude(rel_path, exclude_patterns):
+            continue
         stat = file_path.stat()
         manifest[rel_path] = {
             "mtime_ns": int(stat.st_mtime_ns),
             "sha256": _sha256_file(file_path),
         }
     return manifest
+
+
+def _revision_manifest_excludes(project_root: Path) -> tuple[str, ...]:
+    config_path = project_root / "science.yaml"
+    if not config_path.is_file():
+        return ()
+    loaded = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(loaded, dict):
+        return ()
+    graph = loaded.get("graph") or {}
+    if not isinstance(graph, dict):
+        return ()
+    if "revision_manifest_excludes" not in graph:
+        return ()
+    raw = graph["revision_manifest_excludes"]
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        raise ValueError("science.yaml graph.revision_manifest_excludes must be a list of strings")
+    patterns: list[str] = []
+    for item in raw:
+        pattern = item.strip()
+        if not pattern:
+            raise ValueError("science.yaml graph.revision_manifest_excludes entries must be non-empty")
+        path = Path(pattern)
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError(
+                "science.yaml graph.revision_manifest_excludes entries must be relative project paths"
+            )
+        patterns.append(path.as_posix())
+    return tuple(patterns)
+
+
+def _matches_revision_manifest_exclude(rel_path: str, patterns: tuple[str, ...]) -> bool:
+    return any(fnmatch.fnmatchcase(rel_path, pattern) for pattern in patterns)
 
 
 def project_root_from_graph_path(graph_path: Path) -> Path:

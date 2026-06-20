@@ -8,6 +8,7 @@ from rdflib import Dataset, Literal, RDF
 import science_tool.annotation.cli as annotation_cli
 from science_tool.annotation.cli import annotate_group
 from science_tool.annotation.prose_decomposition import ProseDecompositionStore, compute_source_hash
+from science_tool.annotation.prose_validation import ProseValidationReport
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
 from science_tool.graph.store import _graph_uri
 
@@ -303,6 +304,257 @@ def test_check_rejects_invalid_source_ref(tmp_path, source_ref, message):
     assert message in result.output
 
 
+def test_validate_prose_decomposition_artifact_reports_units_before_ingest(tmp_path):
+    artifact_path = _artifact_file(tmp_path)
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "validate-prose-decomposition-artifact",
+            str(artifact_path),
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["source_ref"] == "prose-source:example"
+    assert payload["artifact_id"] == "decomp-1"
+    assert payload["summary"] == {
+        "units": 1,
+        "resolved": 1,
+        "unresolved": 0,
+        "ambiguous": 0,
+        "stale": 0,
+        "hard_failures": 0,
+    }
+    assert payload["units"][0]["unit_id"] == "u001"
+    assert payload["units"][0]["locator_status"] == "resolved"
+    assert payload["units"][0]["promoted_to"] is None
+    assert payload["units"][0]["stale"] is False
+    assert not (tmp_path / "entities" / "prose-sources" / "example.md").exists()
+    assert not (
+        tmp_path / "data" / "prose-decompositions" / "example" / "generations" / "decomp-1.json"
+    ).exists()
+    assert not (tmp_path / "data" / "prose-decompositions" / "example" / "index.json").exists()
+
+
+def test_validate_prose_decomposition_artifact_accepts_relative_source_path_under_root(tmp_path):
+    artifact_path = _artifact_file(tmp_path)
+    raw = json.loads(artifact_path.read_text(encoding="utf-8"))
+    raw["source"]["path"] = "docs/example.md"
+    artifact_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "validate-prose-decomposition-artifact",
+            str(artifact_path),
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["source_ref"] == "prose-source:example"
+    assert payload["summary"]["resolved"] == 1
+    assert payload["units"][0]["locator_status"] == "resolved"
+    assert not (tmp_path / "entities" / "prose-sources" / "example.md").exists()
+
+
+def test_validate_prose_decomposition_artifact_hash_mismatch_fails(tmp_path):
+    artifact_path = _artifact_file(tmp_path, content_hash="sha256:" + "0" * 64)
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "validate-prose-decomposition-artifact",
+            str(artifact_path),
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "content hash mismatch" in result.output
+    assert not (tmp_path / "entities" / "prose-sources" / "example.md").exists()
+
+
+def test_validate_prose_decomposition_artifact_rejects_source_outside_root(tmp_path):
+    root = tmp_path / "project"
+    root.mkdir()
+    outside_source = tmp_path / "outside.md"
+    outside_source.write_text("# Section\n\nBasalt flows record the cooling history.\n", encoding="utf-8")
+    artifact_path = _artifact_file(root, content_hash=compute_source_hash(outside_source))
+    raw = json.loads(artifact_path.read_text(encoding="utf-8"))
+    raw["source"]["path"] = str(outside_source)
+    artifact_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "validate-prose-decomposition-artifact",
+            str(artifact_path),
+            "--root",
+            str(root),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "source path escapes project root" in result.output
+    assert str(outside_source) in result.output
+    assert "content hash mismatch" not in result.output
+
+
+def test_validate_prose_decomposition_artifact_missing_source_fails_without_traceback(tmp_path):
+    artifact_path = _artifact_file(tmp_path)
+    raw = json.loads(artifact_path.read_text(encoding="utf-8"))
+    missing_source = tmp_path / "docs" / "missing.md"
+    raw["source"]["path"] = str(missing_source)
+    artifact_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        [
+            "validate-prose-decomposition-artifact",
+            str(artifact_path),
+            "--root",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "could not read source for hash" in result.output
+    assert str(missing_source) in result.output
+    assert "Traceback" not in result.output
+
+
+def test_prose_validation_report_summary_counts_stale_separately_from_hard_failures():
+    report = ProseValidationReport(
+        source_ref="prose-source:example",
+        artifact_id="decomp-1",
+        rows=[
+            {
+                "unit_id": "u001",
+                "disposition": "candidate",
+                "status": "stale",
+                "fingerprint": "fp-stale",
+                "locator_status": "stale",
+                "message": "unit is stale in latest decomposition",
+                "promoted_to": None,
+                "stale": True,
+            },
+            {
+                "unit_id": "u002",
+                "disposition": "candidate",
+                "status": "candidate",
+                "fingerprint": "fp-hard-failure",
+                "locator_status": "invalid",
+                "message": "unexpected locator state",
+                "promoted_to": None,
+                "stale": False,
+            },
+        ],
+    )
+
+    summary = report.to_json()["summary"]
+    assert isinstance(summary, dict)
+    assert summary["stale"] == 1
+    assert summary["hard_failures"] == 1
+
+
+def test_validate_and_check_share_per_unit_findings_after_ingest(tmp_path):
+    artifact_path = _artifact_file(tmp_path)
+    validate = CliRunner().invoke(
+        annotate_group,
+        [
+            "validate-prose-decomposition-artifact",
+            str(artifact_path),
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+    assert validate.exit_code == 0, validate.output
+
+    ingest = CliRunner().invoke(
+        annotate_group,
+        ["ingest-prose-decomposition", str(artifact_path), "--root", str(tmp_path)],
+    )
+    assert ingest.exit_code == 0, ingest.output
+
+    check = CliRunner().invoke(
+        annotate_group,
+        [
+            "check-prose-decomposition",
+            "--source",
+            "prose-source:example",
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+    assert check.exit_code == 0, check.output
+
+    validate_payload = json.loads(validate.output)
+    check_payload = json.loads(check.output)
+    # Fresh ingest has no stale/promoted state, so raw-artifact validation and
+    # latest-artifact check should produce identical per-unit findings.
+    assert validate_payload["units"] == check_payload["units"]
+
+
+def test_check_prose_decomposition_reports_unreadable_latest_generation(tmp_path):
+    ingest = CliRunner().invoke(
+        annotate_group,
+        ["ingest-prose-decomposition", str(_artifact_file(tmp_path)), "--root", str(tmp_path)],
+    )
+    assert ingest.exit_code == 0, ingest.output
+    generation = tmp_path / "data" / "prose-decompositions" / "example" / "generations" / "decomp-1.json"
+    generation.unlink()
+    generation.mkdir()
+
+    result = CliRunner().invoke(
+        annotate_group,
+        ["check-prose-decomposition", "--source", "prose-source:example", "--root", str(tmp_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "could not read latest prose decomposition for source slug example" in result.output
+    assert str(generation) in result.output
+    assert "Traceback" not in result.output
+
+
+def test_check_prose_decomposition_reports_unreadable_index(tmp_path):
+    ingest = CliRunner().invoke(
+        annotate_group,
+        ["ingest-prose-decomposition", str(_artifact_file(tmp_path)), "--root", str(tmp_path)],
+    )
+    assert ingest.exit_code == 0, ingest.output
+    index_path = tmp_path / "data" / "prose-decompositions" / "example" / "index.json"
+    index_path.unlink()
+    index_path.mkdir()
+
+    result = CliRunner().invoke(
+        annotate_group,
+        ["check-prose-decomposition", "--source", "prose-source:example", "--root", str(tmp_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "could not read prose decomposition index for source slug example" in result.output
+    assert str(index_path) in result.output
+    assert "Traceback" not in result.output
+
+
 def test_promote_prose_decomposition_apply_mints(tmp_path):
     ingest = CliRunner().invoke(
         annotate_group,
@@ -355,6 +607,53 @@ def test_promote_prose_decomposition_rejects_unresolved_locator(tmp_path):
     )
     assert result.exit_code != 0
     assert "locator" in result.output
+
+
+def test_plan_and_apply_prose_promotions_cli_smoke(tmp_path):
+    ingest = CliRunner().invoke(
+        annotate_group,
+        ["ingest-prose-decomposition", str(_artifact_file(tmp_path)), "--root", str(tmp_path)],
+    )
+    assert ingest.exit_code == 0, ingest.output
+    plan_path = tmp_path / "plan.json"
+
+    plan = CliRunner().invoke(
+        annotate_group,
+        [
+            "plan-prose-promotions",
+            "--source",
+            "example",
+            "--unit",
+            "u001",
+            "--root",
+            str(tmp_path),
+            "--output",
+            str(plan_path),
+        ],
+    )
+    assert plan.exit_code == 0, plan.output
+    payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert payload["source_slug"] == "example"
+    assert payload["rows"][0]["decision"] == "mint"
+    assert "claim" not in payload["rows"][0]
+    assert "candidate" not in payload["rows"][0]
+
+    apply = CliRunner().invoke(
+        annotate_group,
+        [
+            "apply-prose-promotion-plan",
+            str(plan_path),
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+    assert apply.exit_code == 0, apply.output
+    report = json.loads(apply.output)
+    assert report["minted"] == 1
+    assert report["linked"] == 0
+    assert (tmp_path / "entities" / "propositions" / "basalt-flows-record-the-cooling-history.md").exists()
 
 
 def test_ground_prose_decomposition_json_output(tmp_path):
