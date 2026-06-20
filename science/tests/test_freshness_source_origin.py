@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import date
 
 from rdflib import Dataset, URIRef
-
 from science_model.entities import EntityClass
+
 from science_tool.graph.freshness import EntityFreshnessInfo, derive_freshness
 from science_tool.graph.store import PROJECT_NS, SCI_NS
 

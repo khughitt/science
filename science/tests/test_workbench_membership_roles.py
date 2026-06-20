@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
-
 from science_model.reasoning import MembershipRole
+
 from science_tool.dag.workbench import (
     WorkbenchFile,
     WorkbenchRow,

@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-
 FIXTURE_PROJECT = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
 DATASET_MD = Path("doc/datasets/data-fixture-ds.md")
 

@@ -17,10 +17,10 @@ from typing import Any
 
 from science_tool.archive import (
     ArchiveRow,
+    _relocate_rows,
     archive_index_path,
     derive_archive_path,
     load_archive_index,
-    _relocate_rows,
 )
 from science_tool.entities import (
     EntityLocation,

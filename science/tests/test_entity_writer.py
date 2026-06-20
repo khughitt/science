@@ -1,15 +1,16 @@
 from datetime import date
 from pathlib import Path
 
+import pytest
 from science_model.propositions import PropositionEntity
+
 from science_tool.entities import (
+    EntityCommandError,
     append_entity_source_ref,
     slug_for_claim_text,
     slug_from_raw,
     write_entity_file,
 )
-from science_tool.entities import EntityCommandError
-import pytest
 
 
 def _project(tmp_path: Path) -> Path:

@@ -11,6 +11,8 @@ from science_tool.commons.contigs import (
     AmbiguousContig,
     ContigError,
     ContigMatch,
+)
+from science_tool.commons.contigs import (
     resolve_contig as _resolve_contig,
 )
 from science_tool.commons.errors import CommonsError

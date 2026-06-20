@@ -12,9 +12,9 @@ for files with ``type: synthesis``.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from pathlib import Path
-import re
 
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext

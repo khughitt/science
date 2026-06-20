@@ -11,11 +11,11 @@ from typing import Any, TypeVar, cast
 import yaml
 from pydantic import BaseModel, Field, ValidationError
 from science_model.entities import (
+    DomainEntity,
     Entity,
     EntityClass,
     EntityType,
     ProjectEntity,
-    DomainEntity,
     core_entity_type_for_kind,
 )
 from science_model.ontologies import load_catalogs_for_names
@@ -39,8 +39,8 @@ from science_model.source_contracts import (
 )
 from science_model.source_ref import SourceRef
 
-from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.bibliography import is_bibliography_reference as _is_bibliography_reference
+from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.commons.aliases import load_manual_aliases
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.errors import EntityIdentityCollisionError
@@ -53,8 +53,8 @@ from science_tool.graph.source_records import AggregateRowMeta, MarkdownSourceDo
 from science_tool.graph.storage_adapters.aggregate import AggregateAdapter
 from science_tool.graph.storage_adapters.base import StorageAdapter
 from science_tool.graph.storage_adapters.bib import BibAdapter
-from science_tool.graph.storage_adapters.curie_ref import CurieRefAdapter
 from science_tool.graph.storage_adapters.code import CodeAdapter
+from science_tool.graph.storage_adapters.curie_ref import CurieRefAdapter
 from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
 from science_tool.graph.storage_adapters.task import TaskAdapter

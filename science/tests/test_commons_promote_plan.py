@@ -11,6 +11,7 @@ from science_model.entity_schema import (
     read_canonical_body_sections,
     read_merge_policy,
 )
+
 from science_tool.commons.promote import (
     CanonicalArtifact,
     PromoteCandidate,
@@ -18,7 +19,6 @@ from science_tool.commons.promote import (
     _merge_canonical_fields,
     _pick_canonical_bibkey_case,
 )
-
 
 _PAPER_PROFILE = default_profile_for_kind("paper")
 _PAPER_POLICY = read_merge_policy(_PAPER_PROFILE)
@@ -271,8 +271,9 @@ def test_render_canonical_includes_base_required_fields() -> None:
 
 
 def test_render_canonical_dates_are_quoted_strings() -> None:
-    from science_tool.commons.promote import PROMOTE_KIND_PAPER, PromoteDecision, _render_canonical
     import yaml
+
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, PromoteDecision, _render_canonical
 
     decision = PromoteDecision(
         slug="X",
@@ -304,6 +305,7 @@ def test_render_canonical_dates_are_quoted_strings() -> None:
 
 def test_render_canonical_uses_active_profile() -> None:
     from science_model.entity_schema.profile import ProfileComponent
+
     from science_tool.commons.promote import (
         PROMOTE_KIND_DATASET,
         PromoteDecision,
@@ -486,9 +488,9 @@ def test_render_overlay_uses_kind_id_prefix() -> None:
 
 def test_plan_promote_groups_by_bibkey_and_carries_failures(tmp_path) -> None:
     from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
         DiscoveryResult,
         FailedCandidate,
-        PROMOTE_KIND_PAPER,
         plan_promote,
     )
 
@@ -537,8 +539,8 @@ def test_plan_promote_groups_by_bibkey_and_carries_failures(tmp_path) -> None:
 
 def test_plan_promote_invokes_resolver_on_conflict(tmp_path) -> None:
     from science_tool.commons.promote import (
-        DiscoveryResult,
         PROMOTE_KIND_PAPER,
+        DiscoveryResult,
         plan_promote,
     )
 
@@ -587,7 +589,7 @@ def test_plan_promote_invokes_resolver_on_conflict(tmp_path) -> None:
 
 
 def test_plan_promote_case_collision_picks_first_from_order(tmp_path) -> None:
-    from science_tool.commons.promote import DiscoveryResult, PROMOTE_KIND_PAPER, plan_promote
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, DiscoveryResult, plan_promote
 
     def _cand(slug, bibkey):
         return PromoteCandidate(
@@ -631,13 +633,13 @@ def test_plan_promote_calls_profile_readers_with_kind_profile(tmp_path, monkeypa
     """Pin the per-kind profile lookups. Without this guard, plan_promote
     would silently use the paper policy for topic/theme runs and misclassify
     fields like topic 'datasets' or theme 'evidence_refs'."""
+    import science_tool.commons.promote as promote_mod
     from science_tool.commons.promote import (
         PROMOTE_KIND_PAPER,
         PROMOTE_KIND_TOPIC,
         DiscoveryResult,
         plan_promote,
     )
-    import science_tool.commons.promote as promote_mod
 
     captured = {}
     real_read_merge_policy = promote_mod.read_merge_policy

@@ -19,7 +19,6 @@ from pathlib import Path
 
 from science_tool.graph.sources import load_project_sources
 
-
 FIXTURE = Path(__file__).parent / "fixtures" / "spec_y_kitchen_sink"
 SNAPSHOT = Path(__file__).parent / "fixtures" / "spec_y_kitchen_sink" / "snapshot.json"
 

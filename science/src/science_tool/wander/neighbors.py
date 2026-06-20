@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 
 from rdflib import Dataset, Node, URIRef
 
-from science_tool.graph.store import canonical_id_from_entity_uri
 from science_tool.graph.io import PROJECT_NS, SCI_NS
+from science_tool.graph.store import canonical_id_from_entity_uri
 
 OTHER_PREDICATE_CAP = 10
 

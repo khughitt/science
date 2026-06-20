@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from science_model.entities import EntityClass, TalkEntity
 from science_model.profiles.core import CORE_PROFILE
+
 from science_tool.entities import default_status, resolve_path_policy, valid_statuses
 from science_tool.graph.entity_registry import EntityRegistry
 

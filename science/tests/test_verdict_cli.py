@@ -9,7 +9,6 @@ from click.testing import CliRunner
 
 from science_tool.verdict.cli import verdict_group
 
-
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "verdict"
 REGISTRY_PATH = FIXTURE_DIR / "claim-registry.yaml"
 

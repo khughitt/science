@@ -1,5 +1,6 @@
-from science_tool.graph.belief import EvidenceUnit, BeliefMagnitude, aggregate_belief, reduce_units
+from science_tool.graph.belief import BeliefMagnitude, EvidenceUnit, aggregate_belief, reduce_units
 from science_tool.graph.io import PROJECT_NS
+
 
 def _u(stance="supports", **kw):
     base = dict(line_uri="x", stance=stance, strength="strong", independence="independent",
@@ -71,7 +72,9 @@ def test_aggregate_belief_candidates_do_not_collapse_but_committed_records_do() 
 
 def test_base_magnitude_matches_inline_and_qa_failed_not_qualifying():
     from science_tool.graph.belief import (
-        BeliefMagnitude, _base_magnitude, is_qualifying_direct_test,
+        BeliefMagnitude,
+        _base_magnitude,
+        is_qualifying_direct_test,
     )
     from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY as P
 

@@ -21,7 +21,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from rdflib import Dataset, Literal, RDF, URIRef
+from rdflib import RDF, Dataset, Literal, URIRef
 from rdflib.namespace import PROV, RDFS, XSD
 
 from science_tool.graph.belief import EvidenceUnit, aggregate_belief

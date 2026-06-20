@@ -18,7 +18,6 @@ import pytest
 
 from science_tool.dag.render import style_for_edge
 
-
 # ---------------------------------------------------------------------------
 # Helpers — construct minimal edge dicts using the new channel fields
 # ---------------------------------------------------------------------------

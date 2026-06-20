@@ -7,8 +7,8 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
-
 from science_model.entities import EntityClass
+
 from science_tool.graph.sources import load_project_sources
 
 

@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-
 from science_model.source_ref import SourceRef
 
 from science_tool.entity_scan import iter_entity_markdown

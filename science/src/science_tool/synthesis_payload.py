@@ -14,7 +14,6 @@ from science_tool.evidence_payload import (
     ValidationRole,
 )
 
-
 SYNTHESIS_OPERATION_EXTENSION = "synthesis-operation"
 SynthesisPermission = ValidationRole
 

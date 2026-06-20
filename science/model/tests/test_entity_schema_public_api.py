@@ -3,8 +3,8 @@ from __future__ import annotations
 
 def test_public_api_exports() -> None:
     from science_model.entity_schema import (
-        EntityValidator,
         EntityValidationError,
+        EntityValidator,
         MergePolicy,
         ProfileString,
         SharedEntity,

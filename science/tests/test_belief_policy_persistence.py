@@ -1,10 +1,12 @@
 from pathlib import Path
 
-from rdflib import Dataset, Literal, RDF, URIRef
+from rdflib import RDF, Dataset, Literal, URIRef
 
 from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
 from science_tool.graph.belief_snapshot import (
-    append_snapshots, read_snapshots, snapshot_records,
+    append_snapshots,
+    read_snapshots,
+    snapshot_records,
 )
 from science_tool.graph.io import CITO_NS, SCI_NS
 from science_tool.graph.store import _graph_uri
@@ -91,7 +93,7 @@ def test_patch_trig_emits_policy_identity(tmp_path: Path):
 
 
 def test_snapshot_persists_qa_dataset_capped_and_legacy_normalizes(tmp_path):
-    from science_tool.graph.belief_snapshot import _with_policy_defaults, _key
+    from science_tool.graph.belief_snapshot import _key, _with_policy_defaults
 
     legacy = _with_policy_defaults({"as_of": "x", "claim": "c", "input_hashes": [],
         "config_version": "v", "scalar_enabled": False, "policy_id": "core-default",

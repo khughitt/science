@@ -10,7 +10,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from rdflib import Graph, Literal as RDFLiteral, URIRef
+from rdflib import Graph, URIRef
+from rdflib import Literal as RDFLiteral
 from rdflib.namespace import PROV, RDF
 
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS

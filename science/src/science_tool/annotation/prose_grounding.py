@@ -25,7 +25,6 @@ from science_tool.graph.grounding import (
     load_grounding_graphs,
 )
 
-
 _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 
 

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from rdflib import Dataset, Graph, Literal, Literal as RDFLiteral, URIRef
+from rdflib import Dataset, Graph, Literal, URIRef
+from rdflib import Literal as RDFLiteral
 from rdflib.namespace import PROV, RDF
 from science_model.entities import Entity, EntityType, PaperEntity
 from science_model.packages.schema import AccessBlock, DatasetUsage, DerivationBlock

@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from science_tool.commons.liftover import ChainFormatError, LiftoverDefect, LiftedInterval, lift_interval, parse_chain_text
-
+from science_tool.commons.liftover import (
+    ChainFormatError,
+    LiftedInterval,
+    LiftoverDefect,
+    lift_interval,
+    parse_chain_text,
+)
 
 CHAIN = """\
 chain 1000 chr1 1000 + 500 630 chr1 2000 + 1000 1140 7

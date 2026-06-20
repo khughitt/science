@@ -5,6 +5,7 @@ from __future__ import annotations
 from rich.table import Table
 from rich.text import Text
 from science_model.tasks import Task
+
 from science_tool.styles import (
     TASK_PRIORITY_STYLES,
     TASK_STATUS_STYLES,

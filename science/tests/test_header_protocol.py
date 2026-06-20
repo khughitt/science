@@ -9,7 +9,6 @@ from science_tool.project_artifacts.header import (
 )
 from science_tool.project_artifacts.registry_schema import HeaderKind, HeaderProtocol
 
-
 SHEBANG = HeaderProtocol(kind=HeaderKind.SHEBANG_COMMENT, comment_prefix="#")
 
 

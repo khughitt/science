@@ -10,7 +10,6 @@ import yaml
 from science_tool.commons.errors import DataResourceNotFoundError
 from science_tool.commons.reference_graph_resources import read_commons_edge_rows, read_commons_node_rows
 
-
 _GRAPH_BYTES = b"<MONDO:0005148> <is_a> <MONDO:0000001> .\n"
 _NODE_BYTES = (
     b"member_key,member_kind,label,status,replaced_by,dataset_usage\n"

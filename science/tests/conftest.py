@@ -49,8 +49,8 @@ def build_inquiry_graph(graph_path: Path, slug: str = "i01", *, profile: str = "
     ``assumptions=[...]``, ``status=...``.
     """
     from rdflib import Dataset
-
     from science_model.patch_definition import PatchDefinitionEntity
+
     from science_tool.graph.inquiry_compile import emit_inquiry_views
     from science_tool.graph.store import _load_dataset, _save_dataset
 

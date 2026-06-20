@@ -15,7 +15,6 @@ from pydantic import ValidationError
 
 from science_tool.dag.workbench import EvidenceStub, WorkbenchFile, WorkbenchRow
 
-
 # ---------------------------------------------------------------------------
 # Minimal valid row
 # ---------------------------------------------------------------------------

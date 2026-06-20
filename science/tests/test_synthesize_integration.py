@@ -7,12 +7,19 @@ from click.testing import CliRunner
 from science_tool.annotation import io as anno_io
 from science_tool.annotation.cli import annotate_group
 from science_tool.annotation.model import (
-    Annotation, Motivation, SpecificResource, Status, TextQuoteSelector, TextualBody, Sidecar,
+    Annotation,
+    Motivation,
+    Sidecar,
+    SpecificResource,
+    Status,
+    TextQuoteSelector,
+    TextualBody,
 )
 from science_tool.entities import _parse_markdown_file
 from science_tool.validate import ValidateContext
 from science_tool.validate.checks.propositions import (
-    check_polarity_predicate_aptitude, check_canonical_enum_binding,
+    check_canonical_enum_binding,
+    check_polarity_predicate_aptitude,
 )
 
 

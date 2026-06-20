@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
-from rdflib import Dataset, Literal, RDF
+from rdflib import RDF, Dataset, Literal
 
 import science_tool.annotation.cli as annotation_cli
 from science_tool.annotation.cli import annotate_group

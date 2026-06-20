@@ -6,11 +6,11 @@ is materialized normally.
 """
 from __future__ import annotations
 
-from rdflib import Graph, Literal, RDF, URIRef
-
+from rdflib import RDF, Graph, Literal, URIRef
 from science_model.entities import EntityType, EvidenceLineEntity, ProjectEntity, QuantitativeResult
 from science_model.reasoning import EvidenceStance
-from science_tool.graph.belief import collect_evidence_units, EVIDENCE_LINE_CLASS
+
+from science_tool.graph.belief import EVIDENCE_LINE_CLASS, collect_evidence_units
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
 from science_tool.graph.materialize import _add_evidence_line_metadata, _add_evidence_line_relations
 

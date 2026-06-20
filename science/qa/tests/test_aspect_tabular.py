@@ -1,6 +1,11 @@
 import pandas as pd
+
 from science_qa.aspects.tabular import (
-    categoricals, exclusive_flags, required_complete, type_conformance, unique_key,
+    categoricals,
+    exclusive_flags,
+    required_complete,
+    type_conformance,
+    unique_key,
 )
 from science_qa.context import TableContext
 

@@ -8,7 +8,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-
 ComparisonTarget = Literal["null-vs-alternative", "hypothesis-set", "model-set", "artifact-target", "n-a"]
 SupportDirection = Literal[
     "supports",

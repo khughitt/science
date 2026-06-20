@@ -9,7 +9,6 @@ can preserve that dependency boundary.
 from importlib import import_module
 from importlib.metadata import version
 
-
 _SEQ = "CGTACGTACGTACGTACGTACGTACGTACGTACGTACGTA"
 _REPEAT_SEQ = "CCCCAAAAAGGGGTTTTCCCC"
 

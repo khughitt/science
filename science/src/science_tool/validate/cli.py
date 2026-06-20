@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import json
 from contextlib import redirect_stdout
 from io import StringIO
-import json
 from pathlib import Path
 from typing import Any, cast
 
@@ -14,8 +14,7 @@ from science_tool.validate._helpers import section_banner
 from science_tool.validate.context import ValidateContextError
 from science_tool.validate.gates import GATE_TIERS
 from science_tool.validate.result import Result, Severity
-from science_tool.validate.runner import RunResult, VALIDATE_PROFILES, ValidationProfile, run
-
+from science_tool.validate.runner import VALIDATE_PROFILES, RunResult, ValidationProfile, run
 
 BANNER = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from science_model.frontmatter import parse_frontmatter
+
 from science_tool.datapackage_promote import plan_orphan_promotions, promote_orphan_datapackages
 from science_tool.graph.sources import load_project_sources
 

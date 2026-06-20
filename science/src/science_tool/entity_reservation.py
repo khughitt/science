@@ -23,8 +23,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from science_tool.entities import (
-    EntityCommandError,
     LOCAL_PART_WIDTH,
+    EntityCommandError,
     derive_slug,
     resolve_path_policy,
     validate_slug,

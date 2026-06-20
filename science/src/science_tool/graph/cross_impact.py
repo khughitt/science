@@ -13,8 +13,8 @@ from rdflib.namespace import RDF, SKOS
 from science_tool.graph.store import (
     CITO_NS,
     PROJECT_NS,
-    SCI_NS,
     SCHEMA_NS,
+    SCI_NS,
     _load_dataset,
     _resolve_center_entity,
     shorten_uri,

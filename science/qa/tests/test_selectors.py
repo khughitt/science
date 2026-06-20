@@ -1,5 +1,6 @@
 import pandas as pd
 import pytest
+
 from science_qa.selectors import SelectorError, resolve_columns
 
 DF = pd.DataFrame({"a": [1, 2], "b": [3.0, 4.0], "label": ["x", "y"]})

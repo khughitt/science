@@ -11,10 +11,11 @@ import hashlib
 from dataclasses import dataclass
 from typing import Literal
 
-from rdflib import Dataset, Literal as RDFLiteral, URIRef
+from rdflib import Dataset, URIRef
+from rdflib import Literal as RDFLiteral
 from rdflib.namespace import RDF, XSD
-
 from science_model.patch_definition import PatchDefinitionEntity
+
 from science_tool.graph.inquiry_compile import inquiry_existing_refs, inquiry_minted_uris
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, entity_uri_for_ref
 

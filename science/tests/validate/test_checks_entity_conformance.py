@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
-
 import pytest
+import yaml
 
 from science_tool.entities import create_entity
 from science_tool.validate.checks.entity_conformance import (

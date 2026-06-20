@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import pytest
-from rdflib import Graph, Literal, RDF
-
+from rdflib import RDF, Graph, Literal
 from science_model.reasoning import MembershipRole
+
 from science_tool.graph.io import (
     CITO_NS,
     SCI_NS,
     emit_discusses_membership,
-    membership_uri_for,
     entity_uri_for_ref,
+    membership_uri_for,
 )
 
 

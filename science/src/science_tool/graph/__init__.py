@@ -1,3 +1,13 @@
+from science_tool.graph.export_types import (
+    GraphExportEdge,
+    GraphExportLayer,
+    GraphExportNode,
+    GraphExportOverlays,
+    GraphExportPayload,
+    GraphExportScope,
+    build_graph_export_edge_id,
+    build_graph_export_node_id,
+)
 from science_tool.graph.materialize import materialization_audit, materialize_graph
 from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
@@ -30,16 +40,6 @@ from science_tool.graph.store import (
     read_graph_stats,
     stamp_revision,
     validate_graph,
-)
-from science_tool.graph.export_types import (
-    GraphExportEdge,
-    GraphExportLayer,
-    GraphExportNode,
-    GraphExportOverlays,
-    GraphExportPayload,
-    GraphExportScope,
-    build_graph_export_edge_id,
-    build_graph_export_node_id,
 )
 
 __all__ = [

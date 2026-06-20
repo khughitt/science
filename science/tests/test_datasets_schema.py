@@ -5,7 +5,19 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from science_tool.datasets.schema import PROFILE_PATH, FieldConstraints, FieldQA, FieldSpec, ForeignKey, MissingValue, ResourceDescriptor, TableQA, TableSchema, emit_profile, package_consistency_issues
+from science_tool.datasets.schema import (
+    PROFILE_PATH,
+    FieldConstraints,
+    FieldQA,
+    FieldSpec,
+    ForeignKey,
+    MissingValue,
+    ResourceDescriptor,
+    TableQA,
+    TableSchema,
+    emit_profile,
+    package_consistency_issues,
+)
 
 
 class TestFieldValueModels:

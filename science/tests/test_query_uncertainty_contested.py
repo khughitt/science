@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from rdflib import Dataset, Literal, RDF, URIRef
+from rdflib import RDF, Dataset, Literal, URIRef
 
 from science_tool.graph.io import CITO_NS, SCHEMA_NS, SCI_NS
 from science_tool.graph.store import _graph_uri, query_uncertainty

@@ -6,7 +6,6 @@ from science_tool.verdict.registry import load_registry
 from science_tool.verdict.rollup import group_by, tally_claim_polarities, tally_polarities, walk_interpretations
 from science_tool.verdict.tokens import Token
 
-
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "verdict"
 REGISTRY_PATH = FIXTURE_DIR / "claim-registry.yaml"
 

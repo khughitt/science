@@ -12,7 +12,6 @@ from science_tool.validate import Check, Result, Severity, ValidateContext
 from science_tool.validate.checks import clear_checks_for_tests
 from science_tool.validate.runner import clear_hooks_for_tests, run
 
-
 PORTING_GUIDE = "docs/migration/2026-05-19-validate-local-sh-porting-guide.md"
 
 

@@ -140,6 +140,7 @@ def test_skip_on_invalid_drops_bad_decision_and_keeps_valid(tmp_path, monkeypatc
 
 def test_plan_promote_wraps_overlay_validation_failure(tmp_path, monkeypatch) -> None:
     from science_model.entity_schema import EntityValidationError, EntityValidator
+
     from science_tool.commons.errors import PromoteValidationError
     from science_tool.commons.promote import (
         PROMOTE_KIND_PAPER,

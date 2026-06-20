@@ -6,12 +6,10 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-
 from science_model.entities import Entity
 from science_model.source_ref import SourceRef
 
 from science_tool.graph.storage_adapters.base import StorageAdapter
-
 
 _ENTITY_FIELDS = (
     "id",

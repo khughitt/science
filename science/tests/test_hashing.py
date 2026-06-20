@@ -5,7 +5,6 @@ import hashlib
 from science_tool.project_artifacts.hashing import body_hash
 from science_tool.project_artifacts.registry_schema import HeaderKind, HeaderProtocol
 
-
 SHEBANG = HeaderProtocol(kind=HeaderKind.SHEBANG_COMMENT, comment_prefix="#")
 
 

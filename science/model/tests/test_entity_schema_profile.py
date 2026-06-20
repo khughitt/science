@@ -6,7 +6,6 @@ from science_model.entity_schema import default_profile_for_kind
 from science_model.entity_schema.profile import (
     ProfileComponent,
     ProfileParseError,
-    ProfileString,
     parse_profile,
 )
 

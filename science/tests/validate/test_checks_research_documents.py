@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 import importlib
+from collections.abc import Iterable
 from pathlib import Path
 
 from science_tool.validate import Result, Severity, ValidateContext
@@ -42,8 +42,8 @@ def test_new_research_document_checks_register_after_hypotheses() -> None:
 
     import science_tool.validate.checks.bias_audits as bias_audits
     import science_tool.validate.checks.discussions as discussions
-    import science_tool.validate.checks.hypothesis_comparisons as hypothesis_comparisons
     import science_tool.validate.checks.hypotheses as hypotheses
+    import science_tool.validate.checks.hypothesis_comparisons as hypothesis_comparisons
     import science_tool.validate.checks.prereg as prereg
     import science_tool.validate.checks.research_plan as research_plan
 

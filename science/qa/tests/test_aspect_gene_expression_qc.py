@@ -1,6 +1,10 @@
 import pandas as pd
+
 from science_qa.aspects.gene_expression_qc import (
-    REQUIRED_COLUMNS, degenerate_cell, library_size_positive, required_column,
+    REQUIRED_COLUMNS,
+    degenerate_cell,
+    library_size_positive,
+    required_column,
 )
 from science_qa.context import TableContext
 

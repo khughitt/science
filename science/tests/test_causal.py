@@ -13,6 +13,9 @@ from science_tool.graph.store import (
     PREDICATE_REGISTRY,
     PROJECT_NS,
     VALID_INQUIRY_TYPES,
+    FalsificationRecord,
+    PropositionEvidenceLine,
+    PropositionInteractionTerm,
     add_concept,
     add_edge,
     add_falsification,
@@ -24,7 +27,6 @@ from science_tool.graph.store import (
     set_treatment_outcome,
     validate_inquiry,
 )
-from science_tool.graph.store import FalsificationRecord, PropositionInteractionTerm, PropositionEvidenceLine
 
 HAS_PGMPY = importlib.util.find_spec("pgmpy") is not None
 

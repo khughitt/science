@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import re
 import importlib
+import re
 from pathlib import Path
 from typing import Any
 

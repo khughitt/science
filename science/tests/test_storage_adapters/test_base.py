@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from science_model.source_ref import SourceRef
+
 from science_tool.graph.storage_adapters.base import StorageAdapter
 
 

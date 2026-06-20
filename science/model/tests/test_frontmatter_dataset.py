@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from science_model.entities import EntityType
-from science_model.identity import EntityScope, ExternalId
 from science_model.frontmatter import parse_entity_file
+from science_model.identity import EntityScope, ExternalId
 
 
 @pytest.fixture

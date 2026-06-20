@@ -1,7 +1,12 @@
 import pytest
+
 from science_tool.annotation.promote import (
-    Promotable, PromotionCandidate, PromotionCorpus, PromotionOverrideError,
-    decide_candidates, normalize_claim,
+    Promotable,
+    PromotionCandidate,
+    PromotionCorpus,
+    PromotionOverrideError,
+    decide_candidates,
+    normalize_claim,
 )
 
 
@@ -115,8 +120,14 @@ def test_load_corpora_indexes_each_kind(tmp_path):
 def _statement_ann(frag, exact, *, status, atype="proposition", subject=None, promoted_to=None):
     import json as _json
     from datetime import datetime, timezone
+
     from science_tool.annotation.model import (
-        Annotation, Motivation, SpecificResource, Status, TextQuoteSelector, TextualBody,
+        Annotation,
+        Motivation,
+        SpecificResource,
+        Status,
+        TextQuoteSelector,
+        TextualBody,
     )
     body = {"section": "abstract", "stance": "asserted"}
     if subject is not None:
@@ -167,9 +178,15 @@ def test_promotable_filters_queue(tmp_path):
 
 def test_malformed_statement_body_hard_fails(tmp_path):
     from datetime import datetime, timezone
+
     from science_tool.annotation import io as anno_io
     from science_tool.annotation.model import (
-        Annotation, Motivation, SpecificResource, Status, TextQuoteSelector, TextualBody,
+        Annotation,
+        Motivation,
+        SpecificResource,
+        Status,
+        TextQuoteSelector,
+        TextualBody,
     )
     from science_tool.annotation.promote import PromotionReadError, collect_promotable
 
@@ -191,10 +208,14 @@ def test_malformed_statement_body_hard_fails(tmp_path):
 
 def test_apply_mints_proposition_and_backlinks(tmp_path):
     from datetime import date
+
     from science_tool.annotation import io as anno_io
     from science_tool.annotation.model import Status
     from science_tool.annotation.promote import (
-        apply_candidates, collect_promotable, decide_candidates, load_corpora,
+        apply_candidates,
+        collect_promotable,
+        decide_candidates,
+        load_corpora,
     )
     from science_tool.annotation.query import read_sidecar_strict
 
@@ -230,12 +251,16 @@ def test_apply_mints_proposition_and_backlinks(tmp_path):
 
 def test_apply_links_to_existing_appends_both_refs_preserves_prose(tmp_path):
     from datetime import date
+
     from science_tool.annotation import io as anno_io
     from science_tool.annotation.model import Status
-    from science_tool.annotation.query import read_sidecar_strict
     from science_tool.annotation.promote import (
-        apply_candidates, collect_promotable, decide_candidates, load_corpora,
+        apply_candidates,
+        collect_promotable,
+        decide_candidates,
+        load_corpora,
     )
+    from science_tool.annotation.query import read_sidecar_strict
 
     (tmp_path / "entities" / "propositions").mkdir(parents=True)
     existing = tmp_path / "entities" / "propositions" / "known-claim.md"
@@ -271,8 +296,10 @@ def test_apply_links_to_existing_appends_both_refs_preserves_prose(tmp_path):
 
 def test_apply_refuses_overwrite_of_different_claim(tmp_path):
     # An explicit-id MINT (e.g. from a curator override) must never clobber an unrelated proposition.
-    import pytest
     from datetime import date
+
+    import pytest
+
     from science_tool.annotation.promote import PromotionApplyError, PromotionCandidate, apply_candidates
 
     (tmp_path / "entities" / "propositions").mkdir(parents=True)
@@ -293,10 +320,14 @@ def test_apply_refuses_overwrite_of_different_claim(tmp_path):
 def test_apply_is_idempotent(tmp_path):
     # Running the full flow twice mints once; the second run's queue is empty.
     from datetime import date
+
     from science_tool.annotation import io as anno_io
     from science_tool.annotation.model import Status
     from science_tool.annotation.promote import (
-        apply_candidates, collect_promotable, decide_candidates, load_corpora,
+        apply_candidates,
+        collect_promotable,
+        decide_candidates,
+        load_corpora,
     )
     from science_tool.annotation.query import read_sidecar_strict
     (tmp_path / "entities" / "propositions").mkdir(parents=True)
@@ -349,6 +380,7 @@ def test_override_unchanged_row_passthrough():
 
 def test_override_bad_link_target_fails_loud():
     import pytest
+
     from science_tool.annotation.promote import PromotionCandidate, PromotionOverrideError, apply_overrides
 
     base = [PromotionCandidate(ref="annotation:a#f1", frag="f1", claim="C", subject=None, object=None,
@@ -359,6 +391,7 @@ def test_override_bad_link_target_fails_loud():
 
 def test_override_unknown_ref_fails_loud():
     import pytest
+
     from science_tool.annotation.promote import PromotionOverrideError, apply_overrides
 
     with pytest.raises(PromotionOverrideError):

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
 from textwrap import dedent
 
+import pytest
 from rdflib import Dataset, URIRef
 
 from science_tool.graph.materialize import materialize_graph
@@ -590,6 +590,7 @@ def test_propagate_and_materialize_agree(tmp_path: Path):
 def test_audit_gate_runs_even_when_freshness_disabled(tmp_path: Path):
     """`freshness.enabled: false` does NOT bypass the audit gate."""
     import pytest as _pytest
+
     from science_tool.graph.freshness import propagate_freshness_in_memory
 
     root = tmp_path / "demo"

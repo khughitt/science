@@ -10,13 +10,13 @@ from textwrap import dedent
 from rdflib import Dataset
 
 import science_tool.graph.materialize as m
+from science_tool.graph.io import REVISION_URI
 from science_tool.graph.materialize import (
     CompilationResult,
     _build_dataset_from_sources,
     _compile,
     materialize_graph,
 )
-from science_tool.graph.io import REVISION_URI
 from science_tool.graph.source_snapshots import compute_source_snapshots
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.store import DEFAULT_GRAPH_PATH, PROJECT_NS

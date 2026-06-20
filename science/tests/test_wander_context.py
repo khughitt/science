@@ -7,7 +7,6 @@ from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import RDF, SKOS
 
 from science_tool.graph.io import PROJECT_NS, SCI_NS
-
 from science_tool.wander.context import assemble_bundle
 from science_tool.wander.provenance import PROV_WAS_DERIVED_FROM, SCHEMA_IDENTIFIER
 

@@ -8,8 +8,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 from science_model.entity_schema.profile import ProfileComponent
+
 from science_tool.commons.promote import (
     PROMOTE_KIND_DATASET,
     PROMOTE_KIND_PAPER,

@@ -8,7 +8,6 @@ from typing import Mapping
 from rdflib import Dataset, URIRef
 
 from science_tool.graph.attention import AttentionCandidate
-
 from science_tool.wander.neighbors import NeighborSet, neighbors_for
 from science_tool.wander.provenance import created_date_for, source_path_for
 from science_tool.wander.references import Reference, active_references_for

@@ -13,8 +13,8 @@ from pathlib import Path
 import yaml
 
 from science_tool.entities import (
-    EntityPathPolicy,
     LOCAL_PART_WIDTH,
+    EntityPathPolicy,
     is_markdown_entity_kind,
     local_kind_warnings,
     local_part_conforms,

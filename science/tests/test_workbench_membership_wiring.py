@@ -18,7 +18,6 @@ from science_tool.graph.io import CITO_NS
 from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.store import PROJECT_NS
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------

@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import click
-
 from science_model.packages.validation import check_freshness, validate_package
 
 from science_tool.output import OUTPUT_FORMATS

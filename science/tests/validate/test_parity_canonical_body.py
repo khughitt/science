@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections import Counter
-from collections.abc import Callable, Sequence
 import importlib
 import json
 import os
@@ -10,6 +8,8 @@ import subprocess
 import sys
 import tomllib
 import warnings
+from collections import Counter
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -17,9 +17,7 @@ import pytest
 
 from science_tool.validate import Result, Severity
 from science_tool.validate.checks import CANONICAL_CHECK_MODULES, clear_checks_for_tests
-from science_tool.validate.runner import run
-from science_tool.validate.runner import RunResult
-
+from science_tool.validate.runner import RunResult, run
 
 DiagnosticItem = tuple[str, str | None, int | None, str]
 

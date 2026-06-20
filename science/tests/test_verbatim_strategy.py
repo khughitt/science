@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 from science_tool.entities import (
-    EntityCommandError,
     _VALID_STRATEGIES,
+    EntityCommandError,
     entity_policies,
     generate_entity_id,
     local_part_conforms,

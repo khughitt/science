@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from science_model.identity import EntityScope, ExternalId
+
 from science_tool.registry.index import (
     RegistryEntity,
     RegistryEntitySource,

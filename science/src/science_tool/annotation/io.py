@@ -21,12 +21,13 @@ from pathlib import Path
 from typing import Any
 
 from rdflib import RDF, Dataset, Literal, URIRef
-from rdflib.namespace import DCTERMS, Namespace, PROV
+from rdflib.namespace import DCTERMS, PROV, Namespace
 from rdflib.term import Node
 
 from science_tool.annotation.model import (
     Annotation,
     AuditLedger,
+    Body,
     IriBody,
     Motivation,
     PriorState,
@@ -35,7 +36,6 @@ from science_tool.annotation.model import (
     Status,
     TextQuoteSelector,
     TextualBody,
-    Body,
 )
 
 OA = Namespace("http://www.w3.org/ns/oa#")
@@ -346,12 +346,12 @@ def _emit_shared_target(target: SpecificResource) -> "list[str]":
     return [
         f"  anno:{target.id} a oa:SpecificResource ;",
         f"    oa:hasSource <{target.source}> ;",
-        f"    oa:hasSelector [",
-        f"      a oa:TextQuoteSelector ;",
+        "    oa:hasSelector [",
+        "      a oa:TextQuoteSelector ;",
         f"      oa:exact   {_str_lit(sel.exact)} ;",
         f"      oa:prefix  {_str_lit(sel.prefix)} ;",
         f"      oa:suffix  {_str_lit(sel.suffix)}",
-        f"    ] .",
+        "    ] .",
     ]
 
 
@@ -362,15 +362,15 @@ def _emit_annotation(ann: Annotation) -> "list[str]":
         out.append(f"    oa:hasTarget       anno:{ann.target.id} ;")
     else:
         sel = ann.target.selector
-        out.append(f"    oa:hasTarget       [")
+        out.append("    oa:hasTarget       [")
         out.append(f"      oa:hasSource <{ann.target.source}> ;")
-        out.append(f"      oa:hasSelector [")
-        out.append(f"        a oa:TextQuoteSelector ;")
+        out.append("      oa:hasSelector [")
+        out.append("        a oa:TextQuoteSelector ;")
         out.append(f"        oa:exact   {_str_lit(sel.exact)} ;")
         out.append(f"        oa:prefix  {_str_lit(sel.prefix)} ;")
         out.append(f"        oa:suffix  {_str_lit(sel.suffix)}")
-        out.append(f"      ]")
-        out.append(f"    ] ;")
+        out.append("      ]")
+        out.append("    ] ;")
     for body in ann.bodies:
         out.extend(_emit_body(body))
     out.append(f"    oa:motivatedBy     oa:{ann.motivation.value} ;")
@@ -399,11 +399,11 @@ def _emit_annotation(ann: Annotation) -> "list[str]":
         out.append(f"    dc:description     {_str_lit(ann.description)}")
     for prior in ann.prior_states:
         out[-1] += " ;"
-        out.append(f"    prov:wasRevisionOf [")
+        out.append("    prov:wasRevisionOf [")
         out.append(f"      sci:status       {_str_lit(prior.status.value)} ;")
         out.append(f"      dc:created       {_dt_lit(prior.created)} ;")
         out.append(f"      dc:creator       {_str_lit(prior.creator)}")
-        out.append(f"    ]")
+        out.append("    ]")
     out[-1] += " ."
     return out
 
@@ -412,11 +412,11 @@ def _emit_body(body: Body) -> "list[str]":
     if isinstance(body, IriBody):
         return [f"    oa:hasBody         <{body.iri}> ;"]
     return [
-        f"    oa:hasBody         [",
-        f"      a oa:TextualBody ;",
+        "    oa:hasBody         [",
+        "      a oa:TextualBody ;",
         f"      dc:format        {_str_lit(body.format)} ;",
         f"      rdf:value        {_str_lit(body.value)}",
-        f"    ] ;",
+        "    ] ;",
     ]
 
 

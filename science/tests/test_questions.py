@@ -12,7 +12,6 @@ from click.testing import CliRunner
 from science_tool.cli import main
 from science_tool.questions import _MAX_SLUG_LENGTH, Reservation, reserve_question, slugify
 
-
 # --- slugify ------------------------------------------------------------------
 
 

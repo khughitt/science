@@ -1,5 +1,7 @@
-import pytest
 from pathlib import Path
+
+import pytest
+
 from science_tool.graph.store import add_evidence_edge, add_observation, add_proposition
 
 

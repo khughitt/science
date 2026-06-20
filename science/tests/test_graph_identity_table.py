@@ -2,8 +2,8 @@ from dataclasses import dataclass as _dc
 from dataclasses import field as _f
 
 import pytest
-
 from science_model.source_ref import SourceRef
+
 from science_tool.graph.identity_table import (
     IdentityCollision,
     IdentityDeclaration,

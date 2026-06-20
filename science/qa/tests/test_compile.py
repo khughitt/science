@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+
 from science_qa.compile import CompileError, merge_configs, schema_to_config
 from science_qa.config import QAConfig
 

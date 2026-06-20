@@ -10,7 +10,12 @@ from typing import Any
 
 from .belief import BeliefMagnitude, BeliefResult, EvidenceUnit, is_proxy_gated
 from .belief_weights import (
-    CURATION_STEP_PENALTY, DELTA_ENVELOPE, PROXY_STEP_PENALTY, role_steps, strength_steps, type_steps,
+    CURATION_STEP_PENALTY,
+    DELTA_ENVELOPE,
+    PROXY_STEP_PENALTY,
+    role_steps,
+    strength_steps,
+    type_steps,
 )
 
 _FEATURE_FLAG_BELIEF_SCALAR = re.compile(

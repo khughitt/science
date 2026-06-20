@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
-import re
 
 import yaml
 
@@ -13,7 +13,6 @@ from science_tool.verdict.models import Claim, Context, ParseResult, VerdictBloc
 from science_tool.verdict.registry import IndexedClaimRegistry
 from science_tool.verdict.rules import aggregate_composite, rule_disagrees_with_body
 from science_tool.verdict.tokens import Token, parse_body_verdict
-
 
 _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n(.*)\Z", re.DOTALL)
 _BODY_VERDICT_LINE_RE = re.compile(r"\*\*Verdict:\*\*([^\r\n]*)")

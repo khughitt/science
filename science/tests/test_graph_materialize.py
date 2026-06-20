@@ -316,6 +316,7 @@ def test_add_entity_emits_two_provenance_triples_when_overlay_path_present() -> 
     from rdflib import Graph
     from rdflib.namespace import PROV
     from science_model.entities import Entity
+
     from science_tool.graph.materialize import _add_entity, _entity_uri
 
     entity = Entity.model_validate(
@@ -350,6 +351,7 @@ def test_add_entity_emits_one_provenance_triple_without_overlay() -> None:
     from rdflib import Graph
     from rdflib.namespace import PROV
     from science_model.entities import Entity
+
     from science_tool.graph.materialize import _add_entity, _entity_uri
 
     entity = Entity.model_validate(

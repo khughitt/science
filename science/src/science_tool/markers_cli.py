@@ -9,8 +9,8 @@ from pathlib import Path
 
 import click
 
-from science_tool.markers import LEGACY_ALIASES, scan_markers
 from science_tool.markdown_utils import is_fence_line
+from science_tool.markers import LEGACY_ALIASES, scan_markers
 
 
 @click.group("markers")

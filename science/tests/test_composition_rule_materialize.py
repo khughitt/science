@@ -1,12 +1,11 @@
 # science/tests/test_composition_rule_materialize.py
 from __future__ import annotations
 
-from rdflib import Literal, URIRef
-
+from rdflib import Graph, Literal, URIRef
 from science_model.entities import Entity, EntityType
+
 from science_tool.graph.io import SCI_NS
 from science_tool.graph.materialize import _add_reasoning_metadata
-from rdflib import Graph
 
 
 def _entity(rule):

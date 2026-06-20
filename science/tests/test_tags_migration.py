@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from click.testing import CliRunner
+
 from science_tool.cli import main
 from science_tool.graph.tags_migration import (
     migrate_tags_to_related,
@@ -410,6 +411,7 @@ class TestCLI:
 
     def test_as_topic_cli_flag(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
+
         from science_tool.cli import main
 
         (tmp_path / "science.yaml").write_text("name: test\n")

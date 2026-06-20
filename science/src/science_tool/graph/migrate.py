@@ -15,6 +15,7 @@ from science_tool.addressing import is_address
 from science_tool.bibliography import is_bibliography_reference
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
 from science_tool.commons.geneset_resources import dataset_geneset_frontmatter, read_member_rows
+from science_tool.graph.identity_table import IdentityTable, build_identity_table
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
     AliasCollisionError,
@@ -27,7 +28,6 @@ from science_tool.graph.sources import (
     load_project_sources,
     local_profile_sources_dir,
 )
-from science_tool.graph.identity_table import IdentityTable, build_identity_table
 from science_tool.graph.store import PROJECT_ENTITY_PREFIXES
 from science_tool.paths import resolve_paths
 

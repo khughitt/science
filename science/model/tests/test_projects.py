@@ -1,5 +1,6 @@
 from datetime import date
-from science_model.projects import Project, ProjectDetail, GraphSummary
+
+from science_model.projects import GraphSummary, Project, ProjectDetail
 
 
 def test_project_model():

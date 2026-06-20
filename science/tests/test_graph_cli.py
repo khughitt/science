@@ -4,10 +4,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 from click.testing import CliRunner
+from conftest import build_inquiry_graph
 from rdflib import Dataset, Literal
 from rdflib.namespace import PROV, RDF, SKOS, Namespace
-
-from conftest import build_inquiry_graph
 
 from science_tool.cli import main
 

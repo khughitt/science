@@ -15,6 +15,7 @@ from science_tool.graph.io import emit_discusses_membership
 from science_tool.graph.sources import is_metadata_reference
 
 from .constants import (
+    _RELATION_KIND_BY_PREDICATE,
     CITO_NS,
     DCTERMS_NS,
     EVIDENCE_STANCE_PREDICATES,
@@ -23,8 +24,9 @@ from .constants import (
     SCHEMA_NS,
     SCI_NS,
     VALID_INQUIRY_TYPES,
-    _RELATION_KIND_BY_PREDICATE,
 )
+from .dataset import _load_dataset, _save_dataset
+from .evidence_signals import _json_literal
 from .identity import (
     _edge_statement_uri,
     _entity_kind_from_uri,
@@ -32,8 +34,6 @@ from .identity import (
     _resolve_term,
     _slug,
 )
-from .dataset import _load_dataset, _save_dataset
-from .evidence_signals import _json_literal
 from .types import PropositionEvidenceLine, PropositionInteractionTerm
 
 

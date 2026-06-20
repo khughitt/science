@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from science_model.aspects import KNOWN_ASPECTS, SOFTWARE_ASPECT, load_project_aspects
+
 from science_tool.tasks import parse_tasks
 
 

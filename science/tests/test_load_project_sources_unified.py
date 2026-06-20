@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from science_model.entities import (
     DatasetEntity,
     DomainEntity,

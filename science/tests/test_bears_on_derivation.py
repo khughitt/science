@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from rdflib import Dataset, URIRef
 from rdflib.namespace import PROV, RDF
-
 from science_model.entities import EntityClass
+
 from science_tool.graph.freshness import (
     close_bears_on,
     derive_bears_on_from_provenance,

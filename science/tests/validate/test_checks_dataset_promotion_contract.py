@@ -10,7 +10,6 @@ from science_tool.commons.registry import RegistryBuilder
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Severity
 
-
 _MANIFEST = (
     "name: demo-project\n"
     "created: 2026-01-01\n"

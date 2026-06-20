@@ -12,8 +12,8 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from rdflib import Graph, Literal as RDFLiteral, URIRef
-
+from rdflib import Graph, URIRef
+from rdflib import Literal as RDFLiteral
 from science_model.reasoning import EvidenceType
 
 from .belief_weights import normalize_evidence_type

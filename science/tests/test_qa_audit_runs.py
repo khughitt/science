@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from science_tool.qa_audit.runs import load_runs, chain_depth
+from science_tool.qa_audit.runs import chain_depth, load_runs
 
 
 def _run(dirpath: Path, slug, workflow, supersedes=None, manifest_path="results/x/datapackage.yaml"):

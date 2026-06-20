@@ -1,5 +1,6 @@
 from science_tool.graph.belief import EvidenceUnit, reduce_units
 
+
 def _u(**kw):
     base = dict(line_uri="x", stance="supports", strength="moderate", independence="independent",
                 independence_group=None, evidence_role="proxy_support", evidence_type="literature_evidence",

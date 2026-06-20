@@ -28,7 +28,6 @@ from rdflib.namespace import PROV, RDF
 
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------

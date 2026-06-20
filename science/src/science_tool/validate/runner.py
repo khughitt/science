@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass, replace
 import importlib.util
 import os
-from pathlib import Path
 import sys
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, replace
+from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Literal, cast
 

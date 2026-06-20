@@ -506,8 +506,8 @@ def test_stale_grounding_with_invalid_unit_structure_is_invalid_grounding(tmp_pa
 
 
 def test_invalid_grounding_precedes_stale_grounding(tmp_path: Path) -> None:
-    from science_tool.annotation.prose_health import build_prose_health_report
     from science_tool.annotation.prose_grounding import prose_grounding_path
+    from science_tool.annotation.prose_health import build_prose_health_report
 
     first, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path, artifact_id="decomp-1"))
     _write_grounding(tmp_path, artifact=first, status="grounded")
@@ -648,8 +648,8 @@ def test_extra_non_stale_grounding_row_is_invalid_grounding(tmp_path: Path) -> N
 
 
 def test_invalid_grounding_json_produces_state_and_finding(tmp_path: Path) -> None:
-    from science_tool.annotation.prose_health import build_prose_health_report
     from science_tool.annotation.prose_grounding import prose_grounding_path
+    from science_tool.annotation.prose_health import build_prose_health_report
 
     _persist_decomposition(tmp_path, _artifact_payload(tmp_path))
     _write_manifest(tmp_path)
@@ -665,8 +665,8 @@ def test_invalid_grounding_json_produces_state_and_finding(tmp_path: Path) -> No
 
 
 def test_invalid_grounding_json_under_missing_slug_is_not_misclassified(tmp_path: Path) -> None:
-    from science_tool.annotation.prose_health import build_prose_health_report
     from science_tool.annotation.prose_grounding import prose_grounding_path
+    from science_tool.annotation.prose_health import build_prose_health_report
 
     _persist_decomposition(tmp_path, _artifact_payload(tmp_path, slug="missing-data"))
     _write_manifest(tmp_path, slug="missing-data")
@@ -681,8 +681,8 @@ def test_invalid_grounding_json_under_missing_slug_is_not_misclassified(tmp_path
 
 
 def test_grounding_fingerprint_mismatch_degrades_one_source_to_invalid_grounding(tmp_path: Path) -> None:
-    from science_tool.annotation.prose_health import build_prose_health_report
     from science_tool.annotation.prose_grounding import prose_grounding_path
+    from science_tool.annotation.prose_health import build_prose_health_report
 
     artifact, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path))
     _write_grounding(tmp_path, artifact=artifact, status="grounded")
@@ -769,7 +769,11 @@ def test_non_complete_source_state_has_exactly_one_matching_finding(tmp_path: Pa
 
 
 def test_write_prose_health_report_skips_timestamp_only_rewrite(tmp_path: Path) -> None:
-    from science_tool.annotation.prose_health import build_prose_health_report, prose_health_path, write_prose_health_report
+    from science_tool.annotation.prose_health import (
+        build_prose_health_report,
+        prose_health_path,
+        write_prose_health_report,
+    )
 
     artifact, _store = _persist_decomposition(tmp_path, _artifact_payload(tmp_path))
     _write_grounding(tmp_path, artifact=artifact, status="grounded")

@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import pytest
-
 from science_model.entities import Entity, EntityType
-from science_model.reasoning import CompositionRule, RESERVED_COMPOSITION_RULES, WEAKEST_LINK_COMPOSITION_RULES
+from science_model.reasoning import RESERVED_COMPOSITION_RULES, WEAKEST_LINK_COMPOSITION_RULES, CompositionRule
 
 
 def _entity(**kw):

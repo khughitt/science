@@ -23,6 +23,7 @@ from datetime import date
 from pathlib import Path
 from typing import Literal
 
+from science_tool import tasks as _tasks_mod
 from science_tool.dag.paths import DagPaths
 from science_tool.dag.render import render_all
 from science_tool.dag.staleness import (
@@ -32,8 +33,6 @@ from science_tool.dag.staleness import (
     check_staleness,
 )
 from science_tool.dag.validate import ValidationReport, validate_project
-from science_tool import tasks as _tasks_mod
-
 
 # ---------------------------------------------------------------------------
 # Public dataclasses

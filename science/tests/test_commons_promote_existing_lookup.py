@@ -9,7 +9,6 @@ import pytest
 
 from science_tool.commons.errors import PromoteInputError
 
-
 # --------------------------------------------------------------------------- #
 # Shared fixtures / helpers                                                    #
 # --------------------------------------------------------------------------- #
@@ -133,8 +132,8 @@ def test_existing_canonical_max_semver_numeric_not_lexicographic(tmp_path) -> No
 
 def test_existing_canonical_integrity_guard_raises_on_multiple_cases(tmp_path) -> None:
     """Tags paper/Dubois2022/1.0.0 AND paper/dubois2022/1.0.0 → PromoteInputError."""
-    from science_tool.commons.promote import PROMOTE_KIND_PAPER, _existing_canonical_for_slug
     from science_tool.commons.errors import PromoteInputError
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, _existing_canonical_for_slug
 
     _init_commons(tmp_path)
     _add_tag(tmp_path, "paper/Dubois2022/1.0.0")

@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
-from science_tool.annotation.prose_decomposition import DecompositionError, ProseDecompositionStore, artifact_unit_ref
 from science_tool.annotation.promote import (
     ApplyReport,
     PromotionApplyError,
@@ -16,6 +15,7 @@ from science_tool.annotation.promote import (
     entity_dest,
     load_corpora,
 )
+from science_tool.annotation.prose_decomposition import DecompositionError, ProseDecompositionStore, artifact_unit_ref
 from science_tool.annotation.prose_promote import (
     ProsePromotionError,
     ProsePromotionPlanRow,

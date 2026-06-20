@@ -29,7 +29,7 @@ def test_diagnostic_roles():
 
 
 def test_steps_are_rank_minus_one_floored_at_zero():
-    from science_tool.graph.belief_weights import type_steps, role_steps, strength_steps
+    from science_tool.graph.belief_weights import role_steps, strength_steps, type_steps
     assert type_steps("empirical_data_evidence") == 3   # rank 4 normalized - 1
     assert type_steps("literature") == 1                # rank 2 - 1
     assert role_steps("direct_test") == 2               # rank 3 - 1

@@ -23,7 +23,6 @@ from typing import Iterable, Iterator, Optional
 from science_tool.annotation.io import markdown_for_sidecar, read_sidecar
 from science_tool.annotation.model import Annotation, Sidecar, Status
 
-
 # ---- Errors ----------------------------------------------------------
 
 class SidecarParseError(Exception):

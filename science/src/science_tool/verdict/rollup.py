@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Literal
-import re
 
 import yaml
 
@@ -14,7 +14,6 @@ from science_tool.verdict.models import ParseResult
 from science_tool.verdict.parser import NoVerdictBlockError, parse_file
 from science_tool.verdict.registry import IndexedClaimRegistry
 from science_tool.verdict.tokens import Token
-
 
 Scope = Literal["all", "claim"]
 

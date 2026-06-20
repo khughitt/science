@@ -6,7 +6,6 @@ from pathlib import Path
 
 from science_tool.validate import Severity, ValidateContext
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

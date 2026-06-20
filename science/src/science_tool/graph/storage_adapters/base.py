@@ -14,6 +14,7 @@ from typing import Any
 
 from science_model.entities import Entity
 from science_model.source_ref import SourceRef
+
 from science_tool.graph.identity_table import ParticipationMode
 from science_tool.graph.source_records import AggregateRowMeta, MarkdownSourceDocument
 

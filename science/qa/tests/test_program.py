@@ -1,4 +1,5 @@
 import pytest
+
 from science_qa.config import QAConfig
 from science_qa.context import TableContext
 from science_qa.program import ProgramError, resolve_program

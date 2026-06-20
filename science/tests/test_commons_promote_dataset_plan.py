@@ -108,8 +108,7 @@ def test_render_canonical_datapackage_strips_project_fields_and_injects_hashes()
 
 
 def test_render_canonical_datapackage_uses_path_metadata_alias():
-    from science_tool.commons.datapackage import parse_canonical_datapackage_yaml
-    from science_tool.commons.datapackage import render_canonical_datapackage_yaml
+    from science_tool.commons.datapackage import parse_canonical_datapackage_yaml, render_canonical_datapackage_yaml
 
     valid_hash = (
         "sha256:"
@@ -130,9 +129,10 @@ def test_render_canonical_datapackage_uses_path_metadata_alias():
 
 
 def test_render_canonical_datapackage_rejects_missing_computed_metadata():
+    import pytest
+
     from science_tool.commons.datapackage import render_canonical_datapackage_yaml
     from science_tool.commons.errors import CommonsError
-    import pytest
 
     project_doc = {
         "name": "project-ds",
@@ -155,9 +155,10 @@ def test_render_canonical_datapackage_rejects_missing_computed_metadata():
 
 
 def test_render_canonical_datapackage_rejects_conflicting_metadata_aliases():
+    import pytest
+
     from science_tool.commons.datapackage import render_canonical_datapackage_yaml
     from science_tool.commons.errors import CommonsError
-    import pytest
 
     project_doc = {
         "name": "project-ds",
@@ -176,9 +177,10 @@ def test_render_canonical_datapackage_rejects_conflicting_metadata_aliases():
 
 
 def test_render_canonical_datapackage_rejects_cross_resource_alias_collision():
+    import pytest
+
     from science_tool.commons.datapackage import render_canonical_datapackage_yaml
     from science_tool.commons.errors import CommonsError
-    import pytest
 
     project_doc = {
         "name": "project-ds",
@@ -200,9 +202,10 @@ def test_render_canonical_datapackage_rejects_cross_resource_alias_collision():
 
 
 def test_render_canonical_datapackage_rejects_missing_or_empty_resources():
+    import pytest
+
     from science_tool.commons.datapackage import render_canonical_datapackage_yaml
     from science_tool.commons.errors import CommonsError
-    import pytest
 
     for project_doc in ({"name": "project-ds"}, {"name": "project-ds", "resources": []}):
         with pytest.raises(CommonsError, match="resources"):
@@ -214,9 +217,10 @@ def test_render_canonical_datapackage_rejects_missing_or_empty_resources():
 
 
 def test_render_canonical_datapackage_rejects_non_list_resources():
+    import pytest
+
     from science_tool.commons.datapackage import render_canonical_datapackage_yaml
     from science_tool.commons.errors import CommonsError
-    import pytest
 
     with pytest.raises(CommonsError, match="resources"):
         render_canonical_datapackage_yaml(
@@ -244,9 +248,10 @@ resources:
 
 
 def test_parse_canonical_datapackage_yaml_rejects_missing_hash():
+    import pytest
+
     from science_tool.commons.datapackage import parse_canonical_datapackage_yaml
     from science_tool.commons.errors import CommonsError
-    import pytest
 
     yaml_text = """\
 name: fixture-ds
@@ -476,6 +481,7 @@ def test_plan_promote_dataset_produces_three_artifacts(tmp_path, monkeypatch):
 
 def test_plan_promote_dataset_accepts_symlinked_project_root(tmp_path, monkeypatch):
     import shutil
+
     import yaml
 
     from science_tool.commons.promote import (
@@ -638,6 +644,7 @@ def test_plan_promote_dataset_rejects_multi_project_datapackage_field_mismatch(
     tmp_path, monkeypatch
 ):
     import json
+
     import pytest
 
     from science_tool.commons.errors import PromoteCandidateError

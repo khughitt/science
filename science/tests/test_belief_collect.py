@@ -1,7 +1,8 @@
-from rdflib import Graph, URIRef, Literal, RDF
+from rdflib import RDF, Graph, Literal, URIRef
 from rdflib.namespace import PROV
-from science_tool.graph.io import PROJECT_NS, SCI_NS, CITO_NS
-from science_tool.graph.belief import collect_evidence_units, EVIDENCE_LINE_CLASS
+
+from science_tool.graph.belief import EVIDENCE_LINE_CLASS, collect_evidence_units
+from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
 
 CLAIM = URIRef("http://example.org/science/entity/proposition/p")
 HYP = URIRef("http://example.org/science/entity/hypothesis/h")
@@ -268,8 +269,11 @@ def test_lineage_sibling_candidate_does_not_collapse_lines() -> None:
 
 def test_read_unit_reads_qa_failed_datasets_and_predicate():
     from rdflib import Graph, URIRef
+
     from science_tool.graph.belief import (
-        EvidenceUnit, _read_unit, is_qa_failed,
+        EvidenceUnit,
+        _read_unit,
+        is_qa_failed,
     )
     from science_tool.graph.io import SCI_NS
 

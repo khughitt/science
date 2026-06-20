@@ -1,8 +1,12 @@
 from datetime import date
 
 import pytest
+
 from science_tool.annotation.promote import (
-    PromotionApplyError, PromotionCandidate, build_targets, numeric_target,
+    PromotionApplyError,
+    PromotionCandidate,
+    build_targets,
+    numeric_target,
 )
 
 

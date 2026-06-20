@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import RDF, XSD
-
 from science_model.patch_definition import PatchDefinitionEntity
+
 from science_tool.graph.io import SCI_NS, entity_uri_for_ref
 from science_tool.graph.patch_membership import (
     MembershipRecord,

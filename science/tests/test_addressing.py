@@ -9,7 +9,6 @@ from science_tool.addressing import (
     render_uri,
 )
 
-
 LOCAL_KINDS = {"task", "hypothesis", "question", "meta", "topic"}
 PROJECT_IDS = {"cbioportal", "multiple-myeloma", "natural-systems"}
 

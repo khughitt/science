@@ -12,7 +12,6 @@ from science_tool.cli import main
 from science_tool.validate.checks import CANONICAL_CHECK_MODULES, clear_checks_for_tests
 from science_tool.validate.runner import clear_hooks_for_tests
 
-
 FIXTURES = Path(__file__).parent / "fixtures"
 COMBINED_PROJECT = FIXTURES / "_combined"
 SNAPSHOTS = Path(__file__).parent / "snapshots"

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
-from pathlib import Path
 import re
 import shutil
+from collections.abc import Iterable
+from pathlib import Path
 from typing import NamedTuple
-
 
 COMMAND_PREAMBLE_HEADING = "## Science Codex Command Preamble"
 

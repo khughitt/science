@@ -2,9 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from science_qa.aspects import CHECK_FAMILY, CHECK_REQUIRED, CheckSpec, Invocation
+from science_qa.aspects import (
+    CHECK_FAMILY,
+    CHECK_REQUIRED,
+    CheckSpec,
+    Invocation,
+    general,
+    numeric_column,
+    scrna_qc,
+    tabular,
+)
 from science_qa.aspects import gene_expression_qc as gx
-from science_qa.aspects import general, numeric_column, scrna_qc, tabular
 from science_qa.context import TableContext
 
 

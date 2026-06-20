@@ -11,9 +11,9 @@ from __future__ import annotations
 import math
 
 import pytest
-from rdflib import Graph, Literal, RDF, URIRef
+from rdflib import RDF, Graph, Literal, URIRef
 
-from science_tool.graph.belief import aggregate_belief, collect_evidence_units, EVIDENCE_LINE_CLASS
+from science_tool.graph.belief import EVIDENCE_LINE_CLASS, aggregate_belief, collect_evidence_units
 from science_tool.graph.belief_scalar import belief_scalar
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
 
@@ -205,6 +205,7 @@ def test_genuine_contradiction_still_raises():
 def test_materialize_emits_quant_predicates():
     from science_model.entities import EntityType, EvidenceLineEntity, QuantitativeResult
     from science_model.reasoning import EvidenceStance
+
     from science_tool.graph.materialize import _add_evidence_line_metadata
 
     provenance = Graph()

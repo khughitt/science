@@ -311,7 +311,8 @@ def test_identical_dataset_commitment_group_key_regression():
 
 
 def test_dependence_datasets_by_line_direct_dependence_only():
-    from rdflib import Graph, Literal, RDF, URIRef
+    from rdflib import RDF, Graph, Literal, URIRef
+
     from science_tool.graph.dataset_independence import dependence_datasets_by_line
     from science_tool.graph.io import CITO_NS, SCI_NS
 
@@ -334,7 +335,8 @@ def test_dependence_datasets_by_line_direct_dependence_only():
 
 
 def test_dependence_datasets_by_line_excludes_cited_role():
-    from rdflib import Graph, Literal, RDF, URIRef
+    from rdflib import RDF, Graph, Literal, URIRef
+
     from science_tool.graph.dataset_independence import dependence_datasets_by_line
     from science_tool.graph.io import CITO_NS, SCI_NS
 
@@ -355,8 +357,9 @@ def test_dependence_datasets_by_line_excludes_cited_role():
 
 
 def test_dependence_datasets_by_line_includes_virtual_member():
-    from rdflib import Graph, Literal, RDF, URIRef
+    from rdflib import RDF, Graph, Literal, URIRef
     from rdflib.namespace import PROV
+
     from science_tool.graph.dataset_independence import dependence_datasets_by_line
     from science_tool.graph.io import CITO_NS, SCI_NS
 
@@ -379,7 +382,8 @@ def test_dependence_datasets_by_line_includes_virtual_member():
 
 
 def test_dependence_datasets_by_line_excludes_indirect_bears_on():
-    from rdflib import Graph, Literal, RDF, URIRef
+    from rdflib import RDF, Graph, Literal, URIRef
+
     from science_tool.graph.dataset_independence import dependence_datasets_by_line
     from science_tool.graph.io import CITO_NS, SCI_NS
 

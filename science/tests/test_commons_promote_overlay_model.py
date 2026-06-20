@@ -14,13 +14,14 @@ import pytest
 
 from science_tool.commons.promote import (
     KEEP_EXISTING,
-    KEEP_EXISTING as _ke2,
     CanonicalArtifact,
     ExistingCanonicalConflict,
     PromoteDecision,
     _KeepExisting,
 )
-
+from science_tool.commons.promote import (
+    KEEP_EXISTING as _ke2,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers

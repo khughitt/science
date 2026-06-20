@@ -14,7 +14,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-
 from science_model.entities import EvidenceLineEntity
 from science_model.frontmatter import parse_entity_file
 

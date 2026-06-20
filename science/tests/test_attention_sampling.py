@@ -11,11 +11,11 @@ from rdflib.namespace import RDF, SKOS, XSD
 from science_tool.cli import main
 from science_tool.graph.attention import (
     AttentionReason,
+    _open_question_debt,
     compute_attention_candidates,
     format_attention_candidate,
     reason_aware_sample_candidates,
     weighted_sample_without_replacement,
-    _open_question_debt,
 )
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, save_canonical_graph_dataset
 

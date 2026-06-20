@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 
 from science_tool.feedback import (
-    FeedbackEntry,
     VALID_CATEGORIES,
     VALID_STATUSES,
+    FeedbackEntry,
     detect_project,
     find_duplicate,
     group_for_triage,

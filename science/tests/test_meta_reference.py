@@ -221,6 +221,7 @@ class TestMetaRefsInBlockedByAndSourceRefs:
     def test_meta_ref_in_blocked_by_not_materialized(self, tmp_path: Path) -> None:
         """meta: refs in blocked_by must not produce sci:blockedBy edges."""
         from rdflib import Dataset
+
         from science_tool.graph.materialize import materialize_graph
         from science_tool.graph.store import SCI_NS
 

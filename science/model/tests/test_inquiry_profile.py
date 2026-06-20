@@ -3,7 +3,6 @@ from pydantic import ValidationError
 
 from science_model.patch_definition import PatchDefinitionEntity
 
-
 # Required base-Entity scaffolding fields (no defaults on science_model.entities.Entity).
 _ENTITY_REQUIRED = {
     "project": "",

@@ -73,6 +73,7 @@ def test_loader_drift_guard_iso_bound(tmp_path):
     # science_qa.load_package and science_tool.infer_schema.load_descriptor must parse an
     # unquoted ISO bound to the identical str (no PyYAML timestamp coercion drift).
     from science_qa.package import load_package
+
     from science_tool.datasets.infer_schema import load_descriptor
     (tmp_path / "datapackage.yaml").write_text(
         "name: p\nresources:\n  - name: r\n    path: r.csv\n    schema:\n      fields:\n"

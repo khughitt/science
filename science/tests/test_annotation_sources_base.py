@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-import pytest
 
 from science_tool.annotation.model import (
-    Motivation, SpecificResource, TextQuoteSelector, TextualBody,
+    Motivation,
+    SpecificResource,
+    TextQuoteSelector,
+    TextualBody,
 )
 from science_tool.annotation.sources.base import (
     IdCollisionError,

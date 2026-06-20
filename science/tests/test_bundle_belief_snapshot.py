@@ -1,7 +1,7 @@
 # science/tests/test_bundle_belief_snapshot.py
 from __future__ import annotations
 
-from rdflib import Graph, Literal, RDF, URIRef
+from rdflib import RDF, Graph, Literal, URIRef
 
 from science_tool.graph.belief import EVIDENCE_LINE_CLASS
 from science_tool.graph.belief_snapshot import snapshot_records

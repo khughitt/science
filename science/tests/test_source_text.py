@@ -27,7 +27,6 @@ from science_tool.annotation.source_text import (
 )
 from science_tool.paper_fetch import FetchConfig
 
-
 # Representative PubTator3 BioC abstract record: title + abstract passages, with a
 # multi-byte character (em-dash) that round-trips unchanged through JSON decode.
 _BIOC_RECORD = {

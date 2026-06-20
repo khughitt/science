@@ -27,11 +27,9 @@ from typing import Any
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-
 from science_model.entities import EntityType, EvidenceLineEntity, QuantitativeResult
 from science_model.propositions import DiscussesMembership, PropositionEntity
 from science_model.reasoning import EvidenceType, canonical_evidence_type_token
-
 
 # ---------------------------------------------------------------------------
 # Layout models (Task 5e) — cosmetic / non-epistemic state

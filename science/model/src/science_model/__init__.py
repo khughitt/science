@@ -13,30 +13,22 @@ from science_model.entities import (
     MechanismEntity,
     StructuralChainEntity,
 )
+from science_model.entity_schema import (
+    EntityValidationError,
+    EntityValidator,
+    MergePolicy,
+    SharedEntity,
+)
 from science_model.graph import GraphData, GraphEdge, GraphNode, GraphSummary
 from science_model.identity import EntityScope, ExternalId
 from science_model.ids import CanonicalId, normalize_alias
 from science_model.ontologies.schema import OntologyCatalog, OntologyPredicate, OntologyRegistryEntry, OntologyTermType
-from science_model.projects import Project, ProjectDetail
-from science_model.reasoning import (
-    ClaimLayer,
-    CompositionRule,
-    DisputeScope,
-    EvidenceRole,
-    EvidenceStance,
-    EvidenceStrength,
-    IdentificationStrength,
-    IndependenceTag,
-    MeasurementModel,
-    Polarity,
-    Predicate,
-    PropositionMetadata,
-    ProxyDirectness,
-    RivalModelPacket,
-    RESERVED_COMPOSITION_RULES,
-    SIGN_MEANINGFUL_PREDICATES,
-    SupportScope,
-    WEAKEST_LINK_COMPOSITION_RULES,
+from science_model.packages import (
+    ResearchPackageDescriptor,
+    ValidationResult,
+    check_freshness,
+    parse_cells,
+    validate_package,
 )
 from science_model.patch_definition import (
     Assumption,
@@ -51,26 +43,34 @@ from science_model.patch_definition import (
     Transformation,
 )
 from science_model.profiles import EntityKind, ProfileManifest, RelationKind
+from science_model.projects import Project, ProjectDetail
 from science_model.propositions import PropositionEntity
 from science_model.provenance import EvidenceIndependence, ProvenanceType
+from science_model.reasoning import (
+    RESERVED_COMPOSITION_RULES,
+    SIGN_MEANINGFUL_PREDICATES,
+    WEAKEST_LINK_COMPOSITION_RULES,
+    ClaimLayer,
+    CompositionRule,
+    DisputeScope,
+    EvidenceRole,
+    EvidenceStance,
+    EvidenceStrength,
+    IdentificationStrength,
+    IndependenceTag,
+    MeasurementModel,
+    Polarity,
+    Predicate,
+    PropositionMetadata,
+    ProxyDirectness,
+    RivalModelPacket,
+    SupportScope,
+)
 from science_model.relations import build_relation_registry
 from science_model.search import Filters, SearchResult
-from science_model.sync import SyncSource
 from science_model.source_contracts import AuthoredTargetedRelation, BindingSource, ModelSource, ParameterSource
-from science_model.packages import (
-    ResearchPackageDescriptor,
-    ValidationResult,
-    check_freshness,
-    parse_cells,
-    validate_package,
-)
+from science_model.sync import SyncSource
 from science_model.tasks import Task, TaskCreate, TaskStatus, TaskUpdate
-from science_model.entity_schema import (
-    EntityValidationError,
-    EntityValidator,
-    MergePolicy,
-    SharedEntity,
-)
 
 __all__ = [
     "ActivityItem",

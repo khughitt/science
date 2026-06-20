@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 from rdflib import Dataset, URIRef
 
-from science_tool.graph.store import canonical_id_from_entity_uri
 from science_tool.graph.io import PROJECT_NS, SCI_NS
+from science_tool.graph.store import canonical_id_from_entity_uri
 
 # Match _CLOSED_STATUSES in science_tool.tasks: a task only stops counting as
 # an "active reference" once it's done or retired. Deferred/blocked still count.

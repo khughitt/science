@@ -166,8 +166,8 @@ def _minimal_empty_sidecar() -> str:
     )
 
 
-from datetime import datetime, timezone
 import shutil
+from datetime import datetime, timezone
 
 from science_tool.annotation.io import read_sidecar
 from science_tool.annotation.model import Status

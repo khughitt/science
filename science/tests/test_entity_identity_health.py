@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from science_tool.entity_identity import collect_identity_warnings
-from science_tool.graph.health import build_health_report
 from science_tool.graph.entity_registry import EntityRegistry
+from science_tool.graph.health import build_health_report
 from science_tool.graph.sources import KnowledgeProfiles, MarkdownSourceDocument, ProjectSources, load_project_sources
 
 

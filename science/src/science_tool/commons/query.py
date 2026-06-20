@@ -20,7 +20,6 @@ from science_tool.commons.registry import (
     RegistryBuilder,
 )
 
-
 # Column order is load-bearing: `_hydrate` unpacks rows positionally, so both
 # SELECTs (`find` and `_row_for`) must use this exact list.
 _ENTITY_COLUMNS = (

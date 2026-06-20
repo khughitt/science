@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 
 from science_tool.commons.datapackage import (
-    DataResource,
     DatapackageDescriptor,
+    DataResource,
     parse_resource_hash,
     read_datapackage,
     validate_logical_path,

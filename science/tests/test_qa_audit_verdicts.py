@@ -1,4 +1,4 @@
-from science_tool.qa_audit.verdicts import engagement_verdict, iteration_verdict, FlagDisposition
+from science_tool.qa_audit.verdicts import FlagDisposition, engagement_verdict, iteration_verdict
 
 
 def fd(disposition, change=""):

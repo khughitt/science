@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from rdflib import Graph, RDF, URIRef
+from rdflib import RDF, Graph, URIRef
 
 from science_tool.graph.belief import BeliefMagnitude, aggregate_belief, collect_evidence_units
 from science_tool.graph.io import PROJECT_NS, SCI_NS

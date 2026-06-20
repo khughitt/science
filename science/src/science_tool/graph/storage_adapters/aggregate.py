@@ -7,13 +7,11 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-
 from science_model.entities import Entity
 from science_model.source_ref import SourceRef
 
 from science_tool.graph.source_records import AggregateRowMeta
 from science_tool.graph.storage_adapters.base import StorageAdapter
-
 
 # Mapping: directory plural → singular kind. Used by single-type aggregate files
 # (doc/<plural>/<plural>.{json,yaml}). Mirrors science_model.frontmatter._DIR_TO_TYPE.

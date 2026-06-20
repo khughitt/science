@@ -12,10 +12,11 @@ from collections import defaultdict
 from collections.abc import Iterator
 from pathlib import Path
 
-from rdflib import Literal, RDF, Dataset, URIRef
+from rdflib import RDF, Dataset, Literal, URIRef
 from rdflib.namespace import PROV
-
 from science_model.reasoning import EvidenceType
+
+from science_tool.entities import resolve_path_policy
 from science_tool.graph.belief import (
     BeliefMagnitude,
     aggregate_belief,
@@ -23,6 +24,7 @@ from science_tool.graph.belief import (
     is_decisive_refutation,
     is_proxy_gated,
 )
+from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
 from science_tool.graph.belief_weights import (
     DIAGNOSTIC_ROLES,
     EVIDENCE_ROLE_RANK,
@@ -30,10 +32,8 @@ from science_tool.graph.belief_weights import (
     STRENGTH_RANK,
     normalize_evidence_type,
 )
-from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
 from science_tool.graph.io import SCHEMA_NS, SCI_NS
 from science_tool.graph.store import _evidence_targets_for_uri, _graph_uri
-from science_tool.entities import resolve_path_policy
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity

@@ -1,6 +1,6 @@
+import json
 from pathlib import Path
 
-import json
 import yaml
 
 from science_tool.qa_audit.audit import audit_workflows, render_markdown

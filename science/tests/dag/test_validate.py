@@ -15,7 +15,6 @@ from science_tool.dag.validate import (
     validate_project,
 )
 
-
 FIXTURE_MINIMAL = Path(__file__).parent / "fixtures" / "minimal"
 
 

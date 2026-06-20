@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-
 from science_model.source_ref import SourceRef
+
 from science_tool.graph.identity_table import (
     IdentityDeclaration,
     IdentityTable,

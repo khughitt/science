@@ -1,26 +1,25 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 import json
 import os
-from pathlib import Path
 import shutil
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
-from click.testing import CliRunner
 import pytest
-
 from _copy_filters import oversized_payload_names
-from science_tool.cli import main
+from click.testing import CliRunner
 from test_parity_canonical_body import (
-    DiagnosticItem,
     REAL_PROJECTS_CONFIG,
+    DiagnosticItem,
     _load_project_paths,
     _resolved_project_paths,
     _run_bash_validate,
     _sort_diagnostic_items,
 )
 
+from science_tool.cli import main
 
 CopyProject = Callable[[Path], Path]
 _LEGACY_SIDECAR_REMOVED_RULE = "validate.sidecar.legacy_removed"

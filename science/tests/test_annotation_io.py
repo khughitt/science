@@ -6,8 +6,6 @@ from pathlib import Path
 import pytest
 
 from science_tool.annotation import (
-    Annotation,
-    AuditLedger,
     Motivation,
     Sidecar,
     SpecificResource,
@@ -194,11 +192,17 @@ def test_writer_escapes_carriage_return(tmp_path: Path) -> None:
 
 def test_promoted_to_round_trips(tmp_path):
     # Build a minimal sidecar with one annotation carrying promoted_to, write, re-read.
+    from datetime import datetime, timezone
+
     from science_tool.annotation import io as anno_io
     from science_tool.annotation.model import (
-        Annotation, Motivation, SpecificResource, Status, TextQuoteSelector, TextualBody,
+        Annotation,
+        Motivation,
+        SpecificResource,
+        Status,
+        TextQuoteSelector,
+        TextualBody,
     )
-    from datetime import datetime, timezone
 
     md = tmp_path / "paper.md"
     md.write_text("Alpha beta gamma.\n", encoding="utf-8")

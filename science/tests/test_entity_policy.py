@@ -77,6 +77,7 @@ def test_numeric_scan_tolerates_legacy_letter_prefix(tmp_path) -> None:
 
 def test_citekey_requires_explicit_id(tmp_path) -> None:
     import pytest
+
     from science_tool.entities import EntityCommandError
 
     with pytest.raises(EntityCommandError):
@@ -87,6 +88,7 @@ def test_citekey_requires_explicit_id(tmp_path) -> None:
 
 def test_explicit_numeric_id_must_be_canonical(tmp_path) -> None:
     import pytest
+
     from science_tool.entities import EntityCommandError
 
     # Legacy letter-prefixed and wrong-width ids must be rejected, so --id

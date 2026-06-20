@@ -24,8 +24,8 @@ from science_tool.commons.datapackage import (
     validate_logical_path,
 )
 from science_tool.commons.errors import (
-    CommonsError,
     CommonsEntityError,
+    CommonsError,
     DataIntegrityError,
     DataResourceNotFoundError,
 )

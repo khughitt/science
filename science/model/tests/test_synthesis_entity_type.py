@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 def test_entity_type_has_synthesis_and_is_not_a_mechanism_participant() -> None:
-    from science_model.entities import EntityType, _DISALLOWED_MECHANISM_PARTICIPANT_KINDS
+    from science_model.entities import _DISALLOWED_MECHANISM_PARTICIPANT_KINDS, EntityType
 
     assert EntityType.SYNTHESIS.value == "synthesis"
     # synthesis is a document/output kind like report → must be barred as a

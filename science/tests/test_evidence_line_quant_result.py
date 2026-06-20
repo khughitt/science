@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from science_model.entities import EvidenceLineEntity, EntityType, QuantitativeResult
+from science_model.entities import EntityType, EvidenceLineEntity, QuantitativeResult
 
 
 def _base_evidence_line(**kwargs) -> EvidenceLineEntity:

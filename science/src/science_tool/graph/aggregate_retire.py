@@ -29,9 +29,8 @@ from science_tool.datapackage_promote import _is_safe_slug
 from science_tool.entities import EntityCommandError, default_status, local_part_conforms, resolve_path_policy
 from science_tool.graph.aggregate_triage import AggregateBucket, AggregateRowTriage
 from science_tool.graph.decision_log import DecisionLogIndex, render_owner_file
-from science_tool.graph.storage_adapters.aggregate import multi_type_root_key
-
 from science_tool.graph.sources import local_profile_sources_dir, resolve_local_profile_name
+from science_tool.graph.storage_adapters.aggregate import multi_type_root_key
 
 if TYPE_CHECKING:
     from science_tool.graph.sources import AggregateRowMeta, ProjectSources

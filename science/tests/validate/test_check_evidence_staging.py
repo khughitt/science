@@ -11,7 +11,6 @@ from pathlib import Path
 
 from science_tool.validate import Severity, ValidateContext
 
-
 # ---------------------------------------------------------------------------
 # Helpers (mirror the pattern in test_checks_evidence_lines.py)
 # ---------------------------------------------------------------------------

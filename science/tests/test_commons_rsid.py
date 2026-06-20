@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import sqlite3
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 
 import science_tool.commons.rsid as rsid_module
 from science_tool.commons.rsid import RsidDefect, RsidMatch, resolve_rsid

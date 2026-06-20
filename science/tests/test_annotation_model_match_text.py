@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pytest
 
 from science_tool.annotation.io import read_sidecar, write_sidecar
 from science_tool.annotation.model import (

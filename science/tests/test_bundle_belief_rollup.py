@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import pytest
-from rdflib import Graph, Literal, RDF, URIRef
-
+from rdflib import RDF, Graph, Literal, URIRef
 from science_model.reasoning import CompositionRule
-from science_tool.graph.belief import BeliefMagnitude, BeliefResult, EVIDENCE_LINE_CLASS
+
+from science_tool.graph.belief import EVIDENCE_LINE_CLASS, BeliefMagnitude, BeliefResult
 from science_tool.graph.bundle_belief import (
     BundleBeliefResult,
     MemberBelief,

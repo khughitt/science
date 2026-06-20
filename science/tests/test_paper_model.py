@@ -4,8 +4,8 @@ import pytest
 from rdflib.namespace import RDF
 
 from science_tool.graph.store import (
-    SCI_NS,
     PROJECT_NS,
+    SCI_NS,
     _graph_uri,
     _load_dataset,
     add_finding,

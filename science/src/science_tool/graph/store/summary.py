@@ -7,7 +7,6 @@ from typing import cast
 
 from rdflib import URIRef
 from rdflib.namespace import PROV, RDF, SKOS
-
 from science_model.reasoning import EvidenceType
 
 from science_tool.graph.belief import aggregate_belief, collect_evidence_units
@@ -15,14 +14,6 @@ from science_tool.graph.belief_weights import normalize_evidence_type
 from science_tool.graph.io import project_root_from_graph_path as _project_root_from_graph_path
 
 from .constants import CITO_NS, PROJECT_NS, SCHEMA_NS, SCI_NS, SCIC_NS
-from .types import (
-    ClaimSummaryData,
-    InquirySummaryData,
-    NeighborhoodSummaryData,
-    ProjectSummaryData,
-    QuestionSummaryData,
-)
-from .identity import _graph_uri, _resolve_center_entity, _short_name
 from .dataset import _load_dataset
 from .evidence_signals import (
     _collect_evidence_signals,
@@ -34,6 +25,14 @@ from .evidence_signals import (
     _load_proposition_falsifications,
     _load_proposition_interaction_terms,
     _load_proposition_pre_registrations,
+)
+from .identity import _graph_uri, _resolve_center_entity, _short_name
+from .types import (
+    ClaimSummaryData,
+    InquirySummaryData,
+    NeighborhoodSummaryData,
+    ProjectSummaryData,
+    QuestionSummaryData,
 )
 
 

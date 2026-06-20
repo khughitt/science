@@ -1,7 +1,13 @@
 import pandas as pd
 import pytest
+
 from science_qa.aspects.numeric_column import (
-    bounds, low_variance, missing_sentinels, polarity, ranges, zero_fraction,
+    bounds,
+    low_variance,
+    missing_sentinels,
+    polarity,
+    ranges,
+    zero_fraction,
 )
 from science_qa.context import TableContext
 from science_qa.flags import SEVERITY_STRUCTURAL

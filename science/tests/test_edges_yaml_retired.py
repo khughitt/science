@@ -21,12 +21,11 @@ from __future__ import annotations
 import warnings
 
 import pytest
-
 from science_model.propositions import PropositionEntity
+
 from science_tool.dag.proposition_edges import edges_from_propositions
 from science_tool.dag.render import style_for_edge
 from science_tool.dag.schema import EdgesYamlFile, load_legacy_edges_yaml
-
 
 # ---------------------------------------------------------------------------
 # 1. Propositions are the epistemic source-of-truth for edges.

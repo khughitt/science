@@ -12,7 +12,6 @@ from science_tool.annotation.text_segmentation import (
     split_sentences_with_offsets,
 )
 
-
 # ---- split_sentences_with_offsets -------------------------------------
 
 def test_split_sentences_simple() -> None:

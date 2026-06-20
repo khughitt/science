@@ -8,6 +8,8 @@ def test_record_types_live_in_leaf_and_reexport_from_sources() -> None:
     # Public path stays valid (aggregate_retire.py + existing tests import from here).
     from science_tool.graph.sources import (
         AggregateRowMeta as SourcesAggregateRowMeta,
+    )
+    from science_tool.graph.sources import (
         MarkdownSourceDocument as SourcesMarkdownSourceDocument,
     )
 

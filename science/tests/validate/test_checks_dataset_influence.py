@@ -9,7 +9,6 @@ from science_tool.validate.checks import CANONICAL_CHECKS, clear_checks_for_test
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Severity
 
-
 _MANIFEST = "name: demo\nknowledge_profiles:\n  local: local\n"
 
 

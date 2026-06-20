@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rdflib import Dataset, Literal, RDF, URIRef
+from rdflib import RDF, Dataset, Literal, URIRef
 from rdflib.namespace import PROV
 
 from science_tool.graph.io import CITO_NS, SCI_NS
 from science_tool.graph.store import PROJECT_NS, _graph_uri
 from science_tool.validate import Severity, ValidateContext
-
 
 # ---------------------------------------------------------------------------
 # Helpers

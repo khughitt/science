@@ -5,21 +5,21 @@ from pathlib import Path
 from typing import Literal
 
 from science_tool.annotation.internal_prose_adapter import InternalProseAdapter, LocatorStatus
+from science_tool.annotation.promote import (
+    ApplyReport,
+    Promotable,
+    PromotionApplyError,
+    PromotionCandidate,
+    build_targets,
+    decide_all,
+    entity_dest,
+    load_corpora,
+)
 from science_tool.annotation.prose_decomposition import (
     DecompositionError,
     ProseDecompositionStore,
     Quote,
     artifact_unit_ref,
-)
-from science_tool.annotation.promote import (
-    ApplyReport,
-    PromotionApplyError,
-    PromotionCandidate,
-    Promotable,
-    build_targets,
-    decide_all,
-    entity_dest,
-    load_corpora,
 )
 from science_tool.entities import EntityCommandError, append_entity_source_ref, find_entity
 

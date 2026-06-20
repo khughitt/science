@@ -11,7 +11,6 @@ from science_tool.cli import main
 from science_tool.validate.checks import clear_checks_for_tests
 from science_tool.validate.runner import clear_hooks_for_tests
 
-
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "validate" / "fixtures" / "_combined"
 SNAPSHOTS = ROOT / "tests" / "validate" / "snapshots"

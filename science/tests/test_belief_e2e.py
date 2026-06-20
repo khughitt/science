@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -126,6 +125,7 @@ def _scaffold(root: Path, dispute_fn) -> None:
 def _build_and_load(root: Path):
     """Materialize graph; return (knowledge, provenance, claim_uri)."""
     from rdflib import Dataset, URIRef
+
     from science_tool.graph.materialize import materialize_graph
     from science_tool.graph.store import PROJECT_NS
 

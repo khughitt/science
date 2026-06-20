@@ -8,7 +8,8 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Callable, Literal
 
-from rdflib import Graph, Literal as RDFLiteral, URIRef
+from rdflib import Graph, URIRef
+from rdflib import Literal as RDFLiteral
 from rdflib.namespace import RDF
 from science_model.entities import Entity
 from science_model.packages.schema import DerivationBlock

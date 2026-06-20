@@ -40,9 +40,9 @@ from science_tool.annotation.model import (
     TextualBody,
 )
 from science_tool.annotation.pubtator_seed import (
+    _CONTEXT,
     PersistedPassage,
     load_persisted_passages,
-    _CONTEXT,
 )
 from science_tool.annotation.source_text import SourceTextError
 from science_tool.annotation.sources.base import PlannedAnnotation

@@ -4,7 +4,10 @@ from pathlib import Path
 from typing import TypedDict, cast
 
 import pytest
+import yaml
 from pydantic import ValidationError
+from rdflib import Literal, URIRef
+from rdflib.namespace import PROV, RDF, SKOS
 
 from science_tool.graph.export_types import (
     GraphExportOverlays,
@@ -13,31 +16,26 @@ from science_tool.graph.export_types import (
     build_graph_export_edge_id,
     build_graph_export_node_id,
 )
-from science_tool.graph.store import (
-    INITIAL_GRAPH_TEMPLATE,
-    add_concept,
-    add_edge,
-    add_inquiry,
-    add_inquiry_node,
-    add_hypothesis,
-    add_mechanism,
-    add_proposition,
-    export_graph_payload,
-    _graph_uri,
-    _load_dataset,
-    _save_dataset,
-    set_boundary_role,
-    set_treatment_outcome,
-    SCI_NS,
-)
 from science_tool.graph.io import DCAT_NS
 from science_tool.graph.materialize import _build_dataset_from_sources
 from science_tool.graph.sources import load_project_sources
-from rdflib import URIRef
-from rdflib import Literal
-from rdflib.namespace import PROV, RDF, SKOS
-
-import yaml
+from science_tool.graph.store import (
+    INITIAL_GRAPH_TEMPLATE,
+    SCI_NS,
+    _graph_uri,
+    _load_dataset,
+    _save_dataset,
+    add_concept,
+    add_edge,
+    add_hypothesis,
+    add_inquiry,
+    add_inquiry_node,
+    add_mechanism,
+    add_proposition,
+    export_graph_payload,
+    set_boundary_role,
+    set_treatment_outcome,
+)
 
 
 class CausalEdgeOverlay(TypedDict):

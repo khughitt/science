@@ -2,8 +2,7 @@ from pathlib import Path
 
 import yaml
 
-from science_tool.validate._helpers import dataset_frontmatters
-from science_tool.validate._helpers import raw_frontmatter
+from science_tool.validate._helpers import dataset_frontmatters, raw_frontmatter
 
 
 class _Ctx:

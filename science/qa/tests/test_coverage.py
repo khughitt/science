@@ -1,5 +1,10 @@
 from science_qa.coverage import (
-    STATUS_BLOCKED, STATUS_EMPTY, STATUS_NA, STATUS_RAN, Coverage, CoverageEntry,
+    STATUS_BLOCKED,
+    STATUS_EMPTY,
+    STATUS_NA,
+    STATUS_RAN,
+    Coverage,
+    CoverageEntry,
 )
 
 

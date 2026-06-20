@@ -101,7 +101,7 @@ def test_migrate_preserves_backticked_legacy_tokens() -> None:
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         _write(root / "doc" / "a.md", "Bare [NEEDS CITATION] and `[NEEDS CITATION]` doc-ref.\n")
-        result = runner.invoke(markers_group, ["migrate", "--root", str(root), "--write"])
+        runner.invoke(markers_group, ["migrate", "--root", str(root), "--write"])
         text = (root / "doc" / "a.md").read_text()
         # Bare occurrence rewritten:
         assert "Bare [MISSING_CITATION]" in text

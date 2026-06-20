@@ -6,12 +6,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from science_tool.validate.checks.genesets import check_genesets
-from science_tool.validate.checks.genesets import evaluate_geneset_collections
+from science_tool.validate.checks.genesets import check_genesets, evaluate_geneset_collections
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result
-from science_tool.validate.result import Severity
-
+from science_tool.validate.result import Result, Severity
 
 _GENE_REGISTRY = "dataset:gene-crosswalk-hgnc"
 _VALID_GENE_META = {

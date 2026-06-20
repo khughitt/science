@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from rdflib import Graph, Literal, URIRef
-
 from science_model.propositions import PropositionEntity
+
 from science_tool.dag.workbench import WorkbenchRow, _proposition_for_row
 from science_tool.graph.io import SCI_NS
 from science_tool.graph.materialize import _add_reasoning_metadata

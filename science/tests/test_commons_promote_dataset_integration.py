@@ -4,9 +4,9 @@ Drives discover -> plan -> apply over a synthetic project under tmp_path with
 XDG_CONFIG_HOME sandboxed. Asserts the full pilot surface.
 """
 
-from pathlib import Path
 import shutil
 import subprocess
+from pathlib import Path
 
 import yaml as pyyaml
 

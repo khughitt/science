@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from science_model.entity_schema import EntityValidationError, EntityValidator
 
 FIXTURES = Path(__file__).parent / "fixtures" / "commons"

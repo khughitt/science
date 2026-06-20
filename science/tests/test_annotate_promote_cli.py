@@ -7,7 +7,12 @@ from click.testing import CliRunner
 from science_tool.annotation import io as anno_io
 from science_tool.annotation.cli import annotate_group
 from science_tool.annotation.model import (
-    Annotation, Motivation, SpecificResource, Status, TextQuoteSelector, TextualBody,
+    Annotation,
+    Motivation,
+    SpecificResource,
+    Status,
+    TextQuoteSelector,
+    TextualBody,
 )
 from science_tool.annotation.query import read_sidecar_strict
 

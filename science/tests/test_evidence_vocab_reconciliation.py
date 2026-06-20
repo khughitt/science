@@ -1,4 +1,5 @@
 from science_model.reasoning import EvidenceRole, EvidenceStrength, EvidenceType
+
 from science_tool.graph.belief_weights import (
     DIAGNOSTIC_ROLES,
     EVIDENCE_ROLE_RANK,

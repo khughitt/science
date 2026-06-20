@@ -59,15 +59,6 @@ from science_tool.commons.errors import (
     PromoteValidationError,
     PromoteWriteError,
 )
-from science_tool.commons.overlay import (
-    MergedEntity,
-    OverlayAdapter,
-    OverlayRecord,
-    OverlayValidationReport,
-    merge_entity,
-    resolve_entity,
-    validate_project_overlays,
-)
 from science_tool.commons.inventory import build_commons_inventory
 from science_tool.commons.member import (
     MemberOf,
@@ -79,10 +70,19 @@ from science_tool.commons.member import (
 )
 from science_tool.commons.member_payload import (
     MemberPayloadError,
-    UnsupportedMemberPayloadError,
     UnresolvedMemberPayloadError,
+    UnsupportedMemberPayloadError,
     VirtualMemberPayload,
     resolve_virtual_member_payload,
+)
+from science_tool.commons.overlay import (
+    MergedEntity,
+    OverlayAdapter,
+    OverlayRecord,
+    OverlayValidationReport,
+    merge_entity,
+    resolve_entity,
+    validate_project_overlays,
 )
 from science_tool.commons.promote import (
     ConflictResolution,

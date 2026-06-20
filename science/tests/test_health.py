@@ -429,10 +429,10 @@ class TestBuildHealthReport:
     def test_build_health_report_validate_check_surfaces_runner_findings(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        import science_tool.validate.runner as validate_runner
         from science_tool.graph.health import build_health_report
         from science_tool.validate.result import Result, Severity
         from science_tool.validate.runner import RunResult
-        import science_tool.validate.runner as validate_runner
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
 
@@ -486,8 +486,9 @@ class TestBuildHealthReport:
     def test_build_health_report_validate_check_disables_legacy_sidecar_subprocess(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from science_tool.graph.health import build_health_report
         import subprocess
+
+        from science_tool.graph.health import build_health_report
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
         sidecar = tmp_path / "validate.local.sh"
@@ -737,6 +738,7 @@ Proposed.
 class TestHealthCLI:
     def test_table_output_default(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
+
         from science_tool.cli import main
 
         (tmp_path / "science.yaml").write_text("name: test\n")
@@ -758,6 +760,7 @@ class TestHealthCLI:
 
     def test_json_output(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
+
         from science_tool.cli import main
 
         (tmp_path / "science.yaml").write_text("name: test\n")
@@ -779,6 +782,7 @@ class TestHealthCLI:
 
     def test_json_output_with_timings_includes_meta(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
+
         from science_tool.cli import main
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
@@ -793,6 +797,7 @@ class TestHealthCLI:
 
     def test_table_output_with_timings_writes_stderr(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
+
         from science_tool.cli import main
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
@@ -815,6 +820,7 @@ class TestHealthCLI:
 
     def test_json_output_can_run_only_named_health_checks(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
+
         from science_tool.cli import main
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
@@ -859,12 +865,14 @@ class TestHealthCLI:
     def test_json_output_validate_check_uses_runner_without_subprocess(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        import subprocess
+
         from click.testing import CliRunner
+
+        import science_tool.validate.runner as validate_runner
         from science_tool.cli import main
         from science_tool.validate.result import Result, Severity
         from science_tool.validate.runner import RunResult
-        import science_tool.validate.runner as validate_runner
-        import subprocess
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
         calls: list[Path] = []
@@ -911,6 +919,7 @@ class TestHealthCLI:
 
     def test_json_output_validate_check_reports_context_errors(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
+
         from science_tool.cli import main
 
         runner = CliRunner()
@@ -937,10 +946,11 @@ class TestHealthCLI:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from click.testing import CliRunner
+
+        import science_tool.validate.runner as validate_runner
         from science_tool.cli import main
         from science_tool.validate.result import Result, Severity
         from science_tool.validate.runner import RunResult
-        import science_tool.validate.runner as validate_runner
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
 
@@ -976,6 +986,7 @@ class TestHealthCLI:
 
     def test_json_output_rejects_unknown_health_check(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
+
         from science_tool.cli import main
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
@@ -988,6 +999,7 @@ class TestHealthCLI:
 
     def test_json_output_fast_skips_source_required_health_checks(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
+
         import science_tool.graph.health as health_module
         from science_tool.cli import main
 
@@ -1016,6 +1028,7 @@ class TestHealthCLI:
 
     def test_fast_rejects_explicit_check_selection(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
+
         from science_tool.cli import main
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
@@ -1031,6 +1044,7 @@ class TestHealthCLI:
 
     def test_list_checks_table_output(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from click.testing import CliRunner
+
         import science_tool.graph.health as health_module
         from science_tool.cli import main
 
@@ -1049,6 +1063,7 @@ class TestHealthCLI:
 
     def test_list_checks_json_output(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
+
         from science_tool.cli import main
 
         runner = CliRunner()
@@ -1065,6 +1080,7 @@ class TestHealthCLI:
 
     def test_table_output_includes_layered_claim_sections(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
+
         from science_tool.cli import main
 
         project = _write_layered_claim_project(tmp_path)
@@ -1078,6 +1094,7 @@ class TestHealthCLI:
 
     def test_clean_project_exits_zero(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
+
         from science_tool.cli import main
         from science_tool.project_artifacts import canonical_path
 
@@ -1099,6 +1116,7 @@ class TestHealthCLI:
 
     def test_table_output_includes_identity_policy_section(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
+
         from science_tool.cli import main
 
         project = _write_identity_policy_project(tmp_path)
@@ -1111,6 +1129,7 @@ class TestHealthCLI:
 
     def test_table_output_includes_entity_identity_section(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
+
         from science_tool.cli import main
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
@@ -1129,6 +1148,7 @@ class TestHealthCLI:
 
     def test_json_output_includes_identity_policy_section(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
+
         from science_tool.cli import main
 
         project = _write_identity_policy_project(tmp_path)
@@ -1850,6 +1870,7 @@ def test_health_report_no_prose_health_manifest_no_artifact_is_not_applicable(tm
 
 def test_health_cli_json_includes_prose_epistemics(tmp_path: Path) -> None:
     from click.testing import CliRunner
+
     from science_tool.cli import main
 
     _write_prose_health_artifact(tmp_path)
@@ -1866,6 +1887,7 @@ def test_health_cli_json_includes_prose_epistemics(tmp_path: Path) -> None:
 
 def test_health_list_checks_includes_prose_epistemics(tmp_path: Path) -> None:
     from click.testing import CliRunner
+
     from science_tool.cli import main
 
     result = CliRunner().invoke(
@@ -1880,6 +1902,7 @@ def test_health_list_checks_includes_prose_epistemics(tmp_path: Path) -> None:
 
 def test_health_cli_table_includes_prose_epistemics_findings(tmp_path: Path) -> None:
     from click.testing import CliRunner
+
     from science_tool.cli import main
 
     _write_prose_health_artifact(

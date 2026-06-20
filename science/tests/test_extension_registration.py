@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-
 from science_model.entities import ProjectEntity
+
 from science_tool.graph.entity_registry import (
     EntityKindAlreadyRegisteredError,
     EntityKindNotRegisteredError,

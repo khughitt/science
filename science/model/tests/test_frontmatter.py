@@ -4,10 +4,9 @@ import pytest
 from pydantic import ValidationError
 
 from science_model.entities import EntityType, EvidenceLineEntity, MechanismEntity
-from science_model.identity import EntityScope, ExternalId
 from science_model.frontmatter import parse_entity_file, parse_frontmatter
-from science_model.reasoning import EvidenceStance, EvidenceStrength, IndependenceTag, DisputeScope
-from science_model.reasoning import EvidenceRole
+from science_model.identity import EntityScope, ExternalId
+from science_model.reasoning import DisputeScope, EvidenceRole, EvidenceStance, EvidenceStrength, IndependenceTag
 
 
 def test_parse_frontmatter_basic(tmp_path: Path):

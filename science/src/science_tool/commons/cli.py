@@ -26,18 +26,18 @@ from science_tool.commons.overlay import (
     validate_project_overlays,
 )
 from science_tool.commons.promote import (
-    DiscoveryResult,
     PROMOTE_KIND_DATASET,
     PROMOTE_KIND_PAPER,
     PROMOTE_KIND_THEME,
     PROMOTE_KIND_TOPIC,
+    DiscoveryResult,
     PromoteDecision,
     PromoteKindConfig,
     PromotePlan,
+    _validate_mixin_stacking,
     apply_promote,
     discover_candidates,
     plan_promote,
-    _validate_mixin_stacking,
 )
 from science_tool.commons.query import CommonsQuery
 from science_tool.commons.registry import RegistryBuilder
@@ -479,6 +479,7 @@ def _resolve_mixin_arg(raw: str) -> "ProfileComponent":
     from importlib import resources
 
     from science_model.entity_schema.profile import ProfileComponent
+
     from science_tool.commons.errors import PromoteMixinResolutionError
 
     raw = raw.strip()

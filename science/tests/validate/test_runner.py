@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Generator
 import importlib
-from pathlib import Path
 import sys
+from collections.abc import Generator
+from pathlib import Path
 from types import ModuleType
 
 import pytest

@@ -3,10 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from click.testing import CliRunner
-
 from science_model.identity import ExternalId
-from science_tool.registry.config import ensure_registered
+
 from science_tool.cli import main
+from science_tool.registry.config import ensure_registered
 
 
 def _setup_projects(tmp_path: Path) -> tuple[Path, Path, Path]:

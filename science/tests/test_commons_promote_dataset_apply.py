@@ -8,7 +8,6 @@ from typing import Any, NoReturn
 import pytest
 import yaml
 
-
 FIXTURES = Path(__file__).parent / "fixtures" / "promote"
 
 
@@ -598,9 +597,9 @@ def test_dataset_apply_side_channel_failure_unstages_commons_paths(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from science_tool.commons.errors import PromoteWriteError
     from dataclasses import replace
 
+    from science_tool.commons.errors import PromoteWriteError
     from science_tool.commons.promote import (
         PROMOTE_KIND_DATASET,
         SideChannelContext,

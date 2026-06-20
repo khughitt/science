@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 from science_tool.project_artifacts.registry_schema import (
     Artifact,
     Pin,

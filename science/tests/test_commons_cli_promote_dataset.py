@@ -1,6 +1,6 @@
-from pathlib import Path
 import shutil
 import subprocess
+from pathlib import Path
 
 from click.testing import CliRunner
 
@@ -230,6 +230,7 @@ def test_cli_promote_dataset_apply_writes_artifacts(tmp_path, monkeypatch):
 
 def test_promote_dataset_verify_digests_prints_skip(tmp_path, monkeypatch):
     from promote_source_fixtures import init_commons, sourced_project
+
     from science_tool.commons.cli import commons_group
 
     proj = sourced_project(tmp_path, "${OUTPUT_ROOT}/scrna/x.h5ad")

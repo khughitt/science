@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from rdflib import Dataset, Graph, Literal, RDF, URIRef
+from rdflib import RDF, Dataset, Graph, Literal, URIRef
 
 from science_tool.graph.grounding import (
     DEFAULT_GROUNDING_FLOOR,

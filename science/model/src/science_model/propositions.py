@@ -9,12 +9,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from science_model.entities import EntityType, ProjectEntity
 from science_model.reasoning import (
+    SIGN_MEANINGFUL_PREDICATES,
     ClaimLayer,
     IdentificationStrength,
     MembershipRole,
     Polarity,
     Predicate,
-    SIGN_MEANINGFUL_PREDICATES,
 )
 
 

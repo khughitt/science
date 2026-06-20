@@ -18,7 +18,6 @@ def default_registry() -> Registry:
 
 from science_tool.project_artifacts.paths import canonical_path  # noqa: E402  (avoids import cycle)
 
-
 __all__ = [
     "Registry",
     "RegistryLoadError",

@@ -5,15 +5,15 @@ from pathlib import Path
 import pytest
 
 from science_tool.commons.contigs import (
-    AccessionAssemblyMismatch,
-    AmbiguousContig,
+    _ALIAS_COLUMNS,
+    _CONTIG_COLUMNS,
     ALIASES_RESOURCE,
     CONTIGS_RESOURCE,
+    AccessionAssemblyMismatch,
+    AmbiguousContig,
     ContigError,
     ContigMatch,
-    _ALIAS_COLUMNS,
     _AliasRow,
-    _CONTIG_COLUMNS,
     _ContigRow,
     _parse_alias_rows,
     _parse_contig_rows,
@@ -21,7 +21,6 @@ from science_tool.commons.contigs import (
     _validate_header,
     resolve_contig,
 )
-
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "commons"
 

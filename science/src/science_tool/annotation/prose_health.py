@@ -15,7 +15,6 @@ from science_tool.annotation.prose_decomposition import (
 )
 from science_tool.annotation.prose_grounding import prose_grounding_path
 
-
 DEFAULT_MANIFEST_REL = Path("data") / "prose-health" / "manifest.json"
 DEFAULT_ARTIFACT_REL = Path("data") / "prose-health" / "prose-health.json"
 SUMMARY_KEYS = (

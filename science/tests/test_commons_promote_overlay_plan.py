@@ -164,7 +164,7 @@ def test_mint_unchanged_when_no_existing_tag(tmp_path, monkeypatch) -> None:
 
 
 def test_divergent_keep_existing_records_resolution(tmp_path, monkeypatch) -> None:
-    from science_tool.commons.promote import ExistingCanonicalConflict, KEEP_EXISTING
+    from science_tool.commons.promote import KEEP_EXISTING, ExistingCanonicalConflict
 
     commons = tmp_path / "commons"
     _init_commons(commons)
@@ -221,8 +221,8 @@ def test_prompt_resolve_keep_existing(monkeypatch) -> None:
     import click
 
     from science_tool.commons.promote import (
-        ExistingCanonicalConflict,
         KEEP_EXISTING,
+        ExistingCanonicalConflict,
         prompt_resolve,
     )
 

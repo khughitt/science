@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import pytest
-
 from science_model.entity_schema.profile import ProfileComponent
+
 from science_tool.commons.errors import PromoteMixinStackingError
 from science_tool.commons.promote import _validate_mixin_stacking
 

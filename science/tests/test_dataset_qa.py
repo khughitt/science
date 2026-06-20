@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
-from rdflib import Graph, Literal, RDF, URIRef
+from rdflib import RDF, Graph, Literal, URIRef
 
 from science_tool.graph.dataset_qa import DatasetQaReportError, emit_dataset_qa_layer
 from science_tool.graph.dataset_usage import project_entity_uri

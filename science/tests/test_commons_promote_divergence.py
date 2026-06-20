@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from science_tool.commons.promote import _canonical_fields_equal_or_subset
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -12,11 +12,15 @@ from science_tool.graph.io import (
     CITO_NS,
     DCAT_NS,
     DCTERMS_NS,
-    PROJECT_NS as PROJECT_NS,
-    REVISION_URI as REVISION_URI,
     SCHEMA_NS,
     SCI_NS,
     SCIC_NS,
+)
+from science_tool.graph.io import (
+    PROJECT_NS as PROJECT_NS,
+)
+from science_tool.graph.io import (
+    REVISION_URI as REVISION_URI,
 )
 
 DEFAULT_GRAPH_PATH = Path("knowledge/graph.trig")

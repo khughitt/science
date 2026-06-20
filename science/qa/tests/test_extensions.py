@@ -1,4 +1,5 @@
 import pytest
+
 from science_qa.aspects import CheckSpec
 from science_qa.extensions import ProjectLocalError, load_project_local
 

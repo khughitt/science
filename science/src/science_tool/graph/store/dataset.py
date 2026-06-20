@@ -3,12 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
-from rdflib import Dataset, Graph
+from rdflib import Dataset
 
 from science_tool.graph.io import (
     PROJECT_NS,
-    project_root_from_graph_path as _project_root_from_graph_path,
     save_canonical_graph_dataset,
+)
+from science_tool.graph.io import (
+    project_root_from_graph_path as _project_root_from_graph_path,
 )
 
 from .constants import GRAPH_LAYERS, INITIAL_GRAPH_TEMPLATE

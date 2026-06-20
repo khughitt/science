@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from science_model.entities import (
     DatasetEntity,
     DomainEntity,
@@ -14,11 +13,12 @@ from science_model.entities import (
     ProjectEntity,
     TaskEntity,
 )
+
 from science_tool.graph.entity_registry import (
-    EntityRegistry,
-    EntityKindShadowError,
     EntityKindAlreadyRegisteredError,
     EntityKindNotRegisteredError,
+    EntityKindShadowError,
+    EntityRegistry,
 )
 
 
@@ -158,6 +158,7 @@ def test_registered_class_must_subclass_entity() -> None:
 def test_core_registry_resolves_patch_definition() -> None:
     from science_model.entities import EntityClass
     from science_model.patch_definition import PatchDefinitionEntity
+
     from science_tool.graph.entity_registry import EntityRegistry
 
     registry = EntityRegistry.with_core_types()

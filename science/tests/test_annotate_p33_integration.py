@@ -12,7 +12,6 @@ from science_tool.annotation.cli import annotate_group
 from science_tool.annotation.io import read_sidecar
 from science_tool.annotation.model import Status
 
-
 _FIXTURE = """\
 ---
 title: Integration fixture

@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from click.testing import CliRunner
-
 from science_model.patch_definition import PatchDefinitionEntity
+
 from science_tool.cli import main
 
 
@@ -63,6 +63,7 @@ def test_set_estimand_is_retired():
 
 def test_import_writes_source_and_refuses_overwrite(tmp_path: Path):
     from rdflib import Dataset
+
     from science_tool.graph.inquiry_compile import emit_inquiry_views
 
     ds = Dataset()

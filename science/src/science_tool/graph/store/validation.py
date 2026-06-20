@@ -8,6 +8,8 @@ from rdflib.namespace import PROV, RDF, SKOS
 
 from science_tool.graph.io import (
     build_input_manifest as _build_input_manifest,
+)
+from science_tool.graph.io import (
     read_revision_manifest as _read_revision_manifest,
 )
 from science_tool.graph.patch_membership import validate_patch_membership_convenience

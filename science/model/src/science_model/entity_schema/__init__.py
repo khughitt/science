@@ -9,6 +9,10 @@ section 3 for the design.
 
 from __future__ import annotations
 
+from science_model.entity_schema.loader import (
+    SchemaLoader,
+    SchemaNotFoundError,
+)
 from science_model.entity_schema.merge import (
     MergePolicy,
     read_canonical_body_sections,
@@ -23,10 +27,6 @@ from science_model.entity_schema.profile import (
     ProfileString,
     default_profile_for_kind,
     parse_profile,
-)
-from science_model.entity_schema.loader import (
-    SchemaLoader,
-    SchemaNotFoundError,
 )
 from science_model.entity_schema.validator import (
     EntityValidationError,

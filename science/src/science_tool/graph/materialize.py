@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date as _date
 import hashlib
 import json
+from dataclasses import dataclass
+from datetime import date as _date
 from pathlib import Path
 from typing import Literal as _Literal
 from urllib.parse import quote
@@ -24,24 +24,24 @@ from science_model.relations import relation_allows_kinds
 from science_tool.addressing import is_address, parse_address
 from science_tool.bibliography import is_bibliography_reference
 from science_tool.code.lifecycle import ORPHAN_GATING_EXEMPT_STATUSES
-from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
 from science_tool.commons.datapackage import DatasetResource, read_dataset_resources
+from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
 from science_tool.commons.geneset_resources import (
     dataset_datapackage_path,
     dataset_geneset_frontmatter,
     read_member_rows,
-)
-from science_tool.graph.dataset_usage import (
-    add_usage_record_to_graph,
-    project_entity_uri,
-    usage_records_for_entity,
-    usage_records_for_geneset_rows,
 )
 from science_tool.graph.dataset_independence import (
     derive_dataset_independence_records,
     emit_dataset_independence_records,
 )
 from science_tool.graph.dataset_qa import emit_dataset_qa_layer
+from science_tool.graph.dataset_usage import (
+    add_usage_record_to_graph,
+    project_entity_uri,
+    usage_records_for_entity,
+    usage_records_for_geneset_rows,
+)
 from science_tool.graph.freshness import (
     EntityFreshnessInfo,
     close_bears_on,
@@ -54,28 +54,34 @@ from science_tool.graph.freshness import (
     derive_freshness,
 )
 from science_tool.graph.identity_table import ParticipationMode, build_identity_table
-from science_tool.graph.migrate import AuditRow, audit_project_sources
-from science_tool.graph.reference_resolution import ReferenceResolver
-from science_tool.graph.sources import (
-    ProjectSources,
-    SourceBinding,
-    SourceRelation,
-    _EXTERNAL_PREFIXES,
-    external_prefixes,
-    is_external_reference,
-    is_metadata_reference,
-    load_project_sources,
-)
 from science_tool.graph.inquiry_compile import emit_inquiry_views
-from science_tool.graph.io import CITO_NS, DCAT_NS, DCTERMS_NS, emit_discusses_membership, entity_uri_for_ref, membership_uri_for
+from science_tool.graph.io import (
+    CITO_NS,
+    DCAT_NS,
+    DCTERMS_NS,
+    emit_discusses_membership,
+    entity_uri_for_ref,
+)
+from science_tool.graph.migrate import AuditRow, audit_project_sources
+from science_tool.graph.patch_membership import (
+    derive_patch_memberships,
+    emit_patch_memberships,
+)
+from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.source_snapshots import (
     SourceSnapshotResult,
     compute_source_snapshots,
     emit_source_snapshots,
 )
-from science_tool.graph.patch_membership import (
-    derive_patch_memberships,
-    emit_patch_memberships,
+from science_tool.graph.sources import (
+    _EXTERNAL_PREFIXES,
+    ProjectSources,
+    SourceBinding,
+    SourceRelation,
+    external_prefixes,
+    is_external_reference,
+    is_metadata_reference,
+    load_project_sources,
 )
 from science_tool.graph.store import (
     CURIE_PREFIXES,

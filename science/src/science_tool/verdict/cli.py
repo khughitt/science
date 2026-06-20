@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, is_dataclass
 from enum import Enum
-import json
 from pathlib import Path
 from typing import Any, cast
 
@@ -17,7 +17,6 @@ from science_tool.verdict.parser import parse_file
 from science_tool.verdict.registry import IndexedClaimRegistry, load_registry
 from science_tool.verdict.rollup import Scope, group_by, tally_claim_polarities, tally_polarities, walk_interpretations
 from science_tool.verdict.tokens import Token
-
 
 _MAX_ANCESTOR_REGISTRY_LEVELS = 5
 

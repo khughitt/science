@@ -4,22 +4,20 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
-from rdflib import Literal, URIRef
+from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import RDF
 
-from rdflib import Dataset
-
 from science_tool.cli import main
-from science_tool.graph.io import SCI_NS, CITO_NS, membership_uri_for
+from science_tool.graph.io import CITO_NS, SCI_NS, membership_uri_for
 from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
     INITIAL_GRAPH_TEMPLATE,
     PROJECT_NS,
-    add_hypothesis,
-    add_proposition,
     _graph_uri,
     _load_dataset,
     _slug,
+    add_hypothesis,
+    add_proposition,
 )
 
 

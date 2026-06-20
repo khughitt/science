@@ -8,6 +8,7 @@ Phase 3.1 ships the `verify` subcommand. Later phases (P3.2+) will add
 from __future__ import annotations
 
 import json
+import re as _re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,24 +56,22 @@ from science_tool.annotation.prose_validation import (
 )
 from science_tool.annotation.sources import LINT_SOURCES, SOURCES
 from science_tool.annotation.sources.marker_token import (
-    MarkerTokenSource,
     TOKEN_TYPE_MAP,
+    MarkerTokenSource,
 )
 from science_tool.annotation.text_segmentation import (
     build_quote_selector,
     sentence_range_containing_literal,
     split_sentences_with_offsets,
 )
-from science_tool.markers import scan_text as _scan_markers_text
-import re as _re
 from science_tool.annotation.verify import (
     VerifyReport,
     apply_supersessions,
     verify_path,
 )
 from science_tool.entities import EntityCommandError
+from science_tool.markers import scan_text as _scan_markers_text
 from science_tool.output import OUTPUT_FORMATS
-
 
 _GROUNDING_SUMMARY_KEYS = (
     "grounded_units",
@@ -1058,7 +1057,9 @@ def _replan_for_remove(
     """Build planned rows whose selectors anchor to cleaned_text but whose
     `match_text`/`lifted_from` retain the original bracketed token."""
     from science_tool.annotation.model import (  # noqa: PLC0415
-        Motivation, SpecificResource, TextualBody,
+        Motivation,
+        SpecificResource,
+        TextualBody,
     )
     from science_tool.annotation.sources.base import (  # noqa: PLC0415
         PlannedAnnotation,
@@ -1637,11 +1638,18 @@ def promote_cmd(source_md: Path, root: Path | None, paper_ref: str | None,
                 do_apply: bool, input_path: Path | None, fmt: str) -> None:
     """Promote statement annotations (proposition/question/hypothesis) into entities (mint-or-link)."""
     from science_tool.annotation.io import sidecar_for_markdown
-    from science_tool.annotation.query import read_sidecar_strict
     from science_tool.annotation.promote import (
-        PromotionApplyError, PromotionOverrideError, PromotionReadError, apply_candidates,
-        apply_overrides, build_targets, collect_promotable, decide_all, load_corpora,
+        PromotionApplyError,
+        PromotionOverrideError,
+        PromotionReadError,
+        apply_candidates,
+        apply_overrides,
+        build_targets,
+        collect_promotable,
+        decide_all,
+        load_corpora,
     )
+    from science_tool.annotation.query import read_sidecar_strict
     from science_tool.annotation.text_source_adapter import (
         TextSourceAdapterError,
         resolve_adapter,
@@ -1724,11 +1732,15 @@ def synthesize_cmd(source_md: Path, root: Path | None, do_apply: bool,
                    input_path: Path | None, fmt: str) -> None:
     """Synthesize predicate/polarity/claim_layer on promoted propositions (curator-reviewed)."""
     from science_tool.annotation.io import sidecar_for_markdown
-    from science_tool.annotation.query import entity_relpath_for_sidecar, read_sidecar_strict
     from science_tool.annotation.promote import entity_dest
+    from science_tool.annotation.query import entity_relpath_for_sidecar, read_sidecar_strict
     from science_tool.annotation.synthesize import (
-        SynthesisApplyError, SynthesisReadError, apply_synthesis, build_scaffold,
-        in_scope_propositions, parse_candidates_doc,
+        SynthesisApplyError,
+        SynthesisReadError,
+        apply_synthesis,
+        build_scaffold,
+        in_scope_propositions,
+        parse_candidates_doc,
     )
     from science_tool.entities import _parse_markdown_file
 

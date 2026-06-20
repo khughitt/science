@@ -4,7 +4,7 @@ from science_tool.annotation.internal_prose_adapter import (
     resolve_markdown_locator,
 )
 from science_tool.annotation.prose_decomposition import MarkdownLocator, Quote
-from science_tool.annotation.text_source_adapter import LocatorRegime, TEXT_SOURCE_ADAPTERS
+from science_tool.annotation.text_source_adapter import TEXT_SOURCE_ADAPTERS, LocatorRegime
 
 
 def test_resolve_unique_heading_path_with_candidate_quote(tmp_path):

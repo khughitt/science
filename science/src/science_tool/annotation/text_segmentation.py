@@ -26,7 +26,6 @@ from typing import Optional
 
 from science_tool.annotation.model import TextQuoteSelector
 
-
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
 

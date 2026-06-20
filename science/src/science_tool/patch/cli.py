@@ -4,8 +4,8 @@ from pathlib import Path
 
 import click
 from rdflib import Dataset
-
 from science_model.patch_definition import PatchDefinitionEntity
+
 from science_tool.graph.materialize import PATCH_MEMBERSHIP_POLICY_VERSION, build_dataset_from_sources
 from science_tool.graph.patch_membership import (
     derive_patch_memberships,

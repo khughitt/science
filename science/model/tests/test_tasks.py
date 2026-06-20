@@ -1,5 +1,6 @@
 from datetime import date
-from science_model.tasks import Task, TaskCreate, TaskUpdate, TaskStatus
+
+from science_model.tasks import Task, TaskCreate, TaskStatus, TaskUpdate
 
 
 def test_task_model():

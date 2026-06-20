@@ -147,7 +147,7 @@ def _write_paper(tmp_path: Path, pid: str) -> None:
         entities_yaml.write_text("entities:\n", encoding="utf-8")
     with entities_yaml.open("a", encoding="utf-8") as fh:
         fh.write(f"  - canonical_id: paper:{pid}\n")
-        fh.write(f"    kind: paper\n")
+        fh.write("    kind: paper\n")
         fh.write(f"    title: {pid}\n")
 
 

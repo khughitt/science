@@ -12,6 +12,7 @@ from science_model.aspects import (
     load_project_aspects,
     matches_aspect_filter,
 )
+
 from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.big_picture.resolver import ResolverOutput, resolve_questions
 from science_tool.entity_scan import iter_entity_markdown

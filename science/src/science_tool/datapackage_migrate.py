@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
-
 from science_model.frontmatter import parse_frontmatter
+
 from science_tool.datasets_register import (
     _append_yaml_list_item,
     _read_run,

@@ -6,14 +6,13 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import TypeAlias
 
-from pydantic import BaseModel, Field
 import yaml
-
+from pydantic import BaseModel, Field
 from science_model.frontmatter import parse_frontmatter
 
-from science_tool.tasks import parse_tasks
 from science_tool.curate.agents_md import AgentsMdDigestState, collect_agents_md_state
 from science_tool.entity_scan import iter_entity_markdown
+from science_tool.tasks import parse_tasks
 
 ArtifactClass: TypeAlias = str
 

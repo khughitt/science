@@ -5,10 +5,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
-from rdflib import Graph, Literal, RDF, URIRef
+from rdflib import RDF, Graph, Literal, URIRef
 from rdflib.namespace import PROV
 
-from .belief_policy import BeliefPolicy, DEFAULT_BELIEF_POLICY
+from .belief_policy import DEFAULT_BELIEF_POLICY, BeliefPolicy
 from .belief_weights import CIRCULAR, INDEPENDENT, SHARED_SOURCE, normalize_evidence_type
 from .dataset_independence import DerivedCommitmentMetadata, committed_metadata_by_line
 from .io import CITO_NS, SCI_NS

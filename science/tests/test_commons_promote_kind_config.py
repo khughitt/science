@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from pathlib import Path
 
 
 def test_promote_kind_config_is_frozen_dataclass() -> None:
@@ -14,6 +14,7 @@ def test_promote_kind_config_is_frozen_dataclass() -> None:
 
 def test_promote_kind_config_required_fields() -> None:
     from science_model.entity_schema import default_profile_for_kind
+
     from science_tool.commons.promote import PromoteKindConfig
 
     cfg = PromoteKindConfig(
@@ -65,8 +66,8 @@ def test_dataset_side_channel_apply_writes_data_yaml_and_reports_absent_backup(
     import yaml
 
     from science_tool.commons.promote import (
-        CanonicalArtifact,
         PROMOTE_KIND_DATASET,
+        CanonicalArtifact,
         PromoteDecision,
         PromotePlan,
         SideChannelContext,
@@ -363,8 +364,8 @@ def test_four_kinds_have_distinct_id_prefixes() -> None:
 
 def test_theme_eligibility_cross_project_is_eligible() -> None:
     from science_tool.commons.promote import (
-        EligibilityVerdict,
         PROMOTE_KIND_THEME,
+        EligibilityVerdict,
     )
 
     f = PROMOTE_KIND_THEME.eligibility_filter
@@ -375,8 +376,8 @@ def test_theme_eligibility_cross_project_is_eligible() -> None:
 
 def test_theme_eligibility_project_scope_is_skip_silent() -> None:
     from science_tool.commons.promote import (
-        EligibilityVerdict,
         PROMOTE_KIND_THEME,
+        EligibilityVerdict,
     )
 
     f = PROMOTE_KIND_THEME.eligibility_filter
@@ -387,8 +388,8 @@ def test_theme_eligibility_project_scope_is_skip_silent() -> None:
 
 def test_theme_eligibility_missing_or_malformed_is_fail() -> None:
     from science_tool.commons.promote import (
-        EligibilityVerdict,
         PROMOTE_KIND_THEME,
+        EligibilityVerdict,
     )
 
     f = PROMOTE_KIND_THEME.eligibility_filter

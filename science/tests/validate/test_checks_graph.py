@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import importlib
 import pytest
 
 from science_tool.peers_validate import PeerIssueKind
@@ -476,9 +476,9 @@ def test_check_graph_does_not_emit_identity_collision(tmp_path: Path) -> None:
 
 
 def test_registry_loads_graph_after_notes_at_order_17() -> None:
-    from science_tool.validate.checks import CANONICAL_CHECKS, clear_checks_for_tests
     import science_tool.validate.checks.graph as graph
     import science_tool.validate.checks.notes as notes
+    from science_tool.validate.checks import CANONICAL_CHECKS, clear_checks_for_tests
 
     clear_checks_for_tests()
     try:

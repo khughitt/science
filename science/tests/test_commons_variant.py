@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
+from science_tool.commons import variant as V
 from science_tool.commons.contigs import AccessionAssemblyMismatch, AmbiguousContig, ContigError, ContigMatch
 from science_tool.commons.liftover import LiftedInterval, LiftoverDefect
-from science_tool.commons import variant as V
 from science_tool.commons.refget_proxy import RefgetProxy
 from science_tool.commons.sequence_store import open_store, refget_digest
 from science_tool.commons.vrs import compute_vrs_id

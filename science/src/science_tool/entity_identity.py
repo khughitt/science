@@ -5,6 +5,7 @@ from pathlib import Path
 
 import yaml
 from science_model.contracts.inventory_common import InventoryWarning
+
 from science_tool.graph.sources import ProjectSources
 
 CANONICAL_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*:[A-Za-z0-9][A-Za-z0-9_.-]*$")

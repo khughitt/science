@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 import importlib
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -9,7 +9,6 @@ import pytest
 from science_tool.validate import Severity
 from science_tool.validate.checks import CANONICAL_CHECK_MODULES, clear_checks_for_tests
 from science_tool.validate.runner import run
-
 
 FIXTURES = Path(__file__).parent / "fixtures"
 COMBINED_PROJECT = FIXTURES / "_combined"

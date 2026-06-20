@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from science_model.entities import EntityClass
 from science_model.profiles.core import CORE_PROFILE
+
 from science_tool.graph.entity_registry import EntityRegistry
 
 

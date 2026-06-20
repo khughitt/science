@@ -7,11 +7,10 @@ from pathlib import Path
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV
 
-from science_tool.graph.materialize import materialize_graph
-from science_tool.graph.store import PROJECT_NS, SCI_NS
-
 # CITO_NS is defined in io.py; import directly.
 from science_tool.graph.io import CITO_NS
+from science_tool.graph.materialize import materialize_graph
+from science_tool.graph.store import PROJECT_NS, SCI_NS
 
 
 def _write(tmp_path: Path, rel: str, body: str) -> None:

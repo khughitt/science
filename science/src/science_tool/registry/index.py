@@ -7,8 +7,8 @@ from pathlib import Path
 
 import yaml
 from pydantic import BaseModel, Field
-
 from science_model.identity import EntityScope, ExternalId
+
 from science_tool.registry.config import get_science_config_dir
 
 

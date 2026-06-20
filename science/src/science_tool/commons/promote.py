@@ -27,7 +27,6 @@ from typing import Any, Callable, Literal, Mapping
 
 import click
 import yaml
-
 from science_model.entity_schema import (
     MergePolicy,
     ProfileString,
@@ -38,6 +37,8 @@ from science_model.entity_schema import (
 )
 from science_model.entity_schema.loader import SchemaNotFoundError
 from science_model.entity_schema.profile import ProfileComponent
+
+from science_tool.commons.config import check_override_conflict, resolve_project_by_id
 from science_tool.commons.datapackage import (
     Resolved,
     ResourceSource,
@@ -49,7 +50,6 @@ from science_tool.commons.datapackage import (
     validate_logical_path,
     validate_source,
 )
-from science_tool.commons.config import check_override_conflict, resolve_project_by_id
 from science_tool.commons.errors import (
     CommonsError,
     DataLogicalPathError,

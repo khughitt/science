@@ -22,7 +22,6 @@ from science_tool.annotation.io import (
 )
 from science_tool.annotation.model import Status
 
-
 # ---- Result + error -------------------------------------------------
 
 @dataclass(frozen=True)

@@ -1,9 +1,12 @@
 import pytest
-
 from science_model.reasoning import CompositionRule
+
 from science_tool.graph.belief import BeliefMagnitude, BeliefResult
 from science_tool.graph.bundle_belief import (
-    MemberBelief, MixedBeliefPolicyError, member_rank_key, roll_up_weakest_link,
+    MemberBelief,
+    MixedBeliefPolicyError,
+    member_rank_key,
+    roll_up_weakest_link,
 )
 
 

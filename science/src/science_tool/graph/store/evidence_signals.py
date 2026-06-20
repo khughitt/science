@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import cast
 
-from rdflib import Graph, Literal, URIRef
+from rdflib import URIRef
 from rdflib.namespace import PROV, RDF
 from science_model.reasoning import MeasurementModel, RivalModelPacket
 

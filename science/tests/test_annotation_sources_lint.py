@@ -4,16 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from science_tool.annotation.model import Motivation
 from science_tool.annotation.sources.lint import (
     DETECTOR_VERSIONS,
     LintSource,
     bare_author_year_source,
+    lint_source_name,
     numeric_anchor_source,
     short_form_ids_source,
-    lint_source_name,
 )
 
 FX = Path(__file__).parent / "_fixtures" / "annotation" / "audit"

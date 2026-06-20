@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import logging
+from collections.abc import Callable
 
 from science_tool.datasets._base import DatasetAdapter, DatasetResult, FileInfo
 from science_tool.datasets._ranking import dedupe_results, rank_results

@@ -1,6 +1,6 @@
-import science_model.reasoning as reasoning_module
 from pydantic import BaseModel, ValidationError
 
+import science_model.reasoning as reasoning_module
 from science_model import Entity, EntityType
 from science_model.reasoning import (
     ClaimLayer,

@@ -7,10 +7,6 @@ import click
 from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import PROV, RDF, XSD
 
-from science_tool.graph.io import (
-    build_input_manifest as _build_input_manifest,
-    read_revision_manifest as _read_revision_manifest,
-)
 
 from .constants import PROJECT_NS, REVISION_URI, SCHEMA_NS
 from .dataset import _load_dataset, _save_dataset
@@ -22,7 +18,6 @@ def import_snapshot(graph_path: Path, snapshot_path: Path) -> int:
     if not snapshot_path.exists():
         raise click.ClickException(f"Snapshot file not found: {snapshot_path}")
 
-    from rdflib import Graph
 
     snapshot = Graph()
     snapshot.parse(str(snapshot_path), format="turtle")

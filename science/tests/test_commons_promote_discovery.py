@@ -234,8 +234,8 @@ def test_parse_entity_file_returns_frontmatter_and_body(tmp_path) -> None:
 
 
 def test_parse_entity_file_no_frontmatter_raises(tmp_path) -> None:
-    from science_tool.commons.promote import _parse_entity_file
     from science_tool.commons.errors import PromoteCandidateError
+    from science_tool.commons.promote import _parse_entity_file
 
     p = tmp_path / "broken.md"
     p.write_text("just a body, no frontmatter\n", encoding="utf-8")
@@ -244,8 +244,8 @@ def test_parse_entity_file_no_frontmatter_raises(tmp_path) -> None:
 
 
 def test_parse_entity_file_malformed_yaml_raises(tmp_path) -> None:
-    from science_tool.commons.promote import _parse_entity_file
     from science_tool.commons.errors import PromoteCandidateError
+    from science_tool.commons.promote import _parse_entity_file
 
     p = tmp_path / "broken.md"
     p.write_text("---\nid: : :\n---\nbody\n", encoding="utf-8")
@@ -309,6 +309,7 @@ def test_scan_project_records_failures_without_aborting(tmp_path) -> None:
 
 def test_scan_project_skips_other_kind_with_warning(tmp_path, caplog) -> None:
     import logging
+
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, _scan_project
 
     papers = tmp_path / "doc" / "papers"

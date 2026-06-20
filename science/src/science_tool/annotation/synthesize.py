@@ -18,17 +18,18 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
-
 from science_model.propositions import PropositionEntity
 from science_model.reasoning import (
-    ClaimLayer, Polarity, Predicate, SIGN_MEANINGFUL_PREDICATES,
+    SIGN_MEANINGFUL_PREDICATES,
+    ClaimLayer,
+    Polarity,
+    Predicate,
 )
 
 from science_tool.annotation.model import Annotation, Sidecar, TextualBody
 from science_tool.annotation.promote import entity_dest
 from science_tool.annotation.statement_extract import find_qualified_spans
 from science_tool.entities import _parse_markdown_file, write_entity_file
-
 
 SYNTH_SOURCE_RE = re.compile(r"^llm-synth:[A-Za-z0-9._-]+:proposition-synthesize-v1$")
 SYNTH_FIELDS: tuple[str, ...] = ("subject", "object", "predicate", "polarity", "claim_layer")

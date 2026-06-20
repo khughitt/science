@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from science_model.source_ref import SourceRef
+
 from science_tool.graph.errors import EntityIdentityCollisionError
 
 

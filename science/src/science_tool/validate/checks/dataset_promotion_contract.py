@@ -24,7 +24,6 @@ from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
-
 PROMOTABLE_ENTITY_PROFILE = "science-pkg-entity-1.0"
 
 

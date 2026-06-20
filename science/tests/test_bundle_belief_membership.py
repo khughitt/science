@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rdflib import Dataset, Graph, Literal, RDF, URIRef
-
+from rdflib import RDF, Dataset, Graph, Literal, URIRef
 from science_model.reasoning import MembershipRole
+
 from science_tool.graph.bundle_belief import bundle_members, core_members, membership_role
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
 from science_tool.graph.materialize import _entity_uri, materialize_graph

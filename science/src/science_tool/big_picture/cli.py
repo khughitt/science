@@ -5,12 +5,12 @@ from dataclasses import asdict
 from pathlib import Path
 
 import click
-
 from science_model.aspects import (
     SOFTWARE_ASPECT,
     load_project_aspects,
     matches_aspect_filter,
 )
+
 from science_tool.big_picture.digests import load_cluster_digests, member_to_digest
 from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.big_picture.knowledge_gaps import compute_topic_gaps

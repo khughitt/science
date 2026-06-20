@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import os
-from pathlib import Path
 import textwrap
+from datetime import datetime, timezone
+from pathlib import Path
 
 from science_tool.curate.agents_md import (
     BEGIN_MARKER,

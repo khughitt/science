@@ -231,9 +231,9 @@ fi
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from pathlib import Path
-import re
 from typing import Literal
 
 from science_tool.entity_scan import iter_entity_markdown

@@ -121,6 +121,7 @@ def test_audit_to_json_is_stable(tmp_path: Path) -> None:
 def test_audit_cli_empty_project_exits_zero(tmp_path: Path) -> None:
     """fb-2026-05-01-001: software-profile project with no dag: block and no edges.yaml."""
     from click.testing import CliRunner
+
     from science_tool.dag.cli import audit_cmd
 
     (tmp_path / "science.yaml").write_text("profile: software\n")

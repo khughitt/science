@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from _fixtures.entity_helpers import seed_project, write_markdown_entity
+
 from science_tool.entities import (
     EntityCommandError,
-    append_note_to_body,
     append_entity_note,
+    append_note_to_body,
     build_entity_markdown,
     create_entity,
     derive_slug,

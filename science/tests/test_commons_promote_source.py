@@ -1,10 +1,8 @@
 """Tests for source-aware promote: default trust, --verify-digests, validation."""
 from __future__ import annotations
 
-from pathlib import Path
 
 import pytest
-
 from promote_source_fixtures import init_commons, sourced_project
 
 

@@ -231,8 +231,9 @@ def test_relations_store_prop_to_bundle_emits_core_node(make_project_with_relati
     knowledge = make_project_with_relation(
         subject="proposition:0011-bar", predicate="cito:discusses", object="hypothesis:0001-foo",
     )
-    from science_tool.graph.io import SCI_NS, membership_uri_for
     from rdflib import Literal
+
+    from science_tool.graph.io import SCI_NS, membership_uri_for
     node = membership_uri_for("proposition:0011-bar", "hypothesis:0001-foo")
     assert (node, SCI_NS.membershipRole, Literal("core")) in knowledge
 
@@ -251,7 +252,7 @@ def test_relations_store_paper_to_bundle_has_no_membership_node(make_project_wit
     knowledge = make_project_with_relation(
         subject="paper:legatiuk2021", predicate="cito:discusses", object="hypothesis:0001-foo",
     )
-    from science_tool.graph.io import CITO_NS, SCI_NS, entity_uri_for_ref
+    from science_tool.graph.io import CITO_NS, SCI_NS
     # The plain structural link still materializes...
     assert (entity_uri_for_ref("paper:legatiuk2021"), CITO_NS.discusses,
             entity_uri_for_ref("hypothesis:0001-foo")) in knowledge
@@ -264,9 +265,9 @@ def test_relations_store_role_background_excluded_from_core(make_project_with_re
         subject="proposition:0011-bar", predicate="cito:discusses",
         object="hypothesis:0001-foo", role="background",
     )
-    from science_tool.graph.bundle_belief import core_members, membership_role
-    from science_tool.graph.io import entity_uri_for_ref
     from science_model.reasoning import MembershipRole
+
+    from science_tool.graph.bundle_belief import core_members, membership_role
     prop = entity_uri_for_ref("proposition:0011-bar")
     frame = entity_uri_for_ref("hypothesis:0001-foo")
     assert membership_role(knowledge, prop, frame) == MembershipRole.BACKGROUND

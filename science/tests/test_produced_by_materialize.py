@@ -4,8 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from rdflib import URIRef
-
 from science_model.entities import CodeFileEntity, EntityType
+
 from science_tool.graph.materialize import _build_dataset_from_sources, _eligible_code_files
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.store import PROJECT_NS, SCI_NS

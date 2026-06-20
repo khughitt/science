@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
-
 from science_model.frontmatter import parse_frontmatter
 
 

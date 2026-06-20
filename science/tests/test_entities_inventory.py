@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 from science_model.contracts.inventory_v2 import InventoryPayload
+
 from science_tool import entities_inventory
 from science_tool.entities_inventory import build_inventory
 from science_tool.graph.sources import load_project_sources

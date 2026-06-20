@@ -11,7 +11,6 @@ from dataclasses import dataclass
 
 from science_tool.project_artifacts.registry_schema import HeaderKind, HeaderProtocol
 
-
 _SHEBANG_RE = re.compile(rb"^#![^\n]*\n")
 _HEADER_LINE_RE = re.compile(rb"^#\s*science-managed-(?P<key>artifact|version|source-sha256):\s*(?P<value>\S+)\s*$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")

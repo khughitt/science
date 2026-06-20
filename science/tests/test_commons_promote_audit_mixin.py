@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
-
 from science_model.entity_schema.profile import ProfileComponent
+
 from science_tool.commons.promote import (
     PROMOTE_KIND_DATASET,
     PromoteResult,

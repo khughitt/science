@@ -9,7 +9,6 @@ from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import XSD
 
 from science_tool.graph.io import PROJECT_NS
-
 from science_tool.wander.provenance import created_date_for, source_path_for
 
 PROV = URIRef("http://www.w3.org/ns/prov#wasDerivedFrom")

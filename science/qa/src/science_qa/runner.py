@@ -9,15 +9,20 @@ import pandas as pd
 
 from science_qa.aspects import CHECK_REQUIRED, CheckSpec, Invocation
 from science_qa.compile import CompileError, merge_configs, schema_to_config
-from science_qa.package import load_package
 from science_qa.config import QAConfig
 from science_qa.context import Context, TableContext
 from science_qa.coverage import (
-    STATUS_BLOCKED, STATUS_EMPTY, STATUS_NA, STATUS_RAN, Coverage, CoverageEntry,
+    STATUS_BLOCKED,
+    STATUS_EMPTY,
+    STATUS_NA,
+    STATUS_RAN,
+    Coverage,
+    CoverageEntry,
 )
 from science_qa.dispositions import reconcile_dispositions
-from science_qa.flags import SEVERITY_DISTRIBUTION, SEVERITY_STRUCTURAL, Flag
 from science_qa.extensions import load_project_local
+from science_qa.flags import SEVERITY_DISTRIBUTION, SEVERITY_STRUCTURAL, Flag
+from science_qa.package import load_package
 from science_qa.program import resolve_program
 from science_qa.report import write_reports
 from science_qa.selectors import resolve_columns

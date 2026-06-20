@@ -1,14 +1,13 @@
-from rdflib import Dataset, RDF, URIRef
-from rdflib.namespace import PROV, SKOS
-
+from rdflib import RDF, Dataset, URIRef
+from rdflib.namespace import PROV
 from science_model.patch_definition import PatchDefinitionEntity
+
 from science_tool.graph.inquiry_compile import (
     emit_inquiry_views,
     inquiry_existing_refs,
     inquiry_minted_uris,
 )
 from science_tool.graph.io import PROJECT_NS, SCI_NS
-
 
 _ENTITY_REQUIRED = {
     "project": "",

@@ -17,8 +17,8 @@ from datetime import date
 from pathlib import Path
 
 from science_tool.tasks import (
-    Task,
     _HEADER_RE,
+    Task,
     _parse_task_block,
     render_tasks,
 )

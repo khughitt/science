@@ -7,9 +7,9 @@ from pathlib import Path
 import yaml
 from click.testing import CliRunner
 
+from science_tool.cli import main
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.registry import RegistryBuilder
-from science_tool.cli import main
 from science_tool.graph.migrate import (
     audit_project_graph,
     audit_project_sources,

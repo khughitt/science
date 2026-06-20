@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+
 from science_qa.runner import run_qa
 
 
@@ -155,7 +156,7 @@ def test_datapackage_with_runknobs_overlay(tmp_path):
            "schema": {"fields": [{"name": "v", "type": "number"}]}}
     dp = _dp(tmp_path, res, pd.DataFrame({"v": [-1.0, 1.0]}))
     (tmp_path / "qa.yaml").write_text("qa:\n  polarity: [v]\n")  # no program: -> tabular default
-    result = run_qa_datapackage(dp, "obs", tmp_path, runknobs_path=tmp_path / "qa.yaml")
+    run_qa_datapackage(dp, "obs", tmp_path, runknobs_path=tmp_path / "qa.yaml")
     ids = {f["flag_id"] for f in json.loads((tmp_path / "qa_report.json").read_text())["flags"]}
     assert "numeric-column/polarity/v/-" in ids  # polarity came from the run-knob yaml
 
@@ -185,6 +186,7 @@ def test_datapackage_numeric_missing_sentinel_fires_structural(tmp_path):
 
 def test_run_qa_datapackage_exposes_rows_checked(tmp_path):
     import json as _json
+
     from science_qa.runner import run_qa_datapackage
     res = {"name": "obs", "path": "obs.parquet",
            "schema": {"fields": [{"name": "id", "type": "integer"}]}}
@@ -290,6 +292,7 @@ def test_package_report_dir_none_writes_nothing(tmp_path):
 
 def test_package_report_writes_subdirs_and_rollup(tmp_path):
     import json as _json
+
     from science_qa.runner import run_qa_package
     pd.DataFrame({"id": [1, 2]}).to_parquet(tmp_path / "a.parquet")
     pd.DataFrame({"p": [-1.0, 1.0]}).to_parquet(tmp_path / "b.parquet")
@@ -299,7 +302,7 @@ def test_package_report_writes_subdirs_and_rollup(tmp_path):
         "  - name: b\n    path: b.parquet\n    schema:\n      fields:\n"
         "        - name: p\n          type: number\n          constraints: {minimum: 0}\n")
     out = tmp_path / "out"
-    result = run_qa_package(tmp_path / "datapackage.yaml", report_dir=out)
+    run_qa_package(tmp_path / "datapackage.yaml", report_dir=out)
     # per-resource subdir reports exist
     assert (out / "a" / "qa_report.json").exists()
     assert (out / "b" / "qa_report.json").exists()
@@ -314,6 +317,7 @@ def test_package_report_writes_subdirs_and_rollup(tmp_path):
 def test_package_same_flag_id_two_resources_does_not_merge(tmp_path):
     # collision regression: identical flag_id in two resources -> separate subdir ledgers
     import json as _json
+
     from science_qa.runner import run_qa_package
     pd.DataFrame({"p": [-1.0, 1.0]}).to_parquet(tmp_path / "a.parquet")
     pd.DataFrame({"p": [-2.0, 1.0]}).to_parquet(tmp_path / "b.parquet")

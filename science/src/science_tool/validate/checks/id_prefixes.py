@@ -88,10 +88,10 @@ fi
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 import os
-from pathlib import Path
 import re
+from collections.abc import Iterator
+from pathlib import Path
 
 from science_tool.entities import markdown_entity_kinds
 from science_tool.entity_scan import iter_entity_markdown

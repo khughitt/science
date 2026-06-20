@@ -1,4 +1,5 @@
-from science_tool.graph.belief import EvidenceUnit, is_qualifying_direct_test, is_diagnostic, is_proxy_gated
+from science_tool.graph.belief import EvidenceUnit, is_diagnostic, is_proxy_gated, is_qualifying_direct_test
+
 
 def _u(**kw):
     base = dict(line_uri="x", stance="supports", strength="strong", independence="independent",

@@ -2,10 +2,14 @@ from types import MappingProxyType
 
 import pytest
 
-from science_tool.graph.belief_policy import BeliefPolicy, DEFAULT_BELIEF_POLICY
+from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY, BeliefPolicy
 from science_tool.graph.belief_weights import (
-    CURATION_STEP_PENALTY, DIAGNOSTIC_ROLES, EVIDENCE_ROLE_RANK,
-    EVIDENCE_TYPE_RANK, GATED_PROXY, STRENGTH_RANK,
+    CURATION_STEP_PENALTY,
+    DIAGNOSTIC_ROLES,
+    EVIDENCE_ROLE_RANK,
+    EVIDENCE_TYPE_RANK,
+    GATED_PROXY,
+    STRENGTH_RANK,
 )
 
 
@@ -64,7 +68,9 @@ def test_default_policy_has_qa_failed_dataset_ceiling():
 
 def test_policy_rejects_out_of_vocab_qa_ceiling():
     import dataclasses
+
     import pytest
+
     from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
     with pytest.raises(ValueError):
         dataclasses.replace(DEFAULT_BELIEF_POLICY, qa_failed_dataset_ceiling="bogus")

@@ -13,9 +13,9 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
-
 from rdflib import Dataset
 
+from science_tool.graph.io import entity_uri_for_ref
 from science_tool.graph.materialize import (
     build_dataset_from_sources,
     materialization_audit,
@@ -23,7 +23,6 @@ from science_tool.graph.materialize import (
 )
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.store import PROJECT_NS
-from science_tool.graph.io import entity_uri_for_ref
 
 
 def _write(path: Path, content: str) -> None:

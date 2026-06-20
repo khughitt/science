@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Literal, cast
 
-
 LiftoverStatus = Literal["lifted", "unliftable", "multi_mapping", "strand_ambiguous"]
 ChainStrand = Literal["+", "-"]
 

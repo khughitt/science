@@ -9,15 +9,16 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from dataclasses import dataclass, field as dataclass_field
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from pathlib import Path
 from time import perf_counter
-from typing import Callable, NotRequired, TypeVar, TypedDict, cast
+from typing import Callable, NotRequired, TypedDict, TypeVar, cast
 
 import yaml as _yaml
-
 from science_model.contracts.inventory_common import InventoryWarning
 from science_model.entities import Entity
+
 from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.entity_identity import collect_identity_warnings
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError
@@ -34,7 +35,6 @@ from science_tool.graph.sources import (
     is_metadata_reference,
     load_project_sources,
 )
-
 
 DATASET_ANOMALY_CODES: tuple[str, ...] = (
     "dataset_consumed_but_unverified",
@@ -410,8 +410,8 @@ def _collect_entity_identity(context: HealthContext) -> list[EntityIdentityFindi
 
 
 def collect_validation_findings(project_root: Path) -> list[ValidationFinding]:
-    from science_tool.validate.context import ValidateContextError
     from science_tool.validate import runner as validate_runner
+    from science_tool.validate.context import ValidateContextError
     from science_tool.validate.result import Severity
 
     try:

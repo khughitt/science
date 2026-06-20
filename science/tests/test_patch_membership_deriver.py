@@ -3,14 +3,13 @@ from __future__ import annotations
 import pytest
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import RDF, XSD
-
 from science_model.patch_definition import PatchDefinitionEntity
+
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, entity_uri_for_ref
 from science_tool.graph.patch_membership import (
     PatchMembershipError,
     derive_patch_memberships,
 )
-
 
 _ENTITY_REQUIRED = {
     "project": "",
@@ -189,8 +188,9 @@ def test_deriver_excludes_non_entity_provenance_nodes() -> None:
 
 
 def test_inquiry_existing_refs_and_minted_nodes_become_members():
-    from rdflib import Dataset, RDF, URIRef
+    from rdflib import RDF, Dataset, URIRef
     from science_model.patch_definition import PatchDefinitionEntity
+
     from science_tool.graph.inquiry_compile import emit_inquiry_views
     from science_tool.graph.io import PROJECT_NS, SCI_NS
     from science_tool.graph.patch_membership import derive_patch_memberships
@@ -225,8 +225,9 @@ def test_inquiry_existing_refs_and_minted_nodes_become_members():
 
 def test_unresolved_inquiry_boundary_ref_is_hard_error():
     import pytest
-    from rdflib import Dataset, RDF, URIRef
+    from rdflib import RDF, Dataset, URIRef
     from science_model.patch_definition import PatchDefinitionEntity
+
     from science_tool.graph.inquiry_compile import emit_inquiry_views
     from science_tool.graph.io import PROJECT_NS, SCI_NS
     from science_tool.graph.patch_membership import PatchMembershipError, derive_patch_memberships

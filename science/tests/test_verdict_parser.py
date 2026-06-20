@@ -6,7 +6,6 @@ from science_tool.verdict.parser import NoVerdictBlockError, parse_file
 from science_tool.verdict.registry import load_registry
 from science_tool.verdict.tokens import Token
 
-
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "verdict"
 REGISTRY_PATH = FIXTURE_DIR / "claim-registry.yaml"
 

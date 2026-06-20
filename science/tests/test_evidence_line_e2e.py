@@ -29,7 +29,6 @@ from science_tool.validate.checks.evidence_lines import (
     check_independence_ungrouped_collapse,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

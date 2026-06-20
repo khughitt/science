@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 import importlib
+from collections.abc import Iterable
 from pathlib import Path
 
 import pytest
@@ -169,8 +169,8 @@ def test_id_prefixes_scans_entities_dir(tmp_path) -> None:
     d = tmp_path / "entities" / "questions"
     d.mkdir(parents=True)
     (d / "0001-x.md").write_text('---\ntype: question\nid: "hypothesis:0001-x"\n---\n', encoding="utf-8")
-    from science_tool.validate.context import ValidateContext
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
+    from science_tool.validate.context import ValidateContext
     ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
     assert any(r.severity is Severity.WARN for r in check_id_prefixes(ctx))
 

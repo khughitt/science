@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from science_model.profiles.core import CORE_PROFILE
 from science_model.profiles.schema import KindCategory
+
 from science_tool.graph.entity_registry import EntityRegistry
 from science_tool.graph.sources import known_kinds
 

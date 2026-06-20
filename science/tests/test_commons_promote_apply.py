@@ -361,8 +361,8 @@ def test_audit_log_records_canonical_paths_per_decision(tmp_path, monkeypatch) -
 def test_apply_promote_rejects_absolute_canonical_artifact_path(tmp_path) -> None:
     from science_tool.commons.errors import PromoteInputError
     from science_tool.commons.promote import (
-        CanonicalArtifact,
         PROMOTE_KIND_PAPER,
+        CanonicalArtifact,
         PromoteDecision,
         PromotePlan,
         apply_promote,
@@ -412,8 +412,8 @@ def test_apply_promote_rejects_absolute_canonical_artifact_path(tmp_path) -> Non
 def test_apply_promote_rejects_parent_traversal_canonical_artifact_path(tmp_path) -> None:
     from science_tool.commons.errors import PromoteInputError
     from science_tool.commons.promote import (
-        CanonicalArtifact,
         PROMOTE_KIND_PAPER,
+        CanonicalArtifact,
         PromoteDecision,
         PromotePlan,
         apply_promote,
@@ -464,8 +464,8 @@ def test_apply_promote_failure_audit_omits_symlink_escape_canonical_artifact_pat
 
     from science_tool.commons.errors import PromoteInputError
     from science_tool.commons.promote import (
-        CanonicalArtifact,
         PROMOTE_KIND_PAPER,
+        CanonicalArtifact,
         PromoteDecision,
         PromotePlan,
         apply_promote,
@@ -517,8 +517,8 @@ def test_apply_promote_failure_audit_omits_symlink_escape_canonical_artifact_pat
 
 def test_apply_promote_writes_and_stages_multiple_canonical_artifacts(tmp_path) -> None:
     from science_tool.commons.promote import (
-        CanonicalArtifact,
         PROMOTE_KIND_PAPER,
+        CanonicalArtifact,
         PromoteDecision,
         PromotePlan,
         apply_promote,
@@ -867,8 +867,8 @@ def test_apply_promote_tag_preflight_rejects_existing_tag_for_mint(tmp_path) -> 
     inconsistency."""
     from science_tool.commons.errors import PromoteWriteError
     from science_tool.commons.promote import (
-        CanonicalArtifact,
         PROMOTE_KIND_PAPER,
+        CanonicalArtifact,
         PromoteDecision,
         PromotePlan,
         apply_promote,
@@ -1498,8 +1498,8 @@ def test_apply_promote_empty_plan_no_op(tmp_path, monkeypatch) -> None:
     """A plan with zero decisions returns ok cleanly — no commit, no tag, no
     audit log, no `git add -- <empty>` error."""
     from science_tool.commons.promote import (
-        DiscoveryResult,
         PROMOTE_KIND_PAPER,
+        DiscoveryResult,
         apply_promote,
         plan_promote,
     )
@@ -1541,6 +1541,7 @@ def test_apply_promote_step7_audit_failure_does_not_crash_after_landed_writes(
 ) -> None:
     """If step-7 audit write/commit fails AFTER landed commit+tags+rewrites,
     apply_promote raises typed PromoteWriteError(stage='audit')."""
+    from science_tool.commons import promote as promote_module
     from science_tool.commons.errors import PromoteWriteError
     from science_tool.commons.promote import (
         PROMOTE_KIND_PAPER,
@@ -1548,7 +1549,6 @@ def test_apply_promote_step7_audit_failure_does_not_crash_after_landed_writes(
         discover_candidates,
         plan_promote,
     )
-    from science_tool.commons import promote as promote_module
 
     _init_commons(tmp_path / "commons")
     proj = _build_project(
@@ -2088,8 +2088,8 @@ def test_apply_tags_use_kind_kind_prefix(tmp_path, monkeypatch) -> None:
     indirectly by inspecting the planned tag prefix logic via a tiny stub
     PromotePlan with a single decision."""
     from science_tool.commons.promote import (
-        CanonicalArtifact,
         PROMOTE_KIND_TOPIC,
+        CanonicalArtifact,
         PromoteDecision,
     )
 

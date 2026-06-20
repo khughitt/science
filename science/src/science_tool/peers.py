@@ -79,8 +79,8 @@ class LocalPeerResolver:
     """Default resolver: reads `peers:` from a single project's science.yaml."""
 
     def __init__(self, project_root: Path) -> None:
-        from science_tool.project_config import load_project_config  # noqa: PLC0415
         from science_tool.peers_validate import format_peer_issues, peer_error_issues  # noqa: PLC0415
+        from science_tool.project_config import load_project_config  # noqa: PLC0415
 
         self._project_root = project_root
         self._in_flight: set[str] = set()

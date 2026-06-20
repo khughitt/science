@@ -1506,6 +1506,7 @@ def test_unsluggable_title_and_stem_do_not_abort_planning(tmp_path: Path) -> Non
 
 def _decl(cid, mode, scope="demo", *, adapter="markdown", deprecated=False):
     from science_model.source_ref import SourceRef
+
     from science_tool.graph.identity_table import IdentityDeclaration
 
     return IdentityDeclaration(

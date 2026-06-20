@@ -210,6 +210,7 @@ def test_refs_config_default_source_is_frontmatter(tmp_path):
 def test_refs_config_rejects_unknown_source(tmp_path):
     """`refs.entity_index_source` rejects unknown values via Pydantic validation."""
     from pydantic import ValidationError
+
     from science_tool.project_config import load_project_config
 
     (tmp_path / "science.yaml").write_text(

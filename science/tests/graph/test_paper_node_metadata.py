@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rdflib import Literal
-from rdflib import URIRef
+from rdflib import Literal, URIRef
 from rdflib.namespace import PROV, RDF, SKOS
 
 from science_tool.graph.io import DCAT_NS, DCTERMS_NS

@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from science_model.entities import Entity, EntityType
 from science_model.source_ref import SourceRef
+
 from science_tool.graph.errors import EntityIdentityCollisionError
 from science_tool.graph.identity_table import (
     IdentityDeclaration,

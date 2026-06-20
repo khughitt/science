@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from science_tool.annotation.model import Motivation
 from science_tool.annotation.sources.marker_token import (
-    MarkerTokenSource,
     TOKEN_SOURCE_NAME,
     TOKEN_TYPE_MAP,
+    MarkerTokenSource,
 )
 
 FIXTURE = (

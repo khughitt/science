@@ -436,8 +436,9 @@ def workbench_cmd(ctx: click.Context, check_path: Path | None) -> None:
         ctx.exit(0)
         return
 
-    from science_tool.dag.workbench import WorkbenchFile, compile_workbench, serialize_canonical
     import yaml
+
+    from science_tool.dag.workbench import WorkbenchFile, compile_workbench, serialize_canonical
 
     committed_text = check_path.read_text(encoding="utf-8")
 

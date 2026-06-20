@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
-from rdflib import Dataset, Literal, RDF, URIRef
+from rdflib import RDF, Dataset, Literal, URIRef
 
 from science_tool.annotation.prose_decomposition import (
     ProseDecompositionStore,
@@ -19,7 +19,6 @@ from science_tool.annotation.prose_grounding import (
 from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
 from science_tool.graph.store import _graph_uri
-
 
 TARGET = PROJECT_NS["proposition/basalt-cooling"]
 

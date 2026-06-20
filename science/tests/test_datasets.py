@@ -5,11 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 
 from science_tool.datasets._base import DatasetResult, FileInfo
-import httpx
-
 from science_tool.datasets.arrayexpress import ArrayExpressAdapter
 from science_tool.datasets.dryad import DryadAdapter
 from science_tool.datasets.figshare import FigshareAdapter

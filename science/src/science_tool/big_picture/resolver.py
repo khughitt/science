@@ -22,6 +22,7 @@ from science_model.aspects import (
     resolve_entity_aspects,
     validate_entity_aspects,
 )
+
 from science_tool.big_picture.digests import load_cluster_digests
 from science_tool.big_picture.frontmatter import as_list, read_frontmatter
 from science_tool.big_picture.layout import entity_dir

@@ -14,8 +14,10 @@ def test_locator_regime_values():
 
 # append to science/tests/test_text_source_adapter.py
 from pathlib import Path
+
 import pytest
-from science_tool.annotation.text_source_adapter import TextSourceAdapter, LocatorRegime
+
+from science_tool.annotation.text_source_adapter import TextSourceAdapter
 
 
 class _DummyAdapter(TextSourceAdapter):

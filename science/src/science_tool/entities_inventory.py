@@ -11,9 +11,9 @@ from science_model.contracts.inventory_v2 import (
     InventoryAlias,
     InventoryEntity,
     InventoryProjectMetadata,
-    InventoryWarning,
     InventoryReference,
     InventorySourceLocation,
+    InventoryWarning,
 )
 from science_model.entity_schema import MergePolicy, read_overlay_merge_policy
 

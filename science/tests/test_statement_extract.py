@@ -5,8 +5,8 @@ from pathlib import Path
 from science_tool.annotation.io import read_sidecar, write_sidecar
 from science_tool.annotation.ledger import ledger_set_source_text_hash
 from science_tool.annotation.model import (
-    AuditLedger,
     HASH_REQUIRED_SOURCE_PREFIXES,
+    AuditLedger,
     Sidecar,
 )
 
@@ -59,8 +59,8 @@ def test_legacy_ledger_without_predicate_reads_none(tmp_path: Path):
 
 from science_tool.annotation.pubtator_seed import PersistedPassage
 from science_tool.annotation.statement_extract import (
-    CANONICAL_SECTIONS,
     _SECTION_NORMALIZE,
+    CANONICAL_SECTIONS,
     _containing_passage,
     normalize_section,
 )
@@ -112,10 +112,10 @@ def test_containing_passage_finds_enclosing():
 import pytest
 
 from science_tool.annotation.statement_extract import (
-    CandidateError,
-    FigurativeCandidate,
     MAX_CANDIDATES,
     MAX_FIELD_CHARS,
+    CandidateError,
+    FigurativeCandidate,
     StatementCandidate,
     parse_candidates,
 )
@@ -372,7 +372,6 @@ from science_tool.annotation.model import (
     Annotation,
     IriBody,
     Motivation,
-    Sidecar,
     SpecificResource,
     Status,
     TextQuoteSelector,

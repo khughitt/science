@@ -11,7 +11,6 @@ from science_tool.validate.checks.reference_graphs import check_reference_graphs
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
-
 _MANIFEST = (
     "name: demo\ncreated: 2026-01-01\nlast_modified: 2026-01-02\nstatus: active\n"
     "summary: demo\nprofile: research\nlayout_version: 1\n"

@@ -11,7 +11,6 @@ from typing import Any
 
 import httpx
 
-
 OPENALEX_BASE_URL = "https://api.openalex.org"
 OPENALEX_MAX_PER_PAGE = 100
 RESOLVED_STATUSES = {"ok", "empty"}

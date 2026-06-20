@@ -17,7 +17,11 @@ from science_tool.addressing import classify_entity_ref
 from science_tool.bibliography import bibliography_key_from_reference, load_bib_keys
 from science_tool.markdown_utils import (
     frontmatter_line_numbers as _frontmatter_line_numbers,
+)
+from science_tool.markdown_utils import (
     is_fence_line as _is_fence_line,
+)
+from science_tool.markdown_utils import (
     strip_inline_code as _strip_inline_code,
 )
 from science_tool.project_config import DEFAULT_DOI_PMID_EXEMPT_DIRS, load_project_config

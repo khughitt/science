@@ -34,15 +34,19 @@ from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsError
 from science_tool.commons.gene_crosswalk import (
     GENE_CROSSWALK_ID,
-    MEMBER_KEY_COLUMN as _GENE_KEY_COLUMN,
     SUPPORTED_GENE_NAMESPACES,
+)
+from science_tool.commons.gene_crosswalk import (
+    MEMBER_KEY_COLUMN as _GENE_KEY_COLUMN,
+)
+from science_tool.commons.member import ResolutionState, evaluate_key_resolution
+from science_tool.commons.protein_crosswalk import (
+    MEMBER_KEY_COLUMN as _PROTEIN_KEY_COLUMN,
 )
 from science_tool.commons.protein_crosswalk import (
     PROTEIN_CROSSWALK_ID,
-    MEMBER_KEY_COLUMN as _PROTEIN_KEY_COLUMN,
     SUPPORTED_PROTEIN_NAMESPACES,
 )
-from science_tool.commons.member import ResolutionState, evaluate_key_resolution
 from science_tool.validate._helpers import dataset_frontmatters, raw_frontmatter
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext

@@ -1,9 +1,14 @@
 from datetime import datetime, timezone
 
 from science_tool.annotation.model import (
-    Annotation, Motivation, SpecificResource, Status, TextQuoteSelector, TextualBody,
+    Annotation,
+    Motivation,
+    Sidecar,
+    SpecificResource,
+    Status,
+    TextQuoteSelector,
+    TextualBody,
 )
-from science_tool.annotation.model import Sidecar
 from science_tool.annotation.synthesize import in_scope_propositions, statement_context
 
 
@@ -101,8 +106,11 @@ def test_build_scaffold_shape():
 
 
 import pytest
+
 from science_tool.annotation.synthesize import (
-    SynthesisCandidate, SynthesisReadError, parse_candidates_doc,
+    SynthesisCandidate,
+    SynthesisReadError,
+    parse_candidates_doc,
 )
 
 # in-scope set + per-proposition supporting-statement refs the parser validates against
@@ -191,7 +199,10 @@ def test_override_rejects_reasoning_source():
 
 
 from science_tool.annotation.synthesize import (
-    SynthesisApplyError, SynthesisOverrideError, WritePlan, plan_writes, validate_candidate,
+    SynthesisApplyError,
+    SynthesisOverrideError,
+    plan_writes,
+    validate_candidate,
 )
 
 
@@ -260,9 +271,11 @@ def test_validate_ok_returns_plan():
 
 
 from pathlib import Path
-from science_tool.annotation.synthesize import SynthReport, apply_synthesis
-from science_tool.entities import _parse_markdown_file, write_entity_file
+
 from science_model.propositions import PropositionEntity
+
+from science_tool.annotation.synthesize import apply_synthesis
+from science_tool.entities import _parse_markdown_file, write_entity_file
 
 
 def _project(tmp_path: Path) -> Path:
@@ -374,11 +387,13 @@ def test_apply_is_atomic_on_interlock_error(tmp_path):
 
 
 import json as _json
+
 from click.testing import CliRunner
+
 from science_tool.annotation import io as anno_io
 from science_tool.annotation.cli import annotate_group
 from science_tool.annotation.model import (
-    Annotation, Motivation, SpecificResource, Status, TextQuoteSelector, TextualBody, Sidecar,
+    Status,
 )
 
 

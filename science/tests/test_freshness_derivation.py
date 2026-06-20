@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import date
 
 from rdflib import Dataset, URIRef
-
 from science_model.entities import EntityClass
+
 from science_tool.graph.freshness import EntityFreshnessInfo, derive_freshness
 from science_tool.graph.store import PROJECT_NS, SCI_NS
 
@@ -282,8 +282,10 @@ def test_derive_freshness_no_last_reviewed_triple_when_unset() -> None:
 def test_horizon_boundary_inclusive_at_threshold() -> None:
     """today - baseline == horizon → still fresh (uses strict `>`)."""
     from datetime import date, timedelta
+
     from rdflib import Dataset, Literal, URIRef
     from science_model.entities import EntityClass
+
     from science_tool.graph.freshness import derive_freshness
     from science_tool.graph.store import PROJECT_NS, SCI_NS
 
@@ -309,8 +311,10 @@ def test_horizon_boundary_inclusive_at_threshold() -> None:
 def test_horizon_one_day_past_threshold_is_stale() -> None:
     """today - baseline == horizon + 1 → stale (crosses the strict `>` boundary)."""
     from datetime import date, timedelta
+
     from rdflib import Dataset, Literal, URIRef
     from science_model.entities import EntityClass
+
     from science_tool.graph.freshness import derive_freshness
     from science_tool.graph.store import PROJECT_NS, SCI_NS
 
@@ -336,8 +340,10 @@ def test_horizon_one_day_past_threshold_is_stale() -> None:
 def test_horizon_one_day_minimum() -> None:
     """horizon=1: 1 day after baseline → fresh; 2 days after → stale."""
     from datetime import date, timedelta
+
     from rdflib import Dataset, Literal, URIRef
     from science_model.entities import EntityClass
+
     from science_tool.graph.freshness import derive_freshness
     from science_tool.graph.store import PROJECT_NS, SCI_NS
 

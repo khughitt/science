@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import hashlib
 
-from rdflib import Dataset, Graph, Literal as RDFLiteral, URIRef
+from rdflib import Dataset, Graph, URIRef
+from rdflib import Literal as RDFLiteral
 from rdflib.namespace import PROV, RDF, SKOS
-
 from science_model.patch_definition import InquiryProfile, PatchDefinitionEntity
+
 from science_tool.graph.io import DCTERMS_NS, PROJECT_NS, SCI_NS, SCIC_NS, entity_uri_for_ref
 
 _PROFILE_TO_INQUIRY_TYPE = {"investigation": "general", "causal": "causal"}

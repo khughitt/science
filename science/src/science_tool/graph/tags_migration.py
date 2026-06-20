@@ -24,7 +24,6 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-
 _TAGS_LINE_RE = re.compile(r"^(?P<indent>[ \t]*)tags:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE)
 _RELATED_LINE_RE = re.compile(r"^(?P<indent>[ \t]*)related:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE)
 # Block-form `related:` — key on its own line followed by one or more `- "X"` item lines.

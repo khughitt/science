@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from science_model.entity_schema.profile import ProfileComponent
 from science_model.entity_schema.loader import SchemaLoader
+from science_model.entity_schema.profile import ProfileComponent
 from science_model.entity_schema.validator import EntityValidationError, EntityValidator
 
 

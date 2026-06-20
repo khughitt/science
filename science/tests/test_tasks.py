@@ -1366,6 +1366,7 @@ def test_add_task_without_aspects_writes_empty_aspects_line(tmp_path) -> None:
 
 
 from _fixtures.entity_helpers import seed_project, write_markdown_entity  # noqa: E402
+
 from science_tool.tasks_blockers import BlockerValidationError  # noqa: E402
 
 

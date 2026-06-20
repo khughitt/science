@@ -14,7 +14,6 @@ from science_tool.validate import Check, Result, Severity, ValidateContext
 from science_tool.validate.checks import clear_checks_for_tests
 from science_tool.validate.runner import clear_hooks_for_tests
 
-
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 BANNER = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 

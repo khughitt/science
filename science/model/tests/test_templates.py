@@ -10,7 +10,7 @@ import yaml
 from science_model.entities import EvidenceLineEntity
 from science_model.frontmatter import parse_entity_file
 from science_model.reasoning import EvidenceStance
-from science_model.templates import EntityTemplateError, MIGRATED_KINDS, Renderer
+from science_model.templates import MIGRATED_KINDS, EntityTemplateError, Renderer
 
 
 def _fields(kind: str = "discussion") -> dict[str, object]:

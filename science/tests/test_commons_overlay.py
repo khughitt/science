@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-
 _OVERLAYS = Path(__file__).parent / "fixtures" / "overlays"
 
 

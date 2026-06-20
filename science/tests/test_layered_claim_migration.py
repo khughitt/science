@@ -6,10 +6,9 @@ from pathlib import Path
 from typing import Mapping, Sequence, cast
 
 import pytest
+from pydantic import ValidationError
 from rdflib import Dataset, Literal, Namespace
 from rdflib.namespace import PROV, RDF
-from pydantic import ValidationError
-
 from science_model.entities import ProjectEntity
 from science_model.reasoning import (
     ClaimLayer,
@@ -20,13 +19,14 @@ from science_model.reasoning import (
     RivalModelPacket,
     SupportScope,
 )
-from science_tool.graph.migrate import build_layered_claim_migration_report
+
 from science_tool.graph.materialize import materialize_graph
+from science_tool.graph.migrate import build_layered_claim_migration_report
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.store import (
-    EvidenceClaimBundle,
     INITIAL_GRAPH_TEMPLATE,
     SCI_NS,
+    EvidenceClaimBundle,
     add_concept,
     add_edge,
     add_proposition,

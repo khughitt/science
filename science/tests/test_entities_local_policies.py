@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from science_model.profiles.schema import EntityKind
+
 from science_tool.entities import (
     EntityCommandError,
     EntityPathPolicy,

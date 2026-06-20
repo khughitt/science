@@ -7,10 +7,16 @@ from typing import Any, cast
 
 import click
 from rich.text import Text
+from science_model.reasoning import MembershipRole
 
-from science_tool.patch.cli import patch_group
+from science_tool.annotation.cli import annotate_group
+from science_tool.aspects.cli import aspects_group
+from science_tool.big_picture.cli import big_picture_group
 from science_tool.causal.export_chirho import export_chirho_script
 from science_tool.causal.export_pgmpy import export_pgmpy_script
+from science_tool.commons import commons_group
+from science_tool.curate.cli import curate_group
+from science_tool.dag.cli import dag_group
 from science_tool.data_worktree import hydrate_worktree_data
 from science_tool.datasets import available_adapters, get_adapter, search_all
 from science_tool.datasets import infer_schema as _infer_schema
@@ -28,18 +34,18 @@ from science_tool.entities import (
     list_entities,
 )
 from science_tool.entities_inventory import build_inventory
-from science_tool.entity_migrations import audit_identifiers, migrate_identifiers
 from science_tool.entity_kinds import register_local_kind
+from science_tool.entity_migrations import audit_identifiers, migrate_identifiers
 from science_tool.graph import belief_snapshot
-from science_tool.graph.materialize import materialization_audit, materialize_graph
 from science_tool.graph.cross_impact import query_cross_impact
+from science_tool.graph.materialize import materialization_audit, materialize_graph
 from science_tool.graph.migrate import (
     audit_project_graph,
     build_layered_claim_migration_report,
     preview_project_id_rewrites,
     rewrite_project_ids_in_sources,
-    write_migration_report,
     write_local_sources,
+    write_migration_report,
 )
 from science_tool.graph.paper_dataset_migration import plan_paper_dataset_migration
 from science_tool.graph.store import (
@@ -87,20 +93,17 @@ from science_tool.graph.store import (
     validate_graph,
     validate_inquiry,
 )
-from science_model.reasoning import MembershipRole
-from science_tool.aspects.cli import aspects_group
-from science_tool.annotation.cli import annotate_group
-from science_tool.big_picture.cli import big_picture_group
-from science_tool.curate.cli import curate_group
-from science_tool.dag.cli import dag_group
-from science_tool.output import OUTPUT_FORMATS, emit_query_rows
-from science_tool.project_artifacts.cli import artifacts_group as _artifacts_group
-from science_tool.peers_cli import peers_group
-from science_tool.prose import scan_prose
 from science_tool.markers_cli import markers_group
+from science_tool.output import OUTPUT_FORMATS, emit_query_rows
+from science_tool.patch.cli import patch_group
+from science_tool.peers_cli import peers_group
+from science_tool.project_artifacts.cli import artifacts_group as _artifacts_group
+from science_tool.prose import scan_prose
 from science_tool.prose_lint_cli import prose_group
+from science_tool.qa_audit.cli import qa_audit_command
 from science_tool.refs_cli import refs_group
 from science_tool.research_package.cli import research_package_group
+from science_tool.skills_lint import skills_group
 from science_tool.styles import (
     COLOR_POLICY_CHOICES,
     entity_table_renderers,
@@ -114,10 +117,7 @@ from science_tool.styles import (
 )
 from science_tool.validate.cli import validate_cmd
 from science_tool.verdict.cli import verdict_group
-from science_tool.skills_lint import skills_group
-from science_tool.commons import commons_group
 from science_tool.wander.cli import wander_command
-from science_tool.qa_audit.cli import qa_audit_command
 
 
 @click.group()
@@ -2925,6 +2925,7 @@ def inquiry_import(slug, project_root, graph_path, force):
     """Bridge: write a patch-definition source from an existing graph inquiry."""
     import yaml
     from science_model.patch_definition import PatchDefinitionEntity
+
     from science_tool.graph.store.inquiry import get_inquiry
 
     dest = Path(project_root) / "entities" / "patches" / f"{slug}.md"
@@ -3580,6 +3581,7 @@ def tasks_add(
         load_project_aspects,
         validate_entity_aspects,
     )
+
     from science_tool.tasks import add_task
     from science_tool.tasks_blockers import BlockerValidationError
 
@@ -3715,9 +3717,9 @@ def tasks_retire(task_id: str, reason: str | None) -> None:
 @click.option("--force", is_flag=True, help="Record blocker even if entity not yet known")
 def tasks_block(task_id: str, blocked_by: tuple[str, ...], force: bool) -> None:
     """Block a task by one or more typed entity references."""
+    from science_tool.entities import load_local_entity_ids
     from science_tool.tasks import block_task
     from science_tool.tasks_blockers import BlockerValidationError
-    from science_tool.entities import load_local_entity_ids
 
     try:
         task = block_task(
@@ -3990,6 +3992,7 @@ def tasks_edit(
         load_project_aspects,
         validate_entity_aspects,
     )
+
     from science_tool.tasks import edit_task
     from science_tool.tasks_blockers import BlockerValidationError
 
@@ -4083,6 +4086,7 @@ def tasks_list(
 ) -> None:
     """List tasks. Done/retired tasks are hidden by default; use --all or --status=done to include them."""
     from science_model.tasks import Task
+
     from science_tool.tasks import list_tasks, parse_tasks_for_cli
     from science_tool.tasks_display import render_tasks_table, sort_tasks
     from science_tool.tasks_readiness import make_local_resolver
@@ -5527,7 +5531,6 @@ def dataset_register_run(workflow_run_id: str, project_root: Path | None) -> Non
 def dataset_reconcile(slug: str, project_root: Path | None) -> None:
     """Check cached-field drift between dataset entity and its runtime datapackage.yaml."""
     import yaml as _yaml
-
     from science_model.frontmatter import parse_frontmatter
 
     root = project_root.resolve() if project_root else _project_root_from_env()

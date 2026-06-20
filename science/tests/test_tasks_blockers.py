@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from _fixtures.entity_helpers import seed_project
 from science_model.entities import DatasetEntity
+
 from science_tool.entities import load_local_entity_ids, load_local_entity_index
 from science_tool.tasks_blockers import (
     BlockerValidationError,

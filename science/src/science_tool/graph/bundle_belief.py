@@ -8,10 +8,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from rdflib import RDF, URIRef
+from science_model.reasoning import RESERVED_COMPOSITION_RULES, CompositionRule, MembershipRole
 
-from science_model.reasoning import CompositionRule, MembershipRole, RESERVED_COMPOSITION_RULES
-from .belief import aggregate_belief, BeliefMagnitude, BeliefResult, collect_evidence_units, _MAG_ORDER
-from .belief_scalar import belief_scalar, BeliefScalar
+from .belief import _MAG_ORDER, BeliefMagnitude, BeliefResult, aggregate_belief, collect_evidence_units
+from .belief_scalar import BeliefScalar, belief_scalar
 from .io import CITO_NS, SCI_NS
 
 _BUNDLE_TYPES: dict[str, URIRef] = {

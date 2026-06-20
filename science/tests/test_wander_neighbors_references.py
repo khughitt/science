@@ -4,7 +4,6 @@ from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import RDF, SKOS
 
 from science_tool.graph.io import PROJECT_NS, SCI_NS
-
 from science_tool.wander.neighbors import neighbors_for
 from science_tool.wander.references import active_references_for
 

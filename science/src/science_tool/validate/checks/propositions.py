@@ -16,6 +16,7 @@ from science_model.reasoning import (
     IdentificationStrength,
     Polarity,
 )
+
 from science_tool.entities import resolve_path_policy
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -249,7 +250,7 @@ def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Res
             materialize.py uses ``role=relation.role or MembershipRole.CORE`` and writes
             to the same deterministic membership node IRI).
     """
-    from science_tool.graph.sources import load_project_sources, SourceRelation
+    from science_tool.graph.sources import load_project_sources
 
     try:
         sources = load_project_sources(ctx.project_root, strict_identity=False)
@@ -333,8 +334,9 @@ def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Res
     # We use build_alias_map (the same resolver used by the materialize path) to
     # canonicalize BOTH the frontmatter frame_refs AND the relation subject/object
     # strings.  If a ref cannot be canonicalized, we emit an ERROR (never silently skip).
-    from science_tool.graph.sources import build_alias_map
     from science_model import normalize_alias
+
+    from science_tool.graph.sources import build_alias_map
 
     alias_map = build_alias_map(sources.entities, manual_aliases=sources.manual_aliases)
 

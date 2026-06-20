@@ -5,13 +5,13 @@ import os
 import re
 from pathlib import Path
 
-from click.testing import CliRunner
 import yaml
-
 from _fixtures.entity_helpers import seed_project, write_markdown_entity
+from click.testing import CliRunner
 from science_model.contracts.inventory_v2 import InventoryPayload as InventoryPayloadV2
 from science_model.entities import EntityClass
 from science_model.profiles.schema import ProfileManifest
+
 from science_tool.cli import main
 from science_tool.graph.sources import load_project_sources
 

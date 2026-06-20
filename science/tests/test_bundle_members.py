@@ -1,10 +1,10 @@
 # science/tests/test_bundle_members.py
 from __future__ import annotations
 
-from rdflib import Graph, Literal, RDF, URIRef
-
+from rdflib import RDF, Graph, Literal, URIRef
 from science_model.reasoning import CompositionRule
-from science_tool.graph.bundle_belief import bundle_members, bundle_kind, resolve_composition_rule
+
+from science_tool.graph.bundle_belief import bundle_kind, bundle_members, resolve_composition_rule
 from science_tool.graph.io import CITO_NS, SCI_NS
 
 HYP = URIRef("http://example.org/science/entity/hypothesis/h1")

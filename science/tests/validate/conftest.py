@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+import shutil
 from collections.abc import Callable
 from pathlib import Path
-import shutil
 
 import pytest
-
 from _copy_filters import oversized_payload_names
 
 

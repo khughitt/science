@@ -1,9 +1,11 @@
 from pathlib import Path
 
-from rdflib import Dataset, Literal, RDF, URIRef
+from rdflib import RDF, Dataset, Literal, URIRef
 
 from science_tool.graph.belief_snapshot import (
-    append_snapshots, read_snapshots, snapshot_records,
+    append_snapshots,
+    read_snapshots,
+    snapshot_records,
 )
 from science_tool.graph.io import CITO_NS, SCI_NS
 from science_tool.graph.store import _graph_uri

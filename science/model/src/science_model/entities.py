@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from datetime import date
 from enum import StrEnum
-
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from science_model.identity import EntityClass, EntityScope, ExternalId  # noqa: F401  (EntityClass re-exported; relocated to identity in Spec 2)
+from science_model.identity import (  # noqa: F401  (EntityClass re-exported; relocated to identity in Spec 2)
+    EntityClass,
+    EntityScope,
+    ExternalId,
+)
 from science_model.packages.schema import (
     AccessBlock,
     DatasetUsage,
@@ -18,6 +21,7 @@ from science_model.packages.schema import (
     WorkflowRecipeDerivationBlock,
 )
 from science_model.reasoning import (
+    RESERVED_COMPOSITION_RULES,
     ClaimLayer,
     CompositionRule,
     DisputeScope,
@@ -29,7 +33,6 @@ from science_model.reasoning import (
     IndependenceTag,
     MeasurementModel,
     ProxyDirectness,
-    RESERVED_COMPOSITION_RULES,
     RivalModelPacket,
     SupportScope,
     canonical_evidence_type_token,
