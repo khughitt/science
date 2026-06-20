@@ -222,7 +222,7 @@ core:
   reason_codes: [agent-source-unvalidated, tool-chain-unvalidated, information-absence-undetected]
 
 extension/agent-tool-operation:
-  target_artifact_refs: [synthesis:scientific-agents-knowledge-graphs]
+  target_artifact_refs: [synthesis:0006-synthesis-scientific-agents-and-knowledge-graph-infrastructure]
   agent_role: synthesis-author
   agent_model_version: ~
   prompt_or_workflow_ref: workflow:science-research-papers

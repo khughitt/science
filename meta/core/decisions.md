@@ -47,8 +47,10 @@ ties meta-project history to tool history.
 - **Date:** 2026-04-23
 - **Status:** active
 - **Decision:** Profile is `software`; research artifacts (hypotheses,
-  literature, interpretations, discussions) live under `doc/` and
-  `specs/hypotheses/` rather than using a `research`-profile layout.
+  literature, interpretations, discussions) are kept as first-class entities
+  rather than using a `research`-profile layout. (Originally these lived under
+  `doc/` and `specs/hypotheses/`; the v2→v3 entity-layout migration relocated
+  them to `entities/<kind>/` — see Implications.)
 
 **Why:**
 The bulk of work is tool development, which is software. But the tool's
@@ -56,7 +58,8 @@ design warrants hypothesis-testing and literature grounding. The
 software-profile scaffolder supports a research layer by populating
 `doc/background/`, `doc/questions/`, `doc/interpretations/`, and
 `specs/hypotheses/` while keeping the implementation root as `src/` rather
-than `code/`. This matches the real shape of the work.
+than `code/`. This matches the real shape of the work. (These directories were
+later unified under `entities/<kind>/` by the v3 migration; see Implications.)
 
 **Alternatives considered and rejected:**
 - `research` profile — forces `code/` naming and `data/`, `models/`,
@@ -69,6 +72,10 @@ than `code/`. This matches the real shape of the work.
 - `meta/src/` initially held an empty placeholder; as of 2026-04-24 it holds
   shipped packages (see D-004).
 - No `RESEARCH_PLAN.md`; strategic plan lives in `README.md`.
+- As of 2026-06-20 the project migrated to the unified entity layout
+  (`layout_version: 3`): papers, questions, hypotheses, interpretations,
+  syntheses, topics, and talks now live under `entities/<kind>/NNNN-slug.md`;
+  `specs/` is retired. Design/handoff docs remain under `doc/plans/`.
 - Aspects enabled: `software-development`, `causal-modeling`,
   `hypothesis-testing`.
 

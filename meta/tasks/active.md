@@ -4,7 +4,7 @@
 - priority: P2
 - status: proposed
 - aspects: [software-development, hypothesis-testing]
-- related: [hypothesis:h01-stochastic-revisiting]
+- related: [hypothesis:0001-stochastic-revisiting]
 - created: 2026-04-24
 
 `[t002]`'s sweep tested `constant_revisit` at `revisit_prob ∈ {0.05, 0.1, 0.2, 0.3}` and the r-curve was monotonically increasing through the upper bound — meaning P5 ("optimal r is a function of uncertainty, not a constant") could not be evaluated. Either the optimum lies above r=0.3 or there is no optimum within sensible bounds. Extend the axis to e.g. `{0.3, 0.4, 0.5, 0.7, 0.9}`, re-run a focused sweep (no need to repeat the existing rows — append new r values for the existing seeds), and update the interpretation with the resolved finding. Specifically: does the optimum vary with `bias_model` × `noise_level` (P5 supported) or land at a single r across all conditions (P5 disconfirmed in the simpler form)?
@@ -15,7 +15,7 @@ Lightweight enough to keep within the existing `RUNTIME_BUDGET_SECONDS = 3180s` 
 - priority: P3
 - status: proposed
 - aspects: [software-development, hypothesis-testing]
-- related: [hypothesis:h01-stochastic-revisiting]
+- related: [hypothesis:0001-stochastic-revisiting]
 - created: 2026-04-24
 
 The current H01 simulator emits binary Bernoulli signals — H01's recall finding is bounded to that abstraction. The handoff note (`meta/doc/plans/2026-04-24-h01-engine-handoff.md`) flagged "Beta-Bernoulli artifact" as a candidate alternative explanation that the Bernoulli sweep cannot rule out. Build a Gaussian-effect-size variant: signals drawn from `Normal(mu, sigma)` where `mu = mu_pos` for truth=1 and `mu_neg` for truth=0; conjugate posterior is normal-normal with running mean and variance; recall analog uses a posterior-mean threshold; calibration analog is MSE between posterior mean and truth-conditional effect size.
@@ -73,7 +73,7 @@ Surfaced by: 2026-04-26 brainstorm of the managed-artifact long-term design (Q5 
 - priority: P3
 - status: proposed
 - aspects: [software-development, framework-design]
-- related: [hypothesis:h01-stochastic-revisiting]
+- related: [hypothesis:0001-stochastic-revisiting]
 - created: 2026-05-05
 
 Phase 1 freshness uses frontmatter `updated` / `created` dates as the upstream change marker. `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` explicitly deferred content-hash-based change detection to a later phase. Add a graph/materialization path that can detect upstream content changes even when authors forget to bump `updated:`, without replacing the current date-based convention prematurely.
@@ -86,7 +86,7 @@ Surfaced by: EDG design § Decisions, item 5.
 - priority: P3
 - status: proposed
 - aspects: [software-development, federation, framework-design]
-- related: [hypothesis:h01-stochastic-revisiting]
+- related: [hypothesis:0001-stochastic-revisiting]
 - created: 2026-05-05
 
 Extend epistemic freshness beyond a single project: a paper, dataset, workflow-run, observation, proposition, or other epistemic upstream added in a parent/child/sibling project should be able to mark downstream hypotheses, questions, propositions, inquiries, and interpretations as `needs-review` across project boundaries.
@@ -99,7 +99,7 @@ Surfaced by: EDG design trajectory item 2.
 - priority: P3
 - status: deferred
 - aspects: [software-development, framework-design, hypothesis-testing]
-- related: [hypothesis:h01-stochastic-revisiting]
+- related: [hypothesis:0001-stochastic-revisiting]
 - created: 2026-05-05
 
 Explore replacing implicit binary verdict-state with an explicit qualitative ladder such as `dormant` / `contested` / `supported` / `well-supported`, derived from evidence edges, pre-registered interpretation outcomes, and freshness/attention signals.
@@ -136,7 +136,7 @@ Surfaced by: typed-entity-blockers trajectory item 2.
 - priority: P1
 - status: proposed
 - aspects: [software-development, framework-design, hypothesis-testing, causal-modeling]
-- related: [question:01-evidence-payload-schema, question:02-causal-synthesis-guardrails, hypothesis:h01-stochastic-revisiting, topic:bayesian-methods-continuous-belief]
+- related: [question:0002-evidence-payload-schema, question:0003-causal-synthesis-guardrails, hypothesis:0001-stochastic-revisiting, topic:bayesian-methods-continuous-belief]
 - group: evidence-payload-schema
 - created: 2026-05-05
 
@@ -167,7 +167,7 @@ Surfaced by: `doc/background/papers/synthesis-2026-05-05-bayesian-evidence-synth
 - status: proposed
 - parent: task:t021
 - aspects: [software-development, framework-design, hypothesis-testing]
-- related: [task:t021, question:01-evidence-payload-schema, hypothesis:h01-stochastic-revisiting]
+- related: [task:t021, question:0002-evidence-payload-schema, hypothesis:0001-stochastic-revisiting]
 - group: evidence-payload-schema
 - created: 2026-05-05
 
@@ -184,7 +184,7 @@ Deliverables:
 - status: proposed
 - parent: task:t021
 - aspects: [software-development, framework-design, hypothesis-testing]
-- related: [task:t021, hypothesis:h01-stochastic-revisiting, question:01-evidence-payload-schema]
+- related: [task:t021, hypothesis:0001-stochastic-revisiting, question:0002-evidence-payload-schema]
 - group: evidence-payload-schema
 - created: 2026-05-05
 
@@ -206,7 +206,7 @@ Aspect-extension design tasks (`[t034]`, `[t035]`, `[t037]`, `[t038]`, `[t040]`)
 - status: blocked
 - parent: task:t021
 - aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
-- related: [task:t021, question:02-causal-synthesis-guardrails, question:01-evidence-payload-schema]
+- related: [task:t021, question:0003-causal-synthesis-guardrails, question:0002-evidence-payload-schema]
 - blocked-by: [task:t034]
 - group: evidence-payload-schema
 - created: 2026-05-05
@@ -238,7 +238,7 @@ Start from `paper:Berenfeld2026`, `paper:Dai2023`, `paper:Thijssen2017`, `paper:
 - priority: P3
 - status: proposed
 - aspects: [research, hypothesis-testing, causal-modeling]
-- related: [question:01-evidence-payload-schema, question:02-causal-synthesis-guardrails, topic:bayesian-methods-continuous-belief]
+- related: [question:0002-evidence-payload-schema, question:0003-causal-synthesis-guardrails, topic:bayesian-methods-continuous-belief]
 - group: evidence-payload-schema
 - created: 2026-05-05
 
@@ -255,7 +255,7 @@ Deliverable: either add PDFs to `meta/papers/pdfs/` and process them in a later 
 - priority: P2
 - status: proposed
 - aspects: [software-development, skills, research]
-- related: [question:01-evidence-payload-schema]
+- related: [question:0002-evidence-payload-schema]
 - group: research-papers-workflow
 - created: 2026-05-05
 
@@ -285,7 +285,7 @@ Start with a design pass before editing generated commands or skills.
 - status: proposed
 - parent: task:t021
 - aspects: [software-development, framework-design, hypothesis-testing]
-- related: [task:t024, task:t025, task:t033, task:t035, task:t037, task:t038, question:03-source-and-pipeline-provenance, question:05-source-dependence-detection, question:07-llm-agents-as-fallible-sources, question:11-graph-valued-synthesis-artifacts, question:12-agent-tool-kg-operations, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- related: [task:t024, task:t025, task:t033, task:t035, task:t037, task:t038, question:0004-source-and-pipeline-provenance, question:0006-source-dependence-detection, question:0008-llm-agents-as-fallible-sources, question:0011-graph-valued-synthesis-artifacts, question:0012-agent-tool-kg-operations, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration, hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting]
 - group: evidence-payload-schema
 - created: 2026-05-05
 
@@ -304,7 +304,7 @@ Deliverables:
 - priority: P2
 - status: proposed
 - aspects: [research, framework-design, hypothesis-testing]
-- related: [task:t028, question:06-sequential-anytime-valid-evidence, hypothesis:h05-sequential-evidence-improves-attention, hypothesis:h01-stochastic-revisiting, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- related: [task:t028, question:0007-sequential-anytime-valid-evidence, hypothesis:0005-sequential-evidence-improves-attention, hypothesis:0001-stochastic-revisiting, hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting]
 - group: sequential-evidence
 - created: 2026-05-05
 
@@ -321,7 +321,7 @@ Steps:
 - priority: P2
 - status: blocked
 - aspects: [software-development, framework-design, research]
-- related: [task:t022, task:t024, task:t031, task:t037, task:t038, question:07-llm-agents-as-fallible-sources, question:05-source-dependence-detection, question:12-agent-tool-kg-operations, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- related: [task:t022, task:t024, task:t031, task:t037, task:t038, question:0008-llm-agents-as-fallible-sources, question:0006-source-dependence-detection, question:0012-agent-tool-kg-operations, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration, hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting]
 - blocked-by: [task:t037]
 - group: agent-source-modeling
 - created: 2026-05-05
@@ -350,7 +350,7 @@ Granularity is a key design decision; expect to defend the chosen level (per-pro
 - status: active
 - parent: task:t021
 - aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
-- related: [task:t022, task:t023, task:t025, task:t026, question:10-causal-graph-construction-pipeline, question:02-causal-synthesis-guardrails, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting, hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening]
+- related: [task:t022, task:t023, task:t025, task:t026, question:0010-causal-graph-construction-pipeline, question:0003-causal-synthesis-guardrails, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration, hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting, hypothesis:0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening]
 - group: evidence-payload-schema
 - created: 2026-05-06
 
@@ -387,7 +387,7 @@ Start from Batch 3 synthesis: `doc/background/papers/synthesis-2026-05-06-causal
 - status: proposed
 - parent: task:t021
 - aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
-- related: [task:t022, task:t023, task:t024, task:t025, task:t026, task:t034, question:11-graph-valued-synthesis-artifacts, question:10-causal-graph-construction-pipeline, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting, hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening]
+- related: [task:t022, task:t023, task:t024, task:t025, task:t026, task:t034, question:0011-graph-valued-synthesis-artifacts, question:0010-causal-graph-construction-pipeline, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration, hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting, hypothesis:0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening]
 - group: evidence-payload-schema
 - created: 2026-05-06
 
@@ -417,7 +417,7 @@ Start from Batch 4 synthesis: `doc/background/papers/synthesis-2026-05-06-graphi
 - priority: P3
 - status: proposed
 - aspects: [research, framework-design, hypothesis-testing]
-- related: [task:t035, question:11-graph-valued-synthesis-artifacts, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting, hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening]
+- related: [task:t035, question:0011-graph-valued-synthesis-artifacts, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration, hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting, hypothesis:0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening]
 - group: evidence-payload-schema
 - created: 2026-05-06
 
@@ -437,7 +437,7 @@ Deliverable: either add PDFs and process them in a later batch, or write a topic
 - priority: P1
 - status: active
 - aspects: [software-development, framework-design, research]
-- related: [task:t029, task:t033, question:07-llm-agents-as-fallible-sources, question:12-agent-tool-kg-operations, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- related: [task:t029, task:t033, question:0008-llm-agents-as-fallible-sources, question:0012-agent-tool-kg-operations, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration, hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting]
 - group: agent-source-modeling
 - created: 2026-05-06
 
@@ -468,7 +468,7 @@ Start from Batch 5 synthesis: `doc/background/papers/synthesis-2026-05-06-scient
 - priority: P1
 - status: proposed
 - aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
-- related: [task:t021, task:t035, task:t037, question:12-agent-tool-kg-operations, question:03-source-and-pipeline-provenance, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- related: [task:t021, task:t035, task:t037, question:0012-agent-tool-kg-operations, question:0004-source-and-pipeline-provenance, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration, hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting]
 - group: evidence-payload-schema
 - created: 2026-05-06
 
@@ -501,7 +501,7 @@ Start from Batch 5 synthesis: `doc/background/papers/synthesis-2026-05-06-scient
 - priority: P3
 - status: proposed
 - aspects: [research, software-development, framework-design]
-- related: [task:t037, task:t038, question:12-agent-tool-kg-operations, question:07-llm-agents-as-fallible-sources, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- related: [task:t037, task:t038, question:0012-agent-tool-kg-operations, question:0008-llm-agents-as-fallible-sources, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration, hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting]
 - group: agent-source-modeling
 - created: 2026-05-06
 
@@ -521,7 +521,7 @@ Deliverable: either add PDFs and process them in a later batch, or write a topic
 - priority: P1
 - status: proposed
 - aspects: [software-development, framework-design, hypothesis-testing, research]
-- related: [task:t021, task:t022, task:t025, task:t030, question:13-robustness-reproducibility-evaluation, question:01-evidence-payload-schema, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting, topic:analytic-flexibility-and-replication]
+- related: [task:t021, task:t022, task:t025, task:t030, question:0013-robustness-reproducibility-evaluation, question:0002-evidence-payload-schema, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration, hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting, topic:analytic-flexibility-and-replication]
 - group: evidence-payload-schema
 - created: 2026-05-06
 
@@ -549,7 +549,7 @@ Start from Batch 6 synthesis: `doc/background/papers/synthesis-2026-05-06-robust
 - priority: P3
 - status: proposed
 - aspects: [research, framework-design, hypothesis-testing]
-- related: [task:t040, question:13-robustness-reproducibility-evaluation, topic:analytic-flexibility-and-replication, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- related: [task:t040, question:0013-robustness-reproducibility-evaluation, topic:analytic-flexibility-and-replication, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration, hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting]
 - group: evidence-payload-schema
 - created: 2026-05-06
 
@@ -570,7 +570,7 @@ Deliverable: either add PDFs and process them in a later batch, or write a topic
 - priority: P2
 - status: proposed
 - aspects: [software-development, hypothesis-testing]
-- related: [task:t023, task:t038, question:01-evidence-payload-schema]
+- related: [task:t023, task:t038, question:0002-evidence-payload-schema]
 - group: evidence-payload-schema
 - created: 2026-05-07
 
@@ -752,7 +752,7 @@ When 'science tasks list' or other inventory commands hit a schema-validation fa
 - priority: P1
 - status: proposed
 - aspects: [software-development]
-- related: [hypothesis:h00-working-model, hypothesis:h06-adaptive-project-topology-improves-research-fit, question:14-adaptive-project-topology, task:t043]
+- related: [hypothesis:0007-working-model, hypothesis:0006-adaptive-project-topology-improves-research-fit, question:0014-adaptive-project-topology, task:t043]
 - created: 2026-05-31
 
 Design a VALIDATING cross-project entity reference syntax. Surfaced by fb-2026-05-31-012 (writing h00): a foreign 'type:id' ref resolves against the local repo so it reads as broken, and the refs-checker even resolves the bare token locally — forcing honest foreign mentions into untyped prose (the interim h00 policy), which defeats validation, graph linkage, and cross-boundary freshness.
@@ -765,7 +765,7 @@ This is the single primitive the recurring 'cross-project address syntax' open i
 - priority: P2
 - status: proposed
 - aspects: [software-development]
-- related: [hypothesis:h00-working-model, task:t065, task:t066]
+- related: [hypothesis:0007-working-model, task:t065, task:t066]
 - created: 2026-06-01
 
 Two pre-pattern hardening items from the t065 review (2026-06-01), to settle before the L1 patch is treated as canonical:
@@ -782,4 +782,4 @@ Until both are done, t065 claims stay scoped: 'PROV-O round-trips structurally' 
 - aspects: []
 - created: 2026-06-01
 
-t066 demonstrated the latent-construct (PMI) correction subtracts the publication-attention axis cleanly at BOTH ends of the slice (7 panel genes positive, 10 universal genes negative, for CMT + HSP) and flips raw-ranking errors. Two things it did NOT establish: (1) behavior on the ambiguous MIDDLE — the clean step is partly a property of a slice built to contrast extremes, so PPMI>0 is a correction, not a calibrated classifier; needs the full 18206x3831 matrix + held-out-panel validation (overlaps pan-disease recall@K / cluster-mate-AUC, the cross-project proving ground). (2) a sampling-variance guard — rare cells have high-variance PMI (e.g. CYP7B1 cooc=39); add shrinkage / Poisson-significance before any fine ranking or near-zero threshold. Code: meta/src/h00_patch_l1/latent.py. Interpretation: interpretation:h00-t066-latent-correction-2026-06-01.
+t066 demonstrated the latent-construct (PMI) correction subtracts the publication-attention axis cleanly at BOTH ends of the slice (7 panel genes positive, 10 universal genes negative, for CMT + HSP) and flips raw-ranking errors. Two things it did NOT establish: (1) behavior on the ambiguous MIDDLE — the clean step is partly a property of a slice built to contrast extremes, so PPMI>0 is a correction, not a calibrated classifier; needs the full 18206x3831 matrix + held-out-panel validation (overlaps pan-disease recall@K / cluster-mate-AUC, the cross-project proving ground). (2) a sampling-variance guard — rare cells have high-variance PMI (e.g. CYP7B1 cooc=39); add shrinkage / Poisson-significance before any fine ranking or near-zero threshold. Code: meta/src/h00_patch_l1/latent.py. Interpretation: interpretation:0003-t066-latent-correction-2026-06-01.

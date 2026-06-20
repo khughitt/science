@@ -849,7 +849,7 @@ Insert between `[t001]` and `[t002]` in `meta/tasks/active.md`:
 - priority: P1
 - status: done
 - aspects: [software-development, hypothesis-testing]
-- related: [hypothesis:h01-stochastic-revisiting]
+- related: [hypothesis:0001-stochastic-revisiting]
 - blocked_by: [t001]
 - created: 2026-04-24
 

@@ -28,10 +28,10 @@ An evidence-driven re-examination of the data / knowledge model, informed by
 the scientific-process, knowledge-representation, and research-agent
 literatures. Outputs land in:
 
-- `doc/background/topics/` — topic syntheses
-- `doc/background/papers/` — paper summaries
-- `specs/hypotheses/` — falsifiable claims about design choices
-- `doc/interpretations/` — what the evidence says about current model
+- `entities/topics/` — topic syntheses
+- `entities/papers/` — paper summaries
+- `entities/hypotheses/` — falsifiable claims about design choices
+- `entities/interpretations/` — what the evidence says about current model
 
 ## Workstreams (initial sketch)
 

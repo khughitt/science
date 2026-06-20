@@ -10,8 +10,10 @@ hypotheses, tasks, knowledge graph, and literature review that drive it.
 
 ## Profile
 
-`software` with an embedded research layer (`doc/background/`,
-`doc/questions/`, `specs/hypotheses/`, `doc/interpretations/`).
+`software` with an embedded research layer. Under the unified entity layout
+(`layout_version: 3`), research artifacts — papers, questions, hypotheses,
+interpretations, syntheses, topics, talks — live under `entities/<kind>/`.
+Design and handoff docs live under `doc/plans/`.
 
 ## Working directory convention
 
@@ -30,7 +32,7 @@ uv run --frozen science validate --verbose
 - Paths to tool code use `../science/...` from inside `meta/`.
 - Hypotheses are about the tool's design and the research-workflow model it
   implements, not about an external scientific domain.
-- Literature in `doc/background/papers/` focuses on: research-agent design,
+- Literature in `entities/papers/` focuses on: research-agent design,
   knowledge-graph modelling, causal inference workflows, scientific-process
   ontologies, and related tooling (e.g. CrossCompute, Galaxy, Nextflow,
   Jupyter, Obsidian-style PKMs).
@@ -68,5 +70,5 @@ uv run --frozen science validate --verbose
 - Decisions: `core/decisions.md`
 - Project overview: `core/overview.md`
 - Active tasks: `tasks/active.md`
-- Hypotheses: `specs/hypotheses/`
+- Hypotheses: `entities/hypotheses/`
 - Strategic plan: `README.md`

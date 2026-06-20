@@ -58,6 +58,6 @@ model should contain, literature grounding, explicit decisions with recorded
 
 - Strategic plan: `README.md`
 - Active tasks: `tasks/active.md`
-- Hypotheses: `specs/hypotheses/`
+- Hypotheses: `entities/hypotheses/`
 - Decisions log: `core/decisions.md`
 - Knowledge graph: `knowledge/graph.trig` (not yet built)
