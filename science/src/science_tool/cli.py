@@ -556,8 +556,9 @@ def entities_generate_decisions_command(project_root: Path, write_changes: bool)
     version = _v if isinstance(_v, int) else None
     if version is None or version < 3:
         raise click.ClickException(
-            f"generate-decisions needs an `entities/decision/` owner root; this project is "
-            f"layout_version {version} — complete the v2->v3 migration first."
+            f"generate-decisions needs an `entities/decision/` owner root, but this project is "
+            f"layout_version {version}. This Science version supports layout_version 3 only; "
+            f"the v2 layout is no longer supported."
         )
 
     owners = read_decision_owners(project_root / "entities" / "decision")
