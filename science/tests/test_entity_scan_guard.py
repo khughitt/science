@@ -32,15 +32,12 @@ ALLOWLIST: set[str] = {
     "graph/health.py",                      # health/datasets/runs roots
     "graph/materialize.py",                 # doc/data-packages migration gate
     "graph/migrate.py",                     # migration roots
-    "graph/project_model_migration.py",
-    "graph/tags_migration.py",
     "validate/checks/id_prefixes.py",       # doc/specs legacy roots (line 52)
     "validate/checks/entity_conformance.py",  # _LEGACY_ROOTS (line 89)
     "validate/_helpers.py",
     "entities_inventory.py",                # _latest_activity scans project_root (skip-set added)
-    "entity_layout_migration.py",           # legacy migration roots
-    "prose.py", "prose_lint.py", "markers.py", "refs.py", "refs_migrate.py",
-    "datapackage_migrate.py", "skills_lint/lint.py", "cli.py",
+    "prose.py", "prose_lint.py", "markers.py", "refs.py",
+    "skills_lint/lint.py", "cli.py",
 }
 
 
