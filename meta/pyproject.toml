@@ -25,6 +25,7 @@ dev = [
     "ruff>=0.6",
     "pyright>=1.1.380",
     "science",
+    "pandas>=2.0",
 ]
 
 [tool.hatch.build.targets.wheel]
