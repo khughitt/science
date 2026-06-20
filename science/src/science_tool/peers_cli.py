@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import TypedDict
 
 import click
 import yaml
@@ -118,38 +118,6 @@ def peers_show(peer_id: str, project_root: Path) -> None:
     click.echo(f"path:        {resolved.path}")
 
 
-@peers_group.command("migrate")
-@click.option(
-    "--project-root",
-    default=".",
-    show_default=True,
-    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
-)
-@click.option("--dry-run", is_flag=True, help="Report migrations without writing files.")
-@click.option("--all", "migrate_all", is_flag=True, help="Also migrate legacy child projects.")
-def peers_migrate(project_root: Path, dry_run: bool, migrate_all: bool) -> None:
-    """Migrate legacy parent/children fields to peers."""
-    from science_tool.peers_migrate import MigrationError, migrate_project
-
-    try:
-        targets = [project_root]
-        if migrate_all:
-            targets.extend(_legacy_child_project_roots(project_root))
-            if not dry_run:
-                for target in targets:
-                    migrate_project(target, dry_run=True)
-
-        for target in targets:
-            summary = migrate_project(target, dry_run=dry_run)
-            if summary.migrated:
-                action = "would migrate" if dry_run else "migrated"
-                click.echo(f"{action}: {target}")
-            else:
-                note = f" - {summary.note}" if summary.note else ""
-                click.echo(f"skipped: {target}{note}")
-    except MigrationError as exc:
-        raise click.ClickException(str(exc)) from exc
-
 
 def _peer_rows(project_root: Path, cfg: ProjectConfig) -> list[PeerRow]:
     issues_by_entry = _issues_by_entry(project_root, cfg)
@@ -184,48 +152,6 @@ def _raw_peer_count(project_root: Path) -> int:
         return 0
     return len(peers)
 
-
-def _legacy_child_project_roots(project_root: Path) -> list[Path]:
-    raw = _raw_project_yaml(project_root)
-    if not isinstance(raw, dict):
-        return []
-
-    children = raw.get("children")
-    if not isinstance(children, list):
-        return []
-
-    targets: list[Path] = []
-    for index, child in enumerate(children):
-        if not isinstance(child, dict):
-            raise click.ClickException(f"children[{index}] must be a mapping with string path")
-        child_path = child.get("path")
-        if not isinstance(child_path, str):
-            raise click.ClickException(f"children[{index}] must include string path")
-        target = _resolve_migration_path(project_root, child_path)
-        if not (target / "science.yaml").is_file():
-            raise click.ClickException(
-                f"children[{index}] path {child_path!r} resolved to {target}, but no science.yaml was found"
-            )
-        targets.append(target)
-    return targets
-
-
-def _raw_project_yaml(project_root: Path) -> Any:
-    yaml_path = project_root / "science.yaml"
-    try:
-        return yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
-    except (OSError, UnicodeError, yaml.YAMLError) as exc:
-        raise click.ClickException(f"failed to read {yaml_path}: {exc}") from exc
-
-
-def _resolve_migration_path(project_root: Path, raw_path: str) -> Path:
-    if raw_path.startswith("~"):
-        return Path(raw_path).expanduser().resolve(strict=False)
-
-    path = Path(raw_path)
-    if path.is_absolute():
-        return path.resolve(strict=False)
-    return (project_root / path).resolve(strict=False)
 
 
 def _issues_by_entry(project_root: Path, cfg: ProjectConfig) -> list[list[PeerIssueRow]]:
