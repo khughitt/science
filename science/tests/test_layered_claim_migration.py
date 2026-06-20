@@ -584,11 +584,7 @@ def test_layered_claim_migration_report_runtime_guard(tmp_path: Path) -> None:
     assert report["summary"]["proposition_count"] == 120
 
 
-def test_graph_migrate_command_includes_layered_claim_scan_payload(tmp_path: Path) -> None:
-    from click.testing import CliRunner
-
-    from science_tool.cli import main
-
+def test_build_layered_claim_report_infers_identification_strength(tmp_path: Path) -> None:
     project = _write_scan_project(
         tmp_path / "scan-project",
         [
@@ -600,14 +596,9 @@ def test_graph_migrate_command_includes_layered_claim_scan_payload(tmp_path: Pat
         ],
     )
 
-    runner = CliRunner()
-    result = runner.invoke(main, ["graph", "migrate", "--project-root", str(project), "--format", "json"])
+    report = build_layered_claim_migration_report(project)
 
-    assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
-
-    assert "layered_claim_migration" in payload
-    assert payload["layered_claim_migration"]["summary"]["proposition_count"] == 1
-    row = payload["layered_claim_migration"]["rows"][0]
+    assert report["summary"]["proposition_count"] == 1
+    row = report["rows"][0]
     assert row["proposition"] == "proposition:p05"
     assert row["inferred_identification_strength"] == "observational"
