@@ -33,7 +33,7 @@ Per the 2026-04-25 synthesis-shape investigation Q2, the canonical form for `syn
 ```yaml
 synthesized_from:
   - hypothesis: "hypothesis:<slug>"
-    file: "doc/reports/synthesis/<slug>.md"
+    file: "entities/synthesis/<slug>.md"
     sha: "<SHA>"
 ```
 
@@ -160,7 +160,7 @@ Lit follow-up tasks (`[t028]`, `[t036]`, `[t039]`, `[t041]`) are P3 so they do n
 **State (2026-05-06):** `[t022]` shipped at v2.2 (`meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md`) with structural claims validated by `[t030]`. Both tasks done. Aspect extensions (`[t034]`, `[t035]`, `[t037]`, `[t038]`, `[t040]`) are now unblocked and move to P1.
 Carry-forwards: each aspect extension declaring an evaluation/audit/operation type now owns its own `target_artifact_ref` (no longer in core); enums have `methods-paper`/`framework-paper`/`benchmark-or-dataset-paper`, `method-set`, `framework-proposal` available; `uncertainty_summary` is `[opt]` and may be qualitative.
 
-Surfaced by: `doc/background/papers/synthesis-2026-05-05-bayesian-evidence-synthesis.md`.
+Surfaced by: `entities/synthesis/0001-synthesis-bayesian-evidence-synthesis-and-meta-analysis.md`.
 
 ## [t024] Represent heterogeneity and bias as evidence-generation mechanisms
 - priority: P2
@@ -312,7 +312,7 @@ Resolve t028's anytime-valid reading lead into either a topic note + simulator e
 
 Steps:
 - ingest the e-value / test-martingale / confidence-sequence references queued in `[t028]`;
-- write a topic note `doc/background/topics/sequential-evidence.md` linking these methods to H01 / H03 attention and H02 payload state;
+- write a topic note `entities/topics/sequential-evidence.md` linking these methods to H01 / H03 attention and H02 payload state;
 - audit current and likely-future project graph state for the realized prevalence of optional stopping and unbounded revisiting;
 - propose a sequential-evidence extension to the H01 simulator: propositions receive evidence over time, attention policies compare fixed-N posterior, BMA-style, and anytime-valid evidence levels;
 - decide whether H05 graduates to an active simulation track or stays speculative pending stronger upstream evidence.
@@ -375,7 +375,7 @@ Deliverables:
 - validation rules for when each artifact may strengthen, annotate, or merely prioritize a causal proposition;
 - alignment notes with `[t022]`, `[t023]`, `[t025]`, and `[t026]`.
 
-Start from Batch 3 synthesis: `doc/background/papers/synthesis-2026-05-06-causal-graph-construction.md`.
+Start from Batch 3 synthesis: `entities/synthesis/0003-synthesis-causal-graph-construction-and-discovery.md`.
 
 ### Notes
 
@@ -411,7 +411,7 @@ Deliverables:
 - H03 reason-code mapping for graph posterior uncertainty, shared-structure dependence, view-scope mismatch, approximation risk, clustering validation, and selected-feature stability;
 - H04 guardrail notes for preventing noncausal graph or clustering outputs from strengthening causal propositions without identification metadata.
 
-Start from Batch 4 synthesis: `doc/background/papers/synthesis-2026-05-06-graphical-models-multiview-integration.md`.
+Start from Batch 4 synthesis: `entities/synthesis/0004-synthesis-graphical-models-and-multiview-integration.md`.
 
 ## [t036] Follow-up literature on graph-valued and multiview synthesis artifacts
 - priority: P3
@@ -462,7 +462,7 @@ Deliverables:
 - H03 reason-code mapping for `agent-source-unvalidated`, `tool-chain-unvalidated`, `safety-check-missing`, `context-retrieval-uncertain`, `information-absence-undetected`, and `agent-bias-risk`;
 - alignment with `[t033]` so LLM agents are represented as both fallible sources and graph-governed operators.
 
-Start from Batch 5 synthesis: `doc/background/papers/synthesis-2026-05-06-scientific-agents-knowledge-graphs.md`.
+Start from Batch 5 synthesis: `entities/synthesis/0006-synthesis-scientific-agents-and-knowledge-graph-infrastructure.md`.
 
 ## [t038] Design graph evolution and KG view provenance
 - priority: P1
@@ -495,7 +495,7 @@ Deliverables:
 - guidance for representing RAG contexts, task-conditioned subgraphs, correlation-discovery outputs, and KG diffusion/denoising views;
 - H03 reason-code mapping for `kg-view-derived`, `graph-version-stale`, `attention-not-evidence`, and `context-retrieval-uncertain`.
 
-Start from Batch 5 synthesis: `doc/background/papers/synthesis-2026-05-06-scientific-agents-knowledge-graphs.md`.
+Start from Batch 5 synthesis: `entities/synthesis/0006-synthesis-scientific-agents-and-knowledge-graph-infrastructure.md`.
 
 ## [t039] Follow-up literature on scientific agents, tool provenance, and KG operations
 - priority: P3
@@ -543,7 +543,7 @@ Deliverables:
 - H03 reason-code mapping for `robustness-target-ambiguous`, `modifier-domain-missing`, `tolerance-unspecified`, `replication-metric-mismatch`, `reproducibility-dimension-ambiguous`, `checklist-incomplete`, `analysis-plan-missing`, `deviation-unreported`, `code-or-data-unavailable`, and `null-results-omitted`;
 - alignment notes with `[t030]` so H02 calibration benchmarks use typed validation outcomes rather than binary replication-success labels.
 
-Start from Batch 6 synthesis: `doc/background/papers/synthesis-2026-05-06-robustness-reproducibility-evaluation.md`.
+Start from Batch 6 synthesis: `entities/synthesis/0005-synthesis-robustness-and-reproducibility-evaluation.md`.
 
 ## [t041] Follow-up literature on replication metrics, robustness, and reproducibility standards
 - priority: P3
