@@ -1375,26 +1375,6 @@ def graph_audit(output_format: str, project_root: Path) -> None:
         raise click.exceptions.Exit(1)
 
 
-@graph.command("migrate-model")
-@click.option(
-    "--project-root",
-    default=".",
-    show_default=True,
-    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
-)
-def graph_migrate_model(project_root: Path) -> None:
-    """Migrate project sources from old entity model to Project Model."""
-    from science_tool.graph.project_model_migration import migrate_entity_sources
-
-    project_root = project_root.resolve()
-    stats = migrate_entity_sources(project_root)
-    click.echo(
-        f"Migration complete: {stats['migrated']} migrated, {stats['skipped']} skipped, {stats['errors']} errors"
-    )
-    if stats["errors"] > 0:
-        click.echo("Review errors manually — some files may need manual migration.")
-
-
 @graph.command("migrate-addresses")
 @click.option("--apply", is_flag=True, default=False, help="Write changes to disk (default is dry-run).")
 @click.option(
