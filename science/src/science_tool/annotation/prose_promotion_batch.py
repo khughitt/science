@@ -7,13 +7,20 @@ from pathlib import Path
 from typing import Literal, cast
 
 from science_tool.annotation.prose_decomposition import DecompositionError, ProseDecompositionStore, artifact_unit_ref
-from science_tool.annotation.promote import ApplyReport
+from science_tool.annotation.promote import (
+    ApplyReport,
+    PromotionApplyError,
+    PromotionCandidate,
+    PromotionTarget,
+    build_targets,
+    entity_dest,
+)
 from science_tool.annotation.prose_promote import (
     ProsePromotionError,
     ProsePromotionPlanRow,
     plan_prose_unit_promotion,
-    promote_prose_unit,
 )
+from science_tool.entities import EntityCommandError, append_entity_source_ref, find_entity, slug_for_claim_text
 
 _SCHEMA_VERSION = 1
 _PLAN_KEYS = frozenset({"schema_version", "source_slug", "rows"})
@@ -44,6 +51,12 @@ class ProsePromotionPlan:
         }
 
 
+@dataclass(frozen=True)
+class _ValidatedPromotionRow:
+    row: ProsePromotionPlanRow
+    candidate: PromotionCandidate
+
+
 def plan_prose_promotions(project_root: Path, source_slug: str, unit_ids: Sequence[str]) -> ProsePromotionPlan:
     if not unit_ids:
         raise ProsePromotionError("promotion plan requires at least one unit")
@@ -54,6 +67,7 @@ def plan_prose_promotions(project_root: Path, source_slug: str, unit_ids: Sequen
         if row is None:
             raise ProsePromotionError(f"unit {unit_id!r} does not have a mint/link promotion decision")
         rows.append(row)
+    _reject_duplicate_mint_targets([_validate_current_row(project_root.resolve(), row) for row in rows])
     return ProsePromotionPlan(source_slug=source_slug, rows=tuple(rows))
 
 
@@ -66,18 +80,56 @@ def apply_prose_promotion_plan(project_root: Path, plan: ProsePromotionPlan) -> 
     """
     project_root = project_root.resolve()
     current_rows = [_validate_current_row(project_root, row) for row in _plan_rows(plan)]
+    _reject_duplicate_mint_targets(current_rows)
+    targets = build_targets()
     report = ApplyReport()
-    for row in current_rows:
-        unit_report = promote_prose_unit(
-            project_root=project_root,
-            source_ref=row.source_ref,
-            unit_id=row.unit_id,
-            apply=True,
-        )
+    for current in current_rows:
+        unit_report = _apply_validated_row(project_root, current, targets)
         report.minted += unit_report.minted
         report.linked += unit_report.linked
         report.skipped.update(unit_report.skipped)
         report.written_paths.extend(unit_report.written_paths)
+    return report
+
+
+def _apply_validated_row(
+    project_root: Path,
+    current: _ValidatedPromotionRow,
+    targets: dict[str, PromotionTarget],
+) -> ApplyReport:
+    row = current.row
+    candidate = current.candidate
+    report = ApplyReport()
+    promoted_to: str | None = None
+    try:
+        if candidate.decision == "MINT":
+            promoted_to = targets[candidate.kind].mint(
+                candidate, [row.source_ref, row.artifact_unit_ref], project_root, None
+            )
+            report.written_paths.append(str(entity_dest(promoted_to, project_root)))
+            report.minted += 1
+        elif candidate.decision == "LINK":
+            if candidate.slug is None:
+                raise ProsePromotionError(f"LINK decision for unit {row.unit_id!r} is missing target ref")
+            dest = find_entity(project_root, candidate.slug).path
+            append_entity_source_ref(dest, row.source_ref)
+            append_entity_source_ref(dest, row.artifact_unit_ref)
+            report.linked += 1
+            promoted_to = candidate.slug
+        else:
+            report.skipped[candidate.reason] += 1
+    except (DecompositionError, EntityCommandError, PromotionApplyError) as exc:
+        raise ProsePromotionError(str(exc)) from exc
+
+    if promoted_to is not None:
+        try:
+            ProseDecompositionStore(project_root).record_promotion(
+                source_slug=row.source_slug,
+                fingerprint=row.fingerprint,
+                promoted_to=promoted_to,
+            )
+        except DecompositionError as exc:
+            raise ProsePromotionError(str(exc)) from exc
     return report
 
 
@@ -108,7 +160,7 @@ def plan_from_json(payload: object) -> ProsePromotionPlan:
     return ProsePromotionPlan(source_slug=source_slug, rows=rows)
 
 
-def _validate_current_row(project_root: Path, row: ProsePromotionPlanRow) -> ProsePromotionPlanRow:
+def _validate_current_row(project_root: Path, row: ProsePromotionPlanRow) -> _ValidatedPromotionRow:
     store = ProseDecompositionStore(project_root)
     try:
         artifact = store.load_latest(row.source_slug)
@@ -150,7 +202,39 @@ def _validate_current_row(project_root: Path, row: ProsePromotionPlanRow) -> Pro
             f"decision drift for unit {row.unit_id!r}: "
             f"planned {(row.decision, row.target_ref)!r}, current {(current.decision, current.target_ref)!r}"
         )
-    return current
+    return _ValidatedPromotionRow(row=current, candidate=_promotion_candidate(current, unit.candidate))
+
+
+def _promotion_candidate(row: ProsePromotionPlanRow, candidate) -> PromotionCandidate:
+    if row.decision == "mint":
+        try:
+            slug = slug_for_claim_text(candidate.exact)
+        except EntityCommandError as exc:
+            raise ProsePromotionError(str(exc)) from exc
+        return PromotionCandidate(
+            ref=row.artifact_unit_ref,
+            frag=row.unit_id,
+            claim=candidate.exact,
+            subject=candidate.subject,
+            object=candidate.object,
+            decision="MINT",
+            slug=slug,
+            reason="planned prose promotion",
+            kind=candidate.type,
+        )
+    if row.target_ref is None:
+        raise ProsePromotionError(f"link decision for unit {row.unit_id!r} is missing target_ref")
+    return PromotionCandidate(
+        ref=row.artifact_unit_ref,
+        frag=row.unit_id,
+        claim=candidate.exact,
+        subject=candidate.subject,
+        object=candidate.object,
+        decision="LINK",
+        slug=row.target_ref,
+        reason="planned prose promotion",
+        kind=candidate.type,
+    )
 
 
 def _row_from_json(payload: object, *, source_slug: str, index: int) -> ProsePromotionPlanRow:
@@ -221,3 +305,15 @@ def _reject_duplicate_unit_ids(unit_ids: Sequence[str]) -> None:
         if unit_id in seen:
             raise ProsePromotionError(f"duplicate promotion plan unit_id: {unit_id}")
         seen.add(unit_id)
+
+
+def _reject_duplicate_mint_targets(rows: Sequence[_ValidatedPromotionRow]) -> None:
+    seen: set[tuple[str, str]] = set()
+    for validated in rows:
+        candidate = validated.candidate
+        if candidate.decision != "MINT" or candidate.slug is None:
+            continue
+        key = (candidate.kind, candidate.slug)
+        if key in seen:
+            raise ProsePromotionError(f"duplicate mint target in promotion plan: {candidate.kind}:{candidate.slug}")
+        seen.add(key)

@@ -97,6 +97,53 @@ def _persist_artifact(
     return artifact
 
 
+def _persist_duplicate_claim_artifact(tmp_path: Path):
+    source = tmp_path / "docs" / "example.md"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text(
+        "# Section\n\nBasalt flows record the cooling history.\n\n"
+        "# Other\n\nBasalt flows record the cooling history.\n",
+        encoding="utf-8",
+    )
+    payload = _artifact_payload(tmp_path)
+    payload["source"] = {
+        "kind": "prose-source",
+        "slug": "example",
+        "path": str(source),
+        "title": "Example",
+        "content_hash": compute_source_hash(source),
+    }
+    payload["units"] = [
+        {
+            "unit_id": "u001",
+            "disposition": "candidate",
+            "locator": {"regime": "markdown-heading-path", "value": ["Section"]},
+            "payload": {
+                "type": "proposition",
+                "exact": "Basalt flows record the cooling history.",
+                "prefix": "",
+                "suffix": "",
+                "stance": "asserted",
+            },
+        },
+        {
+            "unit_id": "u002",
+            "disposition": "candidate",
+            "locator": {"regime": "markdown-heading-path", "value": ["Other"]},
+            "payload": {
+                "type": "proposition",
+                "exact": "Basalt flows record the cooling history.",
+                "prefix": "",
+                "suffix": "",
+                "stance": "asserted",
+            },
+        },
+    ]
+    artifact = parse_submitted_decomposition(json.dumps(payload), project_root=tmp_path)
+    ProseDecompositionStore(tmp_path).persist(artifact)
+    return artifact
+
+
 def _write_existing_proposition(root: Path) -> None:
     dest = root / "entities" / "propositions" / "existing.md"
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -264,6 +311,15 @@ def test_apply_rejects_duplicate_units_before_partial_mutation(tmp_path: Path) -
 
     with pytest.raises(ProsePromotionError, match="duplicate"):
         plan_from_json(payload)
+
+    assert not (tmp_path / "entities" / "propositions" / "basalt-flows-record-the-cooling-history.md").exists()
+
+
+def test_plan_rejects_duplicate_mint_targets_before_partial_mutation(tmp_path: Path) -> None:
+    _persist_duplicate_claim_artifact(tmp_path)
+
+    with pytest.raises(ProsePromotionError, match="duplicate mint target"):
+        plan_prose_promotions(tmp_path, "example", ["u001", "u002"])
 
     assert not (tmp_path / "entities" / "propositions" / "basalt-flows-record-the-cooling-history.md").exists()
 
