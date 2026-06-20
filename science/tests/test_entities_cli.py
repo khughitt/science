@@ -456,34 +456,16 @@ def test_entities_audit_identifiers_cli_outputs_json(tmp_path) -> None:
     }
 
 
-def test_entities_migrate_identifiers_cli_dry_run_outputs_json(tmp_path) -> None:
-    project = tmp_path / "project"
-    (project / "doc").mkdir(parents=True)
-    path = project / "doc" / "finding.md"
-    path.write_text("---\nkind: finding\ntitle: Finding\n---\n", encoding="utf-8")
-    runner = CliRunner()
-
-    result = runner.invoke(main, ["entities", "migrate-identifiers", "--project", str(project)])
-
-    assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
-    assert payload["planned_changes"] == [{"path": "doc/finding.md", "new_id": "finding:finding"}]
-    assert "id: finding:finding" not in path.read_text(encoding="utf-8")
-
-
-def test_entities_identifier_commands_emit_json_for_malformed_non_entity_markdown(tmp_path) -> None:
+def test_entities_audit_identifiers_emits_json_for_malformed_non_entity_markdown(tmp_path) -> None:
     project = tmp_path / "project"
     (project / "notes").mkdir(parents=True)
     (project / "notes" / "command.md").write_text("---\nrun: [unterminated\n---\n", encoding="utf-8")
     runner = CliRunner()
 
     audit = runner.invoke(main, ["entities", "audit-identifiers", "--project", str(project)])
-    migrate = runner.invoke(main, ["entities", "migrate-identifiers", "--project", str(project)])
 
     assert audit.exit_code == 0, audit.output
-    assert migrate.exit_code == 0, migrate.output
     assert json.loads(audit.output) == {"missing_canonical_ids": [], "invalid_canonical_ids": []}
-    assert json.loads(migrate.output)["planned_changes"] == []
 
 
 def test_entities_register_kind_is_idempotent_with_same_metadata(tmp_path) -> None:
@@ -1367,51 +1349,3 @@ def test_entity_show_resolves_shortform() -> None:
         assert result.exit_code == 0, result.output
         assert "question:0005-granularity" in result.output
 
-
-def test_entities_migrate_dry_run_emits_report() -> None:
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        root = Path.cwd()
-        (root / "science.yaml").write_text("name: t\nlayout_version: 2\n", encoding="utf-8")
-        write_markdown_entity(
-            root, "specs/hypotheses/h01-alpha.md",
-            {"id": "hypothesis:h01-alpha", "type": "hypothesis", "title": "Alpha", "status": "proposed",
-             "created": "2026-01-01", "updated": "2026-01-01"},
-        )
-        result = runner.invoke(main, ["entities", "migrate"])
-        assert result.exit_code == 0, result.output
-        assert "hypothesis:0001-alpha" in result.output  # report shows planned id
-        assert Path("specs/hypotheses/h01-alpha.md").is_file()  # dry run: unchanged
-
-
-def test_entities_migrate_apply_blocks_with_clean_error() -> None:
-    """--apply with a path collision must exit non-zero with a clean ClickException message."""
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        root = Path.cwd()
-        (root / "science.yaml").write_text("name: t\nlayout_version: 2\n", encoding="utf-8")
-        # Two paper files with the same citekey from both legacy paper homes → both
-        # would map to entities/papers/Adams2025.md, triggering a path collision.
-        write_markdown_entity(
-            root, "doc/papers/Adams2025.md",
-            {"id": "paper:Adams2025", "type": "paper", "title": "Adams 2025", "status": "read",
-             "created": "2025-01-01", "updated": "2025-01-01"},
-        )
-        write_markdown_entity(
-            root, "specs/papers/Adams2025.md",
-            {"id": "paper:Adams2025", "type": "paper", "title": "Adams 2025 (dup)", "status": "read",
-             "created": "2025-01-01", "updated": "2025-01-01"},
-        )
-
-        result = runner.invoke(main, ["entities", "migrate", "--apply"])
-
-        # Must exit non-zero.
-        assert result.exit_code != 0
-        # The error message must mention the collision — clean ClickException, not a traceback.
-        assert "collision" in result.output
-        # A ClickException produces a SystemExit, not a raw ValueError/Exception traceback.
-        assert not isinstance(result.exception, ValueError)
-        # No migration happened: source files still present, target absent.
-        assert Path("doc/papers/Adams2025.md").is_file()
-        assert Path("specs/papers/Adams2025.md").is_file()
-        assert not Path("entities/papers/Adams2025.md").exists()

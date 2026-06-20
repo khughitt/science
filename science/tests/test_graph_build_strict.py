@@ -19,7 +19,7 @@ def test_strict_build_fails_on_unmigrated_data_package(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError) as exc_info:
         materialize_graph(tmp_path, strict=True)
     assert "data-package:u" in str(exc_info.value)
-    assert "data-package migrate" in str(exc_info.value)
+    assert "no longer supported" in str(exc_info.value)
 
 
 def test_strict_build_passes_on_superseded(tmp_path: Path) -> None:

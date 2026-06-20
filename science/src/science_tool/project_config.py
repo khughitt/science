@@ -128,7 +128,7 @@ class ProjectConfig(BaseModel):
             if illegal:
                 raise ValueError(
                     f"science.yaml uses removed field(s) {illegal!r}. "
-                    "Run `science peers migrate` to migrate to `peers:`."
+                    "Use `peers:` instead; the legacy parent/children fields are no longer supported."
                 )
         return raw
 

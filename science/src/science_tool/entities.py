@@ -63,8 +63,7 @@ _VALID_STRATEGIES: frozenset[str] = frozenset({"numeric", "citekey", "slug"})
 
 # Set of directory (or file) names that belong to core kinds' homes.  A local
 # kind whose resolved home has the same final path component would silently
-# overwrite the core entry in the dir→kind inference map built by the migrator
-# (_project_dir_to_kind in entity_layout_migration.py).  Computed once at
+# overwrite the core entry in a dir→kind inference map.  Computed once at
 # import time from the authoritative builtin table.
 _CORE_HOME_DIR_NAMES: frozenset[str] = frozenset(policy.root.name for policy in _BUILTIN_MARKDOWN_POLICIES.values())
 

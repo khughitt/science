@@ -159,7 +159,7 @@ parent: ../meta
 """,
         encoding="utf-8",
     )
-    with pytest.raises(ValidationError, match=r"Run `science peers migrate` to migrate to `peers:`"):
+    with pytest.raises(ValidationError, match=r"Use `peers:` instead; the legacy parent/children fields are no longer supported\."):
         load_project_config(project_root)
 
 
@@ -243,5 +243,5 @@ children:
 """,
         encoding="utf-8",
     )
-    with pytest.raises(ValidationError, match=r"Run `science peers migrate` to migrate to `peers:`"):
+    with pytest.raises(ValidationError, match=r"Use `peers:` instead; the legacy parent/children fields are no longer supported\."):
         load_project_config(project_root)

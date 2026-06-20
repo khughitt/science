@@ -113,19 +113,17 @@ The current peer commands are:
 science peers list
 science peers check
 science peers show <peer-id>
-science peers migrate
 ```
 
 - `science peers list` shows declared peers, resolved paths, and status.
 - `science peers check` validates peer entries and reports structured issues.
 - `science peers show <peer-id>` displays one resolved peer's declared ID,
   project ID, name, role, and path.
-- `science peers migrate` converts old relationship fields to `peers:`.
 
 ## Historical Context
 
 Older Science projects used umbrella-child config fields with
 `science federation ...` commands for status and validation. Those fields and
-commands described a tree-shaped relationship and are no longer current
-guidance. Run `science peers migrate` for projects that still carry those
-legacy fields.
+commands described a tree-shaped relationship and are no longer supported.
+Use `peers:` directly; the legacy parent/children fields are not migrated
+automatically.

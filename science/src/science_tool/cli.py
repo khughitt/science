@@ -10,7 +10,6 @@ from rich.text import Text
 from science_model.reasoning import MembershipRole
 
 from science_tool.annotation.cli import annotate_group
-from science_tool.aspects.cli import aspects_group
 from science_tool.big_picture.cli import big_picture_group
 from science_tool.causal.export_chirho import export_chirho_script
 from science_tool.causal.export_pgmpy import export_pgmpy_script
@@ -35,19 +34,10 @@ from science_tool.entities import (
 )
 from science_tool.entities_inventory import build_inventory
 from science_tool.entity_kinds import register_local_kind
-from science_tool.entity_migrations import audit_identifiers, migrate_identifiers
+from science_tool.entity_migrations import audit_identifiers
 from science_tool.graph import belief_snapshot
 from science_tool.graph.cross_impact import query_cross_impact
 from science_tool.graph.materialize import materialization_audit, materialize_graph
-from science_tool.graph.migrate import (
-    audit_project_graph,
-    build_layered_claim_migration_report,
-    preview_project_id_rewrites,
-    rewrite_project_ids_in_sources,
-    write_local_sources,
-    write_migration_report,
-)
-from science_tool.graph.paper_dataset_migration import plan_paper_dataset_migration
 from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
     GRAPH_LAYERS,
@@ -230,7 +220,6 @@ def _parse_interaction_terms(entries: tuple[str, ...]) -> list[PropositionIntera
     return interaction_terms
 
 
-main.add_command(aspects_group)
 main.add_command(dag_group)
 main.add_command(curate_group)
 main.add_command(research_package_group)
@@ -276,17 +265,6 @@ def entities_inventory_command(
 @click.option("--project", "project_path", type=click.Path(path_type=Path), default=Path.cwd())
 def entities_audit_identifiers_command(project_path: Path) -> None:
     click.echo(json.dumps(audit_identifiers(project_path), indent=2))
-
-
-@entities_group.command("migrate-identifiers")
-@click.option("--project", "project_path", type=click.Path(path_type=Path), default=Path.cwd())
-@click.option("--apply", "apply_changes", is_flag=True, default=False)
-def entities_migrate_identifiers_command(project_path: Path, apply_changes: bool) -> None:
-    try:
-        report = migrate_identifiers(project_path, apply=apply_changes)
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
-    click.echo(json.dumps(report, indent=2))
 
 
 @entities_group.command("mark-superseded")
@@ -391,25 +369,6 @@ def entities_consolidate_apply_command(digest_id: str, project_root: Path, apply
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     report = apply_consolidation(project_root, digest_id, apply=apply_changes, now=now)
-    click.echo(json.dumps(report, indent=2))
-
-
-@entities_group.command("migrate")
-@click.option("--apply", "apply_changes", is_flag=True, help="Apply the migration (default: dry run).")
-@click.option(
-    "--project-root",
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
-    default=Path("."),
-    help="Project root (default: current directory).",
-)
-def entities_migrate_command(apply_changes: bool, project_root: Path) -> None:
-    """Migrate a project's doc/specs entity layout into entities/ (v2 → v3)."""
-    from science_tool.entity_layout_migration import migrate_layout
-
-    try:
-        report = migrate_layout(project_root, apply=apply_changes)
-    except ValueError as exc:  # collisions / unresolved refs block --apply
-        raise click.ClickException(str(exc)) from exc
     click.echo(json.dumps(report, indent=2))
 
 
@@ -518,8 +477,8 @@ def entities_triage_aggregate_command(
         version = _v if isinstance(_v, int) else None
         if version is None or version < 3:
             raise click.ClickException(
-                f"promotion needs an `entities/` owner root; this project is layout_version {version} — "
-                "complete the v2->v3 migration (`science entities migrate`) first."
+                f"promotion needs an `entities/` owner root, but this project is layout_version {version}. "
+                "This Science version supports layout_version 3 only; the v2 layout is no longer supported."
             )
 
     decisions_path = project_root / "core" / "decisions.md"
@@ -597,8 +556,9 @@ def entities_generate_decisions_command(project_root: Path, write_changes: bool)
     version = _v if isinstance(_v, int) else None
     if version is None or version < 3:
         raise click.ClickException(
-            f"generate-decisions needs an `entities/decision/` owner root; this project is "
-            f"layout_version {version} — complete the v2->v3 migration first."
+            f"generate-decisions needs an `entities/decision/` owner root, but this project is "
+            f"layout_version {version}. This Science version supports layout_version 3 only; "
+            f"the v2 layout is no longer supported."
         )
 
     owners = read_decision_owners(project_root / "entities" / "decision")
@@ -1414,143 +1374,6 @@ def graph_audit(output_format: str, project_root: Path) -> None:
         raise click.exceptions.Exit(1)
 
 
-@graph.command("migrate")
-@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-@click.option("--apply", is_flag=True, default=False, help="Write source rewrites and migration artifacts to disk.")
-@click.option(
-    "--project-root",
-    default=".",
-    show_default=True,
-    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
-)
-def graph_migrate(output_format: str, apply: bool, project_root: Path) -> None:
-    """Audit graph migration state; pass --apply to rewrite refs and persist migration artifacts."""
-
-    project_root = project_root.resolve()
-    initial_report = audit_project_graph(project_root)
-    if apply:
-        rewritten_files = rewrite_project_ids_in_sources(project_root, initial_report["alias_map"])
-        write_local_sources(project_root, dict(initial_report))
-    else:
-        rewritten_files = preview_project_id_rewrites(project_root, initial_report["alias_map"])
-
-    final_report = audit_project_graph(project_root)
-    layered_claim_report = build_layered_claim_migration_report(project_root)
-    final_report_payload: dict[str, Any] = dict(final_report)
-    final_report_payload["apply"] = apply
-    final_report_payload["rewritten_files"] = rewritten_files
-    final_report_payload["rewritten_file_count"] = len(rewritten_files)
-    final_report_payload["layered_claim_migration"] = layered_claim_report
-    if apply:
-        report_path = write_migration_report(project_root, final_report_payload)
-        final_report_payload["report_path"] = str(report_path)
-    else:
-        report_path = None
-        final_report_payload["report_path"] = None
-
-    if output_format == "json":
-        click.echo(json.dumps(final_report_payload, indent=2, sort_keys=True))
-    else:
-        emit_query_rows(
-            output_format=output_format,
-            title="Graph Migration Audit",
-            columns=[
-                ("check", "Check"),
-                ("status", "Status"),
-                ("source", "Source"),
-                ("field", "Field"),
-                ("target", "Target"),
-                ("details", "Details"),
-            ],
-            rows=[dict(row) for row in final_report["rows"]],
-        )
-        if report_path is None:
-            click.echo("Mode: dry-run (no project files written)")
-        else:
-            click.echo(f"Report: {report_path}")
-        click.echo(f"Potential rewritten files: {len(rewritten_files)}")
-        click.echo(
-            "Layered-claim scan: "
-            f"{layered_claim_report['summary']['proposition_count']} propositions, "
-            f"{layered_claim_report['summary']['warning_count']} warnings, "
-            f"{layered_claim_report['summary']['todo_count']} TODOs"
-        )
-        if not apply and rewritten_files:
-            click.echo("Re-run with --apply to write the previewed rewrites and migration artifacts.")
-
-    if final_report["has_failures"]:
-        raise click.exceptions.Exit(1)
-
-
-@graph.command("migrate-paper-datasets")
-@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-@click.option("--apply", "apply_changes", is_flag=True, default=False, help="Rewrite paper frontmatter in place.")
-@click.option(
-    "--project-root",
-    default=".",
-    show_default=True,
-    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
-)
-def graph_migrate_paper_datasets(output_format: str, apply_changes: bool, project_root: Path) -> None:
-    """Migrate legacy paper.datasets fields to canonical dataset_usage."""
-
-    report = plan_paper_dataset_migration(project_root.resolve(), apply=apply_changes)
-    payload = report.to_json()
-    if output_format == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-    else:
-        rows = [{"kind": "change", "path": path, "reason": "", "detail": ""} for path in report.changed_files]
-        rows.extend(
-            {
-                "kind": "conflict",
-                "path": conflict.path,
-                "reason": conflict.reason,
-                "detail": conflict.detail,
-            }
-            for conflict in report.conflicts
-        )
-        emit_query_rows(
-            output_format=output_format,
-            title="Paper Dataset Migration",
-            columns=[
-                ("kind", "Kind"),
-                ("path", "Path"),
-                ("reason", "Reason"),
-                ("detail", "Detail"),
-            ],
-            rows=rows,
-        )
-        mode = "apply" if apply_changes else "dry-run"
-        click.echo(f"Mode: {mode}")
-        click.echo(f"Changed files: {report.changed_file_count}")
-        click.echo(f"Conflicts: {report.conflict_count}")
-
-    if report.conflicts:
-        raise click.exceptions.Exit(20)
-    if not apply_changes and report.changed_files:
-        raise click.exceptions.Exit(10)
-
-
-@graph.command("migrate-model")
-@click.option(
-    "--project-root",
-    default=".",
-    show_default=True,
-    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
-)
-def graph_migrate_model(project_root: Path) -> None:
-    """Migrate project sources from old entity model to Project Model."""
-    from science_tool.graph.project_model_migration import migrate_entity_sources
-
-    project_root = project_root.resolve()
-    stats = migrate_entity_sources(project_root)
-    click.echo(
-        f"Migration complete: {stats['migrated']} migrated, {stats['skipped']} skipped, {stats['errors']} errors"
-    )
-    if stats["errors"] > 0:
-        click.echo("Review errors manually — some files may need manual migration.")
-
-
 @graph.command("migrate-addresses")
 @click.option("--apply", is_flag=True, default=False, help="Write changes to disk (default is dry-run).")
 @click.option(
@@ -1579,61 +1402,6 @@ def graph_migrate_addresses(apply: bool, graph_path: Path) -> None:
         click.echo("Re-run with --apply to write changes.")
 
 
-@graph.command("migrate-tags")
-@click.option(
-    "--project-root",
-    default=".",
-    show_default=True,
-    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
-)
-@click.option("--apply", is_flag=True, default=False, help="Write changes to disk (default is dry-run).")
-@click.option(
-    "--as-topic",
-    is_flag=True,
-    default=False,
-    help="Legacy mode: convert bare tags to topic: refs instead of the default meta: refs.",
-)
-def graph_migrate_tags(project_root: Path, apply: bool, as_topic: bool) -> None:
-    """Rewrite legacy `tags:` frontmatter into `related:` refs in-place.
-
-    Default: bare tag values become `meta:<tag>` (intentional metadata,
-    no KG pollution). Pass --as-topic only for legacy migrations where
-    the tags have already been audited and should remain `topic:` refs.
-
-    Entity frontmatter: `tags: [genomics]` → adds `meta:genomics` to `related`, removes `tags:` line.
-    Task markdown: same idea for `- tags: [foo]` in tasks/active.md and tasks/done/*.md.
-    Dry-run by default; pass --apply to actually write.
-    """
-    from science_tool.graph.tags_migration import migrate_tags_to_related
-
-    project_root = project_root.resolve()
-    report = migrate_tags_to_related(project_root, apply=apply, as_topic=as_topic)
-
-    if not report.entity_files and not report.task_files and not report.errors:
-        click.echo("No legacy tags found — nothing to migrate.")
-        return
-
-    prefix = "Would migrate" if not apply else "Migrated"
-    for fm in report.entity_files:
-        rel = fm.path.relative_to(project_root) if fm.path.is_absolute() else fm.path
-        added = ", ".join(fm.added_to_related) if fm.added_to_related else "(no new refs)"
-        click.echo(f"{prefix}: {rel}  tags={fm.tag_values} → related+={added}")
-
-    for task_file in report.task_files:
-        rel = task_file.relative_to(project_root) if task_file.is_absolute() else task_file
-        click.echo(f"{prefix}: {rel}  (task file re-rendered)")
-
-    for path, err in report.errors:
-        rel = path.relative_to(project_root) if path.is_absolute() else path
-        click.echo(f"ERROR: {rel}: {err}", err=True)
-
-    total = len(report.entity_files) + len(report.task_files)
-    action = "Migrated" if apply else "Would migrate"
-    click.echo(f"\n{action} {total} file(s).")
-    if not apply:
-        click.echo("Re-run with --apply to write changes.")
-    if report.errors:
-        raise click.exceptions.Exit(1)
 
 
 @graph.command("stats")
@@ -3615,45 +3383,6 @@ def tasks_add(
     click.echo(f"Created [{task.id}] {task.title}")
 
 
-@tasks.command("migrate-ids")
-@click.option("--project-root", type=click.Path(path_type=Path), default=Path("."), help="Project root to rewrite")
-@click.option("--map", "raw_mappings", multiple=True, required=True, help="Task id rewrite OLD=NEW; repeatable")
-@click.option("--parent", "parent_ref", default=None, help="Parent ref to add to migrated task blocks, e.g. task:t294")
-@click.option("--include-generated", is_flag=True, help="Also rewrite generated knowledge/ files")
-@click.option("--apply", "do_apply", is_flag=True, help="Write changes; default is dry-run")
-def tasks_migrate_ids(
-    project_root: Path,
-    raw_mappings: tuple[str, ...],
-    parent_ref: str | None,
-    include_generated: bool,
-    do_apply: bool,
-) -> None:
-    """Rewrite invalid or stale task ids across a project."""
-    from science_tool.tasks_id_migration import (
-        TaskIdMigrationError,
-        migrate_task_ids,
-        parse_task_id_mapping,
-    )
-
-    try:
-        mappings = parse_task_id_mapping(raw_mappings)
-        result = migrate_task_ids(
-            project_root,
-            mappings,
-            parent_ref=parent_ref,
-            include_generated=include_generated,
-            apply=do_apply,
-        )
-    except TaskIdMigrationError as exc:
-        raise click.ClickException(str(exc)) from exc
-
-    mode = "applied" if do_apply else "dry-run"
-    click.echo(
-        f"{mode}: changed_files={result.changed_files} renamed_paths={result.renamed_paths} "
-        f"scanned_files={result.scanned_files}"
-    )
-
-
 def _warn_dangling_task_refs(tasks_dir: Path) -> None:
     """Post-write self-check: surface any blocked-by/parent task ref that no
     longer resolves, so a dropped sibling is caught here rather than at graph build."""
@@ -4629,11 +4358,8 @@ def health_command(
 
         if empty_count:
             console.print(
-                f"[dim]...and {empty_count} additional file(s) with empty `tags: []` "
-                f"(cosmetic only — migrate-tags will strip them).[/dim]"
+                f"[dim]...and {empty_count} additional file(s) with empty `tags: []` (cosmetic only).[/dim]"
             )
-
-        console.print("\n[bold]Next:[/bold] run [cyan]science graph migrate-tags --apply[/cyan] to migrate these.")
 
     if report["identity_policy"]:
         table = Table(title=f"Identity Policy ({len(report['identity_policy'])})")
@@ -5576,44 +5302,6 @@ def dataset_reconcile(slug: str, project_root: Path | None) -> None:
 @main.group(name="data-package")
 def data_package_group() -> None:
     """Legacy data-package commands."""
-
-
-@data_package_group.command(name="migrate")
-@click.argument("slug", required=False)
-@click.option("--all", "all_", is_flag=True, default=False, help="Migrate every unmigrated data-package.")
-@click.option("--dry-run", is_flag=True, default=False, help="Preview without writing.")
-@click.option(
-    "--project-root",
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
-    default=None,
-)
-def data_package_migrate_cmd(slug: str | None, all_: bool, dry_run: bool, project_root: Path | None) -> None:
-    """Split legacy data-package(s) into derived dataset(s) + research-package."""
-    from science_tool.datapackage_migrate import list_unmigrated, migrate_data_package
-
-    proj = project_root or _project_root_from_env()
-    if all_ and slug:
-        raise click.UsageError("provide either <slug> or --all, not both")
-    if not all_ and not slug:
-        raise click.UsageError("provide a <slug> or pass --all")
-    if all_:
-        slugs: list[str] = list_unmigrated(proj)
-    else:
-        assert slug is not None  # narrowed by UsageError above
-        slugs = [slug]
-    for s in slugs:
-        try:
-            plan = migrate_data_package(proj, s, dry_run=dry_run)
-        except (FileNotFoundError, ValueError) as exc:
-            click.echo(f"{s}: {exc}", err=True)
-            raise click.exceptions.Exit(2) from exc
-        prefix = "[dry-run] would write" if dry_run else "wrote"
-        for p in plan.dataset_paths:
-            click.echo(f"{prefix} {p.relative_to(proj)}")
-        if plan.research_package_path is not None:
-            click.echo(f"{prefix} {plan.research_package_path.relative_to(proj)}")
-        if not dry_run:
-            click.echo(f"superseded data-package:{s} -> research-package:{s}")
 
 
 @data_package_group.command(name="list")

@@ -42,8 +42,8 @@ _RESOURCE_ONLY_FIELDS = frozenset(
     }
 )
 
-# Reuse migrate_layout's undated sentinel so the existing `--apply` undated gate
-# surfaces a datapackage that carries no `created` rather than inventing a date.
+# Sentinel date used by the `--apply` undated gate to surface a datapackage that
+# carries no `created` field rather than inventing a date.
 _UNDATED_SENTINEL = "9999-99-99"
 
 # Path-safety: a promoted owner is written at entities/datasets/<slug>.md. The

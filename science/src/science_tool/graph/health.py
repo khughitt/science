@@ -1611,7 +1611,7 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
                         "severity": "error",
                         "entity_id": str(fm.get("id", "")),
                         "file_path": str(md),
-                        "message": "unmigrated data-package; run `science data-package migrate` to split into derived dataset(s) + research-package",
+                        "message": "unmigrated data-package; the legacy data-package layout is no longer supported — split into derived dataset(s) + research-package by hand",
                     }
                 )
 
