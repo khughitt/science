@@ -177,7 +177,7 @@ def test_audit_reference_ignores_annotation_source_refs() -> None:
     assert rows == []
 
 
-def test_audit_reference_does_not_broadly_ignore_annotation_refs_in_other_fields() -> None:
+def test_audit_reference_allows_annotation_evidence_refs_as_cross_project_addresses() -> None:
     referer = _ref_entity("hypothesis:h1", "hypothesis", EntityType.HYPOTHESIS)
     rows = _audit_reference(
         referer,
@@ -186,10 +186,9 @@ def test_audit_reference_does_not_broadly_ignore_annotation_refs_in_other_fields
         _empty_resolver(),
         ext_prefixes=frozenset(),
         allow_cross_kind_fallback=True,
+        allow_cross_project_address=True,
     )
-    assert len(rows) == 1
-    assert rows[0]["check"] == "unresolved_reference"
-    assert rows[0]["field"] == "evidence_refs"
+    assert rows == []
 
 
 def test_audit_reference_emits_ambiguous_reference_row() -> None:
