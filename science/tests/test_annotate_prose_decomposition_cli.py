@@ -409,7 +409,7 @@ def test_validate_prose_decomposition_artifact_rejects_source_outside_root(tmp_p
     )
 
     assert result.exit_code != 0
-    assert "source path is outside project root" in result.output
+    assert "source path escapes project root" in result.output
     assert str(outside_source) in result.output
     assert "content hash mismatch" not in result.output
 
