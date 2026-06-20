@@ -32,7 +32,6 @@ ALLOWLIST: set[str] = {
     "graph/health.py",                      # health/datasets/runs roots
     "graph/materialize.py",                 # doc/data-packages migration gate
     "graph/migrate.py",                     # migration roots
-    "graph/paper_dataset_migration.py",
     "graph/project_model_migration.py",
     "graph/tags_migration.py",
     "validate/checks/id_prefixes.py",       # doc/specs legacy roots (line 52)
