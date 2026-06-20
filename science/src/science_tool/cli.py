@@ -5422,44 +5422,6 @@ def data_package_group() -> None:
     """Legacy data-package commands."""
 
 
-@data_package_group.command(name="migrate")
-@click.argument("slug", required=False)
-@click.option("--all", "all_", is_flag=True, default=False, help="Migrate every unmigrated data-package.")
-@click.option("--dry-run", is_flag=True, default=False, help="Preview without writing.")
-@click.option(
-    "--project-root",
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
-    default=None,
-)
-def data_package_migrate_cmd(slug: str | None, all_: bool, dry_run: bool, project_root: Path | None) -> None:
-    """Split legacy data-package(s) into derived dataset(s) + research-package."""
-    from science_tool.datapackage_migrate import list_unmigrated, migrate_data_package
-
-    proj = project_root or _project_root_from_env()
-    if all_ and slug:
-        raise click.UsageError("provide either <slug> or --all, not both")
-    if not all_ and not slug:
-        raise click.UsageError("provide a <slug> or pass --all")
-    if all_:
-        slugs: list[str] = list_unmigrated(proj)
-    else:
-        assert slug is not None  # narrowed by UsageError above
-        slugs = [slug]
-    for s in slugs:
-        try:
-            plan = migrate_data_package(proj, s, dry_run=dry_run)
-        except (FileNotFoundError, ValueError) as exc:
-            click.echo(f"{s}: {exc}", err=True)
-            raise click.exceptions.Exit(2) from exc
-        prefix = "[dry-run] would write" if dry_run else "wrote"
-        for p in plan.dataset_paths:
-            click.echo(f"{prefix} {p.relative_to(proj)}")
-        if plan.research_package_path is not None:
-            click.echo(f"{prefix} {plan.research_package_path.relative_to(proj)}")
-        if not dry_run:
-            click.echo(f"superseded data-package:{s} -> research-package:{s}")
-
-
 @data_package_group.command(name="list")
 @click.option(
     "--project-root",

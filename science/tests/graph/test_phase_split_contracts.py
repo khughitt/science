@@ -100,7 +100,7 @@ def test_preflight_is_materialize_only(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError) as exc:
         materialize_graph(tmp_path, strict=True)
     assert "data-package:u" in str(exc.value)
-    assert "data-package migrate" in str(exc.value)
+    assert "no longer supported" in str(exc.value)
     # audit path skips the preflight: it must not raise RuntimeError
     rows, _ = materialization_audit(tmp_path)
     assert isinstance(rows, list)

@@ -371,8 +371,8 @@ def _preflight_migration(project_root: Path) -> None:
         slugs = ", ".join(sorted(unmigrated))
         raise RuntimeError(
             f"unmigrated data-package entities: {slugs}. "
-            f"Run `science data-package migrate <slug>` to split each into "
-            f"derived dataset(s) + research-package."
+            f"Legacy data-package entities are no longer supported; split each into "
+            f"derived dataset(s) + a research-package by hand."
         )
 
 
@@ -454,8 +454,8 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
     """Build `knowledge/graph.trig` deterministically from project sources.
 
     When `strict=True` (the default), the project-root preflight raises
-    RuntimeError if any legacy data-package entities have not yet been migrated
-    via `science data-package migrate`.
+    RuntimeError if any legacy (unmigrated) data-package entities remain;
+    the v2 data-package layout is no longer supported.
     """
     result = _compile(project_root, strict=strict)
     assert result.trig_path is not None  # a full compile always writes
