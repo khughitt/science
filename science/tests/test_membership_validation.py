@@ -272,3 +272,77 @@ def test_matching_role_in_frontmatter_and_relations_no_error(tmp_path: Path):
     ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
     errs = _relation_role_errors(ctx)
     assert errs == []
+
+
+# ---------------------------------------------------------------------------
+# Rule-3 hardening: alias-based frame refs and unresolvable frame refs
+# ---------------------------------------------------------------------------
+
+
+def _write_hyp_with_alias(tmp_path: Path, hid: str, alias: str) -> None:
+    """Write a hypothesis entity with one explicit alias."""
+    _write_entity_file(
+        tmp_path / "entities" / "hypotheses" / f"{hid}.md",
+        [
+            f'id: "hypothesis:{hid}"',
+            'type: "hypothesis"',
+            f'title: "{hid}"',
+            'status: "proposed"',
+            "ontology_terms: []",
+            "source_refs: []",
+            "related: []",
+            f'aliases: ["{alias}"]',
+        ],
+    )
+
+
+def test_alias_frame_ref_conflict_now_detected(tmp_path: Path):
+    """Rule 3 (hardened): frontmatter uses an alias frame ref; old code silently skipped
+    the pair because the alias was not in entity_index; new code canonicalizes it and
+    correctly surfaces the conflict.
+
+    Setup: hypothesis:h1 has alias "h-focal"; frontmatter says background via alias;
+    relations.yaml says core via canonical id → conflict MUST be flagged.
+    """
+    local_sources = _write_minimal_project(tmp_path)
+    _write_hyp_with_alias(tmp_path, "h1", "h-focal")
+    # Frontmatter uses the ALIAS, not the canonical id.
+    _write_prop(tmp_path, "p1", '[{frame: "h-focal", role: "background"}]')
+    # relations.yaml uses the CANONICAL id with a conflicting role.
+    _write_relations(local_sources, [
+        "relations:",
+        "  - subject: proposition:p1",
+        "    predicate: cito:discusses",
+        "    object: hypothesis:h1",
+        "    role: core",
+    ])
+    ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
+    errs = _relation_role_errors(ctx)
+    assert any(r.rule == "relation.role.cross-surface-conflict" for r in errs), (
+        "Expected a cross-surface-conflict error but got: " + str([r.message for r in errs])
+    )
+
+
+def test_unresolvable_frame_ref_is_loud_error(tmp_path: Path):
+    """Rule 3 (hardened): a discusses frame ref that cannot be resolved to any known
+    entity must now surface as a loud error (relation.role.unresolved-frame) rather than
+    silently skipping — the old code called entity_index.get(frame_ref) and continued on
+    None, masking the bad ref.
+    """
+    local_sources = _write_minimal_project(tmp_path)
+    _write_hyp(tmp_path, "h1")
+    # Frontmatter references a frame that does NOT exist in the project.
+    _write_prop(tmp_path, "p1", '[{frame: "hypothesis:nonexistent", role: "background"}]')
+    # relations.yaml has a valid role entry (triggering rule-3 path).
+    _write_relations(local_sources, [
+        "relations:",
+        "  - subject: proposition:p1",
+        "    predicate: cito:discusses",
+        "    object: hypothesis:h1",
+        "    role: core",
+    ])
+    ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
+    errs = _relation_role_errors(ctx)
+    assert any(r.rule == "relation.role.unresolved-frame" for r in errs), (
+        "Expected an unresolved-frame error but got: " + str([r.message for r in errs])
+    )

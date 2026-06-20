@@ -294,24 +294,58 @@ def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Res
 
     # Rule 3: cross-surface conflict — same (proposition, frame) pair with conflicting roles
     # across frontmatter `discusses:` and relations.yaml `role:`.
-    # Build entity index keyed by canonical_id for quick lookup.
-    entity_index = {e.canonical_id: e for e in sources.entities}
+    #
+    # Key-space alignment: both sides must be canonicalized before keying so that a
+    # short-slug or alias ref in either surface matches a canonical-id ref in the other.
+    # We use build_alias_map (the same resolver used by the materialize path) to
+    # canonicalize BOTH the frontmatter frame_refs AND the relation subject/object
+    # strings.  If a ref cannot be canonicalized, we emit an ERROR (never silently skip).
+    from science_tool.graph.sources import build_alias_map
+    from science_model import normalize_alias
+
+    alias_map = build_alias_map(sources.entities, manual_aliases=sources.manual_aliases)
+
+    # Re-key relation_roles by canonicalized (subject_cid, object_cid) pairs.
+    canonical_relation_roles: dict[tuple[str, str], str] = {}
+    for (raw_subject, raw_object), rel_role in relation_roles.items():
+        subj_cid = normalize_alias(raw_subject, alias_map)
+        obj_cid = normalize_alias(raw_object, alias_map)
+        canonical_relation_roles[(subj_cid, obj_cid)] = rel_role
 
     for entity in sources.entities:
         iter_memberships = getattr(entity, "iter_memberships", None)
         if not callable(iter_memberships):
             continue
         for frame_ref, role in iter_memberships():
-            # frame_ref is a raw reference — resolve via canonical_id prefix if it matches exactly.
-            # Since we only need a prefix match with entity_index, try direct lookup first.
-            frame_entity = entity_index.get(frame_ref)
-            if frame_entity is None:
+            # Canonicalize the frontmatter frame_ref via the alias map.
+            # normalize_alias returns the raw string unchanged when the ref is not found in
+            # the alias map (neither raw nor lowercased).  A known canonical_id is always
+            # registered as its own alias, so the only case where resolution fails is a
+            # genuinely unknown ref.
+            frame_cid = normalize_alias(frame_ref, alias_map)
+            unresolved = frame_ref not in alias_map and frame_ref.lower() not in alias_map
+            if unresolved:
+                # Since a discusses frame MUST resolve (the materialize path fails loud on
+                # the same condition), surface this as an error rather than silently
+                # skipping — a silent skip here would hide cross-surface conflicts for any
+                # author using an alias or mis-typed ref.
+                yield Result(
+                    severity=Severity.ERROR,
+                    path=Path(entity.file_path),
+                    line=None,
+                    message=(
+                        f"{entity.canonical_id}: discusses frame ref '{frame_ref}' cannot be "
+                        "resolved to a known entity; cannot check cross-surface role conflict "
+                        "(design §4 rule 3)"
+                    ),
+                    rule="relation.role.unresolved-frame",
+                    task=None,
+                )
                 continue
-            frame_cid = frame_entity.canonical_id
             pair = (entity.canonical_id, frame_cid)
-            if pair not in relation_roles:
+            if pair not in canonical_relation_roles:
                 continue
-            relations_role = relation_roles[pair]
+            relations_role = canonical_relation_roles[pair]
             if role.value != relations_role:
                 yield Result(
                     severity=Severity.ERROR,

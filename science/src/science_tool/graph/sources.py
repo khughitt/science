@@ -1098,7 +1098,13 @@ def _load_structured_relations(project_root: Path, *, local_profile: str) -> lis
         raw_role = item.get("role")
         role: MembershipRole | None = None
         if raw_role is not None:
-            role = MembershipRole(str(raw_role))
+            if not isinstance(raw_role, str):
+                raise ValueError(
+                    f"relations.yaml: 'role' must be a string, got {type(raw_role).__name__!r} "
+                    f"(value: {raw_role!r}); valid roles are "
+                    f"{[r.value for r in MembershipRole]}"
+                )
+            role = MembershipRole(raw_role)
 
         relations.append(
             SourceRelation(
