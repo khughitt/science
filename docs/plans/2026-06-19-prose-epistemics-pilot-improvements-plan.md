@@ -8,6 +8,18 @@
 
 **Tech Stack:** Python 3, Click, pytest, rdflib, existing `science_tool.annotation` and `science_tool.graph` modules, downstream `~/d/natural-systems` artifacts for the offline-agent pilot.
 
+**Status:** Completed and merged.
+
+**Completion Record (2026-06-20):**
+- `science`: implemented, reviewed, verified, and merged to `main` in merge commit `8b364074` (`Merge branch 'prose-pilot-improvements'`).
+- `natural-systems`: offline-agent artifact pilot merged to `main` at `e652407c` (`test: run prose epistemics agent artifact pilot`).
+- Cleanup completed: removed the `science` implementation worktree/branch and removed the downstream `natural-systems-prose-agent-pilot` worktree/branch.
+- Verification on merged `science/main`: focused prose/graph pytest suite passed; ruff passed for touched files; targeted pyright passed for touched files.
+- Verification on merged `natural-systems/main`: `npm run typecheck` passed.
+- Full-repo `uv run --frozen --project science pyright` was run and still reports broad pre-existing issues outside this plan's touched surface; it was not used as the completion gate.
+
+The checklist below is retained as the original execution plan. The authoritative status is this completion record plus the merge commits above.
+
 ---
 
 ## Implementation Notes
@@ -1611,7 +1623,7 @@ Run:
 uv run --frozen pytest science/tests/test_annotate_prose_decomposition_cli.py science/tests/test_prose_decomposition.py science/tests/test_internal_prose_adapter.py science/tests/test_prose_promote.py science/tests/test_prose_promotion_batch.py science/tests/test_prose_source_entity.py science/tests/test_graph_io_revision_manifest.py science/tests/test_graph_migrate_identity_audit.py -q
 ```
 
-Expected: PASS.
+Actual: PASS on merged `science/main`.
 
 - [ ] **Step 2: Run lint and typing checks**
 
@@ -1619,10 +1631,12 @@ Run:
 
 ```bash
 uv run --frozen ruff check science/src/science_tool/annotation/prose_validation.py science/src/science_tool/annotation/prose_promotion_batch.py science/src/science_tool/annotation/prose_decomposition.py science/src/science_tool/annotation/prose_source_entity.py science/src/science_tool/graph/io.py science/tests/test_annotate_prose_decomposition_cli.py science/tests/test_prose_promotion_batch.py science/tests/test_graph_io_revision_manifest.py
-uv run --frozen pyright
+uv run --frozen pyright science/src/science_tool/annotation/prose_validation.py science/src/science_tool/annotation/prose_promote.py science/src/science_tool/annotation/prose_promotion_batch.py science/src/science_tool/annotation/prose_decomposition.py science/src/science_tool/annotation/prose_source_entity.py science/src/science_tool/graph/io.py science/tests/test_prose_promotion_batch.py science/tests/test_graph_io_revision_manifest.py
 ```
 
-Expected: PASS.
+Actual: PASS on merged `science/main`.
+
+Note: full-repo `uv run --frozen --project science pyright` was also run and failed on broad pre-existing unrelated issues in notebooks/model/tests/scripts, not on this plan's touched files.
 
 - [ ] **Step 3: Check worktree status**
 
@@ -1632,4 +1646,4 @@ Run:
 git status --short
 ```
 
-Expected: clean science worktree after all science commits. The downstream natural-systems worktree may remain on its pilot branch.
+Actual: `science/main` was clean except for unrelated plan-doc edits during status update. The downstream `natural-systems-prose-agent-pilot` worktree and branch were removed after confirming they were merged.
