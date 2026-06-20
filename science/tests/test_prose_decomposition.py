@@ -7,6 +7,7 @@ from science_tool.annotation.prose_decomposition import (
     DecompositionError,
     ProseDecompositionStore,
     artifact_unit_ref,
+    compute_source_hash,
     parse_submitted_decomposition,
 )
 
@@ -162,6 +163,33 @@ def test_d_science_path_rewrite_respects_path_boundary(tmp_path):
     raw["source"]["path"] = "~/d/science-old/foo.md"
     artifact = parse_submitted_decomposition(json.dumps(raw), project_root=tmp_path)
     assert artifact.source.path == Path("~/d/science-old/foo.md").expanduser()
+
+
+def test_parse_submitted_decomposition_resolves_project_relative_source_path(tmp_path: Path) -> None:
+    source = tmp_path / "docs" / "example.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# Section\n\nBasalt flows record the cooling history.\n", encoding="utf-8")
+    payload = _artifact(tmp_path)
+    payload["source"]["path"] = "docs/example.md"
+    payload["source"]["content_hash"] = compute_source_hash(source)
+
+    artifact = parse_submitted_decomposition(json.dumps(payload), project_root=tmp_path)
+
+    assert artifact.source.path == source
+
+
+def test_parse_submitted_decomposition_resolves_tilde_d_project_alias(tmp_path: Path) -> None:
+    project_root = tmp_path / "natural-systems"
+    source = project_root / "docs" / "example.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# Section\n\nBasalt flows record the cooling history.\n", encoding="utf-8")
+    payload = _artifact(project_root)
+    payload["source"]["path"] = "~/d/natural-systems/docs/example.md"
+    payload["source"]["content_hash"] = compute_source_hash(source)
+
+    artifact = parse_submitted_decomposition(json.dumps(payload), project_root=project_root)
+
+    assert artifact.source.path == source
 
 
 def test_fingerprint_ignores_artifact_local_unit_id(tmp_path):

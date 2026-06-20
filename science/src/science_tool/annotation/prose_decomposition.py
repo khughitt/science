@@ -614,9 +614,13 @@ def _candidate_to_json_payload(candidate: StatementCandidate) -> dict[str, Any]:
 
 
 def _resolve_source_path(value: str, *, project_root: Path) -> Path:
-    if value == "~/d/science":
-        return project_root
-    if value.startswith("~/d/science/"):
-        suffix = value.removeprefix("~/d/science").lstrip("/")
-        return project_root / suffix
-    return Path(value).expanduser()
+    root = project_root.resolve(strict=False)
+    if value.startswith("~/d/"):
+        alias_body = value.removeprefix("~/d/").strip("/")
+        parts = Path(alias_body).parts
+        if parts and parts[0] == root.name:
+            return root.joinpath(*parts[1:])
+    candidate = Path(value).expanduser()
+    if candidate.is_absolute():
+        return candidate
+    return root / candidate
