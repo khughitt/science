@@ -224,6 +224,62 @@ def test_apply_rejects_fingerprint_mismatch(tmp_path: Path) -> None:
         apply_prose_promotion_plan(tmp_path, plan)
 
 
+def test_apply_rejects_source_ref_mismatch_before_mutation(tmp_path: Path) -> None:
+    _persist_artifact(tmp_path)
+    payload = plan_prose_promotions(tmp_path, "example", ["u001"]).to_json()
+    rows = payload["rows"]
+    assert isinstance(rows, list)
+    row = rows[0]
+    assert isinstance(row, dict)
+    row["source_ref"] = "prose-source:other"
+
+    with pytest.raises(ProsePromotionError, match="source_ref"):
+        plan_from_json(payload)
+
+    assert not (tmp_path / "entities" / "propositions" / "basalt-flows-record-the-cooling-history.md").exists()
+
+
+def test_apply_rejects_artifact_unit_ref_mismatch_before_mutation(tmp_path: Path) -> None:
+    _persist_artifact(tmp_path)
+    payload = plan_prose_promotions(tmp_path, "example", ["u001"]).to_json()
+    rows = payload["rows"]
+    assert isinstance(rows, list)
+    row = rows[0]
+    assert isinstance(row, dict)
+    row["artifact_unit_ref"] = "annotation:data/prose-decompositions/example/generations/decomp-1.json#u999"
+    plan = plan_from_json(payload)
+
+    with pytest.raises(ProsePromotionError, match="artifact_unit_ref"):
+        apply_prose_promotion_plan(tmp_path, plan)
+
+    assert not (tmp_path / "entities" / "propositions" / "basalt-flows-record-the-cooling-history.md").exists()
+
+
+def test_apply_rejects_duplicate_units_before_partial_mutation(tmp_path: Path) -> None:
+    _persist_artifact(tmp_path)
+    payload = plan_prose_promotions(tmp_path, "example", ["u001"]).to_json()
+    rows = payload["rows"]
+    assert isinstance(rows, list)
+    rows.append(dict(rows[0]))
+
+    with pytest.raises(ProsePromotionError, match="duplicate"):
+        plan_from_json(payload)
+
+    assert not (tmp_path / "entities" / "propositions" / "basalt-flows-record-the-cooling-history.md").exists()
+
+
+def test_plan_rejects_empty_unit_list(tmp_path: Path) -> None:
+    _persist_artifact(tmp_path)
+
+    with pytest.raises(ProsePromotionError, match="at least one unit"):
+        plan_prose_promotions(tmp_path, "example", [])
+
+
+def test_plan_from_json_rejects_empty_rows() -> None:
+    with pytest.raises(ProsePromotionError, match="at least one row"):
+        plan_from_json({"schema_version": 1, "source_slug": "example", "rows": []})
+
+
 def test_apply_rejects_decision_drift(tmp_path: Path) -> None:
     _persist_artifact(tmp_path)
     plan = plan_prose_promotions(tmp_path, "example", ["u001"])

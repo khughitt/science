@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
-from science_tool.annotation.prose_decomposition import DecompositionError, ProseDecompositionStore
+from science_tool.annotation.prose_decomposition import DecompositionError, ProseDecompositionStore, artifact_unit_ref
 from science_tool.annotation.promote import ApplyReport
 from science_tool.annotation.prose_promote import (
     ProsePromotionError,
@@ -45,11 +45,15 @@ class ProsePromotionPlan:
 
 
 def plan_prose_promotions(project_root: Path, source_slug: str, unit_ids: Sequence[str]) -> ProsePromotionPlan:
+    if not unit_ids:
+        raise ProsePromotionError("promotion plan requires at least one unit")
+    _reject_duplicate_unit_ids(unit_ids)
     rows: list[ProsePromotionPlanRow] = []
     for unit_id in unit_ids:
         row = plan_prose_unit_promotion(project_root, source_slug, unit_id)
-        if row is not None:
-            rows.append(row)
+        if row is None:
+            raise ProsePromotionError(f"unit {unit_id!r} does not have a mint/link promotion decision")
+        rows.append(row)
     return ProsePromotionPlan(source_slug=source_slug, rows=tuple(rows))
 
 
@@ -61,17 +65,9 @@ def apply_prose_promotion_plan(project_root: Path, plan: ProsePromotionPlan) -> 
     index recovery.
     """
     project_root = project_root.resolve()
+    current_rows = [_validate_current_row(project_root, row) for row in _plan_rows(plan)]
     report = ApplyReport()
-    for row in plan.rows:
-        _validate_latest_row(project_root, row)
-        current = plan_prose_unit_promotion(project_root, row.source_slug, row.unit_id)
-        if current is None:
-            raise ProsePromotionError(f"unit {row.unit_id!r} no longer has a mint/link promotion decision")
-        if (current.decision, current.target_ref) != (row.decision, row.target_ref):
-            raise ProsePromotionError(
-                f"decision drift for unit {row.unit_id!r}: "
-                f"planned {(row.decision, row.target_ref)!r}, current {(current.decision, current.target_ref)!r}"
-            )
+    for row in current_rows:
         unit_report = promote_prose_unit(
             project_root=project_root,
             source_ref=row.source_ref,
@@ -108,15 +104,21 @@ def plan_from_json(payload: object) -> ProsePromotionPlan:
     if not isinstance(raw_rows, list):
         raise ProsePromotionError("promotion plan rows must be an array")
     rows = tuple(_row_from_json(item, source_slug=source_slug, index=index) for index, item in enumerate(raw_rows))
+    _plan_rows(ProsePromotionPlan(source_slug=source_slug, rows=rows))
     return ProsePromotionPlan(source_slug=source_slug, rows=rows)
 
 
-def _validate_latest_row(project_root: Path, row: ProsePromotionPlanRow) -> None:
+def _validate_current_row(project_root: Path, row: ProsePromotionPlanRow) -> ProsePromotionPlanRow:
     store = ProseDecompositionStore(project_root)
     try:
         artifact = store.load_latest(row.source_slug)
     except DecompositionError as exc:
         raise ProsePromotionError(str(exc)) from exc
+    if row.source_ref != artifact.source_ref:
+        raise ProsePromotionError(
+            f"source_ref mismatch for unit {row.unit_id!r}: "
+            f"planned {row.source_ref!r}, latest {artifact.source_ref!r}"
+        )
     if artifact.artifact.artifact_id != row.artifact_id:
         raise ProsePromotionError(
             f"stale artifact for unit {row.unit_id!r}: "
@@ -125,6 +127,12 @@ def _validate_latest_row(project_root: Path, row: ProsePromotionPlanRow) -> None
     unit = next((candidate_unit for candidate_unit in artifact.units if candidate_unit.unit_id == row.unit_id), None)
     if unit is None:
         raise ProsePromotionError(f"unit {row.unit_id!r} is not in latest artifact for {row.source_ref}; stale or missing")
+    expected_ref = artifact_unit_ref(artifact, unit)
+    if row.artifact_unit_ref != expected_ref:
+        raise ProsePromotionError(
+            f"artifact_unit_ref mismatch for unit {row.unit_id!r}: "
+            f"planned {row.artifact_unit_ref!r}, latest {expected_ref!r}"
+        )
     if unit.disposition != "candidate":
         raise ProsePromotionError(f"unit {row.unit_id!r} is non-candidate: {unit.disposition}")
     if unit.candidate is None:
@@ -134,6 +142,15 @@ def _validate_latest_row(project_root: Path, row: ProsePromotionPlanRow) -> None
             f"fingerprint mismatch for unit {row.unit_id!r}: "
             f"planned {row.fingerprint!r}, latest {unit.fingerprint!r}"
         )
+    current = plan_prose_unit_promotion(project_root, row.source_slug, row.unit_id)
+    if current is None:
+        raise ProsePromotionError(f"unit {row.unit_id!r} no longer has a mint/link promotion decision")
+    if (current.decision, current.target_ref) != (row.decision, row.target_ref):
+        raise ProsePromotionError(
+            f"decision drift for unit {row.unit_id!r}: "
+            f"planned {(row.decision, row.target_ref)!r}, current {(current.decision, current.target_ref)!r}"
+        )
+    return current
 
 
 def _row_from_json(payload: object, *, source_slug: str, index: int) -> ProsePromotionPlanRow:
@@ -145,6 +162,12 @@ def _row_from_json(payload: object, *, source_slug: str, index: int) -> ProsePro
         raise ProsePromotionError(
             f"promotion plan row[{index}] source_slug {row_source_slug!r} does not match plan {source_slug!r}"
         )
+    source_ref = _required_string(payload, "source_ref")
+    expected_source_ref = f"prose-source:{source_slug}"
+    if source_ref != expected_source_ref:
+        raise ProsePromotionError(
+            f"promotion plan row[{index}] source_ref {source_ref!r} does not match {expected_source_ref!r}"
+        )
     decision = _required_decision(payload, "decision")
     target_ref = payload.get("target_ref")
     if target_ref is not None and not isinstance(target_ref, str):
@@ -155,7 +178,7 @@ def _row_from_json(payload: object, *, source_slug: str, index: int) -> ProsePro
         raise ProsePromotionError(f"promotion plan row[{index}] mint decision must not carry target_ref")
     return ProsePromotionPlanRow(
         source_slug=row_source_slug,
-        source_ref=_required_string(payload, "source_ref"),
+        source_ref=source_ref,
         artifact_id=_required_string(payload, "artifact_id"),
         unit_id=_required_string(payload, "unit_id"),
         fingerprint=_required_string(payload, "fingerprint"),
@@ -183,3 +206,18 @@ def _reject_unknown_keys(payload: dict[str, object], allowed: frozenset[str], la
     extra = set(payload) - allowed
     if extra:
         raise ProsePromotionError(f"unknown {label} keys: {sorted(extra)}")
+
+
+def _plan_rows(plan: ProsePromotionPlan) -> tuple[ProsePromotionPlanRow, ...]:
+    if not plan.rows:
+        raise ProsePromotionError("promotion plan requires at least one row")
+    _reject_duplicate_unit_ids([row.unit_id for row in plan.rows])
+    return plan.rows
+
+
+def _reject_duplicate_unit_ids(unit_ids: Sequence[str]) -> None:
+    seen: set[str] = set()
+    for unit_id in unit_ids:
+        if unit_id in seen:
+            raise ProsePromotionError(f"duplicate promotion plan unit_id: {unit_id}")
+        seen.add(unit_id)
