@@ -23,9 +23,8 @@
 **Context docs:**
 - Engine plan (completed): `meta/doc/plans/2026-04-24-h01-simulator.md`
 - Engine follow-ups (completed): `meta/doc/plans/2026-04-24-h01-engine-followups.md`
-- Handoff note (alternatives, framings): `meta/doc/plans/2026-04-24-h01-engine-handoff.md`
-- Spec: `meta/specs/h01-simulator.md`
-- Hypothesis: `meta/specs/hypotheses/h01-stochastic-revisiting.md`
+- Spec: `meta/doc/plans/2026-04-24-h01-simulator-spec.md`
+- Hypothesis: `meta/entities/hypotheses/0001-stochastic-revisiting.md`
 
 ---
 
