@@ -165,6 +165,14 @@ def test_d_science_path_rewrite_respects_path_boundary(tmp_path):
     assert artifact.source.path == Path("~/d/science-old/foo.md").expanduser()
 
 
+def test_parse_submitted_decomposition_rejects_relative_source_path_escape(tmp_path: Path) -> None:
+    payload = _artifact(tmp_path)
+    payload["source"]["path"] = "../outside.md"
+
+    with pytest.raises(DecompositionError, match="source path escapes project root"):
+        parse_submitted_decomposition(json.dumps(payload), project_root=tmp_path)
+
+
 def test_parse_submitted_decomposition_resolves_project_relative_source_path(tmp_path: Path) -> None:
     source = tmp_path / "docs" / "example.md"
     source.parent.mkdir(parents=True)
@@ -176,6 +184,15 @@ def test_parse_submitted_decomposition_resolves_project_relative_source_path(tmp
     artifact = parse_submitted_decomposition(json.dumps(payload), project_root=tmp_path)
 
     assert artifact.source.path == source
+
+
+def test_parse_submitted_decomposition_rejects_tilde_d_project_alias_escape(tmp_path: Path) -> None:
+    project_root = tmp_path / "natural-systems"
+    payload = _artifact(project_root)
+    payload["source"]["path"] = "~/d/natural-systems/../outside.md"
+
+    with pytest.raises(DecompositionError, match="source path escapes project root"):
+        parse_submitted_decomposition(json.dumps(payload), project_root=project_root)
 
 
 def test_parse_submitted_decomposition_resolves_tilde_d_project_alias(tmp_path: Path) -> None:
@@ -190,6 +207,17 @@ def test_parse_submitted_decomposition_resolves_tilde_d_project_alias(tmp_path: 
     artifact = parse_submitted_decomposition(json.dumps(payload), project_root=project_root)
 
     assert artifact.source.path == source
+
+
+def test_parse_submitted_decomposition_preserves_prefix_similar_tilde_d_alias(tmp_path: Path) -> None:
+    project_root = tmp_path / "natural-systems"
+    payload = _artifact(project_root)
+    payload["source"]["path"] = "~/d/natural-systems-old/docs/example.md"
+
+    artifact = parse_submitted_decomposition(json.dumps(payload), project_root=project_root)
+
+    assert artifact.source.path == Path("~/d/natural-systems-old/docs/example.md").expanduser()
+    assert not artifact.source.path.is_relative_to(project_root)
 
 
 def test_fingerprint_ignores_artifact_local_unit_id(tmp_path):

@@ -619,8 +619,14 @@ def _resolve_source_path(value: str, *, project_root: Path) -> Path:
         alias_body = value.removeprefix("~/d/").strip("/")
         parts = Path(alias_body).parts
         if parts and parts[0] == root.name:
-            return root.joinpath(*parts[1:])
+            return _require_path_under_root(root.joinpath(*parts[1:]).resolve(strict=False), root=root, source=value)
     candidate = Path(value).expanduser()
     if candidate.is_absolute():
         return candidate
-    return root / candidate
+    return _require_path_under_root((root / candidate).resolve(strict=False), root=root, source=value)
+
+
+def _require_path_under_root(path: Path, *, root: Path, source: str) -> Path:
+    if not path.is_relative_to(root):
+        raise DecompositionError(f"source path escapes project root: {source}")
+    return path
