@@ -374,25 +374,6 @@ def entities_consolidate_apply_command(digest_id: str, project_root: Path, apply
     click.echo(json.dumps(report, indent=2))
 
 
-@entities_group.command("migrate")
-@click.option("--apply", "apply_changes", is_flag=True, help="Apply the migration (default: dry run).")
-@click.option(
-    "--project-root",
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
-    default=Path("."),
-    help="Project root (default: current directory).",
-)
-def entities_migrate_command(apply_changes: bool, project_root: Path) -> None:
-    """Migrate a project's doc/specs entity layout into entities/ (v2 → v3)."""
-    from science_tool.entity_layout_migration import migrate_layout
-
-    try:
-        report = migrate_layout(project_root, apply=apply_changes)
-    except ValueError as exc:  # collisions / unresolved refs block --apply
-        raise click.ClickException(str(exc)) from exc
-    click.echo(json.dumps(report, indent=2))
-
-
 @entities_group.command("triage-aggregate")
 @click.option(
     "--project-root",
