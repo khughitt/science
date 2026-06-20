@@ -69,13 +69,17 @@ A proposition has **exactly one role per bundle frame**. Excluded members are
 still listed as bundle members (they show up in coverage and neighborhood
 views); they just don't drag the weakest-link belief down.
 
-**The role only takes effect in the proposition's `discusses:` frontmatter.**
-A `cito:discusses` edge authored in the structured authored-relations store
-(`knowledge/sources/local/relations.yaml`) emits a plain edge with **no role**
-and is always treated as `core`. To mark a rival/background membership, author
-it here in frontmatter — not as a relations-store edge. Forward
-`sci:hasProposition` (mechanism steps) is always authoritatively `core` and
-cannot be demoted.
+**Role assignment by authoring surface:**
+
+- `discusses:` frontmatter (above) — full role control via the `role:` field.
+- `knowledge/sources/local/relations.yaml` — a `cito:discusses` relation whose
+  object is a bundle (hypothesis/mechanism) now accepts an optional `role:` field
+  (absent = `core`). The store-CLI bridge also accepts `--bridge-role` when
+  ingesting a discusses edge from an external store. A `cito:discusses` relation
+  whose object is a non-bundle (e.g. a question or topic) is a plain structural
+  link with no membership role.
+- `sci:hasProposition` (mechanism steps) is always authoritatively `core` and
+  cannot be demoted.
 
 ## Companion Skills
 

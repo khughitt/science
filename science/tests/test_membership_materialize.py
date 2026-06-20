@@ -7,7 +7,7 @@ import pytest
 from rdflib import Dataset, Literal
 from rdflib.namespace import RDF
 
-from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
+from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, entity_uri_for_ref, membership_uri_for
 from science_tool.graph.materialize import _entity_uri, materialize_graph
 
 
@@ -271,3 +271,91 @@ def test_relations_store_role_background_excluded_from_core(make_project_with_re
     frame = entity_uri_for_ref("hypothesis:0001-foo")
     assert membership_role(knowledge, prop, frame) == MembershipRole.BACKGROUND
     assert prop not in core_members(knowledge, frame)
+
+
+# ---------------------------------------------------------------------------
+# Coverage-invariant (§2.1): membership ↔ proposition→bundle discusses
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def make_project_with_relations(tmp_path: Path) -> Callable[..., object]:
+    """Factory fixture: build a minimal project with multiple relations.yaml entries.
+
+    Accepts a list of (subject, predicate, object) tuples (all str).
+    Returns the parsed knowledge named graph after materialize_graph runs.
+    """
+
+    def _factory(relations: list[tuple[str, str, str]]) -> object:
+        project = tmp_path / "demo"
+        local_sources = _write_project_base(project)
+
+        # Collect all unique refs and write entity files.
+        seen: set[str] = set()
+        for subject, _predicate, object_ in relations:
+            for ref in (subject, object_):
+                if ref in seen:
+                    continue
+                seen.add(ref)
+                kind = ref.split(":", 1)[0]
+                if kind in _SOURCE_YAML_KINDS:
+                    _write_source_entity(local_sources, ref)
+                else:
+                    _write_subject_entity(project, ref)
+
+        # Write all relations to relations.yaml.
+        relation_lines = ["relations:"]
+        for subject, predicate, object_ in relations:
+            relation_lines.extend([
+                f"  - subject: {subject}",
+                f"    predicate: {predicate}",
+                f"    object: {object_}",
+            ])
+        relation_lines.append("")
+        (local_sources / "relations.yaml").write_text(
+            "\n".join(relation_lines),
+            encoding="utf-8",
+        )
+
+        trig_path = materialize_graph(project)
+        ds = Dataset()
+        ds.parse(str(trig_path), format="trig")
+        return ds.graph(PROJECT_NS["graph/knowledge"])
+
+    return _factory
+
+
+def test_membership_coverage_invariant(make_project_with_relations):
+    """Design §2.1 in both directions.
+
+    (a) Every proposition→bundle cito:discusses edge has a BundleMembership node.
+    (b) No BundleMembership node points at a non-proposition subject.
+    """
+    knowledge = make_project_with_relations([
+        ("proposition:0011-bar", "cito:discusses", "hypothesis:0001-foo"),  # membership
+        ("paper:legatiuk2021", "cito:discusses", "hypothesis:0001-foo"),    # NOT membership
+    ])
+
+    _BUNDLE_KINDS = frozenset({"hypothesis", "mechanism"})
+
+    def _cid(uri: object) -> str:
+        """Convert project URI to canonical ref (kind:slug)."""
+        tail = str(uri).split("project/", 1)[-1]  # e.g. "proposition/0011-bar"
+        kind, _, slug = tail.partition("/")
+        return f"{kind}:{slug}"
+
+    # Forward: every proposition→bundle discusses edge must have a membership node.
+    for s, _, o in knowledge.triples((None, CITO_NS.discusses, None)):
+        o_kind = _cid(o).split(":")[0]
+        if o_kind in _BUNDLE_KINDS and (s, RDF.type, SCI_NS.Proposition) in knowledge:
+            node = membership_uri_for(_cid(s), _cid(o))
+            assert (node, SCI_NS.membershipFrame, o) in knowledge, (
+                f"missing membership node for {s} -> {o}"
+            )
+
+    # Reverse: no membership node may point at a non-proposition subject.
+    for node in knowledge.subjects(RDF.type, SCI_NS.BundleMembership):
+        prop = knowledge.value(node, SCI_NS.membershipProposition)
+        assert (prop, RDF.type, SCI_NS.Proposition) in knowledge, (
+            f"membership node {node} on non-proposition {prop}"
+        )
