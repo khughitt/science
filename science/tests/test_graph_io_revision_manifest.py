@@ -29,6 +29,22 @@ def test_build_input_manifest_excludes_configured_generated_report(tmp_path: Pat
     assert "doc/reports/health-report.json" not in manifest
 
 
+def test_build_input_manifest_excludes_configured_wildcard_report_pattern(tmp_path: Path) -> None:
+    _seed_project(
+        tmp_path,
+        "name: fixture\n"
+        "profile: research\n"
+        "graph:\n"
+        "  revision_manifest_excludes:\n"
+        "    - doc/reports/*.json\n",
+    )
+
+    manifest = build_input_manifest(tmp_path / "knowledge" / "graph.trig")
+
+    assert "doc/notes.md" in manifest
+    assert "doc/reports/health-report.json" not in manifest
+
+
 def test_build_input_manifest_keeps_report_without_configured_exclude(tmp_path: Path) -> None:
     _seed_project(tmp_path, "name: fixture\nprofile: research\n")
 
@@ -45,6 +61,28 @@ def test_build_input_manifest_rejects_absolute_exclude_pattern(tmp_path: Path) -
         "graph:\n"
         "  revision_manifest_excludes:\n"
         "    - /tmp/outside.json\n",
+    )
+
+    with pytest.raises(ValueError, match="revision_manifest_excludes"):
+        build_input_manifest(tmp_path / "knowledge" / "graph.trig")
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        '    - ""\n',
+        "    - 12\n",
+        "    - ../outside.json\n",
+    ],
+)
+def test_build_input_manifest_rejects_invalid_exclude_pattern_entries(tmp_path: Path, entry: str) -> None:
+    _seed_project(
+        tmp_path,
+        "name: fixture\n"
+        "profile: research\n"
+        "graph:\n"
+        "  revision_manifest_excludes:\n"
+        f"{entry}",
     )
 
     with pytest.raises(ValueError, match="revision_manifest_excludes"):
