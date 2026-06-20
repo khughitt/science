@@ -32,6 +32,7 @@ def _artifact_payload(
     unit_id: str = "u001",
     disposition: str = "candidate",
     exact: str = "Basalt flows record the cooling history.",
+    candidate_type: str = "proposition",
 ) -> dict[str, object]:
     source = _source(tmp_path)
     if disposition == "candidate":
@@ -40,7 +41,7 @@ def _artifact_payload(
             "disposition": "candidate",
             "locator": {"regime": "markdown-heading-path", "value": ["Section"]},
             "payload": {
-                "type": "proposition",
+                "type": candidate_type,
                 "exact": exact,
                 "prefix": "",
                 "suffix": "",
@@ -97,7 +98,7 @@ def _persist_artifact(
     return artifact
 
 
-def _persist_duplicate_claim_artifact(tmp_path: Path):
+def _persist_duplicate_claim_artifact(tmp_path: Path, *, candidate_type: str = "proposition"):
     source = tmp_path / "docs" / "example.md"
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_text(
@@ -119,7 +120,7 @@ def _persist_duplicate_claim_artifact(tmp_path: Path):
             "disposition": "candidate",
             "locator": {"regime": "markdown-heading-path", "value": ["Section"]},
             "payload": {
-                "type": "proposition",
+                "type": candidate_type,
                 "exact": "Basalt flows record the cooling history.",
                 "prefix": "",
                 "suffix": "",
@@ -131,7 +132,7 @@ def _persist_duplicate_claim_artifact(tmp_path: Path):
             "disposition": "candidate",
             "locator": {"regime": "markdown-heading-path", "value": ["Other"]},
             "payload": {
-                "type": "proposition",
+                "type": candidate_type,
                 "exact": "Basalt flows record the cooling history.",
                 "prefix": "",
                 "suffix": "",
@@ -142,6 +143,10 @@ def _persist_duplicate_claim_artifact(tmp_path: Path):
     artifact = parse_submitted_decomposition(json.dumps(payload), project_root=tmp_path)
     ProseDecompositionStore(tmp_path).persist(artifact)
     return artifact
+
+
+def _persist_duplicate_question_artifact(tmp_path: Path):
+    return _persist_duplicate_claim_artifact(tmp_path, candidate_type="question")
 
 
 def _write_existing_proposition(root: Path) -> None:
@@ -223,6 +228,23 @@ def test_plan_links_recovered_unit_before_locator_resolution(tmp_path: Path) -> 
     assert isinstance(row, dict)
     assert row["decision"] == "link"
     assert row["target_ref"] == "proposition:recovered"
+
+
+def test_apply_recovered_link_records_index_without_link_counter_or_ref_churn(tmp_path: Path) -> None:
+    artifact = _persist_artifact(tmp_path)
+    unit = artifact.units[0]
+    _write_recovered_proposition(tmp_path, artifact_unit_ref(artifact, unit))
+    dest = tmp_path / "entities" / "propositions" / "recovered.md"
+    first_text = dest.read_text(encoding="utf-8")
+    plan = plan_prose_promotions(tmp_path, "example", ["u001"])
+
+    report = apply_prose_promotion_plan(tmp_path, plan)
+
+    assert report.minted == 0
+    assert report.linked == 0
+    assert dest.read_text(encoding="utf-8") == first_text
+    index = ProseDecompositionStore(tmp_path).load_index("example")
+    assert index["units"][unit.fingerprint]["promoted_to"] == "proposition:recovered"
 
 
 def test_apply_matches_single_unit_promotion_behavior(tmp_path: Path) -> None:
@@ -322,6 +344,17 @@ def test_plan_rejects_duplicate_mint_targets_before_partial_mutation(tmp_path: P
         plan_prose_promotions(tmp_path, "example", ["u001", "u002"])
 
     assert not (tmp_path / "entities" / "propositions" / "basalt-flows-record-the-cooling-history.md").exists()
+
+
+def test_plan_allows_duplicate_numeric_mint_titles(tmp_path: Path) -> None:
+    _persist_duplicate_question_artifact(tmp_path)
+
+    plan = plan_prose_promotions(tmp_path, "example", ["u001", "u002"])
+
+    payload = plan.to_json()
+    rows = payload["rows"]
+    assert isinstance(rows, list)
+    assert [row["decision"] for row in rows if isinstance(row, dict)] == ["mint", "mint"]
 
 
 def test_plan_rejects_empty_unit_list(tmp_path: Path) -> None:

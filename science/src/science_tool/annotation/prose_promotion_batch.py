@@ -14,6 +14,7 @@ from science_tool.annotation.promote import (
     PromotionTarget,
     build_targets,
     entity_dest,
+    load_corpora,
 )
 from science_tool.annotation.prose_promote import (
     ProsePromotionError,
@@ -55,6 +56,7 @@ class ProsePromotionPlan:
 class _ValidatedPromotionRow:
     row: ProsePromotionPlanRow
     candidate: PromotionCandidate
+    recovered_link: bool = False
 
 
 def plan_prose_promotions(project_root: Path, source_slug: str, unit_ids: Sequence[str]) -> ProsePromotionPlan:
@@ -67,7 +69,8 @@ def plan_prose_promotions(project_root: Path, source_slug: str, unit_ids: Sequen
         if row is None:
             raise ProsePromotionError(f"unit {unit_id!r} does not have a mint/link promotion decision")
         rows.append(row)
-    _reject_duplicate_mint_targets([_validate_current_row(project_root.resolve(), row) for row in rows])
+    targets = build_targets()
+    _reject_duplicate_mint_targets([_validate_current_row(project_root.resolve(), row) for row in rows], targets)
     return ProsePromotionPlan(source_slug=source_slug, rows=tuple(rows))
 
 
@@ -79,9 +82,9 @@ def apply_prose_promotion_plan(project_root: Path, plan: ProsePromotionPlan) -> 
     index recovery.
     """
     project_root = project_root.resolve()
-    current_rows = [_validate_current_row(project_root, row) for row in _plan_rows(plan)]
-    _reject_duplicate_mint_targets(current_rows)
     targets = build_targets()
+    current_rows = [_validate_current_row(project_root, row) for row in _plan_rows(plan)]
+    _reject_duplicate_mint_targets(current_rows, targets)
     report = ApplyReport()
     for current in current_rows:
         unit_report = _apply_validated_row(project_root, current, targets)
@@ -101,6 +104,19 @@ def _apply_validated_row(
     candidate = current.candidate
     report = ApplyReport()
     promoted_to: str | None = None
+    if current.recovered_link:
+        if candidate.slug is None:
+            raise ProsePromotionError(f"recovered link for unit {row.unit_id!r} is missing target ref")
+        try:
+            ProseDecompositionStore(project_root).record_promotion(
+                source_slug=row.source_slug,
+                fingerprint=row.fingerprint,
+                promoted_to=candidate.slug,
+            )
+        except DecompositionError as exc:
+            raise ProsePromotionError(str(exc)) from exc
+        return report
+
     try:
         if candidate.decision == "MINT":
             promoted_to = targets[candidate.kind].mint(
@@ -202,7 +218,13 @@ def _validate_current_row(project_root: Path, row: ProsePromotionPlanRow) -> _Va
             f"decision drift for unit {row.unit_id!r}: "
             f"planned {(row.decision, row.target_ref)!r}, current {(current.decision, current.target_ref)!r}"
         )
-    return _ValidatedPromotionRow(row=current, candidate=_promotion_candidate(current, unit.candidate))
+    _, derived_refs = load_corpora(project_root)
+    recovered_link = current.decision == "link" and current.artifact_unit_ref in derived_refs
+    return _ValidatedPromotionRow(
+        row=current,
+        candidate=_promotion_candidate(current, unit.candidate),
+        recovered_link=recovered_link,
+    )
 
 
 def _promotion_candidate(row: ProsePromotionPlanRow, candidate) -> PromotionCandidate:
@@ -307,11 +329,17 @@ def _reject_duplicate_unit_ids(unit_ids: Sequence[str]) -> None:
         seen.add(unit_id)
 
 
-def _reject_duplicate_mint_targets(rows: Sequence[_ValidatedPromotionRow]) -> None:
+def _reject_duplicate_mint_targets(
+    rows: Sequence[_ValidatedPromotionRow],
+    targets: dict[str, PromotionTarget],
+) -> None:
     seen: set[tuple[str, str]] = set()
     for validated in rows:
         candidate = validated.candidate
         if candidate.decision != "MINT" or candidate.slug is None:
+            continue
+        target = targets.get(candidate.kind)
+        if target is None or not target.slug_addressed:
             continue
         key = (candidate.kind, candidate.slug)
         if key in seen:
