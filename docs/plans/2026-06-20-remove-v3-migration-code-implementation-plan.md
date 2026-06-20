@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - **Locate code by anchor, not absolute line number.** All line numbers below are from the pre-change tree. Earlier tasks edit shared files (especially `science/src/science_tool/cli.py`), shifting later line numbers. Always find the quoted decorator/symbol/string, not the line number.
-- **Test command:** `uv run --frozen pytest science/tests` (run from repo root `~/d/science`). Single test: `uv run --frozen pytest science/tests/<file>::<test> -v`.
+- **Test command:** pytest runs from the `science/` package directory, NOT the repo root: `cd ~/d/science/science && uv run --frozen pytest tests`. Single test: `cd ~/d/science/science && uv run --frozen pytest tests/<file>::<test> -v`. **Path rule:** test paths below are written repo-relative as `science/tests/<file>`; when invoking pytest from `science/`, strip the leading `science/` (use `tests/<file>`). `git grep` commands run from the repo root `~/d/science` exactly as written.
 - **Clean break:** no compatibility shims, no retired-command stubs, no deprecation messages.
 - **Keep, never touch:** `project_artifacts/migrations/` + `project_artifacts/update.py` (managed-artifact runner), `graph/aggregate_retire.py`, `graph migrate-addresses` + `migrate_addresses_direction`, `entity_migrations.audit_identifiers`, and `graph/migrate.py`'s `audit_project_sources` / `AuditRow` / `_audit_*` and `build_layered_claim_migration_report` / `LayeredClaimMigrationReport`. (Note: `write_migration_report` and `audit_project_graph` in `graph/migrate.py` *are* removed in Task 2 — they were used only by the removed `graph migrate` command.)
 - **Commit after each task.** Do not include `Co-Authored-By` trailers.
