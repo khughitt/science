@@ -3459,45 +3459,6 @@ def tasks_add(
     click.echo(f"Created [{task.id}] {task.title}")
 
 
-@tasks.command("migrate-ids")
-@click.option("--project-root", type=click.Path(path_type=Path), default=Path("."), help="Project root to rewrite")
-@click.option("--map", "raw_mappings", multiple=True, required=True, help="Task id rewrite OLD=NEW; repeatable")
-@click.option("--parent", "parent_ref", default=None, help="Parent ref to add to migrated task blocks, e.g. task:t294")
-@click.option("--include-generated", is_flag=True, help="Also rewrite generated knowledge/ files")
-@click.option("--apply", "do_apply", is_flag=True, help="Write changes; default is dry-run")
-def tasks_migrate_ids(
-    project_root: Path,
-    raw_mappings: tuple[str, ...],
-    parent_ref: str | None,
-    include_generated: bool,
-    do_apply: bool,
-) -> None:
-    """Rewrite invalid or stale task ids across a project."""
-    from science_tool.tasks_id_migration import (
-        TaskIdMigrationError,
-        migrate_task_ids,
-        parse_task_id_mapping,
-    )
-
-    try:
-        mappings = parse_task_id_mapping(raw_mappings)
-        result = migrate_task_ids(
-            project_root,
-            mappings,
-            parent_ref=parent_ref,
-            include_generated=include_generated,
-            apply=do_apply,
-        )
-    except TaskIdMigrationError as exc:
-        raise click.ClickException(str(exc)) from exc
-
-    mode = "applied" if do_apply else "dry-run"
-    click.echo(
-        f"{mode}: changed_files={result.changed_files} renamed_paths={result.renamed_paths} "
-        f"scanned_files={result.scanned_files}"
-    )
-
-
 def _warn_dangling_task_refs(tasks_dir: Path) -> None:
     """Post-write self-check: surface any blocked-by/parent task ref that no
     longer resolves, so a dropped sibling is caught here rather than at graph build."""
