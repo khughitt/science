@@ -42,6 +42,12 @@ from science_tool.annotation.prose_health import (
     write_prose_health_report,
 )
 from science_tool.annotation.prose_promote import ProsePromotionError, promote_prose_unit
+from science_tool.annotation.prose_promotion_batch import (
+    apply_prose_promotion_plan,
+    plan_from_json_text,
+    plan_prose_promotions,
+    plan_to_json_text,
+)
 from science_tool.annotation.prose_source_entity import resolve_or_create_prose_source
 from science_tool.annotation.prose_validation import (
     validate_latest_decomposition,
@@ -311,6 +317,65 @@ def promote_prose_decomposition_cmd(
         f"{mode} prose promotion for {source_ref}#{unit_id}: "
         f"minted={report.minted} linked={report.linked} skipped={skipped}"
     )
+
+
+@annotate_group.command("plan-prose-promotions")
+@click.option("--source", "source_slug", required=True)
+@click.option("--unit", "unit_ids", multiple=True, required=True)
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--output", "output_path", default="-", type=click.Path(dir_okay=False, path_type=Path))
+def plan_prose_promotions_cmd(
+    source_slug: str,
+    unit_ids: tuple[str, ...],
+    root: Path | None,
+    output_path: Path,
+) -> None:
+    """Write an identity-only prose promotion plan for selected units."""
+    project_root = (root or Path.cwd()).resolve()
+    if source_slug.startswith("prose-source:"):
+        source_slug = source_slug.split(":", 1)[1]
+    try:
+        plan = plan_prose_promotions(project_root, source_slug, unit_ids)
+    except (ProsePromotionError, DecompositionError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    text = plan_to_json_text(plan)
+    if str(output_path) == "-":
+        click.echo(text, nl=False)
+        return
+    output_path.write_text(text, encoding="utf-8")
+    click.echo(f"planned {len(plan.rows)} prose promotion rows to {output_path}")
+
+
+@annotate_group.command("apply-prose-promotion-plan")
+@click.argument("plan_json", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--root", "root", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+def apply_prose_promotion_plan_cmd(plan_json: Path, root: Path | None, fmt: str) -> None:
+    """Apply an identity-only prose promotion plan after state validation."""
+    project_root = (root or Path.cwd()).resolve()
+    try:
+        plan = plan_from_json_text(plan_json.read_text(encoding="utf-8"))
+        report = apply_prose_promotion_plan(project_root, plan)
+    except (OSError, ProsePromotionError, DecompositionError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    payload = {
+        "minted": report.minted,
+        "linked": report.linked,
+        "skipped": dict(report.skipped),
+        "written": report.written_paths,
+    }
+    if fmt == "json":
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    skipped = ", ".join(f"{reason}={count}" for reason, count in sorted(report.skipped.items())) or "none"
+    click.echo(
+        f"applied prose promotion plan {plan_json}: "
+        f"minted={report.minted} linked={report.linked} skipped={skipped}"
+    )
+    click.echo("recovered link rows may report no minted/linked counter increments")
 
 
 @annotate_group.command("ground-prose-decomposition")

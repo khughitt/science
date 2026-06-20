@@ -1,0 +1,185 @@
+from __future__ import annotations
+
+import json
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal, cast
+
+from science_tool.annotation.prose_decomposition import DecompositionError, ProseDecompositionStore
+from science_tool.annotation.promote import ApplyReport
+from science_tool.annotation.prose_promote import (
+    ProsePromotionError,
+    ProsePromotionPlanRow,
+    plan_prose_unit_promotion,
+    promote_prose_unit,
+)
+
+_SCHEMA_VERSION = 1
+_PLAN_KEYS = frozenset({"schema_version", "source_slug", "rows"})
+_ROW_KEYS = frozenset(
+    {
+        "source_slug",
+        "source_ref",
+        "artifact_id",
+        "unit_id",
+        "fingerprint",
+        "artifact_unit_ref",
+        "decision",
+        "target_ref",
+    }
+)
+
+
+@dataclass(frozen=True)
+class ProsePromotionPlan:
+    source_slug: str
+    rows: tuple[ProsePromotionPlanRow, ...]
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "schema_version": _SCHEMA_VERSION,
+            "source_slug": self.source_slug,
+            "rows": [row.to_json() for row in self.rows],
+        }
+
+
+def plan_prose_promotions(project_root: Path, source_slug: str, unit_ids: Sequence[str]) -> ProsePromotionPlan:
+    rows: list[ProsePromotionPlanRow] = []
+    for unit_id in unit_ids:
+        row = plan_prose_unit_promotion(project_root, source_slug, unit_id)
+        if row is not None:
+            rows.append(row)
+    return ProsePromotionPlan(source_slug=source_slug, rows=tuple(rows))
+
+
+def apply_prose_promotion_plan(project_root: Path, plan: ProsePromotionPlan) -> ApplyReport:
+    """Apply a read-only prose promotion plan after validating latest state.
+
+    Recovered units can inherit promote_prose_unit's empty ApplyReport because the
+    entity already has the artifact unit ref and apply only records decomposition
+    index recovery.
+    """
+    project_root = project_root.resolve()
+    report = ApplyReport()
+    for row in plan.rows:
+        _validate_latest_row(project_root, row)
+        current = plan_prose_unit_promotion(project_root, row.source_slug, row.unit_id)
+        if current is None:
+            raise ProsePromotionError(f"unit {row.unit_id!r} no longer has a mint/link promotion decision")
+        if (current.decision, current.target_ref) != (row.decision, row.target_ref):
+            raise ProsePromotionError(
+                f"decision drift for unit {row.unit_id!r}: "
+                f"planned {(row.decision, row.target_ref)!r}, current {(current.decision, current.target_ref)!r}"
+            )
+        unit_report = promote_prose_unit(
+            project_root=project_root,
+            source_ref=row.source_ref,
+            unit_id=row.unit_id,
+            apply=True,
+        )
+        report.minted += unit_report.minted
+        report.linked += unit_report.linked
+        report.skipped.update(unit_report.skipped)
+        report.written_paths.extend(unit_report.written_paths)
+    return report
+
+
+def plan_to_json_text(plan: ProsePromotionPlan) -> str:
+    return json.dumps(plan.to_json(), indent=2) + "\n"
+
+
+def plan_from_json_text(raw: str) -> ProsePromotionPlan:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ProsePromotionError(f"promotion plan is not valid JSON: {exc}") from exc
+    return plan_from_json(payload)
+
+
+def plan_from_json(payload: object) -> ProsePromotionPlan:
+    if not isinstance(payload, dict):
+        raise ProsePromotionError("promotion plan must be a JSON object")
+    _reject_unknown_keys(payload, _PLAN_KEYS, "promotion plan")
+    if payload.get("schema_version") != _SCHEMA_VERSION:
+        raise ProsePromotionError(f"promotion plan schema_version must be {_SCHEMA_VERSION}")
+    source_slug = _required_string(payload, "source_slug")
+    raw_rows = payload.get("rows")
+    if not isinstance(raw_rows, list):
+        raise ProsePromotionError("promotion plan rows must be an array")
+    rows = tuple(_row_from_json(item, source_slug=source_slug, index=index) for index, item in enumerate(raw_rows))
+    return ProsePromotionPlan(source_slug=source_slug, rows=rows)
+
+
+def _validate_latest_row(project_root: Path, row: ProsePromotionPlanRow) -> None:
+    store = ProseDecompositionStore(project_root)
+    try:
+        artifact = store.load_latest(row.source_slug)
+    except DecompositionError as exc:
+        raise ProsePromotionError(str(exc)) from exc
+    if artifact.artifact.artifact_id != row.artifact_id:
+        raise ProsePromotionError(
+            f"stale artifact for unit {row.unit_id!r}: "
+            f"planned {row.artifact_id!r}, latest {artifact.artifact.artifact_id!r}"
+        )
+    unit = next((candidate_unit for candidate_unit in artifact.units if candidate_unit.unit_id == row.unit_id), None)
+    if unit is None:
+        raise ProsePromotionError(f"unit {row.unit_id!r} is not in latest artifact for {row.source_ref}; stale or missing")
+    if unit.disposition != "candidate":
+        raise ProsePromotionError(f"unit {row.unit_id!r} is non-candidate: {unit.disposition}")
+    if unit.candidate is None:
+        raise ProsePromotionError(f"candidate unit {row.unit_id!r} is missing candidate payload")
+    if unit.fingerprint != row.fingerprint:
+        raise ProsePromotionError(
+            f"fingerprint mismatch for unit {row.unit_id!r}: "
+            f"planned {row.fingerprint!r}, latest {unit.fingerprint!r}"
+        )
+
+
+def _row_from_json(payload: object, *, source_slug: str, index: int) -> ProsePromotionPlanRow:
+    if not isinstance(payload, dict):
+        raise ProsePromotionError(f"promotion plan row[{index}] must be an object")
+    _reject_unknown_keys(payload, _ROW_KEYS, f"promotion plan row[{index}]")
+    row_source_slug = _required_string(payload, "source_slug")
+    if row_source_slug != source_slug:
+        raise ProsePromotionError(
+            f"promotion plan row[{index}] source_slug {row_source_slug!r} does not match plan {source_slug!r}"
+        )
+    decision = _required_decision(payload, "decision")
+    target_ref = payload.get("target_ref")
+    if target_ref is not None and not isinstance(target_ref, str):
+        raise ProsePromotionError(f"promotion plan row[{index}] target_ref must be a string or null")
+    if decision == "link" and not target_ref:
+        raise ProsePromotionError(f"promotion plan row[{index}] link decision requires target_ref")
+    if decision == "mint" and target_ref is not None:
+        raise ProsePromotionError(f"promotion plan row[{index}] mint decision must not carry target_ref")
+    return ProsePromotionPlanRow(
+        source_slug=row_source_slug,
+        source_ref=_required_string(payload, "source_ref"),
+        artifact_id=_required_string(payload, "artifact_id"),
+        unit_id=_required_string(payload, "unit_id"),
+        fingerprint=_required_string(payload, "fingerprint"),
+        artifact_unit_ref=_required_string(payload, "artifact_unit_ref"),
+        decision=decision,
+        target_ref=target_ref,
+    )
+
+
+def _required_decision(payload: dict[str, object], key: str) -> Literal["mint", "link"]:
+    value = _required_string(payload, key)
+    if value not in {"mint", "link"}:
+        raise ProsePromotionError(f"{key} must be mint or link")
+    return cast(Literal["mint", "link"], value)
+
+
+def _required_string(payload: dict[str, object], key: str) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str) or not value:
+        raise ProsePromotionError(f"{key} must be a non-empty string")
+    return value
+
+
+def _reject_unknown_keys(payload: dict[str, object], allowed: frozenset[str], label: str) -> None:
+    extra = set(payload) - allowed
+    if extra:
+        raise ProsePromotionError(f"unknown {label} keys: {sorted(extra)}")

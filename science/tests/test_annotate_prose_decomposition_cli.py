@@ -609,6 +609,53 @@ def test_promote_prose_decomposition_rejects_unresolved_locator(tmp_path):
     assert "locator" in result.output
 
 
+def test_plan_and_apply_prose_promotions_cli_smoke(tmp_path):
+    ingest = CliRunner().invoke(
+        annotate_group,
+        ["ingest-prose-decomposition", str(_artifact_file(tmp_path)), "--root", str(tmp_path)],
+    )
+    assert ingest.exit_code == 0, ingest.output
+    plan_path = tmp_path / "plan.json"
+
+    plan = CliRunner().invoke(
+        annotate_group,
+        [
+            "plan-prose-promotions",
+            "--source",
+            "example",
+            "--unit",
+            "u001",
+            "--root",
+            str(tmp_path),
+            "--output",
+            str(plan_path),
+        ],
+    )
+    assert plan.exit_code == 0, plan.output
+    payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert payload["source_slug"] == "example"
+    assert payload["rows"][0]["decision"] == "mint"
+    assert "claim" not in payload["rows"][0]
+    assert "candidate" not in payload["rows"][0]
+
+    apply = CliRunner().invoke(
+        annotate_group,
+        [
+            "apply-prose-promotion-plan",
+            str(plan_path),
+            "--root",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+    assert apply.exit_code == 0, apply.output
+    report = json.loads(apply.output)
+    assert report["minted"] == 1
+    assert report["linked"] == 0
+    assert (tmp_path / "entities" / "propositions" / "basalt-flows-record-the-cooling-history.md").exists()
+
+
 def test_ground_prose_decomposition_json_output(tmp_path):
     _ingest_and_mark_promoted(tmp_path)
     graph_path = _write_grounding_graph(tmp_path, supports=2)
