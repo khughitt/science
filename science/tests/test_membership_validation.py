@@ -346,3 +346,80 @@ def test_unresolvable_frame_ref_is_loud_error(tmp_path: Path):
     assert any(r.rule == "relation.role.unresolved-frame" for r in errs), (
         "Expected an unresolved-frame error but got: " + str([r.message for r in errs])
     )
+
+
+# ---------------------------------------------------------------------------
+# Rule-3 hardening: unlabeled relations.yaml edge treated as implicit core
+# ---------------------------------------------------------------------------
+
+
+def test_frontmatter_background_vs_unlabeled_relations_conflict_is_error(tmp_path: Path):
+    """Rule 3 (unlabeled-core fix): frontmatter labels (p1, h1) as 'background'; a
+    role-less relations.yaml cito:discusses edge materializes to the same membership node
+    as implicit 'core' — the two conflicting literals on one node must be caught here.
+
+    Before the fix, the `if relation.role is None: continue` guard skipped the role-less
+    edge entirely, so no conflict was detected.
+    """
+    local_sources = _write_minimal_project(tmp_path)
+    _write_hyp(tmp_path, "h1")
+    # Frontmatter explicitly labels this pair as 'background'.
+    _write_prop(tmp_path, "p1", '[{frame: "hypothesis:h1", role: "background"}]')
+    # relations.yaml has the SAME edge but with NO role → implicit core.
+    _write_relations(local_sources, [
+        "relations:",
+        "  - subject: proposition:p1",
+        "    predicate: cito:discusses",
+        "    object: hypothesis:h1",
+    ])
+    ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
+    errs = _relation_role_errors(ctx)
+    assert any(r.rule == "relation.role.cross-surface-conflict" for r in errs), (
+        "Expected a cross-surface-conflict error (frontmatter=background vs implicit core) "
+        "but got: " + str([r.message for r in errs])
+    )
+
+
+def test_frontmatter_core_vs_unlabeled_relations_no_error(tmp_path: Path):
+    """Rule 3 (unlabeled-core fix): when frontmatter says 'core' and relations.yaml has the
+    same edge with NO role (also implicit core), there is no conflict → no error.
+    """
+    local_sources = _write_minimal_project(tmp_path)
+    _write_hyp(tmp_path, "h1")
+    # Frontmatter explicitly labels this pair as 'core' (same as the implicit default).
+    _write_prop(tmp_path, "p1", '[{frame: "hypothesis:h1", role: "core"}]')
+    # relations.yaml has the SAME edge with NO role → implicit core → no conflict.
+    _write_relations(local_sources, [
+        "relations:",
+        "  - subject: proposition:p1",
+        "    predicate: cito:discusses",
+        "    object: hypothesis:h1",
+    ])
+    ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
+    errs = _relation_role_errors(ctx)
+    assert not any(r.rule == "relation.role.cross-surface-conflict" for r in errs), (
+        "Expected no conflict error but got: " + str([r.message for r in errs])
+    )
+
+
+def test_no_frontmatter_membership_unlabeled_relations_no_error(tmp_path: Path):
+    """Rule 3 (unlabeled-core fix): a role-less relations.yaml edge with NO frontmatter
+    membership for that pair must NOT trigger a conflict error (there is only one surface).
+    """
+    local_sources = _write_minimal_project(tmp_path)
+    _write_hyp(tmp_path, "h1")
+    # Proposition has no discusses at all.
+    _write_prop(tmp_path, "p1")
+    # relations.yaml has a role-less cito:discusses edge.
+    _write_relations(local_sources, [
+        "relations:",
+        "  - subject: proposition:p1",
+        "    predicate: cito:discusses",
+        "    object: hypothesis:h1",
+    ])
+    ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
+    errs = _relation_role_errors(ctx)
+    assert errs == [], (
+        "Expected no errors for single-surface role-less edge but got: "
+        + str([r.message for r in errs])
+    )

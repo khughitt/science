@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
-from rdflib import BNode, Dataset, Literal, Namespace, URIRef
+from rdflib import BNode, Dataset, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
 from science_model.reasoning import MembershipRole
 
@@ -45,7 +45,7 @@ def membership_uri_for(prop_cid: str, frame_cid: str) -> URIRef:
 
 
 def emit_discusses_membership(
-    knowledge,
+    knowledge: Graph,
     *,
     prop_uri: URIRef,
     frame_uri: URIRef,

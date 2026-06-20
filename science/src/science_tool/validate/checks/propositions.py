@@ -219,6 +219,21 @@ def check_discusses_membership(ctx: ValidateContext) -> Iterator[Result]:
 # Live-bundle kind prefixes that make a cito:discusses edge a membership (design §4).
 _LIVE_BUNDLE_PREFIXES = frozenset({"hypothesis", "mechanism"})
 
+# The cito:discusses predicate expressed both as a CURIE and as the resolved absolute IRI.
+# Validation classifies predicates by comparing against both forms so that an edge authored
+# as the full IRI ("http://purl.org/spar/cito/discusses") is treated the same way as one
+# authored as the CURIE ("cito:discusses") — matching the resolution materialize.py performs
+# via _resolve_relation_term / CITO_NS.  Importing _resolve_relation_term directly would
+# create a circular dependency (propositions → materialize → sources → propositions), so we
+# compare against both the CURIE string and the resolved IRI string instead.
+_CITO_DISCUSSES_CURIE = "cito:discusses"
+_CITO_DISCUSSES_IRI = "http://purl.org/spar/cito/discusses"
+
+
+def _is_cito_discusses(predicate: str) -> bool:
+    """Return True when `predicate` refers to cito:discusses in any authored form."""
+    return predicate == _CITO_DISCUSSES_CURIE or predicate == _CITO_DISCUSSES_IRI
+
 
 @Check(section="propositions", order=40)
 def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Result]:
@@ -229,6 +244,10 @@ def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Res
             membership (subject not a proposition, or object not a bundle) → error.
     Rule 3: the same (proposition, frame) pair carries conflicting roles across
             frontmatter `discusses:` and relations.yaml `role:` → error.
+            A role-less relations.yaml cito:discusses edge to a proposition→live-bundle
+            pair contributes an implicit 'core' role to this comparison (because
+            materialize.py uses ``role=relation.role or MembershipRole.CORE`` and writes
+            to the same deterministic membership node IRI).
     """
     from science_tool.graph.sources import load_project_sources, SourceRelation
 
@@ -240,15 +259,28 @@ def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Res
         return
 
     # Build a map of (proposition_cid, frame_cid) → role from relations.yaml.
-    # Also emit rule-1 and rule-2 errors for each relation.
+    # Explicit-role edges: also emit rule-1 and rule-2 errors.
+    # Role-less cito:discusses edges to proposition→live-bundle pairs: contribute
+    # implicit 'core' to the conflict map (Rule 3 only; no rule-1/rule-2 errors).
     relation_roles: dict[tuple[str, str], str] = {}
 
     for relation in sources.relations:
         if relation.role is None:
+            # Still need to check role-less cito:discusses → proposition→live-bundle
+            # edges for Rule 3 (implicit core).  All other role-less edges are irrelevant.
+            if not _is_cito_discusses(relation.predicate):
+                continue
+            subject_prefix = relation.subject.split(":", 1)[0]
+            object_prefix = relation.object.split(":", 1)[0]
+            if subject_prefix == "proposition" and object_prefix in _LIVE_BUNDLE_PREFIXES:
+                # Implicit core: record for cross-surface conflict check only.
+                # Do NOT overwrite an explicit role already recorded for this pair.
+                key = (relation.subject, relation.object)
+                relation_roles.setdefault(key, "core")
             continue
 
         # Rule 1: role is only meaningful on cito:discusses.
-        if relation.predicate != "cito:discusses":
+        if not _is_cito_discusses(relation.predicate):
             yield Result(
                 severity=Severity.ERROR,
                 path=Path(relation.source_path),
@@ -286,7 +318,8 @@ def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Res
             )
             continue
 
-        # Valid membership role — record it for cross-surface conflict check (Rule 3).
+        # Valid explicit membership role — record it for cross-surface conflict check (Rule 3).
+        # Explicit role overwrites any implicit-core entry for the same pair.
         relation_roles[(relation.subject, relation.object)] = relation.role.value
 
     if not relation_roles:
