@@ -88,11 +88,14 @@ Delete `science/tests/test_paper_dataset_migration.py`.
 
 - [ ] **Step 6: Verify no stragglers + suite green**
 
-Run:
+Run two separate checks (a single trailing-`\b` pattern would false-positive, since `is_paper_dataset_role_conflict` is a substring of the new `_is_paper_dataset_role_conflict`):
 ```bash
-git grep -n "paper_dataset_migration\|is_paper_dataset_role_conflict\b\|migrate-paper-datasets" -- 'science/src/**'
+# 1. Module + command must be fully gone:
+git grep -n "paper_dataset_migration\|migrate-paper-datasets" -- 'science/src/**'
+# 2. No leftover use of the OLD public predicate name (filter out the new private one):
+git grep -n "is_paper_dataset_role_conflict" -- 'science/src/**' | grep -v "_is_paper_dataset_role_conflict"
 ```
-Expected: no output (the inlined predicate is now `_is_paper_dataset_role_conflict`, which won't match `\bis_paper...`).
+Expected: both produce no output. (Check 2's filter drops the inlined `_is_paper_dataset_role_conflict`, which is the only allowed match.)
 
 Run: `uv run --frozen pytest science/tests`
 Expected: PASS.
@@ -674,10 +677,12 @@ Note: `docs/audits/downstream-project-conventions/synthesis-shape-investigation-
 
 Run:
 ```bash
-git grep -n "2026-05-19-validate-local-sh-porting-guide\|managed-artifacts-template" -- 'science/src/**'
+git grep -n "2026-05-19-validate-local-sh-porting-guide" -- 'science/src/**'
 git grep -n "entity-layout-migration-guide\|assembly-identity\|crosswalk-identity\|layout-v3-migration-readiness-audit" -- 'science/src/**' ':!docs/**' ':!archive/**'
 ```
-Expected: first prints the live references in `validate/runner.py` and `project_artifacts/registry.yaml` (proves they must stay); second prints nothing (proves the deletions are safe).
+Expected: first prints the live references in `validate/runner.py` and `project_artifacts/registry.yaml` (proves the porting guide must stay); second prints nothing (proves the deletions are safe).
+
+`managed-artifacts-template.md` is retained by decision (managed-artifact authoring doc), not by source consumption — it has **no** `science/src` references, and that is expected, not suspicious. Do not delete it.
 
 - [ ] **Step 4: Delete**
 
