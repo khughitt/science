@@ -10,7 +10,6 @@ from rich.text import Text
 from science_model.reasoning import MembershipRole
 
 from science_tool.annotation.cli import annotate_group
-from science_tool.aspects.cli import aspects_group
 from science_tool.big_picture.cli import big_picture_group
 from science_tool.causal.export_chirho import export_chirho_script
 from science_tool.causal.export_pgmpy import export_pgmpy_script
@@ -221,7 +220,6 @@ def _parse_interaction_terms(entries: tuple[str, ...]) -> list[PropositionIntera
     return interaction_terms
 
 
-main.add_command(aspects_group)
 main.add_command(dag_group)
 main.add_command(curate_group)
 main.add_command(research_package_group)
