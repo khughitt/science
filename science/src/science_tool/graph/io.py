@@ -315,7 +315,9 @@ def _revision_manifest_excludes(project_root: Path) -> tuple[str, ...]:
     graph = loaded.get("graph") or {}
     if not isinstance(graph, dict):
         return ()
-    raw = graph.get("revision_manifest_excludes") or []
+    if "revision_manifest_excludes" not in graph:
+        return ()
+    raw = graph["revision_manifest_excludes"]
     if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
         raise ValueError("science.yaml graph.revision_manifest_excludes must be a list of strings")
     patterns: list[str] = []

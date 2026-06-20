@@ -49,3 +49,16 @@ def test_build_input_manifest_rejects_absolute_exclude_pattern(tmp_path: Path) -
 
     with pytest.raises(ValueError, match="revision_manifest_excludes"):
         build_input_manifest(tmp_path / "knowledge" / "graph.trig")
+
+
+def test_build_input_manifest_rejects_falsy_non_list_exclude_config(tmp_path: Path) -> None:
+    _seed_project(
+        tmp_path,
+        "name: fixture\n"
+        "profile: research\n"
+        "graph:\n"
+        "  revision_manifest_excludes: false\n",
+    )
+
+    with pytest.raises(ValueError, match="revision_manifest_excludes"):
+        build_input_manifest(tmp_path / "knowledge" / "graph.trig")
