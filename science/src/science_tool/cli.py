@@ -87,6 +87,7 @@ from science_tool.graph.store import (
     validate_graph,
     validate_inquiry,
 )
+from science_model.reasoning import MembershipRole
 from science_tool.aspects.cli import aspects_group
 from science_tool.annotation.cli import annotate_group
 from science_tool.big_picture.cli import big_picture_group
@@ -2366,6 +2367,14 @@ def add_article_cmd(doi: str, graph_path: Path) -> None:
 )
 @click.option("--bridge-between", "bridge_between_refs", multiple=True, help="Hypothesis ref bridged by this claim")
 @click.option(
+    "--bridge-role",
+    "bridge_role",
+    type=click.Choice(["core", "rival", "background"]),
+    default="core",
+    show_default=True,
+    help="Membership role for --bridge-between frames",
+)
+@click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def add_proposition_cmd(
@@ -2390,6 +2399,7 @@ def add_proposition_cmd(
     pre_registration_refs: tuple[str, ...],
     interaction_term_entries: tuple[str, ...],
     bridge_between_refs: tuple[str, ...],
+    bridge_role: str,
     graph_path: Path,
 ) -> None:
     """Add a proposition to the knowledge graph."""
@@ -2419,6 +2429,7 @@ def add_proposition_cmd(
         pre_registration_refs=list(pre_registration_refs) if pre_registration_refs else None,
         interaction_terms=interaction_terms,
         bridge_between_refs=list(bridge_between_refs) if bridge_between_refs else None,
+        bridge_role=MembershipRole(bridge_role),
     )
     click.echo(f"Added proposition: {uri}")
     click.echo(

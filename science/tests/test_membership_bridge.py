@@ -3,11 +3,16 @@
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 from rdflib import Literal, URIRef
 from rdflib.namespace import RDF
 
+from rdflib import Dataset
+
+from science_tool.cli import main
 from science_tool.graph.io import SCI_NS, CITO_NS, membership_uri_for
 from science_tool.graph.store import (
+    DEFAULT_GRAPH_PATH,
     INITIAL_GRAPH_TEMPLATE,
     PROJECT_NS,
     add_hypothesis,
@@ -93,3 +98,62 @@ class TestBridgeBetweenMembership:
         assert (prop_uri, SCI_NS.bridgeBetween, hyp_uri) in provenance, (
             "Expected (prop, sci:bridgeBetween, hypothesis) triple in provenance graph"
         )
+
+
+class TestBridgeRoleCli:
+    def test_bridge_role_background_via_cli(self) -> None:
+        """--bridge-role background must produce a BundleMembership with membershipRole 'background'."""
+        runner = CliRunner()
+
+        with runner.isolated_filesystem():
+            assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+            assert (
+                runner.invoke(
+                    main,
+                    [
+                        "graph",
+                        "add",
+                        "hypothesis",
+                        "0001-foo",
+                        "--text",
+                        "Foo hypothesis",
+                        "--source",
+                        "paper:doi_test",
+                    ],
+                ).exit_code
+                == 0
+            )
+            result = runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "proposition",
+                    "Bridging proposition",
+                    "--source",
+                    "paper:doi_test",
+                    "--id",
+                    "bridge-prop-01",
+                    "--bridge-between",
+                    "hypothesis:0001-foo",
+                    "--bridge-role",
+                    "background",
+                ],
+            )
+            assert result.exit_code == 0, result.output
+
+            dataset = Dataset()
+            dataset.parse(source=str(DEFAULT_GRAPH_PATH), format="trig")
+            knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+            token = _slug("bridge-prop-01")
+            prop_cid = f"proposition:{token}"
+            frame_cid = "hypothesis:0001-foo"
+            node = membership_uri_for(prop_cid, frame_cid)
+
+            assert (node, RDF.type, SCI_NS.BundleMembership) in knowledge, (
+                "Expected BundleMembership rdf:type triple"
+            )
+            assert (node, SCI_NS.membershipRole, Literal("background")) in knowledge, (
+                "Expected membershipRole 'background' on the BundleMembership node"
+            )
