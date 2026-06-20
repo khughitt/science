@@ -63,9 +63,9 @@ def emit_dataset_qa_layer(knowledge: Graph, provenance: Graph, sources: ProjectS
     for entity in sources.entities:
         if entity.kind != "dataset":
             continue
-        # `qa_report` is a typed first-class field on DatasetEntity; after the kind guard it is
-        # always present. Explicit access over defensive getattr (Explicit > Defensive).
-        qa_report = entity.qa_report
+        qa_report = getattr(entity, "qa_report", "")
+        if not isinstance(qa_report, str):
+            raise DatasetQaReportError(f"{entity.canonical_id}: qa_report must be a string")
         if not qa_report:
             continue
         dataset_uri = project_entity_uri(entity.canonical_id)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, TypeVar, cast
 
@@ -13,11 +14,11 @@ from pydantic import BaseModel, Field, ValidationError
 from science_model.entities import (
     DomainEntity,
     Entity,
-    EntityClass,
     EntityType,
     ProjectEntity,
     core_entity_type_for_kind,
 )
+from science_model.identity import EntityClass
 from science_model.ontologies import load_catalogs_for_names
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE, load_profile_manifest, load_shared_profile
@@ -69,7 +70,7 @@ _CORE_KINDS = frozenset(kind.name for kind in CORE_PROFILE.entity_kinds)
 _SourceRecordT = TypeVar("_SourceRecordT", bound=BaseModel)
 _TypedRecordCache = dict[tuple[str, str, str, str, type[BaseModel]], object]
 
-_ENUM_FIELDS: dict[str, type] = {
+_ENUM_FIELDS: dict[str, type[StrEnum]] = {
     "claim_layer": ClaimLayer,
     "identification_strength": IdentificationStrength,
     "proxy_directness": ProxyDirectness,
@@ -1214,7 +1215,12 @@ def resolve_local_profile_name(project_root: Path) -> str:
     falls back to the legacy ``profiles.local`` key if the newer key is absent;
     defaults to ``"local"`` when neither key is present.
     """
-    return str(_read_project_config(project_root)["knowledge_profiles"]["local"])
+    config = _read_project_config(project_root)
+    knowledge_profiles = config.get("knowledge_profiles")
+    if not isinstance(knowledge_profiles, dict):
+        return "local"
+    local_profile = knowledge_profiles.get("local")
+    return str(local_profile) if local_profile is not None else "local"
 
 
 def _load_manual_aliases(project_root: Path, *, local_profile: str) -> dict[str, str]:

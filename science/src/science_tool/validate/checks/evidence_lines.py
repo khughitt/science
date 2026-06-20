@@ -12,7 +12,7 @@ from collections import defaultdict
 from collections.abc import Iterator
 from pathlib import Path
 
-from rdflib import RDF, Dataset, Literal, URIRef
+from rdflib import RDF, Dataset, Graph, Literal, URIRef
 from rdflib.namespace import PROV
 from science_model.reasoning import EvidenceType
 
@@ -352,7 +352,7 @@ _AUTHORED_MAGNITUDE = {
 }
 
 
-def _load_belief_graphs(ctx: ValidateContext):
+def _load_belief_graphs(ctx: ValidateContext) -> tuple[Graph | None, Graph | None]:
     path = ctx.project_root / "knowledge" / "graph.trig"
     if not path.exists():
         return None, None
@@ -361,10 +361,11 @@ def _load_belief_graphs(ctx: ValidateContext):
     return ds.graph(_graph_uri("graph/knowledge")), ds.graph(_graph_uri("graph/provenance"))
 
 
-def _claims(knowledge):
+def _claims(knowledge: Graph) -> Iterator[URIRef]:
     for ctype in (SCI_NS.Proposition, SCI_NS.Hypothesis):
         for subj, _, _ in knowledge.triples((None, RDF.type, ctype)):
-            yield subj
+            if isinstance(subj, URIRef):
+                yield subj
 
 
 def _authored_magnitude(ctx, provenance, claim_uri):
@@ -396,7 +397,7 @@ def _authored_magnitude(ctx, provenance, claim_uri):
 @Check(section="evidence lines", order=27)
 def check_belief_authoring(ctx: ValidateContext) -> Iterator[Result]:
     knowledge, provenance = _load_belief_graphs(ctx)
-    if knowledge is None:
+    if knowledge is None or provenance is None:
         return
     for claim in _claims(knowledge):
         units = collect_evidence_units(
@@ -473,7 +474,7 @@ def check_belief_fragile_single_line(ctx: ValidateContext) -> Iterator[Result]:
     """#7 leave-one-out: if dropping any single kept independent unit flips the ordinal
     belief_state (magnitude or contested), the claim's conclusion is not robust."""
     knowledge, provenance = _load_belief_graphs(ctx)
-    if knowledge is None:
+    if knowledge is None or provenance is None:
         return
     for claim in _claims(knowledge):
         units = collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(knowledge, claim))
@@ -686,7 +687,7 @@ def check_reference_basis_no_identification_strength(ctx: ValidateContext) -> It
     """#9 authoring nudge (A2/A-D4): lines resting on a reference dataset but declaring no
     identification_strength should consider setting identification_strength: structural."""
     knowledge, provenance = _load_belief_graphs(ctx)
-    if knowledge is None:
+    if knowledge is None or provenance is None:
         return
 
     reference_uris = {
@@ -697,6 +698,8 @@ def check_reference_basis_no_identification_strength(ctx: ValidateContext) -> It
         return
 
     for line, _, _ in knowledge.triples((None, RDF.type, SCI_NS.EvidenceLine)):
+        if not isinstance(line, URIRef):
+            continue
         derived = {str(o) for _, _, o in provenance.triples((line, PROV.wasDerivedFrom, None))}
         if not (derived & reference_uris):
             continue

@@ -6,7 +6,7 @@ import math
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from statistics import median
-from typing import Any
+from typing import Any, TypeGuard
 
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.config import resolve_commons_root
@@ -59,11 +59,11 @@ def _is_geneset(fm: dict[str, Any]) -> bool:
     return is_geneset_frontmatter(fm)
 
 
-def _is_int(value: object) -> bool:
+def _is_int(value: object) -> TypeGuard[int]:
     return type(value) is int
 
 
-def _is_number(value: object) -> bool:
+def _is_number(value: object) -> TypeGuard[int | float]:
     return type(value) in (int, float)
 
 
@@ -79,14 +79,16 @@ def _collection_defect(fm: dict[str, Any]) -> str | None:
     summary = fm.get("set_size_summary")
     if not isinstance(summary, dict):
         return "set_size_summary must be an object"
-    for key in ("min", "max"):
-        value = summary.get(key)
-        if not _is_int(value) or value < 0:
-            return f"set_size_summary.{key} must be a non-negative integer"
+    min_value = summary.get("min")
+    max_value = summary.get("max")
+    if not _is_int(min_value) or min_value < 0:
+        return "set_size_summary.min must be a non-negative integer"
+    if not _is_int(max_value) or max_value < 0:
+        return "set_size_summary.max must be a non-negative integer"
     median_value = summary.get("median")
     if not _is_number(median_value) or median_value < 0:
         return "set_size_summary.median must be a non-negative number"
-    if not (summary["min"] <= summary["median"] <= summary["max"]):
+    if not (min_value <= median_value <= max_value):
         return "set_size_summary must satisfy min <= median <= max"
     ident = fm.get("identifier_space")
     if not isinstance(ident, dict):
@@ -125,9 +127,12 @@ def _row_stats(rows: list[GenesetRow]) -> tuple[int, float, int]:
 
 def _summary_matches(summary: dict[str, Any], rows: list[GenesetRow]) -> bool:
     min_size, median_size, max_size = _row_stats(rows)
+    median_value = summary.get("median")
+    if not _is_number(median_value):
+        return False
     return (
         summary.get("min") == min_size
-        and math.isclose(float(summary.get("median")), median_size, rel_tol=0.0, abs_tol=1e-9)
+        and math.isclose(float(median_value), median_size, rel_tol=0.0, abs_tol=1e-9)
         and summary.get("max") == max_size
     )
 
@@ -263,11 +268,14 @@ def check_genesets(ctx: ValidateContext) -> Iterator[Result]:
     datasets = dataset_frontmatters(ctx)
     genesets = [fm for fm in datasets if _is_geneset(fm)]
     local_by_id = {fm["id"]: fm for fm in datasets if isinstance(fm.get("id"), str) and fm["id"]}
-    rows_by_dataset_id = {
-        str(fm["id"]): read_member_rows(ctx.project_root, fm)
-        for fm in genesets
-        if isinstance(fm.get("id"), str) and fm["id"]
-    }
+    rows_by_dataset_id: dict[str, list[dict[str, Any]] | Exception] = {}
+    for fm in genesets:
+        dataset_id = fm.get("id")
+        if not isinstance(dataset_id, str) or not dataset_id:
+            continue
+        rows = read_member_rows(ctx.project_root, fm)
+        if rows is not None:
+            rows_by_dataset_id[dataset_id] = rows
     declared_registries: set[str] = set()
     for fm in genesets:
         ident = fm.get("identifier_space")

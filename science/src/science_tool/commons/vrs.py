@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from ga4gh.core import ga4gh_identify
 from ga4gh.vrs.extras.translator import AlleleTranslator
@@ -20,7 +20,7 @@ class _Proxy(Protocol):
 
 
 def _translator(proxy: _Proxy) -> AlleleTranslator:
-    return AlleleTranslator(data_proxy=proxy)
+    return AlleleTranslator(data_proxy=cast(Any, proxy))
 
 
 def _translator_expr(fmt: str, expr: str) -> str:
@@ -37,4 +37,7 @@ def compute_vrs_id(proxy: _Proxy, *, fmt: str, expr: str) -> str:
         raise ValueError(f"unsupported variant fmt {fmt!r}")
 
     allele = _translator(proxy).translate_from(_translator_expr(fmt, expr), fmt=fmt, do_normalize=True)
-    return ga4gh_identify(allele)
+    identifier = ga4gh_identify(allele)
+    if identifier is None:
+        raise ValueError(f"could not compute VRS identifier for {fmt!r} expression")
+    return identifier

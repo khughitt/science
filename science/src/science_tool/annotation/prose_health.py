@@ -5,6 +5,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from science_tool.annotation.prose_decomposition import (
     DecompositionArtifact,
@@ -63,7 +64,7 @@ class ProseHealthManifest:
 class ProseHealthReport:
     payload: dict[str, object]
 
-    def to_json(self) -> dict[str, object]:
+    def to_json(self) -> dict[str, Any]:
         return self.payload
 
 

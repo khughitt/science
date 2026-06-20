@@ -161,7 +161,7 @@ def classify_aggregate_rows(
         has_real_owner = any(r.adapter != "aggregate" and not r.deprecated for r in rows)
         for decl in agg_rows:
             ref = decl.source_ref
-            meta = meta_by_ref.get((ref.path, ref.line)) if ref is not None else None
+            meta = meta_by_ref.get((ref.path, ref.line)) if ref is not None and ref.line is not None else None
             kind = meta.kind if meta is not None else canonical_id.split(":", 1)[0]
             source_path = meta.source_path if meta is not None else None
             agg_path = ref.path if ref is not None else None

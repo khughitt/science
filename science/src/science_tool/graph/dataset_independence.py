@@ -147,6 +147,8 @@ def _read_dataset_lineage(knowledge: Graph) -> DatasetLineage:
 def read_dataset_usage_facts(provenance: Graph) -> list[UsageFact]:
     facts: list[UsageFact] = []
     for consumer, _, usage_node in provenance.triples((None, SCI_NS.hasDatasetUsage, None)):
+        if not isinstance(consumer, URIRef) or not isinstance(usage_node, URIRef):
+            continue
         if (usage_node, RDF.type, SCI_NS.DatasetUsage) not in provenance:
             continue
         dataset = _one_uri(provenance, usage_node, SCI_NS.dataset)
@@ -155,7 +157,7 @@ def read_dataset_usage_facts(provenance: Graph) -> list[UsageFact]:
         source = _one_literal(provenance, usage_node, SCI_NS.usageSource) or ""
         if dataset is None or role is None:
             continue
-        facts.append(UsageFact(URIRef(consumer), dataset, role, overlap, source, URIRef(usage_node)))
+        facts.append(UsageFact(consumer, dataset, role, overlap, source, usage_node))
     return sorted(facts, key=lambda fact: (str(fact.consumer), str(fact.dataset), str(fact.usage_node)))
 
 
@@ -247,10 +249,12 @@ def committed_metadata_by_line(
 ) -> dict[URIRef, DerivedCommitmentMetadata]:
     out: dict[URIRef, DerivedCommitmentMetadata] = {}
     for record in provenance.subjects(RDF.type, SCI_NS.DatasetIndependenceCommitment):
-        target = _one_uri(provenance, URIRef(record), SCI_NS.independenceTarget)
+        if not isinstance(record, URIRef):
+            continue
+        target = _one_uri(provenance, record, SCI_NS.independenceTarget)
         if target not in targets:
             continue
-        group = _one_literal(provenance, URIRef(record), SCI_NS.independenceGroup)
+        group = _one_literal(provenance, record, SCI_NS.independenceGroup)
         if group is None:
             continue
         for member in provenance.objects(record, SCI_NS.independenceMember):
@@ -288,7 +292,13 @@ def _line_ancestors(
     return ancestors
 
 
-def _ancestor_path(knowledge: Graph, provenance: Graph, line: URIRef, target: URIRef, consumer: URIRef) -> str | None:
+def _ancestor_path(
+    knowledge: Graph,
+    provenance: Graph,
+    line: URIRef,
+    target: URIRef,
+    consumer: URIRef,
+) -> Literal["direct", "indirect-bears-on", "virtual"] | None:
     if consumer == line:
         return "virtual" if _is_virtual_gene_set_member(consumer) else "direct"
     if (line, PROV.wasDerivedFrom, consumer) in provenance:

@@ -2844,14 +2844,16 @@ def _render_inquiry_source(
     profile: str,
     status: str,
     project: str = "",
-    boundary_roles: list[tuple[str, str]] = (),          # (ref, "BoundaryIn"|"BoundaryOut")
-    flow_edges: list[tuple[str, str, str, list[str]]] = (),  # (subject_ref, predicate, object_ref, claim_refs)
+    boundary_roles: list[tuple[str, str]] | None = None,          # (ref, "BoundaryIn"|"BoundaryOut")
+    flow_edges: list[tuple[str, str, str, list[str]]] | None = None,  # (subject_ref, predicate, object_ref, claim_refs)
     treatment_ref: str | None = None,
     outcome_ref: str | None = None,
 ) -> str:
     import yaml
 
     inquiry: dict = {"profile": profile, "status": status}
+    boundary_roles = boundary_roles or []
+    flow_edges = flow_edges or []
     inquiry["boundary_roles"] = [{"ref": r, "role": role} for r, role in boundary_roles]
     inquiry["flow_edges"] = [
         {"subject": s, "predicate": p, "object": o, "claim_refs": list(claims)}
@@ -2939,6 +2941,8 @@ def inquiry_import(slug, project_root, graph_path, force):
     flows = [(_ref_from_uri(e["subject"]), _local_predicate(e["predicate"]), _ref_from_uri(e["object"]),
               [_ref_from_uri(c) for c in e.get("claims", [])])
              for e in info.get("edges", [])]
+    treatment = info.get("treatment")
+    outcome = info.get("outcome")
     text = _render_inquiry_source(
         slug,
         title=info.get("label") or slug,
@@ -2948,8 +2952,8 @@ def inquiry_import(slug, project_root, graph_path, force):
         project=(Path(project_root).resolve().name or "project"),
         boundary_roles=boundary,
         flow_edges=flows,
-        treatment_ref=_ref_from_uri(info["treatment"]) if info.get("treatment") else None,
-        outcome_ref=_ref_from_uri(info["outcome"]) if info.get("outcome") else None,
+        treatment_ref=_ref_from_uri(treatment) if isinstance(treatment, str) and treatment else None,
+        outcome_ref=_ref_from_uri(outcome) if isinstance(outcome, str) and outcome else None,
     )
     PatchDefinitionEntity(**yaml.safe_load(text.split("---")[1]))  # fail loudly on invalid bridge output
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -4311,11 +4315,11 @@ def project_index(output_format: str, project_root: Path) -> None:
         for entity in list_entities(project_root, kind=kind):
             rows.append(
                 {
-                    "kind": entity["kind"],
-                    "id": entity["id"],
-                    "file": entity["path"],
-                    "title": entity["title"],
-                    "status": entity["status"],
+                    "kind": str(entity["kind"]),
+                    "id": str(entity["id"]),
+                    "file": str(entity["path"]),
+                    "title": str(entity["title"]),
+                    "status": str(entity["status"]),
                 }
             )
 

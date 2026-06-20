@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from rdflib import RDF, Dataset, Literal, URIRef
@@ -40,7 +41,7 @@ def _artifact_payload(
     artifact_id: str = "decomp-1",
     unit_id: str = "u001",
     quote: str = "Basalt flows record the cooling history.",
-) -> dict:
+) -> dict[str, Any]:
     source = _source(tmp_path)
     return {
         "schema_version": 1,
@@ -94,6 +95,10 @@ def _persist_artifact(tmp_path: Path, payload: dict):
     return artifact, store
 
 
+def _report_json(report: ProseGroundingReport) -> dict[str, Any]:
+    return cast(dict[str, Any], report.to_json())
+
+
 def _write_graph(tmp_path: Path, *, supports: int) -> Path:
     dataset = Dataset()
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
@@ -119,12 +124,14 @@ def test_build_prose_grounding_report_joins_promoted_unit_by_fingerprint(tmp_pat
     store.record_promotion("example", artifact.units[0].fingerprint, "proposition:basalt-cooling")
     graph_path = _write_graph(tmp_path, supports=2)
 
-    report = build_prose_grounding_report(
-        tmp_path,
-        "prose-source:example",
-        graph_path,
-        generated_at="2026-06-18T13:00:00Z",
-    ).to_json()
+    report = _report_json(
+        build_prose_grounding_report(
+            tmp_path,
+            "prose-source:example",
+            graph_path,
+            generated_at="2026-06-18T13:00:00Z",
+        )
+    )
 
     assert report["source_ref"] == "prose-source:example"
     assert report["decomposition_artifact_id"] == "decomp-1"
@@ -157,12 +164,14 @@ def test_build_prose_grounding_report_keeps_promoted_link_across_unit_renumber(t
     )
     graph_path = _write_graph(tmp_path, supports=2)
 
-    report = build_prose_grounding_report(
-        tmp_path,
-        "prose-source:example",
-        graph_path,
-        generated_at="2026-06-18T13:00:00Z",
-    ).to_json()
+    report = _report_json(
+        build_prose_grounding_report(
+            tmp_path,
+            "prose-source:example",
+            graph_path,
+            generated_at="2026-06-18T13:00:00Z",
+        )
+    )
 
     candidate = report["units"][0]
     assert candidate["unit_id"] == "u777"
@@ -176,12 +185,14 @@ def test_build_prose_grounding_report_classifies_below_floor(tmp_path: Path):
     store.record_promotion("example", artifact.units[0].fingerprint, "proposition:basalt-cooling")
     graph_path = _write_graph(tmp_path, supports=1)
 
-    report = build_prose_grounding_report(
-        tmp_path,
-        "prose-source:example",
-        graph_path,
-        generated_at="2026-06-18T13:00:00Z",
-    ).to_json()
+    report = _report_json(
+        build_prose_grounding_report(
+            tmp_path,
+            "prose-source:example",
+            graph_path,
+            generated_at="2026-06-18T13:00:00Z",
+        )
+    )
 
     assert report["summary"]["below_floor_units"] == 1
     candidate = report["units"][0]
@@ -193,12 +204,14 @@ def test_build_prose_grounding_report_classifies_unpromoted_candidate(tmp_path: 
     _persist_artifact(tmp_path, _artifact_payload(tmp_path))
     graph_path = _write_graph(tmp_path, supports=2)
 
-    report = build_prose_grounding_report(
-        tmp_path,
-        "prose-source:example",
-        graph_path,
-        generated_at="2026-06-18T13:00:00Z",
-    ).to_json()
+    report = _report_json(
+        build_prose_grounding_report(
+            tmp_path,
+            "prose-source:example",
+            graph_path,
+            generated_at="2026-06-18T13:00:00Z",
+        )
+    )
 
     assert report["grounding_policy"] == {
         "floor": "supported",
@@ -255,12 +268,14 @@ def test_build_prose_grounding_report_emits_stale_rows_without_counting_current_
     )
     graph_path = _write_graph(tmp_path, supports=2)
 
-    report = build_prose_grounding_report(
-        tmp_path,
-        "prose-source:example",
-        graph_path,
-        generated_at="2026-06-18T13:00:00Z",
-    ).to_json()
+    report = _report_json(
+        build_prose_grounding_report(
+            tmp_path,
+            "prose-source:example",
+            graph_path,
+            generated_at="2026-06-18T13:00:00Z",
+        )
+    )
 
     stale_rows = [row for row in report["units"] if row["status"] == "stale"]
     assert len(stale_rows) == 1

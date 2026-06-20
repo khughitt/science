@@ -6,14 +6,16 @@ even before ``graph build`` and give fast authoring-time feedback.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
+from typing import cast
 
 from science_model.reasoning import (
     MEMBERSHIP_ROLE_VALUES,
     SIGN_MEANINGFUL_PREDICATES,
     ClaimLayer,
     IdentificationStrength,
+    MembershipRole,
     Polarity,
 )
 
@@ -351,7 +353,7 @@ def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Res
         iter_memberships = getattr(entity, "iter_memberships", None)
         if not callable(iter_memberships):
             continue
-        for frame_ref, role in iter_memberships():
+        for frame_ref, role in cast(Iterable[tuple[str, MembershipRole]], iter_memberships()):
             # Canonicalize the frontmatter frame_ref via the alias map.
             # normalize_alias returns the raw string unchanged when the ref is not found in
             # the alias map (neither raw nor lowercased).  A known canonical_id is always

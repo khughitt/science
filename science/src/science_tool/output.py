@@ -16,7 +16,7 @@ def emit_query_rows(
     *,
     output_format: str,
     title: str,
-    columns: list[tuple[str, str] | tuple[str, str, dict[str, Any]]],
+    columns: Sequence[tuple[str, str] | tuple[str, str, dict[str, Any]]],
     rows: Sequence[Mapping[str, Any]],
     meta: Mapping[str, Any] | None = None,
     renderers: Mapping[str, Callable[[Any, Mapping[str, Any]], Any]] | None = None,

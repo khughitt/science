@@ -11,7 +11,7 @@ import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import yaml
 
@@ -1017,7 +1017,7 @@ def _postmove_audit_failures(
         + _schema_invalid_blockers(sources, undated_new_paths)
         + _dangling_alias_targets(sources, mappings_aliases)
     )
-    return blockers, transitional_warnings
+    return cast(tuple[list[dict], list[dict]], (blockers, transitional_warnings))
 
 
 def _dangling_alias_targets(sources: "ProjectSources", mappings_aliases: dict[str, str]) -> list[dict]:

@@ -30,7 +30,7 @@ def compute_seqcol_digest(level2: dict[str, Any]) -> str:
     refget silently dropping ``lengths``. ``refget.utils.seqcol_digest`` applies
     the spec's canonical-JSON + sha512t24u rollup over exactly these attributes.
     """
-    from refget.utils import seqcol_digest  # lazy: recipe-only dependency
+    from refget.utils import seqcol_digest  # pyright: ignore[reportMissingImports]  # lazy: recipe-only dependency
 
     return seqcol_digest(
         {"names": list(level2["names"]), "sequences": list(level2["sequences"])},

@@ -231,7 +231,11 @@ def _bears_on_neighbors(dataset: Dataset, origin: URIRef, *, max_depth: int) -> 
             source = next(graph.objects(edge, SCI_NS.bearsOnSource), None)
             target = next(graph.objects(edge, SCI_NS.bearsOnTarget), None)
             depth_lit = next(graph.objects(edge, SCI_NS.bearsOnDepth), None)
-            if not isinstance(source, URIRef) or not isinstance(target, URIRef) or depth_lit is None:
+            if (
+                not isinstance(source, URIRef)
+                or not isinstance(target, URIRef)
+                or not isinstance(depth_lit, RDFLiteral)
+            ):
                 continue
             depth = int(depth_lit)
             if depth > max_depth:

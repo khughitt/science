@@ -42,7 +42,7 @@ class EntityPathPolicy:
 _KIND_DESCRIPTORS = (*CORE_PROFILE.entity_kinds, *LOCAL_PROFILE.entity_kinds)
 
 _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
-    ek.name: EntityPathPolicy(Path(ek.home), ek.strategy)
+    ek.name: EntityPathPolicy(Path(ek.home), cast(EntityFilenameStrategy, ek.strategy))
     for ek in _KIND_DESCRIPTORS
     if ek.home is not None and ek.strategy is not None
 }
@@ -833,7 +833,7 @@ def list_entities(
     *,
     include_hidden: bool = False,
     include_archived: bool = False,
-) -> list[dict[str, str]]:
+) -> list[dict[str, object]]:
     if related is not None and include_archived:
         # The archive index carries no relation data, so the `related` filter cannot
         # be evaluated against archived rows. Fail loud rather than silently include
@@ -846,7 +846,7 @@ def list_entities(
     resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
     related_key = _resolved_ref_key(resolver, related) if related is not None else None
 
-    rows: list[dict[str, str]] = []
+    rows: list[dict[str, object]] = []
     for entity in sources.entities:
         if kind is not None and entity.kind != kind:
             continue
@@ -886,7 +886,7 @@ def list_entities(
                     "archived": True,
                 }
             )
-    return sorted(rows, key=lambda row: row["id"])
+    return sorted(rows, key=lambda row: str(row["id"]))
 
 
 def _resolved_ref_key(resolver: ReferenceResolver, raw: str) -> str:

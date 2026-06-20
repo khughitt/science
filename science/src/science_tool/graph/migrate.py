@@ -143,7 +143,7 @@ def _commons_hint_for(target: str) -> str:
     )
 
 
-def audit_identity_table(table: IdentityTable) -> list[dict]:
+def audit_identity_table(table: IdentityTable) -> list[AuditRow]:
     """Turn identity-table collisions into graph-audit rows (design §B3, §C2).
 
     A genuine duplicate (>=2 non-deprecated owners) is `fail` (blocks the strict build
@@ -151,7 +151,7 @@ def audit_identity_table(table: IdentityTable) -> list[dict]:
     retirement, not a build blocker (§C4). Grade via the shared IdentityCollision
     predicate so this path, the migrator, and the validate check never diverge.
     """
-    rows: list[dict] = []
+    rows: list[AuditRow] = []
     for collision in table.collisions():
         paths = [(r.source_ref.path if r.source_ref else "<unknown>") for r in collision.rows]
         rows.append(

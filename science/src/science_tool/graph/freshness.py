@@ -25,7 +25,7 @@ from typing import TypedDict
 
 from rdflib import Dataset, Graph, Literal, URIRef
 from rdflib.namespace import PROV, RDF, XSD
-from science_model.entities import EntityClass
+from science_model.identity import EntityClass
 
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.store import CITO_NS, PROJECT_NS, SCI_NS, canonical_id_from_entity_uri

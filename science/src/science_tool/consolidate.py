@@ -181,13 +181,15 @@ def apply_consolidation(
         fm = dict(loc.frontmatter)
         fm["status"] = "archived"
         fm["consolidated_into"] = digest_id
+        aliases_raw = loc.frontmatter.get("aliases")
+        same_as_raw = loc.frontmatter.get("same_as")
         row = ArchiveRow(
             op="archive",
             id=loc.entity_id,
             kind=loc.kind,
             title=loc.title or None,
-            aliases=[a for a in (loc.frontmatter.get("aliases") or []) if isinstance(a, str)],
-            same_as=[s for s in (loc.frontmatter.get("same_as") or []) if isinstance(s, str)],
+            aliases=[a for a in aliases_raw if isinstance(a, str)] if isinstance(aliases_raw, list) else [],
+            same_as=[s for s in same_as_raw if isinstance(s, str)] if isinstance(same_as_raw, list) else [],
             status="archived",
             original_path=loc.rel_path,
             consolidated_into=digest_id,

@@ -12,7 +12,7 @@ import re
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import final
+from typing import Any, final
 
 import yaml
 
@@ -215,7 +215,7 @@ def render_canonical_datapackage_yaml(
     if not isinstance(project_doc, dict):
         raise CommonsError("project datapackage document must be a mapping")
 
-    out = {"name": canonical_slug}
+    out: dict[str, Any] = {"name": canonical_slug}
     for key, value in project_doc.items():
         if key in _PROJECT_ONLY_DATAPACKAGE_KEYS or key in {"name", "resources"}:
             continue
@@ -226,7 +226,7 @@ def render_canonical_datapackage_yaml(
         raise CommonsError("project datapackage has a missing or empty 'resources' list")
     _validate_resource_aliases(raw_resources)
 
-    resources = []
+    resources: list[dict[str, Any]] = []
     for index, resource in enumerate(raw_resources):
         if not isinstance(resource, dict):
             raise CommonsError(f"resources[{index}] is not a mapping")

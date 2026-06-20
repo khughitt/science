@@ -588,6 +588,8 @@ def verify(
     rewritten_count = 0
     pre_apply_broken = 0
     if apply_changes:
+        if actor is None:
+            raise click.ClickException("--apply requires --actor <identity>")
         pre_apply_broken = report.broken
         rewritten = apply_supersessions(
             report,

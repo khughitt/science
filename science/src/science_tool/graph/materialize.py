@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date as _date
 from pathlib import Path
-from typing import Literal as _Literal
+from typing import Literal as _Literal, cast
 from urllib.parse import quote
 
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, RDF, RDFS, SKOS, XSD
-from science_model.entities import Entity, EntityClass, EvidenceLineEntity
-from science_model.identity import EntityScope
+from science_model.entities import Entity, EvidenceLineEntity
+from science_model.identity import EntityClass, EntityScope
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.patch_definition import PatchDefinitionEntity
 from science_model.profiles import CORE_PROFILE
@@ -104,10 +105,13 @@ def _iter_membership_refs(entity):
     """
     iter_memberships = getattr(entity, "iter_memberships", None)
     if callable(iter_memberships):
-        yield from sorted(iter_memberships(), key=lambda pair: pair[0])
+        memberships = cast(Iterable[tuple[str, MembershipRole]], iter_memberships())
+        yield from sorted(memberships, key=lambda pair: pair[0])
         return
-    for raw in sorted(getattr(entity, "discusses", []) or []):
-        yield raw, MembershipRole.CORE
+    discusses = getattr(entity, "discusses", None)
+    if isinstance(discusses, list):
+        for raw in sorted(item for item in discusses if isinstance(item, str)):
+            yield raw, MembershipRole.CORE
 
 
 @dataclass(frozen=True)
@@ -1205,7 +1209,7 @@ def _add_authored_relation(
     is_membership = (
         predicate_uri == CITO_NS.discusses and subject_is_proposition and object_is_live_bundle
     )
-    if is_membership:
+    if is_membership and isinstance(object_entity, Entity):
         emit_discusses_membership(
             graph,
             prop_uri=subject_uri,
@@ -1406,12 +1410,15 @@ def _add_reasoning_metadata(*, uri: URIRef, provenance, entity: Entity) -> None:
                 Literal(_model_to_json(rival_packet)),
             )
         )
-    if getattr(entity, "composition_rule", None) is not None:
-        provenance.add((uri, SCI_NS.compositionRule, Literal(entity.composition_rule.value)))
-    if getattr(entity, "legacy_patch", None) is not None:
-        provenance.add((uri, SCI_NS.legacyPatch, Literal(entity.legacy_patch)))
-    if getattr(entity, "legacy_edge_id", None) is not None:
-        provenance.add((uri, SCI_NS.legacyEdgeId, Literal(entity.legacy_edge_id)))
+    composition_rule = getattr(entity, "composition_rule", None)
+    if composition_rule is not None:
+        provenance.add((uri, SCI_NS.compositionRule, Literal(composition_rule.value)))
+    legacy_patch = getattr(entity, "legacy_patch", None)
+    if legacy_patch is not None:
+        provenance.add((uri, SCI_NS.legacyPatch, Literal(legacy_patch)))
+    legacy_edge_id = getattr(entity, "legacy_edge_id", None)
+    if legacy_edge_id is not None:
+        provenance.add((uri, SCI_NS.legacyEdgeId, Literal(legacy_edge_id)))
 
 
 def _model_to_json(value: MeasurementModel | RivalModelPacket) -> str:

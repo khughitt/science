@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from science_model.frontmatter import parse_entity_file, parse_frontmatter
-from science_model.packages.schema import MemberOfDerivationBlock
+from science_model.packages.schema import DerivationBlock, MemberOfDerivationBlock
 
 
 def _load_dataset(project_root: Path, ds_id: str):
@@ -41,6 +41,9 @@ def check_inputs(project_root: Path, dataset_ids: list[str]) -> tuple[bool, list
             if isinstance(e.derivation, MemberOfDerivationBlock):
                 # member_of datasets are structurally-derived; their readiness
                 # is the parent collection's responsibility, not a pipeline run.
+                continue
+            if not isinstance(e.derivation, DerivationBlock):
+                halts.append(f"{ds_id}: derived entity has unsupported derivation block")
                 continue
             run_slug = e.derivation.workflow_run.removeprefix("workflow-run:")
             run_path = project_root / "doc" / "workflow-runs" / f"{run_slug}.md"

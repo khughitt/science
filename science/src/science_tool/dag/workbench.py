@@ -29,7 +29,15 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from science_model.entities import EntityType, EvidenceLineEntity, QuantitativeResult
 from science_model.propositions import DiscussesMembership, PropositionEntity
-from science_model.reasoning import EvidenceType, canonical_evidence_type_token
+from science_model.reasoning import (
+    ClaimLayer,
+    EvidenceStance,
+    EvidenceType,
+    IdentificationStrength,
+    Polarity,
+    Predicate,
+    canonical_evidence_type_token,
+)
 
 # ---------------------------------------------------------------------------
 # Layout models (Task 5e) — cosmetic / non-epistemic state
@@ -249,13 +257,17 @@ def _proposition_for_row(row: WorkbenchRow) -> PropositionEntity:
         id=entity_id,
         subject=row.subject,
         object=row.object,
-        predicate=row.predicate,
-        polarity=row.polarity,
+        predicate=Predicate(row.predicate),
+        polarity=Polarity(row.polarity) if row.polarity is not None else None,
         legacy_relation_label=row.legacy_relation_label,
         legacy_patch=row.legacy_patch,
         legacy_edge_id=row.legacy_edge_id,
-        claim_layer=row.claim_layer,
-        identification_strength=row.identification_strength,
+        claim_layer=ClaimLayer(row.claim_layer) if row.claim_layer is not None else None,
+        identification_strength=(
+            IdentificationStrength(row.identification_strength)
+            if row.identification_strength is not None
+            else None
+        ),
     )
 
 
@@ -282,7 +294,7 @@ def _evidence_line_for_stub(stub: EvidenceStub, *, target_id: str, index: int) -
         source_refs=[],
         content_preview="",
         file_path="",
-        stance=stub.stance,
+        stance=EvidenceStance(stub.stance) if stub.stance is not None else EvidenceStance.SUPPORTS,
         target=target_id,
         source=stub.source,
         evidence_type=stub.evidence_type,

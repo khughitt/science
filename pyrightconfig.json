@@ -1,0 +1,7 @@
+{
+  "include": ["science/src"],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "venvPath": "science",
+  "venv": ".venv"
+}

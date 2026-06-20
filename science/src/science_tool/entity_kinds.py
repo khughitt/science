@@ -4,7 +4,8 @@ from pathlib import Path
 
 import yaml
 from pydantic import ValidationError
-from science_model.entities import EntityClass, EntityType
+from science_model.entities import EntityType
+from science_model.identity import EntityClass
 from science_model.ontologies import load_catalogs_for_names
 from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE, load_shared_profile
 from science_model.profiles.schema import ProfileManifest

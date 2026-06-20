@@ -59,7 +59,10 @@ def _collect_chapters(nodes: list[Any], reader: PdfReader, part: str | None = No
             i += 1
             continue
         title = str(node.title).strip()
-        start = reader.get_destination_page_number(node) + 1  # 0-based -> 1-based
+        page_number = reader.get_destination_page_number(node)
+        if page_number is None:
+            raise ValueError(f"could not resolve PDF outline destination page: {title}")
+        start = page_number + 1  # 0-based -> 1-based
         has_children = i + 1 < len(nodes) and isinstance(nodes[i + 1], list)
         if has_children and _PART_RE.match(title):
             # Container Part: descend; its children are the chapters.

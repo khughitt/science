@@ -15,7 +15,7 @@ from datetime import date
 from pathlib import Path
 
 from rdflib import Dataset
-from science_model.entities import EntityClass
+from science_model.identity import EntityClass
 
 from science_tool.entities import (
     EntityCommandError,

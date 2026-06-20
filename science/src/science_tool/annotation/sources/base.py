@@ -63,7 +63,10 @@ class SourceAdapter(Protocol):
     user-facing CLI value accepted by `--source`.
     """
 
-    name: str
-    short_name: str
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def short_name(self) -> str: ...
 
     def scan(self, md_path: Path) -> Iterable[PlannedAnnotation]: ...

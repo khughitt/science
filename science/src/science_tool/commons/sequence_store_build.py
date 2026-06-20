@@ -13,7 +13,7 @@ import tempfile
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, BinaryIO, Iterable, Iterator
+from typing import Any, BinaryIO, Iterable, Iterator, cast
 
 from science_tool.commons.sequence_store import refget_digest
 
@@ -44,7 +44,7 @@ def _record_name(header_line: bytes, *, fasta_path: Path, line_no: int) -> str:
 
 def _start_record(name: str, out_dir: Path) -> _OpenRecord:
     tmp = tempfile.NamedTemporaryFile("wb", dir=out_dir, prefix=".seqstore-", delete=False)
-    return _OpenRecord(name=name, path=Path(tmp.name), handle=tmp, sha256=hashlib.sha256())
+    return _OpenRecord(name=name, path=Path(tmp.name), handle=cast(BinaryIO, tmp), sha256=hashlib.sha256())
 
 
 def _finish_record(

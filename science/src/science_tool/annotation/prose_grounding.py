@@ -36,7 +36,7 @@ class ProseGroundingError(ValueError):
 class ProseGroundingReport:
     payload: dict[str, object]
 
-    def to_json(self) -> dict[str, object]:
+    def to_json(self) -> dict[str, Any]:
         return self.payload
 
 
@@ -187,7 +187,7 @@ def _row_for_current_unit(
 
 
 def _grounding_payload(result: GroundingResult) -> dict[str, object]:
-    payload = result.to_json()
+    payload: dict[str, object] = dict(result.to_json())
     payload.pop("target_ref", None)
     payload.pop("status", None)
     payload["belief_policy_id"] = payload.pop("policy_id")
@@ -219,6 +219,11 @@ def _stale_row(fingerprint: str, index_row: dict[str, Any]) -> dict[str, object]
 def _summary(rows: list[dict[str, object]]) -> dict[str, int]:
     current_rows = [row for row in rows if row.get("status") != "stale"]
     current_candidates = [row for row in current_rows if row.get("disposition") == "candidate"]
+    contested_units = 0
+    for row in current_rows:
+        grounding = row.get("grounding")
+        if isinstance(grounding, dict) and grounding.get("contested") is True:
+            contested_units += 1
     return {
         "current_candidate_units": len(current_candidates),
         "promoted_units": sum(1 for row in current_candidates if row.get("proposition_ref") is not None),
@@ -228,11 +233,7 @@ def _summary(rows: list[dict[str, object]]) -> dict[str, int]:
         "unpromoted_units": sum(1 for row in current_rows if row.get("status") == "unpromoted"),
         "skipped_units": sum(1 for row in current_rows if row.get("status") == "skipped"),
         "stale_units": sum(1 for row in rows if row.get("status") == "stale"),
-        "contested_units": sum(
-            1
-            for row in current_rows
-            if isinstance(row.get("grounding"), dict) and row["grounding"].get("contested") is True
-        ),
+        "contested_units": contested_units,
     }
 
 

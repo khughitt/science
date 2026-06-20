@@ -15,6 +15,7 @@ import os
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 import yaml
@@ -198,10 +199,11 @@ def read_table_sample(table_path: Path, sample: int) -> pd.DataFrame:
 
 def infer_fields(df: pd.DataFrame) -> list[InferredField]:
     """Infer (name, coarse type, mixed-flag) from a DataFrame (the CSV path)."""
-    return [
-        InferredField(name=str(col), type=coarse_type(df[col]), mixed=is_mixed_object(df[col]))
-        for col in df.columns
-    ]
+    fields: list[InferredField] = []
+    for col in df.columns:
+        series = cast(pd.Series, df[col])
+        fields.append(InferredField(name=str(col), type=coarse_type(series), mixed=is_mixed_object(series)))
+    return fields
 
 
 def observed_fields(table_path: Path, sample: int) -> list[InferredField]:
@@ -282,7 +284,7 @@ def build_report(df: pd.DataFrame, inferred: list[InferredField]) -> ReviewRepor
     rep = ReviewReport(sample_rows=int(len(df)))
     by_name = {i.name: i for i in inferred}
     for col in df.columns:
-        s = df[col]
+        s = cast(pd.Series, df[col])
         name = str(col)
         nonnull = s.dropna()
         n_nonnull = int(len(nonnull))

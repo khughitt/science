@@ -18,7 +18,6 @@ from science_model.entities import (
     CodeFileEntity,
     DatasetEntity,
     Entity,
-    EntityClass,
     EvidenceLineEntity,
     InquiryEntity,
     MechanismEntity,
@@ -31,6 +30,7 @@ from science_model.entities import (
     ThemeEntity,
     WorkflowRunEntity,
 )
+from science_model.identity import EntityClass
 from science_model.patch_definition import PatchDefinitionEntity
 from science_model.profiles.core import CORE_PROFILE
 from science_model.profiles.schema import KindCategory
