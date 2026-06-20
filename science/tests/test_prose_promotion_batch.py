@@ -337,6 +337,21 @@ def test_apply_rejects_duplicate_units_before_partial_mutation(tmp_path: Path) -
     assert not (tmp_path / "entities" / "propositions" / "basalt-flows-record-the-cooling-history.md").exists()
 
 
+def test_apply_rejects_duplicate_fingerprints_before_partial_mutation(tmp_path: Path) -> None:
+    _persist_artifact(tmp_path)
+    payload = plan_prose_promotions(tmp_path, "example", ["u001"]).to_json()
+    rows = payload["rows"]
+    assert isinstance(rows, list)
+    duplicate = dict(rows[0])
+    duplicate["unit_id"] = "u999"
+    rows.append(duplicate)
+
+    with pytest.raises(ProsePromotionError, match="duplicate.*fingerprint"):
+        plan_from_json(payload)
+
+    assert not (tmp_path / "entities" / "propositions" / "basalt-flows-record-the-cooling-history.md").exists()
+
+
 def test_plan_rejects_duplicate_mint_targets_before_partial_mutation(tmp_path: Path) -> None:
     _persist_duplicate_claim_artifact(tmp_path)
 

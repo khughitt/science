@@ -622,7 +622,7 @@ def _resolve_source_path(value: str, *, project_root: Path) -> Path:
             return _require_path_under_root(root.joinpath(*parts[1:]).resolve(strict=False), root=root, source=value)
     candidate = Path(value).expanduser()
     if candidate.is_absolute():
-        return candidate
+        return _require_path_under_root(candidate.resolve(strict=False), root=root, source=value)
     return _require_path_under_root((root / candidate).resolve(strict=False), root=root, source=value)
 
 

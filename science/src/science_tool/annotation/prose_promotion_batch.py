@@ -318,6 +318,7 @@ def _plan_rows(plan: ProsePromotionPlan) -> tuple[ProsePromotionPlanRow, ...]:
     if not plan.rows:
         raise ProsePromotionError("promotion plan requires at least one row")
     _reject_duplicate_unit_ids([row.unit_id for row in plan.rows])
+    _reject_duplicate_fingerprints([row.fingerprint for row in plan.rows])
     return plan.rows
 
 
@@ -327,6 +328,14 @@ def _reject_duplicate_unit_ids(unit_ids: Sequence[str]) -> None:
         if unit_id in seen:
             raise ProsePromotionError(f"duplicate promotion plan unit_id: {unit_id}")
         seen.add(unit_id)
+
+
+def _reject_duplicate_fingerprints(fingerprints: Sequence[str]) -> None:
+    seen: set[str] = set()
+    for fingerprint in fingerprints:
+        if fingerprint in seen:
+            raise ProsePromotionError(f"duplicate promotion plan fingerprint: {fingerprint}")
+        seen.add(fingerprint)
 
 
 def _reject_duplicate_mint_targets(
