@@ -4,14 +4,14 @@
 
 **Goal:** Remove the dead one-shot v2→v3 migration modules, their CLI commands, tests, and migration guide docs, while keeping the generic managed-artifact update runner and all live audit/report code.
 
-**Architecture:** Each task removes one migrator (module + its CLI command + its tests) or performs a surgical split that keeps live code and removes only the one-shot apply path. Retained legacy-shape guards that referenced removed commands are rewritten as plain hard errors. Work happens on branch `remove-v3-migration-code`, merged to `main`.
+**Architecture:** Each task removes one migrator (module + its CLI command + its tests) or performs a surgical split that keeps live code and removes only the one-shot apply path. Retained legacy-shape guards and current docs that referenced removed commands are rewritten as plain hard errors / updated prose. Work happens on branch `remove-v3-migration-code`, merged to `main`. Repo root is `~/d/science`.
 
 **Tech Stack:** Python 3.11+, Click CLI, pytest, `uv`. Spec: `docs/plans/2026-06-20-remove-v3-migration-code-design.md`.
 
 ## Global Constraints
 
 - **Locate code by anchor, not absolute line number.** All line numbers below are from the pre-change tree. Earlier tasks edit shared files (especially `science/src/science_tool/cli.py`), shifting later line numbers. Always find the quoted decorator/symbol/string, not the line number.
-- **Test command:** `uv run --frozen pytest science/tests` (run from repo root `/mnt/ssd/Dropbox/science`). Single test: `uv run --frozen pytest science/tests/<file>::<test> -v`.
+- **Test command:** `uv run --frozen pytest science/tests` (run from repo root `~/d/science`). Single test: `uv run --frozen pytest science/tests/<file>::<test> -v`.
 - **Clean break:** no compatibility shims, no retired-command stubs, no deprecation messages.
 - **Keep, never touch:** `project_artifacts/migrations/` + `project_artifacts/update.py` (managed-artifact runner), `graph/aggregate_retire.py`, `graph migrate-addresses` + `migrate_addresses_direction`, `entity_migrations.audit_identifiers`, and `graph/migrate.py`'s `audit_project_sources` / `AuditRow` / `_audit_*` and `build_layered_claim_migration_report` / `LayeredClaimMigrationReport`. (Note: `write_migration_report` and `audit_project_graph` in `graph/migrate.py` *are* removed in Task 2 — they were used only by the removed `graph migrate` command.)
 - **Commit after each task.** Do not include `Co-Authored-By` trailers.
@@ -34,7 +34,7 @@
 
 - [ ] **Step 1: Add a local predicate test in the validation suite**
 
-Find the test module covering `dataset_influence` (e.g. `science/tests/validate/` or `science/tests/test_dataset_influence*.py`; if none exists, add `science/tests/validate/test_dataset_influence_role_conflict.py`). Add:
+Find the test module covering `dataset_influence` (`git grep -l "dataset_influence\|dataset-influence" -- 'science/tests/**'`). Add the cases to that module; if none exists, create `science/tests/validate/test_dataset_influence_role_conflict.py`. Note the path of the module you chose — call it `<CHOSEN_TEST>` for the run commands below. Add:
 
 ```python
 from science_tool.validate.checks.dataset_influence import _is_paper_dataset_role_conflict
@@ -51,7 +51,7 @@ def test_role_conflict_false_when_analyzed():
 
 - [ ] **Step 2: Run the test, expect failure**
 
-Run: `uv run --frozen pytest science/tests/validate/test_dataset_influence_role_conflict.py -v`
+Run: `uv run --frozen pytest <CHOSEN_TEST> -v` (the module from Step 1)
 Expected: FAIL — `ImportError: cannot import name '_is_paper_dataset_role_conflict'`.
 
 - [ ] **Step 3: Inline the predicate into `dataset_influence.py`**
@@ -75,7 +75,7 @@ Update the call site (line ~165) from `if is_paper_dataset_role_conflict(entry):
 
 - [ ] **Step 4: Run the predicate test, expect pass**
 
-Run: `uv run --frozen pytest science/tests/validate/test_dataset_influence_role_conflict.py -v`
+Run: `uv run --frozen pytest <CHOSEN_TEST> -v` (the module from Step 1)
 Expected: PASS.
 
 - [ ] **Step 5: Remove the module, command, and import**
@@ -274,6 +274,7 @@ git add -A && git commit -m "refactor: remove entity-layout v2->v3 migrator and 
 - Delete: `science/src/science_tool/peers_migrate.py`
 - Modify: `science/src/science_tool/peers_cli.py` (remove `@peers_group.command("migrate")` block ~121-152)
 - Modify: `science/src/science_tool/project_config.py` (guard at line ~128-132)
+- Modify: `docs/federation.md` (remove `science peers migrate` references at lines ~116, ~123, ~130)
 - Delete: `science/tests/test_peers_migrate.py`
 - Modify: `science/tests/test_peers_cli.py` (remove `test_peers_migrate*` cases)
 
@@ -311,18 +312,37 @@ Delete `science/src/science_tool/peers_migrate.py` and `science/tests/test_peers
 
 In `science/tests/test_peers_cli.py`, delete the migration test functions (`test_peers_migrate_single`, `test_peers_migrate_dry_run`, `test_peers_migrate_all_*`, `test_peers_migrate_single_error_is_wrapped_as_cli_error` — everything from ~line 583 to the end of those functions). Also remove the now-unused `_legacy_child_project_roots` helper in `peers_cli.py` if it was only used by the removed command (`git grep -n "_legacy_child_project_roots" -- 'science/src/**'`).
 
-- [ ] **Step 4: Verify + suite green**
+- [ ] **Step 4: Update `docs/federation.md`**
+
+In the `## CLI` code block (line ~116), delete the `science peers migrate` line so it lists only `list` / `check` / `show <peer-id>`. Delete the bullet (line ~123):
+```markdown
+- `science peers migrate` converts old relationship fields to `peers:`.
+```
+In `## Historical Context` (line ~128-131), change:
+```markdown
+commands described a tree-shaped relationship and are no longer current
+guidance. Run `science peers migrate` for projects that still carry those
+legacy fields.
+```
+to:
+```markdown
+commands described a tree-shaped relationship and are no longer supported.
+Use `peers:` directly; the legacy parent/children fields are not migrated
+automatically.
+```
+
+- [ ] **Step 5: Verify + suite green**
 
 Run:
 ```bash
-git grep -n "peers_migrate\|peers migrate\b" -- 'science/src/**'
+git grep -n "peers_migrate\|peers migrate\b" -- 'science/src/**' docs/federation.md
 uv run --frozen pytest science/tests/test_peers_cli.py
 uv run --frozen pytest science/tests
 uv run --frozen python -m science_tool.cli peers --help
 ```
 Expected: grep empty; tests PASS; no `migrate` under `peers`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add -A && git commit -m "refactor: remove peers parent/children migrator and peers migrate command"
@@ -608,9 +628,12 @@ git add -A && git commit -m "refactor: remove aspects task migrator and empty as
 
 ---
 
-### Task 11: Delete the dead script and migration guide docs
+### Task 11: Trim the scan-guard allowlist, delete the dead script and migration guide docs
+
+This task runs after all module deletions (Tasks 1-10), so the entity-scan guard allowlist can be reconciled in one place.
 
 **Files:**
+- Modify: `science/tests/test_entity_scan_guard.py` (remove deleted-module entries from `ALLOWLIST`)
 - Delete: `scripts/migrate_downstream_conventions.py`
 - Delete: `docs/entity-layout-migration-guide.md`
 - Delete: `docs/migration/2026-05-26-assembly-identity.md`
@@ -619,12 +642,35 @@ git add -A && git commit -m "refactor: remove aspects task migrator and empty as
 - Delete: `docs/audits/2026-06-06-layout-v3-migration-readiness-audit.md`
 - **Keep:** `docs/migration/2026-05-19-validate-local-sh-porting-guide.md`, `docs/migration/managed-artifacts-template.md`
 
-- [ ] **Step 1: Confirm the script has no importers**
+- [ ] **Step 1: Trim the entity-scan guard allowlist**
+
+In `science/tests/test_entity_scan_guard.py`, the `ALLOWLIST: set[str]` names recursive-markdown scanners. Tasks 1-10 deleted six of them. Remove these entries:
+```python
+    "graph/paper_dataset_migration.py",
+    "graph/project_model_migration.py",
+    "graph/tags_migration.py",
+    "entity_layout_migration.py",           # legacy migration roots
+```
+and remove `"refs_migrate.py"` and `"datapackage_migrate.py"` from the combined line:
+```python
+    "prose.py", "prose_lint.py", "markers.py", "refs.py", "refs_migrate.py",
+    "datapackage_migrate.py", "skills_lint/lint.py", "cli.py",
+```
+so it reads:
+```python
+    "prose.py", "prose_lint.py", "markers.py", "refs.py",
+    "skills_lint/lint.py", "cli.py",
+```
+Keep `"graph/migrate.py"` and `"graph/materialize.py"` (both retained). Run `uv run --frozen pytest science/tests/test_entity_scan_guard.py -v` — expected PASS (the deleted files no longer appear in the scanner inventory, so dropping them from the allowlist keeps it exact).
+
+- [ ] **Step 2: Confirm the script has no code importers (historical-doc references are expected)**
 
 Run: `git grep -ln "migrate_downstream_conventions" -- 'science/src/**' 'science/tests/**'`
 Expected: no output.
 
-- [ ] **Step 2: Confirm the kept docs are still referenced and the deleted ones are not**
+Note: `docs/audits/downstream-project-conventions/synthesis-shape-investigation-2026-04-25.md` and files under `docs/plans/**` cite this script as a historical record of past work. Those are intentionally left as-is (the citation documents what was done at the time); do not edit or delete them.
+
+- [ ] **Step 3: Confirm the kept docs are still referenced and the deleted ones are not**
 
 Run:
 ```bash
@@ -633,7 +679,7 @@ git grep -n "entity-layout-migration-guide\|assembly-identity\|crosswalk-identit
 ```
 Expected: first prints the live references in `validate/runner.py` and `project_artifacts/registry.yaml` (proves they must stay); second prints nothing (proves the deletions are safe).
 
-- [ ] **Step 3: Delete**
+- [ ] **Step 4: Delete**
 
 ```bash
 git rm scripts/migrate_downstream_conventions.py \
@@ -644,15 +690,15 @@ git rm scripts/migrate_downstream_conventions.py \
   docs/audits/2026-06-06-layout-v3-migration-readiness-audit.md
 ```
 
-- [ ] **Step 4: Verify suite still green (docs/script removal can break doc-driven tests)**
+- [ ] **Step 5: Verify suite still green (docs/script removal can break doc-driven tests)**
 
 Run: `uv run --frozen pytest science/tests`
 Expected: PASS. If a test references a deleted doc path, update it to point at retained docs or remove the stale assertion.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add -A && git commit -m "docs: remove v2->v3 migration guides and dead downstream-conventions script"
+git add -A && git commit -m "chore: trim scan-guard allowlist; remove v3 migration guides and dead downstream-conventions script"
 ```
 
 ---
@@ -677,13 +723,22 @@ uv run --frozen python -c "from science_tool.graph.migrate import audit_project_
 ```
 Expected: `ok`.
 
-- [ ] **Step 3: No retained source tells users to run a removed command**
+- [ ] **Step 3: No retained source OR current docs tells users to run a removed command**
+
+Run (note: `docs/plans/**` and `archive/**` are excluded as historical record):
+```bash
+git grep -n "science peers migrate\|science entities migrate\|migrate-identifiers\|data-package migrate\|aspects migrate\|migrate-paper\b\|graph migrate\b\|migrate-model\|migrate-tags\|tasks migrate-ids" \
+  -- 'science/src/**' 'docs/**' ':!docs/plans/**'
+```
+Expected: no output. (If a hit appears in a kept doc such as `docs/federation.md`, update that doc the same way as the source guards.)
+
+- [ ] **Step 3b: Scan-guard allowlist has no dangling deleted-file names**
 
 Run:
 ```bash
-git grep -n "science peers migrate\|science entities migrate\|migrate-identifiers\|data-package migrate\|aspects migrate" -- 'science/src/**'
+git grep -n "paper_dataset_migration\|project_model_migration\|tags_migration\|entity_layout_migration\|refs_migrate\|datapackage_migrate" -- science/tests/test_entity_scan_guard.py
 ```
-Expected: no output.
+Expected: no output (Task 11 Step 1 trimmed them).
 
 - [ ] **Step 4: Deleted guides gone, kept guides present**
 
