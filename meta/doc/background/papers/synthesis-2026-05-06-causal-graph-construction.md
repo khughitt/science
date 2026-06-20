@@ -19,7 +19,7 @@ source_refs:
   - "paper:Liu2024HiddenWorld"
   - "paper:Zheng2024"
   - "paper:Wan2025"
-  - "paper:Wang2025"
+  - "science-meta:paper:Wang2025"
   - "paper:Yang2025"
   - "paper:Zuber2025"
 related:
