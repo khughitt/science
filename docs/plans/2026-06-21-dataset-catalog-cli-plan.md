@@ -25,7 +25,7 @@
 
 ## File Structure
 
-- Create: `science/src/science_tool/datasets_catalog.py` — `add_dataset`, `list_datasets`, `resolve_dataset`, `show_dataset`, `list_consumers` (pure-ish functions; CLI wrappers stay in `cli.py`).
+- Create: `science/src/science_tool/datasets_catalog.py` — `add_dataset`, `list_datasets`, `resolve_dataset`, `format_show`, `consumers_of` (pure-ish functions; CLI wrappers stay in `cli.py`).
 - Create: `science/src/science_tool/validate/checks/dataset_acquisition.py` — the acquisition check.
 - Modify: `science/src/science_tool/validate/checks/__init__.py` — register the new check module.
 - Modify: `science/src/science_tool/cli.py` — add `dataset add|show|consumers` commands; rework `dataset list`.
@@ -203,11 +203,13 @@ git commit -m "feat(validate): dataset acquisition check + candidate template de
 
 **Files:**
 - Create: `science/src/science_tool/datasets_catalog.py`
+- Modify: `science/src/science_tool/entities.py` (`_validate_prospective_write` gains an `include_commons` param)
 - Modify: `science/src/science_tool/cli.py` (add `dataset_add` command in the `dataset` group, near line 5208)
 - Test: `science/tests/test_dataset_add_cli.py`
 
 **Interfaces:**
-- Produces: `add_dataset(project_root: Path, slug: str, *, title: str, origin="external", tier="track", level="controlled", source_url="", ontology_terms=(), related=(), today=None) -> tuple[str, Path, list[str]]` returning `(entity_id, dest_path, warnings)`. Raises `science_tool.entities.EntityCommandError` on bad slug, derived origin, or existing destination.
+- Produces: `add_dataset(project_root: Path, slug: str, *, title: str, origin="external", tier="track", level="controlled", source_url="", ontology_terms=(), related=(), today=None) -> tuple[str, Path, list[str]]` returning `(entity_id, dest_path, warnings)`. Raises `science_tool.entities.EntityCommandError` on bad slug, derived origin, or existing destination. Does a **local-only** prospective validation (`include_commons=False`).
+- Modifies: `_validate_prospective_write(..., include_commons: bool = True)` — threaded to both `load_project_sources` calls; default `True` preserves `create_entity`'s behaviour.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -264,6 +266,19 @@ def test_add_rejects_bad_slug(tmp_path: Path) -> None:
     res = _add(tmp_path, "Bad_Slug", "--title", "Bad")
     assert res.exit_code == 1
     assert "slug" in res.output.lower()
+
+
+def test_add_with_commons_related_ref_does_not_crash(tmp_path: Path) -> None:
+    # A commons-looking related ref must not crash author-time even when no
+    # commons store is reachable: add does a local-only prospective validation.
+    res = CliRunner().invoke(
+        science_cli,
+        ["dataset", "add", "linked", "--title", "Linked", "--related", "cycles:paper:Aras2025"],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
+    )
+    assert res.exit_code == 0, res.output
+    assert (tmp_path / "doc" / "datasets" / "linked.md").exists()
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -271,7 +286,36 @@ def test_add_rejects_bad_slug(tmp_path: Path) -> None:
 Run: `uv run --frozen pytest science/tests/test_dataset_add_cli.py -v`
 Expected: FAIL — `dataset add` is not a command (Click usage error / exit 2).
 
-- [ ] **Step 3: Implement `add_dataset` in the new module**
+- [ ] **Step 3: Add an `include_commons` param to `_validate_prospective_write`**
+
+In `science/src/science_tool/entities.py`, update `_validate_prospective_write` (≈ line 1016) so a local-only prospective write does not pull commons (which raises when a commons-looking ref is present but no commons store exists):
+
+```python
+def _validate_prospective_write(
+    *,
+    project_root: Path,
+    rel_path: Path,
+    text: str,
+    target_entity_id: str,
+    include_commons: bool = True,
+) -> list[str]:
+    rel_path_text = rel_path.as_posix()
+    baseline_rows, _ = audit_project_sources(
+        load_project_sources(project_root, include_commons=include_commons)
+    )
+    prospective_rows, _ = audit_project_sources(
+        load_project_sources(
+            project_root,
+            markdown_overrides={rel_path_text: text},
+            include_commons=include_commons,
+        )
+    )
+    # ... rest of the function is unchanged ...
+```
+
+Leave the body below this point untouched. The default `True` preserves `create_entity`'s three existing call sites.
+
+- [ ] **Step 4: Implement `add_dataset` in the new module**
 
 Create `science/src/science_tool/datasets_catalog.py`:
 
@@ -388,6 +432,7 @@ def add_dataset(
         rel_path=rel_path,
         text=text,
         target_entity_id=entity_id,
+        include_commons=False,  # local-only: a commons-looking related ref must not crash author-time
     )
     tmp = dest.with_suffix(dest.suffix + ".tmp")
     try:
@@ -400,7 +445,7 @@ def add_dataset(
     return entity_id, dest, warnings
 ```
 
-- [ ] **Step 4: Wire the `dataset add` CLI command**
+- [ ] **Step 5: Wire the `dataset add` CLI command**
 
 In `science/src/science_tool/cli.py`, after the `dataset_list` command (around line 5208), add:
 
@@ -460,12 +505,12 @@ def dataset_add(
     click.echo(f"created {entity_id} -> {dest.relative_to(root)}")
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `uv run --frozen pytest science/tests/test_dataset_add_cli.py -v`
-Expected: PASS (4 tests).
+Expected: PASS (5 tests).
 
-- [ ] **Step 6: Verify a created entity validates clean**
+- [ ] **Step 7: Verify a created entity validates clean**
 
 Run (write a **full** minimal `science.yaml` — the manifest check requires `name`, `created`,
 `last_modified`, `status`, `summary`, `profile`, `layout_version` ≥ 3, and `knowledge_profiles.local`,
@@ -492,11 +537,11 @@ Expected: the entity is written and the run prints `OK: candidate not flagged` �
 `status: candidate` exempts it from the acquisition check. (Other unrelated structure warnings for a
 bare temp project are fine; this assertion targets only the rule under test.)
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add science/src/science_tool/datasets_catalog.py science/src/science_tool/cli.py \
-        science/tests/test_dataset_add_cli.py
+git add science/src/science_tool/datasets_catalog.py science/src/science_tool/entities.py \
+        science/src/science_tool/cli.py science/tests/test_dataset_add_cli.py
 git commit -m "feat(dataset): add command to author candidate dataset entities"
 ```
 
@@ -530,6 +575,12 @@ def _seed_filterable(root: Path) -> None:
         '---\nid: "dataset:acq"\ntype: "dataset"\ntitle: "Acq"\nstatus: "active"\n'
         'origin: "external"\ntier: "track"\ndatapackage: "r/dp.yaml"\n'
         'access: {level: "controlled", verified: true}\n---\n',
+        encoding="utf-8",
+    )
+    # A derived dataset (no access block) — must NOT appear under --unverified.
+    (d / "der.md").write_text(
+        '---\nid: "dataset:der"\ntype: "dataset"\ntitle: "Der"\nstatus: "active"\n'
+        'origin: "derived"\ntier: "track"\ndatapackage: "r/dp.yaml"\n---\n',
         encoding="utf-8",
     )
     # A non-entity note with frontmatter but type != dataset — must be excluded.
@@ -569,6 +620,8 @@ def test_list_tier_and_unverified_filters(tmp_path: Path) -> None:
     assert "dataset:acq" not in _list(tmp_path, "--tier", "use-now").output
     assert "dataset:cand" in _list(tmp_path, "--unverified").output
     assert "dataset:acq" not in _list(tmp_path, "--unverified").output
+    # derived rows have no access block; --unverified is external-only
+    assert "dataset:der" not in _list(tmp_path, "--unverified").output
 
 
 def test_list_commons_missing_registry_degrades(tmp_path: Path) -> None:
@@ -636,7 +689,10 @@ def _matches(row: dict, *, origin, status, tier, unverified, level) -> bool:
         return False
     if level is not None and row["level"] != level:
         return False
-    if unverified and row["verified"]:
+    if unverified and not (row["origin"] == "external" and not row["verified"]):
+        # --unverified means "external entities awaiting verification", not
+        # "anything lacking an access block" (derived rows have no access →
+        # verified defaults False and must NOT show up here).
         return False
     return True
 
@@ -800,7 +856,7 @@ git commit -m "feat(dataset): rich list table with status/tier/level/--commons f
 
 **Interfaces:**
 - Consumes: `list_datasets` module from Task 3.
-- Produces: `resolve_dataset(project_root, ref) -> tuple[str, dict, str] | None` returning `(scope, frontmatter, body)` or `None`; `ref` accepts `foo` or `dataset:foo`. Resolves local `doc/datasets/<slug>.md` first, then commons via `CommonsQuery.show`.
+- Produces: `resolve_dataset(project_root, ref) -> tuple[str, dict, str] | None` returning `(scope, frontmatter, body)` or `None`; `ref` accepts `foo` or `dataset:foo` (validated via `validate_slug`). Resolves local `doc/datasets/<slug>.md` (dataset-type only) first, then commons via `CommonsQuery.show`. Also produces the thin formatters `format_show(scope, fm, body) -> list[str]` and `consumers_of(fm) -> list[str]`, so the CLI wrappers only resolve + echo.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -852,6 +908,12 @@ def test_show_missing_exits_2_naming_scopes(tmp_path: Path) -> None:
     assert "local" in res.output.lower() and "commons" in res.output.lower()
 
 
+def test_show_traversal_ref_is_miss(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    res = _run(tmp_path, "dataset", "show", "../../etc/passwd")
+    assert res.exit_code == 2  # invalid slug → clean not-found, no path escape
+
+
 def test_consumers_lists_consumed_by(tmp_path: Path) -> None:
     _seed(tmp_path)
     res = _run(tmp_path, "dataset", "consumers", "dataset:foo")
@@ -885,6 +947,12 @@ Append to `science/src/science_tool/datasets_catalog.py`:
 def resolve_dataset(project_root: Path, ref: str) -> tuple[str, dict, str] | None:
     """Resolve `foo` or `dataset:foo` to (scope, frontmatter, body); local then commons."""
     slug = ref[len("dataset:"):] if ref.startswith("dataset:") else ref
+    # Validate before building any path: a ref like "../other/x" must not escape
+    # doc/datasets/. An invalid slug is a clean miss (CLI maps None → exit 2).
+    try:
+        slug = validate_slug(slug)
+    except EntityCommandError:
+        return None
     local = project_root / "doc" / "datasets" / f"{slug}.md"
     if local.exists():
         parsed = parse_frontmatter(local)
@@ -910,6 +978,35 @@ def resolve_dataset(project_root: Path, ref: str) -> tuple[str, dict, str] | Non
         parsed_commons = parse_frontmatter(Path(rec.body_path))
         body = parsed_commons[1] if parsed_commons else ""
     return ("commons", fm, body)
+
+
+def format_show(scope: str, fm: dict, body: str) -> list[str]:
+    """Render a dataset entity to display lines (keeps the CLI wrapper thin)."""
+    access = fm.get("access") or {}
+    lines = [
+        f"id:       {fm.get('id', '?')}  ({scope})",
+        f"title:    {fm.get('title', '')}",
+        f"status:   {fm.get('status', '')}    tier: {fm.get('tier', '')}",
+        f"origin:   {fm.get('origin', '')}    license: {fm.get('license', '')}",
+    ]
+    if isinstance(access, dict) and access:
+        lines.append(f"access:   level={access.get('level', '')} verified={access.get('verified')}")
+        if access.get("source_url"):
+            lines.append(f"url:      {access['source_url']}")
+    if fm.get("accessions"):
+        lines.append(f"accessions: {fm['accessions']}")
+    if fm.get("related"):
+        lines.append(f"related:  {fm['related']}")
+    if fm.get("consumed_by"):
+        lines.append(f"consumed_by: {fm['consumed_by']}")
+    lines.append("")
+    lines.append(body.strip())
+    return lines
+
+
+def consumers_of(fm: dict) -> list[str]:
+    """The entity's consumers (consumed_by), as a list of refs."""
+    return list(fm.get("consumed_by") or [])
 ```
 
 - [ ] **Step 4: Wire the `dataset show` and `dataset consumers` CLI commands**
@@ -937,25 +1034,12 @@ def _resolve_dataset_or_exit(root: Path, ref: str):
 )
 def dataset_show(ref: str, project_root: Path | None) -> None:
     """Show a dataset entity (accepts `slug` or `dataset:slug`)."""
+    from science_tool.datasets_catalog import format_show
+
     root = project_root.resolve() if project_root else _project_root_from_env()
     scope, fm, body = _resolve_dataset_or_exit(root, ref)
-    access = fm.get("access") or {}
-    click.echo(f"id:       {fm.get('id', '?')}  ({scope})")
-    click.echo(f"title:    {fm.get('title', '')}")
-    click.echo(f"status:   {fm.get('status', '')}    tier: {fm.get('tier', '')}")
-    click.echo(f"origin:   {fm.get('origin', '')}    license: {fm.get('license', '')}")
-    if isinstance(access, dict) and access:
-        click.echo(f"access:   level={access.get('level', '')} verified={access.get('verified')}")
-        if access.get("source_url"):
-            click.echo(f"url:      {access['source_url']}")
-    if fm.get("accessions"):
-        click.echo(f"accessions: {fm['accessions']}")
-    if fm.get("related"):
-        click.echo(f"related:  {fm['related']}")
-    if fm.get("consumed_by"):
-        click.echo(f"consumed_by: {fm['consumed_by']}")
-    click.echo("")
-    click.echo(body.strip())
+    for line in format_show(scope, fm, body):
+        click.echo(line)
 
 
 @dataset_group.command("consumers")
@@ -966,9 +1050,11 @@ def dataset_show(ref: str, project_root: Path | None) -> None:
 )
 def dataset_consumers(ref: str, project_root: Path | None) -> None:
     """List entities that consume this dataset (via consumed_by)."""
+    from science_tool.datasets_catalog import consumers_of
+
     root = project_root.resolve() if project_root else _project_root_from_env()
     _scope, fm, _body = _resolve_dataset_or_exit(root, ref)
-    consumers = fm.get("consumed_by") or []
+    consumers = consumers_of(fm)
     if not consumers:
         click.echo("no recorded consumers")
         return
@@ -979,7 +1065,7 @@ def dataset_consumers(ref: str, project_root: Path | None) -> None:
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `uv run --frozen pytest science/tests/test_dataset_show_consumers_cli.py -v`
-Expected: PASS (4 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 6: Commit**
 
