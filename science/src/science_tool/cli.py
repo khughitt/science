@@ -240,7 +240,7 @@ main.add_command(patch_group)
 
 @main.group("entities")
 def entities_group() -> None:
-    """Inspect and migrate Science entity inventories."""
+    """Inspect and audit Science entity inventories."""
 
 
 @entities_group.command("inventory")

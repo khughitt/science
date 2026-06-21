@@ -129,22 +129,13 @@ references behind.
 Run:
 
 ```bash
-science graph migrate --project-root . --format json
 science graph audit --project-root . --format json
 ```
 
-Use `graph migrate` first as a dry-run audit. It previews alias-resolvable rewrites, layered-claim
-migration gaps, and projected cleanup without mutating the project.
-
-If the preview looks correct, re-run with:
-
-```bash
-science graph migrate --project-root . --format json --apply
-```
-
-Only `--apply` writes alias rewrites, scaffolds local-profile source files, and persists
-`knowledge/reports/kg-migration-audit.json`. If unresolved references remain after the audit or
-apply pass, fix the upstream sources first. Do not build until the audit is clean.
+`graph audit` is read-only: it reports unresolved canonical source references before
+materialization without mutating the project. Resolve anything it flags in the upstream
+sources first (apply the fix-on-touch policy above to any legacy IDs it surfaces). Do not
+build until the audit is clean.
 
 ### Step 5: Re-materialize and validate
 
@@ -156,13 +147,13 @@ science graph validate --format json
 science graph stats --format json
 ```
 
-### Step 6: Record project-local migration state when needed
+### Step 6: Keep project-local source files current when needed
 
-If the update involved legacy ID cleanup or new project-local semantics, keep the migration artifacts current:
+If the update involved legacy ID cleanup or new project-local semantics, keep the
+project-local source files current:
 
 - `knowledge/sources/<local-profile>/entities.yaml`
 - `knowledge/sources/<local-profile>/mappings.yaml`
-- `knowledge/reports/kg-migration-audit.json`
 
 ## Important Notes
 

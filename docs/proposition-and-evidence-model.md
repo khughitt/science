@@ -159,37 +159,29 @@ It can widen review output, but it must not override explicit graph dependencies
 Use `rival_model_packet` when a proposition participates in an explicit bounded comparison among competing models.
 `current_working_model` is optional; teams do not need to pretend a preferred model exists before one emerges.
 
-## Migration And Health Surfaces
+## Health Surfaces
 
-The layered-claim migration helper is intentionally conservative.
+The layered-claim audit is intentionally conservative.
 Treat it as an audit/validator surface first, not as a primary authoring workflow.
-Run:
+It runs as the `layered_claim_migration` check inside `science health`:
 
 ```bash
-uv run science graph migrate --project-root <root> --format json
 uv run science health --project-root <root> --format json
 ```
 
-`graph migrate` is dry-run by default. It previews alias rewrites and layered-claim migration
-state without mutating the project. Pass `--apply` only when you explicitly want it to write
-source rewrites, local-source scaffolding, and `knowledge/reports/kg-migration-audit.json`.
-
-Use the migration output for:
+Use the health output for:
 
 - safe first-pass `claim_layer` and `identification_strength` suggestions,
 - explicit TODOs for ambiguous propositions,
 - warnings for unsupported mechanistic narratives,
-- warnings for proxy-mediated propositions that still lack `measurement_model`.
-
-Prefer authored proposition files plus explicit metadata for the real migration work. Use the
-helper afterward to check coverage, warnings, and remaining manual judgment calls.
-
-Use the health output for:
-
+- warnings for proxy-mediated propositions that still lack `measurement_model`,
 - authored `claim_layer` coverage across propositions,
 - authored `identification_strength` coverage across causal-leaning propositions,
 - rival-model packets missing discriminating predictions,
-- migration issues that still need manual judgment.
+- remaining claim-layer issues that still need manual judgment.
+
+Prefer authored proposition files plus explicit metadata for the real claim-layer work. Use the
+health check afterward to confirm coverage, warnings, and remaining manual judgment calls.
 
 ## Skeptical Default Stance
 

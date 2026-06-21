@@ -1148,8 +1148,7 @@ class TestInvalidStatusWarning:
 
 class TestTagsAndGroups:
     def test_legacy_tags_silently_dropped(self, tmp_path: Path) -> None:
-        """After parse-time merge removal, `- tags:` in task markdown is silently ignored.
-        Use `science graph migrate-tags` to migrate legacy task tags."""
+        """After parse-time merge removal, `- tags:` in task markdown is silently ignored."""
         f = _write(tmp_path / "active.md", TAGGED_TASK)
         tasks = parse_tasks(f)
         assert len(tasks) == 1

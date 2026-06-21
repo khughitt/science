@@ -85,15 +85,15 @@ For each cluster, propose ONE action covering the whole cluster, not per-ref dec
 > "8 refs look like operational markers (phase, cycle, milestone): topic:phase3b, topic:cycle1, ... Rewrite as meta: refs (preserved as metadata, excluded from KG)?"
 
 **Lingering tags cluster:**
-> "M files still have `tags:` lines (residual from old templates). Run `science graph migrate-tags --apply` to clean them up?"
+> "M files still have `tags:` lines (residual from old templates). Remove the `tags:` lines, or replace each with the intended `meta:`/`topic:` ref, by hand?"
 
 ### 5. Apply chosen actions
 
 For each cluster the user approves, use the appropriate CLI to apply:
 - Rewriting refs: edit frontmatter or task markdown directly (find files via the `sources` field of each ref)
 - Creating topic stubs: write minimal entity files matching the existing template structure
-- Migrating tags: `science graph migrate-tags --apply` (default meta:)
-- Migrating tags as topics: `science graph migrate-tags --apply --as-topic`
+- Cleaning up lingering tags: remove the `tags:` lines from the frontmatter, or replace each with the intended `meta:` ref, by hand
+- Reframing tags as topics: replace each `tags:` entry with the intended `topic:` ref by hand
 
 ### 6. Verify
 
