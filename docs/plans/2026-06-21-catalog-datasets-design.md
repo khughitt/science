@@ -133,6 +133,12 @@ discount falls back to an `origin`/cohort heuristic (see Key decision 4).
 - **Rejected alternative:** emit only the ranked score.
 - **Reason:** in a sparse graph the *ranking* is weak but the *gaps* are the real signal — "this dataset has no question edge yet" and "this dataset is unverified" are the actionable findings that make a future ranking meaningful. The command's near-term value is surfacing work, not ordering a near-empty set.
 
+### Key decision 6: degrade-with-warning on a stale graph, never auto-materialize
+
+- **Chosen approach:** at startup, check `graph_is_stale(project_root, graph_path)` (`science_model/entities.py:925`, an mtime comparison). If the graph is missing or stale, emit a warning to stderr (`graph may be stale; reach/leverage computed from the last build — run \`science graph build\``) and **continue**, computing what it can (frontmatter reach always works without the graph; usage-reach/leverage degrade to their neutral values when the graph is absent).
+- **Rejected alternatives:** (a) hard-require a fresh graph and error out; (b) silently auto-run `materialize_graph()` inside a read-only command.
+- **Reason:** this matches the one existing precedent in the codebase — `entity neighbors` (`cli.py:796`) warns on `graph_is_stale` but does not rebuild — and keeps a read-only ranking command free of write side effects. Auto-materializing would surprise the user with a graph rewrite; hard-failing would make the command useless precisely on the young graphs where it is most needed.
+
 ## The scorer: `science dataset prioritize`
 
 **Inputs (read-only):** the project's dataset entities and, when present, the materialized graph
@@ -145,31 +151,62 @@ discount falls back to an `origin`/cohort heuristic (see Key decision 4).
 score(d) = readiness_weight(d) × (1 + reach(d)) × leverage_tilt(d)
 ```
 
-- **`readiness_weight(d)`** — derived from the computed `readiness()` state:
+- **`readiness_weight(d)`** — keyed on the **structured fields** behind `DatasetEntity.readiness()`,
+  not on label-matching its prose. `readiness()` returns a `Readiness(ready: bool, state: str,
+  detail: str)` (`science_model/entities.py:395,735`), and `state` is a small closed set of exact
+  strings — match those verbatim, never a conceptual paraphrase. The weight is a function of
+  `readiness.ready` plus the structured discriminators (`origin`, `access.level`,
+  `access.exception.mode`, `access.availability`):
 
-  | readiness state | weight |
-  |---|---|
-  | `available` (verified, obtainable) | 1.0 |
-  | unverified, `level: public` | 0.7 |
-  | unverified, `level: registration` | 0.5 |
-  | unverified, `level: controlled`/`commercial` | 0.3 |
-  | `acquiring` (exception: expanded-to-acquire) | 0.4 |
-  | `consumable-via-scope-reduced`/`substituted` | 0.25 |
-  | `embargoed` / `withdrawn` | 0.05 |
-  | derived / `done` | 0.6 |
+  | `readiness.state` (exact) | condition | weight |
+  |---|---|---|
+  | `available` | external, verified, obtainable | 1.0 |
+  | `derived-via-code` / `derived-via-member-of` / `derived-via-workflow-recipe` | derived, resolvable | 0.6 |
+  | `consumable-via-scope-reduced` / `consumable-via-substituted` | usable via exception | 0.55 |
+  | `"<level>, unverified"` where level = `public` | external, unverified | 0.7 |
+  | `"<level>, unverified"` where level = `registration` / `mixed` | external, unverified | 0.5 |
+  | `"<level>, unverified"` where level = `controlled` / `commercial` | external, unverified | 0.3 |
+  | `acquiring` | exception: expanded-to-acquire | 0.4 |
+  | `embargoed` / `withdrawn` | not obtainable now | 0.05 |
+  | `unknown` / `missing-access-block` / `missing-provenance` / `exception:<mode>` | unresolved | 0.1 **and emit a `readiness-unresolved` gap-flag** |
 
-  (Concrete constants; tunable in one place. The ordering is the load-bearing part.)
+  The last row is the anti-footgun: an unrecognized state must **flag**, never silently fall into a
+  default bucket. (Constants tunable in one place; the ordering and the explicit flagged-default are
+  the load-bearing parts. `"<level>, unverified"` is parsed by splitting on `", unverified"` and
+  reading `access.level` from the structured field, not by string-matching the whole label.)
 
-- **`reach(d)`** — number of *distinct* questions/hypotheses `d` bears on:
-  - if evidence-lines with `dataset_usage` exist: traverse `dataset_usage → cito:supports/disputes →
-    proposition → discusses/addresses → hypothesis/question`.
-  - else: count frontmatter `related`/`source_refs` edges to `question:`/`hypothesis:` entities.
-  - redundancy discount (Key decision 4): edges in a shared `independence_group`/cohort contribute
-    `1/k` each rather than 1.
+- **`reach(d)`** — number of *distinct* questions/hypotheses `d` bears on, computed **per-dataset as a
+  merged union** of two sources (never a global either/or — a graph that has *some* `dataset_usage`
+  must not make a dataset that is only frontmatter-connected look like `no-edge`):
 
-- **`leverage_tilt(d)`** — `1.0` baseline, multiplied by a bounded factor (capped, e.g. ≤2.0) built
-  from whichever question-side signals are present: higher when the touched Q/H are `contested`,
-  `single_source`, `no_empirical_data`, or high-`priority`; `1.0` when none are populated.
+  1. **Usage path** (preferred per edge, when present): find consumers of `d` via the reified usage
+     node — `?consumer sci:hasDatasetUsage ?u . ?u sci:dataset <d>` (provenance graph,
+     `graph/dataset_usage.py:201`). For each consumer evidence-line, expand to epistemic targets:
+     `evidence-line —cito:supports|cito:disputes→ proposition` (frontmatter `target:`,
+     `materialize.py:873`), then `proposition —cito:discusses→ hypothesis` (`io.py:73`) and
+     `question —sci:addresses→ proposition` traversed **backwards** (the edge is question→proposition;
+     `store/summary.py:362`, `cross_impact.py:200`). Reuse the existing `sci:bearsOn` derivers/closure
+     (`graph/freshness.py:70,182,231`) for the proposition→Q/H expansion rather than re-implementing
+     it.
+  2. **Frontmatter path** (always also counted, both directions): `skos:related` edges between `d` and
+     any `question:`/`hypothesis:` entity — **including the back-edge** where a question/hypothesis
+     lists `dataset:d` in *its own* `related` (materialized as `(question, skos:related, d)`, so a
+     dataset-only outgoing scan misses it; check incoming too — `materialize.py:646`). Do **not** count
+     `source_refs`: those materialize as `prov:wasDerivedFrom` provenance, not semantic relatedness
+     (`materialize.py:720`), and already participate via the usage/`bearsOn` path where they form a real
+     chain.
+
+  The two sources are unioned and de-duplicated by target Q/H id. Redundancy discount
+  (Key decision 4): targets reached only through a shared `independence_group`/cohort contribute `1/k`
+  each rather than 1.
+
+- **`leverage_tilt(d)`** — `1.0` baseline, multiplied by a bounded factor (capped ≤ 2.0) over the
+  propositions `d` reaches. It **reuses the existing computed claim signals** rather than introducing a
+  second interpretation of them: `risk_score`, `contested`, `single_source`, and `no_empirical_data`
+  are computed by `_claim_summary_data()` and surfaced by `query_dashboard_summary(graph_path, top)`
+  (`graph/store/summary.py:67,226`) — `leverage_tilt` calls that and aggregates the per-claim signals
+  over `d`'s reached propositions (plus question `priority` where a reached proposition is addressed by
+  a question). When no propositions are reached (sparse graph), the factor is exactly `1.0`.
 
 **Output:** one row per dataset —
 `rank · id · score · readiness · reach · top-reason · gap-flags` — sorted by score descending.
@@ -177,11 +214,13 @@ Flags: `--explain` (full per-row reason breakdown), `--format table|json`, plus 
 `list`-style filters (`--origin/--status/--level/--tier`) so a project can prioritize a subset.
 
 **Degradation check (must hold):**
-- *Sparse graph (this project today):* `leverage_tilt ≈ 1` everywhere, `reach` from frontmatter refs,
-  `readiness_weight` dominates → an accessibility-weighted ordering that foregrounds `unverified` and
-  `no-edge` gaps.
-- *Mature graph (`mm30`):* full `reach` via `dataset_usage`, real `leverage_tilt` from
-  `risk_score`/`contested`. Same command, no flags changed.
+- *Sparse graph (this project today):* `leverage_tilt = 1` everywhere (no propositions reached),
+  `reach` from the frontmatter `skos:related` path only, `readiness_weight` dominates → an
+  accessibility-weighted ordering that foregrounds `unverified` and `no-edge` gaps.
+- *Mixed graph:* a project with *some* `dataset_usage` must still credit `reach` to datasets connected
+  only by frontmatter — the union (not either/or) is what guarantees this.
+- *Mature graph (`mm30`):* merged usage + frontmatter `reach`, real `leverage_tilt` from the reused
+  `_claim_summary_data` signals. Same command, no flags changed.
 
 ## The loop: `/science:catalog-datasets`
 
@@ -217,6 +256,18 @@ The command is validated on a real sparse graph:
 - This exercises every step against a graph at the sparse end of the maturity spectrum, confirming the
   degradation behavior before the command is relied on elsewhere.
 
+## Resolved by review (2026-06-21)
+
+- **`leverage_tilt` reuses computed signals, not a second interpretation.** `risk_score`/`contested`/
+  `single_source`/`no_empirical_data` are computed claim/neighborhood signals
+  (`graph/store/summary.py:_claim_summary_data`, exposed via `query_dashboard_summary`), not authored
+  question fields. `leverage_tilt` calls that and aggregates — see the term definition above.
+- **Stale-graph policy = degrade-with-warning** (Key decision 6).
+- **`reach` is a per-dataset merged union**, frontmatter path checks both directions, `source_refs` is
+  provenance not relatedness — see the `reach` term above.
+- **`readiness_weight` keys on exact `readiness.state` strings + structured fields**, with a flagged
+  default for unresolved states — see the table above.
+
 ## Open questions
 
 - Exact `leverage_tilt` factor shape and cap — to be pinned in the implementation plan against real
@@ -239,6 +290,17 @@ The command is validated on a real sparse graph:
       sensible accessibility-weighted ordering with correct `no-edge`/`unverified` gap-flags.
 - [ ] The same command on a graph **with** `dataset_usage` edges incorporates `reach` and a non-trivial
       `leverage_tilt`, with no flag or config change.
+- [ ] **Mixed-graph (regression for the High finding):** in a graph where *some* datasets have
+      `dataset_usage` and another is connected to a question only by frontmatter `skos:related`, the
+      frontmatter-only dataset shows `reach ≥ 1` and is **not** flagged `no-edge`.
+- [ ] **Back-edge reach:** a dataset is credited with `reach` when a *question* lists `dataset:d` in its
+      own `related` (incoming edge), not only when the dataset lists the question.
+- [ ] **`source_refs` is not relatedness:** a dataset cited only via an interpretation's `source_refs`
+      is not double-counted as a direct `skos:related` reach edge.
+- [ ] **Flagged default:** a dataset whose `readiness.state` is unrecognized/`unknown` gets the
+      `readiness-unresolved` gap-flag rather than silently landing in a default weight bucket.
+- [ ] **Stale/missing graph:** the command warns (does not error, does not auto-materialize) and still
+      produces a frontmatter-based ranking.
 - [ ] The redundancy discount collapses a known shared-source pair (e.g. the dengue meta) to a single
       effective reach contribution.
 - [ ] `--explain` shows, per row, why it ranked where it did (readiness state, reach edges,
