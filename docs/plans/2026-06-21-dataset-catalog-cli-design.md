@@ -92,14 +92,18 @@ Command logic lives in a new `datasets_catalog.py` module (keeping `cli.py` thin
 
 Authors a **candidate external** dataset entity at `doc/datasets/<slug>.md`. The `dataset` kind has a
 registry entry but **no path policy**, so `generate_entity_id` would raise
-(`resolve_path_policy("dataset").strategy`); `add` instead **synthesizes `dataset:<slug>` directly**
-from its slug argument and validates it against the id pattern (`validate_entity_id`/`validate_slug`) —
-the same direct-construction approach `register-run` uses. It still reuses the prospective-write
-validation (`_validate_prospective_write`) and the atomic temp-file replace, and populates the
-dataset-specific frontmatter the generic `create_entity` does not know about.
+(`resolve_path_policy("dataset").strategy`); `add` instead **synthesizes `dataset:<slug>` directly** —
+it validates the slug with `validate_slug(slug)` (pattern + length only; no path policy) and constructs
+`f"dataset:{slug}"`. (`validate_entity_id` is also unusable: it likewise calls
+`resolve_path_policy("dataset").strategy`.) This is the direct-construction approach `register-run`
+uses. It still reuses the prospective-write validation (`_validate_prospective_write`) and the atomic
+temp-file replace, and populates the dataset-specific frontmatter the generic `create_entity` does not
+know about.
 
-Options: `--title` (required), `--tier` (default `track`), `--level` (default `controlled`),
-`--source-url`, `--ontology-term` (repeatable), `--related` (repeatable), `--project-root`.
+Options: `--title` (required), `--origin external|derived` (default `external`), `--tier` (default
+`track`), `--level` (default `controlled`), `--source-url`, `--ontology-term` (repeatable),
+`--related` (repeatable), `--project-root`. `--origin` is defined explicitly so the derived-rejection
+guard below emits a friendly error rather than Click's "No such option".
 
 Emitted frontmatter (the candidate shape proven out in the t013 catalog):
 
@@ -137,11 +141,12 @@ resolver:
 
 1. **Accepts either form** — `foo` or `dataset:foo` — normalizing by stripping a leading `dataset:`.
 2. **Resolves local first:** `doc/datasets/<slug>.md`.
-3. **Falls back to commons** via the commons source loader when not found locally (so a `--commons` row
-   the user just saw resolves).
+3. **Falls back to commons** via `CommonsQuery(commons_root).show("dataset:<slug>")` when not found
+   locally (so a `--commons` row the user just saw resolves).
 4. **Clear miss:** if absent in both, exit 2 with a message naming both scopes searched.
 
-Reuse `resolve_entity_ref`/the commons resolver where they fit rather than re-globbing.
+Reuse `resolve_entity_ref` for the local side and `CommonsQuery` for the commons side rather than
+re-globbing.
 
 ### `dataset show <slug|dataset:slug>`
 
@@ -161,7 +166,10 @@ Replaces the bare `f"{id}  {title}"` loop with a `rich` table (the table primiti
   `--candidate` (shorthand for `--status candidate`), `--tier <t>`, `--unverified`
   (`access.verified == false`), `--level <l>`.
 - **`--commons`:** also enumerate commons dataset entities via
-  `load_project_sources(project_root, include_commons=True)`, tagging each row's origin-project so
+  `CommonsQuery(commons_root).find("dataset")` — the registry-backed catalog query.
+  (`load_project_sources(include_commons=True)` only pulls *referenced* commons ids + overlays, **not**
+  the full catalog, so it is wrong here.) Each `CommonsEntityRecord` carries
+  `canonical_id`/`title`/`frontmatter_json`/`datapackage_path` for the table; tag rows as commons so
   local vs commons is visible.
 
 ### `dataset consumers <slug|dataset:slug>`
@@ -225,10 +233,11 @@ real `datapackage`), not via this template.
   directly (validating the pattern), and reuses prospective validation + atomic write.
 - **Rejected:** routing through the generic `create_entity(kind="dataset")` / `generate_entity_id`.
 - **Reason:** `create_entity` only accepts `status`/`related`/`source_refs` and cannot express
-  `origin`/`tier`/`access`; and `generate_entity_id` calls `resolve_path_policy("dataset").strategy`,
-  but `dataset` has no path policy, so it raises before writing. Direct synthesis (the approach
-  `register-run` already uses) sidesteps both while keeping the prospective-validation + atomic-write
-  safety guarantees.
+  `origin`/`tier`/`access`; and `generate_entity_id` *and* `validate_entity_id` both call
+  `resolve_path_policy("dataset").strategy`, but `dataset` has no path policy, so they raise before
+  writing. Direct synthesis via `validate_slug(slug)` + `f"dataset:{slug}"` (the approach `register-run`
+  already uses) sidesteps all of them while keeping the prospective-validation + atomic-write safety
+  guarantees.
 
 ## Work packages
 
@@ -251,9 +260,9 @@ real `datapackage`), not via this template.
 ### WP3 — `dataset list` rework
 - **Depends on:** none (independent of WP1/2).
 - **Entry point:** rewrite `dataset_list` to delegate to `datasets_catalog.py::list_datasets`.
-- **Definition of done:** rich table; `--status/--candidate`, `--tier`, `--unverified`, `--level`,
-  `--commons` all filter correctly; non-`type:dataset` notes are excluded; existing
-  `test_datasets_list_cli.py` updated and green.
+- **Definition of done:** rich table; `--status/--candidate`, `--tier`, `--unverified`, `--level`
+  filter correctly over local entries; `--commons` adds `CommonsQuery.find("dataset")` rows tagged as
+  commons; non-`type:dataset` notes are excluded; existing `test_datasets_list_cli.py` updated and green.
 
 ### WP4 — `dataset show` + `dataset consumers`
 - **Depends on:** none.
@@ -281,9 +290,10 @@ real `datapackage`), not via this template.
 
 **Still open (resolve in-WP):**
 
-3. **Exact `load_project_sources` return shape for `--commons`** — confirm it yields dataset
-   frontmatter (or entities) with an origin-project tag usable in the table, and that the same loader
-   backs the `show`/`consumers` commons fallback. Resolve in WP3.
+3. **Resolving the commons root for `CommonsQuery`** — confirm how to locate the commons store root
+   the way the `science commons` CLI does, and that `CommonsEntityRecord.frontmatter_json` exposes the
+   table fields (status/tier/origin/access.level). `CommonsQuery` requires the registry to exist and
+   warns on staleness — decide whether `--commons` rebuilds or just warns. Resolve in WP3.
 
 ## Non-goals
 
