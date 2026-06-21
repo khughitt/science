@@ -5174,38 +5174,68 @@ def dataset_group() -> None:
 
 
 @dataset_group.command("list")
+@click.option("--origin", default=None, type=click.Choice(["external", "derived"]))
+@click.option("--status", default=None, help="Filter by status (e.g. candidate, active)")
+@click.option("--candidate", is_flag=True, help="Shorthand for --status candidate")
+@click.option("--tier", default=None, type=click.Choice(["use-now", "evaluate-next", "track"]))
+@click.option("--unverified", is_flag=True, help="Only external entities with access.verified false")
 @click.option(
-    "--origin",
+    "--level",
     default=None,
-    type=click.Choice(["external", "derived"]),
-    help="Filter by origin (external or derived)",
+    type=click.Choice(["public", "registration", "controlled", "commercial", "mixed"]),
 )
+@click.option("--commons", "include_commons", is_flag=True, help="Also list commons dataset entities")
 @click.option(
     "--project-root",
     default=None,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
     help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
 )
-def dataset_list(origin: str | None, project_root: Path | None) -> None:
-    """List dataset entities in the project."""
-    root = project_root.resolve() if project_root else _project_root_from_env()
-    ds_dir = root / "doc" / "datasets"
-    if not ds_dir.is_dir():
-        click.echo("No doc/datasets directory found.")
-        return
-    from science_model.frontmatter import parse_frontmatter
+def dataset_list(
+    origin: str | None,
+    status: str | None,
+    candidate: bool,
+    tier: str | None,
+    unverified: bool,
+    level: str | None,
+    include_commons: bool,
+    project_root: Path | None,
+) -> None:
+    """List dataset entities as a table, with filters."""
+    from rich.console import Console
+    from rich.table import Table
 
-    for md in sorted(ds_dir.glob("*.md")):
-        result = parse_frontmatter(md)
-        if result is None:
-            continue
-        fm, _ = result
-        ds_origin = fm.get("origin", "")
-        if origin is not None and ds_origin != origin:
-            continue
-        ds_id = fm.get("id", md.stem)
-        title = fm.get("title", "")
-        click.echo(f"{ds_id}  {title}")
+    from science_tool.datasets_catalog import list_datasets
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    if candidate:
+        status = "candidate"
+
+    rows, notice = list_datasets(
+        root,
+        origin=origin,
+        status=status,
+        tier=tier,
+        unverified=unverified,
+        level=level,
+        include_commons=include_commons,
+    )
+    if notice:
+        click.echo(f"notice: commons datasets unavailable ({notice})", err=True)
+
+    if not rows:
+        click.echo("No matching dataset entities.")
+        return
+
+    table = Table(show_header=True, header_style="bold")
+    for col in ("id", "title", "status", "tier", "origin", "level", "verified", "scope"):
+        table.add_column(col, overflow="fold", no_wrap=False)
+    for r in rows:
+        table.add_row(
+            r["id"], r["title"], r["status"], r["tier"], r["origin"], r["level"],
+            "yes" if r["verified"] else "no", r["scope"],
+        )
+    Console(width=200).print(table)
 
 
 @dataset_group.command("add")
