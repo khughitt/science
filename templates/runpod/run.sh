@@ -34,6 +34,16 @@ echo "Dry run: $DRY_RUN"
 # Add project-specific env vars here if your workload needs them, for example:
 # export BATCH_SIZE="${BATCH_SIZE:-32}"
 # export MODEL_NAME="${MODEL_NAME:-replace-me}"
+#
+# CRITICAL: the pod shell is fresh and inherits none of your workstation
+# environment. If the workload's OUTPUT location is governed by an env var
+# (output-root, results-dir, cache-dir), you MUST export it here, pinned to the
+# same path pull_results.sh retrieves from. Otherwise the workload falls back to
+# its built-in (usually relative) default and the outputs are stranded on the pod
+# where the pull never looks. Treat run-output and pull-input as one contract.
+# Example:
+# export OUTPUT_ROOT="${OUTPUT_ROOT:-/workspace/<project-name>/data/out}"
+#
 # If you want a standard log path, define it here and have project_run use tee.
 # Example:
 # export RUN_LOG_DIR="${RUN_LOG_DIR:-logs/runpod}"

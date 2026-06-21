@@ -138,6 +138,28 @@ Add a project-specific smoke test to `setup.sh` and keep the real workload entry
 
 Then add one workload-specific check such as a model import or workflow CLI `--version`.
 
+### `run.sh` writes outputs where `pull_results.sh` does not look
+
+The pod shell is fresh — it does not inherit the workstation environment. If the
+workload's output location is governed by an env var (an output-root, results-dir,
+or cache-dir variable) and `run.sh` does not `export` it, the workload silently
+falls back to its built-in default, usually a *relative* path under the project
+dir. Meanwhile `pull_results.sh` is typically written against the *absolute* mirror
+path the workstation uses. The run exits 0 and prints a plausible summary, but the
+artifacts are stranded on the pod outside the pull's search path, so the pull
+retrieves nothing or stale files.
+
+This is easy to miss because a workload whose `--out` flag is an absolute path
+writes its *primary* summary to the right place, while *secondary* artifacts
+(posterior traces, logs, intermediate caches) written via the env-defaulted root
+land in the relative dir. The failure surfaces only at pull time, not run time.
+
+Fix: in `run.sh`, explicitly `export` every output-root / results-dir / cache-dir
+env var the workload reads, pinned to the same mirror paths `pull_results.sh`
+retrieves from. Treat the run-output location and the pull-input location as one
+contract that must agree. A fresh pod shell has none of your workstation defaults —
+assume nothing is exported.
+
 ### Rsync copies too much or too little
 
 Edit the allow-list includes deliberately. Broad exclude-lists drift over time and usually leak irrelevant files to the pod.
