@@ -467,13 +467,30 @@ Expected: PASS (4 tests).
 
 - [ ] **Step 6: Verify a created entity validates clean**
 
-Run (write a minimal `science.yaml` first — `ValidateContext.from_project_root` rejects a project without one):
+Run (write a **full** minimal `science.yaml` — the manifest check requires `name`, `created`,
+`last_modified`, `status`, `summary`, `profile`, `layout_version` ≥ 3, and `knowledge_profiles.local`,
+else it emits its own `Severity.ERROR` that would mask the dataset signal):
 ```bash
-TMP=$(mktemp -d); printf 'name: smoke\n' > "$TMP/science.yaml"
+TMP=$(mktemp -d)
+cat > "$TMP/science.yaml" <<'YAML'
+name: smoke
+created: 2026-06-21
+last_modified: 2026-06-21
+status: active
+summary: smoke test project
+profile: research
+layout_version: 3
+knowledge_profiles:
+  local: local
+YAML
 uv run --frozen science dataset add demo-set --title "Demo Set" --project-root "$TMP"
-uv run --frozen science validate --project-root "$TMP" --verbose 2>&1 | tail -3; rm -rf "$TMP"
+uv run --frozen science validate --project-root "$TMP" --verbose 2>&1 \
+  | grep -i "acquired-without-pointer" && echo "UNEXPECTED: candidate flagged" || echo "OK: candidate not flagged"
+rm -rf "$TMP"
 ```
-Expected: the entity is written; validate does not emit `Severity.ERROR` on it (candidate without datapackage is permitted by Task 1's check).
+Expected: the entity is written and the run prints `OK: candidate not flagged` — the candidate's
+`status: candidate` exempts it from the acquisition check. (Other unrelated structure warnings for a
+bare temp project are fine; this assertion targets only the rule under test.)
 
 - [ ] **Step 7: Commit**
 
@@ -494,7 +511,7 @@ git commit -m "feat(dataset): add command to author candidate dataset entities"
 
 **Interfaces:**
 - Consumes: `add_dataset` module from Task 2.
-- Produces: `list_datasets(project_root: Path, *, origin=None, status=None, tier=None, unverified=False, level=None, include_commons=False) -> list[dict]` returning row dicts with keys `id, title, status, tier, origin, level, verified, scope` (`scope` is `"local"` or `"commons"`). Skips frontmatter whose `type != "dataset"`.
+- Produces: `list_datasets(project_root: Path, *, origin=None, status=None, tier=None, unverified=False, level=None, include_commons=False) -> tuple[list[dict], str | None]` returning `(filtered row dicts, commons-unavailable notice)`. Row keys: `id, title, status, tier, origin, level, verified, scope` (`scope` is `"local"` or `"commons"`). Skips frontmatter whose `type != "dataset"`. Local rows are always returned; a commons read failure sets the notice and degrades gracefully.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -633,15 +650,23 @@ def list_datasets(
     unverified: bool = False,
     level: str | None = None,
     include_commons: bool = False,
-) -> list[dict]:
+) -> tuple[list[dict], str | None]:
+    """Return (filtered rows, commons-unavailable notice). Local rows are always
+    returned; if `include_commons` and the commons registry can't be read, the
+    notice is set and local rows still come back (graceful degradation)."""
     rows = _local_rows(project_root)
+    notice: str | None = None
     if include_commons:
-        rows.extend(_commons_rows())
-    return [
+        try:
+            rows.extend(_commons_rows())
+        except CommonsUnavailable as exc:
+            notice = str(exc)
+    filtered = [
         r
         for r in rows
         if _matches(r, origin=origin, status=status, tier=tier, unverified=unverified, level=level)
     ]
+    return filtered, notice
 
 
 def _commons_rows() -> list[dict]:
@@ -718,23 +743,23 @@ def dataset_list(
     from rich.console import Console
     from rich.table import Table
 
-    from science_tool.datasets_catalog import CommonsUnavailable, _commons_rows, _local_rows, _matches
+    from science_tool.datasets_catalog import list_datasets
 
     root = project_root.resolve() if project_root else _project_root_from_env()
     if candidate:
         status = "candidate"
 
-    rows = _local_rows(root)
-    if include_commons:
-        try:
-            rows.extend(_commons_rows())
-        except CommonsUnavailable as exc:
-            click.echo(f"notice: commons datasets unavailable ({exc})", err=True)
-    rows = [
-        r
-        for r in rows
-        if _matches(r, origin=origin, status=status, tier=tier, unverified=unverified, level=level)
-    ]
+    rows, notice = list_datasets(
+        root,
+        origin=origin,
+        status=status,
+        tier=tier,
+        unverified=unverified,
+        level=level,
+        include_commons=include_commons,
+    )
+    if notice:
+        click.echo(f"notice: commons datasets unavailable ({notice})", err=True)
 
     if not rows:
         click.echo("No matching dataset entities.")
@@ -865,7 +890,10 @@ def resolve_dataset(project_root: Path, ref: str) -> tuple[str, dict, str] | Non
         parsed = parse_frontmatter(local)
         if parsed is not None:
             fm, body = parsed
-            return ("local", fm, body)
+            # Same guard as `list`: a non-dataset file under doc/datasets/ is a
+            # local miss, not a match — fall through to commons.
+            if (fm.get("kind") or fm.get("type")) == "dataset":
+                return ("local", fm, body)
     from science_tool.commons.config import resolve_commons_root
     from science_tool.commons.errors import CommonsEntityError, CommonsRegistryError
     from science_tool.commons.query import CommonsQuery
@@ -875,9 +903,12 @@ def resolve_dataset(project_root: Path, ref: str) -> tuple[str, dict, str] | Non
     except (CommonsEntityError, CommonsRegistryError, FileNotFoundError):
         return None
     fm = rec.frontmatter or {}
+    # body_path is the full entity.md (frontmatter + body); strip the frontmatter
+    # so `show` prints body-only, matching the local path's parse_frontmatter result.
     body = ""
     if rec.body_path and Path(rec.body_path).exists():
-        body = Path(rec.body_path).read_text(encoding="utf-8")
+        parsed_commons = parse_frontmatter(Path(rec.body_path))
+        body = parsed_commons[1] if parsed_commons else ""
     return ("commons", fm, body)
 ```
 
