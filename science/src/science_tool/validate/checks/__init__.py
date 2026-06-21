@@ -49,6 +49,7 @@ CANONICAL_CHECK_MODULES = (
     "reference_collections",
     "identity_context",
     "dataset_taxonomy",
+    "dataset_acquisition",
     "dataset_metadata",
     "dataset_lineage",
     "dataset_promotion_contract",

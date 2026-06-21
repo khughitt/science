@@ -2,7 +2,7 @@
 id: "dataset:<slug>"
 type: "dataset"
 title: "<Dataset Name — artefact-level specific>"
-status: "active"
+status: "candidate"               # candidate (not yet acquired) | active (acquired, has datapackage/local_path)
 profiles: ["science-pkg-entity-1.0"]
 origin: "external"                # external | derived
 tier: "evaluate-next"             # use-now | evaluate-next | track
