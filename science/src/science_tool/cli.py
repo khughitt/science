@@ -5208,6 +5208,61 @@ def dataset_list(origin: str | None, project_root: Path | None) -> None:
         click.echo(f"{ds_id}  {title}")
 
 
+@dataset_group.command("add")
+@click.argument("slug")
+@click.option("--title", required=True, help="Human-readable dataset title")
+@click.option("--origin", type=click.Choice(["external", "derived"]), default="external")
+@click.option("--tier", type=click.Choice(["use-now", "evaluate-next", "track"]), default="track")
+@click.option(
+    "--level",
+    type=click.Choice(["public", "registration", "controlled", "commercial", "mixed"]),
+    default="controlled",
+)
+@click.option("--source-url", default="", help="Landing page / accession URL")
+@click.option("--ontology-term", "ontology_terms", multiple=True)
+@click.option("--related", "related", multiple=True, help="Related entity ref (repeatable)")
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
+)
+def dataset_add(
+    slug: str,
+    title: str,
+    origin: str,
+    tier: str,
+    level: str,
+    source_url: str,
+    ontology_terms: tuple[str, ...],
+    related: tuple[str, ...],
+    project_root: Path | None,
+) -> None:
+    """Author a candidate external dataset entity under doc/datasets/."""
+    from science_tool.datasets_catalog import add_dataset
+    from science_tool.entities import EntityCommandError
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    try:
+        entity_id, dest, warnings = add_dataset(
+            root,
+            slug,
+            title=title,
+            origin=origin,
+            tier=tier,
+            level=level,
+            source_url=source_url,
+            ontology_terms=ontology_terms,
+            related=related,
+        )
+    except EntityCommandError as exc:
+        click.echo(str(exc), err=True)
+        raise click.exceptions.Exit(1)
+    for w in warnings:
+        click.echo(f"warning: {w}", err=True)
+    click.echo(f"created {entity_id} -> {dest.relative_to(root)}")
+
+
 @dataset_group.command("register-run")
 @click.argument("workflow_run_id")
 @click.option(

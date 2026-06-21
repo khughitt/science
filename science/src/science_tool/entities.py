@@ -1019,11 +1019,12 @@ def _validate_prospective_write(
     rel_path: Path,
     text: str,
     target_entity_id: str,
+    include_commons: bool = True,
 ) -> list[str]:
     rel_path_text = rel_path.as_posix()
-    baseline_rows, _ = audit_project_sources(load_project_sources(project_root))
+    baseline_rows, _ = audit_project_sources(load_project_sources(project_root, include_commons=include_commons))
     prospective_rows, _ = audit_project_sources(
-        load_project_sources(project_root, markdown_overrides={rel_path_text: text})
+        load_project_sources(project_root, markdown_overrides={rel_path_text: text}, include_commons=include_commons)
     )
 
     baseline_keys = {_audit_row_key(row) for row in baseline_rows}
