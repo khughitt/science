@@ -289,18 +289,13 @@ import os
 from datetime import date
 from pathlib import Path
 
+import yaml
+
 from science_tool.entities import (
     EntityCommandError,
     _validate_prospective_write,
     validate_slug,
 )
-
-
-def _yaml_list(items) -> str:
-    items = list(items)
-    if not items:
-        return "[]"
-    return "[" + ", ".join(items) + "]"
 
 
 def _render_candidate(
@@ -315,41 +310,40 @@ def _render_candidate(
     related,
     today: date,
 ) -> str:
+    # Build the frontmatter as a dict and serialize with yaml.safe_dump so any
+    # quote/newline/colon in user input cannot break the document or inject
+    # fields ahead of _validate_prospective_write's parse.
     iso = today.isoformat()
-    return (
-        "---\n"
-        f"id: {entity_id}\n"
-        "type: dataset\n"
-        f'title: "{title}"\n'
-        "status: candidate\n"
-        f'created: "{iso}"\n'
-        f'updated: "{iso}"\n'
-        f"origin: {origin}\n"
-        "source_class: observational\n"
-        f"tier: {tier}\n"
-        "license: unknown\n"
-        "access:\n"
-        f"  level: {level}\n"
-        "  availability: available\n"
-        "  verified: false\n"
-        f'  source_url: "{source_url}"\n'
-        "accessions: []\n"
-        f"ontology_terms: {_yaml_list(ontology_terms)}\n"
-        f"related:\n{_render_related(related)}"
-        "---\n\n"
+    fm: dict = {
+        "id": entity_id,
+        "type": "dataset",
+        "title": title,
+        "status": "candidate",
+        "created": iso,
+        "updated": iso,
+        "origin": origin,
+        "source_class": "observational",
+        "tier": tier,
+        "license": "unknown",
+        "access": {
+            "level": level,
+            "availability": "available",
+            "verified": False,
+            "source_url": source_url,
+        },
+        "accessions": [],
+        "ontology_terms": list(ontology_terms),
+        "related": list(related),
+    }
+    front = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True, default_flow_style=False)
+    body = (
         f"# {title}\n\n"
         "**Candidate dataset.** `status: candidate` — catalogued but not yet acquired.\n\n"
-        "## What it is\n\n_TODO: one-paragraph description._\n\n"
-        "## Why it fits\n\n_TODO: relevance to the task/question that motivated cataloguing it._\n\n"
-        "## Access / caveats\n\n_TODO: access level, gating, and known limitations._\n"
+        "## What it is\n\n_One-paragraph description (fill in)._\n\n"
+        "## Why it fits\n\n_Relevance to the task/question that motivated cataloguing it (fill in)._\n\n"
+        "## Access / caveats\n\n_Access level, gating, and known limitations (fill in)._\n"
     )
-
-
-def _render_related(related) -> str:
-    items = list(related)
-    if not items:
-        return "  []\n"
-    return "".join(f"  - {r}\n" for r in items)
+    return f"---\n{front}---\n\n{body}"
 
 
 def add_dataset(
@@ -473,12 +467,13 @@ Expected: PASS (4 tests).
 
 - [ ] **Step 6: Verify a created entity validates clean**
 
-Run:
+Run (write a minimal `science.yaml` first — `ValidateContext.from_project_root` rejects a project without one):
 ```bash
-TMP=$(mktemp -d); uv run --frozen science dataset add demo-set --title "Demo Set" --project-root "$TMP"
+TMP=$(mktemp -d); printf 'name: smoke\n' > "$TMP/science.yaml"
+uv run --frozen science dataset add demo-set --title "Demo Set" --project-root "$TMP"
 uv run --frozen science validate --project-root "$TMP" --verbose 2>&1 | tail -3; rm -rf "$TMP"
 ```
-Expected: the entity is written; validate does not FAIL on it (candidate without datapackage is permitted by Task 1's check).
+Expected: the entity is written; validate does not emit `Severity.ERROR` on it (candidate without datapackage is permitted by Task 1's check).
 
 - [ ] **Step 7: Commit**
 
@@ -665,14 +660,12 @@ def _commons_rows() -> list[dict]:
         raise CommonsUnavailable(str(exc)) from exc
     rows: list[dict] = []
     for rec in records:
-        import json
-
-        fm = json.loads(rec.frontmatter_json) if rec.frontmatter_json else {}
+        fm = rec.frontmatter or {}
         access = fm.get("access") or {}
         rows.append(
             {
                 "id": rec.canonical_id,
-                "title": rec.title or fm.get("title", ""),
+                "title": fm.get("title", ""),
                 "status": fm.get("status", ""),
                 "tier": fm.get("tier", ""),
                 "origin": fm.get("origin", ""),
@@ -881,14 +874,10 @@ def resolve_dataset(project_root: Path, ref: str) -> tuple[str, dict, str] | Non
         rec = CommonsQuery(resolve_commons_root()).show(f"dataset:{slug}")
     except (CommonsEntityError, CommonsRegistryError, FileNotFoundError):
         return None
-    import json
-
-    fm = json.loads(rec.frontmatter_json) if rec.frontmatter_json else {}
+    fm = rec.frontmatter or {}
     body = ""
-    if rec.body_path:
-        body_file = Path(rec.body_path)
-        if body_file.exists():
-            body = body_file.read_text(encoding="utf-8")
+    if rec.body_path and Path(rec.body_path).exists():
+        body = Path(rec.body_path).read_text(encoding="utf-8")
     return ("commons", fm, body)
 ```
 
@@ -996,11 +985,14 @@ Expected: PASS. Investigate any failure before proceeding.
 
 - [ ] **Step 3: Manual commons happy-path check (not unit-tested)**
 
-The `--commons` populated path and the `show`/`consumers` commons fallback are exercised against a real commons registry, which the unit tests deliberately do not build. Manually verify once:
+The `--commons` populated path and the `show`/`consumers` commons fallback are exercised against a real commons registry, which the unit tests deliberately do not build. Manually verify once, picking a real commons dataset slug from the first command:
 ```bash
 uv run --frozen science dataset list --commons | head
+# pick a dataset:<slug> shown with scope=commons above, then:
+uv run --frozen science dataset show dataset:<commons-slug>
+uv run --frozen science dataset consumers dataset:<commons-slug>
 ```
-Expected: local rows plus any commons `dataset:` rows tagged `commons` (or the "commons datasets unavailable" notice if no registry). Note the result in the task commit message. **Do not** silently treat an empty result as success — state which path was observed.
+Expected: `list --commons` shows local rows plus commons `dataset:` rows tagged `commons` (or the "commons datasets unavailable" notice if no registry); `show`/`consumers` resolve the commons-only slug via the fallback (not exit 2). Note in the commit message **which path was observed** — if the commons store has no dataset entities, say so explicitly rather than treating the empty result as a pass.
 
 - [ ] **Step 4: Cross-check against the design acceptance criteria**
 
@@ -1017,5 +1009,5 @@ git add -A && git commit -m "test(dataset): full catalog-CLI suite green; note m
 ## Self-Review Notes (author)
 
 - **Spec coverage:** `add` (T2), `show`/`consumers` (T4), `list` rework + filters + `--commons` + type-filter (T3), acquisition check + template flip (T1), tests throughout, final smoke (T5). Deferred items (`--stale-review`, `dataset verify`, group collapse, schema-mixin change) are correctly absent.
-- **Open question 3** (commons root + record shape) is resolved inline: `resolve_commons_root()` + `CommonsQuery.find/show`, `frontmatter_json` parsed for fields, `body_path` read for body. The populated-commons path is covered by T5 Step 3's manual check (flagged, not silently capped).
+- **Open question 3** (commons root + record shape) is resolved inline: `resolve_commons_root()` + `CommonsQuery.find/show`; `CommonsEntityRecord.frontmatter` (a dict) supplies the fields and `body_path` the body — the record has no `frontmatter_json`/`title`. The populated-commons path is covered by T5 Step 3's manual check (flagged, not silently capped).
 - **Type consistency:** row dict keys (`id/title/status/tier/origin/level/verified/scope`) are identical across `_local_rows`, `_commons_rows`, `_matches`, and the table render. `resolve_dataset` returns `(scope, fm, body)` consumed uniformly by `show`/`consumers`.
