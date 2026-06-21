@@ -73,7 +73,7 @@ science/src/science_tool/
     checks/dataset_acquisition.py  ── NEW
     checks/__init__.py             ── MODIFY (register the check)
 science/model/src/science_model/templates/
-  dataset.md                 ── NEW IF not already templated (see Open question 1)
+  dataset.md                 ── MODIFY (default status: active → candidate)
 science/tests/
   test_dataset_add_cli.py          ── NEW
   test_dataset_show_cli.py         ── NEW
@@ -90,10 +90,13 @@ Command logic lives in a new `datasets_catalog.py` module (keeping `cli.py` thin
 
 ### `dataset add <slug>`
 
-Authors a **candidate external** dataset entity at `doc/datasets/<slug>.md`. Reuses the entity-creation
-safety helpers from `entities.py` — `generate_entity_id`, the prospective-write validation
-(`_validate_prospective_write`), and the atomic temp-file replace — but populates dataset-specific
-frontmatter that the generic `create_entity` does not know about.
+Authors a **candidate external** dataset entity at `doc/datasets/<slug>.md`. The `dataset` kind has a
+registry entry but **no path policy**, so `generate_entity_id` would raise
+(`resolve_path_policy("dataset").strategy`); `add` instead **synthesizes `dataset:<slug>` directly**
+from its slug argument and validates it against the id pattern (`validate_entity_id`/`validate_slug`) —
+the same direct-construction approach `register-run` uses. It still reuses the prospective-write
+validation (`_validate_prospective_write`) and the atomic temp-file replace, and populates the
+dataset-specific frontmatter the generic `create_entity` does not know about.
 
 Options: `--title` (required), `--tier` (default `track`), `--level` (default `controlled`),
 `--source-url`, `--ontology-term` (repeatable), `--related` (repeatable), `--project-root`.
@@ -126,11 +129,25 @@ Guard rails (fail-early): `--origin derived` is **rejected** with a pointer to `
 (derived datasets are machine-authored, never hand-written). Destination-exists → error (mirrors
 `create_entity`). Runs prospective validation and prints any warnings.
 
-### `dataset show <slug>`
+### Ref forms and scope resolution (`show`, `consumers`)
 
-Reads `doc/datasets/<slug>.md`, prints a formatted view: key frontmatter (id, title, status, tier,
+`dataset list` prints canonical ids (`dataset:foo`) and `--commons` rows are not under local
+`doc/datasets/`, so `show`/`consumers` must not be naive `doc/datasets/<arg>.md` lookups. A shared
+resolver:
+
+1. **Accepts either form** — `foo` or `dataset:foo` — normalizing by stripping a leading `dataset:`.
+2. **Resolves local first:** `doc/datasets/<slug>.md`.
+3. **Falls back to commons** via the commons source loader when not found locally (so a `--commons` row
+   the user just saw resolves).
+4. **Clear miss:** if absent in both, exit 2 with a message naming both scopes searched.
+
+Reuse `resolve_entity_ref`/the commons resolver where they fit rather than re-globbing.
+
+### `dataset show <slug|dataset:slug>`
+
+Resolves the ref (above), prints a formatted view: key frontmatter (id, title, status, tier,
 origin, access level/verified, license, accessions, source_url), the resolved `related` and
-`consumed_by` lists, and the body. Exit 2 if not found.
+`consumed_by` lists, and the body.
 
 ### `dataset list` (rework)
 
@@ -147,22 +164,36 @@ Replaces the bare `f"{id}  {title}"` loop with a `rich` table (the table primiti
   `load_project_sources(project_root, include_commons=True)`, tagging each row's origin-project so
   local vs commons is visible.
 
-### `dataset consumers <slug>`
+### `dataset consumers <slug|dataset:slug>`
 
-Reads the entity's `consumed_by` list and prints each consumer (plans, workflow-runs). Exit 2 if the
-entity is missing; prints "no recorded consumers" when empty.
+Resolves the ref (above), reads the entity's `consumed_by` list, and prints each consumer (plans,
+workflow-runs). Exit 2 if the entity is missing; prints "no recorded consumers" when empty.
 
 ### `validate/checks/dataset_acquisition.py`
 
 Mirrors `dataset_taxonomy.py` (read raw frontmatter via the `dataset_frontmatters` helper, re-enforce
-a schema-critical rule with a friendly message). Rule `dataset.acquired-without-datapackage`:
+a schema-critical rule with a friendly message). The acquired-data signal is the presence of a data
+pointer — **`datapackage` OR `local_path`** — not `status` alone; `local_path` is the template's
+single-file escape hatch ("mutually exclusive with datapackage") and `register-run` writes derived
+entities as `status: active` **with** a `datapackage`, so both must satisfy the check.
 
-- `status != "candidate"` (acquired) **and** `datapackage` empty/absent → **Severity that fails the
-  run** (FAIL), message naming the slug and the fix ("set `status: candidate` if not yet acquired, or
-  add the `datapackage:` pointer").
-- `status == "candidate"` with no `datapackage` → pass (the supported state).
+Rule `dataset.acquired-without-pointer`:
+
+- `status != "candidate"` **and** neither `datapackage` nor `local_path` is populated →
+  `Severity.ERROR` (fails the run). Message names the slug and the fix: "set `status: candidate` if
+  not yet acquired, or add a `datapackage`/`local_path` pointer."
+- `status == "candidate"` → pass regardless of pointers (the supported not-yet-acquired state).
+- any non-candidate **with** a pointer → pass.
 
 Registered in `validate/checks/__init__.py`.
+
+### `dataset.md` template default
+
+Change the hand-author template's `status: "active"` → `status: "candidate"`. The template currently
+ships `active` with empty `datapackage`/`local_path`, which the new check would (correctly) reject;
+hand-authoring starts from the not-yet-acquired state, so `candidate` is the right default. This does
+**not** affect `register-run`, which writes derived-entity frontmatter directly (`status: active` +
+real `datapackage`), not via this template.
 
 ## Key decisions
 
@@ -189,27 +220,33 @@ Registered in `validate/checks/__init__.py`.
   The check turns today's *accidental, unchecked* leniency into an *explicit, checked* invariant
   (fail-early) with a far smaller blast radius and no risk to the cross-project closed-Entity path.
 
-### Key decision 4: `dataset add` is bespoke but reuses the creation helpers
-- **Chosen:** a dedicated writer that populates dataset frontmatter, reusing `generate_entity_id`,
-  prospective validation, and atomic write.
-- **Rejected:** routing through the generic `create_entity(kind="dataset")`.
-- **Reason:** `create_entity` only accepts `status`/`related`/`source_refs` and depends on a per-kind
-  template + `_validate_status`; it cannot express `origin`/`tier`/`access`. Reusing the *helpers*
-  keeps the safety guarantees without contorting the generic path.
+### Key decision 4: `dataset add` is bespoke; reuses the safe-write helpers but synthesizes the id directly
+- **Chosen:** a dedicated writer that populates dataset frontmatter, synthesizes `dataset:<slug>`
+  directly (validating the pattern), and reuses prospective validation + atomic write.
+- **Rejected:** routing through the generic `create_entity(kind="dataset")` / `generate_entity_id`.
+- **Reason:** `create_entity` only accepts `status`/`related`/`source_refs` and cannot express
+  `origin`/`tier`/`access`; and `generate_entity_id` calls `resolve_path_policy("dataset").strategy`,
+  but `dataset` has no path policy, so it raises before writing. Direct synthesis (the approach
+  `register-run` already uses) sidesteps both while keeping the prospective-validation + atomic-write
+  safety guarantees.
 
 ## Work packages
 
-### WP1 — `dataset add` + candidate template
-- **Depends on:** Open question 1 (template registration).
-- **Entry point:** `datasets_catalog.py::add_dataset`, wired as `@dataset_group.command("add")`.
-- **Definition of done:** `science dataset add foo --title "Foo"` writes a valid candidate entity that
-  passes `science validate`; `--origin derived` is rejected; destination-exists errors; unit tests green.
+### WP1 — `dataset add` + template default
+- **Depends on:** none.
+- **Entry point:** `datasets_catalog.py::add_dataset`, wired as `@dataset_group.command("add")`; plus
+  the `dataset.md` template `status` default flip (active → candidate).
+- **Definition of done:** `science dataset add foo --title "Foo"` writes a valid candidate entity
+  (id synthesized as `dataset:foo`, status candidate, license `unknown`) that passes `science validate`;
+  `--origin derived` is rejected with a `register-run` pointer; destination-exists errors; unit tests
+  green.
 
 ### WP2 — `dataset acquisition` validate check
-- **Depends on:** none.
+- **Depends on:** WP1's template default flip (so the canonical template passes the new check).
 - **Entry point:** `validate/checks/dataset_acquisition.py` + `__init__.py` registration.
-- **Definition of done:** acquired-without-datapackage FAILs with a friendly message; candidate passes;
-  the t013 catalog (15 candidates) still passes; check unit test green.
+- **Definition of done:** a non-candidate entity with neither `datapackage` nor `local_path` →
+  `Severity.ERROR`; candidates pass; non-candidate **with** a pointer passes; the t013 catalog (15
+  candidates) still validates clean; check unit test green.
 
 ### WP3 — `dataset list` rework
 - **Depends on:** none (independent of WP1/2).
@@ -231,16 +268,22 @@ Registered in `validate/checks/__init__.py`.
 
 ## Open questions
 
-1. **Is `dataset` registered as a templated/`MIGRATED_KINDS` entity with a body template?** If yes,
-   `add` can lean on it for the body; if no, WP1 adds a `dataset.md` template following the existing
-   template format. Verify at the top of WP1.
-2. **Does `_validate_status` (in `entities.py`) constrain dataset status values?** If it has a
-   per-kind allow-list, confirm `candidate`/`active` are permitted (extend if needed). The base schema
-   leaves `status` free-string, but the create path may be stricter.
+*(Resolved during spec review — kept as a record.)*
+
+1. ~~Is `dataset` body-templated?~~ **Resolved:** yes, `dataset.md` exists; WP1 *modifies* its `status`
+   default rather than creating a template. `add` writes its own frontmatter and reuses the body
+   sections.
+2. ~~Does `_validate_status` constrain dataset status?~~ **Moot:** `add` synthesizes the id and
+   frontmatter directly and does not go through `create_entity`/`_validate_status`. The base schema
+   leaves `status` free-string, so `candidate` is valid.
+4. ~~Which `Severity` fails the run?~~ **Resolved:** enum is `ERROR/WARN/INFO`; the check emits
+   `Severity.ERROR`.
+
+**Still open (resolve in-WP):**
+
 3. **Exact `load_project_sources` return shape for `--commons`** — confirm it yields dataset
-   frontmatter (or entities) with an origin-project tag usable in the table. Resolve in WP3.
-4. **Which `Severity` value fails the run** in the validate framework (so the acquisition check FAILs
-   rather than warns). Confirm against an existing FAIL-producing check in WP2.
+   frontmatter (or entities) with an origin-project tag usable in the table, and that the same loader
+   backs the `show`/`consumers` commons fallback. Resolve in WP3.
 
 ## Non-goals
 
@@ -254,8 +297,10 @@ Registered in `validate/checks/__init__.py`.
 
 - [ ] `science dataset add` authors a valid candidate entity; rejects `--origin derived`.
 - [ ] `science dataset list` shows a filterable table, excludes non-dataset notes, supports `--commons`.
-- [ ] `science dataset show` and `dataset consumers` work and exit 2 on missing entities.
-- [ ] `dataset_acquisition` check FAILs acquired-without-datapackage, passes candidates; the t013
-      catalog still validates clean.
+- [ ] `science dataset show` and `dataset consumers` accept `foo` and `dataset:foo`, resolve local
+      then commons, and exit 2 (naming both scopes) on a true miss.
+- [ ] `dataset_acquisition` check emits `Severity.ERROR` for a non-candidate with no
+      `datapackage`/`local_path`, passes candidates and pointer-bearing entities; the t013 catalog and
+      the updated `dataset.md` template both validate clean.
 - [ ] `register-run`/`reconcile` and the plural `datasets` group are untouched; their tests still pass.
 - [ ] New + updated unit tests green; `uv run --frozen science validate` passes.
