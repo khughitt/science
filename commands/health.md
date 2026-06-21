@@ -118,5 +118,5 @@ git commit -m "chore(health): triage <N> issues — <brief description per clust
   or otherwise misrepresent stance/strength/independence to force a check green. The only valid moves
   are: add *genuine* independent evidence, correct an *actual* mislabeling, or accept the residual flag
   and record why. A check may legitimately stay yellow — never present "overstate to clear it" as an
-  option. See [`../docs/proposition-and-evidence-model.md`](../docs/proposition-and-evidence-model.md)
+  option. See [`../docs/user-guide/evidence-lines.md`](../docs/user-guide/evidence-lines.md)
   → *Evidence Integrity (Non-Negotiable)*.

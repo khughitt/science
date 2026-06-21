@@ -34,7 +34,7 @@ flow below.
 
 1. Read `specs/research-question.md`.
 2. Read `science.yaml`.
-3. If present, read `${CLAUDE_PLUGIN_ROOT}/docs/proposition-and-evidence-model.md`.
+3. If present, read `${CLAUDE_PLUGIN_ROOT}/docs/user-guide/epistemic-model.md`.
 
 ## Sections
 

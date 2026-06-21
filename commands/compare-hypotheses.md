@@ -27,7 +27,7 @@ If no arguments are provided, scan `specs/hypotheses/` and propose a high-value 
 Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
 Additionally:
-1. Read `${CLAUDE_PLUGIN_ROOT}/docs/proposition-and-evidence-model.md`.
+1. Read `${CLAUDE_PLUGIN_ROOT}/docs/user-guide/epistemic-model.md`.
 2. Read `.ai/templates/comparison.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/comparison.md`.
 3. Read relevant hypotheses in `specs/hypotheses/`.
 4. Read existing evidence in `doc/topics/`, `doc/papers/`, `doc/interpretations/`, and `doc/discussions/`.

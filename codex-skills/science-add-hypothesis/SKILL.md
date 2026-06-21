@@ -77,7 +77,7 @@ In this project, a hypothesis is an organizing conjecture, not a settled fact. T
 Follow the Science Codex Command Preamble before executing this skill. Use the `research-assistant` role prompt.
 
 Additionally:
-1. Read `docs/proposition-and-evidence-model.md`.
+1. Read `docs/user-guide/epistemic-model.md`.
 2. Read `.ai/templates/hypothesis.md` first; if not found, read `templates/hypothesis.md`.
 3. Read existing hypotheses in `specs/hypotheses/` to avoid duplication.
 4. Check `doc/questions/` — the new hypothesis may address an existing open question.

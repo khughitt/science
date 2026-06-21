@@ -13,7 +13,7 @@ In this project, a hypothesis is an organizing conjecture, not a settled fact. T
 Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
 Additionally:
-1. Read `${CLAUDE_PLUGIN_ROOT}/docs/proposition-and-evidence-model.md`.
+1. Read `${CLAUDE_PLUGIN_ROOT}/docs/user-guide/epistemic-model.md`.
 2. Read `.ai/templates/hypothesis.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/hypothesis.md`.
 3. Read existing hypotheses in `specs/hypotheses/` to avoid duplication.
 4. Check `doc/questions/` — the new hypothesis may address an existing open question.

@@ -17,6 +17,13 @@ dependencies = []
 dev = []
 ```"""
 
+USER_GUIDE_DOC = "docs/" + "user-guide.md"
+PROJECT_ORGANIZATION_DOC = "docs/" + "project-organization-profiles.md"
+PROJECT_WORKING_MODEL_DOC = "docs/conventions/" + "project-working-model-" + "h00.md"
+PROJECT_WORKING_MODEL_STEM = "project-working-model-" + "h00"
+PROPOSITION_MODEL_DOC = "docs/" + "proposition-and-evidence-model.md"
+CLAIM_MODEL_DOC = "docs/" + "claim-and-evidence-model.md"
+
 
 def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
@@ -29,7 +36,7 @@ def _read(path: str) -> str:
             "commands/add-hypothesis.md",
             (
                 "${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md",
-                "${CLAUDE_PLUGIN_ROOT}/docs/proposition-and-evidence-model.md",
+                "${CLAUDE_PLUGIN_ROOT}/docs/user-guide/epistemic-model.md",
                 ".ai/templates/hypothesis.md",
                 "${CLAUDE_PLUGIN_ROOT}/templates/hypothesis.md",
             ),
@@ -46,7 +53,7 @@ def _read(path: str) -> str:
             "commands/compare-hypotheses.md",
             (
                 "${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md",
-                "${CLAUDE_PLUGIN_ROOT}/docs/proposition-and-evidence-model.md",
+                "${CLAUDE_PLUGIN_ROOT}/docs/user-guide/epistemic-model.md",
                 ".ai/templates/comparison.md",
                 "${CLAUDE_PLUGIN_ROOT}/templates/comparison.md",
             ),
@@ -75,7 +82,8 @@ def _read(path: str) -> str:
             "commands/interpret-results.md",
             (
                 "${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md",
-                "${CLAUDE_PLUGIN_ROOT}/docs/proposition-and-evidence-model.md",
+                "${CLAUDE_PLUGIN_ROOT}/docs/user-guide/epistemic-model.md",
+                "${CLAUDE_PLUGIN_ROOT}/docs/user-guide/evidence-lines.md",
                 ".ai/templates/interpretation.md",
                 "${CLAUDE_PLUGIN_ROOT}/templates/interpretation.md",
             ),
@@ -124,7 +132,7 @@ def _read(path: str) -> str:
         ),
         (
             "commands/status.md",
-            ("${CLAUDE_PLUGIN_ROOT}/docs/proposition-and-evidence-model.md",),
+            ("${CLAUDE_PLUGIN_ROOT}/docs/user-guide/epistemic-model.md",),
         ),
     ],
 )
@@ -135,6 +143,24 @@ def test_command_docs_use_explicit_framework_resolution(
     text = _read(path)
     for expected in expected_strings:
         assert expected in text
+
+
+def test_command_docs_do_not_reference_retired_user_docs() -> None:
+    retired = (
+        USER_GUIDE_DOC,
+        PROJECT_ORGANIZATION_DOC,
+        PROJECT_WORKING_MODEL_DOC,
+        PROJECT_WORKING_MODEL_STEM,
+        PROPOSITION_MODEL_DOC,
+        CLAIM_MODEL_DOC,
+    )
+    offenders: list[str] = []
+    for path in (ROOT / "commands").glob("*.md"):
+        text = path.read_text(encoding="utf-8")
+        if any(token in text for token in retired):
+            offenders.append(path.relative_to(ROOT).as_posix())
+
+    assert not offenders
 
 
 def test_plan_analysis_command_defines_methodology_readiness_workflow() -> None:
@@ -366,7 +392,7 @@ def test_validate_cli_reference_documents_shim_contract() -> None:
             "commands/add-hypothesis.md",
             (
                 "Follow `references/command-preamble.md`",
-                "Read `docs/claim-and-evidence-model.md`.",
+                f"Read `{CLAIM_MODEL_DOC}`.",
             ),
         ),
         ("commands/bias-audit.md", ("Follow `references/command-preamble.md`",)),
@@ -374,7 +400,7 @@ def test_validate_cli_reference_documents_shim_contract() -> None:
             "commands/compare-hypotheses.md",
             (
                 "Follow `references/command-preamble.md`",
-                "Read `docs/claim-and-evidence-model.md`.",
+                f"Read `{CLAIM_MODEL_DOC}`.",
             ),
         ),
         ("commands/discuss.md", ("Follow `references/command-preamble.md`", "Read `templates/discussion.md`")),
@@ -390,7 +416,7 @@ def test_validate_cli_reference_documents_shim_contract() -> None:
             "commands/interpret-results.md",
             (
                 "Follow `references/command-preamble.md`",
-                "Read `docs/claim-and-evidence-model.md`.",
+                f"Read `{CLAIM_MODEL_DOC}`.",
             ),
         ),
         ("commands/next-steps.md", ("Follow `references/command-preamble.md`",)),
@@ -411,7 +437,7 @@ def test_validate_cli_reference_documents_shim_contract() -> None:
                 "Read `skills/data/sources/pubmed.md`.",
             ),
         ),
-        ("commands/status.md", ("If present, read `docs/claim-and-evidence-model.md`.",)),
+        ("commands/status.md", (f"If present, read `{CLAIM_MODEL_DOC}`.",)),
     ],
 )
 def test_command_docs_remove_project_local_framework_paths(path: str, legacy_strings: tuple[str, ...]) -> None:
@@ -427,7 +453,7 @@ def test_command_docs_remove_project_local_framework_paths(path: str, legacy_str
             "README.md",
             (
                 "claims and relation-claims are the main units of belief",
-                "docs/claim-and-evidence-model.md",
+                CLAIM_MODEL_DOC,
             ),
         ),
         (

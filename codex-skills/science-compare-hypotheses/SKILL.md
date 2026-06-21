@@ -91,7 +91,7 @@ If no arguments are provided, scan `specs/hypotheses/` and propose a high-value 
 Follow the Science Codex Command Preamble before executing this skill. Use the `research-assistant` role prompt.
 
 Additionally:
-1. Read `docs/proposition-and-evidence-model.md`.
+1. Read `docs/user-guide/epistemic-model.md`.
 2. Read `.ai/templates/comparison.md` first; if not found, read `templates/comparison.md`.
 3. Read relevant hypotheses in `specs/hypotheses/`.
 4. Read existing evidence in `doc/topics/`, `doc/papers/`, `doc/interpretations/`, and `doc/discussions/`.

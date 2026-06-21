@@ -36,10 +36,11 @@ source_refs: []
 # Science working model (h00)
 
 This is `science-meta`'s **explicit working model** — how the framework represents
-knowledge, evidence, and belief. Per `convention:project-working-model-h00`, `h00`
-is the umbrella the framework's ordinary hypotheses (`h01`–`h06`) and questions
-(`q01`–`q14`) are *facets of*; it is a **model**, not a testable conjecture
-(`role: working-model`). Full design, prior-art reconciliation, and open forks:
+knowledge, evidence, and belief. The user-facing version now lives in
+`docs/user-guide/science-model.md`; `h00` remains the working-model artifact the
+framework's ordinary hypotheses (`h01`–`h06`) and questions (`q01`–`q14`) are
+*facets of*. It is a **model**, not a testable conjecture (`role: working-model`).
+Full design, prior-art reconciliation, and open forks:
 `doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md` (the RFC).
 
 ## The model (one paragraph)
@@ -132,8 +133,7 @@ nonetheless contestable, and would be undermined if:
 
 These are model-revision triggers, evaluated through the facet hypotheses, not a
 pass/fail on `h00` itself. (Tooling note: the hypothesis validator requires this
-section; a `role: working-model`-aware exemption is a deferred follow-up named in
-`convention:project-working-model-h00`.)
+section; a `role: working-model`-aware exemption is a deferred follow-up.)
 
 ## Status & open forks
 

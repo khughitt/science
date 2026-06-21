@@ -163,6 +163,12 @@ _INJECTION_PHRASES = (
 )
 
 CODEX_SKILLS_ROOT = ROOT / "codex-skills"
+USER_GUIDE_DOC = "docs/" + "user-guide.md"
+PROJECT_ORGANIZATION_DOC = "docs/" + "project-organization-profiles.md"
+PROJECT_WORKING_MODEL_DOC = "docs/conventions/" + "project-working-model-" + "h00.md"
+PROJECT_WORKING_MODEL_STEM = "project-working-model-" + "h00"
+PROPOSITION_MODEL_DOC = "docs/" + "proposition-and-evidence-model.md"
+CLAIM_MODEL_DOC = "docs/" + "claim-and-evidence-model.md"
 
 
 def test_no_generated_skill_has_at_core_injection_guidance() -> None:
@@ -181,6 +187,27 @@ def test_no_generated_skill_has_at_core_injection_guidance() -> None:
     assert not offenders, (
         "Generated codex-skills must not instruct agents to insert @core/*.md includes. "
         "Regenerate via scripts/generate_codex_skills.py after editing commands/. "
+        f"Offenders: {offenders}"
+    )
+
+
+def test_no_generated_skill_references_retired_user_docs() -> None:
+    retired = (
+        USER_GUIDE_DOC,
+        PROJECT_ORGANIZATION_DOC,
+        PROJECT_WORKING_MODEL_DOC,
+        PROJECT_WORKING_MODEL_STEM,
+        PROPOSITION_MODEL_DOC,
+        CLAIM_MODEL_DOC,
+    )
+    offenders: list[str] = []
+    for skill_md in CODEX_SKILLS_ROOT.rglob("SKILL.md"):
+        text = skill_md.read_text(encoding="utf-8")
+        if any(token in text for token in retired):
+            offenders.append(str(skill_md.relative_to(ROOT)))
+
+    assert not offenders, (
+        "Generated codex-skills must be regenerated after user-guide doc migration. "
         f"Offenders: {offenders}"
     )
 

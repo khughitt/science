@@ -79,12 +79,13 @@ If no argument is provided, ask the user to describe their findings or point to 
 Follow the Science Codex Command Preamble before executing this skill. Use the `research-assistant` role prompt.
 
 Additionally:
-1. Read `docs/proposition-and-evidence-model.md`.
-2. Read `.ai/templates/interpretation.md` first; if not found, read `templates/interpretation.md`.
-3. Read active hypotheses in `specs/hypotheses/`.
-4. Read open questions in `doc/questions/`.
-5. Read relevant prior interpretations in `doc/interpretations/`.
-6. If an inquiry slug is involved, load it:
+1. Read `docs/user-guide/epistemic-model.md`.
+2. Read `docs/user-guide/evidence-lines.md`.
+3. Read `.ai/templates/interpretation.md` first; if not found, read `templates/interpretation.md`.
+4. Read active hypotheses in `specs/hypotheses/`.
+5. Read open questions in `doc/questions/`.
+6. Read relevant prior interpretations in `doc/interpretations/`.
+7. If an inquiry slug is involved, load it:
 
 ```bash
 uv run science inquiry show "<slug>" --format json

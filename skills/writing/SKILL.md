@@ -83,7 +83,7 @@ When writing any document, actively connect the content to the project's researc
 
 Avoid writing as if one result has proved a hypothesis or validated an edge unless that standard is genuinely met.
 
-For the project’s reasoning model, see `docs/proposition-and-evidence-model.md`.
+For the project's reasoning model, see `docs/user-guide/epistemic-model.md`.
 
 ## Formatting Conventions
 

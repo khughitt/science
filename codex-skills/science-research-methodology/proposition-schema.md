@@ -8,7 +8,8 @@ description: Use when authoring or updating proposition entities, hypothesis fro
 Project-specific schema for the Science proposition/evidence model. For the
 generic methodology layer (source hierarchy, evaluating sources, citation
 discipline), see [`SKILL.md`](./SKILL.md). For the prose explanation of the
-model, see `docs/proposition-and-evidence-model.md`.
+model, see `docs/user-guide/epistemic-model.md` and
+`docs/user-guide/evidence-lines.md`.
 
 When the project uses layered-claim metadata:
 
@@ -44,6 +45,42 @@ Methodological scaffolding (analysis methods, definitional/framework material,
 historical context) usually does **not** belong as a `proposition`. Use
 `method:`, `topic:`, or `discussion:` entity types instead - those don't
 require enum classification.
+
+## Bundle Membership and Roles
+
+`discusses:` declares which hypothesis/mechanism bundle(s) a proposition
+belongs to (materialized as `cito:discusses`). Each entry has a **membership
+role** that controls whether the proposition enters the bundle's weakest-link
+belief conjunction:
+
+- `core` (default) - a load-bearing claim of the bundle; **enters** the conjunction.
+- `rival` - a competing alternative to the bundle's claims; **excluded** from the conjunction.
+- `background` - contextual/governance/scoping material, not load-bearing; **excluded** from the conjunction.
+
+A bare string is sugar for `core`. Use the object form to assign a non-core role:
+
+```yaml
+discusses:
+- hypothesis:0001-foo            # core (bare string)
+- frame: hypothesis:0002-bar     # excluded from 0002's belief conjunction
+  role: background
+```
+
+A proposition has **exactly one role per bundle frame**. Excluded members are
+still listed as bundle members (they show up in coverage and neighborhood
+views); they just don't drag the weakest-link belief down.
+
+**Role assignment by authoring surface:**
+
+- `discusses:` frontmatter (above) — full role control via the `role:` field.
+- `knowledge/sources/local/relations.yaml` — a `cito:discusses` relation whose
+  object is a bundle (hypothesis/mechanism) now accepts an optional `role:` field
+  (absent = `core`). The store-CLI bridge also accepts `--bridge-role` when
+  ingesting a discusses edge from an external store. A `cito:discusses` relation
+  whose object is a non-bundle (e.g. a question or topic) is a plain structural
+  link with no membership role.
+- `sci:hasProposition` (mechanism steps) is always authoritatively `core` and
+  cannot be demoted.
 
 ## Companion Skills
 

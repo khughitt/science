@@ -180,7 +180,8 @@ Before writing any document, check:
 
 This prevents duplication and ensures new work connects to the existing knowledge base.
 
-For terminology and modeling details, see `docs/proposition-and-evidence-model.md`.
+For terminology and modeling details, see `docs/user-guide/epistemic-model.md`
+and `docs/user-guide/evidence-lines.md`.
 
 ## Template Usage
 

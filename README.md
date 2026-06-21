@@ -39,7 +39,7 @@ claude --plugin-dir /path/to/science
 For Codex, see [docs/README.codex.md](docs/README.codex.md). Codex support uses
 generated `science-*` skills from `codex-skills/`.
 
-The main manual is [docs/user-guide.md](docs/user-guide.md).
+The main manual is [docs/user-guide/index.md](docs/user-guide/index.md).
 
 ## Core Model
 
@@ -54,9 +54,11 @@ Science uses a layered reasoning model:
   propositions, datasets, transformations, and decisions
 - graph summaries and belief snapshots: derived views over authored sources
 
-For field-level detail, see
-[docs/proposition-and-evidence-model.md](docs/proposition-and-evidence-model.md).
-For workflow teaching, see [docs/user-guide.md](docs/user-guide.md).
+For the full model, see [docs/user-guide/science-model.md](docs/user-guide/science-model.md),
+[docs/user-guide/entities.md](docs/user-guide/entities.md), and
+[docs/user-guide/epistemic-model.md](docs/user-guide/epistemic-model.md).
+For evidence-line authoring, see
+[docs/user-guide/evidence-lines.md](docs/user-guide/evidence-lines.md).
 
 ## Fast Start
 
@@ -112,9 +114,12 @@ custom checks.
 
 ## Canonical References
 
-- [docs/user-guide.md](docs/user-guide.md): end-user workflow guide
-- [docs/proposition-and-evidence-model.md](docs/proposition-and-evidence-model.md): reasoning model and field-level detail
-- [docs/project-organization-profiles.md](docs/project-organization-profiles.md): project profiles and layout
+- [docs/user-guide/index.md](docs/user-guide/index.md): end-user workflow guide
+- [docs/user-guide/science-model.md](docs/user-guide/science-model.md): Science project and meta-model overview
+- [docs/user-guide/project-layout.md](docs/user-guide/project-layout.md): project layout and manifests
+- [docs/user-guide/entities.md](docs/user-guide/entities.md): entity file shape and core entity kinds
+- [docs/user-guide/epistemic-model.md](docs/user-guide/epistemic-model.md): propositions, hypotheses, belief, and uncertainty
+- [docs/user-guide/evidence-lines.md](docs/user-guide/evidence-lines.md): evidence-line authoring and evidence vocabulary
 - [docs/federation.md](docs/federation.md): peers, composite graphs, and cross-project references
 - [docs/conventions/validate.md](docs/conventions/validate.md): validation conventions
 - [docs/README.codex.md](docs/README.codex.md): Codex skill generation and installation

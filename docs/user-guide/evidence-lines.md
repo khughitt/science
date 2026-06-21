@@ -1,0 +1,76 @@
+# Evidence Lines
+
+An `evidence-line` is a durable, reviewable line of support or dispute. It links
+a source, result, observation, or interpretation to the proposition it bears on.
+
+## Core Fields
+
+```yaml
+stance: supports
+target: proposition:p01-example
+source: paper:Example2026
+evidence_type: empirical_data_evidence
+strength: moderate
+independence: independent
+independence_group: example-cohort-1
+evidence_role: direct_test
+```
+
+| Field | Purpose |
+|---|---|
+| `stance` | Whether the line `supports` or `disputes` the target. |
+| `target` | The proposition or epistemic target being evaluated. |
+| `source` | Citation, source entity, dataset, workflow run, or other provenance. |
+| `evidence_type` | Kind of evidence. |
+| `strength` | How strong this line is when honestly interpreted. |
+| `independence` | Whether this line is independent of other lines. |
+| `independence_group` | Shared group for lines that should not be double-counted as independent. |
+| `evidence_role` | How directly this line tests the target. |
+
+## Evidence Types
+
+Common evidence types:
+
+| Evidence Type | Use |
+|---|---|
+| `literature_evidence` | Prior publications, reviews, or meta-analyses. |
+| `empirical_data_evidence` | Observed or experimental data. |
+| `simulation_evidence` | Computational, mechanistic, or generative simulations. |
+| `benchmark_evidence` | Benchmark tasks, evaluation suites, or standardized comparisons. |
+| `expert_judgment` | Structured expert assessment. |
+| `negative_result` | Valid compatibility token for a null or negative result; model the stance and scope carefully. |
+
+`negative_result` is accepted for compatibility, but it is usually better
+understood as a result pattern. The line's `stance`, role, and scope should say
+what the null or negative result does to the target proposition.
+
+## Independence
+
+Multiple lines from the same cohort, instrument, source, or analysis family are
+not independent just because they are written as separate files. Use the same
+`independence_group` when support should be discounted as shared.
+
+## Worked Example
+
+```markdown
+---
+id: evidence-line:sleep-extension-reaction-time-pilot
+type: evidence-line
+title: "Pilot trial reports faster reaction time after sleep extension"
+status: active
+stance: supports
+target: proposition:p01-sleep-extension-reaction-time
+source: paper:Example2026
+evidence_type: empirical_data_evidence
+strength: moderate
+independence: independent
+independence_group: sleep-extension-reaction-time-pilot
+evidence_role: direct_test
+---
+
+# Pilot trial reports faster reaction time after sleep extension
+
+The study reports faster next-day reaction time in the sleep-extension arm.
+The line is a direct test of the proposition, but it remains only moderate
+because the sample is small and replication is not yet available.
+```

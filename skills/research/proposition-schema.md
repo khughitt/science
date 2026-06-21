@@ -8,7 +8,8 @@ description: Use when authoring or updating proposition entities, hypothesis fro
 Project-specific schema for the Science proposition/evidence model. For the
 generic methodology layer (source hierarchy, evaluating sources, citation
 discipline), see [`SKILL.md`](./SKILL.md). For the prose explanation of the
-model, see `docs/proposition-and-evidence-model.md`.
+model, see `docs/user-guide/epistemic-model.md` and
+`docs/user-guide/evidence-lines.md`.
 
 When the project uses layered-claim metadata:
 
