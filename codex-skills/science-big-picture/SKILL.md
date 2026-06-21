@@ -38,7 +38,7 @@ Before executing any research command:
 
    | Signal | Suggests |
    |---|---|
-   | Files in `specs/hypotheses/` | `hypothesis-testing` |
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
    | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
    | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
    | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
@@ -68,7 +68,7 @@ Before executing any research command:
    fall back to:
    `uv run --with <science-plugin-root>/science science <command>`
 
-Generate `doc/reports/synthesis/<hyp>.md` files (one per hypothesis), `doc/reports/synthesis/_emergent-threads.md`, and `doc/reports/synthesis.md` (project rollup).
+Generate `entities/reports/synthesis/<hyp>.md` files (one per hypothesis), `entities/reports/synthesis/_emergent-threads.md`, and `entities/reports/synthesis.md` (project rollup).
 
 See the design spec at `docs/specs/2026-04-18-project-big-picture-design.md` for full semantics.
 
@@ -79,7 +79,7 @@ Parse the user input for:
 - `--hypothesis <id>` — regenerate only one per-hypothesis file. Skip steps 3 and the non-targeted writes.
 - `--dry-run` — print what would be generated without writing.
 - `--commit` — auto-commit written files with `doc(big-picture): regenerate synthesis YYYY-MM-DD`.
-- `--snapshot` — after writing, copy `doc/reports/synthesis.md` to `doc/reports/synthesis-history/<YYYY-MM-DDTHHMMSSZ>.md`.
+- `--snapshot` — after writing, copy `entities/reports/synthesis.md` to `entities/reports/synthesis-history/<YYYY-MM-DDTHHMMSSZ>.md`.
 - `--since <date>` — produce a scoped Arc. **Requires `--output <path>`. Never overwrites canonical files.** If `--since` is set without `--output`, refuse with a clear error.
 
 ## Phase 1: Precompute
@@ -106,18 +106,18 @@ deterministic top-N priority rows.
 
 **Note on `graph gaps`**: unlike the other summaries, `graph gaps` requires a `CENTER` argument (the node to analyze around). It is **not** called globally in this phase. Per-hypothesis `gaps_slice` is computed during bundle assembly below, centered on each hypothesis ID.
 
-Enumerate hypotheses from `specs/hypotheses/*.md`.
+Enumerate hypotheses from `entities/hypotheses/*.md`.
 
 For each hypothesis, assemble a bundle. The bundle is a dictionary you construct in-memory — it is NOT persisted to disk:
 
 **Aspect filtering**. Before assembling bundles, load project aspects via `load_project_aspects` (or parse `science.yaml` directly). Compute `research_filter = project.aspects \ {software-development}`. Throughout bundle assembly, any entity whose resolved aspects (entity `aspects:` if set, else project `aspects:`) does NOT intersect `research_filter` is excluded from the bundle. This means software-oriented questions (e.g., ones explicitly tagged `aspects: [software-development]`) are dropped before hypothesis matching runs. If `research_filter` is empty, refuse to proceed and point the user at `science big-picture` — research synthesis is undefined on a software-only project.
 
-- `hypothesis_path`: path to the `specs/hypotheses/<id>.md` file.
+- `hypothesis_path`: path to the `entities/hypotheses/<id>.md` file.
 - `phase`: read `phase:` from the hypothesis frontmatter; default to `active` if absent.
 - `hypothesis_frontmatter`: parsed YAML.
 - `resolved_questions`: from the resolver output, all questions whose `hypotheses[]` contains this hypothesis. Annotate each with its confidence.
 - `tasks`: glob `tasks/*.md` and `tasks/done/*.md`; parse frontmatter; include entries whose `related:` mentions this hypothesis or any of its resolved questions **AND** whose resolved aspects intersect `research_filter`. If `tasks/active.md` is a single aggregated file (common pattern, e.g., mm30), scan its body for per-task headings and `related:` metadata instead of expecting one file per task.
-- `interpretations`: glob `doc/interpretations/*.md`; parse frontmatter; include entries that either (a) directly reference this hypothesis in `related:`, (b) reference a question whose **primary** hypothesis (per resolver output) is this hypothesis, or (c) appear by `interpretation:...` ID in this hypothesis spec's own `related:` frontmatter. Do NOT include interpretations that only reach this hypothesis via transitive-only questions (questions whose primary_hypothesis is a different hypothesis). This tightens transitive pull-in and prevents early work that is really "central to H<other>" from flooding this hypothesis's bundle. Rule (c) is the escape hatch for `weakened`/`proposed`/`candidate` hypotheses that have no resolved questions and that the hypothesis author has explicitly bound to specific interpretations — without it, weakened hypotheses can end up with bundles too sparse to synthesize against. For each included interpretation, parse its frontmatter `id:` field and pass both `path` and canonical `id:` in the bundle entry, so sub-agents can cite by canonical ID without falling back to filename inference. Apply the same `research_filter` aspect check.
+- `interpretations`: glob `entities/interpretations/*.md`; parse frontmatter; include entries that either (a) directly reference this hypothesis in `related:`, (b) reference a question whose **primary** hypothesis (per resolver output) is this hypothesis, or (c) appear by `interpretation:...` ID in this hypothesis spec's own `related:` frontmatter. Do NOT include interpretations that only reach this hypothesis via transitive-only questions (questions whose primary_hypothesis is a different hypothesis). This tightens transitive pull-in and prevents early work that is really "central to H<other>" from flooding this hypothesis's bundle. Rule (c) is the escape hatch for `weakened`/`proposed`/`candidate` hypotheses that have no resolved questions and that the hypothesis author has explicitly bound to specific interpretations — without it, weakened hypotheses can end up with bundles too sparse to synthesize against. For each included interpretation, parse its frontmatter `id:` field and pass both `path` and canonical `id:` in the bundle entry, so sub-agents can cite by canonical ID without falling back to filename inference. Apply the same `research_filter` aspect check.
 - `edges_yaml`: glob `doc/figures/dags/*.edges.yaml`; include any whose filename stem starts with this hypothesis ID. While assembling, build a set of interpretation IDs cited at the edge level (any `evidence:` or `anchor:` interpretation references inside each edge's metadata). Pass this set to the sub-agent as `edge_cited_interpretation_ids`: when an interpretation in the bundle is also covered by an `.edges.yaml` edge, the sub-agent should cite it through the edge (preserving the structural provenance) and treat its omission from the prose-level interpretation list as expected — not as a "bundle-unused" gap.
 - `uncertainty_slice`: filter the global uncertainty output to entries referring to this hypothesis or its resolved questions.
 - `gaps_slice`: run `uv run science graph gaps "hypothesis:<id>" --format json` for this hypothesis. Skip (empty slice) if the call errors because the hypothesis has no graph neighborhood yet.
@@ -175,7 +175,7 @@ The prompt passed to each sub-agent includes:
 - Project root path.
 - Hypothesis ID and `hypothesis_path`.
 - The bundle (inlined in the prompt as structured text — the sub-agent does not have access to your in-memory bundle directly).
-- Target output path: `doc/reports/synthesis/<hyp-id>.md`.
+- Target output path: `entities/reports/synthesis/<hyp-id>.md`.
 - Frontmatter: emit `type: synthesis` + `title: "Synthesis: <hyp-id>"` + `report_kind: hypothesis-synthesis` + `id: synthesis:<hyp-id>` + `hypothesis: hypothesis:<hyp-id>` + `generated_at` + `source_commit` + `provenance_coverage`. Do *not* emit `synthesized_from:` (the rollup carries that). `title` is required because projects may register `synthesis` as a profile kind. See `agents/hypothesis-synthesizer.md` for the full output spec.
 - `generated_at` and `source_commit` values.
 - `provenance_coverage` value.
@@ -195,7 +195,7 @@ The prompt includes:
 
 - Project root path.
 - Full resolver output (JSON from Phase 1).
-- Target output path: `doc/reports/synthesis/_emergent-threads.md`.
+- Target output path: `entities/reports/synthesis/_emergent-threads.md`.
 - Frontmatter: emit `type: synthesis` + `title: "Emergent threads - <project name>"` + `report_kind: emergent-threads` + `id: synthesis:emergent-threads` + `generated_at` + `source_commit` + `orphan_question_count` + `orphan_interpretation_count` + `orphan_ids: [...]`. Do *not* emit `synthesized_from:` — emergent-threads is graph-derived, not file-derived.
 - `generated_at` and `source_commit` values.
 
@@ -209,7 +209,7 @@ Skip this phase if `--hypothesis <id>` is set.
 
 After the dispatch phase completes, read back each just-written per-hypothesis file and the emergent-threads file. You (the orchestrator, on Opus 4.7) are the only agent with visibility across all hypotheses, so cross-hypothesis synthesis happens here — do not dispatch another sub-agent for this.
 
-Write `doc/reports/synthesis.md` with this structure:
+Write `entities/reports/synthesis.md` with this structure:
 
 The frontmatter follows the canonical synthesis shape documented in `templates/synthesis.md`. All three artifacts produced by this command (per-hypothesis files, `_emergent-threads.md`, and the project rollup) share `type: synthesis` and differ by `report_kind`. The validator (`meta/validate.sh` section 11a) warns when any `type: synthesis` file omits `report_kind`, and applies per-kind field requirements: `synthesis-rollup` must carry `synthesized_from`; `hypothesis-synthesis` must carry `hypothesis` and `provenance_coverage`; `emergent-threads` must carry `orphan_question_count`, `orphan_interpretation_count`, and `orphan_ids`.
 
@@ -227,7 +227,7 @@ generated_at: "<ISO-8601>"
 source_commit: "<SHA>"
 synthesized_from:
   - hypothesis: "hypothesis:<hyp-id>"
-    file: "doc/reports/synthesis/<hyp-id>.md"
+    file: "entities/reports/synthesis/<hyp-id>.md"
     sha: "<SHA>"
   # one entry per hypothesis
 emergent_threads_sha: "<SHA>"
@@ -240,7 +240,7 @@ Body sections (~1000–1500 words total):
 - **TL;DR** — 5–7 bullets, most salient project-wide facts. Distilled from each per-hypothesis State, not a per-hypothesis recap.
 - **State** — cross-hypothesis consolidation. What the project collectively believes, where the strongest evidence sits, what's contested.
 - **Arc** — one paragraph per **active** hypothesis (those whose bundle has `phase == "active"` or whose hypothesis file omits `phase:`), plus a framing paragraph on how the active hypotheses relate. Candidate hypotheses are not included here; they appear in the Candidate frames section below.
-- **Research fronts** — ranked list across **active** hypotheses only. Signals: uncertainty density, recent activity, explicit task priority. Cite source: "from <hyp-id>" for each front. Candidate hypotheses do not contribute to this section; their fronts (if any) appear inside their per-hypothesis files at `doc/reports/synthesis/<id>.md`.
+- **Research fronts** — ranked list across **active** hypotheses only. Signals: uncertainty density, recent activity, explicit task priority. Cite source: "from <hyp-id>" for each front. Candidate hypotheses do not contribute to this section; their fronts (if any) appear inside their per-hypothesis files at `entities/reports/synthesis/<id>.md`.
 - **Candidate frames** — one paragraph per hypothesis whose bundle has `phase == "candidate"`. Same citation, grounding, and length rules as the per-hypothesis files. If no candidates exist, emit a single line: `No candidate hypotheses.` Do not suppress the section. Active hypotheses are NOT mentioned here — they appear in the Arc and Research-fronts sections only.
 - **Knowledge Gaps (rollup)** — The orchestrator reuses the `all_gaps` list computed in Phase 1 (no second call to `compute_topic_gaps`). Render the top 10 entries (by `gap_score` desc, ties broken by topic ID asc) as a markdown table with columns: Topic, Coverage, Demand, Gap, Hypotheses. If `all_gaps` is empty, emit the one-liner: "No knowledge gaps detected this run." and skip the table. Per-hypothesis files render their own Knowledge Gaps sub-bullet inside Research Fronts per the spec (with a rendering cap of 5 `demanding_questions` IDs + "… and N more" tail).
 - **Emergent threads** — 2–3 sentence pointer to `_emergent-threads.md`. Include the orphan-question count.
@@ -248,8 +248,8 @@ Body sections (~1000–1500 words total):
 Computing SHAs:
 
 ```bash
-git hash-object doc/reports/synthesis/<hyp-id>.md
-git hash-object doc/reports/synthesis/_emergent-threads.md
+git hash-object entities/reports/synthesis/<hyp-id>.md
+git hash-object entities/reports/synthesis/_emergent-threads.md
 ```
 
 **Orphan-question counting**:
@@ -264,14 +264,14 @@ All canonical artifacts are overwritten on regen.
 
 - Per-hypothesis files: already written by sub-agents in Phase 2.
 - Emergent-threads file: already written by sub-agent in Phase 2.
-- Project rollup: write `doc/reports/synthesis.md` (from Phase 3).
+- Project rollup: write `entities/reports/synthesis.md` (from Phase 3).
 
 If `--snapshot` is set:
 
 ```bash
-mkdir -p doc/reports/synthesis-history
+mkdir -p entities/reports/synthesis-history
 ts="$(date -u +%Y-%m-%dT%H%M%SZ)"
-cp doc/reports/synthesis.md "doc/reports/synthesis-history/${ts}.md"
+cp entities/reports/synthesis.md "entities/reports/synthesis-history/${ts}.md"
 ```
 
 If `--dry-run` is set: do not write any files. Print, for each intended file, the target path and a summary (section word counts). Do not invoke sub-agents.
@@ -295,8 +295,8 @@ The staleness warning is informational — do not block execution.
 
 If `--since <date>` is set:
 
-- Require `--output <path>` as well. If absent, refuse with: "`--since` requires `--output <path>` to avoid overwriting canonical artifacts. Pass `--output doc/reports/some-scoped-name.md`."
-- Do NOT write canonical files (`doc/reports/synthesis.md`, `doc/reports/synthesis/`, `_emergent-threads.md`). Write only to `--output`.
+- Require `--output <path>` as well. If absent, refuse with: "`--since` requires `--output <path>` to avoid overwriting canonical artifacts. Pass `--output entities/reports/some-scoped-name.md`."
+- Do NOT write canonical files (`entities/reports/synthesis.md`, `entities/reports/synthesis/`, `_emergent-threads.md`). Write only to `--output`.
 - In the output, include `since: <date>` in frontmatter, and a banner at the top: `> **Scoped synthesis:** includes only activity after <date>. Not the authoritative project synthesis.`
 
 ## Output to user

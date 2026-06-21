@@ -38,7 +38,7 @@ Before executing any research command:
 
    | Signal | Suggests |
    |---|---|
-   | Files in `specs/hypotheses/` | `hypothesis-testing` |
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
    | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
    | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
    | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
@@ -91,7 +91,7 @@ For brevity, examples write just `science <command>` — **always expand to `uv 
 - **MUST** challenge every causal edge for reverse causation and alternative explanations
 - **MUST** check for missing confounders systematically
 - **MUST** assess identifiability (can the target effect be estimated from observables?)
-- **MUST** write review report to `doc/inquiries/<slug>-critique.md`
+- **MUST** write review report to `entities/inquiries/<slug>-critique.md`
 - **MUST NOT** dismiss concerns as "minor" or "unlikely" — surface all issues
 - **SHOULD** reference `references/dag-two-axis-evidence-model.md` for pitfall patterns
 
@@ -125,7 +125,7 @@ that is not yet registered as a graph-backed causal inquiry.
   threats that should shape the future DAG.
 - Do not claim formal adjustment-set review, back-door validation, or pgmpy
   identifiability analysis.
-- Save the report to `doc/inquiries/<slug>-critique.md` and label it
+- Save the report to `entities/inquiries/<slug>-critique.md` and label it
   "pre-DAG critique" in the title or reviewed-status line.
 
 Skip Step 2 for pre-DAG mode; resume at Step 3 using the candidate relationships
@@ -226,7 +226,7 @@ Include a sensitivity summary table in the review report:
 
 ### Step 7: Write review report
 
-Save to `doc/inquiries/<slug>-critique.md`:
+Save to `entities/inquiries/<slug>-critique.md`:
 
 ```markdown
 # Causal DAG Critique: <label>

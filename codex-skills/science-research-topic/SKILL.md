@@ -38,7 +38,7 @@ Before executing any research command:
 
    | Signal | Suggests |
    |---|---|
-   | Files in `specs/hypotheses/` | `hypothesis-testing` |
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
    | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
    | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
    | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
@@ -78,7 +78,7 @@ This command runs in two roles. Determine which you are before proceeding.
 
 (You received the `/research-topic` slash command directly from the user.)
 
-1. **Pre-dispatch check:** Look at `doc/topics/` for existing coverage of the topic. If a file likely overlaps, ask the user whether to overwrite, skip, or produce a supplementary synthesis. Pass their decision into the subagent prompt.
+1. **Pre-dispatch check:** Look at `entities/topics/` for existing coverage of the topic. If a file likely overlaps, ask the user whether to overwrite, skip, or produce a supplementary synthesis. Pass their decision into the subagent prompt.
 2. **Dispatch** the `topic-researcher` subagent via the Agent tool:
    - `subagent_type: topic-researcher`
    - `description`: a short identifier for the topic
@@ -96,8 +96,8 @@ Follow the Science Codex Command Preamble before executing this skill. Use the `
 
 Additionally:
 1. Read `.ai/templates/background-topic.md` first; if not found, read `templates/background-topic.md`.
-2. Check `doc/topics/` for existing coverage; ask before overwriting.
-3. Check `doc/papers/` for relevant summaries.
+2. Check `entities/topics/` for existing coverage; ask before overwriting.
+3. Check `entities/papers/` for relevant summaries.
 
 ## Research Process
 
@@ -108,7 +108,7 @@ Additionally:
 ## Writing
 
 Follow `.ai/templates/background-topic.md` first, then `templates/background-topic.md`, and fill all sections.
-Save to `doc/topics/<topic-slug>.md`.
+Save to `entities/topics/<topic-slug>.md`.
 
 The output should include:
 
@@ -122,7 +122,7 @@ If loaded aspects contribute additional sections (e.g., Tooling & Implementation
 ## After Writing
 
 1. Add new references to `papers/references.bib` (create with header if missing).
-2. Add newly surfaced questions to `doc/questions/` using `.ai/templates/question.md` first, then `templates/question.md`.
+2. Add newly surfaced questions to `entities/questions/` using `.ai/templates/question.md` first, then `templates/question.md`.
 3. Commit: `git add -A && git commit -m "doc: research topic <topic>"`
 
 Note: "Offer to create follow-up tasks via `science tasks add`" is intentionally deferred to the orchestrator — it is a user-interactive step and the subagent cannot prompt the user directly.
@@ -133,7 +133,7 @@ After the subagent returns its report:
 
 1. Review the scope the subagent settled on. If it narrowed too aggressively (or not enough), flag that to the user before moving on.
 2. Review suggested follow-up research tasks in the subagent's report. Offer to create them via `science tasks add`, grouping related items where sensible and including the rationale the subagent provided.
-3. If the subagent flagged contradictions or open questions that overlap existing hypotheses in `specs/hypotheses/`, make small follow-up edits as a separate commit.
+3. If the subagent flagged contradictions or open questions that overlap existing hypotheses in `entities/hypotheses/`, make small follow-up edits as a separate commit.
 4. Read the written synthesis only if you need its content for downstream reasoning. Otherwise, trust the report.
 
 ## Process Reflection

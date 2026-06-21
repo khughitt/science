@@ -20,7 +20,7 @@ leaving it a footnote in the pre-reg or bias audit — surfaces the specific
 discriminating tests that would adjudicate it, which the upstream documents
 rarely expose on their own.
 
-If no arguments are provided, scan `specs/hypotheses/` and propose a high-value pair.
+If no arguments are provided, scan `entities/hypotheses/` and propose a high-value pair.
 
 ## Setup
 
@@ -29,8 +29,8 @@ Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-a
 Additionally:
 1. Read `${CLAUDE_PLUGIN_ROOT}/docs/user-guide/epistemic-model.md`.
 2. Read `.ai/templates/comparison.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/comparison.md`.
-3. Read relevant hypotheses in `specs/hypotheses/`.
-4. Read existing evidence in `doc/topics/`, `doc/papers/`, `doc/interpretations/`, and `doc/discussions/`.
+3. Read relevant hypotheses in `entities/hypotheses/`.
+4. Read existing evidence in `entities/topics/`, `entities/papers/`, `entities/interpretations/`, and `entities/discussions/`.
 
 ## Workflow
 
@@ -110,7 +110,7 @@ Ask whether the hypotheses are:
 ## Writing
 
 Follow `.ai/templates/comparison.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/comparison.md`.
-Save to `doc/discussions/comparison-<slug>.md`.
+Save to `entities/discussions/comparison-<slug>.md`.
 
 ## After Writing
 

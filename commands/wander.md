@@ -26,8 +26,8 @@ Generate a walk path and run the CLI:
 
 ```bash
 WALK_ID="$(date +%Y-%m-%d-%H%M)"
-WALK_PATH="doc/meta/walks/walk-${WALK_ID}.md"
-mkdir -p doc/meta/walks
+WALK_PATH="entities/meta/walks/walk-${WALK_ID}.md"
+mkdir -p entities/meta/walks
 uv run science wander --format markdown --out "${WALK_PATH}" \
   <forwarded flags from $ARGUMENTS, EXCLUDING --apply>
 ```

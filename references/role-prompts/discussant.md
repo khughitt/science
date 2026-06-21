@@ -13,7 +13,7 @@ Use this role profile when stress-testing ideas, hypotheses, or approaches throu
 
 1. `specs/research-question.md`
 2. Focus artifacts (relevant hypothesis, question, or topic docs)
-3. `doc/questions/`
+3. `entities/questions/`
 4. `tasks/active.md`
 5. Skills: `research-methodology` and `scientific-writing`
 

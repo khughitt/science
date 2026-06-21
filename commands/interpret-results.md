@@ -18,9 +18,9 @@ Additionally:
 1. Read `${CLAUDE_PLUGIN_ROOT}/docs/user-guide/epistemic-model.md`.
 2. Read `${CLAUDE_PLUGIN_ROOT}/docs/user-guide/evidence-lines.md`.
 3. Read `.ai/templates/interpretation.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/interpretation.md`.
-4. Read active hypotheses in `specs/hypotheses/`.
-5. Read open questions in `doc/questions/`.
-6. Read relevant prior interpretations in `doc/interpretations/`.
+4. Read active hypotheses in `entities/hypotheses/`.
+5. Read open questions in `entities/questions/`.
+6. Read relevant prior interpretations in `entities/interpretations/`.
 7. If an inquiry slug is involved, load it:
 
 ```bash
@@ -48,7 +48,7 @@ If given a directory, scan for result files and summarize what is available.
 - **Update mode:** an interpretation already exists; update framework implications without rewriting the whole narrative
 - **Dev mode:** the result is about tooling or workflow rather than substantive empirical evidence. Use the dedicated `templates/interpretation-dev.md` (see Writing below) — the empirical-mode sections are dead weight for infrastructure work.
 - **Conceptual mode:** the input is a discussion document, synthesis, or free-form user observations — not empirical data, notebooks, or pipeline output. Auto-select this mode when:
-  - the input is a `doc/discussions/*.md` file
+  - the input is a `entities/discussions/*.md` file
   - the user describes observations or insights without pointing to data files
   - the input has no associated data quality characteristics (no sample counts, effect sizes, or controls)
 
@@ -192,7 +192,7 @@ Also ask:
 
 **Suspiciously good results:** When results substantially exceed pre-registered upper bounds (observed >> expected), do not accept them uncritically. Before proceeding:
 - Enumerate plausible inflators: confounds, data leakage, overfitting, control inadequacy
-- Reference the pre-registration document (in `doc/meta/pre-registration-*.md`) and compare observed vs. expected range explicitly
+- Reference the pre-registration document (in `entities/pre-registrations/*.md`) and compare observed vs. expected range explicitly
 - State whether the result survives scrutiny or needs additional verification
 - For epistemic-target pre-regs, an out-of-range result is `disputes` evidence weighted by the pre-reg's commitment — it does not invalidate the hypothesis on its own.
 
@@ -280,7 +280,7 @@ After analyzing results, create structured entities in addition to the prose doc
 - **Partially-migrated project (no `knowledge/graph.trig`).** Every `science graph …` command below
   will error. Do not try them per-command and accept the failures — instead route the structured
   output to **source-authored files** (the durable path below), and keep the interpretation itself in
-  `doc/interpretations/` via `science interpretations create`. Note this in the output mode line.
+  `entities/interpretations/` via `science interpretations create`. Note this in the output mode line.
 - **`graph add` is non-durable even when the graph exists.** `science graph add
   observation/proposition/evidence/finding` writes *directly into* `graph.trig` and is **wiped on the
   next `science graph build`** (the CLI prints this warning). Use `graph add` only for throwaway
@@ -297,7 +297,7 @@ After analyzing results, create structured entities in addition to the prose doc
   - **Observation** → it has no standalone source entity; **anchor it inside** a proposition,
     finding, or interpretation source file rather than as a free-standing `graph add observation`.
   - **Evidence with stance / strength / independence** → author an **evidence-line** entity under
-    `doc/evidence-lines/*.md` (kind `evidence-line`), which the build reads and materializes; or
+    `entities/evidence-lines/*.md` (kind `evidence-line`), which the build reads and materializes; or
     express the relation inside the proposition/finding/interpretation source file. (Do not rely on a
     bare `graph add evidence` edge — it does not survive the build.)
   - **Interpretation / finding** → `science interpretations create` (step 5 below) produces a durable
@@ -321,7 +321,7 @@ source-authored form above when the entity must persist.
 5. Create the interpretation as a source-authored entity:
    `science interpretations create "<summary>" --input <data-package-ref> --related <finding-or-proposition-ref>`
 
-   This places the file under `doc/interpretations/<today>-<slug>.md` with canonical frontmatter and runs prospective validation. Prefer this over the older `science graph add interpretation`, which still works but does not produce a durable source document.
+   This places the file under `entities/interpretations/<today>-<slug>.md` with canonical frontmatter and runs prospective validation. Prefer this over the older `science graph add interpretation`, which still works but does not produce a durable source document.
 
 ### 6. Surface New Questions
 
@@ -374,7 +374,7 @@ Pick the template that matches the mode:
 - **Dev mode:** follow `.ai/templates/interpretation-dev.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/interpretation-dev.md`. Skip the empirical sections (Evidence Quality, Data Quality Checks, Proposition-Level Updates, Evidence vs. Open Questions) entirely — the dev template omits them on purpose.
 - **All other modes (write / update / conceptual):** follow `.ai/templates/interpretation.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/interpretation.md`.
 
-If the project uses open questions rather than formal hypotheses, adapt section headers in the output document accordingly — e.g., "Question-Level Implications" instead of "Hypothesis-Level Implications". Evaluate against questions in `doc/questions/` rather than hypothesis files in `specs/hypotheses/`.
+If the project uses open questions rather than formal hypotheses, adapt section headers in the output document accordingly — e.g., "Question-Level Implications" instead of "Hypothesis-Level Implications". Evaluate against questions in `entities/questions/` rather than hypothesis files in `entities/hypotheses/`.
 
 Create the interpretation file with `science interpretations create`:
 
@@ -384,14 +384,14 @@ uv run science interpretations create "<short title>" \
   --related <hypothesis:hNN-...|question:qNN-...>
 ```
 
-The tool builds the canonical `interpretation:<today>-<slug>` ID, places the file under `doc/interpretations/`, writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`), and runs prospective validation. `--input` maps to `source_refs`; `--related` is repeatable. After creation, open the file and fill the body using the template — preserve the frontmatter the tool produced. Add custom fields (e.g. `input` if the project schema requires it) by editing the frontmatter directly.
+The tool builds the canonical `interpretation:<today>-<slug>` ID, places the file under `entities/interpretations/`, writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`), and runs prospective validation. `--input` maps to `source_refs`; `--related` is repeatable. After creation, open the file and fill the body using the template — preserve the frontmatter the tool produced. Add custom fields (e.g. `input` if the project schema requires it) by editing the frontmatter directly.
 
 ## After Writing
 
 1. Update relevant hypothesis documents with new support/dispute and uncertainty notes. For metadata changes use `science entity edit <ref> --status ...`; for body changes edit the file in place. Do not mechanically flip statuses to `supported` or `rejected`.
 2. **New questions surfaced:** create them with `science questions create "<text>" [--related <ref>] [--source-ref <ref>]`. To attach the new question to the interpretation, run `science entity edit <interpretation-ref> --related <question-ref>`.
 3. Update tasks via `science tasks`.
-Write durable result interpretations under `doc/interpretations/`, and when the findings change the project-level narrative or current state substantially, summarize that in `doc/reports/` as well.
+Write durable result interpretations under `entities/interpretations/`, and when the findings change the project-level narrative or current state substantially, summarize that in `entities/reports/` as well.
 4. If graph updates were proposed, point the user to the exact proposition or evidence updates to make.
 5. If the project still lacks proposition-backed evidence summaries, say that it appears partially migrated and that interpretation quality is constrained by that gap.
 6. Suggest next steps:

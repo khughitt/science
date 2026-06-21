@@ -11,27 +11,24 @@ Use `$ARGUMENTS` as optional filters, for example: `dev only`, `this week`, `rel
 
 Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
-**Resolve the next-steps home (layout-aware).** Next-steps files are `type: meta`
-entities. Where they live depends on `layout_version` in `science.yaml`:
+**Next-steps home.** Next-steps files are `type: meta` entities and live under
+`entities/meta/`, named with a zero-padded numeric prefix:
+`entities/meta/<NNNN>-next-steps-<YYYY-MM-DD>.md`. Pick `<NNNN>` as the next free
+index in `entities/meta/`. The validator rejects `type: meta` entities placed
+outside `entities/meta/`.
 
-- **`layout_version: 3`** → `entities/meta/`, named with a zero-padded numeric
-  prefix: `entities/meta/<NNNN>-next-steps-<YYYY-MM-DD>.md`. Pick `<NNNN>` as the
-  next free index in `entities/meta/`. The validator rejects `type: meta`
-  entities placed outside `entities/meta/`.
-- **legacy (v2 / no `layout_version`)** → `doc/meta/next-steps-<YYYY-MM-DD>.md`.
-
-Throughout this command, **`<meta-home>`** means the resolved directory above and
-**`<meta-home>/*next-steps-*.md`** matches prior analyses in either layout (the
-glob tolerates the optional `<NNNN>-` prefix). Resolve this once, up front, and
-use it for every read, scan, and write below.
+Throughout this command, **`<meta-home>`** means `entities/meta/` and
+**`<meta-home>/*next-steps-*.md`** matches prior analyses (the glob tolerates the
+optional `<NNNN>-` prefix). Resolve this once, up front, and use it for every
+read, scan, and write below.
 
 Additionally, read (skip any that don't exist):
 1. `tasks/active.md`
 2. Recent completed tasks: scan `tasks/done/` for the most recent file
 3. **Hypothesis and question status:** run `science project index --format json` to get a compact index of all hypotheses and questions with their titles and statuses. Only read individual files when you need full detail (e.g., to assess evidence quality for a specific hypothesis).
 4. `specs/scope-boundaries.md` — project scope
-5. `doc/topics/` or equivalent topic coverage files in the doc directory
-6. `doc/papers/` — paper coverage
+5. `entities/topics/` or equivalent topic coverage files in the doc directory
+6. `entities/papers/` — paper coverage
 7. `<meta-home>/*next-steps-*.md` — prior next-steps analyses (most recent)
 
 Also run: `git log --oneline -15 --format="%h %s (%cr)"`
@@ -77,7 +74,7 @@ From `tasks/active.md`, show:
 
 **Fallback when no manifests exist.** Some projects have rich results without `datapackage.json` files. If `find results/ -name datapackage.json` returns nothing:
 - Infer run bundles from `results/**/` directory conventions instead — most commonly dated subdirectories (`results/YYYY-MM-DD-<slug>/` or `results/<slug>/`) containing a `report.md` / `summary.md` / notebook outputs.
-- Report: recent bundles by directory mtime (last 7 days), bundles whose name appears superseded by a later one with the same slug, bundles with no linking interpretation under `doc/interpretations/`.
+- Report: recent bundles by directory mtime (last 7 days), bundles whose name appears superseded by a later one with the same slug, bundles with no linking interpretation under `entities/interpretations/`.
 - Be explicit in the output that these are inferred from directory conventions, not declared manifests — readers should not assume datapackage-grade provenance.
 - Skip the section entirely if neither manifests nor a recognizable `results/` convention exists; do not pad with low-signal noise.
 
@@ -118,7 +115,7 @@ Scan pipeline plans in `entities/plans/` for implementation tasks that are not t
 Scan active analysis-facing tasks and inquiries for linked `analysis-plan:<slug>`
 artifacts. If none exists and the task is about running, validating, or
 pre-registering a data analysis, add a recommended next action to run
-`/science:plan-analysis`. Check `entities/plans/*-analysis-plan.md` before
+`/science:plan-analysis`. Check `entities/analysis-plan/*-analysis-plan.md` before
 recommending a new one.
 
 **Archive lag.** Run `science health --format json` and inspect `archive_lag`. When `archive_lag.done_in_active` or `archive_lag.retired_in_active` is non-zero, add a Recommended Next Action:
@@ -146,7 +143,7 @@ If status is `locally_modified` or `missing`, point at the corresponding verb (`
 Before recommending next actions, audit task status against on-disk evidence. For each task in `tasks/active.md` with status `proposed`, `blocked`, or `in_progress`, check whether the work appears already done by scanning for any of:
 
 - a result file under `results/` whose path or `datapackage.json` references the task ID
-- a doc under `doc/interpretations/`, `doc/findings/`, `doc/reports/`, or `doc/discussions/` whose frontmatter `source_refs` includes the task ID
+- a doc under `entities/interpretations/`, `entities/findings/`, `entities/reports/`, or `entities/discussions/` whose frontmatter `source_refs` includes the task ID
 - recent git commits (since the task was added) whose message body mentions the task ID
 - a workflow-run manifest whose `tasks` list includes the task ID
 
@@ -212,24 +209,23 @@ For each suggestion, include:
 
 ## Writing
 
-Save output to `<meta-home>/[<NNNN>-]next-steps-<YYYY-MM-DD>.md` (use the resolved
-`<meta-home>` and, under v3, the `<NNNN>-` numeric prefix). If a file for today
-already exists (delta mode), append an `## Update — HH:MM` section instead of
-creating a new file.
+Save output to `<meta-home>/<NNNN>-next-steps-<YYYY-MM-DD>.md` (use the resolved
+`<meta-home>` and the `<NNNN>-` numeric prefix). If a file for today already
+exists (delta mode), append an `## Update — HH:MM` section instead of creating a
+new file.
 
-Set the frontmatter `id` to match the filename-derived canonical id: under v3
-that is `meta:<NNNN>-next-steps-<YYYY-MM-DD>`; in the legacy layout it is
-`meta:next-steps-<YYYY-MM-DD>`.
+Set the frontmatter `id` to match the filename-derived canonical id:
+`meta:<NNNN>-next-steps-<YYYY-MM-DD>`.
 
 ```markdown
 ---
-id: "meta:[<NNNN>-]next-steps-YYYY-MM-DD"
+id: "meta:<NNNN>-next-steps-YYYY-MM-DD"
 type: "meta"
 title: "Next Steps — YYYY-MM-DD"
 status: "active"
 created: "YYYY-MM-DD"
 updated: "YYYY-MM-DD"
-prior: "meta:[<NNNN>-]next-steps-<predecessor-date>"  # canonical id of predecessor; see "Resolve prior link" below; omit if no predecessor
+prior: "meta:<NNNN>-next-steps-<predecessor-date>"  # canonical id of predecessor; see "Resolve prior link" below; omit if no predecessor
 related: []
 ---
 
@@ -292,19 +288,7 @@ If sync is stale, include a note in the Recommended Next Actions table:
 
 ### Resolve prior link
 
-Before writing the file, list `<meta-home>/*next-steps-*.md`. **Exclude any file dated today** (delta-mode appends to that file rather than creating a new one, so the predecessor must be the most recent file *strictly before* today). From the remaining files, select the one with the lexically-greatest `YYYY-MM-DD` in its filename. Set `prior:` to that file's canonical id — `meta:<NNNN>-next-steps-<that-date>` under v3, or `meta:next-steps-<that-date>` in the legacy layout (read the predecessor's frontmatter `id` rather than reconstructing it). If no predecessor exists (this is the first next-steps file in the project), omit the `prior:` field entirely.
-
-> ⚠️ Under `layout_version: 3`, prior analyses live in `entities/meta/`, **not**
-> `doc/meta/`. Globbing only `doc/meta/` on a v3 project silently finds nothing
-> and the run will wrongly conclude "no predecessor / first analysis." Always
-> scan the resolved `<meta-home>`.
->
-> ⚠️ **Transitional fallback (v3 only):** a project migrated from v2 may still
-> have an orphaned predecessor under the legacy `doc/meta/` (e.g. a next-steps
-> file written just before the entities/ cutover). If the resolved `<meta-home>`
-> (`entities/meta/`) yields **no** predecessor, also scan `doc/meta/*next-steps-*.md`
-> before concluding "first analysis." If you find one there, use it as `prior:`
-> and flag that the orphaned file should be moved into `entities/meta/`.
+Before writing the file, list `<meta-home>/*next-steps-*.md`. **Exclude any file dated today** (delta-mode appends to that file rather than creating a new one, so the predecessor must be the most recent file *strictly before* today). From the remaining files, select the one with the lexically-greatest `YYYY-MM-DD` in its filename. Set `prior:` to that file's canonical id — `meta:<NNNN>-next-steps-<that-date>` (read the predecessor's frontmatter `id` rather than reconstructing it). If no predecessor exists (this is the first next-steps file in the project), omit the `prior:` field entirely.
 
 Delta mode (append `## Update — HH:MM` to today's existing file) does **not** change the file's `prior:` — the chain link is per-file, not per-update.
 
@@ -315,7 +299,7 @@ Projects that historically use `prior_analyses: [...]` (e.g. protein-landscape) 
 1. Save to `<meta-home>/[<NNNN>-]next-steps-<YYYY-MM-DD>.md`. In delta mode, append to the existing file rather than creating a new one — git tracks history, so overwriting the date-stamped file is acceptable.
 2. Offer to create tasks from recommended items: "Create tasks from these suggestions?"
    - If accepted, run `science tasks add` for each recommended task with appropriate priority, type, and related entities
-3. Cross-link relevant items in `doc/questions/`.
+3. Cross-link relevant items in `entities/questions/`.
 4. Commit: `git add -A && git commit -m "doc: next steps and gap analysis <date>"`
 
 ## Process Reflection

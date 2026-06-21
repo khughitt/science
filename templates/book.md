@@ -50,7 +50,7 @@ _template:
 
 ## Chapter Map
 
-<!-- Table: chapter # -> link to ../../doc/books/<citekey>/chNN-*.md -> one-line gist. -->
+<!-- Table: chapter # -> link to ../../entities/books/<citekey>/chNN-*.md -> one-line gist. -->
 
 | # | Chapter | Gist |
 |---|---------|------|

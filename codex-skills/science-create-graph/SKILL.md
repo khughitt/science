@@ -38,7 +38,7 @@ Before executing any research command:
 
    | Signal | Suggests |
    |---|---|
-   | Files in `specs/hypotheses/` | `hypothesis-testing` |
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
    | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
    | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
    | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
@@ -135,8 +135,8 @@ knowledge_profiles:
 For each project entity:
 
 1. Put first-class research objects in typed markdown docs:
-   - hypotheses in `specs/hypotheses/`
-   - questions in `doc/questions/`
+   - hypotheses in `entities/hypotheses/`
+   - questions in `entities/questions/`
    - interpretations, discussions, pre-registrations, bias audits, methods, datasets, and similar entities in their typed `doc/` locations
 2. Keep task links in `tasks/*.md` `related:` / `blocked-by:` fields using canonical IDs.
 3. Put unresolved but legitimate project-local semantics in `knowledge/sources/<local-profile>/`:
@@ -169,7 +169,7 @@ Fix every unresolved reference in the canonical sources before building:
 - convert legacy short IDs to canonical IDs
 - add explicit aliases in `mappings.yaml` when a temporary migration bridge is still needed
 - add missing local-profile entities for legitimate project-local concepts
-- add `theme` markdown entities under `doc/themes/` when the missing node is a durable cross-cutting organizing frame that links multiple questions, hypotheses, tasks, reports, methods, concepts, child projects, or guardrails.
+- add `theme` markdown entities under `entities/themes/` when the missing node is a durable cross-cutting organizing frame that links multiple questions, hypotheses, tasks, reports, methods, concepts, child projects, or guardrails.
 
 ### Step 4: Materialize the graph
 

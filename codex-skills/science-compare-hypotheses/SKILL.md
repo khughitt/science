@@ -38,7 +38,7 @@ Before executing any research command:
 
    | Signal | Suggests |
    |---|---|
-   | Files in `specs/hypotheses/` | `hypothesis-testing` |
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
    | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
    | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
    | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
@@ -84,7 +84,7 @@ leaving it a footnote in the pre-reg or bias audit — surfaces the specific
 discriminating tests that would adjudicate it, which the upstream documents
 rarely expose on their own.
 
-If no arguments are provided, scan `specs/hypotheses/` and propose a high-value pair.
+If no arguments are provided, scan `entities/hypotheses/` and propose a high-value pair.
 
 ## Setup
 
@@ -93,8 +93,8 @@ Follow the Science Codex Command Preamble before executing this skill. Use the `
 Additionally:
 1. Read `docs/user-guide/epistemic-model.md`.
 2. Read `.ai/templates/comparison.md` first; if not found, read `templates/comparison.md`.
-3. Read relevant hypotheses in `specs/hypotheses/`.
-4. Read existing evidence in `doc/topics/`, `doc/papers/`, `doc/interpretations/`, and `doc/discussions/`.
+3. Read relevant hypotheses in `entities/hypotheses/`.
+4. Read existing evidence in `entities/topics/`, `entities/papers/`, `entities/interpretations/`, and `entities/discussions/`.
 
 ## Workflow
 
@@ -174,7 +174,7 @@ Ask whether the hypotheses are:
 ## Writing
 
 Follow `.ai/templates/comparison.md` first, then `templates/comparison.md`.
-Save to `doc/discussions/comparison-<slug>.md`.
+Save to `entities/discussions/comparison-<slug>.md`.
 
 ## After Writing
 

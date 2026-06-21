@@ -81,7 +81,7 @@ Examples: small sample size, model dependence, single dataset, weak controls.
 
 ## Related
 
-- Hypothesis: `specs/hypotheses/<hypothesis-id>.md`
-- Inquiry: `doc/inquiries/<inquiry-slug>.md`
-- Pipeline: `doc/plans/<pipeline-plan>.md`
+- Hypothesis: `entities/hypotheses/<hypothesis-id>.md`
+- Inquiry: `entities/inquiries/<inquiry-slug>.md`
+- Pipeline: `entities/plans/<pipeline-plan>.md`
 - Data: `data/processed/<output>`

@@ -38,7 +38,7 @@ Before executing any research command:
 
    | Signal | Suggests |
    |---|---|
-   | Files in `specs/hypotheses/` | `hypothesis-testing` |
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
    | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
    | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
    | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
@@ -345,7 +345,7 @@ If created, keep it strategic only:
 
 Do not put task-queue bookkeeping in it.
 
-For `software` projects, prefer `README.md` and `doc/plans/` unless the user explicitly wants a separate root-level plan file.
+For `software` projects, prefer `README.md` and `entities/plans/` unless the user explicitly wants a separate root-level plan file.
 
 ### `tasks/active.md`
 
@@ -361,7 +361,7 @@ For `research` projects:
 
 - write `specs/research-question.md`
 - write `specs/scope-boundaries.md`
-- create `specs/hypotheses/`
+- create `entities/hypotheses/`
 
 For `software` projects:
 

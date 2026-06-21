@@ -20,14 +20,14 @@ Additionally:
    - If `$ARGUMENTS` names a pipeline: read the pipeline plan and its source inquiry
    - If no scope: identify the most recently modified research documents (use `git log --oneline -10 --name-only -- doc/ specs/ models/`)
 3. Read scoped documents:
-   - Relevant hypotheses from `specs/hypotheses/`
-   - Relevant topics from `doc/topics/`
-   - Relevant papers from `doc/papers/`
-   - Relevant discussions from `doc/discussions/`
-   - Relevant interpretations from `doc/interpretations/`
-   - Relevant searches from `doc/searches/`
-   - Pipeline plans from `doc/plans/` (if applicable)
-4. Read pre-registration documents from `doc/meta/pre-registration-*.md` (if any exist).
+   - Relevant hypotheses from `entities/hypotheses/`
+   - Relevant topics from `entities/topics/`
+   - Relevant papers from `entities/papers/`
+   - Relevant discussions from `entities/discussions/`
+   - Relevant interpretations from `entities/interpretations/`
+   - Relevant searches from `entities/searches/`
+   - Pipeline plans from `entities/plans/` (if applicable)
+4. Read pre-registration documents from `entities/pre-registrations/*.md` (if any exist).
 5. If `causal-modeling` aspect is active, load causal DAGs from the knowledge graph.
 
 ## Workflow
@@ -127,18 +127,15 @@ Check explicitly: did this agent author or substantively edit any artifact under
 
 Follow `.ai/templates/bias-audit.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/bias-audit.md`, and fill all sections.
 
-**Resolve the save path by `layout_version` in `science.yaml`.** The template emits a
-`type: report` entity (`id: report:bias-audit-<slug>`):
-
-- **`layout_version: 3`** → `entities/reports/bias-audit-<slug>.md` (the validator rejects
-  `type: report` entities outside `entities/reports/`). If the project keeps critical reviews
-  of pre-registrations under a `review` entity type (`entities/review/`) and has a precedent
-  for it, prefer that home and set the frontmatter `type`/`id` to match.
-- **legacy (v2 / no `layout_version`)** → `doc/meta/bias-audit-<slug>.md`.
+The template emits a `type: report` entity (`id: report:bias-audit-<slug>`) saved to
+`entities/reports/bias-audit-<slug>.md` (the validator rejects `type: report`
+entities outside `entities/reports/`). If the project keeps critical reviews of
+pre-registrations under a `review` entity type (`entities/review/`) and has a
+precedent for it, prefer that home and set the frontmatter `type`/`id` to match.
 
 ## After Writing
 
-1. Save to the layout-resolved path above (v3: `entities/reports/` or `entities/review/`; legacy: `doc/meta/`).
+1. Save to `entities/reports/` (or `entities/review/` per the note above).
 2. If HARKing risk is detected and no pre-registration exists, suggest `/science:pre-register`.
 3. If confirmation bias is detected, suggest `/science:compare-hypotheses` to force consideration of alternatives.
 4. If confounding is detected and no causal DAG exists, suggest `/science:sketch-model`.

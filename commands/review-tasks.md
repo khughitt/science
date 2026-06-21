@@ -33,7 +33,7 @@ If $ARGUMENTS specifies a filter (priority, type, group, related), apply it. Oth
 
 For each open task, check whether the codebase reflects completion:
 
-- **Search for implementation evidence.** Use Grep/Glob to look for code, reports, or documents that the task describes. Check `doc/reports/`, `doc/interpretations/`, `scripts/`, `src/`, and `pipeline/` as appropriate.
+- **Search for implementation evidence.** Use Grep/Glob to look for code, reports, or documents that the task describes. Check `entities/reports/`, `entities/interpretations/`, `scripts/`, `src/`, and `pipeline/` as appropriate.
 - **Check git history.** Search recent commits for the task ID or key terms from the title.
 - **Check for partial progress.** Some tasks may be in-progress rather than proposed.
 
@@ -136,6 +136,6 @@ git add tasks/ && git commit -m "tasks: backlog review — N status corrections,
 
 - Use subagents to parallelize codebase searches for multiple tasks
 - Check `tasks/done/` for recently completed tasks that might inform gap analysis
-- Cross-reference `doc/discussions/` and `doc/interpretations/` for research context
+- Cross-reference `entities/discussions/` and `entities/interpretations/` for research context
 - The `science:next-steps` skill produces complementary forward-looking analysis; this skill is backward-looking (auditing what exists)
 - For a broader project audit beyond just tasks (unresolved references, lingering tags, knowledge gaps), use `/science:health`.

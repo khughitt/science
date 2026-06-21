@@ -102,7 +102,7 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
 Use this skill any time you are:
 
 - Pre-registering a quantitative analysis (especially under a Science
-  project's `doc/pre-registrations/` flow).
+  project's `entities/pre-registrations/` flow).
 - Reviewing or critiquing someone else's pre-registered analysis.
 - Choosing values for resampling counts (bootstrap, permutation, MC),
   random seeds, or stopping rules.

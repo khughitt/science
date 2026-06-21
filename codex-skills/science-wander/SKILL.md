@@ -38,7 +38,7 @@ Before executing any research command:
 
    | Signal | Suggests |
    |---|---|
-   | Files in `specs/hypotheses/` | `hypothesis-testing` |
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
    | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
    | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
    | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
@@ -90,8 +90,8 @@ Generate a walk path and run the CLI:
 
 ```bash
 WALK_ID="$(date +%Y-%m-%d-%H%M)"
-WALK_PATH="doc/meta/walks/walk-${WALK_ID}.md"
-mkdir -p doc/meta/walks
+WALK_PATH="entities/meta/walks/walk-${WALK_ID}.md"
+mkdir -p entities/meta/walks
 uv run science wander --format markdown --out "${WALK_PATH}" \
   <forwarded flags from $ARGUMENTS, EXCLUDING --apply>
 ```

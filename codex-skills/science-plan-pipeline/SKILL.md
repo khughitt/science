@@ -38,7 +38,7 @@ Before executing any research command:
 
    | Signal | Suggests |
    |---|---|
-   | Files in `specs/hypotheses/` | `hypothesis-testing` |
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
    | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
    | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
    | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
@@ -92,7 +92,7 @@ For brevity, the examples below write just `science <command>` — **always expa
 
 - **MUST** start from a specified inquiry or a task/question description (see Input Modes below)
 - **MUST** pick a plan mode (`probe` / `design` / `implementation`, see Plan Modes below) and let it dictate plan shape and section list. Right-size aggressively — over-spec'd 1-day probes are the most common drift.
-- **MUST** write the plan to `doc/plans/YYYY-MM-DD-<slug>.md` (suffix omitted for design/implementation modes; `-pipeline-plan.md` suffix permitted but no longer required).
+- **MUST** write the plan to `entities/plans/YYYY-MM-DD-<slug>.md` (suffix omitted for design/implementation modes; `-pipeline-plan.md` suffix permitted but no longer required).
 - **MUST** check whether methodological readiness is already documented by an `analysis-plan:<slug>` artifact. If not, and the user is asking for orchestration before data QA, independent unit, estimand, power/resolution, and sensitivity rules are clear, recommend `science-plan-analysis` before finalizing the pipeline plan.
 - **SHOULD** include frontmatter linking the plan to its hypotheses / questions / decisions / tasks via `related: [hypothesis:..., rq:..., decision:..., plan:..., task:..., paper:...]`. For pure upstream design notes (in the science repo itself), a `Parent design / Predecessor / Status / Depends on` header block is an acceptable alternative to frontmatter.
 - **SHOULD** in `design` mode, defend non-obvious choices in named `Key decision` subsections that name the rejected alternative — this replaces the older per-transformation Risks block.
@@ -109,7 +109,7 @@ The plan-pipeline command works with two types of input:
 - **Inquiry mode** (default when an inquiry slug is provided): Load the formal inquiry subgraph and translate it into a pipeline plan. Follow Steps 1, 3, and 5 for inquiry loading, graph annotation, and status updates.
 - **Task mode** (when the project uses tasks/questions instead of formal inquiries, or when the user input is a task ID or description): Derive the plan directly from the task description, existing code, and project context. Skip inquiry-specific steps (1, 3, 5) — the plan document is the primary deliverable. Graph annotations are secondary.
 
-When an existing analysis plan is in scope, read `doc/plans/*-analysis-plan.md`
+When an existing analysis plan is in scope, read `entities/analysis-plan/*-analysis-plan.md`
 and reuse its methodological readiness checks. Do not re-decide those checks in
 the pipeline plan; focus on execution.
 
@@ -138,7 +138,7 @@ Verify status is `specified`. If it's `sketch`, warn the user and suggest `scien
 
 If status is `specified` but not `critiqued`, warn: "This inquiry hasn't been through critique yet. Consider running `science-critique-approach <slug>` first. Proceeding anyway."
 
-**Fallback:** If `science inquiry show` fails or times out, read the inquiry document directly from `doc/inquiries/<slug>.md`.
+**Fallback:** If `science inquiry show` fails or times out, read the inquiry document directly from `entities/inquiries/<slug>.md`.
 
 ### Step 2: Identify computational requirements
 
@@ -252,7 +252,7 @@ a `workflow` entity:
 
 ### Step 4: Write the plan
 
-Save to `doc/plans/YYYY-MM-DD-<slug>.md`. The plan shape is dictated by the chosen mode (see Plan Modes above). The frontmatter is the same across modes.
+Save to `entities/plans/YYYY-MM-DD-<slug>.md`. The plan shape is dictated by the chosen mode (see Plan Modes above). The frontmatter is the same across modes.
 
 **Frontmatter (project-level plans):**
 
@@ -411,7 +411,7 @@ Append a short log entry to each dataset entity's verification log:
 
 Skip this step in Task mode.
 
-Update the inquiry status to `planned`. Regenerate `doc/inquiries/<slug>.md`.
+Update the inquiry status to `planned`. Regenerate `entities/inquiries/<slug>.md`.
 
 ```bash
 science graph stamp-revision
@@ -432,7 +432,7 @@ science graph stamp-revision
 - **Pilot first.** For complex pipelines, suggest a `probe`-mode precursor before a `design`-mode plan.
 - **Validation is mode-specific, not per-transformation.** `probe` plans carry a single `Decision criteria` block + `Validation` summary; `design` plans carry per-WP `Definition of done` plus closing `Acceptance Criteria`; `implementation` plans carry per-task checkbox steps with inline commands. Do not emit per-transformation validation matrices.
 - **The plan document is the canonical artifact.** Inquiry-graph annotations (Step 3) are optional and only meaningful when downstream tooling consumes them; they are not the source of truth for the plan.
-- **When science is unavailable:** If `science` commands fail or time out (>15s), proceed with the plan document directly. Read inquiry and graph data from markdown files in `doc/inquiries/` instead. Graph annotations are secondary — the plan document is the primary deliverable. Note which graph commands were skipped so they can be run later.
+- **When science is unavailable:** If `science` commands fail or time out (>15s), proceed with the plan document directly. Read inquiry and graph data from markdown files in `entities/inquiries/` instead. Graph annotations are secondary — the plan document is the primary deliverable. Note which graph commands were skipped so they can be run later.
 
 ## Process Reflection
 

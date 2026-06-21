@@ -38,7 +38,7 @@ Before executing any research command:
 
    | Signal | Suggests |
    |---|---|
-   | Files in `specs/hypotheses/` | `hypothesis-testing` |
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
    | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
    | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
    | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
@@ -128,7 +128,7 @@ uv run science <command>
 
 Read these project files if they exist:
 - `specs/research-question.md`
-- `specs/hypotheses/`
+- `entities/hypotheses/`
 - `entities/questions/`
 - `knowledge/graph.trig`
 - `entities/inquiries/`
@@ -251,7 +251,7 @@ science inquiry show "<slug>" --format table
 science inquiry validate "<slug>" --format json
 ```
 
-Save the inquiry document to `doc/inquiries/<slug>.md`.
+Save the inquiry document to `entities/inquiries/<slug>.md`.
 
 The summary should explicitly note:
 - tentative propositions
