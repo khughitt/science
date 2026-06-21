@@ -5293,6 +5293,54 @@ def dataset_add(
     click.echo(f"created {entity_id} -> {dest.relative_to(root)}")
 
 
+def _resolve_dataset_or_exit(root: Path, ref: str):
+    from science_tool.datasets_catalog import resolve_dataset
+
+    resolved = resolve_dataset(root, ref)
+    if resolved is None:
+        click.echo(
+            f"no such dataset {ref!r} (searched local doc/datasets/ and commons)", err=True
+        )
+        raise click.exceptions.Exit(2)
+    return resolved
+
+
+@dataset_group.command("show")
+@click.argument("ref")
+@click.option(
+    "--project-root", default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+)
+def dataset_show(ref: str, project_root: Path | None) -> None:
+    """Show a dataset entity (accepts `slug` or `dataset:slug`)."""
+    from science_tool.datasets_catalog import format_show
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    scope, fm, body = _resolve_dataset_or_exit(root, ref)
+    for line in format_show(scope, fm, body):
+        click.echo(line)
+
+
+@dataset_group.command("consumers")
+@click.argument("ref")
+@click.option(
+    "--project-root", default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+)
+def dataset_consumers(ref: str, project_root: Path | None) -> None:
+    """List entities that consume this dataset (via consumed_by)."""
+    from science_tool.datasets_catalog import consumers_of
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    _scope, fm, _body = _resolve_dataset_or_exit(root, ref)
+    consumers = consumers_of(fm)
+    if not consumers:
+        click.echo("no recorded consumers")
+        return
+    for c in consumers:
+        click.echo(c)
+
+
 @dataset_group.command("register-run")
 @click.argument("workflow_run_id")
 @click.option(

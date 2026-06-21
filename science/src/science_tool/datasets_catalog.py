@@ -234,3 +234,68 @@ def _commons_rows() -> list[dict]:
 
 class CommonsUnavailable(Exception):
     """Raised when the commons registry cannot be read for a --commons listing."""
+
+
+def resolve_dataset(project_root: Path, ref: str) -> tuple[str, dict, str] | None:
+    """Resolve `foo` or `dataset:foo` to (scope, frontmatter, body); local then commons."""
+    slug = ref[len("dataset:"):] if ref.startswith("dataset:") else ref
+    # Validate before building any path: a ref like "../other/x" must not escape
+    # doc/datasets/. An invalid slug is a clean miss (CLI maps None → exit 2).
+    try:
+        slug = validate_slug(slug)
+    except EntityCommandError:
+        return None
+    local = project_root / "doc" / "datasets" / f"{slug}.md"
+    if local.exists():
+        parsed = parse_frontmatter(local)
+        if parsed is not None:
+            fm, body = parsed
+            # Same guard as `list`: a non-dataset file under doc/datasets/ is a
+            # local miss, not a match — fall through to commons.
+            if (fm.get("kind") or fm.get("type")) == "dataset":
+                return ("local", fm, body)
+    from science_tool.commons.config import resolve_commons_root
+    from science_tool.commons.errors import CommonsEntityError, CommonsRegistryError
+    from science_tool.commons.query import CommonsQuery
+
+    try:
+        rec = CommonsQuery(resolve_commons_root()).show(f"dataset:{slug}")
+    except (CommonsEntityError, CommonsRegistryError, FileNotFoundError):
+        return None
+    fm = rec.frontmatter or {}
+    # body_path is the full entity.md (frontmatter + body); strip the frontmatter
+    # so `show` prints body-only, matching the local path's parse_frontmatter result.
+    body = ""
+    if rec.body_path and Path(rec.body_path).exists():
+        parsed_commons = parse_frontmatter(Path(rec.body_path))
+        body = parsed_commons[1] if parsed_commons else ""
+    return ("commons", fm, body)
+
+
+def format_show(scope: str, fm: dict, body: str) -> list[str]:
+    """Render a dataset entity to display lines (keeps the CLI wrapper thin)."""
+    access = fm.get("access") or {}
+    lines = [
+        f"id:       {fm.get('id', '?')}  ({scope})",
+        f"title:    {fm.get('title', '')}",
+        f"status:   {fm.get('status', '')}    tier: {fm.get('tier', '')}",
+        f"origin:   {fm.get('origin', '')}    license: {fm.get('license', '')}",
+    ]
+    if isinstance(access, dict) and access:
+        lines.append(f"access:   level={access.get('level', '')} verified={access.get('verified')}")
+        if access.get("source_url"):
+            lines.append(f"url:      {access['source_url']}")
+    if fm.get("accessions"):
+        lines.append(f"accessions: {fm['accessions']}")
+    if fm.get("related"):
+        lines.append(f"related:  {fm['related']}")
+    if fm.get("consumed_by"):
+        lines.append(f"consumed_by: {fm['consumed_by']}")
+    lines.append("")
+    lines.append(body.strip())
+    return lines
+
+
+def consumers_of(fm: dict) -> list[str]:
+    """The entity's consumers (consumed_by), as a list of refs."""
+    return list(fm.get("consumed_by") or [])
