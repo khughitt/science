@@ -22,53 +22,6 @@ The current H01 simulator emits binary Bernoulli signals — H01's recall findin
 
 Tests whether the H01 finding generalises beyond binary signals. If it does, D-003's continuous-belief commitment has stronger empirical footing. If not, H01 is bounded to the Beta-Bernoulli regime and the design principle needs re-examination. Likely a substantial new package alongside `h01_simulator/` (or a parallel module within it) with its own sweep, notebook, and interpretation. Plan before implementation.
 
-## [t008] Validator: warn on inline-dict synthesized_from items
-- priority: P2
-- status: proposed
-- aspects: [software-development]
-- created: 2026-04-25
-
-Per the 2026-04-25 synthesis-shape investigation Q2, the canonical form for `synthesized_from:` items in `type: synthesis` + `report_kind: synthesis-rollup` files is **block-list** (one field per line):
-
-```yaml
-synthesized_from:
-  - hypothesis: "hypothesis:<slug>"
-    file: "entities/synthesis/<slug>.md"
-    sha: "<SHA>"
-```
-
-The inline-dict form (`synthesized_from: [{hypothesis: "...", file: "...", sha: "..."}]`) is deprecated. Currently `meta/validate.sh` § 11a only checks for the presence of the `synthesized_from:` field, not item shape.
-
-Extend the validator (both `meta/validate.sh` and `scripts/validate.sh` per the lockstep convention) to warn (not error) when `synthesized_from:` items are inline-dict shape on a `report_kind: synthesis-rollup` file. Use the warn severity (matches surrounding validator conventions per the master rollout plan).
-
-Add a regression test in `science/tests/test_validate_script.py` covering the inline-dict warn case + the block-list silent case + the absent-field skip case.
-
-Surfaced by: `docs/audits/downstream-project-conventions/synthesis-shape-investigation-2026-04-25.md` Q2 resolution.
-
-## [t009] Entity-rename / declarative-migrations primitive (Q5 follow-up)
-- priority: P2
-- status: proposed
-- aspects: [software-development]
-- created: 2026-04-26
-
-Land the long-term ideal articulated as Q5 in the 2026-04-25 synthesis-shape investigation: entity-id references become first-class citizens of the knowledge graph, and migrations become **declarative** rather than imperative. Concrete deliverables to scope when this lands:
-
-- `science entity rename <old-id> <new-id>` as a primitive that rewrites every reference graph-wide (not regex-driven; uses the actual reference index).
-- A declarative migration shape: "transition entity instances of kind K from shape S₀ to shape S₁" — a registry-like description that the tool can plan, dry-run, and apply, rather than ad-hoc Python scripts.
-- Composes WITH the managed-artifact system (per `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md` — to be written): managed-artifact version bumps that need entity-shape changes ride into the same declarative migration channel. The managed-artifact system is one delivery surface; entity-rename / declarative migrations are the other.
-
-**Why this is its own track:** The 2026-04-25 conventions audit's Bucket C (P1 #1, #3, #5, #8 — design-pass items) defines the abstract entity data model that this primitive needs. Bucket C must land first, or at least its load-bearing pieces (the multi-axis profile shape and the sanctioned entity-kind extension surface). Until that, entity-rename has no stable referent shape to operate over.
-
-**Sequencing recommendation:**
-1. Bucket C design session (P1 #1/#3/#5/#8 — separate cycle, with user).
-2. Implement Bucket C decisions.
-3. Implement managed-artifact long-term system (per the 2026-04-26 design spec).
-4. Then this task: entity-rename primitive + declarative migration registry.
-
-Phase 2 of `scripts/migrate_downstream_conventions.py` (shape-driven rules, landed `fe8d974`) is the first concrete step toward this; it should be cited as the prior art when planning the declarative migration shape.
-
-Surfaced by: 2026-04-26 brainstorm of the managed-artifact long-term design (Q5 referenced from `docs/audits/downstream-project-conventions/synthesis-shape-investigation-2026-04-25.md` and `docs/plans/2026-04-25-rollout-and-migration-handoff.md` decision #6).
-
 ## [t014] Epistemic freshness: content-hash upstream change detection
 - priority: P3
 - status: proposed
@@ -203,11 +156,10 @@ Aspect-extension design tasks (`[t034]`, `[t035]`, `[t037]`, `[t038]`, `[t040]`)
 
 ## [t026] Causal synthesis guardrails
 - priority: P2
-- status: blocked
+- status: active
 - parent: task:t021
 - aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
 - related: [task:t021, question:0003-causal-synthesis-guardrails, question:0002-evidence-payload-schema]
-- blocked-by: [task:t034]
 - group: evidence-payload-schema
 - created: 2026-05-05
 
@@ -319,10 +271,9 @@ Steps:
 
 ## [t033] Model LLM agents as fallible evidence sources and graph-governed operators
 - priority: P2
-- status: blocked
+- status: active
 - aspects: [software-development, framework-design, research]
 - related: [task:t022, task:t024, task:t031, task:t037, task:t038, question:0008-llm-agents-as-fallible-sources, question:0006-source-dependence-detection, question:0012-agent-tool-kg-operations, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration, hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting]
-- blocked-by: [task:t037]
 - group: agent-source-modeling
 - created: 2026-05-05
 
@@ -344,43 +295,6 @@ Granularity is a key design decision; expect to defend the chosen level (per-pro
 ### Notes
 
 - 2026-05-08: Scope reduced (2026-05-08): t037 v1.3 design absorbs source-side agent schema (agent/agent_role registry entities, validation_status, agent-evaluation extension with Si2025 Bayes-factor semantics). Residual t033 scope to re-evaluate when t037 closes: (a) self-application / retroactive agent-provenance pass on Batch 1-5 syntheses; (b) granularity decision (per-prompt vs per-tool-version vs per-model); (c) source-dependence integration with t031 (shared prompt/model/tool-chain/KG-view); (d) repeated-extraction-with-disagreement policy per t030 D4 calibration drift finding.
-
-## [t034] Design causal graph construction pipeline artifacts
-- priority: P1
-- status: active
-- parent: task:t021
-- aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
-- related: [task:t022, task:t023, task:t025, task:t026, question:0010-causal-graph-construction-pipeline, question:0003-causal-synthesis-guardrails, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration, hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting, hypothesis:0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening]
-- group: evidence-payload-schema
-- created: 2026-05-06
-
-Design how Science represents causal graph construction as a staged evidence pipeline rather than as direct causal edge creation.
-
-Candidate artifacts:
-- candidate variable / measurement proposal;
-- source annotation and external-variable extraction;
-- background knowledge or prior-knowledge bundle;
-- LLM-generated weak prior or constraint set;
-- causal-discovery run;
-- learned graph object or graph posterior;
-- graph diagnostic result;
-- identified estimand;
-- mediation or MR-specific result;
-- causal effect estimate.
-
-Deliverables:
-- a graph-object taxonomy covering at least DAG, CPDAG, PAG, ADMG, equivalence-class feature, candidate graph, and graph posterior;
-- an epistemic-role taxonomy covering `assumed_background_edge`, `llm_prior_edge`, `llm_ancestral_constraint`, `data_discovered_adjacency`, `equivalence_class_feature`, `latent_variable_hypothesis`, `identified_causal_effect`, `mediation_path`, and `mechanistic_hypothesis`;
-- a payload-versus-first-class-entity decision rule for each artifact type;
-- validation rules for when each artifact may strengthen, annotate, or merely prioritize a causal proposition;
-- alignment notes with `[t022]`, `[t023]`, `[t025]`, and `[t026]`.
-
-Start from Batch 3 synthesis: `entities/synthesis/0003-synthesis-causal-graph-construction-and-discovery.md`.
-
-### Notes
-
-- 2026-05-09: v1.4 design patches landed (2026-05-09) per slice-3 effective-codes validator findings: (P1.4-a) explicit iar retirement rule for mr-analysis with pleiotropy_handling != unhandled + upstream instrument_validity_assumptions containing relevance — first retirement rule depending on upstream state, makes T34-6 stage (b) two-stage MR example validate at strengthen-belief; (P1.4-b) authoring-policy decision = hard-error when authors hand-write auto-injected codes (identification-missing, instrument-assumption-risk, mechanism-hypothesis-only, prior-network-dependent). Slice-3 prototype rules carry forward unchanged. Outstanding-mechanical work (per-extension consumer rules, multi-extension dispatch, origin-chain API, ref-resolution registry pass, fold into validate.sh) remains.
-- 2026-05-09: Validator fold-in landed (2026-05-09). Production module at meta/src/t034_validator/ bundles all three slice rule sets against the v1.4 contract (including P1.4-a iar retirement reading upstream state). validate.local.sh registers an extra_checks hook calling 'python -m t034_validator evidence/'; empty payload directory passes silently. PyYAML 6.0+ added as direct dep; meta/evidence/ is the payload-directory convention. End-to-end smoke confirms T34-6 stage (b) two-stage MR validates at strengthen-belief, while unhandled-pleiotropy correctly fires cee-strengthen-b. Three prototype files remain in doc/plans/ as test fixtures + design records (slice-3 prototype known to lag v1.4; small follow-up to align).
 
 ## [t035] Design graph-valued synthesis artifact schema
 - priority: P1
@@ -432,37 +346,6 @@ Highest-value additions:
 - benchmark papers comparing multi-omics integration methods under external validation.
 
 Deliverable: either add PDFs and process them in a later batch, or write a topic note explaining how each family should influence `graph_artifact_type`, `integration_objective`, posterior uncertainty, validation role, and H03 reason codes.
-
-## [t037] Design agent/tool operations schema
-- priority: P1
-- status: active
-- aspects: [software-development, framework-design, research]
-- related: [task:t029, task:t033, question:0008-llm-agents-as-fallible-sources, question:0012-agent-tool-kg-operations, hypothesis:0002-rich-evidence-payloads-improve-graph-calibration, hypothesis:0003-reason-coded-revisiting-beats-posterior-only-revisiting]
-- group: agent-source-modeling
-- created: 2026-05-06
-
-Design a Science operations schema for agents, tools, commands, skills, and tool chains.
-
-Candidate entities:
-- `agent`;
-- `agent_role`;
-- `tool`;
-- `skill`;
-- `command`;
-- `tool_chain`;
-- `execution_trace`;
-- `safety_policy`;
-- `validation_protocol`;
-- `operation_record`.
-
-Deliverables:
-- a tool/skill graph schema with capability descriptions, expected inputs/outputs, dependency edges, safety constraints, and validation commands;
-- an operation-record schema covering `agent_role`, `agent_model_version`, `prompt_or_workflow_ref`, `tool_chain_ref`, `tool_io_contract`, `safety_policy_ref`, `execution_trace_ref`, `validation_status`, `abstention_reason`, and `agent_evaluation_protocol`;
-- mapping of operation records to evidence payloads, paper summaries, syntheses, graph updates, and task edits;
-- H03 reason-code mapping for `agent-source-unvalidated`, `tool-chain-unvalidated`, `safety-check-missing`, `context-retrieval-uncertain`, `information-absence-undetected`, and `agent-bias-risk`;
-- alignment with `[t033]` so LLM agents are represented as both fallible sources and graph-governed operators.
-
-Start from Batch 5 synthesis: `entities/synthesis/0006-synthesis-scientific-agents-and-knowledge-graph-infrastructure.md`.
 
 ## [t038] Design graph evolution and KG view provenance
 - priority: P1
