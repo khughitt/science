@@ -79,7 +79,7 @@ When writing any document, actively connect the content to the project's researc
 
 - Reference relevant **hypotheses** by ID: `(see Hypothesis H01)`
 - Reference important **propositions** when they are the real unit being updated
-- Note implications for **open questions** in `doc/questions/`
+- Note implications for **open questions** in `entities/questions/`
 - Suggest updates to **next steps** when findings change priorities
 - Flag any findings that affect the **causal model** in `models/`
 
@@ -99,8 +99,8 @@ For the project's reasoning model, see `docs/user-guide/epistemic-model.md`.
 
 - **Background topics** (`doc/background/topics/`): 500-1500 words. Comprehensive but focused.
 - **Paper summaries** (`doc/background/papers/`): 300-800 words. Capture what matters for this project.
-- **Hypothesis descriptions** (`specs/hypotheses/`): 300-1000 words. Thorough enough to be actionable.
-- **Open questions** (`doc/questions/`): 50-200 words per question. Concise and specific.
+- **Hypothesis descriptions** (`entities/hypotheses/`): 300-1000 words. Thorough enough to be actionable.
+- **Open questions** (`entities/questions/`): 50-200 words per question. Concise and specific.
 - **Overview** (`doc/01-overview.md`): 500-1000 words. The "elevator pitch" for the whole project.
 
 ## Companion Skills

@@ -15,8 +15,8 @@ Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-a
 Additionally:
 1. Read `${CLAUDE_PLUGIN_ROOT}/docs/user-guide/epistemic-model.md`.
 2. Read `.ai/templates/hypothesis.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/hypothesis.md`.
-3. Read existing hypotheses in `specs/hypotheses/` to avoid duplication.
-4. Check `doc/questions/` — the new hypothesis may address an existing open question.
+3. Read existing hypotheses in `entities/hypotheses/` to avoid duplication.
+4. Check `entities/questions/` — the new hypothesis may address an existing open question.
 
 ## Interactive Refinement
 
@@ -64,7 +64,7 @@ If the hypothesis has genuinely competing structural readings, note the likely r
 
 ## Writing
 
-After the conversation, create the hypothesis with `science hypotheses create`. The tool assigns the next sequential `hNN` ID, places the file under `specs/hypotheses/`, and writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`). It also runs prospective validation against the project's audit rules — unresolved references emit warnings, structural problems block.
+After the conversation, create the hypothesis with `science hypotheses create`. The tool assigns the next sequential `hNN` ID, places the file under `entities/hypotheses/`, and writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`). It also runs prospective validation against the project's audit rules — unresolved references emit warnings, structural problems block.
 
 ```bash
 uv run science hypotheses create "<short title>" \

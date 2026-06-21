@@ -23,7 +23,7 @@ This command runs in two roles. Determine which you are before proceeding.
 (You received the `/research-papers` slash command directly from the user.)
 
 1. **Parse** `$ARGUMENTS` into a list of paper references. Let `N` be the count.
-2. **Pre-dispatch check:** For each paper, look at `doc/papers/` for an existing summary (fuzzy match on title/author/DOI). If any may exist, ask the user whether to overwrite, skip, or supplement — resolve per-paper, then carry each decision into that paper's subagent prompt.
+2. **Pre-dispatch check:** For each paper, look at `entities/papers/` for an existing summary (fuzzy match on title/author/DOI). If any may exist, ask the user whether to overwrite, skip, or supplement — resolve per-paper, then carry each decision into that paper's subagent prompt.
 3. **Dispatch** the `paper-researcher` subagent *once per paper*. When `N > 1`, issue all Agent calls **in parallel** (multiple tool uses in a single message) so they overlap — the shared rate limiter in `science paper-fetch` keeps per-host traffic polite automatically.
    - `subagent_type: paper-researcher`
    - `description`: a short identifier for that paper
@@ -41,7 +41,7 @@ Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-a
 
 Additionally:
 1. Read `.ai/templates/paper.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/paper.md`.
-2. Check `doc/papers/` for existing summary; ask before overwriting.
+2. Check `entities/papers/` for existing summary; ask before overwriting.
 
 ## Source Strategy
 
@@ -107,7 +107,7 @@ Follow `.ai/templates/paper.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/pap
 
 - Include frontmatter `Source:` describing provenance (`LLM knowledge`, `web search`, `PDF`, or combination).
 - Generate BibTeX key as `FirstAuthorLastNameYear` (with suffix if needed).
-- Save to `doc/papers/<citekey>.md`.
+- Save to `entities/papers/<citekey>.md`.
 - Use `paper:<citekey>` for the paper note entity and `cite:<citekey>` for the backing BibTeX entry in `source_refs`.
 
 ## After Writing
@@ -119,8 +119,8 @@ Follow `.ai/templates/paper.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/pap
    EOF
    ```
    This does a single locked append: it creates the file with a header if missing, is idempotent by key (re-running is a safe no-op; pass `--replace` to overwrite), and serializes concurrent writes from parallel subagents. A direct Edit instead hits "file modified since read" errors under Dropbox sync and races other subagents in a batch.
-2. Link relevance to existing hypotheses in `specs/hypotheses/`.
-3. Add new questions via `science questions reserve`. **Do not** create files under `doc/questions/` directly — parallel subagents racing on the next q-number cause silent collisions. The CLI uses `O_CREAT|O_EXCL` to atomically claim the next slot, even with multiple subagents writing concurrently.
+2. Link relevance to existing hypotheses in `entities/hypotheses/`.
+3. Add new questions via `science questions reserve`. **Do not** create files under `entities/questions/` directly — parallel subagents racing on the next q-number cause silent collisions. The CLI uses `O_CREAT|O_EXCL` to atomically claim the next slot, even with multiple subagents writing concurrently.
    Read `.ai/templates/question.md` first; if not found, read
    `${CLAUDE_PLUGIN_ROOT}/templates/question.md` before drafting question bodies.
 
@@ -153,7 +153,7 @@ Pick by access status, not by reflex. Most paper-summary fields warrant `[UNVERI
 
 After the subagent returns its report:
 
-1. Review any `[UNVERIFIED]` / `[SPECULATION]` fields the subagent flagged and surface them to the user — they may warrant a follow-up web check or a note in `doc/questions/`. (`[INACCESSIBLE]` markers are permanent and don't need follow-up.)
+1. Review any `[UNVERIFIED]` / `[SPECULATION]` fields the subagent flagged and surface them to the user — they may warrant a follow-up web check or a note in `entities/questions/`. (`[INACCESSIBLE]` markers are permanent and don't need follow-up.)
 2. If the subagent could not identify the paper, relay its request for additional metadata to the user and stop; do not attempt to fabricate a summary on the orchestrator.
 3. Read the written summary only if you need its content for downstream reasoning (e.g., before cross-paper synthesis or hypothesis linking). Otherwise, trust the report.
 4. If you hold broader project context than the subagent did — unmerged hypotheses, recent approach decisions in `doc/04-approach.md`, adjacent open questions — make small follow-up edits as a separate commit.
@@ -162,7 +162,7 @@ After the subagent returns its report:
 
 When the dispatched batch contained `N ≥ 2` papers with a shared thematic connection, after all subagent reports return:
 
-1. Produce a brief cross-paper synthesis at `doc/papers/synthesis-YYYY-MM-DD-<theme>.md`. Synthesis is an orchestrator responsibility because it requires holding all papers in context at once — the subagents do not talk to each other.
+1. Produce a brief cross-paper synthesis at `entities/papers/synthesis-YYYY-MM-DD-<theme>.md`. Synthesis is an orchestrator responsibility because it requires holding all papers in context at once — the subagents do not talk to each other.
 2. Contents: shared themes, tensions between papers, and combined implications for the project.
 3. Cross-reference the individual paper summaries by their `id` fields.
 

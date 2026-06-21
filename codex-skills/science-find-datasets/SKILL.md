@@ -38,7 +38,7 @@ Before executing any research command:
 
    | Signal | Suggests |
    |---|---|
-   | Files in `specs/hypotheses/` | `hypothesis-testing` |
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
    | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
    | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
    | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
@@ -82,7 +82,7 @@ Additionally:
 4. Read project context:
    - `specs/research-question.md`
    - `specs/scope-boundaries.md`
-   - `specs/hypotheses/`
+   - `entities/hypotheses/`
    - Existing `doc/datasets/` (to avoid duplicating known datasets)
 5. If an inquiry exists, check inquiry variables to understand what data the project needs:
    ```bash
@@ -228,7 +228,7 @@ Include this mapping in a `## Variable Coverage` section of the search output.
 ### Step 7: Update project files
 
 1. Update `science.yaml` data_sources section with new entries.
-2. Write machine-readable search results to `doc/searches/YYYY-MM-DD-datasets-<slug>.json`.
+2. Write machine-readable search results to `entities/searches/YYYY-MM-DD-datasets-<slug>.json`.
 3. If appropriate, suggest download commands:
    ```bash
    science datasets download <source>:<id> --dest data/raw/

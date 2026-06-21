@@ -38,7 +38,7 @@ Before executing any research command:
 
    | Signal | Suggests |
    |---|---|
-   | Files in `specs/hypotheses/` | `hypothesis-testing` |
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
    | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
    | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
    | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
@@ -79,7 +79,7 @@ See the design spec at `docs/specs/2026-04-21-project-curation-design.md` for fu
 Parse the user input for:
 
 - `--dry-run` - do not write source edits; write the curation ledger unless `--no-write` is also set.
-- `--no-write` - print the ledger preview only. Do not create or update `doc/meta/curation/`.
+- `--no-write` - print the ledger preview only. Do not create or update `entities/meta/curation/`.
 - `--scope <scope>` - restrict the sweep to a narrow curation slice.
 - `--since <date>` - bias the sweep toward activity after `<date>` while still allowing older linked artifacts to be read.
 - `--apply-obvious` - allow only high-confidence, small, local, evidence-backed metadata edits.
@@ -109,7 +109,7 @@ uv run science graph attention-sample --limit 8 --format json
 ### Carry-over from prior sweeps
 
 Before running new analysis, read the most recent prior ledger at
-`doc/meta/curation/curation-sweep-*.md` (sorted descending by filename).
+`entities/meta/curation/curation-sweep-*.md` (sorted descending by filename).
 Extract its **Pending Decisions** section. Items the user has not acted on
 since must surface in the new ledger as carry-overs rather than being
 re-derived as fresh medium-confidence findings (fb-2026-05-01-003). Mark
@@ -199,7 +199,7 @@ Keep fixes narrow. Do not introduce compatibility layers, placeholders, or broad
 
 ## Phase 4: Ledger write
 
-Write or update `doc/meta/curation/curation-sweep-YYYY-MM-DD.md`.
+Write or update `entities/meta/curation/curation-sweep-YYYY-MM-DD.md`.
 
 Suggested frontmatter:
 
@@ -254,7 +254,7 @@ Be concrete. Name the friction, where it appeared, and the smallest improvement 
 
 ## After Writing
 
-1. Save the ledger to `doc/meta/curation/curation-sweep-YYYY-MM-DD.md` unless `--no-write` is set.
+1. Save the ledger to `entities/meta/curation/curation-sweep-YYYY-MM-DD.md` unless `--no-write` is set.
 2. If `--dry-run` is set, do not mutate source artifacts; the ledger may still be written or updated unless `--no-write` is also set.
 3. If the sweep produced safe obvious fixes, ask before applying them unless `--apply-obvious` was explicitly given.
 4. If `--commit` is set, commit the written files after verification.

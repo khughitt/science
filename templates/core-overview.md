@@ -8,7 +8,7 @@ a fresh collaborator (human or agent) can read to be useful in five minutes.
 Keep it durable. Avoid:
 - duplicating science.yaml or README.md (those are loaded separately)
 - pasting recent /science:status output (that's regenerated each session)
-- play-by-play history (use git log + doc/meta/ for that)
+- play-by-play history (use git log + entities/meta/ for that)
 
 Include only the judgment calls and context that machine-readable manifests
 cannot capture.
@@ -70,6 +70,6 @@ catch yourself explaining the same thing twice. -->
 
 - Research question: `specs/research-question.md`
 - Active tasks: `tasks/active.md`
-- Recent next-steps: `doc/meta/next-steps-*.md` (most recent)
+- Recent next-steps: `entities/meta/next-steps-*.md` (most recent)
 - Decisions log: `core/decisions.md`
 - Knowledge graph: `knowledge/graph.trig`

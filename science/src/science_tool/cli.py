@@ -5174,38 +5174,171 @@ def dataset_group() -> None:
 
 
 @dataset_group.command("list")
+@click.option("--origin", default=None, type=click.Choice(["external", "derived"]))
+@click.option("--status", default=None, help="Filter by status (e.g. candidate, active)")
+@click.option("--candidate", is_flag=True, help="Shorthand for --status candidate")
+@click.option("--tier", default=None, type=click.Choice(["use-now", "evaluate-next", "track"]))
+@click.option("--unverified", is_flag=True, help="Only external entities with access.verified false")
 @click.option(
-    "--origin",
+    "--level",
     default=None,
-    type=click.Choice(["external", "derived"]),
-    help="Filter by origin (external or derived)",
+    type=click.Choice(["public", "registration", "controlled", "commercial", "mixed"]),
 )
+@click.option("--commons", "include_commons", is_flag=True, help="Also list commons dataset entities")
 @click.option(
     "--project-root",
     default=None,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
     help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
 )
-def dataset_list(origin: str | None, project_root: Path | None) -> None:
-    """List dataset entities in the project."""
-    root = project_root.resolve() if project_root else _project_root_from_env()
-    ds_dir = root / "doc" / "datasets"
-    if not ds_dir.is_dir():
-        click.echo("No doc/datasets directory found.")
-        return
-    from science_model.frontmatter import parse_frontmatter
+def dataset_list(
+    origin: str | None,
+    status: str | None,
+    candidate: bool,
+    tier: str | None,
+    unverified: bool,
+    level: str | None,
+    include_commons: bool,
+    project_root: Path | None,
+) -> None:
+    """List dataset entities as a table, with filters."""
+    from rich.console import Console
+    from rich.table import Table
 
-    for md in sorted(ds_dir.glob("*.md")):
-        result = parse_frontmatter(md)
-        if result is None:
-            continue
-        fm, _ = result
-        ds_origin = fm.get("origin", "")
-        if origin is not None and ds_origin != origin:
-            continue
-        ds_id = fm.get("id", md.stem)
-        title = fm.get("title", "")
-        click.echo(f"{ds_id}  {title}")
+    from science_tool.datasets_catalog import list_datasets
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    if candidate:
+        status = "candidate"
+
+    rows, notice = list_datasets(
+        root,
+        origin=origin,
+        status=status,
+        tier=tier,
+        unverified=unverified,
+        level=level,
+        include_commons=include_commons,
+    )
+    if notice:
+        click.echo(f"notice: commons datasets unavailable ({notice})", err=True)
+
+    if not rows:
+        click.echo("No matching dataset entities.")
+        return
+
+    table = Table(show_header=True, header_style="bold")
+    for col in ("id", "title", "status", "tier", "origin", "level", "verified", "scope"):
+        table.add_column(col, overflow="fold", no_wrap=False)
+    for r in rows:
+        table.add_row(
+            r["id"], r["title"], r["status"], r["tier"], r["origin"], r["level"],
+            "yes" if r["verified"] else "no", r["scope"],
+        )
+    Console(width=200).print(table)
+
+
+@dataset_group.command("add")
+@click.argument("slug")
+@click.option("--title", required=True, help="Human-readable dataset title")
+@click.option("--origin", type=click.Choice(["external", "derived"]), default="external")
+@click.option("--tier", type=click.Choice(["use-now", "evaluate-next", "track"]), default="track")
+@click.option(
+    "--level",
+    type=click.Choice(["public", "registration", "controlled", "commercial", "mixed"]),
+    default="controlled",
+)
+@click.option("--source-url", default="", help="Landing page / accession URL")
+@click.option("--ontology-term", "ontology_terms", multiple=True)
+@click.option("--related", "related", multiple=True, help="Related entity ref (repeatable)")
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
+)
+def dataset_add(
+    slug: str,
+    title: str,
+    origin: str,
+    tier: str,
+    level: str,
+    source_url: str,
+    ontology_terms: tuple[str, ...],
+    related: tuple[str, ...],
+    project_root: Path | None,
+) -> None:
+    """Author a candidate external dataset entity under doc/datasets/."""
+    from science_tool.datasets_catalog import add_dataset
+    from science_tool.entities import EntityCommandError
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    try:
+        entity_id, dest, warnings = add_dataset(
+            root,
+            slug,
+            title=title,
+            origin=origin,
+            tier=tier,
+            level=level,
+            source_url=source_url,
+            ontology_terms=ontology_terms,
+            related=related,
+        )
+    except EntityCommandError as exc:
+        click.echo(str(exc), err=True)
+        raise click.exceptions.Exit(1)
+    for w in warnings:
+        click.echo(f"warning: {w}", err=True)
+    click.echo(f"created {entity_id} -> {dest.relative_to(root)}")
+
+
+def _resolve_dataset_or_exit(root: Path, ref: str):
+    from science_tool.datasets_catalog import resolve_dataset
+
+    resolved = resolve_dataset(root, ref)
+    if resolved is None:
+        click.echo(
+            f"no such dataset {ref!r} (searched local doc/datasets/ and commons)", err=True
+        )
+        raise click.exceptions.Exit(2)
+    return resolved
+
+
+@dataset_group.command("show")
+@click.argument("ref")
+@click.option(
+    "--project-root", default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+)
+def dataset_show(ref: str, project_root: Path | None) -> None:
+    """Show a dataset entity (accepts `slug` or `dataset:slug`)."""
+    from science_tool.datasets_catalog import format_show
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    scope, fm, body = _resolve_dataset_or_exit(root, ref)
+    for line in format_show(scope, fm, body):
+        click.echo(line)
+
+
+@dataset_group.command("consumers")
+@click.argument("ref")
+@click.option(
+    "--project-root", default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+)
+def dataset_consumers(ref: str, project_root: Path | None) -> None:
+    """List entities that consume this dataset (via consumed_by)."""
+    from science_tool.datasets_catalog import consumers_of
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    _scope, fm, _body = _resolve_dataset_or_exit(root, ref)
+    consumers = consumers_of(fm)
+    if not consumers:
+        click.echo("no recorded consumers")
+        return
+    for c in consumers:
+        click.echo(c)
 
 
 @dataset_group.command("register-run")

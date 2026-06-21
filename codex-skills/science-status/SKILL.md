@@ -38,7 +38,7 @@ Before executing any research command:
 
    | Signal | Suggests |
    |---|---|
-   | Files in `specs/hypotheses/` | `hypothesis-testing` |
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
    | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
    | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
    | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
@@ -113,14 +113,14 @@ From `science.yaml` and `specs/research-question.md`:
 
 ### 2. Active Hypotheses
 
-From `specs/hypotheses/*.md`:
+From `entities/hypotheses/*.md`:
 - list each hypothesis with ID, short title, and current status
 - describe it briefly as an organizing conjecture, not a proven result
 - highlight which ones are under active investigation
 
 ### 3. Open Questions
 
-From `doc/questions/*.md`:
+From `entities/questions/*.md`:
 - list the top 5 by priority
 - include the question text and type
 
@@ -252,10 +252,10 @@ From tasks, graph uncertainty, and recent activity, show:
 - the top few high-value next actions
 - where uncertainty reduction is most likely to pay off
 - blocked tasks or missing evidence
-- which findings belong in `doc/reports/` or `doc/interpretations/`
+- which findings belong in `entities/reports/` or `entities/interpretations/`
 - which follow-up actions should be added under `tasks/`
 - If active hypothesis, inquiry, or task work implies a data analysis but no
-  linked `analysis-plan:<slug>` or `doc/plans/*-analysis-plan.md` exists,
+  linked `analysis-plan:<slug>` or `entities/analysis-plan/*-analysis-plan.md` exists,
   suggest `science-plan-analysis` before pre-registration or pipeline planning.
 
 ## Output Format
@@ -268,5 +268,5 @@ Use rich terminal output:
 ## Optional `--save`
 
 If the user explicitly asks to save the output or includes `--save`:
-- save to `doc/meta/status-snapshot-YYYY-MM-DD.md`
+- save to `entities/meta/status-snapshot-YYYY-MM-DD.md`
 - commit the snapshot

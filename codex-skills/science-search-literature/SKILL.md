@@ -38,7 +38,7 @@ Before executing any research command:
 
    | Signal | Suggests |
    |---|---|
-   | Files in `specs/hypotheses/` | `hypothesis-testing` |
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
    | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
    | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
    | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
@@ -69,7 +69,7 @@ Before executing any research command:
    `uv run --with <science-plugin-root>/science science <command>`
 
 Search literature for the user input.
-If no argument is provided, derive candidate search foci from `specs/research-question.md` and `doc/questions/`, then ask the user to confirm the focus.
+If no argument is provided, derive candidate search foci from `specs/research-question.md` and `entities/questions/`, then ask the user to confirm the focus.
 
 ## Setup
 
@@ -83,11 +83,11 @@ Additionally:
 3. Read project context:
    - `specs/research-question.md`
    - `specs/scope-boundaries.md`
-   - `doc/questions/`
-   - `specs/hypotheses/`
-   - `doc/papers/`
-   - `doc/topics/`, `doc/questions/`
-4. Check `doc/searches/` for recent related searches and ask whether to refresh or create a new run.
+   - `entities/questions/`
+   - `entities/hypotheses/`
+   - `entities/papers/`
+   - `entities/topics/`, `entities/questions/`
+4. Check `entities/searches/` for recent related searches and ask whether to refresh or create a new run.
 
 ## Query Planning
 
@@ -152,9 +152,9 @@ Before writing output, enumerate the project's declared scope and check which pa
 Sources of declared scope (read all that exist):
 
 - `science.yaml` aspects
-- `doc/topics/` (topic slugs and their subtopics)
-- `doc/questions/` (open questions)
-- `specs/hypotheses/` (active hypotheses)
+- `entities/topics/` (topic slugs and their subtopics)
+- `entities/questions/` (open questions)
+- `entities/hypotheses/` (active hypotheses)
 
 For each declared item, mark whether the current search surfaced at least one ranked candidate that materially addresses it. If gaps exist, either:
 
@@ -165,9 +165,9 @@ Do not skip this step — a reading queue that silently omits declared scope is 
 
 ## Writing Output
 
-If `doc/searches/` does not exist yet, create it first.
+If `entities/searches/` does not exist yet, create it first.
 
-Create `doc/searches/YYYY-MM-DD-<slug>.md` with sections:
+Create `entities/searches/YYYY-MM-DD-<slug>.md` with sections:
 
 1. `## Search Focus`
 2. `## Query Set`
@@ -188,7 +188,7 @@ In `## Ranked Results`, include a table with columns:
 
 Also write machine-readable output to:
 
-- `doc/searches/YYYY-MM-DD-<slug>.json`
+- `entities/searches/YYYY-MM-DD-<slug>.json`
 
 Include the normalized candidate list, dedupe keys, source provenance, and rank/tier fields.
 
@@ -196,7 +196,7 @@ Include the normalized candidate list, dedupe keys, source provenance, and rank/
 
 1. Offer to create tasks for the top `Core now` papers via `science tasks add`.
 2. For selected high-priority papers, run `science-research-papers` (or create a task for later).
-3. For `Core now` items, create a **stub-only** note at `doc/papers/<citekey>.md` using `.ai/templates/paper.md` first, then `templates/paper.md`. The stub must contain:
+3. For `Core now` items, create a **stub-only** note at `entities/papers/<citekey>.md` using `.ai/templates/paper.md` first, then `templates/paper.md`. The stub must contain:
    - Template frontmatter filled from search metadata only (title, authors, year, identifiers).
    - Every prose/content section (Key Contribution, Methods, Key Findings, etc.) replaced with a single line: `UNREAD — populate after reading the paper`.
    - Do **not** write plausible-sounding summaries from the LLM prior; those are hard to distinguish from real notes later and cause stub-drift when the paper is actually read.
@@ -205,7 +205,7 @@ Include the normalized candidate list, dedupe keys, source provenance, and rank/
    - `tags` for project-specific labels.
    - `ontology_terms` for normalized ontology CURIEs (for example MeSH, GO, Biolink terms).
    - `datasets` for relevant dataset accessions when identified.
-5. Update related topic/question notes (`doc/topics/`, `doc/questions/`) with new links and key takeaways.
+5. Update related topic/question notes (`entities/topics/`, `entities/questions/`) with new links and key takeaways.
 6. Add BibTeX entries for selected high-priority papers to `papers/references.bib`. If the file does not exist yet, create it with:
    ```bibtex
    % references.bib — BibTeX database for this Science project

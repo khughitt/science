@@ -38,7 +38,7 @@ Before executing any research command:
 
    | Signal | Suggests |
    |---|---|
-   | Files in `specs/hypotheses/` | `hypothesis-testing` |
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
    | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
    | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
    | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
@@ -76,11 +76,11 @@ Follow the Science Codex Command Preamble before executing this skill. Use the `
 
 Additionally:
 1. Read `.ai/templates/pre-registration.md` first; if not found, read `templates/pre-registration.md`.
-2. Read active hypotheses in `specs/hypotheses/`.
+2. Read active hypotheses in `entities/hypotheses/`.
 3. Read existing inquiries: run `science inquiry list` (if available).
 4. Read existing pipeline plans in `entities/plans/` (if any).
 5. Read existing pre-registrations in `entities/pre-registrations/` to avoid duplication.
-6. Read linked analysis plans in `entities/plans/*-analysis-plan.md` when the user or context references `analysis-plan:<slug>`.
+6. Read linked analysis plans in `entities/analysis-plan/*-analysis-plan.md` when the user or context references `analysis-plan:<slug>`.
 
 ## Interactive Refinement
 
@@ -136,8 +136,8 @@ treats the standing verdict as no-update rather than as a runnable null.
 ### 1. Identify the Analysis
 
 - What analysis are you about to run?
-- Which hypotheses does it test? (Reference by ID if they exist in `specs/hypotheses/`)
-- Is there a pipeline plan? (Reference by slug if one exists in `doc/plans/`)
+- Which hypotheses does it test? (Reference by ID if they exist in `entities/hypotheses/`)
+- Is there a pipeline plan? (Reference by slug if one exists in `entities/plans/`)
 
 If this is a data-analysis pre-registration and no linked `analysis-plan:<slug>`
 exists, recommend `science-plan-analysis` when any of these are underspecified:
@@ -234,7 +234,7 @@ After the conversation, write the pre-registration document using `.ai/templates
 ### Naming and Frontmatter
 
 Use the hypothesis ID, inquiry slug, or task ID as the basis:
-- **Filename:** `doc/meta/pre-registration-<slug>.md` (default), or `doc/pre-registrations/<slug>.md` if the project has adopted that placement.
+- **Filename:** `entities/pre-registrations/<slug>.md`.
 - **Frontmatter** must use the canonical pre-registration shape:
   - `id: "pre-registration:<slug>"`
   - `type: "pre-registration"`
@@ -248,7 +248,7 @@ Use the hypothesis ID, inquiry slug, or task ID as the basis:
 
 ## After Writing
 
-1. Save to `doc/meta/pre-registration-<slug>.md` (or `doc/pre-registrations/<slug>.md` if the project uses that placement). The frontmatter must declare `type: "pre-registration"` and `id: "pre-registration:<slug>"` per the template.
+1. Save to `entities/pre-registrations/<slug>.md`. The frontmatter must declare `type: "pre-registration"` and `id: "pre-registration:<slug>"` per the template.
 2. If relevant hypotheses exist, note in the output that pre-registration is now on record.
 3. Suggest next steps:
    - `science-plan-pipeline` — if no pipeline plan exists yet

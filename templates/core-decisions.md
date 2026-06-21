@@ -3,7 +3,7 @@ core/decisions.md — load-bearing decisions and the reasoning behind them.
 Loaded at session start via AGENTS.md.
 
 Length cap: ~150 lines. When the file outgrows that, move older entries
-to doc/decisions/ and keep only the still-load-bearing ones here.
+to entities/decision/ and keep only the still-load-bearing ones here.
 
 This file is APPEND-ONLY for individual decisions. Do not rewrite a
 decision when it is later superseded — add a new entry that references and
@@ -59,7 +59,7 @@ What does NOT belong here:
 - Implementation notes ("we use httpx not requests") — that's code-level.
 - Style preferences without consequence — those belong in AGENTS.md.
 - One-time deliberations that no longer constrain anything — let them die in
-  doc/discussions/.
+  entities/discussions/.
 - Recap of an entire research debate — link to the discussion doc, summarize
   the conclusion in this file.
 

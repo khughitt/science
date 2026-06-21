@@ -38,7 +38,7 @@ Before executing any research command:
 
    | Signal | Suggests |
    |---|---|
-   | Files in `specs/hypotheses/` | `hypothesis-testing` |
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
    | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
    | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
    | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
@@ -69,7 +69,7 @@ Before executing any research command:
    `uv run --with <science-plugin-root>/science science <command>`
 
 Run a structured discussion on the user input.
-If no argument is provided, sample a discussion focus from `doc/questions/`, `specs/hypotheses/`, or active tasks in `tasks/active.md`.
+If no argument is provided, sample a discussion focus from `entities/questions/`, `entities/hypotheses/`, or active tasks in `tasks/active.md`.
 
 ## Setup
 
@@ -80,9 +80,9 @@ Additionally:
 2. If the discussion may create follow-up questions, read `.ai/templates/question.md`
    first; if not found, read `templates/question.md`.
 3. Read relevant context tied to the chosen focus:
-   - `doc/topics/`
-   - `specs/hypotheses/`
-   - `doc/questions/`
+   - `entities/topics/`
+   - `entities/hypotheses/`
+   - `entities/questions/`
    - `tasks/active.md`
 
 ## Discussion Modes
@@ -115,12 +115,12 @@ Use when the user asks for independent reasoning before synthesis.
 
 ## Writing Output
 
-Create the discussion with `science discussions create`. The tool builds the canonical ID, writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`), runs prospective validation, and places the file in the layout-resolved discussion home: `entities/discussions/` under `layout_version: 3`, or `doc/discussions/` in the legacy layout.
+Create the discussion with `science discussions create`. The tool builds the canonical ID, writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`), runs prospective validation, and places the file in the discussion home `entities/discussions/`.
 
 > ⚠️ **Fallback if the CLI errors or writes a non-canonical path.** The `discussions create`
 > CLI may be mid-refactor on some toolchains (e.g. emitting a numeric `discussion:0001-<slug>`
 > ID under `entities/discussions/` while the project convention is date-slug under
-> `doc/discussions/`). If the produced ID or path disagrees with the project's existing
+> `entities/discussions/`). If the produced ID or path disagrees with the project's existing
 > discussions, delete the stray file and author the source file directly under the project's
 > established discussion home, using the same `discussion:<today>-<slug>` ID scheme its
 > neighbours use. This mirrors the partially-migrated fallback in `science-interpret-results`.

@@ -79,7 +79,7 @@ For each cluster, propose ONE action covering the whole cluster, not per-ref dec
 > "5 refs look like task IDs being mis-prefixed: topic:t143, topic:t146, topic:t147, topic:t149, topic:t150. Rewrite all as task: refs?"
 
 **Real topics cluster:**
-> "12 refs look like domain topics: topic:genomics, topic:protein, topic:embeddings, ... Create stub topic entity files for these in doc/topics/?"
+> "12 refs look like domain topics: topic:genomics, topic:protein, topic:embeddings, ... Create stub topic entity files for these in entities/topics/?"
 
 **Operational markers cluster:**
 > "8 refs look like operational markers (phase, cycle, milestone): topic:phase3b, topic:cycle1, ... Rewrite as meta: refs (preserved as metadata, excluded from KG)?"

@@ -75,4 +75,4 @@ imperative rule. The "why" stays in core/decisions.md. -->
 - Decisions: `core/decisions.md`
 - Project overview: `core/overview.md`
 - Active tasks: `tasks/active.md`
-- Hypotheses: `specs/hypotheses/`
+- Hypotheses: `entities/hypotheses/`

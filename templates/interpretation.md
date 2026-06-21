@@ -133,7 +133,7 @@ Avoid direct "proved/refuted" language unless the case is genuinely overwhelming
 
 If the project uses open questions rather than formal hypotheses,
 rename this section to "Question-Level Implications" and evaluate
-against questions in doc/questions/ instead. -->
+against questions in entities/questions/ instead. -->
 
 ## Evidence vs. Open Questions
 

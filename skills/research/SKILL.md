@@ -171,8 +171,8 @@ These are high-value places to direct reading, replication, experimental work, o
 Before writing any document, check:
 
 1. `specs/research-question.md` — What is this project about?
-2. `specs/hypotheses/` — What hypotheses are we tracking?
-3. `doc/questions/` — What questions are we trying to answer?
+2. `entities/hypotheses/` — What hypotheses are we tracking?
+3. `entities/questions/` — What questions are we trying to answer?
 4. `doc/background/papers/` — What have we already reviewed?
 5. `doc/background/topics/` — What topics have we already covered?
 

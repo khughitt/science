@@ -292,5 +292,5 @@ Tell the user:
 - which profile the project was migrated to
 - which roots were consolidated
 - which material was archived versus kept active
-- whether `RESEARCH_PLAN.md` was retained, moved into `README.md`, or replaced by `doc/plans/`
+- whether `RESEARCH_PLAN.md` was retained, moved into `README.md`, or replaced by `entities/plans/`
 - what still needs manual review before commit
