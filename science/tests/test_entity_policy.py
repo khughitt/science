@@ -132,7 +132,10 @@ def test_every_policy_kind_has_status_config() -> None:
 def test_markdown_entity_kinds_includes_synthesis_excludes_task() -> None:
     kinds = markdown_entity_kinds()
     assert "synthesis" in kinds and "question" in kinds
-    assert "task" not in kinds and "dataset" not in kinds
+    # dataset/workflow are now first-class entities/ kinds (2026-06-21 adapter-entity
+    # -layout migration); task remains a non-markdown kind (tasks/ adapter).
+    assert "task" not in kinds
+    assert "dataset" in kinds and "workflow" in kinds
     assert is_markdown_entity_kind("hypothesis")
     assert not is_markdown_entity_kind("task")
 

@@ -118,19 +118,21 @@ science/src/science_tool/
 - **Entry point:** `profiles/schema.py:12` (add `id-local`); `entity_layout_migration.py` strategy dispatch + `test_entity_layout_migration.py`.
 - **Definition of done:** `id-local` is a valid `EntityFilenameStrategy`; failing-then-passing tests prove `doc/datasets/data-ctrpv2.md` (frontmatter `id: dataset:ctrpv2`) → planned move to `entities/datasets/ctrpv2.md` with id **unchanged** and **no ref rewrites**; a synthetic owner whose stem ≠ id is renamed to match the id; an `id-local` file with **no explicit `id:`** raises a planning error (no stem fallback); existing slug/citekey/verbatim/numeric behavior for other kinds is untouched (regression tests green).
 
-### Phase 2 — Framework: wire `home`/`strategy` + overlay-relocation pass + collision gate (TDD)
+### Phase 2 — Framework: wire `home`/`strategy` (owners) + owner-collision gate (TDD)
 - **Depends on:** Phase 1.
-- **Entry point:** `core.py` kind definitions; migrator overlay pass + planning-time collision detection.
+- **Entry point:** `core.py` kind definitions; `test_migrate_*`.
+- **Scope note (sequencing correction):** overlay relocation was originally bundled here but **moved to Phase 3** — relocating overlays to `overlays/` requires the `OverlayAdapter` to read `overlays/` in the *same* step, or the migrator's post-move audit reports borrowed entities as unresolved and aborts `--apply`. Owner migration has no such coupling (`MarkdownAdapter` already scans `entities/`), so Phase 2 stays clean and atomic with owners only.
 - **Definition of done:**
   - `dataset`→`entities/datasets`, `workflow`→`entities/workflows`, `workflow-run`→`entities/workflow-runs`, `workflow-step`→`entities/workflow-steps`, all `strategy="id-local"`.
-  - Migrator overlay pass relocates `overlay_of:` files of all 4 federated types (dataset, paper, topic, theme) to `overlays/<type>/`; tests cover an owner+overlay pair landing in the two distinct roots.
-  - **Target-collision gate (blocks `--apply`):** planning detects and reports when two source files would land on the same destination — both for owners (e.g. `doc/datasets/data-x.md` and `doc/datasets/x.md` → `entities/datasets/x.md`) and overlays (→ `overlays/datasets/x.md`). Test proves a colliding pair aborts planning with a clear per-collision error.
+  - Test: a dataset **owner** `doc/datasets/data-x.md` (`id: dataset:x`) migrates to `entities/datasets/x.md`, id preserved, no ref rewrites, post-move audit passes.
+  - **Owner target-collision gate:** `doc/datasets/data-x.md` + `doc/datasets/x.md` (both `id: dataset:x`) → both target `entities/datasets/x.md`; existing `_detect_collisions` (path + id) populates `plan.collisions` and `--apply` aborts (`entity_layout_migration.py:1207`). Test proves the abort.
 
-### Phase 3 — Framework: flip the readers/writers to the new roots + audit gate (TDD)
+### Phase 3 — Framework: flip readers/writers + overlay relocation + audit gate (TDD)
 - **Depends on:** Phase 2.
-- **Entry point:** `sources.py:306`, `commons_sources.py:75`, `overlay.py`, `promote.py:204`, `datasets_catalog.py:92`, `validate/_helpers.py:143`, `graph/health.py:1279`, `graph/health.py:1626`, `entity_conformance.py:195`.
+- **Entry point:** `sources.py:306`, `commons_sources.py:75`, `overlay.py:39-44,92-107`, `promote.py:204`, `datasets_catalog.py:92`, `validate/_helpers.py:143`, `graph/health.py:1279`, `graph/health.py:1626`, `entity_conformance.py:195`; migrator overlay-relocation pass.
 - **Definition of done:**
-  - discovery finds dataset/workflow **owners** under `entities/`; `OverlayAdapter` scans `overlays/`; commons-promote candidate scan + catalog writes target `entities/datasets/`; the `_helpers.py` validate-discovery scan_root and both `health.py` reads point at `entities/`; the `data-` hack is removed; `check_overlay_of_in_owner_root` is generalized to "overlays belong in `overlays/`" (ERROR at v3 if an `overlay_of:` file is found under `entities/` **or** `doc/<type>/`).
+  - discovery finds dataset/workflow **owners** under `entities/`; `OverlayAdapter` scans `overlays/` (root constant, lines 92/107); commons-promote candidate scan + catalog writes target `entities/datasets/`; the `_helpers.py` validate-discovery scan_root and both `health.py` reads point at `entities/`; the `data-` hack (45, 93-94) is removed; `check_overlay_of_in_owner_root` is generalized to "overlays belong in `overlays/`" (ERROR at v3 if an `overlay_of:` file is found under `entities/` **or** `doc/<type>/`).
+  - **Migrator overlay-relocation pass** (coupled with the OverlayAdapter flip above): `overlay_of:` files of all 4 federated types relocate `doc/<type>/` → `overlays/<type>/`, filename = `overlay_of` local part (drops `data-`), id preserved. Routed through `plan.moves` so `_detect_collisions` covers overlay→same-destination clashes for free. Test: an owner+overlay pair lands in the two distinct roots and the post-move audit (now reading `overlays/`) passes.
   - **Hardcoded-path audit (gate):** a repo grep proves no remaining source-tree literal of `doc/datasets`, `doc/workflows`, `doc/workflow-runs`, `doc/papers`, `doc/topics`, or `doc/themes` outside tests/fixtures and explicitly-justified legacy comments. This is the backstop against silently-stranded readers like `_helpers.py`/`health.py`.
   - Full science test suite green.
 
