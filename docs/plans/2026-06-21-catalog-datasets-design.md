@@ -286,16 +286,34 @@ The command is validated on a real sparse graph:
   question edge). Default v1: equal weight; revisit with data.
 - Whether the redundancy discount can reuse an existing `science_tool` shared-source derivation helper
   or needs the `origin`/cohort fallback (resolve by code inspection during planning).
-- **Multi-hop usage reach via the `sci:bearsOn` closure (deferred follow-up).** The shipped
-  implementation walks the usage path's proposition→Q/H expansion with the two DIRECT edges only
+- **Multi-hop usage reach via the `sci:bearsOn` closure — SCOPED FOR IMPLEMENTATION (2026-06-22).**
+  The v1 implementation walks the usage path's proposition→Q/H expansion with the two DIRECT edges only
   (`cito:discusses`, `sci:addresses`), not the transitive `sci:bearsOn` closure this design recommended
   (`graph/freshness.py:70,182,231`). Consequence: a proposition reachable only through a multi-hop
-  chain is undercounted in `reach` — but solely on a *mature* materialized graph. The only current
-  consumer (PAIS) has no materialized graph, so the usage path never fires and reach is frontmatter-
-  only; the gap is invisible today. Follow-up when a mature-graph consumer exists: rewire
-  `usage_reach` + `reached_proposition_uris` (in `dataset_prioritize.py`) to traverse the materialized
-  `sci:bearsOn` closure, and add a multi-hop reach test. Flagged by the final whole-branch review
-  (2026-06-21); accepted as a scoped reduction by the project owner.
+  chain (e.g. `P ⊳supports P2 ⊳supports H`, giving `P bearsOn H` at depth 2) is undercounted in
+  `reach`. **Resolution (2026-06-22):** `_qh_for_proposition` (in `dataset_prioritize.py`) gains a
+  third source — the materialized transitive `sci:bearsOn` closure targets typed Question/Hypothesis —
+  **unioned** with the existing two direct edges (NOT a replacement: `cito:discusses`/`sci:addresses`
+  are not in the `bearsOn` deriver rule set, so the closure alone would drop them). Purely additive:
+  cannot regress any existing acceptance criterion. `usage_reach` inherits the upgrade; the leverage
+  path (`reached_proposition_uris`) is untouched. Validated by a synthetic multi-hop test — there is no
+  live consumer (PAIS has 0 `dataset_usage` edges; lights up end-to-end only on an `mm30`-scale graph).
+  Flagged by the final whole-branch review (2026-06-21); accepted as a scoped reduction, then promoted
+  to implementation by the project owner (2026-06-22).
+
+- **Candidate-aware leverage — DEFERRED with an explicit un-defer trigger (2026-06-22).** Idea: let a
+  *candidate* dataset's `leverage_tilt` borrow from the claim-signals (`contested`/`single_source`/
+  `no_empirical_data`/`risk_score`) of the propositions in the bearsOn neighborhood of its
+  frontmatter-linked Q/H, so leverage is meaningful *before* the dataset is analyzed — as a
+  **subordinate tilt** (bounded so it never lets a lower-readiness dataset overtake a higher-readiness
+  one; preserves Key decision 2). **Why deferred:** an audit of PAIS (2026-06-22) found the required
+  signal is unpopulated — only 7 proposition nodes exist and **zero** bear on any question/hypothesis,
+  so the traversal returns the neutral `1.0` for every dataset; the only populated proxy (bearsOn
+  in-degree to a question) is the circular centrality signal this design already rejects as a Non-goal.
+  Building it now would violate the Guiding Principle ("design only around signals that are actually
+  populated"). **Un-defer trigger:** a consumer graph has propositions wired to its candidate-targeted
+  questions — i.e. proposition→Q/H `bearsOn` edges are non-zero on datasets' frontmatter-linked Q/H.
+  Revisit then, tuning the subordinate cap against that consumer's real numbers.
 
 ## Non-goals
 
