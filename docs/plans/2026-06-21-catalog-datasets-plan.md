@@ -374,8 +374,12 @@ def _seed_graph_project(root: Path) -> None:
            'access: {level: "public", verified: true}\n---\n')
     _write(root / "entities/hypotheses/h.md",
            '---\nid: "hypothesis:h"\ntype: "hypothesis"\ntitle: "H"\n---\n')
+    # question→proposition is the sci:addresses edge: author it via a `relations:`
+    # block (flattened at sources.py:1047, emitted at materialize.py:1173). A plain
+    # `related:` would materialize as skos:related, NOT sci:addresses.
     _write(root / "entities/questions/q.md",
-           '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\nrelated: ["proposition:p"]\n---\n')
+           '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\n'
+           'relations:\n  - predicate: "sci:addresses"\n    target: "proposition:p"\n---\n')
     _write(root / "entities/propositions/p.md",
            '---\nid: "proposition:p"\ntype: "proposition"\ntitle: "P"\ndiscusses: ["hypothesis:h"]\n---\n')
     _write(root / "entities/evidence-lines/e.md",
@@ -452,7 +456,7 @@ def usage_reach(knowledge, provenance, dataset_ids: list[str]) -> dict[str, set[
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_dataset_prioritize_graph.py -v`
-Expected: PASS — `canonical_id_from_entity_uri` reconstructs `hypothesis:h`/`question:q` from the project URIs. If the assertion shows the question missing, the question→proposition edge is the likely cause: `related:` materializes as `skos:related`, but the traversal expects `sci:addresses`. Verify against `tests/test_meta_reference.py` how a question→proposition `sci:addresses` edge is authored (it may require an `addresses:` field rather than `related:`), adjust the `_seed_graph_project` question frontmatter accordingly, and keep the assertion `{"hypothesis:h", "question:q"}` as the contract.
+Expected: PASS — `canonical_id_from_entity_uri` reconstructs `hypothesis:h`/`question:q` from the project URIs, and the question's `relations: [{predicate: "sci:addresses", target: "proposition:p"}]` block materializes the `sci:addresses` edge the traversal reads.
 
 - [ ] **Step 5: Commit**
 
@@ -482,10 +486,12 @@ from science_tool.dataset_prioritize import merged_reach
 
 def test_merged_reach_unions_both_paths_and_dedups(tmp_path: Path) -> None:
     _seed_graph_project(tmp_path)
-    # ALSO give dataset:d a frontmatter back-edge to the SAME question:q
+    # ALSO give dataset:d a frontmatter back-edge to the SAME question:q, while
+    # keeping the sci:addresses edge so question:q is reachable via BOTH paths.
     (tmp_path / "entities/questions/q.md").write_text(
         '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\n'
-        'related: ["proposition:p", "dataset:d"]\n---\n', encoding="utf-8")
+        'relations:\n  - predicate: "sci:addresses"\n    target: "proposition:p"\n'
+        'related: ["dataset:d"]\n---\n', encoding="utf-8")
     graph_path = materialize_graph(tmp_path)
     ds = _load_dataset(graph_path)
     knowledge = ds.graph(_graph_uri("graph/knowledge"))
@@ -766,10 +772,12 @@ from science_tool.dataset_prioritize import prioritize
 
 def test_prioritize_mixed_graph_frontmatter_dataset_not_no_edge(tmp_path: Path) -> None:
     _seed_graph_project(tmp_path)  # dataset:d connected via usage
-    # a second dataset connected ONLY by frontmatter to question:q
+    # a second dataset connected ONLY by frontmatter to question:q (keep the
+    # sci:addresses edge intact for dataset:d's usage path)
     (tmp_path / "entities/questions/q.md").write_text(
         '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\n'
-        'related: ["proposition:p", "dataset:fm_only"]\n---\n', encoding="utf-8")
+        'relations:\n  - predicate: "sci:addresses"\n    target: "proposition:p"\n'
+        'related: ["dataset:fm_only"]\n---\n', encoding="utf-8")
     (tmp_path / "doc/datasets/fm_only.md").write_text(
         '---\nid: "dataset:fm_only"\ntype: "dataset"\ntitle: "FM"\norigin: "external"\n'
         'access: {level: "public", verified: true}\n---\n', encoding="utf-8")
@@ -841,8 +849,10 @@ def test_prioritize_runs_without_graph_and_warns(tmp_path: Path) -> None:
     res = _run(tmp_path)
     assert res.exit_code == 0
     assert "dataset:a" in res.output and "dataset:b" in res.output
-    # no graph present → a stderr warning is emitted but the command still ranks
-    assert "graph" in res.output.lower()
+    # no graph present → a stderr warning is emitted but the command still ranks.
+    # This repo's CliRunner captures stderr separately (see tests/test_datasets_cli.py:80).
+    combined = res.output + (res.stderr if res.stderr_bytes else "")
+    assert "graph" in combined.lower()
 
 
 def test_prioritize_json_and_explain(tmp_path: Path) -> None:
@@ -850,11 +860,11 @@ def test_prioritize_json_and_explain(tmp_path: Path) -> None:
     res = _run(tmp_path, "--format", "json")
     assert res.exit_code == 0
     import json
-    rows = json.loads(res.output.split("\n", 1)[-1]) if not res.output.lstrip().startswith("[") else json.loads(res.output[res.output.index("["):])
+    rows = json.loads(res.output)  # stdout is clean JSON; the warning is on stderr
     assert any(r["id"] == "dataset:a" for r in rows)
 ```
 
-(If mixing the stderr warning into stdout complicates JSON parsing, send the warning to stderr via `click.echo(..., err=True)` and parse `res.output` — `CliRunner` separates them only if `mix_stderr=False`; default mixes. Simplest: in `--format json` mode, suppress the human warning line or prefix-strip it; the test above tolerates a leading warning line.)
+(This repo's `CliRunner` captures stderr **separately** from stdout — `res.output` is stdout only, `res.stderr` holds the warning (guard with `res.stderr_bytes`), per `tests/test_datasets_cli.py:80`. Because the warning goes to stderr via `click.echo(..., err=True)`, `--format json` mode emits clean JSON on stdout — `res.output` parses directly with no warning line to strip. The `_run` helper above relies on the default capture, so no `mix_stderr` argument is needed.)
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1031,4 +1041,4 @@ cd ~/d/science && git add -A && git commit -m "chore(dataset): validation fixups
 
 **Type consistency:** `prioritize` returns rows with `gap_flags` (list); CLI renders `gap-flags` column from `r["gap_flags"]`. `readiness_for`/`readiness_weight`/`frontmatter_reach`/`usage_reach`/`merged_reach`/`leverage_tilt`/`prioritize` signatures are consistent across tasks. Graph layers obtained identically everywhere (`_load_dataset` + `_graph_uri("graph/knowledge"|"graph/provenance")`).
 
-**Known implementation risk flagged inline (not a placeholder):** the only residual uncertainty is how a question→proposition `sci:addresses` edge is authored in frontmatter (Task 3's `_seed_graph_project` uses `related:`, which materializes as `skos:related`; `sci:addresses` may need an `addresses:` field). Task 3 Step 4 says to verify against `tests/test_meta_reference.py` and keep the `{"hypothesis:h", "question:q"}` reach assertion as the contract. URI→ref is now resolved via the real inverse `canonical_id_from_entity_uri` (identity.py:32), and the graph-fixture entity layout is corrected to `entities/{hypotheses,questions,propositions,evidence-lines}/` (datasets in `doc/datasets/`) to match `load_project_sources` scan roots.
+**Graph-fixture correctness (all resolved):** the question→proposition `sci:addresses` edge is authored via a `relations:` block (flattened at sources.py:1047, emitted at materialize.py:1173) — not `related:`, which would be `skos:related`. URI→ref uses the real inverse `canonical_id_from_entity_uri` (identity.py:32). The entity layout is `entities/{hypotheses,questions,propositions,evidence-lines}/` (datasets in `doc/datasets/`), matching `load_project_sources` scan roots.
