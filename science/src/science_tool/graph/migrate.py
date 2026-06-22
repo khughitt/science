@@ -365,6 +365,7 @@ def _audit_entity(
                     ext_prefixes=ext_prefixes,
                     allow_cross_kind_fallback=False,
                     allow_tag=False,
+                    allow_descriptive_freetext=True,
                 )
             )
     derivation = getattr(entity, "derivation", None)
@@ -631,7 +632,13 @@ def _audit_dataset_reference(
     ext_prefixes: frozenset[str],
     allow_cross_kind_fallback: bool = False,
     allow_tag: bool = False,
+    allow_descriptive_freetext: bool = False,
 ) -> list[AuditRow]:
+    # A descriptive field (e.g. a paper's `datasets:` provenance) lists dataset
+    # NAMES as free text, not structural references. Only an explicit `dataset:<slug>`
+    # entry is a reference that must resolve; bare free-text is descriptive and skipped.
+    if allow_descriptive_freetext and not raw_target.startswith("dataset:"):
+        return []
     if (
         is_external_reference(raw_target, known_prefixes=ext_prefixes)
         or is_metadata_reference(raw_target)
