@@ -12,7 +12,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from rdflib import URIRef
+from rdflib.namespace import RDF
+
 from science_model.entities import DatasetEntity, Readiness
+from science_tool.graph.dataset_usage import project_entity_uri
+from science_tool.graph.store.constants import CITO_NS, SCI_NS
+from science_tool.graph.store.identity import canonical_id_from_entity_uri
 from science_model.frontmatter import parse_frontmatter
 
 # Base Entity fields that a normal on-disk dataset frontmatter omits but
@@ -125,4 +131,39 @@ def frontmatter_reach(project_root: Path) -> dict[str, set[str]]:
             for r in related:
                 if isinstance(r, str) and r.startswith("dataset:"):
                     reach.setdefault(r, set()).add(ent_id)
+    return reach
+
+
+def _qh_for_proposition(knowledge, prop_uri: URIRef) -> set[URIRef]:
+    """Hypotheses (prop discusses) + questions (question addresses prop)."""
+    out: set[URIRef] = set()
+    for _, _, hyp in knowledge.triples((prop_uri, CITO_NS.discusses, None)):
+        if isinstance(hyp, URIRef) and (hyp, RDF.type, SCI_NS.Hypothesis) in knowledge:
+            out.add(hyp)
+    for q in knowledge.subjects(SCI_NS.addresses, prop_uri):
+        if isinstance(q, URIRef) and (q, RDF.type, SCI_NS.Question) in knowledge:
+            out.add(q)
+    return out
+
+
+def usage_reach(knowledge, provenance, dataset_ids: list[str]) -> dict[str, set[str]]:
+    reach: dict[str, set[str]] = {ds_id: set() for ds_id in dataset_ids}
+    for ds_id in dataset_ids:
+        ds_uri = project_entity_uri(ds_id)
+        # usage nodes referencing this dataset, then their consumers (evidence-lines)
+        for usage_node in provenance.subjects(SCI_NS.dataset, ds_uri):
+            for consumer in provenance.subjects(SCI_NS.hasDatasetUsage, usage_node):
+                # consumer (evidence-line) supports/disputes a proposition (knowledge graph)
+                props: set[URIRef] = set()
+                for _, _, prop in knowledge.triples((consumer, CITO_NS.supports, None)):
+                    props.add(prop)
+                for _, _, prop in knowledge.triples((consumer, CITO_NS.disputes, None)):
+                    props.add(prop)
+                for prop in props:
+                    if not isinstance(prop, URIRef):
+                        continue
+                    for qh in _qh_for_proposition(knowledge, prop):
+                        ref = canonical_id_from_entity_uri(str(qh))
+                        if ref is not None:  # skip non-entity URIs
+                            reach[ds_id].add(ref)
     return reach
