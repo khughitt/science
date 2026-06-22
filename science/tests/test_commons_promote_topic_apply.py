@@ -56,7 +56,7 @@ def _init_commons(tmp_path: Path) -> Path:
 
 
 def test_topic_apply_flatten_unlinks_background_source(tmp_path, monkeypatch) -> None:
-    """A topic sourced from doc/background/topics/ is flattened to entities/topics/."""
+    """A topic sourced from doc/background/topics/ is relocated to overlays/topics/."""
     from science_tool.commons.promote import (
         PROMOTE_KIND_TOPIC,
         apply_promote,
@@ -76,13 +76,13 @@ def test_topic_apply_flatten_unlinks_background_source(tmp_path, monkeypatch) ->
 
     result = apply_promote(plan, commons_root=commons, invocation="test")
 
-    assert (proj / "doc" / "topics" / "flatten-source.md").exists()
+    assert (proj / "overlays" / "topics" / "flatten-source.md").exists()
     assert not (proj / "doc" / "background" / "topics" / "flatten-source.md").exists()
     assert result.audit_log_path is not None
     log = yaml.safe_load(result.audit_log_path.read_text(encoding="utf-8"))
     rewrites = log["projects_touched"]["proj-alpha"]["overlay_rewrites"]
     flatten_entry = next(entry for entry in rewrites if entry["slug"] == "flatten-source")
-    assert flatten_entry["path"] == str(proj / "doc" / "topics" / "flatten-source.md")
+    assert flatten_entry["path"] == str(proj / "overlays" / "topics" / "flatten-source.md")
     assert flatten_entry["unlinked_source"] == str(proj / "doc" / "background" / "topics" / "flatten-source.md")
 
 
@@ -120,7 +120,7 @@ def test_topic_apply_rollback_restores_unlinked_source(tmp_path, monkeypatch) ->
     )
 
     proj = _copy_fixture(tmp_path, "proj-alpha")
-    for path in (proj / "doc" / "topics").glob("*.md"):
+    for path in (proj / "entities" / "topics").glob("*.md"):
         if path.name != "single-instance.md":
             path.unlink()
     for path in (proj / "doc" / "background" / "topics").glob("*.md"):
@@ -142,7 +142,7 @@ def test_topic_apply_rollback_restores_unlinked_source(tmp_path, monkeypatch) ->
     discovery = discover_candidates(["proj-alpha"], PROMOTE_KIND_TOPIC)
     plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_TOPIC)
 
-    failing_target = proj / "doc" / "topics" / "single-instance.md"
+    failing_target = proj / "overlays" / "topics" / "single-instance.md"
     real_write_text = Path.write_text
 
     def sabotaged_write_text(self: Path, *args, **kwargs):
@@ -156,3 +156,5 @@ def test_topic_apply_rollback_restores_unlinked_source(tmp_path, monkeypatch) ->
         apply_promote(plan, commons_root=commons, invocation="test")
 
     assert (proj / "doc" / "background" / "topics" / "flatten-source.md").exists()
+
+

@@ -45,7 +45,7 @@ The plan-pipeline command works with two types of input:
 - **Inquiry mode** (default when an inquiry slug is provided): Load the formal inquiry subgraph and translate it into a pipeline plan. Follow Steps 1, 3, and 5 for inquiry loading, graph annotation, and status updates.
 - **Task mode** (when the project uses tasks/questions instead of formal inquiries, or when `$ARGUMENTS` is a task ID or description): Derive the plan directly from the task description, existing code, and project context. Skip inquiry-specific steps (1, 3, 5) — the plan document is the primary deliverable. Graph annotations are secondary.
 
-When an existing analysis plan is in scope, read `entities/analysis-plan/*-analysis-plan.md`
+When an existing analysis plan is in scope, read `entities/plans/*-analysis-plan.md`
 and reuse its methodological readiness checks. Do not re-decide those checks in
 the pipeline plan; focus on execution.
 

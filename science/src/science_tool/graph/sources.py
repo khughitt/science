@@ -292,18 +292,13 @@ def load_project_sources(
 
     project_paths = resolve_paths(project_root)
     adapters: list[StorageAdapter] = [
-        # The 21 entity-layout kinds live under entities/ (Plan 3 cutover). The
-        # datapackage/workflow family (dataset, workflow, workflow-run) is NOT one
-        # of those layout kinds and was not migrated, so we keep discovering it at
-        # its existing doc/ roots (also hard-coded in validate/_helpers.py,
-        # dataset_promotion_contract.py, commons/promote.py). The markdown.py
-        # default stays entities/-only; these doc/ roots are listed explicitly.
-        # NOTE: doc/ is a TRANSITIONAL home for this family, not a principled one —
-        # whether dataset/workflow/workflow-run should become first-class entities/
-        # kinds (and gain dataset<->claim epistemic edges) is deferred to a dedicated
-        # follow-up. See docs/plans/2026-04-19-dataset-entity-lifecycle-design.md.
+        # The dataset/workflow/workflow-run/workflow-step family are now first-class
+        # entities/ kinds (home=entities/<kind>, strategy=id-local) — see
+        # docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md. They
+        # are discovered via the default entities/ root like every other owner kind;
+        # the legacy doc/ scan roots have been removed (owners no longer live there).
         MarkdownAdapter(
-            scan_roots=["entities", "research/packages", "doc/datasets", "doc/workflows", "doc/workflow-runs"],
+            scan_roots=["entities", "research/packages"],
             virtual_files=markdown_overrides,
         ),
         AggregateAdapter(local_profile=local_profile, virtual_files=markdown_overrides),

@@ -9,7 +9,7 @@ from science_tool.qa_audit.audit import audit_workflows, render_markdown
 
 
 @click.command("qa-audit")
-@click.option("--runs-dir", type=click.Path(path_type=Path), default=Path("doc/workflow-runs"),
+@click.option("--runs-dir", type=click.Path(path_type=Path), default=Path("entities/workflow-runs"),
               show_default=True, help="Directory of authored workflow-run entities.")
 @click.option("--repo-root", type=click.Path(path_type=Path), default=Path("."), show_default=True,
               help="Repo root used to resolve each run's manifest_path.")

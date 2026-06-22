@@ -278,7 +278,7 @@ related: ["topic:single-cell-foundation-models"]
 """,
         encoding="utf-8",
     )
-    overlay_path = project / "doc" / "topics" / "single-cell-foundation-models.md"
+    overlay_path = project / "overlays" / "topics" / "single-cell-foundation-models.md"
     overlay_path.parent.mkdir(parents=True)
     overlay_path.write_text(
         """---

@@ -475,6 +475,12 @@ CORE_PROFILE = ProfileManifest(
             description="Tabular or file dataset tracked as a research artifact.",
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.AUTHORED_CORE,
+            home="entities/datasets",
+            strategy="id-local",
+            # Minimal vocabulary covering values in use across projects; refinement
+            # of the dataset lifecycle is deferred to the 2026-04-19 lifecycle design.
+            default_status="active",
+            statuses=["proposed", "candidate", "active", "retired", "deprecated"],
         ),
         EntityKind(
             name="workflow",
@@ -483,6 +489,10 @@ CORE_PROFILE = ProfileManifest(
             description="Reusable pipeline definition (Snakefile + config + rules).",
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.AUTHORED_CORE,
+            home="entities/workflows",
+            strategy="id-local",
+            default_status="active",
+            statuses=["planned", "active", "deprecated", "retired"],
         ),
         EntityKind(
             name="workflow-run",
@@ -491,6 +501,10 @@ CORE_PROFILE = ProfileManifest(
             description="Concrete execution of a workflow producing durable outputs.",
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.AUTHORED_CORE,
+            home="entities/workflow-runs",
+            strategy="id-local",
+            default_status="running",
+            statuses=["running", "complete", "failed"],
         ),
         EntityKind(
             name="workflow-step",
@@ -499,6 +513,10 @@ CORE_PROFILE = ProfileManifest(
             description="Individual step within a workflow definition or run.",
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.AUTHORED_CORE,
+            home="entities/workflow-steps",
+            strategy="id-local",
+            default_status="pending",
+            statuses=["pending", "running", "complete", "failed"],
         ),
         EntityKind(
             name="data-package",

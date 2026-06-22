@@ -115,7 +115,7 @@ Scan pipeline plans in `entities/plans/` for implementation tasks that are not t
 Scan active analysis-facing tasks and inquiries for linked `analysis-plan:<slug>`
 artifacts. If none exists and the task is about running, validating, or
 pre-registering a data analysis, add a recommended next action to run
-`/science:plan-analysis`. Check `entities/analysis-plan/*-analysis-plan.md` before
+`/science:plan-analysis`. Check `entities/plans/*-analysis-plan.md` before
 recommending a new one.
 
 **Archive lag.** Run `science health --format json` and inspect `archive_lag`. When `archive_lag.done_in_active` or `archive_lag.retired_in_active` is non-zero, add a Recommended Next Action:

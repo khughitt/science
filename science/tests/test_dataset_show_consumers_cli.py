@@ -10,7 +10,7 @@ from science_tool.cli import main as science_cli
 
 
 def _seed(root: Path) -> None:
-    d = root / "doc" / "datasets"
+    d = root / "entities" / "datasets"
     d.mkdir(parents=True, exist_ok=True)
     (d / "foo.md").write_text(
         '---\nid: "dataset:foo"\ntype: "dataset"\ntitle: "Foo"\nstatus: "candidate"\n'
@@ -58,7 +58,7 @@ def test_consumers_lists_consumed_by(tmp_path: Path) -> None:
 
 
 def test_consumers_empty(tmp_path: Path) -> None:
-    d = tmp_path / "doc" / "datasets"
+    d = tmp_path / "entities" / "datasets"
     d.mkdir(parents=True, exist_ok=True)
     (d / "bar.md").write_text(
         '---\nid: "dataset:bar"\ntype: "dataset"\ntitle: "Bar"\nstatus: "candidate"\n---\n',

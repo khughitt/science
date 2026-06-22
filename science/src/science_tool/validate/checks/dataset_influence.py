@@ -217,7 +217,7 @@ def _dataset_ref_statuses(
     frontmatters: Iterable[dict[str, Any]],
 ) -> dict[str, DatasetRefStatus]:
     local_kinds = _local_entity_kinds(frontmatters)
-    # Markdown dataset descriptors (doc/datasets/) live outside the entity scan roots,
+    # Markdown dataset descriptors (entities/datasets/) live outside the entity scan roots,
     # so entity_frontmatters never surfaces them; fold in dataset_frontmatters (both
     # markdown + datapackage backends) or every dataset_usage ref to a markdown-only
     # local dataset would warn ref-unresolved despite the descriptor existing.

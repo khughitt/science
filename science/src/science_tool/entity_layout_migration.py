@@ -112,6 +112,43 @@ def discover_legacy_entities(project_root: Path) -> list[LegacyEntity]:
     return _discover_with_skips(project_root)[0]
 
 
+# The four federated commons types whose overlays live (post-2026-06-21) under
+# overlays/<type_dir>/. Maps the legacy doc/<type_dir>/ to the canonical id prefix.
+_OVERLAY_TYPE_DIRS: dict[str, str] = {
+    "datasets": "dataset",
+    "papers": "paper",
+    "topics": "topic",
+    "themes": "theme",
+}
+
+
+def _discover_overlay_relocations(project_root: Path) -> list[OverlayMove]:
+    """Find commons overlays (`overlay_of:` files) stranded in doc/<type>/ and plan
+    their relocation to overlays/<type>/. The destination filename is the overlay_of
+    LOCAL PART (so the legacy `data-` dataset prefix is dropped), and the canonical
+    id is preserved — an overlay carries no owner identity to renumber. Owner notes
+    (no `overlay_of`) under the same dirs are left to the owner pass."""
+    moves: list[OverlayMove] = []
+    for type_dir in _OVERLAY_TYPE_DIRS:
+        src_dir = project_root / "doc" / type_dir
+        if not src_dir.is_dir():
+            continue
+        for path in sorted(src_dir.rglob("*.md")):
+            if "templates" in path.parts:
+                continue
+            frontmatter, _ = _split_frontmatter(path.read_text(encoding="utf-8"))
+            if not frontmatter:
+                continue
+            canonical_id = frontmatter.get("overlay_of")
+            if not isinstance(canonical_id, str) or ":" not in canonical_id:
+                continue
+            local = canonical_id.split(":", 1)[1]
+            rel_old = path.relative_to(project_root).as_posix()
+            rel_new = f"overlays/{type_dir}/{local}.md"
+            moves.append(OverlayMove(rel_old, rel_new, canonical_id))
+    return moves
+
+
 # Specific legacy file paths whose kind cannot be inferred from the parent dir.
 # `doc/reports/synthesis.md` is the legacy synthesis singleton: its parent dir is
 # "reports", which the generic map would misclassify as `report`. Validation
@@ -337,10 +374,23 @@ class SingletonMove:
     new_rel_path: str
 
 
+@dataclass(frozen=True)
+class OverlayMove:
+    """Relocation of a commons overlay (`overlay_of:` file) out of the prose-only
+    doc/<type>/ tree into the dedicated overlays/<type>/ root. The overlay carries
+    no owner identity of its own — `canonical_id` is the borrowed commons id, and
+    it is preserved verbatim (no id_map entry, no reference rewriting of the id)."""
+
+    old_rel_path: str
+    new_rel_path: str
+    canonical_id: str
+
+
 @dataclass
 class MigrationPlan:
     moves: list[Move] = field(default_factory=list)
     singletons: list[SingletonMove] = field(default_factory=list)
+    overlay_moves: list[OverlayMove] = field(default_factory=list)
     id_map: dict[str, str] = field(default_factory=dict)  # old_id -> new_id
     collisions: list[dict] = field(default_factory=list)  # blocking; reported
     # Tracks stem-alias keys added to id_map so alias-vs-alias conflicts can be
@@ -469,6 +519,23 @@ def plan_migration(project_root: Path) -> MigrationPlan:
                 local = Path(entity.rel_path).stem
                 _add_move(plan, entity, f"{policy.root.as_posix()}/{local}.md", f"{kind}:{local}", kind)
             continue
+        if policy.strategy == "id-local":
+            # id-local preserves the authoritative frontmatter `id:` verbatim and
+            # derives the destination FILENAME from the id's local part (not the
+            # stem). This is what lets adapter-backed owners (dataset/workflow)
+            # move doc/<type>/data-<slug>.md -> entities/<kind>/<slug>.md with the
+            # id unchanged and therefore ZERO reference rewrites. A file with no
+            # explicit, kind-prefixed id has no derivable identity here — fail loud
+            # rather than fall back to the stem (which would re-introduce drift).
+            for entity in items:
+                if not entity.old_id or not entity.old_id.startswith(f"{kind}:"):
+                    raise ValueError(
+                        f"id-local kind {kind!r} requires an explicit '{kind}:<local>' id; "
+                        f"{entity.rel_path} has id={entity.old_id!r}"
+                    )
+                local = entity.old_id.split(":", 1)[1]
+                _add_move(plan, entity, f"{policy.root.as_posix()}/{local}.md", entity.old_id, kind)
+            continue
         # numeric: preserve conformant numbers; assign the rest in created order.
         ordered = sorted(items, key=lambda e: (str(normalized[e.rel_path]["created"]), e.rel_path))
         taken: set[int] = set()
@@ -524,6 +591,7 @@ def plan_migration(project_root: Path) -> MigrationPlan:
                 local = f"{number:04d}-{_slug_from_legacy(entity, normalized[entity.rel_path])}"
             _add_move(plan, entity, f"{policy.root.as_posix()}/{local}.md", f"{kind}:{local}", kind)
 
+    plan.overlay_moves = _discover_overlay_relocations(project_root)
     _detect_collisions(plan)
     _detect_disk_collisions(project_root, plan)
     return plan
@@ -546,10 +614,15 @@ def _detect_disk_collisions(project_root: Path, plan: MigrationPlan) -> None:
     moving (e.g. a pre-existing entities/papers/<citekey>.md or NNNN-*.md). This
     catches partial-migration / re-run cases that the moves-only collision pass
     cannot see."""
-    moved_sources = {m.old_rel_path for m in plan.moves} | {s.old_rel_path for s in plan.singletons}
+    moved_sources = (
+        {m.old_rel_path for m in plan.moves}
+        | {s.old_rel_path for s in plan.singletons}
+        | {o.old_rel_path for o in plan.overlay_moves}
+    )
     for new_rel, old_rel in (
         *[(m.new_rel_path, m.old_rel_path) for m in plan.moves],
         *[(s.new_rel_path, s.old_rel_path) for s in plan.singletons],
+        *[(o.new_rel_path, o.old_rel_path) for o in plan.overlay_moves],
     ):
         if new_rel in moved_sources:
             continue  # a swap among the files we are moving — handled by path/id checks
@@ -709,9 +782,16 @@ def _detect_collisions(plan: MigrationPlan) -> None:
         by_source.setdefault(move.old_rel_path, []).append(move.new_rel_path)
     for singleton in plan.singletons:
         by_source.setdefault(singleton.old_rel_path, []).append(singleton.new_rel_path)
+    for overlay in plan.overlay_moves:
+        by_source.setdefault(overlay.old_rel_path, []).append(overlay.new_rel_path)
     for source, targets in sorted(by_source.items()):
         if len(targets) > 1:
             plan.collisions.append({"kind": "source", "source": source, "targets": sorted(targets)})
+    # Overlay targets share the by_path namespace with owner/singleton targets: two
+    # overlays for the same canonical (or an overlay colliding with a relocated file)
+    # both land on overlays/<type>/<local>.md and must be caught here.
+    for overlay in plan.overlay_moves:
+        by_path.setdefault(overlay.new_rel_path, []).append(overlay.old_rel_path)
     for move in plan.moves:
         by_path.setdefault(move.new_rel_path, []).append(move.old_rel_path)
         by_id.setdefault(move.new_id, []).append(move.old_rel_path)
@@ -1120,11 +1200,24 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     for sm in plan.singletons:
         singleton_text[sm.new_rel_path] = (project_root / sm.old_rel_path).read_text(encoding="utf-8")
 
+    # Overlay relocations: pure path moves (no frontmatter synthesis — an overlay
+    # carries no owner identity), but their bodies are still ref-rewritten below so
+    # overlay-only fields (e.g. hypothesis_links) pointing at renumbered entities
+    # stay resolved. Keyed by NEW path like singletons.
+    overlay_text: dict[str, str] = {}
+    for om in plan.overlay_moves:
+        overlay_text[om.new_rel_path] = (project_root / om.old_rel_path).read_text(encoding="utf-8")
+
     # In-place files: every *.md under the project's content roots that is NOT
     # being moved (moved sources are in `rewritten`, keyed by NEW path; singletons
-    # in `singleton_text`). Covers pre-existing entities/ files, doc/ prose,
-    # research/packages, and tasks. Templates and .git are skipped.
-    moved_sources = {m.old_rel_path for m in plan.moves} | {s.old_rel_path for s in plan.singletons}
+    # in `singleton_text`; overlays in `overlay_text`). Covers pre-existing
+    # entities/ files, doc/ prose, research/packages, and tasks. Templates and
+    # .git are skipped.
+    moved_sources = (
+        {m.old_rel_path for m in plan.moves}
+        | {s.old_rel_path for s in plan.singletons}
+        | {o.old_rel_path for o in plan.overlay_moves}
+    )
     inplace_text: dict[str, str] = {}
     for root_name in _INPLACE_ROOTS:
         root = project_root / root_name
@@ -1142,7 +1235,7 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     # Full-text rewrite (produces the content --apply will write) + a separate
     # code-stripped pass that feeds the non-blocking prose-warning bucket.
     unresolved_warnings: dict[str, list[str]] = {}
-    for bucket in (rewritten, singleton_text, inplace_text):
+    for bucket in (rewritten, singleton_text, overlay_text, inplace_text):
         for rel, text in list(bucket.items()):
             out, _ = rewrite_references(text, plan.id_map, policed_kinds=policed_kinds, project_root=project_root)
             bucket[rel] = out
@@ -1171,6 +1264,7 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
     report = {
         "moves": [vars(m) for m in plan.moves],
         "singletons": [vars(s) for s in plan.singletons],
+        "overlay_moves": [vars(o) for o in plan.overlay_moves],
         "id_map": plan.id_map,
         "collisions": plan.collisions,
         "unresolved_references": _audit_failures_to_report(structural_failures),
@@ -1201,7 +1295,9 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
         )
     untracked = _untracked_sources(
         project_root,
-        [m.old_rel_path for m in plan.moves] + [s.old_rel_path for s in plan.singletons],
+        [m.old_rel_path for m in plan.moves]
+        + [s.old_rel_path for s in plan.singletons]
+        + [o.old_rel_path for o in plan.overlay_moves],
     )
     if untracked:
         raise ValueError(
@@ -1219,6 +1315,9 @@ def migrate_layout(project_root: Path, *, apply: bool) -> dict:
         for sm in plan.singletons:
             _git_mv(project_root, sm.old_rel_path, sm.new_rel_path)
             (project_root / sm.new_rel_path).write_text(singleton_text[sm.new_rel_path], encoding="utf-8")
+        for om in plan.overlay_moves:
+            _git_mv(project_root, om.old_rel_path, om.new_rel_path)
+            (project_root / om.new_rel_path).write_text(overlay_text[om.new_rel_path], encoding="utf-8")
         for rel, text in inplace_text.items():
             (project_root / rel).write_text(text, encoding="utf-8")
 

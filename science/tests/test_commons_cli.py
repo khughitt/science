@@ -434,7 +434,7 @@ def test_show_project_json_includes_overlay_block(
     assert payload["canonical_id"] == "paper:Adams2025"
     assert payload["merged_frontmatter"]["hypothesis_links"] == ["H2", "H4"]
     assert payload["overlay"]["project"] == "proj-alpha"
-    assert payload["overlay"]["overlay_path"] == "doc/papers/Adams2025.md"
+    assert payload["overlay"]["overlay_path"] == "overlays/papers/Adams2025.md"
     assert payload["field_sources"]["tags"] == "canonical+overlay"
 
 
@@ -481,8 +481,8 @@ def test_show_project_warns_on_inactive_pin(
     RegistryBuilder(root, CommonsEntityAdapter(root)).rebuild()
 
     proj = tmp_path / "proj-pinned"
-    (proj / "doc" / "papers").mkdir(parents=True)
-    (proj / "doc" / "papers" / "Adams2025.md").write_text(
+    (proj / "overlays" / "papers").mkdir(parents=True)
+    (proj / "overlays" / "papers" / "Adams2025.md").write_text(
         '---\nid: "paper:Adams2025"\noverlay_of: "paper:Adams2025"\n'
         'pin_version: "1.2.0"\nrelevance: "pinned"\n---\n\n## Notes\n',
         encoding="utf-8",

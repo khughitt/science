@@ -5353,7 +5353,7 @@ def dataset_add(
     related: tuple[str, ...],
     project_root: Path | None,
 ) -> None:
-    """Author a candidate external dataset entity under doc/datasets/."""
+    """Author a candidate external dataset entity under entities/datasets/."""
     from science_tool.datasets_catalog import add_dataset
     from science_tool.entities import EntityCommandError
 
@@ -5384,7 +5384,7 @@ def _resolve_dataset_or_exit(root: Path, ref: str):
     resolved = resolve_dataset(root, ref)
     if resolved is None:
         click.echo(
-            f"no such dataset {ref!r} (searched local doc/datasets/ and commons)", err=True
+            f"no such dataset {ref!r} (searched local entities/datasets/ and commons)", err=True
         )
         raise click.exceptions.Exit(2)
     return resolved
@@ -5482,7 +5482,7 @@ def dataset_reconcile(slug: str, project_root: Path | None) -> None:
     from science_model.frontmatter import parse_frontmatter
 
     root = project_root.resolve() if project_root else _project_root_from_env()
-    md = root / "doc" / "datasets" / f"{slug}.md"
+    md = root / "entities" / "datasets" / f"{slug}.md"
     if not md.exists():
         click.echo(f"no such dataset entity: {md}", err=True)
         raise click.exceptions.Exit(2)

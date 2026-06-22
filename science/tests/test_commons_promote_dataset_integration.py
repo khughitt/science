@@ -101,7 +101,7 @@ def test_promote_dataset_end_to_end(tmp_path, monkeypatch):
     ).stdout.strip().splitlines()
     assert tags == ["dataset/fixture-ds/1.0.0"]
 
-    overlay = (proj / "doc/datasets/data-fixture-ds.md").read_text(encoding="utf-8")
+    overlay = (proj / "overlays/datasets/fixture-ds.md").read_text(encoding="utf-8")
     assert "overlay_of: dataset:fixture-ds" in overlay
     assert overlay.startswith("---\n")
     overlay_frontmatter = pyyaml.safe_load(overlay.split("---", 2)[1])

@@ -10,7 +10,7 @@ from science_model.packages.schema import DerivationBlock, MemberOfDerivationBlo
 
 def _load_dataset(project_root: Path, ds_id: str):
     slug = ds_id.removeprefix("dataset:")
-    md = project_root / "doc" / "datasets" / f"{slug}.md"
+    md = project_root / "entities" / "datasets" / f"{slug}.md"
     if not md.exists():
         return None
     try:
@@ -46,7 +46,7 @@ def check_inputs(project_root: Path, dataset_ids: list[str]) -> tuple[bool, list
                 halts.append(f"{ds_id}: derived entity has unsupported derivation block")
                 continue
             run_slug = e.derivation.workflow_run.removeprefix("workflow-run:")
-            run_path = project_root / "doc" / "workflow-runs" / f"{run_slug}.md"
+            run_path = project_root / "entities" / "workflow-runs" / f"{run_slug}.md"
             if not run_path.exists():
                 halts.append(f"{ds_id}: derivation.workflow_run {e.derivation.workflow_run} not found")
                 continue

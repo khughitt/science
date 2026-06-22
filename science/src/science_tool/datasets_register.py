@@ -13,7 +13,7 @@ from science_model.frontmatter import parse_frontmatter
 def _read_workflow_outputs(project_root: Path, workflow_id: str) -> list[dict]:
     """Return the workflow's `outputs:` block. Raises FileNotFoundError if missing."""
     slug = workflow_id.removeprefix("workflow:")
-    wf_path = project_root / "doc" / "workflows" / f"{slug}.md"
+    wf_path = project_root / "entities" / "workflows" / f"{slug}.md"
     if not wf_path.exists():
         raise FileNotFoundError(f"workflow entity not found: {wf_path}")
     result = parse_frontmatter(wf_path)
@@ -23,7 +23,7 @@ def _read_workflow_outputs(project_root: Path, workflow_id: str) -> list[dict]:
 
 def _read_run(project_root: Path, run_id: str) -> tuple[Path, dict]:
     slug = run_id.removeprefix("workflow-run:")
-    run_path = project_root / "doc" / "workflow-runs" / f"{slug}.md"
+    run_path = project_root / "entities" / "workflow-runs" / f"{slug}.md"
     if not run_path.exists():
         raise FileNotFoundError(f"workflow-run entity not found: {run_path}")
     result = parse_frontmatter(run_path)
@@ -166,7 +166,7 @@ def write_derived_dataset_entities(project_root: Path, workflow_run_id: str) -> 
         # per-output datapackage name (`{workflow_slug}-{run_dir}-{out_slug}`), keeping
         # the entity id and its datapackage name in sync.
         slug = f"{run_entity_slug}-{out['slug']}"
-        ds_path = project_root / "doc" / "datasets" / f"{slug}.md"
+        ds_path = project_root / "entities" / "datasets" / f"{slug}.md"
         ds_path.parent.mkdir(parents=True, exist_ok=True)
         # path on disk uses the run dir slug (strips workflow prefix)
         dp_rel = f"results/{workflow_slug}/{run_dir}/{out['slug']}/datapackage.yaml"
@@ -257,13 +257,13 @@ def _append_yaml_list_item(file_path: Path, field: str, value: str) -> None:
 def write_symmetric_edges(project_root: Path, workflow_run_id: str, written_dataset_ids: list[str]) -> None:
     """Append produces[] on workflow-run + consumed_by on each upstream input."""
     run_slug = workflow_run_id.removeprefix("workflow-run:")
-    run_path = project_root / "doc" / "workflow-runs" / f"{run_slug}.md"
+    run_path = project_root / "entities" / "workflow-runs" / f"{run_slug}.md"
     for ds_id in written_dataset_ids:
         _append_yaml_list_item(run_path, "produces", ds_id)
     result = parse_frontmatter(run_path)
     fm = result[0] if result else {}
     for upstream_id in list(fm.get("inputs") or []):
         slug = upstream_id.removeprefix("dataset:")
-        upstream_path = project_root / "doc" / "datasets" / f"{slug}.md"
+        upstream_path = project_root / "entities" / "datasets" / f"{slug}.md"
         if upstream_path.exists():
             _append_yaml_list_item(upstream_path, "consumed_by", workflow_run_id)

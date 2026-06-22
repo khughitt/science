@@ -271,7 +271,7 @@ def _plan_one(tmp_path, monkeypatch):
     src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
     proj = tmp_path / "proj-dataset"
     shutil.copytree(src, proj)
-    entity_source = proj / "doc" / "datasets" / "data-fixture-ds.md"
+    entity_source = proj / "entities" / "datasets" / "fixture-ds.md"
     entity_source.write_text(
         entity_source.read_text(encoding="utf-8").replace(
             "ontologies:\n  - test-ontology\n", ""
@@ -463,7 +463,7 @@ def test_plan_promote_dataset_produces_three_artifacts(tmp_path, monkeypatch):
     import yaml
 
     overlay = plan.decisions[0].overlays["proj-dataset"]
-    assert overlay.path.name == "data-fixture-ds.md"
+    assert overlay.path.name == "fixture-ds.md"
     assert overlay.rename_from is None
     overlay_fm = yaml.safe_load(overlay.after_content.split("---\n", 2)[1])
     assert overlay_fm["overlay_of"] == "dataset:fixture-ds"

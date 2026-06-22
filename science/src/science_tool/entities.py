@@ -59,7 +59,7 @@ _LOCAL_MANIFEST_CACHE: dict[tuple[str, int], ProfileManifest | None] = {}
 # the migrator's singleton handling (`_plan_singletons`) is hard-coded to the two
 # core singleton paths and has no local-singleton semantics, so a local singleton
 # would be accepted, discovered, then never moved. Forbid it fail-loud here.
-_VALID_STRATEGIES: frozenset[str] = frozenset({"numeric", "citekey", "slug"})
+_VALID_STRATEGIES: frozenset[str] = frozenset({"numeric", "citekey", "slug", "id-local"})
 
 # Set of directory (or file) names that belong to core kinds' homes.  A local
 # kind whose resolved home has the same final path component would silently
@@ -224,6 +224,14 @@ _LIVE_STATUSES: frozenset[str] = frozenset(
         "amended",
         "deprecated",
         "abandoned",
+        # Adapter-backed kinds (dataset/workflow/workflow-run/workflow-step), wired
+        # in the 2026-06-21 adapter-entity-layout migration. All are live lifecycle
+        # states (superseded is already hidden above).
+        "candidate",
+        "planned",
+        "running",
+        "failed",
+        "pending",
     }
 )
 
@@ -318,7 +326,9 @@ def local_part_conforms(kind: str, local_part: str, *, project_root: Path | None
         return bool(_NUMERIC_LOCAL_PART_RE.fullmatch(local_part))
     if strategy == "citekey":
         return bool(_CITEKEY_RE.fullmatch(local_part))
-    if strategy == "slug":
+    if strategy in ("slug", "id-local"):
+        # id-local local parts are slug-shaped (the id is authoritative; only the
+        # migrator treats it specially by deriving the filename from the id).
         return bool(_SLUG_RE.fullmatch(local_part))
     if strategy == "verbatim":
         return bool(_VERBATIM_RE.fullmatch(local_part))
@@ -458,7 +468,7 @@ def validate_entity_id(kind: str, entity_id: str) -> str:
         if not _CITEKEY_RE.fullmatch(local_part):
             raise EntityCommandError(f"Invalid citekey local part: {entity_id}")
         return entity_id
-    if strategy == "slug":
+    if strategy in ("slug", "id-local"):
         if not _SLUG_RE.fullmatch(local_part):
             raise EntityCommandError(f"Invalid slug local part: {entity_id}")
         return entity_id
@@ -505,7 +515,7 @@ def generate_entity_id(
         raise EntityCommandError(f"{kind} requires an explicit --id; sequence identities are not derived from a title")
 
     slug_value = validate_slug(slug) if slug is not None else derive_slug(title)
-    if strategy == "slug":
+    if strategy in ("slug", "id-local"):
         return f"{kind}:{slug_value}"
     return f"{kind}:{_next_numeric_local_part(project_root, kind, slug_value)}"
 

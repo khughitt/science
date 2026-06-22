@@ -47,9 +47,9 @@ def _commit_canonical(
 
 def _build_project(tmp_path: Path, name: str, papers: dict[str, str]) -> Path:
     root = tmp_path / name
-    (root / "doc" / "papers").mkdir(parents=True)
+    (root / "entities" / "papers").mkdir(parents=True)
     for filename, content in papers.items():
-        (root / "doc" / "papers" / filename).write_text(content, encoding="utf-8")
+        (root / "entities" / "papers" / filename).write_text(content, encoding="utf-8")
     _init_repo(root)
     subprocess.run(["git", "-C", str(root), "add", "."], check=True)
     subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "init"], check=True)

@@ -1276,7 +1276,7 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
     issues: list[dict] = []
     workflow_runs = _load_workflow_runs(project_root)
 
-    datasets_dir = project_root / "doc" / "datasets"
+    datasets_dir = project_root / "entities" / "datasets"
 
     # Build datasets_by_id for transitive gate walk (task 6.5)
     datasets_by_id: dict[str, dict] = {}
@@ -1623,7 +1623,7 @@ def _load_workflow_runs(project_root: Path) -> dict[str, dict]:
     from science_model.frontmatter import parse_frontmatter
 
     runs: dict[str, dict] = {}
-    runs_dir = project_root / "doc" / "workflow-runs"
+    runs_dir = project_root / "entities" / "workflow-runs"
     if not runs_dir.exists():
         return runs
     for md in runs_dir.rglob("*.md"):

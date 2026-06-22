@@ -255,7 +255,7 @@ From tasks, graph uncertainty, and recent activity, show:
 - which findings belong in `entities/reports/` or `entities/interpretations/`
 - which follow-up actions should be added under `tasks/`
 - If active hypothesis, inquiry, or task work implies a data analysis but no
-  linked `analysis-plan:<slug>` or `entities/analysis-plan/*-analysis-plan.md` exists,
+  linked `analysis-plan:<slug>` or `entities/plans/*-analysis-plan.md` exists,
   suggest `science-plan-analysis` before pre-registration or pipeline planning.
 
 ## Output Format

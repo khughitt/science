@@ -80,7 +80,7 @@ Additionally:
 3. Read existing inquiries: run `science inquiry list` (if available).
 4. Read existing pipeline plans in `entities/plans/` (if any).
 5. Read existing pre-registrations in `entities/pre-registrations/` to avoid duplication.
-6. Read linked analysis plans in `entities/analysis-plan/*-analysis-plan.md` when the user or context references `analysis-plan:<slug>`.
+6. Read linked analysis plans in `entities/plans/*-analysis-plan.md` when the user or context references `analysis-plan:<slug>`.
 
 ## Interactive Refinement
 

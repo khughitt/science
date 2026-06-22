@@ -295,7 +295,7 @@ def test_promote_kind_paper_constant() -> None:
 
     assert PROMOTE_KIND_PAPER.kind == "paper"
     assert PROMOTE_KIND_PAPER.source_subdirs == ("entities/papers", "doc/papers", "doc/background/papers")
-    assert PROMOTE_KIND_PAPER.overlay_dest_subdir == "doc/papers"
+    assert PROMOTE_KIND_PAPER.overlay_dest_subdir == "overlays/papers"
     assert PROMOTE_KIND_PAPER.commons_subdir == "papers"
     assert PROMOTE_KIND_PAPER.id_prefix == "paper:"
     assert PROMOTE_KIND_PAPER.slug_match == "casefold"
@@ -308,7 +308,7 @@ def test_promote_kind_topic_constant() -> None:
 
     assert PROMOTE_KIND_TOPIC.kind == "topic"
     assert PROMOTE_KIND_TOPIC.source_subdirs == ("entities/topics", "doc/topics", "doc/background/topics")
-    assert PROMOTE_KIND_TOPIC.overlay_dest_subdir == "doc/topics"
+    assert PROMOTE_KIND_TOPIC.overlay_dest_subdir == "overlays/topics"
     assert PROMOTE_KIND_TOPIC.commons_subdir == "topics"
     assert PROMOTE_KIND_TOPIC.id_prefix == "topic:"
     assert PROMOTE_KIND_TOPIC.slug_match == "exact"
@@ -321,7 +321,7 @@ def test_promote_kind_theme_constant() -> None:
 
     assert PROMOTE_KIND_THEME.kind == "theme"
     assert PROMOTE_KIND_THEME.source_subdirs == ("entities/themes", "doc/themes")
-    assert PROMOTE_KIND_THEME.overlay_dest_subdir == "doc/themes"
+    assert PROMOTE_KIND_THEME.overlay_dest_subdir == "overlays/themes"
     assert PROMOTE_KIND_THEME.commons_subdir == "themes"
     assert PROMOTE_KIND_THEME.id_prefix == "theme:"
     assert PROMOTE_KIND_THEME.slug_match == "exact"
@@ -334,8 +334,8 @@ def test_promote_kind_dataset_constant_shape():
     from science_tool.commons.promote import PROMOTE_KIND_DATASET
 
     assert PROMOTE_KIND_DATASET.kind == "dataset"
-    assert PROMOTE_KIND_DATASET.source_subdirs == ("doc/datasets",)
-    assert PROMOTE_KIND_DATASET.overlay_dest_subdir == "doc/datasets"
+    assert PROMOTE_KIND_DATASET.source_subdirs == ("entities/datasets",)
+    assert PROMOTE_KIND_DATASET.overlay_dest_subdir == "overlays/datasets"
     assert PROMOTE_KIND_DATASET.commons_subdir == "datasets"
     assert PROMOTE_KIND_DATASET.id_prefix == "dataset:"
     # Dataset slug rule: lowercase-kebab
@@ -464,7 +464,7 @@ def test_promote_decision_uses_canonical_artifacts_list():
 def test_promote_kind_dataset_filter_and_slug_source():
     from science_tool.commons.promote import PROMOTE_KIND_DATASET
 
-    assert PROMOTE_KIND_DATASET.filename_prefix == "data-"
+    assert PROMOTE_KIND_DATASET.filename_prefix == ""
     assert PROMOTE_KIND_DATASET.slug_from_id is True
 
 
@@ -488,8 +488,8 @@ def test_dataset_discovery_uses_id_slug_when_filename_stem_differs(tmp_path, mon
     src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
     proj = tmp_path / "proj-dataset"
     shutil.copytree(src, proj)
-    (proj / "doc/datasets/data-fixture-ds.md").rename(proj / "doc/datasets/data-fixture.md")
-    f = proj / "doc/datasets/data-fixture.md"
+    (proj / "entities/datasets/fixture-ds.md").rename(proj / "entities/datasets/fixture.md")
+    f = proj / "entities/datasets/fixture.md"
     text = f.read_text(encoding="utf-8")
     text = text.replace("id: dataset:fixture-ds", "id: dataset:fixture-ds-2026-01")
     f.write_text(text, encoding="utf-8")
@@ -519,78 +519,3 @@ def test_dataset_discovery_uses_id_slug_when_filename_stem_differs(tmp_path, mon
     [candidate] = discovery.candidates_by_slug["fixture-ds-2026-01"]
     assert candidate.slug == "fixture-ds-2026-01"
     assert "fixture" not in discovery.candidates_by_slug
-
-
-def test_dataset_discovery_normalizes_id_slug_with_filename_prefix(tmp_path, monkeypatch):
-    """id dataset:data-fixture-ds uses the same prefix-stripped canonical slug as the discovery key."""
-    import shutil
-    import subprocess
-
-    src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
-    proj = tmp_path / "proj-dataset"
-    shutil.copytree(src, proj)
-    f = proj / "doc/datasets/data-fixture-ds.md"
-    text = f.read_text(encoding="utf-8")
-    text = text.replace("id: dataset:fixture-ds", "id: dataset:data-fixture-ds")
-    f.write_text(text, encoding="utf-8")
-    subprocess.run(["git", "init", "-q", str(proj)], check=True)
-    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
-    subprocess.run(
-        [
-            "git",
-            "-C",
-            str(proj),
-            "-c",
-            "user.email=t@t",
-            "-c",
-            "user.name=t",
-            "commit",
-            "-q",
-            "-m",
-            "init",
-        ],
-        check=True,
-    )
-    monkeypatch.setattr("science_tool.commons.promote.resolve_project_by_id", lambda s: proj)
-    from science_tool.commons.promote import PROMOTE_KIND_DATASET, discover_candidates
-
-    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
-    assert set(discovery.candidates_by_slug) == {"fixture-ds"}
-    [candidate] = discovery.candidates_by_slug["fixture-ds"]
-    assert candidate.slug == "fixture-ds"
-    assert candidate.slug_normalized == "fixture-ds"
-
-
-def test_dataset_discovery_skips_files_without_filename_prefix(tmp_path, monkeypatch):
-    """A file under doc/datasets/ without the 'data-' prefix is silently skipped."""
-    import shutil
-    import subprocess
-
-    src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
-    proj = tmp_path / "proj-dataset"
-    shutil.copytree(src, proj)
-    (proj / "doc/datasets/notes.md").write_text("---\nid: misc:ignore-me\ntype: note\n---\n", encoding="utf-8")
-    subprocess.run(["git", "init", "-q", str(proj)], check=True)
-    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
-    subprocess.run(
-        [
-            "git",
-            "-C",
-            str(proj),
-            "-c",
-            "user.email=t@t",
-            "-c",
-            "user.name=t",
-            "commit",
-            "-q",
-            "-m",
-            "init",
-        ],
-        check=True,
-    )
-    monkeypatch.setattr("science_tool.commons.promote.resolve_project_by_id", lambda s: proj)
-    from science_tool.commons.promote import PROMOTE_KIND_DATASET, discover_candidates
-
-    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
-    assert "ignore-me" not in discovery.candidates_by_slug
-    assert all("notes.md" not in str(fc.source_path) for fc in discovery.failed_candidates)

@@ -28,7 +28,7 @@ def _init_repo(root: Path) -> None:
 def _copy_project(tmp_path: Path, fixture_name: str) -> Path:
     proj = tmp_path / fixture_name
     shutil.copytree(FIXTURES / fixture_name, proj)
-    invalid_theme = proj / "doc" / "themes" / "cross-biological.md"
+    invalid_theme = proj / "entities" / "themes" / "cross-biological.md"
     if invalid_theme.exists():
         invalid_theme.unlink()
     _init_repo(proj)

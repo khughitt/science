@@ -8,12 +8,12 @@ from science_tool.graph.errors import EntityIdentityCollisionError
 
 
 def test_collision_message_includes_both_sources() -> None:
-    first = SourceRef(adapter_name="markdown", path="doc/datasets/x.md")
+    first = SourceRef(adapter_name="markdown", path="entities/datasets/x.md")
     second = SourceRef(adapter_name="datapackage", path="data/x/datapackage.yaml")
     err = EntityIdentityCollisionError("dataset:x", first, second)
     msg = str(err)
     assert "dataset:x" in msg
-    assert "doc/datasets/x.md" in msg
+    assert "entities/datasets/x.md" in msg
     assert "data/x/datapackage.yaml" in msg
 
 

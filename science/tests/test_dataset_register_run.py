@@ -31,7 +31,7 @@ def _seed_workflow_and_run(
             }
             for r in run_resources
         ]
-    wf_dir = root / "doc" / "workflows"
+    wf_dir = root / "entities" / "workflows"
     wf_dir.mkdir(parents=True, exist_ok=True)
     outputs_yaml = "".join(
         f'  - slug: "{o["slug"]}"\n'
@@ -44,7 +44,7 @@ def _seed_workflow_and_run(
         f'---\nid: "workflow:wf"\ntype: "workflow"\ntitle: "WF"\noutputs:\n{outputs_yaml}---\n',
         encoding="utf-8",
     )
-    runs_dir = root / "doc" / "workflow-runs"
+    runs_dir = root / "entities" / "workflow-runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
     (runs_dir / "wf-r1.md").write_text(
         "---\n"
@@ -170,9 +170,9 @@ def test_register_run_writes_dataset_entities(tmp_path: Path) -> None:
     assert res.exit_code == 0, res.output
     # Entity id must not double the workflow-slug prefix, and must match the
     # per-output datapackage name (`wf-r1-kappa`, see results/wf/r1/kappa).
-    ds_path = tmp_path / "doc" / "datasets" / "wf-r1-kappa.md"
+    ds_path = tmp_path / "entities" / "datasets" / "wf-r1-kappa.md"
     assert ds_path.exists()
-    assert not (tmp_path / "doc" / "datasets" / "wf-wf-r1-kappa.md").exists()
+    assert not (tmp_path / "entities" / "datasets" / "wf-wf-r1-kappa.md").exists()
     body = ds_path.read_text()
     assert 'id: "dataset:wf-r1-kappa"' in body
     assert 'origin: "derived"' in body
@@ -197,13 +197,13 @@ def test_register_run_appends_to_workflow_run_produces(tmp_path: Path) -> None:
         catch_exceptions=False,
         env={"SCIENCE_PROJECT_ROOT": str(tmp_path)},
     )
-    body = (tmp_path / "doc" / "workflow-runs" / "wf-r1.md").read_text()
+    body = (tmp_path / "entities" / "workflow-runs" / "wf-r1.md").read_text()
     assert "dataset:wf-r1-kappa" in body
 
 
 def test_register_run_appends_workflow_run_to_upstream_consumed_by(tmp_path: Path) -> None:
-    (tmp_path / "doc" / "datasets").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "doc" / "datasets" / "up.md").write_text(
+    (tmp_path / "entities" / "datasets").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "entities" / "datasets" / "up.md").write_text(
         '---\nid: "dataset:up"\ntype: "dataset"\ntitle: "Up"\norigin: "external"\n'
         'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}\n'
         "consumed_by: []\n---\n",
@@ -211,7 +211,7 @@ def test_register_run_appends_workflow_run_to_upstream_consumed_by(tmp_path: Pat
     )
     _seed_workflow_and_run(tmp_path, run_resources=[{"name": "kappa", "path": "kappa.csv", "format": "csv"}])
     _seed_resource_files(tmp_path, ["kappa"])
-    runs = tmp_path / "doc" / "workflow-runs" / "wf-r1.md"
+    runs = tmp_path / "entities" / "workflow-runs" / "wf-r1.md"
     runs.write_text(runs.read_text().replace("inputs: []", 'inputs: ["dataset:up"]'), encoding="utf-8")
     CliRunner().invoke(
         science_cli,
@@ -219,7 +219,7 @@ def test_register_run_appends_workflow_run_to_upstream_consumed_by(tmp_path: Pat
         catch_exceptions=False,
         env={"SCIENCE_PROJECT_ROOT": str(tmp_path)},
     )
-    body = (tmp_path / "doc" / "datasets" / "up.md").read_text()
+    body = (tmp_path / "entities" / "datasets" / "up.md").read_text()
     assert "workflow-run:wf-r1" in body
 
 
@@ -296,7 +296,7 @@ def test_register_run_idempotent(tmp_path: Path) -> None:
     assert res2.exit_code == 0
     rt2 = (tmp_path / "results" / "wf" / "r1" / "kappa" / "datapackage.yaml").read_text()
     assert rt1 == rt2  # per-output dp unchanged
-    runs_body = (tmp_path / "doc" / "workflow-runs" / "wf-r1.md").read_text()
+    runs_body = (tmp_path / "entities" / "workflow-runs" / "wf-r1.md").read_text()
     assert runs_body.count("dataset:wf-r1-kappa") == 1  # produces deduplicated
 
 
@@ -315,8 +315,8 @@ def test_repeated_runs_produce_parallel_active_datasets(tmp_path: Path) -> None:
     )
     from science_tool.datasets_register import _append_yaml_list_item
 
-    _append_yaml_list_item(tmp_path / "doc" / "datasets" / "wf-r1-kappa.md", "consumed_by", "plan:p1")
-    runs_dir = tmp_path / "doc" / "workflow-runs"
+    _append_yaml_list_item(tmp_path / "entities" / "datasets" / "wf-r1-kappa.md", "consumed_by", "plan:p1")
+    runs_dir = tmp_path / "entities" / "workflow-runs"
     (runs_dir / "wf-r2.md").write_text(
         "---\n"
         'id: "workflow-run:wf-r2"\n'
@@ -349,8 +349,8 @@ def test_repeated_runs_produce_parallel_active_datasets(tmp_path: Path) -> None:
         env={"SCIENCE_PROJECT_ROOT": str(tmp_path)},
         catch_exceptions=False,
     )
-    r1 = (tmp_path / "doc" / "datasets" / "wf-r1-kappa.md").read_text()
-    r2 = (tmp_path / "doc" / "datasets" / "wf-r2-kappa.md").read_text()
+    r1 = (tmp_path / "entities" / "datasets" / "wf-r1-kappa.md").read_text()
+    r2 = (tmp_path / "entities" / "datasets" / "wf-r2-kappa.md").read_text()
     assert 'status: "active"' in r1
     assert 'status: "active"' in r2
     assert "plan:p1" in r1

@@ -150,7 +150,7 @@ def test_dataset_apply_writes_three_artifacts_commit_tag_override_overlay(
     assert len(backup_markers) == 1
     assert backup_markers[0].name.endswith(".absent")
 
-    overlay = proj / "doc" / "datasets" / "data-fixture-ds.md"
+    overlay = proj / "overlays" / "datasets" / "fixture-ds.md"
     overlay_text = overlay.read_text(encoding="utf-8")
     assert "overlay_of: dataset:fixture-ds" in overlay_text
     assert "pin_version" in overlay_text
@@ -269,7 +269,7 @@ def test_rollback_overlay_failure(
         kind=PROMOTE_KIND_DATASET,
         from_order=["proj-dataset"],
     )
-    target_overlay = proj / "doc" / "datasets" / "data-fixture-ds.md"
+    target_overlay = proj / "overlays" / "datasets" / "fixture-ds.md"
     real_write_text = Path.write_text
 
     def sabotage(self: Path, *args: Any, **kwargs: Any) -> int:
@@ -288,7 +288,7 @@ def test_rollback_overlay_failure(
 
     _assert_rolled_back(commons, data_yaml, before)
     assert not list((tmp_path / ".config" / "science").glob("data.yaml.bak.*"))
-    assert "overlay_of: dataset:fixture-ds" not in target_overlay.read_text(encoding="utf-8")
+    assert not target_overlay.exists()
     logs = list((commons / ".migrations").glob("*.yaml"))
     assert len(logs) == 1
     log = yaml.safe_load(logs[0].read_text(encoding="utf-8"))

@@ -24,7 +24,7 @@ def _as_list(value) -> list[str]:
 
 
 def load_runs(runs_dir: Path) -> list[RunRecord]:
-    """Load authored workflow-run entities from doc/workflow-runs/*.md frontmatter.
+    """Load authored workflow-run entities from entities/workflow-runs/*.md frontmatter.
 
     A run missing the machine-readable fields the audit depends on
     (manifest_path, workflow) is returned with `error` set rather than skipped.

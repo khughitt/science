@@ -7,7 +7,7 @@ from science_tool.validate.result import Severity
 
 
 def _fm(**kw):
-    base = {"type": "dataset", "id": "dataset:x", "_path": "doc/datasets/x.md"}
+    base = {"type": "dataset", "id": "dataset:x", "_path": "entities/datasets/x.md"}
     base.update(kw)
     return base
 

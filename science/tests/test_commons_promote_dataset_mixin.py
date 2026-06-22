@@ -15,10 +15,10 @@ def _make_project_tree(tmp_path: Path) -> Path:
     """Build a minimal project source tree with one bulk RNA-seq dataset,
     committed to git so discovery's `git ls-files` finds it."""
     proj = tmp_path / "proj-rnaseq"
-    (proj / "doc" / "datasets").mkdir(parents=True)
+    (proj / "entities" / "datasets").mkdir(parents=True)
     (proj / "data" / "mockrna").mkdir(parents=True)
 
-    (proj / "doc" / "datasets" / "data-mockrna.md").write_text(
+    (proj / "entities" / "datasets" / "mockrna.md").write_text(
         """---
 id: dataset:mockrna
 type: dataset
@@ -172,7 +172,7 @@ def test_promote_dataset_with_matrix_and_rnaseq_succeeds(
     assert "feature_axis: rows" in entity
     assert "Homo sapiens" in entity
 
-    overlay = (proj / "doc" / "datasets" / "data-mockrna.md").read_text(
+    overlay = (proj / "overlays" / "datasets" / "mockrna.md").read_text(
         encoding="utf-8"
     )
     assert "assay: bulk-rnaseq" not in overlay

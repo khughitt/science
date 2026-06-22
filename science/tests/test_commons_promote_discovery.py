@@ -256,7 +256,7 @@ def test_parse_entity_file_malformed_yaml_raises(tmp_path) -> None:
 def test_scan_project_walks_doc_papers(tmp_path) -> None:
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, _scan_project
 
-    papers = tmp_path / "doc" / "papers"
+    papers = tmp_path / "entities" / "papers"
     papers.mkdir(parents=True)
     (papers / "Adams2025.md").write_text(
         "---\nid: paper:Adams2025\ntitle: A\n---\n\nbody\n",
@@ -276,7 +276,7 @@ def test_scan_project_walks_doc_papers(tmp_path) -> None:
 def test_scan_project_skips_already_promoted(tmp_path) -> None:
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, _scan_project
 
-    papers = tmp_path / "doc" / "papers"
+    papers = tmp_path / "entities" / "papers"
     papers.mkdir(parents=True)
     (papers / "Done2024.md").write_text(
         "---\nid: paper:Done2024\noverlay_of: paper:Done2024\npin_version: '1.0.0'\n---\n",
@@ -290,7 +290,7 @@ def test_scan_project_skips_already_promoted(tmp_path) -> None:
 def test_scan_project_records_failures_without_aborting(tmp_path) -> None:
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, _scan_project
 
-    papers = tmp_path / "doc" / "papers"
+    papers = tmp_path / "entities" / "papers"
     papers.mkdir(parents=True)
     (papers / "Good2024.md").write_text(
         "---\nid: paper:Good2024\ntitle: G\n---\n",
@@ -312,7 +312,7 @@ def test_scan_project_skips_other_kind_with_warning(tmp_path, caplog) -> None:
 
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, _scan_project
 
-    papers = tmp_path / "doc" / "papers"
+    papers = tmp_path / "entities" / "papers"
     papers.mkdir(parents=True)
     (papers / "Misfiled.md").write_text(
         "---\nid: paper:Misfiled\ntitle: X\nkind: dataset\n---\n",
@@ -330,7 +330,7 @@ def test_scan_project_fails_when_id_does_not_match_stem(tmp_path) -> None:
     stem are rejected at discovery (design §4.1.3)."""
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, _scan_project
 
-    papers = tmp_path / "doc" / "papers"
+    papers = tmp_path / "entities" / "papers"
     papers.mkdir(parents=True)
     (papers / "Adams2025.md").write_text(
         "---\nid: paper:WrongStem\ntitle: A\n---\n",
@@ -347,14 +347,14 @@ def test_discover_groups_by_normalized_bibkey(tmp_path, monkeypatch) -> None:
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, discover_candidates
 
     proj_a = tmp_path / "proj_a"
-    (proj_a / "doc" / "papers").mkdir(parents=True)
-    (proj_a / "doc" / "papers" / "Huh2024.md").write_text(
+    (proj_a / "entities" / "papers").mkdir(parents=True)
+    (proj_a / "entities" / "papers" / "Huh2024.md").write_text(
         "---\nid: paper:Huh2024\ntitle: A\n---\n",
         encoding="utf-8",
     )
     proj_b = tmp_path / "proj_b"
-    (proj_b / "doc" / "papers").mkdir(parents=True)
-    (proj_b / "doc" / "papers" / "huh2024.md").write_text(
+    (proj_b / "entities" / "papers").mkdir(parents=True)
+    (proj_b / "entities" / "papers" / "huh2024.md").write_text(
         "---\nid: paper:huh2024\ntitle: B\n---\n",
         encoding="utf-8",
     )
@@ -386,12 +386,12 @@ def test_discover_carries_failures(tmp_path, monkeypatch) -> None:
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, discover_candidates
 
     proj = tmp_path / "proj"
-    (proj / "doc" / "papers").mkdir(parents=True)
-    (proj / "doc" / "papers" / "Good.md").write_text(
+    (proj / "entities" / "papers").mkdir(parents=True)
+    (proj / "entities" / "papers" / "Good.md").write_text(
         "---\nid: paper:Good\ntitle: G\n---\n",
         encoding="utf-8",
     )
-    (proj / "doc" / "papers" / "Broken.md").write_text(
+    (proj / "entities" / "papers" / "Broken.md").write_text(
         "no frontmatter\n",
         encoding="utf-8",
     )
@@ -412,8 +412,8 @@ def test_discover_candidates_paper_kind_returns_expected_result(tmp_path, monkey
     from science_tool.commons.promote import PROMOTE_KIND_PAPER, discover_candidates
 
     proj = tmp_path / "proj_x"
-    (proj / "doc" / "papers").mkdir(parents=True)
-    (proj / "doc" / "papers" / "Adams2025.md").write_text(
+    (proj / "entities" / "papers").mkdir(parents=True)
+    (proj / "entities" / "papers" / "Adams2025.md").write_text(
         "---\nid: paper:Adams2025\ntitle: A\n---\n",
         encoding="utf-8",
     )
@@ -459,8 +459,8 @@ def test_discover_candidates_rejects_explicit_id_with_wrong_prefix(tmp_path, mon
     from science_tool.commons.promote import PROMOTE_KIND_TOPIC, discover_candidates
 
     proj = tmp_path / "proj_w"
-    (proj / "doc" / "topics").mkdir(parents=True)
-    (proj / "doc" / "topics" / "trapped.md").write_text(
+    (proj / "entities" / "topics").mkdir(parents=True)
+    (proj / "entities" / "topics" / "trapped.md").write_text(
         "---\nkind: topic\nid: paper:trapped\ntitle: X\n---\n",
         encoding="utf-8",
     )
@@ -480,8 +480,8 @@ def test_discover_candidates_rejects_explicit_id_with_invalid_slug(tmp_path, mon
     from science_tool.commons.promote import PROMOTE_KIND_TOPIC, discover_candidates
 
     proj = tmp_path / "proj_bad_slug"
-    (proj / "doc" / "topics").mkdir(parents=True)
-    (proj / "doc" / "topics" / "valid.md").write_text(
+    (proj / "entities" / "topics").mkdir(parents=True)
+    (proj / "entities" / "topics" / "valid.md").write_text(
         "---\nid: topic:BadSlug\ntitle: X\n---\n",
         encoding="utf-8",
     )
@@ -500,8 +500,8 @@ def test_discover_candidates_rejects_non_string_explicit_id(tmp_path, monkeypatc
     from science_tool.commons.promote import PROMOTE_KIND_TOPIC, discover_candidates
 
     proj = tmp_path / "proj_non_string_id"
-    (proj / "doc" / "topics").mkdir(parents=True)
-    (proj / "doc" / "topics" / "valid.md").write_text(
+    (proj / "entities" / "topics").mkdir(parents=True)
+    (proj / "entities" / "topics" / "valid.md").write_text(
         "---\nid: 123\ntitle: X\n---\n",
         encoding="utf-8",
     )
@@ -521,8 +521,8 @@ def test_discover_candidates_theme_cross_project_scope_is_candidate(tmp_path, mo
     from science_tool.commons.promote import PROMOTE_KIND_THEME, discover_candidates
 
     proj = tmp_path / "proj_theme_candidate"
-    (proj / "doc" / "themes").mkdir(parents=True)
-    (proj / "doc" / "themes" / "shared-method.md").write_text(
+    (proj / "entities" / "themes").mkdir(parents=True)
+    (proj / "entities" / "themes" / "shared-method.md").write_text(
         "---\nid: theme:shared-method\ntheme_scope: cross-project\ntitle: T\n---\n",
         encoding="utf-8",
     )
@@ -540,8 +540,8 @@ def test_discover_candidates_theme_project_scope_is_silently_skipped(tmp_path, m
     from science_tool.commons.promote import PROMOTE_KIND_THEME, discover_candidates
 
     proj = tmp_path / "proj_theme_project"
-    (proj / "doc" / "themes").mkdir(parents=True)
-    (proj / "doc" / "themes" / "local-method.md").write_text(
+    (proj / "entities" / "themes").mkdir(parents=True)
+    (proj / "entities" / "themes" / "local-method.md").write_text(
         "---\nid: theme:local-method\ntheme_scope: project\ntitle: T\n---\n",
         encoding="utf-8",
     )
@@ -559,8 +559,8 @@ def test_discover_candidates_theme_missing_scope_is_failed_candidate(tmp_path, m
     from science_tool.commons.promote import PROMOTE_KIND_THEME, discover_candidates
 
     proj = tmp_path / "proj_theme_missing"
-    (proj / "doc" / "themes").mkdir(parents=True)
-    (proj / "doc" / "themes" / "missing-scope.md").write_text(
+    (proj / "entities" / "themes").mkdir(parents=True)
+    (proj / "entities" / "themes" / "missing-scope.md").write_text(
         "---\nid: theme:missing-scope\ntitle: T\n---\n",
         encoding="utf-8",
     )
@@ -579,8 +579,8 @@ def test_discover_candidates_theme_malformed_scope_is_failed_candidate(tmp_path,
     from science_tool.commons.promote import PROMOTE_KIND_THEME, discover_candidates
 
     proj = tmp_path / "proj_theme_malformed"
-    (proj / "doc" / "themes").mkdir(parents=True)
-    (proj / "doc" / "themes" / "bad-scope.md").write_text(
+    (proj / "entities" / "themes").mkdir(parents=True)
+    (proj / "entities" / "themes" / "bad-scope.md").write_text(
         "---\nid: theme:bad-scope\ntheme_scope: [cross-project]\ntitle: T\n---\n",
         encoding="utf-8",
     )
@@ -617,3 +617,5 @@ def test_discover_candidates_same_project_intra_kind_collision(tmp_path, monkeyp
     assert len(result.failed_candidates) >= 1
     msgs = [fc.error_message for fc in result.failed_candidates]
     assert any("collide" in m and "both" in m.lower() for m in msgs)
+
+

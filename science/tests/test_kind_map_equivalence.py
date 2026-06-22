@@ -49,6 +49,10 @@ FROZEN_MARKDOWN_POLICIES = {
     "book": EntityPathPolicy(Path("entities/books"), "citekey"),
     "talk": EntityPathPolicy(Path("entities/talks"), "citekey"),
     "outcome": EntityPathPolicy(Path("entities/outcomes"), "slug"),
+    "dataset": EntityPathPolicy(Path("entities/datasets"), "id-local"),
+    "workflow": EntityPathPolicy(Path("entities/workflows"), "id-local"),
+    "workflow-run": EntityPathPolicy(Path("entities/workflow-runs"), "id-local"),
+    "workflow-step": EntityPathPolicy(Path("entities/workflow-steps"), "id-local"),
     "research-question": EntityPathPolicy(Path("entities/research-question.md"), "singleton"),
     "claim-registry": EntityPathPolicy(Path("entities/claim-registry.yaml"), "singleton"),
 }
@@ -81,6 +85,10 @@ FROZEN_DEFAULT_STATUS = {
     "construct": "active",
     "decision": "active",
     "outcome": "active",
+    "dataset": "active",
+    "workflow": "active",
+    "workflow-run": "running",
+    "workflow-step": "pending",
 }
 
 FROZEN_STATUS_VALUES = {
@@ -113,6 +121,10 @@ FROZEN_STATUS_VALUES = {
     "construct": frozenset({"active", "retired"}),
     "decision": frozenset({"active", "superseded", "abandoned", "archived"}),
     "outcome": frozenset({"active", "retired"}),
+    "dataset": frozenset({"proposed", "candidate", "active", "retired", "deprecated"}),
+    "workflow": frozenset({"planned", "active", "deprecated", "retired"}),
+    "workflow-run": frozenset({"running", "complete", "failed"}),
+    "workflow-step": frozenset({"pending", "running", "complete", "failed"}),
 }
 
 FROZEN_SHORTFORM = {

@@ -9,7 +9,7 @@ def _rules(datasets: list[dict]) -> list[tuple[Severity, str]]:
 
 
 def _ds(**kw) -> dict:
-    base = {"type": "dataset", "id": "dataset:x", "_path": "doc/datasets/x.md"}
+    base = {"type": "dataset", "id": "dataset:x", "_path": "entities/datasets/x.md"}
     base.update(kw)
     return base
 
@@ -92,5 +92,5 @@ def test_non_dataset_ignored() -> None:
 
 def test_kind_dataset_without_type_is_checked() -> None:
     # `kind` is the canonical field; a dataset declaring only kind must be evaluated.
-    rules = _rules([{"kind": "dataset", "id": "dataset:k", "_path": "doc/datasets/k.md"}])
+    rules = _rules([{"kind": "dataset", "id": "dataset:k", "_path": "entities/datasets/k.md"}])
     assert (Severity.WARN, "taxonomy.source-class-undeclared") in rules

@@ -98,7 +98,11 @@ def _write_descriptor(
     datapackage: str = "data/processed/demo/datapackage.json",
     source_refs: str = "source_refs:\n  - task:t001\n",
 ) -> Path:
-    path = root / "doc" / "datasets" / f"data-{slug}.md"
+    # Owners live in entities/datasets/; pinned overlays (overlay_of present) live
+    # in overlays/datasets/ after the 2026-06-21 root split. dataset_frontmatters
+    # scans both, and _is_dataset_descriptor accepts both prefixes.
+    subdir = "overlays" if "overlay_of:" in extra_frontmatter else "entities"
+    path = root / subdir / "datasets" / f"{slug}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "---\n"
@@ -144,7 +148,7 @@ def test_plain_dataset_reference_doc_is_not_a_promotion_candidate(tmp_path: Path
         check_dataset_promotion_contract,
     )
 
-    path = tmp_path / "doc" / "datasets" / "data-reference-only.md"
+    path = tmp_path / "entities" / "datasets" / "reference-only.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "---\n"

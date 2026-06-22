@@ -192,31 +192,34 @@ def check_entity_stray_files(ctx: ValidateContext) -> Iterator[Result]:
                 yield _result(_severity(ctx), _rel(ctx, path), f"non-entity file in {policy.root}/: {path.name}")
 
 
-@Check(section="entity overlay_of in owner root...", order=42)
+@Check(section="entity overlay_of outside overlays/...", order=42)
 def check_overlay_of_in_owner_root(ctx: ValidateContext) -> Iterator[Result]:
     """An overlay (`overlay_of:` frontmatter) is a borrow attachment and belongs
-    under doc/<type>/, never under the framework owner root entities/. A file with
-    overlay_of in entities/ would be silently minted as a spurious OWNER by
-    MarkdownAdapter (design §B2/§C3: the owner root holds owner declarations only;
-    OverlayAdapter is the sole borrower reader). Flag it as a conformance
-    violation — WARN during the v2->v3 transition, ERROR at layout_version >= 3."""
-    root = ctx.project_root / "entities"
-    if not root.is_dir():
-        return
-    for path in iter_entity_markdown(root):
-        if "templates" in path.relative_to(ctx.project_root).parts:
+    under the dedicated overlays/<type>/ root — never under the framework owner
+    root entities/ (where MarkdownAdapter would silently mint it as a spurious
+    OWNER) and never in the prose-only doc/ tree (where the OverlayAdapter, which
+    reads only overlays/, can no longer see it). Both placements are flagged —
+    WARN during the v2->v3 transition, ERROR at layout_version >= 3. See
+    docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md."""
+    for root_name in ("entities", "doc"):
+        root = ctx.project_root / root_name
+        if not root.is_dir():
             continue
-        text = ctx.read_text_cached(path)
-        if not text.startswith("---\n"):
-            continue  # no frontmatter -> cannot declare overlay_of
-        try:
-            data = ctx.frontmatter(path)
-        except yaml.YAMLError:
-            continue  # invalid YAML in registered-kind dirs is reported by check_entity_frontmatter_completeness
-        if "overlay_of" in data:
-            yield _result(
-                _severity(ctx),
-                _rel(ctx, path),
-                f"{path.name}: overlay_of in owner root entities/ "
-                "(overlays belong under doc/<type>/; entities/ holds owner declarations only)",
-            )
+        for path in iter_entity_markdown(root):
+            if "templates" in path.relative_to(ctx.project_root).parts:
+                continue
+            text = ctx.read_text_cached(path)
+            if not text.startswith("---\n"):
+                continue  # no frontmatter -> cannot declare overlay_of
+            try:
+                data = ctx.frontmatter(path)
+            except yaml.YAMLError:
+                continue  # invalid YAML in registered-kind dirs is reported by check_entity_frontmatter_completeness
+            if "overlay_of" in data:
+                yield _result(
+                    _severity(ctx),
+                    _rel(ctx, path),
+                    f"{path.name}: overlay_of under {root_name}/ "
+                    "(overlays belong under overlays/<type>/; entities/ holds owner "
+                    "declarations and doc/ is prose-only)",
+                )

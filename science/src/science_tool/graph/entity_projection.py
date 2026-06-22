@@ -8,7 +8,7 @@ content already matches), ``check_projection_drift`` compares a
 **committed** state already on disk, and returns a structured diff
 describing any divergence.
 
-The concrete projection — e.g. ``mm30.v8.yml → doc/datasets/`` — is the
+The concrete projection — e.g. ``mm30.v8.yml → entities/datasets/`` — is the
 responsibility of the *consuming* project.  This module contains only the
 generic comparison primitive; it performs no filesystem access and has no
 dependency on rdflib or the materialisation pipeline.

@@ -312,10 +312,10 @@ def test_check_dataset_influence_resolves_local_dataset_ref(
 def test_check_dataset_influence_resolves_local_markdown_dataset_ref(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A markdown dataset descriptor in doc/datasets/ resolves a paper's dataset_usage ref.
+    """A markdown dataset descriptor in entities/datasets/ resolves a paper's dataset_usage ref.
 
     Regression: the resolver loaded entity_frontmatters (entities/ + data/ datapackages)
-    but not dataset_frontmatters (doc/datasets/ markdown), so markdown-only datasets were
+    but not dataset_frontmatters (entities/datasets/ markdown), so markdown-only datasets were
     invisible to resolution and every dataset_usage ref to them warned ref-unresolved.
     """
     from science_tool.validate.checks.dataset_influence import check_dataset_influence
@@ -323,9 +323,9 @@ def test_check_dataset_influence_resolves_local_markdown_dataset_ref(
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "empty-commons"))
     _write_project(tmp_path)
     _write_dataset_usage_paper(tmp_path, ref="dataset:swan")
-    ds_dir = tmp_path / "doc" / "datasets"
+    ds_dir = tmp_path / "entities" / "datasets"
     ds_dir.mkdir(parents=True)
-    (ds_dir / "data-swan.md").write_text(
+    (ds_dir / "swan.md").write_text(
         '---\nid: "dataset:swan"\ntype: "dataset"\ntitle: "SWAN"\n'
         'status: "active"\norigin: "external"\ntier: "use-now"\n---\n\nSWAN cohort.\n',
         encoding="utf-8",

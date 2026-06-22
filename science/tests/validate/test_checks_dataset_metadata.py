@@ -36,7 +36,7 @@ def _rules(datasets: list[dict]) -> list[tuple[Severity, str]]:
 
 
 def _ds(**kw) -> dict:
-    base = {"type": "dataset", "id": "dataset:x", "_path": "doc/datasets/x.md"}
+    base = {"type": "dataset", "id": "dataset:x", "_path": "entities/datasets/x.md"}
     base.update(kw)
     return base
 
@@ -128,7 +128,7 @@ def test_license_missing_surfaces_through_runner(tmp_path: Path) -> None:
 
     _load_checks_with_dataset_metadata_fresh()
     (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
-    ds_dir = tmp_path / "doc" / "datasets"
+    ds_dir = tmp_path / "entities" / "datasets"
     ds_dir.mkdir(parents=True)
     (ds_dir / "x.md").write_text(
         '---\n'
