@@ -19,12 +19,11 @@ def _write(p: Path, text: str) -> None:
 def _seed_graph_project(root: Path) -> None:
     # Minimal connected graph: dataset → evidence-line(dataset_usage) → proposition
     # → hypothesis; question → proposition.
-    # IMPORTANT: load_project_sources (graph/sources.py:305) scans entities/ for the
-    # 21 layout kinds (questions/hypotheses/propositions/evidence-lines) and
-    # doc/datasets/ for datasets. Q/H/P/evidence-lines under doc/ would NOT be
-    # materialized — they MUST go under entities/.
+    # IMPORTANT: load_project_sources (graph/sources.py) scans entities/ for every
+    # layout kind — questions/hypotheses/propositions/evidence-lines AND datasets.
+    # Anything under doc/ would NOT be materialized — they MUST go under entities/.
     (root / "science.yaml").write_text('slug: "tp"\n', encoding="utf-8")
-    _write(root / "doc/datasets/d.md",
+    _write(root / "entities/datasets/d.md",
            '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\norigin: "external"\n'
            'access: {level: "public", verified: true}\n---\n')
     _write(root / "entities/hypotheses/h.md",
@@ -109,7 +108,7 @@ def test_prioritize_mixed_graph_frontmatter_dataset_not_no_edge(tmp_path: Path) 
         '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\n'
         'relations:\n  - predicate: "sci:addresses"\n    target: "proposition:p"\n'
         'related: ["dataset:fm_only"]\n---\n', encoding="utf-8")
-    (tmp_path / "doc/datasets/fm_only.md").write_text(
+    (tmp_path / "entities/datasets/fm_only.md").write_text(
         '---\nid: "dataset:fm_only"\ntype: "dataset"\ntitle: "FM"\norigin: "external"\n'
         'access: {level: "public", verified: true}\n---\n', encoding="utf-8")
     graph_path = materialize_graph(tmp_path)

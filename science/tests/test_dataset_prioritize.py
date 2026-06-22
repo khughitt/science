@@ -46,10 +46,10 @@ def _write(p: Path, text: str) -> None:
 
 def test_frontmatter_reach_both_directions_excludes_source_refs(tmp_path: Path) -> None:
     # dataset A points outward to a question; question Q2 points back to dataset B.
-    _write(tmp_path / "doc/datasets/a.md",
+    _write(tmp_path / "entities/datasets/a.md",
            '---\nid: "dataset:a"\ntype: "dataset"\ntitle: "A"\n'
            'related: ["question:q1", "topic:t1"]\n---\n')
-    _write(tmp_path / "doc/datasets/b.md",
+    _write(tmp_path / "entities/datasets/b.md",
            '---\nid: "dataset:b"\ntype: "dataset"\ntitle: "B"\n'
            'source_refs: ["question:qX"]\n---\n')  # source_refs must NOT count
     _write(tmp_path / "entities/questions/q1.md",
@@ -68,10 +68,10 @@ from science_tool.dataset_prioritize import prioritize
 
 def test_prioritize_sparse_no_graph_orders_by_accessibility_and_flags(tmp_path: Path) -> None:
     # available > unverified public; the unconnected one gets no-edge.
-    _write(tmp_path / "doc/datasets/avail.md",
+    _write(tmp_path / "entities/datasets/avail.md",
            '---\nid: "dataset:avail"\ntype: "dataset"\ntitle: "Avail"\norigin: "external"\n'
            'related: ["question:q1"]\naccess: {level: "controlled", verified: true}\n---\n')
-    _write(tmp_path / "doc/datasets/unv.md",
+    _write(tmp_path / "entities/datasets/unv.md",
            '---\nid: "dataset:unv"\ntype: "dataset"\ntitle: "Unv"\norigin: "external"\n'
            'access: {level: "public", verified: false}\n---\n')
     _write(tmp_path / "entities/questions/q1.md",

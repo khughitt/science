@@ -22,6 +22,7 @@ from science_tool.graph.store.identity import canonical_id_from_entity_uri
 from science_tool.graph.store.summary import _claim_summary_data
 from science_model.frontmatter import parse_frontmatter
 from science_tool.datasets_catalog import _local_rows
+from science_tool.entity_scan import iter_entity_markdown
 
 # Base Entity fields that a normal on-disk dataset frontmatter omits but
 # DatasetEntity.model_validate requires. Backfilled so we can call the canonical
@@ -31,7 +32,7 @@ _BASE_BACKFILL = {
     "project": "_prioritize",
     "source_refs": [],
     "content_preview": "",
-    "file_path": "doc/datasets/_.md",
+    "file_path": "entities/datasets/_.md",
 }
 
 
@@ -93,30 +94,23 @@ def _is_qh(ref: str) -> bool:
     return isinstance(ref, str) and ref.startswith(_QH_PREFIXES)
 
 
-# Roots that hold the entities reach cares about, mirroring load_project_sources
-# (graph/sources.py:305): the 21 entity-layout kinds (questions, hypotheses,
-# propositions, evidence-lines, ...) live under entities/; datasets stay at
-# doc/datasets/. Scan both — NOT a bare doc/ scan (Q/H are NOT under doc/).
-_REACH_SCAN_ROOTS = ("entities", "doc/datasets")
-
-
 def _iter_entity_frontmatter(project_root: Path):
-    """Yield (id, fm) for every markdown entity under the reach scan roots.
+    """Yield (id, fm) for every live markdown entity under entities/.
 
-    Files without an id are skipped.
+    Every entity-layout kind reach cares about — questions, hypotheses,
+    propositions, evidence-lines, AND datasets — lives under entities/ post-migration.
+    Routed through the sanctioned ``iter_entity_markdown`` scanner so the ``_archive``
+    skip stays authoritative (enforced by the entity-scan guard test). Files without
+    an id are skipped.
     """
-    for root in _REACH_SCAN_ROOTS:
-        base = project_root / root
-        if not base.is_dir():
+    for md in iter_entity_markdown(project_root / "entities"):
+        parsed = parse_frontmatter(md)
+        if parsed is None:
             continue
-        for md in sorted(base.rglob("*.md")):
-            parsed = parse_frontmatter(md)
-            if parsed is None:
-                continue
-            fm, _ = parsed
-            ent_id = fm.get("id")
-            if isinstance(ent_id, str) and ent_id:
-                yield ent_id, fm
+        fm, _ = parsed
+        ent_id = fm.get("id")
+        if isinstance(ent_id, str) and ent_id:
+            yield ent_id, fm
 
 
 def frontmatter_reach(project_root: Path) -> dict[str, set[str]]:
@@ -287,7 +281,7 @@ def prioritize(
         if level is not None and r["level"] != level:
             continue
         slug = r["id"].split(":", 1)[-1]
-        parsed = parse_frontmatter(project_root / "doc" / "datasets" / f"{slug}.md")
+        parsed = parse_frontmatter(project_root / "entities" / "datasets" / f"{slug}.md")
         fm = parsed[0] if parsed else {}
         weight, r_flags = readiness_weight(fm)
         reach_set = reach_map.get(r["id"], set())

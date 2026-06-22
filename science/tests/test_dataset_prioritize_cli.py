@@ -9,7 +9,7 @@ from science_tool.cli import main as science_cli
 
 
 def _seed(root: Path) -> None:
-    d = root / "doc" / "datasets"
+    d = root / "entities" / "datasets"
     d.mkdir(parents=True, exist_ok=True)
     (d / "a.md").write_text(
         '---\nid: "dataset:a"\ntype: "dataset"\ntitle: "A"\norigin: "external"\n'
