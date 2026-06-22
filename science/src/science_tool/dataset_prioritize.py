@@ -131,17 +131,18 @@ def frontmatter_reach(project_root: Path) -> dict[str, set[str]]:
 
 
 def _qh_for_proposition(knowledge, prop_uri: URIRef) -> set[URIRef]:
-    """Hypotheses (prop discusses) + questions (question addresses prop).
+    """Questions/hypotheses a proposition reaches, as the UNION of three sources:
 
-    Scope note (deferred): this walks the two DIRECT edges only. The design
-    (2026-06-21-catalog-datasets-design.md, usage path) recommended reusing the
-    materialized transitive `sci:bearsOn` closure (graph/freshness.py:70,182,231)
-    so a proposition reachable only via a multi-hop chain (e.g.
-    prop -bearsOn-> prop -discusses-> hyp) still counts toward reach. Single-hop
-    is a deliberate scope reduction: the only current consumer (PAIS) has no
-    materialized graph, so the usage path never fires and reach is frontmatter-
-    only; the undercount appears solely on a mature graph. Upgrading to the
-    `bearsOn` closure is tracked as a follow-up (see design Open questions).
+    1. direct ``prop cito:discusses hypothesis``,
+    2. direct ``question sci:addresses prop`` (traversed backward),
+    3. the materialized transitive ``sci:bearsOn`` closure targets typed
+       Question/Hypothesis (graph/freshness.py ``close_bears_on``) — catches a
+       Q/H reachable only via a multi-hop chain, e.g. ``P cito:supports P2
+       cito:supports H`` yields ``P bearsOn H`` at depth 2.
+
+    Union, NOT replacement: ``cito:discusses``/``sci:addresses`` are not bearsOn
+    deriver rules, so the closure alone would drop sources 1-2. Purely additive —
+    can only add Q/H, never remove.
     """
     out: set[URIRef] = set()
     for _, _, hyp in knowledge.triples((prop_uri, CITO_NS.discusses, None)):
@@ -150,6 +151,11 @@ def _qh_for_proposition(knowledge, prop_uri: URIRef) -> set[URIRef]:
     for q in knowledge.subjects(SCI_NS.addresses, prop_uri):
         if isinstance(q, URIRef) and (q, RDF.type, SCI_NS.Question) in knowledge:
             out.add(q)
+    for tgt in knowledge.objects(prop_uri, SCI_NS.bearsOn):
+        if not isinstance(tgt, URIRef):
+            continue
+        if (tgt, RDF.type, SCI_NS.Hypothesis) in knowledge or (tgt, RDF.type, SCI_NS.Question) in knowledge:
+            out.add(tgt)
     return out
 
 

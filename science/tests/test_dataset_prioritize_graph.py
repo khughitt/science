@@ -120,3 +120,39 @@ def test_prioritize_mixed_graph_frontmatter_dataset_not_no_edge(tmp_path: Path) 
     fm_only = next(r for r in rows if r["id"] == "dataset:fm_only")
     assert fm_only["reach"] >= 1
     assert "no-edge" not in fm_only["gap_flags"]   # regression for the High review finding
+
+
+def _seed_multihop_project(root: Path) -> None:
+    # dataset:d --usage--> evidence-line:e --supports--> proposition:p
+    # p --cito:supports--> p2 --cito:supports--> hypothesis:h2
+    # => h2 is reachable from p ONLY via the transitive bearsOn closure at
+    #    depth 2. p does NOT `cito:discusses` h2, and no question `sci:addresses`
+    #    p, so the pre-upgrade direct-edge walk returns an empty set here.
+    (root / "science.yaml").write_text('slug: "tp"\n', encoding="utf-8")
+    _write(root / "entities/datasets/d.md",
+           '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\norigin: "external"\n'
+           'access: {level: "public", verified: true}\n---\n')
+    _write(root / "entities/hypotheses/h2.md",
+           '---\nid: "hypothesis:h2"\ntype: "hypothesis"\ntitle: "H2"\n---\n')
+    _write(root / "entities/propositions/p.md",
+           '---\nid: "proposition:p"\ntype: "proposition"\ntitle: "P"\n'
+           'relations:\n  - predicate: "cito:supports"\n    target: "proposition:p2"\n---\n')
+    _write(root / "entities/propositions/p2.md",
+           '---\nid: "proposition:p2"\ntype: "proposition"\ntitle: "P2"\n'
+           'relations:\n  - predicate: "cito:supports"\n    target: "hypothesis:h2"\n---\n')
+    _write(root / "entities/evidence-lines/e.md",
+           '---\nid: "evidence-line:e"\ntype: "evidence-line"\ntitle: "E"\n'
+           'stance: "supports"\ntarget: "proposition:p"\nevidence_type: "empirical_data_evidence"\n'
+           'dataset_usage:\n  - ref: "dataset:d"\n    role: "analyzed"\n    overlap: "full"\n---\n')
+
+
+def test_usage_reach_follows_multihop_bearson_closure(tmp_path: Path) -> None:
+    _seed_multihop_project(tmp_path)
+    graph_path = materialize_graph(tmp_path)
+    ds = _load_dataset(graph_path)
+    knowledge = ds.graph(_graph_uri("graph/knowledge"))
+    provenance = ds.graph(_graph_uri("graph/provenance"))
+    # h2 is reachable from proposition:p only via a depth-2 bearsOn chain;
+    # the pre-upgrade direct-edge-only walk returned set() for dataset:d.
+    reach = usage_reach(knowledge, provenance, ["dataset:d"])
+    assert reach["dataset:d"] == {"hypothesis:h2"}
