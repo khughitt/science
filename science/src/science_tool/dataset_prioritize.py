@@ -146,6 +146,21 @@ def _qh_for_proposition(knowledge, prop_uri: URIRef) -> set[URIRef]:
     return out
 
 
+def merged_reach(
+    project_root: Path,
+    knowledge=None,
+    provenance=None,
+    dataset_ids: list[str] | None = None,
+) -> dict[str, set[str]]:
+    fm_reach = frontmatter_reach(project_root)
+    ids = dataset_ids if dataset_ids is not None else sorted(fm_reach)
+    merged: dict[str, set[str]] = {ds_id: set(fm_reach.get(ds_id, set())) for ds_id in ids}
+    if knowledge is not None and provenance is not None:
+        for ds_id, targets in usage_reach(knowledge, provenance, ids).items():
+            merged.setdefault(ds_id, set()).update(targets)  # union dedups by target id
+    return merged
+
+
 def usage_reach(knowledge, provenance, dataset_ids: list[str]) -> dict[str, set[str]]:
     reach: dict[str, set[str]] = {ds_id: set() for ds_id in dataset_ids}
     for ds_id in dataset_ids:

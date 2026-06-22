@@ -6,7 +6,7 @@ from pathlib import Path
 from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.store.dataset import _load_dataset
 from science_tool.graph.store.identity import _graph_uri
-from science_tool.dataset_prioritize import usage_reach
+from science_tool.dataset_prioritize import usage_reach, merged_reach
 
 
 def _write(p: Path, text: str) -> None:
@@ -50,3 +50,30 @@ def test_usage_reach_traverses_to_question_and_hypothesis(tmp_path: Path) -> Non
 
     reach = usage_reach(knowledge, provenance, ["dataset:d"])
     assert reach["dataset:d"] == {"hypothesis:h", "question:q"}
+
+
+def test_merged_reach_unions_both_paths_and_dedups(tmp_path: Path) -> None:
+    _seed_graph_project(tmp_path)
+    # ALSO give dataset:d a frontmatter back-edge to the SAME question:q, while
+    # keeping the sci:addresses edge so question:q is reachable via BOTH paths.
+    (tmp_path / "entities/questions/q.md").write_text(
+        '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\n'
+        'relations:\n  - predicate: "sci:addresses"\n    target: "proposition:p"\n'
+        'related: ["dataset:d"]\n---\n', encoding="utf-8")
+    graph_path = materialize_graph(tmp_path)
+    ds = _load_dataset(graph_path)
+    knowledge = ds.graph(_graph_uri("graph/knowledge"))
+    provenance = ds.graph(_graph_uri("graph/provenance"))
+
+    reach = merged_reach(tmp_path, knowledge, provenance, ["dataset:d"])
+    # question:q reachable via BOTH paths → counted once; hypothesis:h via usage only
+    assert reach["dataset:d"] == {"hypothesis:h", "question:q"}
+
+
+def test_merged_reach_frontmatter_only_when_no_graph(tmp_path: Path) -> None:
+    _seed_graph_project(tmp_path)
+    (tmp_path / "entities/questions/q.md").write_text(
+        '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\nrelated: ["dataset:d"]\n---\n',
+        encoding="utf-8")
+    reach = merged_reach(tmp_path, None, None, ["dataset:d"])
+    assert reach["dataset:d"] == {"question:q"}  # frontmatter path works with no graph
