@@ -154,7 +154,7 @@ def test_cli_promote_topic_apply_writes_commons_and_rewrites_overlay(
 
     assert result.exit_code == 0, result.output
     assert (commons / "topics" / "single-instance.md").exists()
-    overlay = (proj / "doc" / "topics" / "single-instance.md").read_text(
+    overlay = (proj / "overlays" / "topics" / "single-instance.md").read_text(
         encoding="utf-8",
     )
     assert "overlay_of: topic:single-instance" in overlay

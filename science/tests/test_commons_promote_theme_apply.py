@@ -62,7 +62,7 @@ def test_theme_apply_happy_path_creates_theme_tag(tmp_path, monkeypatch) -> None
 
     proj = _copy_fixture(tmp_path, "proj-alpha")
     for name in ("cross-biological.md", "malformed-scope.md", "cross-conflict.md"):
-        (proj / "doc" / "themes" / name).unlink()
+        (proj / "entities" / "themes" / name).unlink()
     subprocess.run(["git", "-C", str(proj), "add", "."], check=True, capture_output=True)
     subprocess.run(
         ["git", "-C", str(proj), "commit", "-q", "-m", "trim"],
@@ -83,7 +83,7 @@ def test_theme_apply_happy_path_creates_theme_tag(tmp_path, monkeypatch) -> None
     assert (commons / "themes" / "cross-no-conflict.md").exists()
     assert not (commons / "themes" / "project-scope.md").exists()
     assert "theme/cross-no-conflict/1.0.0" in result.tags_created
-    overlay = (proj / "doc" / "themes" / "cross-no-conflict.md").read_text(
+    overlay = (proj / "overlays" / "themes" / "cross-no-conflict.md").read_text(
         encoding="utf-8"
     )
     assert "overlay_of: theme:cross-no-conflict" in overlay

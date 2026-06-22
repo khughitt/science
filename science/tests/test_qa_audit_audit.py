@@ -25,7 +25,7 @@ def _manifest_with_open_flag(run_dir: Path):
 
 
 def test_single_run_ignored_is_headline(tmp_path):
-    runs_dir = tmp_path / "doc" / "workflow-runs"
+    runs_dir = tmp_path / "entities" / "workflow-runs"
     runs_dir.mkdir(parents=True)
     manifest = _manifest_with_open_flag(tmp_path / "results" / "wf-a")
     _run(runs_dir, "r1", "wf-a", str(manifest))
@@ -36,7 +36,7 @@ def test_single_run_ignored_is_headline(tmp_path):
 
 
 def test_missing_manifest_yields_error_row(tmp_path):
-    runs_dir = tmp_path / "doc" / "workflow-runs"
+    runs_dir = tmp_path / "entities" / "workflow-runs"
     runs_dir.mkdir(parents=True)
     _run(runs_dir, "r1", "wf-a", str(tmp_path / "nope" / "datapackage.yaml"))
     rows = audit_workflows(runs_dir=runs_dir, repo_root=tmp_path)

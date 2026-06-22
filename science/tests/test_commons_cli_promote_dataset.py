@@ -115,7 +115,7 @@ def test_cli_promote_dataset_dry_run_completes(tmp_path, monkeypatch):
     assert "bytes: 12" in r.output
     assert "data.yaml" in r.output
     assert str(proj / "data" / "fixture-ds") in r.output
-    assert "doc/datasets/data-fixture-ds.md" in r.output
+    assert "overlays/datasets/fixture-ds.md" in r.output
     assert "source: data/fixture-ds/datapackage.json" in r.output
     assert "1 overlay rewrites" in r.output
     assert "dropped fields" in r.output.lower()

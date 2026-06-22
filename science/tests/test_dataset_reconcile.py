@@ -11,8 +11,8 @@ from science_tool.cli import main as science_cli
 
 
 def _seed(tmp_path: Path, *, entity_license: str, runtime_license: str) -> None:
-    (tmp_path / "doc" / "datasets").mkdir(parents=True)
-    (tmp_path / "doc" / "datasets" / "x.md").write_text(
+    (tmp_path / "entities" / "datasets").mkdir(parents=True)
+    (tmp_path / "entities" / "datasets" / "x.md").write_text(
         '---\nid: "dataset:x"\ntype: "dataset"\ntitle: "X"\norigin: "external"\n'
         f'license: "{entity_license}"\n'
         'datapackage: "data/x/datapackage.yaml"\n'
@@ -56,7 +56,7 @@ def test_reconcile_drift_exits_nonzero(tmp_path: Path) -> None:
 
 
 def test_reconcile_missing_entity_exits_2(tmp_path: Path) -> None:
-    (tmp_path / "doc" / "datasets").mkdir(parents=True)
+    (tmp_path / "entities" / "datasets").mkdir(parents=True)
     res = CliRunner().invoke(
         science_cli,
         ["dataset", "reconcile", "nonexistent"],

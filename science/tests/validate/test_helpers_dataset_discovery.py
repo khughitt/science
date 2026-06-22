@@ -15,8 +15,8 @@ def _ctx(root: Path) -> _Ctx:
 
 
 def test_dataset_frontmatters_covers_markdown_and_datapackage(tmp_path: Path) -> None:
-    (tmp_path / "doc" / "datasets").mkdir(parents=True)
-    (tmp_path / "doc" / "datasets" / "gtex.md").write_text(
+    (tmp_path / "entities" / "datasets").mkdir(parents=True)
+    (tmp_path / "entities" / "datasets" / "gtex.md").write_text(
         "---\nid: dataset:gtex\ntype: dataset\ntitle: GTEx\n---\nBody.\n", encoding="utf-8"
     )
     (tmp_path / "data" / "refcoll").mkdir(parents=True)

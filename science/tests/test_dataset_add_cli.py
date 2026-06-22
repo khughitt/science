@@ -21,7 +21,7 @@ def _add(tmp_path: Path, *args: str):
 def test_add_creates_candidate_entity(tmp_path: Path) -> None:
     res = _add(tmp_path, "my-set", "--title", "My Set", "--source-url", "https://example.org")
     assert res.exit_code == 0, res.output
-    p = tmp_path / "doc" / "datasets" / "my-set.md"
+    p = tmp_path / "entities" / "datasets" / "my-set.md"
     assert p.exists()
     text = p.read_text(encoding="utf-8")
     assert "dataset:my-set" in text
@@ -60,4 +60,4 @@ def test_add_with_commons_related_ref_does_not_crash(tmp_path: Path) -> None:
         env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
     )
     assert res.exit_code == 0, res.output
-    assert (tmp_path / "doc" / "datasets" / "linked.md").exists()
+    assert (tmp_path / "entities" / "datasets" / "linked.md").exists()

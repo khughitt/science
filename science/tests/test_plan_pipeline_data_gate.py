@@ -8,26 +8,26 @@ from science_tool.plan_gate import check_inputs
 
 
 def _seed_mixed_inputs(root: Path) -> None:
-    (root / "doc" / "datasets").mkdir(parents=True, exist_ok=True)
-    (root / "doc" / "datasets" / "ext_ok.md").write_text(
+    (root / "entities" / "datasets").mkdir(parents=True, exist_ok=True)
+    (root / "entities" / "datasets" / "ext_ok.md").write_text(
         '---\nid: "dataset:ext_ok"\ntype: "dataset"\ntitle: "OK"\norigin: "external"\n'
         'datapackage: "data/ext_ok/datapackage.yaml"\n'
         'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}\n'
         "---\n",
         encoding="utf-8",
     )
-    (root / "doc" / "datasets" / "ext_bad.md").write_text(
+    (root / "entities" / "datasets" / "ext_bad.md").write_text(
         '---\nid: "dataset:ext_bad"\ntype: "dataset"\ntitle: "BAD"\norigin: "external"\n'
         'access: {level: "controlled", verified: false}\n---\n',
         encoding="utf-8",
     )
-    (root / "doc" / "workflow-runs").mkdir(parents=True, exist_ok=True)
-    (root / "doc" / "workflow-runs" / "wf-r1.md").write_text(
+    (root / "entities" / "workflow-runs").mkdir(parents=True, exist_ok=True)
+    (root / "entities" / "workflow-runs" / "wf-r1.md").write_text(
         '---\nid: "workflow-run:wf-r1"\ntype: "workflow-run"\ntitle: "WF r1"\n'
         'workflow: "workflow:wf"\nproduces: ["dataset:der_ok"]\ninputs: ["dataset:ext_ok"]\n---\n',
         encoding="utf-8",
     )
-    (root / "doc" / "datasets" / "der_ok.md").write_text(
+    (root / "entities" / "datasets" / "der_ok.md").write_text(
         '---\nid: "dataset:der_ok"\ntype: "dataset"\ntitle: "DerOK"\norigin: "derived"\n'
         'datapackage: "results/wf/r1/out/datapackage.yaml"\n'
         "derivation:\n"

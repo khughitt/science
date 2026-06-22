@@ -228,23 +228,38 @@ def test_promote_paper_plan_time_collision_exits_nonzero_cleanly(
     from science_tool.commons.cli import commons_group
 
     _init_commons(tmp_path / "commons")
-    proj = tmp_path / "proj-x"
-    (proj / "doc" / "papers").mkdir(parents=True)
-    (proj / "doc" / "papers" / "Huh2024.md").write_text(
+
+    def _init_proj(proj: Path) -> None:
+        subprocess.run(["git", "init", "-q", str(proj)], check=True)
+        subprocess.run(["git", "-C", str(proj), "config", "user.email", "t@x"], check=True)
+        subprocess.run(["git", "-C", str(proj), "config", "user.name", "t"], check=True)
+        subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(proj), "commit", "-q", "-m", "init"], check=True)
+
+    # proj-a fixes the canonical case to `Huh2024` via --from ordering.
+    proj_a = tmp_path / "proj-a"
+    (proj_a / "entities" / "papers").mkdir(parents=True)
+    (proj_a / "entities" / "papers" / "Huh2024.md").write_text(
         "---\nid: paper:Huh2024\ntitle: H1\n---\n", encoding="utf-8",
     )
-    (proj / "doc" / "papers" / "huh2024.md").write_text(
+    _init_proj(proj_a)
+
+    # proj-b carries `huh2024.md`, which must rename to `Huh2024.md`, but a stale
+    # file already occupies that canonical-case overlay target.
+    proj_b = tmp_path / "proj-b"
+    (proj_b / "entities" / "papers").mkdir(parents=True)
+    (proj_b / "entities" / "papers" / "huh2024.md").write_text(
         "---\nid: paper:huh2024\ntitle: H2\n---\n", encoding="utf-8",
     )
-    subprocess.run(["git", "init", "-q", str(proj)], check=True)
-    subprocess.run(["git", "-C", str(proj), "config", "user.email", "t@x"], check=True)
-    subprocess.run(["git", "-C", str(proj), "config", "user.name", "t"], check=True)
-    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
-    subprocess.run(["git", "-C", str(proj), "commit", "-q", "-m", "init"], check=True)
+    (proj_b / "overlays" / "papers").mkdir(parents=True)
+    (proj_b / "overlays" / "papers" / "Huh2024.md").write_text(
+        "---\nid: paper:Huh2024\ntitle: stale\n---\n", encoding="utf-8",
+    )
+    _init_proj(proj_b)
 
     monkeypatch.setattr(
         "science_tool.commons.promote.resolve_project_by_id",
-        lambda slug: proj,
+        lambda slug: {"proj-a": proj_a, "proj-b": proj_b}[slug],
     )
     monkeypatch.setattr(
         "science_tool.commons.cli.resolve_commons_root",
@@ -253,7 +268,7 @@ def test_promote_paper_plan_time_collision_exits_nonzero_cleanly(
 
     result = runner.invoke(
         commons_group,
-        ["promote", "paper", "--from", "proj-x"],
+        ["promote", "paper", "--from", "proj-a", "--from", "proj-b"],
     )
     assert result.exit_code != 0
     assert "case-rename collision" in result.output

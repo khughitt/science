@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 FIXTURE_PROJECT = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
-DATASET_MD = Path("doc/datasets/data-fixture-ds.md")
+DATASET_MD = Path("entities/datasets/fixture-ds.md")
 
 
 def _copy_dataset_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:

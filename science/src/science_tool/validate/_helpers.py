@@ -133,14 +133,18 @@ def dataset_frontmatters(ctx: ValidateContext) -> list[dict[str, Any]]:
     RAISES on a malformed core-kind entity and would crash the run):
 
     - datapackage-backed datasets (`DatapackageAdapter`: data/, results/)
-    - markdown datasets (`MarkdownAdapter` scoped to doc/datasets/)
+    - markdown dataset owners (`MarkdownAdapter` scoped to entities/datasets/)
+    - markdown dataset overlays (`MarkdownAdapter` scoped to overlays/datasets/) —
+      so pinned-overlay descriptors stay visible to the promotion-contract check
+      after the 2026-06-21 owner/overlay root split. An owner and its overlay never
+      coexist for one id, so the id-dedup below is safe across both roots.
 
     `kind` is the canonical field; `type` is the authored alias — accept either.
     Each dict carries `_path` (project-relative). De-duped by entity id (first wins).
     """
     out: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
-    adapters = (DatapackageAdapter(), MarkdownAdapter(scan_roots=["doc/datasets"]))
+    adapters = (DatapackageAdapter(), MarkdownAdapter(scan_roots=["entities/datasets", "overlays/datasets"]))
     for adapter in adapters:
         for ref in adapter.discover(ctx.project_root):
             abs_path = ctx.project_root / ref.path

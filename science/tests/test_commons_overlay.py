@@ -40,7 +40,7 @@ def test_overlay_adapter_load_hit() -> None:
     assert rec.slug == "Adams2025"
     assert rec.project == "proj-alpha"
     assert rec.project_root == root
-    assert rec.overlay_path == root / "doc" / "papers" / "Adams2025.md"
+    assert rec.overlay_path == root / "overlays" / "papers" / "Adams2025.md"
     assert rec.frontmatter["relevance"].startswith("H2")
     assert "Project-Specific Notes" in rec.body
     assert rec.pin_version is None
@@ -54,10 +54,12 @@ def test_overlay_adapter_load_miss_returns_none() -> None:
     assert OverlayAdapter(root, "proj-alpha").load("paper:NoSuchPaper") is None
 
 
-def test_overlay_adapter_load_finds_promoted_dataset_overlay_filename(tmp_path: Path) -> None:
+def test_overlay_adapter_load_dataset_overlay_filename_is_bare_slug(tmp_path: Path) -> None:
+    # Post-2026-06-21: dataset overlays live at overlays/datasets/<slug>.md with no
+    # legacy `data-` prefix — filename follows the id local part like every other type.
     from science_tool.commons.overlay import OverlayAdapter, OverlayRecord
 
-    overlay_path = tmp_path / "doc" / "datasets" / "data-fixture-ds.md"
+    overlay_path = tmp_path / "overlays" / "datasets" / "fixture-ds.md"
     overlay_path.parent.mkdir(parents=True)
     overlay_path.write_text(
         "---\nid: dataset:fixture-ds\noverlay_of: dataset:fixture-ds\n---\n",
@@ -115,10 +117,10 @@ def test_overlay_adapter_scan_yields_records() -> None:
     assert ids == ["dataset:cath-domains", "paper:Adams2025"]
 
 
-def test_overlay_adapter_scan_strips_promoted_dataset_filename_prefix(tmp_path: Path) -> None:
+def test_overlay_adapter_scan_dataset_canonical_id_is_stem(tmp_path: Path) -> None:
     from science_tool.commons.overlay import OverlayAdapter, OverlayRecord
 
-    overlay_path = tmp_path / "doc" / "datasets" / "data-fixture-ds.md"
+    overlay_path = tmp_path / "overlays" / "datasets" / "fixture-ds.md"
     overlay_path.parent.mkdir(parents=True)
     overlay_path.write_text(
         "---\nid: dataset:fixture-ds\noverlay_of: dataset:fixture-ds\n---\n",
@@ -135,9 +137,11 @@ def test_overlay_adapter_scan_strips_promoted_dataset_filename_prefix(tmp_path: 
 
 
 def test_overlay_adapter_scan_preserves_dataset_slug_that_starts_with_data(tmp_path: Path) -> None:
+    # A slug that literally begins with "data-" is preserved verbatim — there is no
+    # longer any prefix-stripping that could mangle it into "quality".
     from science_tool.commons.overlay import OverlayAdapter, OverlayRecord
 
-    overlay_path = tmp_path / "doc" / "datasets" / "data-quality.md"
+    overlay_path = tmp_path / "overlays" / "datasets" / "data-quality.md"
     overlay_path.parent.mkdir(parents=True)
     overlay_path.write_text(
         "---\nid: dataset:data-quality\noverlay_of: dataset:data-quality\n---\n",
@@ -158,7 +162,7 @@ def test_overlay_adapter_scan_skips_project_paper_without_overlay_of(
 ) -> None:
     from science_tool.commons.overlay import OverlayAdapter
 
-    paper = tmp_path / "doc" / "papers" / "Adams2025.md"
+    paper = tmp_path / "overlays" / "papers" / "Adams2025.md"
     paper.parent.mkdir(parents=True)
     paper.write_text(
         "---\nkind: paper\nid: paper:Adams2025\ntitle: Adams 2025\n---\n\nProject-authored paper note.\n",
@@ -174,8 +178,8 @@ def test_overlay_adapter_scan_yields_errors_for_broken_files() -> None:
 
     root = _OVERLAYS / "proj-broken"
     items = list(OverlayAdapter(root, "proj-broken").scan())
-    # proj-broken/entities/papers/Adams2025.md fails the overlay schema;
-    # proj-broken/entities/topics/nonexistent-topic.md is schema-valid here
+    # proj-broken/overlays/papers/Adams2025.md fails the overlay schema;
+    # proj-broken/overlays/topics/nonexistent-topic.md is schema-valid here
     # (the dangling overlay_of check belongs to validate_project_overlays).
     errors = [i for i in items if isinstance(i, OverlayValidationError)]
     records = [i for i in items if isinstance(i, OverlayRecord)]
@@ -185,10 +189,10 @@ def test_overlay_adapter_scan_yields_errors_for_broken_files() -> None:
     assert records[0].canonical_id == "topic:nonexistent-topic"
 
 
-def test_overlay_adapter_scan_missing_doc_dir_yields_nothing(tmp_path: Path) -> None:
+def test_overlay_adapter_scan_missing_overlays_dir_yields_nothing(tmp_path: Path) -> None:
     from science_tool.commons.overlay import OverlayAdapter
 
-    # tmp_path exists but has no doc/ subtree.
+    # tmp_path exists but has no overlays/ subtree.
     assert list(OverlayAdapter(tmp_path, "empty-proj").scan()) == []
 
 

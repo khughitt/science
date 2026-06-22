@@ -148,7 +148,7 @@ class PromoteKindConfig:
 PROMOTE_KIND_PAPER = PromoteKindConfig(
     kind="paper",
     source_subdirs=("entities/papers", "doc/papers", "doc/background/papers"),
-    overlay_dest_subdir="doc/papers",
+    overlay_dest_subdir="overlays/papers",
     commons_subdir="papers",
     id_prefix="paper:",
     slug_regex=re.compile(r"^[A-Za-z][A-Za-z0-9-]{1,63}$"),
@@ -161,7 +161,7 @@ PROMOTE_KIND_PAPER = PromoteKindConfig(
 PROMOTE_KIND_TOPIC = PromoteKindConfig(
     kind="topic",
     source_subdirs=("entities/topics", "doc/topics", "doc/background/topics"),
-    overlay_dest_subdir="doc/topics",
+    overlay_dest_subdir="overlays/topics",
     commons_subdir="topics",
     id_prefix="topic:",
     slug_regex=re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$"),
@@ -190,7 +190,7 @@ def _theme_eligibility(fm: Mapping[str, Any]) -> EligibilityVerdict:
 PROMOTE_KIND_THEME = PromoteKindConfig(
     kind="theme",
     source_subdirs=("entities/themes", "doc/themes"),
-    overlay_dest_subdir="doc/themes",
+    overlay_dest_subdir="overlays/themes",
     commons_subdir="themes",
     id_prefix="theme:",
     slug_regex=re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$"),
@@ -203,8 +203,8 @@ PROMOTE_KIND_THEME = PromoteKindConfig(
 
 PROMOTE_KIND_DATASET = PromoteKindConfig(
     kind="dataset",
-    source_subdirs=("doc/datasets",),
-    overlay_dest_subdir="doc/datasets",
+    source_subdirs=("entities/datasets",),
+    overlay_dest_subdir="overlays/datasets",
     commons_subdir="datasets",
     id_prefix="dataset:",
     slug_regex=re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$"),
@@ -213,7 +213,6 @@ PROMOTE_KIND_DATASET = PromoteKindConfig(
     default_profile=default_profile_for_kind("dataset"),
     eligibility_filter=None,
     side_channel_apply=_dataset_side_channel_apply,
-    filename_prefix="data-",
     slug_from_id=True,
 )
 
@@ -1681,7 +1680,16 @@ def apply_promote(
                         overlay.rename_from.unlink()
                     overlay.path.parent.mkdir(parents=True, exist_ok=True)
                     overlay.path.write_text(overlay.after_content, encoding="utf-8")
-                    if overlay.unlinked_source is not None and overlay.unlinked_source != overlay.path:
+                    # When the owner is BOTH renamed (case differs) and relocated
+                    # (source dir != overlay dest dir — now always true since owners
+                    # live in entities/ and overlays in overlays/), rename_from and
+                    # unlinked_source are the same source file; the rename_from branch
+                    # above already removed it. Guard against the double-unlink.
+                    if (
+                        overlay.unlinked_source is not None
+                        and overlay.unlinked_source != overlay.path
+                        and overlay.unlinked_source != overlay.rename_from
+                    ):
                         overlay.unlinked_source.unlink()
                     written_rewrites.append(overlay)
                     current_rewrite = None
@@ -2559,8 +2567,6 @@ def _overlay_target_path(
     canonical_case: str,
 ) -> Path:
     filename = f"{canonical_case}.md"
-    if kind.kind == "dataset":
-        filename = f"{kind.filename_prefix}{canonical_case}.md"
     return candidate.project_root / kind.overlay_dest_subdir / filename
 
 

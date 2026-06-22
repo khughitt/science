@@ -72,7 +72,7 @@ def _load_commons_referenced_entities(
     ontology_catalogs: list[OntologyCatalog],
 ) -> tuple[list[tuple[Entity, SourceRef]], dict[str, str], list[tuple[str, SourceRef]]]:
     overlays = {}
-    if (project_root / "doc").exists():
+    if (project_root / "overlays").exists():
         for item in OverlayAdapter(project_root, project_slug).scan():
             if isinstance(item, OverlayValidationError):
                 raise item

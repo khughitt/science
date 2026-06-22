@@ -89,7 +89,7 @@ def add_dataset(
     slug = validate_slug(slug)
     entity_id = f"dataset:{slug}"
     today = today or date.today()
-    rel_path = Path("doc") / "datasets" / f"{slug}.md"
+    rel_path = Path("entities") / "datasets" / f"{slug}.md"
     dest = project_root / rel_path
     if dest.exists():
         raise EntityCommandError(f"Destination already exists: {rel_path}")
@@ -127,7 +127,7 @@ from science_model.frontmatter import parse_frontmatter
 
 
 def _local_rows(project_root: Path) -> list[dict]:
-    ds_dir = project_root / "doc" / "datasets"
+    ds_dir = project_root / "entities" / "datasets"
     rows: list[dict] = []
     if not ds_dir.is_dir():
         return rows
@@ -240,17 +240,17 @@ def resolve_dataset(project_root: Path, ref: str) -> tuple[str, dict, str] | Non
     """Resolve `foo` or `dataset:foo` to (scope, frontmatter, body); local then commons."""
     slug = ref[len("dataset:"):] if ref.startswith("dataset:") else ref
     # Validate before building any path: a ref like "../other/x" must not escape
-    # doc/datasets/. An invalid slug is a clean miss (CLI maps None → exit 2).
+    # entities/datasets/. An invalid slug is a clean miss (CLI maps None → exit 2).
     try:
         slug = validate_slug(slug)
     except EntityCommandError:
         return None
-    local = project_root / "doc" / "datasets" / f"{slug}.md"
+    local = project_root / "entities" / "datasets" / f"{slug}.md"
     if local.exists():
         parsed = parse_frontmatter(local)
         if parsed is not None:
             fm, body = parsed
-            # Same guard as `list`: a non-dataset file under doc/datasets/ is a
+            # Same guard as `list`: a non-dataset file under entities/datasets/ is a
             # local miss, not a match — fall through to commons.
             if (fm.get("kind") or fm.get("type")) == "dataset":
                 return ("local", fm, body)

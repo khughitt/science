@@ -136,6 +136,11 @@ science/src/science_tool/
   - **Hardcoded-path audit (gate):** a repo grep proves no remaining source-tree literal of `doc/datasets`, `doc/workflows`, `doc/workflow-runs`, `doc/papers`, `doc/topics`, or `doc/themes` outside tests/fixtures and explicitly-justified legacy comments. This is the backstop against silently-stranded readers like `_helpers.py`/`health.py`.
   - Full science test suite green.
 
+> **Phase 3 implementation notes (deviations from the original sketch):**
+> 1. **Audit gate scoped to the three moved kinds.** The gate (`test_no_doc_owner_path_literals.py`) policies only `doc/datasets`, `doc/workflows`, `doc/workflow-runs` — the owner kinds this slice actually moved. The federated `doc/papers`/`doc/topics`/`doc/themes` **owner-discovery** readers (`PROMOTE_KIND_*.source_subdirs`, reused by `annotation/source_text._paper_dirs` and meta-checkouts that store papers under `doc/background/papers/`) carry pre-existing v2/v3 dual-layout support from the earlier paper/topic migration and are **out of this slice** — narrowing them broke `annotation` paper resolution, so only their **overlay dest** moved to `overlays/`. Owner-discovery dual-layout cleanup for papers/topics is a separate follow-up.
+> 2. **`dataset_frontmatters` scans both roots.** Owners are in `entities/datasets/`; pinned overlays are in `overlays/datasets/`. The validate helper scans both (an owner and its overlay never coexist for one id, so id-dedup is safe), and `dataset_promotion_contract._is_dataset_descriptor` accepts both prefixes — otherwise pinned-overlay contract validation would silently lose coverage.
+> 3. **Latent promote double-unlink bug fixed.** Once owners (`entities/`) and overlay dest (`overlays/`) live in different dirs, a case-rename candidate set BOTH `rename_from` and `unlinked_source` to the same source path, double-unlinking it. Guarded `apply_promote` against re-unlinking what `rename_from` already removed.
+
 ### Phase 4 — MM30 cutover (proving ground)
 - **Depends on:** Phase 3.
 - **Entry point:** `cd ~/d/r/mm30 && science entities migrate --apply` (after a clean dry-run + audit gate).

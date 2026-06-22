@@ -92,7 +92,7 @@ def test_canary_overlay_and_inbound_ref_share_single_entity(tmp_path: Path, monk
     assert sources.entity_source_adapters[matches[0].canonical_id] == "commons-merged"
     assert sources.commons_overlay_paths == {
         "topic:epigenetic-chromatin-mm-progression": str(
-            project / "doc" / "topics" / "epigenetic-chromatin-mm-progression.md"
+            project / "overlays" / "topics" / "epigenetic-chromatin-mm-progression.md"
         )
     }
 

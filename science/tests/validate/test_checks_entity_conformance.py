@@ -176,9 +176,21 @@ def test_overlay_of_in_owner_root_flagged_as_error_at_v3(tmp_path: Path) -> None
     )
 
 
-def test_overlay_under_doc_is_not_flagged(tmp_path: Path) -> None:
-    # the legitimate location for an overlay; the owner-root check must ignore it
+def test_overlay_under_doc_is_flagged_at_v3(tmp_path: Path) -> None:
+    # Post-2026-06-21: overlays live under overlays/<type>/, never in the prose-only
+    # doc/ tree. An overlay_of file stranded in doc/<type>/ is a misplacement.
     _write(tmp_path, "doc/topics/bayesian.md", {"overlay_of": "topic:bayesian"})
+    ctx = _ctx(tmp_path)  # _ctx writes layout_version: 3 -> ERROR
+    results = list(check_overlay_of_in_owner_root(ctx))
+    assert any(
+        r.severity is Severity.ERROR and "overlay_of" in r.message and "doc/topics/bayesian.md" in str(r.path)
+        for r in results
+    )
+
+
+def test_overlay_under_overlays_root_is_not_flagged(tmp_path: Path) -> None:
+    # the legitimate location for an overlay; the check must ignore it
+    _write(tmp_path, "overlays/topics/bayesian.md", {"overlay_of": "topic:bayesian"})
     ctx = _ctx(tmp_path)
     assert list(check_overlay_of_in_owner_root(ctx)) == []
 

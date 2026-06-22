@@ -33,7 +33,9 @@ def _result(path: str | None, message: str, rule: str) -> Result:
 
 def _is_dataset_descriptor(fm: Mapping[str, Any]) -> bool:
     path = fm.get("_path")
-    return isinstance(path, str) and path.startswith("doc/datasets/")
+    return isinstance(path, str) and (
+        path.startswith("entities/datasets/") or path.startswith("overlays/datasets/")
+    )
 
 
 def _profile_names(value: Any) -> set[str]:

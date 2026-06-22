@@ -183,15 +183,15 @@ def test_build_project_rollback_command_includes_unlinked_source(tmp_path) -> No
 
     entries = [
         {
-            "path": str(tmp_path / "doc" / "topics" / "primitives.md"),
+            "path": str(tmp_path / "overlays" / "topics" / "primitives.md"),
             "unlinked_source": str(
-                tmp_path / "doc" / "background" / "topics" / "primitives.md"
+                tmp_path / "entities" / "topics" / "primitives.md"
             ),
         },
     ]
     cmd = _build_project_rollback_command(entries, PROMOTE_KIND_TOPIC)
-    assert "doc/topics/primitives.md" in cmd
-    assert "doc/background/topics/primitives.md" in cmd
+    assert "overlays/topics/primitives.md" in cmd
+    assert "entities/topics/primitives.md" in cmd
 
 
 def test_rollback_step5_deletes_tags_and_restores_path_limited(tmp_path) -> None:
@@ -255,9 +255,9 @@ def test_rollback_step5_restores_re_promote_file(tmp_path) -> None:
 def _build_project(tmp_path: Path, name: str, papers: dict[str, str]) -> Path:
     """Create a project repo at `tmp_path/<name>` with paper files at `entities/papers/`."""
     root = tmp_path / name
-    (root / "doc" / "papers").mkdir(parents=True)
+    (root / "entities" / "papers").mkdir(parents=True)
     for filename, content in papers.items():
-        (root / "doc" / "papers" / filename).write_text(content, encoding="utf-8")
+        (root / "entities" / "papers" / filename).write_text(content, encoding="utf-8")
     _init_repo(root)
     subprocess.run(["git", "-C", str(root), "add", "."], check=True)
     subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "init"], check=True)
@@ -304,7 +304,7 @@ def test_apply_promote_happy_path_writes_commits_tags_rewrites(tmp_path, monkeyp
     canon_text = canon.read_text(encoding="utf-8")
     assert "schema_profile: science-entity-base/1.0+paper/2.0" in canon_text
     assert "## Key Findings" in canon_text
-    overlay = proj / "doc" / "papers" / "Adams2025.md"
+    overlay = proj / "overlays" / "papers" / "Adams2025.md"
     overlay_text = overlay.read_text(encoding="utf-8")
     assert "overlay_of: paper:Adams2025" in overlay_text
     assert 'pin_version: "1.0.0"' in overlay_text
@@ -616,7 +616,7 @@ def test_apply_promote_preflight_rejects_dirty_target_project_file(tmp_path, mon
         "proj-a",
         {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
     )
-    (proj / "doc" / "papers" / "Adams2025.md").write_text(
+    (proj / "entities" / "papers" / "Adams2025.md").write_text(
         "---\nid: paper:Adams2025\ntitle: DIRTY\n---\n",
         encoding="utf-8",
     )
@@ -766,9 +766,9 @@ def test_apply_promote_rename_happy_path_unlinks_source_writes_target(tmp_path, 
     assert plan.decisions[0].slug == "Huh2024"
     result = apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
     assert result.status == "ok"
-    assert not (proj_b / "doc" / "papers" / "huh2024.md").exists()
-    assert (proj_b / "doc" / "papers" / "Huh2024.md").exists()
-    assert (proj_a / "doc" / "papers" / "Huh2024.md").exists()
+    assert not (proj_b / "entities" / "papers" / "huh2024.md").exists()
+    assert (proj_b / "overlays" / "papers" / "Huh2024.md").exists()
+    assert (proj_a / "overlays" / "papers" / "Huh2024.md").exists()
     assert result.audit_log_path is not None
     log = yaml.safe_load(result.audit_log_path.read_text(encoding="utf-8"))
     proj_b_rewrites = log["projects_touched"]["proj-b"]["overlay_rewrites"]
@@ -794,11 +794,16 @@ def test_apply_promote_rename_collision_aborts(tmp_path, monkeypatch) -> None:
     proj_b = _build_project(
         tmp_path,
         "proj-b",
-        {
-            "huh2024.md": "---\nid: paper:huh2024\ntitle: H\n---\n",
-            "Huh2024.md": "---\nid: paper:Huh2024\ntitle: H (different file)\n---\n",
-        },
+        {"huh2024.md": "---\nid: paper:huh2024\ntitle: H\n---\n"},
     )
+    # A stale, unrelated file already occupies the canonical-case overlay target.
+    (proj_b / "overlays" / "papers").mkdir(parents=True)
+    (proj_b / "overlays" / "papers" / "Huh2024.md").write_text(
+        "---\nid: paper:Huh2024\ntitle: H (different file)\n---\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(proj_b), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(proj_b), "commit", "-q", "-m", "stale"], check=True)
     monkeypatch.setattr(
         "science_tool.commons.promote.resolve_project_by_id",
         lambda slug: {"proj-a": proj_a, "proj-b": proj_b}[slug],
@@ -977,7 +982,7 @@ def test_apply_promote_all_overlay_existing_writes_no_commit_no_tag(tmp_path, mo
     last_files = _git_out(commons, "show", "--stat", "--format=", "--name-only", "HEAD").splitlines()
     assert all(f.startswith(".migrations/") for f in last_files if f), last_files
     # The source summary is rewritten as an overlay pinned to the existing version.
-    overlay_text = (proj / "doc" / "papers" / "Foo.md").read_text(encoding="utf-8")
+    overlay_text = (proj / "overlays" / "papers" / "Foo.md").read_text(encoding="utf-8")
     assert "overlay_of: paper:Foo" in overlay_text
     assert 'pin_version: "1.0.0"' in overlay_text
 
@@ -1092,8 +1097,8 @@ def test_apply_promote_mixed_batch_mints_new_overlays_existing(tmp_path, monkeyp
     # The new canonical was committed; the existing one is untouched in-place.
     assert (commons / "papers" / "Bar2025.md").exists()
     # Both source summaries are rewritten as overlays.
-    foo_overlay = (proj / "doc" / "papers" / "Foo.md").read_text(encoding="utf-8")
-    bar_overlay = (proj / "doc" / "papers" / "Bar2025.md").read_text(encoding="utf-8")
+    foo_overlay = (proj / "overlays" / "papers" / "Foo.md").read_text(encoding="utf-8")
+    bar_overlay = (proj / "overlays" / "papers" / "Bar2025.md").read_text(encoding="utf-8")
     assert "overlay_of: paper:Foo" in foo_overlay
     assert 'pin_version: "1.0.0"' in foo_overlay
     assert "overlay_of: paper:Bar2025" in bar_overlay
@@ -1321,12 +1326,18 @@ def test_apply_promote_project_rollback_preserves_dirty_non_target(tmp_path, mon
     )
 
     second_overlay = plan.decisions[1].overlays["proj-a"]
-    second_overlay.path.chmod(0o444)
-    try:
-        with pytest.raises(PromoteWriteError, match="overlay write"):
-            apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
-    finally:
-        second_overlay.path.chmod(0o644)
+    # Fail only the second overlay write so the first overlay (same dir) is
+    # written successfully and must be rolled back.
+    real_write_text = Path.write_text
+
+    def sabotaged_write_text(self, *args, **kw):
+        if self == second_overlay.path:
+            raise OSError("forced second-overlay write failure")
+        return real_write_text(self, *args, **kw)
+
+    monkeypatch.setattr(Path, "write_text", sabotaged_write_text)
+    with pytest.raises(PromoteWriteError, match="overlay write"):
+        apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
 
     assert (proj / "other.txt").read_text(encoding="utf-8") == "dirty WIP\n"
 
@@ -1368,6 +1379,11 @@ def test_apply_promote_reports_project_rollback_checkout_failure(
     )
     first_overlay = plan.decisions[0].overlays["proj-a"]
     second_overlay = plan.decisions[1].overlays["proj-a"]
+    # The first overlay's source (entities/papers/...) is the tracked file that
+    # rollback restores via `git checkout HEAD --`; the overlay dest itself is a
+    # new untracked file that rollback unlinks rather than checks out.
+    assert first_overlay.unlinked_source is not None
+    rollback_path = str(first_overlay.unlinked_source.relative_to(proj))
     real_run = subprocess.run
 
     def sabotage_run(*args, **kwargs):
@@ -1377,7 +1393,7 @@ def test_apply_promote_reports_project_rollback_checkout_failure(
             and len(cmd) >= 7
             and cmd[0] == "git"
             and cmd[3:6] == ["checkout", "HEAD", "--"]
-            and cmd[-1] == str(first_overlay.path.relative_to(proj))
+            and cmd[-1] == rollback_path
         ):
             if kwargs.get("check"):
                 raise subprocess.CalledProcessError(
@@ -1389,12 +1405,18 @@ def test_apply_promote_reports_project_rollback_checkout_failure(
         return real_run(*args, **kwargs)
 
     monkeypatch.setattr(subprocess, "run", sabotage_run)
-    second_overlay.path.chmod(0o444)
-    try:
-        with pytest.raises(PromoteWriteError) as exc_info:
-            apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
-    finally:
-        second_overlay.path.chmod(0o644)
+    # Fail only the second overlay write so the first overlay (same dir) is
+    # written and its rollback checkout is the one we sabotage above.
+    real_write_text = Path.write_text
+
+    def sabotaged_write_text(self, *args, **kw):
+        if self == second_overlay.path:
+            raise OSError("forced second-overlay write failure")
+        return real_write_text(self, *args, **kw)
+
+    monkeypatch.setattr(Path, "write_text", sabotaged_write_text)
+    with pytest.raises(PromoteWriteError) as exc_info:
+        apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
 
     assert "overlay write failed" in str(exc_info.value)
     assert "project rewrite restore failed" in str(exc_info.value)
@@ -1594,7 +1616,7 @@ def test_apply_promote_step7_audit_failure_does_not_crash_after_landed_writes(
     assert "failure_stage" not in parsed
 
     assert (tmp_path / "commons" / "papers" / "Adams2025.md").exists()
-    overlay_text = (proj / "doc" / "papers" / "Adams2025.md").read_text(encoding="utf-8")
+    overlay_text = (proj / "overlays" / "papers" / "Adams2025.md").read_text(encoding="utf-8")
     assert "overlay_of: paper:Adams2025" in overlay_text
     logs = list((tmp_path / "commons" / ".migrations").glob("*.yaml"))
     assert logs, "success audit log should have been written before commit failed"
@@ -1641,7 +1663,7 @@ def test_apply_promote_step6_partial_rename_records_slug_in_projects_touched(
     )
 
     real_write_text = Path.write_text
-    target = proj_b / "doc" / "papers" / "Huh2024.md"
+    target = proj_b / "overlays" / "papers" / "Huh2024.md"
 
     def sabotaged_write_text(self, *args, **kw):
         if self == target:
@@ -1766,15 +1788,16 @@ def test_apply_promote_failure_leaves_clean_tree_and_unblocks_retry(
     )
 
     # Force a Step-6 (rewrite_projects, post-commit) overlay write failure by
-    # making the source overlay target read-only. This reaches the outer
+    # making the overlay-dest directory read-only. This reaches the outer
     # failure handler at a non-audit stage with a written audit_path.
-    target = proj / "doc" / "papers" / "Adams2025.md"
-    target.chmod(0o444)
+    target_dir = proj / "overlays" / "papers"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_dir.chmod(0o555)
     try:
         with pytest.raises(PromoteWriteError, match="overlay write"):
             apply_promote(plan, commons_root=commons, invocation="...")
     finally:
-        target.chmod(0o644)
+        target_dir.chmod(0o755)
 
     # The commons working tree is clean: the audit log was committed, not left
     # as an untracked .migrations/ file.
@@ -1851,9 +1874,10 @@ def test_apply_promote_failed_audit_commit_does_not_mask_original_error(
         from_order=["proj-a"],
     )
 
-    # Original failure: Step-6 overlay write fails (read-only target).
-    target = proj / "doc" / "papers" / "Adams2025.md"
-    target.chmod(0o444)
+    # Original failure: Step-6 overlay write fails (read-only dest dir).
+    target_dir = proj / "overlays" / "papers"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_dir.chmod(0o555)
 
     real_git = promote_module._git
 
@@ -1871,7 +1895,7 @@ def test_apply_promote_failed_audit_commit_does_not_mask_original_error(
         with pytest.raises(PromoteWriteError, match="overlay write") as exc_info:
             apply_promote(plan, commons_root=commons, invocation="...")
     finally:
-        target.chmod(0o644)
+        target_dir.chmod(0o755)
 
     # The propagated exception is the ORIGINAL PromoteWriteError, not a git error.
     assert not isinstance(exc_info.value, subprocess.CalledProcessError)
@@ -1914,13 +1938,14 @@ def test_apply_promote_failure_audit_records_post_commit_failure_stage(
         from_order=["proj-a"],
     )
 
-    target = proj / "doc" / "papers" / "Adams2025.md"
-    target.chmod(0o444)
+    target_dir = proj / "overlays" / "papers"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_dir.chmod(0o555)
     try:
         with pytest.raises(PromoteWriteError, match="overlay write"):
             apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
     finally:
-        target.chmod(0o644)
+        target_dir.chmod(0o755)
 
     logs = list((tmp_path / "commons" / ".migrations").glob("*.yaml"))
     assert len(logs) == 1
@@ -1942,8 +1967,8 @@ def test_apply_commons_path_uses_kind_commons_subdir(tmp_path, monkeypatch) -> N
     )
 
     proj = tmp_path / "proj_p"
-    (proj / "doc" / "topics").mkdir(parents=True)
-    (proj / "doc" / "topics" / "single.md").write_text(
+    (proj / "entities" / "topics").mkdir(parents=True)
+    (proj / "entities" / "topics" / "single.md").write_text(
         "---\nid: topic:single\ntitle: T\n---\n\n## Summary\n\nx\n",
         encoding="utf-8",
     )
@@ -1995,16 +2020,16 @@ def test_commons_is_clean_checks_kind_commons_subdir(tmp_path) -> None:
 
 def test_project_target_files_clean_checks_kind_overlay_dest_subdir(tmp_path) -> None:
     """_project_target_files_clean hardcoded "entities/papers/{name}". After de-hardcoding,
-    kind.overlay_dest_subdir is used. For topic, also scans kind.source_subdirs
-    so a dirty doc/background/topics/foo.md is reported (the flatten case)."""
+    kind.overlay_dest_subdir is used. For topic, it also scans kind.source_subdirs
+    so a dirty entities/topics/foo.md is reported."""
     from science_tool.commons.promote import (
         PROMOTE_KIND_TOPIC,
         _project_target_files_clean,
     )
 
     _init_repo(tmp_path)
-    (tmp_path / "doc" / "background" / "topics").mkdir(parents=True)
-    target = tmp_path / "doc" / "background" / "topics" / "primitives.md"
+    (tmp_path / "entities" / "topics").mkdir(parents=True)
+    target = tmp_path / "entities" / "topics" / "primitives.md"
     target.write_text("original\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True, capture_output=True)
     subprocess.run(
@@ -2020,7 +2045,7 @@ def test_project_target_files_clean_checks_kind_overlay_dest_subdir(tmp_path) ->
         tmp_path, ["primitives.md"], PROMOTE_KIND_TOPIC
     )
     assert clean is False
-    assert any("background/topics/primitives.md" in p for p in dirty_paths)
+    assert any("entities/topics/primitives.md" in p for p in dirty_paths)
 
 
 def test_project_target_files_clean_reports_deleted_tracked_source_file(tmp_path) -> None:
@@ -2030,8 +2055,8 @@ def test_project_target_files_clean_reports_deleted_tracked_source_file(tmp_path
     )
 
     _init_repo(tmp_path)
-    (tmp_path / "doc" / "background" / "topics").mkdir(parents=True)
-    target = tmp_path / "doc" / "background" / "topics" / "primitives.md"
+    (tmp_path / "entities" / "topics").mkdir(parents=True)
+    target = tmp_path / "entities" / "topics" / "primitives.md"
     target.write_text("original\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True, capture_output=True)
     subprocess.run(
@@ -2046,14 +2071,14 @@ def test_project_target_files_clean_reports_deleted_tracked_source_file(tmp_path
         tmp_path, ["primitives.md"], PROMOTE_KIND_TOPIC
     )
     assert clean is False
-    assert "doc/background/topics/primitives.md" in dirty_paths
+    assert "entities/topics/primitives.md" in dirty_paths
 
 
 @pytest.mark.parametrize(
     "target_rel",
     [
-        "doc/topics/primitives.md",
-        "doc/background/topics/primitives.md",
+        "overlays/topics/primitives.md",
+        "entities/topics/primitives.md",
     ],
 )
 def test_project_target_files_clean_reports_untracked_topic_target_file(

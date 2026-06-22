@@ -10,7 +10,7 @@ from science_tool.cli import main as science_cli
 
 
 def _seed_filterable(root: Path) -> None:
-    d = root / "doc" / "datasets"
+    d = root / "entities" / "datasets"
     d.mkdir(parents=True, exist_ok=True)
     (d / "cand.md").write_text(
         '---\nid: "dataset:cand"\ntype: "dataset"\ntitle: "Cand"\nstatus: "candidate"\n'
@@ -86,13 +86,13 @@ def test_list_commons_missing_registry_degrades(tmp_path: Path) -> None:
 
 
 def _seed_two_origins(root: Path) -> None:
-    (root / "doc" / "datasets").mkdir(parents=True, exist_ok=True)
-    (root / "doc" / "datasets" / "ext.md").write_text(
+    (root / "entities" / "datasets").mkdir(parents=True, exist_ok=True)
+    (root / "entities" / "datasets" / "ext.md").write_text(
         '---\nid: "dataset:ext"\ntype: "dataset"\ntitle: "Ext"\norigin: "external"\n'
         'access: {level: "public", verified: false}\n---\n',
         encoding="utf-8",
     )
-    (root / "doc" / "datasets" / "der.md").write_text(
+    (root / "entities" / "datasets" / "der.md").write_text(
         '---\nid: "dataset:der"\ntype: "dataset"\ntitle: "Der"\norigin: "derived"\n'
         'derivation: {workflow: "workflow:w", workflow_run: "workflow-run:r", git_commit: "a", config_snapshot: "c", produced_at: "t", inputs: []}\n'
         'datapackage: "results/w/r/x/datapackage.yaml"\n---\n',

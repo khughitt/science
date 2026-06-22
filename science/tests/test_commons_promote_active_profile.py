@@ -18,14 +18,14 @@ from science_tool.commons.promote import (
 
 
 def _project_tree_with_rnaseq(tmp_path: Path) -> Path:
-    """Build a minimal source project with one data-mockrna.md dataset
+    """Build a minimal source project with one mockrna.md dataset
     carrying bio.matrix + bio.rnaseq fields in its frontmatter, plus a
     JSON datapackage and the resource file the datapackage references."""
     proj = tmp_path / "proj-rnaseq"
-    (proj / "doc" / "datasets").mkdir(parents=True)
+    (proj / "entities" / "datasets").mkdir(parents=True)
     (proj / "data" / "mockrna").mkdir(parents=True)
 
-    (proj / "doc" / "datasets" / "data-mockrna.md").write_text(
+    (proj / "entities" / "datasets" / "mockrna.md").write_text(
         """---
 id: dataset:mockrna
 type: dataset

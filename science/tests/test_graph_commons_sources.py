@@ -469,7 +469,7 @@ def test_orchestrator_raises_overlay_validation_error_on_orphan_overlay(
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
     monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
     project_root = tmp_path / "project"
-    overlay_path = project_root / "doc" / "topics" / "orphan.md"
+    overlay_path = project_root / "overlays" / "topics" / "orphan.md"
     overlay_path.parent.mkdir(parents=True)
     overlay_path.write_text(
         """---
@@ -495,7 +495,7 @@ def test_orchestrator_loads_overlay_without_explicit_reference(tmp_path: Path, m
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
     monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
     project_root = tmp_path / "project"
-    overlay_path = project_root / "doc" / "topics" / "single-cell-foundation-models.md"
+    overlay_path = project_root / "overlays" / "topics" / "single-cell-foundation-models.md"
     overlay_path.parent.mkdir(parents=True)
     overlay_path.write_text(
         """---
@@ -525,7 +525,7 @@ def test_orchestrator_skips_overlay_when_project_identity_already_exists(
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
     monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
     project_root = tmp_path / "project"
-    overlay_path = project_root / "doc" / "topics" / "single-cell-foundation-models.md"
+    overlay_path = project_root / "overlays" / "topics" / "single-cell-foundation-models.md"
     overlay_path.parent.mkdir(parents=True)
     overlay_path.write_text(
         """---
@@ -570,7 +570,7 @@ def test_orchestrator_raises_missing_commons_root_when_overlays_present(
     missing_root = tmp_path / "missing-commons"
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(missing_root))
     project_root = tmp_path / "project"
-    overlay_path = project_root / "doc" / "topics" / "single-cell-foundation-models.md"
+    overlay_path = project_root / "overlays" / "topics" / "single-cell-foundation-models.md"
     overlay_path.parent.mkdir(parents=True)
     overlay_path.write_text(
         """---
@@ -748,7 +748,7 @@ def test_load_project_sources_populates_overlay_paths(tmp_path: Path, monkeypatc
     manifest_path = project_root / "knowledge" / "sources" / "local" / "manifest.yaml"
     manifest_path.parent.mkdir(parents=True)
     manifest_path.write_text("", encoding="utf-8")
-    overlay_path = project_root / "doc" / "topics" / "single-cell-foundation-models.md"
+    overlay_path = project_root / "overlays" / "topics" / "single-cell-foundation-models.md"
     overlay_path.parent.mkdir(parents=True)
     overlay_path.write_text(
         """---
@@ -780,7 +780,7 @@ def test_pinned_overlay_matching_commons_version_does_not_warn(
         ("paper:Adams2025", "papers", "Adams2025"),
         ("topic:single-cell-foundation-models", "topics", "single-cell-foundation-models"),
     ):
-        overlay_path = project_root / "doc" / subdir / f"{slug}.md"
+        overlay_path = project_root / "overlays" / subdir / f"{slug}.md"
         overlay_path.parent.mkdir(parents=True, exist_ok=True)
         overlay_path.write_text(
             f'---\nid: "{canonical_id}"\noverlay_of: "{canonical_id}"\npin_version: "1.0.0"\n---\n\n## Notes\n',
@@ -799,7 +799,7 @@ def test_pinned_overlay_rejects_commons_version_drift(tmp_path: Path, monkeypatc
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
     monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
     project_root = tmp_path / "project"
-    overlay_path = project_root / "doc" / "papers" / "Adams2025.md"
+    overlay_path = project_root / "overlays" / "papers" / "Adams2025.md"
     overlay_path.parent.mkdir(parents=True, exist_ok=True)
     overlay_path.write_text(
         '---\nid: "paper:Adams2025"\noverlay_of: "paper:Adams2025"\npin_version: "9.9.9"\n---\n\n## Notes\n',

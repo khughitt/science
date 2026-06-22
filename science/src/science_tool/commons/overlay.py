@@ -1,11 +1,13 @@
 """Project-overlay discovery and read-time merge for the commons store.
 
-A project carries a thin overlay file (`<project>/doc/<type>/<slug>.md`) for a
-commons entity. This module discovers, parses, validates overlay files,
+A project carries a thin overlay file (`<project>/overlays/<type>/<slug>.md`)
+for a commons entity. This module discovers, parses, validates overlay files,
 checks overlay pins against the live canonical version, and merges them onto
 the canonical entity per the schema's `science:merge` policy.
 
-See docs/plans/2026-05-14-commons-overlay-merge-design.md.
+See docs/plans/2026-05-14-commons-overlay-merge-design.md and
+docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md (overlays
+moved out of the prose-only doc/ tree into the dedicated overlays/ root).
 """
 
 from __future__ import annotations
@@ -42,7 +44,7 @@ _TYPE_TO_DIR = {
     "topic": "topics",
     "theme": "themes",
 }
-_DATASET_OVERLAY_FILENAME_PREFIX = "data-"
+_OVERLAYS_ROOT = "overlays"
 
 
 def _read_markdown_body(path: Path) -> str:
@@ -89,22 +91,20 @@ class OverlayAdapter:
         canonical id.
         """
         type_dir, slug = self._split_id(canonical_id)
-        overlay_path = self._project_root / "doc" / type_dir / f"{slug}.md"
-        if not overlay_path.is_file() and type_dir == "datasets":
-            overlay_path = self._project_root / "doc" / type_dir / f"{_DATASET_OVERLAY_FILENAME_PREFIX}{slug}.md"
+        overlay_path = self._project_root / _OVERLAYS_ROOT / type_dir / f"{slug}.md"
         if not overlay_path.is_file():
             return None
         return self._build(canonical_id, overlay_path)
 
     def scan(self) -> Iterator[OverlayRecord | OverlayValidationError]:
-        """Walk the project's doc/{datasets,papers,topics,themes}/*.md overlays.
+        """Walk the project's overlays/{datasets,papers,topics,themes}/*.md overlays.
 
         Yields an OverlayRecord or an OverlayValidationError per file. A missing
-        doc/ directory or a missing type subdirectory yields nothing -- a project
-        need not overlay every type.
+        overlays/ directory or a missing type subdirectory yields nothing -- a
+        project need not overlay every type.
         """
         for type_name, type_dir in _TYPE_TO_DIR.items():
-            subdir = self._project_root / "doc" / type_dir
+            subdir = self._project_root / _OVERLAYS_ROOT / type_dir
             if not subdir.is_dir():
                 continue
             for child in sorted(subdir.iterdir()):
@@ -113,11 +113,7 @@ class OverlayAdapter:
                 frontmatter, _ = parse_frontmatter(child)
                 if "overlay_of" not in frontmatter:
                     continue
-                canonical_id = _overlay_canonical_id_from_filename(
-                    type_name,
-                    child.stem,
-                    declared=frontmatter.get("overlay_of"),
-                )
+                canonical_id = f"{type_name}:{child.stem}"
                 try:
                     yield self._build(canonical_id, child)
                 except OverlayValidationError as exc:
@@ -185,16 +181,6 @@ class OverlayAdapter:
             pin_version=frontmatter.get("pin_version") or None,
             pin_effective_version=frontmatter.get("pin_effective_version") or None,
         )
-
-
-def _overlay_canonical_id_from_filename(type_name: str, stem: str, *, declared: object) -> str:
-    canonical_id = f"{type_name}:{stem}"
-    if type_name != "dataset" or not stem.startswith(_DATASET_OVERLAY_FILENAME_PREFIX):
-        return canonical_id
-    promoted_id = f"{type_name}:{stem[len(_DATASET_OVERLAY_FILENAME_PREFIX) :]}"
-    if declared == promoted_id:
-        return promoted_id
-    return canonical_id
 
 
 def validate_overlay_pin(canonical: CommonsEntityRecord, overlay: OverlayRecord | None) -> None:

@@ -269,9 +269,9 @@ def test_build_inventory_v2_excludes_project_authored_shared_entities_and_aliase
 
 def test_build_inventory_v2_scans_project_overlays(tmp_path) -> None:
     project = tmp_path / "project"
-    (project / "doc" / "papers").mkdir(parents=True)
+    (project / "overlays" / "papers").mkdir(parents=True)
     (project / "science.yaml").write_text("id: overlay-project\n", encoding="utf-8")
-    (project / "doc" / "papers" / "Adams2025.md").write_text(
+    (project / "overlays" / "papers" / "Adams2025.md").write_text(
         "---\n"
         'id: "paper:Adams2025"\n'
         'overlay_of: "paper:Adams2025"\n'
@@ -295,9 +295,9 @@ def test_build_inventory_v2_scans_project_overlays(tmp_path) -> None:
 
 def test_build_inventory_v2_rejects_overlay_fields_not_mergeable_by_dashboard(tmp_path) -> None:
     project = tmp_path / "project"
-    (project / "doc" / "topics").mkdir(parents=True)
+    (project / "overlays" / "topics").mkdir(parents=True)
     (project / "science.yaml").write_text("id: overlay-project\n", encoding="utf-8")
-    (project / "doc" / "topics" / "invalid-fields.md").write_text(
+    (project / "overlays" / "topics" / "invalid-fields.md").write_text(
         "---\n"
         'id: "topic:invalid-fields"\n'
         'overlay_of: "topic:invalid-fields"\n'
@@ -319,9 +319,9 @@ def test_build_inventory_v2_rejects_overlay_fields_not_mergeable_by_dashboard(tm
 
 def test_build_inventory_v2_overlay_validation_error_becomes_warning(tmp_path) -> None:
     project = tmp_path / "project"
-    (project / "doc" / "papers").mkdir(parents=True)
+    (project / "overlays" / "papers").mkdir(parents=True)
     (project / "science.yaml").write_text("id: broken-overlay\n", encoding="utf-8")
-    (project / "doc" / "papers" / "Adams2025.md").write_text(
+    (project / "overlays" / "papers" / "Adams2025.md").write_text(
         '---\nid: "paper:Wrong2025"\noverlay_of: "paper:Wrong2025"\nrelevance: "mismatch"\n---\n\n## Notes\n',
         encoding="utf-8",
     )
@@ -333,7 +333,7 @@ def test_build_inventory_v2_overlay_validation_error_becomes_warning(tmp_path) -
     assert len(overlay_warnings) == 1
     warning_path = overlay_warnings[0].path
     assert warning_path is not None
-    assert warning_path.endswith("doc/papers/Adams2025.md")
+    assert warning_path.endswith("overlays/papers/Adams2025.md")
 
 
 def test_build_inventory_v2_treats_project_paper_as_entity_not_overlay(tmp_path) -> None:

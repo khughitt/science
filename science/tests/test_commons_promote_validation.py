@@ -66,8 +66,8 @@ def test_plan_promote_validates_canonical_against_kind_profile(tmp_path, monkeyp
     )
 
     proj = tmp_path / "proj_v"
-    (proj / "doc" / "papers").mkdir(parents=True)
-    (proj / "doc" / "papers" / "Adams2025.md").write_text(
+    (proj / "entities" / "papers").mkdir(parents=True)
+    (proj / "entities" / "papers" / "Adams2025.md").write_text(
         "---\nid: paper:Adams2025\ntitle: A\nyear: 99\n---\n",
         encoding="utf-8",
     )
@@ -103,12 +103,12 @@ def test_skip_on_invalid_drops_bad_decision_and_keeps_valid(tmp_path, monkeypatc
     )
 
     proj = tmp_path / "proj_mixed"
-    (proj / "doc" / "papers").mkdir(parents=True)
-    (proj / "doc" / "papers" / "Good2025.md").write_text(
+    (proj / "entities" / "papers").mkdir(parents=True)
+    (proj / "entities" / "papers" / "Good2025.md").write_text(
         "---\nid: paper:Good2025\ntitle: Good\nyear: 2025\n---\n",
         encoding="utf-8",
     )
-    (proj / "doc" / "papers" / "Bad2025.md").write_text(
+    (proj / "entities" / "papers" / "Bad2025.md").write_text(
         "---\nid: paper:Bad2025\ntitle: Bad\nyear: 99\n---\n",
         encoding="utf-8",
     )
@@ -149,8 +149,8 @@ def test_plan_promote_wraps_overlay_validation_failure(tmp_path, monkeypatch) ->
     )
 
     proj = tmp_path / "proj_overlay"
-    (proj / "doc" / "papers").mkdir(parents=True)
-    (proj / "doc" / "papers" / "Adams2025.md").write_text(
+    (proj / "entities" / "papers").mkdir(parents=True)
+    (proj / "entities" / "papers" / "Adams2025.md").write_text(
         "---\nid: paper:Adams2025\ntitle: A\nyear: 2025\ntags: [local]\n---\n",
         encoding="utf-8",
     )

@@ -1277,7 +1277,7 @@ def test_dataset_anomaly_codes_registered() -> None:
 
 
 def _write_dataset(p: Path, slug: str, *, origin: str, body: str) -> Path:
-    f = p / "doc" / "datasets" / f"{slug}.md"
+    f = p / "entities" / "datasets" / f"{slug}.md"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(
         f'---\nid: "dataset:{slug}"\ntype: "dataset"\ntitle: "{slug}"\norigin: "{origin}"\n{body}\n---\n',
@@ -1350,7 +1350,7 @@ def test_external_verified_no_source_url_flagged(tmp_path: Path) -> None:
 
 
 def _write_workflow_run(p: Path, slug: str, *, produces: list[str], inputs: list[str]) -> None:
-    f = p / "doc" / "workflow-runs" / f"{slug}.md"
+    f = p / "entities" / "workflow-runs" / f"{slug}.md"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(
         f'---\nid: "workflow-run:{slug}"\ntype: "workflow-run"\ntitle: "{slug}"\n'
@@ -1585,7 +1585,7 @@ def test_umbrella_in_consumed_by_flagged(tmp_path: Path) -> None:
         body='access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://y"}\n'
         "consumed_by: []",
     )
-    f = tmp_path / "doc" / "datasets" / "consumer.md"
+    f = tmp_path / "entities" / "datasets" / "consumer.md"
     f.write_text(
         '---\nid: "dataset:consumer"\ntype: "dataset"\ntitle: "Consumer"\norigin: "external"\n'
         'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://z"}\n'
