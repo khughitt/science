@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from science_model.identity import EntityClass
 
-EntityFilenameStrategy = Literal["numeric", "citekey", "singleton", "slug", "verbatim"]
+EntityFilenameStrategy = Literal["numeric", "citekey", "singleton", "slug", "verbatim", "id-local"]
 
 
 class KindCategory(StrEnum):

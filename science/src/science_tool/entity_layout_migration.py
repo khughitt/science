@@ -469,6 +469,23 @@ def plan_migration(project_root: Path) -> MigrationPlan:
                 local = Path(entity.rel_path).stem
                 _add_move(plan, entity, f"{policy.root.as_posix()}/{local}.md", f"{kind}:{local}", kind)
             continue
+        if policy.strategy == "id-local":
+            # id-local preserves the authoritative frontmatter `id:` verbatim and
+            # derives the destination FILENAME from the id's local part (not the
+            # stem). This is what lets adapter-backed owners (dataset/workflow)
+            # move doc/<type>/data-<slug>.md -> entities/<kind>/<slug>.md with the
+            # id unchanged and therefore ZERO reference rewrites. A file with no
+            # explicit, kind-prefixed id has no derivable identity here — fail loud
+            # rather than fall back to the stem (which would re-introduce drift).
+            for entity in items:
+                if not entity.old_id or not entity.old_id.startswith(f"{kind}:"):
+                    raise ValueError(
+                        f"id-local kind {kind!r} requires an explicit '{kind}:<local>' id; "
+                        f"{entity.rel_path} has id={entity.old_id!r}"
+                    )
+                local = entity.old_id.split(":", 1)[1]
+                _add_move(plan, entity, f"{policy.root.as_posix()}/{local}.md", entity.old_id, kind)
+            continue
         # numeric: preserve conformant numbers; assign the rest in created order.
         ordered = sorted(items, key=lambda e: (str(normalized[e.rel_path]["created"]), e.rel_path))
         taken: set[int] = set()
