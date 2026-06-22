@@ -49,6 +49,8 @@ related:
 - `AccessBlock` fields (`science_model/packages/schema.py:96`): `level` ∈ {public,registration,controlled,commercial,mixed}, `availability`, `verified`, `verification_method`, `last_reviewed`, `exception` (with `.mode`).
 - Frontmatter parse: `from science_model.frontmatter import parse_frontmatter` → `parse_frontmatter(path) -> (fm: dict, body: str) | None` (`datasets_catalog.py:126`, `:135`).
 - Dataset entity files live at `<project>/doc/datasets/*.md`; filter `(fm.get("kind") or fm.get("type")) == "dataset"` (`datasets_catalog.py:129-140`).
+- Source scan roots (`graph/sources.py:305`, `load_project_sources`): `["entities", "research/packages", "doc/datasets", "doc/workflows", "doc/workflow-runs"]`. The 21 layout kinds — questions, hypotheses, propositions, evidence-lines — live under `entities/`; only datasets live under `doc/datasets/`. `materialize_graph` will NOT see Q/H/P/evidence-lines placed under `doc/`. The frontmatter reach scan therefore reads `entities/` + `doc/datasets/`.
+- URI → canonical ref inverse: `from science_tool.graph.store.identity import canonical_id_from_entity_uri` → `canonical_id_from_entity_uri(str(uri)) -> str | None` (e.g. `.../hypothesis/h` → `"hypothesis:h"`; returns `None` for non-entity/layer URIs — skip those). (`identity.py:32`.)
 - Graph path: `DEFAULT_GRAPH_PATH = Path("knowledge/graph.trig")` — `from science_tool.graph.store import DEFAULT_GRAPH_PATH`; full path = `project_root / DEFAULT_GRAPH_PATH`.
 - Load graph layers: `from science_tool.graph.store.dataset import _load_dataset`; `from science_tool.graph.store.identity import _graph_uri`; then `ds = _load_dataset(graph_path); knowledge = ds.graph(_graph_uri("graph/knowledge")); provenance = ds.graph(_graph_uri("graph/provenance"))`.
 - Namespaces: `from science_tool.graph.store.constants import SCI_NS, CITO_NS`; `from rdflib.namespace import RDF`; `from rdflib import URIRef`.
@@ -243,9 +245,9 @@ def test_frontmatter_reach_both_directions_excludes_source_refs(tmp_path: Path) 
     _write(tmp_path / "doc/datasets/b.md",
            '---\nid: "dataset:b"\ntype: "dataset"\ntitle: "B"\n'
            'source_refs: ["question:qX"]\n---\n')  # source_refs must NOT count
-    _write(tmp_path / "doc/questions/q1.md",
+    _write(tmp_path / "entities/questions/q1.md",
            '---\nid: "question:q1"\ntype: "question"\ntitle: "Q1"\n---\n')
-    _write(tmp_path / "doc/questions/q2.md",
+    _write(tmp_path / "entities/questions/q2.md",
            '---\nid: "question:q2"\ntype: "question"\ntitle: "Q2"\nrelated: ["dataset:b"]\n---\n')
 
     reach = frontmatter_reach(tmp_path)
@@ -274,24 +276,30 @@ def _is_qh(ref: str) -> bool:
     return isinstance(ref, str) and ref.startswith(_QH_PREFIXES)
 
 
-def _iter_entity_frontmatter(project_root: Path):
-    """Yield (id, fm) for every markdown entity under the project's doc/ tree.
+# Roots that hold the entities reach cares about, mirroring load_project_sources
+# (graph/sources.py:305): the 21 entity-layout kinds (questions, hypotheses,
+# propositions, evidence-lines, ...) live under entities/; datasets stay at
+# doc/datasets/. Scan both — NOT a bare doc/ scan (Q/H are NOT under doc/).
+_REACH_SCAN_ROOTS = ("entities", "doc/datasets")
 
-    A recursive doc/ scan is sufficient: dataset entities live in doc/datasets/
-    and Q/H entities in doc/questions/, doc/hypotheses/ (or wherever the project
-    places them under doc/). Files without an id are skipped.
+
+def _iter_entity_frontmatter(project_root: Path):
+    """Yield (id, fm) for every markdown entity under the reach scan roots.
+
+    Files without an id are skipped.
     """
-    doc = project_root / "doc"
-    if not doc.is_dir():
-        return
-    for md in sorted(doc.rglob("*.md")):
-        parsed = parse_frontmatter(md)
-        if parsed is None:
+    for root in _REACH_SCAN_ROOTS:
+        base = project_root / root
+        if not base.is_dir():
             continue
-        fm, _ = parsed
-        ent_id = fm.get("id")
-        if isinstance(ent_id, str) and ent_id:
-            yield ent_id, fm
+        for md in sorted(base.rglob("*.md")):
+            parsed = parse_frontmatter(md)
+            if parsed is None:
+                continue
+            fm, _ = parsed
+            ent_id = fm.get("id")
+            if isinstance(ent_id, str) and ent_id:
+                yield ent_id, fm
 
 
 def frontmatter_reach(project_root: Path) -> dict[str, set[str]]:
@@ -356,17 +364,21 @@ def _write(p: Path, text: str) -> None:
 def _seed_graph_project(root: Path) -> None:
     # Minimal connected graph: dataset → evidence-line(dataset_usage) → proposition
     # → hypothesis; question → proposition.
+    # IMPORTANT: load_project_sources (graph/sources.py:305) scans entities/ for the
+    # 21 layout kinds (questions/hypotheses/propositions/evidence-lines) and
+    # doc/datasets/ for datasets. Q/H/P/evidence-lines under doc/ would NOT be
+    # materialized — they MUST go under entities/.
     (root / "science.yaml").write_text('slug: "tp"\n', encoding="utf-8")
     _write(root / "doc/datasets/d.md",
            '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\norigin: "external"\n'
            'access: {level: "public", verified: true}\n---\n')
-    _write(root / "doc/hypotheses/h.md",
+    _write(root / "entities/hypotheses/h.md",
            '---\nid: "hypothesis:h"\ntype: "hypothesis"\ntitle: "H"\n---\n')
-    _write(root / "doc/questions/q.md",
+    _write(root / "entities/questions/q.md",
            '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\nrelated: ["proposition:p"]\n---\n')
-    _write(root / "doc/propositions/p.md",
+    _write(root / "entities/propositions/p.md",
            '---\nid: "proposition:p"\ntype: "proposition"\ntitle: "P"\ndiscusses: ["hypothesis:h"]\n---\n')
-    _write(root / "doc/evidence-lines/e.md",
+    _write(root / "entities/evidence-lines/e.md",
            '---\nid: "evidence-line:e"\ntype: "evidence-line"\ntitle: "E"\n'
            'stance: "supports"\ntarget: "proposition:p"\nevidence_type: "empirical_data_evidence"\n'
            'dataset_usage:\n  - ref: "dataset:d"\n    role: "analyzed"\n    overlap: "full"\n---\n')
@@ -399,14 +411,7 @@ from rdflib.namespace import RDF
 
 from science_tool.graph.dataset_usage import project_entity_uri
 from science_tool.graph.store.constants import CITO_NS, SCI_NS
-
-
-def _uri_to_ref(uri: URIRef, knowledge) -> str:
-    """Best-effort URI → canonical ref. The local name after the last '/' or '#'
-    matches the canonical id encoding used by project_entity_uri."""
-    s = str(uri)
-    local = s.rsplit("/", 1)[-1].rsplit("#", 1)[-1]
-    return local
+from science_tool.graph.store.identity import canonical_id_from_entity_uri
 
 
 def _qh_for_proposition(knowledge, prop_uri: URIRef) -> set[URIRef]:
@@ -438,14 +443,16 @@ def usage_reach(knowledge, provenance, dataset_ids: list[str]) -> dict[str, set[
                     if not isinstance(prop, URIRef):
                         continue
                     for qh in _qh_for_proposition(knowledge, prop):
-                        reach[ds_id].add(_uri_to_ref(qh, knowledge))
+                        ref = canonical_id_from_entity_uri(str(qh))
+                        if ref is not None:  # skip non-entity URIs
+                            reach[ds_id].add(ref)
     return reach
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd ~/d/science/science && uv run --frozen pytest tests/test_dataset_prioritize_graph.py -v`
-Expected: PASS. If `_uri_to_ref` returns a bare local name (e.g. `h`) rather than `hypothesis:h`, fix `_uri_to_ref` to reconstruct the prefixed ref by reading the entity id from the graph (`knowledge.value(uri, SCI_NS.id)` if present) or by mapping the URI namespace — adjust until the assertion `{"hypothesis:h", "question:q"}` holds.
+Expected: PASS — `canonical_id_from_entity_uri` reconstructs `hypothesis:h`/`question:q` from the project URIs. If the assertion shows the question missing, the question→proposition edge is the likely cause: `related:` materializes as `skos:related`, but the traversal expects `sci:addresses`. Verify against `tests/test_meta_reference.py` how a question→proposition `sci:addresses` edge is authored (it may require an `addresses:` field rather than `related:`), adjust the `_seed_graph_project` question frontmatter accordingly, and keep the assertion `{"hypothesis:h", "question:q"}` as the contract.
 
 - [ ] **Step 5: Commit**
 
@@ -476,7 +483,7 @@ from science_tool.dataset_prioritize import merged_reach
 def test_merged_reach_unions_both_paths_and_dedups(tmp_path: Path) -> None:
     _seed_graph_project(tmp_path)
     # ALSO give dataset:d a frontmatter back-edge to the SAME question:q
-    (tmp_path / "doc/questions/q.md").write_text(
+    (tmp_path / "entities/questions/q.md").write_text(
         '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\n'
         'related: ["proposition:p", "dataset:d"]\n---\n', encoding="utf-8")
     graph_path = materialize_graph(tmp_path)
@@ -491,7 +498,7 @@ def test_merged_reach_unions_both_paths_and_dedups(tmp_path: Path) -> None:
 
 def test_merged_reach_frontmatter_only_when_no_graph(tmp_path: Path) -> None:
     _seed_graph_project(tmp_path)
-    (tmp_path / "doc/questions/q.md").write_text(
+    (tmp_path / "entities/questions/q.md").write_text(
         '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\nrelated: ["dataset:d"]\n---\n',
         encoding="utf-8")
     reach = merged_reach(tmp_path, None, None, ["dataset:d"])
@@ -660,7 +667,7 @@ def test_prioritize_sparse_no_graph_orders_by_accessibility_and_flags(tmp_path: 
     _write(tmp_path / "doc/datasets/unv.md",
            '---\nid: "dataset:unv"\ntype: "dataset"\ntitle: "Unv"\norigin: "external"\n'
            'access: {level: "public", verified: false}\n---\n')
-    _write(tmp_path / "doc/questions/q1.md",
+    _write(tmp_path / "entities/questions/q1.md",
            '---\nid: "question:q1"\ntype: "question"\ntitle: "Q1"\n---\n')
 
     rows = prioritize(tmp_path)
@@ -760,7 +767,7 @@ from science_tool.dataset_prioritize import prioritize
 def test_prioritize_mixed_graph_frontmatter_dataset_not_no_edge(tmp_path: Path) -> None:
     _seed_graph_project(tmp_path)  # dataset:d connected via usage
     # a second dataset connected ONLY by frontmatter to question:q
-    (tmp_path / "doc/questions/q.md").write_text(
+    (tmp_path / "entities/questions/q.md").write_text(
         '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\n'
         'related: ["proposition:p", "dataset:fm_only"]\n---\n', encoding="utf-8")
     (tmp_path / "doc/datasets/fm_only.md").write_text(
@@ -964,15 +971,16 @@ Author a command that drives the front-half loop from `plan:2026-06-21-catalog-d
 
 Include a top note: "This command is the front half of the dataset arc (design: `~/d/science/docs/plans/2026-06-21-catalog-datasets-design.md`). Operationalization is `plan-pipeline`; commons promotion is deferred and gated on `access.verified`."
 
+**Invocation convention (resolves the two contexts):** the command doc runs inside a *consumer* project where `science` is a dependency, so its example invocations follow the sibling commands' `uv run science <cmd>` convention (matching `commands/find-datasets.md` and the user guide) — do NOT write `--frozen` into the consumer-facing examples. The plan's `uv run --frozen` constraint applies to science-repo dev/test only, e.g. the verification step below, which runs from the `science/` subproject.
+
 - [ ] **Step 3: Verify it is well-formed and references real surfaces**
 
 Run:
 ```bash
-cd ~/d/science
-grep -n "dataset prioritize\|find-datasets\|plan-pipeline\|access" commands/catalog-datasets.md
-uv run --frozen science dataset prioritize --help
+cd ~/d/science && grep -n "dataset prioritize\|find-datasets\|plan-pipeline\|access" commands/catalog-datasets.md
+cd ~/d/science/science && uv run --frozen science dataset prioritize --help
 ```
-Expected: the grep shows each referenced surface is named; `--help` exits 0 and lists the options.
+Expected: the grep shows each referenced surface is named; `--help` (run from the `science/` subproject — root invocation fails with `Failed to spawn: science`) exits 0 and lists the options.
 
 - [ ] **Step 4: Commit**
 
@@ -1023,4 +1031,4 @@ cd ~/d/science && git add -A && git commit -m "chore(dataset): validation fixups
 
 **Type consistency:** `prioritize` returns rows with `gap_flags` (list); CLI renders `gap-flags` column from `r["gap_flags"]`. `readiness_for`/`readiness_weight`/`frontmatter_reach`/`usage_reach`/`merged_reach`/`leverage_tilt`/`prioritize` signatures are consistent across tasks. Graph layers obtained identically everywhere (`_load_dataset` + `_graph_uri("graph/knowledge"|"graph/provenance")`).
 
-**Known implementation risk flagged inline (not a placeholder):** `_uri_to_ref` (Task 3) must reconstruct the prefixed canonical ref (`hypothesis:h`) from the entity URI; the task includes a fix-up instruction and the assertion that pins it. The graph-fixture seed frontmatter (Task 3) may need adjustment to match exactly what `materialize_graph` consumes for the question→proposition `addresses` edge — the task says to verify against `tests/test_meta_reference.py` and keep the reach assertion as the contract.
+**Known implementation risk flagged inline (not a placeholder):** the only residual uncertainty is how a question→proposition `sci:addresses` edge is authored in frontmatter (Task 3's `_seed_graph_project` uses `related:`, which materializes as `skos:related`; `sci:addresses` may need an `addresses:` field). Task 3 Step 4 says to verify against `tests/test_meta_reference.py` and keep the `{"hypothesis:h", "question:q"}` reach assertion as the contract. URI→ref is now resolved via the real inverse `canonical_id_from_entity_uri` (identity.py:32), and the graph-fixture entity layout is corrected to `entities/{hypotheses,questions,propositions,evidence-lines}/` (datasets in `doc/datasets/`) to match `load_project_sources` scan roots.
