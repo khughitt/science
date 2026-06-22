@@ -7,7 +7,7 @@ from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.store.dataset import _load_dataset
 from science_tool.graph.store.identity import _graph_uri
 from science_tool.dataset_prioritize import usage_reach, merged_reach
-from science_tool.dataset_prioritize import leverage_tilt, reached_proposition_uris
+from science_tool.dataset_prioritize import leverage_tilt
 from science_tool.dataset_prioritize import prioritize
 
 

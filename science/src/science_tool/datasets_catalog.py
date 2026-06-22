@@ -13,6 +13,7 @@ from pathlib import Path
 
 import yaml
 
+from science_model.frontmatter import parse_frontmatter
 from science_tool.entities import (
     EntityCommandError,
     _validate_prospective_write,
@@ -121,9 +122,6 @@ def add_dataset(
         if tmp.exists():
             tmp.unlink()
     return entity_id, dest, warnings
-
-
-from science_model.frontmatter import parse_frontmatter
 
 
 def _local_rows(project_root: Path) -> list[dict]:
