@@ -91,7 +91,7 @@ Common validation errors:
 
 When a `datapackage.json` exists and an inquiry is active:
 
-1. Map resource fields to inquiry variables in `doc/datasets/data-<slug>.md`
+1. Map resource fields to inquiry variables in `entities/datasets/<slug>.md`
 2. Manually check which inquiry variables are covered by available dataset fields
 3. Document any transformations needed (unit conversions, normalization, filtering)
 
