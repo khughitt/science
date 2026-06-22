@@ -32,3 +32,32 @@ def test_readiness_weight_ordering_and_flagged_default() -> None:
     w_unk, f_unk = readiness_weight({"id": "dataset:b", "type": "dataset", "title": "B"})
     assert w_unk == 0.1
     assert "readiness-unresolved" in f_unk
+
+
+from pathlib import Path
+
+from science_tool.dataset_prioritize import frontmatter_reach
+
+
+def _write(p: Path, text: str) -> None:
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text, encoding="utf-8")
+
+
+def test_frontmatter_reach_both_directions_excludes_source_refs(tmp_path: Path) -> None:
+    # dataset A points outward to a question; question Q2 points back to dataset B.
+    _write(tmp_path / "doc/datasets/a.md",
+           '---\nid: "dataset:a"\ntype: "dataset"\ntitle: "A"\n'
+           'related: ["question:q1", "topic:t1"]\n---\n')
+    _write(tmp_path / "doc/datasets/b.md",
+           '---\nid: "dataset:b"\ntype: "dataset"\ntitle: "B"\n'
+           'source_refs: ["question:qX"]\n---\n')  # source_refs must NOT count
+    _write(tmp_path / "entities/questions/q1.md",
+           '---\nid: "question:q1"\ntype: "question"\ntitle: "Q1"\n---\n')
+    _write(tmp_path / "entities/questions/q2.md",
+           '---\nid: "question:q2"\ntype: "question"\ntitle: "Q2"\nrelated: ["dataset:b"]\n---\n')
+
+    reach = frontmatter_reach(tmp_path)
+    assert reach["dataset:a"] == {"question:q1"}          # outgoing; topic ignored
+    assert reach["dataset:b"] == {"question:q2"}          # incoming back-edge only
+    assert "dataset:b" not in reach.get("dataset:b", set()) or "question:qX" not in reach["dataset:b"]
