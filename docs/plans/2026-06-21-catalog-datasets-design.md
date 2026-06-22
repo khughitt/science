@@ -286,6 +286,16 @@ The command is validated on a real sparse graph:
   question edge). Default v1: equal weight; revisit with data.
 - Whether the redundancy discount can reuse an existing `science_tool` shared-source derivation helper
   or needs the `origin`/cohort fallback (resolve by code inspection during planning).
+- **Multi-hop usage reach via the `sci:bearsOn` closure (deferred follow-up).** The shipped
+  implementation walks the usage path's proposition→Q/H expansion with the two DIRECT edges only
+  (`cito:discusses`, `sci:addresses`), not the transitive `sci:bearsOn` closure this design recommended
+  (`graph/freshness.py:70,182,231`). Consequence: a proposition reachable only through a multi-hop
+  chain is undercounted in `reach` — but solely on a *mature* materialized graph. The only current
+  consumer (PAIS) has no materialized graph, so the usage path never fires and reach is frontmatter-
+  only; the gap is invisible today. Follow-up when a mature-graph consumer exists: rewire
+  `usage_reach` + `reached_proposition_uris` (in `dataset_prioritize.py`) to traverse the materialized
+  `sci:bearsOn` closure, and add a multi-hop reach test. Flagged by the final whole-branch review
+  (2026-06-21); accepted as a scoped reduction by the project owner.
 
 ## Non-goals
 

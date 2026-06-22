@@ -137,7 +137,18 @@ def frontmatter_reach(project_root: Path) -> dict[str, set[str]]:
 
 
 def _qh_for_proposition(knowledge, prop_uri: URIRef) -> set[URIRef]:
-    """Hypotheses (prop discusses) + questions (question addresses prop)."""
+    """Hypotheses (prop discusses) + questions (question addresses prop).
+
+    Scope note (deferred): this walks the two DIRECT edges only. The design
+    (2026-06-21-catalog-datasets-design.md, usage path) recommended reusing the
+    materialized transitive `sci:bearsOn` closure (graph/freshness.py:70,182,231)
+    so a proposition reachable only via a multi-hop chain (e.g.
+    prop -bearsOn-> prop -discusses-> hyp) still counts toward reach. Single-hop
+    is a deliberate scope reduction: the only current consumer (PAIS) has no
+    materialized graph, so the usage path never fires and reach is frontmatter-
+    only; the undercount appears solely on a mature graph. Upgrading to the
+    `bearsOn` closure is tracked as a follow-up (see design Open questions).
+    """
     out: set[URIRef] = set()
     for _, _, hyp in knowledge.triples((prop_uri, CITO_NS.discusses, None)):
         if isinstance(hyp, URIRef) and (hyp, RDF.type, SCI_NS.Hypothesis) in knowledge:
