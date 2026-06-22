@@ -112,7 +112,7 @@ FASTA files in the `sequences/` subdirectory. Annotate with EDAM terms:
 
 ## When Adding a New Data Source
 
-1. Document it using the framework `dataset.md` template (or a project override in `.ai/templates/`) — save to `doc/datasets/data-<source-name>.md`
+1. Document it using the framework `dataset.md` template (or a project override in `.ai/templates/`) — save to `entities/datasets/<source-name>.md`
 2. Update `science.yaml` with the new data source entry
 3. Add acquisition scripts to `code/scripts/`
 4. Create or update `datapackage.json` in the appropriate directory

@@ -12,12 +12,32 @@ agents and humans to find.
 | `pyproject.toml` | Project-local Python/tooling manifest so `uv run science ...` and validation resolve consistently. |
 | `AGENTS.md` / `CLAUDE.md` | Operational instructions for agents. |
 | `README.md` | Project front door. |
-| `doc/` | Research notes, background, interpretations, reports, discussions, and other prose. |
-| `specs/` | Hypotheses, propositions, plans, and structured project specifications when a project keeps them there. |
+| `entities/` | Typed entity **owners**, one subdirectory per kind (`entities/datasets/`, `entities/papers/`, `entities/topics/`, `entities/hypotheses/`, `entities/questions/`, `entities/workflows/`, …). The single structural home for everything the project *owns*. |
+| `overlays/` | Project-local **overlays** — files carrying `overlay_of:` that borrow and extend a commons-canonical entity. One subdirectory per type (`overlays/datasets/`, `overlays/papers/`, `overlays/topics/`, `overlays/themes/`). |
+| `doc/` | Prose **only**: research notes, background, interpretations, reports, discussions, figures. No typed entity owners live here. |
+| `specs/` | Hypotheses, propositions, plans, and structured project specifications when a legacy project keeps them there. |
 | `tasks/` | Active, blocked, deferred, retired, and completed work. |
 | `knowledge/` | Generated graph files, summaries, snapshots, and other derived knowledge artifacts. |
 | `papers/references.bib` | Bibliography entries for cited literature. |
 | `.ai/` | Optional project-specific prompts, templates, and overrides. |
+
+## Three-Root Entity Layout (`layout_version: 3`)
+
+At `layout_version: 3` every markdown entity has exactly one structural home, and
+a reader can locate anything by *what it is*:
+
+- **`entities/<kind>/`** — owners. A thing the project itself defines lives here,
+  in the subdirectory for its kind. Filenames follow the entity `id` (e.g.
+  `dataset:ctrpv2` → `entities/datasets/ctrpv2.md`).
+- **`overlays/<type>/`** — borrows. When the project extends a commons-canonical
+  entity rather than owning it, the `overlay_of:` file lives here, never under
+  `entities/` (which would mint a competing owner) and never under `doc/`.
+- **`doc/`** — prose. Background, interpretations, reports, discussions, figures —
+  no typed entity owners.
+
+This replaces the older v2 arrangement where dataset, paper, topic, and theme
+files were scattered under `doc/<type>/`. See
+`docs/user-guide/entities.md` for the entity model itself.
 
 ## `science.yaml` And `pyproject.toml`
 
@@ -28,7 +48,7 @@ Example:
 
 ```yaml
 profile: research
-layout_version: 2
+layout_version: 3
 aspects:
   - computational-analysis
 ontologies: [biolink]

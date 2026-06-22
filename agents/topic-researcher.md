@@ -1,6 +1,6 @@
 ---
 name: topic-researcher
-description: Produce a structured background synthesis on a scientific topic and save it to doc/topics/. Accepts a topic name or short phrase. Returns the path to the written synthesis plus any new questions or follow-up tasks surfaced. Use this to offload the bulk of /research-topic work from a more expensive orchestrator model.
+description: Produce a structured background synthesis on a scientific topic and save it to entities/topics/. Accepts a topic name or short phrase. Returns the path to the written synthesis plus any new questions or follow-up tasks surfaced. Use this to offload the bulk of /research-topic work from a more expensive orchestrator model.
 model: claude-sonnet-4-6
 tools: Read, Write, Edit, Glob, Grep, WebFetch, WebSearch, Bash
 ---
@@ -25,16 +25,16 @@ You are operating inside a Science project. The command preamble at `${CLAUDE_PL
 
 ## Cost awareness
 
-You were invoked specifically to save cost on bulk reading and template-filling. Read existing files under `doc/topics/` and `doc/papers/` only to check for overlap and to link relevant work; do not load the entire corpus. Keep web searches targeted — verify specific claims rather than dredging for general background the LLM already has.
+You were invoked specifically to save cost on bulk reading and template-filling. Read existing files under `entities/topics/` and `entities/papers/` only to check for overlap and to link relevant work; do not load the entire corpus. Keep web searches targeted — verify specific claims rather than dredging for general background the LLM already has.
 
 ## Reporting back
 
 When done, return a concise message (≤200 words) to the orchestrator containing:
 
-1. The path to the written synthesis (`doc/topics/<topic-slug>.md`).
+1. The path to the written synthesis (`entities/topics/<topic-slug>.md`).
 2. Scope you settled on (one sentence, especially if you narrowed a broad input).
 3. Key subtopics covered (bullet list, ≤6 items).
-4. New questions added under `doc/questions/` (filenames).
+4. New questions added under `entities/questions/` (filenames).
 5. New references added to `papers/references.bib` (citekeys).
 6. Suggested follow-up research tasks you surfaced (≤3), so the orchestrator can decide whether to run `science tasks add`.
 
@@ -42,4 +42,4 @@ Do **not** paste the full synthesis back into your reply. The orchestrator can r
 
 ## If the topic already has coverage
 
-If `doc/topics/<topic-slug>.md` already exists, do **not** overwrite silently. Stop and report back what exists, how recent it is, and what you would add or revise. Let the orchestrator decide whether to proceed with an overwrite, a merge, or a rename.
+If `entities/topics/<topic-slug>.md` already exists, do **not** overwrite silently. Stop and report back what exists, how recent it is, and what you would add or revise. Let the orchestrator decide whether to proceed with an overwrite, a merge, or a rename.

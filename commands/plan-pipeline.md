@@ -182,7 +182,7 @@ science inquiry add-edge "<slug>" "concept:<step>" "sci:validatedBy" "concept:<c
 If this plan creates a new pipeline (not extending an existing one), register
 a `workflow` entity:
 
-1. Create `doc/workflows/workflow-<slug>.md` using the `workflow.md` template
+1. Create `entities/workflows/<slug>.md` (filename follows the entity id `workflow:<slug>`) using the `workflow.md` template
 2. Link to the method it realizes: `sci:realizes` → `method:<slug>`
 3. Document the steps it contains: `sci:contains` → `workflow-step:<slug>` for each rule
 

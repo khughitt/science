@@ -21,7 +21,7 @@ Additionally:
    - `specs/scope-boundaries.md`
    - `entities/hypotheses/` (all hypothesis files)
    - `entities/questions/` (all question files, if present)
-   - Existing `doc/datasets/` (to know what is already catalogued)
+   - Existing `entities/datasets/` (to know what is already catalogued)
 4. Resolve the project root (the directory containing `science.yaml`) — the CLI commands below require it or discover it automatically from the working directory.
 
 ## Tool invocation
@@ -80,7 +80,7 @@ science dataset add <slug> \
 `--level` defaults to `public` for GEO/SRA/Zenodo resources; adjust to `registration` or `controlled` when the repository requires login or a DUA.
 `status` defaults to `candidate` — do not override unless the dataset is already verified.
 
-After authoring, confirm each file was created under `doc/datasets/`.
+After authoring, confirm each file was created under `entities/datasets/`.
 
 ---
 
@@ -91,7 +91,7 @@ For **each candidate** dataset (status `candidate`, `access.verified: false`), c
 **Branch A — verifiable under current credentials** (public or registration-only datasets):
 
 1. Confirm the landing page or accession URL resolves and the files are downloadable without application.
-2. Edit `doc/datasets/data-<slug>.md`:
+2. Edit `entities/datasets/<slug>.md`:
    - Set `access.verified: true`
    - Set `access.verification_method: "<how you checked, e.g. GEO landing page confirmed public>">`
    - Set `access.last_reviewed: "<YYYY-MM-DD>"`

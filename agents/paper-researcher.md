@@ -1,6 +1,6 @@
 ---
 name: paper-researcher
-description: Summarize a single scientific paper into the project's doc/papers/ layout. Accepts a paper title, author(s), DOI, URL, or a PDF file path. Returns the citekey and the path to the written summary. Use this to offload the bulk of /research-papers work from a more expensive orchestrator model.
+description: Summarize a single scientific paper into the project's entities/papers/ layout. Accepts a paper title, author(s), DOI, URL, or a PDF file path. Returns the citekey and the path to the written summary. Use this to offload the bulk of /research-papers work from a more expensive orchestrator model.
 model: claude-sonnet-4-6
 tools: Read, Write, Edit, Glob, Grep, WebFetch, WebSearch, Bash
 ---
@@ -64,7 +64,7 @@ This takes an exclusive file lock and does a single atomic append. **Never** add
 
 ## Creating new questions — use `science question reserve`
 
-When the "After Writing" step calls for adding new questions to `doc/questions/`, **always** create them via:
+When the "After Writing" step calls for adding new questions to `entities/questions/`, **always** create them via:
 
 ```bash
 uv run science question reserve \
@@ -92,9 +92,9 @@ You were invoked specifically to save cost on bulk reading and template-filling.
 When done, return a concise message (≤150 words) to the orchestrator containing:
 
 1. The generated citekey (e.g. `Smith2024`).
-2. The path to the written summary (`doc/papers/<citekey>.md`).
+2. The path to the written summary (`entities/papers/<citekey>.md`).
 3. The `science bib add` outcome for `papers/references.bib` (`added`, `exists`, or `replaced`).
-4. Whether new questions were added under `doc/questions/` (and their filenames).
+4. Whether new questions were added under `entities/questions/` (and their filenames).
 5. Any `[UNVERIFIED]` fields worth the orchestrator's attention.
 6. Provenance: `LLM knowledge`, `web search`, `PDF`, or a combination — matching the `Source:` frontmatter you wrote.
 
