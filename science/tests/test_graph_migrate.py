@@ -187,3 +187,52 @@ Body.
     assert bad["check"] == "unresolved_reference"
     assert "datasets/does-not-exist/entity.md" in bad["details"]
     assert "science commons promote dataset --slug does-not-exist --from <project>" in bad["details"]
+
+
+def test_audit_paper_datasets_bare_freetext_is_descriptive(tmp_path: Path) -> None:
+    """A paper's `datasets:` field is descriptive provenance: bare free-text names
+    (e.g. "UniRef50") are NOT structural dataset references and must not produce
+    audit failures. An explicit `dataset:<slug>` ref in the same field still resolves
+    (and still fails when the dataset entity is absent)."""
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("", encoding="utf-8")
+    paper_path = project / "entities" / "papers" / "Adams2025.md"
+    paper_path.parent.mkdir(parents=True)
+    paper_path.write_text(
+        """---
+id: "paper:Adams2025"
+type: "paper"
+title: "A paper that uses several datasets"
+status: "active"
+datasets:
+  - UniRef50
+  - Swiss-Prot
+  - TAPE (secondary structure)
+  - "dataset:does-not-exist"
+source_refs: []
+created: "2026-04-23"
+updated: "2026-04-23"
+---
+
+Body.
+""",
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(project)
+    rows, _ = audit_project_sources(sources)
+
+    dataset_field_fails = [
+        row for row in rows if row.get("field") == "datasets" and row.get("status") == "fail"
+    ]
+    bad_targets = {row["target"] for row in dataset_field_fails}
+    # Bare free-text names are descriptive, not references → no failure rows.
+    assert "UniRef50" not in bad_targets
+    assert "Swiss-Prot" not in bad_targets
+    assert "TAPE (secondary structure)" not in bad_targets
+    # An explicit dataset: ref still audits and fails when absent.
+    assert "dataset:does-not-exist" in bad_targets
