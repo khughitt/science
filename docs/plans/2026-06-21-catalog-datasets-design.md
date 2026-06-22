@@ -129,13 +129,13 @@ discount falls back to an `origin`/cohort heuristic (see Key decision 4).
 
 ### Key decision 5: gap-flags are first-class output, not a side effect
 
-- **Chosen approach:** every row carries `gap-flags` ∈ {`no-edge`, `unverified`, `redundant`}, and the command summarizes them.
+- **Chosen approach:** every row carries `gap-flags` ∈ {`no-edge`, `unverified`, `redundant`, `readiness-unresolved`} (the canonical set; `readiness-unresolved` is emitted by the `readiness_weight` flagged default), and the command summarizes them.
 - **Rejected alternative:** emit only the ranked score.
 - **Reason:** in a sparse graph the *ranking* is weak but the *gaps* are the real signal — "this dataset has no question edge yet" and "this dataset is unverified" are the actionable findings that make a future ranking meaningful. The command's near-term value is surfacing work, not ordering a near-empty set.
 
 ### Key decision 6: degrade-with-warning on a stale graph, never auto-materialize
 
-- **Chosen approach:** at startup, check `graph_is_stale(project_root, graph_path)` (`science_model/entities.py:925`, an mtime comparison). If the graph is missing or stale, emit a warning to stderr (`graph may be stale; reach/leverage computed from the last build — run \`science graph build\``) and **continue**, computing what it can (frontmatter reach always works without the graph; usage-reach/leverage degrade to their neutral values when the graph is absent).
+- **Chosen approach:** at startup, check `graph_is_stale(project_root, graph_path)` (`science_tool/entities.py:925`, an mtime comparison). If the graph is missing or stale, emit a warning to stderr (`graph may be stale; reach/leverage computed from the last build — run \`science graph build\``) and **continue**, computing what it can. The frontmatter `related` reach is computed by scanning **raw entity frontmatter directly** (not graph triples), so it works even with no graph at all; the graph `skos:related` path is used only when a graph is loaded (the two must agree when both are available — see the `reach` term). Usage-reach and `leverage_tilt` degrade to their neutral values when the graph is absent.
 - **Rejected alternatives:** (a) hard-require a fresh graph and error out; (b) silently auto-run `materialize_graph()` inside a read-only command.
 - **Reason:** this matches the one existing precedent in the codebase — `entity neighbors` (`cli.py:796`) warns on `graph_is_stale` but does not rebuild — and keeps a read-only ranking command free of write side effects. Auto-materializing would surprise the user with a graph rewrite; hard-failing would make the command useless precisely on the young graphs where it is most needed.
 
@@ -188,13 +188,17 @@ score(d) = readiness_weight(d) × (1 + reach(d)) × leverage_tilt(d)
      `store/summary.py:362`, `cross_impact.py:200`). Reuse the existing `sci:bearsOn` derivers/closure
      (`graph/freshness.py:70,182,231`) for the proposition→Q/H expansion rather than re-implementing
      it.
-  2. **Frontmatter path** (always also counted, both directions): `skos:related` edges between `d` and
-     any `question:`/`hypothesis:` entity — **including the back-edge** where a question/hypothesis
-     lists `dataset:d` in *its own* `related` (materialized as `(question, skos:related, d)`, so a
-     dataset-only outgoing scan misses it; check incoming too — `materialize.py:646`). Do **not** count
-     `source_refs`: those materialize as `prov:wasDerivedFrom` provenance, not semantic relatedness
-     (`materialize.py:720`), and already participate via the usage/`bearsOn` path where they form a real
-     chain.
+  2. **Frontmatter path** (always also counted, both directions): the bidirectional `related` linkage
+     between `d` and any `question:`/`hypothesis:` entity — **including the back-edge** where a
+     question/hypothesis lists `dataset:d` in *its own* `related`. This path has **two read modes** that
+     must produce the same edge set: when a graph is loaded, read the `skos:related` triples in both
+     directions (`(d, skos:related, Q/H)` and `(Q/H, skos:related, d)`, materialized at
+     `materialize.py:646`); when no graph is available (Key decision 6), scan **raw entity frontmatter
+     directly** — `d.related` for outgoing refs and every question/hypothesis entity's `related` list
+     for the incoming back-edge. Either mode must catch the back-edge that a dataset-only outgoing scan
+     would miss. Do **not** count `source_refs`: those materialize as `prov:wasDerivedFrom` provenance,
+     not semantic relatedness (`materialize.py:720`), and already participate via the usage/`bearsOn`
+     path where they form a real chain.
 
   The two sources are unioned and de-duplicated by target Q/H id. Redundancy discount
   (Key decision 4): targets reached only through a shared `independence_group`/cohort contribute `1/k`
@@ -203,10 +207,15 @@ score(d) = readiness_weight(d) × (1 + reach(d)) × leverage_tilt(d)
 - **`leverage_tilt(d)`** — `1.0` baseline, multiplied by a bounded factor (capped ≤ 2.0) over the
   propositions `d` reaches. It **reuses the existing computed claim signals** rather than introducing a
   second interpretation of them: `risk_score`, `contested`, `single_source`, and `no_empirical_data`
-  are computed by `_claim_summary_data()` and surfaced by `query_dashboard_summary(graph_path, top)`
-  (`graph/store/summary.py:67,226`) — `leverage_tilt` calls that and aggregates the per-claim signals
-  over `d`'s reached propositions (plus question `priority` where a reached proposition is addressed by
-  a question). When no propositions are reached (sparse graph), the factor is exactly `1.0`.
+  are computed by `_claim_summary_data(knowledge, provenance, uri)` (`graph/store/summary.py:67`),
+  which returns the signal record **for a single proposition URI**. `leverage_tilt` calls that
+  **per reached-proposition URI** and aggregates (plus question `priority` where a reached proposition
+  is addressed by a question). It must **not** read `query_dashboard_summary(graph_path, top)`
+  (`summary.py:226`): that surface returns formatted, **top-N-truncated** rows and would silently drop
+  a reached proposition that falls outside `top`. If a per-URI helper is not already public, expose
+  `_claim_summary_data` (or the untruncated `_claim_summaries()` at `summary.py:217`) rather than
+  scoring off the dashboard surface. When no propositions are reached (sparse graph), the factor is
+  exactly `1.0`.
 
 **Output:** one row per dataset —
 `rank · id · score · readiness · reach · top-reason · gap-flags` — sorted by score descending.
@@ -260,8 +269,9 @@ The command is validated on a real sparse graph:
 
 - **`leverage_tilt` reuses computed signals, not a second interpretation.** `risk_score`/`contested`/
   `single_source`/`no_empirical_data` are computed claim/neighborhood signals
-  (`graph/store/summary.py:_claim_summary_data`, exposed via `query_dashboard_summary`), not authored
-  question fields. `leverage_tilt` calls that and aggregates — see the term definition above.
+  (`graph/store/summary.py:_claim_summary_data`, the untruncated per-URI helper — **not** the top-N
+  `query_dashboard_summary` surface), not authored question fields. `leverage_tilt` calls it per
+  reached-proposition URI and aggregates — see the term definition above.
 - **Stale-graph policy = degrade-with-warning** (Key decision 6).
 - **`reach` is a per-dataset merged union**, frontmatter path checks both directions, `source_refs` is
   provenance not relatedness — see the `reach` term above.
