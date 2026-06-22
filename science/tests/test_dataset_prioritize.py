@@ -61,3 +61,26 @@ def test_frontmatter_reach_both_directions_excludes_source_refs(tmp_path: Path) 
     assert reach["dataset:a"] == {"question:q1"}          # outgoing; topic ignored
     assert reach["dataset:b"] == {"question:q2"}          # incoming back-edge only
     assert "dataset:b" not in reach.get("dataset:b", set()) or "question:qX" not in reach["dataset:b"]
+
+
+from science_tool.dataset_prioritize import prioritize
+
+
+def test_prioritize_sparse_no_graph_orders_by_accessibility_and_flags(tmp_path: Path) -> None:
+    # available > unverified public; the unconnected one gets no-edge.
+    _write(tmp_path / "doc/datasets/avail.md",
+           '---\nid: "dataset:avail"\ntype: "dataset"\ntitle: "Avail"\norigin: "external"\n'
+           'related: ["question:q1"]\naccess: {level: "controlled", verified: true}\n---\n')
+    _write(tmp_path / "doc/datasets/unv.md",
+           '---\nid: "dataset:unv"\ntype: "dataset"\ntitle: "Unv"\norigin: "external"\n'
+           'access: {level: "public", verified: false}\n---\n')
+    _write(tmp_path / "entities/questions/q1.md",
+           '---\nid: "question:q1"\ntype: "question"\ntitle: "Q1"\n---\n')
+
+    rows = prioritize(tmp_path)
+    ids = [r["id"] for r in rows]
+    assert ids[0] == "dataset:avail"                  # verified + reach=1 ranks first
+    unv = next(r for r in rows if r["id"] == "dataset:unv")
+    assert "unverified" in unv["gap_flags"]
+    assert "no-edge" in unv["gap_flags"]              # reach 0
+    assert rows[0]["score"] > unv["score"]

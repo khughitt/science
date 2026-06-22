@@ -8,6 +8,7 @@ from science_tool.graph.store.dataset import _load_dataset
 from science_tool.graph.store.identity import _graph_uri
 from science_tool.dataset_prioritize import usage_reach, merged_reach
 from science_tool.dataset_prioritize import leverage_tilt, reached_proposition_uris
+from science_tool.dataset_prioritize import prioritize
 
 
 def _write(p: Path, text: str) -> None:
@@ -98,3 +99,25 @@ def test_leverage_tilt_bounded_and_responsive(tmp_path: Path) -> None:
     provenance = ds.graph(_graph_uri("graph/provenance"))
     tilt = leverage_tilt(knowledge, provenance, "dataset:d")
     assert 1.0 <= tilt <= 2.0  # single-source proposition raises tilt, capped at 2.0
+
+
+def test_prioritize_mixed_graph_frontmatter_dataset_not_no_edge(tmp_path: Path) -> None:
+    _seed_graph_project(tmp_path)  # dataset:d connected via usage
+    # a second dataset connected ONLY by frontmatter to question:q (keep the
+    # sci:addresses edge intact for dataset:d's usage path)
+    (tmp_path / "entities/questions/q.md").write_text(
+        '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\n'
+        'relations:\n  - predicate: "sci:addresses"\n    target: "proposition:p"\n'
+        'related: ["dataset:fm_only"]\n---\n', encoding="utf-8")
+    (tmp_path / "doc/datasets/fm_only.md").write_text(
+        '---\nid: "dataset:fm_only"\ntype: "dataset"\ntitle: "FM"\norigin: "external"\n'
+        'access: {level: "public", verified: true}\n---\n', encoding="utf-8")
+    graph_path = materialize_graph(tmp_path)
+    ds = _load_dataset(graph_path)
+    knowledge = ds.graph(_graph_uri("graph/knowledge"))
+    provenance = ds.graph(_graph_uri("graph/provenance"))
+
+    rows = prioritize(tmp_path, knowledge=knowledge, provenance=provenance)
+    fm_only = next(r for r in rows if r["id"] == "dataset:fm_only")
+    assert fm_only["reach"] >= 1
+    assert "no-edge" not in fm_only["gap_flags"]   # regression for the High review finding

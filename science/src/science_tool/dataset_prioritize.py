@@ -21,6 +21,7 @@ from science_tool.graph.store.constants import CITO_NS, SCI_NS
 from science_tool.graph.store.identity import canonical_id_from_entity_uri
 from science_tool.graph.store.summary import _claim_summary_data
 from science_model.frontmatter import parse_frontmatter
+from science_tool.datasets_catalog import _local_rows
 
 # Base Entity fields that a normal on-disk dataset frontmatter omits but
 # DatasetEntity.model_validate requires. Backfilled so we can call the canonical
@@ -221,3 +222,77 @@ def usage_reach(knowledge, provenance, dataset_ids: list[str]) -> dict[str, set[
                         if ref is not None:  # skip non-entity URIs
                             reach[ds_id].add(ref)
     return reach
+
+
+def _gap_flags_for(row_fm: dict, reach_n: int, readiness_flags: list[str]) -> list[str]:
+    flags = list(readiness_flags)
+    if reach_n == 0:
+        flags.append("no-edge")
+    origin = row_fm.get("origin")
+    access = row_fm.get("access") or {}
+    verified = bool(access.get("verified")) if isinstance(access, dict) else False
+    if origin == "external" and not verified:
+        flags.append("unverified")
+    return flags
+
+
+def _top_reason(weight: float, readiness_state: str, reach_n: int, tilt: float) -> str:
+    bits = [f"readiness={readiness_state}({weight:g})", f"reach={reach_n}"]
+    if tilt > 1.0:
+        bits.append(f"leverage×{tilt:g}")
+    return ", ".join(bits)
+
+
+def prioritize(
+    project_root: Path,
+    *,
+    knowledge=None,
+    provenance=None,
+    origin: str | None = None,
+    status: str | None = None,
+    tier: str | None = None,
+    level: str | None = None,
+) -> list[dict]:
+    """Return dataset rows sorted by score desc (tie-break by id).
+
+    score = readiness_weight × (1 + reach) × leverage_tilt
+
+    Each row: {id, title, score, readiness, reach, top_reason, gap_flags}.
+    leverage_tilt is only applied when both knowledge and provenance are provided;
+    otherwise tilt = 1.0.
+    """
+    rows_in = _local_rows(project_root)
+    dataset_ids = [r["id"] for r in rows_in]
+    reach_map = merged_reach(project_root, knowledge, provenance, dataset_ids)
+
+    out: list[dict] = []
+    for r in rows_in:
+        if origin is not None and r["origin"] != origin:
+            continue
+        if status is not None and r["status"] != status:
+            continue
+        if tier is not None and r["tier"] != tier:
+            continue
+        if level is not None and r["level"] != level:
+            continue
+        slug = r["id"].split(":", 1)[-1]
+        parsed = parse_frontmatter(project_root / "doc" / "datasets" / f"{slug}.md")
+        fm = parsed[0] if parsed else {}
+        weight, r_flags = readiness_weight(fm)
+        reach_set = reach_map.get(r["id"], set())
+        reach_n = len(reach_set)
+        tilt = 1.0
+        if knowledge is not None and provenance is not None:
+            tilt = leverage_tilt(knowledge, provenance, r["id"])
+        score = weight * (1 + reach_n) * tilt
+        out.append({
+            "id": r["id"],
+            "title": r["title"],
+            "score": round(score, 4),
+            "readiness": readiness_for(fm).state,
+            "reach": reach_n,
+            "top_reason": _top_reason(weight, readiness_for(fm).state, reach_n, tilt),
+            "gap_flags": _gap_flags_for(fm, reach_n, r_flags),
+        })
+    out.sort(key=lambda d: (-d["score"], d["id"]))
+    return out
