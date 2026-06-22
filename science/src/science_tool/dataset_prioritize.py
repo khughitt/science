@@ -19,6 +19,7 @@ from science_model.entities import DatasetEntity, Readiness
 from science_tool.graph.dataset_usage import project_entity_uri
 from science_tool.graph.store.constants import CITO_NS, SCI_NS
 from science_tool.graph.store.identity import canonical_id_from_entity_uri
+from science_tool.graph.store.summary import _claim_summary_data
 from science_model.frontmatter import parse_frontmatter
 
 # Base Entity fields that a normal on-disk dataset frontmatter omits but
@@ -159,6 +160,44 @@ def merged_reach(
         for ds_id, targets in usage_reach(knowledge, provenance, ids).items():
             merged.setdefault(ds_id, set()).update(targets)  # union dedups by target id
     return merged
+
+
+# leverage contribution per signal/field, summed across reached propositions then capped.
+_LEVERAGE_PER_SIGNAL = {"contested": 0.4, "single_source": 0.3, "no_empirical_data": 0.2}
+_LEVERAGE_RISK_SCALE = 0.05  # × risk_score, modest
+_LEVERAGE_CAP = 2.0
+
+
+def reached_proposition_uris(knowledge, provenance, dataset_id: str) -> set[URIRef]:
+    """Propositions a dataset reaches via the usage path (URIs, for signal lookup)."""
+    props: set[URIRef] = set()
+    ds_uri = project_entity_uri(dataset_id)
+    for usage_node in provenance.subjects(SCI_NS.dataset, ds_uri):
+        for consumer in provenance.subjects(SCI_NS.hasDatasetUsage, usage_node):
+            for _, _, prop in knowledge.triples((consumer, CITO_NS.supports, None)):
+                if isinstance(prop, URIRef):
+                    props.add(prop)
+            for _, _, prop in knowledge.triples((consumer, CITO_NS.disputes, None)):
+                if isinstance(prop, URIRef):
+                    props.add(prop)
+    return props
+
+
+def leverage_tilt(knowledge, provenance, dataset_id: str, *, usage_props=None) -> float:
+    props = usage_props if usage_props is not None else reached_proposition_uris(
+        knowledge, provenance, dataset_id
+    )
+    if not props:
+        return 1.0
+    bonus = 0.0
+    for prop in props:
+        summary = _claim_summary_data(knowledge, provenance, prop)
+        if summary is None:
+            continue
+        for sig in summary.get("signals", []):
+            bonus += _LEVERAGE_PER_SIGNAL.get(sig, 0.0)
+        bonus += _LEVERAGE_RISK_SCALE * float(summary.get("risk_score", 0.0))
+    return min(_LEVERAGE_CAP, 1.0 + bonus)
 
 
 def usage_reach(knowledge, provenance, dataset_ids: list[str]) -> dict[str, set[str]]:

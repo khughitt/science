@@ -7,6 +7,7 @@ from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.store.dataset import _load_dataset
 from science_tool.graph.store.identity import _graph_uri
 from science_tool.dataset_prioritize import usage_reach, merged_reach
+from science_tool.dataset_prioritize import leverage_tilt, reached_proposition_uris
 
 
 def _write(p: Path, text: str) -> None:
@@ -77,3 +78,23 @@ def test_merged_reach_frontmatter_only_when_no_graph(tmp_path: Path) -> None:
         encoding="utf-8")
     reach = merged_reach(tmp_path, None, None, ["dataset:d"])
     assert reach["dataset:d"] == {"question:q"}  # frontmatter path works with no graph
+
+
+def test_leverage_tilt_neutral_when_no_props(tmp_path: Path) -> None:
+    _seed_graph_project(tmp_path)
+    graph_path = materialize_graph(tmp_path)
+    ds = _load_dataset(graph_path)
+    knowledge = ds.graph(_graph_uri("graph/knowledge"))
+    provenance = ds.graph(_graph_uri("graph/provenance"))
+    # a dataset with no usage edges reaches no propositions → tilt is exactly 1.0
+    assert leverage_tilt(knowledge, provenance, "dataset:absent") == 1.0
+
+
+def test_leverage_tilt_bounded_and_responsive(tmp_path: Path) -> None:
+    _seed_graph_project(tmp_path)
+    graph_path = materialize_graph(tmp_path)
+    ds = _load_dataset(graph_path)
+    knowledge = ds.graph(_graph_uri("graph/knowledge"))
+    provenance = ds.graph(_graph_uri("graph/provenance"))
+    tilt = leverage_tilt(knowledge, provenance, "dataset:d")
+    assert 1.0 <= tilt <= 2.0  # single-source proposition raises tilt, capped at 2.0
