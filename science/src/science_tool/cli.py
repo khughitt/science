@@ -5257,6 +5257,72 @@ def dataset_list(
     Console(width=200).print(table)
 
 
+@dataset_group.command("prioritize")
+@click.option("--origin", default=None, type=click.Choice(["external", "derived"]))
+@click.option("--status", default=None)
+@click.option("--tier", default=None, type=click.Choice(["use-now", "evaluate-next", "track"]))
+@click.option("--level", default=None,
+              type=click.Choice(["public", "registration", "controlled", "commercial", "mixed"]))
+@click.option("--format", "output_format", default="table", type=click.Choice(["table", "json"]))
+@click.option("--explain", is_flag=True, help="Show the per-row scoring reason")
+@click.option("--project-root", default=None,
+              type=click.Path(path_type=Path, file_okay=False, dir_okay=True))
+def dataset_prioritize(
+    origin: str | None, status: str | None, tier: str | None, level: str | None,
+    output_format: str, explain: bool, project_root: Path | None,
+) -> None:
+    """Rank dataset entities by accessibility-weighted, graph-aware usefulness."""
+    import json as _json
+
+    from science_tool.dataset_prioritize import prioritize
+    from science_tool.entities import graph_is_stale
+    from science_tool.graph.store import DEFAULT_GRAPH_PATH
+    from science_tool.graph.store.dataset import _load_dataset
+    from science_tool.graph.store.identity import _graph_uri
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    graph_path = root / DEFAULT_GRAPH_PATH
+    knowledge = provenance = None
+    if graph_path.exists():
+        if graph_is_stale(root, graph_path):
+            click.echo(
+                "warning: graph may be stale; reach/leverage from last build — run `science graph build`",
+                err=True,
+            )
+        ds = _load_dataset(graph_path)
+        knowledge = ds.graph(_graph_uri("graph/knowledge"))
+        provenance = ds.graph(_graph_uri("graph/provenance"))
+    else:
+        click.echo("warning: no materialized graph; reach from frontmatter only", err=True)
+
+    rows = prioritize(root, knowledge=knowledge, provenance=provenance,
+                      origin=origin, status=status, tier=tier, level=level)
+
+    if output_format == "json":
+        click.echo(_json.dumps(rows, indent=2))
+        return
+    if not rows:
+        click.echo("No matching dataset entities.")
+        return
+
+    from rich.console import Console
+    from rich.table import Table
+
+    table = Table(show_header=True, header_style="bold")
+    cols = ["rank", "id", "score", "readiness", "reach", "gap-flags"]
+    if explain:
+        cols.append("reason")
+    for c in cols:
+        table.add_column(c, overflow="fold", no_wrap=False)
+    for i, r in enumerate(rows, 1):
+        cells = [str(i), r["id"], f"{r['score']:g}", r["readiness"], str(r["reach"]),
+                 ", ".join(r["gap_flags"]) or "-"]
+        if explain:
+            cells.append(r["top_reason"])
+        table.add_row(*cells)
+    Console(width=200).print(table)
+
+
 @dataset_group.command("add")
 @click.argument("slug")
 @click.option("--title", required=True, help="Human-readable dataset title")
