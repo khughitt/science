@@ -83,7 +83,7 @@ Additionally:
    - `specs/research-question.md`
    - `specs/scope-boundaries.md`
    - `entities/hypotheses/`
-   - Existing `doc/datasets/` (to avoid duplicating known datasets)
+   - Existing `entities/datasets/` (to avoid duplicating known datasets)
 5. If an inquiry exists, check inquiry variables to understand what data the project needs:
    ```bash
    science inquiry list --format json
@@ -153,7 +153,7 @@ files raise on download until access is granted; SRA `.sra` files need
 oncology resources — notably AACR GENIE / GENIE BPC (Synapse +
 `genie.cbioportal.org`), MSK-CHORD, and TCGA MC3 controlled-access tiers — are
 not indexed by any adapter. For those, fall back to LLM knowledge plus the
-project's `doc/datasets` cross-reference and record the access path (Synapse
+project's `entities/datasets` cross-reference and record the access path (Synapse
 DUA, dbGaP, etc.) manually.
 
 For each promising result, get full metadata:
@@ -188,7 +188,7 @@ Label each as:
 
 For each `Use now` or `Evaluate next` dataset, create a dataset note:
 
-**File:** `doc/datasets/data-<slug>.md` using `.ai/templates/dataset.md` first, then `templates/dataset.md`
+**File:** `entities/datasets/<slug>.md` using `.ai/templates/dataset.md` first, then `templates/dataset.md`
 
 Fill in all available fields. For fields you cannot verify, mark as `[UNVERIFIED]`.
 
@@ -247,7 +247,7 @@ Include this mapping in a `## Variable Coverage` section of the search output.
 
 ### Emission rules (rev 2.1)
 
-When emitting `doc/datasets/<slug>.md`:
+When emitting `entities/datasets/<slug>.md`:
 
 - One entity per **distinguishable artefact** at a distinct access level. A paper
   with one public supplement and one controlled EGA deposit produces TWO entities,
