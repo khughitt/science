@@ -11,11 +11,15 @@ from science_tool.references import (
     CONTRACT,
     SCHEMA_VERSION,
     DuplicateCitekeyError,
+    MarkdownPayload,
+    UnresolvedCitationError,
+    UnsupportedCitationSyntaxError,
     build_reference_bundle,
     format_authors,
     format_display,
     parse_citations,
     reference_record,
+    validate_exported_markdown,
 )
 
 _CORPUS = Path(__file__).parent / "fixtures" / "citation_grammar_v1.json"
@@ -145,3 +149,34 @@ def test_build_reference_bundle_rejects_duplicate_citekeys(tmp_path: Path) -> No
     with pytest.raises(DuplicateCitekeyError) as exc:
         build_reference_bundle(tmp_path)
     assert exc.value.duplicates == {"Dup2020": 2}
+
+
+def _payload(text: str) -> list[MarkdownPayload]:
+    return [MarkdownPayload(path="findings/leads/x.json", field="sections[0].body", text=text)]
+
+
+def test_validate_passes_known_keys() -> None:
+    assert validate_exported_markdown(_payload("ok [@Smith2020]"), {"Smith2020"}) == {}
+
+
+def test_validate_fails_closed_on_unknown_key() -> None:
+    with pytest.raises(UnresolvedCitationError) as exc:
+        validate_exported_markdown(_payload("bad [@Missing2026]"), {"Smith2020"})
+    assert "Missing2026" in exc.value.unresolved
+
+
+def test_validate_partial_returns_unresolved_block() -> None:
+    unresolved = validate_exported_markdown(
+        _payload("bad [@Missing2026]"), {"Smith2020"}, allow_partial=True
+    )
+    entry = unresolved["Missing2026"][0]
+    assert entry["citekey"] == "Missing2026"
+    assert entry["reason"] == "unknown-citekey"
+    assert entry["path"] == "findings/leads/x.json"
+    assert entry["field"] == "sections[0].body"
+    assert "Missing2026" in entry["snippet"]
+
+
+def test_validate_fails_on_unsupported_syntax_even_with_partial() -> None:
+    with pytest.raises(UnsupportedCitationSyntaxError):
+        validate_exported_markdown(_payload("see [-@Smith2020]"), {"Smith2020"}, allow_partial=True)

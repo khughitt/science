@@ -260,6 +260,75 @@ def parse_citations(markdown: str) -> CitationScan:
     return CitationScan(citations=citations, unsupported=unsupported)
 
 
+class UnsupportedCitationSyntaxError(ValueError):
+    """Raised when exported prose uses citation syntax outside the v1 grammar."""
+
+
+class UnresolvedCitationError(ValueError):
+    """Raised when exported prose cites a key absent from the bibliography."""
+
+    def __init__(self, unresolved: dict[str, list[dict]]) -> None:
+        self.unresolved = unresolved
+        keys = ", ".join(sorted(unresolved))
+        super().__init__(f"unresolved citation keys in exported prose: {keys}")
+
+
+@dataclass(frozen=True)
+class MarkdownPayload:
+    path: str
+    field: str
+    text: str
+
+
+def _snippet(text: str, citekey: str) -> str:
+    idx = text.find(citekey)
+    if idx == -1:
+        return text[:60]
+    start = max(0, idx - 20)
+    end = min(len(text), idx + len(citekey) + 20)
+    return f"... {text[start:end]} ..."
+
+
+def validate_exported_markdown(
+    payloads: list[MarkdownPayload],
+    known_citekeys: set[str],
+    *,
+    allow_partial: bool = False,
+) -> dict[str, list[dict]]:
+    """Scan exported Markdown for citation keys (design §7). Fail-closed.
+
+    - Any unsupported-syntax token (`[see @x]`, `[-@x]`, bare `@x`) raises
+      UnsupportedCitationSyntaxError regardless of allow_partial.
+    - Unknown citekeys raise UnresolvedCitationError unless allow_partial, in
+      which case the design §7 `unresolved` map is returned instead.
+    """
+    unsupported_hits: list[str] = []
+    unresolved: dict[str, list[dict]] = {}
+    for payload in payloads:
+        scan = parse_citations(payload.text)
+        for token in scan.unsupported:
+            unsupported_hits.append(f"{payload.path}:{payload.field} @{token}")
+        for cite in scan.citations:
+            if cite.citekey in known_citekeys:
+                continue
+            unresolved.setdefault(cite.citekey, []).append(
+                {
+                    "citekey": cite.citekey,
+                    "reason": "unknown-citekey",
+                    "path": payload.path,
+                    "field": payload.field,
+                    "snippet": _snippet(payload.text, cite.citekey),
+                }
+            )
+    if unsupported_hits:
+        raise UnsupportedCitationSyntaxError(
+            "unsupported citation syntax (use [@key] only): " + "; ".join(unsupported_hits)
+        )
+    if unresolved and not allow_partial:
+        raise UnresolvedCitationError(unresolved)
+    return unresolved
+
+
 class DuplicateCitekeyError(ValueError):
     """Raised when papers/references.bib declares the same citekey more than once."""
 
