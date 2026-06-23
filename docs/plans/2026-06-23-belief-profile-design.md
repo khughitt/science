@@ -53,12 +53,15 @@ Default row set:
 
 - Include supported belief-bearing entities when at least one of these
   predicates is true:
-  - `support_count + dispute_count + diagnostic_count > 0`;
+  - for non-bundle `BeliefResult` rows,
+    `support_count + dispute_count + diagnostic_count > 0`;
   - the entity is a resolved bundle with one or more core member propositions;
-  - authored `sci:confidence` is present;
   - any belief cap/ceiling flag is true:
     `authored_capped`, `qa_dataset_capped`, or `capped_by_refutation`;
   - materialized `sci:freshnessState` is `needs-review` or `stale`.
+  Authored confidence is not a separate inclusion predicate because it is
+  evidence-unit metadata: if it matters, the collected evidence unit already
+  makes the row informative or contributes to authored-only/cap labels.
 - Exclude completely empty/speculative rows by default.
 - `--all` includes all supported belief-bearing entities, including rows whose
   profile is mostly empty or speculative.
@@ -121,7 +124,9 @@ Field semantics:
 - `evidence` summarizes the evidence units after the existing collection path.
   `support_count` and `dispute_count` count belief-mass units by stance;
   `diagnostic_count` counts diagnostic evidence units that affect contestation
-  or review signals without adding support/dispute mass.
+  or review signals without adding support/dispute mass. Bundle rows do not
+  have a bundle-level diagnostics field in `BundleBeliefResult`; for those rows
+  `diagnostic_count` is `null` in v1 rather than aggregating member diagnostics.
 - `caps` mirrors existing belief caps and ceilings.
 - `caps.capped_by_refutation` mirrors the existing `BeliefResult` /
   `BundleBeliefResult` field. It means a decisive dispute pinned the magnitude
@@ -180,7 +185,9 @@ review provenance are normalized enough to derive them without guessing.
 5. Collect the same evidence units used by the belief engine. For empirical
    classification, reuse the existing graph summary semantics:
    `empirical_data` and `benchmark` evidence types count as empirical data after
-   the same normalization used by `graph/store/summary.py`.
+   the same normalization used by `graph/store/summary.py`. Authored confidence
+   is read from collected `EvidenceUnit.confidence`; v1 does not look for or
+   interpret a proposition-level confidence triple.
 6. Derive categorical labels from belief result, evidence summary, caps, and
    freshness state.
 7. Attach scalar bands only when the existing scalar feature is enabled.
