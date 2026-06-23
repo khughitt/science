@@ -5,8 +5,10 @@ citation-syntax grammar, and the app-export reference bundle (design doc
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from science_tool.bibliography import BibEntry
+from science_tool.markdown_utils import is_fence_line, strip_inline_code
 
 
 def _split_authors(raw: str) -> list[str]:
@@ -166,10 +168,6 @@ def reference_record(entry: BibEntry) -> dict:
         "source": source,
     }
 
-
-from dataclasses import dataclass
-
-from science_tool.markdown_utils import is_fence_line, strip_inline_code
 
 # Outer block detector (design §6): a bracketed run whose first non-space char is '@'.
 _BLOCK_RE = re.compile(r"\[\s*@[^\]]*\]")
