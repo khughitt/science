@@ -234,3 +234,55 @@ def test_profile_freshness_and_refutation_labels() -> None:
     assert "contested" in row["epistemic_labels"]
     assert "capped_by_refutation" in row["epistemic_labels"]
     assert "needs_review" in row["epistemic_labels"]
+
+
+def _expected_scalar_payload(knowledge: Graph, provenance: Graph, target: URIRef) -> dict:
+    from science_tool.graph.belief import aggregate_belief, collect_evidence_units
+    from science_tool.graph.belief_scalar import belief_scalar
+
+    scalar = belief_scalar(aggregate_belief(collect_evidence_units(knowledge, provenance, [target])))
+    return {
+        "massed_support_score": scalar.massed_support_score,
+        "massed_dispute_score": scalar.massed_dispute_score,
+        "massed_support_band": list(scalar.massed_support_band),
+        "massed_dispute_band": list(scalar.massed_dispute_band),
+        "net_band": list(scalar.net_band),
+        "net_robust": scalar.net_robust,
+        "diagnostic_dispute_count": scalar.diagnostic_dispute_count,
+    }
+
+
+def test_profile_projects_existing_scalar_for_non_bundle_when_enabled() -> None:
+    knowledge, provenance = _base_graphs()
+    _line(knowledge, provenance, PROP_A, "emp-a", source=str(PROJECT_NS["source/a"]))
+
+    row = next(
+        item
+        for item in profile_records(knowledge, provenance, scalar_enabled=True)
+        if item["entity"] == "proposition:pa"
+    )
+
+    assert row["belief_scalar"] == _expected_scalar_payload(knowledge, provenance, PROP_A)
+
+
+def test_profile_projects_existing_bundle_scalar_driver_when_enabled() -> None:
+    knowledge, provenance = _base_graphs()
+    _line(knowledge, provenance, PROP_A, "emp-a", source=str(PROJECT_NS["source/a"]))
+    _line(
+        knowledge,
+        provenance,
+        PROP_B,
+        "lit-b",
+        evidence_type="literature",
+        evidence_role="background_constraint",
+        strength="moderate",
+        source=str(PROJECT_NS["source/b"]),
+    )
+
+    row = next(
+        item
+        for item in profile_records(knowledge, provenance, scalar_enabled=True)
+        if item["entity"] == "hypothesis:h1"
+    )
+
+    assert row["belief_scalar"] == _expected_scalar_payload(knowledge, provenance, PROP_B)
