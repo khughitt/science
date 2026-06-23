@@ -4,8 +4,19 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from science_tool.bibliography import BibEntry
-from science_tool.references import CONTRACT, SCHEMA_VERSION, format_authors, format_display, reference_record, parse_citations
+from science_tool.references import (
+    CONTRACT,
+    SCHEMA_VERSION,
+    DuplicateCitekeyError,
+    build_reference_bundle,
+    format_authors,
+    format_display,
+    parse_citations,
+    reference_record,
+)
 
 _CORPUS = Path(__file__).parent / "fixtures" / "citation_grammar_v1.json"
 # Drift guard: the identical constant lives in Labnote's test/citations.test.js.
@@ -94,3 +105,43 @@ def test_reference_record_kind_normalization() -> None:
     assert reference_record(BibEntry(key="X", entry_type="incollection"))["kind"] == "chapter"
     assert reference_record(BibEntry(key="X", entry_type="book"))["kind"] == "book"
     assert reference_record(BibEntry(key="X", entry_type="online"))["kind"] == "misc"
+
+
+def test_build_reference_bundle_shape(tmp_path: Path) -> None:
+    (tmp_path / "papers").mkdir()
+    (tmp_path / "papers" / "references.bib").write_text(
+        "@article{Williams2018,\n  author = {Williams, Donald R.},\n"
+        "  title = {Bayesian Meta-Analysis},\n  journal = {PsyArXiv},\n  year = {2018},\n}\n",
+        encoding="utf-8",
+    )
+    bundle = build_reference_bundle(tmp_path)
+    assert bundle["contract"] == "science.references"
+    assert bundle["schema_version"] == "1"
+    assert bundle["style"] == "numeric"
+    assert bundle["unresolved"] == {}
+    rec = bundle["references"]["Williams2018"]
+    assert rec["id"] == "cite:Williams2018"
+    assert rec["display"].startswith("Williams DR. Bayesian Meta-Analysis.")
+
+
+def test_build_reference_bundle_includes_all_entries_not_only_cited(tmp_path: Path) -> None:
+    (tmp_path / "papers").mkdir()
+    (tmp_path / "papers" / "references.bib").write_text(
+        "@article{A2020,\n  title = {A},\n  year = {2020},\n}\n\n"
+        "@article{B2021,\n  title = {B},\n  year = {2021},\n}\n",
+        encoding="utf-8",
+    )
+    bundle = build_reference_bundle(tmp_path)
+    assert set(bundle["references"]) == {"A2020", "B2021"}  # locked decision §16.1
+
+
+def test_build_reference_bundle_rejects_duplicate_citekeys(tmp_path: Path) -> None:
+    (tmp_path / "papers").mkdir()
+    (tmp_path / "papers" / "references.bib").write_text(
+        "@article{Dup2020,\n  title = {First},\n  year = {2020},\n}\n\n"
+        "@article{Dup2020,\n  title = {Second},\n  year = {2021},\n}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(DuplicateCitekeyError) as exc:
+        build_reference_bundle(tmp_path)
+    assert exc.value.duplicates == {"Dup2020": 2}

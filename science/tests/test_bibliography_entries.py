@@ -101,3 +101,13 @@ def test_load_bib_entries_parses_extended_fields(tmp_path: Path) -> None:
     assert entry.pages == "45--67"
     assert entry.pmid == "29876543"
     assert entry.booktitle is None  # absent optional field stays None
+
+
+def test_raw_bib_entry_keys_preserves_duplicates(tmp_path: Path) -> None:
+    from science_tool.bibliography import raw_bib_entry_keys
+
+    _write_bib(
+        tmp_path,
+        "@article{Dup2020,\n  title = {First},\n}\n\n@article{Dup2020,\n  title = {Second},\n}\n",
+    )
+    assert raw_bib_entry_keys(tmp_path) == ["Dup2020", "Dup2020"]

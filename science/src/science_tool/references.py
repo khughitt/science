@@ -5,9 +5,11 @@ citation-syntax grammar, and the app-export reference bundle (design doc
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
 
-from science_tool.bibliography import BibEntry
+from science_tool.bibliography import BibEntry, load_bib_entries, raw_bib_entry_keys
 from science_tool.markdown_utils import is_fence_line, strip_inline_code
 
 
@@ -256,3 +258,34 @@ def parse_citations(markdown: str) -> CitationScan:
                 continue
             unsupported.append(at.group(1))
     return CitationScan(citations=citations, unsupported=unsupported)
+
+
+class DuplicateCitekeyError(ValueError):
+    """Raised when papers/references.bib declares the same citekey more than once."""
+
+    def __init__(self, duplicates: dict[str, int]) -> None:
+        self.duplicates = duplicates
+        listed = ", ".join(f"{key} (x{count})" for key, count in sorted(duplicates.items()))
+        super().__init__(f"duplicate citekeys in papers/references.bib: {listed}")
+
+
+def build_reference_bundle(project_root: Path) -> dict:
+    """Build the app-export reference bundle from papers/references.bib (design §7).
+
+    Includes ALL normalized bibliography records, not only cited ones (locked
+    decision §16.1). Fails closed on duplicate citekeys (design §5). `unresolved`
+    is empty here; partial-export callers populate it via validate_exported_markdown.
+    """
+    counts = Counter(raw_bib_entry_keys(project_root))
+    duplicates = {key: n for key, n in counts.items() if n > 1}
+    if duplicates:
+        raise DuplicateCitekeyError(duplicates)
+    entries = load_bib_entries(project_root)
+    references = {key: reference_record(entry) for key, entry in entries.items()}
+    return {
+        "contract": CONTRACT,
+        "schema_version": SCHEMA_VERSION,
+        "style": "numeric",
+        "references": references,
+        "unresolved": {},
+    }

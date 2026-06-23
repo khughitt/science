@@ -46,6 +46,20 @@ def load_bib_keys(project_root: Path) -> set[str]:
     return keys
 
 
+def raw_bib_entry_keys(project_root: Path) -> list[str]:
+    """Return every BibTeX entry key in file order, INCLUDING duplicates.
+
+    Unlike load_bib_keys (a set) and load_bib_entries (a dict), this preserves
+    repeats so callers can detect duplicate citekeys, which the dict/set forms
+    silently collapse.
+    """
+    bib_path = project_root / "papers" / "references.bib"
+    if not bib_path.is_file():
+        return []
+    text = bib_path.read_text(encoding="utf-8")
+    return [m.group(2) for m in _BIBTEX_ENTRY_TYPED_RE.finditer(text)]
+
+
 _BIBTEX_AUTHOR_FIELD_RE = re.compile(r"author\s*=\s*[{\"]([^{}\"]*)[}\"]", re.IGNORECASE)
 
 
