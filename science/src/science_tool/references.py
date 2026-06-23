@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import re
 
+from science_tool.bibliography import BibEntry
+
 
 def _split_authors(raw: str) -> list[str]:
     """Split a BibTeX author field on top-level ` and `, respecting braces."""
@@ -67,3 +69,99 @@ def format_authors(raw_author: str | None) -> str:
         rendered = [_format_one_author(a) for a in authors[:3]]
         return ", ".join(rendered) + ", et al."
     return ", ".join(_format_one_author(a) for a in authors)
+
+
+CONTRACT = "science.references"
+SCHEMA_VERSION = "1"
+
+# BibTeX entry_type -> normalized record kind (design §4: article|book|chapter|preprint|misc).
+# Driven solely by entry_type, NOT by container name: the design's §4 example maps a
+# PsyArXiv @article to kind "article", so container sniffing would contradict the contract.
+# "preprint" is emitted only for entry types that explicitly mean preprint.
+_KIND_MAP = {
+    "article": "article",
+    "book": "book",
+    "inbook": "chapter",
+    "incollection": "chapter",
+    "inproceedings": "chapter",
+    "conference": "chapter",
+    "preprint": "preprint",
+    "unpublished": "preprint",
+    "misc": "misc",
+}
+
+
+def _normalize_kind(entry: BibEntry) -> str:
+    return _KIND_MAP.get(entry.entry_type, "misc")
+
+
+def _authors_struct(raw_author: str | None) -> list[dict[str, str]]:
+    if not raw_author:
+        return []
+    out: list[dict[str, str]] = []
+    for name in _split_authors(raw_author):
+        if name.startswith("{") and name.endswith("}"):
+            out.append({"family": name[1:-1].strip(), "given": ""})
+            continue
+        if "," in name:
+            fields = [f.strip() for f in name.split(",")]
+            family, given = fields[0], (fields[-1] if len(fields) >= 2 else "")
+        else:
+            tokens = name.split()
+            family = tokens[-1] if tokens else ""
+            given = " ".join(tokens[:-1])
+        out.append({"family": family, "given": given})
+    return out
+
+
+def format_display(entry: BibEntry) -> str:
+    """Conservative numeric-style display string (design §5)."""
+    authors = format_authors(entry.author) or entry.key
+    container = entry.journal or entry.booktitle or entry.publisher
+    head = f"{authors}."
+    parts = [head]
+    if entry.title:
+        parts.append(f"{entry.title}.")
+    if container:
+        parts.append(f"{container}.")
+    tail = ""
+    if entry.year is not None:
+        tail = str(entry.year)
+        if entry.volume:
+            tail += f";{entry.volume}"
+            if entry.number:
+                tail += f"({entry.number})"
+            if entry.pages:
+                tail += f":{entry.pages}"
+        tail += "."
+        parts.append(tail)
+    if entry.doi:
+        parts.append(f"doi:{entry.doi}.")
+    return " ".join(parts)
+
+
+def reference_record(entry: BibEntry) -> dict:
+    """Build the design §4 reference record dict for one bibliography entry."""
+    source = {"path": "papers/references.bib", "entry_type": entry.entry_type}
+    if entry.author:
+        source["raw_author"] = entry.author
+    return {
+        "contract": CONTRACT,
+        "schema_version": SCHEMA_VERSION,
+        "id": f"cite:{entry.key}",
+        "citekey": entry.key,
+        "kind": _normalize_kind(entry),
+        "title": entry.title or entry.key,
+        "authors": _authors_struct(entry.author),
+        "issued": {"year": entry.year} if entry.year is not None else {},
+        "container_title": entry.journal or entry.booktitle,
+        "publisher": entry.publisher,
+        "volume": entry.volume,
+        "issue": entry.number,
+        "pages": entry.pages,
+        "doi": entry.doi,
+        "pmid": entry.pmid,
+        "url": entry.url,
+        "display": format_display(entry),
+        "source": source,
+    }
