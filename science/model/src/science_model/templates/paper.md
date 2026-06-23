@@ -3,6 +3,8 @@ id: "paper:{{nn}}-{{slug}}"
 type: "paper"
 title: "{{title}}"
 status: "active"
+# Optional: literature-survey | literature-review | review | survey
+paper_kind: ""
 ontology_terms: []
 dataset_usage: []
 # Transition input only; prefer dataset_usage above.
@@ -17,6 +19,7 @@ _template:
     type: { default: "paper" }
     title: { from: title }
     status: { from: status }
+    paper_kind: { default: "" }
     ontology_terms: { default: [] }
     dataset_usage: { default: [] }
     datasets: { default: [] }

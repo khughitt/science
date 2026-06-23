@@ -1,6 +1,7 @@
 # tests/test_dataset_prioritize_cli.py
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -85,3 +86,30 @@ def test_prioritize_explain_shows_reason_column(tmp_path: Path) -> None:
     assert plain.exit_code == 0
     assert "reason" not in plain.output
     assert "reach=" not in plain.output
+
+
+def test_prioritize_coverage_json_reports_per_target_gaps(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    qdir = tmp_path / "entities" / "questions"
+    qdir.mkdir(parents=True, exist_ok=True)
+    (qdir / "q-covered.md").write_text(
+        '---\nid: "question:q-covered"\ntype: "question"\ntitle: "Covered"\nrelated: ["dataset:b"]\n---\n',
+        encoding="utf-8",
+    )
+    (qdir / "q-gap.md").write_text(
+        '---\nid: "question:q-gap"\ntype: "question"\ntitle: "Gap"\n---\n',
+        encoding="utf-8",
+    )
+
+    res = _run(tmp_path, "--coverage", "--format", "json")
+
+    assert res.exit_code == 0
+    text = "\n".join(
+        line for line in res.output.splitlines() if not line.startswith("warning:")
+    )
+    rows = json.loads(text)
+    by_id = {row["target"]: row for row in rows}
+    assert by_id["question:q-covered"]["datasets"] == ["dataset:b"]
+    assert by_id["question:q-covered"]["coverage_state"] == "covered"
+    assert by_id["question:q-gap"]["datasets"] == []
+    assert by_id["question:q-gap"]["coverage_state"] == "gap"

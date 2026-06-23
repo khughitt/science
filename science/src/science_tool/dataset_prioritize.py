@@ -269,7 +269,7 @@ def prioritize(
 
     score = readiness_weight × (1 + reach) × leverage_tilt
 
-    Each row: {id, title, score, readiness, reach, top_reason, gap_flags}.
+    Each row: {id, title, score, readiness, reach, reaches, top_reason, gap_flags}.
     leverage_tilt is only applied when both knowledge and provenance are provided;
     otherwise tilt = 1.0.
 
@@ -310,8 +310,39 @@ def prioritize(
             "score": round(score, 4),
             "readiness": readiness_for(fm).state,
             "reach": reach_n,
+            "reaches": sorted(reach_set),
             "top_reason": _top_reason(weight, readiness_for(fm).state, reach_n, tilt),
             "gap_flags": _gap_flags_for(fm, reach_n, r_flags),
         })
     out.sort(key=lambda d: (-d["score"], d["id"]))
     return out
+
+
+def target_coverage(rows: list[dict], project_root: Path) -> list[dict]:
+    """Invert prioritized dataset rows into per-question/hypothesis coverage rows."""
+    targets: dict[str, dict[str, object]] = {}
+    for ent_id, fm in _iter_entity_frontmatter(project_root):
+        if not _is_qh(ent_id):
+            continue
+        targets[ent_id] = {
+            "target": ent_id,
+            "title": fm.get("title", ""),
+            "datasets": [],
+            "dataset_count": 0,
+            "coverage_state": "gap",
+        }
+
+    by_target: dict[str, list[str]] = {target: [] for target in targets}
+    for row in rows:
+        dataset_id = row["id"]
+        for target in row.get("reaches", []):
+            if target in by_target:
+                by_target[target].append(dataset_id)
+
+    for target, dataset_ids in by_target.items():
+        datasets = sorted(dataset_ids)
+        targets[target]["datasets"] = datasets
+        targets[target]["dataset_count"] = len(datasets)
+        targets[target]["coverage_state"] = "covered" if datasets else "gap"
+
+    return [targets[target] for target in sorted(targets)]

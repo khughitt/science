@@ -27,6 +27,7 @@ _TOPIC_SECTIONS = (
     "## Key References",
 )
 _PAPER_SECTIONS = ("## Key Contribution", "## Methods", "## Key Findings", "## Relevance")
+_PAPER_RUBRIC_EXEMPT_KINDS = {"literature-survey", "literature-review", "review", "survey"}
 _BOOK_SECTIONS = (
     "## Overview",
     "## Whole-Book Synthesis",
@@ -50,13 +51,19 @@ def check_document_structure(ctx: ValidateContext) -> Iterator[Result]:
         yield from _check_documents(ctx, topics_dir, _TOPIC_SECTIONS)
     papers_dir = ctx.project_root / "entities" / "papers"
     if papers_dir.is_dir():
-        yield from _check_documents(ctx, papers_dir, _PAPER_SECTIONS)
+        yield from _check_documents(ctx, papers_dir, _PAPER_SECTIONS, exempt_paper_kinds=_PAPER_RUBRIC_EXEMPT_KINDS)
     books_dir = ctx.project_root / "entities" / "books"
     if books_dir.is_dir():
         yield from _check_documents(ctx, books_dir, _BOOK_SECTIONS)
 
 
-def _check_documents(ctx: ValidateContext, directory: Path, sections: tuple[str, ...]) -> Iterator[Result]:
+def _check_documents(
+    ctx: ValidateContext,
+    directory: Path,
+    sections: tuple[str, ...],
+    *,
+    exempt_paper_kinds: set[str] | None = None,
+) -> Iterator[Result]:
     if not directory.is_dir():
         return
 
@@ -65,6 +72,11 @@ def _check_documents(ctx: ValidateContext, directory: Path, sections: tuple[str,
             continue
         relative = path.relative_to(ctx.project_root).as_posix()
         yield _result(Severity.INFO, relative, f"Checking {relative}...")
+
+        if exempt_paper_kinds is not None:
+            paper_kind = str(ctx.frontmatter(path).get("paper_kind") or "").strip().lower()
+            if paper_kind in exempt_paper_kinds:
+                continue
 
         headings = set(_non_fenced_lines(ctx.read_text_cached(path).splitlines()))
         for section in sections:

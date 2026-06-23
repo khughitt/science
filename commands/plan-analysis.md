@@ -42,6 +42,11 @@ route it there instead of silently re-planning around it.
 3. Read relevant hypotheses, inquiries, tasks, prior pre-registrations, and existing plans named by the user.
 4. If an inquiry slug is provided, read the inquiry/model state and reuse captured estimand, variables, independent unit, and model/test fields.
 5. If the task is literature synthesis or theory without a data-analysis component, route to `/science:research-topic` or `/science:research-papers` unless the user explicitly wants an analysis plan.
+6. Before drafting the plan, run a data-availability / metric-feasibility pre-check:
+   - Are the needed inputs already represented by `dataset:<slug>` entities?
+   - Is each input available now, explicitly acquisition-gated, or absent?
+   - Can the primary metric be computed from the available columns, sample grain, and time axis?
+   - If the answer is no, keep the plan in `not-ready` or design-stage mode and make acquisition/inspection the blocking checks instead of drafting a runnable analysis.
 
 ## Leaf Selection Rubric
 
@@ -61,6 +66,7 @@ reason.
 | Likelihood model fit, AIC/BIC/LRT, Wright-Fisher/Moran/binomial-segregation, selection-vs-neutral | `statistics-likelihood-model-comparison`, `statistics-population-genetics-likelihood`, `statistics-sensitivity-arbitration` |
 | CRISPR/RNAi, DepMap, LINCS/L1000, drug response | `data-functional-genomics-qa`, `statistics-bias-vs-variance-decomposition`, `statistics-sensitivity-arbitration` |
 | Survival, Cox, Weibull, censored outcomes across cohorts | `statistics-survival-and-hierarchical-models`, `statistics-power-floor-acknowledgement`, `statistics-sensitivity-arbitration` |
+| Wearable, behavioral, actigraphy, EMA, symptom diary, sensor time series, sleep/activity rhythms, or cross-lag coupling | `statistics-time-series-and-longitudinal-models` if present in the skill index; otherwise `statistics-bias-vs-variance-decomposition`, `statistics-power-floor-acknowledgement`, and `statistics-sensitivity-arbitration` |
 | Fractions/proportions constrained to sum to one | `statistics-compositional-data`, `statistics-bias-vs-variance-decomposition` |
 | Embedding clustering, UMAP, HDBSCAN, Mapper, CKA, Moran's I | `data-embeddings-manifold-qa`, `statistics-bias-vs-variance-decomposition`, `statistics-sensitivity-arbitration` |
 | Protein PLM, UniProt/Pfam/CATH/Foldseek/MMseqs labels | `data-protein-sequence-structure-qa`; add `data-embeddings-manifold-qa` when embeddings/manifolds are analyzed |
@@ -77,27 +83,47 @@ reason.
 7. If graph tooling is available, link the saved plan to referenced hypothesis, inquiry, and task entities.
 8. If `not-ready`, create one task per blocking check when task tooling is available; otherwise list exact task text in the plan.
 
+### Design-stage causal plans with no dataset in hand
+
+If the user is designing a causal analysis before a dataset has been selected,
+do not invent a dataset entity or mark the analysis ready. Save a design-stage
+analysis plan with `status: not-ready`, a `Data Inputs and Provenance` section
+that states the required dataset properties, and `Blocking Checks Before
+Pre-Registration` entries for dataset discovery, access verification, variable
+availability, independent-unit validation, and metric feasibility. The plan may
+still lock the estimand, adjustment strategy, negative controls, and sensitivity
+arbitration rules, but execution and pre-registration remain gated on the data
+checks.
+
 ## Output
 
-Save to `entities/plans/YYYY-MM-DD-<slug>-analysis-plan.md` unless the user explicitly requests terminal-only output.
+Save to `entities/plans/<NNNN>-<slug>-analysis-plan.md` unless the user explicitly requests terminal-only output. Pick `<NNNN>` as the next free numeric prefix in `entities/plans/`; the filename stem and the `id` local part must match exactly.
 
 Use this frontmatter:
 
 ```yaml
 ---
-type: analysis-plan
-id: analysis-plan:<slug>
-date: YYYY-MM-DD
+id: "plan:<NNNN>-<slug>-analysis-plan"
+type: "plan"
+title: "<short title>"
+status: ready | ready-with-caveats | not-ready
+created: "YYYY-MM-DD"
+updated: "YYYY-MM-DD"
+plan_kind: "analysis-plan"
 related:
   - hypothesis:<id>
   - inquiry:<slug>
   - task:<id>
-status: ready | ready-with-caveats | not-ready
 skills_loaded:
   - id: data-expression-scrna-qa
     reason: single-cell/pseudobulk expression analysis
 ---
 ```
+
+Reference saved analysis plans as `plan:<NNNN>-<slug>-analysis-plan`. Do not emit
+`type: analysis-plan`, `id: analysis-plan:<slug>`, or a date-prefixed filename;
+`analysis-plan` is not a registered entity kind, and non-numeric stems collide
+with numeric entity validation in layout version 3 projects.
 
 The body must include:
 

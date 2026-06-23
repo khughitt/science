@@ -1,5 +1,5 @@
 ---
-id: "report:bias-audit-{{slug}}"
+id: "report:{{NNNN}}-bias-audit-{{slug}}"
 type: "report"
 title: "Bias Audit: {{Short Title}}"
 status: "proposed"

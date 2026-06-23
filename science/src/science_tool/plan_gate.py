@@ -19,9 +19,18 @@ def _load_dataset(project_root: Path, ds_id: str):
         return None  # Invalid entities don't pass the gate
 
 
-def check_inputs(project_root: Path, dataset_ids: list[str]) -> tuple[bool, list[str]]:
+_RETRIEVABLE_LEVELS = {"public", "registration"}
+
+
+def check_inputs(
+    project_root: Path,
+    dataset_ids: list[str],
+    *,
+    planned_retrieval: set[str] | None = None,
+) -> tuple[bool, list[str]]:
     """Run Step 2b gate logic against `dataset_ids`. Returns (pass, halt_messages)."""
     halts: list[str] = []
+    planned_retrieval = planned_retrieval or set()
     for ds_id in dataset_ids:
         e = _load_dataset(project_root, ds_id)
         if e is None:
@@ -30,6 +39,12 @@ def check_inputs(project_root: Path, dataset_ids: list[str]) -> tuple[bool, list
         if e.origin == "external":
             if e.access is None:
                 halts.append(f"{ds_id}: external entity missing access block")
+                continue
+            if (
+                ds_id in planned_retrieval
+                and e.access.level in _RETRIEVABLE_LEVELS
+                and not e.access.exception.mode
+            ):
                 continue
             if not (e.access.verified or e.access.exception.mode != ""):
                 halts.append(f"{ds_id}: external access.verified=false and no exception")
@@ -57,7 +72,7 @@ def check_inputs(project_root: Path, dataset_ids: list[str]) -> tuple[bool, list
                 continue
             # Transitive: recurse into inputs.
             for upstream in e.derivation.inputs:
-                ok, sub_halts = check_inputs(project_root, [upstream])
+                ok, sub_halts = check_inputs(project_root, [upstream], planned_retrieval=planned_retrieval)
                 if not ok:
                     halts.append(f"{ds_id} -> {sub_halts[0]}")
                     break

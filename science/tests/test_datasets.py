@@ -1005,6 +1005,22 @@ class TestPhysioNetAdapter:
         with pytest.raises(PermissionError):
             adapter.download(file_info, Path("/tmp/pn-test"))
 
+    def test_files_gated_raises_permission_error(self) -> None:
+        adapter = PhysioNetAdapter()
+        request = httpx.Request(
+            "GET",
+            "https://physionet.org/api/v1/projects/published/secret/1.0.0/sha256sums/",
+        )
+        response = httpx.Response(401, request=request)
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "401", request=request, response=response
+        )
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            with pytest.raises(PermissionError, match="PhysioNet file listing requires"):
+                adapter.files("secret/1.0.0")
+
 
 class TestSRAAdapter:
     _ESUMMARY = (

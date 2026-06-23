@@ -46,6 +46,12 @@ Identify questions and hypotheses that have no accessible dataset.
 science dataset prioritize --format json
 ```
 
+Also export the inverse coverage view:
+
+```bash
+science dataset prioritize --coverage --format json
+```
+
 Cross-reference every `question:` and `hypothesis:` entity found in `entities/`:
 
 - A Q/H is a **gap** if:
@@ -54,11 +60,12 @@ Cross-reference every `question:` and `hypothesis:` entity found in `entities/`:
 
 Collect the gap list and present it as a table:
 
-| Q/H ID | Title | Gap reason |
-|--------|-------|------------|
-| ... | ... | `no-edge` / `unverified` / `all-inaccessible` |
+| Q/H ID | Title | Covered datasets | Gap reason |
+|--------|-------|------------------|------------|
+| ... | ... | `dataset:<id>` / none | `no-edge` / `unverified` / `all-inaccessible` |
 
 Note the `no-edge` and `unverified` gap-flags surfaced by the prioritizer — these are the primary signal in a sparse graph.
+Use the `--coverage` output as the per-question/per-hypothesis source of truth; do not manually eyeball only frontmatter edges and miss `dataset_usage` reach.
 
 ---
 
@@ -66,6 +73,8 @@ Note the `no-edge` and `unverified` gap-flags surfaced by the prioritizer — th
 
 For each gap Q/H, invoke `/science:find-datasets` to surface public candidate datasets.
 Focus on obtainable omics (GEO, SRA, Zenodo) for under-covered Q/H triggers; prefer datasets with a direct accession or DOI that can be verified without credentialing.
+
+Before creating any local dataset entity, check existing project datasets and commons-backed datasets/overlays by accession, DOI, title, and normalized slug. If a canonical commons dataset already exists (for example TCGA PanCanAtlas or METABRIC), link to the existing `dataset:<slug>` or create a project overlay when the project needs local annotations. Do not create a duplicate local dataset entity for the same artefact.
 
 For each promising candidate found, author a dataset entity:
 
@@ -93,17 +102,18 @@ For **each candidate** dataset (status `candidate`, `access.verified: false`), c
 1. Confirm the landing page or accession URL resolves and the files are downloadable without application.
 2. Edit `entities/datasets/<slug>.md`:
    - Set `access.verified: true`
-   - Set `access.verification_method: "<how you checked, e.g. GEO landing page confirmed public>">`
+   - Set `access.verification_method: "retrieved"` for public files you directly retrieved or listed; use `"credential-confirmed"` only when access required a valid login/credential. Do not put free text in this enum field.
    - Set `access.last_reviewed: "<YYYY-MM-DD>"`
-   - Append a dated line to the verification log (create the block if absent):
+   - Append a dated line to the body `## Access verification log` with the free-text method/evidence:
      ```yaml
      access:
        verified: true
-       verification_method: "GEO landing page — files freely downloadable"
+       verification_method: "retrieved"
        last_reviewed: "2026-06-21"
-       verification_log:
-         - date: "2026-06-21"
-           note: "Confirmed public access; no login required."
+     ```
+     Body log line:
+     ```markdown
+     - 2026-06-21 (agent): GEO landing page and file list confirmed public access; no login required.
      ```
 
 **Branch B — requires credentials the project does not hold** (controlled, DUA-gated, commercial):

@@ -5272,18 +5272,20 @@ def dataset_list(
               type=click.Choice(["public", "registration", "controlled", "commercial", "mixed"]))
 @click.option("--include-gated", is_flag=True,
               help="Include gated datasets (registration/controlled/commercial); excluded by default")
+@click.option("--coverage", is_flag=True,
+              help="Invert reach into per-question/hypothesis coverage rows")
 @click.option("--format", "output_format", default="table", type=click.Choice(["table", "json"]))
 @click.option("--explain", is_flag=True, help="Show the per-row scoring reason")
 @click.option("--project-root", default=None,
               type=click.Path(path_type=Path, file_okay=False, dir_okay=True))
 def dataset_prioritize(
     origin: str | None, status: str | None, tier: str | None, level: str | None,
-    include_gated: bool, output_format: str, explain: bool, project_root: Path | None,
+    include_gated: bool, coverage: bool, output_format: str, explain: bool, project_root: Path | None,
 ) -> None:
     """Rank dataset entities by accessibility-weighted, graph-aware usefulness."""
     import json as _json
 
-    from science_tool.dataset_prioritize import prioritize
+    from science_tool.dataset_prioritize import prioritize, target_coverage
     from science_tool.entities import graph_is_stale
     from science_tool.graph.store import DEFAULT_GRAPH_PATH
     from science_tool.graph.store.dataset import _load_dataset
@@ -5307,6 +5309,29 @@ def dataset_prioritize(
     rows = prioritize(root, knowledge=knowledge, provenance=provenance,
                       origin=origin, status=status, tier=tier, level=level,
                       include_gated=include_gated)
+
+    if coverage:
+        coverage_rows = target_coverage(rows, root)
+        if output_format == "json":
+            click.echo(_json.dumps(coverage_rows, indent=2))
+            return
+        if not coverage_rows:
+            click.echo("No question or hypothesis entities found.")
+            return
+        from rich.console import Console
+        from rich.table import Table
+
+        table = Table(show_header=True, header_style="bold")
+        for c in ["target", "coverage", "datasets"]:
+            table.add_column(c, overflow="fold", no_wrap=False)
+        for r in coverage_rows:
+            table.add_row(
+                str(r["target"]),
+                str(r["coverage_state"]),
+                ", ".join(r["datasets"]) if r["datasets"] else "-",
+            )
+        Console(width=200).print(table)
+        return
 
     if output_format == "json":
         click.echo(_json.dumps(rows, indent=2))

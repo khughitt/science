@@ -385,6 +385,25 @@ def test_document_structure_complete_docs_have_no_missing_section_warnings(tmp_p
     assert [result.severity for result in results] == [Severity.INFO, Severity.INFO]
 
 
+def test_document_structure_skips_literature_survey_paper_notes(tmp_path: Path) -> None:
+    from science_tool.validate.checks.document_structure import check_document_structure
+
+    ctx = _ctx(tmp_path)
+    papers_dir = tmp_path / "entities" / "papers"
+    papers_dir.mkdir(parents=True)
+    papers_dir.joinpath("survey.md").write_text(
+        "---\nid: paper:survey\ntype: paper\ntitle: Survey\npaper_kind: literature-survey\n---\n"
+        "## Scope\n\nBody\n## Synthesis\n\nBody\n",
+        encoding="utf-8",
+    )
+
+    results = list(check_document_structure(ctx))
+    messages = _messages(results)
+
+    assert "Checking entities/papers/survey.md..." in messages
+    assert not any("entities/papers/survey.md missing section" in message for message in messages)
+
+
 def test_document_structure_requires_exact_h2_headings(tmp_path: Path) -> None:
     from science_tool.validate.checks.document_structure import check_document_structure
 

@@ -169,8 +169,9 @@ def test_plan_analysis_command_defines_methodology_readiness_workflow() -> None:
     expected_strings = (
         "${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md",
         "${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md",
-        "entities/plans/YYYY-MM-DD-<slug>-analysis-plan.md",
-        "type: analysis-plan",
+        "entities/plans/<NNNN>-<slug>-analysis-plan.md",
+        'type: "plan"',
+        'plan_kind: "analysis-plan"',
         "skills_loaded:",
         "Readiness Decision",
         "ready-with-caveats",
@@ -203,19 +204,19 @@ def test_plan_analysis_is_integrated_with_neighbor_commands() -> None:
         "commands/plan-pipeline.md": (
             "/science:plan-analysis",
             "methodological readiness",
-            "analysis-plan:<slug>",
+            "plan:<stem>",
         ),
         "commands/pre-register.md": (
-            "analysis-plan:<slug>",
+            "plan:<stem>",
             "entities/plans/*-analysis-plan.md",
             "/science:plan-analysis",
         ),
         "commands/status.md": (
-            "analysis-plan:<slug>",
+            "plan:<stem>",
             "/science:plan-analysis",
         ),
         "commands/next-steps.md": (
-            "analysis-plan:<slug>",
+            "plan:<stem>",
             "entities/plans/*-analysis-plan.md",
             "/science:plan-analysis",
         ),
@@ -579,7 +580,7 @@ def test_comparison_template_satisfies_validator_sections() -> None:
 def test_bias_audit_templates_emit_report_not_task() -> None:
     for path in ("templates/bias-audit.md", "science/model/src/science_model/templates/bias-audit.md"):
         text = _read(path)
-        assert 'id: "report:bias-audit-{{slug}}"' in text
+        assert 'id: "report:{{NNNN}}-bias-audit-{{slug}}"' in text
         assert 'type: "report"' in text
         assert 'id: "task:{{slug}}"' not in text
         assert 'type: "task"' not in text

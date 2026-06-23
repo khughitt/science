@@ -54,3 +54,21 @@ def test_step2b_halts_on_unverified_external(tmp_path: Path) -> None:
     pass_, halts = check_inputs(tmp_path, ["dataset:ext_bad"])
     assert pass_ is False
     assert any("ext_bad" in h for h in halts)
+
+
+def test_step2b_allows_planned_public_retrieval_work_package(tmp_path: Path) -> None:
+    _seed_mixed_inputs(tmp_path)
+    (tmp_path / "entities" / "datasets" / "ext_public.md").write_text(
+        '---\nid: "dataset:ext_public"\ntype: "dataset"\ntitle: "Public"\norigin: "external"\n'
+        'access: {level: "public", verified: false}\n---\n',
+        encoding="utf-8",
+    )
+
+    pass_, halts = check_inputs(
+        tmp_path,
+        ["dataset:ext_public"],
+        planned_retrieval={"dataset:ext_public"},
+    )
+
+    assert pass_ is True
+    assert halts == []

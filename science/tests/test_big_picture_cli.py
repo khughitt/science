@@ -35,6 +35,22 @@ def test_resolve_questions_emits_json() -> None:
     assert payload["question:q05-orphan"]["primary_hypothesis"] is None
 
 
+def test_resolve_questions_empty_output_reports_status(tmp_path: Path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["big-picture", "resolve-questions", "--project-root", str(tmp_path)],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload == {
+        "status": "empty",
+        "reason": "no question entities found",
+        "questions": {},
+    }
+
+
 def test_validate_exits_nonzero_on_issues(tmp_path: Path) -> None:
     # Copy fixture entities into tmp_path so referenced IDs are available.
     import shutil

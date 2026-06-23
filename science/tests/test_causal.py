@@ -31,6 +31,39 @@ from science_tool.graph.store import (
 HAS_PGMPY = importlib.util.find_spec("pgmpy") is not None
 
 
+def _build_compiled_inquiry_graph(graph_path: Path, slug: str, **inquiry: object) -> None:
+    from rdflib import Dataset
+    from science_model.patch_definition import PatchDefinitionEntity
+
+    from science_tool.graph.inquiry_compile import emit_inquiry_views
+    from science_tool.graph.store import _load_dataset, _save_dataset
+
+    ent = PatchDefinitionEntity(
+        id=f"patch-definition:{slug}",
+        title="I",
+        focal="hypothesis:h01",
+        scope_set=[{"scope": "local"}],
+        neighborhood_policy={},
+        patch_type="inquiry",
+        project="",
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path=f"entities/patches/{slug}.md",
+        inquiry=inquiry,
+    )
+    compiled = Dataset()
+    emit_inquiry_views(compiled, [ent])
+
+    graph_path.parent.mkdir(parents=True, exist_ok=True)
+    dataset = _load_dataset(graph_path) if graph_path.exists() else Dataset()
+    for quad in compiled.quads((None, None, None, None)):
+        s, p, o, ctx = quad
+        dataset.graph(ctx.identifier if hasattr(ctx, "identifier") else ctx).add((s, p, o))
+    _save_dataset(dataset, graph_path)
+
+
 @pytest.fixture
 def graph_path(tmp_path: Path) -> Path:
     """Fresh graph file for testing."""
@@ -332,6 +365,27 @@ class TestExportPgmpy:
         assert "TODO" in script
         assert "latent" in script.lower()
         assert "hidden" in script.lower()
+
+    def test_export_pgmpy_reads_compiled_patch_inquiry_edges(self, graph_path: Path) -> None:
+        """Patch-authored inquiries compile to their own named graph and must export causal edges."""
+        _build_compiled_inquiry_graph(
+            graph_path,
+            slug="patch-dag",
+            profile="causal",
+            boundary_roles=[
+                {"ref": "concept:x", "role": "BoundaryIn"},
+                {"ref": "concept:y", "role": "BoundaryOut"},
+            ],
+            treatment="concept:x",
+            outcome="concept:y",
+            flow_edges=[
+                {"subject": "concept:x", "predicate": "causes", "object": "concept:y"},
+            ],
+        )
+
+        script = export_pgmpy_script(graph_path, "patch-dag")
+
+        assert '("x", "y")' in script
 
 
 class TestExportChirho:

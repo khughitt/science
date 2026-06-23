@@ -35,6 +35,12 @@ uv run science big-picture resolve-questions --project-root .
 
 All graph summary commands default to `--path knowledge/graph.trig` (the Science convention), so no flag is needed when run from the project root.
 
+If `big-picture resolve-questions` returns `{"status": "empty", ...}`, treat
+that as a clean empty state only when the reason is expected for the project
+(for example, no question entities yet). A bare `{}` is not an acceptable status
+surface; rerun with the current CLI or report feedback because it does not
+distinguish clean-empty from unwired.
+
 For `software` profile projects, skip `graph project-summary` (follows `/science:status` precedent).
 Use `graph attention-sample` to choose which epistemic entities receive close
 reading in this synthesis pass. Do not narrow the synthesis solely by

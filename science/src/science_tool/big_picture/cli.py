@@ -38,7 +38,14 @@ def big_picture_group() -> None:
 def resolve_questions_cmd(project_root: Path) -> None:
     """Emit question→hypothesis resolver output as JSON."""
     results = resolve_questions(project_root)
-    payload = {qid: asdict(out) for qid, out in results.items()}
+    if not results:
+        payload = {
+            "status": "empty",
+            "reason": "no question entities found",
+            "questions": {},
+        }
+    else:
+        payload = {qid: asdict(out) for qid, out in results.items()}
     click.echo(json.dumps(payload, indent=2, sort_keys=True))
 
 

@@ -112,11 +112,11 @@ This longitudinal view makes progress visible and highlights both forward moment
 
 Scan pipeline plans in `entities/plans/` for implementation tasks that are not tracked in `tasks/active.md`. Surface any development work buried in plan documents that should be trackable tasks.
 
-Scan active analysis-facing tasks and inquiries for linked `analysis-plan:<slug>`
-artifacts. If none exists and the task is about running, validating, or
-pre-registering a data analysis, add a recommended next action to run
-`/science:plan-analysis`. Check `entities/plans/*-analysis-plan.md` before
-recommending a new one.
+Scan active analysis-facing tasks and inquiries for linked `plan:<stem>` analysis
+plans (`entities/plans/*-analysis-plan.md` with `plan_kind: analysis-plan`). If
+none exists and the task is about running, validating, or pre-registering a data
+analysis, add a recommended next action to run `/science:plan-analysis`. Check
+`entities/plans/*-analysis-plan.md` before recommending a new one.
 
 **Archive lag.** Run `science health --format json` and inspect `archive_lag`. When `archive_lag.done_in_active` or `archive_lag.retired_in_active` is non-zero, add a Recommended Next Action:
 
@@ -273,7 +273,7 @@ Display the output in the terminal using rich formatting:
 - Bullet lists for progress and suggestions
 - Bold for emphasis on critical items
 
-> **Note:** This command saves output to disk (unlike the previous read-only version). This is intentional — ephemeral analysis that disappears after the session is less useful than a versioned record.
+> **Note:** Next-steps output is a transient planning aid by default. Save it when the user asks, when it records a non-obvious project decision, or when another durable artifact needs to cite it.
 
 ## Cross-Project Sync Check
 
@@ -300,7 +300,7 @@ Projects that historically use `prior_analyses: [...]` (e.g. protein-landscape) 
 2. Offer to create tasks from recommended items: "Create tasks from these suggestions?"
    - If accepted, run `science tasks add` for each recommended task with appropriate priority, type, and related entities
 3. Cross-link relevant items in `entities/questions/`.
-4. Commit: `git add -A && git commit -m "doc: next steps and gap analysis <date>"`
+4. Do not commit routine next-steps files unless the user explicitly requested a commit. If a commit is requested, use `git add -A && git commit -m "doc: next steps and gap analysis <date>"`.
 
 ## Process Reflection
 

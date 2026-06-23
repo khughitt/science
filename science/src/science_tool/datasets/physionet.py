@@ -36,7 +36,14 @@ class PhysioNetAdapter:
     def files(self, dataset_id: str) -> list[FileInfo]:
         slug, version = self._resolve_version(dataset_id)
         resp = self._client.get(f"/projects/published/{slug}/{version}/sha256sums/")
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (401, 403):
+                raise PermissionError(
+                    f"PhysioNet file listing requires credentialed/restricted access: {slug}/{version}"
+                ) from exc
+            raise
         return self._parse_sha256sums(resp.text, slug, version)
 
     def download(self, file_info: FileInfo, dest_dir: Path) -> Path:
