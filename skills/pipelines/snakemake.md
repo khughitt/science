@@ -270,6 +270,35 @@ is one config file, one shell wrapper, and a marker-file refactor for
 each canonical-output rule. Cheap relative to a single destroyed
 intermediate.
 
+### Container-written outputs are root-owned
+
+When a pipeline runs inside a container that executes as root (e.g. a
+Dockerfile that does `USER root` and never switches back — the
+`mambaorg/micromamba` base otherwise runs as a non-root user), every file
+the container writes to a bind-mounted host volume is owned by root on the
+host. The host user then **cannot delete or overwrite** those files:
+`rm -f` swallows the `EPERM` and exits 0, so a stale marker/sentinel
+silently survives a cleanup that *appears* to succeed. Snakemake then
+treats the rule as up-to-date and skips it — the failure is invisible
+until you notice the rule never re-ran.
+
+Two consequences for runners:
+
+- **Clean stale markers/sentinels inside the container, as root** — not
+  host-side. Host `rm -f` on a root-owned marker is a silent no-op:
+  `docker run --rm -v /data:/data <img> bash -lc 'rm -f <marker>'`.
+- **Prefer a host-UID container** so outputs are host-owned from the
+  start: switch back to a non-root `USER` after the root-only build steps,
+  or pass `--user "$(id -u):$(id -g)"` at `docker run` time. This removes
+  the whole class of "host can't manage pipeline outputs" bugs. Caveat:
+  tools that expect a writable `$HOME`/tmp (conda activation, aligners)
+  can break under an arbitrary UID — test before adopting.
+
+This is the same "silent failure destroys/masks state" family as the
+cleanup footguns above: the marker is the unit of truth snakemake acts on,
+so a marker you *think* you deleted but didn't is as dangerous as one
+snakemake deleted out from under you.
+
 ### Scripts vs shell
 - **Shell:** simple commands, tool invocations
 - **Scripts:** anything needing Python logic (access `snakemake.input`, `snakemake.output`, `snakemake.params`)
