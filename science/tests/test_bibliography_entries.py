@@ -77,3 +77,27 @@ def test_load_bib_entries_lowercases_entry_type(tmp_path: Path) -> None:
     _write_bib(tmp_path, "@BOOK{Kelly1982,\n  title = {Information Rate},\n  year = {1982},\n}\n")
     entries = load_bib_entries(tmp_path)
     assert entries["Kelly1982"].entry_type == "book"
+
+
+def test_load_bib_entries_parses_extended_fields(tmp_path: Path) -> None:
+    _write_bib(
+        tmp_path,
+        "@article{Williams2018,\n"
+        "  author = {Williams, Donald R. and Rast, Philippe},\n"
+        "  title = {Bayesian Meta-Analysis},\n"
+        "  journal = {PsyArXiv},\n"
+        "  year = {2018},\n"
+        "  volume = {12},\n"
+        "  number = {3},\n"
+        "  pages = {45--67},\n"
+        "  pmid = {29876543},\n"
+        "}\n",
+    )
+    entry = load_bib_entries(tmp_path)["Williams2018"]
+    assert entry.author == "Williams, Donald R. and Rast, Philippe"
+    assert entry.journal == "PsyArXiv"
+    assert entry.volume == "12"
+    assert entry.number == "3"
+    assert entry.pages == "45--67"
+    assert entry.pmid == "29876543"
+    assert entry.booktitle is None  # absent optional field stays None

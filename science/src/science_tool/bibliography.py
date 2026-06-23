@@ -94,6 +94,14 @@ class BibEntry:
     year: int | None = None
     doi: str | None = None
     url: str | None = None
+    author: str | None = None
+    journal: str | None = None
+    booktitle: str | None = None
+    publisher: str | None = None
+    volume: str | None = None
+    number: str | None = None
+    pages: str | None = None
+    pmid: str | None = None
 
 
 def _field_value(entry_text: str, field: str) -> str | None:
@@ -164,6 +172,14 @@ def load_bib_entries(project_root: Path) -> dict[str, "BibEntry"]:
             year=year,
             doi=_field_value(block, "doi"),
             url=_field_value(block, "url"),
+            author=_field_value(block, "author"),
+            journal=_field_value(block, "journal"),
+            booktitle=_field_value(block, "booktitle"),
+            publisher=_field_value(block, "publisher"),
+            volume=_field_value(block, "volume"),
+            number=_field_value(block, "number"),
+            pages=_field_value(block, "pages"),
+            pmid=_field_value(block, "pmid"),
         )
     return entries
 
