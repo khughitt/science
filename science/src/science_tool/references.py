@@ -165,3 +165,96 @@ def reference_record(entry: BibEntry) -> dict:
         "display": format_display(entry),
         "source": source,
     }
+
+
+from dataclasses import dataclass
+
+from science_tool.markdown_utils import is_fence_line, strip_inline_code
+
+# Outer block detector (design §6): a bracketed run whose first non-space char is '@'.
+_BLOCK_RE = re.compile(r"\[\s*@[^\]]*\]")
+# Any @citekey-shaped token, used for unsupported-syntax detection.
+_BARE_AT_RE = re.compile(r"@([A-Za-z][A-Za-z0-9_:.\-]*)")
+# A bare citekey within an item: text after '@' until whitespace/comma/semicolon/bracket.
+_ITEM_KEY_RE = re.compile(r"@\s*([^\s,;\]]+)")
+
+
+@dataclass(frozen=True)
+class Citation:
+    citekey: str
+    locator: str | None
+
+
+@dataclass(frozen=True)
+class CitationScan:
+    citations: list[Citation]
+    unsupported: list[str]
+
+
+def _parse_block(inner: str) -> tuple[list[Citation], list[str]]:
+    """Parse the inside of a recognized `[@...]` block.
+
+    Returns (citations, unsupported). A `;`-separated item that does not begin
+    with `@<citekey>` is malformed (e.g. `see @Jones2021` in
+    `[@Smith2020; see @Jones2021]`). Such an item is NOT silently dropped — its
+    `@`-tokens (or, failing that, its raw text) are reported as unsupported so
+    Science export fails closed instead of losing a citation.
+    """
+    citations: list[Citation] = []
+    unsupported: list[str] = []
+    for raw_item in inner.split(";"):
+        item = raw_item.strip()
+        if not item:
+            continue
+        key_match = _ITEM_KEY_RE.match(item)
+        if key_match:
+            citekey = key_match.group(1)
+            rest = item[key_match.end():].strip()
+            locator = None
+            if rest:
+                if not rest.startswith(","):
+                    unsupported.append(item.lstrip("@"))
+                    continue
+                locator = rest[1:].strip() or None
+            citations.append(Citation(citekey=citekey, locator=locator))
+            continue
+        ats = _BARE_AT_RE.findall(item)
+        unsupported.extend(ats if ats else [item])
+    return citations, unsupported
+
+
+def _prose_lines(markdown: str) -> list[str]:
+    """Lines with inline code stripped and fenced-code blocks removed."""
+    lines: list[str] = []
+    in_fence = False
+    for line in markdown.splitlines():
+        if is_fence_line(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        lines.append(strip_inline_code(line))
+    return lines
+
+
+def parse_citations(markdown: str) -> CitationScan:
+    """Parse Markdown into the v1 citation grammar (design §6).
+
+    Recognizes only `[@key ...]` blocks. `@key` tokens that are not inside a
+    recognized block (bare `@key`, `[see @key]`, `[-@key]`) are reported as
+    unsupported syntax, never silently dropped.
+    """
+    citations: list[Citation] = []
+    unsupported: list[str] = []
+    for line in _prose_lines(markdown):
+        consumed_spans: list[tuple[int, int]] = []
+        for block in _BLOCK_RE.finditer(line):
+            block_citations, block_unsupported = _parse_block(block.group(0)[1:-1])
+            citations.extend(block_citations)
+            unsupported.extend(block_unsupported)
+            consumed_spans.append(block.span())
+        for at in _BARE_AT_RE.finditer(line):
+            if any(start <= at.start() < end for start, end in consumed_spans):
+                continue
+            unsupported.append(at.group(1))
+    return CitationScan(citations=citations, unsupported=unsupported)

@@ -1,7 +1,32 @@
 from __future__ import annotations
 
+import hashlib
+import json
+from pathlib import Path
+
 from science_tool.bibliography import BibEntry
-from science_tool.references import CONTRACT, SCHEMA_VERSION, format_authors, format_display, reference_record
+from science_tool.references import CONTRACT, SCHEMA_VERSION, format_authors, format_display, reference_record, parse_citations
+
+_CORPUS = Path(__file__).parent / "fixtures" / "citation_grammar_v1.json"
+# Drift guard: the identical constant lives in Labnote's test/citations.test.js.
+# Both repos hash their copy of the corpus against this value, so a hand-edit to
+# either copy fails CI until the corpus is re-synced and the constant updated in
+# both places (deliberate, visible). Fill in with the Step 1b command output.
+CITATION_GRAMMAR_V1_SHA256 = "65329d96d10082b3b9a7fc195e44291cdcaaa8ec9ba2d9b21ada4f2f3fa249ba"
+
+
+def test_corpus_hash_is_pinned() -> None:
+    digest = hashlib.sha256(_CORPUS.read_bytes()).hexdigest()
+    assert digest == CITATION_GRAMMAR_V1_SHA256
+
+
+def test_parse_citations_matches_shared_corpus() -> None:
+    cases = json.loads(_CORPUS.read_text(encoding="utf-8"))["cases"]
+    for case in cases:
+        scan = parse_citations(case["markdown"])
+        got = [{"citekey": c.citekey, "locator": c.locator} for c in scan.citations]
+        assert got == case["citations"], case["name"]
+        assert sorted(scan.unsupported) == sorted(case["unsupported"]), case["name"]
 
 
 def test_format_authors_last_first_with_initials() -> None:
