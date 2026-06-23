@@ -71,9 +71,7 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
     source_count = cast(int, evidence_summary["source_count"])
     evidence_types = sorted(_collect_evidence_types(knowledge, provenance, uri))
     has_empirical_data = any(is_empirical_evidence_type(evidence_type) for evidence_type in evidence_types)
-    belief = aggregate_belief(
-        collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(knowledge, uri))
-    )
+    belief = aggregate_belief(collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(knowledge, uri)))
     belief_state = belief.magnitude.value
     contested = belief.contested
     belief_display = belief.display()

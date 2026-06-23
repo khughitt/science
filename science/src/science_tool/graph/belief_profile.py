@@ -156,9 +156,7 @@ def _scalar_payload(scalar: BeliefScalar | None) -> dict[str, Any] | None:
     }
 
 
-def _belief_scalar_payload(
-    result: BeliefResult | BundleBeliefResult, *, scalar_enabled: bool
-) -> dict[str, Any] | None:
+def _belief_scalar_payload(result: BeliefResult | BundleBeliefResult, *, scalar_enabled: bool) -> dict[str, Any] | None:
     if not scalar_enabled:
         return None
     if isinstance(result, BundleBeliefResult):
@@ -193,9 +191,7 @@ def _labels(
         labels.append("authored_only")
 
     normalized_types = {
-        normalize_evidence_type(unit.evidence_type)
-        for unit in evidence.all_units
-        if unit.evidence_type
+        normalize_evidence_type(unit.evidence_type) for unit in evidence.all_units if unit.evidence_type
     }
     if normalized_types == {"literature"}:
         labels.append("literature_only")

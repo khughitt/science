@@ -118,12 +118,9 @@ def test_profile_emits_non_bundle_row_with_labels_and_null_scalar() -> None:
 def test_profile_default_excludes_empty_rows_but_all_includes_them() -> None:
     knowledge, provenance = _base_graphs()
 
-    default_entities = {
-        row["entity"] for row in profile_records(knowledge, provenance, scalar_enabled=False)
-    }
+    default_entities = {row["entity"] for row in profile_records(knowledge, provenance, scalar_enabled=False)}
     all_entities = {
-        row["entity"]
-        for row in profile_records(knowledge, provenance, scalar_enabled=False, include_all=True)
+        row["entity"] for row in profile_records(knowledge, provenance, scalar_enabled=False, include_all=True)
     }
 
     assert "proposition:empty" not in default_entities

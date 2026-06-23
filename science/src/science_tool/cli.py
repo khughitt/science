@@ -126,13 +126,25 @@ def main(ctx: click.Context, color_policy: str | None) -> None:
 
 @main.command("search")
 @click.argument("query")
-@click.option("--archived", is_flag=True, default=False, help="Search the archive index (required; live search not yet implemented).")
-@click.option("--project-root", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path("."), help="Project root (default: current directory).")
+@click.option(
+    "--archived",
+    is_flag=True,
+    default=False,
+    help="Search the archive index (required; live search not yet implemented).",
+)
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path("."),
+    help="Project root (default: current directory).",
+)
 @click.option("--format", "output_format", type=click.Choice(["json", "text"]), default="json", show_default=True)
 def search_command(query: str, archived: bool, project_root: Path, output_format: str) -> None:
     """Search entities. P3 supports --archived only (reads the archive index)."""
     if not archived:
-        raise click.UsageError("science search currently supports only --archived (live entity search is not implemented).")
+        raise click.UsageError(
+            "science search currently supports only --archived (live entity search is not implemented)."
+        )
     from science_tool.archive import search_archive
 
     hits = search_archive(project_root, query)
@@ -336,19 +348,20 @@ def entities_consolidate_group() -> None:
     default=Path("."),
     help="Project root (default: current directory).",
 )
-@click.option("--into", "digest_id", required=True, help="Canonical synthesis id to mint for the cluster-digest (e.g. synthesis:0001-slug).")
+@click.option(
+    "--into",
+    "digest_id",
+    required=True,
+    help="Canonical synthesis id to mint for the cluster-digest (e.g. synthesis:0001-slug).",
+)
 @click.option("--members", required=True, help="Comma-separated member entity ids.")
 @click.option("--title", default=None, help="Digest title (default: derived placeholder).")
-def entities_consolidate_scaffold_command(
-    project_root: Path, digest_id: str, members: str, title: str | None
-) -> None:
+def entities_consolidate_scaffold_command(project_root: Path, digest_id: str, members: str, title: str | None) -> None:
     """Mint a cluster-digest stub with consolidates relations (touches no members)."""
     from science_tool.consolidate import scaffold_digest
 
     member_ids = [m.strip() for m in members.split(",") if m.strip()]
-    report = scaffold_digest(
-        project_root, digest_id=digest_id, member_ids=member_ids, title=title or digest_id
-    )
+    report = scaffold_digest(project_root, digest_id=digest_id, member_ids=member_ids, title=title or digest_id)
     click.echo(json.dumps(report, indent=2))
 
 
@@ -726,14 +739,35 @@ def entity_note(ref: str, note: str, note_date: str | None) -> None:
 @click.option("--kind")
 @click.option("--status")
 @click.option("--related")
-@click.option("--include-hidden", is_flag=True, default=False, help="Include superseded/archived entities (hidden by default).")
-@click.option("--include-archived", is_flag=True, default=False, help="Include archived (relocated) entities from the archive index.")
+@click.option(
+    "--include-hidden", is_flag=True, default=False, help="Include superseded/archived entities (hidden by default)."
+)
+@click.option(
+    "--include-archived",
+    is_flag=True,
+    default=False,
+    help="Include archived (relocated) entities from the archive index.",
+)
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def entity_list(kind: str | None, status: str | None, related: str | None, include_hidden: bool, include_archived: bool, output_format: str) -> None:
+def entity_list(
+    kind: str | None,
+    status: str | None,
+    related: str | None,
+    include_hidden: bool,
+    include_archived: bool,
+    output_format: str,
+) -> None:
     """List source-authored entities."""
 
     try:
-        rows = list_entities(Path.cwd(), kind=kind, status=status, related=related, include_hidden=include_hidden, include_archived=include_archived)
+        rows = list_entities(
+            Path.cwd(),
+            kind=kind,
+            status=status,
+            related=related,
+            include_hidden=include_hidden,
+            include_archived=include_archived,
+        )
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
     emit_query_rows(
@@ -1419,8 +1453,6 @@ def graph_migrate_addresses(apply: bool, graph_path: Path) -> None:
     click.echo(f"{verb} {stats['flipped']} sci:addresses triple(s) ({stats['already_canonical']} already canonical).")
     if not apply:
         click.echo("Re-run with --apply to write changes.")
-
-
 
 
 @graph.command("stats")
@@ -2702,7 +2734,7 @@ def _ref_from_uri(value: str) -> str:
     if not isinstance(value, str) or not value:
         return value or ""
     if value.startswith(str(PROJECT_NS)):
-        local = value[len(str(PROJECT_NS)):]
+        local = value[len(str(PROJECT_NS)) :]
         if "/" in local:
             kind, slug = local.split("/", 1)
             return f"{kind}:{slug}"
@@ -2725,7 +2757,7 @@ def _render_inquiry_source(
     profile: str,
     status: str,
     project: str = "",
-    boundary_roles: list[tuple[str, str]] | None = None,          # (ref, "BoundaryIn"|"BoundaryOut")
+    boundary_roles: list[tuple[str, str]] | None = None,  # (ref, "BoundaryIn"|"BoundaryOut")
     flow_edges: list[tuple[str, str, str, list[str]]] | None = None,  # (subject_ref, predicate, object_ref, claim_refs)
     treatment_ref: str | None = None,
     outcome_ref: str | None = None,
@@ -2737,8 +2769,7 @@ def _render_inquiry_source(
     flow_edges = flow_edges or []
     inquiry["boundary_roles"] = [{"ref": r, "role": role} for r, role in boundary_roles]
     inquiry["flow_edges"] = [
-        {"subject": s, "predicate": p, "object": o, "claim_refs": list(claims)}
-        for s, p, o, claims in flow_edges
+        {"subject": s, "predicate": p, "object": o, "claim_refs": list(claims)} for s, p, o, claims in flow_edges
     ]
     inquiry["assumptions"] = []
     inquiry["transformations"] = []
@@ -2775,8 +2806,9 @@ def _render_inquiry_source(
 @click.option("--label", required=True)
 @click.option("--target", required=True, help="Focal hypothesis or question (e.g. hypothesis:h01)")
 @click.option("--profile", required=True, type=click.Choice(["investigation", "causal"]))
-@click.option("--status", default="sketch",
-              type=click.Choice(["sketch", "specified", "planned", "in-progress", "complete"]))
+@click.option(
+    "--status", default="sketch", type=click.Choice(["sketch", "specified", "planned", "in-progress", "complete"])
+)
 @click.option("--treatment", default=None, help="Treatment ref (required for --profile causal)")
 @click.option("--outcome", default=None, help="Outcome ref (required for --profile causal)")
 @click.option("--project-root", "project_root", default=".", type=click.Path(path_type=Path, file_okay=False))
@@ -2790,9 +2822,14 @@ def inquiry_init(slug, label, target, profile, status, treatment, outcome, proje
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(
         _render_inquiry_source(
-            slug, title=label, focal_ref=target, profile=profile, status=status,
+            slug,
+            title=label,
+            focal_ref=target,
+            profile=profile,
+            status=status,
             project=(Path(project_root).resolve().name or "project"),
-            treatment_ref=treatment, outcome_ref=outcome,
+            treatment_ref=treatment,
+            outcome_ref=outcome,
         ),
         encoding="utf-8",
     )
@@ -2819,9 +2856,15 @@ def inquiry_import(slug, project_root, graph_path, force):
     profile = "causal" if info.get("inquiry_type") == "causal" else "investigation"
     boundary = [(_ref_from_uri(u), "BoundaryIn") for u in info.get("boundary_in", [])]
     boundary += [(_ref_from_uri(u), "BoundaryOut") for u in info.get("boundary_out", [])]
-    flows = [(_ref_from_uri(e["subject"]), _local_predicate(e["predicate"]), _ref_from_uri(e["object"]),
-              [_ref_from_uri(c) for c in e.get("claims", [])])
-             for e in info.get("edges", [])]
+    flows = [
+        (
+            _ref_from_uri(e["subject"]),
+            _local_predicate(e["predicate"]),
+            _ref_from_uri(e["object"]),
+            [_ref_from_uri(c) for c in e.get("claims", [])],
+        )
+        for e in info.get("edges", [])
+    ]
     treatment = info.get("treatment")
     outcome = info.get("outcome")
     text = _render_inquiry_source(
@@ -3235,15 +3278,30 @@ def datasets_validate(data_path: Path, output_format: str) -> None:
 @datasets.command("qa")
 @click.argument("path", type=click.Path(path_type=Path))
 @click.option("--resource", "resource", default=None, help="Restrict QA to one resource (default: all tabular).")
-@click.option("--report-dir", "report_dir", default=None, type=click.Path(path_type=Path),
-              help="Persist qa_report.{json,md} (+ per-resource subdirs). Default: print only.")
-@click.option("--config", "runknobs", default=None,
-              type=click.Path(path_type=Path, exists=True, dir_okay=False),
-              help="Optional operational run-knobs YAML overlaid on the schema-derived config.")
+@click.option(
+    "--report-dir",
+    "report_dir",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Persist qa_report.{json,md} (+ per-resource subdirs). Default: print only.",
+)
+@click.option(
+    "--config",
+    "runknobs",
+    default=None,
+    type=click.Path(path_type=Path, exists=True, dir_okay=False),
+    help="Optional operational run-knobs YAML overlaid on the schema-derived config.",
+)
 @click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text", show_default=True)
 @click.option("--no-strict", is_flag=True, default=False, help="Suppress the build-fatal exit 1 (local inspection).")
-def datasets_qa(path: Path, resource: str | None, report_dir: Path | None,
-                runknobs: Path | None, output_format: str, no_strict: bool) -> None:
+def datasets_qa(
+    path: Path,
+    resource: str | None,
+    report_dir: Path | None,
+    runknobs: Path | None,
+    output_format: str,
+    no_strict: bool,
+) -> None:
     """Run schema-driven QA over a datapackage's tabular resources (package-level).
 
     Exit codes: 0 ok · 1 structural flag fired (build-fatal; --no-strict forces 0) ·
@@ -3256,7 +3314,8 @@ def datasets_qa(path: Path, resource: str | None, report_dir: Path | None,
 
     try:
         result, code = _qa.run_package_qa(
-            path, resource=resource, report_dir=report_dir, runknobs=runknobs, no_strict=no_strict)
+            path, resource=resource, report_dir=report_dir, runknobs=runknobs, no_strict=no_strict
+        )
     except (CompileError, RunnerError, ValueError, FileNotFoundError) as exc:
         click.echo(str(exc), err=True)
         raise click.exceptions.Exit(2) from exc
@@ -3279,8 +3338,13 @@ def datasets_qa(path: Path, resource: str | None, report_dir: Path | None,
 @click.option("--resource", "resource", required=True, help="Resource name (or path) to infer.")
 @click.option("--sample", default=10000, show_default=True, help="Max rows sampled for inference.")
 @click.option("--write", "do_write", is_flag=True, help="Apply ONLY the safe names+types patch in place.")
-@click.option("--emit-suggestions", "suggestions_path", default=None, type=click.Path(path_type=Path),
-              help="Write the review report to this YAML file (never mutates the descriptor).")
+@click.option(
+    "--emit-suggestions",
+    "suggestions_path",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Write the review report to this YAML file (never mutates the descriptor).",
+)
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def datasets_infer_schema(
     datapackage: Path,
@@ -3307,13 +3371,17 @@ def datasets_infer_schema(
         click.echo(_infer_schema.result_to_json(result), nl=False)
     else:
         emit_query_rows(
-            output_format=output_format, title="Proposed schema (names + types only)",
+            output_format=output_format,
+            title="Proposed schema (names + types only)",
             columns=[("glyph", ""), ("action", "Action"), ("field", "Field"), ("details", "Details")],
-            rows=_infer_schema.render_diff_rows(result.diff))
+            rows=_infer_schema.render_diff_rows(result.diff),
+        )
         emit_query_rows(
-            output_format=output_format, title="Review recommendations (NOT applied — author by hand)",
+            output_format=output_format,
+            title="Review recommendations (NOT applied — author by hand)",
             columns=[("kind", "Kind"), ("column", "Column"), ("note", "Note"), ("label", "Label")],
-            rows=_infer_schema.render_report_rows(result.report))
+            rows=_infer_schema.render_report_rows(result.report),
+        )
 
     if suggestions_path is not None:
         suggestions_path.write_text(_infer_schema.report_to_yaml(result.report), encoding="utf-8")
@@ -4307,9 +4375,7 @@ def health_command(
     schema_invalid = report.get("schema_invalid") or []
     validation = report.get("validation") or []
     prose_epistemics = report.get("prose_epistemics") or {}
-    raw_prose_epistemics_findings = (
-        prose_epistemics.get("findings") if isinstance(prose_epistemics, dict) else None
-    )
+    raw_prose_epistemics_findings = prose_epistemics.get("findings") if isinstance(prose_epistemics, dict) else None
     prose_epistemics_findings: list[dict[str, object]] = (
         [cast("dict[str, object]", row) for row in raw_prose_epistemics_findings if isinstance(row, dict)]
         if isinstance(raw_prose_epistemics_findings, list)
@@ -4470,9 +4536,7 @@ def health_command(
             console.print(table)
 
         if empty_count:
-            console.print(
-                f"[dim]...and {empty_count} additional file(s) with empty `tags: []` (cosmetic only).[/dim]"
-            )
+            console.print(f"[dim]...and {empty_count} additional file(s) with empty `tags: []` (cosmetic only).[/dim]")
 
     if report["identity_policy"]:
         table = Table(title=f"Identity Policy ({len(report['identity_policy'])})")
@@ -4693,9 +4757,7 @@ def persist_source_cmd(
 
     resolved_email = email or _os.environ.get("SCIENCE_CONTACT_EMAIL")
     if not resolved_email:
-        raise click.ClickException(
-            "Contact email is required. Pass --email or set $SCIENCE_CONTACT_EMAIL."
-        )
+        raise click.ClickException("Contact email is required. Pass --email or set $SCIENCE_CONTACT_EMAIL.")
     cfg_kwargs: dict[str, Any] = {"email": resolved_email}
     if cache_dir is not None:
         cfg_kwargs["cache_dir"] = cache_dir
@@ -5352,8 +5414,14 @@ def dataset_list(
         table.add_column(col, overflow="fold", no_wrap=False)
     for r in rows:
         table.add_row(
-            r["id"], r["title"], r["status"], r["tier"], r["origin"], r["level"],
-            "yes" if r["verified"] else "no", r["scope"],
+            r["id"],
+            r["title"],
+            r["status"],
+            r["tier"],
+            r["origin"],
+            r["level"],
+            "yes" if r["verified"] else "no",
+            r["scope"],
         )
     Console(width=200).print(table)
 
@@ -5362,19 +5430,28 @@ def dataset_list(
 @click.option("--origin", default=None, type=click.Choice(["external", "derived"]))
 @click.option("--status", default=None)
 @click.option("--tier", default=None, type=click.Choice(["use-now", "evaluate-next", "track"]))
-@click.option("--level", default=None,
-              type=click.Choice(["public", "registration", "controlled", "commercial", "mixed"]))
-@click.option("--include-gated", is_flag=True,
-              help="Include gated datasets (registration/controlled/commercial); excluded by default")
-@click.option("--coverage", is_flag=True,
-              help="Invert reach into per-question/hypothesis coverage rows")
+@click.option(
+    "--level", default=None, type=click.Choice(["public", "registration", "controlled", "commercial", "mixed"])
+)
+@click.option(
+    "--include-gated",
+    is_flag=True,
+    help="Include gated datasets (registration/controlled/commercial); excluded by default",
+)
+@click.option("--coverage", is_flag=True, help="Invert reach into per-question/hypothesis coverage rows")
 @click.option("--format", "output_format", default="table", type=click.Choice(["table", "json"]))
 @click.option("--explain", is_flag=True, help="Show the per-row scoring reason")
-@click.option("--project-root", default=None,
-              type=click.Path(path_type=Path, file_okay=False, dir_okay=True))
+@click.option("--project-root", default=None, type=click.Path(path_type=Path, file_okay=False, dir_okay=True))
 def dataset_prioritize(
-    origin: str | None, status: str | None, tier: str | None, level: str | None,
-    include_gated: bool, coverage: bool, output_format: str, explain: bool, project_root: Path | None,
+    origin: str | None,
+    status: str | None,
+    tier: str | None,
+    level: str | None,
+    include_gated: bool,
+    coverage: bool,
+    output_format: str,
+    explain: bool,
+    project_root: Path | None,
 ) -> None:
     """Rank dataset entities by accessibility-weighted, graph-aware usefulness."""
     import json as _json
@@ -5400,9 +5477,16 @@ def dataset_prioritize(
     else:
         click.echo("warning: no materialized graph; reach from frontmatter only", err=True)
 
-    rows = prioritize(root, knowledge=knowledge, provenance=provenance,
-                      origin=origin, status=status, tier=tier, level=level,
-                      include_gated=include_gated)
+    rows = prioritize(
+        root,
+        knowledge=knowledge,
+        provenance=provenance,
+        origin=origin,
+        status=status,
+        tier=tier,
+        level=level,
+        include_gated=include_gated,
+    )
 
     if coverage:
         coverage_rows = target_coverage(rows, root)
@@ -5444,8 +5528,7 @@ def dataset_prioritize(
     for c in cols:
         table.add_column(c, overflow="fold", no_wrap=False)
     for i, r in enumerate(rows, 1):
-        cells = [str(i), r["id"], f"{r['score']:g}", r["readiness"], str(r["reach"]),
-                 ", ".join(r["gap_flags"]) or "-"]
+        cells = [str(i), r["id"], f"{r['score']:g}", r["readiness"], str(r["reach"]), ", ".join(r["gap_flags"]) or "-"]
         if explain:
             cells.append(r["top_reason"])
         table.add_row(*cells)
@@ -5512,9 +5595,7 @@ def _resolve_dataset_or_exit(root: Path, ref: str):
 
     resolved = resolve_dataset(root, ref)
     if resolved is None:
-        click.echo(
-            f"no such dataset {ref!r} (searched local entities/datasets/ and commons)", err=True
-        )
+        click.echo(f"no such dataset {ref!r} (searched local entities/datasets/ and commons)", err=True)
         raise click.exceptions.Exit(2)
     return resolved
 
@@ -5522,7 +5603,8 @@ def _resolve_dataset_or_exit(root: Path, ref: str):
 @dataset_group.command("show")
 @click.argument("ref")
 @click.option(
-    "--project-root", default=None,
+    "--project-root",
+    default=None,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
 )
 def dataset_show(ref: str, project_root: Path | None) -> None:
@@ -5538,7 +5620,8 @@ def dataset_show(ref: str, project_root: Path | None) -> None:
 @dataset_group.command("consumers")
 @click.argument("ref")
 @click.option(
-    "--project-root", default=None,
+    "--project-root",
+    default=None,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
 )
 def dataset_consumers(ref: str, project_root: Path | None) -> None:
