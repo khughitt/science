@@ -21,7 +21,7 @@ from science_tool.graph.store.constants import CITO_NS, SCI_NS
 from science_tool.graph.store.identity import canonical_id_from_entity_uri
 from science_tool.graph.store.summary import _claim_summary_data
 from science_model.frontmatter import parse_frontmatter
-from science_tool.datasets_catalog import _local_rows
+from science_tool.datasets_catalog import GATED_LEVELS, _local_rows
 from science_tool.entity_scan import iter_entity_markdown
 
 # Base Entity fields that a normal on-disk dataset frontmatter omits but
@@ -263,6 +263,7 @@ def prioritize(
     status: str | None = None,
     tier: str | None = None,
     level: str | None = None,
+    include_gated: bool = False,
 ) -> list[dict]:
     """Return dataset rows sorted by score desc (tie-break by id).
 
@@ -271,6 +272,10 @@ def prioritize(
     Each row: {id, title, score, readiness, reach, top_reason, gap_flags}.
     leverage_tilt is only applied when both knowledge and provenance are provided;
     otherwise tilt = 1.0.
+
+    Gated datasets (`access.level` in GATED_LEVELS) are excluded unless
+    `include_gated` is set or a specific `level` is requested — so the ranking
+    surfaces datasets a project can actually act on.
     """
     rows_in = _local_rows(project_root)
     dataset_ids = [r["id"] for r in rows_in]
@@ -285,6 +290,9 @@ def prioritize(
         if tier is not None and r["tier"] != tier:
             continue
         if level is not None and r["level"] != level:
+            continue
+        if not include_gated and level is None and r["level"] in GATED_LEVELS:
+            # Non-gated by default; an explicit --level overrides this exclusion.
             continue
         slug = r["id"].split(":", 1)[-1]
         parsed = parse_frontmatter(project_root / "entities" / "datasets" / f"{slug}.md")

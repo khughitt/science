@@ -124,6 +124,8 @@ def test_dataset_list_origin_filter(tmp_path: Path) -> None:
 
 
 def test_dataset_list_no_filter_shows_all(tmp_path: Path) -> None:
+    # ext is public (non-gated) and der is derived (no access block); both are
+    # actionable, so a bare `list` shows them by default.
     _seed_two_origins(tmp_path)
     runner = CliRunner()
     res = runner.invoke(
@@ -135,3 +137,40 @@ def test_dataset_list_no_filter_shows_all(tmp_path: Path) -> None:
     assert res.exit_code == 0
     assert "dataset:ext" in res.output
     assert "dataset:der" in res.output
+
+
+def _seed_gated_mix(root: Path) -> None:
+    d = root / "entities" / "datasets"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "pub.md").write_text(
+        '---\nid: "dataset:pub"\ntype: "dataset"\ntitle: "Pub"\norigin: "external"\n'
+        'access: {level: "public", verified: false}\n---\n', encoding="utf-8")
+    (d / "reg.md").write_text(
+        '---\nid: "dataset:reg"\ntype: "dataset"\ntitle: "Reg"\norigin: "external"\n'
+        'access: {level: "registration", verified: false}\n---\n', encoding="utf-8")
+    (d / "ctrl.md").write_text(
+        '---\nid: "dataset:ctrl"\ntype: "dataset"\ntitle: "Ctrl"\norigin: "external"\n'
+        'access: {level: "controlled", verified: true}\n---\n', encoding="utf-8")
+
+
+def test_list_hides_gated_by_default(tmp_path: Path) -> None:
+    _seed_gated_mix(tmp_path)
+    out = _list(tmp_path).output
+    assert "dataset:pub" in out          # public is non-gated
+    assert "dataset:reg" not in out      # registration is gated
+    assert "dataset:ctrl" not in out     # controlled is gated
+
+
+def test_list_include_gated_shows_gated(tmp_path: Path) -> None:
+    _seed_gated_mix(tmp_path)
+    out = _list(tmp_path, "--include-gated").output
+    assert "dataset:pub" in out
+    assert "dataset:reg" in out
+    assert "dataset:ctrl" in out
+
+
+def test_list_explicit_level_overrides_gated_default(tmp_path: Path) -> None:
+    _seed_gated_mix(tmp_path)
+    out = _list(tmp_path, "--level", "controlled").output
+    assert "dataset:ctrl" in out         # naming the gated level surfaces it
+    assert "dataset:pub" not in out

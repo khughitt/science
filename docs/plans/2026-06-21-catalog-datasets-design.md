@@ -221,6 +221,10 @@ score(d) = readiness_weight(d) × (1 + reach(d)) × leverage_tilt(d)
 `rank · id · score · readiness · reach · top-reason · gap-flags` — sorted by score descending.
 Flags: `--explain` (full per-row reason breakdown), `--format table|json`, plus the existing
 `list`-style filters (`--origin/--status/--level/--tier`) so a project can prioritize a subset.
+**Gated datasets** (`access.level` in `{registration, controlled, commercial}`) are excluded by
+default on both `list` and `prioritize`, so suggestions stay actionable; surface them with
+`--include-gated`, or by naming the level explicitly via `--level`. Derived rows (no access block)
+and `public`/`mixed` are never gated.
 
 **Degradation check (must hold):**
 - *Sparse graph (this project today):* `leverage_tilt = 1` everywhere (no propositions reached),

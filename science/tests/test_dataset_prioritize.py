@@ -68,6 +68,9 @@ from science_tool.dataset_prioritize import prioritize
 
 def test_prioritize_sparse_no_graph_orders_by_accessibility_and_flags(tmp_path: Path) -> None:
     # available > unverified public; the unconnected one gets no-edge.
+    # dataset:avail is controlled (gated) → include_gated=True keeps it visible so
+    # the accessibility ordering can be asserted; the default-exclusion behavior is
+    # covered separately by test_prioritize_excludes_gated_by_default.
     _write(tmp_path / "entities/datasets/avail.md",
            '---\nid: "dataset:avail"\ntype: "dataset"\ntitle: "Avail"\norigin: "external"\n'
            'related: ["question:q1"]\naccess: {level: "controlled", verified: true}\n---\n')
@@ -77,10 +80,47 @@ def test_prioritize_sparse_no_graph_orders_by_accessibility_and_flags(tmp_path: 
     _write(tmp_path / "entities/questions/q1.md",
            '---\nid: "question:q1"\ntype: "question"\ntitle: "Q1"\n---\n')
 
-    rows = prioritize(tmp_path)
+    rows = prioritize(tmp_path, include_gated=True)
     ids = [r["id"] for r in rows]
     assert ids[0] == "dataset:avail"                  # verified + reach=1 ranks first
     unv = next(r for r in rows if r["id"] == "dataset:unv")
     assert "unverified" in unv["gap_flags"]
     assert "no-edge" in unv["gap_flags"]              # reach 0
     assert rows[0]["score"] > unv["score"]
+
+
+def test_prioritize_excludes_gated_by_default(tmp_path: Path) -> None:
+    # registration/controlled/commercial are gated; public/mixed and derived (no
+    # access block → level "") are actionable and stay. Default hides the gated set.
+    _write(tmp_path / "entities/datasets/pub.md",
+           '---\nid: "dataset:pub"\ntype: "dataset"\ntitle: "Pub"\norigin: "external"\n'
+           'access: {level: "public", verified: false}\n---\n')
+    _write(tmp_path / "entities/datasets/mix.md",
+           '---\nid: "dataset:mix"\ntype: "dataset"\ntitle: "Mix"\norigin: "external"\n'
+           'access: {level: "mixed", verified: false}\n---\n')
+    _write(tmp_path / "entities/datasets/reg.md",
+           '---\nid: "dataset:reg"\ntype: "dataset"\ntitle: "Reg"\norigin: "external"\n'
+           'access: {level: "registration", verified: false}\n---\n')
+    _write(tmp_path / "entities/datasets/ctrl.md",
+           '---\nid: "dataset:ctrl"\ntype: "dataset"\ntitle: "Ctrl"\norigin: "external"\n'
+           'access: {level: "controlled", verified: true}\n---\n')
+    _write(tmp_path / "entities/datasets/com.md",
+           '---\nid: "dataset:com"\ntype: "dataset"\ntitle: "Com"\norigin: "external"\n'
+           'access: {level: "commercial", verified: true}\n---\n')
+    _write(tmp_path / "entities/datasets/der.md",
+           '---\nid: "dataset:der"\ntype: "dataset"\ntitle: "Der"\norigin: "derived"\n'
+           'datapackage: "r/dp.yaml"\n---\n')
+
+    default_ids = {r["id"] for r in prioritize(tmp_path)}
+    assert default_ids == {"dataset:pub", "dataset:mix", "dataset:der"}
+
+    # opt-out restores the full set
+    all_ids = {r["id"] for r in prioritize(tmp_path, include_gated=True)}
+    assert all_ids == {
+        "dataset:pub", "dataset:mix", "dataset:der",
+        "dataset:reg", "dataset:ctrl", "dataset:com",
+    }
+
+    # an explicit level overrides the default exclusion for that level
+    ctrl_ids = {r["id"] for r in prioritize(tmp_path, level="controlled")}
+    assert ctrl_ids == {"dataset:ctrl"}

@@ -28,7 +28,9 @@ def _run(tmp_path: Path, *args: str):
 
 def test_prioritize_runs_without_graph_and_warns(tmp_path: Path) -> None:
     _seed(tmp_path)
-    res = _run(tmp_path)
+    # dataset:a is controlled (gated) and hidden by default; --include-gated keeps
+    # both rows so this test exercises the no-graph ranking path on a full set.
+    res = _run(tmp_path, "--include-gated")
     assert res.exit_code == 0
     assert "dataset:a" in res.output and "dataset:b" in res.output
     # no graph present → a stderr warning is emitted but the command still ranks.
@@ -40,7 +42,7 @@ def test_prioritize_runs_without_graph_and_warns(tmp_path: Path) -> None:
 
 def test_prioritize_json(tmp_path: Path) -> None:
     _seed(tmp_path)
-    res = _run(tmp_path, "--format", "json")
+    res = _run(tmp_path, "--include-gated", "--format", "json")
     assert res.exit_code == 0
     import json
     # Click 8 mixes stderr into output; strip any leading warning lines before parsing.
@@ -49,6 +51,24 @@ def test_prioritize_json(tmp_path: Path) -> None:
     )
     rows = json.loads(json_text)
     assert any(r["id"] == "dataset:a" for r in rows)
+
+
+def test_prioritize_excludes_gated_by_default(tmp_path: Path) -> None:
+    # _seed() writes dataset:a (controlled, gated) and dataset:b (public).
+    _seed(tmp_path)
+    import json
+
+    def _ids(*args: str) -> set[str]:
+        res = _run(tmp_path, *args, "--format", "json")
+        assert res.exit_code == 0
+        text = "\n".join(
+            ln for ln in res.output.splitlines() if not ln.startswith("warning:")
+        )
+        return {r["id"] for r in json.loads(text)}
+
+    assert _ids() == {"dataset:b"}                       # gated controlled hidden
+    assert _ids("--include-gated") == {"dataset:a", "dataset:b"}
+    assert _ids("--level", "controlled") == {"dataset:a"}  # explicit level overrides
 
 
 def test_prioritize_explain_shows_reason_column(tmp_path: Path) -> None:

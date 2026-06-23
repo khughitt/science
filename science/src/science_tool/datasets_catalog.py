@@ -20,6 +20,13 @@ from science_tool.entities import (
     validate_slug,
 )
 
+# access.level values that put a dataset behind registration, application, or
+# purchase — i.e. not something you can just download. `list`/`prioritize` hide
+# these by default so suggestions stay actionable; surface them with
+# --include-gated (or by naming the level explicitly via --level). Derived rows
+# (no access block → level "") and public/mixed are never gated.
+GATED_LEVELS = frozenset({"registration", "controlled", "commercial"})
+
 
 def _render_candidate(
     entity_id: str,
@@ -152,7 +159,7 @@ def _local_rows(project_root: Path) -> list[dict]:
     return rows
 
 
-def _matches(row: dict, *, origin, status, tier, unverified, level) -> bool:
+def _matches(row: dict, *, origin, status, tier, unverified, level, include_gated) -> bool:
     if origin is not None and row["origin"] != origin:
         return False
     if status is not None and row["status"] != status:
@@ -160,6 +167,10 @@ def _matches(row: dict, *, origin, status, tier, unverified, level) -> bool:
     if tier is not None and row["tier"] != tier:
         return False
     if level is not None and row["level"] != level:
+        return False
+    if not include_gated and level is None and row["level"] in GATED_LEVELS:
+        # Non-gated by default. An explicit --level (level is not None) is an
+        # intent to see that level, so it overrides this exclusion.
         return False
     if unverified and not (row["origin"] == "external" and not row["verified"]):
         # --unverified means "external entities awaiting verification", not
@@ -177,11 +188,15 @@ def list_datasets(
     tier: str | None = None,
     unverified: bool = False,
     level: str | None = None,
+    include_gated: bool = False,
     include_commons: bool = False,
 ) -> tuple[list[dict], str | None]:
     """Return (filtered rows, commons-unavailable notice). Local rows are always
     returned; if `include_commons` and the commons registry can't be read, the
-    notice is set and local rows still come back (graceful degradation)."""
+    notice is set and local rows still come back (graceful degradation).
+
+    Gated datasets (`access.level` in GATED_LEVELS) are excluded unless
+    `include_gated` is set or a specific `level` is requested."""
     rows = _local_rows(project_root)
     notice: str | None = None
     if include_commons:
@@ -192,7 +207,10 @@ def list_datasets(
     filtered = [
         r
         for r in rows
-        if _matches(r, origin=origin, status=status, tier=tier, unverified=unverified, level=level)
+        if _matches(
+            r, origin=origin, status=status, tier=tier,
+            unverified=unverified, level=level, include_gated=include_gated,
+        )
     ]
     return filtered, notice
 

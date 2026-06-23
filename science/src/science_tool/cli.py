@@ -5203,6 +5203,11 @@ def dataset_group() -> None:
     default=None,
     type=click.Choice(["public", "registration", "controlled", "commercial", "mixed"]),
 )
+@click.option(
+    "--include-gated",
+    is_flag=True,
+    help="Include gated datasets (registration/controlled/commercial); excluded by default",
+)
 @click.option("--commons", "include_commons", is_flag=True, help="Also list commons dataset entities")
 @click.option(
     "--project-root",
@@ -5217,6 +5222,7 @@ def dataset_list(
     tier: str | None,
     unverified: bool,
     level: str | None,
+    include_gated: bool,
     include_commons: bool,
     project_root: Path | None,
 ) -> None:
@@ -5237,6 +5243,7 @@ def dataset_list(
         tier=tier,
         unverified=unverified,
         level=level,
+        include_gated=include_gated,
         include_commons=include_commons,
     )
     if notice:
@@ -5263,13 +5270,15 @@ def dataset_list(
 @click.option("--tier", default=None, type=click.Choice(["use-now", "evaluate-next", "track"]))
 @click.option("--level", default=None,
               type=click.Choice(["public", "registration", "controlled", "commercial", "mixed"]))
+@click.option("--include-gated", is_flag=True,
+              help="Include gated datasets (registration/controlled/commercial); excluded by default")
 @click.option("--format", "output_format", default="table", type=click.Choice(["table", "json"]))
 @click.option("--explain", is_flag=True, help="Show the per-row scoring reason")
 @click.option("--project-root", default=None,
               type=click.Path(path_type=Path, file_okay=False, dir_okay=True))
 def dataset_prioritize(
     origin: str | None, status: str | None, tier: str | None, level: str | None,
-    output_format: str, explain: bool, project_root: Path | None,
+    include_gated: bool, output_format: str, explain: bool, project_root: Path | None,
 ) -> None:
     """Rank dataset entities by accessibility-weighted, graph-aware usefulness."""
     import json as _json
@@ -5296,7 +5305,8 @@ def dataset_prioritize(
         click.echo("warning: no materialized graph; reach from frontmatter only", err=True)
 
     rows = prioritize(root, knowledge=knowledge, provenance=provenance,
-                      origin=origin, status=status, tier=tier, level=level)
+                      origin=origin, status=status, tier=tier, level=level,
+                      include_gated=include_gated)
 
     if output_format == "json":
         click.echo(_json.dumps(rows, indent=2))
