@@ -1,7 +1,7 @@
 # Belief Profile CLI Design
 
 **Date:** 2026-06-23
-**Status:** Design approved in brainstorming; implementation not started.
+**Status:** Implementation planned; see `docs/plans/2026-06-23-belief-profile-implementation-plan.md`.
 **Feedback:** `fb-2026-05-31-009`
 
 ## Context
