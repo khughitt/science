@@ -55,7 +55,7 @@ def _summary_targets(knowledge, *, include_hypotheses: bool) -> list[URIRef]:
 _EMPIRICAL_TYPES = frozenset({EvidenceType.EMPIRICAL_DATA, EvidenceType.BENCHMARK})
 
 
-def _is_empirical_type(evidence_type: str) -> bool:
+def is_empirical_evidence_type(evidence_type: str | None) -> bool:
     """True iff the (possibly suffixed) evidence_type literal is empirical-grade data.
 
     Normalizes first so canonical ('empirical_data') and authored-suffixed
@@ -70,7 +70,7 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
     dispute_count = cast(int, evidence_summary["dispute_count"])
     source_count = cast(int, evidence_summary["source_count"])
     evidence_types = sorted(_collect_evidence_types(knowledge, provenance, uri))
-    has_empirical_data = any(_is_empirical_type(evidence_type) for evidence_type in evidence_types)
+    has_empirical_data = any(is_empirical_evidence_type(evidence_type) for evidence_type in evidence_types)
     belief = aggregate_belief(
         collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(knowledge, uri))
     )
