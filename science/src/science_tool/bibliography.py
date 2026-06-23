@@ -46,6 +46,20 @@ def load_bib_keys(project_root: Path) -> set[str]:
     return keys
 
 
+def raw_bib_entry_keys(project_root: Path) -> list[str]:
+    """Return every BibTeX entry key in file order, INCLUDING duplicates.
+
+    Unlike load_bib_keys (a set) and load_bib_entries (a dict), this preserves
+    repeats so callers can detect duplicate citekeys, which the dict/set forms
+    silently collapse.
+    """
+    bib_path = project_root / "papers" / "references.bib"
+    if not bib_path.is_file():
+        return []
+    text = bib_path.read_text(encoding="utf-8")
+    return [m.group(2) for m in _BIBTEX_ENTRY_TYPED_RE.finditer(text)]
+
+
 _BIBTEX_AUTHOR_FIELD_RE = re.compile(r"author\s*=\s*[{\"]([^{}\"]*)[}\"]", re.IGNORECASE)
 
 
@@ -94,6 +108,14 @@ class BibEntry:
     year: int | None = None
     doi: str | None = None
     url: str | None = None
+    author: str | None = None
+    journal: str | None = None
+    booktitle: str | None = None
+    publisher: str | None = None
+    volume: str | None = None
+    number: str | None = None
+    pages: str | None = None
+    pmid: str | None = None
 
 
 def _field_value(entry_text: str, field: str) -> str | None:
@@ -164,6 +186,14 @@ def load_bib_entries(project_root: Path) -> dict[str, "BibEntry"]:
             year=year,
             doi=_field_value(block, "doi"),
             url=_field_value(block, "url"),
+            author=_field_value(block, "author"),
+            journal=_field_value(block, "journal"),
+            booktitle=_field_value(block, "booktitle"),
+            publisher=_field_value(block, "publisher"),
+            volume=_field_value(block, "volume"),
+            number=_field_value(block, "number"),
+            pages=_field_value(block, "pages"),
+            pmid=_field_value(block, "pmid"),
         )
     return entries
 

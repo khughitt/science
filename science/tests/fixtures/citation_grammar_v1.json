@@ -1,0 +1,87 @@
+{
+  "contract": "science.citation-grammar",
+  "schema_version": "1",
+  "cases": [
+    {
+      "name": "single",
+      "markdown": "Background [@Smith2020].",
+      "citations": [{ "citekey": "Smith2020", "locator": null }],
+      "unsupported": []
+    },
+    {
+      "name": "compound",
+      "markdown": "Prior work [@Smith2020; @Jones2021].",
+      "citations": [
+        { "citekey": "Smith2020", "locator": null },
+        { "citekey": "Jones2021", "locator": null }
+      ],
+      "unsupported": []
+    },
+    {
+      "name": "locator",
+      "markdown": "See [@Smith2020, p. 42].",
+      "citations": [{ "citekey": "Smith2020", "locator": "p. 42" }],
+      "unsupported": []
+    },
+    {
+      "name": "narrative",
+      "markdown": "Smith et al. [@Smith2020] found that...",
+      "citations": [{ "citekey": "Smith2020", "locator": null }],
+      "unsupported": []
+    },
+    {
+      "name": "code-span-ignored",
+      "markdown": "Use `[@NotACite]` literally.",
+      "citations": [],
+      "unsupported": []
+    },
+    {
+      "name": "fenced-ignored",
+      "markdown": "```\n[@NotACite]\n```\n",
+      "citations": [],
+      "unsupported": []
+    },
+    {
+      "name": "unsupported-prefix",
+      "markdown": "As shown [see @Smith2020].",
+      "citations": [],
+      "unsupported": ["Smith2020"]
+    },
+    {
+      "name": "unsupported-suppressed",
+      "markdown": "The year [-@Smith2020].",
+      "citations": [],
+      "unsupported": ["Smith2020"]
+    },
+    {
+      "name": "unsupported-bare",
+      "markdown": "See @Smith2020 for details.",
+      "citations": [],
+      "unsupported": ["Smith2020"]
+    },
+    {
+      "name": "malformed-mixed-block",
+      "markdown": "Prior work [@Smith2020; see @Jones2021].",
+      "citations": [{ "citekey": "Smith2020", "locator": null }],
+      "unsupported": ["Jones2021"]
+    },
+    {
+      "name": "malformed-no-at-item",
+      "markdown": "Prior work [@Smith2020; garbage].",
+      "citations": [{ "citekey": "Smith2020", "locator": null }],
+      "unsupported": ["garbage"]
+    },
+    {
+      "name": "malformed-missing-comma-locator",
+      "markdown": "See [@Smith2020 p. 42].",
+      "citations": [],
+      "unsupported": ["Smith2020 p. 42"]
+    },
+    {
+      "name": "malformed-extra-text-before-compound",
+      "markdown": "See [@Smith2020 extra; @Jones2021].",
+      "citations": [{ "citekey": "Jones2021", "locator": null }],
+      "unsupported": ["Smith2020 extra"]
+    }
+  ]
+}
