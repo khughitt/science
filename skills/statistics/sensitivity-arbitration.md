@@ -50,6 +50,28 @@ Before running verdict-bearing code, define:
 - **Estimand split:** Adjusted and unadjusted results answer different
   questions; report both instead of forcing agreement.
 
+## Attribute Diagnostics to the Arm That Produced Them
+
+When a run fits a primary model and several sensitivity refits in one process,
+their diagnostics accumulate in a shared log. A pooled number — total
+divergences, worst Pareto-k across all refits, a single "did the sampler
+complain" line — does not belong to the primary fit. Read it per arm before you
+read it at all.
+
+- Record convergence diagnostics (R-hat, ESS, divergences, Pareto-k)
+  **separately for the primary fit and for each named sensitivity arm**, keyed to
+  the arm that emitted them.
+- A degenerate sensitivity arm (e.g. a single-group refit where a cross-group
+  hierarchy collapses to one level) is *expected* to sample worse. Its
+  divergences condemn that arm's reliability, not the primary verdict.
+- Before downgrading or halting on a diagnostic, confirm which arm produced it.
+  If the primary fit is clean and only a known-fragile arm is noisy, the verdict
+  stands and that arm is reported as least-reliable-by-construction.
+
+A frozen arbitration rule (above) plus per-arm diagnostic attribution is what
+lets a clean primary fit survive an alarming-looking aggregate log — without
+either ignoring the warning or being spooked into discarding a sound verdict.
+
 ## Anti-Patterns
 
 - Running many sensitivities and emphasizing whichever agrees with the desired
@@ -59,6 +81,9 @@ Before running verdict-bearing code, define:
   quantity.
 - Treating failed diagnostics as caveats while keeping an unchanged verdict.
 - Adding new sensitivities after seeing results without labeling them post-hoc.
+- Reading a pooled diagnostic (total divergences, worst Pareto-k across all
+  refits) as a verdict on the primary fit when it was a sensitivity arm that
+  misbehaved.
 
 ## Decision Table Template
 
