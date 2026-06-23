@@ -656,7 +656,7 @@ git commit -m "feat(dataset): leverage_tilt reusing _claim_summary_data signals 
 
 **Interfaces:**
 - Consumes: Tasks 1–5.
-- Produces: `prioritize(project_root, *, knowledge=None, provenance=None, origin=None, status=None, tier=None, level=None) -> list[dict]` returning rows sorted by `score` desc, each: `{"id","title","score","readiness","reach","top_reason","gap_flags": list[str]}`. Gap-flags: `no-edge` (reach==0), `unverified` (external & not access.verified), `redundant` (reserved; emitted only when a future discount fires), `readiness-unresolved` (from `readiness_weight`).
+- Produces: `prioritize(project_root, *, knowledge=None, provenance=None, origin=None, status=None, tier=None, level=None, include_gated=False) -> list[dict]` returning rows sorted by `score` desc, each: `{"id","title","score","readiness","reach","top_reason","gap_flags": list[str]}`. Gap-flags: `no-edge` (reach==0), `unverified` (external & not access.verified), `redundant` (reserved; emitted only when a future discount fires), `readiness-unresolved` (from `readiness_weight`). Implemented adaptation: `registration`, `controlled`, and `commercial` datasets are hidden by default; pass `include_gated=True` or CLI `--include-gated` to include them. An explicit `level` filter also surfaces that level.
 
 - [ ] **Step 1: Write the failing test**
 

@@ -77,7 +77,7 @@ science dataset add <slug> \
   --related "question:<id>"   # repeat for each related Q/H
 ```
 
-`--level` defaults to `public` for GEO/SRA/Zenodo resources; adjust to `registration` or `controlled` when the repository requires login or a DUA.
+`science dataset add` defaults `--level` to `controlled`; pass `--level public` explicitly for GEO/SRA/Zenodo resources that are freely downloadable. Use `registration` or `controlled` when the repository requires login or a DUA.
 `status` defaults to `candidate` — do not override unless the dataset is already verified.
 
 After authoring, confirm each file was created under `entities/datasets/`.
@@ -155,9 +155,9 @@ Also add the back-edge: in the Q/H entity, add the dataset to its `related:` blo
 ```yaml
 # In an evidence-line or interpretation entity:
 dataset_usage:
-  - dataset: "dataset:<slug>"
-    role: "source"          # source | validation | background
-    notes: "<brief usage note>"
+  - ref: "dataset:<slug>"
+    role: "analyzed"        # analyzed | validation_source | cited | upstream | training | set_definition_source
+    overlap: "full"         # full | partial | unknown
 ```
 
 This is load-bearing: `dataset_usage` edges participate in the `reach` term of the prioritizer and appear in the graph once materialized.

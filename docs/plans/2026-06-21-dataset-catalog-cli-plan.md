@@ -556,7 +556,7 @@ git commit -m "feat(dataset): add command to author candidate dataset entities"
 
 **Interfaces:**
 - Consumes: `add_dataset` module from Task 2.
-- Produces: `list_datasets(project_root: Path, *, origin=None, status=None, tier=None, unverified=False, level=None, include_commons=False) -> tuple[list[dict], str | None]` returning `(filtered row dicts, commons-unavailable notice)`. Row keys: `id, title, status, tier, origin, level, verified, scope` (`scope` is `"local"` or `"commons"`). Skips frontmatter whose `type != "dataset"`. Local rows are always returned; a commons read failure sets the notice and degrades gracefully.
+- Produces: `list_datasets(project_root: Path, *, origin=None, status=None, tier=None, unverified=False, level=None, include_gated=False, include_commons=False) -> tuple[list[dict], str | None]` returning `(filtered row dicts, commons-unavailable notice)`. Row keys: `id, title, status, tier, origin, level, verified, scope` (`scope` is `"local"` or `"commons"`). Skips frontmatter whose `type != "dataset"`. Local non-gated rows are always returned; `registration`, `controlled`, and `commercial` rows are hidden by default unless `include_gated=True` or a specific `level` is requested. A commons read failure sets the notice and degrades gracefully.
 
 - [ ] **Step 1: Write the failing tests**
 
