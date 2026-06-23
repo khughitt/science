@@ -392,3 +392,34 @@ class TestShortFormIdsDeny:
         )
         result = scan_root(tmp_path, checks=["bare-author-year"])
         assert result["counts"]["bare-author-year"] == 1
+
+
+class TestUnsupportedCitationSyntax:
+    def test_flags_unsupported_citation_syntax(self, tmp_path):
+        (tmp_path / "doc").mkdir()
+        (tmp_path / "doc" / "note.md").write_text(
+            "Background: see @Smith2020 and [-@Jones2021].\n",
+            encoding="utf-8",
+        )
+        result = scan_root(tmp_path, checks=["unsupported-citation-syntax"])
+        messages = " ".join(h.message for h in result["hits"])
+        assert "Smith2020" in messages
+        assert "unsupported citation syntax" in messages.lower()
+
+    def test_supported_citation_not_flagged(self, tmp_path):
+        (tmp_path / "doc").mkdir()
+        (tmp_path / "doc" / "note.md").write_text(
+            "Background [@Smith2020; @Jones2021].\n",
+            encoding="utf-8",
+        )
+        result = scan_root(tmp_path, checks=["unsupported-citation-syntax"])
+        assert result["counts"].get("unsupported-citation-syntax", 0) == 0
+
+    def test_no_unsupported_citations_no_findings(self, tmp_path):
+        (tmp_path / "doc").mkdir()
+        (tmp_path / "doc" / "note.md").write_text(
+            "No citations at all in this file.\n",
+            encoding="utf-8",
+        )
+        result = scan_root(tmp_path, checks=["unsupported-citation-syntax"])
+        assert result["counts"].get("unsupported-citation-syntax", 0) == 0

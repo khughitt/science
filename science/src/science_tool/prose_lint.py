@@ -20,6 +20,7 @@ from science_tool.markdown_utils import (
     parse_frontmatter,
     strip_inline_code,
 )
+from science_tool.references import parse_citations
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ CHECKS: tuple[str, ...] = (
     "short-form-ids",
     "frontmatter-inline-gap",
     "numeric-anchor",
+    "unsupported-citation-syntax",
 )
 
 DEFAULT_SEVERITY: dict[str, str] = {
@@ -35,6 +37,7 @@ DEFAULT_SEVERITY: dict[str, str] = {
     "short-form-ids": "warn",
     "frontmatter-inline-gap": "info",
     "numeric-anchor": "info",
+    "unsupported-citation-syntax": "warn",
 }
 
 
@@ -375,11 +378,46 @@ def detect_numeric_anchor(
     return issues
 
 
+def detect_unsupported_citation_syntax(
+    path: Path, *, strict: bool = False
+) -> list[LintIssue]:
+    """Flag `@key` tokens outside a recognized `[@key]` block.
+
+    Emits one finding per unsupported token so authors are warned before export.
+    Unsupported forms include bare `@key`, `[see @key]`, and `[-@key]`.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    scan = parse_citations(text)
+    if not scan.unsupported:
+        return []
+    issues: list[LintIssue] = []
+    for token in scan.unsupported:
+        issues.append(
+            LintIssue(
+                file=path,
+                line=1,
+                col=1,
+                check="unsupported-citation-syntax",
+                severity=severity_for("unsupported-citation-syntax", strict=strict),
+                message=(
+                    f"unsupported citation syntax '@{token}' — v1 supports only [@{token}]; "
+                    "rewrite prefixed/suppressed/bare forms"
+                ),
+                match=token,
+            )
+        )
+    return issues
+
+
 _DETECTORS: dict[str, Callable[..., list[LintIssue]]] = {
     "bare-author-year": detect_bare_author_year,
     "short-form-ids": detect_short_form_ids,
     "frontmatter-inline-gap": detect_frontmatter_inline_gaps,
     "numeric-anchor": detect_numeric_anchor,
+    "unsupported-citation-syntax": detect_unsupported_citation_syntax,
 }
 _SCAN_DIRS = ("doc", "specs", "entities")
 _SCAN_ROOT_FILES = ("README.md", "AGENTS.md", "CLAUDE.md", "RESEARCH_PLAN.md")
