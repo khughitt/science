@@ -38,9 +38,10 @@ Add a read-only CLI surface:
 science belief profile --format json
 ```
 
-The command emits a stable per-entity epistemic profile. It does not persist new
-metadata and does not introduce a new belief engine. The profile is a derived
-reading of the current graph.
+`profile` slots into the existing `science belief` command group beside
+`science belief snapshot`. The command emits a stable per-entity epistemic
+profile. It does not persist new metadata and does not introduce a new belief
+engine. The profile is a derived reading of the current graph.
 
 Initial supported entity kinds:
 
@@ -50,9 +51,14 @@ Initial supported entity kinds:
 
 Default row set:
 
-- Include supported belief-bearing entities that have at least one meaningful
-  epistemic input: evidence units, bundle members, authored confidence,
-  freshness state, caps, or another signal that makes the row informative.
+- Include supported belief-bearing entities when at least one of these
+  predicates is true:
+  - `support_count + dispute_count + diagnostic_count > 0`;
+  - the entity is a resolved bundle with one or more core member propositions;
+  - authored `sci:confidence` is present;
+  - any belief cap/ceiling flag is true:
+    `authored_capped`, `qa_dataset_capped`, or `capped_by_refutation`;
+  - materialized `sci:freshnessState` is `needs-review` or `stale`.
 - Exclude completely empty/speculative rows by default.
 - `--all` includes all supported belief-bearing entities, including rows whose
   profile is mostly empty or speculative.
@@ -82,6 +88,7 @@ JSON output should preserve one row per entity:
   "evidence": {
     "support_count": 1,
     "dispute_count": 0,
+    "diagnostic_count": 0,
     "source_count": 1,
     "evidence_types": ["expert_judgment"],
     "has_empirical_data": false
@@ -89,7 +96,7 @@ JSON output should preserve one row per entity:
   "caps": {
     "authored_capped": true,
     "qa_dataset_capped": false,
-    "refutation_capped": false
+    "capped_by_refutation": false
   },
   "freshness_state": "fresh",
   "belief_scalar": null
@@ -107,9 +114,21 @@ Field semantics:
 - `belief_state` is the existing derived ordinal result.
 - `contested` is the existing derived contestation flag.
 - `epistemic_labels` are categorical readings derived from existing fields.
+  They deliberately duplicate filterable axes such as `belief_state` and
+  `contested` so `--label` can filter uniformly across belief magnitude,
+  contestation, evidence provenance, caps, and freshness. The label matching
+  `belief_state` must always be copied from the same derived magnitude value.
 - `evidence` summarizes the evidence units after the existing collection path.
+  `support_count` and `dispute_count` count belief-mass units by stance;
+  `diagnostic_count` counts diagnostic evidence units that affect contestation
+  or review signals without adding support/dispute mass.
 - `caps` mirrors existing belief caps and ceilings.
+- `caps.capped_by_refutation` mirrors the existing `BeliefResult` /
+  `BundleBeliefResult` field. It means a decisive dispute pinned the magnitude
+  to `fragile`; it is not an independent ceiling field.
 - `freshness_state` reads existing materialized freshness state when present.
+  The materialized literal vocabulary is `needs-review`, `stale`, and `fresh`;
+  missing freshness is represented as `null`, not inferred.
 - `belief_scalar` is a projection of existing scalar output only.
 
 ## Initial Label Set
@@ -128,12 +147,14 @@ The v1 labels are categorical and directly derivable:
 - `empirical_data_backed`
 - `authored_capped`
 - `qa_dataset_capped`
-- `refutation_capped`
+- `capped_by_refutation`
 - `stale`
 - `needs_review`
 
 Labels are readings of the graph, not authored truth. The command should avoid
 labels that require normalized source-agent provenance that does not yet exist.
+`needs_review` is a normalized label derived from materialized
+`sci:freshnessState == "needs-review"`.
 
 Deferred labels:
 
@@ -148,13 +169,23 @@ review provenance are normalized enough to derive them without guessing.
 
 1. Load the materialized graph.
 2. Enumerate supported belief-bearing entities.
-3. For each entity, use the existing bundle-aware belief path.
-4. Collect the same evidence units used by the belief engine.
-5. Derive categorical labels from belief result, evidence summary, caps, and
+3. Reuse the existing `science belief snapshot` computation path where possible:
+   `belief_for_entity(knowledge, provenance, uri, scalar_enabled=...)` dispatches
+   non-bundle entities to `aggregate_belief(...)` and bundle entities
+   (`hypothesis` / `mechanism`) to `BundleBeliefResult`.
+4. For non-bundle `BeliefResult` rows, compute `belief_scalar(result)` only when
+   the existing scalar feature is enabled. For `BundleBeliefResult` rows, use
+   `result.scalar`, which is already the weakest-link scalar driver when scalar
+   is enabled.
+5. Collect the same evidence units used by the belief engine. For empirical
+   classification, reuse the existing graph summary semantics:
+   `empirical_data` and `benchmark` evidence types count as empirical data after
+   the same normalization used by `graph/store/summary.py`.
+6. Derive categorical labels from belief result, evidence summary, caps, and
    freshness state.
-6. Attach scalar bands only when the existing scalar feature is enabled.
-7. Apply `--kind`, `--label`, and default-vs-`--all` filtering.
-8. Emit table or JSON via the existing query-row output machinery.
+7. Attach scalar bands only when the existing scalar feature is enabled.
+8. Apply `--kind`, `--label`, and default-vs-`--all` filtering.
+9. Emit table or JSON via the existing query-row output machinery.
 
 No persistent RDF predicates are introduced in v1. No source files are edited by
 the command.
@@ -194,8 +225,7 @@ Rejected.
 - Researchers can list belief-bearing entities by categorical epistemic profile
   without manually traversing evidence lines.
 - The output makes authored-only, literature-only, no-empirical, contested,
-  fragile, capped, and stale/needs-review states queryable.
+  fragile, capped/ceiling, and stale/needs-review states queryable.
 - The command agrees with existing belief and scalar machinery.
 - The contract is stable enough to later consider RDF materialization,
   dashboard consumption, or health summaries.
-
