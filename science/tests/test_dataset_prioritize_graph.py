@@ -23,23 +23,30 @@ def _seed_graph_project(root: Path) -> None:
     # layout kind — questions/hypotheses/propositions/evidence-lines AND datasets.
     # Anything under doc/ would NOT be materialized — they MUST go under entities/.
     (root / "science.yaml").write_text('slug: "tp"\n', encoding="utf-8")
-    _write(root / "entities/datasets/d.md",
-           '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\norigin: "external"\n'
-           'access: {level: "public", verified: true}\n---\n')
-    _write(root / "entities/hypotheses/h.md",
-           '---\nid: "hypothesis:h"\ntype: "hypothesis"\ntitle: "H"\n---\n')
+    _write(
+        root / "entities/datasets/d.md",
+        '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\norigin: "external"\n'
+        'access: {level: "public", verified: true}\n---\n',
+    )
+    _write(root / "entities/hypotheses/h.md", '---\nid: "hypothesis:h"\ntype: "hypothesis"\ntitle: "H"\n---\n')
     # question→proposition is the sci:addresses edge: author it via a `relations:`
     # block (flattened at sources.py:1047, emitted at materialize.py:1173). A plain
     # `related:` would materialize as skos:related, NOT sci:addresses.
-    _write(root / "entities/questions/q.md",
-           '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\n'
-           'relations:\n  - predicate: "sci:addresses"\n    target: "proposition:p"\n---\n')
-    _write(root / "entities/propositions/p.md",
-           '---\nid: "proposition:p"\ntype: "proposition"\ntitle: "P"\ndiscusses: ["hypothesis:h"]\n---\n')
-    _write(root / "entities/evidence-lines/e.md",
-           '---\nid: "evidence-line:e"\ntype: "evidence-line"\ntitle: "E"\n'
-           'stance: "supports"\ntarget: "proposition:p"\nevidence_type: "empirical_data_evidence"\n'
-           'dataset_usage:\n  - ref: "dataset:d"\n    role: "analyzed"\n    overlap: "full"\n---\n')
+    _write(
+        root / "entities/questions/q.md",
+        '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\n'
+        'relations:\n  - predicate: "sci:addresses"\n    target: "proposition:p"\n---\n',
+    )
+    _write(
+        root / "entities/propositions/p.md",
+        '---\nid: "proposition:p"\ntype: "proposition"\ntitle: "P"\ndiscusses: ["hypothesis:h"]\n---\n',
+    )
+    _write(
+        root / "entities/evidence-lines/e.md",
+        '---\nid: "evidence-line:e"\ntype: "evidence-line"\ntitle: "E"\n'
+        'stance: "supports"\ntarget: "proposition:p"\nevidence_type: "empirical_data_evidence"\n'
+        'dataset_usage:\n  - ref: "dataset:d"\n    role: "analyzed"\n    overlap: "full"\n---\n',
+    )
 
 
 def test_usage_reach_traverses_to_question_and_hypothesis(tmp_path: Path) -> None:
@@ -55,18 +62,21 @@ def test_usage_reach_traverses_to_question_and_hypothesis(tmp_path: Path) -> Non
 
 def test_usage_reach_collects_paper_related_qh(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text('slug: "tp"\n', encoding="utf-8")
-    _write(tmp_path / "entities/datasets/d.md",
-           '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\norigin: "external"\n'
-           'access: {level: "public", verified: true}\n---\n')
-    _write(tmp_path / "entities/hypotheses/h.md",
-           '---\nid: "hypothesis:h"\ntype: "hypothesis"\ntitle: "H"\n---\n')
-    _write(tmp_path / "entities/papers/p.md",
-           '---\nid: "paper:p"\ntype: "paper"\ntitle: "P"\n'
-           'related: ["hypothesis:h"]\n'
-           'dataset_usage:\n'
-           '  - ref: "dataset:d"\n'
-           '    role: "analyzed"\n'
-           '    overlap: "full"\n---\n')
+    _write(
+        tmp_path / "entities/datasets/d.md",
+        '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\norigin: "external"\n'
+        'access: {level: "public", verified: true}\n---\n',
+    )
+    _write(tmp_path / "entities/hypotheses/h.md", '---\nid: "hypothesis:h"\ntype: "hypothesis"\ntitle: "H"\n---\n')
+    _write(
+        tmp_path / "entities/papers/p.md",
+        '---\nid: "paper:p"\ntype: "paper"\ntitle: "P"\n'
+        'related: ["hypothesis:h"]\n'
+        "dataset_usage:\n"
+        '  - ref: "dataset:d"\n'
+        '    role: "analyzed"\n'
+        '    overlap: "full"\n---\n',
+    )
     graph_path = materialize_graph(tmp_path)
     ds = _load_dataset(graph_path)
     knowledge = ds.graph(_graph_uri("graph/knowledge"))
@@ -79,13 +89,15 @@ def test_usage_reach_collects_paper_related_qh(tmp_path: Path) -> None:
 
 def test_usage_reach_unions_consumer_related_qh_with_proposition_path(tmp_path: Path) -> None:
     _seed_graph_project(tmp_path)
-    _write(tmp_path / "entities/hypotheses/h-related.md",
-           '---\nid: "hypothesis:h-related"\ntype: "hypothesis"\ntitle: "H related"\n---\n')
+    _write(
+        tmp_path / "entities/hypotheses/h-related.md",
+        '---\nid: "hypothesis:h-related"\ntype: "hypothesis"\ntitle: "H related"\n---\n',
+    )
     (tmp_path / "entities/evidence-lines/e.md").write_text(
         '---\nid: "evidence-line:e"\ntype: "evidence-line"\ntitle: "E"\n'
         'stance: "supports"\ntarget: "proposition:p"\nevidence_type: "empirical_data_evidence"\n'
         'related: ["hypothesis:h-related"]\n'
-        'dataset_usage:\n'
+        "dataset_usage:\n"
         '  - ref: "dataset:d"\n'
         '    role: "analyzed"\n'
         '    overlap: "full"\n---\n',
@@ -108,7 +120,9 @@ def test_merged_reach_unions_both_paths_and_dedups(tmp_path: Path) -> None:
     (tmp_path / "entities/questions/q.md").write_text(
         '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\n'
         'relations:\n  - predicate: "sci:addresses"\n    target: "proposition:p"\n'
-        'related: ["dataset:d"]\n---\n', encoding="utf-8")
+        'related: ["dataset:d"]\n---\n',
+        encoding="utf-8",
+    )
     graph_path = materialize_graph(tmp_path)
     ds = _load_dataset(graph_path)
     knowledge = ds.graph(_graph_uri("graph/knowledge"))
@@ -122,8 +136,8 @@ def test_merged_reach_unions_both_paths_and_dedups(tmp_path: Path) -> None:
 def test_merged_reach_frontmatter_only_when_no_graph(tmp_path: Path) -> None:
     _seed_graph_project(tmp_path)
     (tmp_path / "entities/questions/q.md").write_text(
-        '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\nrelated: ["dataset:d"]\n---\n',
-        encoding="utf-8")
+        '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\nrelated: ["dataset:d"]\n---\n', encoding="utf-8"
+    )
     reach = merged_reach(tmp_path, None, None, ["dataset:d"])
     assert reach["dataset:d"] == {"question:q"}  # frontmatter path works with no graph
 
@@ -155,10 +169,14 @@ def test_prioritize_mixed_graph_frontmatter_dataset_not_no_edge(tmp_path: Path) 
     (tmp_path / "entities/questions/q.md").write_text(
         '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\n'
         'relations:\n  - predicate: "sci:addresses"\n    target: "proposition:p"\n'
-        'related: ["dataset:fm_only"]\n---\n', encoding="utf-8")
+        'related: ["dataset:fm_only"]\n---\n',
+        encoding="utf-8",
+    )
     (tmp_path / "entities/datasets/fm_only.md").write_text(
         '---\nid: "dataset:fm_only"\ntype: "dataset"\ntitle: "FM"\norigin: "external"\n'
-        'access: {level: "public", verified: true}\n---\n', encoding="utf-8")
+        'access: {level: "public", verified: true}\n---\n',
+        encoding="utf-8",
+    )
     graph_path = materialize_graph(tmp_path)
     ds = _load_dataset(graph_path)
     knowledge = ds.graph(_graph_uri("graph/knowledge"))
@@ -167,7 +185,7 @@ def test_prioritize_mixed_graph_frontmatter_dataset_not_no_edge(tmp_path: Path) 
     rows = prioritize(tmp_path, knowledge=knowledge, provenance=provenance)
     fm_only = next(r for r in rows if r["id"] == "dataset:fm_only")
     assert fm_only["reach"] >= 1
-    assert "no-edge" not in fm_only["gap_flags"]   # regression for the High review finding
+    assert "no-edge" not in fm_only["gap_flags"]  # regression for the High review finding
 
 
 def _seed_multihop_project(root: Path) -> None:
@@ -177,21 +195,28 @@ def _seed_multihop_project(root: Path) -> None:
     #    depth 2. p does NOT `cito:discusses` h2, and no question `sci:addresses`
     #    p, so the pre-upgrade direct-edge walk returns an empty set here.
     (root / "science.yaml").write_text('slug: "tp"\n', encoding="utf-8")
-    _write(root / "entities/datasets/d.md",
-           '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\norigin: "external"\n'
-           'access: {level: "public", verified: true}\n---\n')
-    _write(root / "entities/hypotheses/h2.md",
-           '---\nid: "hypothesis:h2"\ntype: "hypothesis"\ntitle: "H2"\n---\n')
-    _write(root / "entities/propositions/p.md",
-           '---\nid: "proposition:p"\ntype: "proposition"\ntitle: "P"\n'
-           'relations:\n  - predicate: "cito:supports"\n    target: "proposition:p2"\n---\n')
-    _write(root / "entities/propositions/p2.md",
-           '---\nid: "proposition:p2"\ntype: "proposition"\ntitle: "P2"\n'
-           'relations:\n  - predicate: "cito:supports"\n    target: "hypothesis:h2"\n---\n')
-    _write(root / "entities/evidence-lines/e.md",
-           '---\nid: "evidence-line:e"\ntype: "evidence-line"\ntitle: "E"\n'
-           'stance: "supports"\ntarget: "proposition:p"\nevidence_type: "empirical_data_evidence"\n'
-           'dataset_usage:\n  - ref: "dataset:d"\n    role: "analyzed"\n    overlap: "full"\n---\n')
+    _write(
+        root / "entities/datasets/d.md",
+        '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\norigin: "external"\n'
+        'access: {level: "public", verified: true}\n---\n',
+    )
+    _write(root / "entities/hypotheses/h2.md", '---\nid: "hypothesis:h2"\ntype: "hypothesis"\ntitle: "H2"\n---\n')
+    _write(
+        root / "entities/propositions/p.md",
+        '---\nid: "proposition:p"\ntype: "proposition"\ntitle: "P"\n'
+        'relations:\n  - predicate: "cito:supports"\n    target: "proposition:p2"\n---\n',
+    )
+    _write(
+        root / "entities/propositions/p2.md",
+        '---\nid: "proposition:p2"\ntype: "proposition"\ntitle: "P2"\n'
+        'relations:\n  - predicate: "cito:supports"\n    target: "hypothesis:h2"\n---\n',
+    )
+    _write(
+        root / "entities/evidence-lines/e.md",
+        '---\nid: "evidence-line:e"\ntype: "evidence-line"\ntitle: "E"\n'
+        'stance: "supports"\ntarget: "proposition:p"\nevidence_type: "empirical_data_evidence"\n'
+        'dataset_usage:\n  - ref: "dataset:d"\n    role: "analyzed"\n    overlap: "full"\n---\n',
+    )
 
 
 def test_usage_reach_follows_multihop_bearson_closure(tmp_path: Path) -> None:

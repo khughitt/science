@@ -131,7 +131,7 @@ def frontmatter_reach(project_root: Path) -> dict[str, set[str]]:
     reach: dict[str, set[str]] = {}
     # Collect dataset ids and the Q/H ids; build every source-authored direction.
     for ent_id, fm in _iter_entity_frontmatter(project_root):
-        kind = (fm.get("kind") or fm.get("type") or "")
+        kind = fm.get("kind") or fm.get("type") or ""
         related = [r for r in (fm.get("related") or []) if isinstance(r, str)]
         if kind == "dataset":
             reach.setdefault(ent_id, set())
@@ -233,9 +233,7 @@ def reached_proposition_uris(knowledge, provenance, dataset_id: str) -> set[URIR
 
 
 def leverage_tilt(knowledge, provenance, dataset_id: str, *, usage_props=None) -> float:
-    props = usage_props if usage_props is not None else reached_proposition_uris(
-        knowledge, provenance, dataset_id
-    )
+    props = usage_props if usage_props is not None else reached_proposition_uris(knowledge, provenance, dataset_id)
     if not props:
         return 1.0
     bonus = 0.0
@@ -345,16 +343,18 @@ def prioritize(
         if knowledge is not None and provenance is not None:
             tilt = leverage_tilt(knowledge, provenance, r["id"])
         score = weight * (1 + reach_n) * tilt
-        out.append({
-            "id": r["id"],
-            "title": r["title"],
-            "score": round(score, 4),
-            "readiness": readiness_for(fm).state,
-            "reach": reach_n,
-            "reaches": sorted(reach_set),
-            "top_reason": _top_reason(weight, readiness_for(fm).state, reach_n, tilt),
-            "gap_flags": _gap_flags_for(fm, reach_n, r_flags),
-        })
+        out.append(
+            {
+                "id": r["id"],
+                "title": r["title"],
+                "score": round(score, 4),
+                "readiness": readiness_for(fm).state,
+                "reach": reach_n,
+                "reaches": sorted(reach_set),
+                "top_reason": _top_reason(weight, readiness_for(fm).state, reach_n, tilt),
+                "gap_flags": _gap_flags_for(fm, reach_n, r_flags),
+            }
+        )
     out.sort(key=lambda d: (-d["score"], d["id"]))
     return out
 

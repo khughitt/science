@@ -16,16 +16,18 @@ def _seed(root: Path) -> None:
     d.mkdir(parents=True, exist_ok=True)
     (d / "a.md").write_text(
         '---\nid: "dataset:a"\ntype: "dataset"\ntitle: "A"\norigin: "external"\n'
-        'access: {level: "controlled", verified: true}\n---\n', encoding="utf-8")
+        'access: {level: "controlled", verified: true}\n---\n',
+        encoding="utf-8",
+    )
     (d / "b.md").write_text(
         '---\nid: "dataset:b"\ntype: "dataset"\ntitle: "B"\norigin: "external"\n'
-        'access: {level: "public", verified: false}\n---\n', encoding="utf-8")
+        'access: {level: "public", verified: false}\n---\n',
+        encoding="utf-8",
+    )
 
 
 def _json_rows(res) -> list[dict]:
-    text = "\n".join(
-        line for line in res.output.splitlines() if not line.startswith("warning:")
-    )
+    text = "\n".join(line for line in res.output.splitlines() if not line.startswith("warning:"))
     return json.loads(text)
 
 
@@ -50,7 +52,7 @@ def _seed_paper_reach(root: Path, *, include_paper: bool = True) -> None:
         (p / "p.md").write_text(
             '---\nid: "paper:p"\ntype: "paper"\ntitle: "P"\n'
             'related: ["hypothesis:h"]\n'
-            'dataset_usage:\n'
+            "dataset_usage:\n"
             '  - ref: "dataset:d"\n'
             '    role: "analyzed"\n'
             '    overlap: "full"\n---\n',
@@ -60,8 +62,10 @@ def _seed_paper_reach(root: Path, *, include_paper: bool = True) -> None:
 
 def _run(tmp_path: Path, *args: str):
     return CliRunner().invoke(
-        science_cli, ["dataset", "prioritize", *args],
-        catch_exceptions=False, env={"SCIENCE_PROJECT_ROOT": str(tmp_path)},
+        science_cli,
+        ["dataset", "prioritize", *args],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path)},
     )
 
 
@@ -96,7 +100,7 @@ def test_prioritize_excludes_gated_by_default(tmp_path: Path) -> None:
         assert res.exit_code == 0
         return {r["id"] for r in _json_rows(res)}
 
-    assert _ids() == {"dataset:b"}                       # gated controlled hidden
+    assert _ids() == {"dataset:b"}  # gated controlled hidden
     assert _ids("--include-gated") == {"dataset:a", "dataset:b"}
     assert _ids("--level", "controlled") == {"dataset:a"}  # explicit level overrides
 
