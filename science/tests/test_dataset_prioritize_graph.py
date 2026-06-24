@@ -53,6 +53,54 @@ def test_usage_reach_traverses_to_question_and_hypothesis(tmp_path: Path) -> Non
     assert reach["dataset:d"] == {"hypothesis:h", "question:q"}
 
 
+def test_usage_reach_collects_paper_related_qh(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text('slug: "tp"\n', encoding="utf-8")
+    _write(tmp_path / "entities/datasets/d.md",
+           '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\norigin: "external"\n'
+           'access: {level: "public", verified: true}\n---\n')
+    _write(tmp_path / "entities/hypotheses/h.md",
+           '---\nid: "hypothesis:h"\ntype: "hypothesis"\ntitle: "H"\n---\n')
+    _write(tmp_path / "entities/papers/p.md",
+           '---\nid: "paper:p"\ntype: "paper"\ntitle: "P"\n'
+           'related: ["hypothesis:h"]\n'
+           'dataset_usage:\n'
+           '  - ref: "dataset:d"\n'
+           '    role: "analyzed"\n'
+           '    overlap: "full"\n---\n')
+    graph_path = materialize_graph(tmp_path)
+    ds = _load_dataset(graph_path)
+    knowledge = ds.graph(_graph_uri("graph/knowledge"))
+    provenance = ds.graph(_graph_uri("graph/provenance"))
+
+    reach = usage_reach(knowledge, provenance, ["dataset:d"])
+
+    assert reach["dataset:d"] == {"hypothesis:h"}
+
+
+def test_usage_reach_unions_consumer_related_qh_with_proposition_path(tmp_path: Path) -> None:
+    _seed_graph_project(tmp_path)
+    _write(tmp_path / "entities/hypotheses/h-related.md",
+           '---\nid: "hypothesis:h-related"\ntype: "hypothesis"\ntitle: "H related"\n---\n')
+    (tmp_path / "entities/evidence-lines/e.md").write_text(
+        '---\nid: "evidence-line:e"\ntype: "evidence-line"\ntitle: "E"\n'
+        'stance: "supports"\ntarget: "proposition:p"\nevidence_type: "empirical_data_evidence"\n'
+        'related: ["hypothesis:h-related"]\n'
+        'dataset_usage:\n'
+        '  - ref: "dataset:d"\n'
+        '    role: "analyzed"\n'
+        '    overlap: "full"\n---\n',
+        encoding="utf-8",
+    )
+    graph_path = materialize_graph(tmp_path)
+    ds = _load_dataset(graph_path)
+    knowledge = ds.graph(_graph_uri("graph/knowledge"))
+    provenance = ds.graph(_graph_uri("graph/provenance"))
+
+    reach = usage_reach(knowledge, provenance, ["dataset:d"])
+
+    assert reach["dataset:d"] == {"hypothesis:h", "hypothesis:h-related", "question:q"}
+
+
 def test_merged_reach_unions_both_paths_and_dedups(tmp_path: Path) -> None:
     _seed_graph_project(tmp_path)
     # ALSO give dataset:d a frontmatter back-edge to the SAME question:q, while
