@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from click.testing import CliRunner
 
 from science_tool.cli import main as science_cli
+from science_tool.graph.materialize import materialize_graph
 
 
 def _seed(root: Path) -> None:
@@ -18,6 +20,42 @@ def _seed(root: Path) -> None:
     (d / "b.md").write_text(
         '---\nid: "dataset:b"\ntype: "dataset"\ntitle: "B"\norigin: "external"\n'
         'access: {level: "public", verified: false}\n---\n', encoding="utf-8")
+
+
+def _json_rows(res) -> list[dict]:
+    text = "\n".join(
+        line for line in res.output.splitlines() if not line.startswith("warning:")
+    )
+    return json.loads(text)
+
+
+def _seed_paper_reach(root: Path, *, include_paper: bool = True) -> None:
+    (root / "science.yaml").write_text('slug: "tp"\n', encoding="utf-8")
+    d = root / "entities" / "datasets"
+    h = root / "entities" / "hypotheses"
+    p = root / "entities" / "papers"
+    d.mkdir(parents=True, exist_ok=True)
+    h.mkdir(parents=True, exist_ok=True)
+    (d / "d.md").write_text(
+        '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\norigin: "external"\n'
+        'access: {level: "public", verified: true}\n---\n',
+        encoding="utf-8",
+    )
+    (h / "h.md").write_text(
+        '---\nid: "hypothesis:h"\ntype: "hypothesis"\ntitle: "H"\n---\n',
+        encoding="utf-8",
+    )
+    if include_paper:
+        p.mkdir(parents=True, exist_ok=True)
+        (p / "p.md").write_text(
+            '---\nid: "paper:p"\ntype: "paper"\ntitle: "P"\n'
+            'related: ["hypothesis:h"]\n'
+            'dataset_usage:\n'
+            '  - ref: "dataset:d"\n'
+            '    role: "analyzed"\n'
+            '    overlap: "full"\n---\n',
+            encoding="utf-8",
+        )
 
 
 def _run(tmp_path: Path, *args: str):
@@ -45,27 +83,18 @@ def test_prioritize_json(tmp_path: Path) -> None:
     _seed(tmp_path)
     res = _run(tmp_path, "--include-gated", "--format", "json")
     assert res.exit_code == 0
-    import json
-    # Click 8 mixes stderr into output; strip any leading warning lines before parsing.
-    json_text = "\n".join(
-        line for line in res.output.splitlines() if not line.startswith("warning:")
-    )
-    rows = json.loads(json_text)
+    rows = _json_rows(res)
     assert any(r["id"] == "dataset:a" for r in rows)
 
 
 def test_prioritize_excludes_gated_by_default(tmp_path: Path) -> None:
     # _seed() writes dataset:a (controlled, gated) and dataset:b (public).
     _seed(tmp_path)
-    import json
 
     def _ids(*args: str) -> set[str]:
         res = _run(tmp_path, *args, "--format", "json")
         assert res.exit_code == 0
-        text = "\n".join(
-            ln for ln in res.output.splitlines() if not ln.startswith("warning:")
-        )
-        return {r["id"] for r in json.loads(text)}
+        return {r["id"] for r in _json_rows(res)}
 
     assert _ids() == {"dataset:b"}                       # gated controlled hidden
     assert _ids("--include-gated") == {"dataset:a", "dataset:b"}
@@ -104,12 +133,38 @@ def test_prioritize_coverage_json_reports_per_target_gaps(tmp_path: Path) -> Non
     res = _run(tmp_path, "--coverage", "--format", "json")
 
     assert res.exit_code == 0
-    text = "\n".join(
-        line for line in res.output.splitlines() if not line.startswith("warning:")
-    )
-    rows = json.loads(text)
+    rows = _json_rows(res)
     by_id = {row["target"]: row for row in rows}
     assert by_id["question:q-covered"]["datasets"] == ["dataset:b"]
     assert by_id["question:q-covered"]["coverage_state"] == "covered"
     assert by_id["question:q-gap"]["datasets"] == []
     assert by_id["question:q-gap"]["coverage_state"] == "gap"
+
+
+def test_prioritize_coverage_uses_paper_usage_frontmatter_without_graph(tmp_path: Path) -> None:
+    _seed_paper_reach(tmp_path)
+
+    res = _run(tmp_path, "--coverage", "--format", "json")
+
+    assert res.exit_code == 0
+    assert "no materialized graph" in res.output.lower()
+    rows = _json_rows(res)
+    by_id = {row["target"]: row for row in rows}
+    assert by_id["hypothesis:h"]["datasets"] == ["dataset:d"]
+    assert by_id["hypothesis:h"]["coverage_state"] == "covered"
+
+
+def test_prioritize_coverage_uses_current_frontmatter_when_graph_is_stale(tmp_path: Path) -> None:
+    _seed_paper_reach(tmp_path, include_paper=False)
+    graph_path = materialize_graph(tmp_path)
+    _seed_paper_reach(tmp_path, include_paper=True)
+    os.utime(graph_path, (1, 1))
+
+    res = _run(tmp_path, "--coverage", "--format", "json")
+
+    assert res.exit_code == 0
+    assert "graph may be stale" in res.output.lower()
+    rows = _json_rows(res)
+    by_id = {row["target"]: row for row in rows}
+    assert by_id["hypothesis:h"]["datasets"] == ["dataset:d"]
+    assert by_id["hypothesis:h"]["coverage_state"] == "covered"
