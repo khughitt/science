@@ -974,7 +974,7 @@ Author a command that drives the front-half loop from `plan:2026-06-21-catalog-d
 2. **Gap scan** — list questions/hypotheses with no accessible dataset: run `uv run science dataset prioritize --format json`, and cross-reference the project's questions/hypotheses; a Q/H is a gap if no dataset reaches it OR every dataset that does is `unverified`/inaccessible. Present the gap list.
 3. **Discover** — for gap Q/H, invoke `/science:find-datasets`; author candidates with `uv run science dataset add <slug> --title ... --level public ...` (status defaults to `candidate`). Bias to obtainable omics (GEO/SRA/Zenodo).
 4. **Verify accessibility** — for each candidate, confirm obtainability and record it by editing the entity's `access` block (`verified: true` + `verification_method` + `last_reviewed`) OR populating `access.exception` per the `plan-pipeline` Dimension-3 Branch-A/B logic; append a dated verification-log line. State explicitly: no new findings store — reuse the access schema.
-5. **Connect** — add `related:` edges between datasets and the Q/H they inform; where evidence-lines exist, author `dataset_usage` blocks.
+5. **Connect** — prefer Q/H `datasets:` for direct dataset needs, use dataset `related:` when the dataset entity is the active editing surface, and author `dataset_usage` blocks on papers/evidence-lines where usage provenance exists.
 6. **Prioritize** — run `uv run science dataset prioritize --explain`; present the ranked table + gap summary.
 7. **Handoff** — route the top obtainable datasets to `/science:plan-pipeline` → execute; state that per-dataset QA/download is out of scope for this command.
 8. **Process reflection** — `science feedback add` stub matching other commands.

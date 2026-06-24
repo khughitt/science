@@ -61,7 +61,8 @@ _template:
 ## Connections to Project
 
 - Related hypotheses:
-- Required data or analyses:
+- Required datasets: list dataset IDs in frontmatter `datasets:`.
+- Required analyses:
 - Priority level:
 
 ## Related
