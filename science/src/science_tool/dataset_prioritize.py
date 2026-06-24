@@ -94,6 +94,20 @@ def _is_qh(ref: str) -> bool:
     return isinstance(ref, str) and ref.startswith(_QH_PREFIXES)
 
 
+def _dataset_usage_refs(fm: dict) -> list[str]:
+    usage = fm.get("dataset_usage") or []
+    if not isinstance(usage, list):
+        return []
+    refs: list[str] = []
+    for entry in usage:
+        if not isinstance(entry, dict):
+            continue
+        ref = entry.get("ref")
+        if isinstance(ref, str) and ref.startswith("dataset:"):
+            refs.append(ref)
+    return refs
+
+
 def _iter_entity_frontmatter(project_root: Path):
     """Yield (id, fm) for every live markdown entity under entities/.
 
@@ -115,7 +129,7 @@ def _iter_entity_frontmatter(project_root: Path):
 
 def frontmatter_reach(project_root: Path) -> dict[str, set[str]]:
     reach: dict[str, set[str]] = {}
-    # Collect dataset ids and the Q/H ids; build both directions.
+    # Collect dataset ids and the Q/H ids; build every source-authored direction.
     for ent_id, fm in _iter_entity_frontmatter(project_root):
         kind = (fm.get("kind") or fm.get("type") or "")
         related = [r for r in (fm.get("related") or []) if isinstance(r, str)]
@@ -127,6 +141,19 @@ def frontmatter_reach(project_root: Path) -> dict[str, set[str]]:
             for r in related:
                 if isinstance(r, str) and r.startswith("dataset:"):
                     reach.setdefault(r, set()).add(ent_id)
+            # first-class Q/H surface: datasets: ["dataset:x", ...]
+            datasets = [r for r in (fm.get("datasets") or []) if isinstance(r, str)]
+            for dataset_id in datasets:
+                if dataset_id.startswith("dataset:"):
+                    reach.setdefault(dataset_id, set()).add(ent_id)
+
+        # General source-authored usage bridge: papers are the motivating case,
+        # but any entity carrying dataset_usage and related Q/H records the same
+        # dataset-inquiry fact.
+        qh_targets = {r for r in related if _is_qh(r)}
+        if qh_targets:
+            for dataset_ref in _dataset_usage_refs(fm):
+                reach.setdefault(dataset_ref, set()).update(qh_targets)
     return reach
 
 
