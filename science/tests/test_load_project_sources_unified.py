@@ -637,6 +637,43 @@ def test_load_project_sources_preserves_aggregate_identity_fields(tmp_path: Path
     assert entity.taxon == "NCBITaxon:9606"
 
 
+def test_load_project_sources_preserves_external_ref_taxon(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    (tmp_path / "science.yaml").write_text(
+        "name: unified\nprofile: research\nprofiles: {local: local}\nontologies: [biology]\n",
+        encoding="utf-8",
+    )
+    local_sources = tmp_path / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "external_refs.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "references": [
+                    {
+                        "id": "protein:EZH2",
+                        "type": "protein",
+                        "title": "EZH2",
+                        "taxon": "NCBITaxon:9606",
+                        "primary_external_id": {
+                            "source": "UniProtKB",
+                            "id": "Q15910",
+                            "curie": "UniProtKB:Q15910",
+                            "provenance": "manual",
+                        },
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(tmp_path)
+    entity = next(e for e in sources.entities if e.canonical_id == "protein:EZH2")
+
+    assert entity.taxon == "NCBITaxon:9606"
+
+
 def test_load_normalizes_legacy_parameter_kind(tmp_path: Path) -> None:
     _seed(tmp_path)
     (tmp_path / "entities" / "parameters").mkdir(parents=True)

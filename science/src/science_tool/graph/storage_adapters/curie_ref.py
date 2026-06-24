@@ -115,4 +115,7 @@ class CurieRefAdapter(StorageAdapter):
         description = row.get("description")
         if isinstance(description, str) and description:
             raw["summary"] = description
+        taxon = row.get("taxon")
+        if isinstance(taxon, str) and taxon:
+            raw["taxon"] = taxon
         return raw
