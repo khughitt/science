@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from rdflib import URIRef
-from rdflib.namespace import RDF
+from rdflib.namespace import RDF, SKOS
 
 from science_model.entities import DatasetEntity, Readiness
 from science_tool.graph.dataset_usage import project_entity_uri
@@ -186,6 +186,16 @@ def _qh_for_proposition(knowledge, prop_uri: URIRef) -> set[URIRef]:
     return out
 
 
+def _qh_for_consumer_related(knowledge, consumer: URIRef) -> set[URIRef]:
+    out: set[URIRef] = set()
+    for target in knowledge.objects(consumer, SKOS.related):
+        if not isinstance(target, URIRef):
+            continue
+        if (target, RDF.type, SCI_NS.Hypothesis) in knowledge or (target, RDF.type, SCI_NS.Question) in knowledge:
+            out.add(target)
+    return out
+
+
 def merged_reach(
     project_root: Path,
     knowledge=None,
@@ -243,10 +253,10 @@ def usage_reach(knowledge, provenance, dataset_ids: list[str]) -> dict[str, set[
     reach: dict[str, set[str]] = {ds_id: set() for ds_id in dataset_ids}
     for ds_id in dataset_ids:
         ds_uri = project_entity_uri(ds_id)
-        # usage nodes referencing this dataset, then their consumers (evidence-lines)
+        # usage nodes referencing this dataset, then their consumers
         for usage_node in provenance.subjects(SCI_NS.dataset, ds_uri):
             for consumer in provenance.subjects(SCI_NS.hasDatasetUsage, usage_node):
-                # consumer (evidence-line) supports/disputes a proposition (knowledge graph)
+                # consumer (usually evidence-line) supports/disputes a proposition
                 props: set[URIRef] = set()
                 for _, _, prop in knowledge.triples((consumer, CITO_NS.supports, None)):
                     props.add(prop)
@@ -259,6 +269,10 @@ def usage_reach(knowledge, provenance, dataset_ids: list[str]) -> dict[str, set[
                         ref = canonical_id_from_entity_uri(str(qh))
                         if ref is not None:  # skip non-entity URIs
                             reach[ds_id].add(ref)
+                for qh in _qh_for_consumer_related(knowledge, consumer):
+                    ref = canonical_id_from_entity_uri(str(qh))
+                    if ref is not None:
+                        reach[ds_id].add(ref)
     return reach
 
 
