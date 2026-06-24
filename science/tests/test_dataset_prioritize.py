@@ -63,6 +63,36 @@ def test_frontmatter_reach_both_directions_excludes_source_refs(tmp_path: Path) 
     assert "dataset:b" not in reach.get("dataset:b", set()) or "question:qX" not in reach["dataset:b"]
 
 
+def test_frontmatter_reach_reads_question_datasets_field(tmp_path: Path) -> None:
+    _write(tmp_path / "entities/datasets/d.md",
+           '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\nrelated: []\n---\n')
+    _write(tmp_path / "entities/questions/q.md",
+           '---\nid: "question:q"\ntype: "question"\ntitle: "Q"\n'
+           'datasets: ["dataset:d"]\nrelated: []\n---\n')
+
+    reach = frontmatter_reach(tmp_path)
+
+    assert reach["dataset:d"] == {"question:q"}
+
+
+def test_frontmatter_reach_bridges_consumer_dataset_usage_to_related_qh(tmp_path: Path) -> None:
+    _write(tmp_path / "entities/datasets/d.md",
+           '---\nid: "dataset:d"\ntype: "dataset"\ntitle: "D"\nrelated: []\n---\n')
+    _write(tmp_path / "entities/hypotheses/h.md",
+           '---\nid: "hypothesis:h"\ntype: "hypothesis"\ntitle: "H"\n---\n')
+    _write(tmp_path / "entities/papers/p.md",
+           '---\nid: "paper:p"\ntype: "paper"\ntitle: "P"\n'
+           'related: ["hypothesis:h"]\n'
+           'dataset_usage:\n'
+           '  - ref: "dataset:d"\n'
+           '    role: "analyzed"\n'
+           '    overlap: "full"\n---\n')
+
+    reach = frontmatter_reach(tmp_path)
+
+    assert reach["dataset:d"] == {"hypothesis:h"}
+
+
 from science_tool.dataset_prioritize import prioritize
 
 
