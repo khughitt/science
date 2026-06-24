@@ -55,7 +55,7 @@ science dataset prioritize --coverage --format json
 Cross-reference every `question:` and `hypothesis:` entity found in `entities/`:
 
 - A Q/H is a **gap** if:
-  - No dataset reaches it through any load-bearing authoring surface: dataset `related:`, Q/H `related:` back-edge, Q/H `datasets:`, evidence-line/paper `dataset_usage` + proposition reach, or paper/consumer `dataset_usage` + `related:`; **or**
+  - No dataset reaches it through any load-bearing authoring surface: dataset `related:`, Q/H `related:` back-edge, Q/H `datasets:`, evidence-line `dataset_usage` + proposition reach, or paper/consumer `dataset_usage` + `related:` Q/H links; **or**
   - Every dataset that does reach it has `access.verified: false` and no `access.exception.mode` set, AND its `readiness.state` is `unverified` or inaccessible (weight < 0.4 from the scorer).
 
 Collect the gap list and present it as a table:
@@ -192,7 +192,7 @@ science dataset prioritize --explain
 ```
 
 Present the ranked table. Highlight:
-- Datasets that moved up because of the new `related:` / `dataset_usage` edges added in Step 4.
+- Datasets that moved up because of the new `datasets:` / `related:` / `dataset_usage` connections added in Step 4.
 - Remaining `no-edge` and `unverified` gap-flags.
 - The top-ranked **obtainable** datasets (those with `access.verified: true` or `access.level: public` and a plausible Branch A path).
 
