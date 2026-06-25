@@ -140,6 +140,7 @@ def collect_unregistered_ref_kinds(
     if sources is None:
         sources = load_project_sources(project_root.resolve())
     external = external_prefixes(sources.ontology_catalogs)
+    peer_ids = sources.peer_ids
     grouped: dict[tuple[str, str], _UnregisteredRefKindAccumulator] = {}
 
     for entity in sources.entities:
@@ -152,6 +153,7 @@ def collect_unregistered_ref_kinds(
                     or (field in _BIBLIOGRAPHY_REFERENCE_FIELDS and is_bibliography_reference(raw))
                     or is_external_reference(raw)
                     or is_external_reference(raw, known_prefixes=external)
+                    or _is_registered_peer_address(raw, peer_ids)
                 ):
                     continue
                 kind, _ = raw.split(":", 1)
@@ -179,6 +181,13 @@ def collect_unregistered_ref_kinds(
             }
         )
     return sorted(rows, key=lambda row: (row["kind"], row["field"]))
+
+
+def _is_registered_peer_address(raw: str, peer_ids: frozenset[str]) -> bool:
+    if not peer_ids or ":" not in raw:
+        return False
+    scope, artifact = raw.split(":", 1)
+    return ":" in artifact and scope in peer_ids
 
 
 def _string_refs(value: object) -> list[str]:

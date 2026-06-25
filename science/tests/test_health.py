@@ -608,6 +608,43 @@ class TestBuildHealthReport:
         assert any(row["target"] == "hypothesis:h01" for row in report["unresolved_refs"])
         assert report["total_issues"] >= 2
 
+    def test_declared_peer_addresses_are_not_unregistered_reference_kinds(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        (tmp_path / "science.yaml").write_text(
+            "name: test\n"
+            "id: pais\n"
+            "peers:\n"
+            "  - id: immunity\n"
+            "    path: ../immunity\n",
+            encoding="utf-8",
+        )
+        doc = tmp_path / "entities" / "questions"
+        doc.mkdir(parents=True)
+        (doc / "q01.md").write_text(
+            "---\n"
+            'id: "question:q01"\n'
+            'type: "question"\n'
+            'title: "Q1"\n'
+            'status: "open"\n'
+            'related: ["immunity:topic:sex-hormone-life-stage-immune-homeostasis", "gadget:d1"]\n'
+            "---\n"
+            "Body.\n",
+            encoding="utf-8",
+        )
+
+        report = build_health_report(tmp_path, checks={"unregistered_ref_kinds"})
+
+        assert report["unregistered_ref_kinds"] == [
+            {
+                "kind": "gadget",
+                "field": "related",
+                "mention_count": 1,
+                "refs": ["gadget:d1"],
+                "sources": ["entities/questions/q01.md"],
+            }
+        ]
+
     def test_bibliography_refs_are_not_unregistered_ref_kinds(self, tmp_path: Path) -> None:
         from science_tool.graph.health import build_health_report
 
