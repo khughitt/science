@@ -218,7 +218,11 @@ def _parse_block(inner: str) -> tuple[list[Citation], list[str]]:
                 locator = rest[1:].strip() or None
             citations.append(Citation(citekey=citekey, locator=locator))
             continue
-        ats = _BARE_AT_RE.findall(item)
+        ats = [
+            match.group(1)
+            for match in _BARE_AT_RE.finditer(item)
+            if _is_bare_citation_candidate(item, match.start())
+        ]
         unsupported.extend(ats if ats else [item])
     return citations, unsupported
 
@@ -256,8 +260,16 @@ def parse_citations(markdown: str) -> CitationScan:
         for at in _BARE_AT_RE.finditer(line):
             if any(start <= at.start() < end for start, end in consumed_spans):
                 continue
+            if not _is_bare_citation_candidate(line, at.start()):
+                continue
             unsupported.append(at.group(1))
     return CitationScan(citations=citations, unsupported=unsupported)
+
+
+def _is_bare_citation_candidate(line: str, at_index: int) -> bool:
+    if at_index <= 0:
+        return True
+    return not line[at_index - 1].isalnum()
 
 
 class UnsupportedCitationSyntaxError(ValueError):

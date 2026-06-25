@@ -390,7 +390,12 @@ def detect_unsupported_citation_syntax(
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return []
-    scan = parse_citations(text)
+    _, body_start = parse_frontmatter(path)
+    body_lines = text.splitlines()[body_start - 1 :]
+    body = "\n".join(
+        line for line in body_lines if not _is_agent_include_directive(line)
+    )
+    scan = parse_citations(body)
     if not scan.unsupported:
         return []
     issues: list[LintIssue] = []
@@ -410,6 +415,11 @@ def detect_unsupported_citation_syntax(
             )
         )
     return issues
+
+
+def _is_agent_include_directive(line: str) -> bool:
+    stripped = line.strip()
+    return stripped.startswith("@") and stripped.endswith(".md") and " " not in stripped
 
 
 _DETECTORS: dict[str, Callable[..., list[LintIssue]]] = {

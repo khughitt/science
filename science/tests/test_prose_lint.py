@@ -423,3 +423,41 @@ class TestUnsupportedCitationSyntax:
         )
         result = scan_root(tmp_path, checks=["unsupported-citation-syntax"])
         assert result["counts"].get("unsupported-citation-syntax", 0) == 0
+
+    def test_frontmatter_email_is_not_citation_syntax(self, tmp_path):
+        (tmp_path / "entities" / "papers").mkdir(parents=True)
+        (tmp_path / "entities" / "papers" / "paper.md").write_text(
+            "---\n"
+            "id: paper:Example2026\n"
+            "type: paper\n"
+            "title: Example\n"
+            "correspondence: author@example.edu\n"
+            "---\n"
+            "Body without citations.\n",
+            encoding="utf-8",
+        )
+        result = scan_root(tmp_path, checks=["unsupported-citation-syntax"])
+        assert result["counts"].get("unsupported-citation-syntax", 0) == 0
+
+    def test_agent_include_directive_is_not_citation_syntax(self, tmp_path):
+        (tmp_path / "CLAUDE.md").write_text("@AGENTS.md\n", encoding="utf-8")
+        result = scan_root(tmp_path, checks=["unsupported-citation-syntax"])
+        assert result["counts"].get("unsupported-citation-syntax", 0) == 0
+
+    def test_body_email_is_not_citation_syntax(self, tmp_path):
+        (tmp_path / "doc").mkdir()
+        (tmp_path / "doc" / "note.md").write_text(
+            "Data are available from author@example.edu on request.\n",
+            encoding="utf-8",
+        )
+        result = scan_root(tmp_path, checks=["unsupported-citation-syntax"])
+        assert result["counts"].get("unsupported-citation-syntax", 0) == 0
+
+    def test_measurement_at_token_is_not_citation_syntax(self, tmp_path):
+        (tmp_path / "doc").mkdir()
+        (tmp_path / "doc" / "note.md").write_text(
+            "The CPET table reports VO2@VT and Work@peak on day 2.\n",
+            encoding="utf-8",
+        )
+        result = scan_root(tmp_path, checks=["unsupported-citation-syntax"])
+        assert result["counts"].get("unsupported-citation-syntax", 0) == 0
