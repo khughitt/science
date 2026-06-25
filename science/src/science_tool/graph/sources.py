@@ -65,6 +65,12 @@ from science_tool.paths import resolve_paths
 logger = logging.getLogger(__name__)
 
 _SHORT_ID_RE = re.compile(r"^(?P<token>[a-z]\d+)(?:[-_].*)?$", re.IGNORECASE)
+_NUMERIC_ID_PREFIX_RE = re.compile(r"^(?P<number>\d{1,4})(?:[-_].*)?$")
+_KIND_SHORT_PREFIX: dict[str, str] = {
+    "hypothesis": "h",
+    "question": "q",
+    "task": "t",
+}
 _EXTERNAL_PREFIXES = frozenset({"go", "mesh", "doid", "hp", "so", "ncbitaxon", "ncbigene", "ensembl"})
 _CORE_KINDS = frozenset(kind.name for kind in CORE_PROFILE.entity_kinds)
 _SourceRecordT = TypeVar("_SourceRecordT", bound=BaseModel)
@@ -1303,6 +1309,18 @@ def _derive_aliases(canonical_id: str, kind: str, explicit_aliases: list[str]) -
         add(f"{kind}:{token.upper()}")
         add(token.lower())
         add(token.upper())
+    else:
+        numeric_match = _NUMERIC_ID_PREFIX_RE.match(slug)
+        if numeric_match is None:
+            head = slug.split("-", 1)[0]
+            numeric_match = _NUMERIC_ID_PREFIX_RE.match(head)
+        prefix = _KIND_SHORT_PREFIX.get(kind)
+        if numeric_match is not None and prefix is not None:
+            token = f"{prefix}{numeric_match.group('number')}"
+            add(f"{kind}:{token.lower()}")
+            add(f"{kind}:{token.upper()}")
+            add(token.lower())
+            add(token.upper())
 
     return aliases
 

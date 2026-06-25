@@ -108,3 +108,27 @@ def test_lint_uses_short_form_ids_deny_from_config(tmp_path):
     )
     payload = json.loads(result.output)
     assert payload["counts"].get("short-form-ids", 0) == 0
+
+
+def test_lint_resolves_v3_numeric_entity_ids_as_short_forms(tmp_path):
+    root = _write_project(tmp_path)
+    (root / "entities" / "hypotheses").mkdir(parents=True)
+    (root / "entities" / "hypotheses" / "0007-foo.md").write_text(
+        "---\n"
+        "kind: hypothesis\n"
+        "id: hypothesis:0007-foo\n"
+        "title: Foo\n"
+        "---\n\n"
+        "# Foo\n"
+    )
+    (root / "doc" / "a.md").write_text("# A\n\nThis cites h0007 and H0007.\n")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        prose_group,
+        ["lint", "--root", str(root), "--check", "short-form-ids", "--format", "json"],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["counts"].get("short-form-ids", 0) == 0
