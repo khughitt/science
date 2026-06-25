@@ -131,6 +131,156 @@ def add_dataset(
     return entity_id, dest, warnings
 
 
+_VERIFY_LOG_HEADING = "## Access verification log"
+
+
+def _load_local_dataset(project_root: Path, ref: str) -> tuple[str, Path, dict, str]:
+    """Resolve `slug`/`dataset:slug` to (slug, dest, fm, body) for a LOCAL dataset.
+
+    verify-access edits a file in place, so commons-backed datasets (not editable
+    here) and non-dataset files are clean refusals.
+    """
+    slug = ref[len("dataset:"):] if ref.startswith("dataset:") else ref
+    slug = validate_slug(slug)  # raises EntityCommandError on a malformed slug
+    dest = project_root / "entities" / "datasets" / f"{slug}.md"
+    if not dest.exists():
+        raise EntityCommandError(f"no such local dataset {ref!r} under entities/datasets/")
+    parsed = parse_frontmatter(dest)
+    if parsed is None or (parsed[0].get("kind") or parsed[0].get("type")) != "dataset":
+        raise EntityCommandError(f"{ref!r} is not a dataset entity")
+    fm, body = parsed
+    return slug, dest, fm, body
+
+
+def _append_verification_log(body: str, line: str) -> str:
+    """Append a dated log line under the `## Access verification log` section,
+    creating the section if absent. Idempotent re-runs add lines, not sections."""
+    trimmed = body.rstrip("\n")
+    if _VERIFY_LOG_HEADING in trimmed:
+        return f"{trimmed}\n{line}\n"
+    return f"{trimmed}\n\n{_VERIFY_LOG_HEADING}\n\n{line}\n"
+
+
+def verify_access(
+    project_root: Path,
+    ref: str,
+    *,
+    level: str | None = None,
+    license_: str | None = None,
+    method: str | None = None,
+    verified_by: str = "agent (verify-access)",
+    source_url: str | None = None,
+    tier: str | None = None,
+    note: str = "",
+    exception: str | None = None,
+    rationale: str = "",
+    superseded_by: str | None = None,
+    followup_task: str | None = None,
+    today: date | None = None,
+) -> tuple[str, Path, str, float, list[str]]:
+    """Verify (or exception-gate) a local dataset's accessibility in one atomic edit.
+
+    Writes the coupled origin/license/access fields together (doubling as the
+    legacy backfill), appends a verification-log line, and returns
+    (entity_id, dest, readiness_state, readiness_weight, warnings).
+    """
+    from science_tool.dataset_prioritize import readiness_for, readiness_weight
+    from science_tool.validate.checks.dataset_metadata import evaluate_dataset_metadata
+
+    today = today or date.today()
+    slug, dest, fm, body = _load_local_dataset(project_root, ref)
+    entity_id = fm.get("id") or f"dataset:{slug}"
+
+    if fm.get("origin") == "derived":
+        raise EntityCommandError(
+            f"{entity_id}: cannot verify-access a derived dataset (invariant #8 forbids an "
+            "access block); derived datasets are authored by `science dataset register-run`."
+        )
+
+    # origin: any verified/exception-gated dataset is external.
+    fm["origin"] = "external"
+
+    # license — path-independent: an empty license on an external dataset trips
+    # dataset.license-missing regardless of verified/exception state.
+    if license_:
+        fm["license"] = license_
+    elif not (isinstance(fm.get("license"), str) and fm["license"].strip()):
+        raise EntityCommandError(
+            f"{entity_id}: no license recorded — pass --license (an SPDX id, or the "
+            "'unknown' sentinel if it genuinely can't be determined)."
+        )
+
+    access = dict(fm.get("access")) if isinstance(fm.get("access"), dict) else {}
+    access["level"] = level or access.get("level") or "public"
+    access["availability"] = "available"
+    if source_url is not None:
+        access["source_url"] = source_url
+
+    if exception:
+        # Branch B: exception decision. verified ⊥ exception.mode → clear verified.
+        access["verified"] = False
+        access["verification_method"] = ""
+        exc: dict = {"mode": exception, "decision_date": today.isoformat()}
+        if rationale:
+            exc["rationale"] = rationale
+        if followup_task:
+            exc["followup_task"] = followup_task
+        if superseded_by:
+            exc["superseded_by_dataset"] = superseded_by
+        access["exception"] = exc
+        summary = note or f"{exception}" + (f" — {rationale}" if rationale else "")
+    else:
+        # Branch A: verified.
+        if not method:
+            raise EntityCommandError(
+                f"{entity_id}: the verified path requires --method "
+                "(retrieved|credential-confirmed)."
+            )
+        access["verified"] = True
+        access["verification_method"] = method
+        access["last_reviewed"] = today.isoformat()
+        access["verified_by"] = verified_by
+        # mutual exclusivity, other direction: clear any prior exception mode.
+        if isinstance(access.get("exception"), dict) and access["exception"].get("mode"):
+            access["exception"] = {**access["exception"], "mode": ""}
+        summary = note or method
+
+    fm["access"] = access
+    if tier is not None:
+        fm["tier"] = tier
+    fm["updated"] = today.isoformat()
+
+    body = _append_verification_log(body, f"- {today.isoformat()} ({verified_by}): {summary}")
+
+    front = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True, default_flow_style=False)
+    body = body.lstrip("\n")
+    text = f"---\n{front}---\n\n{body}"
+
+    rel_path = Path("entities") / "datasets" / f"{slug}.md"
+    warnings = _validate_prospective_write(
+        project_root=project_root,
+        rel_path=rel_path,
+        text=text,
+        target_entity_id=entity_id,
+        include_commons=False,
+    )
+    # Second pass: metadata vocabulary checks (license/tier/cadence) — these are NOT
+    # run by _validate_prospective_write, which only diffs source-audit rows.
+    warnings.extend(r.message for r in evaluate_dataset_metadata([fm]))
+
+    tmp = dest.with_suffix(dest.suffix + ".tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, dest)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+
+    state = readiness_for(fm).state
+    weight = readiness_weight(fm)[0]
+    return entity_id, dest, state, weight, warnings
+
+
 def _local_rows(project_root: Path) -> list[dict]:
     ds_dir = project_root / "entities" / "datasets"
     rows: list[dict] = []

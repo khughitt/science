@@ -5590,6 +5590,78 @@ def dataset_add(
     click.echo(f"created {entity_id} -> {dest.relative_to(root)}")
 
 
+@dataset_group.command("verify-access")
+@click.argument("ref")
+@click.option("--level", type=click.Choice(["public", "registration", "controlled", "commercial", "mixed"]))
+@click.option("--method", type=click.Choice(["retrieved", "credential-confirmed"]))
+@click.option("--license", "license_", default=None, help="SPDX id or sentinel (unknown|proprietary|custom)")
+@click.option("--by", "verified_by", default="agent (verify-access)")
+@click.option("--source-url", "source_url", default=None)
+@click.option("--tier", type=click.Choice(["use-now", "evaluate-next", "track"]), default=None)
+@click.option("--note", default="", help="Free-text evidence for the verification log line")
+@click.option(
+    "--exception",
+    type=click.Choice(["scope-reduced", "expanded-to-acquire", "substituted"]),
+    default=None,
+    help="Record a Branch-B access exception instead of flipping verified",
+)
+@click.option("--rationale", default="")
+@click.option("--superseded-by", "superseded_by", default=None)
+@click.option("--followup-task", "followup_task", default=None)
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
+)
+def dataset_verify_access(
+    ref: str,
+    level: str | None,
+    method: str | None,
+    license_: str | None,
+    verified_by: str,
+    source_url: str | None,
+    tier: str | None,
+    note: str,
+    exception: str | None,
+    rationale: str,
+    superseded_by: str | None,
+    followup_task: str | None,
+    project_root: Path | None,
+) -> None:
+    """Verify (or exception-gate) a dataset's accessibility.
+
+    Sets the coupled origin/license/access fields together in one atomic edit and
+    records a verification-log line (also backfills legacy entities).
+    """
+    from science_tool.datasets_catalog import verify_access
+    from science_tool.entities import EntityCommandError
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    try:
+        entity_id, _dest, state, weight, warnings = verify_access(
+            root,
+            ref,
+            level=level,
+            license_=license_,
+            method=method,
+            verified_by=verified_by,
+            source_url=source_url,
+            tier=tier,
+            note=note,
+            exception=exception,
+            rationale=rationale,
+            superseded_by=superseded_by,
+            followup_task=followup_task,
+        )
+    except EntityCommandError as exc:
+        click.echo(str(exc), err=True)
+        raise click.exceptions.Exit(1)
+    for w in warnings:
+        click.echo(f"warning: {w}", err=True)
+    click.echo(f"{entity_id} -> {state} (weight {weight:g})")
+
+
 def _resolve_dataset_or_exit(root: Path, ref: str):
     from science_tool.datasets_catalog import resolve_dataset
 

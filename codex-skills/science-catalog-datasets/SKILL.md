@@ -150,53 +150,43 @@ After authoring, confirm each file was created under `entities/datasets/`.
 
 ## Step 3: Verify accessibility
 
-For **each candidate** dataset (status `candidate`, `access.verified: false`), confirm it is obtainable and record the result in the entity's `access` block.
+For **each candidate** dataset (status `candidate`, `access.verified: false`), confirm it is obtainable and record the result with **one command** — `science dataset verify-access`. It sets the coupled `origin` / `license` / `access` fields together and appends the verification-log line in a single atomic, idempotent edit (and backfills legacy entities that lack `origin`/`tier`/`access`). Do **not** hand-edit the three fields separately — they have order-dependent failure modes (an `access` block is inert until `origin: external`, which then trips `dataset.license-missing` until a `license` is set).
 
 **Branch A — verifiable under current credentials** (public or registration-only datasets):
 
 1. Confirm the landing page or accession URL resolves and the files are downloadable without application.
-2. Edit `entities/datasets/<slug>.md`:
-   - Set `access.verified: true`
-   - Set `access.verification_method: "<how you checked, e.g. GEO landing page confirmed public>">`
-   - Set `access.last_reviewed: "<YYYY-MM-DD>"`
-   - Append a dated line to the verification log (create the block if absent):
-     ```yaml
-     access:
-       verified: true
-       verification_method: "GEO landing page — files freely downloadable"
-       last_reviewed: "2026-06-21"
-       verification_log:
-         - date: "2026-06-21"
-           note: "Confirmed public access; no login required."
-     ```
+2. Record it:
+   ```bash
+   science dataset verify-access <slug> \
+     --level public \
+     --method retrieved \
+     --license <SPDX-id-or-unknown> \
+     --source-url "<landing/accession URL>" \
+     --note "GEO landing page and file list confirmed public; no login required."
+   ```
+   `--method` is **required** (enum `retrieved|credential-confirmed` — use `credential-confirmed` only when a valid login/credential was needed; no free text). `--license` is **required when the entity has none** — pass an SPDX id, or the `unknown` sentinel if it genuinely can't be determined. The command sets `access.verified: true` and `last_reviewed` to today, appends `--note` to the body `## Access verification log`, and prints the resulting readiness state + prioritizer weight.
 
 **Branch B — requires credentials the project does not hold** (controlled, DUA-gated, commercial):
 
-Apply the `plan-pipeline` Dimension-3 data-access gate logic:
+Record a structured access exception instead of flipping verified (the two are mutually exclusive — the command clears `verified`). `--license` is still required; `decision_date` is set to today automatically:
 
-- **(a) scope-reduce:** defer acquisition; populate `access.exception`:
-  ```yaml
-  access.exception:
-    mode: "scope-reduced"
-    decision_date: "<YYYY-MM-DD>"
-    followup_task: "task:<id>"
-  ```
-- **(b) expand-to-acquire:** add credential acquisition to the current task; populate:
-  ```yaml
-  access.exception:
-    mode: "expanded-to-acquire"
-    decision_date: "<YYYY-MM-DD>"
-  ```
-- **(c) substitute:** choose an alternative dataset; populate:
-  ```yaml
-  access.exception:
-    mode: "substituted"
-    superseded_by_dataset: "dataset:<alternative-slug>"
-  ```
+```bash
+# (a) scope-reduce — defer acquisition
+science dataset verify-access <slug> --license <id-or-unknown> \
+  --exception scope-reduced --rationale "<why>" --followup-task task:<id>
 
-In all Branch B cases, append a dated verification-log line explaining the decision.
+# (b) expand-to-acquire — add credential acquisition to the current task
+science dataset verify-access <slug> --license <id-or-unknown> \
+  --exception expanded-to-acquire --rationale "<why>"
 
-**No new findings store.** These fields are the existing `access` schema — do not introduce a parallel record.
+# (c) substitute — choose an alternative dataset
+science dataset verify-access <slug> --license <id-or-unknown> \
+  --exception substituted --superseded-by dataset:<alternative-slug> --rationale "<why>"
+```
+
+A verification-log line is appended in all Branch B cases.
+
+**No new findings store.** These are the existing `access` fields and the existing body log section — do not introduce a parallel record.
 
 ---
 
