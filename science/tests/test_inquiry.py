@@ -528,6 +528,34 @@ class TestOrphanedInteriorValidation:
         statuses = {r["check"]: r["status"] for r in results}
         assert statuses["orphaned_interior"] == "pass"
 
+    def test_causal_inquiry_allows_exogenous_roots_and_terminal_sinks(self, graph_path: Path) -> None:
+        """Causal DAGs may have non-boundary source roots and terminal sink nodes."""
+        add_inquiry(
+            graph_path,
+            slug="causal-roots-sinks",
+            label="Causal Roots Sinks",
+            target="hypothesis:h01",
+            inquiry_type="causal",
+        )
+        add_concept(graph_path, "treatment", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "outcome", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "latent_root", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "mediator", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "selection_sink", concept_type=None, ontology_id=None)
+        set_boundary_role(graph_path, "causal-roots-sinks", "concept:treatment", "BoundaryIn")
+        set_boundary_role(graph_path, "causal-roots-sinks", "concept:outcome", "BoundaryOut")
+
+        add_inquiry_edge(graph_path, "causal-roots-sinks", "concept:treatment", "sci:feedsInto", "concept:mediator")
+        add_inquiry_edge(graph_path, "causal-roots-sinks", "concept:latent_root", "sci:feedsInto", "concept:mediator")
+        add_inquiry_edge(graph_path, "causal-roots-sinks", "concept:mediator", "sci:feedsInto", "concept:outcome")
+        add_inquiry_edge(
+            graph_path, "causal-roots-sinks", "concept:mediator", "sci:feedsInto", "concept:selection_sink"
+        )
+
+        results = validate_inquiry(graph_path, "causal-roots-sinks")
+        statuses = {r["check"]: r["status"] for r in results}
+        assert statuses["orphaned_interior"] == "pass"
+
 
 class TestProvenanceCompletenessValidation:
     def test_missing_provenance_fails_specified(self, graph_path: Path) -> None:

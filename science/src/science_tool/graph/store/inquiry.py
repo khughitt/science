@@ -625,7 +625,9 @@ def validate_inquiry_dataset(dataset: Dataset, slug: str) -> list[dict]:
             }
         )
 
-    # 5. orphaned_interior — interior nodes with no incoming or outgoing flow edges
+    inquiry_type = _inquiry_property(dataset, inquiry_uri, SCI_NS.inquiryType) or "general"
+
+    # 5. orphaned_interior — interior nodes with missing flow connectivity
     boundary_all = boundary_in | boundary_out
     orphaned: list[str] = []
     for node in all_flow_nodes:
@@ -633,7 +635,10 @@ def validate_inquiry_dataset(dataset: Dataset, slug: str) -> list[dict]:
             continue
         has_incoming = any(node in adjacency.get(src, []) for src in all_flow_nodes)
         has_outgoing = node in adjacency and len(adjacency[node]) > 0
-        if not has_incoming or not has_outgoing:
+        missing_connectivity = not has_incoming and not has_outgoing
+        if inquiry_type != "causal":
+            missing_connectivity = not has_incoming or not has_outgoing
+        if missing_connectivity:
             orphaned.append(str(node))
 
     if orphaned:
@@ -646,16 +651,20 @@ def validate_inquiry_dataset(dataset: Dataset, slug: str) -> list[dict]:
             }
         )
     else:
+        pass_message = (
+            "All causal interior nodes have at least one flow edge"
+            if inquiry_type == "causal"
+            else "All interior nodes have incoming and outgoing flow edges"
+        )
         results.append(
             {
                 "check": "orphaned_interior",
                 "status": "pass",
-                "message": "All interior nodes have incoming and outgoing flow edges",
+                "message": pass_message,
             }
         )
 
     # === Causal-specific checks (only for type=causal) ===
-    inquiry_type = _inquiry_property(dataset, inquiry_uri, SCI_NS.inquiryType) or "general"
     if inquiry_type == "causal":
         causal_graph = dataset.graph(_graph_uri("graph/causal"))
 
