@@ -191,6 +191,12 @@ Do not scaffold unused placeholder directories such as `tools/`, top-level `prom
 
 Only create `.ai/` if the user explicitly needs project-specific prompt/template overrides.
 
+If the scaffold includes `commitlint.config.mjs`, configure it to accept the
+research commit prefixes documented by Science (`finding:`, `hypothesis:`,
+`papers:`, `specs:`) in addition to any conventional-commit prefixes. Do not
+scaffold a bare `config-conventional` preset that rejects those documented
+research subjects.
+
 ## Step 3: Populate Core Files
 
 ### `science.yaml`

@@ -110,19 +110,26 @@ Identify questions and hypotheses that have no accessible dataset.
 science dataset prioritize --format json
 ```
 
+Also export the inverse coverage view:
+
+```bash
+science dataset prioritize --coverage --format json
+```
+
 Cross-reference every `question:` and `hypothesis:` entity found in `entities/`:
 
 - A Q/H is a **gap** if:
-  - No dataset entity has a `related:` edge to it (frontmatter path, either direction), AND no evidence-line carries a `dataset_usage` block pointing to a dataset that reaches it; **or**
+  - No dataset reaches it through any load-bearing authoring surface: dataset `related:`, Q/H `related:` back-edge, Q/H `datasets:`, evidence-line `dataset_usage` + proposition reach, or paper/consumer `dataset_usage` + `related:` Q/H links; **or**
   - Every dataset that does reach it has `access.verified: false` and no `access.exception.mode` set, AND its `readiness.state` is `unverified` or inaccessible (weight < 0.4 from the scorer).
 
 Collect the gap list and present it as a table:
 
-| Q/H ID | Title | Gap reason |
-|--------|-------|------------|
-| ... | ... | `no-edge` / `unverified` / `all-inaccessible` |
+| Q/H ID | Title | Covered datasets | Gap reason |
+|--------|-------|------------------|------------|
+| ... | ... | `dataset:<id>` / none | `no-edge` / `unverified` / `all-inaccessible` |
 
 Note the `no-edge` and `unverified` gap-flags surfaced by the prioritizer — these are the primary signal in a sparse graph.
+Use the `--coverage` output as the per-question/per-hypothesis source of truth; do not manually eyeball only frontmatter edges and miss `dataset_usage` reach.
 
 ---
 
@@ -131,15 +138,18 @@ Note the `no-edge` and `unverified` gap-flags surfaced by the prioritizer — th
 For each gap Q/H, invoke `science-find-datasets` to surface public candidate datasets.
 Focus on obtainable omics (GEO, SRA, Zenodo) for under-covered Q/H triggers; prefer datasets with a direct accession or DOI that can be verified without credentialing.
 
+Before creating any local dataset entity, check existing project datasets and commons-backed datasets/overlays by accession, DOI, title, and normalized slug. If a canonical commons dataset already exists (for example TCGA PanCanAtlas or METABRIC), link to the existing `dataset:<slug>` or create a project overlay when the project needs local annotations. Do not create a duplicate local dataset entity for the same artefact.
+
 For each promising candidate found, author a dataset entity:
 
 ```bash
 science dataset add <slug> \
   --title "<Human-readable title>" \
   --level public \
-  --source-url "<landing page or accession URL>" \
-  --related "question:<id>"   # repeat for each related Q/H
+  --source-url "<landing page or accession URL>"
 ```
+
+Record the dataset/QH connection in the Q/H entity's `datasets:` field during Step 4. Use dataset `related:` only when the dataset entity is the clearer editing surface for the authoring session.
 
 `science dataset add` defaults `--level` to `controlled`; pass `--level public` explicitly for GEO/SRA/Zenodo resources that are freely downloadable. Use `registration` or `controlled` when the repository requires login or a DUA.
 `status` defaults to `candidate` — do not override unless the dataset is already verified.
@@ -194,27 +204,35 @@ A verification-log line is appended in all Branch B cases.
 
 Wire datasets to the questions and hypotheses they inform.
 
-**Add `related:` edges** in each dataset entity's frontmatter for any Q/H it reaches that is not already listed:
+**Prefer Q/H `datasets:` for direct dataset needs.** In each question or hypothesis entity, add the dataset IDs it needs or is informed by:
+
+```yaml
+datasets:
+  - "dataset:<slug>"
+```
+
+This is now load-bearing for `science dataset prioritize` and works without a materialized graph.
+
+**Use dataset `related:` when the dataset entity is the active editing surface.** This remains supported:
 
 ```yaml
 related:
   - "question:q0001"
-  - "hypothesis:h0003"
+  - "hypothesis:h0002"
 ```
 
-Also add the back-edge: in the Q/H entity, add the dataset to its `related:` block if it is not present.
+Do not add duplicate Q/H `related:` back-edges solely for prioritize reach when `datasets:` already records the fact.
 
-**Author `dataset_usage` blocks** where an evidence-line already exists (or author a minimal evidence-line stub):
+**Author `dataset_usage` blocks** where a paper or evidence-line records how a dataset was used:
 
 ```yaml
-# In an evidence-line or interpretation entity:
 dataset_usage:
   - ref: "dataset:<slug>"
-    role: "analyzed"        # analyzed | validation_source | cited | upstream | training | set_definition_source
-    overlap: "full"         # full | partial | unknown
+    role: "analyzed"
+    overlap: "full"
 ```
 
-This is load-bearing: `dataset_usage` edges participate in the `reach` term of the prioritizer and appear in the graph once materialized.
+For papers, pair `dataset_usage` with `related:` Q/H links on the paper. For evidence-lines, pair `dataset_usage` with the existing proposition target. Both paths participate in the `reach` term of the prioritizer; graph materialization is still needed for proposition-derived reach and leverage.
 
 ---
 
@@ -227,7 +245,7 @@ science dataset prioritize --explain
 ```
 
 Present the ranked table. Highlight:
-- Datasets that moved up because of the new `related:` / `dataset_usage` edges added in Step 4.
+- Datasets that moved up because of the new `datasets:` / `related:` / `dataset_usage` connections added in Step 4.
 - Remaining `no-edge` and `unverified` gap-flags.
 - The top-ranked **obtainable** datasets (those with `access.verified: true` or `access.level: public` and a plausible Branch A path).
 

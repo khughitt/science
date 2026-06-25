@@ -93,7 +93,7 @@ For brevity, the examples below write just `science <command>` — **always expa
 - **MUST** start from a specified inquiry or a task/question description (see Input Modes below)
 - **MUST** pick a plan mode (`probe` / `design` / `implementation`, see Plan Modes below) and let it dictate plan shape and section list. Right-size aggressively — over-spec'd 1-day probes are the most common drift.
 - **MUST** write the plan to `entities/plans/YYYY-MM-DD-<slug>.md` (suffix omitted for design/implementation modes; `-pipeline-plan.md` suffix permitted but no longer required).
-- **MUST** check whether methodological readiness is already documented by an `analysis-plan:<slug>` artifact. If not, and the user is asking for orchestration before data QA, independent unit, estimand, power/resolution, and sensitivity rules are clear, recommend `science-plan-analysis` before finalizing the pipeline plan.
+- **MUST** check whether methodological readiness is already documented by an analysis-plan file under `entities/plans/*-analysis-plan.md` (a `type: plan` entity with `plan_kind: analysis-plan`, referenced as `plan:<stem>`). If not, and the user is asking for orchestration before data QA, independent unit, estimand, power/resolution, and sensitivity rules are clear, recommend `science-plan-analysis` before finalizing the pipeline plan.
 - **SHOULD** include frontmatter linking the plan to its hypotheses / questions / decisions / tasks via `related: [hypothesis:..., rq:..., decision:..., plan:..., task:..., paper:...]`. For pure upstream design notes (in the science repo itself), a `Parent design / Predecessor / Status / Depends on` header block is an acceptable alternative to frontmatter.
 - **SHOULD** in `design` mode, defend non-obvious choices in named `Key decision` subsections that name the rejected alternative — this replaces the older per-transformation Risks block.
 - **SHOULD** add `sci:Transformation` graph nodes ONLY when the project uses formal inquiries (Step 3 below). Skip in `design` / `implementation` modes — the plan document is the canonical artifact and graph annotations are not load-bearing.
@@ -110,8 +110,9 @@ The plan-pipeline command works with two types of input:
 - **Task mode** (when the project uses tasks/questions instead of formal inquiries, or when the user input is a task ID or description): Derive the plan directly from the task description, existing code, and project context. Skip inquiry-specific steps (1, 3, 5) — the plan document is the primary deliverable. Graph annotations are secondary.
 
 When an existing analysis plan is in scope, read `entities/plans/*-analysis-plan.md`
-and reuse its methodological readiness checks. Do not re-decide those checks in
-the pipeline plan; focus on execution.
+and reuse its methodological readiness checks. Reference it as `plan:<stem>`, not
+`analysis-plan:<slug>`; `analysis-plan` is a plan kind, not a registered entity
+kind. Do not re-decide those checks in the pipeline plan; focus on execution.
 
 ## Plan Modes
 
@@ -193,6 +194,12 @@ For each input data source identified in Step 2:
    - `origin: external`:
      - PASS if `access.verified: true`.
      - PASS if `access.verified: false` AND `access.exception.mode != ""`.
+     - DEFER, without treating the plan as data-ready, if the dataset is public
+       or registration-only and Work Package 1 is explicitly "retrieve and
+       verify this dataset". In that case WP1 must end by setting
+       `access.verified: true` plus enum-safe `verification_method` and
+       `last_reviewed`; all downstream work packages depend on WP1 and must not
+       consume the dataset before the gate is rerun.
      - HALT otherwise with Branch A/B options:
        - **Branch A** — verifiable under current credentials → run verification
          (manual or future `science dataset verify`), then re-run this step.

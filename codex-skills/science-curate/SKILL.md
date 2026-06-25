@@ -134,6 +134,11 @@ The inventory helper should return compact facts only:
 - unresolved refs and obvious alias-resolutions if available;
 - candidate stale-task evidence from direct source refs or result manifests.
 
+If the inventory includes `no_frontmatter_files`, separate frontmatter-exempt
+legacy prose from true missing-metadata candidates. Legacy `doc/plans/` and
+`doc/reports/` files are curation context unless they live under a registered
+entity home or this sweep is explicitly promoting them to entities.
+
 ## Phase 2: Candidate triage
 
 Group findings into curation themes and choose a bounded reading set. Use the

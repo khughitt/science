@@ -80,7 +80,7 @@ Additionally:
 3. Read existing inquiries: run `science inquiry list` (if available).
 4. Read existing pipeline plans in `entities/plans/` (if any).
 5. Read existing pre-registrations in `entities/pre-registrations/` to avoid duplication.
-6. Read linked analysis plans in `entities/plans/*-analysis-plan.md` when the user or context references `analysis-plan:<slug>`.
+6. Read linked analysis plans in `entities/plans/*-analysis-plan.md` when the user or context references a `plan:<stem>` whose frontmatter has `plan_kind: analysis-plan`.
 
 ## Interactive Refinement
 
@@ -139,8 +139,8 @@ treats the standing verdict as no-update rather than as a runnable null.
 - Which hypotheses does it test? (Reference by ID if they exist in `entities/hypotheses/`)
 - Is there a pipeline plan? (Reference by slug if one exists in `entities/plans/`)
 
-If this is a data-analysis pre-registration and no linked `analysis-plan:<slug>`
-exists, recommend `science-plan-analysis` when any of these are underspecified:
+If this is a data-analysis pre-registration and no linked `plan:<stem>` analysis
+plan exists, recommend `science-plan-analysis` when any of these are underspecified:
 input QA, preprocessing/normalization checks, independent unit, estimand,
 power/resolution limit, or sensitivity-arbitration rule. The recommendation is
 advisory, not a hard dependency.
@@ -244,6 +244,7 @@ Use the hypothesis ID, inquiry slug, or task ID as the basis:
   - `related: [...]` — hypothesis IDs, inquiry slugs, and/or task IDs this pre-reg covers (mix of commitment targets and navigation context is fine here)
   - `commits_to: [...]` — optional; the subset of epistemic `related:` entries this pre-reg actually constrains. When present, `bears_on` edges are derived only to these targets. When absent, the deriver falls back to "all epistemic `related:` entries are commitment targets," which over-derives for mixed pre-regs.
 - The `related` field is what `interpret-results` searches on, so it must be populated.
+- Dataset refs are allowed in `related:` when a pre-registration is tied to a specific vehicle/dataset; they are navigation and provenance context, not commitment targets. Put epistemic targets in `commits_to:` so dataset context does not get treated as a locked claim.
 - `commits_to:` is an edge-scoping field, not a lock. Populating it does not exempt the target from freshness propagation from other upstream entities.
 
 ## After Writing
