@@ -112,12 +112,20 @@ def test_plan_analysis_generated_skill_mentions_index_and_readiness() -> None:
     expected_strings = (
         "name: science-plan-analysis",
         "skills/INDEX.md",
-        "entities/plans/YYYY-MM-DD-<slug>-analysis-plan.md",
+        "entities/plans/<NNNN>-<slug>-analysis-plan.md",
         "Readiness Decision",
         "science feedback add",
     )
     for expected in expected_strings:
         assert expected in text
+
+
+def test_review_pipeline_generated_skill_uses_doc_reviews_for_reports(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-review-pipeline"].read_text(encoding="utf-8")
+
+    assert "doc/reviews/<stem>-pipeline-review.md" in text
+    assert "entities/plans/<stem>-review.md" not in text
 
 
 def test_science_health_mentions_identity_policy_triage() -> None:

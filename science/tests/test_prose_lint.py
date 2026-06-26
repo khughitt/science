@@ -185,6 +185,13 @@ class TestShortFormIds:
         path = _write(tmp_path, "H1975 and T47D cell lines were profiled.\n")
         assert detect_short_form_ids(path) == []
 
+    def test_reports_utf8_byte_column_for_automated_edits(self, tmp_path):
+        path = _write(tmp_path, "αβ H123 should use the canonical form.\n")
+        issues = detect_short_form_ids(path)
+        assert len(issues) == 1
+        assert issues[0].col == 4
+        assert issues[0].byte_col == 6
+
     def test_no_flag_inside_wikilink(self, tmp_path):
         # `[[h006-regime-sequence]]` is a resolvable wiki-link, the linking
         # convention the toolchain encourages; its inner `h006` must not flag.

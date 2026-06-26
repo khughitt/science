@@ -494,6 +494,12 @@ def _next_numeric_local_part(project_root: Path, kind: str, slug: str) -> str:
     return f"{max_n + 1:0{LOCAL_PART_WIDTH}d}-{slug}"
 
 
+def _numeric_slug_fragment(slug: str) -> str:
+    if _NUMERIC_LOCAL_PART_RE.fullmatch(slug):
+        return slug.split("-", 1)[1]
+    return slug
+
+
 def generate_entity_id(
     project_root: Path,
     kind: str,
@@ -517,6 +523,7 @@ def generate_entity_id(
     slug_value = validate_slug(slug) if slug is not None else derive_slug(title)
     if strategy in ("slug", "id-local"):
         return f"{kind}:{slug_value}"
+    slug_value = _numeric_slug_fragment(slug_value)
     return f"{kind}:{_next_numeric_local_part(project_root, kind, slug_value)}"
 
 

@@ -93,7 +93,7 @@ uv run science <command>
 - **MUST** evaluate all 9 rubric dimensions
 - **MUST** be critical — surface weaknesses, don't just confirm the plan is good
 - **MUST** provide specific, actionable recommendations for each issue
-- **MUST** save review report next to the reviewed artifact: `entities/inquiries/<slug>-review.md` for an inquiry, or `entities/plans/<stem>-review.md` for a `type: plan` document (see *Resolve the target* below)
+- **MUST** save review report under `doc/reviews/<stem>-pipeline-review.md` with a frontmatter backlink to the reviewed inquiry or plan (see *Resolve the target* below)
 - **SHOULD** cross-reference claims against existing literature (LLM knowledge + web search)
 - **MUST NOT** change the inquiry or plan — only report findings
 
@@ -106,7 +106,8 @@ artifact under review is an `inquiry` (a `entities/inquiries/<slug>.md` with an 
 the inquiry commands below. If it is a standalone `type: plan` document (e.g. `entities/plans/<stem>.md`
 with no inquiry slug), the `science inquiry show/validate <slug>` calls do **not** resolve — skip
 them and instead drive the review from the plan document itself plus its frontmatter `related:`
-entities, following the repo's existing review-file convention (`entities/plans/<stem>-review.md`).
+entities. Save the review outside the entity tree as `doc/reviews/<stem>-pipeline-review.md` so layout
+v3 entity-conformance does not treat the review as a malformed plan entity.
 
 For an inquiry target:
 
@@ -235,13 +236,13 @@ WARN (manifest present but incomplete) / FAIL (no manifest generation)
 
 ### Step 3: Write review report
 
-Save next to the reviewed artifact: `entities/inquiries/<slug>-review.md` for an inquiry target, or
-`entities/plans/<stem>-review.md` for a plan target (match the repo's existing review-file convention):
+Save under `doc/reviews/<stem>-pipeline-review.md`, where `<stem>` is the reviewed inquiry or plan
+file stem. Include a `reviews:` backlink to the reviewed entity or file path:
 
 ```markdown
 # Pipeline Review: {{label}}
 
-- **Inquiry:** {{slug}}
+- **Reviews:** {{reviewed-ref-or-path}}
 - **Date:** {{date}}
 - **Overall:** {{PASS|WARN|FAIL}}
 

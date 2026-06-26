@@ -50,6 +50,7 @@ class LintIssue:
     severity: str
     message: str
     match: str
+    byte_col: int | None = None
 
 
 def severity_for(check: str, *, strict: bool) -> str:
@@ -130,6 +131,10 @@ def _mask_wikilinks(line: str) -> str:
 def _is_cell_line_context(line: str, match: re.Match[str]) -> bool:
     window = line[max(0, match.start() - 40) : min(len(line), match.end() + 40)]
     return bool(_CELL_LINE_CONTEXT_RE.search(window))
+
+
+def _utf8_byte_col(line: str, char_index: int) -> int:
+    return len(line[:char_index].encode("utf-8")) + 1
 
 
 def detect_bare_author_year(
@@ -261,6 +266,7 @@ def detect_short_form_ids(
                     severity=severity_for("short-form-ids", strict=strict),
                     message=f"short-form ID '{short}' should be canonical '{kind}:…'",
                     match=short,
+                    byte_col=_utf8_byte_col(raw_line, match.start()),
                 )
             )
     return issues

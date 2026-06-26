@@ -850,6 +850,14 @@ def test_generate_entity_id_uses_numeric_for_discussion_and_interpretation(tmp_p
     )
 
 
+def test_generate_entity_id_strips_numeric_prefix_from_numeric_slug(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    assert (
+        generate_entity_id(tmp_path, "interpretation", "Run 1 Result", None, "0007-run-1-result")
+        == "interpretation:0001-run-1-result"
+    )
+
+
 def test_create_entity_auto_generates_discussion_id_without_siblings(tmp_path: Path) -> None:
     seed_project(tmp_path)
     result = create_entity(
