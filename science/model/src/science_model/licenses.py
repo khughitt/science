@@ -26,6 +26,7 @@ KNOWN_LICENSES: frozenset[str] = frozenset(
         "BSD-3-Clause",
         "GPL-3.0-only",
         "LGPL-3.0-only",
+        "LGPL-3.0-or-later",
     }
 )
 

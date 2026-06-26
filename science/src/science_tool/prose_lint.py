@@ -119,11 +119,17 @@ _TASK_HEADING_RE = re.compile(r"^\s*##+\s*\[[a-zA-Z]\d+\]")
 # `[[h006-regime-sequence]]` wiki-links are the toolchain's linking convention;
 # their inner text (e.g. `h006`) is a resolvable reference, not a bare short form.
 _WIKILINK_SPAN_RE = re.compile(r"\[\[[^\]\n]*\]\]")
+_CELL_LINE_CONTEXT_RE = re.compile(r"\bcell[-\s]?lines?\b", re.IGNORECASE)
 
 
 def _mask_wikilinks(line: str) -> str:
     """Blank out `[[...]]` spans, preserving column offsets for other matches."""
     return _WIKILINK_SPAN_RE.sub(lambda m: " " * len(m.group(0)), line)
+
+
+def _is_cell_line_context(line: str, match: re.Match[str]) -> bool:
+    window = line[max(0, match.start() - 40) : min(len(line), match.end() + 40)]
+    return bool(_CELL_LINE_CONTEXT_RE.search(window))
 
 
 def detect_bare_author_year(
@@ -240,6 +246,8 @@ def detect_short_form_ids(
                 continue
             short = match.group(0)
             if deny and short in deny:
+                continue
+            if match.group(1).isupper() and _is_cell_line_context(line, match):
                 continue
             if resolver and (short in resolver or short.lower() in resolver):
                 continue

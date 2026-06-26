@@ -181,6 +181,10 @@ class TestShortFormIds:
         path = _write(tmp_path, "Variable X1 holds the result.\n")
         assert detect_short_form_ids(path) == []
 
+    def test_no_flag_on_embedded_cell_line_identifier(self, tmp_path):
+        path = _write(tmp_path, "H1975 and T47D cell lines were profiled.\n")
+        assert detect_short_form_ids(path) == []
+
     def test_no_flag_inside_wikilink(self, tmp_path):
         # `[[h006-regime-sequence]]` is a resolvable wiki-link, the linking
         # convention the toolchain encourages; its inner `h006` must not flag.

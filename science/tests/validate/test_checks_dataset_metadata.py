@@ -54,6 +54,10 @@ def test_valid_license_passes_silently() -> None:
     assert _rules([_ds(origin="external", license="CC-BY-4.0")]) == []
 
 
+def test_lgpl_or_later_license_passes_silently() -> None:
+    assert _rules([_ds(origin="external", license="LGPL-3.0-or-later")]) == []
+
+
 def test_sentinel_license_clears_missing_without_unrecognized() -> None:
     assert _rules([_ds(origin="external", license="unknown")]) == []
 

@@ -699,6 +699,12 @@ class TestEditTask:
         t = edit_task(tmp_path, tasks_dir, "t001", related=["hypothesis:h01"])
         assert t.related == ["hypothesis:h01"]
 
+    def test_edit_related_appends_without_duplicates(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        edit_task(tmp_path, tasks_dir, "t001", related=["hypothesis:h01", "topic:dnabert2"])
+        t = edit_task(tmp_path, tasks_dir, "t001", related=["topic:dnabert2", "task:t010"])
+        assert t.related == ["hypothesis:h01", "topic:dnabert2", "task:t010"]
+
     def test_edit_not_found_raises(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
         with pytest.raises(KeyError):

@@ -678,7 +678,9 @@ def edit_task(
     if aspects is not None:
         task.aspects = aspects
     if related is not None:
-        task.related = related
+        for ref in related:
+            if ref not in task.related:
+                task.related.append(ref)
     if blocked_by is not None:
         task.blocked_by = validate_blocker_refs(project_root, blocked_by, force=force)
     if group is not None:

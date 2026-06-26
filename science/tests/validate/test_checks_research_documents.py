@@ -222,6 +222,27 @@ def test_hypothesis_comparisons_warn_for_missing_sections(tmp_path: Path) -> Non
     assert "Comparison entities/discussions/0001-comparison-a.md missing section: Current Verdict" in messages
 
 
+def test_hypothesis_comparisons_normalizes_required_section_headings(tmp_path: Path) -> None:
+    from science_tool.validate.checks.hypothesis_comparisons import check_hypothesis_comparisons
+
+    ctx = _ctx(tmp_path)
+    comparisons_dir = tmp_path / "entities" / "discussions"
+    comparisons_dir.mkdir(parents=True)
+    comparisons_dir.joinpath("0001-comparison-a.md").write_text(
+        "\n".join(
+            [
+                "## Hypotheses Compared",
+                "## Evidence inventory",
+                "## Discriminating predictions",
+                "## Current verdict",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert _messages(check_hypothesis_comparisons(ctx)) == []
+
+
 # ---------------------------------------------------------------------------
 # Task 8: dual-root tests — entities/ locations are discovered (prereg)
 # ---------------------------------------------------------------------------
