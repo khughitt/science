@@ -684,3 +684,13 @@ Phase 5 of the adapter-entity-layout migration (design: docs/plans/2026-06-21-ad
 - created: 2026-06-22
 
 science entities migrate --apply has a weaker pre-mutation gate (_postmove_audit_failures in entity_layout_migration.py, via audit_project_sources on the simulated post-move model) than its final post-mutation full graph validation. On protein-landscape, --apply passed the pre-mutation gate (0 unresolved) but then failed post-mutation with 11 unresolved report:/task: related-refs AFTER git-mv'ing 243 owners, self-reporting 'working tree modified; run git restore' and forcing a rollback. The pre-mutation gate should be a superset of the post-mutation validation so fan-out projects fail fast pre-mutation instead of apply-then-rollback. Align the two reference surfaces.
+
+## [t073] Design first-class minimum viable synthesis artifacts
+- priority: P2
+- status: proposed
+- aspects: []
+- related: [task:t021]
+- group: evidence-payload-schema
+- created: 2026-06-26
+
+Cancer-meta t026 surfaced a reusable Science pattern: when quantitative synthesis is blocked, the workflow should still produce a structured artifact rather than a terminal abstention. Design whether Science should provide template or command support for minimum viable synthesis outputs: structured comparison, heterogeneity or incompatibility statement, missing-fields list, follow-up route, and an explicitly adapted certainty block when formal GRADE/SWiM is out of scope. Relate this to evidence payload fields, uncertainty reason codes, and source-reliability dimensions without making project-specific certainty labels part of core semantics. Origin: cancer-meta question:0013-adapted-federation-certainty-blocks and feedback fb-2026-06-26-001.
