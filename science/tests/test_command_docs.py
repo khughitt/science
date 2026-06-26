@@ -75,6 +75,15 @@ def test_plan_analysis_guides_blocker_tasks_to_reuse_task_scoped_aspects() -> No
     assert "do not mutate `science.yaml` solely to create blocker tasks" in text
 
 
+def test_specify_model_documents_proxy_directness_vocabulary() -> None:
+    text = _read("commands/specify-model.md")
+
+    assert "`proxy_directness:` must be one of `direct`, `indirect`, or `derived`" in text
+    assert "Do not write `proxy`; graph build rejects it." in text
+    assert "`indirect` for a measured proxy of the target construct" in text
+    assert "`derived` for a computed or model-derived proxy" in text
+
+
 def test_graph_docs_explain_local_only_build_for_composite_noise_control() -> None:
     user_guide = _read("docs/user-guide/graph-and-derived-state.md")
     federation = _read("docs/federation.md")

@@ -154,6 +154,11 @@ When the proposition is materially clearer with layered metadata, author it expl
 - `supports_scope` as a review hint only
 - `rival_model_packet` using optional `current_working_model`
 
+`proxy_directness:` must be one of `direct`, `indirect`, or `derived`. Do not write `proxy`; graph build rejects it.
+Use `direct` when the evidence observes the target construct itself, `indirect` for a measured proxy of the target construct,
+and `derived` for a computed or model-derived proxy. If `proxy_directness` is `indirect` or `derived`, include a
+`measurement_model` that explains what the proxy measures, the latent construct it stands in for, and known failure modes.
+
 ### Step 4: Attach Support And Dispute
 
 For each important proposition, ask:

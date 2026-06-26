@@ -192,6 +192,18 @@ def test_generated_plan_analysis_skill_reuses_task_scoped_aspects_for_blockers(
     assert "do not mutate `science.yaml` solely to create blocker tasks" in text
 
 
+def test_generated_specify_model_skill_documents_proxy_directness_vocabulary(
+    tmp_path: Path,
+) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-specify-model"].read_text(encoding="utf-8")
+
+    assert "`proxy_directness:` must be one of `direct`, `indirect`, or `derived`" in text
+    assert "Do not write `proxy`; graph build rejects it." in text
+    assert "`indirect` for a measured proxy of the target construct" in text
+    assert "`derived` for a computed or model-derived proxy" in text
+
+
 def test_review_pipeline_generated_skill_uses_doc_reviews_for_reports(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
     text = generated["science-review-pipeline"].read_text(encoding="utf-8")
