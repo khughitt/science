@@ -20,6 +20,7 @@ from science_model.contracts.inventory_common import InventoryWarning
 from science_model.entities import Entity
 
 from science_tool.big_picture.literature_prefix import canonical_paper_id
+from science_tool.datasets.semantics import dataset_class_for, runtime_state_for
 from science_tool.entity_identity import collect_identity_warnings
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError
 from science_tool.graph.migrate import (
@@ -1402,21 +1403,36 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
                 datapackage = fm.get("datapackage", "")
                 local_path = fm.get("local_path", "")
                 stageable_path = datapackage or local_path
+                try:
+                    dataset_class = dataset_class_for(fm)
+                    runtime_state = runtime_state_for(fm)
+                except ValueError:
+                    dataset_class = "deposit"
+                    runtime_state = "blocked-access"
                 # evaluate-next / track are not-yet-staged triage tiers, where a
                 # verified dataset means "confirmed reachable", not "staged" — so
                 # absence of datapackage/local_path is expected, not an anomaly.
                 not_yet_staged = (fm.get("tier") or "").strip() in ("evaluate-next", "track")
-                if (verified or exception_mode) and not stageable_path and not not_yet_staged:
+                if (
+                    dataset_class == "deposit"
+                    and runtime_state == "unstaged-deposit"
+                    and (verified or exception_mode)
+                    and not stageable_path
+                    and not not_yet_staged
+                ):
                     issues.append(
                         {
                             "code": "dataset_verified_but_unstageable",
                             "severity": "warning",
                             "entity_id": entity_id,
                             "file_path": str(md),
-                            "message": "verified entity has neither datapackage: nor local_path:",
+                            "message": (
+                                "access is verified but runtime files are not staged; add "
+                                "datapackage:/local_path: or move the dataset out of use-now"
+                            ),
                         }
                     )
-                elif stageable_path:
+                elif dataset_class == "deposit" and stageable_path:
                     full = project_root / stageable_path
                     if not full.exists():
                         issues.append(

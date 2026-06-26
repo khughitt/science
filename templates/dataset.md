@@ -5,6 +5,7 @@ title: "<Dataset Name — artefact-level specific>"
 status: "active"
 profiles: ["science-pkg-entity-1.0"]
 origin: "external"                # external | derived
+dataset_class: "deposit"          # deposit | reference | pointer
 tier: "evaluate-next"             # use-now | evaluate-next | track
 license: ""                       # SPDX id (e.g. CC-BY-4.0) or sentinel: unknown | proprietary | custom
 update_cadence: ""                # static | rolling | monthly | ...
@@ -21,7 +22,7 @@ access:
   availability: "available"       # available | embargoed | withdrawn
   available_after: ""             # free-form window (ISO date when known, else e.g. "2026-Q3", "after Lee2026 publication"). Only set when availability is "embargoed".
   verified: false
-  verification_method: ""         # "" | retrieved | credential-confirmed
+  verification_method: ""         # "" | retrieved | credential-confirmed | landing-confirmed | metadata-confirmed
   last_reviewed: ""               # YYYY-MM-DD
   verified_by: ""
   source_url: ""

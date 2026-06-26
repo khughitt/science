@@ -27,6 +27,7 @@ def test_add_creates_candidate_entity(tmp_path: Path) -> None:
     assert "dataset:my-set" in text
     assert "status: candidate" in text
     assert "origin: external" in text
+    assert "dataset_class: deposit" in text
     assert "license: unknown" in text
     assert "verified: false" in text
 

@@ -174,7 +174,7 @@ For **each candidate** dataset (status `candidate`, `access.verified: false`), c
      --source-url "<landing/accession URL>" \
      --note "GEO landing page and file list confirmed public; no login required."
    ```
-   `--method` is **required** (enum `retrieved|credential-confirmed` — use `credential-confirmed` only when a valid login/credential was needed; no free text). `--license` is **required when the entity has none** — pass an SPDX id, or the `unknown` sentinel if it genuinely can't be determined. The command sets `access.verified: true` and `last_reviewed` to today, appends `--note` to the body `## Access verification log`, and prints the resulting readiness state + prioritizer weight.
+   `--method` is **required** (enum `retrieved|credential-confirmed|landing-confirmed|metadata-confirmed` — use `retrieved` for downloadable deposits, `credential-confirmed` only when a valid login/credential was needed, and `landing-confirmed`/`metadata-confirmed` for reference or pointer records; no free text). `--license` is **required when the entity has none** — pass an SPDX id, or the `unknown` sentinel if it genuinely can't be determined. The command sets `access.verified: true` and `last_reviewed` to today, appends `--note` to the body `## Access verification log`, and prints the resulting readiness state + prioritizer weight.
 
 **Branch B — requires credentials the project does not hold** (controlled, DUA-gated, commercial):
 

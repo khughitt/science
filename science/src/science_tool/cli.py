@@ -5593,7 +5593,10 @@ def dataset_add(
 @dataset_group.command("verify-access")
 @click.argument("ref")
 @click.option("--level", type=click.Choice(["public", "registration", "controlled", "commercial", "mixed"]))
-@click.option("--method", type=click.Choice(["retrieved", "credential-confirmed"]))
+@click.option(
+    "--method",
+    type=click.Choice(["retrieved", "credential-confirmed", "landing-confirmed", "metadata-confirmed"]),
+)
 @click.option("--license", "license_", default=None, help="SPDX id or sentinel (unknown|proprietary|custom)")
 @click.option("--by", "verified_by", default="agent (verify-access)")
 @click.option("--source-url", "source_url", default=None)

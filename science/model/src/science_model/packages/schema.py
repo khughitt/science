@@ -100,7 +100,13 @@ class AccessBlock(BaseModel):
     availability: Literal["available", "embargoed", "withdrawn"] = "available"
     available_after: str = ""
     verified: bool
-    verification_method: Literal["", "retrieved", "credential-confirmed"] = ""
+    verification_method: Literal[
+        "",
+        "retrieved",
+        "credential-confirmed",
+        "landing-confirmed",
+        "metadata-confirmed",
+    ] = ""
     last_reviewed: str = ""
     verified_by: str = ""
     source_url: str = ""
