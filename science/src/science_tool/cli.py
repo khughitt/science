@@ -1312,8 +1312,13 @@ def graph_init(graph_path: Path) -> None:
     show_default=True,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
 )
-def graph_build(project_root: Path) -> None:
-    """Materialize graph.trig and composite.trig from structured project sources."""
+@click.option(
+    "--local-only",
+    is_flag=True,
+    help="Materialize only knowledge/graph.trig; leave knowledge/composite.trig untouched.",
+)
+def graph_build(project_root: Path, local_only: bool) -> None:
+    """Materialize graph.trig and, unless skipped, composite.trig from structured project sources."""
     from science_tool.graph.composite import assemble_composite_graph
     from science_tool.peers import PeerNotFound, PeerUnresolved
     from science_tool.project_config import load_project_config
@@ -1339,7 +1344,9 @@ def graph_build(project_root: Path) -> None:
     click.echo(f"Materialized local graph at {local_path}")
 
     stale_composite_path = _project_root / "knowledge" / "composite.trig"
-    if _cfg is not None and _cfg.peers:
+    if local_only:
+        click.echo("Skipped composite graph refresh (--local-only)")
+    elif _cfg is not None and _cfg.peers:
         if stale_composite_path.exists():
             stale_composite_path.unlink()
         try:

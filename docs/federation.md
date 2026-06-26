@@ -105,6 +105,16 @@ If a peer has `knowledge/composite.trig` but no `knowledge/graph.trig`, composit
 assembly treats the peer's local graph as missing instead of reading the
 composite file.
 
+For local cleanup where peer state is not part of the intended change, run:
+
+```bash
+science graph build --local-only
+```
+
+This refreshes the host `knowledge/graph.trig` and leaves `knowledge/composite.trig` untouched.
+Use the default `science graph build` only when you intentionally want a fresh
+composite graph that may include unrelated peer updates.
+
 ## CLI
 
 The current peer commands are:

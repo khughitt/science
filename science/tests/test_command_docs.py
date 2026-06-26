@@ -75,6 +75,15 @@ def test_plan_analysis_guides_blocker_tasks_to_reuse_task_scoped_aspects() -> No
     assert "do not mutate `science.yaml` solely to create blocker tasks" in text
 
 
+def test_graph_docs_explain_local_only_build_for_composite_noise_control() -> None:
+    user_guide = _read("docs/user-guide/graph-and-derived-state.md")
+    federation = _read("docs/federation.md")
+
+    for text in (user_guide, federation):
+        assert "science graph build --local-only" in text
+        assert "leaves `knowledge/composite.trig` untouched" in text
+
+
 def test_pipeline_audit_process_documents_clean_base_qa_checkpoint_pattern() -> None:
     text = _read("docs/process/pipeline-audit-and-refactor.md")
 

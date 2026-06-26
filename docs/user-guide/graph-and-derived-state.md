@@ -17,6 +17,16 @@ bibliography records, structured sources, and project configuration.
 Do not edit `knowledge/graph.trig` as the durable fix. Correct the source and
 rebuild.
 
+For local cleanup in a project that declares peers, use:
+
+```bash
+science graph build --local-only
+```
+
+This refreshes `knowledge/graph.trig` and leaves `knowledge/composite.trig` untouched.
+Use the default `science graph build` when you intentionally want to refresh the
+peer-composed graph.
+
 ## Dashboard Summaries
 
 Dashboard summaries are compact readings of the current graph: unresolved

@@ -94,6 +94,87 @@ def test_graph_init_viz_notebook_uses_store_summaries_for_dashboard_panels() -> 
         assert "click" in pyproject_content
 
 
+def test_graph_build_local_only_leaves_existing_composite_untouched() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        peer = root / "peer"
+        peer.mkdir()
+        (root / "science.yaml").write_text(
+            f"name: host\nid: host\nrole: project\npeers:\n  - id: peer\n    path: {peer}\n",
+            encoding="utf-8",
+        )
+        knowledge = root / "knowledge"
+        knowledge.mkdir()
+        composite = knowledge / "composite.trig"
+        composite.write_text("existing composite\n", encoding="utf-8")
+
+        def fake_materialize(project_root: Path) -> Path:
+            graph_path = project_root / "knowledge" / "graph.trig"
+            graph_path.parent.mkdir(exist_ok=True)
+            graph_path.write_text("local graph\n", encoding="utf-8")
+            return graph_path
+
+        with (
+            patch("science_tool.cli.materialize_graph", side_effect=fake_materialize),
+            patch("science_tool.registry.config.ensure_registered"),
+            patch("science_tool.graph.composite.assemble_composite_graph") as assemble,
+            patch("science_tool.graph.sources.load_project_sources", return_value=None),
+            patch("science_tool.graph.suggest.suggest_ontologies", return_value=[]),
+        ):
+            result = runner.invoke(main, ["graph", "build", "--local-only"])
+
+        assert result.exit_code == 0, result.output
+        assert "Materialized local graph" in result.output
+        assert "Skipped composite graph refresh" in result.output
+        assemble.assert_not_called()
+        assert composite.read_text(encoding="utf-8") == "existing composite\n"
+
+
+def test_graph_build_default_refreshes_composite_when_peers_exist() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        peer = root / "peer"
+        peer.mkdir()
+        (root / "science.yaml").write_text(
+            f"name: host\nid: host\nrole: project\npeers:\n  - id: peer\n    path: {peer}\n",
+            encoding="utf-8",
+        )
+        knowledge = root / "knowledge"
+        knowledge.mkdir()
+        composite = knowledge / "composite.trig"
+        composite.write_text("stale composite\n", encoding="utf-8")
+
+        def fake_materialize(project_root: Path) -> Path:
+            graph_path = project_root / "knowledge" / "graph.trig"
+            graph_path.parent.mkdir(exist_ok=True)
+            graph_path.write_text("local graph\n", encoding="utf-8")
+            return graph_path
+
+        def fake_assemble(project_root: Path) -> Path:
+            assert not (project_root / "knowledge" / "composite.trig").exists()
+            out = project_root / "knowledge" / "composite.trig"
+            out.write_text("fresh composite\n", encoding="utf-8")
+            return out
+
+        with (
+            patch("science_tool.cli.materialize_graph", side_effect=fake_materialize),
+            patch("science_tool.registry.config.ensure_registered"),
+            patch("science_tool.graph.composite.assemble_composite_graph", side_effect=fake_assemble) as assemble,
+            patch("science_tool.graph.sources.load_project_sources", return_value=None),
+            patch("science_tool.graph.suggest.suggest_ontologies", return_value=[]),
+        ):
+            result = runner.invoke(main, ["graph", "build"])
+
+        assert result.exit_code == 0, result.output
+        assert "Materialized composite graph" in result.output
+        assemble.assert_called_once_with(root)
+        assert composite.read_text(encoding="utf-8") == "fresh composite\n"
+
+
 def test_graph_export_json_emits_selected_overlays() -> None:
     runner = CliRunner()
 
