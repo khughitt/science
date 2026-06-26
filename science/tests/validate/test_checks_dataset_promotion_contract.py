@@ -143,6 +143,77 @@ def test_clean_candidate_dataset_descriptor_passes_contract(tmp_path: Path) -> N
     assert results == []
 
 
+def test_reference_candidate_descriptor_does_not_require_datapackage(tmp_path: Path) -> None:
+    from science_tool.validate.checks.dataset_promotion_contract import (
+        check_dataset_promotion_contract,
+    )
+
+    _write_descriptor(
+        tmp_path,
+        datapackage="",
+        extra_frontmatter=(
+            "dataset_class: reference\n"
+            "license: unknown\n"
+            "access:\n"
+            "  level: public\n"
+            "  verified: true\n"
+            "  verification_method: landing-confirmed\n"
+            "  source_url: https://example.org/catalog\n"
+        ),
+    )
+
+    results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
+
+    assert results == []
+
+
+def test_pointer_candidate_descriptor_does_not_require_datapackage(tmp_path: Path) -> None:
+    from science_tool.validate.checks.dataset_promotion_contract import (
+        check_dataset_promotion_contract,
+    )
+
+    _write_descriptor(
+        tmp_path,
+        datapackage="",
+        extra_frontmatter=(
+            "dataset_class: pointer\n"
+            "license: unknown\n"
+            "access:\n"
+            "  level: public\n"
+            "  verified: true\n"
+            "  verification_method: metadata-confirmed\n"
+            "  source_url: https://example.org/record\n"
+        ),
+    )
+
+    results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
+
+    assert results == []
+
+
+def test_reference_candidate_descriptor_requires_verified_source_url(tmp_path: Path) -> None:
+    from science_tool.validate.checks.dataset_promotion_contract import (
+        check_dataset_promotion_contract,
+    )
+
+    _write_descriptor(
+        tmp_path,
+        datapackage="",
+        extra_frontmatter=(
+            "dataset_class: reference\n"
+            "license: unknown\n"
+            "access:\n"
+            "  level: public\n"
+            "  verified: true\n"
+            "  verification_method: landing-confirmed\n"
+        ),
+    )
+
+    results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
+
+    assert _rules(results) == ["dataset-promotion.reference-access-invalid"]
+
+
 def test_plain_dataset_reference_doc_is_not_a_promotion_candidate(tmp_path: Path) -> None:
     from science_tool.validate.checks.dataset_promotion_contract import (
         check_dataset_promotion_contract,
@@ -254,6 +325,29 @@ def test_pinned_overlay_requires_resolvable_source_datapackage(
 
     assert _rules(results) == ["dataset-promotion.source-unresolved"]
     assert results[0].severity is Severity.ERROR
+
+
+def test_pinned_deposit_overlay_requires_source_datapackage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.validate.checks.dataset_promotion_contract import (
+        check_dataset_promotion_contract,
+    )
+
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(_write_commons_dataset(tmp_path)))
+    _write_descriptor(
+        tmp_path,
+        extra_frontmatter=(
+            "overlay_of: dataset:demo-dataset\n"
+            "pin_version: \"1.0.0\"\n"
+        ),
+    )
+
+    results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
+
+    assert _rules(results) == ["dataset-promotion.source-unresolved"]
+    assert "source datapackage" in results[0].message
 
 
 def test_pinned_overlay_requires_resolvable_commons_canonical(

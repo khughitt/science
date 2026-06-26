@@ -65,6 +65,25 @@ def _git_stdout(root: Path, *args: str) -> str:
     ).stdout.strip()
 
 
+def _commit_all(root: Path, message: str = "update") -> None:
+    subprocess.run(["git", "-C", str(root), "add", "."], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(root), "commit", "-q", "-m", message],
+        check=True,
+        capture_output=True,
+    )
+
+
+def _replace_single_dataset(proj: Path, slug: str, frontmatter: str) -> None:
+    dataset_dir = proj / "entities" / "datasets"
+    for path in dataset_dir.glob("*.md"):
+        path.unlink()
+    (dataset_dir / f"{slug}.md").write_text(
+        f"---\n{frontmatter}---\n# {slug}\n",
+        encoding="utf-8",
+    )
+
+
 def _snapshot_state(commons: Path, data_yaml: Path) -> dict[str, Any]:
     """Capture pre-apply state for byte-identity rollback assertions."""
     artifact_paths = [
@@ -154,6 +173,103 @@ def test_dataset_apply_writes_three_artifacts_commit_tag_override_overlay(
     overlay_text = overlay.read_text(encoding="utf-8")
     assert "overlay_of: dataset:fixture-ds" in overlay_text
     assert "pin_version" in overlay_text
+
+
+def test_reference_dataset_promotes_without_datapackage_or_data_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    proj, commons = _setup(tmp_path, monkeypatch)
+    _replace_single_dataset(
+        proj,
+        "catalog-ref",
+        (
+            "id: dataset:catalog-ref\n"
+            "type: dataset\n"
+            "title: Catalog Reference\n"
+            "dataset_class: reference\n"
+            "origin: external\n"
+            "tier: track\n"
+            "license: unknown\n"
+            "source_refs: [paper:source]\n"
+            "access:\n"
+            "  level: public\n"
+            "  verified: true\n"
+            "  verification_method: landing-confirmed\n"
+            "  source_url: https://example.org/catalog\n"
+        ),
+    )
+    _commit_all(proj, "reference dataset")
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    assert discovery.failed_candidates == []
+    plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
+
+    [decision] = plan.decisions
+    assert [artifact.path.as_posix() for artifact in decision.canonical_artifacts] == [
+        "datasets/catalog-ref/entity.md"
+    ]
+
+    result = apply_promote(plan, commons_root=commons, invocation="test")
+
+    canonical = commons / "datasets" / "catalog-ref" / "entity.md"
+    assert canonical.is_file()
+    text = canonical.read_text(encoding="utf-8")
+    assert "dataset_class: reference" in text
+    assert "datapackage:" not in text
+    assert not (commons / "datasets" / "catalog-ref" / "datapackage.yaml").exists()
+    assert result.side_channel_results["catalog-ref"].artifact_paths == []
+    assert not (tmp_path / ".config" / "science" / "data.yaml").exists()
+
+
+def test_pointer_dataset_promotes_as_metadata_stub_with_runtime_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        discover_candidates,
+        plan_promote,
+    )
+
+    proj, commons = _setup(tmp_path, monkeypatch)
+    _replace_single_dataset(
+        proj,
+        "pointer-only",
+        (
+            "id: dataset:pointer-only\n"
+            "type: dataset\n"
+            "title: Pointer Only\n"
+            "dataset_class: pointer\n"
+            "origin: external\n"
+            "tier: track\n"
+            "license: unknown\n"
+            "source_refs: [paper:source]\n"
+            "access:\n"
+            "  level: public\n"
+            "  verified: true\n"
+            "  verification_method: metadata-confirmed\n"
+            "  source_url: https://example.org/record\n"
+        ),
+    )
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    assert discovery.failed_candidates == []
+    plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
+
+    [decision] = plan.decisions
+    [artifact] = decision.canonical_artifacts
+    assert artifact.path.as_posix() == "datasets/pointer-only/entity.md"
+    assert "dataset_class: pointer" in artifact.content
+    assert "runtime_state: pointer-only" in artifact.content
+    assert "datapackage:" not in artifact.content
 
 
 def test_dataset_apply_audit_log_records_extras(

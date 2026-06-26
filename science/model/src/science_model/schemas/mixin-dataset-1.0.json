@@ -3,7 +3,7 @@
   "$id": "https://schemas.science/mixin-dataset-1.0.json",
   "title": "science entity dataset mixin",
   "type": "object",
-  "required": ["id", "type", "datapackage", "origin", "tier"],
+  "required": ["id", "type", "origin", "tier"],
   "properties": {
     "id": {"type": "string", "pattern": "^dataset:[a-z0-9][a-z0-9-]{1,63}$"},
     "type": {"const": "dataset"},
@@ -20,6 +20,9 @@
     "consumed_by": {"type": "array", "items": {"type": "string"}},
     "source_class": {"enum": ["observational", "derived", "reference"]},
     "dataset_class": {"enum": ["deposit", "reference", "pointer"]},
+    "runtime_state": {
+      "enum": ["runnable", "unstaged-deposit", "blocked-access", "reference-only", "pointer-only"]
+    },
     "derived_kind": {"enum": ["aggregate", "transform", "model_output"]}
   },
   "not": {"required": ["resources"]},
@@ -45,6 +48,18 @@
     {
       "if": {"required": ["derived_kind"]},
       "then": {"properties": {"source_class": {"const": "derived"}}, "required": ["source_class"]}
+    },
+    {
+      "if": {
+        "anyOf": [
+          {"not": {"required": ["dataset_class"]}},
+          {
+            "properties": {"dataset_class": {"const": "deposit"}},
+            "required": ["dataset_class"]
+          }
+        ]
+      },
+      "then": {"required": ["datapackage"]}
     }
   ],
   "$defs": {

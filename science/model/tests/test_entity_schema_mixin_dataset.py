@@ -34,6 +34,53 @@ def test_dataset_external_with_access_validates(base_entity: dict) -> None:
     EntityValidator().validate(entity)
 
 
+def test_reference_dataset_does_not_require_datapackage(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "tier": "track",
+        "dataset_class": "reference",
+        "access": {
+            "level": "public",
+            "verified": True,
+            "verification_method": "landing-confirmed",
+            "source_url": "https://example.org/catalog",
+        },
+    }
+    entity.pop("datapackage")
+
+    EntityValidator().validate(entity)
+
+
+def test_pointer_dataset_can_record_explicit_runtime_state_without_datapackage(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "tier": "track",
+        "dataset_class": "pointer",
+        "runtime_state": "pointer-only",
+        "access": {
+            "level": "public",
+            "verified": True,
+            "verification_method": "metadata-confirmed",
+            "source_url": "https://example.org/record",
+        },
+    }
+    entity.pop("datapackage")
+
+    EntityValidator().validate(entity)
+
+
+def test_deposit_dataset_still_requires_datapackage(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "dataset_class": "deposit",
+        "access": {"level": "public", "verified": True},
+    }
+    entity.pop("datapackage")
+
+    with pytest.raises(EntityValidationError, match="datapackage"):
+        EntityValidator().validate(entity)
+
+
 def test_dataset_derived_with_derivation_validates(base_entity: dict) -> None:
     entity = base_entity | {
         "origin": "derived",

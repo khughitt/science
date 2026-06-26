@@ -278,6 +278,14 @@ For each top-ranked dataset where `access.verified: true` (or Branch A has just 
 
 **Per-dataset QA and download are out of scope for this command.** The handoff is the front/back boundary; this command ends once `science-plan-pipeline` has been invoked for each top candidate.
 
+## Commons Promotion Follow-Up
+
+When a catalog record is reusable across projects, promote it with `science commons promote dataset --from <project-id> --slug <slug>` after its class-specific verification is complete.
+
+- `deposit` rows still need a promotable datapackage and QA resource before promotion.
+- `reference` rows promote as entity-only commons records when `access.verified: true`, `access.source_url` exists, and `verification_method` is `landing-confirmed`, `metadata-confirmed`, or `credential-confirmed`.
+- `pointer` rows promote as metadata stubs with `runtime_state: pointer-only`; they are never counted as runnable datasets.
+
 ---
 
 ## Process Reflection

@@ -28,6 +28,9 @@
     "access": {"$ref": "#/$defs/access"},
     "derivation": {"$ref": "#/$defs/derivation"},
     "dataset_class": {"enum": ["deposit", "reference", "pointer"]},
+    "runtime_state": {
+      "enum": ["runnable", "unstaged-deposit", "blocked-access", "reference-only", "pointer-only"]
+    },
     "source_refs": {"type": "array", "items": {"type": "string"}},
     "related": {"type": "array", "items": {"type": "string"}},
     "produced_by": {"type": "array", "items": {"type": "string", "pattern": "^code-file:"}, "minItems": 1},

@@ -57,6 +57,50 @@ def _ident(fm: Mapping[str, Any]) -> str:
     return ident if isinstance(ident, str) and ident else "dataset:?"
 
 
+def _dataset_class(fm: Mapping[str, Any]) -> str:
+    raw = fm.get("dataset_class")
+    if raw in {"deposit", "reference", "pointer"}:
+        return raw
+    return "deposit"
+
+
+def _reference_access_result(fm: Mapping[str, Any]) -> Result | None:
+    dataset_class = _dataset_class(fm)
+    if dataset_class not in {"reference", "pointer"}:
+        return None
+    path = fm.get("_path")
+    rel_path = path if isinstance(path, str) else None
+    ident = _ident(fm)
+    access = fm.get("access")
+    if not isinstance(access, Mapping):
+        return _result(
+            rel_path,
+            f"{ident}: {dataset_class} promotion requires an access block",
+            "dataset-promotion.reference-access-invalid",
+        )
+    source_url = access.get("source_url")
+    method = access.get("verification_method")
+    allowed_methods = (
+        {"landing-confirmed", "metadata-confirmed", "credential-confirmed"}
+        if dataset_class == "reference"
+        else {"landing-confirmed", "metadata-confirmed"}
+    )
+    if (
+        access.get("verified") is not True
+        or not isinstance(source_url, str)
+        or not source_url.strip()
+        or method not in allowed_methods
+    ):
+        allowed = ", ".join(sorted(allowed_methods))
+        return _result(
+            rel_path,
+            f"{ident}: {dataset_class} promotion requires verified access.source_url "
+            f"and verification_method in {{{allowed}}}",
+            "dataset-promotion.reference-access-invalid",
+        )
+    return None
+
+
 def _validate_datapackage_ref(
     *,
     ctx: ValidateContext,
@@ -123,29 +167,38 @@ def _missing_candidate_fields(fm: Mapping[str, Any]) -> list[str]:
     return missing
 
 
-def _validate_overlay_pin(fm: Mapping[str, Any]) -> Result | None:
+def _validate_overlay_pin(fm: Mapping[str, Any]) -> tuple[Result | None, str | None]:
     path = fm.get("_path")
     rel_path = path if isinstance(path, str) else None
     ident = _ident(fm)
     overlay_of = fm.get("overlay_of")
     pin_version = fm.get("pin_version")
     if not isinstance(overlay_of, str) or not overlay_of.strip():
-        return _result(
-            rel_path,
-            f"{ident}: pinned dataset overlay requires overlay_of",
-            "dataset-promotion.pin-missing",
+        return (
+            _result(
+                rel_path,
+                f"{ident}: pinned dataset overlay requires overlay_of",
+                "dataset-promotion.pin-missing",
+            ),
+            None,
         )
     if not isinstance(pin_version, str) or not pin_version.strip():
-        return _result(
-            rel_path,
-            f"{ident}: pinned dataset overlay requires pin_version",
-            "dataset-promotion.pin-missing",
+        return (
+            _result(
+                rel_path,
+                f"{ident}: pinned dataset overlay requires pin_version",
+                "dataset-promotion.pin-missing",
+            ),
+            None,
         )
     if overlay_of != ident:
-        return _result(
-            rel_path,
-            f"{ident}: overlay_of {overlay_of!r} does not match descriptor id",
-            "dataset-promotion.pin-mismatch",
+        return (
+            _result(
+                rel_path,
+                f"{ident}: overlay_of {overlay_of!r} does not match descriptor id",
+                "dataset-promotion.pin-mismatch",
+            ),
+            None,
         )
     try:
         commons_root = resolve_commons_root()
@@ -153,19 +206,25 @@ def _validate_overlay_pin(fm: Mapping[str, Any]) -> Result | None:
             raise FileNotFoundError(commons_root)
         canonical = CommonsEntityAdapter(commons_root).load(overlay_of)
     except (CommonsError, OSError) as exc:
-        return _result(
-            rel_path,
-            f"{ident}: commons canonical could not be resolved for pinned overlay: {exc}",
-            "dataset-promotion.pin-unresolved",
+        return (
+            _result(
+                rel_path,
+                f"{ident}: commons canonical could not be resolved for pinned overlay: {exc}",
+                "dataset-promotion.pin-unresolved",
+            ),
+            None,
         )
     canonical_version = canonical.frontmatter.get("version")
     if canonical_version != pin_version:
-        return _result(
-            rel_path,
-            f"{ident}: pins {pin_version} but commons canonical is {canonical_version}",
-            "dataset-promotion.pin-version-mismatch",
+        return (
+            _result(
+                rel_path,
+                f"{ident}: pins {pin_version} but commons canonical is {canonical_version}",
+                "dataset-promotion.pin-version-mismatch",
+            ),
+            None,
         )
-    return None
+    return None, _dataset_class(canonical.frontmatter)
 
 
 def evaluate_dataset_promotion_contract(
@@ -192,9 +251,11 @@ def evaluate_dataset_promotion_contract(
             )
 
         if _is_pinned_overlay(fm):
-            pin_result = _validate_overlay_pin(fm)
+            pin_result, canonical_dataset_class = _validate_overlay_pin(fm)
             if pin_result is not None:
                 yield pin_result
+            if canonical_dataset_class in {"reference", "pointer"}:
+                continue
             result = _validate_datapackage_ref(
                 ctx=ctx,
                 fm=fm,
@@ -211,6 +272,12 @@ def evaluate_dataset_promotion_contract(
                 f"{ident}: dataset promotion candidate missing required field {field!r}",
                 "dataset-promotion.required-field-missing",
             )
+
+        if _dataset_class(fm) in {"reference", "pointer"}:
+            access_result = _reference_access_result(fm)
+            if access_result is not None:
+                yield access_result
+            continue
 
         result = _validate_datapackage_ref(
             ctx=ctx,

@@ -92,7 +92,9 @@ def _dataset_side_channel_apply(ctx: SideChannelContext) -> SideChannelResult:
     )
 
     extras = ctx.plan.dataset_audit_extras.get(ctx.decision.slug)
-    if extras is None or "override_path" not in extras:
+    if extras is None:
+        return SideChannelResult(artifact_paths=[], backup_paths=[])
+    if "override_path" not in extras:
         raise PromoteCandidateError(
             "dataset side-channel apply requires override_path audit extra",
             slug=ctx.decision.slug,
@@ -762,39 +764,51 @@ def plan_promote(
 
             dataset_primary: PromoteCandidate | None = None
             dataset_primary_per_resource: dict[str, tuple[str, int]] | None = None
+            dataset_primary_class: Literal["deposit", "reference", "pointer"] = "deposit"
             if kind.kind == "dataset":
                 dataset_primary = _primary_candidate_for_plan(classified, from_order)
-                _primary_result = _dataset_per_resource(
-                    dataset_primary, verify_digests=verify_digests
-                )
-                dataset_primary_per_resource = _primary_result.per_resource
-                _group_verifications: tuple[ResourceVerification, ...] = ()
-                if (
-                    dataset_primary.datapackage_doc is None
-                    or dataset_primary.datapackage_source_path is None
-                ):
+                dataset_primary_class = _candidate_dataset_class(dataset_primary)
+                candidate_classes = {_candidate_dataset_class(candidate) for candidate in classified}
+                if len(candidate_classes) != 1:
                     raise PromoteCandidateError(
-                        "dataset planning requires discovery datapackage metadata",
+                        f"dataset {canonical_case!r} has mixed dataset_class values: "
+                        + ", ".join(sorted(candidate_classes)),
                         slug=canonical_case,
                     )
-                _group_verifications = _validate_dataset_group_datapackages(
-                    canonical_slug=canonical_case,
-                    primary=dataset_primary,
-                    candidates=classified,
-                    primary_per_resource=dataset_primary_per_resource,
-                    verify_digests=verify_digests,
-                )
-                combined_verifications = (
-                    _primary_result.verifications + _group_verifications
-                )
-                if combined_verifications:
-                    dataset_resource_verifications[canonical_case] = combined_verifications
-                check_override_conflict(
-                    slug=canonical_case,
-                    planned_path=dataset_primary.datapackage_source_path.parent,
-                )
+                if dataset_primary_class == "deposit":
+                    _primary_result = _dataset_per_resource(
+                        dataset_primary, verify_digests=verify_digests
+                    )
+                    dataset_primary_per_resource = _primary_result.per_resource
+                    _group_verifications: tuple[ResourceVerification, ...] = ()
+                    if (
+                        dataset_primary.datapackage_doc is None
+                        or dataset_primary.datapackage_source_path is None
+                    ):
+                        raise PromoteCandidateError(
+                            "dataset planning requires discovery datapackage metadata",
+                            slug=canonical_case,
+                        )
+                    _group_verifications = _validate_dataset_group_datapackages(
+                        canonical_slug=canonical_case,
+                        primary=dataset_primary,
+                        candidates=classified,
+                        primary_per_resource=dataset_primary_per_resource,
+                        verify_digests=verify_digests,
+                    )
+                    combined_verifications = (
+                        _primary_result.verifications + _group_verifications
+                    )
+                    if combined_verifications:
+                        dataset_resource_verifications[canonical_case] = combined_verifications
+                    check_override_conflict(
+                        slug=canonical_case,
+                        planned_path=dataset_primary.datapackage_source_path.parent,
+                    )
 
             merged, conflicts = _merge_canonical_fields(classified, merge_policy, kind=kind.kind)
+            if kind.kind == "dataset" and dataset_primary_class == "pointer":
+                merged["runtime_state"] = "pointer-only"
 
             resolved_conflicts: list[ConflictResolution] = []
             for conflict in conflicts:
@@ -974,48 +988,6 @@ def plan_promote(
                 active_profile=active_profile,
             )
             if kind.kind == "dataset":
-                canonical_content = _rewrite_rendered_frontmatter(
-                    canonical_content,
-                    {"datapackage": "datapackage.yaml"},
-                )
-                if dataset_primary_per_resource is None:
-                    raise PromoteCandidateError(
-                        "dataset planning requires discovery datapackage metadata",
-                        slug=canonical_case,
-                    )
-                per_resource = dataset_primary_per_resource
-                if primary.datapackage_doc is None or primary.datapackage_source_path is None:
-                    raise PromoteCandidateError(
-                        "dataset planning requires discovery datapackage metadata",
-                        slug=canonical_case,
-                    )
-                datapackage_content = render_canonical_datapackage_yaml(
-                    project_doc=primary.datapackage_doc,
-                    canonical_slug=canonical_case,
-                    per_resource=per_resource,
-                )
-                source_hint = _dataset_recipe_source_hint(merged)
-                recipe_content = _render_dataset_recipe_stub(
-                    slug=canonical_case,
-                    source_hint=source_hint,
-                )
-                canonical_artifacts = [
-                    CanonicalArtifact(
-                        path=canonical_artifact_path,
-                        content=canonical_content,
-                        validator="entity-mixin",
-                    ),
-                    CanonicalArtifact(
-                        path=Path(kind.commons_subdir) / canonical_case / "datapackage.yaml",
-                        content=datapackage_content,
-                        validator="frictionless-datapackage",
-                    ),
-                    CanonicalArtifact(
-                        path=Path(kind.commons_subdir) / canonical_case / "recipe" / "README.md",
-                        content=recipe_content,
-                        validator="plain",
-                    ),
-                ]
                 dropped_fields = sorted(
                     {
                         field
@@ -1023,12 +995,63 @@ def plan_promote(
                         for field in dropped
                     }
                 )
-                dataset_audit_extras[canonical_case] = {
-                    "per_resource": per_resource,
-                    "dropped_fields": dropped_fields,
-                    "recipe_stubbed": True,
-                    "override_path": str(primary.datapackage_source_path.parent),
-                }
+                if dataset_primary_class == "deposit":
+                    canonical_content = _rewrite_rendered_frontmatter(
+                        canonical_content,
+                        {"datapackage": "datapackage.yaml"},
+                    )
+                    if dataset_primary_per_resource is None:
+                        raise PromoteCandidateError(
+                            "dataset planning requires discovery datapackage metadata",
+                            slug=canonical_case,
+                        )
+                    per_resource = dataset_primary_per_resource
+                    if primary.datapackage_doc is None or primary.datapackage_source_path is None:
+                        raise PromoteCandidateError(
+                            "dataset planning requires discovery datapackage metadata",
+                            slug=canonical_case,
+                        )
+                    datapackage_content = render_canonical_datapackage_yaml(
+                        project_doc=primary.datapackage_doc,
+                        canonical_slug=canonical_case,
+                        per_resource=per_resource,
+                    )
+                    source_hint = _dataset_recipe_source_hint(merged)
+                    recipe_content = _render_dataset_recipe_stub(
+                        slug=canonical_case,
+                        source_hint=source_hint,
+                    )
+                    canonical_artifacts = [
+                        CanonicalArtifact(
+                            path=canonical_artifact_path,
+                            content=canonical_content,
+                            validator="entity-mixin",
+                        ),
+                        CanonicalArtifact(
+                            path=Path(kind.commons_subdir) / canonical_case / "datapackage.yaml",
+                            content=datapackage_content,
+                            validator="frictionless-datapackage",
+                        ),
+                        CanonicalArtifact(
+                            path=Path(kind.commons_subdir) / canonical_case / "recipe" / "README.md",
+                            content=recipe_content,
+                            validator="plain",
+                        ),
+                    ]
+                    dataset_audit_extras[canonical_case] = {
+                        "per_resource": per_resource,
+                        "dropped_fields": dropped_fields,
+                        "recipe_stubbed": True,
+                        "override_path": str(primary.datapackage_source_path.parent),
+                    }
+                else:
+                    canonical_artifacts = [
+                        CanonicalArtifact(
+                            path=canonical_artifact_path,
+                            content=canonical_content,
+                            validator="entity-mixin",
+                        )
+                    ]
             else:
                 canonical_artifacts = [
                     CanonicalArtifact(
@@ -2097,6 +2120,55 @@ def _validate_datapackage_resources(slug: str, dp_abs: Path, dp_doc: dict[str, A
             )
 
 
+def _dataset_class_for_promotion(fm: Mapping[str, Any]) -> Literal["deposit", "reference", "pointer"]:
+    raw = fm.get("dataset_class", "deposit")
+    if raw in {"deposit", "reference", "pointer"}:
+        return raw
+    raise PromoteCandidateError(f"dataset_class {raw!r} is not one of deposit, reference, pointer")
+
+
+def _dataset_access_for_promotion(fm: Mapping[str, Any]) -> Mapping[str, Any]:
+    access = fm.get("access")
+    if not isinstance(access, Mapping):
+        raise PromoteCandidateError("reference/pointer promotion requires an access block")
+    return access
+
+
+def _validate_reference_pointer_promotion(fm: Mapping[str, Any], *, slug: str) -> None:
+    dataset_class = _dataset_class_for_promotion(fm)
+    if dataset_class not in {"reference", "pointer"}:
+        return
+    if fm.get("origin") != "external":
+        raise PromoteCandidateError(
+            f"{dataset_class} promotion requires origin: external",
+            slug=slug,
+        )
+    access = _dataset_access_for_promotion(fm)
+    if access.get("verified") is not True:
+        raise PromoteCandidateError(
+            f"{dataset_class} promotion requires access.verified: true",
+            slug=slug,
+        )
+    source_url = access.get("source_url")
+    if not isinstance(source_url, str) or not source_url.strip():
+        raise PromoteCandidateError(
+            f"{dataset_class} promotion requires access.source_url",
+            slug=slug,
+        )
+    method = access.get("verification_method")
+    allowed_methods = (
+        {"landing-confirmed", "metadata-confirmed", "credential-confirmed"}
+        if dataset_class == "reference"
+        else {"landing-confirmed", "metadata-confirmed"}
+    )
+    if method not in allowed_methods:
+        allowed = ", ".join(sorted(allowed_methods))
+        raise PromoteCandidateError(
+            f"{dataset_class} promotion requires verification_method in {{{allowed}}}",
+            slug=slug,
+        )
+
+
 def _normalize_derivation_for_commons(derivation: Any) -> Any:
     """Normalize a derived-dataset `derivation` block into the commons form.
 
@@ -2320,6 +2392,19 @@ def _scan_project(
             datapackage_source_path: Path | None = None
             datapackage_doc: dict[str, Any] | None = None
             if kind.kind == "dataset":
+                try:
+                    dataset_class = _dataset_class_for_promotion(fm)
+                except PromoteCandidateError as exc:
+                    failures.append(
+                        FailedCandidate(
+                            slug=source_case_slug,
+                            project_slug=project_slug,
+                            source_path=source_path,
+                            error_class="PromoteCandidateError",
+                            error_message=str(exc),
+                        )
+                    )
+                    continue
                 missing_fields = [
                     field
                     for field in ("origin", "tier")
@@ -2345,42 +2430,57 @@ def _scan_project(
                                 source_path=source_path,
                                 error_class="PromoteCandidateError",
                                 error_message=f"dataset candidate {source_case_slug!r} missing required field {field!r}",
-                            )
                         )
+                    )
                     continue
 
-                try:
-                    datapackage_source_path, datapackage_doc = _load_project_datapackage(
-                        project_root,
-                        fm.get("datapackage"),
-                    )
-                    _validate_datapackage_resources(
-                        source_case_slug,
-                        datapackage_source_path,
-                        datapackage_doc,
-                    )
-                except PromoteResourceMissingError as exc:
-                    failures.append(
-                        FailedCandidate(
-                            slug=source_case_slug,
-                            project_slug=project_slug,
-                            source_path=source_path,
-                            error_class="PromoteResourceMissingError",
-                            error_message=str(exc),
+                if dataset_class in {"reference", "pointer"}:
+                    try:
+                        _validate_reference_pointer_promotion(fm, slug=source_case_slug)
+                    except PromoteCandidateError as exc:
+                        failures.append(
+                            FailedCandidate(
+                                slug=source_case_slug,
+                                project_slug=project_slug,
+                                source_path=source_path,
+                                error_class="PromoteCandidateError",
+                                error_message=str(exc),
+                            )
                         )
-                    )
-                    continue
-                except PromoteCandidateError as exc:
-                    failures.append(
-                        FailedCandidate(
-                            slug=source_case_slug,
-                            project_slug=project_slug,
-                            source_path=source_path,
-                            error_class="PromoteCandidateError",
-                            error_message=str(exc),
+                        continue
+                else:
+                    try:
+                        datapackage_source_path, datapackage_doc = _load_project_datapackage(
+                            project_root,
+                            fm.get("datapackage"),
                         )
-                    )
-                    continue
+                        _validate_datapackage_resources(
+                            source_case_slug,
+                            datapackage_source_path,
+                            datapackage_doc,
+                        )
+                    except PromoteResourceMissingError as exc:
+                        failures.append(
+                            FailedCandidate(
+                                slug=source_case_slug,
+                                project_slug=project_slug,
+                                source_path=source_path,
+                                error_class="PromoteResourceMissingError",
+                                error_message=str(exc),
+                            )
+                        )
+                        continue
+                    except PromoteCandidateError as exc:
+                        failures.append(
+                            FailedCandidate(
+                                slug=source_case_slug,
+                                project_slug=project_slug,
+                                source_path=source_path,
+                                error_class="PromoteCandidateError",
+                                error_message=str(exc),
+                            )
+                        )
+                        continue
 
             seen.setdefault(slug_normalized, (sub, source_path))
 
@@ -2549,6 +2649,13 @@ def _primary_candidate_for_plan(
         candidates,
         key=lambda c: (order.get(c.project_slug, len(order)), c.project_slug),
     )[0]
+
+
+def _candidate_dataset_class(candidate: PromoteCandidate) -> Literal["deposit", "reference", "pointer"]:
+    fields: dict[str, Any] = {}
+    fields.update(candidate.project_only_fields)
+    fields.update(candidate.canonical_fields)
+    return _dataset_class_for_promotion(fields)
 
 
 def _project_relative_posix(project_root: Path, path: Path) -> str:
