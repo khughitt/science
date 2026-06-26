@@ -123,6 +123,54 @@ def test_cli_promote_dataset_dry_run_completes(tmp_path, monkeypatch):
     assert not (commons / "datasets/fixture-ds").exists()
 
 
+def test_cli_promote_dataset_single_slug_omits_unrelated_failed_candidates(
+    tmp_path, monkeypatch
+):
+    proj, commons = _setup(tmp_path)
+    broken = proj / "entities" / "datasets" / "unrelated-broken.md"
+    broken.write_text(
+        "---\n"
+        "id: dataset:unrelated-broken\n"
+        "type: dataset\n"
+        "title: Unrelated broken dataset\n"
+        "origin: external\n"
+        "tier: evaluate-next\n"
+        "access:\n"
+        "  level: public\n"
+        "  verified: true\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.setattr(
+        "science_tool.commons.config.resolve_project_by_id",
+        lambda s: proj,
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda s: proj,
+    )
+    from science_tool.commons.cli import commons_group
+
+    r = CliRunner().invoke(
+        commons_group,
+        [
+            "promote",
+            "dataset",
+            "--from",
+            "proj-dataset",
+            "--slug",
+            "fixture-ds",
+        ],
+    )
+
+    assert r.exit_code == 0, r.output
+    assert "fixture-ds" in r.output
+    assert "unrelated-broken" not in r.output
+    assert "failed candidates" not in r.output
+
+
 def test_cli_promote_dataset_dry_run_override_conflict_is_click_error(tmp_path, monkeypatch):
     proj, commons = _setup(tmp_path)
     config_dir = tmp_path / "science-config"

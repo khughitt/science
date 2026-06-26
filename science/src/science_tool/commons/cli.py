@@ -703,7 +703,11 @@ def _promote_kind_cmd(
         filtered = {k: v for k, v in discovery.candidates_by_slug.items() if k == wanted}
         discovery = DiscoveryResult(
             candidates_by_slug=filtered,
-            failed_candidates=discovery.failed_candidates,
+            failed_candidates=[
+                f
+                for f in discovery.failed_candidates
+                if _failed_candidate_matches_slug(f, wanted=wanted, kind=kind)
+            ],
         )
 
     # `--limit 0` is a discovery-only summary (per command help): report the
@@ -868,6 +872,31 @@ def _echo_dataset_plan_details(plan: PromotePlan, decision: PromoteDecision) -> 
         source = overlay_fm.get("source")
         if isinstance(source, str):
             click.echo(f"      source: {source}")
+
+
+def _failed_candidate_matches_slug(
+    failed_candidate: Any,
+    *,
+    wanted: str,
+    kind: PromoteKindConfig,
+) -> bool:
+    """Return whether a discovery failure belongs to a single-entity request."""
+    for raw_slug in (failed_candidate.slug, failed_candidate.source_path.stem):
+        if not isinstance(raw_slug, str):
+            continue
+        normalized = _slug_match_key(raw_slug, kind)
+        if normalized == wanted:
+            return True
+    return False
+
+
+def _slug_match_key(raw_slug: str, kind: PromoteKindConfig) -> str | None:
+    slug = raw_slug.strip()
+    if not slug or not kind.slug_regex.match(slug):
+        return None
+    if kind.slug_match == "casefold":
+        return slug.casefold()
+    return slug
 
 
 def _rendered_frontmatter(rendered: str) -> dict[str, Any]:
