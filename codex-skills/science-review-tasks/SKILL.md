@@ -163,7 +163,7 @@ Summarize as a structured report:
 |------|--------|
 
 ## New Tasks
-| Title | Type | Priority | Rationale |
+| Title | Aspects | Priority | Rationale |
 |-------|------|----------|-----------|
 
 ## Suggested Groups
@@ -190,7 +190,7 @@ uv run science tasks edit <id> --group=<group>
 uv run science tasks edit <id> --related=topic:foo --related=topic:bar
 
 # New tasks
-uv run science tasks add "<title>" --type=<type> --priority=<priority> [--group=<group>] [--related=<ref>...]
+uv run science tasks add "<title>" --aspects=<aspect> --priority=<priority> [--group=<group>] [--related=<ref>...]
 ```
 
 ### 9. Commit

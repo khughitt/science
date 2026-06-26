@@ -147,6 +147,15 @@ def test_catalog_datasets_generated_skill_warns_about_legacy_metadata_backfill(t
     assert "role: \"training\"" in text
 
 
+def test_generated_task_skills_use_aspects_for_task_creation(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    for skill_name in ("science-tasks", "science-review-tasks"):
+        text = generated[skill_name].read_text(encoding="utf-8")
+
+        assert "tasks add \"<title>\" --type" not in text
+        assert "tasks add \"<title>\" --aspects=<aspect>" in text
+
+
 def test_review_pipeline_generated_skill_uses_doc_reviews_for_reports(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
     text = generated["science-review-pipeline"].read_text(encoding="utf-8")

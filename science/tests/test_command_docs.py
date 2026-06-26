@@ -53,6 +53,14 @@ def test_catalog_datasets_connect_warns_about_legacy_metadata_backfill() -> None
     assert "role: \"training\"" in text
 
 
+def test_task_command_docs_use_aspects_for_task_creation() -> None:
+    for path in ("commands/tasks.md", "commands/review-tasks.md"):
+        text = _read(path)
+
+        assert "tasks add \"<title>\" --type" not in text
+        assert "tasks add \"<title>\" --aspects=<aspect>" in text
+
+
 @pytest.mark.parametrize(
     ("path", "expected_strings"),
     [

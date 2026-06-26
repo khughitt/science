@@ -47,7 +47,7 @@ uv run science tasks list --related=topic:lens --group=visualization
 ### "add <description>"
 
 Interactively create a task. Ask the user for:
-- **Type:** research or dev
+- **Aspects:** (optional) project-declared analysis/work aspects, such as `software-development` or `hypothesis-testing`
 - **Priority:** P0-P3
 - **Related entities:** (optional) typed refs for hypotheses, themes, methods, questions, tasks, etc. Local refs use `<kind>:<slug>` such as `hypothesis:h01` or `task:t016`; cross-project refs use `<project-id>:<kind>:<slug>` such as `natural-systems:task:t335`.
 - **Group:** (optional) single group label for thematic clustering
@@ -55,7 +55,7 @@ Interactively create a task. Ask the user for:
 Then run:
 
 ```bash
-uv run science tasks add "<title>" --type=<type> --priority=<priority> [--related=<ref>...] [--group=<group>]
+uv run science tasks add "<title>" --aspects=<aspect> --priority=<priority> [--related=<ref>...] [--group=<group>]
 ```
 
 ### "done <task_id>"
@@ -107,9 +107,9 @@ Interactive sweep to retype legacy untyped blockers in `tasks/active.md`.
 
 Remove all blockers and set status to active.
 
-### "edit <task_id> [--priority P0] [--status active] [--type dev] [--related hypothesis:h01] [--related topic:lens] [--group viz]"
+### "edit <task_id> [--priority P0] [--status active] [--aspects software-development] [--related hypothesis:h01] [--related topic:lens] [--group viz]"
 
-Update task fields. Supports `--related` (repeatable) and `--group` (single value).
+Update task fields. Supports `--aspects` and `--related` (repeatable) and `--group` (single value).
 
 ### "show <task_id>"
 
