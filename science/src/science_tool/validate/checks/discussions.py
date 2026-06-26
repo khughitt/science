@@ -53,7 +53,7 @@ def check_discussions(ctx: ValidateContext) -> Iterator[Result]:
         for path in sorted(discussions_dir.glob("*.md")):
             if path.is_file():
                 relative = path.relative_to(ctx.project_root).as_posix()
-                if "comparison-" in relative:
+                if path.name.startswith("comparison-"):
                     continue
                 yield from _check_discussion(ctx, path, relative)
 

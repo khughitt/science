@@ -1,5 +1,5 @@
 ---
-id: "discussion:{{slug}}"
+id: "discussion:{{NNNN}}-{{slug}}"
 type: "discussion"
 title: "{{Short Title}}"
 status: "active"
@@ -10,6 +10,27 @@ updated: "{{YYYY-MM-DD}}"
 ---
 
 # Hypothesis Comparison: {{Short Title}}
+
+## Focus
+
+<!--
+State the comparison focus: which phenomenon, question, or decision requires a
+head-to-head comparison, and which hypotheses are in scope.
+-->
+
+## Current Position
+
+<!--
+Summarize the current project stance before adjudication. Name any provisional
+lean, known fragility, or reason the comparison remains open.
+-->
+
+## Critical Analysis
+
+<!--
+Use the sections below to analyze the competing proposition bundles, their
+evidence, and their discriminating predictions.
+-->
 
 ## Hypotheses Compared
 
@@ -50,7 +71,7 @@ Where do these hypotheses make different predictions?
 These are the highest-value places to gather evidence.
 -->
 
-## Discriminating Evidence Needed
+## Evidence Needed
 
 <!--
 What evidence would most efficiently shift belief between them?
@@ -72,6 +93,16 @@ this section otherwise.
   favored; leave unset when the packet is genuinely open.
 -->
 
+## Prioritized Follow-Ups
+
+<!--
+Turn the most discriminating evidence needs into concrete follow-ups.
+-->
+
+| Priority | Action | Why now | Dependencies |
+|---|---|---|---|
+| P1 | {{next discriminating evidence step}} | {{why it would shift belief}} | {{dependencies}} |
+
 ## Current Verdict
 
 <!--
@@ -84,7 +115,7 @@ Use skeptical language:
 Avoid overstating certainty.
 -->
 
-## Synthesis Or Coexistence
+## Synthesis
 
 <!--
 Could both hypotheses contain valid propositions?

@@ -109,7 +109,7 @@ def test_research_plan_check_accepts_readme_when_plan_is_missing(tmp_path: Path)
     assert messages == ["README.md exists; RESEARCH_PLAN.md not required"]
 
 
-def test_discussions_warn_for_missing_sections_and_skip_comparison_docs(tmp_path: Path) -> None:
+def test_discussions_warn_for_missing_sections_and_skip_legacy_comparison_docs(tmp_path: Path) -> None:
     from science_tool.validate.checks.discussions import check_discussions
 
     ctx = _ctx(tmp_path)
@@ -117,16 +117,19 @@ def test_discussions_warn_for_missing_sections_and_skip_comparison_docs(tmp_path
     discussions_dir.mkdir(parents=True)
     discussions_dir.joinpath("0001-topic.md").write_text("## Focus\n", encoding="utf-8")
     discussions_dir.joinpath("comparison-topic.md").write_text("", encoding="utf-8")
+    discussions_dir.joinpath("0002-comparison-topic.md").write_text("## Focus\n", encoding="utf-8")
 
     messages = _messages(check_discussions(ctx))
 
     assert "Checking entities/discussions/0001-topic.md..." in messages
     assert "Checking entities/discussions/comparison-topic.md..." not in messages
+    assert "Checking entities/discussions/0002-comparison-topic.md..." in messages
     assert "entities/discussions/0001-topic.md missing section: ## Current Position" in messages
     assert "entities/discussions/0001-topic.md missing section: ## Critical Analysis" in messages
     assert "entities/discussions/0001-topic.md missing section: ## Evidence Needed" in messages
     assert "entities/discussions/0001-topic.md missing section: ## Prioritized Follow-Ups" in messages
     assert "entities/discussions/0001-topic.md missing section: ## Synthesis" in messages
+    assert "entities/discussions/0002-comparison-topic.md missing section: ## Current Position" in messages
 
 
 def test_discussions_double_blind_mode_requires_addendum_sections(tmp_path: Path) -> None:

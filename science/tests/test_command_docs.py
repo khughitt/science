@@ -601,6 +601,27 @@ def test_comparison_template_satisfies_validator_sections() -> None:
             assert f"## {section}" in text, f"{path} missing required section: {section}"
 
 
+def test_comparison_template_satisfies_discussion_schema_and_numeric_path() -> None:
+    """Comparison docs are discussion entities, so the template must satisfy the
+    discussion section schema and use the numeric discussion id/path shape."""
+    from science_tool.validate.checks.discussions import _REQUIRED_SECTIONS
+
+    for path in ("templates/comparison.md", "science/model/src/science_model/templates/comparison.md"):
+        text = _read(path)
+        assert 'id: "discussion:{{NNNN}}-{{slug}}"' in text
+        assert 'id: "discussion:{{slug}}"' not in text
+        for section in _REQUIRED_SECTIONS:
+            assert section in text, f"{path} missing required discussion section: {section}"
+
+
+def test_compare_hypotheses_command_uses_numeric_discussion_output() -> None:
+    text = _read("commands/compare-hypotheses.md")
+
+    assert "Save to `entities/discussions/<NNNN>-comparison-<slug>.md`" in text
+    assert 'frontmatter `id: "discussion:<NNNN>-comparison-<slug>"`' in text
+    assert "entities/discussions/comparison-<slug>.md" not in text
+
+
 def test_bias_audit_templates_emit_report_not_task() -> None:
     for path in ("templates/bias-audit.md", "science/model/src/science_model/templates/bias-audit.md"):
         text = _read(path)

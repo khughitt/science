@@ -110,7 +110,7 @@ Ask whether the hypotheses are:
 ## Writing
 
 Follow `.ai/templates/comparison.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/comparison.md`.
-Save to `entities/discussions/comparison-<slug>.md`.
+Save to `entities/discussions/<NNNN>-comparison-<slug>.md` with frontmatter `id: "discussion:<NNNN>-comparison-<slug>"`. Pick `<NNNN>` as the next free discussion number so the filename stem and discussion id local part match layout-v3 entity conformance.
 
 ## After Writing
 
