@@ -29,6 +29,17 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def test_catalog_datasets_setup_is_layout_v3_aware() -> None:
+    text = _read("commands/catalog-datasets.md")
+
+    assert "entities/questions/" in text
+    assert "entities/hypotheses/" in text
+    assert "legacy specs/research-question.md only if it exists" in text
+    assert "legacy specs/scope-boundaries.md only if it exists" in text
+    assert "- `specs/research-question.md`" not in text
+    assert "- `specs/scope-boundaries.md`" not in text
+
+
 @pytest.mark.parametrize(
     ("path", "expected_strings"),
     [

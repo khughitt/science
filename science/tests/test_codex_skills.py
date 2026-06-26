@@ -120,6 +120,19 @@ def test_plan_analysis_generated_skill_mentions_index_and_readiness() -> None:
         assert expected in text
 
 
+def test_catalog_datasets_generated_skill_is_layout_v3_aware(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-catalog-datasets"].read_text(encoding="utf-8")
+
+    assert "entities/questions/" in text
+    assert "entities/hypotheses/" in text
+    assert "legacy specs/research-question.md only if it exists" in text
+    assert "legacy specs/scope-boundaries.md only if it exists" in text
+    assert "Read `specs/research-question.md` for project context" not in text
+    assert "- `specs/research-question.md`" not in text
+    assert "- `specs/scope-boundaries.md`" not in text
+
+
 def test_review_pipeline_generated_skill_uses_doc_reviews_for_reports(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
     text = generated["science-review-pipeline"].read_text(encoding="utf-8")

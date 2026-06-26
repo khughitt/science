@@ -8,7 +8,10 @@ Before executing any research command:
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `${CLAUDE_PLUGIN_ROOT}/references/role-prompts/<role>.md`.
 3. Load the `research-methodology` and `scientific-writing` skills.
-4. Read `specs/research-question.md` for project context when it exists.
+4. Read project context from layout-v3 entity roots first:
+   - `entities/questions/` for active research questions.
+   - `entities/hypotheses/` for hypotheses.
+   - Read legacy specs/research-question.md only if it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
    For each declared aspect, resolve the aspect file in this order:
    1. `${CLAUDE_PLUGIN_ROOT}/aspects/<name>/<name>.md` — canonical Science aspects

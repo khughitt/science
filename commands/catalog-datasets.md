@@ -16,11 +16,12 @@ Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-a
 Additionally:
 1. Read `${CLAUDE_PLUGIN_ROOT}/skills/data/SKILL.md` for data management conventions.
 2. Read `.ai/templates/dataset.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/dataset.md`.
-3. Read project context:
-   - `specs/research-question.md`
-   - `specs/scope-boundaries.md`
-   - `entities/hypotheses/` (all hypothesis files)
+3. Read project context, preferring layout-v3 entity roots:
    - `entities/questions/` (all question files, if present)
+   - `entities/hypotheses/` (all hypothesis files)
+   - `entities/propositions/` (durable proposition entities, if present)
+   - Read legacy specs/research-question.md only if it exists.
+   - Read legacy specs/scope-boundaries.md only if it exists.
    - Existing `entities/datasets/` (to know what is already catalogued)
 4. Resolve the project root (the directory containing `science.yaml`) — the CLI commands below require it or discover it automatically from the working directory.
 
