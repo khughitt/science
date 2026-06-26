@@ -75,6 +75,59 @@ def test_plan_analysis_guides_blocker_tasks_to_reuse_task_scoped_aspects() -> No
     assert "do not mutate `science.yaml` solely to create blocker tasks" in text
 
 
+def test_pipeline_audit_process_documents_clean_base_qa_checkpoint_pattern() -> None:
+    text = _read("docs/process/pipeline-audit-and-refactor.md")
+
+    expected_strings = (
+        "Clean-base QA checkpoint pattern",
+        "prepared gene-by-sample matrices",
+        "mapped gene-set universes",
+        "matrix sample/audit consistency",
+        "unique feature IDs",
+        "finite values",
+        "no all-NA rows",
+        "feature-count agreement with the transform audit",
+        "gene-set size-filter compliance",
+        "complete theme/annotation coverage",
+        "release/hash metadata",
+    )
+    for expected in expected_strings:
+        assert expected in text
+
+
+def test_pipeline_audit_process_documents_result_bundle_validation_modes() -> None:
+    text = _read("docs/process/pipeline-audit-and-refactor.md")
+
+    expected_strings = (
+        "Result-bundle QA and wiring verification",
+        "`qa_all`",
+        "direct result-QA smoke checks",
+        "existing ignored outputs",
+        "dry-run DAG checks",
+        "expensive stale downstream recomputation",
+        "full recomputation",
+        "intentional pipeline refresh",
+    )
+    for expected in expected_strings:
+        assert expected in text
+
+
+def test_pipeline_audit_process_documents_derived_artifact_freshness_checks() -> None:
+    text = _read("docs/process/pipeline-audit-and-refactor.md")
+
+    expected_strings = (
+        "Derived-artifact freshness checks",
+        "deterministic artifacts committed for review",
+        "authored input",
+        "regenerates into memory or a temp file",
+        "diffs against the checked-in artifact",
+        "raw-data QA",
+        "downstream result-bundle QA",
+    )
+    for expected in expected_strings:
+        assert expected in text
+
+
 @pytest.mark.parametrize(
     ("path", "expected_strings"),
     [

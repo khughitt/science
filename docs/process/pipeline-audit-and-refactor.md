@@ -148,6 +148,28 @@ Use modality-specific checks when the substrate is not a table:
   coverage, status/readiness consistency.
 - **Manifests/packages:** resource existence, hashes, provenance, declared entity links.
 
+#### Clean-base QA checkpoint pattern
+
+When the sweep finds a reusable prepared substrate, add a build-fatal clean-base QA checkpoint before
+downstream analysis consumes it. This is distinct from raw integrity checks and from final
+analysis-result QA: it guards the reusable substrate that other analyses will inherit.
+
+For prepared gene-by-sample matrices and mapped gene-set universes, use the following checks as the
+default starting point:
+
+- matrix sample/audit consistency;
+- unique feature IDs;
+- finite values;
+- no all-NA rows;
+- feature-count agreement with the transform audit;
+- gene-set size-filter compliance;
+- complete theme/annotation coverage;
+- release/hash metadata.
+
+Adapt the list to the substrate kind, but keep the same contract: the checkpoint re-reads the built
+clean-base artifact, has structural build-fatal failures, and is wired into the pipeline before any
+project-specific model or report step can treat the substrate as ready.
+
 Rubric reuses the `review-pipeline` → **QA Coverage** dimension (incl. its severity-split row), plus
 the DAG-validation check as its own line. Disposition: a missing structural check on an
 already-fixed bug → **fix-now** (regression-guard); missing distribution checks → **backlog**.
@@ -210,6 +232,8 @@ This playbook scores three related disciplines during the sweep, but keeps them 
 - **Analysis / result-QA** — validates *results*, not the input table: leave-one-out /
   dataset-dropout stability; permutation / empirical-null calibration and assumption sweeps.
 - **Workflow / DAG-validation** — validates the *rule graph*, not a table; specified below.
+- **Derived-artifact freshness** — validates deterministic artifacts committed for review against
+  their authored inputs; specified below.
 - **Process iteration** — validates the *process*, not a table or the rule graph: did the analysis
   iterate (QC / clustering / parameters) in response to QA flags, or run once and record the result
   as truth? Scored during the sweep with `science qa-audit`, which reads each workflow's
@@ -223,6 +247,38 @@ This playbook scores three related disciplines during the sweep, but keeps them 
 
 Surface all three during the sweep so they are not forgotten.
 If a project-grown check becomes broadly reusable, record it in the synthesis "convention nominations".
+
+### Analysis / result-QA — Result-bundle QA and wiring verification
+
+For downstream result bundles, add a build-fatal result-bundle sentinel and expose it through a root
+`qa_all` target where the local workflow has a QA aggregation convention. The sentinel should validate
+the produced result bundle's schema, numeric domains, status/readiness fields, split/leakage
+invariants, and expected resource set. It does not substitute for clean-base substrate QA; record it
+as analysis-result-QA in the findings table.
+
+Separate two verification modes during integration:
+
+- **direct result-QA smoke checks** run the checker over existing ignored outputs to verify the
+  checker logic and the current bundle without asking the workflow engine to refresh upstream work.
+- **dry-run DAG checks** verify that the result-bundle sentinel and `qa_all` target are wired into the
+  workflow graph.
+
+Do not treat "ask Snakemake for a fresh QA sentinel" as the default smoke test: it can legitimately
+trigger expensive stale downstream recomputation when the result bundle is older than its inputs.
+Reserve full recomputation for an intentional pipeline refresh.
+
+### Derived-artifact freshness checks
+
+Some reviewable artifacts are deterministic outputs derived from an authored input rather than raw
+data products or downstream result bundles: examples include checked-in adjustment-set text derived
+from an authored DAG patch, generated lookup tables derived from a hand-maintained registry, or
+rendered summaries committed for review.
+
+For deterministic artifacts committed for review, add a lightweight command or test that regenerates into memory or a temp file
+from the authored input and diffs against the checked-in artifact. This freshness check is
+deliberately separate from raw-data QA and downstream result-bundle QA: it asks
+"does the committed review artifact still match the source of truth?" rather than "is the input data
+valid?" or "are the analysis outputs well formed?"
 
 ### Workflow / DAG-validation — single-writer / output-ownership
 
