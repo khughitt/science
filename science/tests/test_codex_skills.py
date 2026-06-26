@@ -120,6 +120,22 @@ def test_plan_analysis_generated_skill_mentions_index_and_readiness() -> None:
         assert expected in text
 
 
+def test_generated_plan_analysis_skill_routes_proteomics_and_sensor_time_series(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-plan-analysis"].read_text(encoding="utf-8")
+
+    expected_strings = (
+        "Proteomics, phosphoproteomics, mass spectrometry, peptide intensity, TMT, LFQ",
+        "`data-proteomics-qa`, `statistics-bias-vs-variance-decomposition`, `statistics-sensitivity-arbitration`",
+        "Wearable, behavioral, actigraphy, EMA, symptom diary, sensor time series, sleep/activity rhythms, or cross-lag coupling",
+        "`statistics-time-series-and-longitudinal-models`, `statistics-bias-vs-variance-decomposition`, `statistics-power-floor-acknowledgement`, and `statistics-sensitivity-arbitration`",
+    )
+    for expected in expected_strings:
+        assert expected in text
+
+    assert "statistics-time-series-and-longitudinal-models` if present" not in text
+
+
 def test_catalog_datasets_generated_skill_is_layout_v3_aware(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
     text = generated["science-catalog-datasets"].read_text(encoding="utf-8")

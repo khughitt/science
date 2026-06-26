@@ -25,6 +25,7 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
 | [`prereg-defensive-instrumentation.md`](./prereg-defensive-instrumentation.md) | Pre-registering a multi-candidate test that needs universe locks, snapshot freezes, familywise nulls, leakage hedges, suspicious-result tripwires, or locked decision tables |
 | [`survival-and-hierarchical-models.md`](./survival-and-hierarchical-models.md) | Cox / Weibull / mixed-effects / Bayesian hierarchical models |
 | [`compositional-data.md`](./compositional-data.md) | Proportions, fractions, deconvolution outputs, microbiome relative abundance |
+| [`time-series-and-longitudinal-models.md`](./time-series-and-longitudinal-models.md) | Repeated-measure, wearable, sensor, EMA, actigraphy, symptom-diary, cross-lag, or longitudinal models |
 | [`likelihood-model-comparison.md`](./likelihood-model-comparison.md) | Comparing parametric models by likelihood — AIC/BIC/LRT, nested vs non-nested, numerical precision, bootstrap selection stability |
 | [`population-genetics-likelihood.md`](./population-genetics-likelihood.md) | Wright-Fisher / Moran / binomial-segregation likelihoods; selection vs neutral null |
 
@@ -97,6 +98,12 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
     data; a single-cohort selection signal is cohort-scoped. See
     [`population-genetics-likelihood`](./population-genetics-likelihood.md).
 
+11. **Treat repeated time rows as dependent.** Wearable, sensor, EMA,
+    actigraphy, symptom-diary, and longitudinal omics analyses need explicit
+    time origin, cadence, lag/window, missingness, and within-unit dependence
+    rules before interpretation. See
+    [`time-series-and-longitudinal-models`](./time-series-and-longitudinal-models.md).
+
 ## When to invoke
 
 Use this skill any time you are:
@@ -116,6 +123,8 @@ Use this skill any time you are:
 - Designing survival, mixed-effect, or hierarchical Bayesian models.
 - Analyzing proportions, cell fractions, deconvolution outputs, or other
   compositional measurements.
+- Designing wearable, sensor, EMA, actigraphy, symptom-diary, cross-lag, or
+  longitudinal repeated-measure analyses.
 
 ## Companion Skills
 

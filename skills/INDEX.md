@@ -27,6 +27,7 @@ progressive disclosure.
 - `data-genomics-mutational-signatures-and-selection`: `skills/data/genomics/mutational-signatures-and-selection.md`
 - `data-genomics-copy-number-sv-qa`: `skills/data/genomics/copy-number-sv-qa.md`
 - `data-functional-genomics-qa`: `skills/data/functional-genomics-qa.md`
+- `data-proteomics-qa`: `skills/data/proteomics-qa.md`
 - `data-protein-sequence-structure-qa`: `skills/data/protein-sequence-structure-qa.md`
 - `data-embeddings-manifold-qa`: `skills/data/embeddings-manifold-qa.md`
 
@@ -47,6 +48,7 @@ progressive disclosure.
 - `statistics-sensitivity-arbitration`: `skills/statistics/sensitivity-arbitration.md`
 - `statistics-survival-and-hierarchical-models`: `skills/statistics/survival-and-hierarchical-models.md`
 - `statistics-compositional-data`: `skills/statistics/compositional-data.md`
+- `statistics-time-series-and-longitudinal-models`: `skills/statistics/time-series-and-longitudinal-models.md`
 - `statistics-prereg-amendment-vs-fresh`: `skills/statistics/prereg-amendment-vs-fresh.md`
 - `statistics-prereg-defensive-instrumentation`: `skills/statistics/prereg-defensive-instrumentation.md`
 - `statistics-likelihood-model-comparison`: `skills/statistics/likelihood-model-comparison.md`

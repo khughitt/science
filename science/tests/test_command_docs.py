@@ -307,6 +307,26 @@ def test_plan_analysis_command_covers_pressure_scenarios() -> None:
         assert expected in text
 
 
+def test_plan_analysis_command_routes_proteomics_and_sensor_time_series() -> None:
+    text = _read("commands/plan-analysis.md")
+    index = _read("skills/INDEX.md")
+
+    expected_strings = (
+        "`data-proteomics-qa`: `skills/data/proteomics-qa.md`",
+        "`statistics-time-series-and-longitudinal-models`: `skills/statistics/time-series-and-longitudinal-models.md`",
+        "Proteomics, phosphoproteomics, mass spectrometry, peptide intensity, TMT, LFQ",
+        "`data-proteomics-qa`, `statistics-bias-vs-variance-decomposition`, `statistics-sensitivity-arbitration`",
+        "Wearable, behavioral, actigraphy, EMA, symptom diary, sensor time series, sleep/activity rhythms, or cross-lag coupling",
+        "`statistics-time-series-and-longitudinal-models`, `statistics-bias-vs-variance-decomposition`, `statistics-power-floor-acknowledgement`, and `statistics-sensitivity-arbitration`",
+    )
+    for expected in expected_strings[:2]:
+        assert expected in index
+    for expected in expected_strings[2:]:
+        assert expected in text
+
+    assert "statistics-time-series-and-longitudinal-models` if present" not in text
+
+
 def test_plan_analysis_is_integrated_with_neighbor_commands() -> None:
     expected_by_path = {
         "commands/plan-pipeline.md": (
