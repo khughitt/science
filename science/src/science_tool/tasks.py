@@ -19,6 +19,7 @@ from science_model.tasks import Task, TaskCreate, TaskStatus, TaskUpdate
 __all__ = [
     "Task",
     "TaskCreate",
+    "TaskAspectValidationError",
     "TaskIntegrityError",
     "TaskLocation",
     "TaskStatus",
@@ -28,6 +29,7 @@ __all__ = [
     "find_task_location",
     "parse_tasks_for_cli",
     "retire_task",
+    "validate_task_aspects",
     "write_task_location",
 ]
 
@@ -81,6 +83,35 @@ def _parse_task_header(line: str, *, path: Path | None = None) -> tuple[str, str
 
     where = f" in {path}" if path is not None else ""
     raise ValueError(f"Invalid task header{where}: {line}")
+
+
+class TaskAspectValidationError(ValueError):
+    """Raised when task-scoped aspects are malformed."""
+
+
+def validate_task_aspects(aspects: list[str]) -> list[str]:
+    """Validate task-scoped aspect labels.
+
+    Task aspects are local routing metadata: they use the shared aspect
+    vocabulary, but do not require the aspect to be enabled globally in
+    science.yaml.
+    """
+    from science_model.aspects import KNOWN_ASPECTS
+
+    if not aspects:
+        raise TaskAspectValidationError("Task aspects list is empty; omit --aspects instead.")
+    seen: set[str] = set()
+    validated: list[str] = []
+    for aspect in aspects:
+        if aspect in seen:
+            raise TaskAspectValidationError(f"duplicate task aspect: {aspect!r}")
+        seen.add(aspect)
+        if aspect not in KNOWN_ASPECTS:
+            raise TaskAspectValidationError(
+                f"{aspect!r} is not in the aspect vocabulary ({sorted(KNOWN_ASPECTS)})."
+            )
+        validated.append(aspect)
+    return validated
 
 
 def _parse_parent(raw: str, *, task_id: str) -> str:

@@ -61,6 +61,20 @@ def test_task_command_docs_use_aspects_for_task_creation() -> None:
         assert "tasks add \"<title>\" --aspects=<aspect>" in text
 
 
+def test_task_command_docs_allow_task_scoped_aspects_without_project_declaration() -> None:
+    text = _read("commands/tasks.md")
+
+    assert "Task-scoped aspects do not need to be declared in `science.yaml`" in text
+    assert "project-wide aspect behavior" in text
+
+
+def test_plan_analysis_guides_blocker_tasks_to_reuse_task_scoped_aspects() -> None:
+    text = _read("commands/plan-analysis.md")
+
+    assert "Reuse task-scoped aspects" in text
+    assert "do not mutate `science.yaml` solely to create blocker tasks" in text
+
+
 @pytest.mark.parametrize(
     ("path", "expected_strings"),
     [

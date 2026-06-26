@@ -554,6 +554,35 @@ def test_tasks_add_accepts_aspects_flag(tmp_path, monkeypatch):
     assert "- aspects: [hypothesis-testing]" in body
 
 
+def test_tasks_add_accepts_task_scoped_aspect_when_project_aspects_absent(
+    tmp_path, monkeypatch
+):
+    from click.testing import CliRunner
+
+    from science_tool.cli import main
+
+    (tmp_path / "tasks").mkdir()
+    (tmp_path / "science.yaml").write_text("name: demo\nprofile: research\n")
+    monkeypatch.chdir(tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "tasks",
+            "add",
+            "Inspect analysis inputs",
+            "--priority",
+            "P1",
+            "--aspects",
+            "computational-analysis",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    body = (tmp_path / "tasks" / "active.md").read_text()
+    assert "- aspects: [computational-analysis]" in body
+
+
 def test_tasks_add_without_type_or_aspects(tmp_path, monkeypatch):
     from click.testing import CliRunner
 
@@ -601,6 +630,36 @@ def test_tasks_edit_updates_aspects(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     body = (tmp_path / "tasks" / "active.md").read_text()
     assert "- aspects: [software-development]" in body
+
+
+def test_tasks_edit_accepts_task_scoped_aspect_when_project_aspects_absent(
+    tmp_path, monkeypatch
+):
+    from click.testing import CliRunner
+
+    from science_tool.cli import main
+
+    (tmp_path / "tasks").mkdir()
+    (tmp_path / "science.yaml").write_text("name: demo\nprofile: research\n")
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t001] Demo\n- priority: P1\n- status: proposed\n- aspects: []\n- created: 2026-04-19\n\nBody.\n"
+    )
+    monkeypatch.chdir(tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "tasks",
+            "edit",
+            "t001",
+            "--aspects",
+            "computational-analysis",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    body = (tmp_path / "tasks" / "active.md").read_text()
+    assert "- aspects: [computational-analysis]" in body
 
 
 def test_tasks_list_filter_by_aspect(tmp_path, monkeypatch):

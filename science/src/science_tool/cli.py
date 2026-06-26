@@ -3529,21 +3529,14 @@ def tasks_add(
     force: bool,
 ) -> None:
     """Add a new task."""
-    from science_model.aspects import (
-        AspectValidationError,
-        load_project_aspects,
-        validate_entity_aspects,
-    )
-
-    from science_tool.tasks import add_task
+    from science_tool.tasks import TaskAspectValidationError, add_task, validate_task_aspects
     from science_tool.tasks_blockers import BlockerValidationError
 
     validated_aspects: list[str] = []
     if aspects:
-        project_aspects = load_project_aspects(Path.cwd())
         try:
-            validated_aspects = validate_entity_aspects(list(aspects), project_aspects)
-        except AspectValidationError as exc:
+            validated_aspects = validate_task_aspects(list(aspects))
+        except TaskAspectValidationError as exc:
             raise click.ClickException(str(exc)) from exc
 
     try:
@@ -3901,13 +3894,7 @@ def tasks_edit(
     force: bool,
 ) -> None:
     """Edit an existing task's fields."""
-    from science_model.aspects import (
-        AspectValidationError,
-        load_project_aspects,
-        validate_entity_aspects,
-    )
-
-    from science_tool.tasks import edit_task
+    from science_tool.tasks import TaskAspectValidationError, edit_task, validate_task_aspects
     from science_tool.tasks_blockers import BlockerValidationError
 
     if clear_blockers and blocked_by:
@@ -3915,10 +3902,9 @@ def tasks_edit(
 
     validated_aspects: list[str] | None = None
     if aspects:
-        project_aspects = load_project_aspects(Path.cwd())
         try:
-            validated_aspects = validate_entity_aspects(list(aspects), project_aspects)
-        except AspectValidationError as exc:
+            validated_aspects = validate_task_aspects(list(aspects))
+        except TaskAspectValidationError as exc:
             raise click.ClickException(str(exc)) from exc
 
     # None = leave blocked-by untouched; [] = clear it. --clear-blockers forces the

@@ -114,10 +114,15 @@ uv run science tasks list --related=topic:lens --group=visualization
 ### "add <description>"
 
 Interactively create a task. Ask the user for:
-- **Aspects:** (optional) project-declared analysis/work aspects, such as `software-development` or `hypothesis-testing`
+- **Aspects:** (optional) task-scoped analysis/work aspects, such as `software-development` or `hypothesis-testing`
 - **Priority:** P0-P3
 - **Related entities:** (optional) typed refs for hypotheses, themes, methods, questions, tasks, etc. Local refs use `<kind>:<slug>` such as `hypothesis:h01` or `task:t016`; cross-project refs use `<project-id>:<kind>:<slug>` such as `natural-systems:task:t335`.
 - **Group:** (optional) single group label for thematic clustering
+
+Task-scoped aspects do not need to be declared in `science.yaml`; they only need
+to use a known Science aspect name. Add an aspect to `science.yaml` only when
+you want project-wide aspect behavior, not merely to label or reuse one task's
+analysis/work category.
 
 Then run:
 

@@ -156,6 +156,26 @@ def test_generated_task_skills_use_aspects_for_task_creation(tmp_path: Path) -> 
         assert "tasks add \"<title>\" --aspects=<aspect>" in text
 
 
+def test_generated_tasks_skill_allows_task_scoped_aspects_without_project_declaration(
+    tmp_path: Path,
+) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-tasks"].read_text(encoding="utf-8")
+
+    assert "Task-scoped aspects do not need to be declared in `science.yaml`" in text
+    assert "project-wide aspect behavior" in text
+
+
+def test_generated_plan_analysis_skill_reuses_task_scoped_aspects_for_blockers(
+    tmp_path: Path,
+) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-plan-analysis"].read_text(encoding="utf-8")
+
+    assert "Reuse task-scoped aspects" in text
+    assert "do not mutate `science.yaml` solely to create blocker tasks" in text
+
+
 def test_review_pipeline_generated_skill_uses_doc_reviews_for_reports(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
     text = generated["science-review-pipeline"].read_text(encoding="utf-8")

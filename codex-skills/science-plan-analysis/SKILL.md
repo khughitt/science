@@ -149,6 +149,10 @@ reason.
 6. Save the analysis plan by default.
 7. If graph tooling is available, link the saved plan to referenced hypothesis, inquiry, and task entities.
 8. If `not-ready`, create one task per blocking check when task tooling is available; otherwise list exact task text in the plan.
+   Reuse task-scoped aspects from the triggering task or analysis context when
+   they make the blocker easier to route, e.g. `science tasks add ... --aspects
+   computational-analysis`. Task-scoped aspects are local task metadata; do not mutate `science.yaml` solely to create blocker tasks. Add a project-level
+   aspect only when the whole project should load that aspect's command guidance.
 
 ### Design-stage causal plans with no dataset in hand
 
