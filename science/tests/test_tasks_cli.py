@@ -733,6 +733,51 @@ def _setup(tmp_path):
     return runner
 
 
+def _setup_host_with_peer_task(tmp_path: Path) -> Path:
+    host = tmp_path / "host"
+    peer = tmp_path / "peer"
+    host.mkdir()
+    peer.mkdir()
+    (host / "science.yaml").write_text(
+        f"name: host\nid: host\npeers:\n  - id: peer\n    path: {peer}\n",
+        encoding="utf-8",
+    )
+    (peer / "science.yaml").write_text("name: peer\nid: peer\n", encoding="utf-8")
+    (peer / "tasks").mkdir()
+    (peer / "tasks" / "active.md").write_text(
+        "## [t001] Peer task\n"
+        "- type: dev\n"
+        "- priority: P2\n"
+        "- status: done\n"
+        "- created: 2026-06-01\n"
+        "- completed: 2026-06-02\n\n"
+        "Done in the peer project.\n",
+        encoding="utf-8",
+    )
+    return host
+
+
+def test_tasks_block_accepts_declared_peer_task(tmp_path, monkeypatch):
+    host = _setup_host_with_peer_task(tmp_path)
+    (host / "tasks").mkdir()
+    (host / "tasks" / "active.md").write_text(
+        "## [t001] Host task\n"
+        "- type: dev\n"
+        "- priority: P2\n"
+        "- status: proposed\n"
+        "- created: 2026-06-03\n\n"
+        "Can be blocked on the peer project.\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(host)
+    result = CliRunner().invoke(main, ["tasks", "block", "t001", "--by", "peer:task:t001"])
+
+    assert result.exit_code == 0, result.output
+    assert "peer:task:t001" in result.output
+    assert "blocked-by: [peer:task:t001]" in (host / "tasks" / "active.md").read_text(encoding="utf-8")
+
+
 def test_tasks_block_rejects_untyped(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     runner = _setup(tmp_path)
@@ -803,6 +848,32 @@ def test_tasks_blockers_json_unresolved(tmp_path, monkeypatch):
     assert blocker["ref"] == "dataset:gone"
     assert blocker["unresolved"] is True
     assert blocker["ready"] is False
+
+
+def test_tasks_blockers_json_resolves_declared_peer_task(tmp_path, monkeypatch):
+    host = _setup_host_with_peer_task(tmp_path)
+    (host / "tasks").mkdir()
+    (host / "tasks" / "active.md").write_text(
+        "## [t001] Host task\n"
+        "- type: dev\n"
+        "- priority: P2\n"
+        "- status: blocked\n"
+        "- blocked-by: [peer:task:t001]\n"
+        "- created: 2026-06-03\n\n"
+        "Blocked on the peer project.\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(host)
+    result = CliRunner().invoke(main, ["tasks", "blockers", "t001", "--format", "json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    blocker = payload["blockers"][0]
+    assert blocker["ref"] == "peer:task:t001"
+    assert blocker["ready"] is True
+    assert blocker["state"] == "done"
+    assert blocker["unresolved"] is False
 
 
 def test_tasks_edit_clear_blockers_drops_blocked_by(tmp_path, monkeypatch):

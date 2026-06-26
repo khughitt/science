@@ -3626,14 +3626,18 @@ def tasks_retire(task_id: str, reason: str | None) -> None:
 @tasks.command("block")
 @click.argument("task_id")
 @click.option(
-    "--by", "blocked_by", multiple=True, required=True, help="Typed blocker ref (repeatable): <kind>:<local-id>"
+    "--by",
+    "blocked_by",
+    multiple=True,
+    required=True,
+    help="Typed blocker ref (repeatable): <kind>:<local-id> or <peer>:<kind>:<local-id>",
 )
 @click.option("--force", is_flag=True, help="Record blocker even if entity not yet known")
 def tasks_block(task_id: str, blocked_by: tuple[str, ...], force: bool) -> None:
     """Block a task by one or more typed entity references."""
-    from science_tool.entities import load_local_entity_ids
     from science_tool.tasks import block_task
     from science_tool.tasks_blockers import BlockerValidationError
+    from science_tool.tasks_readiness import make_project_entity_lookup
 
     try:
         task = block_task(
@@ -3649,9 +3653,14 @@ def tasks_block(task_id: str, blocked_by: tuple[str, ...], force: bool) -> None:
         raise click.ClickException(str(exc)) from exc
 
     if force:
-        known = load_local_entity_ids(Path.cwd())
+        try:
+            lookup = make_project_entity_lookup(Path.cwd())
+        except ValueError:
+            def lookup(_ref: str):
+                return None
+
         for ref in blocked_by:
-            if ref not in known:
+            if lookup(ref) is None:
                 click.echo(
                     f"WARNING: recorded unresolved blocker {ref}; graph audit will flag it",
                     err=True,
@@ -3667,7 +3676,7 @@ def tasks_block(task_id: str, blocked_by: tuple[str, ...], force: bool) -> None:
 def tasks_blockers(task_id: str, fmt: str) -> None:
     """Show per-blocker readiness for a task."""
     from science_tool.tasks import _find_task, _read_active
-    from science_tool.tasks_readiness import make_local_resolver
+    from science_tool.tasks_readiness import make_project_resolver
 
     tasks = _read_active(DEFAULT_TASKS_DIR)
     try:
@@ -3676,7 +3685,7 @@ def tasks_blockers(task_id: str, fmt: str) -> None:
         raise click.ClickException(str(exc)) from exc
 
     try:
-        resolver = make_local_resolver()
+        resolver = make_project_resolver()
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -3996,7 +4005,7 @@ def tasks_list(
 
     from science_tool.tasks import list_tasks, parse_tasks_for_cli
     from science_tool.tasks_display import render_tasks_table, sort_tasks
-    from science_tool.tasks_readiness import make_local_resolver
+    from science_tool.tasks_readiness import make_project_resolver
 
     # Surface legacy-untyped-blocker warnings on stderr.
     _, warnings = parse_tasks_for_cli(DEFAULT_TASKS_DIR / "active.md")
@@ -4016,7 +4025,7 @@ def tasks_list(
     matched = sort_tasks(matched)
 
     try:
-        resolver = make_local_resolver()
+        resolver = make_project_resolver()
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -4096,7 +4105,7 @@ def tasks_list(
 def tasks_show(task_id: str, output_format: str) -> None:
     """Show full details of a task."""
     from science_tool.tasks import find_task_location, render_task
-    from science_tool.tasks_readiness import make_local_resolver
+    from science_tool.tasks_readiness import make_project_resolver
 
     try:
         location = find_task_location(DEFAULT_TASKS_DIR, task_id)
@@ -4104,7 +4113,7 @@ def tasks_show(task_id: str, output_format: str) -> None:
         raise click.ClickException(str(exc)) from exc
     task = location.task
     try:
-        resolver = make_local_resolver() if task.blocked_by else None
+        resolver = make_project_resolver() if task.blocked_by else None
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     readiness_rows = []

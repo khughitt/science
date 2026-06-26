@@ -5,8 +5,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from science_tool.entities import load_local_entity_ids
-
 # Format: <kind>:<local-id> where kind is lowercase letters/digits/hyphens
 # and local-id is anything non-empty without whitespace or @.
 _TYPED_REF_RE = re.compile(r"^[a-z][a-z0-9-]*:[^@\s]+$")
@@ -37,15 +35,22 @@ def validate_blocker_refs(
     for ref in refs:
         if not _TYPED_REF_RE.match(ref):
             raise BlockerValidationError(
-                f"blocker {ref!r} must be typed: <kind>:<local-id> (e.g. dataset:foo, task:t007)"
+                "blocker "
+                f"{ref!r} must be typed: <kind>:<local-id> or <peer>:<kind>:<local-id> "
+                "(e.g. dataset:foo, task:t007, meta:task:t007)"
             )
 
     if force:
         return list(refs)
 
-    known = load_local_entity_ids(project_root)
+    from science_tool.tasks_readiness import make_project_entity_lookup
+
+    try:
+        lookup = make_project_entity_lookup(project_root)
+    except ValueError as exc:
+        raise BlockerValidationError(str(exc)) from exc
     for ref in refs:
-        if ref not in known:
+        if lookup(ref) is None:
             raise BlockerValidationError(
                 f"unknown entity {ref}. Create the corresponding entity file first, or pass --force to record anyway."
             )
