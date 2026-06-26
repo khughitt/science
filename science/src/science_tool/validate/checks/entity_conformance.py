@@ -21,6 +21,7 @@ from science_tool.entities import (
     markdown_entity_kinds,
     resolve_path_policy,
 )
+from science_tool.annotation.io import markdown_for_sidecar
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -48,6 +49,14 @@ def _id_kind_and_local(entity_id: object) -> tuple[str | None, str | None]:
 
 def _rel(ctx: ValidateContext, path: Path) -> Path:
     return path.relative_to(ctx.project_root)
+
+
+def _is_paired_annotation_sidecar(path: Path) -> bool:
+    try:
+        markdown_path = markdown_for_sidecar(path)
+    except ValueError:
+        return False
+    return markdown_path.is_file()
 
 
 def _entity_dirs(ctx: ValidateContext, *, strategy: str | None = None) -> Iterator[tuple[str, EntityPathPolicy, Path]]:
@@ -185,6 +194,8 @@ def check_entity_stray_files(ctx: ValidateContext) -> Iterator[Result]:
             if path.name.startswith("."):
                 # Skip hidden dotfiles: reservation sentinels (.NNNN.reserving,
                 # see entity_reservation.py) and OS/editor cruft are not entities.
+                continue
+            if _is_paired_annotation_sidecar(path):
                 continue
             if path.is_dir():
                 yield _result(_severity(ctx), _rel(ctx, path), f"unexpected subdirectory in {policy.root}/")

@@ -119,6 +119,47 @@ def test_stray_file_flagged(tmp_path: Path) -> None:
     assert any(r.severity is Severity.ERROR for r in results)
 
 
+def test_stray_files_ignore_paired_annotation_sidecars(tmp_path: Path) -> None:
+    _write(
+        tmp_path,
+        "entities/questions/0001-x.md",
+        {
+            "id": "question:0001-x",
+            "type": "question",
+            "title": "X",
+            "status": "active",
+            "created": "2026-01-01",
+            "updated": "2026-01-01",
+        },
+    )
+    sidecar = tmp_path / "entities" / "questions" / "0001-x.anno.trig"
+    sidecar.write_text("@prefix oa: <http://www.w3.org/ns/oa#> .\n", encoding="utf-8")
+
+    ctx = _ctx(tmp_path)
+
+    results = list(check_entity_stray_files(ctx))
+
+    assert not [
+        r
+        for r in results
+        if r.severity is Severity.ERROR and str(r.path) == "entities/questions/0001-x.anno.trig"
+    ]
+
+
+def test_stray_files_flag_unpaired_annotation_sidecars(tmp_path: Path) -> None:
+    directory = tmp_path / "entities" / "questions"
+    directory.mkdir(parents=True)
+    (directory / "missing.anno.trig").write_text("@prefix oa: <http://www.w3.org/ns/oa#> .\n", encoding="utf-8")
+    ctx = _ctx(tmp_path)
+
+    results = list(check_entity_stray_files(ctx))
+
+    assert any(
+        r.severity is Severity.ERROR and str(r.path) == "entities/questions/missing.anno.trig"
+        for r in results
+    )
+
+
 def test_stray_subdirectory_flagged(tmp_path: Path) -> None:
     (tmp_path / "entities" / "questions" / "attachments").mkdir(parents=True)
     ctx = _ctx(tmp_path)
