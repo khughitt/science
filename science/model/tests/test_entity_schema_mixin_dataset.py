@@ -92,6 +92,28 @@ def test_dataset_usage_schema_is_owned_by_base_schema() -> None:
     assert "dataset_usage" not in dataset_schema["properties"]
 
 
+def test_access_verification_method_vocabulary() -> None:
+    dataset_raw = (_SCHEMAS / "mixin-dataset-1.0.json").read_text(encoding="utf-8")
+    dataset_schema = json.loads(dataset_raw)
+
+    enum = set(dataset_schema["$defs"]["access"]["properties"]["verification_method"]["enum"])
+
+    assert enum == {
+        "",
+        "retrieved",
+        "credential-confirmed",
+        "landing-confirmed",
+        "metadata-confirmed",
+    }
+
+
+def test_dataset_class_vocabulary() -> None:
+    dataset_raw = (_SCHEMAS / "mixin-dataset-1.0.json").read_text(encoding="utf-8")
+    dataset_schema = json.loads(dataset_raw)
+
+    assert set(dataset_schema["properties"]["dataset_class"]["enum"]) == {"deposit", "reference", "pointer"}
+
+
 # --- composition + aggregated-error coverage previously deferred from Task 4 ---
 
 

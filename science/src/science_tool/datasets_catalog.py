@@ -52,6 +52,7 @@ def _render_candidate(
         "created": iso,
         "updated": iso,
         "origin": origin,
+        "dataset_class": "deposit",
         "source_class": "observational",
         "tier": tier,
         "license": "unknown",
@@ -199,6 +200,8 @@ def verify_access(
 
     # origin: any verified/exception-gated dataset is external.
     fm["origin"] = "external"
+    if not (isinstance(fm.get("dataset_class"), str) and fm["dataset_class"].strip()):
+        fm["dataset_class"] = "deposit"
 
     # license — path-independent: an empty license on an external dataset trips
     # dataset.license-missing regardless of verified/exception state.
@@ -234,7 +237,7 @@ def verify_access(
         if not method:
             raise EntityCommandError(
                 f"{entity_id}: the verified path requires --method "
-                "(retrieved|credential-confirmed)."
+                "(retrieved|credential-confirmed|landing-confirmed|metadata-confirmed)."
             )
         access["verified"] = True
         access["verification_method"] = method

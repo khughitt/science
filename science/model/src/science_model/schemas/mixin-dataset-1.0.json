@@ -19,6 +19,7 @@
     "siblings": {"type": "array", "items": {"type": "string"}},
     "consumed_by": {"type": "array", "items": {"type": "string"}},
     "source_class": {"enum": ["observational", "derived", "reference"]},
+    "dataset_class": {"enum": ["deposit", "reference", "pointer"]},
     "derived_kind": {"enum": ["aggregate", "transform", "model_output"]}
   },
   "not": {"required": ["resources"]},
@@ -54,7 +55,9 @@
         "level": {"enum": ["public", "registration", "controlled", "commercial", "mixed"]},
         "availability": {"enum": ["available", "embargoed", "withdrawn"]},
         "verified": {"type": "boolean"},
-        "verification_method": {"enum": ["", "retrieved", "credential-confirmed"]},
+        "verification_method": {
+          "enum": ["", "retrieved", "credential-confirmed", "landing-confirmed", "metadata-confirmed"]
+        },
         "last_reviewed": {"type": "string"},
         "verified_by": {"type": "string"},
         "source_url": {"type": "string"},

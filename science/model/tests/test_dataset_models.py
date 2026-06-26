@@ -52,6 +52,11 @@ class TestAccessBlock:
         assert a.verified is True
         assert a.verification_method == "retrieved"
 
+    def test_verified_reference_methods(self) -> None:
+        for method in ("landing-confirmed", "metadata-confirmed"):
+            a = AccessBlock(level="public", verified=True, verification_method=method)
+            assert a.verification_method == method
+
 
 class TestDerivationBlock:
     def test_minimal_valid(self) -> None:
@@ -174,10 +179,12 @@ def test_dataset_entity_preserves_dataset_mixin_metadata() -> None:
         access=_ext_access(),
         tier="use-now",
         update_cadence="static",
+        dataset_class="reference",
     )
 
     assert ds.tier == "use-now"
     assert ds.update_cadence == "static"
+    assert ds.dataset_class == "reference"
 
 
 # Model-level invariants — fail at construction time, not only at JSON Schema check.

@@ -1537,7 +1537,39 @@ def test_verified_unstageable_still_flags_use_now_tier(tmp_path: Path) -> None:
         'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}',
     )
     issues = check_dataset_anomalies(tmp_path)
-    assert any(i["code"] == "dataset_verified_but_unstageable" for i in issues)
+    stageability_issues = [i for i in issues if i["code"] == "dataset_verified_but_unstageable"]
+    assert stageability_issues
+    assert "not staged" in stageability_issues[0]["message"]
+
+
+def test_verified_reference_class_is_exempt_from_unstageable_warning(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "ref",
+        origin="external",
+        body='dataset_class: "reference"\n'
+        'tier: "use-now"\n'
+        'access: {level: "public", verified: true, verification_method: "landing-confirmed", last_reviewed: "2026-04-19", source_url: "https://x"}',
+    )
+
+    issues = check_dataset_anomalies(tmp_path)
+
+    assert not any(i["code"] == "dataset_verified_but_unstageable" for i in issues)
+
+
+def test_verified_pointer_class_is_exempt_from_unstageable_warning(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "ptr",
+        origin="external",
+        body='dataset_class: "pointer"\n'
+        'tier: "use-now"\n'
+        'access: {level: "public", verified: true, verification_method: "metadata-confirmed", last_reviewed: "2026-04-19", source_url: "https://x"}',
+    )
+
+    issues = check_dataset_anomalies(tmp_path)
+
+    assert not any(i["code"] == "dataset_verified_but_unstageable" for i in issues)
 
 
 # ---------------------------------------------------------------------------

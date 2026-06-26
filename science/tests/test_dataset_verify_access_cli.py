@@ -57,6 +57,17 @@ def test_cli_verify_access_missing_method_errors(tmp_path: Path) -> None:
     assert "--method" in res.output
 
 
+@pytest.mark.parametrize("method", ["landing-confirmed", "metadata-confirmed"])
+def test_cli_verify_access_accepts_reference_verification_methods(tmp_path: Path, method: str) -> None:
+    _legacy(tmp_path)
+
+    res = _run(tmp_path, "foo", "--level", "public", "--method", method, "--license", "CC0-1.0")
+
+    assert res.exit_code == 0, res.output
+    text = (tmp_path / "entities" / "datasets" / "foo.md").read_text(encoding="utf-8")
+    assert f"verification_method: {method}" in text
+
+
 @pytest.mark.parametrize("extra", [("--method", "retrieved"), ("--exception", "scope-reduced")])
 def test_cli_verify_access_missing_license_errors(tmp_path: Path, extra: tuple[str, ...]) -> None:
     _legacy(tmp_path)

@@ -20,6 +20,7 @@ from science_tool.validate._helpers import dataset_frontmatters
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
+from science_tool.datasets.semantics import dataset_class_for, has_runtime_artifact
 
 _ALLOWED_TIERS = {"use-now", "evaluate-next", "track"}
 _ALLOWED_CADENCES = {
@@ -30,6 +31,9 @@ _ALLOWED_CADENCES = {
     "annual",
     "versioned-releases",
 }
+_DEPOSIT_METHODS = {"", "retrieved", "credential-confirmed"}
+_REFERENCE_METHODS = {"", "credential-confirmed", "landing-confirmed", "metadata-confirmed"}
+_POINTER_METHODS = {"", "landing-confirmed", "metadata-confirmed"}
 
 
 def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
@@ -115,6 +119,64 @@ def evaluate_dataset_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
         )
         if cadence_finding is not None:
             yield cadence_finding
+
+        raw_dataset_class = fm.get("dataset_class")
+        if not (isinstance(raw_dataset_class, str) and raw_dataset_class.strip()):
+            yield _result(
+                Severity.INFO,
+                path,
+                f"{ident}: dataset_class is missing; defaulting to deposit until the row is touched",
+                "dataset.legacy-missing-class",
+            )
+
+        try:
+            dataset_class = dataset_class_for(fm)
+        except ValueError as exc:
+            yield _result(Severity.WARN, path, f"{ident}: {exc}", "dataset.class-unrecognized")
+            continue
+
+        access = fm.get("access")
+        access_block = access if isinstance(access, dict) else {}
+        method = access_block.get("verification_method", "")
+        method_value = method.strip() if isinstance(method, str) else method
+        allowed_methods = {
+            "deposit": _DEPOSIT_METHODS,
+            "reference": _REFERENCE_METHODS,
+            "pointer": _POINTER_METHODS,
+        }[dataset_class]
+        if method_value not in allowed_methods:
+            yield _result(
+                Severity.WARN,
+                path,
+                f"{ident}: verification_method {method_value!r} is incompatible with "
+                f"dataset_class {dataset_class!r}",
+                "dataset.method-class-mismatch",
+            )
+
+        if dataset_class in {"reference", "pointer"} and not (
+            isinstance(access_block.get("source_url"), str) and access_block["source_url"].strip()
+        ):
+            yield _result(
+                Severity.WARN,
+                path,
+                f"{ident}: {dataset_class} dataset requires access.source_url",
+                "dataset.reference-missing-source-url",
+            )
+
+        if dataset_class == "reference" and has_runtime_artifact(fm):
+            yield _result(
+                Severity.WARN,
+                path,
+                f"{ident}: reference dataset has a runtime artifact; convert it to dataset_class deposit",
+                "dataset.reference-runtime-artifact",
+            )
+        if dataset_class == "pointer" and has_runtime_artifact(fm):
+            yield _result(
+                Severity.WARN,
+                path,
+                f"{ident}: pointer dataset has a runtime artifact; convert it to dataset_class deposit",
+                "dataset.pointer-runtime-artifact",
+            )
 
 
 @Check(section="dataset metadata", order=32)

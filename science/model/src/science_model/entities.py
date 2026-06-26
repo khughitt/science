@@ -337,6 +337,7 @@ class Entity(BaseModel):
     license: str = ""
     # Pillar A — epistemic class (orthogonal to origin) + co-owned forward provenance
     source_class: str | None = None       # "observational" | "derived" | "reference"
+    dataset_class: Literal["deposit", "reference", "pointer"] = "deposit"
     derived_kind: str | None = None        # "aggregate" | "transform" | "model_output"
     dataset_usage: list[DatasetUsage] = Field(default_factory=list)
 

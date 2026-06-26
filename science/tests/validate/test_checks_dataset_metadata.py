@@ -35,8 +35,17 @@ def _rules(datasets: list[dict]) -> list[tuple[Severity, str]]:
     return [(r.severity, r.rule) for r in evaluate_dataset_metadata(datasets)]
 
 
+def _results(datasets: list[dict]):
+    return list(evaluate_dataset_metadata(datasets))
+
+
 def _ds(**kw) -> dict:
-    base = {"type": "dataset", "id": "dataset:x", "_path": "entities/datasets/x.md"}
+    base = {
+        "type": "dataset",
+        "id": "dataset:x",
+        "_path": "entities/datasets/x.md",
+        "dataset_class": "deposit",
+    }
     base.update(kw)
     return base
 
@@ -116,6 +125,83 @@ def test_non_string_cadence_is_unrecognized_not_crash() -> None:
     )
 
 
+def test_missing_dataset_class_is_info_advisory() -> None:
+    ds = _ds(origin="external", license="MIT")
+    ds.pop("dataset_class")
+
+    assert (Severity.INFO, "dataset.legacy-missing-class") in _rules([ds])
+
+
+def test_source_class_reference_does_not_imply_dataset_class_reference() -> None:
+    ds = _ds(
+        origin="external",
+        license="MIT",
+        source_class="reference",
+        datapackage="data/grch38/datapackage.yaml",
+        access={"level": "public", "verified": True, "verification_method": "retrieved"},
+    )
+    ds.pop("dataset_class")
+
+    rules = _rules([ds])
+
+    assert (Severity.WARN, "dataset.method-class-mismatch") not in rules
+    assert (Severity.WARN, "dataset.reference-runtime-artifact") not in rules
+
+
+def test_reference_retrieved_method_warns() -> None:
+    assert (Severity.WARN, "dataset.method-class-mismatch") in _rules(
+        [
+            _ds(
+                origin="external",
+                license="MIT",
+                dataset_class="reference",
+                access={"level": "public", "verified": True, "verification_method": "retrieved"},
+            )
+        ]
+    )
+
+
+def test_deposit_landing_confirmed_method_warns() -> None:
+    assert (Severity.WARN, "dataset.method-class-mismatch") in _rules(
+        [
+            _ds(
+                origin="external",
+                license="MIT",
+                dataset_class="deposit",
+                access={"level": "public", "verified": True, "verification_method": "landing-confirmed"},
+            )
+        ]
+    )
+
+
+def test_reference_missing_source_url_uses_access_block_only() -> None:
+    results = _results(
+        [
+            _ds(
+                origin="external",
+                license="MIT",
+                dataset_class="reference",
+                source_url="https://top-level.example",
+                access={"level": "public", "verified": True, "verification_method": "landing-confirmed"},
+            )
+        ]
+    )
+
+    assert any(result.rule == "dataset.reference-missing-source-url" for result in results)
+
+
+def test_reference_and_pointer_runtime_artifacts_warn() -> None:
+    rules = _rules(
+        [
+            _ds(origin="external", license="MIT", dataset_class="reference", datapackage="data/pkg.yaml"),
+            _ds(origin="external", license="MIT", id="dataset:y", dataset_class="pointer", local_path="data/y.tsv"),
+        ]
+    )
+
+    assert (Severity.WARN, "dataset.reference-runtime-artifact") in rules
+    assert (Severity.WARN, "dataset.pointer-runtime-artifact") in rules
+
+
 def test_module_is_registered() -> None:
     # The new module must be wired into _load_canonical_checks's tuple or it
     # silently never runs. Run the real loader (order-robust) and assert membership.
@@ -169,3 +255,20 @@ def test_tier_vocabulary_agrees_across_both_schema_surfaces() -> None:
     pkg_tier = set(_schema("science-pkg-entity-1.0.json")["properties"]["tier"]["enum"])
     mixin_tier = set(_schema("mixin-dataset-1.0.json")["properties"]["tier"]["enum"])
     assert _ALLOWED_TIERS == pkg_tier == mixin_tier
+
+
+def test_access_verification_method_vocabulary_agrees_across_schema_surfaces() -> None:
+    expected = {
+        "",
+        "retrieved",
+        "credential-confirmed",
+        "landing-confirmed",
+        "metadata-confirmed",
+    }
+    pkg_methods = set(
+        _schema("science-pkg-entity-1.0.json")["$defs"]["access"]["properties"]["verification_method"]["enum"]
+    )
+    mixin_methods = set(
+        _schema("mixin-dataset-1.0.json")["$defs"]["access"]["properties"]["verification_method"]["enum"]
+    )
+    assert expected == pkg_methods == mixin_methods

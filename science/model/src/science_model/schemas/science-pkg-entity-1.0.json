@@ -27,6 +27,7 @@
     "accessions": {"type": "array", "items": {"type": "string"}},
     "access": {"$ref": "#/$defs/access"},
     "derivation": {"$ref": "#/$defs/derivation"},
+    "dataset_class": {"enum": ["deposit", "reference", "pointer"]},
     "source_refs": {"type": "array", "items": {"type": "string"}},
     "related": {"type": "array", "items": {"type": "string"}},
     "produced_by": {"type": "array", "items": {"type": "string", "pattern": "^code-file:"}, "minItems": 1},
@@ -57,7 +58,9 @@
       "properties": {
         "level": {"enum": ["public", "registration", "controlled", "commercial", "mixed"]},
         "verified": {"type": "boolean"},
-        "verification_method": {"enum": ["", "retrieved", "credential-confirmed"]},
+        "verification_method": {
+          "enum": ["", "retrieved", "credential-confirmed", "landing-confirmed", "metadata-confirmed"]
+        },
         "last_reviewed": {"type": "string"},
         "verified_by": {"type": "string"},
         "source_url": {"type": "string"},

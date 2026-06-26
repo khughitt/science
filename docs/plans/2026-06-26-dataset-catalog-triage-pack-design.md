@@ -67,8 +67,8 @@ The catalog should distinguish:
 | `pointer` | Metadata-only record for an external resource useful to track but not yet represented as runnable or reference material. | No runtime files expected; must be visibly non-runnable. |
 
 The existing `source_class` field is currently used for epistemic class values
-such as `observational` and `reference`. Overloading it further would preserve
-backwards compatibility but keep semantics muddy. Add a new field:
+such as `observational` and `reference`. Overloading it further would keep
+semantics muddy. Add a new field:
 
 ```yaml
 dataset_class: "deposit"  # deposit | reference | pointer
@@ -77,8 +77,11 @@ dataset_class: "deposit"  # deposit | reference | pointer
 Migration/default rule:
 
 - Missing `dataset_class` defaults to `deposit`.
-- `source_class: reference` implies `dataset_class: reference` for warnings and
-  display until entities are updated.
+- `source_class` remains a separate epistemic axis (`observational`, `derived`,
+  `reference`, etc.) and does not imply `dataset_class`. A reference genome,
+  reference annotation, or reference atlas can be a downloadable `deposit`.
+- Missing `dataset_class` should produce an info-level
+  `dataset.legacy-missing-class` fix-on-touch advisory, not a hard error.
 - New `dataset add` defaults to `deposit`; `--class reference|pointer` sets the
   field explicitly.
 
@@ -93,6 +96,10 @@ while keeping existing values valid:
 | `credential-confirmed` | `deposit`, `reference` | Access was confirmed using held credentials or a login. |
 | `landing-confirmed` | `reference`, `pointer` | Landing page, portal, accession, or catalog entry resolves and is usable for lookup. |
 | `metadata-confirmed` | `reference`, `pointer` | Metadata record was confirmed, but no runtime data retrieval is expected. |
+
+Use `reference` for a portal, knowledgebase, or lookup surface that is useful
+now but does not itself produce runtime files. Use `pointer` for a resource
+worth tracking but not yet useful as lookup material or runnable data.
 
 For `deposit`, `access.verified: true` means access to the data itself was
 confirmed. For `reference`, it means the reference surface is usable. For
@@ -128,15 +135,22 @@ Runtime stageability answers: "Can this resource be used as an input to a
 workflow right now?"
 
 Add a small derived runtime state for dataset display, prioritization, and
-validation:
+validation. Runtime state is derived in this precedence order:
 
-| Runtime state | Condition |
-|---|---|
-| `runnable` | `dataset_class=deposit` and datapackage/local_path/runtime artifact exists. |
-| `unstaged-deposit` | `dataset_class=deposit`, access verified, but no runtime artifact yet. |
-| `blocked-access` | Access is gated, exception-gated, or unverified for a deposit. |
-| `reference-only` | `dataset_class=reference`; no runtime artifact expected. |
-| `pointer-only` | `dataset_class=pointer`; no runtime artifact expected. |
+1. If `dataset_class=reference`, return `reference-only` even if a stray runtime
+   artifact is present. Validation reports `dataset.reference-runtime-artifact`
+   separately and suggests converting the row to `deposit`.
+2. If `dataset_class=pointer`, return `pointer-only` even if a stray runtime
+   artifact is present. Validation reports `dataset.pointer-runtime-artifact`
+   separately and suggests converting the row to `deposit`.
+3. For `dataset_class=deposit`, if `datapackage`, `local_path`, or another
+   runtime artifact exists, return `runnable`.
+4. For `dataset_class=deposit`, if access has a Branch-B exception or
+   `access.level` is `registration`, `controlled`, or `commercial` while
+   `access.verified` is false, return `blocked-access`.
+5. For `dataset_class=deposit`, if `access.verified: true`, return
+   `unstaged-deposit`.
+6. Otherwise return `blocked-access`.
 
 This resolves the `dataset_verified_but_unstageable` confusion: a verified
 deposit with no local artifact is not contradictory. It is
@@ -186,6 +200,20 @@ Gap reasons:
 - `only-reference`
 - `only-pointer`
 - `unstaged-deposit`
+
+The derivation has one source of truth. Per-dataset runtime states are computed
+first. Coverage rows count runtime states for each Q/H target. `coverage_state`
+is derived from those counts, and `gap_reason` is then derived 1:1 from
+`coverage_state`:
+
+| Coverage state | Gap reason |
+|---|---|
+| `covered-runnable` | `none` |
+| `covered-unstaged` | `unstaged-deposit` |
+| `covered-reference` | `only-reference` |
+| `blocked-access` | `only-gated` |
+| `unverified` | `only-unverified` |
+| `no-candidate` | `no-candidate` |
 
 `catalog-datasets` should use these rows as the source of truth. It should not
 manually infer coverage by eyeballing only `related:`.
@@ -308,12 +336,17 @@ Update Step 5 prioritization:
 Add or adjust checks:
 
 - `dataset.reference-missing-source-url`: reference or pointer row lacks
-  `access.source_url` or a top-level `source_url`.
+  `access.source_url`. `access.source_url` is the canonical location.
 - `dataset.method-class-mismatch`: verification method is incompatible with
   `dataset_class`.
 - `dataset.deposit-verified-unstaged`: verified deposit lacks runtime artifact;
   warning text should say it is access-verified but not staged, not imply access
   verification is wrong.
+- `dataset_verified_but_unstageable`: health should exempt `reference` and
+  `pointer` classes entirely. Only `unstaged-deposit` should receive actionable
+  stageability guidance.
+- `dataset.reference-runtime-artifact`: reference row has datapackage/local_path;
+  suggest converting to `deposit` if it is now runnable.
 - `dataset.pointer-runtime-artifact`: pointer row has datapackage/local_path;
   suggest converting to `deposit` if it is now runnable.
 - `dataset.legacy-missing-class`: old rows missing `dataset_class`; info-level
@@ -326,8 +359,10 @@ No bulk migration is required for v1.
 Transition rules:
 
 - Missing `dataset_class` means `deposit`.
-- Existing `source_class: reference` is treated as `dataset_class=reference` for
-  display and validation warnings.
+- Existing `source_class: reference` does not change `dataset_class`; it remains
+  a separate epistemic label. This is intentionally tested with a downloadable
+  reference dataset so reference genomes and atlases do not become
+  `reference-only` by accident.
 - Existing `verification_method: retrieved|credential-confirmed` remains valid.
 - `catalog-datasets` and `verify-access` should write `dataset_class` on touch.
 
@@ -350,9 +385,18 @@ This keeps existing entities readable while making future writes explicit.
 
 ### Phase 1: model helpers and validation
 
+- Expand the authoritative `AccessBlock.verification_method` enum to include
+  `landing-confirmed` and `metadata-confirmed`; update Pydantic models, JSON
+  schemas, templates, CLI choices, and schema-sync tests in the same change.
 - Add `dataset_class` reading/default helpers.
-- Add runtime-state derivation.
+- Add deterministic runtime-state derivation.
 - Add validation checks and tests.
+- Reword/exempt the health stageability warning for non-deposit classes.
+
+`fb-2026-06-24-004` is already partly implemented: `frontmatter_reach()` reads
+the first-class `datasets:` surface on questions and hypotheses. Residual work
+belongs to Phase 3: update `/science:catalog-datasets` and its generated skill
+so agents author those back-edges consistently instead of relying on `related:`.
 
 ### Phase 2: command surfaces
 

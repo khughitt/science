@@ -60,6 +60,7 @@ def test_verify_access_backfills_all_coupled_fields(tmp_path: Path) -> None:
     )
     fm, body = _read(tmp_path / "entities" / "datasets" / "foo.md")
     assert fm["origin"] == "external"
+    assert fm["dataset_class"] == "deposit"
     assert fm["license"] == "CC0-1.0"
     access = fm["access"]
     assert access["level"] == "public"
@@ -71,6 +72,15 @@ def test_verify_access_backfills_all_coupled_fields(tmp_path: Path) -> None:
     assert "## Access verification log" in body
     assert "2026-06-24" in body
     assert "landing page public" in body
+
+
+def test_verify_access_preserves_existing_dataset_class(tmp_path: Path) -> None:
+    _legacy(tmp_path, dataset_class="reference", license="MIT")
+
+    verify_access(tmp_path, "foo", level="public", method="landing-confirmed", today=DATE)
+
+    fm, _body = _read(tmp_path / "entities" / "datasets" / "foo.md")
+    assert fm["dataset_class"] == "reference"
 
 
 def test_verify_access_yields_available_readiness(tmp_path: Path) -> None:
