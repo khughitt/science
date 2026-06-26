@@ -75,12 +75,59 @@ def test_verify_access_backfills_all_coupled_fields(tmp_path: Path) -> None:
 
 
 def test_verify_access_preserves_existing_dataset_class(tmp_path: Path) -> None:
-    _legacy(tmp_path, dataset_class="reference", license="MIT")
+    _legacy(
+        tmp_path,
+        dataset_class="reference",
+        license="MIT",
+        access={"level": "public", "verified": False, "source_url": "https://example.org/foo"},
+    )
 
     verify_access(tmp_path, "foo", level="public", method="landing-confirmed", today=DATE)
 
     fm, _body = _read(tmp_path / "entities" / "datasets" / "foo.md")
     assert fm["dataset_class"] == "reference"
+
+
+def test_verify_access_sets_dataset_class_when_requested(tmp_path: Path) -> None:
+    _legacy(tmp_path, license="MIT")
+
+    verify_access(
+        tmp_path,
+        "foo",
+        dataset_class="reference",
+        level="public",
+        method="landing-confirmed",
+        source_url="https://example.org/foo",
+        today=DATE,
+    )
+
+    fm, _body = _read(tmp_path / "entities" / "datasets" / "foo.md")
+    assert fm["dataset_class"] == "reference"
+    assert fm["access"]["source_url"] == "https://example.org/foo"
+
+
+def test_verify_access_rejects_method_class_mismatch(tmp_path: Path) -> None:
+    _legacy(tmp_path, license="MIT")
+
+    with pytest.raises(EntityCommandError, match="retrieved"):
+        verify_access(
+            tmp_path,
+            "foo",
+            dataset_class="reference",
+            method="retrieved",
+            source_url="https://example.org/foo",
+            today=DATE,
+        )
+
+    with pytest.raises(EntityCommandError, match="landing-confirmed"):
+        verify_access(tmp_path, "foo", dataset_class="deposit", method="landing-confirmed", today=DATE)
+
+
+def test_verify_access_reference_requires_source_url(tmp_path: Path) -> None:
+    _legacy(tmp_path, license="MIT")
+
+    with pytest.raises(EntityCommandError, match="source-url"):
+        verify_access(tmp_path, "foo", dataset_class="reference", method="landing-confirmed", today=DATE)
 
 
 def test_verify_access_yields_available_readiness(tmp_path: Path) -> None:

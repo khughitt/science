@@ -33,6 +33,7 @@ def _render_candidate(
     *,
     title: str,
     origin: str,
+    dataset_class: str,
     tier: str,
     level: str,
     source_url: str,
@@ -52,7 +53,7 @@ def _render_candidate(
         "created": iso,
         "updated": iso,
         "origin": origin,
-        "dataset_class": "deposit",
+        "dataset_class": dataset_class,
         "source_class": "observational",
         "tier": tier,
         "license": "unknown",
@@ -83,6 +84,7 @@ def add_dataset(
     *,
     title: str,
     origin: str = "external",
+    dataset_class: str = "deposit",
     tier: str = "track",
     level: str = "controlled",
     source_url: str = "",
@@ -95,6 +97,10 @@ def add_dataset(
             "dataset add authors external candidate entities only; derived datasets "
             "are machine-authored by `science dataset register-run`."
         )
+    if dataset_class not in {"deposit", "reference", "pointer"}:
+        raise EntityCommandError("dataset class must be one of: deposit, reference, pointer")
+    if dataset_class == "reference" and not source_url:
+        raise EntityCommandError("dataset add --class reference requires --source-url")
     slug = validate_slug(slug)
     entity_id = f"dataset:{slug}"
     today = today or date.today()
@@ -107,6 +113,7 @@ def add_dataset(
         entity_id,
         title=title,
         origin=origin,
+        dataset_class=dataset_class,
         tier=tier,
         level=level,
         source_url=source_url,
@@ -168,6 +175,7 @@ def verify_access(
     *,
     level: str | None = None,
     license_: str | None = None,
+    dataset_class: str | None = None,
     method: str | None = None,
     verified_by: str = "agent (verify-access)",
     source_url: str | None = None,
@@ -200,7 +208,11 @@ def verify_access(
 
     # origin: any verified/exception-gated dataset is external.
     fm["origin"] = "external"
-    if not (isinstance(fm.get("dataset_class"), str) and fm["dataset_class"].strip()):
+    if dataset_class is not None:
+        if dataset_class not in {"deposit", "reference", "pointer"}:
+            raise EntityCommandError("dataset class must be one of: deposit, reference, pointer")
+        fm["dataset_class"] = dataset_class
+    elif not (isinstance(fm.get("dataset_class"), str) and fm["dataset_class"].strip()):
         fm["dataset_class"] = "deposit"
 
     # license — path-independent: an empty license on an external dataset trips
@@ -218,6 +230,9 @@ def verify_access(
     access["availability"] = "available"
     if source_url is not None:
         access["source_url"] = source_url
+    effective_class = fm["dataset_class"]
+    if effective_class in {"reference", "pointer"} and not access.get("source_url"):
+        raise EntityCommandError(f"{entity_id}: dataset_class {effective_class} requires --source-url")
 
     if exception:
         # Branch B: exception decision. verified ⊥ exception.mode → clear verified.
@@ -238,6 +253,17 @@ def verify_access(
             raise EntityCommandError(
                 f"{entity_id}: the verified path requires --method "
                 "(retrieved|credential-confirmed|landing-confirmed|metadata-confirmed)."
+            )
+        allowed_methods = {
+            "deposit": {"retrieved", "credential-confirmed"},
+            "reference": {"credential-confirmed", "landing-confirmed", "metadata-confirmed"},
+            "pointer": {"landing-confirmed", "metadata-confirmed"},
+        }[effective_class]
+        if method not in allowed_methods:
+            allowed = "|".join(sorted(allowed_methods))
+            raise EntityCommandError(
+                f"{entity_id}: --method {method!r} is invalid for dataset_class "
+                f"{effective_class!r}; use one of ({allowed})."
             )
         access["verified"] = True
         access["verification_method"] = method

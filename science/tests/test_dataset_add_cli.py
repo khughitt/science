@@ -32,6 +32,31 @@ def test_add_creates_candidate_entity(tmp_path: Path) -> None:
     assert "verified: false" in text
 
 
+def test_add_accepts_reference_class_with_source_url(tmp_path: Path) -> None:
+    res = _add(
+        tmp_path,
+        "portal",
+        "--title",
+        "Portal",
+        "--class",
+        "reference",
+        "--source-url",
+        "https://example.org/portal",
+    )
+
+    assert res.exit_code == 0, res.output
+    text = (tmp_path / "entities" / "datasets" / "portal.md").read_text(encoding="utf-8")
+    assert "dataset_class: reference" in text
+    assert "source_url: https://example.org/portal" in text
+
+
+def test_add_reference_requires_source_url(tmp_path: Path) -> None:
+    res = _add(tmp_path, "portal", "--title", "Portal", "--class", "reference")
+
+    assert res.exit_code == 1
+    assert "--source-url" in res.output
+
+
 def test_add_rejects_derived(tmp_path: Path) -> None:
     res = _add(tmp_path, "x", "--title", "X", "--origin", "derived")
     assert res.exit_code == 1

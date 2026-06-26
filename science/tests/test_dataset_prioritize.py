@@ -8,6 +8,7 @@ from science_tool.dataset_prioritize import (
     prioritize,
     readiness_for,
     readiness_weight,
+    target_coverage,
 )
 
 
@@ -179,3 +180,87 @@ def test_prioritize_excludes_gated_by_default(tmp_path: Path) -> None:
     # an explicit level overrides the default exclusion for that level
     ctrl_ids = {r["id"] for r in prioritize(tmp_path, level="controlled")}
     assert ctrl_ids == {"dataset:ctrl"}
+
+
+def test_prioritize_excludes_reference_and_pointer_by_default(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "entities/datasets/dep.md",
+        '---\nid: "dataset:dep"\ntype: "dataset"\ntitle: "Dep"\norigin: "external"\n'
+        'dataset_class: "deposit"\naccess: {level: "public", verified: true}\n---\n',
+    )
+    _write(
+        tmp_path / "entities/datasets/ref.md",
+        '---\nid: "dataset:ref"\ntype: "dataset"\ntitle: "Ref"\norigin: "external"\n'
+        'dataset_class: "reference"\naccess: {level: "public", verified: true, source_url: "https://example.org"}\n---\n',
+    )
+    _write(
+        tmp_path / "entities/datasets/ptr.md",
+        '---\nid: "dataset:ptr"\ntype: "dataset"\ntitle: "Ptr"\norigin: "external"\n'
+        'dataset_class: "pointer"\naccess: {level: "public", verified: true, source_url: "https://example.org/p"}\n---\n',
+    )
+
+    assert {r["id"] for r in prioritize(tmp_path)} == {"dataset:dep"}
+    assert {r["id"] for r in prioritize(tmp_path, include_reference=True)} == {"dataset:dep", "dataset:ref"}
+    assert {r["id"] for r in prioritize(tmp_path, include_pointer=True)} == {"dataset:dep", "dataset:ptr"}
+    assert {r["id"] for r in prioritize(tmp_path, runtime_state="reference-only")} == {"dataset:ref"}
+
+
+def test_target_coverage_reports_runtime_states_and_gap_reasons(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "entities/questions/q-run.md",
+        '---\nid: "question:q-run"\ntype: "question"\ntitle: "Runnable"\n---\n',
+    )
+    _write(
+        tmp_path / "entities/questions/q-ref.md",
+        '---\nid: "question:q-ref"\ntype: "question"\ntitle: "Reference"\n---\n',
+    )
+    _write(
+        tmp_path / "entities/questions/q-gated.md",
+        '---\nid: "question:q-gated"\ntype: "question"\ntitle: "Gated"\n---\n',
+    )
+    _write(
+        tmp_path / "entities/questions/q-unverified.md",
+        '---\nid: "question:q-unverified"\ntype: "question"\ntitle: "Unverified"\n---\n',
+    )
+    _write(
+        tmp_path / "entities/questions/q-gap.md",
+        '---\nid: "question:q-gap"\ntype: "question"\ntitle: "Gap"\n---\n',
+    )
+    _write(
+        tmp_path / "entities/datasets/run.md",
+        '---\nid: "dataset:run"\ntype: "dataset"\ntitle: "Run"\norigin: "external"\n'
+        'dataset_class: "deposit"\ndatapackage: "data/run/datapackage.json"\n'
+        'related: ["question:q-run"]\naccess: {level: "public", verified: true}\n---\n',
+    )
+    _write(
+        tmp_path / "entities/datasets/ref.md",
+        '---\nid: "dataset:ref"\ntype: "dataset"\ntitle: "Ref"\norigin: "external"\n'
+        'dataset_class: "reference"\nrelated: ["question:q-ref"]\n'
+        'access: {level: "public", verified: true, source_url: "https://example.org"}\n---\n',
+    )
+    _write(
+        tmp_path / "entities/datasets/gated.md",
+        '---\nid: "dataset:gated"\ntype: "dataset"\ntitle: "Gated"\norigin: "external"\n'
+        'dataset_class: "deposit"\nrelated: ["question:q-gated"]\n'
+        'access: {level: "controlled", verified: false}\n---\n',
+    )
+    _write(
+        tmp_path / "entities/datasets/unv.md",
+        '---\nid: "dataset:unv"\ntype: "dataset"\ntitle: "Unv"\norigin: "external"\n'
+        'dataset_class: "deposit"\nrelated: ["question:q-unverified"]\n'
+        'access: {level: "public", verified: false}\n---\n',
+    )
+
+    rows = prioritize(tmp_path, include_gated=True, include_reference=True, include_pointer=True)
+    by_target = {r["target"]: r for r in target_coverage(rows, tmp_path)}
+
+    assert by_target["question:q-run"]["coverage_state"] == "covered-runnable"
+    assert by_target["question:q-run"]["gap_reason"] == "none"
+    assert by_target["question:q-ref"]["coverage_state"] == "covered-reference"
+    assert by_target["question:q-ref"]["gap_reason"] == "only-reference"
+    assert by_target["question:q-gated"]["coverage_state"] == "blocked-access"
+    assert by_target["question:q-gated"]["gap_reason"] == "only-gated"
+    assert by_target["question:q-unverified"]["coverage_state"] == "unverified"
+    assert by_target["question:q-unverified"]["gap_reason"] == "only-unverified"
+    assert by_target["question:q-gap"]["coverage_state"] == "no-candidate"
+    assert by_target["question:q-gap"]["gap_reason"] == "no-candidate"

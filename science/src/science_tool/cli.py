@@ -5438,6 +5438,14 @@ def dataset_list(
     is_flag=True,
     help="Include gated datasets (registration/controlled/commercial); excluded by default",
 )
+@click.option("--include-reference", is_flag=True, help="Include reference-class datasets in the ranking")
+@click.option("--include-pointer", is_flag=True, help="Include pointer-class records in the ranking")
+@click.option(
+    "--runtime-state",
+    default=None,
+    type=click.Choice(["runnable", "unstaged-deposit", "blocked-access", "reference-only", "pointer-only"]),
+    help="Filter by derived runtime state",
+)
 @click.option("--coverage", is_flag=True, help="Invert reach into per-question/hypothesis coverage rows")
 @click.option("--format", "output_format", default="table", type=click.Choice(["table", "json"]))
 @click.option("--explain", is_flag=True, help="Show the per-row scoring reason")
@@ -5448,6 +5456,9 @@ def dataset_prioritize(
     tier: str | None,
     level: str | None,
     include_gated: bool,
+    include_reference: bool,
+    include_pointer: bool,
+    runtime_state: str | None,
     coverage: bool,
     output_format: str,
     explain: bool,
@@ -5456,7 +5467,7 @@ def dataset_prioritize(
     """Rank dataset entities by accessibility-weighted, graph-aware usefulness."""
     import json as _json
 
-    from science_tool.dataset_prioritize import prioritize, target_coverage
+    from science_tool.dataset_prioritize import excluded_summary, prioritize, target_coverage
     from science_tool.entities import graph_is_stale
     from science_tool.graph.store import DEFAULT_GRAPH_PATH
     from science_tool.graph.store.dataset import _load_dataset
@@ -5485,13 +5496,27 @@ def dataset_prioritize(
         status=status,
         tier=tier,
         level=level,
+        include_gated=include_gated or coverage,
+        include_reference=include_reference or coverage,
+        include_pointer=include_pointer or coverage,
+        runtime_state=runtime_state,
+    )
+    summary = excluded_summary(
+        root,
+        origin=origin,
+        status=status,
+        tier=tier,
+        level=level,
         include_gated=include_gated,
+        include_reference=include_reference,
+        include_pointer=include_pointer,
+        runtime_state=runtime_state,
     )
 
     if coverage:
         coverage_rows = target_coverage(rows, root)
         if output_format == "json":
-            click.echo(_json.dumps(coverage_rows, indent=2))
+            click.echo(_json.dumps({"rows": coverage_rows, "excluded_summary": summary}, indent=2))
             return
         if not coverage_rows:
             click.echo("No question or hypothesis entities found.")
@@ -5500,19 +5525,20 @@ def dataset_prioritize(
         from rich.table import Table
 
         table = Table(show_header=True, header_style="bold")
-        for c in ["target", "coverage", "datasets"]:
+        for c in ["target", "coverage", "gap-reason", "datasets"]:
             table.add_column(c, overflow="fold", no_wrap=False)
         for r in coverage_rows:
             table.add_row(
                 str(r["target"]),
                 str(r["coverage_state"]),
+                str(r["gap_reason"]),
                 ", ".join(r["datasets"]) if r["datasets"] else "-",
             )
         Console(width=200).print(table)
         return
 
     if output_format == "json":
-        click.echo(_json.dumps(rows, indent=2))
+        click.echo(_json.dumps({"rows": rows, "excluded_summary": summary}, indent=2))
         return
     if not rows:
         click.echo("No matching dataset entities.")
@@ -5522,23 +5548,39 @@ def dataset_prioritize(
     from rich.table import Table
 
     table = Table(show_header=True, header_style="bold")
-    cols = ["rank", "id", "score", "readiness", "reach", "gap-flags"]
+    cols = ["rank", "id", "score", "readiness", "runtime", "reach", "gap-flags"]
     if explain:
         cols.append("reason")
     for c in cols:
         table.add_column(c, overflow="fold", no_wrap=False)
     for i, r in enumerate(rows, 1):
-        cells = [str(i), r["id"], f"{r['score']:g}", r["readiness"], str(r["reach"]), ", ".join(r["gap_flags"]) or "-"]
+        cells = [
+            str(i),
+            r["id"],
+            f"{r['score']:g}",
+            r["readiness"],
+            r["runtime_state"],
+            str(r["reach"]),
+            ", ".join(r["gap_flags"]) or "-",
+        ]
         if explain:
             cells.append(r["top_reason"])
         table.add_row(*cells)
     Console(width=200).print(table)
+    if any(summary.values()):
+        click.echo(
+            "Excluded by default: "
+            f"{summary['gated']} gated deposits, {summary['reference']} reference datasets, "
+            f"{summary['pointer']} pointer records. Use --include-gated, --include-reference, "
+            "or --include-pointer to inspect them."
+        )
 
 
 @dataset_group.command("add")
 @click.argument("slug")
 @click.option("--title", required=True, help="Human-readable dataset title")
 @click.option("--origin", type=click.Choice(["external", "derived"]), default="external")
+@click.option("dataset_class", "--class", type=click.Choice(["deposit", "reference", "pointer"]), default="deposit")
 @click.option("--tier", type=click.Choice(["use-now", "evaluate-next", "track"]), default="track")
 @click.option(
     "--level",
@@ -5558,6 +5600,7 @@ def dataset_add(
     slug: str,
     title: str,
     origin: str,
+    dataset_class: str,
     tier: str,
     level: str,
     source_url: str,
@@ -5576,6 +5619,7 @@ def dataset_add(
             slug,
             title=title,
             origin=origin,
+            dataset_class=dataset_class,
             tier=tier,
             level=level,
             source_url=source_url,
@@ -5598,6 +5642,7 @@ def dataset_add(
     type=click.Choice(["retrieved", "credential-confirmed", "landing-confirmed", "metadata-confirmed"]),
 )
 @click.option("--license", "license_", default=None, help="SPDX id or sentinel (unknown|proprietary|custom)")
+@click.option("dataset_class", "--class", type=click.Choice(["deposit", "reference", "pointer"]), default=None)
 @click.option("--by", "verified_by", default="agent (verify-access)")
 @click.option("--source-url", "source_url", default=None)
 @click.option("--tier", type=click.Choice(["use-now", "evaluate-next", "track"]), default=None)
@@ -5622,6 +5667,7 @@ def dataset_verify_access(
     level: str | None,
     method: str | None,
     license_: str | None,
+    dataset_class: str | None,
     verified_by: str,
     source_url: str | None,
     tier: str | None,
@@ -5642,11 +5688,12 @@ def dataset_verify_access(
 
     root = project_root.resolve() if project_root else _project_root_from_env()
     try:
-        entity_id, _dest, state, weight, warnings = verify_access(
+        entity_id, dest, state, weight, warnings = verify_access(
             root,
             ref,
             level=level,
             license_=license_,
+            dataset_class=dataset_class,
             method=method,
             verified_by=verified_by,
             source_url=source_url,
@@ -5662,7 +5709,12 @@ def dataset_verify_access(
         raise click.exceptions.Exit(1)
     for w in warnings:
         click.echo(f"warning: {w}", err=True)
-    click.echo(f"{entity_id} -> {state} (weight {weight:g})")
+    from science_model.frontmatter import parse_frontmatter
+    from science_tool.datasets.semantics import runtime_state_for
+
+    parsed = parse_frontmatter(dest)
+    runtime_state = runtime_state_for(parsed[0]) if parsed else "blocked-access"
+    click.echo(f"{entity_id} -> access={state} (weight {weight:g}), runtime={runtime_state}")
 
 
 def _resolve_dataset_or_exit(root: Path, ref: str):

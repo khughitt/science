@@ -16,6 +16,7 @@ from rdflib import URIRef
 from rdflib.namespace import RDF, SKOS
 
 from science_model.entities import DatasetEntity, Readiness
+from science_tool.datasets.semantics import DatasetClass, RuntimeState, dataset_class_for, runtime_state_for
 from science_tool.graph.dataset_usage import project_entity_uri
 from science_tool.graph.store.constants import CITO_NS, SCI_NS
 from science_tool.graph.store.identity import canonical_id_from_entity_uri
@@ -286,6 +287,25 @@ def _gap_flags_for(row_fm: dict, reach_n: int, readiness_flags: list[str]) -> li
     return flags
 
 
+def _dataset_path(project_root: Path, dataset_id: str) -> Path:
+    slug = dataset_id.split(":", 1)[-1]
+    return project_root / "entities" / "datasets" / f"{slug}.md"
+
+
+def _frontmatter_for_row(project_root: Path, row: dict) -> dict:
+    parsed = parse_frontmatter(_dataset_path(project_root, row["id"]))
+    return parsed[0] if parsed else {}
+
+
+def _access_info(fm: dict) -> tuple[str, bool, bool]:
+    access = fm.get("access") or {}
+    if not isinstance(access, dict):
+        return "", False, False
+    exception = access.get("exception") or {}
+    has_exception = isinstance(exception, dict) and bool(exception.get("mode"))
+    return str(access.get("level") or ""), access.get("verified") is True, has_exception
+
+
 def _top_reason(weight: float, readiness_state: str, reach_n: int, tilt: float) -> str:
     bits = [f"readiness={readiness_state}({weight:g})", f"reach={reach_n}"]
     if tilt > 1.0:
@@ -303,6 +323,9 @@ def prioritize(
     tier: str | None = None,
     level: str | None = None,
     include_gated: bool = False,
+    include_reference: bool = False,
+    include_pointer: bool = False,
+    runtime_state: RuntimeState | None = None,
 ) -> list[dict]:
     """Return dataset rows sorted by score desc (tie-break by id).
 
@@ -312,9 +335,9 @@ def prioritize(
     leverage_tilt is only applied when both knowledge and provenance are provided;
     otherwise tilt = 1.0.
 
-    Gated datasets (`access.level` in GATED_LEVELS) are excluded unless
-    `include_gated` is set or a specific `level` is requested — so the ranking
-    surfaces datasets a project can actually act on.
+    Gated deposits, references, and pointers are excluded by default so the
+    ranking stays actionable. Explicit include flags, explicit --level, or an
+    explicit runtime-state filter surface those rows.
     """
     rows_in = _local_rows(project_root)
     dataset_ids = [r["id"] for r in rows_in]
@@ -330,12 +353,24 @@ def prioritize(
             continue
         if level is not None and r["level"] != level:
             continue
-        if not include_gated and level is None and r["level"] in GATED_LEVELS:
-            # Non-gated by default; an explicit --level overrides this exclusion.
+        fm = _frontmatter_for_row(project_root, r)
+        try:
+            dataset_class: DatasetClass = dataset_class_for(fm)
+            row_runtime_state: RuntimeState = runtime_state_for(fm)
+        except ValueError:
+            dataset_class = "deposit"
+            row_runtime_state = "blocked-access"
+        if runtime_state is not None and row_runtime_state != runtime_state:
             continue
-        slug = r["id"].split(":", 1)[-1]
-        parsed = parse_frontmatter(project_root / "entities" / "datasets" / f"{slug}.md")
-        fm = parsed[0] if parsed else {}
+        if runtime_state is None:
+            if not include_gated and level is None and dataset_class == "deposit" and r["level"] in GATED_LEVELS:
+                # Non-gated by default; an explicit --level overrides this exclusion.
+                continue
+            if dataset_class == "reference" and not include_reference:
+                continue
+            if dataset_class == "pointer" and not include_pointer:
+                continue
+        access_level, access_verified, access_exception = _access_info(fm)
         weight, r_flags = readiness_weight(fm)
         reach_set = reach_map.get(r["id"], set())
         reach_n = len(reach_set)
@@ -353,10 +388,74 @@ def prioritize(
                 "reaches": sorted(reach_set),
                 "top_reason": _top_reason(weight, readiness_for(fm).state, reach_n, tilt),
                 "gap_flags": _gap_flags_for(fm, reach_n, r_flags),
+                "dataset_class": dataset_class,
+                "runtime_state": row_runtime_state,
+                "access_level": access_level,
+                "access_verified": access_verified,
+                "access_exception": access_exception,
             }
         )
     out.sort(key=lambda d: (-d["score"], d["id"]))
     return out
+
+
+def excluded_summary(
+    project_root: Path,
+    *,
+    origin: str | None = None,
+    status: str | None = None,
+    tier: str | None = None,
+    level: str | None = None,
+    include_gated: bool = False,
+    include_reference: bool = False,
+    include_pointer: bool = False,
+    runtime_state: RuntimeState | None = None,
+) -> dict[str, int]:
+    """Count rows hidden by the default actionable ranking."""
+    summary = {"gated": 0, "reference": 0, "pointer": 0}
+    if runtime_state is not None:
+        return summary
+    for row in _local_rows(project_root):
+        if origin is not None and row["origin"] != origin:
+            continue
+        if status is not None and row["status"] != status:
+            continue
+        if tier is not None and row["tier"] != tier:
+            continue
+        if level is not None and row["level"] != level:
+            continue
+        fm = _frontmatter_for_row(project_root, row)
+        try:
+            dataset_class = dataset_class_for(fm)
+        except ValueError:
+            dataset_class = "deposit"
+        if dataset_class == "reference":
+            if not include_reference:
+                summary["reference"] += 1
+            continue
+        if dataset_class == "pointer":
+            if not include_pointer:
+                summary["pointer"] += 1
+            continue
+        if not include_gated and level is None and row["level"] in GATED_LEVELS:
+            summary["gated"] += 1
+    return summary
+
+
+def _coverage_state_and_reason(counts: dict[str, int]) -> tuple[str, str]:
+    if counts["runnable"] > 0:
+        return "covered-runnable", "none"
+    if counts["unstaged_deposit"] > 0:
+        return "covered-unstaged", "unstaged-deposit"
+    if counts["reference"] > 0:
+        return "covered-reference", "only-reference"
+    if counts["pointer"] > 0:
+        return "covered-pointer", "only-pointer"
+    if counts["gated"] > 0:
+        return "blocked-access", "only-gated"
+    if counts["unverified"] > 0:
+        return "unverified", "only-unverified"
+    return "no-candidate", "no-candidate"
 
 
 def target_coverage(rows: list[dict], project_root: Path) -> list[dict]:
@@ -370,20 +469,54 @@ def target_coverage(rows: list[dict], project_root: Path) -> list[dict]:
             "title": fm.get("title", ""),
             "datasets": [],
             "dataset_count": 0,
-            "coverage_state": "gap",
+            "coverage_state": "no-candidate",
+            "gap_reason": "no-candidate",
+            "counts": {
+                "runnable": 0,
+                "unstaged_deposit": 0,
+                "reference": 0,
+                "pointer": 0,
+                "unverified": 0,
+                "gated": 0,
+            },
         }
 
-    by_target: dict[str, list[str]] = {target: [] for target in targets}
+    by_target: dict[str, list[dict]] = {target: [] for target in targets}
     for row in rows:
-        dataset_id = row["id"]
         for target in row.get("reaches", []):
             if target in by_target:
-                by_target[target].append(dataset_id)
+                by_target[target].append(row)
 
-    for target, dataset_ids in by_target.items():
-        datasets = sorted(dataset_ids)
+    for target, target_rows in by_target.items():
+        datasets = sorted(row["id"] for row in target_rows)
+        counts = {
+            "runnable": 0,
+            "unstaged_deposit": 0,
+            "reference": 0,
+            "pointer": 0,
+            "unverified": 0,
+            "gated": 0,
+        }
+        for row in target_rows:
+            runtime = row.get("runtime_state")
+            if runtime == "runnable":
+                counts["runnable"] += 1
+            elif runtime == "unstaged-deposit":
+                counts["unstaged_deposit"] += 1
+            elif runtime == "reference-only":
+                counts["reference"] += 1
+            elif runtime == "pointer-only":
+                counts["pointer"] += 1
+            elif runtime == "blocked-access":
+                if row.get("access_exception") or row.get("access_level") in GATED_LEVELS:
+                    counts["gated"] += 1
+                else:
+                    counts["unverified"] += 1
+        coverage_state, gap_reason = _coverage_state_and_reason(counts)
         targets[target]["datasets"] = datasets
         targets[target]["dataset_count"] = len(datasets)
-        targets[target]["coverage_state"] = "covered" if datasets else "gap"
+        targets[target]["coverage_state"] = coverage_state
+        targets[target]["gap_reason"] = gap_reason
+        targets[target]["counts"] = counts
 
     return [targets[target] for target in sorted(targets)]

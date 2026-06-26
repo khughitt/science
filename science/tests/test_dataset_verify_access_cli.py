@@ -48,6 +48,29 @@ def test_cli_verify_access_backfills_and_reports_readiness(tmp_path: Path) -> No
     assert "verified: true" in text
     assert "available" in res.output
     assert "weight 1" in res.output
+    assert "runtime=unstaged-deposit" in res.output
+
+
+def test_cli_verify_access_accepts_dataset_class(tmp_path: Path) -> None:
+    _legacy(tmp_path, license="MIT")
+
+    res = _run(
+        tmp_path,
+        "foo",
+        "--class",
+        "reference",
+        "--level",
+        "public",
+        "--method",
+        "landing-confirmed",
+        "--source-url",
+        "https://example.org/foo",
+    )
+
+    assert res.exit_code == 0, res.output
+    text = (tmp_path / "entities" / "datasets" / "foo.md").read_text(encoding="utf-8")
+    assert "dataset_class: reference" in text
+    assert "runtime=reference-only" in res.output
 
 
 def test_cli_verify_access_missing_method_errors(tmp_path: Path) -> None:
@@ -61,7 +84,20 @@ def test_cli_verify_access_missing_method_errors(tmp_path: Path) -> None:
 def test_cli_verify_access_accepts_reference_verification_methods(tmp_path: Path, method: str) -> None:
     _legacy(tmp_path)
 
-    res = _run(tmp_path, "foo", "--level", "public", "--method", method, "--license", "CC0-1.0")
+    res = _run(
+        tmp_path,
+        "foo",
+        "--class",
+        "reference",
+        "--level",
+        "public",
+        "--method",
+        method,
+        "--license",
+        "CC0-1.0",
+        "--source-url",
+        "https://example.org/foo",
+    )
 
     assert res.exit_code == 0, res.output
     text = (tmp_path / "entities" / "datasets" / "foo.md").read_text(encoding="utf-8")

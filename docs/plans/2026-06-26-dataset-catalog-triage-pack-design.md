@@ -188,6 +188,7 @@ Coverage states:
 | `covered-runnable` | At least one runnable deposit reaches the Q/H. |
 | `covered-unstaged` | Verified deposit reaches the Q/H, but runtime files are not staged. |
 | `covered-reference` | Only reference-class resources reach it. |
+| `covered-pointer` | Only pointer-class records reach it. |
 | `blocked-access` | Only gated or exception-gated deposits reach it. |
 | `unverified` | Candidate datasets reach it, but none are verified or exception-classified. |
 | `no-candidate` | No dataset, reference, or pointer reaches it. |
@@ -211,6 +212,7 @@ is derived from those counts, and `gap_reason` is then derived 1:1 from
 | `covered-runnable` | `none` |
 | `covered-unstaged` | `unstaged-deposit` |
 | `covered-reference` | `only-reference` |
+| `covered-pointer` | `only-pointer` |
 | `blocked-access` | `only-gated` |
 | `unverified` | `only-unverified` |
 | `no-candidate` | `no-candidate` |

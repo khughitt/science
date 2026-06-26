@@ -26,9 +26,16 @@ def _seed(root: Path) -> None:
     )
 
 
-def _json_rows(res) -> list[dict]:
+def _json_payload(res):
     text = "\n".join(line for line in res.output.splitlines() if not line.startswith("warning:"))
     return json.loads(text)
+
+
+def _json_rows(res) -> list[dict]:
+    payload = _json_payload(res)
+    if isinstance(payload, dict):
+        return payload["rows"]
+    return payload
 
 
 def _seed_paper_reach(root: Path, *, include_paper: bool = True) -> None:
@@ -87,8 +94,10 @@ def test_prioritize_json(tmp_path: Path) -> None:
     _seed(tmp_path)
     res = _run(tmp_path, "--include-gated", "--format", "json")
     assert res.exit_code == 0
-    rows = _json_rows(res)
+    payload = _json_payload(res)
+    rows = payload["rows"]
     assert any(r["id"] == "dataset:a" for r in rows)
+    assert payload["excluded_summary"] == {"gated": 0, "reference": 0, "pointer": 0}
 
 
 def test_prioritize_excludes_gated_by_default(tmp_path: Path) -> None:
@@ -103,6 +112,33 @@ def test_prioritize_excludes_gated_by_default(tmp_path: Path) -> None:
     assert _ids() == {"dataset:b"}  # gated controlled hidden
     assert _ids("--include-gated") == {"dataset:a", "dataset:b"}
     assert _ids("--level", "controlled") == {"dataset:a"}  # explicit level overrides
+
+
+def test_prioritize_include_reference_pointer_and_runtime_filter(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    d = tmp_path / "entities" / "datasets"
+    (d / "ref.md").write_text(
+        '---\nid: "dataset:ref"\ntype: "dataset"\ntitle: "Ref"\norigin: "external"\n'
+        'dataset_class: "reference"\naccess: {level: "public", verified: true, source_url: "https://example.org"}\n---\n',
+        encoding="utf-8",
+    )
+    (d / "ptr.md").write_text(
+        '---\nid: "dataset:ptr"\ntype: "dataset"\ntitle: "Ptr"\norigin: "external"\n'
+        'dataset_class: "pointer"\naccess: {level: "public", verified: true, source_url: "https://example.org/p"}\n---\n',
+        encoding="utf-8",
+    )
+
+    default = _run(tmp_path, "--format", "json")
+    assert default.exit_code == 0
+    payload = _json_payload(default)
+    assert {r["id"] for r in payload["rows"]} == {"dataset:b"}
+    assert payload["excluded_summary"] == {"gated": 1, "reference": 1, "pointer": 1}
+
+    with_reference = _run(tmp_path, "--include-reference", "--format", "json")
+    assert {r["id"] for r in _json_rows(with_reference)} == {"dataset:b", "dataset:ref"}
+
+    only_pointer = _run(tmp_path, "--runtime-state", "pointer-only", "--format", "json")
+    assert {r["id"] for r in _json_rows(only_pointer)} == {"dataset:ptr"}
 
 
 def test_prioritize_explain_shows_reason_column(tmp_path: Path) -> None:
@@ -140,9 +176,11 @@ def test_prioritize_coverage_json_reports_per_target_gaps(tmp_path: Path) -> Non
     rows = _json_rows(res)
     by_id = {row["target"]: row for row in rows}
     assert by_id["question:q-covered"]["datasets"] == ["dataset:b"]
-    assert by_id["question:q-covered"]["coverage_state"] == "covered"
+    assert by_id["question:q-covered"]["coverage_state"] == "unverified"
+    assert by_id["question:q-covered"]["gap_reason"] == "only-unverified"
     assert by_id["question:q-gap"]["datasets"] == []
-    assert by_id["question:q-gap"]["coverage_state"] == "gap"
+    assert by_id["question:q-gap"]["coverage_state"] == "no-candidate"
+    assert by_id["question:q-gap"]["gap_reason"] == "no-candidate"
 
 
 def test_prioritize_coverage_uses_paper_usage_frontmatter_without_graph(tmp_path: Path) -> None:
@@ -155,7 +193,8 @@ def test_prioritize_coverage_uses_paper_usage_frontmatter_without_graph(tmp_path
     rows = _json_rows(res)
     by_id = {row["target"]: row for row in rows}
     assert by_id["hypothesis:h"]["datasets"] == ["dataset:d"]
-    assert by_id["hypothesis:h"]["coverage_state"] == "covered"
+    assert by_id["hypothesis:h"]["coverage_state"] == "covered-unstaged"
+    assert by_id["hypothesis:h"]["gap_reason"] == "unstaged-deposit"
 
 
 def test_prioritize_coverage_uses_current_frontmatter_when_graph_is_stale(tmp_path: Path) -> None:
@@ -171,4 +210,4 @@ def test_prioritize_coverage_uses_current_frontmatter_when_graph_is_stale(tmp_pa
     rows = _json_rows(res)
     by_id = {row["target"]: row for row in rows}
     assert by_id["hypothesis:h"]["datasets"] == ["dataset:d"]
-    assert by_id["hypothesis:h"]["coverage_state"] == "covered"
+    assert by_id["hypothesis:h"]["coverage_state"] == "covered-unstaged"

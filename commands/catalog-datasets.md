@@ -87,7 +87,9 @@ science dataset add <slug> \
 
 Record the dataset/QH connection in the Q/H entity's `datasets:` field during Step 4. Use dataset `related:` only when the dataset entity is the clearer editing surface for the authoring session.
 
-`science dataset add` defaults `--level` to `controlled`; pass `--level public` explicitly for GEO/SRA/Zenodo resources that are freely downloadable. Use `registration` or `controlled` when the repository requires login or a DUA.
+`science dataset add` defaults `--class deposit` and `--level controlled`; pass `--level public` explicitly for GEO/SRA/Zenodo resources that are freely downloadable. Use `registration` or `controlled` when the repository requires login or a DUA.
+Use `--class reference` for portals, knowledgebases, indexes, or catalogs used for lookup; `--class reference` requires `--source-url`.
+Use `--class pointer` for a metadata-only external resource worth tracking but not yet runnable or useful as a lookup surface.
 `status` defaults to `candidate` — do not override unless the dataset is already verified.
 
 After authoring, confirm each file was created under `entities/datasets/`.
@@ -110,7 +112,7 @@ For **each candidate** dataset (status `candidate`, `access.verified: false`), c
      --source-url "<landing/accession URL>" \
      --note "GEO landing page and file list confirmed public; no login required."
    ```
-   `--method` is **required** (enum `retrieved|credential-confirmed|landing-confirmed|metadata-confirmed` — use `retrieved` for downloadable deposits, `credential-confirmed` only when a valid login/credential was needed, and `landing-confirmed`/`metadata-confirmed` for reference or pointer records; no free text). `--license` is **required when the entity has none** — pass an SPDX id, or the `unknown` sentinel if it genuinely can't be determined. The command sets `access.verified: true` and `last_reviewed` to today, appends `--note` to the body `## Access verification log`, and prints the resulting readiness state + prioritizer weight.
+   `--method` is **required** (enum `retrieved|credential-confirmed|landing-confirmed|metadata-confirmed` — use `retrieved` for downloadable deposits, `credential-confirmed` only when a valid login/credential was needed, and `landing-confirmed`/`metadata-confirmed` for reference or pointer records; no free text). Use `--class reference|pointer` when verifying a reference or pointer row; those classes require `--source-url` and reject `retrieved`. `landing-confirmed` and `metadata-confirmed` reject default `deposit` rows. `--license` is **required when the entity has none** — pass an SPDX id, or the `unknown` sentinel if it genuinely can't be determined. The command sets `access.verified: true` and `last_reviewed` to today, appends `--note` to the body `## Access verification log`, and prints the resulting access readiness state, prioritizer weight, and runtime state.
 
 **Branch B — requires credentials the project does not hold** (controlled, DUA-gated, commercial):
 
@@ -180,9 +182,19 @@ Re-run the prioritizer after connecting:
 science dataset prioritize --explain
 ```
 
+Default ranking excludes gated deposits, reference datasets, and pointer records; the CLI prints an exclusion summary. Use `--include-gated`, `--include-reference`, or `--include-pointer` to inspect excluded classes, or use `--runtime-state runnable|unstaged-deposit|blocked-access|reference-only|pointer-only` for an exact runtime-stageability slice.
+
+Coverage mode reports richer states:
+
+```bash
+science dataset prioritize --coverage --format json
+```
+
+The JSON shape is `{ "rows": [...], "excluded_summary": {...} }`. Each coverage row includes `coverage_state`, `gap_reason`, runtime-state `counts`, and the reaching dataset IDs.
+
 Present the ranked table. Highlight:
 - Datasets that moved up because of the new `datasets:` / `related:` / `dataset_usage` connections added in Step 4.
-- Remaining `no-edge` and `unverified` gap-flags.
+- Remaining `no-edge` and `unverified` gap-flags, plus coverage `gap_reason` values such as `no-candidate`, `only-gated`, `only-reference`, `only-pointer`, and `unstaged-deposit`.
 - The top-ranked **obtainable** datasets (those with `access.verified: true` or `access.level: public` and a plausible Branch A path).
 
 If the graph was stale, the prioritizer will warn on stderr — run `science graph build` to update it before re-running if you want `leverage_tilt` to reflect the latest proposition graph.
