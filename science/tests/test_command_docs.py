@@ -40,6 +40,19 @@ def test_catalog_datasets_setup_is_layout_v3_aware() -> None:
     assert "- `specs/scope-boundaries.md`" not in text
 
 
+def test_catalog_datasets_connect_warns_about_legacy_metadata_backfill() -> None:
+    text = _read("commands/catalog-datasets.md")
+
+    assert "When connecting or backfilling legacy dataset entities" in text
+    assert "do not add `origin: external` by itself" in text
+    assert "set `license:` at the same time" in text
+    assert "`unknown` is acceptable" in text
+    assert "source_class: derived" in text
+    assert "dataset_usage" in text
+    assert "role: \"upstream\"" in text
+    assert "role: \"training\"" in text
+
+
 @pytest.mark.parametrize(
     ("path", "expected_strings"),
     [

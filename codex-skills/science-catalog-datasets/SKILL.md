@@ -210,6 +210,8 @@ A verification-log line is appended in all Branch B cases.
 
 Wire datasets to the questions and hypotheses they inform.
 
+**Legacy metadata backfill.** When connecting or backfilling legacy dataset entities, do not add `origin: external` by itself; set `license:` at the same time (`unknown` is acceptable when the license genuinely cannot be determined), preferably by running `science dataset verify-access` so `origin` / `license` / `access` move together. If the row has `source_class: derived` and `origin: external`, also add `dataset_usage` provenance with `role: "upstream"` or `role: "training"` for the input dataset(s); otherwise validation will warn that independence cannot be derived.
+
 **Prefer Q/H `datasets:` for direct dataset needs.** In each question or hypothesis entity, add the dataset IDs it needs or is informed by:
 
 ```yaml

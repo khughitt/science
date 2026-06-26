@@ -133,6 +133,20 @@ def test_catalog_datasets_generated_skill_is_layout_v3_aware(tmp_path: Path) -> 
     assert "- `specs/scope-boundaries.md`" not in text
 
 
+def test_catalog_datasets_generated_skill_warns_about_legacy_metadata_backfill(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-catalog-datasets"].read_text(encoding="utf-8")
+
+    assert "When connecting or backfilling legacy dataset entities" in text
+    assert "do not add `origin: external` by itself" in text
+    assert "set `license:` at the same time" in text
+    assert "`unknown` is acceptable" in text
+    assert "source_class: derived" in text
+    assert "dataset_usage" in text
+    assert "role: \"upstream\"" in text
+    assert "role: \"training\"" in text
+
+
 def test_review_pipeline_generated_skill_uses_doc_reviews_for_reports(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
     text = generated["science-review-pipeline"].read_text(encoding="utf-8")
