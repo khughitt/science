@@ -192,6 +192,18 @@ def test_generated_plan_analysis_skill_reuses_task_scoped_aspects_for_blockers(
     assert "do not mutate `science.yaml` solely to create blocker tasks" in text
 
 
+def test_generated_plan_pipeline_skill_documents_mixed_access_public_slice_gate(
+    tmp_path: Path,
+) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-plan-pipeline"].read_text(encoding="utf-8")
+
+    assert "`access.level: mixed` with public-slice consumption" in text
+    assert "PASS/DEFER only for the named public slice" in text
+    assert "controlled or commercial siblings remain out of scope" in text
+    assert "HALT if the plan would consume any restricted sibling" in text
+
+
 def test_generated_specify_model_skill_documents_proxy_directness_vocabulary(
     tmp_path: Path,
 ) -> None:

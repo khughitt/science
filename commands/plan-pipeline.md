@@ -136,6 +136,10 @@ For each input data source identified in Step 2:
        `access.verified: true` plus enum-safe `verification_method` and
        `last_reviewed`; all downstream work packages depend on WP1 and must not
        consume the dataset before the gate is rerun.
+     - For `access.level: mixed` with public-slice consumption, PASS/DEFER only for the named public slice.
+       The plan must name the public artefact, table, cohort, endpoint, or sibling dataset it consumes and state
+       that controlled or commercial siblings remain out of scope. HALT if the plan would consume any restricted sibling,
+       or if the public slice is not distinguishable enough to verify independently.
      - HALT otherwise with Branch A/B options:
        - **Branch A** — verifiable under current credentials → run verification
          (manual or future `science dataset verify`), then re-run this step.

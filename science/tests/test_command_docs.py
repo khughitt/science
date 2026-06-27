@@ -75,6 +75,15 @@ def test_plan_analysis_guides_blocker_tasks_to_reuse_task_scoped_aspects() -> No
     assert "do not mutate `science.yaml` solely to create blocker tasks" in text
 
 
+def test_plan_pipeline_documents_mixed_access_public_slice_gate() -> None:
+    text = _read("commands/plan-pipeline.md")
+
+    assert "`access.level: mixed` with public-slice consumption" in text
+    assert "PASS/DEFER only for the named public slice" in text
+    assert "controlled or commercial siblings remain out of scope" in text
+    assert "HALT if the plan would consume any restricted sibling" in text
+
+
 def test_specify_model_documents_proxy_directness_vocabulary() -> None:
     text = _read("commands/specify-model.md")
 
