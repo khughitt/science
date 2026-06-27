@@ -3656,6 +3656,7 @@ def tasks_block(task_id: str, blocked_by: tuple[str, ...], force: bool) -> None:
         try:
             lookup = make_project_entity_lookup(Path.cwd())
         except ValueError:
+
             def lookup(_ref: str):
                 return None
 
@@ -5299,8 +5300,12 @@ def feedback_update(
 
 @feedback.command("triage")
 @click.option("--target", default=None, help="Filter by target (fnmatch glob)")
-@click.option("--cluster", "cluster_mode", is_flag=True, help="Cluster near-duplicate summaries within each target/category")
-@click.option("--since", "since_days", type=click.IntRange(min=0), default=None, help="Only include entries from the last N days")
+@click.option(
+    "--cluster", "cluster_mode", is_flag=True, help="Cluster near-duplicate summaries within each target/category"
+)
+@click.option(
+    "--since", "since_days", type=click.IntRange(min=0), default=None, help="Only include entries from the last N days"
+)
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
 def feedback_triage(target: str | None, cluster_mode: bool, since_days: int | None, output_format: str) -> None:
     """Show open entries grouped or clustered for triage."""
@@ -5332,10 +5337,7 @@ def feedback_triage(target: str | None, cluster_mode: bool, since_days: int | No
             ("entry_ids", "Entries"),
         ]
         table_rows = [
-            row | {"entry_ids": ", ".join(row["entry_ids"])}
-            if output_format != "json"
-            else row
-            for row in rows
+            row | {"entry_ids": ", ".join(row["entry_ids"])} if output_format != "json" else row for row in rows
         ]
         emit_query_rows(
             output_format=output_format,

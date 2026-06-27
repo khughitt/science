@@ -295,8 +295,7 @@ class Entity(BaseModel):
             "reference",
         ):
             raise ValueError(
-                f"{self.id}: source_class must be observational|derived|reference, "
-                f"got {self.source_class!r}"
+                f"{self.id}: source_class must be observational|derived|reference, got {self.source_class!r}"
             )
         if self.source_class == "derived":
             if self.derived_kind not in ("aggregate", "transform", "model_output"):
@@ -339,9 +338,9 @@ class Entity(BaseModel):
     # parse_entity_file path, which returns a plain Entity for datasets, keeps it.
     license: str = ""
     # Pillar A — epistemic class (orthogonal to origin) + co-owned forward provenance
-    source_class: str | None = None       # "observational" | "derived" | "reference"
+    source_class: str | None = None  # "observational" | "derived" | "reference"
     dataset_class: Literal["deposit", "reference", "pointer"] = "deposit"
-    derived_kind: str | None = None        # "aggregate" | "transform" | "model_output"
+    derived_kind: str | None = None  # "aggregate" | "transform" | "model_output"
     dataset_usage: list[DatasetUsage] = Field(default_factory=list)
     benchmark: BenchmarkBlock | None = None
 

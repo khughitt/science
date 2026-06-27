@@ -140,7 +140,9 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                 "benchmark.perturbation-context-missing",
             )
 
-        if "time-series" in benchmark_kinds and not any(_nonempty_string_list(task.get("timepoints")) for task in tasks):
+        if "time-series" in benchmark_kinds and not any(
+            _nonempty_string_list(task.get("timepoints")) for task in tasks
+        ):
             yield _result(
                 Severity.WARN,
                 path,

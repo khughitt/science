@@ -41,10 +41,7 @@ def _dataset_datapackage_path(root: Path, slug: str, entity_path: Path) -> Path 
         if not default_dp_path.is_file():
             raise CommonsLayoutError(
                 dataset_dir,
-                reason=(
-                    f"explicit datapackage field {datapackage!r} requires missing "
-                    "datapackage.yaml sibling"
-                ),
+                reason=(f"explicit datapackage field {datapackage!r} requires missing datapackage.yaml sibling"),
             )
         return default_dp_path
 
@@ -89,9 +86,7 @@ class CommonsEntityAdapter:
                 continue
             yield from self._scan_type(type_name, type_dir)
 
-    def _scan_type(
-        self, type_name: str, type_dir: Path
-    ) -> Iterator[CommonsEntityRecord | CommonsEntityError]:
+    def _scan_type(self, type_name: str, type_dir: Path) -> Iterator[CommonsEntityRecord | CommonsEntityError]:
         if type_name == "datasets":
             for child in sorted(type_dir.iterdir()):
                 if child.name in _SKIP_NAMES or child.name.startswith("."):
@@ -102,9 +97,7 @@ class CommonsEntityAdapter:
                 if not entity_path.is_file():
                     continue
                 try:
-                    dp_path = _dataset_datapackage_path(
-                        self._root, child.name, entity_path
-                    )
+                    dp_path = _dataset_datapackage_path(self._root, child.name, entity_path)
                 except CommonsLayoutError as exc:
                     yield CommonsEntityError(
                         child,
@@ -129,9 +122,7 @@ class CommonsEntityAdapter:
             raise CommonsEntityError(
                 self._root,
                 canonical_id=canonical_id,
-                cause=ValueError(
-                    f"canonical id {canonical_id!r} is not in '<type>:<slug>' form"
-                ),
+                cause=ValueError(f"canonical id {canonical_id!r} is not in '<type>:<slug>' form"),
             )
         type_name, slug = canonical_id.split(":", 1)
         type_dir = next(
@@ -175,30 +166,22 @@ class CommonsEntityAdapter:
         try:
             frontmatter, _ = parse_frontmatter(body_path)
             if not frontmatter:
-                raise EntityValidationError(
-                    f"{body_path} has no parseable frontmatter"
-                )
+                raise EntityValidationError(f"{body_path} has no parseable frontmatter")
             self._validator.validate(frontmatter)
             declared_id = frontmatter.get("id")
             if declared_id != canonical_id:
                 raise EntityValidationError(
-                    f"frontmatter id {declared_id!r} does not match path-derived "
-                    f"canonical id {canonical_id!r}"
+                    f"frontmatter id {declared_id!r} does not match path-derived canonical id {canonical_id!r}"
                 )
             declared_type = frontmatter.get("type")
             if declared_type != type_name:
                 raise EntityValidationError(
-                    f"frontmatter type {declared_type!r} does not match path-derived "
-                    f"type {type_name!r}"
+                    f"frontmatter type {declared_type!r} does not match path-derived type {type_name!r}"
                 )
         except EntityValidationError as exc:
-            return CommonsEntityError(
-                body_path, canonical_id=canonical_id, cause=exc
-            )
+            return CommonsEntityError(body_path, canonical_id=canonical_id, cause=exc)
         except Exception as exc:  # pragma: no cover — unexpected I/O / yaml errors
-            return CommonsEntityError(
-                body_path, canonical_id=canonical_id, cause=exc
-            )
+            return CommonsEntityError(body_path, canonical_id=canonical_id, cause=exc)
 
         mtime_ns = body_path.stat().st_mtime_ns
         if datapackage_path is not None:

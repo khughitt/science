@@ -216,9 +216,7 @@ class DatasetUsage(BaseModel):
     """
 
     ref: str
-    role: Literal[
-        "analyzed", "set_definition_source", "validation_source", "cited", "upstream", "training"
-    ]
+    role: Literal["analyzed", "set_definition_source", "validation_source", "cited", "upstream", "training"]
     overlap: Literal["full", "partial", "unknown"] = "unknown"
 
     @field_validator("ref")

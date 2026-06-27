@@ -427,9 +427,7 @@ def test_dataset_usage_entry_validates(base_entity: dict) -> None:
         "access": {"level": "public", "verified": True},
         "source_class": "derived",
         "derived_kind": "model_output",
-        "dataset_usage": [
-            {"ref": "dataset:training-corpus", "role": "training", "overlap": "full"}
-        ],
+        "dataset_usage": [{"ref": "dataset:training-corpus", "role": "training", "overlap": "full"}],
     }
     EntityValidator().validate(entity)
 

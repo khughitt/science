@@ -1,4 +1,5 @@
 """Tests for science_tool.commons.adapter."""
+
 from __future__ import annotations
 
 import shutil
@@ -33,11 +34,7 @@ def _write_dataset_entity(
     dataset_dir = root / "datasets" / slug
     dataset_dir.mkdir(parents=True)
     dataset_class_line = f'dataset_class: "{dataset_class}"\n' if dataset_class is not None else ""
-    datapackage_line = (
-        f'datapackage: "{datapackage_field}"\n'
-        if datapackage_field is not None
-        else ""
-    )
+    datapackage_line = f'datapackage: "{datapackage_field}"\n' if datapackage_field is not None else ""
     (dataset_dir / "entity.md").write_text(
         "---\n"
         'schema_profile: "science-entity-base/1.0+dataset/1.0"\n'
@@ -257,11 +254,7 @@ def test_load_reference_and_pointer_with_explicit_missing_datapackage_raises_lay
 def test_record_captures_paths_and_mtime(tmp_path: Path) -> None:
     root = _make_store(tmp_path, "valid")
     adapter = CommonsEntityAdapter(root)
-    by_id = {
-        r.canonical_id: r
-        for r in adapter.scan()
-        if isinstance(r, CommonsEntityRecord)
-    }
+    by_id = {r.canonical_id: r for r in adapter.scan() if isinstance(r, CommonsEntityRecord)}
     cath = by_id["dataset:cath-domains"]
     assert cath.body_path == root / "datasets" / "cath-domains" / "entity.md"
     assert cath.datapackage_path == root / "datasets" / "cath-domains" / "datapackage.yaml"
@@ -279,11 +272,7 @@ def test_record_captures_paths_and_mtime(tmp_path: Path) -> None:
 def test_scan_populates_frontmatter_and_schema_profile(tmp_path: Path) -> None:
     root = _make_store(tmp_path, "valid")
     adapter = CommonsEntityAdapter(root)
-    by_id = {
-        r.canonical_id: r
-        for r in adapter.scan()
-        if isinstance(r, CommonsEntityRecord)
-    }
+    by_id = {r.canonical_id: r for r in adapter.scan() if isinstance(r, CommonsEntityRecord)}
     paper = by_id["paper:Adams2025"]
     assert paper.schema_profile == "science-entity-base/1.0+paper/1.0"
     assert paper.frontmatter["bibkey"] == "Adams2025"
@@ -356,7 +345,7 @@ def test_scan_rejects_id_path_mismatch(tmp_path: Path) -> None:
     impostor.write_text(
         "---\n"
         'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
-        'id: "paper:Other2025"\n'        # contradicts path-derived paper:Adams2025
+        'id: "paper:Other2025"\n'  # contradicts path-derived paper:Adams2025
         'type: "paper"\n'
         'title: "Impostor"\n'
         'version: "1.0.0"\n'
@@ -374,14 +363,8 @@ def test_scan_rejects_id_path_mismatch(tmp_path: Path) -> None:
     )
     adapter = CommonsEntityAdapter(root)
     items = list(adapter.scan())
-    paper_records = [
-        r for r in items
-        if isinstance(r, CommonsEntityRecord) and r.type == "paper"
-    ]
-    paper_errors = [
-        e for e in items
-        if isinstance(e, CommonsEntityError) and e.path == impostor
-    ]
+    paper_records = [r for r in items if isinstance(r, CommonsEntityRecord) and r.type == "paper"]
+    paper_errors = [e for e in items if isinstance(e, CommonsEntityError) and e.path == impostor]
     assert paper_records == [], "impostor should not appear in records"
     assert len(paper_errors) == 1
     assert "does not match path-derived" in str(paper_errors[0].cause)

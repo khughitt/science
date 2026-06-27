@@ -207,43 +207,49 @@ def test_perturbation_response_without_intervention_or_contexts_warns() -> None:
 
 
 def test_perturbation_response_with_intervention_does_not_warn() -> None:
-    assert _rules(
-        [
-            _ds(
-                benchmark={
-                    "benchmark_kinds": ["perturbation-response"],
-                    "tasks": [
-                        {
-                            "id": "predict-response",
-                            "task_type": "prediction",
-                            "prediction_target": "response",
-                            "intervention": "drug",
-                        }
-                    ],
-                }
-            )
-        ]
-    ) == []
+    assert (
+        _rules(
+            [
+                _ds(
+                    benchmark={
+                        "benchmark_kinds": ["perturbation-response"],
+                        "tasks": [
+                            {
+                                "id": "predict-response",
+                                "task_type": "prediction",
+                                "prediction_target": "response",
+                                "intervention": "drug",
+                            }
+                        ],
+                    }
+                )
+            ]
+        )
+        == []
+    )
 
 
 def test_perturbation_response_with_contexts_does_not_warn() -> None:
-    assert _rules(
-        [
-            _ds(
-                benchmark={
-                    "benchmark_kinds": ["perturbation-response"],
-                    "tasks": [
-                        {
-                            "id": "predict-response",
-                            "task_type": "prediction",
-                            "prediction_target": "response",
-                            "contexts": ["treated"],
-                        }
-                    ],
-                }
-            )
-        ]
-    ) == []
+    assert (
+        _rules(
+            [
+                _ds(
+                    benchmark={
+                        "benchmark_kinds": ["perturbation-response"],
+                        "tasks": [
+                            {
+                                "id": "predict-response",
+                                "task_type": "prediction",
+                                "prediction_target": "response",
+                                "contexts": ["treated"],
+                            }
+                        ],
+                    }
+                )
+            ]
+        )
+        == []
+    )
 
 
 def test_time_series_without_timepoints_warns() -> None:
@@ -266,23 +272,26 @@ def test_time_series_without_timepoints_warns() -> None:
 
 
 def test_time_series_with_timepoints_does_not_warn() -> None:
-    assert _rules(
-        [
-            _ds(
-                benchmark={
-                    "benchmark_kinds": ["time-series"],
-                    "tasks": [
-                        {
-                            "id": "predict-trajectory",
-                            "task_type": "prediction",
-                            "prediction_target": "trajectory",
-                            "timepoints": ["day-0", "day-7"],
-                        }
-                    ],
-                }
-            )
-        ]
-    ) == []
+    assert (
+        _rules(
+            [
+                _ds(
+                    benchmark={
+                        "benchmark_kinds": ["time-series"],
+                        "tasks": [
+                            {
+                                "id": "predict-trajectory",
+                                "task_type": "prediction",
+                                "prediction_target": "trajectory",
+                                "timepoints": ["day-0", "day-7"],
+                            }
+                        ],
+                    }
+                )
+            ]
+        )
+        == []
+    )
 
 
 def test_pointer_dataset_with_benchmark_emits_info() -> None:
