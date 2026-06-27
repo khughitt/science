@@ -63,15 +63,18 @@ science benchmark opportunities --calibration-report
 ```
 
 The command inspects local `question`, `hypothesis`, and `proposition`
-frontmatter, plus benchmark metadata from local datasets. `--commons` adds the
-shared benchmark seed catalog through the same discovery path used by
-`science benchmark list`, but it needs a richer internal row than the current
-`BenchmarkRow`. `science_tool.benchmark_catalog.BenchmarkRow` carries facets,
-`task_count`, and `task_ids`; opportunity scoring also needs task fields,
-`notes`, `limitations`, and enough frontmatter to reuse dataset readiness. The
-implementation should either enrich `BenchmarkRow` additively or introduce a
-separate internal `BenchmarkOpportunityDataset` loaded from the same local and
-commons frontmatter sources.
+frontmatter via `_load_markdown_entities(project_root, kind=...)`, reusing the
+canonical policy-root resolution and `kind` / `type` frontmatter filtering
+instead of hardcoded `entities/<kind>` paths. It also inspects benchmark
+metadata from local datasets. `--commons` adds the shared benchmark seed catalog
+through the same discovery path used by `science benchmark list`, but it needs a
+richer internal row than the current `BenchmarkRow`.
+`science_tool.benchmark_catalog.BenchmarkRow` carries facets, `task_count`, and
+`task_ids`; opportunity scoring also needs task fields, `notes`, `limitations`,
+and enough frontmatter to reuse dataset readiness. The implementation should
+either enrich `BenchmarkRow` additively or introduce a separate internal
+`BenchmarkOpportunityDataset` loaded from the same local and commons
+frontmatter sources.
 
 `--calibration-report` is part of the v1.5/Phase 2 bridge, not a separate
 workflow. It adds a calibration section to normal table output and adds a
@@ -167,6 +170,14 @@ Default row ordering is stable and explicit:
 
 JSON preserves this order.
 
+Matched opportunity row granularity is `(entity_id, benchmark_id, task_id)`.
+If a benchmark record has `tasks[]`, emit one row per matching task. If a
+benchmark is facets-only, emit one row for the `(entity_id, benchmark_id)` pair
+with `task_id: null` in JSON and `-` in table output. Diversity accounting runs
+after row construction and deduplicates modality/signal credit per
+`entity_id` + `benchmark_id` so a multi-task benchmark does not receive repeated
+diversity credit for the same facets.
+
 ## Two-score model
 
 Each benchmark opportunity has two separate scores:
@@ -197,6 +208,12 @@ score means a fixed editorial list, not "rare among rows returned by this
 particular command." Catalog-relative diversity belongs in the relative score
 and coverage-gap output.
 
+Some terms can carry value in more than one axis. For example, `perturbation`
+may appear as both a signal type and a modality-like assay facet in existing
+seed metadata. Baseline scoring may credit both axes, but it should expose the
+two component contributions separately so the double-credit is visible and
+auditable rather than hidden in one combined score.
+
 ### Relative score
 
 The relative score estimates usefulness for the current project. It is derived
@@ -207,7 +224,8 @@ from transparent project-to-benchmark evidence:
   equality: entries may be prose such as `"hypothesis:h1 predicts response
   shifts."`.
 - `facet_overlap` (0-25): exact-token overlap between project entity titles /
-  `content_preview` text and benchmark facets.
+  `content_preview` text and controlled benchmark facets only: `domains`,
+  `modalities`, `signal_types`, and `benchmark_kinds`.
 - `kind_signal_fit` (0-20): coverage of benchmark kinds likely to test the
   entity's language, such as perturbation-response for perturbation claims or
   time-series for dynamic claims.
@@ -225,12 +243,19 @@ are calibration targets, not settled science; if real-project calibration shows
 that a component creates noisy output, adjust the component weight and document
 the observed failure mode.
 
+Benchmark prose tokens from `notes`, `limitations`, task descriptions, and
+ground-truth descriptions are allowed in the calibration report, but they should
+not feed `facet_overlap`. If prose matching becomes useful later, add it as a
+separate lower-weight component so controlled-facet evidence and prose evidence
+cannot blur together.
+
 ## Matching method
 
 The first implementation should use deterministic matching only:
 
-1. Load project entities from `entities/questions`, `entities/hypotheses`, and
-   `entities/propositions`. Tokenize `id`, `title`, and `content_preview`
+1. Load project entities with `_load_markdown_entities(project_root, kind=...)`
+   for `question`, `hypothesis`, and `proposition`, not by hardcoded directory
+   paths. Tokenize each loaded entity's `id`, `title`, and `content_preview`
    (first 200 body characters, already produced by frontmatter parsing). Do not
    tokenize full `content` by default; it is too noisy for the first matching
    pass. Mechanism `summary` is not part of this command's initial target kinds.
@@ -242,18 +267,23 @@ The first implementation should use deterministic matching only:
    `model`, `result`, `evidence`, `cell`, and `response` unless they appear as
    part of a controlled facet phrase. Ignore tokens shorter than three
    characters except known shorthand ids such as `h1` / `q63`.
-4. Build an id-token set for each project entity: canonical id, local id,
-   shortform references where resolvable, deprecated ids, and aliases if present.
-   Reuse `science_tool.entities.resolve_entity_ref()` for user-supplied
-   `--entity` values and for local/shortform reconciliation where possible.
-   Then detect these ids as exact tokens inside each free-text
-   `related_beliefs` string.
-5. Match exact tokens between project text and benchmark facets.
-6. Apply a small domain synonym table only for obvious local vocabulary variants
+4. Resolve a user-supplied `--entity` value once with
+   `science_tool.entities.resolve_entity_ref()` and translate
+   `EntityCommandError` into a user-facing Click error. Do not call
+   `resolve_entity_ref()` per entity or per `related_beliefs` string; it reloads
+   project entities and resolves in the wrong direction for match expansion.
+5. Build an id-token set for each already-loaded project entity from the
+   canonical id, local id, numeric variants, shortform variants when the kind has
+   a shortform, `deprecated_ids`, `aliases`, and authored external/reference
+   fields such as `same_as` and `source_refs` when present. This is a canonical
+   id -> possible reference-token expansion. Then detect these tokens as exact
+   tokens inside each free-text `related_beliefs` string.
+6. Match exact tokens between project text and controlled benchmark facets.
+7. Apply a small domain synonym table only for obvious local vocabulary variants
    already present in the benchmark seed set, such as `rna-seq` /
    `transcriptomics`, `single-cell` / `single-cell-rna-seq`, and
    `perturbation` / `intervention`.
-7. Emit match reasons for every positive signal and emit dropped-token evidence
+8. Emit match reasons for every positive signal and emit dropped-token evidence
    in calibration mode.
 
 The method intentionally avoids embeddings and LLM judgments at this stage. A
@@ -328,6 +358,10 @@ Cover:
 - Relative score detects canonical/local/shorthand ids inside free-text
   `related_beliefs` prose.
 - Stoplist and minimum-token gating suppress generic token-only matches.
+- Facets-only benchmark matches emit `task_id: null`; multi-task benchmarks emit
+  one row per matched task without repeated diversity credit.
+- `facet_overlap` scores controlled facets only; benchmark prose tokens appear
+  only in calibration evidence unless a later lower-weight component is added.
 - Calibration output exposes score components and token evidence.
 
 ## Relationship to later Phase 2 work
