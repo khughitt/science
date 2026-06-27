@@ -57,10 +57,10 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
         if (fm.get("kind") or fm.get("type")) != "dataset":
             continue
 
-        benchmark = fm.get("benchmark")
-        if benchmark is None:
+        if "benchmark" not in fm:
             continue
 
+        benchmark = fm["benchmark"]
         path = fm.get("_path")
         ident = fm.get("id", "?")
         if _dataset_class(fm) == "pointer":

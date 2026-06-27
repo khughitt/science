@@ -52,8 +52,21 @@ def test_non_mapping_benchmark_warns() -> None:
     ]
 
 
+def test_null_benchmark_warns() -> None:
+    assert _rules([_ds(benchmark=None)]) == [
+        (Severity.WARN, "benchmark.block-malformed"),
+    ]
+
+
 def test_pointer_dataset_with_non_mapping_benchmark_emits_pointer_info_and_malformed_warning() -> None:
     assert _rules([_ds(dataset_class="pointer", benchmark=["static-association"])]) == [
+        (Severity.INFO, "benchmark.pointer-block"),
+        (Severity.WARN, "benchmark.block-malformed"),
+    ]
+
+
+def test_pointer_dataset_with_null_benchmark_emits_pointer_info_and_malformed_warning() -> None:
+    assert _rules([_ds(dataset_class="pointer", benchmark=None)]) == [
         (Severity.INFO, "benchmark.pointer-block"),
         (Severity.WARN, "benchmark.block-malformed"),
     ]
