@@ -161,6 +161,65 @@ def test_dataset_class_vocabulary() -> None:
     assert set(dataset_schema["properties"]["dataset_class"]["enum"]) == {"deposit", "reference", "pointer"}
 
 
+def test_dataset_benchmark_block_validates(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "benchmark": {
+            "domains": ["biology"],
+            "modalities": ["single-cell-rna-seq"],
+            "signal_types": ["perturbation"],
+            "benchmark_kinds": ["perturbation-response"],
+            "source_datasets": ["GEO:GSE000"],
+            "related_beliefs": ["hypothesis:h1"],
+            "limitations": ["Small molecule perturbations only."],
+            "tasks": [
+                {
+                    "id": "drug-response",
+                    "task_type": "response-prediction",
+                    "prediction_target": "post-treatment expression signature",
+                    "held_out_unit": "compound",
+                    "metric": "auroc",
+                    "baseline": "mean-expression",
+                    "ground_truth": {"type": "measured-outcome", "description": "expression state"},
+                    "interpretation_limits": ["Landmark genes only."],
+                    "intervention": "compound dose",
+                    "timepoints": ["24h"],
+                    "contexts": ["A549 cell line"],
+                }
+            ],
+        },
+    }
+
+    EntityValidator().validate(entity)
+
+
+@pytest.mark.parametrize("task_id", ["Bad Task", "a-", "a--b"])
+def test_dataset_benchmark_task_id_pattern_rejected(base_entity: dict, task_id: str) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "benchmark": {
+            "benchmark_kinds": ["perturbation-response"],
+            "tasks": [{"id": task_id, "task_type": "response-prediction"}],
+        },
+    }
+
+    with pytest.raises(EntityValidationError, match="benchmark"):
+        EntityValidator().validate(entity)
+
+
+def test_dataset_benchmark_facet_type_rejected(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "benchmark": {"domains": "biology"},
+    }
+
+    with pytest.raises(EntityValidationError, match="benchmark"):
+        EntityValidator().validate(entity)
+
+
 # --- composition + aggregated-error coverage previously deferred from Task 4 ---
 
 
