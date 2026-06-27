@@ -130,6 +130,7 @@ def test_build_commons_inventory_projects_benchmark_metadata(
 
     payload = build_commons_inventory()
 
+    assert payload.warnings == []
     entity = next(e for e in payload.entities if e.id == "dataset:benchmark-example")
     assert entity.scope == "cross-project"
     assert entity.data["benchmark"]["benchmark_kinds"] == ["perturbation-response"]
