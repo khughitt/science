@@ -192,6 +192,20 @@ def test_generated_plan_analysis_skill_reuses_task_scoped_aspects_for_blockers(
     assert "do not mutate `science.yaml` solely to create blocker tasks" in text
 
 
+def test_generated_plan_analysis_skill_discovers_legacy_doc_meta_pre_registrations(
+    tmp_path: Path,
+) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-plan-analysis"].read_text(encoding="utf-8")
+
+    assert "Pre-registration discovery" in text
+    assert "entities/pre-registrations/" in text
+    assert "doc/meta/" in text
+    assert "docs/meta/" in text
+    assert "legacy `specs/` locations only if they exist" in text
+    assert "do not assume absence just because `entities/pre-registrations/` is empty" in text
+
+
 def test_generated_plan_pipeline_skill_documents_mixed_access_public_slice_gate(
     tmp_path: Path,
 ) -> None:

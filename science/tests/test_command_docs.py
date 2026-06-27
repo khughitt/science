@@ -75,6 +75,17 @@ def test_plan_analysis_guides_blocker_tasks_to_reuse_task_scoped_aspects() -> No
     assert "do not mutate `science.yaml` solely to create blocker tasks" in text
 
 
+def test_plan_analysis_discovers_prior_pre_registrations_in_legacy_doc_meta() -> None:
+    text = _read("commands/plan-analysis.md")
+
+    assert "Pre-registration discovery" in text
+    assert "entities/pre-registrations/" in text
+    assert "doc/meta/" in text
+    assert "docs/meta/" in text
+    assert "legacy `specs/` locations only if they exist" in text
+    assert "do not assume absence just because `entities/pre-registrations/` is empty" in text
+
+
 def test_plan_pipeline_documents_mixed_access_public_slice_gate() -> None:
     text = _read("commands/plan-pipeline.md")
 
