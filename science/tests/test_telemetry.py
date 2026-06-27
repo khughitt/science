@@ -9,6 +9,7 @@ from pathlib import Path
 from science_tool.telemetry import (
     append_event,
     export_events_jsonl,
+    feedback_context_from_recent_event,
     format_feedback_telemetry,
     get_telemetry_dir,
     new_event,
@@ -300,3 +301,95 @@ def test_format_feedback_telemetry_summarizes_validation_context() -> None:
 
 def test_format_feedback_telemetry_reports_empty_context() -> None:
     assert format_feedback_telemetry({"recent_events": 0}) == "no recent telemetry"
+
+
+def test_feedback_context_from_recent_event_selects_newest_eligible_event() -> None:
+    events = [
+        {
+            "event_id": "pass-validation",
+            "timestamp": "2026-06-27T10:00:00-04:00",
+            "event_type": "validation_summary",
+            "command": "validate",
+            "status": "pass",
+        },
+        {
+            "event_id": "older-error",
+            "timestamp": "2026-06-27T10:01:00-04:00",
+            "event_type": "command_error",
+            "command": "dataset verify-access",
+            "argv_shape": ["dataset", "verify-access", "dataset:sciplex3", "--source", "<url:redacted>"],
+            "error_class": "ClickException",
+        },
+        {
+            "event_id": "newer-validation",
+            "timestamp": "2026-06-27T10:02:00-04:00",
+            "event_type": "validation_summary",
+            "surface": "validation",
+            "command": "validate",
+            "status": "warn",
+            "counts": {"error": 0, "warn": 2, "info": 1},
+            "top_checks": [{"check": "dataset.unstaged-deposit", "count": 2}],
+        },
+    ]
+
+    context = feedback_context_from_recent_event(events, today=date(2026, 6, 27))
+
+    assert context.event["event_id"] == "newer-validation"
+    assert context.target == "command:validate"
+    assert context.category == "gap"
+    assert "Telemetry context:" in context.detail
+    assert "- validation_status: warn" in context.detail
+    assert "- validation_counts: error=0, warn=2, info=1" in context.detail
+    assert "- top_checks: dataset.unstaged-deposit=2" in context.detail
+    assert "<url:redacted>" not in context.detail
+
+
+def test_feedback_context_from_recent_event_supports_one_based_index() -> None:
+    events = [
+        {
+            "event_id": "old-error",
+            "timestamp": "2026-06-27T10:00:00-04:00",
+            "event_type": "command_error",
+            "command": "feedback list",
+            "error_class": "NoSuchOption",
+        },
+        {
+            "event_id": "new-error",
+            "timestamp": "2026-06-27T10:01:00-04:00",
+            "event_type": "command_finish",
+            "command": "dataset verify-access",
+            "exit_code": 2,
+        },
+    ]
+
+    context = feedback_context_from_recent_event(events, index=2, today=date(2026, 6, 27))
+
+    assert context.event["event_id"] == "old-error"
+    assert context.target == "command:feedback"
+    assert context.category == "friction"
+    assert "- error_class: NoSuchOption" in context.detail
+
+
+def test_feedback_context_from_recent_event_rejects_empty_or_out_of_range_selection() -> None:
+    events = [
+        {
+            "event_id": "old-error",
+            "timestamp": "2026-06-01T10:00:00-04:00",
+            "event_type": "command_error",
+            "command": "feedback list",
+        }
+    ]
+
+    try:
+        feedback_context_from_recent_event(events, today=date(2026, 6, 27), since_days=14)
+    except ValueError as exc:
+        assert "No eligible recent telemetry events" in str(exc)
+    else:
+        raise AssertionError("Expected no recent telemetry error")
+
+    try:
+        feedback_context_from_recent_event(events, index=0, today=date(2026, 6, 27), since_days=60)
+    except ValueError as exc:
+        assert "1-based" in str(exc)
+    else:
+        raise AssertionError("Expected invalid index error")

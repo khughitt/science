@@ -8,6 +8,7 @@ import re
 import uuid
 from collections import Counter
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -30,6 +31,16 @@ _REDACTED_OPTIONS = {
     "--title",
     "--url",
 }
+
+
+@dataclass(frozen=True)
+class TelemetryFeedbackContext:
+    """Feedback defaults derived from a redacted telemetry event."""
+
+    event: Mapping[str, object]
+    target: str
+    category: str
+    detail: str
 
 
 def get_telemetry_dir() -> Path:
@@ -231,6 +242,40 @@ def summarize_recent_for_feedback_target(
     return _summarize_feedback_events(matching)
 
 
+def feedback_context_from_recent_event(
+    events: Sequence[Mapping[str, object]],
+    *,
+    index: int = 1,
+    today: date | None = None,
+    since_days: int = 14,
+) -> TelemetryFeedbackContext:
+    """Return feedback defaults for a recent eligible telemetry event."""
+    if index < 1:
+        raise ValueError("--from-recent uses a 1-based index")
+
+    cutoff = (today or date.today()) - timedelta(days=since_days)
+    eligible = [
+        event
+        for event in events
+        if (event_date := _event_date(event)) is not None and event_date >= cutoff and _is_feedback_source_event(event)
+    ]
+    eligible.sort(key=lambda event: (_string_field(event, "timestamp"), _string_field(event, "event_id")), reverse=True)
+    if not eligible:
+        raise ValueError("No eligible recent telemetry events found")
+    if index > len(eligible):
+        raise ValueError(f"--from-recent index {index} is out of range for {len(eligible)} eligible telemetry events")
+
+    event = eligible[index - 1]
+    command = _string_field(event, "command")
+    command_token = command.split(maxsplit=1)[0] if command else "unknown"
+    return TelemetryFeedbackContext(
+        event=event,
+        target=f"command:{command_token}",
+        category=_feedback_category_for_event(event),
+        detail=_feedback_detail_for_event(event),
+    )
+
+
 def format_feedback_telemetry(summary: Mapping[str, object]) -> str:
     """Format feedback telemetry context for compact table output."""
     recent_events = _int_value(summary.get("recent_events"))
@@ -253,6 +298,69 @@ def format_feedback_telemetry(summary: Mapping[str, object]) -> str:
         total_errors = sum(int(value) for value in command_errors.values() if isinstance(value, int))
         return f"{recent_events} events, {total_errors} errors"
     return f"{recent_events} events"
+
+
+def _is_feedback_source_event(event: Mapping[str, object]) -> bool:
+    event_type = _string_field(event, "event_type")
+    if event_type == "command_error":
+        return True
+    if event_type == "command_finish":
+        exit_code = event.get("exit_code")
+        return isinstance(exit_code, int) and exit_code != 0
+    if event_type == "validation_summary":
+        return _string_field(event, "status") in {"warn", "fail"}
+    return False
+
+
+def _feedback_category_for_event(event: Mapping[str, object]) -> str:
+    if _string_field(event, "event_type") == "validation_summary":
+        return "gap"
+    return "friction"
+
+
+def _feedback_detail_for_event(event: Mapping[str, object]) -> str:
+    lines = ["Telemetry context:"]
+    _append_detail_line(lines, "event", _string_field(event, "event_id"))
+    _append_detail_line(lines, "timestamp", _string_field(event, "timestamp"))
+    _append_detail_line(lines, "command", _string_field(event, "command"))
+    argv_shape = event.get("argv_shape")
+    if isinstance(argv_shape, Sequence) and not isinstance(argv_shape, (str, bytes)):
+        rendered_argv = " ".join(str(token) for token in argv_shape)
+        _append_detail_line(lines, "argv", rendered_argv)
+    if isinstance(event.get("exit_code"), int):
+        _append_detail_line(lines, "exit_code", str(event["exit_code"]))
+    _append_detail_line(lines, "error_class", _string_field(event, "error_class"))
+    _append_detail_line(lines, "validation_status", _string_field(event, "status"))
+    counts = event.get("counts")
+    if isinstance(counts, Mapping):
+        rendered_counts = ", ".join(
+            f"{key}={_int_value(counts.get(key))}"
+            for key in ("error", "warn", "info")
+            if key in counts
+        )
+        _append_detail_line(lines, "validation_counts", rendered_counts)
+    rendered_checks = _render_top_checks(event.get("top_checks"))
+    _append_detail_line(lines, "top_checks", rendered_checks)
+    return "\n".join(lines)
+
+
+def _append_detail_line(lines: list[str], label: str, value: str) -> None:
+    if value:
+        lines.append(f"- {label}: {value}")
+
+
+def _render_top_checks(value: object) -> str:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return ""
+    rendered: list[str] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        check = item.get("check")
+        count = item.get("count")
+        if isinstance(check, str) and isinstance(count, int):
+            rendered.append(f"{check}={count}")
+    return ", ".join(rendered)
 
 
 def _redact_value(token: str, *, option: str | None, index: int) -> str:
