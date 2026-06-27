@@ -78,6 +78,8 @@ def validate_cmd(
     except ValidateContextError as exc:
         raise click.ClickException(str(exc)) from exc
 
+    _record_validation_summary(result=result, profile=profile, strict=strict, fail_on=fail_on)
+
     sidecar_stdout = captured_stdout.getvalue()
     if sidecar_stdout:
         click.echo(sidecar_stdout, nl=False, err=True)
@@ -89,6 +91,36 @@ def validate_cmd(
 
     if result.errors or result.gated:
         ctx.exit(1)
+
+
+def _record_validation_summary(
+    *,
+    result: RunResult,
+    profile: str,
+    strict: bool,
+    fail_on: str | None,
+) -> None:
+    from science_tool.telemetry import (
+        append_event,
+        get_telemetry_dir,
+        new_validation_summary_event,
+        telemetry_enabled,
+    )
+
+    if not telemetry_enabled():
+        return
+    event = new_validation_summary_event(
+        command="validate",
+        profile=profile,
+        strict=strict,
+        fail_on=fail_on,
+        errors=result.errors,
+        warnings=result.warnings,
+        infos=result.infos,
+        gated=bool(result.gated),
+        rule_ids=[item.rule for item in result.results],
+    )
+    append_event(get_telemetry_dir(), event)
 
 
 def _json_payload(result: RunResult) -> dict[str, Any]:

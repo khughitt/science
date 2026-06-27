@@ -10,6 +10,7 @@ from click.testing import CliRunner
 from jsonschema import validate as validate_json
 
 from science_tool.cli import main
+from science_tool.telemetry import read_events
 from science_tool.validate import Check, Result, Severity, ValidateContext
 from science_tool.validate.checks import clear_checks_for_tests
 from science_tool.validate.runner import clear_hooks_for_tests
@@ -89,6 +90,70 @@ def test_validate_json_emits_results_and_warns_do_not_fail(tmp_path: Path) -> No
             "task": None,
         },
     ]
+
+
+def test_validate_records_failure_summary_telemetry(tmp_path: Path) -> None:
+    @Check(section="demo", order=10)
+    def demo_check(ctx: ValidateContext) -> list[Result]:
+        return [Result(Severity.ERROR, Path("secret/path.md"), 9, "private message", "demo.error", None)]
+
+    project = tmp_path / "project"
+    project.mkdir()
+    telemetry_dir = tmp_path / "telemetry"
+    result = CliRunner().invoke(
+        main,
+        ["validate", "--format", "json", "--project-root", str(_project(project))],
+        env={"SCIENCE_TELEMETRY_DIR": str(telemetry_dir)},
+    )
+
+    assert result.exit_code == 1, result.output
+    events = [event for event in read_events(telemetry_dir) if event.get("event_type") == "validation_summary"]
+    assert len(events) == 1
+    event = events[0]
+    assert event["status"] == "fail"
+    assert event["counts"] == {"error": 1, "warn": 0, "info": 0}
+    assert event["top_checks"] == [{"check": "demo.error", "count": 1}]
+    serialized = json.dumps(event)
+    assert "secret/path.md" not in serialized
+    assert "private message" not in serialized
+
+
+def test_validate_records_warning_summary_telemetry(tmp_path: Path) -> None:
+    @Check(section="demo", order=10)
+    def demo_check(ctx: ValidateContext) -> list[Result]:
+        return [Result(Severity.WARN, Path("doc/demo.md"), 7, "watch this", "demo.warn", None)]
+
+    project = tmp_path / "project"
+    project.mkdir()
+    telemetry_dir = tmp_path / "telemetry"
+    result = CliRunner().invoke(
+        main,
+        ["validate", "--format", "json", "--project-root", str(_project(project))],
+        env={"SCIENCE_TELEMETRY_DIR": str(telemetry_dir)},
+    )
+
+    assert result.exit_code == 0, result.output
+    events = [event for event in read_events(telemetry_dir) if event.get("event_type") == "validation_summary"]
+    assert len(events) == 1
+    assert events[0]["status"] == "warn"
+    assert events[0]["counts"] == {"error": 0, "warn": 1, "info": 0}
+    assert events[0]["top_checks"] == [{"check": "demo.warn", "count": 1}]
+
+
+def test_validate_records_clean_summary_telemetry(tmp_path: Path) -> None:
+    telemetry_dir = tmp_path / "telemetry"
+    result = CliRunner().invoke(
+        main,
+        ["validate", "--format", "json", "--project-root", str(_project(tmp_path))],
+        env={"SCIENCE_TELEMETRY_DIR": str(telemetry_dir)},
+    )
+
+    assert result.exit_code == 0, result.output
+    events = [event for event in read_events(telemetry_dir) if event.get("event_type") == "validation_summary"]
+    assert len(events) == 1
+    assert events[0]["status"] == "pass"
+    assert events[0]["counts"] == {"error": 0, "warn": 0, "info": 0}
+    assert events[0]["top_checks"] == []
 
 
 def test_validate_commit_profile_skips_graph_backed_checks(tmp_path: Path) -> None:
