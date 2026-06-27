@@ -79,11 +79,12 @@ reason.
 1. Classify the analysis: modalities, independent unit, estimand, intended model/test, confirmatory vs exploratory status.
 2. Load the minimum relevant leaves from `skills/INDEX.md`.
 3. Identify required input inspection and preprocessing/normalization checks.
-4. State model/test assumptions, power floor or resolution limit, bias-vs-variance risks, and sensitivity-arbitration rules.
-5. Decide exactly one readiness state: `ready`, `ready-with-caveats`, or `not-ready`.
-6. Save the analysis plan by default.
-7. If graph tooling is available, link the saved plan to referenced hypothesis, inquiry, and task entities.
-8. If `not-ready`, create one task per blocking check when task tooling is available; otherwise list exact task text in the plan.
+4. Build a **Per-Input Data Profile** with one row per input artifact or dataset. Include encoding / file format, row grain, join cardinality, missing-value sentinels, provenance / source version, and checksum or immutable identifier.
+5. State model/test assumptions, power floor or resolution limit, bias-vs-variance risks, and sensitivity-arbitration rules.
+6. Decide exactly one readiness state: `ready`, `ready-with-caveats`, or `not-ready`.
+7. Save the analysis plan by default.
+8. If graph tooling is available, link the saved plan to referenced hypothesis, inquiry, and task entities.
+9. If `not-ready`, create one task per blocking check when task tooling is available; otherwise list exact task text in the plan.
    Reuse task-scoped aspects from the triggering task or analysis context when
    they make the blocker easier to route, e.g. `science tasks add ... --aspects
    computational-analysis`. Task-scoped aspects are local task metadata; do not mutate `science.yaml` solely to create blocker tasks. Add a project-level
@@ -136,6 +137,7 @@ The body must include:
 - Analysis Question
 - Related Hypotheses / Inquiries / Tasks
 - Data Inputs and Provenance
+- Per-Input Data Profile
 - Required Input Inspection
 - Preprocessing / Normalization Checks
 - Independent Unit and Denominator
@@ -148,6 +150,13 @@ The body must include:
 - Aspect-contributed Sections
 - Readiness Decision
 - Feedback Reflection
+
+In `Per-Input Data Profile`, use one row per input artifact or dataset and include:
+
+| Input | Encoding / file format | Row grain | Join cardinality | Missing-value sentinels | Provenance / source version | Checksum or immutable identifier |
+|---|---|---|---|---|---|---|
+
+Treat unknown profile fields as inspection blockers for `ready` decisions, not as blanks to ignore.
 
 For `ready-with-caveats`, include `Known Limitations To Carry Forward`.
 For `not-ready`, include `Blocking Checks Before Pre-Registration` — **but** when a

@@ -206,6 +206,22 @@ def test_generated_plan_analysis_skill_discovers_legacy_doc_meta_pre_registratio
     assert "do not assume absence just because `entities/pre-registrations/` is empty" in text
 
 
+def test_generated_plan_analysis_skill_requires_per_input_data_profile(
+    tmp_path: Path,
+) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-plan-analysis"].read_text(encoding="utf-8")
+
+    assert "Per-Input Data Profile" in text
+    assert "one row per input artifact or dataset" in text
+    assert "encoding / file format" in text
+    assert "row grain" in text
+    assert "join cardinality" in text
+    assert "missing-value sentinels" in text
+    assert "provenance / source version" in text
+    assert "checksum or immutable identifier" in text
+
+
 def test_generated_plan_pipeline_skill_documents_mixed_access_public_slice_gate(
     tmp_path: Path,
 ) -> None:

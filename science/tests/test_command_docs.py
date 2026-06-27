@@ -86,6 +86,19 @@ def test_plan_analysis_discovers_prior_pre_registrations_in_legacy_doc_meta() ->
     assert "do not assume absence just because `entities/pre-registrations/` is empty" in text
 
 
+def test_plan_analysis_requires_per_input_data_profile() -> None:
+    text = _read("commands/plan-analysis.md")
+
+    assert "Per-Input Data Profile" in text
+    assert "one row per input artifact or dataset" in text
+    assert "encoding / file format" in text
+    assert "row grain" in text
+    assert "join cardinality" in text
+    assert "missing-value sentinels" in text
+    assert "provenance / source version" in text
+    assert "checksum or immutable identifier" in text
+
+
 def test_plan_pipeline_documents_mixed_access_public_slice_gate() -> None:
     text = _read("commands/plan-pipeline.md")
 
