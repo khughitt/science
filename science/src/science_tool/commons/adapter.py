@@ -30,24 +30,35 @@ _TYPE_DIR_TO_TYPE = {
 }
 
 
-def _peek_dataset_class(entity_path: Path) -> str:
-    try:
-        frontmatter, _ = parse_frontmatter(entity_path)
-    except Exception:
-        return "deposit"
-    value = (frontmatter or {}).get("dataset_class")
-    return value if isinstance(value, str) and value else "deposit"
-
-
 def _dataset_datapackage_path(root: Path, slug: str, entity_path: Path) -> Path | None:
-    dp_path = root / "datasets" / slug / "datapackage.yaml"
-    requires_dp = _peek_dataset_class(entity_path) not in ("reference", "pointer")
-    if requires_dp and not dp_path.is_file():
+    dataset_dir = root / "datasets" / slug
+    default_dp_path = dataset_dir / "datapackage.yaml"
+    frontmatter, _ = parse_frontmatter(entity_path)
+    dataset_class = frontmatter.get("dataset_class")
+    datapackage = frontmatter.get("datapackage")
+
+    if isinstance(datapackage, str) and datapackage.strip():
+        if not default_dp_path.is_file():
+            raise CommonsLayoutError(
+                dataset_dir,
+                reason=(
+                    f"explicit datapackage field {datapackage!r} requires missing "
+                    "datapackage.yaml sibling"
+                ),
+            )
+        return default_dp_path
+
+    requires_default_dp = (
+        dataset_class is None
+        or (isinstance(dataset_class, str) and dataset_class.strip() == "")
+        or dataset_class == "deposit"
+    )
+    if requires_default_dp and not default_dp_path.is_file():
         raise CommonsLayoutError(
-            root / "datasets" / slug,
+            dataset_dir,
             reason="deposit dataset directory missing required datapackage.yaml sibling",
         )
-    return dp_path if dp_path.is_file() else None
+    return default_dp_path if default_dp_path.is_file() else None
 
 
 @dataclass(frozen=True, slots=True)
