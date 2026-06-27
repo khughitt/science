@@ -84,6 +84,16 @@ def test_specify_model_documents_proxy_directness_vocabulary() -> None:
     assert "`derived` for a computed or model-derived proxy" in text
 
 
+def test_specify_model_routes_hypotheses_to_durable_proposition_bundles() -> None:
+    text = _read("commands/specify-model.md")
+
+    assert "**Hypothesis / epistemic entity with no DAG yet**" in text
+    assert "decompose the hypothesis into durable `proposition:` entities" in text
+    assert "link each proposition back to the hypothesis with `related: [\"hypothesis:<id>\"]`" in text
+    assert "add the proposition refs to the hypothesis's Proposition Bundle" in text
+    assert "Do not leave the decomposition only as prose inside the hypothesis file." in text
+
+
 def test_graph_docs_explain_local_only_build_for_composite_noise_control() -> None:
     user_guide = _read("docs/user-guide/graph-and-derived-state.md")
     federation = _read("docs/federation.md")

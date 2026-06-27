@@ -204,6 +204,19 @@ def test_generated_specify_model_skill_documents_proxy_directness_vocabulary(
     assert "`derived` for a computed or model-derived proxy" in text
 
 
+def test_generated_specify_model_skill_routes_hypotheses_to_proposition_bundles(
+    tmp_path: Path,
+) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-specify-model"].read_text(encoding="utf-8")
+
+    assert "**Hypothesis / epistemic entity with no DAG yet**" in text
+    assert "decompose the hypothesis into durable `proposition:` entities" in text
+    assert "link each proposition back to the hypothesis with `related: [\"hypothesis:<id>\"]`" in text
+    assert "add the proposition refs to the hypothesis's Proposition Bundle" in text
+    assert "Do not leave the decomposition only as prose inside the hypothesis file." in text
+
+
 def test_review_pipeline_generated_skill_uses_doc_reviews_for_reports(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
     text = generated["science-review-pipeline"].read_text(encoding="utf-8")

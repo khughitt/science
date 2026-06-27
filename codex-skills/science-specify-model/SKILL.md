@@ -95,13 +95,13 @@ uv run science <command>
 
 ## Rules
 
-- **MUST** read the existing inquiry before modifying it
+- **MUST** read the existing inquiry, hypothesis, or target epistemic entity before modifying it
 - **MUST** assign formal types to all important variables
-- **MUST** identify which inquiry edges are structural only and which represent uncertain scientific claims
+- **MUST** identify which modeled relations are structural only and which represent uncertain scientific claims
 - **MUST** represent uncertain scientific relations as `proposition` entities
 - **MUST** attach provenance to authored propositions and evidence lines
 - **MUST** keep residual uncertainty visible when support is sparse, contested, or low-quality
-- **MUST** run `inquiry validate` after specifying
+- **MUST** run the relevant validation path after specifying (`inquiry validate`, project DAG check, or graph build)
 - **SHOULD** identify confounders for directional or causal claims
 - **SHOULD** ask what would materially change belief in each key claim
 
@@ -133,14 +133,20 @@ project represents its model graph — otherwise `science inquiry show` errors (
      `proposition` entities) and Step 4 (evidence-line entities) — those are tool-supported and
      durable regardless of DAG representation. Validate with the project's DAG check (e.g.
      `science big-picture`) rather than `inquiry validate`.
+   - **Hypothesis / epistemic entity with no DAG yet** → decompose the hypothesis into durable `proposition:` entities.
+     For each proposition, link each proposition back to the hypothesis with `related: ["hypothesis:<id>"]`.
+     Then add the proposition refs to the hypothesis's Proposition Bundle so the bundle is explicit and queryable.
+     Do not leave the decomposition only as prose inside the hypothesis file. If a DAG is later useful, build it
+     from those proposition records rather than replacing them.
 
 The proposition + evidence-line authoring (Steps 3–4) is representation-agnostic; only the
 structural-graph steps (1, 2, the `add-edge` in 3, and 6's `inquiry validate`) are inquiry-specific.
 
-### Step 1: Load And Assess The Inquiry
+### Step 1: Load And Assess The Target
 
 *(Inquiry + RDF-graph path — see Step 0. For a hypothesis in a file-based DAG project, read the
-hypothesis file and its `.dot`/`.edges.yaml` pair instead.)*
+hypothesis file and its `.dot`/`.edges.yaml` pair instead. For a hypothesis with no DAG yet, read the
+hypothesis file and prepare the proposition bundle before adding any structural graph.)*
 
 If the user input contains an inquiry slug:
 
@@ -156,7 +162,7 @@ Identify:
 - unsupported causal assumptions
 - places where the inquiry is structurally useful but epistemically fragile
 
-If no slug is provided, ask which inquiry to specify.
+If no slug is provided, ask which inquiry, hypothesis, or epistemic target to specify.
 
 ### Step 2: Specify Variables
 
