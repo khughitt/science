@@ -217,6 +217,70 @@ class TestFeedbackTriage:
         assert payload["rows"][0]["suggested_next_test_target"] == "science/tests/test_command_docs.py"
 
 
+class TestFeedbackScaffoldTest:
+    def test_scaffold_test_creates_failing_pytest_file(self, runner: CliRunner, tmp_path, monkeypatch):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path / "feedback")}
+        add_result = runner.invoke(
+            main,
+            [
+                "feedback",
+                "add",
+                "--target",
+                "command:feedback",
+                "--category",
+                "friction",
+                "--summary",
+                "Need regression scaffold helper",
+                "--detail",
+                "The feedback loop needs a one-command test stub.",
+            ],
+            env=env,
+        )
+        assert add_result.exit_code == 0, add_result.output
+        entry_id = next((tmp_path / "feedback").glob("fb-*.yaml")).stem
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        monkeypatch.chdir(project_root)
+
+        result = runner.invoke(main, ["feedback", "scaffold-test", entry_id], env=env)
+
+        assert result.exit_code == 0, result.output
+        scaffold = project_root / "science" / "tests" / "scaffolded" / f"test_{entry_id.replace('-', '_')}.py"
+        assert scaffold.is_file()
+        text = scaffold.read_text(encoding="utf-8")
+        assert "Need regression scaffold helper" in text
+        assert "science/tests/test_feedback_cli.py" in text
+        assert "pytest.fail" in text
+        assert str(scaffold) in result.output
+
+    def test_scaffold_test_dry_run_reports_path_without_writing(self, runner: CliRunner, tmp_path, monkeypatch):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path / "feedback")}
+        add_result = runner.invoke(
+            main,
+            [
+                "feedback",
+                "add",
+                "--target",
+                "framework:benchmarks",
+                "--summary",
+                "Needs design",
+            ],
+            env=env,
+        )
+        assert add_result.exit_code == 0, add_result.output
+        entry_id = next((tmp_path / "feedback").glob("fb-*.yaml")).stem
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        monkeypatch.chdir(project_root)
+
+        result = runner.invoke(main, ["feedback", "scaffold-test", entry_id, "--dry-run"], env=env)
+
+        assert result.exit_code == 0, result.output
+        scaffold = project_root / "science" / "tests" / "scaffolded" / f"test_{entry_id.replace('-', '_')}.py"
+        assert not scaffold.exists()
+        assert "[dry run]" in result.output
+
+
 class TestFeedbackReport:
     def test_report_generates_markdown(self, runner: CliRunner, tmp_path):
         env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}

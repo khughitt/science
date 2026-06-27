@@ -61,6 +61,15 @@ class _FeedbackCluster:
     newest_created: str = ""
 
 
+@dataclass(frozen=True)
+class FeedbackTestScaffold:
+    """Result of creating or previewing a feedback regression scaffold."""
+
+    path: Path
+    suggested_test_target: str
+    wrote: bool
+
+
 def save_entry(feedback_dir: Path, entry: FeedbackEntry) -> Path:
     """Write a feedback entry to a YAML file. Returns the file path."""
     feedback_dir.mkdir(parents=True, exist_ok=True)
@@ -258,6 +267,75 @@ def cluster_for_triage(
         )
     )
     return rows
+
+
+def scaffold_test_for_feedback(
+    feedback_dir: Path,
+    entry_id: str,
+    *,
+    project_root: Path,
+    out_path: Path | None = None,
+    force: bool = False,
+    dry_run: bool = False,
+) -> FeedbackTestScaffold:
+    """Write a failing pytest scaffold for a feedback entry."""
+    entry_path = feedback_dir / f"{entry_id}.yaml"
+    if not entry_path.exists():
+        raise FileNotFoundError(f"Feedback entry not found: {entry_id}")
+
+    entry = load_entry(entry_path)
+    target_path = _scaffold_output_path(project_root, entry_id, out_path)
+    suggested_target = _suggested_next_test_target(entry.target)
+    if target_path.exists() and not force:
+        raise FileExistsError(f"Scaffold already exists: {target_path}")
+
+    if dry_run:
+        return FeedbackTestScaffold(path=target_path, suggested_test_target=suggested_target, wrote=False)
+
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_text(_scaffold_test_text(entry, suggested_target), encoding="utf-8")
+    return FeedbackTestScaffold(path=target_path, suggested_test_target=suggested_target, wrote=True)
+
+
+def _scaffold_output_path(project_root: Path, entry_id: str, out_path: Path | None) -> Path:
+    if out_path is not None:
+        return out_path if out_path.is_absolute() else project_root / out_path
+    return project_root / "science" / "tests" / "scaffolded" / f"test_{_python_safe_name(entry_id)}.py"
+
+
+def _python_safe_name(value: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9_]+", "_", value).strip("_")
+
+
+def _scaffold_test_text(entry: FeedbackEntry, suggested_target: str) -> str:
+    lines = [
+        '"""Regression scaffold generated from Science feedback."""',
+        "",
+        "from __future__ import annotations",
+        "",
+        "import pytest",
+        "",
+        "",
+        f"def test_{_python_safe_name(entry.id)}() -> None:",
+        f'    """Regression scaffold for {entry.id}."""',
+        f"    # Target: {entry.target}",
+        f"    # Category: {entry.category}",
+        f"    # Summary: {entry.summary}",
+        f"    # Suggested existing test target: {suggested_target}",
+    ]
+    if entry.detail:
+        lines.append("    # Detail:")
+        lines.extend(f"    #   {line}" if line else "    #" for line in entry.detail.splitlines())
+    lines.extend(
+        [
+            "    pytest.fail(",
+            f'        "Do not close feedback {entry.id} until this test is replaced "',
+            '        "with a real failing regression test and the fix is verified."',
+            "    )",
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _matching_cluster(

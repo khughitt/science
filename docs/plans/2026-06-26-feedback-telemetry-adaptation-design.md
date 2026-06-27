@@ -54,6 +54,7 @@ The current feedback system stores one YAML file per entry under
 - `science feedback list`
 - `science feedback update`
 - `science feedback triage`
+- `science feedback scaffold-test`
 - `science feedback report`
 
 This is enough for structured issue capture and manual triage. The missing layer
@@ -327,6 +328,8 @@ Telemetry should feed concrete maintenance actions:
 2. **Create or enrich feedback.** Maintainers convert report clusters into
    feedback entries, or attach telemetry context to existing ones.
 3. **Implement fixes.** Fixes remain normal code/docs work with tests.
+   `science feedback scaffold-test <id>` can turn an entry into a deliberately
+   failing pytest scaffold plus the suggested existing test target.
 4. **Close the loop.** `feedback update --status addressed` records the
    resolution. Later telemetry reports should show lower recurrence or fewer
    failures for the same surface.

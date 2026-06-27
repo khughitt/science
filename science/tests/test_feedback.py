@@ -20,6 +20,7 @@ from science_tool.feedback import (
     load_entry,
     next_feedback_id,
     render_report,
+    scaffold_test_for_feedback,
     save_entry,
     update_entry,
 )
@@ -356,6 +357,46 @@ def test_cluster_for_triage_since_filters_old_entries(tmp_path: Path):
     clusters = cluster_for_triage(tmp_path, since_days=3, today=date.fromisoformat("2026-03-26"))
 
     assert [cluster["target"] for cluster in clusters] == ["command:new"]
+
+
+def test_scaffold_test_for_feedback_writes_failing_pytest_skeleton(tmp_path: Path):
+    _make_entry(
+        tmp_path,
+        "fb-2026-03-25-001",
+        target="command:next-steps",
+        category="friction",
+        summary="Stale-window completions hide in prior month done-file",
+        detail="The scan stopped at the current month.",
+    )
+
+    project_root = tmp_path / "project"
+    result = scaffold_test_for_feedback(tmp_path, "fb-2026-03-25-001", project_root=project_root)
+
+    assert result.path == project_root / "science" / "tests" / "scaffolded" / "test_fb_2026_03_25_001.py"
+    assert result.suggested_test_target == "science/tests/test_command_docs.py"
+    assert result.wrote is True
+    text = result.path.read_text(encoding="utf-8")
+    assert "Regression scaffold for fb-2026-03-25-001" in text
+    assert "Target: command:next-steps" in text
+    assert "Suggested existing test target: science/tests/test_command_docs.py" in text
+    assert "pytest.fail" in text
+    assert "Do not close feedback fb-2026-03-25-001 until this test is replaced" in text
+
+
+def test_scaffold_test_for_feedback_dry_run_does_not_write(tmp_path: Path):
+    _make_entry(tmp_path, "fb-2026-03-25-001", target="framework:model", summary="Needs design")
+
+    project_root = tmp_path / "project"
+    result = scaffold_test_for_feedback(
+        tmp_path,
+        "fb-2026-03-25-001",
+        project_root=project_root,
+        dry_run=True,
+    )
+
+    assert result.wrote is False
+    assert result.path == project_root / "science" / "tests" / "scaffolded" / "test_fb_2026_03_25_001.py"
+    assert not result.path.exists()
 
 
 def test_render_report(tmp_path: Path):

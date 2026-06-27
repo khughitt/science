@@ -5364,6 +5364,40 @@ def feedback_triage(target: str | None, cluster_mode: bool, since_days: int | No
             click.echo(f"  - {entry.id} [{entry.category}] {entry.summary}")
 
 
+@feedback.command("scaffold-test")
+@click.argument("entry_id")
+@click.option(
+    "--out",
+    "out_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Output path for the pytest scaffold; relative paths are resolved from the current directory.",
+)
+@click.option("--dry-run", is_flag=True, help="Print the planned output path without writing.")
+@click.option("--force", is_flag=True, help="Overwrite an existing scaffold file.")
+def feedback_scaffold_test(entry_id: str, out_path: Path | None, dry_run: bool, force: bool) -> None:
+    """Create a failing pytest scaffold for one feedback entry."""
+    from science_tool.feedback import scaffold_test_for_feedback
+
+    fb_dir = _get_feedback_dir()
+    try:
+        result = scaffold_test_for_feedback(
+            fb_dir,
+            entry_id,
+            project_root=Path.cwd(),
+            out_path=out_path,
+            force=force,
+            dry_run=dry_run,
+        )
+    except (FileNotFoundError, FileExistsError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    prefix = "[dry run] Would write" if dry_run else "Wrote"
+    click.echo(f"{prefix} feedback regression scaffold: {result.path}")
+    click.echo(f"Suggested existing test target: {result.suggested_test_target}")
+    click.echo(f"Replace the scaffold with a real failing test before closing {entry_id}.")
+
+
 @feedback.command("report")
 @click.option("--status", default=None, help="Filter by status")
 @click.option("--project", default=None, help="Filter by project")
