@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -3768,11 +3769,9 @@ def tasks_block(task_id: str, blocked_by: tuple[str, ...], force: bool) -> None:
 
     if force:
         try:
-            lookup = make_project_entity_lookup(Path.cwd())
+            lookup = cast(Callable[[str], object | None], make_project_entity_lookup(Path.cwd()))
         except ValueError:
-
-            def lookup(_ref: str):
-                return None
+            lookup = _missing_project_entity_lookup
 
         for ref in blocked_by:
             if lookup(ref) is None:
@@ -3783,6 +3782,10 @@ def tasks_block(task_id: str, blocked_by: tuple[str, ...], force: bool) -> None:
 
     refs = ", ".join(task.blocked_by)
     click.echo(f"[{task.id}] blocked by {refs}")
+
+
+def _missing_project_entity_lookup(_ref: str) -> object | None:
+    return None
 
 
 @tasks.command("blockers")
@@ -5590,18 +5593,7 @@ def feedback_triage(
         ]
         if with_telemetry:
             columns.append(("telemetry_text", "Telemetry"))
-        table_rows = [
-            (
-                row
-                | {
-                    "entry_ids": ", ".join(row["entry_ids"]),
-                    "telemetry_text": format_feedback_telemetry(row["telemetry"]) if with_telemetry else "",
-                }
-            )
-            if output_format != "json"
-            else row
-            for row in rows
-        ]
+        table_rows = rows if output_format == "json" else _feedback_triage_table_rows(rows, with_telemetry=with_telemetry)
         emit_query_rows(
             output_format=output_format,
             title="Feedback Triage",
@@ -5642,6 +5634,24 @@ def feedback_triage(
             click.echo(f"Telemetry: {format_feedback_telemetry(summary)}")
         for entry in group["entries"]:
             click.echo(f"  - {entry.id} [{entry.category}] {entry.summary}")
+
+
+def _feedback_triage_table_rows(rows: list[dict[str, object]], *, with_telemetry: bool) -> list[dict[str, object]]:
+    from science_tool.telemetry import format_feedback_telemetry
+
+    table_rows: list[dict[str, object]] = []
+    for row in rows:
+        entry_ids = row.get("entry_ids")
+        telemetry = row.get("telemetry")
+        copied = dict(row)
+        copied["entry_ids"] = ", ".join(str(entry_id) for entry_id in entry_ids) if isinstance(entry_ids, list) else ""
+        copied["telemetry_text"] = (
+            format_feedback_telemetry(cast(dict[str, object], telemetry))
+            if with_telemetry and isinstance(telemetry, dict)
+            else ""
+        )
+        table_rows.append(copied)
+    return table_rows
 
 
 @feedback.command("scaffold-test")
@@ -5918,12 +5928,14 @@ def dataset_prioritize(
     import json as _json
 
     from science_tool.dataset_prioritize import excluded_summary, prioritize, target_coverage
+    from science_tool.datasets.semantics import RuntimeState
     from science_tool.entities import graph_is_stale
     from science_tool.graph.store import DEFAULT_GRAPH_PATH
     from science_tool.graph.store.dataset import _load_dataset
     from science_tool.graph.store.identity import _graph_uri
 
     root = project_root.resolve() if project_root else _project_root_from_env()
+    runtime_state_filter = cast(RuntimeState | None, runtime_state)
     graph_path = root / DEFAULT_GRAPH_PATH
     knowledge = provenance = None
     if graph_path.exists():
@@ -5949,7 +5961,7 @@ def dataset_prioritize(
         include_gated=include_gated or coverage,
         include_reference=include_reference or coverage,
         include_pointer=include_pointer or coverage,
-        runtime_state=runtime_state,
+        runtime_state=runtime_state_filter,
     )
     summary = excluded_summary(
         root,
@@ -5960,7 +5972,7 @@ def dataset_prioritize(
         include_gated=include_gated,
         include_reference=include_reference,
         include_pointer=include_pointer,
-        runtime_state=runtime_state,
+        runtime_state=runtime_state_filter,
     )
 
     if coverage:
