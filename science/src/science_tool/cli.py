@@ -123,7 +123,10 @@ class TelemetryGroup(click.Group):
         global _TELEMETRY_ARGV
         _TELEMETRY_ARGV = raw_args
         try:
-            return super().main(*args, standalone_mode=False, **kwargs)
+            result = super().main(*args, standalone_mode=False, **kwargs)
+            if isinstance(result, int) and result != 0 and standalone_mode:
+                raise SystemExit(result)
+            return result
         except click.ClickException as exc:
             _record_telemetry_error(raw_args, exc)
             if not standalone_mode:

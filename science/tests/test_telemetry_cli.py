@@ -9,6 +9,8 @@ from click.testing import CliRunner
 
 from science_tool.cli import main
 from science_tool.telemetry import append_event, read_events
+from science_tool.validate import Check, Result, Severity, ValidateContext
+from science_tool.validate.checks import clear_checks_for_tests
 
 
 def test_successful_cli_invocation_records_command_finish(tmp_path: Path) -> None:
@@ -40,6 +42,30 @@ def test_click_parse_error_records_command_error(tmp_path: Path) -> None:
     assert events[0]["command"] == "feedback list"
     assert events[0]["error_class"] == "NoSuchOption"
     assert events[0]["exit_code"] == 2
+
+
+def test_telemetry_group_preserves_nonzero_ctx_exit(tmp_path: Path) -> None:
+    clear_checks_for_tests()
+
+    @Check(section="demo", order=10)
+    def demo_check(ctx: ValidateContext) -> list[Result]:
+        return [Result(Severity.ERROR, Path("science.yaml"), 1, "broken", "demo.error", None)]
+
+    project = tmp_path / "project"
+    project.mkdir()
+    project.joinpath("science.yaml").write_text("name: demo\n", encoding="utf-8")
+    telemetry_dir = tmp_path / "telemetry"
+    try:
+        result = CliRunner().invoke(
+            main,
+            ["validate", "--project-root", str(project)],
+            env={"SCIENCE_TELEMETRY_DIR": str(telemetry_dir)},
+        )
+    finally:
+        clear_checks_for_tests()
+
+    assert result.exit_code == 1
+    assert "FAILED: 1 error(s)" in result.output
 
 
 def test_telemetry_can_be_disabled_with_environment_flag(tmp_path: Path) -> None:
