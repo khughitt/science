@@ -26,6 +26,9 @@
   - Keep `science benchmark list` output unchanged.
 - Create `science/src/science_tool/benchmark_opportunities.py`
   - Own all project entity loading, tokenization, stoplist/synonym handling, score components, row construction, ordering, and report assembly.
+- Modify `science/src/science_tool/entities.py`
+  - Add thin public wrappers for the entity-loading and id-variant helpers needed by the opportunity report.
+  - Avoid cross-module imports of underscore-prefixed internals.
 - Modify `science/src/science_tool/cli.py`
   - Add `science benchmark opportunities` under the existing `benchmark` group.
   - Render JSON and table output.
@@ -53,6 +56,11 @@ Rows are sorted as documented in the design:
 - matched opportunities: `relative_score` desc, `baseline_score` desc, `entity_id`, `benchmark_id`, `task_id`
 - unmapped benchmarks: `baseline_score` desc, `benchmark_id`
 - gaps/entities: stable lexical ordering
+
+Coverage gaps in this tranche are intentionally narrow: they only report
+high-value modality/signal facets that appear literally in the project entity's
+token set and are absent from that entity's matched benchmark rows. Do not infer
+missing facets from domain knowledge or graph structure in this implementation.
 
 ---
 
@@ -453,6 +461,48 @@ from science_tool.dataset_prioritize import readiness_weight
 from science_tool.datasets.semantics import dataset_class_for
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9:_-]+")
+_SYNONYMS = {
+    "intervention": "perturbation",
+    "single-cell": "single-cell-rna-seq",
+    "transcriptomics": "rna-seq",
+}
+
+HIGH_VALUE_SIGNAL_POINTS = {
+    "perturbation": 10,
+    "time-series": 10,
+    "longitudinal": 8,
+    "cross-context-generalization": 7,
+    "multi-omic": 7,
+}
+
+HIGH_VALUE_MODALITY_POINTS = {
+    "proteomics": 7,
+    "spatial": 6,
+    "multimodal": 6,
+    "perturbation": 4,
+    "single-cell-rna-seq": 4,
+}
+
+HIGH_VALUE_SIGNALS = frozenset(HIGH_VALUE_SIGNAL_POINTS)
+HIGH_VALUE_MODALITIES = frozenset(HIGH_VALUE_MODALITY_POINTS)
+GAP_MODALITIES = ("proteomics", "spatial", "multimodal")
+GAP_SIGNAL_TYPES = ("perturbation", "time-series", "cross-context-generalization")
+KIND_SIGNAL_RULES = {
+    "perturbation": ("perturbation-response", 10),
+    "dynamic": ("time-series", 8),
+    "temporal": ("time-series", 8),
+    "spatial": ("static-association", 5),
+    "proteomics": ("mechanism-discrimination", 5),
+}
+
+
+def _normalize_token(token: str) -> str:
+    token = token.lower().strip()
+    return _SYNONYMS.get(token, token)
+
+
+def _normalized_values(values: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(_normalize_token(value) for value in values)
 
 
 @dataclass(frozen=True)
@@ -607,27 +657,10 @@ def _task_completeness(dataset: OpportunityDataset) -> int:
     return best
 
 
-_SIGNAL_POINTS = {
-    "perturbation": 10,
-    "time-series": 10,
-    "longitudinal": 8,
-    "cross-context-generalization": 7,
-    "multi-omic": 7,
-}
-
-_MODALITY_POINTS = {
-    "proteomics": 7,
-    "spatial": 6,
-    "multimodal": 6,
-    "perturbation": 4,
-    "single-cell-rna-seq": 4,
-}
-
-
 def _facet_points(values: tuple[str, ...], weights: Mapping[str, int], cap: int) -> tuple[int, list[str]]:
     total = 0
     notes: list[str] = []
-    for value in values:
+    for value in _normalized_values(values):
         points = weights.get(value, 0)
         if points:
             total += points
@@ -637,8 +670,8 @@ def _facet_points(values: tuple[str, ...], weights: Mapping[str, int], cap: int)
 
 def baseline_score(dataset: OpportunityDataset) -> Score:
     task = _task_completeness(dataset)
-    signal, signal_notes = _facet_points(dataset.signal_types, _SIGNAL_POINTS, 25)
-    modality, modality_notes = _facet_points(dataset.modalities, _MODALITY_POINTS, 20)
+    signal, signal_notes = _facet_points(dataset.signal_types, HIGH_VALUE_SIGNAL_POINTS, 25)
+    modality, modality_notes = _facet_points(dataset.modalities, HIGH_VALUE_MODALITY_POINTS, 20)
     readiness_float, readiness_flags = readiness_weight(dict(dataset.frontmatter))
     readiness = round(readiness_float * 15)
     limitations = 10 if dataset.limitations else 0
@@ -680,6 +713,7 @@ rtk git commit -m "feat(benchmark): score benchmark baseline value"
 
 **Files:**
 - Modify: `science/src/science_tool/benchmark_opportunities.py`
+- Modify: `science/src/science_tool/entities.py`
 - Modify: `science/tests/test_benchmark_opportunities.py`
 
 - [ ] **Step 1: Add failing tests for entity loading, controlled facets, and id-token matching**
@@ -780,7 +814,7 @@ benchmark:
     assert payload["available_unmapped_benchmarks"][0]["benchmark_id"] == "dataset:generic"
 
 
-def test_facets_only_rows_use_null_task_and_multitask_diversity_is_deduped(tmp_path: Path) -> None:
+def test_facets_only_rows_use_null_task_and_diversity_is_per_entity(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import opportunity_report
 
     _write_entity(
@@ -835,11 +869,65 @@ benchmark:
 
     atlas = next(row for row in rows if row["benchmark_id"] == "dataset:atlas")
     assert atlas["task_id"] is None
+    assert atlas["score_components"]["relative"]["diversity_added"] > 0
     task_rows = [row for row in rows if row["benchmark_id"] == "dataset:multi-task"]
     assert [row["task_id"] for row in task_rows] == ["dataset:multi-task#task-a", "dataset:multi-task#task-b"]
     diversity_points = [row["score_components"]["relative"]["diversity_added"] for row in task_rows]
-    assert diversity_points[0] > 0
+    assert diversity_points[0] == 0
     assert diversity_points[1] == 0
+
+
+def test_related_belief_id_match_sorts_above_token_only_match(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import opportunity_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0005-perturbation",
+        """
+id: hypothesis:0005-perturbation
+type: hypothesis
+title: Perturbation response
+status: active
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "token-only",
+        """
+id: dataset:token-only
+type: dataset
+title: Token-only
+benchmark:
+  domains: [biology]
+  modalities: [perturbation]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "id-linked",
+        """
+id: dataset:id-linked
+type: dataset
+title: ID linked
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  related_beliefs:
+    - hypothesis:0005-perturbation has an explicit benchmark link.
+""",
+    )
+
+    payload = opportunity_report(tmp_path, include_commons=False)
+
+    rows = payload["matched_opportunities"]
+    assert [row["benchmark_id"] for row in rows[:2]] == ["dataset:id-linked", "dataset:token-only"]
+    assert rows[0]["score_components"]["relative"]["related_belief_id"] == 40
+    assert rows[1]["score_components"]["relative"]["related_belief_id"] == 0
 ```
 
 - [ ] **Step 2: Run failing tests**
@@ -847,21 +935,47 @@ benchmark:
 Run:
 
 ```bash
-rtk uv run --frozen --project science pytest science/tests/test_benchmark_opportunities.py::test_opportunity_report_matches_shorthand_related_belief_and_controlled_facets science/tests/test_benchmark_opportunities.py::test_stoplist_blocks_generic_token_only_match science/tests/test_benchmark_opportunities.py::test_facets_only_rows_use_null_task_and_multitask_diversity_is_deduped -q
+rtk uv run --frozen --project science pytest science/tests/test_benchmark_opportunities.py::test_opportunity_report_matches_shorthand_related_belief_and_controlled_facets science/tests/test_benchmark_opportunities.py::test_stoplist_blocks_generic_token_only_match science/tests/test_benchmark_opportunities.py::test_facets_only_rows_use_null_task_and_diversity_is_per_entity science/tests/test_benchmark_opportunities.py::test_related_belief_id_match_sorts_above_token_only_match -q
 ```
 
 Expected: FAIL because `opportunity_report` is not defined.
 
 - [ ] **Step 3: Add project loading, tokenization, relative scoring, and report assembly**
 
-Append to `science/src/science_tool/benchmark_opportunities.py`:
+First add public wrappers near the existing private helper definitions in `science/src/science_tool/entities.py`:
+
+```python
+def load_markdown_entities(project_root: Path, kind: str | None = None) -> list[dict[str, Any]]:
+    """Public policy-root loader for markdown entities."""
+    return _load_markdown_entities(project_root, kind=kind)
+
+
+def parse_markdown_entity_file(path: Path) -> tuple[dict[str, Any], str]:
+    """Public markdown frontmatter/body parser for entity files."""
+    return _parse_markdown_file(path)
+
+
+def numeric_variants(token: str) -> set[str]:
+    """Public id variant helper for local numeric entity references."""
+    return _numeric_variants(token)
+
+
+def shortform_for_kind(kind: str) -> str | None:
+    """Return the registered shortform prefix for an entity kind, if any."""
+    for shortform, entity_kind in _SHORTFORM_ENTITY_KINDS.items():
+        if entity_kind == kind:
+            return shortform
+    return None
+```
+
+Then append to `science/src/science_tool/benchmark_opportunities.py`:
 
 ```python
 from science_tool.entities import (
-    _SHORTFORM_ENTITY_KINDS,
-    _load_markdown_entities,
-    _numeric_variants,
-    _parse_markdown_file,
+    load_markdown_entities,
+    numeric_variants,
+    parse_markdown_entity_file,
+    shortform_for_kind,
 )
 
 _ENTITY_KINDS = ("question", "hypothesis", "proposition")
@@ -874,11 +988,6 @@ _STOP_TOKENS = {
     "model",
     "result",
     "response",
-}
-_SYNONYMS = {
-    "intervention": "perturbation",
-    "single-cell": "single-cell-rna-seq",
-    "transcriptomics": "rna-seq",
 }
 
 
@@ -893,9 +1002,13 @@ class ProjectBenchmarkEntity:
     id_tokens: frozenset[str]
 
 
-def _normalize_token(token: str) -> str:
-    token = token.lower().strip()
-    return _SYNONYMS.get(token, token)
+@dataclass(frozen=True)
+class DatasetOpportunityContext:
+    dataset: OpportunityDataset
+    baseline: Score
+    controlled_facet_tokens: frozenset[str]
+    prose_tokens: frozenset[str]
+    related_belief_tokens: frozenset[str]
 
 
 def _tokens_from_text(*values: str, include_stop_tokens: bool = False) -> frozenset[str]:
@@ -917,19 +1030,12 @@ def _as_string_list(value: object) -> list[str]:
     return [item for item in value if isinstance(item, str) and item]
 
 
-def _shortform_for(kind: str) -> str | None:
-    for shortform, entity_kind in _SHORTFORM_ENTITY_KINDS.items():
-        if entity_kind == kind:
-            return shortform
-    return None
-
-
 def _id_tokens(entity_id: str, kind: str, fm: Mapping[str, object]) -> frozenset[str]:
     tokens = {entity_id.lower()}
     local = entity_id.split(":", 1)[1] if ":" in entity_id else entity_id
     tokens.add(local.lower())
-    tokens.update(value.lower() for value in _numeric_variants(local))
-    shortform = _shortform_for(kind)
+    tokens.update(value.lower() for value in numeric_variants(local))
+    shortform = shortform_for_kind(kind)
     if shortform is not None:
         numeric_prefix = re.match(r"^0*(\d+)(.*)$", local)
         if numeric_prefix is not None:
@@ -937,7 +1043,7 @@ def _id_tokens(entity_id: str, kind: str, fm: Mapping[str, object]) -> frozenset
             tokens.add(f"{shortform}{number}".lower())
             if suffix:
                 tokens.add(f"{shortform}{number}{suffix}".lower())
-    for field in ("deprecated_ids", "aliases", "same_as", "source_refs"):
+    for field in ("same_as", "source_refs"):
         tokens.update(value.lower() for value in _as_string_list(fm.get(field)))
     return frozenset(tokens)
 
@@ -945,13 +1051,13 @@ def _id_tokens(entity_id: str, kind: str, fm: Mapping[str, object]) -> frozenset
 def load_project_entities(project_root: Path) -> list[ProjectBenchmarkEntity]:
     entities: list[ProjectBenchmarkEntity] = []
     for kind in _ENTITY_KINDS:
-        for row in _load_markdown_entities(project_root, kind=kind):
+        for row in load_markdown_entities(project_root, kind=kind):
             fm = row["frontmatter"]
             if not isinstance(fm, Mapping):
                 continue
             entity_id = str(row["id"])
             title = str(fm.get("title") or "")
-            _frontmatter, body = _parse_markdown_file(row["path"])
+            _frontmatter, body = parse_markdown_entity_file(row["path"])
             content_preview = str(fm.get("content_preview") or body[:200])
             tokens = _tokens_from_text(entity_id, title, content_preview)
             entities.append(
@@ -989,18 +1095,21 @@ def _related_belief_tokens(dataset: OpportunityDataset) -> frozenset[str]:
     return _tokens_from_text(*dataset.related_beliefs, include_stop_tokens=True)
 
 
+def _dataset_context(dataset: OpportunityDataset) -> DatasetOpportunityContext:
+    return DatasetOpportunityContext(
+        dataset=dataset,
+        baseline=baseline_score(dataset),
+        controlled_facet_tokens=_controlled_facet_tokens(dataset),
+        prose_tokens=_benchmark_prose_tokens(dataset),
+        related_belief_tokens=_related_belief_tokens(dataset),
+    )
+
+
 def _kind_signal_points(entity_tokens: frozenset[str], dataset: OpportunityDataset) -> tuple[int, list[str]]:
-    rules = {
-        "perturbation": ("perturbation-response", 10),
-        "dynamic": ("time-series", 8),
-        "temporal": ("time-series", 8),
-        "spatial": ("static-association", 5),
-        "proteomics": ("mechanism-discrimination", 5),
-    }
     total = 0
     notes: list[str] = []
     kinds = set(dataset.benchmark_kinds)
-    for token, (kind, points) in rules.items():
+    for token, (kind, points) in KIND_SIGNAL_RULES.items():
         if token in entity_tokens and kind in kinds:
             total += points
             notes.append(f"kind-signal:{token}->{kind}")
@@ -1009,13 +1118,13 @@ def _kind_signal_points(entity_tokens: frozenset[str], dataset: OpportunityDatas
 
 def _relative_score(
     entity: ProjectBenchmarkEntity,
-    dataset: OpportunityDataset,
-    task_id: str | None,
-    seen_facets: set[tuple[str, str, str]],
+    context: DatasetOpportunityContext,
+    seen_facets: set[tuple[str, str]],
 ) -> Score | None:
-    related_tokens = _related_belief_tokens(dataset)
+    dataset = context.dataset
+    related_tokens = context.related_belief_tokens
     id_hits = sorted(entity.id_tokens & related_tokens)
-    facet_hits = sorted(entity.tokens & _controlled_facet_tokens(dataset))
+    facet_hits = sorted(entity.tokens & context.controlled_facet_tokens)
     if not id_hits and not facet_hits:
         return None
 
@@ -1025,11 +1134,11 @@ def _relative_score(
 
     diversity_points = 0
     diversity_notes: list[str] = []
-    for value in (*dataset.modalities, *dataset.signal_types):
-        key = (entity.id, dataset.id, value)
+    for value in (*_normalized_values(dataset.modalities), *_normalized_values(dataset.signal_types)):
+        key = (entity.id, value)
         if key not in seen_facets:
             seen_facets.add(key)
-            if value in {"proteomics", "spatial", "multimodal", "perturbation", "time-series", "cross-context-generalization"}:
+            if value in HIGH_VALUE_MODALITIES or value in HIGH_VALUE_SIGNALS:
                 diversity_points += 5
                 diversity_notes.append(f"diversity:{value}")
     diversity_points = min(diversity_points, 15)
@@ -1077,26 +1186,28 @@ def _row_for(
 
 def _rows_for_match(
     entity: ProjectBenchmarkEntity,
-    dataset: OpportunityDataset,
-    seen_facets: set[tuple[str, str, str]],
+    context: DatasetOpportunityContext,
+    seen_facets: set[tuple[str, str]],
 ) -> list[dict[str, object]]:
-    baseline = baseline_score(dataset)
+    dataset = context.dataset
+    baseline = context.baseline
     task_ids: list[str | None] = [task.canonical_task_id for task in dataset.tasks] or [None]
     rows: list[dict[str, object]] = []
     for task_id in task_ids:
-        relative = _relative_score(entity, dataset, task_id, seen_facets)
+        relative = _relative_score(entity, context, seen_facets)
         if relative is None:
             continue
         rows.append(_row_for(entity, dataset, task_id, baseline, relative))
     return rows
 
 
-def _available_unmapped_benchmarks(datasets: list[OpportunityDataset], matched_ids: set[str]) -> list[dict[str, object]]:
+def _available_unmapped_benchmarks(contexts: list[DatasetOpportunityContext], matched_ids: set[str]) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    for dataset in datasets:
+    for context in contexts:
+        dataset = context.dataset
         if dataset.id in matched_ids:
             continue
-        baseline = baseline_score(dataset)
+        baseline = context.baseline
         rows.append(
             {
                 "benchmark_id": dataset.id,
@@ -1112,13 +1223,13 @@ def _coverage_gaps(entities: list[ProjectBenchmarkEntity], matched_rows: list[di
     matched_by_entity: dict[str, set[str]] = {}
     for row in matched_rows:
         facets = matched_by_entity.setdefault(str(row["entity_id"]), set())
-        facets.update(str(value) for value in row["modalities"])
-        facets.update(str(value) for value in row["signal_types"])
+        facets.update(_normalize_token(str(value)) for value in row["modalities"])
+        facets.update(_normalize_token(str(value)) for value in row["signal_types"])
     gaps: list[dict[str, object]] = []
     for entity in entities:
         entity_tokens = entity.tokens
-        missing_modalities = sorted(token for token in ("proteomics", "spatial", "multimodal") if token in entity_tokens and token not in matched_by_entity.get(entity.id, set()))
-        missing_signal_types = sorted(token for token in ("perturbation", "time-series", "cross-context-generalization") if token in entity_tokens and token not in matched_by_entity.get(entity.id, set()))
+        missing_modalities = sorted(token for token in GAP_MODALITIES if token in entity_tokens and token not in matched_by_entity.get(entity.id, set()))
+        missing_signal_types = sorted(token for token in GAP_SIGNAL_TYPES if token in entity_tokens and token not in matched_by_entity.get(entity.id, set()))
         if missing_modalities or missing_signal_types:
             gaps.append(
                 {
@@ -1145,12 +1256,17 @@ def opportunity_report(
     datasets, notice = load_opportunity_datasets(project_root, include_commons=include_commons)
     if domain is not None:
         datasets = [dataset for dataset in datasets if domain in dataset.domains]
+    contexts = [_dataset_context(dataset) for dataset in datasets]
 
-    seen_facets: set[tuple[str, str, str]] = set()
+    # Diversity credit is entity-relative across benchmarks. Because rows are
+    # produced in dataset sort order, the first matched benchmark for an entity
+    # claims each high-value facet; later benchmarks with the same facet receive
+    # no additional diversity credit.
+    seen_facets: set[tuple[str, str]] = set()
     matched: list[dict[str, object]] = []
     for entity in entities:
-        for dataset in datasets:
-            matched.extend(_rows_for_match(entity, dataset, seen_facets))
+        for context in contexts:
+            matched.extend(_rows_for_match(entity, context, seen_facets))
     matched.sort(
         key=lambda row: (
             -int(row["relative_score"]),
@@ -1165,7 +1281,7 @@ def opportunity_report(
     return {
         "matched_opportunities": matched,
         "coverage_gaps": _coverage_gaps(entities, matched),
-        "available_unmapped_benchmarks": _available_unmapped_benchmarks(datasets, matched_benchmark_ids),
+        "available_unmapped_benchmarks": _available_unmapped_benchmarks(contexts, matched_benchmark_ids),
         "unmapped_project_entities": [
             {"entity_id": entity.id, "entity_title": entity.title, "observed_tokens": sorted(entity.tokens)}
             for entity in entities
@@ -1184,7 +1300,7 @@ def opportunity_report(
 Run:
 
 ```bash
-rtk uv run --frozen --project science pytest science/tests/test_benchmark_opportunities.py::test_opportunity_report_matches_shorthand_related_belief_and_controlled_facets science/tests/test_benchmark_opportunities.py::test_stoplist_blocks_generic_token_only_match science/tests/test_benchmark_opportunities.py::test_facets_only_rows_use_null_task_and_multitask_diversity_is_deduped -q
+rtk uv run --frozen --project science pytest science/tests/test_benchmark_opportunities.py::test_opportunity_report_matches_shorthand_related_belief_and_controlled_facets science/tests/test_benchmark_opportunities.py::test_stoplist_blocks_generic_token_only_match science/tests/test_benchmark_opportunities.py::test_facets_only_rows_use_null_task_and_diversity_is_per_entity science/tests/test_benchmark_opportunities.py::test_related_belief_id_match_sorts_above_token_only_match -q
 ```
 
 Expected: PASS.
@@ -1192,7 +1308,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-rtk git add science/src/science_tool/benchmark_opportunities.py science/tests/test_benchmark_opportunities.py
+rtk git add science/src/science_tool/entities.py science/src/science_tool/benchmark_opportunities.py science/tests/test_benchmark_opportunities.py
 rtk git commit -m "feat(benchmark): match project entities to benchmark opportunities"
 ```
 
@@ -1450,6 +1566,7 @@ rtk git commit -m "feat(cli): report benchmark opportunities"
 - Modify if needed: `science/src/science_tool/benchmark_opportunities.py`
 - Modify if needed: `science/src/science_tool/benchmark_catalog.py`
 - Modify if needed: `science/src/science_tool/cli.py`
+- Modify if needed: `science/src/science_tool/entities.py`
 - Modify if needed: `science/tests/test_benchmark_opportunities.py`
 
 - [ ] **Step 1: Run focused benchmark tests**
@@ -1467,7 +1584,7 @@ Expected: PASS.
 Run:
 
 ```bash
-rtk uv run --frozen --project science pyright science/src/science_tool/benchmark_catalog.py science/src/science_tool/benchmark_opportunities.py science/src/science_tool/cli.py science/tests/test_benchmark_opportunities.py
+rtk uv run --frozen --project science pyright science/src/science_tool/benchmark_catalog.py science/src/science_tool/benchmark_opportunities.py science/src/science_tool/cli.py science/src/science_tool/entities.py science/tests/test_benchmark_opportunities.py
 ```
 
 Expected: 0 errors.
@@ -1479,7 +1596,7 @@ If pyright complains about `Mapping[str, object]` indexing in `benchmark_opportu
 Run:
 
 ```bash
-rtk uv run --frozen --project science ruff check science/src/science_tool/benchmark_catalog.py science/src/science_tool/benchmark_opportunities.py science/src/science_tool/cli.py science/tests/test_benchmark_opportunities.py
+rtk uv run --frozen --project science ruff check science/src/science_tool/benchmark_catalog.py science/src/science_tool/benchmark_opportunities.py science/src/science_tool/cli.py science/src/science_tool/entities.py science/tests/test_benchmark_opportunities.py
 ```
 
 Expected: All checks passed.
@@ -1500,7 +1617,7 @@ Expected: both commands exit 0 and emit JSON with the six top-level keys from th
 If Task 5 required code edits, run:
 
 ```bash
-rtk git add science/src/science_tool/benchmark_catalog.py science/src/science_tool/benchmark_opportunities.py science/src/science_tool/cli.py science/tests/test_benchmark_opportunities.py
+rtk git add science/src/science_tool/benchmark_catalog.py science/src/science_tool/benchmark_opportunities.py science/src/science_tool/cli.py science/src/science_tool/entities.py science/tests/test_benchmark_opportunities.py
 rtk git commit -m "fix(benchmark): tighten opportunity report verification"
 ```
 
@@ -1514,13 +1631,15 @@ Spec coverage:
 
 - Read-only CLI command: Task 4.
 - Rich benchmark rows with task fields, notes, limitations, and readiness frontmatter: Tasks 1-2.
-- Policy-root entity loading via `_load_markdown_entities(project_root, kind=...)`: Task 3.
+- Public policy-root entity loading wrappers over the existing entity loader: Task 3.
 - `title + content_preview`, not full `content`: Task 3.
 - `related_beliefs` free-text id-token matching: Task 3.
 - Stoplist/min-token gating: Task 3.
 - Controlled-facet-only `facet_overlap`: Task 3.
 - Additive `baseline_score` and `relative_score` components: Tasks 2-3.
-- Modality diversity and multi-task dedupe: Task 3.
+- Normalized editorial facet constants reused across baseline, relative scoring, diversity, and gaps: Tasks 2-3.
+- Entity-relative cross-benchmark modality diversity and multi-task dedupe: Task 3.
+- Cached per-dataset baseline/tokens/readiness before the entity loop: Task 3.
 - Facets-only `task_id: null`: Task 3.
 - Calibration output: Task 4.
 - Commons degradation: Task 4.

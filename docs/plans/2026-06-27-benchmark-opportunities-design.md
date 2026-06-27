@@ -274,10 +274,10 @@ The first implementation should use deterministic matching only:
    project entities and resolves in the wrong direction for match expansion.
 5. Build an id-token set for each already-loaded project entity from the
    canonical id, local id, numeric variants, shortform variants when the kind has
-   a shortform, `deprecated_ids`, `aliases`, and authored external/reference
-   fields such as `same_as` and `source_refs` when present. This is a canonical
-   id -> possible reference-token expansion. Then detect these tokens as exact
-   tokens inside each free-text `related_beliefs` string.
+   a shortform, and authored external/reference fields such as `same_as` and
+   `source_refs` when present. This is a canonical id -> possible
+   reference-token expansion. Then detect these tokens as exact tokens inside
+   each free-text `related_beliefs` string.
 6. Match exact tokens between project text and controlled benchmark facets.
 7. Apply a small domain synonym table only for obvious local vocabulary variants
    already present in the benchmark seed set, such as `rna-seq` /
@@ -304,6 +304,13 @@ Use diversity in two places:
 - Relative scoring gives additional credit when a benchmark adds a modality or
   signal type not already present in the matched opportunity set for the same
   project entity.
+
+Because this diversity credit is computed across the matched opportunity set for
+one entity, it is intentionally order-dependent: the first matched benchmark
+that contributes a high-value facet claims the diversity points for that facet,
+and later matches with the same facet do not receive duplicate diversity credit.
+The row-level `baseline_score` remains a pure function of one benchmark record;
+`relative_score` is a report-context score.
 
 Reports should also expose diversity gaps directly, for example:
 
