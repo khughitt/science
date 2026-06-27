@@ -32,7 +32,7 @@ belief truth, create benchmark outcomes, or author belief-test plans.
 
 - Show candidate benchmark datasets and tasks that may be relevant to project
   entities.
-- Highlight important project entities that have no matching benchmark signal.
+- Highlight project entities that have no matching benchmark signal.
 - Prefer modality diversity when choosing what to inspect next.
 - Separate a benchmark's general informativeness from its usefulness in one
   project context.
@@ -64,14 +64,21 @@ science benchmark opportunities --calibration-report
 
 The command inspects local `question`, `hypothesis`, and `proposition`
 frontmatter, plus benchmark metadata from local datasets. `--commons` adds the
-shared benchmark seed catalog through the same helper path used by
-`science benchmark list`.
+shared benchmark seed catalog through the same discovery path used by
+`science benchmark list`, but it needs a richer internal row than the current
+`BenchmarkRow`. `science_tool.benchmark_catalog.BenchmarkRow` carries facets,
+`task_count`, and `task_ids`; opportunity scoring also needs task fields,
+`notes`, `limitations`, and enough frontmatter to reuse dataset readiness. The
+implementation should either enrich `BenchmarkRow` additively or introduce a
+separate internal `BenchmarkOpportunityDataset` loaded from the same local and
+commons frontmatter sources.
 
 `--calibration-report` is part of the v1.5/Phase 2 bridge, not a separate
-workflow. It prints the evidence the scorer used: token overlaps, unmatched
-tokens, facet coverage, and score components. This is deliberately boring output
-that lets maintainers see whether the method is using the right signals before
-they trust the ranked rows.
+workflow. It adds a calibration section to normal table output and adds a
+`calibration` object to JSON output. It prints the evidence the scorer used:
+token overlaps, dropped tokens, unmatched tokens, facet coverage, and score
+components. This is deliberately boring output that lets maintainers see whether
+the method is using the right signals before they trust the ranked rows.
 
 ## Output contract
 
@@ -92,7 +99,23 @@ the full reasoning:
       "signal_types": ["perturbation", "cross-context-generalization"],
       "modalities": ["single-cell-rna-seq", "perturbation"],
       "baseline_score": 72,
-      "relative_score": 88,
+      "relative_score": 80,
+      "score_components": {
+        "baseline": {
+          "task_completeness": 25,
+          "signal_value": 20,
+          "modality_value": 12,
+          "readiness": 10,
+          "limitations": 5
+        },
+        "relative": {
+          "related_belief_id": 35,
+          "facet_overlap": 20,
+          "kind_signal_fit": 15,
+          "diversity_added": 10,
+          "readiness_penalty": 0
+        }
+      },
       "score_notes": [
         "Has a concrete benchmark task.",
         "Adds perturbation signal coverage for this entity."
@@ -122,13 +145,27 @@ the full reasoning:
       "observed_tokens": ["spatial", "progression"]
     }
   ],
+  "calibration": {
+    "enabled": false
+  },
   "commons_notice": null
 }
 ```
 
-Scores are integers from 0 to 100 for readability. They are report-ordering
-hints, not truth values. The command must print score component notes so a row
-can be audited without reading code.
+Scores are additive component sums, clamped to 0-100 for readability. They are
+report-ordering hints, not truth values. The command must expose component
+points and notes so a row's number can be reconstructed without reading code.
+
+Default row ordering is stable and explicit:
+
+1. `matched_opportunities`: `relative_score` descending, then `baseline_score`
+   descending, then `entity_id`, then `benchmark_id`, then `task_id`.
+2. `available_unmapped_benchmarks`: `baseline_score` descending, then
+   `benchmark_id`.
+3. `coverage_gaps` and `unmapped_project_entities`: `entity_id`, then the
+   rendered missing facet strings.
+
+JSON preserves this order.
 
 ## Two-score model
 
@@ -139,55 +176,85 @@ Each benchmark opportunity has two separate scores:
 The baseline score estimates general benchmark usefulness independent of the
 current project. It is derived only from benchmark metadata:
 
-- Concrete `tasks[]` entry with prediction target, held-out unit, metric,
-  baseline, and ground truth.
-- High-value signal types such as perturbation, time-series, longitudinal, and
-  cross-context generalization.
-- Modality breadth, with credit for multimodal, proteomics, spatial, and other
-  underrepresented modalities.
-- Dataset class and readiness: a `deposit` with a concrete task ranks above a
-  `reference`, which ranks above a `pointer`, unless the reference is the
-  canonical registry for the benchmark.
-- Limitations present and specific; sparse benchmark records without limitations
-  score lower.
+- `task_completeness` (0-30): concrete `tasks[]` entries with prediction target,
+  held-out unit, metric, baseline, and ground truth.
+- `signal_value` (0-25): fixed editorial weights for high-value signal types
+  such as perturbation, time-series, longitudinal, and cross-context
+  generalization.
+- `modality_value` (0-20): fixed editorial weights for modalities that diversify
+  the benchmark catalog, such as proteomics, spatial, multimodal, perturbation,
+  and single-cell.
+- `readiness` (0-15): readiness/access contribution derived consistently from
+  dataset readiness; implementation should reuse `readiness_weight()` from
+  `science_tool.dataset_prioritize` or extract its shared core rather than
+  re-deriving access semantics.
+- `limitations` (0-10): specific notes/limitations increase trust in the
+  record; sparse benchmark records without limitations score lower.
 
 This is a benchmark-quality / informativeness estimate. It should not look at
-project text.
+project text or at the current catalog distribution. "Underrepresented" in this
+score means a fixed editorial list, not "rare among rows returned by this
+particular command." Catalog-relative diversity belongs in the relative score
+and coverage-gap output.
 
 ### Relative score
 
 The relative score estimates usefulness for the current project. It is derived
 from transparent project-to-benchmark evidence:
 
-- Exact project entity id in `benchmark.related_beliefs`.
-- Exact-token overlap between project entity titles / summaries and benchmark
-  facets.
-- Coverage of benchmark kinds likely to test the entity's language, such as
-  perturbation-response for perturbation claims or time-series for dynamic
-  claims.
-- Added diversity relative to benchmarks already matched to the project.
-- Access/readiness penalties when a row is not usable for near-term testing.
+- `related_belief_id` (0-40): project entity id detected as an exact token
+  inside free-text `benchmark.related_beliefs` strings. This is not list
+  equality: entries may be prose such as `"hypothesis:h1 predicts response
+  shifts."`.
+- `facet_overlap` (0-25): exact-token overlap between project entity titles /
+  `content_preview` text and benchmark facets.
+- `kind_signal_fit` (0-20): coverage of benchmark kinds likely to test the
+  entity's language, such as perturbation-response for perturbation claims or
+  time-series for dynamic claims.
+- `diversity_added` (0-15): modalities or signal types not already present in
+  matched opportunities for the same project entity.
+- `readiness_penalty` (0 to -20): access/readiness penalty when a row is not
+  usable for near-term testing, derived consistently with dataset readiness.
 
 This score can only rank candidate opportunities; it cannot assert that a
 benchmark actually tests a belief. Rows with only weak token overlap should be
 clearly marked as low-confidence candidates.
 
+The exact weights above are initial bounded components for implementation. They
+are calibration targets, not settled science; if real-project calibration shows
+that a component creates noisy output, adjust the component weight and document
+the observed failure mode.
+
 ## Matching method
 
 The first implementation should use deterministic matching only:
 
-1. Normalize entity ids, titles, summaries, and selected frontmatter text into
-   lowercase tokens.
+1. Load project entities from `entities/questions`, `entities/hypotheses`, and
+   `entities/propositions`. Tokenize `id`, `title`, and `content_preview`
+   (first 200 body characters, already produced by frontmatter parsing). Do not
+   tokenize full `content` by default; it is too noisy for the first matching
+   pass. Mechanism `summary` is not part of this command's initial target kinds.
 2. Normalize benchmark ids, titles, `related_beliefs`, `domains`, `modalities`,
    `signal_types`, `benchmark_kinds`, source datasets, task fields, notes, and
    limitations into tokens.
-3. Match exact entity ids against `related_beliefs`.
-4. Match exact tokens between project text and benchmark facets.
-5. Apply a small domain synonym table only for obvious local vocabulary variants
+3. Apply a stoplist and token gates before matching. The initial stoplist should
+   remove generic science/project words such as `data`, `dataset`, `analysis`,
+   `model`, `result`, `evidence`, `cell`, and `response` unless they appear as
+   part of a controlled facet phrase. Ignore tokens shorter than three
+   characters except known shorthand ids such as `h1` / `q63`.
+4. Build an id-token set for each project entity: canonical id, local id,
+   shortform references where resolvable, deprecated ids, and aliases if present.
+   Reuse `science_tool.entities.resolve_entity_ref()` for user-supplied
+   `--entity` values and for local/shortform reconciliation where possible.
+   Then detect these ids as exact tokens inside each free-text
+   `related_beliefs` string.
+5. Match exact tokens between project text and benchmark facets.
+6. Apply a small domain synonym table only for obvious local vocabulary variants
    already present in the benchmark seed set, such as `rna-seq` /
    `transcriptomics`, `single-cell` / `single-cell-rna-seq`, and
    `perturbation` / `intervention`.
-6. Emit match reasons for every positive signal.
+7. Emit match reasons for every positive signal and emit dropped-token evidence
+   in calibration mode.
 
 The method intentionally avoids embeddings and LLM judgments at this stage. A
 future implementation can add semantic matching after the calibration report has
@@ -202,8 +269,8 @@ candidate.
 
 Use diversity in two places:
 
-- Baseline scoring gives modest credit to underrepresented high-information
-  modalities and signal types.
+- Baseline scoring gives modest credit to fixed high-information modalities and
+  signal types named in the score recipe.
 - Relative scoring gives additional credit when a benchmark adds a modality or
   signal type not already present in the matched opportunity set for the same
   project entity.
@@ -226,6 +293,9 @@ The first implementation should ship with a calibration-first posture:
 - Run the command against at least one real project and the commons seed catalog.
 - Inspect the calibration report for false positives, false negatives, noisy
   tokens, and missing fields.
+- Tune the stoplist, synonym table, and bounded component weights based on
+  observed failures. Calibration changes should preserve reconstructable
+  component scores.
 - Record observed tuning needs in follow-up feedback or a design note before
   promoting stronger ranking semantics.
 
@@ -255,6 +325,9 @@ Cover:
 - Empty catalogs return stable empty sections.
 - Baseline score rewards concrete tasks and high-value signal types.
 - Relative score rewards modality/signal diversity within one project context.
+- Relative score detects canonical/local/shorthand ids inside free-text
+  `related_beliefs` prose.
+- Stoplist and minimum-token gating suppress generic token-only matches.
 - Calibration output exposes score components and token evidence.
 
 ## Relationship to later Phase 2 work
