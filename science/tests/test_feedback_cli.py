@@ -171,6 +171,51 @@ class TestFeedbackTriage:
         assert "command:discuss" in result.output
         assert "template:discussion" not in result.output
 
+    def test_triage_cluster_json_reports_suggested_next_test_target(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        runner.invoke(
+            main,
+            [
+                "feedback",
+                "add",
+                "--target",
+                "command:next-steps",
+                "--category",
+                "friction",
+                "--summary",
+                "Stale-window completions hide in prior month done-file",
+                "--project",
+                "proj-a",
+            ],
+            env=env,
+        )
+        runner.invoke(
+            main,
+            [
+                "feedback",
+                "add",
+                "--target",
+                "command:next-steps",
+                "--category",
+                "friction",
+                "--summary",
+                "Stale window completion hides in the prior month's done file",
+                "--project",
+                "proj-b",
+            ],
+            env=env,
+        )
+
+        result = runner.invoke(main, ["feedback", "triage", "--cluster", "--format", "json"], env=env)
+
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["format"] == "json"
+        assert payload["rows"][0]["entry_ids"]
+        assert payload["rows"][0]["count"] == 2
+        assert payload["rows"][0]["suggested_status"] == "quick-win"
+        assert payload["rows"][0]["suggested_next_test_target"] == "science/tests/test_command_docs.py"
+
 
 class TestFeedbackReport:
     def test_report_generates_markdown(self, runner: CliRunner, tmp_path):

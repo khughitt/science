@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from science_tool.feedback import (
     VALID_CATEGORIES,
     VALID_STATUSES,
     FeedbackEntry,
+    cluster_for_triage,
     detect_project,
     find_duplicate,
     group_for_triage,
@@ -306,6 +308,54 @@ def test_group_for_triage_with_target_glob(tmp_path: Path):
     groups = group_for_triage(tmp_path, target="command:*")
     assert "command:discuss" in groups
     assert "template:discussion" not in groups
+
+
+def test_cluster_for_triage_groups_duplicate_summaries_and_suggests_test_target(tmp_path: Path):
+    _make_entry(
+        tmp_path,
+        "fb-2026-03-25-001",
+        project="proj-a",
+        target="command:next-steps",
+        category="friction",
+        summary="Stale-window completions hide in prior month done-file",
+        recurrence=2,
+    )
+    _make_entry(
+        tmp_path,
+        "fb-2026-03-26-001",
+        project="proj-b",
+        target="command:next-steps",
+        category="friction",
+        summary="Stale window completion hides in the prior month's done file",
+    )
+    _make_entry(
+        tmp_path,
+        "fb-2026-03-26-002",
+        target="command:pre-register",
+        category="positive",
+        summary="Loading real artifacts caught a design change",
+    )
+
+    clusters = cluster_for_triage(tmp_path)
+
+    assert clusters[0]["target"] == "command:next-steps"
+    assert clusters[0]["category"] == "friction"
+    assert clusters[0]["entry_ids"] == ["fb-2026-03-25-001", "fb-2026-03-26-001"]
+    assert clusters[0]["count"] == 2
+    assert clusters[0]["total_recurrence"] == 3
+    assert clusters[0]["projects"] == ["proj-a", "proj-b"]
+    assert clusters[0]["suggested_status"] == "quick-win"
+    assert clusters[0]["suggested_next_test_target"] == "science/tests/test_command_docs.py"
+    assert clusters[1]["suggested_status"] == "positive-reinforce"
+
+
+def test_cluster_for_triage_since_filters_old_entries(tmp_path: Path):
+    _make_entry(tmp_path, "fb-2026-03-20-001", created="2026-03-20", target="command:old", summary="Old")
+    _make_entry(tmp_path, "fb-2026-03-25-001", created="2026-03-25", target="command:new", summary="New")
+
+    clusters = cluster_for_triage(tmp_path, since_days=3, today=date.fromisoformat("2026-03-26"))
+
+    assert [cluster["target"] for cluster in clusters] == ["command:new"]
 
 
 def test_render_report(tmp_path: Path):

@@ -5299,11 +5299,53 @@ def feedback_update(
 
 @feedback.command("triage")
 @click.option("--target", default=None, help="Filter by target (fnmatch glob)")
-def feedback_triage(target: str | None) -> None:
-    """Show open entries grouped by target for triage."""
-    from science_tool.feedback import group_for_triage
+@click.option("--cluster", "cluster_mode", is_flag=True, help="Cluster near-duplicate summaries within each target/category")
+@click.option("--since", "since_days", type=click.IntRange(min=0), default=None, help="Only include entries from the last N days")
+@click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
+def feedback_triage(target: str | None, cluster_mode: bool, since_days: int | None, output_format: str) -> None:
+    """Show open entries grouped or clustered for triage."""
+    from science_tool.feedback import cluster_for_triage, group_for_triage
 
     fb_dir = _get_feedback_dir()
+    if cluster_mode or output_format == "json":
+        rows = cluster_for_triage(fb_dir, target=target, since_days=since_days)
+        if not rows:
+            if output_format == "json":
+                emit_query_rows(
+                    output_format=output_format,
+                    title="Feedback Triage",
+                    columns=[],
+                    rows=[],
+                    meta={"cluster": True, "since_days": since_days},
+                )
+            else:
+                click.echo("No open feedback entries.")
+            return
+        columns = [
+            ("target", "Target"),
+            ("category", "Category"),
+            ("count", "Count"),
+            ("total_recurrence", "Recur"),
+            ("suggested_status", "Suggested"),
+            ("suggested_next_test_target", "Next test target"),
+            ("representative_summary", "Summary"),
+            ("entry_ids", "Entries"),
+        ]
+        table_rows = [
+            row | {"entry_ids": ", ".join(row["entry_ids"])}
+            if output_format != "json"
+            else row
+            for row in rows
+        ]
+        emit_query_rows(
+            output_format=output_format,
+            title="Feedback Triage",
+            columns=columns,
+            rows=table_rows,
+            meta={"cluster": True, "since_days": since_days},
+        )
+        return
+
     groups = group_for_triage(fb_dir, target=target)
 
     if not groups:

@@ -6,7 +6,8 @@ Stores structured feedback as individual YAML files in ~/.config/science/feedbac
 from __future__ import annotations
 
 import re
-from datetime import date
+from dataclasses import dataclass, field
+from datetime import date, timedelta
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -17,6 +18,18 @@ VALID_CATEGORIES = ("friction", "gap", "guidance", "suggestion", "positive")
 VALID_STATUSES = ("open", "addressed", "deferred", "wontfix")
 
 _ID_RE = re.compile(r"^fb-(\d{4}-\d{2}-\d{2})-(\d{3})$")
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+_SUMMARY_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "for",
+    "in",
+    "of",
+    "the",
+    "to",
+    "with",
+}
 
 
 class FeedbackEntry(BaseModel):
@@ -33,6 +46,19 @@ class FeedbackEntry(BaseModel):
     resolution: str | None = None
     recurrence: int = 1
     related: list[str] = Field(default_factory=list)
+
+
+@dataclass
+class _FeedbackCluster:
+    target: str
+    category: str
+    summary_key: str
+    representative_summary: str
+    entries: list[FeedbackEntry] = field(default_factory=list)
+    projects: set[str] = field(default_factory=set)
+    tokens: set[str] = field(default_factory=set)
+    total_recurrence: int = 0
+    newest_created: str = ""
 
 
 def save_entry(feedback_dir: Path, entry: FeedbackEntry) -> Path:
@@ -186,6 +212,139 @@ def group_for_triage(
 
     # Sort groups by total recurrence descending
     return dict(sorted(groups.items(), key=lambda item: -item[1]["total_recurrence"]))
+
+
+def cluster_for_triage(
+    feedback_dir: Path,
+    *,
+    target: str | None = None,
+    since_days: int | None = None,
+    today: date | None = None,
+) -> list[dict[str, object]]:
+    """Cluster open entries by target, category, and near-duplicate summary."""
+    entries = list_entries(feedback_dir, status="open", target=target)
+    if since_days is not None:
+        cutoff = (today or date.today()) - timedelta(days=since_days)
+        entries = [entry for entry in entries if date.fromisoformat(entry.created) >= cutoff]
+
+    clusters: list[_FeedbackCluster] = []
+    for entry in entries:
+        tokens = set(_summary_tokens(entry.summary))
+        cluster = _matching_cluster(clusters, entry=entry, tokens=tokens)
+        if cluster is None:
+            cluster = _FeedbackCluster(
+                target=entry.target,
+                category=entry.category,
+                summary_key=_summary_key(entry.summary),
+                representative_summary=entry.summary,
+                newest_created=entry.created,
+            )
+            clusters.append(cluster)
+
+        cluster.entries.append(entry)
+        if entry.project:
+            cluster.projects.add(entry.project)
+        cluster.total_recurrence += entry.recurrence
+        cluster.newest_created = max(cluster.newest_created, entry.created)
+        cluster.tokens |= tokens
+
+    rows = [_cluster_row(cluster) for cluster in clusters]
+    rows.sort(
+        key=lambda row: (
+            -int(row["total_recurrence"]),
+            -int(row["count"]),
+            str(row["target"]),
+            str(row["summary_key"]),
+        )
+    )
+    return rows
+
+
+def _matching_cluster(
+    clusters: list[_FeedbackCluster],
+    *,
+    entry: FeedbackEntry,
+    tokens: set[str],
+) -> _FeedbackCluster | None:
+    for cluster in clusters:
+        if cluster.target != entry.target or cluster.category != entry.category:
+            continue
+        if _token_similarity(tokens, cluster.tokens) >= 0.75:
+            return cluster
+    return None
+
+
+def _cluster_row(cluster: _FeedbackCluster) -> dict[str, object]:
+    entries = sorted(cluster.entries, key=lambda entry: (entry.created, entry.id))
+    return {
+        "target": cluster.target,
+        "category": cluster.category,
+        "summary_key": cluster.summary_key,
+        "representative_summary": cluster.representative_summary,
+        "entry_ids": [entry.id for entry in entries],
+        "count": len(entries),
+        "total_recurrence": cluster.total_recurrence,
+        "projects": sorted(cluster.projects),
+        "suggested_status": _suggested_status(target=cluster.target, category=cluster.category, count=len(entries)),
+        "suggested_next_test_target": _suggested_next_test_target(cluster.target),
+    }
+
+
+def _summary_tokens(summary: str) -> list[str]:
+    normalized = summary.lower().replace("-", " ")
+    tokens: list[str] = []
+    for raw in _TOKEN_RE.findall(normalized):
+        token = _stem_summary_token(raw)
+        if token and token not in _SUMMARY_STOPWORDS:
+            tokens.append(token)
+    return tokens
+
+
+def _summary_key(summary: str) -> str:
+    return " ".join(_readable_summary_tokens(summary))
+
+
+def _readable_summary_tokens(summary: str) -> list[str]:
+    normalized = summary.lower().replace("-", " ")
+    return [token for token in _TOKEN_RE.findall(normalized) if token not in _SUMMARY_STOPWORDS]
+
+
+def _stem_summary_token(token: str) -> str:
+    if token.endswith("ies") and len(token) > 4:
+        return token[:-3] + "y"
+    if token.endswith("s") and len(token) > 3:
+        return token[:-1]
+    return token
+
+
+def _token_similarity(left: set[str], right: set[str]) -> float:
+    if not left and not right:
+        return 1.0
+    if not left or not right:
+        return 0.0
+    return len(left & right) / len(left | right)
+
+
+def _suggested_status(*, target: str, category: str, count: int) -> str:
+    if category == "positive":
+        return "positive-reinforce"
+    if target.startswith("framework:") or category == "gap":
+        return "design-needed"
+    if count > 1 or category in {"friction", "guidance", "suggestion"}:
+        return "quick-win"
+    return "possibly-stale"
+
+
+def _suggested_next_test_target(target: str) -> str:
+    if target == "command:feedback":
+        return "science/tests/test_feedback_cli.py"
+    if target.startswith("command:"):
+        return "science/tests/test_command_docs.py"
+    if target.startswith("template:"):
+        return "science/tests/validate/test_checks_research_documents.py"
+    if target.startswith("framework:"):
+        return "docs/plans/"
+    return "science/tests/"
 
 
 def render_report(
