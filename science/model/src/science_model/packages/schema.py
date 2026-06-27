@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -226,3 +227,72 @@ class DatasetUsage(BaseModel):
         if not v.startswith("dataset:"):
             raise ValueError("dataset_usage.ref must be a dataset:<slug> entity reference")
         return v
+
+
+_BENCHMARK_TASK_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
+
+
+class GroundTruth(BaseModel):
+    """What a benchmark task treats as ground truth."""
+
+    type: str = ""
+    description: str = ""
+
+
+class BenchmarkTask(BaseModel):
+    """A locally named evaluation task inside a dataset benchmark block.
+
+    The required fields to make a task an actual *test* are ``prediction_target``
+    (what the model predicts) and ``held_out_unit`` (what is withheld). v1 keeps
+    them as free-text; vocabularies promote to enums in a later phase.
+    """
+
+    id: str
+    task_type: str = ""
+    prediction_target: str = ""
+    held_out_unit: str = ""
+    metric: str = ""
+    baseline: str = ""
+    ground_truth: GroundTruth | None = None
+    interpretation_limits: list[str] = Field(default_factory=list)
+    intervention: str = ""
+    timepoints: list[str] = Field(default_factory=list)
+    contexts: list[str] = Field(default_factory=list)
+
+    @field_validator("id")
+    @classmethod
+    def _validate_id(cls, value: str) -> str:
+        if not _BENCHMARK_TASK_ID_RE.fullmatch(value):
+            raise ValueError("tasks.id must be lowercase kebab-case, 2-64 characters")
+        return value
+
+
+class BenchmarkBlock(BaseModel):
+    """Benchmark-capable dataset metadata.
+
+    V1 keeps vocabularies as free-text strings. Later phases can promote stable
+    terms to enums once seed records show which facets actually recur.
+    """
+
+    domains: list[str] = Field(default_factory=list)
+    modalities: list[str] = Field(default_factory=list)
+    signal_types: list[str] = Field(default_factory=list)
+    benchmark_kinds: list[str] = Field(default_factory=list)
+    source_datasets: list[str] = Field(default_factory=list)
+    related_beliefs: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    tasks: list[BenchmarkTask] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_unique_task_ids(self) -> "BenchmarkBlock":
+        seen: set[str] = set()
+        duplicates: set[str] = set()
+        for task in self.tasks:
+            if task.id in seen:
+                duplicates.add(task.id)
+            seen.add(task.id)
+        if duplicates:
+            ordered = ", ".join(sorted(duplicates))
+            raise ValueError(f"duplicate benchmark task id: {ordered}")
+        return self

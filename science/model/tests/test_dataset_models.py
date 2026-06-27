@@ -9,7 +9,15 @@ from pydantic import ValidationError
 
 from science_model.entities import DatasetEntity, Entity, EntityType
 from science_model.frontmatter import parse_entity_file
-from science_model.packages.schema import AccessBlock, AccessException, DatasetUsage, DerivationBlock
+from science_model.packages.schema import (
+    AccessBlock,
+    AccessException,
+    BenchmarkBlock,
+    BenchmarkTask,
+    DatasetUsage,
+    DerivationBlock,
+    GroundTruth,
+)
 
 
 class TestAccessException:
@@ -91,6 +99,53 @@ class TestDerivationBlock:
                 config_snapshot="c",
                 produced_at="t",
                 inputs=["not-a-dataset"],
+            )
+
+
+class TestBenchmarkBlock:
+    def test_sparse_facets_only_block_is_valid(self) -> None:
+        block = BenchmarkBlock(
+            domains=["biology"],
+            modalities=["single-cell-rna-seq"],
+            signal_types=["perturbation"],
+            benchmark_kinds=["perturbation-response"],
+            related_beliefs=["hypothesis:h1"],
+            limitations=["No held-out task definition yet."],
+        )
+
+        assert block.domains == ["biology"]
+        assert block.tasks == []
+
+    def test_task_carries_core_evaluation_fields(self) -> None:
+        task = BenchmarkTask(
+            id="drug-response",
+            task_type="response-prediction",
+            prediction_target="post-treatment expression signature",
+            held_out_unit="compound",
+            metric="rank correlation",
+            baseline="untreated profile",
+            ground_truth=GroundTruth(type="measured-outcome", description="expression state"),
+            interpretation_limits=["L1000 landmark genes only."],
+            timepoints=["24h"],
+            contexts=["A549 cell line"],
+        )
+
+        assert task.held_out_unit == "compound"
+        assert task.ground_truth is not None
+        assert task.timepoints == ["24h"]
+
+    def test_task_id_must_be_slug_like(self) -> None:
+        with pytest.raises(ValueError, match="tasks.id"):
+            BenchmarkTask(id="Bad Task", task_type="classification")
+
+    def test_duplicate_task_ids_are_rejected(self) -> None:
+        with pytest.raises(ValueError, match="duplicate benchmark task id"):
+            BenchmarkBlock(
+                benchmark_kinds=["perturbation-response"],
+                tasks=[
+                    BenchmarkTask(id="drug-response", task_type="prediction"),
+                    BenchmarkTask(id="drug-response", task_type="ranking"),
+                ],
             )
 
 
@@ -428,6 +483,47 @@ def test_parse_dataset_source_class_and_usage(tmp_path: Path) -> None:
     assert e.dataset_usage[0].ref == "dataset:clinvar-training"
     assert e.dataset_usage[0].role == "training"
     assert e.dataset_usage[0].overlap == "full"
+
+
+def test_parse_dataset_benchmark_block(tmp_path: Path) -> None:
+    md = _write_dataset_md(
+        tmp_path,
+        "benchmark:",
+        "  domains: [biology]",
+        "  modalities: [single-cell-rna-seq]",
+        "  signal_types: [perturbation]",
+        "  benchmark_kinds: [perturbation-response]",
+        "  source_datasets: ['GEO:GSE000']",
+        "  related_beliefs: [hypothesis:h1]",
+        "  limitations:",
+        "    - Landmark genes only.",
+        "  tasks:",
+        "    - id: drug-response",
+        "      task_type: response-prediction",
+        "      prediction_target: post-treatment expression signature",
+        "      held_out_unit: compound",
+        "      metric: rank correlation",
+        "      baseline: untreated profile",
+        "      ground_truth:",
+        "        type: measured-outcome",
+        "        description: post-perturbation expression state",
+        "      intervention: drug dose",
+        "      timepoints: ['24h']",
+        "      contexts: ['A549 cell line']",
+        "      interpretation_limits:",
+        "        - L1000 landmark genes only.",
+    )
+
+    entity = parse_entity_file(md, project_slug="testproj")
+
+    assert entity.benchmark is not None
+    assert entity.benchmark.benchmark_kinds == ["perturbation-response"]
+    assert entity.benchmark.limitations == ["Landmark genes only."]
+    task = entity.benchmark.tasks[0]
+    assert task.id == "drug-response"
+    assert task.held_out_unit == "compound"
+    assert task.timepoints == ["24h"]
+    assert task.ground_truth is not None and task.ground_truth.type == "measured-outcome"
 
 
 def test_parse_dataset_invalid_source_class_raises(tmp_path: Path) -> None:

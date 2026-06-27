@@ -15,6 +15,7 @@ from science_model.identity import (  # noqa: F401  (EntityClass re-exported; re
 )
 from science_model.packages.schema import (
     AccessBlock,
+    BenchmarkBlock,
     DatasetUsage,
     DerivationBlock,
     MemberOfDerivationBlock,
@@ -285,6 +286,8 @@ class Entity(BaseModel):
         # Lives on Entity (gated to kind) — not DatasetEntity — so it also covers the
         # parse_entity_file path, which returns a plain Entity for datasets.
         if self.kind != "dataset":
+            if self.benchmark is not None:
+                raise ValueError(f"{self.id}: benchmark metadata is only valid on dataset entities")
             return self
         if self.source_class is not None and self.source_class not in (
             "observational",
@@ -340,6 +343,7 @@ class Entity(BaseModel):
     dataset_class: Literal["deposit", "reference", "pointer"] = "deposit"
     derived_kind: str | None = None        # "aggregate" | "transform" | "model_output"
     dataset_usage: list[DatasetUsage] = Field(default_factory=list)
+    benchmark: BenchmarkBlock | None = None
 
     @model_validator(mode="after")
     def _fill_derived_defaults(self) -> "Entity":
