@@ -233,16 +233,17 @@ def summarize_recent_for_feedback_target(
 
 def format_feedback_telemetry(summary: Mapping[str, object]) -> str:
     """Format feedback telemetry context for compact table output."""
-    if int(summary.get("recent_events") or 0) == 0:
+    recent_events = _int_value(summary.get("recent_events"))
+    if recent_events == 0:
         return "no recent telemetry"
 
     validation = summary.get("validation")
-    if isinstance(validation, Mapping) and int(validation.get("runs") or 0) > 0:
+    if isinstance(validation, Mapping) and (validation_runs := _int_value(validation.get("runs"))) > 0:
         statuses = validation.get("statuses")
         status_counts = statuses if isinstance(statuses, Mapping) else {}
-        parts = [f"validate: {validation['runs']} runs"]
+        parts = [f"validate: {validation_runs} runs"]
         for status in ("fail", "warn", "pass"):
-            count = status_counts.get(status)
+            count = _int_value(status_counts.get(status))
             if count:
                 parts.append(f"{count} {status}")
         return ", ".join(parts)
@@ -250,8 +251,8 @@ def format_feedback_telemetry(summary: Mapping[str, object]) -> str:
     command_errors = summary.get("command_errors")
     if isinstance(command_errors, Mapping) and command_errors:
         total_errors = sum(int(value) for value in command_errors.values() if isinstance(value, int))
-        return f"{summary['recent_events']} events, {total_errors} errors"
-    return f"{summary['recent_events']} events"
+        return f"{recent_events} events, {total_errors} errors"
+    return f"{recent_events} events"
 
 
 def _redact_value(token: str, *, option: str | None, index: int) -> str:
@@ -349,6 +350,10 @@ def _summarize_feedback_events(events: Sequence[Mapping[str, object]]) -> dict[s
 def _string_field(event: Mapping[str, object], key: str) -> str:
     value = event.get(key)
     return value if isinstance(value, str) else ""
+
+
+def _int_value(value: object) -> int:
+    return value if isinstance(value, int) else 0
 
 
 def _validation_status(*, errors: int, warnings: int, gated: bool) -> str:
