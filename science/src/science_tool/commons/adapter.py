@@ -30,6 +30,26 @@ _TYPE_DIR_TO_TYPE = {
 }
 
 
+def _peek_dataset_class(entity_path: Path) -> str:
+    try:
+        frontmatter, _ = parse_frontmatter(entity_path)
+    except Exception:
+        return "deposit"
+    value = (frontmatter or {}).get("dataset_class")
+    return value if isinstance(value, str) and value else "deposit"
+
+
+def _dataset_datapackage_path(root: Path, slug: str, entity_path: Path) -> Path | None:
+    dp_path = root / "datasets" / slug / "datapackage.yaml"
+    requires_dp = _peek_dataset_class(entity_path) not in ("reference", "pointer")
+    if requires_dp and not dp_path.is_file():
+        raise CommonsLayoutError(
+            root / "datasets" / slug,
+            reason="deposit dataset directory missing required datapackage.yaml sibling",
+        )
+    return dp_path if dp_path.is_file() else None
+
+
 @dataclass(frozen=True, slots=True)
 class CommonsEntityRecord:
     """One validated entity from the commons store."""
@@ -68,20 +88,17 @@ class CommonsEntityAdapter:
                 if not child.is_dir():
                     continue
                 entity_path = child / "entity.md"
-                dp_path = child / "datapackage.yaml"
                 if not entity_path.is_file():
                     continue
-                if not dp_path.is_file():
+                try:
+                    dp_path = _dataset_datapackage_path(
+                        self._root, child.name, entity_path
+                    )
+                except CommonsLayoutError as exc:
                     yield CommonsEntityError(
                         child,
                         canonical_id=f"dataset:{child.name}",
-                        cause=CommonsLayoutError(
-                            child,
-                            reason=(
-                                "dataset directory missing required "
-                                "datapackage.yaml sibling"
-                            ),
-                        ),
+                        cause=exc,
                     )
                     continue
                 yield self._build(type_name, child.name, entity_path, dp_path)
@@ -118,7 +135,7 @@ class CommonsEntityAdapter:
             )
         if type_dir == "datasets":
             body = self._root / "datasets" / slug / "entity.md"
-            dp = self._root / "datasets" / slug / "datapackage.yaml"
+            dp = None
         else:
             body = self._root / type_dir / f"{slug}.md"
             dp = None
@@ -128,11 +145,8 @@ class CommonsEntityAdapter:
                 canonical_id=canonical_id,
                 cause=FileNotFoundError(str(body)),
             )
-        if dp is not None and not dp.is_file():
-            raise CommonsLayoutError(
-                self._root / "datasets" / slug,
-                reason="dataset directory missing required datapackage.yaml sibling",
-            )
+        if type_dir == "datasets":
+            dp = _dataset_datapackage_path(self._root, slug, body)
         result = self._build(type_dir, slug, body, dp)
         if isinstance(result, CommonsEntityError):
             raise result

@@ -22,6 +22,42 @@ def _make_store(tmp_path: Path, source_subdir: str) -> Path:
     return root
 
 
+def _write_dataset_entity(
+    root: Path,
+    slug: str,
+    *,
+    dataset_class: str | None,
+    verification_method: str = "landing-confirmed",
+) -> Path:
+    dataset_dir = root / "datasets" / slug
+    dataset_dir.mkdir(parents=True)
+    dataset_class_line = f'dataset_class: "{dataset_class}"\n' if dataset_class is not None else ""
+    (dataset_dir / "entity.md").write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+dataset/1.0"\n'
+        f'id: "dataset:{slug}"\n'
+        'type: "dataset"\n'
+        f'title: "{slug}"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-06-27"\n'
+        'updated: "2026-06-27"\n'
+        'origin: "external"\n'
+        f"{dataset_class_line}"
+        'tier: "track"\n'
+        "access:\n"
+        '  level: "public"\n'
+        "  verified: true\n"
+        f'  verification_method: "{verification_method}"\n'
+        '  source_url: "https://example.org/dataset"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "---\nbody\n",
+        encoding="utf-8",
+    )
+    return dataset_dir
+
+
 def test_scan_yields_records_for_all_valid_entities(tmp_path: Path) -> None:
     root = _make_store(tmp_path, "valid")
     adapter = CommonsEntityAdapter(root)
@@ -93,6 +129,45 @@ def test_scan_yields_entity_error_for_dataset_missing_datapackage(
     assert isinstance(errors[0].cause, CommonsLayoutError)
     assert "dataset:rnaseq-example" in {r.canonical_id for r in records}
     assert "paper:Adams2025" in {r.canonical_id for r in records}
+
+
+@pytest.mark.parametrize("dataset_class", ["reference", "pointer"])
+def test_scan_allows_reference_and_pointer_dataset_without_datapackage(
+    tmp_path: Path,
+    dataset_class: str,
+) -> None:
+    root = tmp_path / "commons"
+    slug = f"{dataset_class}-dataset"
+    dataset_dir = _write_dataset_entity(root, slug, dataset_class=dataset_class)
+
+    items = list(CommonsEntityAdapter(root).scan())
+
+    errors = [it for it in items if isinstance(it, CommonsEntityError)]
+    records = [it for it in items if isinstance(it, CommonsEntityRecord)]
+    assert [error for error in errors if error.path == dataset_dir] == []
+    assert len(records) == 1
+    assert records[0].canonical_id == f"dataset:{slug}"
+    assert records[0].datapackage_path is None
+
+
+@pytest.mark.parametrize("dataset_class", ["deposit", None])
+def test_scan_requires_datapackage_for_deposit_or_missing_dataset_class(
+    tmp_path: Path,
+    dataset_class: str | None,
+) -> None:
+    root = tmp_path / "commons"
+    slug = "deposit-dataset" if dataset_class == "deposit" else "missing-class-dataset"
+    dataset_dir = _write_dataset_entity(root, slug, dataset_class=dataset_class)
+
+    items = list(CommonsEntityAdapter(root).scan())
+
+    errors = [it for it in items if isinstance(it, CommonsEntityError)]
+    records = [it for it in items if isinstance(it, CommonsEntityRecord)]
+    assert len(errors) == 1
+    assert errors[0].path == dataset_dir
+    assert errors[0].canonical_id == f"dataset:{slug}"
+    assert isinstance(errors[0].cause, CommonsLayoutError)
+    assert records == []
 
 
 def test_record_captures_paths_and_mtime(tmp_path: Path) -> None:
@@ -273,6 +348,35 @@ def test_load_dataset_missing_datapackage_raises_layout_error(tmp_path: Path) ->
     adapter = CommonsEntityAdapter(root)
     with pytest.raises(CommonsLayoutError, match="datapackage.yaml"):
         adapter.load("dataset:no-dp")
+
+
+@pytest.mark.parametrize("dataset_class", ["reference", "pointer"])
+def test_load_allows_reference_and_pointer_dataset_without_datapackage(
+    tmp_path: Path,
+    dataset_class: str,
+) -> None:
+    root = tmp_path / "commons"
+    slug = f"{dataset_class}-dataset"
+    _write_dataset_entity(root, slug, dataset_class=dataset_class)
+
+    record = CommonsEntityAdapter(root).load(f"dataset:{slug}")
+
+    assert isinstance(record, CommonsEntityRecord)
+    assert record.canonical_id == f"dataset:{slug}"
+    assert record.datapackage_path is None
+
+
+@pytest.mark.parametrize("dataset_class", ["deposit", None])
+def test_load_requires_datapackage_for_deposit_or_missing_dataset_class(
+    tmp_path: Path,
+    dataset_class: str | None,
+) -> None:
+    root = tmp_path / "commons"
+    slug = "deposit-dataset" if dataset_class == "deposit" else "missing-class-dataset"
+    _write_dataset_entity(root, slug, dataset_class=dataset_class)
+
+    with pytest.raises(CommonsLayoutError, match="datapackage.yaml"):
+        CommonsEntityAdapter(root).load(f"dataset:{slug}")
 
 
 def test_load_raises_entity_error_for_unknown_id(tmp_path: Path) -> None:
