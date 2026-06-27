@@ -63,6 +63,14 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
 
         path = fm.get("_path")
         ident = fm.get("id", "?")
+        if _dataset_class(fm) == "pointer":
+            yield _result(
+                Severity.INFO,
+                path,
+                f"{ident}: pointer dataset carries benchmark metadata",
+                "benchmark.pointer-block",
+            )
+
         if not isinstance(benchmark, Mapping):
             yield _result(
                 Severity.WARN,
@@ -71,14 +79,6 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                 "benchmark.block-malformed",
             )
             continue
-
-        if _dataset_class(fm) == "pointer":
-            yield _result(
-                Severity.INFO,
-                path,
-                f"{ident}: pointer dataset carries benchmark metadata",
-                "benchmark.pointer-block",
-            )
 
         tasks = _task_mappings(benchmark.get("tasks"))
         limitations = benchmark.get("limitations")

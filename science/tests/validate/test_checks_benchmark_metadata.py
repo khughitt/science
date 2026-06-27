@@ -42,6 +42,23 @@ def test_dataset_without_benchmark_is_ignored() -> None:
     assert _rules([_ds()]) == []
 
 
+def test_non_dataset_with_benchmark_is_ignored() -> None:
+    assert _rules([_ds(type="paper", benchmark={"benchmark_kinds": ["static-association"]})]) == []
+
+
+def test_non_mapping_benchmark_warns() -> None:
+    assert _rules([_ds(benchmark=["static-association"])]) == [
+        (Severity.WARN, "benchmark.block-malformed"),
+    ]
+
+
+def test_pointer_dataset_with_non_mapping_benchmark_emits_pointer_info_and_malformed_warning() -> None:
+    assert _rules([_ds(dataset_class="pointer", benchmark=["static-association"])]) == [
+        (Severity.INFO, "benchmark.pointer-block"),
+        (Severity.WARN, "benchmark.block-malformed"),
+    ]
+
+
 def test_duplicate_task_ids_are_error() -> None:
     rules = _rules(
         [
@@ -70,16 +87,57 @@ def test_invalid_task_id_is_error_and_mentions_lowercase_kebab_case() -> None:
     )
 
 
+def test_task_id_lowercase_kebab_case_edges_are_errors() -> None:
+    rules = _rules(
+        [
+            _ds(
+                benchmark={
+                    "tasks": [
+                        {"task_id": "a"},
+                        {"task_id": "a" * 65},
+                        {"task_id": "ab-"},
+                        {"task_id": "a--b"},
+                    ]
+                }
+            )
+        ]
+    )
+
+    assert rules == [
+        (Severity.ERROR, "benchmark.task-id-invalid"),
+        (Severity.ERROR, "benchmark.task-id-invalid"),
+        (Severity.ERROR, "benchmark.task-id-invalid"),
+        (Severity.ERROR, "benchmark.task-id-invalid"),
+    ]
+
+
 def test_task_missing_core_evaluation_fields_warns() -> None:
     assert (Severity.WARN, "benchmark.task-sparse") in _rules(
         [_ds(benchmark={"tasks": [{"task_id": "rank-genes", "task_type": "ranking"}]})]
     )
 
 
+def test_sparse_warning_only_applies_to_valid_task_ids() -> None:
+    rules = _rules([_ds(benchmark={"tasks": [{"task_id": "Rank__Genes"}]})])
+
+    assert rules == [(Severity.ERROR, "benchmark.task-id-invalid")]
+
+
 def test_facets_only_block_without_limitations_warns() -> None:
     assert (Severity.WARN, "benchmark.facets-lack-task-or-limitation") in _rules(
         [_ds(benchmark={"benchmark_kinds": ["static-association"]})]
     )
+
+
+def test_facets_only_block_with_limitations_does_not_warn() -> None:
+    assert _rules([_ds(benchmark={"benchmark_kinds": ["static-association"], "limitations": ["small cohort"]})]) == []
+
+
+def test_invalid_dataset_class_defaults_to_deposit_for_benchmark_checks() -> None:
+    rules = _rules([_ds(dataset_class="bad-class", benchmark={"benchmark_kinds": ["static-association"]})])
+
+    assert (Severity.WARN, "benchmark.facets-lack-task-or-limitation") in rules
+    assert (Severity.INFO, "benchmark.pointer-block") not in rules
 
 
 def test_perturbation_response_without_intervention_or_contexts_warns() -> None:
@@ -101,6 +159,46 @@ def test_perturbation_response_without_intervention_or_contexts_warns() -> None:
     )
 
 
+def test_perturbation_response_with_intervention_does_not_warn() -> None:
+    assert _rules(
+        [
+            _ds(
+                benchmark={
+                    "benchmark_kinds": ["perturbation-response"],
+                    "tasks": [
+                        {
+                            "task_id": "predict-response",
+                            "task_type": "prediction",
+                            "prediction_target": "response",
+                            "intervention": "drug",
+                        }
+                    ],
+                }
+            )
+        ]
+    ) == []
+
+
+def test_perturbation_response_with_contexts_does_not_warn() -> None:
+    assert _rules(
+        [
+            _ds(
+                benchmark={
+                    "benchmark_kinds": ["perturbation-response"],
+                    "tasks": [
+                        {
+                            "task_id": "predict-response",
+                            "task_type": "prediction",
+                            "prediction_target": "response",
+                            "contexts": ["treated"],
+                        }
+                    ],
+                }
+            )
+        ]
+    ) == []
+
+
 def test_time_series_without_timepoints_warns() -> None:
     assert (Severity.WARN, "benchmark.timepoints-missing") in _rules(
         [
@@ -120,6 +218,26 @@ def test_time_series_without_timepoints_warns() -> None:
     )
 
 
+def test_time_series_with_timepoints_does_not_warn() -> None:
+    assert _rules(
+        [
+            _ds(
+                benchmark={
+                    "benchmark_kinds": ["time-series"],
+                    "tasks": [
+                        {
+                            "task_id": "predict-trajectory",
+                            "task_type": "prediction",
+                            "prediction_target": "trajectory",
+                            "timepoints": ["day-0", "day-7"],
+                        }
+                    ],
+                }
+            )
+        ]
+    ) == []
+
+
 def test_pointer_dataset_with_benchmark_emits_info() -> None:
     assert (Severity.INFO, "benchmark.pointer-block") in _rules(
         [
@@ -129,6 +247,19 @@ def test_pointer_dataset_with_benchmark_emits_info() -> None:
             )
         ]
     )
+
+
+def test_string_path_is_converted_to_result_path() -> None:
+    results = _results([_ds(_path="entities/datasets/string-path.md", benchmark=["static-association"])])
+
+    assert results[0].path == Path("entities/datasets/string-path.md")
+
+
+def test_path_path_is_preserved_as_result_path() -> None:
+    result_path = Path("entities/datasets/path-path.md")
+    results = _results([_ds(_path=result_path, benchmark=["static-association"])])
+
+    assert results[0].path == result_path
 
 
 def test_module_is_registered() -> None:
