@@ -9,7 +9,15 @@ from pydantic import ValidationError
 
 from science_model.entities import DatasetEntity, Entity, EntityType
 from science_model.frontmatter import parse_entity_file
-from science_model.packages.schema import AccessBlock, AccessException, DatasetUsage, DerivationBlock
+from science_model.packages.schema import (
+    AccessBlock,
+    AccessException,
+    BenchmarkBlock,
+    BenchmarkTask,
+    DatasetUsage,
+    DerivationBlock,
+    GroundTruth,
+)
 
 
 class TestAccessException:
@@ -91,6 +99,58 @@ class TestDerivationBlock:
                 config_snapshot="c",
                 produced_at="t",
                 inputs=["not-a-dataset"],
+            )
+
+
+class TestBenchmarkBlock:
+    def test_sparse_facets_only_block_is_valid(self) -> None:
+        block = BenchmarkBlock(
+            domains=["biology"],
+            modalities=["single-cell-rna-seq"],
+            signal_types=["perturbation"],
+            benchmark_kinds=["perturbation-response"],
+            related_beliefs=["hypothesis:h1"],
+            limitations=["No held-out task definition yet."],
+        )
+
+        assert block.domains == ["biology"]
+        assert block.tasks == []
+
+    def test_task_carries_core_evaluation_fields(self) -> None:
+        task = BenchmarkTask(
+            id="drug-response",
+            task_type="response-prediction",
+            prediction_target="post-treatment expression signature",
+            held_out_unit="compound",
+            metric="rank correlation",
+            baseline="untreated profile",
+            ground_truth=GroundTruth(type="measured-outcome", description="expression state"),
+            interpretation_limits=["L1000 landmark genes only."],
+            timepoints=["24h"],
+            contexts=["A549 cell line"],
+        )
+
+        assert task.held_out_unit == "compound"
+        assert task.ground_truth is not None
+        assert task.timepoints == ["24h"]
+
+    def test_task_rejects_legacy_task_id_extra_field(self) -> None:
+        with pytest.raises(ValidationError, match="task_id"):
+            BenchmarkTask(id="drug-response", task_id="legacy-id", task_type="classification")  # type: ignore[call-arg]
+
+    @pytest.mark.parametrize("task_id", ["Bad Task", "a-", "ab-", "a--b"])
+    def test_task_id_must_be_lowercase_kebab_case_segments(self, task_id: str) -> None:
+        with pytest.raises(ValueError, match="tasks.id"):
+            BenchmarkTask(id=task_id, task_type="classification")
+
+    def test_duplicate_task_ids_are_rejected(self) -> None:
+        with pytest.raises(ValueError, match="duplicate benchmark task id"):
+            BenchmarkBlock(
+                benchmark_kinds=["perturbation-response"],
+                tasks=[
+                    BenchmarkTask(id="drug-response", task_type="prediction"),
+                    BenchmarkTask(id="drug-response", task_type="ranking"),
+                ],
             )
 
 
@@ -361,6 +421,23 @@ def test_non_dataset_kind_does_not_validate_source_class() -> None:
     assert e.source_class == "curated"
 
 
+def test_non_dataset_kind_rejects_benchmark_block() -> None:
+    with pytest.raises(ValueError, match="benchmark metadata is only valid on dataset"):
+        Entity(
+            id="hypothesis:h1",
+            kind="hypothesis",
+            type=EntityType.HYPOTHESIS,
+            title="H1",
+            project="p",
+            ontology_terms=[],
+            related=[],
+            source_refs=[],
+            content_preview="",
+            file_path="doc/hypotheses/h1.md",
+            benchmark=BenchmarkBlock(benchmark_kinds=["classification"]),
+        )
+
+
 # --- also enforced on the graph path (DatasetEntity inherits the Entity validator) ---
 
 
@@ -428,6 +505,111 @@ def test_parse_dataset_source_class_and_usage(tmp_path: Path) -> None:
     assert e.dataset_usage[0].ref == "dataset:clinvar-training"
     assert e.dataset_usage[0].role == "training"
     assert e.dataset_usage[0].overlap == "full"
+
+
+def test_parse_dataset_benchmark_block(tmp_path: Path) -> None:
+    md = _write_dataset_md(
+        tmp_path,
+        "benchmark:",
+        "  domains: [biology]",
+        "  modalities: [single-cell-rna-seq]",
+        "  signal_types: [perturbation]",
+        "  benchmark_kinds: [perturbation-response]",
+        "  source_datasets: ['GEO:GSE000']",
+        "  related_beliefs: [hypothesis:h1]",
+        "  limitations:",
+        "    - Landmark genes only.",
+        "  tasks:",
+        "    - id: drug-response",
+        "      task_type: response-prediction",
+        "      prediction_target: post-treatment expression signature",
+        "      held_out_unit: compound",
+        "      metric: rank correlation",
+        "      baseline: untreated profile",
+        "      ground_truth:",
+        "        type: measured-outcome",
+        "        description: post-perturbation expression state",
+        "      intervention: drug dose",
+        "      timepoints: ['24h']",
+        "      contexts: ['A549 cell line']",
+        "      interpretation_limits:",
+        "        - L1000 landmark genes only.",
+    )
+
+    entity = parse_entity_file(md, project_slug="testproj")
+
+    assert entity.benchmark is not None
+    assert entity.benchmark.benchmark_kinds == ["perturbation-response"]
+    assert entity.benchmark.limitations == ["Landmark genes only."]
+    task = entity.benchmark.tasks[0]
+    assert task.id == "drug-response"
+    assert task.held_out_unit == "compound"
+    assert task.timepoints == ["24h"]
+    assert task.ground_truth is not None and task.ground_truth.type == "measured-outcome"
+
+
+def test_parse_dataset_benchmark_malformed_task_id_raises(tmp_path: Path) -> None:
+    md = _write_dataset_md(
+        tmp_path,
+        "benchmark:",
+        "  tasks:",
+        "    - id: a--b",
+        "      task_type: response-prediction",
+    )
+
+    with pytest.raises(ValidationError, match="tasks.id"):
+        parse_entity_file(md, project_slug="testproj")
+
+
+def test_parse_dataset_benchmark_extra_task_id_field_raises(tmp_path: Path) -> None:
+    md = _write_dataset_md(
+        tmp_path,
+        "benchmark:",
+        "  tasks:",
+        "    - id: drug-response",
+        "      task_id: legacy-id",
+        "      task_type: response-prediction",
+    )
+
+    with pytest.raises(ValidationError, match="task_id"):
+        parse_entity_file(md, project_slug="testproj")
+
+
+def test_parse_dataset_benchmark_duplicate_task_ids_raise(tmp_path: Path) -> None:
+    md = _write_dataset_md(
+        tmp_path,
+        "benchmark:",
+        "  tasks:",
+        "    - id: drug-response",
+        "      task_type: response-prediction",
+        "    - id: drug-response",
+        "      task_type: ranking",
+    )
+
+    with pytest.raises(ValidationError, match="duplicate benchmark task id"):
+        parse_entity_file(md, project_slug="testproj")
+
+
+def test_parse_non_dataset_benchmark_block_is_dropped(tmp_path: Path) -> None:
+    md = tmp_path / "h1.md"
+    md.write_text(
+        "---\n"
+        "id: hypothesis:h1\n"
+        "type: hypothesis\n"
+        "title: H1\n"
+        "benchmark:\n"
+        "  tasks:\n"
+        "    - id: drug-response\n"
+        "      task_type: response-prediction\n"
+        "---\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+
+    entity = parse_entity_file(md, project_slug="testproj")
+
+    assert entity is not None
+    assert entity.benchmark is None
 
 
 def test_parse_dataset_invalid_source_class_raises(tmp_path: Path) -> None:

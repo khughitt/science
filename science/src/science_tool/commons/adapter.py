@@ -30,6 +30,34 @@ _TYPE_DIR_TO_TYPE = {
 }
 
 
+def _dataset_datapackage_path(root: Path, slug: str, entity_path: Path) -> Path | None:
+    dataset_dir = root / "datasets" / slug
+    default_dp_path = dataset_dir / "datapackage.yaml"
+    frontmatter, _ = parse_frontmatter(entity_path)
+    dataset_class = frontmatter.get("dataset_class")
+    datapackage = frontmatter.get("datapackage")
+
+    if isinstance(datapackage, str) and datapackage.strip():
+        if not default_dp_path.is_file():
+            raise CommonsLayoutError(
+                dataset_dir,
+                reason=(f"explicit datapackage field {datapackage!r} requires missing datapackage.yaml sibling"),
+            )
+        return default_dp_path
+
+    requires_default_dp = (
+        dataset_class is None
+        or (isinstance(dataset_class, str) and dataset_class.strip() == "")
+        or dataset_class == "deposit"
+    )
+    if requires_default_dp and not default_dp_path.is_file():
+        raise CommonsLayoutError(
+            dataset_dir,
+            reason="deposit dataset directory missing required datapackage.yaml sibling",
+        )
+    return default_dp_path if default_dp_path.is_file() else None
+
+
 @dataclass(frozen=True, slots=True)
 class CommonsEntityRecord:
     """One validated entity from the commons store."""
@@ -58,9 +86,7 @@ class CommonsEntityAdapter:
                 continue
             yield from self._scan_type(type_name, type_dir)
 
-    def _scan_type(
-        self, type_name: str, type_dir: Path
-    ) -> Iterator[CommonsEntityRecord | CommonsEntityError]:
+    def _scan_type(self, type_name: str, type_dir: Path) -> Iterator[CommonsEntityRecord | CommonsEntityError]:
         if type_name == "datasets":
             for child in sorted(type_dir.iterdir()):
                 if child.name in _SKIP_NAMES or child.name.startswith("."):
@@ -68,20 +94,15 @@ class CommonsEntityAdapter:
                 if not child.is_dir():
                     continue
                 entity_path = child / "entity.md"
-                dp_path = child / "datapackage.yaml"
                 if not entity_path.is_file():
                     continue
-                if not dp_path.is_file():
+                try:
+                    dp_path = _dataset_datapackage_path(self._root, child.name, entity_path)
+                except CommonsLayoutError as exc:
                     yield CommonsEntityError(
                         child,
                         canonical_id=f"dataset:{child.name}",
-                        cause=CommonsLayoutError(
-                            child,
-                            reason=(
-                                "dataset directory missing required "
-                                "datapackage.yaml sibling"
-                            ),
-                        ),
+                        cause=exc,
                     )
                     continue
                 yield self._build(type_name, child.name, entity_path, dp_path)
@@ -101,9 +122,7 @@ class CommonsEntityAdapter:
             raise CommonsEntityError(
                 self._root,
                 canonical_id=canonical_id,
-                cause=ValueError(
-                    f"canonical id {canonical_id!r} is not in '<type>:<slug>' form"
-                ),
+                cause=ValueError(f"canonical id {canonical_id!r} is not in '<type>:<slug>' form"),
             )
         type_name, slug = canonical_id.split(":", 1)
         type_dir = next(
@@ -118,7 +137,7 @@ class CommonsEntityAdapter:
             )
         if type_dir == "datasets":
             body = self._root / "datasets" / slug / "entity.md"
-            dp = self._root / "datasets" / slug / "datapackage.yaml"
+            dp = None
         else:
             body = self._root / type_dir / f"{slug}.md"
             dp = None
@@ -128,11 +147,8 @@ class CommonsEntityAdapter:
                 canonical_id=canonical_id,
                 cause=FileNotFoundError(str(body)),
             )
-        if dp is not None and not dp.is_file():
-            raise CommonsLayoutError(
-                self._root / "datasets" / slug,
-                reason="dataset directory missing required datapackage.yaml sibling",
-            )
+        if type_dir == "datasets":
+            dp = _dataset_datapackage_path(self._root, slug, body)
         result = self._build(type_dir, slug, body, dp)
         if isinstance(result, CommonsEntityError):
             raise result
@@ -150,30 +166,22 @@ class CommonsEntityAdapter:
         try:
             frontmatter, _ = parse_frontmatter(body_path)
             if not frontmatter:
-                raise EntityValidationError(
-                    f"{body_path} has no parseable frontmatter"
-                )
+                raise EntityValidationError(f"{body_path} has no parseable frontmatter")
             self._validator.validate(frontmatter)
             declared_id = frontmatter.get("id")
             if declared_id != canonical_id:
                 raise EntityValidationError(
-                    f"frontmatter id {declared_id!r} does not match path-derived "
-                    f"canonical id {canonical_id!r}"
+                    f"frontmatter id {declared_id!r} does not match path-derived canonical id {canonical_id!r}"
                 )
             declared_type = frontmatter.get("type")
             if declared_type != type_name:
                 raise EntityValidationError(
-                    f"frontmatter type {declared_type!r} does not match path-derived "
-                    f"type {type_name!r}"
+                    f"frontmatter type {declared_type!r} does not match path-derived type {type_name!r}"
                 )
         except EntityValidationError as exc:
-            return CommonsEntityError(
-                body_path, canonical_id=canonical_id, cause=exc
-            )
+            return CommonsEntityError(body_path, canonical_id=canonical_id, cause=exc)
         except Exception as exc:  # pragma: no cover — unexpected I/O / yaml errors
-            return CommonsEntityError(
-                body_path, canonical_id=canonical_id, cause=exc
-            )
+            return CommonsEntityError(body_path, canonical_id=canonical_id, cause=exc)
 
         mtime_ns = body_path.stat().st_mtime_ns
         if datapackage_path is not None:

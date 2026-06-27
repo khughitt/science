@@ -23,7 +23,8 @@
     "runtime_state": {
       "enum": ["runnable", "unstaged-deposit", "blocked-access", "reference-only", "pointer-only"]
     },
-    "derived_kind": {"enum": ["aggregate", "transform", "model_output"]}
+    "derived_kind": {"enum": ["aggregate", "transform", "model_output"]},
+    "benchmark": {"$ref": "#/$defs/benchmark"}
   },
   "not": {"required": ["resources"]},
   "allOf": [
@@ -63,6 +64,49 @@
     }
   ],
   "$defs": {
+    "benchmark": {
+      "type": "object",
+      "properties": {
+        "domains": {"type": "array", "items": {"type": "string"}},
+        "modalities": {"type": "array", "items": {"type": "string"}},
+        "signal_types": {"type": "array", "items": {"type": "string"}},
+        "benchmark_kinds": {"type": "array", "items": {"type": "string"}},
+        "source_datasets": {"type": "array", "items": {"type": "string"}},
+        "related_beliefs": {"type": "array", "items": {"type": "string"}},
+        "notes": {"type": "array", "items": {"type": "string"}},
+        "limitations": {"type": "array", "items": {"type": "string"}},
+        "tasks": {"type": "array", "items": {"$ref": "#/$defs/benchmark_task"}}
+      }
+    },
+    "benchmark_task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "task_type": {"type": "string"},
+        "prediction_target": {"type": "string"},
+        "held_out_unit": {"type": "string"},
+        "metric": {"type": "string"},
+        "baseline": {"type": "string"},
+        "ground_truth": {
+          "type": "object",
+          "properties": {
+            "type": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        },
+        "interpretation_limits": {"type": "array", "items": {"type": "string"}},
+        "intervention": {"type": "string"},
+        "timepoints": {"type": "array", "items": {"type": "string"}},
+        "contexts": {"type": "array", "items": {"type": "string"}}
+      }
+    },
     "access": {
       "type": "object",
       "required": ["level", "verified"],

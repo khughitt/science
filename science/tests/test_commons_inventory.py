@@ -88,6 +88,52 @@ def test_build_commons_inventory_clean_store(tmp_path: Path, monkeypatch: pytest
     assert sorted(payload.watch_paths) == ["datasets", "papers", "themes", "topics"]
 
 
+def test_build_commons_inventory_projects_benchmark_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _make_store(tmp_path)
+    dataset_dir = root / "datasets" / "benchmark-example"
+    dataset_dir.mkdir(parents=True)
+    (dataset_dir / "entity.md").write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+dataset/1.0"\n'
+        'id: "dataset:benchmark-example"\n'
+        'type: "dataset"\n'
+        'title: "Benchmark Example"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-06-27"\n'
+        'updated: "2026-06-27"\n'
+        'origin: "external"\n'
+        'dataset_class: "reference"\n'
+        'tier: "track"\n'
+        "access:\n"
+        '  level: "public"\n'
+        "  verified: true\n"
+        '  verification_method: "landing-confirmed"\n'
+        '  source_url: "https://example.org/benchmark"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "benchmark:\n"
+        "  domains: [biology]\n"
+        "  modalities: [single-cell-rna-seq]\n"
+        "  signal_types: [perturbation]\n"
+        "  benchmark_kinds: [perturbation-response]\n"
+        "  limitations:\n"
+        "    - Portal record; a concrete export becomes a deposit later.\n"
+        "---\n"
+        "body\n",
+        encoding="utf-8",
+    )
+    # reference dataset: no datapackage.yaml sibling (allowed after Task 5a)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    payload = build_commons_inventory()
+
+    assert payload.warnings == []
+    entity = next(e for e in payload.entities if e.id == "dataset:benchmark-example")
+    assert entity.scope == "cross-project"
+    assert entity.data["benchmark"]["benchmark_kinds"] == ["perturbation-response"]
+
+
 def test_build_commons_inventory_warns_on_malformed_entity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _make_store(tmp_path)
     bad_path = root / "papers" / "badname.md"
@@ -163,9 +209,7 @@ def test_build_commons_inventory_warns_on_missing_datapackage(tmp_path: Path, mo
     assert "dataset:rnaseq-example" in {e.id for e in payload.entities}
 
 
-def test_build_commons_inventory_projects_dataset_resources(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_build_commons_inventory_projects_dataset_resources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _make_store(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
     payload = build_commons_inventory()
@@ -210,15 +254,11 @@ def test_build_commons_inventory_warns_on_malformed_datapackage(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _make_store(tmp_path)
-    (root / "datasets" / "cath-domains" / "datapackage.yaml").write_text(
-        "resources: [unclosed\n", encoding="utf-8"
-    )
+    (root / "datasets" / "cath-domains" / "datapackage.yaml").write_text("resources: [unclosed\n", encoding="utf-8")
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
     payload = build_commons_inventory()
 
-    dp_warnings = [
-        w for w in payload.warnings if w.code == "commons-datapackage-invalid"
-    ]
+    dp_warnings = [w for w in payload.warnings if w.code == "commons-datapackage-invalid"]
     assert len(dp_warnings) == 1
     assert dp_warnings[0].canonical_id == "dataset:cath-domains"
     cath = next(e for e in payload.entities if e.id == "dataset:cath-domains")
@@ -231,21 +271,19 @@ def test_build_commons_inventory_missing_root(tmp_path: Path, monkeypatch: pytes
         build_commons_inventory()
 
 
-def test_build_commons_inventory_preserves_resource_source(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_build_commons_inventory_preserves_resource_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A sourced resource's `source` survives end-to-end into the inventory."""
     root = _make_store(tmp_path)
     (root / "datasets" / "cath-domains" / "datapackage.yaml").write_text(
         "name: cath-domains\n"
-        "profile: \"data-package\"\n"
+        'profile: "data-package"\n'
         "resources:\n"
         "  - name: cath_domains\n"
         "    path: cath_domains.parquet\n"
-        "    hash: \"sha256:" + "0" * 64 + "\"\n"
+        '    hash: "sha256:' + "0" * 64 + '"\n'
         "    bytes: 4521339201\n"
-        "    format: \"parquet\"\n"
-        "    mediatype: \"application/vnd.apache.parquet\"\n"
+        '    format: "parquet"\n'
+        '    mediatype: "application/vnd.apache.parquet"\n'
         "    source:\n"
         "      type: local\n"
         "      ref: ${OUTPUT_ROOT}/cath/cath_domains.parquet\n",

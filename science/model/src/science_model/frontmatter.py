@@ -17,7 +17,13 @@ from science_model.entities import (
     core_entity_type_for_kind,
 )
 from science_model.identity import EntityScope, ExternalId
-from science_model.packages.schema import AccessBlock, AccessException, DerivationBlock, MemberOfDerivationBlock
+from science_model.packages.schema import (
+    AccessBlock,
+    AccessException,
+    BenchmarkBlock,
+    DerivationBlock,
+    MemberOfDerivationBlock,
+)
 from science_model.sync import SyncSource
 
 
@@ -253,6 +259,15 @@ def _coerce_access(fm: dict) -> AccessBlock | None:
     return None
 
 
+def _coerce_benchmark(fm: dict) -> BenchmarkBlock | None:
+    raw = fm.get("benchmark")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("benchmark must be a mapping")
+    return BenchmarkBlock.model_validate(raw)
+
+
 def _coerce_review_state(fm: dict) -> EpistemicReviewState | None:
     """Build EpistemicReviewState from frontmatter `review_state:` block, or None if absent/malformed."""
     raw = fm.get("review_state")
@@ -372,6 +387,7 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         "source_class": fm.get("source_class"),
         "derived_kind": fm.get("derived_kind"),
         "dataset_usage": [] if fm.get("dataset_usage") is None else fm.get("dataset_usage"),
+        "benchmark": _coerce_benchmark(fm) if kind == EntityType.DATASET.value else None,
         "claim_layer": fm.get("claim_layer"),
         "identification_strength": fm.get("identification_strength"),
         "proxy_directness": fm.get("proxy_directness"),
