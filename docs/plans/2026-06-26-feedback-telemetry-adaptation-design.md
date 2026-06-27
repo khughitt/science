@@ -11,6 +11,21 @@ related:
 
 # Feedback, telemetry, and adaptation for Science
 
+## Implementation note (2026-06-27)
+
+The first shipped tranche is intentionally smaller than the full design:
+
+- local JSONL event journal;
+- conservative command-argument shape redaction;
+- automatic CLI `command_finish` and Click parse/runtime `command_error`
+  capture;
+- `science telemetry status`, `report`, `export`, and `prune`;
+- local opt-out through `SCIENCE_TELEMETRY_ENABLED=0|false|no|off`.
+
+It does not yet implement `feedback add --from-recent`,
+`feedback triage --with-telemetry`, validation-summary events, skill note
+helpers, or explicit export/report workflows beyond local JSONL output.
+
 ## Purpose
 
 Science already collects explicit feedback through `science feedback add`, but
