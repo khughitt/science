@@ -436,6 +436,15 @@ def test_plan_analysis_is_integrated_with_neighbor_commands() -> None:
             assert expected in text
 
 
+def test_next_steps_scans_done_files_for_each_month_in_recent_window() -> None:
+    text = _read("commands/next-steps.md")
+
+    assert "derive the recent-progress window first" in text
+    assert "scan every `tasks/done/YYYY-MM.md` file whose month intersects that window" in text
+    assert "Do not stop at the current month file" in text
+    assert "treat those rows as recent progress, not status drift" in text
+
+
 def test_needs_review_resolution_docs_cover_amendment_workflow() -> None:
     expected_by_path = {
         "commands/interpret-results.md": (

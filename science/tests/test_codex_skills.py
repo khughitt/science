@@ -334,6 +334,15 @@ def test_sync_mentions_scope_and_collision_warnings() -> None:
     assert "primary_external_id collision" in text
 
 
+def test_next_steps_skill_scans_done_files_for_each_month_in_recent_window() -> None:
+    text = _read_skill("science-next-steps")
+
+    assert "derive the recent-progress window first" in text
+    assert "scan every `tasks/done/YYYY-MM.md` file whose month intersects that window" in text
+    assert "Do not stop at the current month file" in text
+    assert "treat those rows as recent progress, not status drift" in text
+
+
 # ---------------------------------------------------------------------------
 # Smoke tests: generated skills must not inject @core/*.md
 # ---------------------------------------------------------------------------
