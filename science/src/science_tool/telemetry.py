@@ -6,8 +6,9 @@ import json
 import os
 import re
 import uuid
+from collections import Counter
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from science_tool.registry.config import get_science_config_dir
@@ -125,6 +126,62 @@ def read_events(telemetry_dir: Path) -> list[dict[str, object]]:
     return events
 
 
+def summarize_events(events: Sequence[Mapping[str, object]]) -> dict[str, object]:
+    """Summarize telemetry events for local reporting."""
+    event_types: Counter[str] = Counter()
+    commands: Counter[str] = Counter()
+    error_classes: Counter[str] = Counter()
+    exit_codes: Counter[str] = Counter()
+
+    for event in events:
+        if event_type := _string_field(event, "event_type"):
+            event_types[event_type] += 1
+        if command := _string_field(event, "command"):
+            commands[command] += 1
+        if error_class := _string_field(event, "error_class"):
+            error_classes[error_class] += 1
+        exit_code = event.get("exit_code")
+        if exit_code is not None:
+            exit_codes[str(exit_code)] += 1
+
+    return {
+        "total_events": len(events),
+        "event_types": dict(sorted(event_types.items())),
+        "commands": dict(sorted(commands.items())),
+        "error_classes": dict(sorted(error_classes.items())),
+        "exit_codes": dict(sorted(exit_codes.items())),
+    }
+
+
+def export_events_jsonl(events: Sequence[Mapping[str, object]]) -> str:
+    """Render events as deterministic JSONL."""
+    sorted_events = sorted(events, key=lambda event: (_string_field(event, "timestamp"), _string_field(event, "event_id")))
+    if not sorted_events:
+        return ""
+    return "\n".join(json.dumps(dict(event), sort_keys=True, separators=(",", ":")) for event in sorted_events) + "\n"
+
+
+def prune_events(telemetry_dir: Path, before: date) -> int:
+    """Remove events before a cutoff date. Returns the number removed."""
+    if not telemetry_dir.is_dir():
+        return 0
+
+    removed = 0
+    for path in sorted(telemetry_dir.glob("events-*.jsonl")):
+        kept: list[dict[str, object]] = []
+        for event in _read_file_events(path):
+            event_date = _event_date(event)
+            if event_date is not None and event_date < before:
+                removed += 1
+                continue
+            kept.append(event)
+        if kept:
+            path.write_text(export_events_jsonl(kept), encoding="utf-8")
+        else:
+            path.unlink(missing_ok=True)
+    return removed
+
+
 def _redact_value(token: str, *, option: str | None, index: int) -> str:
     if _SAFE_REF_RE.match(token):
         return token
@@ -139,6 +196,35 @@ def _redact_value(token: str, *, option: str | None, index: int) -> str:
     if token in {"true", "false", "json", "table", "text", "public", "private", "all", "open"}:
         return "<value>"
     return "<value>"
+
+
+def _read_file_events(path: Path) -> list[dict[str, object]]:
+    events: list[dict[str, object]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            events.append(value)
+    return events
+
+
+def _event_date(event: Mapping[str, object]) -> date | None:
+    timestamp = _string_field(event, "timestamp")
+    if not timestamp:
+        return None
+    try:
+        return date.fromisoformat(timestamp[:10])
+    except ValueError:
+        return None
+
+
+def _string_field(event: Mapping[str, object], key: str) -> str:
+    value = event.get(key)
+    return value if isinstance(value, str) else ""
 
 
 def _event_month(event: Mapping[str, object]) -> str:
