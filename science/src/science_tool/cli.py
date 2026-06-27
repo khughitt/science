@@ -5292,11 +5292,16 @@ def telemetry_status_cmd(output_format: str) -> None:
 
 @telemetry.command("report")
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
-def telemetry_report_cmd(output_format: str) -> None:
+@click.option("--errors", "include_errors", is_flag=True, help="Include recent command failures.")
+@click.option("--limit", default=5, type=click.IntRange(1, 100), show_default=True, help="Recent error rows to show.")
+def telemetry_report_cmd(output_format: str, include_errors: bool, limit: int) -> None:
     """Summarize local telemetry events."""
-    from science_tool.telemetry import get_telemetry_dir, read_events, summarize_events
+    from science_tool.telemetry import get_telemetry_dir, read_events, recent_error_rows, summarize_events
 
-    summary = summarize_events(read_events(get_telemetry_dir()))
+    events = read_events(get_telemetry_dir())
+    summary = summarize_events(events)
+    if include_errors:
+        summary["recent_errors"] = recent_error_rows(events, limit=limit)
     rows = [summary]
     emit_query_rows(
         output_format=output_format,
@@ -5310,6 +5315,17 @@ def telemetry_report_cmd(output_format: str) -> None:
         ],
         rows=rows,
     )
+    if include_errors and output_format != "json":
+        emit_query_rows(
+            output_format=output_format,
+            title="Recent Errors",
+            columns=[
+                ("timestamp", "Timestamp", {"no_wrap": True}),
+                ("failure", "Failure"),
+                ("argv", "Argv"),
+            ],
+            rows=_telemetry_error_table_rows(cast(list[dict[str, object]], summary["recent_errors"])),
+        )
 
 
 @telemetry.command("export")
@@ -5651,6 +5667,27 @@ def _feedback_triage_table_rows(rows: list[dict[str, object]], *, with_telemetry
             else ""
         )
         table_rows.append(copied)
+    return table_rows
+
+
+def _telemetry_error_table_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    table_rows: list[dict[str, object]] = []
+    for row in rows:
+        failure = str(row.get("command") or "")
+        details = [
+            f"exit={row['exit_code']}" if isinstance(row.get("exit_code"), int) else "",
+            str(row.get("error_class") or ""),
+        ]
+        detail_text = " ".join(detail for detail in details if detail)
+        if detail_text:
+            failure = f"{failure} ({detail_text})" if failure else detail_text
+        table_rows.append(
+            {
+                "timestamp": row.get("timestamp", ""),
+                "failure": failure,
+                "argv": row.get("argv", ""),
+            }
+        )
     return table_rows
 
 

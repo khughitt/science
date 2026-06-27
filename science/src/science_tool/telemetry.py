@@ -194,6 +194,13 @@ def summarize_events(events: Sequence[Mapping[str, object]]) -> dict[str, object
     }
 
 
+def recent_error_rows(events: Sequence[Mapping[str, object]], *, limit: int = 5) -> list[dict[str, object]]:
+    """Return recent command failures for local drilldown reporting."""
+    failing_events = [event for event in events if _is_error_report_event(event)]
+    failing_events.sort(key=lambda event: (_string_field(event, "timestamp"), _string_field(event, "event_id")), reverse=True)
+    return [_error_report_row(event) for event in failing_events[:limit]]
+
+
 def export_events_jsonl(events: Sequence[Mapping[str, object]]) -> str:
     """Render events as deterministic JSONL."""
     sorted_events = sorted(events, key=lambda event: (_string_field(event, "timestamp"), _string_field(event, "event_id")))
@@ -312,6 +319,32 @@ def _is_feedback_source_event(event: Mapping[str, object]) -> bool:
     return False
 
 
+def _is_error_report_event(event: Mapping[str, object]) -> bool:
+    event_type = _string_field(event, "event_type")
+    if event_type == "command_error":
+        return True
+    if event_type == "command_finish":
+        exit_code = event.get("exit_code")
+        return isinstance(exit_code, int) and exit_code != 0
+    return False
+
+
+def _error_report_row(event: Mapping[str, object]) -> dict[str, object]:
+    row: dict[str, object] = {
+        "timestamp": _string_field(event, "timestamp"),
+        "command": _string_field(event, "command"),
+        "argv": _render_argv_shape(event.get("argv_shape")),
+    }
+    exit_code = event.get("exit_code")
+    if isinstance(exit_code, int):
+        row["exit_code"] = exit_code
+    if error_class := _string_field(event, "error_class"):
+        row["error_class"] = error_class
+    if event_id := _string_field(event, "event_id"):
+        row["event_id"] = event_id
+    return row
+
+
 def _feedback_category_for_event(event: Mapping[str, object]) -> str:
     if _string_field(event, "event_type") == "validation_summary":
         return "gap"
@@ -342,6 +375,12 @@ def _feedback_detail_for_event(event: Mapping[str, object]) -> str:
     rendered_checks = _render_top_checks(event.get("top_checks"))
     _append_detail_line(lines, "top_checks", rendered_checks)
     return "\n".join(lines)
+
+
+def _render_argv_shape(value: object) -> str:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return ""
+    return " ".join(str(token) for token in value)
 
 
 def _append_detail_line(lines: list[str], label: str, value: str) -> None:

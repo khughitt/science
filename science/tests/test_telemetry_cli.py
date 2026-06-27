@@ -129,6 +129,82 @@ def test_telemetry_report_json_summarizes_local_events(tmp_path: Path) -> None:
     assert payload["rows"][0]["error_classes"]["NoSuchOption"] == 1
 
 
+def test_telemetry_report_json_can_include_recent_errors(tmp_path: Path) -> None:
+    telemetry_dir = tmp_path / "telemetry"
+    append_event(
+        telemetry_dir,
+        {
+            "event_id": "older-error",
+            "event_type": "command_error",
+            "command": "feedback list",
+            "argv_shape": ["feedback", "list", "--bad-option"],
+            "error_class": "NoSuchOption",
+            "exit_code": 2,
+            "timestamp": "2026-06-27T10:00:00-04:00",
+        },
+    )
+    append_event(
+        telemetry_dir,
+        {
+            "event_id": "newer-error",
+            "event_type": "command_error",
+            "command": "tasks add",
+            "argv_shape": ["tasks", "add", "--title", "<value:redacted>"],
+            "error_class": "ClickException",
+            "exit_code": 1,
+            "timestamp": "2026-06-27T10:05:00-04:00",
+        },
+    )
+
+    result = CliRunner().invoke(
+        main,
+        ["telemetry", "report", "--errors", "--limit", "1", "--format", "json"],
+        env={"SCIENCE_TELEMETRY_DIR": str(telemetry_dir)},
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["rows"][0]["total_events"] == 2
+    assert payload["rows"][0]["recent_errors"] == [
+        {
+            "timestamp": "2026-06-27T10:05:00-04:00",
+            "command": "tasks add",
+            "argv": "tasks add --title <value:redacted>",
+            "exit_code": 1,
+            "error_class": "ClickException",
+            "event_id": "newer-error",
+        }
+    ]
+
+
+def test_telemetry_report_table_can_include_recent_errors(tmp_path: Path) -> None:
+    telemetry_dir = tmp_path / "telemetry"
+    append_event(
+        telemetry_dir,
+        {
+            "event_id": "recent-error",
+            "event_type": "command_error",
+            "command": "feedback list",
+            "argv_shape": ["feedback", "list", "--bad-option"],
+            "error_class": "NoSuchOption",
+            "exit_code": 2,
+            "timestamp": "2026-06-27T10:00:00-04:00",
+        },
+    )
+
+    result = CliRunner().invoke(
+        main,
+        ["telemetry", "report", "--errors"],
+        env={"SCIENCE_TELEMETRY_DIR": str(telemetry_dir)},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Recent Errors" in result.output
+    assert "feedback list" in result.output
+    assert "NoSuchOption" in result.output
+    assert "--bad-option" in result.output
+
+
 def test_telemetry_export_jsonl_prints_events(tmp_path: Path) -> None:
     telemetry_dir = tmp_path / "telemetry"
     append_event(
