@@ -134,9 +134,10 @@ class TestBenchmarkBlock:
         assert task.ground_truth is not None
         assert task.timepoints == ["24h"]
 
-    def test_task_id_must_be_slug_like(self) -> None:
+    @pytest.mark.parametrize("task_id", ["Bad Task", "a-", "ab-", "a--b"])
+    def test_task_id_must_be_lowercase_kebab_case_segments(self, task_id: str) -> None:
         with pytest.raises(ValueError, match="tasks.id"):
-            BenchmarkTask(id="Bad Task", task_type="classification")
+            BenchmarkTask(id=task_id, task_type="classification")
 
     def test_duplicate_task_ids_are_rejected(self) -> None:
         with pytest.raises(ValueError, match="duplicate benchmark task id"):
@@ -416,6 +417,23 @@ def test_non_dataset_kind_does_not_validate_source_class() -> None:
     assert e.source_class == "curated"
 
 
+def test_non_dataset_kind_rejects_benchmark_block() -> None:
+    with pytest.raises(ValueError, match="benchmark metadata is only valid on dataset"):
+        Entity(
+            id="hypothesis:h1",
+            kind="hypothesis",
+            type=EntityType.HYPOTHESIS,
+            title="H1",
+            project="p",
+            ontology_terms=[],
+            related=[],
+            source_refs=[],
+            content_preview="",
+            file_path="doc/hypotheses/h1.md",
+            benchmark=BenchmarkBlock(benchmark_kinds=["classification"]),
+        )
+
+
 # --- also enforced on the graph path (DatasetEntity inherits the Entity validator) ---
 
 
@@ -524,6 +542,56 @@ def test_parse_dataset_benchmark_block(tmp_path: Path) -> None:
     assert task.held_out_unit == "compound"
     assert task.timepoints == ["24h"]
     assert task.ground_truth is not None and task.ground_truth.type == "measured-outcome"
+
+
+def test_parse_dataset_benchmark_malformed_task_id_raises(tmp_path: Path) -> None:
+    md = _write_dataset_md(
+        tmp_path,
+        "benchmark:",
+        "  tasks:",
+        "    - id: a--b",
+        "      task_type: response-prediction",
+    )
+
+    with pytest.raises(ValidationError, match="tasks.id"):
+        parse_entity_file(md, project_slug="testproj")
+
+
+def test_parse_dataset_benchmark_duplicate_task_ids_raise(tmp_path: Path) -> None:
+    md = _write_dataset_md(
+        tmp_path,
+        "benchmark:",
+        "  tasks:",
+        "    - id: drug-response",
+        "      task_type: response-prediction",
+        "    - id: drug-response",
+        "      task_type: ranking",
+    )
+
+    with pytest.raises(ValidationError, match="duplicate benchmark task id"):
+        parse_entity_file(md, project_slug="testproj")
+
+
+def test_parse_non_dataset_benchmark_block_is_dropped(tmp_path: Path) -> None:
+    md = tmp_path / "h1.md"
+    md.write_text(
+        "---\n"
+        "id: hypothesis:h1\n"
+        "type: hypothesis\n"
+        "title: H1\n"
+        "benchmark:\n"
+        "  tasks:\n"
+        "    - id: drug-response\n"
+        "      task_type: response-prediction\n"
+        "---\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+
+    entity = parse_entity_file(md, project_slug="testproj")
+
+    assert entity is not None
+    assert entity.benchmark is None
 
 
 def test_parse_dataset_invalid_source_class_raises(tmp_path: Path) -> None:

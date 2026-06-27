@@ -229,7 +229,7 @@ class DatasetUsage(BaseModel):
         return v
 
 
-_BENCHMARK_TASK_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
+_BENCHMARK_TASK_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 class GroundTruth(BaseModel):
@@ -262,7 +262,7 @@ class BenchmarkTask(BaseModel):
     @field_validator("id")
     @classmethod
     def _validate_id(cls, value: str) -> str:
-        if not _BENCHMARK_TASK_ID_RE.fullmatch(value):
+        if not 2 <= len(value) <= 64 or not _BENCHMARK_TASK_ID_RE.fullmatch(value):
             raise ValueError("tasks.id must be lowercase kebab-case, 2-64 characters")
         return value
 
