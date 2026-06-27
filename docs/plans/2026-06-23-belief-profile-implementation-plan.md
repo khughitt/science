@@ -2,6 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Implemented and covered by `science/tests/test_belief_profile.py` and
+`science/tests/test_belief_cli.py`.
+
 **Goal:** Build `science belief profile`, a read-only derived per-entity epistemic profile over existing belief, evidence, cap, scalar, and freshness machinery.
 
 **Architecture:** Add one focused graph module that computes deterministic profile rows from in-memory RDF graphs, then expose it through the existing `science belief` click group. The command does not materialize RDF, does not persist new metadata, and does not introduce a new belief engine; it reuses `belief_for_entity`, `aggregate_belief`, `BundleBeliefResult`, `belief_scalar`, evidence collection, and materialized freshness state.

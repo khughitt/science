@@ -1,7 +1,9 @@
 # Belief Profile CLI Design
 
 **Date:** 2026-06-23
-**Status:** Implementation planned; see `docs/plans/2026-06-23-belief-profile-implementation-plan.md`.
+**Status:** Implemented in `science belief profile`; see
+`docs/plans/2026-06-23-belief-profile-implementation-plan.md` for the delivered
+task sequence and verification targets.
 **Feedback:** `fb-2026-05-31-009`
 
 ## Context
