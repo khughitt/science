@@ -136,6 +136,7 @@ reason.
 | Survival, Cox, Weibull, censored outcomes across cohorts | `statistics-survival-and-hierarchical-models`, `statistics-power-floor-acknowledgement`, `statistics-sensitivity-arbitration` |
 | Proteomics, phosphoproteomics, mass spectrometry, peptide intensity, TMT, LFQ | `data-proteomics-qa`, `statistics-bias-vs-variance-decomposition`, `statistics-sensitivity-arbitration` |
 | Wearable, behavioral, actigraphy, EMA, symptom diary, sensor time series, sleep/activity rhythms, or cross-lag coupling | `statistics-time-series-and-longitudinal-models`, `statistics-bias-vs-variance-decomposition`, `statistics-power-floor-acknowledgement`, and `statistics-sensitivity-arbitration` |
+| Network/graph edges, dyadic data, edge prediction, node-label permutation, QAP/MRQAP | `statistics-power-floor-acknowledgement`, `statistics-replicate-count-justification`, `statistics-sensitivity-arbitration`; treat dyads as dependent observations and do not use iid pair tests as the confirmatory inference |
 | Fractions/proportions constrained to sum to one | `statistics-compositional-data`, `statistics-bias-vs-variance-decomposition` |
 | Embedding clustering, UMAP, HDBSCAN, Mapper, CKA, Moran's I | `data-embeddings-manifold-qa`, `statistics-bias-vs-variance-decomposition`, `statistics-sensitivity-arbitration` |
 | Protein PLM, UniProt/Pfam/CATH/Foldseek/MMseqs labels | `data-protein-sequence-structure-qa`; add `data-embeddings-manifold-qa` when embeddings/manifolds are analyzed |
@@ -244,6 +245,7 @@ Use these as spot checks when applying the command:
 5. **ecDNA selection-vs-neutral on per-cell scWGS (e.g. Bafna-style binomial segregation on DLP+)** - include `data-genomics-copy-number-sv-qa` for the per-cell CN calls, `statistics-population-genetics-likelihood` for the WF/Moran/segregation likelihoods, `statistics-likelihood-model-comparison` for the AIC/BIC/LRT comparison, plus `statistics-power-floor-acknowledgement` and `statistics-sensitivity-arbitration`. A single-cohort selection signal is cohort-scoped pending independent replication.
 6. **Proteomics or phosphoproteomics cohort contrast** - include `data-proteomics-qa`, `statistics-bias-vs-variance-decomposition`, and `statistics-sensitivity-arbitration`; add `statistics-power-floor-acknowledgement` when null or weak effects are verdict-bearing.
 7. **Wearable/sensor or symptom-diary time-series analysis** - include `statistics-time-series-and-longitudinal-models`, `statistics-bias-vs-variance-decomposition`, `statistics-power-floor-acknowledgement`, and `statistics-sensitivity-arbitration`.
+8. **Disease graph edge-prediction or dyadic network analysis** - include `statistics-power-floor-acknowledgement`, `statistics-replicate-count-justification`, and `statistics-sensitivity-arbitration`; require a permutation design such as QAP/MRQAP or node-label permutation when edges share nodes.
 
 ## Process Reflection
 

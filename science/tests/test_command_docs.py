@@ -429,6 +429,18 @@ def test_plan_analysis_command_routes_proteomics_and_sensor_time_series() -> Non
     for expected in expected_strings[2:]:
         assert expected in text
 
+
+def test_plan_analysis_command_routes_network_dyadic_permutation_designs() -> None:
+    text = _read("commands/plan-analysis.md")
+
+    expected_strings = (
+        "Network/graph edges, dyadic data, edge prediction, node-label permutation, QAP/MRQAP",
+        "`statistics-power-floor-acknowledgement`, `statistics-replicate-count-justification`, `statistics-sensitivity-arbitration`",
+        "treat dyads as dependent observations",
+    )
+    for expected in expected_strings:
+        assert expected in text
+
     assert "statistics-time-series-and-longitudinal-models` if present" not in text
 
 

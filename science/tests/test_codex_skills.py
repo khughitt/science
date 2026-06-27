@@ -136,6 +136,19 @@ def test_generated_plan_analysis_skill_routes_proteomics_and_sensor_time_series(
     assert "statistics-time-series-and-longitudinal-models` if present" not in text
 
 
+def test_generated_plan_analysis_skill_routes_network_dyadic_permutation_designs(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-plan-analysis"].read_text(encoding="utf-8")
+
+    expected_strings = (
+        "Network/graph edges, dyadic data, edge prediction, node-label permutation, QAP/MRQAP",
+        "`statistics-power-floor-acknowledgement`, `statistics-replicate-count-justification`, `statistics-sensitivity-arbitration`",
+        "treat dyads as dependent observations",
+    )
+    for expected in expected_strings:
+        assert expected in text
+
+
 def test_catalog_datasets_generated_skill_is_layout_v3_aware(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
     text = generated["science-catalog-datasets"].read_text(encoding="utf-8")
