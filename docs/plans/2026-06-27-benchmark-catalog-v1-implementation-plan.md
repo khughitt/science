@@ -49,6 +49,10 @@ This plan does not implement graph-aware belief mapping, `science benchmark gaps
   Add `science benchmark list`.
 - Create: `science/tests/test_benchmark_cli.py`  
   CLI tests.
+- Modify: `science/src/science_tool/commons/adapter.py`
+  Let reference/pointer commons datasets omit runtime datapackage sidecars.
+- Modify: `science/tests/test_commons_adapter.py`
+  Commons adapter scan/load tests for optional reference/pointer sidecars.
 - Modify: `science/tests/test_commons_inventory.py`  
   Confirm benchmark metadata projects through commons inventory.
 - Modify or create in `~/d/science-commons/`: `datasets/<slug>/entity.md` for the seed benchmark records.
@@ -1343,11 +1347,148 @@ None` (`inventory.py:103`).
 
 - [ ] **Step 1: Write failing tests**
 
-Add tests asserting:
-- a `reference` dataset dir with `entity.md` and NO `datapackage.yaml` yields a `CommonsEntityRecord` with `datapackage_path is None` (not a `CommonsEntityError`);
-- a `pointer` dataset dir without `datapackage.yaml` likewise yields a record;
-- a `deposit` dataset dir without `datapackage.yaml` still yields a `CommonsEntityError` (cause `CommonsLayoutError`);
-- a dataset dir with no explicit `dataset_class` and no `datapackage.yaml` still errors (missing-class defaults to deposit).
+Add this helper to `science/tests/test_commons_adapter.py` after `_make_store`:
+
+```python
+def _write_dataset_entity(
+    root: Path,
+    slug: str,
+    *,
+    dataset_class: str | None,
+    verification_method: str = "landing-confirmed",
+) -> Path:
+    dataset_dir = root / "datasets" / slug
+    dataset_dir.mkdir(parents=True)
+    dataset_class_line = (
+        f'dataset_class: "{dataset_class}"\n'
+        if dataset_class is not None
+        else ""
+    )
+    (dataset_dir / "entity.md").write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+dataset/1.0"\n'
+        f'id: "dataset:{slug}"\n'
+        'type: "dataset"\n'
+        f'title: "{slug}"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-06-27"\n'
+        'updated: "2026-06-27"\n'
+        'origin: "external"\n'
+        f"{dataset_class_line}"
+        'tier: "track"\n'
+        "access:\n"
+        '  level: "public"\n'
+        "  verified: true\n"
+        f'  verification_method: "{verification_method}"\n'
+        '  source_url: "https://example.org/dataset"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "---\nbody\n",
+        encoding="utf-8",
+    )
+    return dataset_dir
+```
+
+Add these tests near `test_scan_yields_entity_error_for_dataset_missing_datapackage`:
+
+```python
+@pytest.mark.parametrize("dataset_class", ["reference", "pointer"])
+def test_scan_allows_reference_pointer_dataset_without_datapackage(
+    tmp_path: Path,
+    dataset_class: str,
+) -> None:
+    root = _make_store(tmp_path, "valid")
+    dataset_dir = _write_dataset_entity(
+        root,
+        f"{dataset_class}-no-dp",
+        dataset_class=dataset_class,
+    )
+
+    items = list(CommonsEntityAdapter(root).scan())
+    errors = [
+        it
+        for it in items
+        if isinstance(it, CommonsEntityError) and it.path == dataset_dir
+    ]
+    records = [
+        it
+        for it in items
+        if isinstance(it, CommonsEntityRecord)
+        and it.canonical_id == f"dataset:{dataset_class}-no-dp"
+    ]
+
+    assert errors == []
+    assert len(records) == 1
+    assert records[0].datapackage_path is None
+
+
+@pytest.mark.parametrize("dataset_class", ["deposit", None])
+def test_scan_still_requires_datapackage_for_deposit_or_missing_class(
+    tmp_path: Path,
+    dataset_class: str | None,
+) -> None:
+    root = _make_store(tmp_path, "valid")
+    slug = "missing-class-no-dp" if dataset_class is None else "deposit-no-dp"
+    dataset_dir = _write_dataset_entity(
+        root,
+        slug,
+        dataset_class=dataset_class,
+        verification_method="retrieved",
+    )
+
+    items = list(CommonsEntityAdapter(root).scan())
+    errors = [
+        it
+        for it in items
+        if isinstance(it, CommonsEntityError) and it.path == dataset_dir
+    ]
+    records = [
+        it
+        for it in items
+        if isinstance(it, CommonsEntityRecord) and it.canonical_id == f"dataset:{slug}"
+    ]
+
+    assert len(errors) == 1
+    assert isinstance(errors[0].cause, CommonsLayoutError)
+    assert records == []
+
+
+@pytest.mark.parametrize("dataset_class", ["reference", "pointer"])
+def test_load_allows_reference_pointer_dataset_without_datapackage(
+    tmp_path: Path,
+    dataset_class: str,
+) -> None:
+    root = _make_store(tmp_path, "valid")
+    _write_dataset_entity(
+        root,
+        f"{dataset_class}-no-dp",
+        dataset_class=dataset_class,
+    )
+
+    record = CommonsEntityAdapter(root).load(f"dataset:{dataset_class}-no-dp")
+
+    assert isinstance(record, CommonsEntityRecord)
+    assert record.datapackage_path is None
+
+
+@pytest.mark.parametrize("dataset_class", ["deposit", None])
+def test_load_still_requires_datapackage_for_deposit_or_missing_class(
+    tmp_path: Path,
+    dataset_class: str | None,
+) -> None:
+    root = _make_store(tmp_path, "valid")
+    slug = "missing-class-no-dp" if dataset_class is None else "deposit-no-dp"
+    _write_dataset_entity(
+        root,
+        slug,
+        dataset_class=dataset_class,
+        verification_method="retrieved",
+    )
+
+    with pytest.raises(CommonsLayoutError, match="datapackage.yaml"):
+        CommonsEntityAdapter(root).load(f"dataset:{slug}")
+```
 
 - [ ] **Step 2: Run tests and verify they fail**
 
@@ -1359,9 +1500,9 @@ Expected: FAIL because the adapter errors on every dataset dir lacking `datapack
 
 - [ ] **Step 3: Implement the relaxation**
 
-In `science/src/science_tool/commons/adapter.py`, read the declared class before
-the datapackage gate (`parse_frontmatter` is already imported and returns
-`(frontmatter, int)`):
+In `science/src/science_tool/commons/adapter.py`, add helpers near `_TYPE_DIR_TO_TYPE`
+so `scan()` and `load()` use one sidecar rule. `parse_frontmatter` is already
+imported and returns `(frontmatter, int)`:
 
 ```python
 def _peek_dataset_class(entity_path: Path) -> str:
@@ -1371,6 +1512,17 @@ def _peek_dataset_class(entity_path: Path) -> str:
         return "deposit"
     value = (frontmatter or {}).get("dataset_class")
     return value if isinstance(value, str) and value else "deposit"
+
+
+def _dataset_datapackage_path(root: Path, slug: str, entity_path: Path) -> Path | None:
+    dp_path = root / "datasets" / slug / "datapackage.yaml"
+    requires_dp = _peek_dataset_class(entity_path) not in ("reference", "pointer")
+    if requires_dp and not dp_path.is_file():
+        raise CommonsLayoutError(
+            root / "datasets" / slug,
+            reason="deposit dataset directory missing required datapackage.yaml sibling",
+        )
+    return dp_path if dp_path.is_file() else None
 ```
 
 Rewrite the `datasets` branch of `_scan_type` so the sidecar is required only for
@@ -1380,25 +1532,45 @@ deposit/missing-class records:
                 entity_path = child / "entity.md"
                 if not entity_path.is_file():
                     continue
-                dp_path = child / "datapackage.yaml"
-                requires_dp = _peek_dataset_class(entity_path) not in ("reference", "pointer")
-                if requires_dp and not dp_path.is_file():
+                try:
+                    dp_path = _dataset_datapackage_path(
+                        self._root,
+                        child.name,
+                        entity_path,
+                    )
+                except CommonsLayoutError as exc:
                     yield CommonsEntityError(
                         child,
                         canonical_id=f"dataset:{child.name}",
-                        cause=CommonsLayoutError(
-                            child,
-                            reason=(
-                                "deposit dataset directory missing required "
-                                "datapackage.yaml sibling"
-                            ),
-                        ),
+                        cause=exc,
                     )
                     continue
-                yield self._build(
-                    type_name, child.name, entity_path,
-                    dp_path if dp_path.is_file() else None,
-                )
+                yield self._build(type_name, child.name, entity_path, dp_path)
+```
+
+Also rewrite the dataset branch in `load()` to call the same helper:
+
+```python
+        if type_dir == "datasets":
+            body = self._root / "datasets" / slug / "entity.md"
+            dp = (
+                _dataset_datapackage_path(self._root, slug, body)
+                if body.is_file()
+                else None
+            )
+        else:
+            body = self._root / type_dir / f"{slug}.md"
+            dp = None
+```
+
+Remove the old unconditional dataset-sidecar check:
+
+```python
+        if dp is not None and not dp.is_file():
+            raise CommonsLayoutError(
+                self._root / "datasets" / slug,
+                reason="dataset directory missing required datapackage.yaml sibling",
+            )
 ```
 
 `CommonsEntityRecord.datapackage_path` is already `Path | None`, and `_build`
@@ -2009,8 +2181,8 @@ update the golden intentionally if so.
 - [ ] **Step 2: Run formatter and linter**
 
 ```bash
-rtk uv run --frozen ruff format science/model/src/science_model/packages/schema.py science/model/src/science_model/entities.py science/model/src/science_model/frontmatter.py science/src/science_tool/benchmark_catalog.py science/src/science_tool/validate/checks/benchmark_metadata.py science/src/science_tool/cli.py science/model/tests/test_dataset_models.py science/model/tests/test_entity_schema_mixin_dataset.py science/tests/validate/test_checks_benchmark_metadata.py science/tests/test_benchmark_cli.py science/tests/test_commons_inventory.py
-rtk uv run --frozen ruff check science/model/src/science_model/packages/schema.py science/model/src/science_model/entities.py science/model/src/science_model/frontmatter.py science/src/science_tool/benchmark_catalog.py science/src/science_tool/validate/checks/benchmark_metadata.py science/src/science_tool/cli.py science/model/tests/test_dataset_models.py science/model/tests/test_entity_schema_mixin_dataset.py science/tests/validate/test_checks_benchmark_metadata.py science/tests/test_benchmark_cli.py science/tests/test_commons_inventory.py
+rtk uv run --frozen ruff format science/model/src/science_model/packages/schema.py science/model/src/science_model/entities.py science/model/src/science_model/frontmatter.py science/src/science_tool/benchmark_catalog.py science/src/science_tool/validate/checks/benchmark_metadata.py science/src/science_tool/cli.py science/src/science_tool/commons/adapter.py science/model/tests/test_dataset_models.py science/model/tests/test_entity_schema_mixin_dataset.py science/tests/validate/test_checks_benchmark_metadata.py science/tests/test_benchmark_cli.py science/tests/test_commons_adapter.py science/tests/test_commons_inventory.py
+rtk uv run --frozen ruff check science/model/src/science_model/packages/schema.py science/model/src/science_model/entities.py science/model/src/science_model/frontmatter.py science/src/science_tool/benchmark_catalog.py science/src/science_tool/validate/checks/benchmark_metadata.py science/src/science_tool/cli.py science/src/science_tool/commons/adapter.py science/model/tests/test_dataset_models.py science/model/tests/test_entity_schema_mixin_dataset.py science/tests/validate/test_checks_benchmark_metadata.py science/tests/test_benchmark_cli.py science/tests/test_commons_adapter.py science/tests/test_commons_inventory.py
 ```
 
 Expected: formatter completes; ruff check passes.
