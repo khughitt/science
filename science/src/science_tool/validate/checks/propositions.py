@@ -252,10 +252,8 @@ def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Res
             materialize.py uses ``role=relation.role or MembershipRole.CORE`` and writes
             to the same deterministic membership node IRI).
     """
-    from science_tool.graph.sources import load_project_sources
-
     try:
-        sources = load_project_sources(ctx.project_root, strict_identity=False)
+        sources = ctx.project_sources(strict_identity=False)
     except Exception:
         # If loading fails for unrelated reasons, skip this check gracefully —
         # other checks (e.g. cross_references) will surface the load failure.

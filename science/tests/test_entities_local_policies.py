@@ -65,6 +65,28 @@ def test_resolve_local_profile_name_defaults_to_local(tmp_path: Path) -> None:
     assert resolve_local_profile_name(tmp_path) == "local"
 
 
+def test_resolve_local_profile_name_reuses_unchanged_project_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write(tmp_path, "science.yaml", "name: t\nknowledge_profiles:\n  local: mm30-local\n")
+
+    from science_tool.graph import sources
+
+    original_safe_load = sources.yaml.safe_load
+    calls = 0
+
+    def counted_safe_load(text: str) -> object:
+        nonlocal calls
+        calls += 1
+        return original_safe_load(text)
+
+    monkeypatch.setattr(sources.yaml, "safe_load", counted_safe_load)
+
+    assert resolve_local_profile_name(tmp_path) == "mm30-local"
+    assert resolve_local_profile_name(tmp_path) == "mm30-local"
+    assert calls == 1
+
+
 _LOCAL_MANIFEST = """\
 name: t-local
 imports:

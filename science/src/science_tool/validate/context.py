@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import yaml
 
 from science_tool.paths import resolve_paths
+
+if TYPE_CHECKING:
+    from rdflib import Dataset
+
+    from science_tool.graph.sources import ProjectSources
+
+_T = TypeVar("_T")
 
 
 class ValidateContextError(Exception):
@@ -27,6 +35,7 @@ class ValidateContext:
     _text_cache: dict[tuple[Path, int], str] = field(default_factory=dict, init=False, repr=False)
     _yaml_cache: dict[tuple[Path, int], Any] = field(default_factory=dict, init=False, repr=False)
     _frontmatter_cache: dict[tuple[Path, int], dict[str, Any]] = field(default_factory=dict, init=False, repr=False)
+    _resource_cache: dict[tuple[object, ...], Any] = field(default_factory=dict, init=False, repr=False)
 
     @classmethod
     def from_project_root(cls, project_root: Path, *, strict: bool, verbose: bool) -> "ValidateContext":
@@ -77,6 +86,37 @@ class ValidateContext:
         if key not in self._frontmatter_cache:
             self._frontmatter_cache[key] = self._parse_frontmatter(self.read_text_cached(key[0]))
         return self._frontmatter_cache[key]
+
+    def cached_resource(self, key: tuple[object, ...], factory: Callable[[], _T]) -> _T:
+        if key not in self._resource_cache:
+            self._resource_cache[key] = factory()
+        return cast(_T, self._resource_cache[key])
+
+    def project_sources(
+        self,
+        *,
+        include_commons: bool = True,
+        strict_core_schema: bool = True,
+        strict_identity: bool = True,
+    ) -> ProjectSources:
+        from science_tool.graph.sources import load_project_sources
+
+        return self.cached_resource(
+            ("project_sources", include_commons, strict_core_schema, strict_identity),
+            lambda: load_project_sources(
+                self.project_root,
+                include_commons=include_commons,
+                strict_core_schema=strict_core_schema,
+                strict_identity=strict_identity,
+            ),
+        )
+
+    def graph_dataset(self, graph_path: Path) -> Dataset:
+        from science_tool.graph.store import dataset as dataset_module
+
+        absolute = graph_path.resolve()
+        key = ("graph_dataset", absolute, absolute.stat().st_mtime_ns)
+        return self.cached_resource(key, lambda: dataset_module._load_dataset(absolute))
 
     @staticmethod
     def _parse_frontmatter(text: str) -> dict[str, Any]:

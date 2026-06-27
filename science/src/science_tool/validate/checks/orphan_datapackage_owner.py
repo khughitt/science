@@ -18,7 +18,6 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
-from science_tool.graph.sources import load_project_sources
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -28,8 +27,7 @@ from science_tool.validate.result import Result, Severity
 def check_orphan_datapackage_owner(ctx: ValidateContext) -> Iterator[Result]:
     # Non-strict + no commons: a diagnostic must not abort on unrelated strictness
     # failures, and commons owners are a different scope (never this-project orphans).
-    sources = load_project_sources(
-        ctx.project_root,
+    sources = ctx.project_sources(
         include_commons=False,
         strict_core_schema=False,
         strict_identity=False,

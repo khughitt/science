@@ -476,12 +476,11 @@ def check_cross_references(ctx: ValidateContext) -> Iterator[Result]:
 @Check(section="archive index reconciliation", order=21)
 def check_archive_index(ctx: ValidateContext) -> Iterator[Result]:
     from science_tool.archive import verify_archive
-    from science_tool.graph.sources import load_project_sources
 
     live_space: set[str] = set()
     load_error: str | None = None
     try:
-        sources = load_project_sources(ctx.project_root)
+        sources = ctx.project_sources()
         for e in sources.entities:
             live_space.add(e.canonical_id)
             live_space.update(e.aliases or [])

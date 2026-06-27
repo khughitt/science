@@ -12,7 +12,7 @@ from collections import defaultdict
 from collections.abc import Iterator
 from pathlib import Path
 
-from rdflib import RDF, Dataset, Graph, Literal, URIRef
+from rdflib import RDF, Graph, Literal, URIRef
 from rdflib.namespace import PROV
 from science_model.reasoning import EvidenceType
 
@@ -356,9 +356,8 @@ def _load_belief_graphs(ctx: ValidateContext) -> tuple[Graph | None, Graph | Non
     path = ctx.project_root / "knowledge" / "graph.trig"
     if not path.exists():
         return None, None
-    ds = Dataset()
-    ds.parse(source=str(path), format="trig")
-    return ds.graph(_graph_uri("graph/knowledge")), ds.graph(_graph_uri("graph/provenance"))
+    dataset = ctx.graph_dataset(path)
+    return dataset.graph(_graph_uri("graph/knowledge")), dataset.graph(_graph_uri("graph/provenance"))
 
 
 def _claims(knowledge: Graph) -> Iterator[URIRef]:

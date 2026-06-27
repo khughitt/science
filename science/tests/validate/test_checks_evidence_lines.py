@@ -46,6 +46,35 @@ def _write(root: Path, rel: str, body: str) -> Path:
     return p
 
 
+def test_belief_graph_loader_reuses_parsed_dataset_for_context(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from science_tool.validate.checks import evidence_lines
+
+    _write(
+        tmp_path,
+        "knowledge/graph.trig",
+        "@prefix ex: <http://example.org/> .\n",
+    )
+    ctx = _ctx(tmp_path)
+    calls = 0
+    from science_tool.graph.store import dataset as dataset_module
+
+    original_load_dataset = dataset_module._load_dataset
+
+    def counted_load_dataset(path: Path) -> Dataset:
+        nonlocal calls
+        calls += 1
+        return original_load_dataset(path)
+
+    monkeypatch.setattr(dataset_module, "_load_dataset", counted_load_dataset)
+
+    evidence_lines._load_belief_graphs(ctx)
+    evidence_lines._load_belief_graphs(ctx)
+
+    assert calls == 1
+
+
 # ---------------------------------------------------------------------------
 # Rule: evidence.unstanced — sub-case (a): missing stance or target on a line
 # ---------------------------------------------------------------------------

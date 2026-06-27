@@ -159,7 +159,6 @@ from science_tool.graph.store import (
     validate_graph_dataset,
     validate_inquiry_dataset,
 )
-from science_tool.graph.store.dataset import _load_dataset
 from science_tool.peers_validate import PeerIssue, validate_peers
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -198,7 +197,7 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
         return
 
     try:
-        dataset = _load_dataset(graph_path)
+        dataset = ctx.graph_dataset(graph_path)
     except Exception:  # noqa: BLE001
         rows, _has_failures = validate_graph(graph_path)
     else:

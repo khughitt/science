@@ -31,7 +31,6 @@ from science_tool.graph.identity_table import (
     IdentityTable,
     build_identity_table,
 )
-from science_tool.graph.sources import load_project_sources
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -53,8 +52,7 @@ def check_forbidden_second_declaration(ctx: ValidateContext) -> Iterator[Result]
     # Non-strict + no commons, matching the orphan check: a diagnostic must not abort
     # on the collision it reports, and a commons owner + a local owner of the same id
     # are two DIFFERENT keys (different owner_scope), never a same-scope collision.
-    sources = load_project_sources(
-        ctx.project_root,
+    sources = ctx.project_sources(
         include_commons=False,
         strict_core_schema=False,
         strict_identity=False,

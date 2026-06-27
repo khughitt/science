@@ -20,7 +20,6 @@ from pathlib import Path
 import yaml
 
 from science_tool.graph.identity_table import build_identity_table
-from science_tool.graph.sources import load_project_sources
 from science_tool.graph.storage_adapters.aggregate import MULTI_TYPE_AGGREGATE_ROOT_KEYS
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -38,8 +37,7 @@ def check_aggregate_retired_at_v3(ctx: ValidateContext) -> Iterator[Result]:
     version = _layout_version(ctx.project_root)
     if version is None or version < 3:
         return  # below v3 the lone-stub WARN covers visibility; this gate is silent
-    sources = load_project_sources(
-        ctx.project_root,
+    sources = ctx.project_sources(
         include_commons=False,
         strict_core_schema=False,
         strict_identity=False,

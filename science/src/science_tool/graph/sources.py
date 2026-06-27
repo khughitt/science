@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from copy import deepcopy
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, TypeVar, cast
@@ -85,6 +86,7 @@ _ENUM_FIELDS: dict[str, type[StrEnum]] = {
 }
 
 _SAFE_YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+_PROJECT_CONFIG_CACHE: dict[tuple[str, int], dict[str, object]] = {}
 
 
 class KnowledgeProfiles(BaseModel):
@@ -1160,6 +1162,13 @@ def _load_typed_records(
 
 def _read_project_config(project_root: Path) -> dict[str, object]:
     yaml_path = project_root / "science.yaml"
+    cache_key: tuple[str, int] | None = None
+    if yaml_path.is_file():
+        cache_key = (str(yaml_path.resolve()), yaml_path.stat().st_mtime_ns)
+        cached = _PROJECT_CONFIG_CACHE.get(cache_key)
+        if cached is not None:
+            return deepcopy(cached)
+
     data: dict[str, object] = {}
     if yaml_path.is_file():
         data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
@@ -1198,7 +1207,7 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
             if isinstance(entry, dict) and isinstance(entry.get("id"), str) and entry["id"]:
                 peer_ids.append(str(entry["id"]))
 
-    return {
+    config: dict[str, object] = {
         "name": str(data.get("name") or project_root.name),
         "knowledge_profiles": {
             "local": str(knowledge_profiles.get("local") or "local"),
@@ -1207,6 +1216,9 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
         "freshness": raw_freshness,
         "peer_ids": peer_ids,
     }
+    if cache_key is not None:
+        _PROJECT_CONFIG_CACHE[cache_key] = config
+    return deepcopy(config)
 
 
 def resolve_local_profile_name(project_root: Path) -> str:

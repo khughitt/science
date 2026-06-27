@@ -17,7 +17,6 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from science_tool.graph.identity_table import build_identity_table
-from science_tool.graph.sources import load_project_sources
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -28,8 +27,7 @@ def check_lone_aggregate_stub(ctx: ValidateContext) -> Iterator[Result]:
     # Non-strict, no commons, lenient core schema -- matching the identity-collision
     # check: a diagnostic must not abort on the condition it reports, and a malformed
     # row must not take the visibility tool offline.
-    sources = load_project_sources(
-        ctx.project_root,
+    sources = ctx.project_sources(
         include_commons=False,
         strict_core_schema=False,
         strict_identity=False,
