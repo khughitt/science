@@ -222,6 +222,19 @@ def test_generated_plan_analysis_skill_requires_per_input_data_profile(
     assert "checksum or immutable identifier" in text
 
 
+def test_generated_plan_analysis_skill_preserves_locked_pre_registration_criteria(
+    tmp_path: Path,
+) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-plan-analysis"].read_text(encoding="utf-8")
+
+    assert "When a Pre-Registration Already Exists" in text
+    assert "do **not** re-derive decision" in text
+    assert "relitigating a committed criterion set here invites" in text
+    assert "HARKing" in text
+    assert "treat it as an amendment question rather than a" in text
+
+
 def test_generated_plan_pipeline_skill_documents_mixed_access_public_slice_gate(
     tmp_path: Path,
 ) -> None:
@@ -268,6 +281,23 @@ def test_generated_pre_register_skill_documents_in_run_calibration_gate(
     assert "marginal distributions or eligibility counts only" in text
     assert "forbid outcome labels, effect estimates, group-contrast results" in text
     assert "not a data-gated pre-registration" in text
+
+
+def test_generated_pre_register_skill_loads_real_artifacts_before_locking_thresholds(
+    tmp_path: Path,
+) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-pre-register"].read_text(encoding="utf-8")
+
+    assert "Feasibility Against Real Input Artifacts" in text
+    assert "Before locking any threshold in § 3" in text
+    assert "load the actual input artifacts" in text
+    assert "Support-set size" in text
+    assert "Universe alignment" in text
+    assert "underpowered or that the wrong arm was slated as confirmatory" in text
+    assert "re-scope, swap which arm is confirmatory/exploratory" in text
+    assert "caught pre-data because the artifacts" in text
+    assert "were loaded before the criteria were locked" in text
 
 
 def test_generated_specify_model_skill_documents_proxy_directness_vocabulary(
