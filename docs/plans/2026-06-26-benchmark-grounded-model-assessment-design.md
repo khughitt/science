@@ -4,7 +4,7 @@ type: "plan"
 title: "Benchmark-grounded model assessment for Science"
 status: "proposed"
 created: "2026-06-26"
-updated: "2026-06-26"
+updated: "2026-06-27"
 related:
   - "plan:2026-06-26-dataset-catalog-triage-pack-design"
   - "plan:2026-06-26-feedback-telemetry-adaptation-design"
@@ -13,6 +13,28 @@ related:
 ---
 
 # Benchmark-grounded model assessment for Science
+
+## Revision note (2026-06-27)
+
+Phase 1's `benchmark` metadata block is refined and narrowed for a first
+implementable v1:
+
+- **Descriptive-only.** v1 ships the catalog metadata block plus a commons seed
+  catalog. It adds **no** `RelationKind`, no materialize changes, and no belief
+  scoring. A benchmark still reaches belief only the existing way — via an
+  evidence-line with `evidence_type: benchmark` and `dataset_usage`. Belief
+  mapping, belief-tests, gap maps, and outcomes (Phases 2–3 below) are
+  unchanged and deferred.
+- The block becomes plural, adds `signal_types` and an optional `tasks[]`, drops
+  `scope`, defers the `informativeness` rubric, and treats `related_beliefs` /
+  `source_datasets` as **free-text references only** (documentation, not graph
+  edges).
+- A new **Commons seed catalog** section defines a diversity-first seed set of
+  shared `dataset:*` records.
+
+See the updated *Benchmark metadata* and *Commons seed catalog* sections; the
+remainder of this design (belief mapping, belief-tests, cross-project analysis)
+is the post-v1 roadmap.
 
 ## Purpose
 
@@ -67,42 +89,89 @@ as evaluation-plan documents that reference those datasets.
 
 ## Benchmark metadata
 
-Extend dataset catalog semantics with an optional `benchmark` block:
+Extend dataset catalog semantics with an optional, additive `benchmark` block on
+`dataset:*` entities. The block is descriptive: it says what a dataset can test
+and how well, so a human or agent can decide what to use for evaluation. It does
+not change the graph or belief in v1.
 
 ```yaml
 benchmark:
-  scope: "project"        # project | field | cross-project
-  domain: "biology"
-  modality:
-    - "single-cell-rna-seq"
-    - "perturbation"
-  benchmark_kind:
-    - "perturbation-response"
-    - "time-series"
-  endpoints:
-    - "cell-state transition"
-    - "gene-expression response"
-  ground_truth:
-    type: "measured-outcome"
-    description: "post-perturbation expression state"
-  suitable_for:
-    - "mechanism-discrimination"
-    - "model-calibration"
-    - "prediction"
-  limitations:
-    - "single cell line"
-    - "short time horizon"
-  related_beliefs:
+  # --- dataset-wide facets (the "catalog" layer; always allowed) ---
+  domains: ["biology", "omics"]
+  modalities: ["single-cell-rna-seq", "perturbation"]            # free-text v1
+  signal_types: ["perturbation", "cross-context-generalization"] # empirical structure present
+  benchmark_kinds: ["perturbation-response"]                     # intended evaluation (Benchmark classes table)
+  source_datasets: ["GEO:GSE..."]                               # free-text refs to underlying data
+  related_beliefs:                                              # OPTIONAL, free-text refs only (no edges in v1)
     - "hypothesis:0005-dynamic-homeostasis"
-    - "proposition:stress-response-is-state-dependent"
+  notes:
+    - "Strong perturbation-response signal; weak for temporal dynamics."
+  limitations:
+    - "L1000 landmark genes with inferred full profiles."
+
+  # --- evaluable specifics: present ONLY when a task is actually defined ---
+  tasks:
+    - id: "l1000-drug-response"
+      task_type: "perturbation-response"
+      prediction_target: "post-treatment expression signature"
+      held_out_unit: "compound"
+      metric: "rank correlation"
+      baseline: "nearest-neighbor signature baseline"
+      ground_truth:
+        type: "measured-outcome"
+        description: "post-perturbation expression state"
+      interpretation_limits:
+        - "L1000 measures landmark genes."
 ```
 
-Fields should be sparse and additive. A benchmark record with only domain,
-modality, and benchmark kind is still useful.
+Fields are sparse and additive. A record with only `domains`, `modalities`, and
+`benchmark_kinds` is still useful; `tasks[]` is omitted until a task is actually
+specified.
+
+Design choices for v1:
+
+- **Plural facets** (`domains`, `modalities`, `signal_types`) because most useful
+  omics benchmarks cross boundaries.
+- **`signal_types` vs `benchmark_kinds` are separate axes.** `signal_types`
+  describes what empirical structure exists (perturbation, temporal,
+  longitudinal, multimodal, spatial, cross-context, calibration); this is why a
+  non-benchmark dataset can still be informative. `benchmark_kinds` describes how
+  we intend to evaluate, drawing from the *Benchmark classes* table below.
+- **`tasks[]` owns the evaluable specifics.** When a task is defined, the
+  per-task fields (`task_type`, `prediction_target`, `held_out_unit`, `metric`,
+  `baseline`, `ground_truth`, `interpretation_limits`) live there. The block does
+  not duplicate them as block-level `endpoints` / `held_out_units` /
+  `suitable_for`; those are dropped.
+- **`held_out_unit` is included early** because it is the practical difference
+  between "a dataset exists" and "a model can be tested."
+- **`related_beliefs` and `source_datasets` are free-text reference lists only.**
+  They are documentation, not graph edges, in v1. Phase 2 promotes the
+  belief link to real typed edges and belief-tests.
+- **No `scope` field.** It overlapped the existing `EntityScope` (project/shared)
+  and the dataset `tier` (`use-now` / `evaluate-next` / `track`). A seed's
+  commons-vs-local home and `tier` already carry that information.
+- **`informativeness` rubric deferred.** A multi-axis qualitative score
+  (causal/temporal/modality-novelty/etc.) is curation theater nobody will
+  maintain consistently across a small seed set. v1 uses free-text `notes`;
+  specific axes can be promoted to structure once the seed set shows which ones
+  actually drive a decision.
+
+### Vocabulary strategy
+
+`modalities`, `signal_types`, `benchmark_kinds`, `task_type`, `metric`, and
+`ground_truth.type` are **free-text strings in v1**. This is deliberate: the seed
+set is a design stress set whose goal is to discover the real vocabulary before
+hardening it. The codebase otherwise makes enums the SSOT (`EvidenceType`,
+`dataset_class`, `tier`, `KindCategory`), so v2 should harvest the terms that
+actually appear across seeds and promote the stable ones to `StrEnum`s with a
+reconciliation gate, exactly as `EvidenceType` and the kind descriptors do today.
+`benchmark_kinds` already has a strong candidate vocabulary in the *Benchmark
+classes* table.
 
 ## Benchmark classes
 
-Initial benchmark classes:
+These are the candidate controlled vocabulary for `benchmark_kinds` (free-text in
+v1; promotion target for v2). Initial benchmark classes:
 
 | Class | Purpose |
 |---|---|
@@ -116,6 +185,36 @@ Initial benchmark classes:
 
 Perturbation and time-series classes should be highlighted in reports because
 they provide stronger tests of causal or dynamic claims than static benchmarks.
+
+## Commons seed catalog (v1)
+
+v1 ships a small, curated seed set of shared `dataset:*` records that carry a
+`benchmark` block. These live in the commons (`~/d/science-commons/`) as
+`scope=SHARED` dataset entities and are consumed by projects through the existing
+overlay-merge path — `dataset` is already a commons type, so no new mechanism is
+introduced. This is the first real population of the shared dataset catalog.
+
+**Goal: a design stress set, not a complete atlas.** The seed set is sized to
+exercise the schema across different modalities, access patterns, and evaluation
+styles before the vocabulary is hardened.
+
+Composition target (~6–10 records), diversity-first:
+
+- Span several **modalities** (e.g. perturbation single-cell, bulk expression,
+  proteomics, spatial, multimodal).
+- Span **access patterns** via the shipped `dataset_class`: some `deposit`
+  (obtainable benchmark data), some `reference` (benchmark portals, challenge
+  registries, leaderboards), optionally a `pointer` (tracked-but-not-yet-runnable
+  benchmark candidate). Commons promotion already follows class rules, so
+  reference benchmarks can be seeded without a materialized datapackage.
+- Span **evaluation styles**: some records carry a fully-specified `tasks[]`
+  entry; others are facets-only (benchmark-capable, no task yet) to verify the
+  block is useful in its sparse form.
+- Each record is sparse but high-quality enough to serve as an authoring example.
+
+The seed set is content, not schema: its exact membership can be finalized during
+implementation. Its purpose is to validate the block shape and seed the commons
+catalog, and to harvest the real vocabulary for the v2 enum-promotion step.
 
 ## Benchmark catalog workflow
 
@@ -322,11 +421,23 @@ science feedback add \
 
 ## Implementation phases
 
-### Phase 1: benchmark metadata and reports
+### Phase 1: benchmark metadata, commons seeds, and reports
 
-- Add optional `benchmark` block support on dataset entities.
-- Add query helpers for benchmark metadata.
-- Add `science benchmark list`.
+Descriptive-only. No `RelationKind`, materialize, or belief changes.
+
+- Add typed `BenchmarkBlock` + `BenchmarkTask` models in `science_model`
+  (`entities.py`, next to `AccessBlock` / `DerivationBlock`), and an optional
+  `DatasetEntity.benchmark` field (appended last, for snapshot/`_key` stability).
+- Coerce the block in `frontmatter.py` (`_coerce_benchmark`), wired into the
+  existing dataset-field extraction.
+- Extend `mixin-dataset-1.0.json` with the optional `benchmark` object; keep the
+  free-text fields unconstrained in v1.
+- The block is **not emitted to `graph.trig`** in v1 — it is catalog metadata
+  read by tooling/validators and humans, keeping the change behavior-neutral for
+  the knowledge graph and belief.
+- Author the commons seed set (see *Commons seed catalog*) as `scope=SHARED`
+  dataset entities.
+- Add query helpers for benchmark metadata and `science benchmark list`.
 - Add `/science:catalog-benchmarks` command doc.
 - Add benchmark gap report as docs or query output.
 
@@ -347,7 +458,13 @@ science feedback add \
 
 ## Validation and quality checks
 
-- Benchmark dataset with `benchmark.benchmark_kind` but no endpoint should warn.
+- Benchmark dataset with `benchmark.benchmark_kinds` but neither a `tasks[]`
+  entry nor `notes`/`limitations` should warn (a kind asserted with no usable
+  detail).
+- Duplicate `tasks[].id` within one record should error.
+- A `tasks[]` entry missing `task_type` or `prediction_target` should warn.
+- `benchmark` block on a `dataset_class: pointer` record may warn (a pure pointer
+  is rarely benchmark-capable yet) — info-level, not a hard error.
 - Belief test without a benchmark should warn.
 - Confirmatory belief test without pre-registration should warn.
 - Benchmark result without baseline or metric should warn.
