@@ -111,7 +111,7 @@ benchmark:
 
   # --- evaluable specifics: present ONLY when a task is actually defined ---
   tasks:
-    - id: "l1000-drug-response"
+    - id: "l1000-drug-response"          # slug-like, unique within this dataset
       task_type: "perturbation-response"
       prediction_target: "post-treatment expression signature"
       held_out_unit: "compound"
@@ -120,6 +120,10 @@ benchmark:
       ground_truth:
         type: "measured-outcome"
         description: "post-perturbation expression state"
+      # optional, sparse structure-specific escape hatches (free-text v1):
+      intervention: "small-molecule compound treatment"  # perturbation tasks
+      timepoints: ["6h", "24h"]                          # time-series tasks
+      contexts: ["A549 cell line"]                        # cohort/tissue/species/assay
       interpretation_limits:
         - "L1000 measures landmark genes."
 ```
@@ -144,6 +148,16 @@ Design choices for v1:
   `suitable_for`; those are dropped.
 - **`held_out_unit` is included early** because it is the practical difference
   between "a dataset exists" and "a model can be tested."
+- **Stable task identity.** `tasks[].id` is slug-like and unique *within* one
+  dataset record. The canonical query/render identity of a task is
+  `dataset:<slug>#<task-id>`, which is globally stable because dataset slugs are
+  globally unique. Validation enforces local uniqueness and slug shape; the
+  `#`-qualified form is what reports and CLI output emit.
+- **Optional structure-specific task fields.** `intervention`, `timepoints`, and
+  `contexts` are sparse, optional, free-text fields on a task. They give
+  perturbation / time-series / cross-context tasks a place to record the metadata
+  that makes them strong tests, without forcing it on simpler tasks. They are the
+  fields the perturbation/time-series validation warning checks against.
 - **`related_beliefs` and `source_datasets` are free-text reference lists only.**
   They are documentation, not graph edges, in v1. Phase 2 promotes the
   belief link to real typed edges and belief-tests.
@@ -189,10 +203,13 @@ they provide stronger tests of causal or dynamic claims than static benchmarks.
 ## Commons seed catalog (v1)
 
 v1 ships a small, curated seed set of shared `dataset:*` records that carry a
-`benchmark` block. These live in the commons (`~/d/science-commons/`) as
-`scope=SHARED` dataset entities and are consumed by projects through the existing
-overlay-merge path — `dataset` is already a commons type, so no new mechanism is
-introduced. This is the first real population of the shared dataset catalog.
+`benchmark` block. These live in the commons (`~/d/science-commons/`); their
+canonical entity files use `scope: shared` when the field is present, and the
+inventory projection exposes them as `scope: cross-project` (per
+`EntityScope.SHARED` → `materialize.py`). They are consumed by projects through
+the existing overlay-merge path — `dataset` is already a commons type, so no new
+mechanism is introduced. This is the first real population of the shared dataset
+catalog.
 
 **Goal: a design stress set, not a complete atlas.** The seed set is sized to
 exercise the schema across different modalities, access patterns, and evaluation
@@ -211,6 +228,25 @@ Composition target (~6–10 records), diversity-first:
   entry; others are facets-only (benchmark-capable, no task yet) to verify the
   block is useful in its sparse form.
 - Each record is sparse but high-quality enough to serve as an authoring example.
+
+Provisional seed set (the deliberate stress-set under design; membership may be
+adjusted in the implementation plan but the spread it covers should be
+preserved):
+
+| slug | resource | dataset_class | modalities | signal_types | benchmark_kinds | task completeness | why in the set |
+|---|---|---|---|---|---|---|---|
+| `sciplex3` | Srivatsan 2020 sci-Plex (drug perturbation scRNA-seq) | deposit | single-cell-rna-seq, perturbation | perturbation, cross-context-generalization | perturbation-response | full task | canonical perturbation-response with held-out compounds |
+| `l1000-cmap` | LINCS L1000 Connectivity Map | deposit | bulk-expression (landmark) | perturbation, cross-context-generalization | perturbation-response | full task | reduced-transcriptome benchmark; limitations matter; scale |
+| `dream-perturbation` | a DREAM challenge perturbation track | reference | varies | perturbation | perturbation-response, mechanism-discrimination | facets-only | challenge registry as a `reference`-class benchmark portal |
+| `human-cell-atlas` | Human Cell Atlas | reference | single-cell-rna-seq, spatial, multimodal | cross-context-generalization | static-association, cross-context-generalization | facets-only | atlas/knowledgebase portal; multimodal breadth; no single task |
+| `cptac-proteogenomics` | CPTAC proteogenomics cohorts | deposit | proteomics, bulk-expression, multimodal | multimodal, longitudinal | static-association, mechanism-discrimination | full task | proteomics + multimodal axis; cohort cross-context |
+| `tahoe-100m` (or similar) | large perturbation atlas (pointer until staged) | pointer | single-cell-rna-seq, perturbation | perturbation, temporal | perturbation-response, time-series | facets-only | exercises `pointer` class + time-series signal not yet runnable |
+
+This table covers: deposit / reference / pointer classes; single-cell,
+bulk, proteomics, spatial, and multimodal modalities; perturbation, temporal,
+longitudinal, cross-context, and multimodal signal types; and both fully-tasked
+and facets-only records. That spread is the product decision; locking it here
+prevents it from being re-decided under implementation pressure.
 
 The seed set is content, not schema: its exact membership can be finalized during
 implementation. Its purpose is to validate the block shape and seed the commons
@@ -356,29 +392,38 @@ Agent workflow:
 - create benchmark gap map;
 - recommend next belief tests.
 
-### `science benchmark list`
+### `science benchmark list` (v1)
 
 Read-only query over dataset benchmark metadata:
 
 ```bash
 science benchmark list --domain biology
 science benchmark list --kind perturbation-response
-science benchmark list --related hypothesis:0005
+science benchmark list --belief-ref-text hypothesis:0005   # v1: free-text match
 science benchmark list --format json
 ```
 
-### `science benchmark gaps`
+`--belief-ref-text` is honest about v1 semantics: it does a case-insensitive
+exact-token match against the free-text `related_beliefs` strings on each block.
+It does **not** resolve graph edges or validate that the referenced entity
+exists. A graph-aware `--related` flag (real reference semantics) is deferred to
+Phase 2, once `related_beliefs` is promoted to typed edges.
 
-Report benchmark gaps by project, domain, mechanism, or hypothesis:
+### `science benchmark gaps` (Phase 2)
+
+Belief-gap reporting depends on the belief mapping introduced in Phase 2 and is
+not part of the descriptive-only v1. Report benchmark gaps by project, domain,
+mechanism, or hypothesis:
 
 ```bash
 science benchmark gaps --target hypothesis:0005
 science benchmark gaps --kind time-series
 ```
 
-### `science benchmark tests`
+### `science benchmark tests` (Phase 2)
 
-List belief-test plans and outcomes:
+Belief-test plans arrive in Phase 2; this command is not part of v1. List
+belief-test plans and outcomes:
 
 ```bash
 science benchmark tests --status planned|run|interpreted
@@ -435,11 +480,22 @@ Descriptive-only. No `RelationKind`, materialize, or belief changes.
 - The block is **not emitted to `graph.trig`** in v1 — it is catalog metadata
   read by tooling/validators and humans, keeping the change behavior-neutral for
   the knowledge graph and belief.
-- Author the commons seed set (see *Commons seed catalog*) as `scope=SHARED`
+- Author the commons seed set (see *Commons seed catalog*) as `scope: shared`
   dataset entities.
 - Add query helpers for benchmark metadata and `science benchmark list`.
-- Add `/science:catalog-benchmarks` command doc.
-- Add benchmark gap report as docs or query output.
+- Add a **catalog coverage summary** that reports benchmark *facets* only —
+  counts of benchmark-capable datasets by `domains` / `modalities` /
+  `benchmark_kinds` / `dataset_class`, and which records have tasks vs are
+  facets-only. This is a metadata roll-up, **not** a belief-gap map: it never
+  reports which hypotheses/propositions lack a benchmark.
+- Add `/science:catalog-benchmarks` command doc covering the v1 scope only:
+  discover, classify, and author benchmark metadata + facet coverage. The
+  belief-mapping and gap-map steps described in the *Benchmark catalog workflow*
+  section are Phase 2 and are flagged as such in the doc.
+
+Belief-gap reporting (which hypotheses/propositions lack a suitable benchmark) is
+explicitly **Phase 2**, since it depends on the belief mapping this phase does not
+build.
 
 ### Phase 2: belief-test plans
 
@@ -465,18 +521,23 @@ Descriptive-only. No `RelationKind`, materialize, or belief changes.
 - A `tasks[]` entry missing `task_type` or `prediction_target` should warn.
 - `benchmark` block on a `dataset_class: pointer` record may warn (a pure pointer
   is rarely benchmark-capable yet) — info-level, not a hard error.
-- Belief test without a benchmark should warn.
-- Confirmatory belief test without pre-registration should warn.
-- Benchmark result without baseline or metric should warn.
-- Perturbation/time-series benchmark missing timepoint or intervention metadata
-  should warn when that metadata is relevant.
+- `tasks[].id` must be slug-like and unique within the record (see *Stable task
+  identity*); the canonical task identity in reports/queries is
+  `dataset:<slug>#<task-id>`.
+- A `perturbation-response` task missing `intervention`, or a `time-series` task
+  missing `timepoints`, should warn (v1; checks the optional task fields).
+- (Phase 2) Belief test without a benchmark should warn.
+- (Phase 2) Confirmatory belief test without pre-registration should warn.
+- (Phase 2) Benchmark result without baseline or metric should warn.
 
 ## Success criteria
 
-- A project can list known benchmarks relevant to its topic or field.
-- A project can see which hypotheses/propositions have no suitable benchmark.
-- Perturbation and time-series datasets are visible as high-value tests rather
-  than just ordinary datasets.
+- (v1) A project can list known benchmarks relevant to its topic or field and
+  see a facet coverage summary by domain/modality/kind/class.
+- (Phase 2) A project can see which hypotheses/propositions have no suitable
+  benchmark.
+- (v1) Perturbation and time-series datasets are visible as high-value tests
+  rather than just ordinary datasets.
 - A project can write a belief-test plan that connects a proposition to a
   benchmark prediction, metric, baseline, and interpretation threshold.
 - Benchmark outcomes can update the proposition/evidence graph instead of
