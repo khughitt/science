@@ -119,6 +119,11 @@ presuppose execution. But a pre-reg may commit a **rule before any qualifying ve
 binding constraint is data availability (e.g. no adequately-powered cohort yet). Author these in
 **data-gated mode** rather than improvising:
 
+- **Execution-readiness gate for runnable-now mode.** When the vehicle exists but the verdict is only
+  interpretable if specific checks pass, add an Execution-Readiness Gate rather than using the
+  data-gated Vehicle-Admissibility Gate. This gate should name the power floor, input QA, preprocessing checks, and required sensitivity checks.
+  Those checks must pass before the result can carry confirmatory weight. These checks gate verdict interpretability rather than data availability.
+  A failed gate yields an inconclusive/protocol-failed interpretation, not a deferred standing verdict.
 - **Commit the rule now, defer execution.** Write the decision criteria and expected outcomes as
   usual, but mark the analysis as not-yet-runnable.
 - **Vehicle-admissibility gate.** State the explicit preconditions a future vehicle must satisfy to

@@ -84,6 +84,15 @@ def test_plan_pipeline_documents_mixed_access_public_slice_gate() -> None:
     assert "HALT if the plan would consume any restricted sibling" in text
 
 
+def test_pre_register_documents_runnable_now_execution_readiness_gate() -> None:
+    text = _read("commands/pre-register.md")
+
+    assert "Execution-readiness gate" in text
+    assert "runnable-now mode" in text
+    assert "power floor, input QA, preprocessing checks, and required sensitivity checks" in text
+    assert "gate verdict interpretability rather than data availability" in text
+
+
 def test_specify_model_documents_proxy_directness_vocabulary() -> None:
     text = _read("commands/specify-model.md")
 
@@ -761,6 +770,18 @@ def test_bias_audit_templates_emit_report_not_task() -> None:
         assert 'type: "report"' in text
         assert 'id: "task:{{slug}}"' not in text
         assert 'type: "task"' not in text
+
+
+def test_pre_registration_templates_include_runnable_now_execution_readiness_gate() -> None:
+    for path in (
+        "templates/pre-registration.md",
+        "science/model/src/science_model/templates/pre-registration.md",
+    ):
+        text = _read(path)
+        assert "Execution-Readiness Gate (runnable-now mode)" in text
+        assert "Use in RUNNABLE-NOW mode" in text
+        assert "power floor, input QA checks, preprocessing checks" in text
+        assert "gate verdict interpretability rather than data availability" in text
 
 
 def test_big_picture_synthesis_frontmatter_includes_profile_required_title() -> None:

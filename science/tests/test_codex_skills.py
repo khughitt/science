@@ -204,6 +204,16 @@ def test_generated_plan_pipeline_skill_documents_mixed_access_public_slice_gate(
     assert "HALT if the plan would consume any restricted sibling" in text
 
 
+def test_generated_pre_register_skill_documents_runnable_now_gate(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-pre-register"].read_text(encoding="utf-8")
+
+    assert "Execution-readiness gate" in text
+    assert "runnable-now mode" in text
+    assert "power floor, input QA, preprocessing checks, and required sensitivity checks" in text
+    assert "gate verdict interpretability rather than data availability" in text
+
+
 def test_generated_specify_model_skill_documents_proxy_directness_vocabulary(
     tmp_path: Path,
 ) -> None:

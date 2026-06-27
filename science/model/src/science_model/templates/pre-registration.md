@@ -29,6 +29,7 @@ _template:
     - { key: metric-selection-rationale, name: "Metric Selection Rationale", required: true }
     - { key: exploratory-vs-confirmatory, name: "Exploratory vs. Confirmatory", required: true }
     - { key: total-comparison-count, name: "Total Comparison Count", required: true }
+    - { key: execution-readiness-gate, name: "Execution-Readiness Gate (runnable-now mode)", required: false }
     - { key: vehicle-admissibility-gate, name: "Vehicle-Admissibility Gate (data-gated mode)", required: false }
 ---
 
@@ -101,6 +102,19 @@ If the count is high (>10), specify the correction method
 | Confirmatory tests | N | method |
 | Exploratory tests | N | method or "none (exploratory)" |
 | **Total** | **N** | |
+-->
+
+## Execution-Readiness Gate (runnable-now mode)
+
+<!-- Optional. Use in RUNNABLE-NOW mode when the current data/vehicle exists,
+but the result is only interpretable if pre-specified checks pass. Omit when
+all readiness checks are already covered by the main Decision Criteria.
+
+- State the power floor, input QA checks, preprocessing checks, and required
+  sensitivity checks that must pass before the result can carry confirmatory weight.
+- These checks gate verdict interpretability rather than data availability.
+- If a gate fails, classify the result as inconclusive/protocol-failed according
+  to the Null Result Plan; do not treat it as a substantive null against the target.
 -->
 
 ## Vehicle-Admissibility Gate (data-gated mode)
