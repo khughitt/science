@@ -657,7 +657,7 @@ def test_pointer_benchmark_block_is_info() -> None:
         [
             _ds(
                 dataset_class="pointer",
-                benchmark={"benchmark_kinds": ["perturbation-response"], "limitations": "Tracked candidate only."},
+                benchmark={"benchmark_kinds": ["perturbation-response"], "limitations": ["Tracked candidate only."]},
             )
         ]
     )
@@ -968,7 +968,8 @@ def test_benchmark_list_json_filters_by_domain_and_kind(tmp_path: Path) -> None:
         "  modalities: [bulk-rna-seq]\n"
         "  signal_types: [cross-sectional]\n"
         "  benchmark_kinds: [static-association]\n"
-        "  limitations: tissue expression only\n",
+        "  limitations:\n"
+        "    - tissue expression only\n",
     )
 
     result = _invoke(tmp_path, "--domain", "biology", "--kind", "perturbation-response", "--format", "json")
@@ -1026,13 +1027,15 @@ def test_benchmark_list_coverage_summary_json(tmp_path: Path) -> None:
         "  modalities: [single-cell-rna-seq, spatial]\n"
         "  signal_types: [reference-atlas]\n"
         "  benchmark_kinds: [cross-context-generalization]\n"
-        "  limitations: facets only\n",
+        "  limitations:\n"
+        "    - facets only\n",
     )
 
     result = _invoke(tmp_path, "--coverage-summary", "--format", "json")
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
+    assert "rows" not in payload  # --coverage-summary --format json is summary-only
     assert payload["summary"]["dataset_class"]["reference"] == 1
     assert payload["summary"]["modalities"]["spatial"] == 1
     assert payload["summary"]["tasks"]["facets_only"] == 1
@@ -1256,7 +1259,11 @@ def benchmark_list(
         click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
 
     if output_format == "json":
-        click.echo(_json.dumps({"rows": rows, "summary": summary, "commons_notice": notice}, indent=2))
+        if coverage_summary:
+            # flag honesty: --coverage-summary returns the facet summary only
+            click.echo(_json.dumps({"summary": summary, "commons_notice": notice}, indent=2))
+        else:
+            click.echo(_json.dumps({"rows": rows, "summary": summary, "commons_notice": notice}, indent=2))
         return
 
     if coverage_summary:
@@ -1311,7 +1318,14 @@ rtk git commit -m "feat(cli): list benchmark-capable datasets"
 
 **Files:**
 - Modify: `science/tests/test_commons_inventory.py`
-- Modify or create in `~/d/science-commons/`: `datasets/sciplex3/entity.md`, `datasets/l1000-cmap/entity.md`, `datasets/dream-perturbation/entity.md`, `datasets/human-cell-atlas/entity.md`, `datasets/cptac-proteogenomics/entity.md`, `datasets/tahoe-100m/entity.md`
+- Modify or create in `~/d/science-commons/`: `datasets/sciplex3/entity.md`, `datasets/sciplex3/datapackage.json`, `datasets/l1000-cmap/entity.md`, `datasets/dream-perturbation/entity.md`, `datasets/human-cell-atlas/entity.md`, `datasets/cptac-proteogenomics/entity.md`, `datasets/tahoe-100m/entity.md`
+
+Seed class spread (schema-aware): `sciplex3` is the single `deposit` (carries a
+`datapackage.json`, since the dataset mixin requires `datapackage` for deposits);
+`l1000-cmap`, `dream-perturbation`, `human-cell-atlas`, and `cptac-proteogenomics`
+are `reference` records (portals/knowledgebases — no datapackage required);
+`tahoe-100m` is a `pointer`. This keeps the deposit/reference/pointer spread while
+staying schema-valid without staging real data.
 
 - [ ] **Step 1: Add commons inventory regression test**
 
@@ -1397,12 +1411,13 @@ source_class: "observational"
 dataset_class: "deposit"
 tier: "evaluate-next"
 license: "unknown"
+datapackage: "datapackage.json"
 access:
   level: "public"
   availability: "available"
   verified: true
   verification_method: "retrieved"
-  source_url: "https://www.science.org/doi/10.1126/science.aax6234"
+  source_url: "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE139944"
 ontology_terms: []
 tags: []
 benchmark:
@@ -1434,6 +1449,23 @@ benchmark:
 # Sci-Plex 3
 ```
 
+For `datasets/sciplex3/datapackage.json` (minimal Frictionless stub so the
+deposit satisfies the mixin's `datapackage` requirement; it documents the remote
+resource without staging local files — refine the resource path/schema when the
+data is actually staged):
+
+```json
+{
+  "name": "sciplex3",
+  "resources": [
+    {
+      "name": "sciplex3-perturbation-counts",
+      "path": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE139944"
+    }
+  ]
+}
+```
+
 For `datasets/l1000-cmap/entity.md`:
 
 ```yaml
@@ -1448,15 +1480,15 @@ created: "2026-06-27"
 updated: "2026-06-27"
 scope: "shared"
 origin: "external"
-source_class: "observational"
-dataset_class: "deposit"
-tier: "evaluate-next"
+source_class: "reference"
+dataset_class: "reference"
+tier: "track"
 license: "unknown"
 access:
   level: "public"
   availability: "available"
   verified: true
-  verification_method: "retrieved"
+  verification_method: "landing-confirmed"
   source_url: "https://clue.io/"
 ontology_terms: []
 tags: []
@@ -1585,15 +1617,15 @@ created: "2026-06-27"
 updated: "2026-06-27"
 scope: "shared"
 origin: "external"
-source_class: "observational"
-dataset_class: "deposit"
-tier: "evaluate-next"
+source_class: "reference"
+dataset_class: "reference"
+tier: "track"
 license: "unknown"
 access:
   level: "public"
   availability: "available"
   verified: true
-  verification_method: "retrieved"
+  verification_method: "landing-confirmed"
   source_url: "https://proteomic.datacommons.cancer.gov/pdc/"
 ontology_terms: []
 tags: []
@@ -1676,15 +1708,13 @@ SCIENCE_COMMONS_ROOT=~/d/science-commons rtk uv run --frozen science commons ind
 SCIENCE_COMMONS_ROOT=~/d/science-commons rtk uv run --frozen science benchmark list --commons --domain biology --coverage-summary --format json
 ```
 
-Expected: commons validation passes (no `dataset.method-class-mismatch`: deposit
-seeds use `retrieved`, the reference seeds use `landing-confirmed`, the pointer
-uses `metadata-confirmed`); index rebuild succeeds; benchmark list JSON includes
-the six seed records in either local or commons scope.
-
-Note: the deposit seeds are verified but carry no local `datapackage`, so an
-advisory `dataset.deposit-verified-unstaged` (WARN) is expected and correct — a
-catalog seed is access-verified but not staged. It must not be an error and must
-not block the commons build.
+Expected: commons validation passes (no `dataset.method-class-mismatch`: the
+`sciplex3` deposit uses `retrieved` and carries a `datapackage`; the four
+reference seeds use `landing-confirmed`; the `tahoe-100m` pointer uses
+`metadata-confirmed`); index rebuild succeeds; benchmark list JSON includes the
+six seed records in either local or commons scope. The deposit's `datapackage`
+satisfies the mixin requirement, so no `dataset.deposit-verified-unstaged` or
+missing-datapackage error is expected.
 
 - [ ] **Step 5: Commit repo regression test**
 
@@ -1696,7 +1726,7 @@ rtk git commit -m "test(commons): preserve benchmark metadata in inventory"
 Commit the commons seed records separately in `~/d/science-commons` with:
 
 ```bash
-rtk git -C ~/d/science-commons add datasets/sciplex3/entity.md datasets/l1000-cmap/entity.md datasets/dream-perturbation/entity.md datasets/human-cell-atlas/entity.md datasets/cptac-proteogenomics/entity.md datasets/tahoe-100m/entity.md
+rtk git -C ~/d/science-commons add datasets/sciplex3/entity.md datasets/sciplex3/datapackage.json datasets/l1000-cmap/entity.md datasets/dream-perturbation/entity.md datasets/human-cell-atlas/entity.md datasets/cptac-proteogenomics/entity.md datasets/tahoe-100m/entity.md
 rtk git -C ~/d/science-commons commit -m "data: seed benchmark-capable omics datasets"
 ```
 

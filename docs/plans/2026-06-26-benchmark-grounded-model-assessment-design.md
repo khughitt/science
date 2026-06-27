@@ -206,7 +206,7 @@ v1 ships a small, curated seed set of shared `dataset:*` records that carry a
 `benchmark` block. These live in the commons (`~/d/science-commons/`); their
 canonical entity files use `scope: shared` when the field is present, and the
 inventory projection exposes them as `scope: cross-project` (per
-`EntityScope.SHARED` → `materialize.py`). They are consumed by projects through
+`EntityScope.SHARED` in `science_tool.commons.inventory`). They are consumed by projects through
 the existing overlay-merge path — `dataset` is already a commons type, so no new
 mechanism is introduced. This is the first real population of the shared dataset
 catalog.
@@ -236,10 +236,10 @@ preserved):
 | slug | resource | dataset_class | modalities | signal_types | benchmark_kinds | task completeness | why in the set |
 |---|---|---|---|---|---|---|---|
 | `sciplex3` | Srivatsan 2020 sci-Plex (drug perturbation scRNA-seq) | deposit | single-cell-rna-seq, perturbation | perturbation, cross-context-generalization | perturbation-response | full task | canonical perturbation-response with held-out compounds |
-| `l1000-cmap` | LINCS L1000 Connectivity Map | deposit | bulk-expression (landmark) | perturbation, cross-context-generalization | perturbation-response | full task | reduced-transcriptome benchmark; limitations matter; scale |
+| `l1000-cmap` | LINCS L1000 Connectivity Map (clue.io portal) | reference | bulk-expression (landmark) | perturbation, cross-context-generalization | perturbation-response | full task | reduced-transcriptome benchmark via a portal; concrete GEO export becomes a deposit later |
 | `dream-perturbation` | a DREAM challenge perturbation track | reference | varies | perturbation | perturbation-response, mechanism-discrimination | facets-only | challenge registry as a `reference`-class benchmark portal |
 | `human-cell-atlas` | Human Cell Atlas | reference | single-cell-rna-seq, spatial, multimodal | cross-context-generalization | static-association, cross-context-generalization | facets-only | atlas/knowledgebase portal; multimodal breadth; no single task |
-| `cptac-proteogenomics` | CPTAC proteogenomics cohorts | deposit | proteomics, bulk-expression, multimodal | multimodal, longitudinal | static-association, mechanism-discrimination | full task | proteomics + multimodal axis; cohort cross-context |
+| `cptac-proteogenomics` | CPTAC proteogenomics (PDC portal) | reference | proteomics, bulk-expression, multimodal | multimodal, longitudinal | static-association, mechanism-discrimination | full task | proteomics + multimodal axis via a data-commons portal |
 | `tahoe-100m` (or similar) | large perturbation atlas (pointer until staged) | pointer | single-cell-rna-seq, perturbation | perturbation, temporal | perturbation-response, time-series | facets-only | exercises `pointer` class + time-series signal not yet runnable |
 
 This table covers: deposit / reference / pointer classes; single-cell,
@@ -247,6 +247,15 @@ bulk, proteomics, spatial, and multimodal modalities; perturbation, temporal,
 longitudinal, cross-context, and multimodal signal types; and both fully-tasked
 and facets-only records. That spread is the product decision; locking it here
 prevents it from being re-decided under implementation pressure.
+
+Schema note: the dataset mixin requires a `datapackage` for any `deposit`
+record, so unstaged benchmarks (portals, registries, not-yet-downloaded data) are
+seeded as `reference` or `pointer`, and only genuinely-stageable data is a
+`deposit`. The single `deposit` seed (`sciplex3`) carries a minimal
+`datapackage.json` stub documenting its remote resource; the portal-backed
+records (`l1000-cmap`, `cptac-proteogenomics`) are `reference` because their
+canonical access surface is a portal, and a concrete downloadable export would be
+registered as a separate `deposit` later.
 
 The seed set is content, not schema: its exact membership can be finalized during
 implementation. Its purpose is to validate the block shape and seed the commons
@@ -294,7 +303,8 @@ candidate_paths:
 ```
 
 Whether benchmark gaps should become a formal entity kind can be deferred. In
-v1 they can live as rows in reports or `docs/benchmark-gaps/*.md` documents.
+Phase 2 they can live as rows in reports or `docs/benchmark-gaps/*.md`
+documents before Science promotes them to a formal entity kind.
 
 ## Belief tests
 
@@ -377,8 +387,8 @@ a field with no useful benchmarks should not be judged the same as a project
 with abundant public perturbation datasets.
 
 This is a later-phase analysis surface, not part of v1 implementation. The v1
-requirement is to record enough structured benchmark metadata and outcomes that
-such analysis becomes possible.
+requirement is to record enough structured benchmark metadata that such analysis
+becomes possible once later phases add outcomes.
 
 ## Commands and surfaces
 
@@ -538,9 +548,9 @@ build.
   benchmark.
 - (v1) Perturbation and time-series datasets are visible as high-value tests
   rather than just ordinary datasets.
-- A project can write a belief-test plan that connects a proposition to a
+- (Phase 2) A project can write a belief-test plan that connects a proposition to a
   benchmark prediction, metric, baseline, and interpretation threshold.
-- Benchmark outcomes can update the proposition/evidence graph instead of
+- (Phase 3) Benchmark outcomes can update the proposition/evidence graph instead of
   living only in workflow logs.
-- Science can eventually study which project practices correlate with better
+- (Phase 3) Science can eventually study which project practices correlate with better
   benchmark-grounded performance, adjusted for data availability.
