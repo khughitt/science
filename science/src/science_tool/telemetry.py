@@ -101,6 +101,30 @@ def new_event(
     return event
 
 
+def new_validation_summary_event(
+    *,
+    command: str,
+    profile: str,
+    strict: bool,
+    fail_on: str | None,
+    errors: int,
+    warnings: int,
+    infos: int,
+    gated: bool,
+    rule_ids: Sequence[str | None],
+) -> dict[str, object]:
+    """Create an aggregate-only validation summary event."""
+    event = new_event(event_type="validation_summary", command=command, argv=())
+    event["surface"] = "validation"
+    event["profile"] = profile
+    event["strict"] = strict
+    event["fail_on"] = fail_on
+    event["status"] = _validation_status(errors=errors, warnings=warnings, gated=gated)
+    event["counts"] = {"error": errors, "warn": warnings, "info": infos}
+    event["top_checks"] = _top_checks(rule_ids)
+    return event
+
+
 def append_event(telemetry_dir: Path, event: Mapping[str, object]) -> Path | None:
     """Append an event to the monthly JSONL journal, best effort."""
     try:
@@ -231,6 +255,22 @@ def _event_date(event: Mapping[str, object]) -> date | None:
 def _string_field(event: Mapping[str, object], key: str) -> str:
     value = event.get(key)
     return value if isinstance(value, str) else ""
+
+
+def _validation_status(*, errors: int, warnings: int, gated: bool) -> str:
+    if errors > 0 or gated:
+        return "fail"
+    if warnings > 0:
+        return "warn"
+    return "pass"
+
+
+def _top_checks(rule_ids: Sequence[str | None]) -> list[dict[str, object]]:
+    counts = Counter(rule_id for rule_id in rule_ids if rule_id)
+    return [
+        {"check": rule_id, "count": count}
+        for rule_id, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
 
 
 def _event_month(event: Mapping[str, object]) -> str:

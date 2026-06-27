@@ -11,6 +11,7 @@ from science_tool.telemetry import (
     export_events_jsonl,
     get_telemetry_dir,
     new_event,
+    new_validation_summary_event,
     prune_events,
     read_events,
     redact_argv,
@@ -157,3 +158,63 @@ def test_prune_events_removes_rows_before_cutoff(tmp_path: Path) -> None:
 
     assert removed == 1
     assert [event["event_id"] for event in read_events(tmp_path)] == ["new"]
+
+
+def test_new_validation_summary_event_records_aggregate_failure_only() -> None:
+    event = new_validation_summary_event(
+        command="validate",
+        profile="full",
+        strict=False,
+        fail_on=None,
+        errors=1,
+        warnings=2,
+        infos=3,
+        gated=True,
+        rule_ids=["demo.error", "demo.warn", "demo.warn", None],
+    )
+
+    assert event["surface"] == "validation"
+    assert event["event_type"] == "validation_summary"
+    assert event["command"] == "validate"
+    assert event["profile"] == "full"
+    assert event["strict"] is False
+    assert event["fail_on"] is None
+    assert event["status"] == "fail"
+    assert event["counts"] == {"error": 1, "warn": 2, "info": 3}
+    assert event["top_checks"] == [{"check": "demo.warn", "count": 2}, {"check": "demo.error", "count": 1}]
+    assert "path" not in event
+    assert "message" not in event
+
+
+def test_new_validation_summary_event_reports_warn_status() -> None:
+    event = new_validation_summary_event(
+        command="validate",
+        profile="commit",
+        strict=True,
+        fail_on="ghost-files",
+        errors=0,
+        warnings=1,
+        infos=0,
+        gated=False,
+        rule_ids=["demo.warn"],
+    )
+
+    assert event["status"] == "warn"
+    assert event["counts"] == {"error": 0, "warn": 1, "info": 0}
+
+
+def test_new_validation_summary_event_reports_pass_status() -> None:
+    event = new_validation_summary_event(
+        command="validate",
+        profile="full",
+        strict=False,
+        fail_on=None,
+        errors=0,
+        warnings=0,
+        infos=1,
+        gated=False,
+        rule_ids=[],
+    )
+
+    assert event["status"] == "pass"
+    assert event["top_checks"] == []
