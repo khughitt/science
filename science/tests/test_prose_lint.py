@@ -417,6 +417,17 @@ class TestUnsupportedCitationSyntax:
         assert "Smith2020" in messages
         assert "unsupported citation syntax" in messages.lower()
 
+    def test_reports_unsupported_citation_syntax_location(self, tmp_path):
+        (tmp_path / "doc").mkdir()
+        (tmp_path / "doc" / "note.md").write_text(
+            "# Note\n\nBackground: see @Smith2020.\n",
+            encoding="utf-8",
+        )
+        result = scan_root(tmp_path, checks=["unsupported-citation-syntax"])
+        assert [(h.line, h.col, h.match) for h in result["hits"]] == [
+            (3, 17, "Smith2020")
+        ]
+
     def test_supported_citation_not_flagged(self, tmp_path):
         (tmp_path / "doc").mkdir()
         (tmp_path / "doc" / "note.md").write_text(

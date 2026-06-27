@@ -20,7 +20,6 @@ from science_tool.markdown_utils import (
     parse_frontmatter,
     strip_inline_code,
 )
-from science_tool.references import parse_citations
 
 logger = logging.getLogger(__name__)
 
@@ -401,34 +400,88 @@ def detect_unsupported_citation_syntax(
     Unsupported forms include bare `@key`, `[see @key]`, and `[-@key]`.
     """
     try:
-        text = path.read_text(encoding="utf-8")
+        lines = path.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeDecodeError):
         return []
     _, body_start = parse_frontmatter(path)
-    body_lines = text.splitlines()[body_start - 1 :]
-    body = "\n".join(
-        line for line in body_lines if not _is_agent_include_directive(line)
-    )
-    scan = parse_citations(body)
-    if not scan.unsupported:
-        return []
     issues: list[LintIssue] = []
-    for token in scan.unsupported:
-        issues.append(
-            LintIssue(
-                file=path,
-                line=1,
-                col=1,
-                check="unsupported-citation-syntax",
-                severity=severity_for("unsupported-citation-syntax", strict=strict),
-                message=(
-                    f"unsupported citation syntax '@{token}' — v1 supports only [@{token}]; "
-                    "rewrite prefixed/suppressed/bare forms"
-                ),
-                match=token,
+    in_fence = False
+    for lineno_zero, raw_line in enumerate(lines):
+        lineno = lineno_zero + 1
+        if lineno < body_start:
+            continue
+        if is_fence_line(raw_line):
+            in_fence = not in_fence
+            continue
+        if in_fence or _is_agent_include_directive(raw_line):
+            continue
+        code_spans = _inline_code_spans(raw_line)
+        supported_spans = _supported_citation_token_spans(raw_line)
+        for match in _UNSUPPORTED_CITATION_TOKEN_RE.finditer(raw_line):
+            if _span_contains(code_spans, match.start()):
+                continue
+            if _span_contains(supported_spans, match.start()):
+                continue
+            if not _is_bare_citation_candidate(raw_line, match.start()):
+                continue
+            token = match.group(1)
+            issues.append(
+                LintIssue(
+                    file=path,
+                    line=lineno,
+                    col=match.start() + 1,
+                    check="unsupported-citation-syntax",
+                    severity=severity_for("unsupported-citation-syntax", strict=strict),
+                    message=(
+                        f"unsupported citation syntax '@{token}' — v1 supports only [@{token}]; "
+                        "rewrite prefixed/suppressed/bare forms"
+                    ),
+                    match=token,
+                    byte_col=_utf8_byte_col(raw_line, match.start()),
+                )
             )
-        )
     return issues
+
+
+_INLINE_CODE_SPAN_RE = re.compile(r"`[^`]*`")
+_SUPPORTED_CITATION_BLOCK_RE = re.compile(r"\[\s*@[^\]]*\]")
+_SUPPORTED_CITATION_ITEM_RE = re.compile(r"\s*@([A-Za-z][A-Za-z0-9_:.-]*)")
+_UNSUPPORTED_CITATION_TOKEN_RE = re.compile(
+    r"@([A-Za-z][A-Za-z0-9_:-]*(?:\.[A-Za-z0-9_:-]+)*)"
+)
+
+
+def _inline_code_spans(line: str) -> list[tuple[int, int]]:
+    return [match.span() for match in _INLINE_CODE_SPAN_RE.finditer(line)]
+
+
+def _span_contains(spans: list[tuple[int, int]], index: int) -> bool:
+    return any(start <= index < end for start, end in spans)
+
+
+def _is_bare_citation_candidate(line: str, at_index: int) -> bool:
+    if at_index <= 0:
+        return True
+    return not line[at_index - 1].isalnum()
+
+
+def _supported_citation_token_spans(line: str) -> list[tuple[int, int]]:
+    """Return spans for syntactically supported `@key` tokens in `[@...]` blocks."""
+    spans: list[tuple[int, int]] = []
+    for block in _SUPPORTED_CITATION_BLOCK_RE.finditer(line):
+        inner_start = block.start() + 1
+        inner = line[inner_start : block.end() - 1]
+        item_start = 0
+        for raw_item in inner.split(";"):
+            item_match = _SUPPORTED_CITATION_ITEM_RE.match(raw_item)
+            if item_match:
+                rest = raw_item[item_match.end() :].strip()
+                if not rest or rest.startswith(","):
+                    absolute_start = inner_start + item_start + item_match.start()
+                    absolute_end = inner_start + item_start + item_match.end()
+                    spans.append((absolute_start, absolute_end))
+            item_start += len(raw_item) + 1
+    return spans
 
 
 def _is_agent_include_directive(line: str) -> bool:
