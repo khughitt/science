@@ -5421,6 +5421,98 @@ def _project_root_from_env() -> Path:
     return Path(env).resolve() if env else Path.cwd()
 
 
+@main.group("benchmark")
+def benchmark_group() -> None:
+    """Benchmark dataset reports."""
+
+
+@benchmark_group.command("list")
+@click.option("--domain", default=None, help="Filter by benchmark domain.")
+@click.option("--kind", "benchmark_kind", default=None, help="Filter by benchmark kind.")
+@click.option("--belief-ref-text", default=None, help="Filter by exact related-belief text token.")
+@click.option("--commons", "include_commons", is_flag=True, help="Also list commons benchmark dataset entities.")
+@click.option("--coverage-summary", "coverage_summary_flag", is_flag=True, help="Only report coverage summary counts.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd).",
+)
+def benchmark_list(
+    domain: str | None,
+    benchmark_kind: str | None,
+    belief_ref_text: str | None,
+    include_commons: bool,
+    coverage_summary_flag: bool,
+    output_format: str,
+    project_root: Path | None,
+) -> None:
+    """List dataset entities with benchmark metadata."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from science_tool.benchmark_catalog import coverage_summary, list_benchmarks
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    rows, notice = list_benchmarks(
+        root,
+        domain=domain,
+        benchmark_kind=benchmark_kind,
+        belief_ref_text=belief_ref_text,
+        include_commons=include_commons,
+    )
+    summary = coverage_summary(rows)
+
+    if notice:
+        click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
+
+    if output_format == "json":
+        if coverage_summary_flag:
+            payload = {"summary": summary, "commons_notice": notice}
+        else:
+            payload = {"rows": rows, "summary": summary, "commons_notice": notice}
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    if not rows:
+        click.echo("No matching benchmark dataset entities.")
+        return
+
+    if coverage_summary_flag:
+        table = Table(show_header=True, header_style="bold")
+        for col in ("facet", "value", "count"):
+            table.add_column(col, overflow="fold", no_wrap=False)
+        for facet, counts in summary.items():
+            for value, count in counts.items():
+                table.add_row(facet, value, str(count))
+        Console(width=200).print(table)
+        return
+
+    table = Table(show_header=True, header_style="bold")
+    for col in ("id", "title", "scope", "class", "domains", "modalities", "signal_types", "kinds", "tasks"):
+        table.add_column(col, overflow="fold", no_wrap=False)
+    for row in rows:
+        table.add_row(
+            row["id"],
+            row["title"],
+            row["scope"],
+            row["dataset_class"],
+            ", ".join(row["domains"]),
+            ", ".join(row["modalities"]),
+            ", ".join(row["signal_types"]),
+            ", ".join(row["benchmark_kinds"]),
+            ", ".join(row["task_ids"]),
+        )
+    Console(width=200).print(table)
+
+
 @main.group("dataset")
 def dataset_group() -> None:
     """Dataset entity lifecycle commands (list, register-run, reconcile)."""
