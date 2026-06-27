@@ -66,25 +66,30 @@ benchmark:
     - "Facets only; no held-out task definition yet."
 ```
 
-Add `tasks[]` only when the task is concrete — at minimum a `prediction_target`
-and a `held_out_unit` (what is predicted and what is withheld), plus `metric` and
-`baseline`:
+Add `benchmark.tasks[]` only when the task is concrete. The preferred minimum
+for a useful catalog entry is a `prediction_target` and a `held_out_unit` (what
+is predicted and what is withheld), plus `metric` and `baseline`:
 
 ```yaml
-tasks:
-  - id: "compound-response"
-    task_type: "response-prediction"
-    prediction_target: "post-treatment expression signature"
-    held_out_unit: "compound"
-    metric: "rank-correlation"
-    baseline: "untreated expression profile"
-    ground_truth:
-      type: "measured-outcome"
-      description: "measured post-perturbation expression state"
-    interpretation_limits:
-      - "Positive rank correlation against held-out perturbation response is the intended signal."
-    intervention: "compound and dose"
-    contexts: ["cell line", "compound", "dose"]
+benchmark:
+  domains: ["biology"]
+  modalities: ["single-cell-rna-seq"]
+  signal_types: ["perturbation"]
+  benchmark_kinds: ["perturbation-response"]
+  tasks:
+    - id: "compound-response"
+      task_type: "response-prediction"
+      prediction_target: "post-treatment expression signature"
+      held_out_unit: "compound"
+      metric: "rank-correlation"
+      baseline: "untreated expression profile"
+      ground_truth:
+        type: "measured-outcome"
+        description: "measured post-perturbation expression state"
+      interpretation_limits:
+        - "Positive rank correlation against held-out perturbation response is the intended signal."
+      intervention: "compound and dose"
+      contexts: ["cell line", "compound", "dose"]
 ```
 
 Task identity is local to the dataset. Render it as `dataset:<slug>#<task-id>` in prose and reports.
