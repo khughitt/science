@@ -82,9 +82,10 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
 
         tasks = _task_mappings(benchmark.get("tasks"))
         limitations = benchmark.get("limitations")
+        has_benchmark_kinds = "benchmark_kinds" in benchmark
         benchmark_kinds = _string_items(benchmark.get("benchmark_kinds"))
 
-        if benchmark_kinds and not tasks and not _nonempty_string_list(limitations):
+        if has_benchmark_kinds and not tasks and not _nonempty_string_list(limitations):
             yield _result(
                 Severity.WARN,
                 path,

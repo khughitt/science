@@ -158,6 +158,24 @@ def test_facets_only_block_without_limitations_warns() -> None:
     )
 
 
+def test_authored_empty_benchmark_kinds_without_tasks_or_limitations_warns() -> None:
+    assert (Severity.WARN, "benchmark.facets-lack-task-or-limitation") in _rules(
+        [_ds(benchmark={"benchmark_kinds": []})]
+    )
+
+
+def test_authored_blank_benchmark_kinds_without_tasks_or_limitations_warns() -> None:
+    assert (Severity.WARN, "benchmark.facets-lack-task-or-limitation") in _rules(
+        [_ds(benchmark={"benchmark_kinds": [""]})]
+    )
+
+
+def test_missing_benchmark_kinds_does_not_warn_for_facets_lack_task_or_limitation() -> None:
+    assert (Severity.WARN, "benchmark.facets-lack-task-or-limitation") not in _rules(
+        [_ds(benchmark={"domains": ["biology"]})]
+    )
+
+
 def test_facets_only_block_with_limitations_does_not_warn() -> None:
     assert _rules([_ds(benchmark={"benchmark_kinds": ["static-association"], "limitations": ["small cohort"]})]) == []
 
