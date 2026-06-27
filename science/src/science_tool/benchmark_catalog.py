@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Mapping
-from json import JSONDecodeError
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -111,16 +110,22 @@ def _commons_rows() -> list[BenchmarkRow]:
 
     try:
         records = CommonsQuery(resolve_commons_root()).find("dataset")
-    except (CommonsError, FileNotFoundError, JSONDecodeError) as exc:
+    except (CommonsError, FileNotFoundError, ValueError) as exc:
         raise CommonsUnavailable(str(exc)) from exc
 
     rows: list[BenchmarkRow] = []
     for record in records:
-        row = _row_from_frontmatter(
-            record.frontmatter or {},
-            fallback_id=record.canonical_id,
-            scope="commons",
-        )
+        if not isinstance(record.frontmatter, Mapping):
+            msg = f"{record.canonical_id}: frontmatter_json must decode to an object"
+            raise CommonsUnavailable(msg)
+        try:
+            row = _row_from_frontmatter(
+                record.frontmatter,
+                fallback_id=record.canonical_id,
+                scope="commons",
+            )
+        except ValueError as exc:
+            raise CommonsUnavailable(str(exc)) from exc
         if row is not None:
             rows.append(row)
     return rows

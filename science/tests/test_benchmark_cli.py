@@ -33,7 +33,7 @@ def _invoke_with_commons(tmp_path: Path, commons_root: Path, *args: str):
     )
 
 
-def _write_corrupt_commons_registry(root: Path) -> None:
+def _write_corrupt_commons_registry(root: Path, frontmatter_json: str = "{not-json") -> None:
     root.mkdir()
     conn = sqlite3.connect(root / "registry.sqlite")
     try:
@@ -65,7 +65,7 @@ def _write_corrupt_commons_registry(root: Path) -> None:
                 "datasets/corrupt/entity.md",
                 None,
                 0,
-                "{not-json",
+                frontmatter_json,
             ),
         )
         conn.commit()
@@ -232,6 +232,31 @@ benchmark:
 def test_benchmark_list_commons_corrupt_registry_json_degrades_to_local_rows(tmp_path: Path) -> None:
     commons_root = tmp_path / "commons"
     _write_corrupt_commons_registry(commons_root)
+    _write_dataset(
+        tmp_path,
+        "local",
+        """
+id: dataset:local
+type: dataset
+title: Local
+benchmark:
+  domains: [biology]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    result = _invoke_with_commons(tmp_path, commons_root, "--commons", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert [row["id"] for row in payload["rows"]] == ["dataset:local"]
+    assert payload["commons_notice"]
+    assert "notice: commons benchmarks unavailable" in result.stderr
+
+
+def test_benchmark_list_commons_non_object_registry_json_degrades_to_local_rows(tmp_path: Path) -> None:
+    commons_root = tmp_path / "commons"
+    _write_corrupt_commons_registry(commons_root, '"bad"')
     _write_dataset(
         tmp_path,
         "local",
