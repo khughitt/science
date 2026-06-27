@@ -134,6 +134,10 @@ class TestBenchmarkBlock:
         assert task.ground_truth is not None
         assert task.timepoints == ["24h"]
 
+    def test_task_rejects_legacy_task_id_extra_field(self) -> None:
+        with pytest.raises(ValidationError, match="task_id"):
+            BenchmarkTask(id="drug-response", task_id="legacy-id", task_type="classification")  # type: ignore[call-arg]
+
     @pytest.mark.parametrize("task_id", ["Bad Task", "a-", "ab-", "a--b"])
     def test_task_id_must_be_lowercase_kebab_case_segments(self, task_id: str) -> None:
         with pytest.raises(ValueError, match="tasks.id"):
@@ -554,6 +558,20 @@ def test_parse_dataset_benchmark_malformed_task_id_raises(tmp_path: Path) -> Non
     )
 
     with pytest.raises(ValidationError, match="tasks.id"):
+        parse_entity_file(md, project_slug="testproj")
+
+
+def test_parse_dataset_benchmark_extra_task_id_field_raises(tmp_path: Path) -> None:
+    md = _write_dataset_md(
+        tmp_path,
+        "benchmark:",
+        "  tasks:",
+        "    - id: drug-response",
+        "      task_id: legacy-id",
+        "      task_type: response-prediction",
+    )
+
+    with pytest.raises(ValidationError, match="task_id"):
         parse_entity_file(md, project_slug="testproj")
 
 

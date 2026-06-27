@@ -192,6 +192,33 @@ benchmark:
     assert payload["summary"]["tasks"]["facets_only"] == 1
 
 
+def test_benchmark_list_counts_only_tasks_with_string_id(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "legacy-task-id",
+        """
+id: dataset:legacy-task-id
+type: dataset
+title: Legacy task id
+benchmark:
+  domains: [biology]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - task_id: old-id
+      task_type: response-prediction
+""",
+    )
+
+    result = _invoke(tmp_path, "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["rows"][0]["task_count"] == 0
+    assert payload["rows"][0]["task_ids"] == []
+    assert payload["summary"]["tasks"]["facets_only"] == 1
+    assert payload["summary"]["tasks"]["with_tasks"] == 0
+
+
 def test_coverage_summary_json_omits_rows_when_no_rows_match(tmp_path: Path) -> None:
     result = _invoke(tmp_path, "--domain", "no-such-domain", "--coverage-summary", "--format", "json")
 

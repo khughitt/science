@@ -209,6 +209,20 @@ def test_dataset_benchmark_task_id_pattern_rejected(base_entity: dict, task_id: 
         EntityValidator().validate(entity)
 
 
+def test_dataset_benchmark_task_rejects_unknown_task_id_field(base_entity: dict) -> None:
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "benchmark": {
+            "benchmark_kinds": ["perturbation-response"],
+            "tasks": [{"id": "drug-response", "task_id": "legacy-id", "task_type": "response-prediction"}],
+        },
+    }
+
+    with pytest.raises(EntityValidationError, match="benchmark"):
+        EntityValidator().validate(entity)
+
+
 def test_dataset_benchmark_facet_type_rejected(base_entity: dict) -> None:
     entity = base_entity | {
         "origin": "external",

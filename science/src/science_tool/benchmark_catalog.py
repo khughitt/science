@@ -75,7 +75,7 @@ def _row_from_frontmatter(fm: Mapping[str, object], *, fallback_id: str, scope: 
         "benchmark_kinds": _string_list(benchmark.get("benchmark_kinds")),
         "source_datasets": _string_list(benchmark.get("source_datasets")),
         "related_beliefs": _string_list(benchmark.get("related_beliefs")),
-        "task_count": len(tasks),
+        "task_count": len(task_ids),
         "task_ids": task_ids,
     }
 

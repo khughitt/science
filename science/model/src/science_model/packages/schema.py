@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ResourceSchema(BaseModel):
@@ -256,6 +256,7 @@ class BenchmarkTask(BaseModel):
     intervention: str = ""
     timepoints: list[str] = Field(default_factory=list)
     contexts: list[str] = Field(default_factory=list)
+    model_config = ConfigDict(extra="forbid")
 
     @field_validator("id")
     @classmethod
