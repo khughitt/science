@@ -74,6 +74,20 @@ the analysis itself runs now. Data-gated mode defers the *entire analysis* pendi
 vehicle. Note it explicitly at the top of the pre-reg (e.g. `mode: data-gated`) so interpret-results
 treats the standing verdict as no-update rather than as a runnable null.
 
+#### Sub-axis: multi-analysis coverage
+
+When one pre-registration covers multiple analyses, add an **Analysis Registry** before the
+per-analysis criteria. This is required when the analyses have mixed runnable/data-gated statuses
+or different confirmatory/exploratory roles.
+
+Record each analysis's `mode` (`runnable-now` or `data-gated`), status, commitment target, and
+verdict policy in the registry. Then link each row to its readiness gate or vehicle-admissibility gate:
+use an Execution-Readiness Gate for runnable-now analyses whose interpretability depends on checks
+passing, and a Vehicle-Admissibility Gate for data-gated analyses that are not yet executable.
+
+Do not collapse the whole pre-reg to a single top-level mode when rows differ. The pre-reg can be
+committed as one document, but interpretability and standing verdicts are per analysis row.
+
 ### 1. Identify the Analysis
 
 - What analysis are you about to run?

@@ -214,6 +214,19 @@ def test_generated_pre_register_skill_documents_runnable_now_gate(tmp_path: Path
     assert "gate verdict interpretability rather than data availability" in text
 
 
+def test_generated_pre_register_skill_documents_multi_analysis_registry(
+    tmp_path: Path,
+) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-pre-register"].read_text(encoding="utf-8")
+
+    assert "Analysis Registry" in text
+    assert "one pre-registration covers multiple analyses" in text
+    assert "mixed runnable/data-gated statuses" in text
+    assert "Record each analysis's `mode` (`runnable-now` or `data-gated`)" in text
+    assert "link each row to its readiness gate or vehicle-admissibility gate" in text
+
+
 def test_generated_specify_model_skill_documents_proxy_directness_vocabulary(
     tmp_path: Path,
 ) -> None:

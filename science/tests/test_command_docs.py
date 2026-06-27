@@ -93,6 +93,16 @@ def test_pre_register_documents_runnable_now_execution_readiness_gate() -> None:
     assert "gate verdict interpretability rather than data availability" in text
 
 
+def test_pre_register_documents_multi_analysis_registry_for_mixed_modes() -> None:
+    text = _read("commands/pre-register.md")
+
+    assert "Analysis Registry" in text
+    assert "one pre-registration covers multiple analyses" in text
+    assert "mixed runnable/data-gated statuses" in text
+    assert "Record each analysis's `mode` (`runnable-now` or `data-gated`)" in text
+    assert "link each row to its readiness gate or vehicle-admissibility gate" in text
+
+
 def test_specify_model_documents_proxy_directness_vocabulary() -> None:
     text = _read("commands/specify-model.md")
 
@@ -782,6 +792,19 @@ def test_pre_registration_templates_include_runnable_now_execution_readiness_gat
         assert "Use in RUNNABLE-NOW mode" in text
         assert "power floor, input QA checks, preprocessing checks" in text
         assert "gate verdict interpretability rather than data availability" in text
+
+
+def test_pre_registration_templates_include_multi_analysis_registry() -> None:
+    for path in (
+        "templates/pre-registration.md",
+        "science/model/src/science_model/templates/pre-registration.md",
+    ):
+        text = _read(path)
+        assert "Analysis Registry" in text
+        assert "one pre-registration covers multiple analyses" in text
+        assert "mixed runnable/data-gated statuses" in text
+        assert "| Analysis ID | Commitment target | Mode | Status | Gate reference | Verdict policy |" in text
+        assert "link to that analysis's Execution-Readiness Gate or Vehicle-Admissibility Gate" in text
 
 
 def test_big_picture_synthesis_frontmatter_includes_profile_required_title() -> None:

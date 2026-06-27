@@ -21,6 +21,7 @@ _template:
     updated: { from: updated }
   sections:
     - { key: hypotheses-under-test, name: "Hypotheses Under Test", required: true }
+    - { key: analysis-registry, name: "Analysis Registry", required: false }
     - { key: expected-outcomes, name: "Expected Outcomes", required: true }
     - { key: decision-criteria, name: "Decision Criteria", required: true }
     - { key: null-result-plan, name: "Null Result Plan", required: true }
@@ -40,6 +41,21 @@ _template:
 <!-- Which hypotheses does this analysis address? List by ID (e.g., H01).
      These must match entries in the `related` frontmatter field
      so that interpret-results can find this pre-registration. -->
+
+## Analysis Registry
+
+<!-- Optional. Use when one pre-registration covers multiple analyses, especially
+when those analyses have mixed runnable/data-gated statuses or different
+confirmatory/exploratory roles.
+
+Each row is one analysis-level commitment. Do not force the whole pre-reg into
+one top-level mode when rows differ. Instead, link to that analysis's Execution-Readiness Gate or Vehicle-Admissibility Gate and state the per-row verdict policy.
+
+| Analysis ID | Commitment target | Mode | Status | Gate reference | Verdict policy |
+|---|---|---|---|---|---|
+| A1 | hypothesis:H01 or inquiry:<slug> | runnable-now | confirmatory | Execution-Readiness Gate / G1 | result carries confirmatory weight only if gate passes |
+| A2 | hypothesis:H02 or inquiry:<slug> | data-gated | confirmatory | Vehicle-Admissibility Gate / G2 | `[?]` inconclusive-for-coverage until admissible vehicle exists |
+-->
 
 ## Expected Outcomes
 
