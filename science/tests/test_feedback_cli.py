@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
 from science_tool.cli import main
@@ -76,6 +77,115 @@ class TestFeedbackAdd:
             env=env,
         )
         assert result.exit_code != 0
+
+    def test_add_from_recent_command_error_uses_telemetry_defaults(self, runner: CliRunner, tmp_path):
+        telemetry_dir = tmp_path / "telemetry"
+        feedback_dir = tmp_path / "feedback"
+        append_event(
+            telemetry_dir,
+            {
+                "event_id": "err1",
+                "timestamp": "2026-06-27T10:00:00-04:00",
+                "event_type": "command_error",
+                "command": "dataset verify-access",
+                "argv_shape": [
+                    "dataset",
+                    "verify-access",
+                    "dataset:sciplex3",
+                    "--source",
+                    "<url:redacted>",
+                    "--path",
+                    "<path:redacted>",
+                ],
+                "error_class": "ClickException",
+            },
+        )
+        env = {"SCIENCE_FEEDBACK_DIR": str(feedback_dir), "SCIENCE_TELEMETRY_DIR": str(telemetry_dir)}
+
+        result = runner.invoke(
+            main,
+            ["feedback", "add", "--from-recent", "--summary", "verify-access failed after bad source input"],
+            env=env,
+        )
+
+        assert result.exit_code == 0, result.output
+        entry_path = next(feedback_dir.glob("fb-*.yaml"))
+        entry = yaml.safe_load(entry_path.read_text(encoding="utf-8"))
+        assert entry["target"] == "command:dataset"
+        assert entry["category"] == "friction"
+        assert entry["summary"] == "verify-access failed after bad source input"
+        assert "Telemetry context:" in entry["detail"]
+        assert "- event: err1" in entry["detail"]
+        assert "<url:redacted>" in entry["detail"]
+        assert "<path:redacted>" in entry["detail"]
+
+    def test_add_from_recent_validation_summary_appends_user_detail(self, runner: CliRunner, tmp_path):
+        telemetry_dir = tmp_path / "telemetry"
+        feedback_dir = tmp_path / "feedback"
+        append_event(
+            telemetry_dir,
+            {
+                "event_id": "val1",
+                "timestamp": "2026-06-27T10:00:00-04:00",
+                "event_type": "validation_summary",
+                "surface": "validation",
+                "command": "validate",
+                "status": "fail",
+                "counts": {"error": 1, "warn": 2, "info": 0},
+                "top_checks": [{"check": "dataset.unstaged-deposit", "count": 2}],
+            },
+        )
+        env = {"SCIENCE_FEEDBACK_DIR": str(feedback_dir), "SCIENCE_TELEMETRY_DIR": str(telemetry_dir)}
+
+        result = runner.invoke(
+            main,
+            [
+                "feedback",
+                "add",
+                "--from-recent",
+                "1",
+                "--summary",
+                "validation failure needs a clearer nudge",
+                "--detail",
+                "This happened while preparing a dataset catalog patch.",
+            ],
+            env=env,
+        )
+
+        assert result.exit_code == 0, result.output
+        entry_path = next(feedback_dir.glob("fb-*.yaml"))
+        entry = yaml.safe_load(entry_path.read_text(encoding="utf-8"))
+        assert entry["target"] == "command:validate"
+        assert entry["category"] == "gap"
+        assert entry["detail"].startswith("This happened while preparing a dataset catalog patch.\n\nTelemetry context:")
+        assert "- validation_status: fail" in entry["detail"]
+        assert "- validation_counts: error=1, warn=2, info=0" in entry["detail"]
+        assert "- top_checks: dataset.unstaged-deposit=2" in entry["detail"]
+
+    def test_add_from_recent_fails_without_eligible_telemetry(self, runner: CliRunner, tmp_path):
+        telemetry_dir = tmp_path / "telemetry"
+        feedback_dir = tmp_path / "feedback"
+        append_event(
+            telemetry_dir,
+            {
+                "event_id": "ok1",
+                "timestamp": "2026-06-27T10:00:00-04:00",
+                "event_type": "command_finish",
+                "command": "feedback list",
+                "exit_code": 0,
+            },
+        )
+        env = {"SCIENCE_FEEDBACK_DIR": str(feedback_dir), "SCIENCE_TELEMETRY_DIR": str(telemetry_dir)}
+
+        result = runner.invoke(
+            main,
+            ["feedback", "add", "--from-recent", "--summary", "nothing eligible"],
+            env=env,
+        )
+
+        assert result.exit_code != 0
+        assert "No eligible recent telemetry events" in result.output
+        assert list(feedback_dir.glob("fb-*.yaml")) == []
 
 
 class TestFeedbackList:

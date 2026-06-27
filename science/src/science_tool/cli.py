@@ -5359,17 +5359,21 @@ def _get_feedback_dir() -> Path:
     return Path(os.environ.get("SCIENCE_FEEDBACK_DIR", str(get_science_config_dir() / "feedback")))
 
 
-@feedback.command("add")
-@click.option("--target", required=True, help="What the feedback is about (e.g., command:interpret-results)")
+@feedback.command("add", context_settings={"allow_extra_args": True})
+@click.option("--from-recent", is_flag=True, help="Use the newest eligible local telemetry event as feedback context.")
+@click.option("--target", default=None, help="What the feedback is about (e.g., command:interpret-results)")
 @click.option("--summary", required=True, help="One-line description")
-@click.option("--category", default="suggestion", type=click.Choice(_FB_CATEGORIES))
+@click.option("--category", default=None, type=click.Choice(_FB_CATEGORIES))
 @click.option("--detail", default=None, help="Optional prose detail")
 @click.option("--project", default=None, help="Project name (auto-detected if omitted)")
 @click.option("--related", multiple=True, help="Related feedback entry IDs")
+@click.pass_context
 def feedback_add(
+    ctx: click.Context,
+    from_recent: bool,
     target: str,
     summary: str,
-    category: str,
+    category: str | None,
     detail: str | None,
     project: str | None,
     related: tuple[str, ...],
@@ -5386,6 +5390,21 @@ def feedback_add(
     )
 
     fb_dir = _get_feedback_dir()
+    recent_index = _parse_from_recent_index(ctx.args, from_recent=from_recent)
+    if recent_index is not None:
+        from science_tool.telemetry import feedback_context_from_recent_event, get_telemetry_dir, read_events
+
+        try:
+            telemetry_context = feedback_context_from_recent_event(read_events(get_telemetry_dir()), index=recent_index)
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
+        target = target or telemetry_context.target
+        category = category or telemetry_context.category
+        detail = f"{detail}\n\n{telemetry_context.detail}" if detail else telemetry_context.detail
+
+    if target is None:
+        raise click.UsageError("--target is required unless --from-recent is used")
+    category = category or "suggestion"
 
     if project is None:
         project = detect_project(Path.cwd())
@@ -5413,6 +5432,24 @@ def feedback_add(
     )
     save_entry(fb_dir, entry)
     click.echo(f"Created {entry.id}: {entry.summary}")
+
+
+def _parse_from_recent_index(extra_args: list[str], *, from_recent: bool) -> int | None:
+    if not from_recent:
+        if extra_args:
+            raise click.UsageError(f"Unexpected argument: {extra_args[0]}")
+        return None
+    if not extra_args:
+        return 1
+    if len(extra_args) > 1:
+        raise click.UsageError("--from-recent accepts at most one 1-based index")
+    try:
+        index = int(extra_args[0])
+    except ValueError as exc:
+        raise click.UsageError("--from-recent index must be an integer") from exc
+    if index < 1:
+        raise click.UsageError("--from-recent index must be 1 or greater")
+    return index
 
 
 @feedback.command("list")
