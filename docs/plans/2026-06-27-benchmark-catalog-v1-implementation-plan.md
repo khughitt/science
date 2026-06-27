@@ -881,7 +881,7 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict[str, Any]]) -> Iterator[
             )
 
 
-@Check(section="benchmark metadata", order=33)
+@Check(section="benchmark metadata", order=34)
 def check_benchmark_metadata(ctx: ValidateContext) -> Iterator[Result]:
     yield from evaluate_benchmark_metadata(dataset_frontmatters(ctx))
 ```
