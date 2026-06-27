@@ -88,6 +88,53 @@ def test_build_commons_inventory_clean_store(tmp_path: Path, monkeypatch: pytest
     assert sorted(payload.watch_paths) == ["datasets", "papers", "themes", "topics"]
 
 
+def test_build_commons_inventory_projects_benchmark_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_store(tmp_path)
+    dataset_dir = root / "datasets" / "benchmark-example"
+    dataset_dir.mkdir(parents=True)
+    (dataset_dir / "entity.md").write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+dataset/1.0"\n'
+        'id: "dataset:benchmark-example"\n'
+        'type: "dataset"\n'
+        'title: "Benchmark Example"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-06-27"\n'
+        'updated: "2026-06-27"\n'
+        'origin: "external"\n'
+        'dataset_class: "reference"\n'
+        'tier: "track"\n'
+        "access:\n"
+        '  level: "public"\n'
+        "  verified: true\n"
+        '  verification_method: "landing-confirmed"\n'
+        '  source_url: "https://example.org/benchmark"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "benchmark:\n"
+        "  domains: [biology]\n"
+        "  modalities: [single-cell-rna-seq]\n"
+        "  signal_types: [perturbation]\n"
+        "  benchmark_kinds: [perturbation-response]\n"
+        "  limitations:\n"
+        "    - Portal record; a concrete export becomes a deposit later.\n"
+        "---\n"
+        "body\n",
+        encoding="utf-8",
+    )
+    # reference dataset: no datapackage.yaml sibling (allowed after Task 5a)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+
+    payload = build_commons_inventory()
+
+    entity = next(e for e in payload.entities if e.id == "dataset:benchmark-example")
+    assert entity.scope == "cross-project"
+    assert entity.data["benchmark"]["benchmark_kinds"] == ["perturbation-response"]
+
+
 def test_build_commons_inventory_warns_on_malformed_entity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _make_store(tmp_path)
     bad_path = root / "papers" / "badname.md"
