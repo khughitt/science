@@ -80,7 +80,7 @@
     },
     "benchmark_task": {
       "type": "object",
-      "additionalProperties": {"not": {}},
+      "additionalProperties": false,
       "required": ["id"],
       "properties": {
         "id": {
