@@ -85,6 +85,13 @@ SYNTHESIS_FAMILIES: dict[str, SynthesisFamilySpec] = {
         primary_owner="task:t024",
         typical_outputs=("truth labels", "source reliability scores", "conflict diagnostics"),
     ),
+    "no-quantitative-synthesis": SynthesisFamilySpec(
+        family="no-quantitative-synthesis",
+        default_permission="record-only",
+        max_permission="record-only",
+        primary_owner="task:t023",
+        typical_outputs=("incompatibility rationale", "missing-estimand record", "blocked-synthesis audit"),
+    ),
     "decision-analytic-score": SynthesisFamilySpec(
         family="decision-analytic-score",
         default_permission="record-only",

@@ -33,6 +33,7 @@ Families:
 - `bayesian-model-comparison`
 - `diagnostic-test-synthesis`
 - `truth-discovery`
+- `no-quantitative-synthesis`
 - `decision-analytic-score`
 - `data-cleaning-repair`
 - `causal-meta-analysis`
@@ -48,6 +49,11 @@ Families:
 - `feature-selection-synthesis`
 - `module-discovery-synthesis`
 - `predictive-integration-synthesis`
+
+`no-quantitative-synthesis` records a structured conclusion that quantitative
+pooling, model comparison, or related synthesis is not valid for the supplied
+inputs. It is `record-only`: it preserves the rationale and assumptions without
+strengthening belief.
 
 `decision-analytic-score` is reserved. Validators reject production payloads with that family until an owning task defines a detailed schema.
 

@@ -145,6 +145,47 @@ def test_synthesis_validation_uses_inherited_blocking_reason_codes() -> None:
         )
 
 
+def test_no_quantitative_synthesis_payload_is_record_only_without_proposition_target() -> None:
+    registry = build_synthesis_registry()
+    registry.register_reason_code(ReasonCodeSpec(code="no-shared-estimand"))
+    payload = _synthesis_payload(
+        "syn-2026-no-quant",
+        core={
+            "artifact_type": "no-quantitative-synthesis",
+            "extensions": ["no-quantitative-synthesis", "synthesis-operation"],
+            "input_artifact_refs": ["paper:study-a", "paper:study-b"],
+            "proposition_refs": [],
+            "comparison_target": "n-a",
+            "support_direction": "operation-record",
+            "validation_role": "record-only",
+            "uncertainty_summary": "No shared estimand; studies report incompatible endpoints.",
+            "reason_codes": ["no-shared-estimand"],
+        },
+        extension_sections={"no-quantitative-synthesis": {}},
+    )
+
+    validate_synthesis_payload(payload, registry)
+
+
+def test_no_quantitative_synthesis_cannot_strengthen_belief() -> None:
+    payload = _synthesis_payload(
+        "syn-2026-no-quant-strengthen",
+        core={
+            "artifact_type": "no-quantitative-synthesis",
+            "extensions": ["no-quantitative-synthesis", "synthesis-operation"],
+            "proposition_refs": [],
+            "comparison_target": "n-a",
+            "support_direction": "operation-record",
+            "validation_role": "strengthen-belief",
+            "uncertainty_summary": "No shared estimand; studies report incompatible endpoints.",
+        },
+        extension_sections={"no-quantitative-synthesis": {}},
+    )
+
+    with pytest.raises(PayloadValidationError, match="exceeds max permission"):
+        validate_synthesis_payload(payload)
+
+
 def test_route_synthesis_family_sends_bma_to_model_comparison() -> None:
     assert route_synthesis_family("bayesian-model-averaging") == "bayesian-model-comparison"
     assert route_synthesis_family("bayes-factor-model-set") == "bayesian-model-comparison"
