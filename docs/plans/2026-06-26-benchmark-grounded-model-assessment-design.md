@@ -235,27 +235,30 @@ preserved):
 
 | slug | resource | dataset_class | modalities | signal_types | benchmark_kinds | task completeness | why in the set |
 |---|---|---|---|---|---|---|---|
-| `sciplex3` | Srivatsan 2020 sci-Plex (drug perturbation scRNA-seq) | deposit | single-cell-rna-seq, perturbation | perturbation, cross-context-generalization | perturbation-response | full task | canonical perturbation-response with held-out compounds |
+| `sciplex3` | Srivatsan 2020 sci-Plex (drug perturbation scRNA-seq) | pointer | single-cell-rna-seq, perturbation | perturbation, cross-context-generalization | perturbation-response | full task | canonical perturbation-response with held-out compounds; tracked-but-not-yet-staged (a `pointer` carrying a full task) |
 | `l1000-cmap` | LINCS L1000 Connectivity Map (clue.io portal) | reference | bulk-expression (landmark) | perturbation, cross-context-generalization | perturbation-response | full task | reduced-transcriptome benchmark via a portal; concrete GEO export becomes a deposit later |
 | `dream-perturbation` | a DREAM challenge perturbation track | reference | varies | perturbation | perturbation-response, mechanism-discrimination | facets-only | challenge registry as a `reference`-class benchmark portal |
 | `human-cell-atlas` | Human Cell Atlas | reference | single-cell-rna-seq, spatial, multimodal | cross-context-generalization | static-association, cross-context-generalization | facets-only | atlas/knowledgebase portal; multimodal breadth; no single task |
 | `cptac-proteogenomics` | CPTAC proteogenomics (PDC portal) | reference | proteomics, bulk-expression, multimodal | multimodal, longitudinal | static-association, mechanism-discrimination | full task | proteomics + multimodal axis via a data-commons portal |
 | `tahoe-100m` (or similar) | large perturbation atlas (pointer until staged) | pointer | single-cell-rna-seq, perturbation | perturbation, temporal | perturbation-response, time-series | facets-only | exercises `pointer` class + time-series signal not yet runnable |
 
-This table covers: deposit / reference / pointer classes; single-cell,
-bulk, proteomics, spatial, and multimodal modalities; perturbation, temporal,
-longitudinal, cross-context, and multimodal signal types; and both fully-tasked
-and facets-only records. That spread is the product decision; locking it here
-prevents it from being re-decided under implementation pressure.
+This table covers reference and pointer classes; single-cell, bulk, proteomics,
+spatial, and multimodal modalities; perturbation, temporal, longitudinal,
+cross-context, and multimodal signal types; and both fully-tasked and facets-only
+records. That spread is the product decision; locking it here prevents it from
+being re-decided under implementation pressure.
 
-Schema note: the dataset mixin requires a `datapackage` for any `deposit`
-record, so unstaged benchmarks (portals, registries, not-yet-downloaded data) are
-seeded as `reference` or `pointer`, and only genuinely-stageable data is a
-`deposit`. The single `deposit` seed (`sciplex3`) carries a minimal
-`datapackage.json` stub documenting its remote resource; the portal-backed
-records (`l1000-cmap`, `cptac-proteogenomics`) are `reference` because their
-canonical access surface is a portal, and a concrete downloadable export would be
-registered as a separate `deposit` later.
+Schema note: the v1 commons seeds carry **no `deposit`** record. A canonical
+commons deposit requires a content-addressed `datapackage.yaml` (relative `path` +
+`hash` + `bytes`), which only exists once real data is staged — out of scope for a
+descriptive benchmark catalog. So portal-backed benchmarks (`l1000-cmap`,
+`cptac-proteogenomics`, the DREAM registry, the Human Cell Atlas) are `reference`,
+and real-but-unstaged datasets (`sciplex3`, `tahoe-100m`) are `pointer`. The
+`deposit` class is still exercised — by the model/schema/validation unit tests,
+which use synthetic deposit frontmatter. The implementation also relaxes the
+commons adapter so `reference`/`pointer` dataset directories no longer require a
+`datapackage.yaml` sibling (it stays required for `deposit`), matching the
+triage design's promotion rules.
 
 The seed set is content, not schema: its exact membership can be finalized during
 implementation. Its purpose is to validate the block shape and seed the commons

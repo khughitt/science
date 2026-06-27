@@ -311,21 +311,10 @@ unaffected:
     benchmark: BenchmarkBlock | None = None
 ```
 
-In `Entity._validate_dataset_taxonomy`, add this explicit dataset-only gate
-immediately after the existing `if self.kind != "dataset": return self` guard, so
-it uses the same string comparison the method already relies on (entities.py:287
-— `self.kind` is a plain string, not an `EntityType`):
-
-```python
-        # placed after the early `if self.kind != "dataset": return self` guard,
-        # so by here self.kind == "dataset"; the inverse guard for non-datasets:
-        if self.kind != "dataset" and self.benchmark is not None:
-            raise ValueError(f"{self.id}: benchmark metadata is only valid on dataset entities")
-```
-
-Note: because the guard sits before the `kind != "dataset"` early return, write
-the non-dataset check as its own statement at the top of the method (before that
-early return), e.g.:
+In `Entity._validate_dataset_taxonomy`, fold the non-dataset guard into the
+existing early return so a non-dataset entity carrying `benchmark` is rejected
+before the method short-circuits. `self.kind` is a plain string here
+(entities.py:287), not an `EntityType`:
 
 ```python
     def _validate_dataset_taxonomy(self) -> "Entity":
@@ -447,6 +436,21 @@ def test_dataset_benchmark_task_id_pattern_rejected(base_entity: dict) -> None:
 
     with pytest.raises(EntityValidationError, match="benchmark"):
         EntityValidator().validate(entity)
+
+
+def test_dataset_benchmark_facet_type_rejected(base_entity: dict) -> None:
+    # domains must be an array; a scalar must be rejected once the block is
+    # actually constrained. Before implementation the unknown `benchmark` key is
+    # ignored (the schema has no additionalProperties:false), so this does NOT
+    # raise — which is exactly what makes it a valid red test.
+    entity = base_entity | {
+        "origin": "external",
+        "access": {"level": "public", "verified": True},
+        "benchmark": {"domains": "biology"},
+    }
+
+    with pytest.raises(EntityValidationError, match="benchmark"):
+        EntityValidator().validate(entity)
 ```
 
 - [ ] **Step 2: Run tests and verify they fail**
@@ -455,7 +459,13 @@ def test_dataset_benchmark_task_id_pattern_rejected(base_entity: dict) -> None:
 rtk uv run --frozen pytest science/model/tests/test_entity_schema_mixin_dataset.py -q -k "benchmark"
 ```
 
-Expected: FAIL because `benchmark` is not recognized by the dataset mixin schema.
+Expected: the two rejection tests (`test_dataset_benchmark_task_id_pattern_rejected`,
+`test_dataset_benchmark_facet_type_rejected`) FAIL — the dataset mixin currently
+has no `additionalProperties: false`, so an unknown `benchmark` key (and anything
+inside it) is silently accepted and nothing raises. They go green once Step 3 adds
+the `benchmark`/`benchmark_task` constraints. The positive
+`test_dataset_benchmark_block_validates` test will already pass before Step 3
+(permissive schema) and only proves the valid shape stays valid after.
 
 - [ ] **Step 3: Add the schema property**
 
@@ -1314,18 +1324,119 @@ rtk git commit -m "feat(cli): list benchmark-capable datasets"
 
 ---
 
+### Task 5a: Relax the commons adapter datapackage requirement for reference/pointer
+
+`CommonsEntityAdapter` currently requires a `datapackage.yaml` sibling for *every*
+commons dataset directory (`adapter.py:64-86`), checked before it reads
+`dataset_class`. That blocks `reference`/`pointer` benchmark seeds, which have no
+stageable, content-addressed datapackage. Relax the gate so the sidecar is
+required only for `deposit` (and missing-class, which defaults to deposit) records;
+`reference`/`pointer` records may omit it and yield a record with
+`datapackage_path=None`. This aligns the adapter with the triage design's
+commons-promotion rules (reference/pointer promote without a datapackage) and with
+`build_commons_inventory`, which already guards `if record.datapackage_path is not
+None` (`inventory.py:103`).
+
+**Files:**
+- Modify: `science/src/science_tool/commons/adapter.py`
+- Test: `science/tests/test_commons_adapter.py`
+
+- [ ] **Step 1: Write failing tests**
+
+Add tests asserting:
+- a `reference` dataset dir with `entity.md` and NO `datapackage.yaml` yields a `CommonsEntityRecord` with `datapackage_path is None` (not a `CommonsEntityError`);
+- a `pointer` dataset dir without `datapackage.yaml` likewise yields a record;
+- a `deposit` dataset dir without `datapackage.yaml` still yields a `CommonsEntityError` (cause `CommonsLayoutError`);
+- a dataset dir with no explicit `dataset_class` and no `datapackage.yaml` still errors (missing-class defaults to deposit).
+
+- [ ] **Step 2: Run tests and verify they fail**
+
+```bash
+rtk uv run --frozen pytest science/tests/test_commons_adapter.py -q -k "reference or pointer or datapackage"
+```
+
+Expected: FAIL because the adapter errors on every dataset dir lacking `datapackage.yaml`, regardless of class.
+
+- [ ] **Step 3: Implement the relaxation**
+
+In `science/src/science_tool/commons/adapter.py`, read the declared class before
+the datapackage gate (`parse_frontmatter` is already imported and returns
+`(frontmatter, int)`):
+
+```python
+def _peek_dataset_class(entity_path: Path) -> str:
+    try:
+        frontmatter, _ = parse_frontmatter(entity_path)
+    except Exception:
+        return "deposit"
+    value = (frontmatter or {}).get("dataset_class")
+    return value if isinstance(value, str) and value else "deposit"
+```
+
+Rewrite the `datasets` branch of `_scan_type` so the sidecar is required only for
+deposit/missing-class records:
+
+```python
+                entity_path = child / "entity.md"
+                if not entity_path.is_file():
+                    continue
+                dp_path = child / "datapackage.yaml"
+                requires_dp = _peek_dataset_class(entity_path) not in ("reference", "pointer")
+                if requires_dp and not dp_path.is_file():
+                    yield CommonsEntityError(
+                        child,
+                        canonical_id=f"dataset:{child.name}",
+                        cause=CommonsLayoutError(
+                            child,
+                            reason=(
+                                "deposit dataset directory missing required "
+                                "datapackage.yaml sibling"
+                            ),
+                        ),
+                    )
+                    continue
+                yield self._build(
+                    type_name, child.name, entity_path,
+                    dp_path if dp_path.is_file() else None,
+                )
+```
+
+`CommonsEntityRecord.datapackage_path` is already `Path | None`, and `_build`
+accepts `None` (non-dataset types already pass it), so no other change is needed.
+
+- [ ] **Step 4: Run tests and verify they pass**
+
+```bash
+rtk uv run --frozen pytest science/tests/test_commons_adapter.py -q
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+rtk git add science/src/science_tool/commons/adapter.py science/tests/test_commons_adapter.py
+rtk git commit -m "feat(commons): require datapackage.yaml only for deposit datasets"
+```
+
+---
+
 ### Task 5: Commons Projection and Seed Records
 
 **Files:**
 - Modify: `science/tests/test_commons_inventory.py`
-- Modify or create in `~/d/science-commons/`: `datasets/sciplex3/entity.md`, `datasets/sciplex3/datapackage.json`, `datasets/l1000-cmap/entity.md`, `datasets/dream-perturbation/entity.md`, `datasets/human-cell-atlas/entity.md`, `datasets/cptac-proteogenomics/entity.md`, `datasets/tahoe-100m/entity.md`
+- Modify or create in `~/d/science-commons/`: `datasets/sciplex3/entity.md`, `datasets/l1000-cmap/entity.md`, `datasets/dream-perturbation/entity.md`, `datasets/human-cell-atlas/entity.md`, `datasets/cptac-proteogenomics/entity.md`, `datasets/tahoe-100m/entity.md`
 
-Seed class spread (schema-aware): `sciplex3` is the single `deposit` (carries a
-`datapackage.json`, since the dataset mixin requires `datapackage` for deposits);
+Seed class spread (schema-aware): v1 seeds **no `deposit`** in commons, because a
+canonical commons deposit requires a content-addressed `datapackage.yaml`
+(relative `path` + `hash` + `bytes` per `datapackage.py`), which only exists once
+real data is staged — out of scope for a descriptive benchmark catalog.
 `l1000-cmap`, `dream-perturbation`, `human-cell-atlas`, and `cptac-proteogenomics`
-are `reference` records (portals/knowledgebases — no datapackage required);
-`tahoe-100m` is a `pointer`. This keeps the deposit/reference/pointer spread while
-staying schema-valid without staging real data.
+are `reference` records (portals/knowledgebases); `sciplex3` and `tahoe-100m` are
+`pointer` records (real datasets tracked but not yet staged). The `deposit` class
+is still exercised — by the model/schema/validation unit tests (Tasks 1–3), which
+use synthetic deposit frontmatter. After Task 5a, reference/pointer dataset dirs
+need no `datapackage.yaml` sibling.
 
 - [ ] **Step 1: Add commons inventory regression test**
 
@@ -1346,14 +1457,13 @@ def test_build_commons_inventory_projects_benchmark_metadata(tmp_path: Path, mon
         'status: "active"\n'
         'created: "2026-06-27"\n'
         'updated: "2026-06-27"\n'
-        'datapackage: "datapackage.json"\n'
         'origin: "external"\n'
-        'dataset_class: "deposit"\n'
-        'tier: "use-now"\n'
+        'dataset_class: "reference"\n'
+        'tier: "track"\n'
         "access:\n"
         '  level: "public"\n'
         "  verified: true\n"
-        '  verification_method: "retrieved"\n'
+        '  verification_method: "landing-confirmed"\n'
         '  source_url: "https://example.org/benchmark"\n'
         "ontology_terms: []\n"
         "tags: []\n"
@@ -1362,16 +1472,13 @@ def test_build_commons_inventory_projects_benchmark_metadata(tmp_path: Path, mon
         "  modalities: [single-cell-rna-seq]\n"
         "  signal_types: [perturbation]\n"
         "  benchmark_kinds: [perturbation-response]\n"
-        "  tasks:\n"
-        "    - id: drug-response\n"
-        "      task_type: response-prediction\n"
-        "      metric: auroc\n"
-        "      baseline: mean-expression\n"
+        "  limitations:\n"
+        "    - Portal record; a concrete export becomes a deposit later.\n"
         "---\n"
         "body\n",
         encoding="utf-8",
     )
-    (dataset_dir / "datapackage.json").write_text('{"resources": []}\n', encoding="utf-8")
+    # reference dataset: no datapackage.yaml sibling (allowed after Task 5a)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
 
     payload = build_commons_inventory()
@@ -1387,7 +1494,11 @@ def test_build_commons_inventory_projects_benchmark_metadata(tmp_path: Path, mon
 rtk uv run --frozen pytest science/tests/test_commons_inventory.py -q -k "benchmark_metadata or clean_store"
 ```
 
-Expected: PASS. The schema change from Task 2 is sufficient; no inventory code change should be needed because non-promoted frontmatter keys already project into `InventoryEntity.data`.
+Expected: PASS. This depends on Task 5a (a `reference` dataset dir with no
+`datapackage.yaml` is now accepted by the adapter). No `inventory.py` change is
+needed: it walks via `CommonsEntityAdapter.scan()`, already tolerates
+`datapackage_path is None` (`inventory.py:103`), and non-promoted frontmatter keys
+(including `benchmark`) already project into `InventoryEntity.data`.
 
 - [ ] **Step 3: Author seed records in commons**
 
@@ -1408,15 +1519,14 @@ updated: "2026-06-27"
 scope: "shared"
 origin: "external"
 source_class: "observational"
-dataset_class: "deposit"
-tier: "evaluate-next"
+dataset_class: "pointer"
+tier: "track"
 license: "unknown"
-datapackage: "datapackage.json"
 access:
   level: "public"
   availability: "available"
   verified: true
-  verification_method: "retrieved"
+  verification_method: "landing-confirmed"
   source_url: "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE139944"
 ontology_terms: []
 tags: []
@@ -1447,23 +1557,6 @@ benchmark:
       contexts: ["cell line", "compound", "dose"]
 ---
 # Sci-Plex 3
-```
-
-For `datasets/sciplex3/datapackage.json` (minimal Frictionless stub so the
-deposit satisfies the mixin's `datapackage` requirement; it documents the remote
-resource without staging local files — refine the resource path/schema when the
-data is actually staged):
-
-```json
-{
-  "name": "sciplex3",
-  "resources": [
-    {
-      "name": "sciplex3-perturbation-counts",
-      "path": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE139944"
-    }
-  ]
-}
 ```
 
 For `datasets/l1000-cmap/entity.md`:
@@ -1708,13 +1801,13 @@ SCIENCE_COMMONS_ROOT=~/d/science-commons rtk uv run --frozen science commons ind
 SCIENCE_COMMONS_ROOT=~/d/science-commons rtk uv run --frozen science benchmark list --commons --domain biology --coverage-summary --format json
 ```
 
-Expected: commons validation passes (no `dataset.method-class-mismatch`: the
-`sciplex3` deposit uses `retrieved` and carries a `datapackage`; the four
-reference seeds use `landing-confirmed`; the `tahoe-100m` pointer uses
-`metadata-confirmed`); index rebuild succeeds; benchmark list JSON includes the
-six seed records in either local or commons scope. The deposit's `datapackage`
-satisfies the mixin requirement, so no `dataset.deposit-verified-unstaged` or
-missing-datapackage error is expected.
+Expected: commons validation passes. The four `reference` seeds use
+`landing-confirmed` and the two `pointer` seeds (`sciplex3`, `tahoe-100m`) use
+`landing-confirmed`/`metadata-confirmed`; none is a `deposit`, so no record needs
+a `datapackage.yaml` (Task 5a makes the sidecar optional for reference/pointer)
+and no `dataset.method-class-mismatch` or missing-datapackage error is expected.
+Index rebuild succeeds; benchmark list JSON includes the six seed records in
+either local or commons scope.
 
 - [ ] **Step 5: Commit repo regression test**
 
@@ -1726,7 +1819,7 @@ rtk git commit -m "test(commons): preserve benchmark metadata in inventory"
 Commit the commons seed records separately in `~/d/science-commons` with:
 
 ```bash
-rtk git -C ~/d/science-commons add datasets/sciplex3/entity.md datasets/sciplex3/datapackage.json datasets/l1000-cmap/entity.md datasets/dream-perturbation/entity.md datasets/human-cell-atlas/entity.md datasets/cptac-proteogenomics/entity.md datasets/tahoe-100m/entity.md
+rtk git -C ~/d/science-commons add datasets/sciplex3/entity.md datasets/l1000-cmap/entity.md datasets/dream-perturbation/entity.md datasets/human-cell-atlas/entity.md datasets/cptac-proteogenomics/entity.md datasets/tahoe-100m/entity.md
 rtk git -C ~/d/science-commons commit -m "data: seed benchmark-capable omics datasets"
 ```
 
@@ -1887,6 +1980,7 @@ rtk uv run --frozen pytest \
   science/model/tests/test_entity_schema_mixin_dataset.py \
   science/tests/validate/test_checks_benchmark_metadata.py \
   science/tests/test_benchmark_cli.py \
+  science/tests/test_commons_adapter.py \
   science/tests/test_commons_inventory.py \
   science/tests/test_command_docs.py \
   -q
