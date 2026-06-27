@@ -96,12 +96,12 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
         seen_task_ids: set[str] = set()
         duplicate_task_ids: set[str] = set()
         for task in tasks:
-            raw_task_id = task.get("task_id")
+            raw_task_id = task.get("id")
             if not isinstance(raw_task_id, str) or not _valid_task_id(raw_task_id):
                 yield _result(
                     Severity.ERROR,
                     path,
-                    f"{ident}: benchmark task_id {raw_task_id!r} must be 2-64 chars of lowercase kebab-case",
+                    f"{ident}: benchmark task id {raw_task_id!r} must be 2-64 chars of lowercase kebab-case",
                     "benchmark.task-id-invalid",
                 )
                 continue
@@ -116,7 +116,7 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
             yield _result(
                 Severity.ERROR,
                 path,
-                f"{ident}: duplicate benchmark task_id {task_id!r}",
+                f"{ident}: duplicate benchmark task id {task_id!r}",
                 "benchmark.task-id-duplicate",
             )
 
@@ -125,7 +125,7 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                 yield _result(
                     Severity.WARN,
                     path,
-                    f"{ident}: benchmark task {task['task_id']!r} is missing task_type or prediction_target",
+                    f"{ident}: benchmark task {task['id']!r} is missing task_type or prediction_target",
                     "benchmark.task-sparse",
                 )
 

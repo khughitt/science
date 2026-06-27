@@ -59,14 +59,30 @@ def test_pointer_dataset_with_non_mapping_benchmark_emits_pointer_info_and_malfo
     ]
 
 
+def test_valid_task_id_does_not_emit_invalid_id() -> None:
+    rules = _rules(
+        [
+            _ds(
+                benchmark={
+                    "tasks": [
+                        {"id": "drug-response", "task_type": "prediction", "prediction_target": "response"},
+                    ]
+                }
+            )
+        ]
+    )
+
+    assert (Severity.ERROR, "benchmark.task-id-invalid") not in rules
+
+
 def test_duplicate_task_ids_are_error() -> None:
     rules = _rules(
         [
             _ds(
                 benchmark={
                     "tasks": [
-                        {"task_id": "rank-genes", "task_type": "ranking", "prediction_target": "gene"},
-                        {"task_id": "rank-genes", "task_type": "ranking", "prediction_target": "gene"},
+                        {"id": "rank-genes", "task_type": "ranking", "prediction_target": "gene"},
+                        {"id": "rank-genes", "task_type": "ranking", "prediction_target": "gene"},
                     ]
                 }
             )
@@ -77,7 +93,7 @@ def test_duplicate_task_ids_are_error() -> None:
 
 
 def test_invalid_task_id_is_error_and_mentions_lowercase_kebab_case() -> None:
-    results = _results([_ds(benchmark={"tasks": [{"task_id": "Rank__Genes"}]})])
+    results = _results([_ds(benchmark={"tasks": [{"id": "Rank__Genes"}]})])
 
     assert any(
         result.severity is Severity.ERROR
@@ -93,10 +109,10 @@ def test_task_id_lowercase_kebab_case_edges_are_errors() -> None:
             _ds(
                 benchmark={
                     "tasks": [
-                        {"task_id": "a"},
-                        {"task_id": "a" * 65},
-                        {"task_id": "ab-"},
-                        {"task_id": "a--b"},
+                        {"id": "a"},
+                        {"id": "a" * 65},
+                        {"id": "ab-"},
+                        {"id": "a--b"},
                     ]
                 }
             )
@@ -113,12 +129,12 @@ def test_task_id_lowercase_kebab_case_edges_are_errors() -> None:
 
 def test_task_missing_core_evaluation_fields_warns() -> None:
     assert (Severity.WARN, "benchmark.task-sparse") in _rules(
-        [_ds(benchmark={"tasks": [{"task_id": "rank-genes", "task_type": "ranking"}]})]
+        [_ds(benchmark={"tasks": [{"id": "rank-genes", "task_type": "ranking"}]})]
     )
 
 
 def test_sparse_warning_only_applies_to_valid_task_ids() -> None:
-    rules = _rules([_ds(benchmark={"tasks": [{"task_id": "Rank__Genes"}]})])
+    rules = _rules([_ds(benchmark={"tasks": [{"id": "Rank__Genes"}]})])
 
     assert rules == [(Severity.ERROR, "benchmark.task-id-invalid")]
 
@@ -148,7 +164,7 @@ def test_perturbation_response_without_intervention_or_contexts_warns() -> None:
                     "benchmark_kinds": ["perturbation-response"],
                     "tasks": [
                         {
-                            "task_id": "predict-response",
+                            "id": "predict-response",
                             "task_type": "prediction",
                             "prediction_target": "response",
                         }
@@ -167,7 +183,7 @@ def test_perturbation_response_with_intervention_does_not_warn() -> None:
                     "benchmark_kinds": ["perturbation-response"],
                     "tasks": [
                         {
-                            "task_id": "predict-response",
+                            "id": "predict-response",
                             "task_type": "prediction",
                             "prediction_target": "response",
                             "intervention": "drug",
@@ -187,7 +203,7 @@ def test_perturbation_response_with_contexts_does_not_warn() -> None:
                     "benchmark_kinds": ["perturbation-response"],
                     "tasks": [
                         {
-                            "task_id": "predict-response",
+                            "id": "predict-response",
                             "task_type": "prediction",
                             "prediction_target": "response",
                             "contexts": ["treated"],
@@ -207,7 +223,7 @@ def test_time_series_without_timepoints_warns() -> None:
                     "benchmark_kinds": ["time-series"],
                     "tasks": [
                         {
-                            "task_id": "predict-trajectory",
+                            "id": "predict-trajectory",
                             "task_type": "prediction",
                             "prediction_target": "trajectory",
                         }
@@ -226,7 +242,7 @@ def test_time_series_with_timepoints_does_not_warn() -> None:
                     "benchmark_kinds": ["time-series"],
                     "tasks": [
                         {
-                            "task_id": "predict-trajectory",
+                            "id": "predict-trajectory",
                             "task_type": "prediction",
                             "prediction_target": "trajectory",
                             "timepoints": ["day-0", "day-7"],
@@ -243,7 +259,7 @@ def test_pointer_dataset_with_benchmark_emits_info() -> None:
         [
             _ds(
                 dataset_class="pointer",
-                benchmark={"tasks": [{"task_id": "rank-genes", "task_type": "ranking", "prediction_target": "gene"}]},
+                benchmark={"tasks": [{"id": "rank-genes", "task_type": "ranking", "prediction_target": "gene"}]},
             )
         ]
     )
