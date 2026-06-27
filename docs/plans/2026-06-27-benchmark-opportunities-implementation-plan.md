@@ -105,6 +105,15 @@ def _invoke(tmp_path: Path, *args: str):
     )
 
 
+def _invoke_with_commons(tmp_path: Path, commons_root: Path, *args: str):
+    return CliRunner().invoke(
+        science_cli,
+        ["benchmark", "opportunities", *args],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(commons_root)},
+    )
+
+
 def _write_corrupt_commons_registry(root: Path, frontmatter_json: str = "{not-json") -> None:
     root.mkdir()
     conn = sqlite3.connect(root / "registry.sqlite")
@@ -668,18 +677,18 @@ def _facet_points(values: tuple[str, ...], weights: Mapping[str, int], cap: int)
     return min(total, cap), notes
 
 
-def baseline_score(dataset: OpportunityDataset) -> Score:
+def baseline_score(dataset: OpportunityDataset, *, readiness: tuple[float, list[str]] | None = None) -> Score:
     task = _task_completeness(dataset)
     signal, signal_notes = _facet_points(dataset.signal_types, HIGH_VALUE_SIGNAL_POINTS, 25)
     modality, modality_notes = _facet_points(dataset.modalities, HIGH_VALUE_MODALITY_POINTS, 20)
-    readiness_float, readiness_flags = readiness_weight(dict(dataset.frontmatter))
-    readiness = round(readiness_float * 15)
+    readiness_float, readiness_flags = readiness if readiness is not None else readiness_weight(dict(dataset.frontmatter))
+    readiness_points = round(readiness_float * 15)
     limitations = 10 if dataset.limitations else 0
     components = {
         "task_completeness": task,
         "signal_value": signal,
         "modality_value": modality,
-        "readiness": readiness,
+        "readiness": readiness_points,
         "limitations": limitations,
     }
     notes = [f"signal:{value}" for value in signal_notes]
@@ -1006,6 +1015,7 @@ class ProjectBenchmarkEntity:
 class DatasetOpportunityContext:
     dataset: OpportunityDataset
     baseline: Score
+    readiness_penalty: int
     controlled_facet_tokens: frozenset[str]
     prose_tokens: frozenset[str]
     related_belief_tokens: frozenset[str]
@@ -1095,12 +1105,15 @@ def _related_belief_tokens(dataset: OpportunityDataset) -> frozenset[str]:
     return _tokens_from_text(*dataset.related_beliefs, include_stop_tokens=True)
 
 
-def _dataset_context(dataset: OpportunityDataset) -> DatasetOpportunityContext:
+def _dataset_context(dataset: OpportunityDataset, *, include_prose_tokens: bool) -> DatasetOpportunityContext:
+    dataset_readiness = readiness_weight(dict(dataset.frontmatter))
+    readiness_float, _readiness_flags = dataset_readiness
     return DatasetOpportunityContext(
         dataset=dataset,
-        baseline=baseline_score(dataset),
+        baseline=baseline_score(dataset, readiness=dataset_readiness),
+        readiness_penalty=0 if readiness_float >= 0.5 else -10,
         controlled_facet_tokens=_controlled_facet_tokens(dataset),
-        prose_tokens=_benchmark_prose_tokens(dataset),
+        prose_tokens=_benchmark_prose_tokens(dataset) if include_prose_tokens else frozenset(),
         related_belief_tokens=_related_belief_tokens(dataset),
     )
 
@@ -1143,14 +1156,12 @@ def _relative_score(
                 diversity_notes.append(f"diversity:{value}")
     diversity_points = min(diversity_points, 15)
 
-    readiness_float, _flags = readiness_weight(dict(dataset.frontmatter))
-    readiness_penalty = 0 if readiness_float >= 0.5 else -10
     components = {
         "related_belief_id": related_points,
         "facet_overlap": facet_points,
         "kind_signal_fit": kind_points,
         "diversity_added": diversity_points,
-        "readiness_penalty": readiness_penalty,
+        "readiness_penalty": context.readiness_penalty,
     }
     notes = [f"related-belief-id:{hit}" for hit in id_hits]
     notes.extend(f"facet-token:{hit}" for hit in facet_hits)
@@ -1242,6 +1253,20 @@ def _coverage_gaps(entities: list[ProjectBenchmarkEntity], matched_rows: list[di
     return sorted(gaps, key=lambda row: (str(row["entity_id"]), ",".join(row["missing_modalities"]), ",".join(row["missing_signal_types"])))
 
 
+def _calibration_payload(contexts: list[DatasetOpportunityContext], *, enabled: bool) -> dict[str, object]:
+    if not enabled:
+        return {"enabled": False}
+    return {
+        "enabled": True,
+        "stop_tokens": sorted(_STOP_TOKENS),
+        "excluded_benchmark_prose_tokens": {
+            context.dataset.id: sorted(context.prose_tokens)
+            for context in contexts
+            if context.prose_tokens
+        },
+    }
+
+
 def opportunity_report(
     project_root: Path,
     *,
@@ -1256,12 +1281,15 @@ def opportunity_report(
     datasets, notice = load_opportunity_datasets(project_root, include_commons=include_commons)
     if domain is not None:
         datasets = [dataset for dataset in datasets if domain in dataset.domains]
-    contexts = [_dataset_context(dataset) for dataset in datasets]
+    contexts = [_dataset_context(dataset, include_prose_tokens=calibration_report) for dataset in datasets]
 
     # Diversity credit is entity-relative across benchmarks. Because rows are
     # produced in dataset sort order, the first matched benchmark for an entity
     # claims each high-value facet; later benchmarks with the same facet receive
-    # no additional diversity credit.
+    # no additional diversity credit. If a multi-task benchmark is first to
+    # claim a facet, the first task row claims it and sibling task rows may have
+    # lower relative scores; calibration should treat that as a known row-order
+    # artifact.
     seen_facets: set[tuple[str, str]] = set()
     matched: list[dict[str, object]] = []
     for entity in entities:
@@ -1287,10 +1315,7 @@ def opportunity_report(
             for entity in entities
             if entity.id not in matched_entity_ids
         ],
-        "calibration": {
-            "enabled": calibration_report,
-            "stop_tokens": sorted(_STOP_TOKENS) if calibration_report else [],
-        },
+        "calibration": _calibration_payload(contexts, enabled=calibration_report),
         "commons_notice": notice,
     }
 ```
@@ -1349,6 +1374,8 @@ benchmark:
   modalities: [single-cell-rna-seq]
   signal_types: [perturbation]
   benchmark_kinds: [perturbation-response]
+  notes:
+    - Measured expression prose is displayed for calibration only.
 """,
     )
 
@@ -1359,6 +1386,9 @@ benchmark:
     assert payload["matched_opportunities"][0]["entity_id"] == "hypothesis:0001-perturbation"
     assert payload["calibration"]["enabled"] is True
     assert "stop_tokens" in payload["calibration"]
+    excluded = payload["calibration"]["excluded_benchmark_prose_tokens"]["dataset:sciplex3"]
+    assert "measured" in excluded
+    assert not any("measured" in reason for reason in payload["matched_opportunities"][0]["match_reasons"])
 
 
 def test_benchmark_opportunities_table_uses_candidate_language(tmp_path: Path) -> None:
@@ -1435,6 +1465,43 @@ benchmark:
     payload = json.loads(result.output)
     assert payload["commons_notice"]
     assert "notice: commons benchmarks unavailable" in result.stderr
+
+
+def test_benchmark_opportunities_commons_corrupt_registry_degrades_to_local_rows(tmp_path: Path) -> None:
+    commons_root = tmp_path / "commons"
+    _write_corrupt_commons_registry(commons_root, '"bad"')
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-static",
+        """
+id: hypothesis:0001-static
+type: hypothesis
+title: Static biology association
+status: active
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "local",
+        """
+id: dataset:local
+type: dataset
+title: Local
+benchmark:
+  domains: [biology]
+  modalities: [biology]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    result = _invoke_with_commons(tmp_path, commons_root, "--commons", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["commons_notice"]
+    assert "frontmatter_json must decode to an object" in payload["commons_notice"]
+    assert "notice: commons benchmarks unavailable" in result.stderr
 ```
 
 - [ ] **Step 2: Run failing CLI tests**
@@ -1442,7 +1509,7 @@ benchmark:
 Run:
 
 ```bash
-rtk uv run --frozen --project science pytest science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_json_and_calibration_shape science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_table_uses_candidate_language science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_invalid_entity_is_click_error science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_commons_unavailable_degrades_to_local_rows -q
+rtk uv run --frozen --project science pytest science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_json_and_calibration_shape science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_table_uses_candidate_language science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_invalid_entity_is_click_error science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_commons_unavailable_degrades_to_local_rows science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_commons_corrupt_registry_degrades_to_local_rows -q
 ```
 
 Expected: FAIL because `benchmark opportunities` is not registered.
@@ -1546,7 +1613,7 @@ def benchmark_opportunities(
 Run:
 
 ```bash
-rtk uv run --frozen --project science pytest science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_json_and_calibration_shape science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_table_uses_candidate_language science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_invalid_entity_is_click_error science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_commons_unavailable_degrades_to_local_rows -q
+rtk uv run --frozen --project science pytest science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_json_and_calibration_shape science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_table_uses_candidate_language science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_invalid_entity_is_click_error science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_commons_unavailable_degrades_to_local_rows science/tests/test_benchmark_opportunities.py::test_benchmark_opportunities_commons_corrupt_registry_degrades_to_local_rows -q
 ```
 
 Expected: PASS.
@@ -1639,9 +1706,9 @@ Spec coverage:
 - Additive `baseline_score` and `relative_score` components: Tasks 2-3.
 - Normalized editorial facet constants reused across baseline, relative scoring, diversity, and gaps: Tasks 2-3.
 - Entity-relative cross-benchmark modality diversity and multi-task dedupe: Task 3.
-- Cached per-dataset baseline/tokens/readiness before the entity loop: Task 3.
+- Cached per-dataset baseline, facet tokens, related-belief tokens, and readiness penalty before the entity loop; prose tokens are cached only when calibration output is requested: Task 3.
 - Facets-only `task_id: null`: Task 3.
-- Calibration output: Task 4.
+- Calibration output, including excluded benchmark prose tokens: Task 4.
 - Commons degradation: Task 4.
 - Invalid `--entity` Click error: Task 4.
 

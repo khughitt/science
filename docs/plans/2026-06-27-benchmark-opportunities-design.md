@@ -175,8 +175,7 @@ If a benchmark record has `tasks[]`, emit one row per matching task. If a
 benchmark is facets-only, emit one row for the `(entity_id, benchmark_id)` pair
 with `task_id: null` in JSON and `-` in table output. Diversity accounting runs
 after row construction and deduplicates modality/signal credit per
-`entity_id` + `benchmark_id` so a multi-task benchmark does not receive repeated
-diversity credit for the same facets.
+`entity_id` + facet across the full matched opportunity set.
 
 ## Two-score model
 
@@ -311,6 +310,9 @@ that contributes a high-value facet claims the diversity points for that facet,
 and later matches with the same facet do not receive duplicate diversity credit.
 The row-level `baseline_score` remains a pure function of one benchmark record;
 `relative_score` is a report-context score.
+If a multi-task benchmark is first to contribute a high-value facet, the first
+task row may claim the diversity points while sibling task rows receive none;
+calibration output should make that row-order artifact visible.
 
 Reports should also expose diversity gaps directly, for example:
 
