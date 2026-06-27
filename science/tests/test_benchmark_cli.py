@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -21,6 +22,55 @@ def _invoke(tmp_path: Path, *args: str):
         catch_exceptions=False,
         env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(tmp_path / "no-commons")},
     )
+
+
+def _invoke_with_commons(tmp_path: Path, commons_root: Path, *args: str):
+    return CliRunner().invoke(
+        science_cli,
+        ["benchmark", "list", *args],
+        catch_exceptions=False,
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path), "SCIENCE_COMMONS_ROOT": str(commons_root)},
+    )
+
+
+def _write_corrupt_commons_registry(root: Path) -> None:
+    root.mkdir()
+    conn = sqlite3.connect(root / "registry.sqlite")
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE entities (
+                canonical_id TEXT PRIMARY KEY,
+                type TEXT NOT NULL,
+                slug TEXT NOT NULL,
+                title TEXT,
+                schema_profile TEXT NOT NULL,
+                body_path TEXT NOT NULL,
+                datapackage_path TEXT,
+                mtime_ns INTEGER NOT NULL,
+                frontmatter_json TEXT NOT NULL
+            );
+            """
+        )
+        conn.execute(
+            "INSERT INTO entities "
+            "(canonical_id, type, slug, title, schema_profile, body_path, datapackage_path, mtime_ns, frontmatter_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "dataset:corrupt",
+                "dataset",
+                "corrupt",
+                "Corrupt",
+                "dataset/v1",
+                "datasets/corrupt/entity.md",
+                None,
+                0,
+                "{not-json",
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def test_benchmark_list_filters_domain_and_kind_json(tmp_path: Path) -> None:
@@ -140,3 +190,59 @@ benchmark:
     assert payload["summary"]["dataset_class"]["reference"] == 1
     assert payload["summary"]["modalities"]["spatial"] == 1
     assert payload["summary"]["tasks"]["facets_only"] == 1
+
+
+def test_benchmark_list_commons_missing_registry_json_degrades_to_local_rows(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "local",
+        """
+id: dataset:local
+type: dataset
+title: Local
+benchmark:
+  domains: [biology]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    result = _invoke(tmp_path, "--commons", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert [row["id"] for row in payload["rows"]] == ["dataset:local"]
+    assert payload["commons_notice"]
+    assert "notice: commons benchmarks unavailable" in result.stderr
+
+
+def test_benchmark_list_commons_corrupt_registry_json_degrades_to_local_rows(tmp_path: Path) -> None:
+    commons_root = tmp_path / "commons"
+    _write_corrupt_commons_registry(commons_root)
+    _write_dataset(
+        tmp_path,
+        "local",
+        """
+id: dataset:local
+type: dataset
+title: Local
+benchmark:
+  domains: [biology]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    result = _invoke_with_commons(tmp_path, commons_root, "--commons", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert [row["id"] for row in payload["rows"]] == ["dataset:local"]
+    assert payload["commons_notice"]
+    assert "notice: commons benchmarks unavailable" in result.stderr
+
+
+def test_coverage_summary_table_renders_when_no_rows_match(tmp_path: Path) -> None:
+    result = _invoke(tmp_path, "--domain", "biology", "--coverage-summary")
+
+    assert result.exit_code == 0
+    assert "facet" in result.output
+    assert "No matching benchmark dataset entities." not in result.output

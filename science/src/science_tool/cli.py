@@ -5481,10 +5481,6 @@ def benchmark_list(
         click.echo(json.dumps(payload, indent=2, sort_keys=True))
         return
 
-    if not rows:
-        click.echo("No matching benchmark dataset entities.")
-        return
-
     if coverage_summary_flag:
         table = Table(show_header=True, header_style="bold")
         for col in ("facet", "value", "count"):
@@ -5493,6 +5489,10 @@ def benchmark_list(
             for value, count in counts.items():
                 table.add_row(facet, value, str(count))
         Console(width=200).print(table)
+        return
+
+    if not rows:
+        click.echo("No matching benchmark dataset entities.")
         return
 
     table = Table(show_header=True, header_style="bold")

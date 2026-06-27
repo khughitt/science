@@ -5,8 +5,9 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Mapping
+from json import JSONDecodeError
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from science_model.frontmatter import parse_frontmatter
 
@@ -17,6 +18,21 @@ _BELIEF_TOKEN_RE = re.compile(r"[A-Za-z0-9:_-]+")
 
 class CommonsUnavailable(Exception):
     """Raised when commons benchmark rows cannot be read."""
+
+
+class BenchmarkRow(TypedDict):
+    id: str
+    title: str
+    scope: str
+    dataset_class: str
+    domains: list[str]
+    modalities: list[str]
+    signal_types: list[str]
+    benchmark_kinds: list[str]
+    source_datasets: list[str]
+    related_beliefs: list[str]
+    task_count: int
+    task_ids: list[str]
 
 
 def _string_list(value: object) -> list[str]:
@@ -38,7 +54,7 @@ def _dataset_class(fm: Mapping[str, object]) -> str:
         return "deposit"
 
 
-def _row_from_frontmatter(fm: Mapping[str, object], *, fallback_id: str, scope: str) -> dict | None:
+def _row_from_frontmatter(fm: Mapping[str, object], *, fallback_id: str, scope: str) -> BenchmarkRow | None:
     if (fm.get("kind") or fm.get("type")) != "dataset":
         return None
 
@@ -65,12 +81,12 @@ def _row_from_frontmatter(fm: Mapping[str, object], *, fallback_id: str, scope: 
     }
 
 
-def _local_rows(project_root: Path) -> list[dict]:
+def _local_rows(project_root: Path) -> list[BenchmarkRow]:
     datasets_dir = project_root / "entities" / "datasets"
     if not datasets_dir.is_dir():
         return []
 
-    rows: list[dict] = []
+    rows: list[BenchmarkRow] = []
     for md in sorted(datasets_dir.glob("*.md")):
         parsed = parse_frontmatter(md)
         if parsed is None:
@@ -82,7 +98,7 @@ def _local_rows(project_root: Path) -> list[dict]:
     return rows
 
 
-def _commons_rows() -> list[dict]:
+def _commons_rows() -> list[BenchmarkRow]:
     """Return benchmark rows from the commons registry.
 
     Raises CommonsUnavailable so the CLI can report a single notice and still
@@ -90,15 +106,15 @@ def _commons_rows() -> list[dict]:
     """
 
     from science_tool.commons.config import resolve_commons_root
-    from science_tool.commons.errors import CommonsRegistryError
+    from science_tool.commons.errors import CommonsError
     from science_tool.commons.query import CommonsQuery
 
     try:
         records = CommonsQuery(resolve_commons_root()).find("dataset")
-    except (CommonsRegistryError, FileNotFoundError) as exc:
+    except (CommonsError, FileNotFoundError, JSONDecodeError) as exc:
         raise CommonsUnavailable(str(exc)) from exc
 
-    rows: list[dict] = []
+    rows: list[BenchmarkRow] = []
     for record in records:
         row = _row_from_frontmatter(
             record.frontmatter or {},
@@ -110,7 +126,7 @@ def _commons_rows() -> list[dict]:
     return rows
 
 
-def _has_belief_token(row: Mapping[str, object], query: str) -> bool:
+def _has_belief_token(row: BenchmarkRow, query: str) -> bool:
     needle = query.strip().lower()
     if not needle:
         return False
@@ -123,7 +139,7 @@ def _has_belief_token(row: Mapping[str, object], query: str) -> bool:
 
 
 def _matches(
-    row: Mapping[str, object],
+    row: BenchmarkRow,
     *,
     domain: str | None,
     benchmark_kind: str | None,
@@ -145,7 +161,7 @@ def list_benchmarks(
     benchmark_kind: str | None = None,
     belief_ref_text: str | None = None,
     include_commons: bool = False,
-) -> tuple[list[dict], str | None]:
+) -> tuple[list[BenchmarkRow], str | None]:
     rows = _local_rows(project_root)
     notice: str | None = None
     if include_commons:
@@ -162,8 +178,8 @@ def list_benchmarks(
     return sorted(filtered, key=lambda row: (row["scope"], row["id"])), notice
 
 
-def coverage_summary(rows: list[dict]) -> dict[str, dict[str, int]]:
-    counters = {
+def coverage_summary(rows: list[BenchmarkRow]) -> dict[str, dict[str, int]]:
+    counters: dict[str, Counter[str]] = {
         "domains": Counter(),
         "modalities": Counter(),
         "signal_types": Counter(),
