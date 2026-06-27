@@ -40,6 +40,12 @@ def get_telemetry_dir() -> Path:
     return get_science_config_dir() / "telemetry"
 
 
+def telemetry_enabled() -> bool:
+    """Return whether local telemetry writes are enabled."""
+    value = os.environ.get("SCIENCE_TELEMETRY_ENABLED", "1").strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
 def redact_argv(argv: Sequence[str]) -> list[str]:
     """Return a conservative, non-sensitive command shape."""
     redacted: list[str] = []

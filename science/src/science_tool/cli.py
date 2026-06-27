@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -110,7 +111,112 @@ from science_tool.verdict.cli import verdict_group
 from science_tool.wander.cli import wander_command
 
 
-@click.group()
+_TELEMETRY_ARGV: list[str] = []
+
+
+class TelemetryGroup(click.Group):
+    """Root Click group that records local telemetry for command failures."""
+
+    def main(self, *args: Any, **kwargs: Any) -> Any:
+        standalone_mode = kwargs.pop("standalone_mode", True)
+        raw_args = _raw_click_args(args=args, kwargs=kwargs)
+        global _TELEMETRY_ARGV
+        _TELEMETRY_ARGV = raw_args
+        try:
+            return super().main(*args, standalone_mode=False, **kwargs)
+        except click.ClickException as exc:
+            _record_telemetry_error(raw_args, exc)
+            if not standalone_mode:
+                raise
+            exc.show()
+            raise SystemExit(exc.exit_code) from exc
+        except click.Abort as exc:
+            _record_telemetry_error(raw_args, exc)
+            if not standalone_mode:
+                raise
+            click.echo("Aborted!", err=True)
+            raise SystemExit(1) from exc
+
+
+def _raw_click_args(*, args: tuple[Any, ...], kwargs: dict[str, Any]) -> list[str]:
+    raw = kwargs.get("args")
+    if raw is None and args:
+        raw = args[0]
+    if raw is None:
+        return sys.argv[1:]
+    return [str(value) for value in raw]
+
+
+def _command_from_argv(argv: list[str]) -> str:
+    command_parts: list[str] = []
+    skip_value = False
+    for token in argv:
+        if skip_value:
+            skip_value = False
+            continue
+        if token.startswith("--"):
+            if "=" not in token:
+                skip_value = True
+            continue
+        if token.startswith("-") and token != "-":
+            skip_value = True
+            continue
+        command_parts.append(token)
+        if len(command_parts) >= 2:
+            break
+    return " ".join(command_parts) or "unknown"
+
+
+def _command_from_context() -> str:
+    ctx = click.get_current_context(silent=True)
+    if ctx is None:
+        return _command_from_argv(_TELEMETRY_ARGV)
+    parts = ctx.command_path.split()
+    if parts and parts[0] in {"main", "science"}:
+        parts = parts[1:]
+    return " ".join(parts) or _command_from_argv(_TELEMETRY_ARGV)
+
+
+def _record_telemetry_finish() -> None:
+    from science_tool.telemetry import append_event, get_telemetry_dir, new_event, telemetry_enabled
+
+    if not telemetry_enabled():
+        return
+    event = new_event(
+        event_type="command_finish",
+        command=_command_from_context(),
+        argv=_TELEMETRY_ARGV,
+        exit_code=0,
+    )
+    append_event(get_telemetry_dir(), event)
+
+
+def _record_telemetry_error(argv: list[str], exc: BaseException) -> None:
+    from science_tool.telemetry import append_event, get_telemetry_dir, new_event, telemetry_enabled
+
+    if not telemetry_enabled():
+        return
+    exit_code = exc.exit_code if isinstance(exc, click.ClickException) else 1
+    event = new_event(
+        event_type="command_error",
+        command=_command_from_argv(argv),
+        argv=argv,
+        exit_code=exit_code,
+        error_class=exc.__class__.__name__,
+        error_message_template=_error_message_template(exc),
+    )
+    append_event(get_telemetry_dir(), event)
+
+
+def _error_message_template(exc: BaseException) -> str:
+    if isinstance(exc, click.NoSuchOption):
+        return "No such option: {option}"
+    if isinstance(exc, click.UsageError):
+        return exc.__class__.__name__
+    return exc.__class__.__name__
+
+
+@click.group(cls=TelemetryGroup)
 @click.option(
     "--color",
     "color_policy",
@@ -122,6 +228,11 @@ from science_tool.wander.cli import wander_command
 def main(ctx: click.Context, color_policy: str | None) -> None:
     """Science CLI tools."""
     set_color_policy(ctx, resolve_color_policy(color_policy))
+
+
+@main.result_callback()
+def _record_cli_success(_: object, **__: object) -> None:
+    _record_telemetry_finish()
 
 
 @main.command("search")
@@ -5141,6 +5252,92 @@ def sync_rebuild(config_path: str | None) -> None:
 
 
 # ── feedback ────────────────────────────────────────────────────────────────
+
+@main.group()
+def telemetry() -> None:
+    """Local telemetry reporting commands."""
+
+
+@telemetry.command("status")
+@click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
+def telemetry_status_cmd(output_format: str) -> None:
+    """Show local telemetry status."""
+    from science_tool.telemetry import get_telemetry_dir, read_events, telemetry_enabled
+
+    telemetry_dir = get_telemetry_dir()
+    rows = [
+        {
+            "enabled": telemetry_enabled(),
+            "telemetry_dir": str(telemetry_dir),
+            "event_count": len(read_events(telemetry_dir)),
+        }
+    ]
+    emit_query_rows(
+        output_format=output_format,
+        title="Telemetry Status",
+        columns=[
+            ("enabled", "Enabled"),
+            ("telemetry_dir", "Directory"),
+            ("event_count", "Events"),
+        ],
+        rows=rows,
+    )
+
+
+@telemetry.command("report")
+@click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
+def telemetry_report_cmd(output_format: str) -> None:
+    """Summarize local telemetry events."""
+    from science_tool.telemetry import get_telemetry_dir, read_events, summarize_events
+
+    summary = summarize_events(read_events(get_telemetry_dir()))
+    rows = [summary]
+    emit_query_rows(
+        output_format=output_format,
+        title="Telemetry Report",
+        columns=[
+            ("total_events", "Events"),
+            ("event_types", "Event types"),
+            ("commands", "Commands"),
+            ("error_classes", "Errors"),
+            ("exit_codes", "Exit codes"),
+        ],
+        rows=rows,
+    )
+
+
+@telemetry.command("export")
+@click.option("--format", "output_format", default="jsonl", type=click.Choice(["jsonl"]))
+def telemetry_export_cmd(output_format: str) -> None:
+    """Export local telemetry events."""
+    from science_tool.telemetry import export_events_jsonl, get_telemetry_dir, read_events
+
+    if output_format == "jsonl":
+        click.echo(export_events_jsonl(read_events(get_telemetry_dir())), nl=False)
+
+
+@telemetry.command("prune")
+@click.option("--before", "before_date", required=True, type=click.DateTime(formats=["%Y-%m-%d"]))
+@click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
+def telemetry_prune_cmd(before_date: datetime, output_format: str) -> None:
+    """Remove local telemetry events before a date."""
+    from science_tool.telemetry import get_telemetry_dir, prune_events
+
+    telemetry_dir = get_telemetry_dir()
+    cutoff = before_date.date()
+    removed = prune_events(telemetry_dir, before=cutoff)
+    rows = [{"before": cutoff.isoformat(), "removed": removed, "telemetry_dir": str(telemetry_dir)}]
+    emit_query_rows(
+        output_format=output_format,
+        title="Telemetry Prune",
+        columns=[
+            ("before", "Before"),
+            ("removed", "Removed"),
+            ("telemetry_dir", "Directory"),
+        ],
+        rows=rows,
+    )
+
 
 _FB_CATEGORIES = ("friction", "gap", "guidance", "suggestion", "positive")
 _FB_STATUSES = ("open", "addressed", "deferred", "wontfix")
