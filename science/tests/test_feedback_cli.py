@@ -8,6 +8,7 @@ import pytest
 from click.testing import CliRunner
 
 from science_tool.cli import main
+from science_tool.telemetry import append_event
 
 
 @pytest.fixture
@@ -215,6 +216,66 @@ class TestFeedbackTriage:
         assert payload["rows"][0]["count"] == 2
         assert payload["rows"][0]["suggested_status"] == "quick-win"
         assert payload["rows"][0]["suggested_next_test_target"] == "science/tests/test_command_docs.py"
+
+    def test_triage_cluster_json_can_include_telemetry_context(self, runner: CliRunner, tmp_path):
+        telemetry_dir = tmp_path / "telemetry"
+        feedback_dir = tmp_path / "feedback"
+        append_event(
+            telemetry_dir,
+            {
+                "event_id": "v1",
+                "timestamp": "2026-06-27T10:00:00-04:00",
+                "event_type": "validation_summary",
+                "surface": "validation",
+                "command": "validate",
+                "status": "warn",
+                "counts": {"error": 0, "warn": 1, "info": 0},
+                "top_checks": [{"check": "demo.warn", "count": 1}],
+            },
+        )
+        env = {"SCIENCE_FEEDBACK_DIR": str(feedback_dir), "SCIENCE_TELEMETRY_DIR": str(telemetry_dir)}
+        runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:validate", "--summary", "Validation warnings are recurring"],
+            env=env,
+        )
+
+        result = runner.invoke(main, ["feedback", "triage", "--cluster", "--with-telemetry", "--format", "json"], env=env)
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert payload["rows"][0]["telemetry"]["validation"]["runs"] == 1
+        assert payload["rows"][0]["telemetry"]["validation"]["statuses"] == {"warn": 1}
+        assert payload["rows"][0]["telemetry"]["validation"]["top_checks"] == {"demo.warn": 1}
+
+    def test_triage_table_can_include_telemetry_context(self, runner: CliRunner, tmp_path):
+        telemetry_dir = tmp_path / "telemetry"
+        feedback_dir = tmp_path / "feedback"
+        append_event(
+            telemetry_dir,
+            {
+                "event_id": "v1",
+                "timestamp": "2026-06-27T10:00:00-04:00",
+                "event_type": "validation_summary",
+                "surface": "validation",
+                "command": "validate",
+                "status": "fail",
+                "counts": {"error": 1, "warn": 0, "info": 0},
+                "top_checks": [{"check": "demo.error", "count": 1}],
+            },
+        )
+        env = {"SCIENCE_FEEDBACK_DIR": str(feedback_dir), "SCIENCE_TELEMETRY_DIR": str(telemetry_dir)}
+        runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:validate", "--summary", "Validation fails repeatedly"],
+            env=env,
+        )
+
+        result = runner.invoke(main, ["feedback", "triage", "--with-telemetry"], env=env)
+
+        assert result.exit_code == 0, result.output
+        assert "command:validate" in result.output
+        assert "validate:" in result.output
 
 
 class TestFeedbackScaffoldTest:

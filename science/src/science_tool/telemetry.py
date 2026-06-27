@@ -8,7 +8,7 @@ import re
 import uuid
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from science_tool.registry.config import get_science_config_dir
@@ -212,6 +212,48 @@ def prune_events(telemetry_dir: Path, before: date) -> int:
     return removed
 
 
+def summarize_recent_for_feedback_target(
+    events: Sequence[Mapping[str, object]],
+    *,
+    target: str,
+    today: date | None = None,
+    since_days: int = 14,
+) -> dict[str, object]:
+    """Summarize recent telemetry relevant to a feedback target."""
+    cutoff = (today or date.today()) - timedelta(days=since_days)
+    matching = [
+        event
+        for event in events
+        if (event_date := _event_date(event)) is not None
+        and event_date >= cutoff
+        and _feedback_target_matches_event(target, event)
+    ]
+    return _summarize_feedback_events(matching)
+
+
+def format_feedback_telemetry(summary: Mapping[str, object]) -> str:
+    """Format feedback telemetry context for compact table output."""
+    if int(summary.get("recent_events") or 0) == 0:
+        return "no recent telemetry"
+
+    validation = summary.get("validation")
+    if isinstance(validation, Mapping) and int(validation.get("runs") or 0) > 0:
+        statuses = validation.get("statuses")
+        status_counts = statuses if isinstance(statuses, Mapping) else {}
+        parts = [f"validate: {validation['runs']} runs"]
+        for status in ("fail", "warn", "pass"):
+            count = status_counts.get(status)
+            if count:
+                parts.append(f"{count} {status}")
+        return ", ".join(parts)
+
+    command_errors = summary.get("command_errors")
+    if isinstance(command_errors, Mapping) and command_errors:
+        total_errors = sum(int(value) for value in command_errors.values() if isinstance(value, int))
+        return f"{summary['recent_events']} events, {total_errors} errors"
+    return f"{summary['recent_events']} events"
+
+
 def _redact_value(token: str, *, option: str | None, index: int) -> str:
     if _SAFE_REF_RE.match(token):
         return token
@@ -250,6 +292,58 @@ def _event_date(event: Mapping[str, object]) -> date | None:
         return date.fromisoformat(timestamp[:10])
     except ValueError:
         return None
+
+
+def _feedback_target_matches_event(target: str, event: Mapping[str, object]) -> bool:
+    if not target.startswith("command:"):
+        return True
+    command_target = target.removeprefix("command:")
+    command = _string_field(event, "command")
+    if not command:
+        return False
+    first_token = command.split(maxsplit=1)[0]
+    return command == command_target or first_token == command_target
+
+
+def _summarize_feedback_events(events: Sequence[Mapping[str, object]]) -> dict[str, object]:
+    commands: Counter[str] = Counter()
+    command_errors: Counter[str] = Counter()
+    validation_statuses: Counter[str] = Counter()
+    validation_top_checks: Counter[str] = Counter()
+    validation_runs = 0
+
+    for event in events:
+        event_type = _string_field(event, "event_type")
+        if event_type in {"command_finish", "command_error"}:
+            if command := _string_field(event, "command"):
+                commands[command] += 1
+        if event_type == "command_error":
+            if error_class := _string_field(event, "error_class"):
+                command_errors[error_class] += 1
+        if event_type == "validation_summary":
+            validation_runs += 1
+            if status := _string_field(event, "status"):
+                validation_statuses[status] += 1
+            top_checks = event.get("top_checks")
+            if isinstance(top_checks, Sequence) and not isinstance(top_checks, (str, bytes)):
+                for item in top_checks:
+                    if not isinstance(item, Mapping):
+                        continue
+                    check = item.get("check")
+                    count = item.get("count")
+                    if isinstance(check, str) and isinstance(count, int):
+                        validation_top_checks[check] += count
+
+    return {
+        "recent_events": len(events),
+        "command_errors": dict(sorted(command_errors.items())),
+        "commands": dict(sorted(commands.items())),
+        "validation": {
+            "runs": validation_runs,
+            "statuses": dict(sorted(validation_statuses.items())),
+            "top_checks": dict(sorted(validation_top_checks.items())),
+        },
+    }
 
 
 def _string_field(event: Mapping[str, object], key: str) -> str:

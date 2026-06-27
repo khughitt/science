@@ -5506,14 +5506,29 @@ def feedback_update(
 @click.option(
     "--since", "since_days", type=click.IntRange(min=0), default=None, help="Only include entries from the last N days"
 )
+@click.option("--with-telemetry", is_flag=True, help="Include recent local telemetry context.")
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
-def feedback_triage(target: str | None, cluster_mode: bool, since_days: int | None, output_format: str) -> None:
+def feedback_triage(
+    target: str | None,
+    cluster_mode: bool,
+    since_days: int | None,
+    with_telemetry: bool,
+    output_format: str,
+) -> None:
     """Show open entries grouped or clustered for triage."""
-    from science_tool.feedback import cluster_for_triage, group_for_triage
+    from science_tool.feedback import attach_telemetry_to_triage_rows, cluster_for_triage, group_for_triage
 
     fb_dir = _get_feedback_dir()
     if cluster_mode or output_format == "json":
         rows = cluster_for_triage(fb_dir, target=target, since_days=since_days)
+        if with_telemetry:
+            from science_tool.telemetry import format_feedback_telemetry, get_telemetry_dir, read_events
+
+            rows = attach_telemetry_to_triage_rows(
+                rows,
+                events=read_events(get_telemetry_dir()),
+                since_days=since_days,
+            )
         if not rows:
             if output_format == "json":
                 emit_query_rows(
@@ -5521,7 +5536,7 @@ def feedback_triage(target: str | None, cluster_mode: bool, since_days: int | No
                     title="Feedback Triage",
                     columns=[],
                     rows=[],
-                    meta={"cluster": True, "since_days": since_days},
+                    meta={"cluster": True, "since_days": since_days, "with_telemetry": with_telemetry},
                 )
             else:
                 click.echo("No open feedback entries.")
@@ -5536,15 +5551,26 @@ def feedback_triage(target: str | None, cluster_mode: bool, since_days: int | No
             ("representative_summary", "Summary"),
             ("entry_ids", "Entries"),
         ]
+        if with_telemetry:
+            columns.append(("telemetry_text", "Telemetry"))
         table_rows = [
-            row | {"entry_ids": ", ".join(row["entry_ids"])} if output_format != "json" else row for row in rows
+            (
+                row
+                | {
+                    "entry_ids": ", ".join(row["entry_ids"]),
+                    "telemetry_text": format_feedback_telemetry(row["telemetry"]) if with_telemetry else "",
+                }
+            )
+            if output_format != "json"
+            else row
+            for row in rows
         ]
         emit_query_rows(
             output_format=output_format,
             title="Feedback Triage",
             columns=columns,
             rows=table_rows,
-            meta={"cluster": True, "since_days": since_days},
+            meta={"cluster": True, "since_days": since_days, "with_telemetry": with_telemetry},
         )
         return
 
@@ -5554,6 +5580,12 @@ def feedback_triage(target: str | None, cluster_mode: bool, since_days: int | No
         click.echo("No open feedback entries.")
         return
 
+    telemetry_events: list[dict[str, object]] = []
+    if with_telemetry:
+        from science_tool.telemetry import get_telemetry_dir, read_events
+
+        telemetry_events = read_events(get_telemetry_dir())
+
     for target_key, group in groups.items():
         n_projects = len(group["projects"])
         n_entries = len(group["entries"])
@@ -5562,6 +5594,15 @@ def feedback_triage(target: str | None, cluster_mode: bool, since_days: int | No
         click.echo(
             f"\n## {target_key}  ({n_entries} entries, {total_recur} recurrences, {n_projects} projects: {projects_str})"
         )
+        if with_telemetry:
+            from science_tool.telemetry import format_feedback_telemetry, summarize_recent_for_feedback_target
+
+            summary = summarize_recent_for_feedback_target(
+                telemetry_events,
+                target=target_key,
+                since_days=since_days if since_days is not None else 14,
+            )
+            click.echo(f"Telemetry: {format_feedback_telemetry(summary)}")
         for entry in group["entries"]:
             click.echo(f"  - {entry.id} [{entry.category}] {entry.summary}")
 

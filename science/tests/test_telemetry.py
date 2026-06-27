@@ -9,12 +9,14 @@ from pathlib import Path
 from science_tool.telemetry import (
     append_event,
     export_events_jsonl,
+    format_feedback_telemetry,
     get_telemetry_dir,
     new_event,
     new_validation_summary_event,
     prune_events,
     read_events,
     redact_argv,
+    summarize_recent_for_feedback_target,
     summarize_events,
 )
 
@@ -218,3 +220,83 @@ def test_new_validation_summary_event_reports_pass_status() -> None:
 
     assert event["status"] == "pass"
     assert event["top_checks"] == []
+
+
+def test_summarize_recent_for_feedback_target_matches_validate_events() -> None:
+    events = [
+        {
+            "event_id": "error",
+            "timestamp": "2026-06-27T10:00:00-04:00",
+            "event_type": "command_error",
+            "command": "validate",
+            "error_class": "NoSuchOption",
+        },
+        {
+            "event_id": "warn",
+            "timestamp": "2026-06-27T10:01:00-04:00",
+            "event_type": "validation_summary",
+            "surface": "validation",
+            "command": "validate",
+            "status": "warn",
+            "top_checks": [{"check": "demo.warn", "count": 2}],
+        },
+        {
+            "event_id": "fail",
+            "timestamp": "2026-06-27T10:02:00-04:00",
+            "event_type": "validation_summary",
+            "surface": "validation",
+            "command": "validate",
+            "status": "fail",
+            "top_checks": [{"check": "demo.error", "count": 1}],
+        },
+        {
+            "event_id": "unrelated",
+            "timestamp": "2026-06-27T10:03:00-04:00",
+            "event_type": "command_finish",
+            "command": "feedback list",
+        },
+        {
+            "event_id": "old",
+            "timestamp": "2026-06-01T10:00:00-04:00",
+            "event_type": "validation_summary",
+            "surface": "validation",
+            "command": "validate",
+            "status": "fail",
+            "top_checks": [{"check": "old.error", "count": 9}],
+        },
+    ]
+
+    summary = summarize_recent_for_feedback_target(
+        events,
+        target="command:validate",
+        today=date(2026, 6, 27),
+        since_days=14,
+    )
+
+    assert summary["recent_events"] == 3
+    assert summary["command_errors"] == {"NoSuchOption": 1}
+    assert summary["commands"] == {"validate": 1}
+    assert summary["validation"] == {
+        "runs": 2,
+        "statuses": {"fail": 1, "warn": 1},
+        "top_checks": {"demo.error": 1, "demo.warn": 2},
+    }
+
+
+def test_format_feedback_telemetry_summarizes_validation_context() -> None:
+    summary = {
+        "recent_events": 2,
+        "command_errors": {},
+        "commands": {},
+        "validation": {
+            "runs": 2,
+            "statuses": {"fail": 1, "warn": 1},
+            "top_checks": {"demo.error": 1},
+        },
+    }
+
+    assert format_feedback_telemetry(summary) == "validate: 2 runs, 1 fail, 1 warn"
+
+
+def test_format_feedback_telemetry_reports_empty_context() -> None:
+    assert format_feedback_telemetry({"recent_events": 0}) == "no recent telemetry"

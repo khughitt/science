@@ -269,6 +269,28 @@ def cluster_for_triage(
     return rows
 
 
+def attach_telemetry_to_triage_rows(
+    rows: list[dict[str, object]],
+    *,
+    events: list[dict[str, object]],
+    since_days: int | None,
+) -> list[dict[str, object]]:
+    """Return triage rows enriched with recent local telemetry summaries."""
+    from science_tool.telemetry import summarize_recent_for_feedback_target
+
+    window = since_days if since_days is not None else 14
+    enriched: list[dict[str, object]] = []
+    for row in rows:
+        copied = dict(row)
+        copied["telemetry"] = summarize_recent_for_feedback_target(
+            events,
+            target=str(row.get("target") or ""),
+            since_days=window,
+        )
+        enriched.append(copied)
+    return enriched
+
+
 def scaffold_test_for_feedback(
     feedback_dir: Path,
     entry_id: str,
