@@ -24,6 +24,7 @@ _template:
     - { key: analysis-registry, name: "Analysis Registry", required: false }
     - { key: expected-outcomes, name: "Expected Outcomes", required: true }
     - { key: decision-criteria, name: "Decision Criteria", required: true }
+    - { key: calibration-gate, name: "Calibration Gate (in-run no-peeking threshold)", required: false }
     - { key: null-result-plan, name: "Null Result Plan", required: true }
     - { key: suspicious-unexpected-result-plan, name: "Suspicious/Unexpected Result Plan", required: true }
     - { key: known-limitations, name: "Known Limitations", required: true }
@@ -68,6 +69,25 @@ one top-level mode when rows differ. Instead, link to that analysis's Execution-
 - What evidence would WEAKEN it?
 - What evidence would REFUTE it?
 Be concrete — name the metric, the threshold, the pattern. -->
+
+## Calibration Gate (in-run no-peeking threshold)
+
+<!-- Optional. Use when a threshold will be derived inside the run from the
+current substrate before confirmatory scoring. This is for an in-run,
+no-peeking, marginal-derived threshold; it is not a data-gated pre-registration
+and does not defer the analysis.
+
+- Allowed calibration inputs must be marginal distributions or eligibility
+  counts only.
+- Explicitly forbid outcome labels, effect estimates, group-contrast results,
+  downstream performance metrics, and other target-linked signals before lock.
+- State the lock point and the audit artifact that proves calibration occurred
+  before confirmatory scoring.
+
+| Threshold | Allowed calibration inputs | Forbidden inputs | Lock point | Formula |
+|---|---|---|---|---|
+| <name> | marginal distributions or eligibility counts only | outcome labels, effect estimates, group-contrast results | before confirmatory scoring | <pre-committed rule> |
+-->
 
 ## Null Result Plan
 

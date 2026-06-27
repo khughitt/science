@@ -103,6 +103,16 @@ def test_pre_register_documents_multi_analysis_registry_for_mixed_modes() -> Non
     assert "link each row to its readiness gate or vehicle-admissibility gate" in text
 
 
+def test_pre_register_documents_in_run_no_peeking_calibration_gate() -> None:
+    text = _read("commands/pre-register.md")
+
+    assert "Calibration Gate" in text
+    assert "in-run, no-peeking, marginal-derived threshold" in text
+    assert "marginal distributions or eligibility counts only" in text
+    assert "forbid outcome labels, effect estimates, group-contrast results" in text
+    assert "not a data-gated pre-registration" in text
+
+
 def test_specify_model_documents_proxy_directness_vocabulary() -> None:
     text = _read("commands/specify-model.md")
 
@@ -805,6 +815,19 @@ def test_pre_registration_templates_include_multi_analysis_registry() -> None:
         assert "mixed runnable/data-gated statuses" in text
         assert "| Analysis ID | Commitment target | Mode | Status | Gate reference | Verdict policy |" in text
         assert "link to that analysis's Execution-Readiness Gate or Vehicle-Admissibility Gate" in text
+
+
+def test_pre_registration_templates_include_calibration_gate() -> None:
+    for path in (
+        "templates/pre-registration.md",
+        "science/model/src/science_model/templates/pre-registration.md",
+    ):
+        text = _read(path)
+        assert "Calibration Gate (in-run no-peeking threshold)" in text
+        assert "Use when a threshold will be derived inside the run" in text
+        assert "marginal distributions or eligibility counts only" in text
+        assert "forbid outcome labels, effect estimates, group-contrast results" in text
+        assert "| Threshold | Allowed calibration inputs | Forbidden inputs | Lock point | Formula |" in text
 
 
 def test_big_picture_synthesis_frontmatter_includes_profile_required_title() -> None:

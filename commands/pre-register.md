@@ -74,6 +74,16 @@ the analysis itself runs now. Data-gated mode defers the *entire analysis* pendi
 vehicle. Note it explicitly at the top of the pre-reg (e.g. `mode: data-gated`) so interpret-results
 treats the standing verdict as no-update rather than as a runnable null.
 
+#### Sub-axis: in-run calibration without peeking
+
+If the analysis runs now but one threshold must be derived from the run's own substrate, add a
+**Calibration Gate**. This covers an in-run, no-peeking, marginal-derived threshold and is not a data-gated pre-registration: the vehicle exists, execution proceeds, and only the threshold value is filled in by a pre-committed rule.
+
+The gate must name exactly which fields may be inspected to set the threshold: marginal distributions or eligibility counts only. It must also forbid outcome labels, effect estimates, group-contrast results, downstream performance metrics, or any target-linked signal before the threshold is locked. Record the lock point, formula, allowed inputs, forbidden inputs, and the audit artifact that proves the calibration happened before confirmatory scoring.
+
+Use this instead of pretending a separate pilot or baseline artifact exists when the defensible
+calibration source is the current run's marginal structure.
+
 #### Sub-axis: multi-analysis coverage
 
 When one pre-registration covers multiple analyses, add an **Analysis Registry** before the

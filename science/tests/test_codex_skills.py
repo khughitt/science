@@ -227,6 +227,19 @@ def test_generated_pre_register_skill_documents_multi_analysis_registry(
     assert "link each row to its readiness gate or vehicle-admissibility gate" in text
 
 
+def test_generated_pre_register_skill_documents_in_run_calibration_gate(
+    tmp_path: Path,
+) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-pre-register"].read_text(encoding="utf-8")
+
+    assert "Calibration Gate" in text
+    assert "in-run, no-peeking, marginal-derived threshold" in text
+    assert "marginal distributions or eligibility counts only" in text
+    assert "forbid outcome labels, effect estimates, group-contrast results" in text
+    assert "not a data-gated pre-registration" in text
+
+
 def test_generated_specify_model_skill_documents_proxy_directness_vocabulary(
     tmp_path: Path,
 ) -> None:
