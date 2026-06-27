@@ -9,7 +9,7 @@ import yaml
 from _fixtures.entity_helpers import seed_project, write_markdown_entity
 from click.testing import CliRunner
 from science_model.contracts.inventory_v2 import InventoryPayload as InventoryPayloadV2
-from science_model.entities import EntityClass
+from science_model.identity import EntityClass
 from science_model.profiles.schema import ProfileManifest
 
 from science_tool.cli import main
@@ -34,6 +34,25 @@ def test_entity_create_question_writes_source() -> None:
         assert result.exit_code == 0, result.output
         assert "question:0002-new-question" in result.output
         assert Path("entities/questions/0002-new-question.md").is_file()
+
+
+def test_entity_create_accepts_local_numeric_id_part() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(
+            main,
+            ["entity", "create", "hypothesis", "Local ID", "--id", "0005-local-id", "--status", "proposed"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "hypothesis:0005-local-id" in result.output
+        path = Path("entities/hypotheses/0005-local-id.md")
+        assert path.is_file()
+        frontmatter = yaml.safe_load(path.read_text(encoding="utf-8").split("---")[1])
+        assert frontmatter["id"] == "hypothesis:0005-local-id"
 
 
 def test_questions_create_uses_plural_group_and_singular_is_removed() -> None:
@@ -323,6 +342,41 @@ def test_entity_list_filters_exact_status() -> None:
         assert result.exit_code == 0, result.output
         assert "question:q02-beta" in result.output
         assert "question:q01-alpha" not in result.output
+
+
+def test_entity_list_accepts_positional_kind_filter() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "entities/questions/q01-alpha.md",
+            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+        )
+        write_markdown_entity(
+            root,
+            "entities/hypotheses/h01-beta.md",
+            {"id": "hypothesis:h01-beta", "type": "hypothesis", "title": "Beta", "status": "proposed"},
+        )
+
+        result = runner.invoke(main, ["entity", "list", "hypothesis", "--format", "json"])
+
+        assert result.exit_code == 0, result.output
+        rows = json.loads(result.output)["rows"]
+        assert [row["id"] for row in rows] == ["hypothesis:h01-beta"]
+
+
+def test_entity_list_rejects_conflicting_positional_and_option_kind() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(main, ["entity", "list", "hypothesis", "--kind", "question"])
+
+        assert result.exit_code != 0
+        assert "positional kind 'hypothesis' conflicts with --kind 'question'" in result.output
 
 
 def test_entity_list_filters_related_refs_with_alias_resolution() -> None:

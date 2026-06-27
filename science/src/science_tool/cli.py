@@ -851,6 +851,7 @@ def entity_note(ref: str, note: str, note_date: str | None) -> None:
 
 
 @entity_group.command("list")
+@click.argument("kind_arg", required=False)
 @click.option("--kind")
 @click.option("--status")
 @click.option("--related")
@@ -865,6 +866,7 @@ def entity_note(ref: str, note: str, note_date: str | None) -> None:
 )
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def entity_list(
+    kind_arg: str | None,
     kind: str | None,
     status: str | None,
     related: str | None,
@@ -874,6 +876,10 @@ def entity_list(
 ) -> None:
     """List source-authored entities."""
 
+    if kind_arg is not None:
+        if kind is not None and kind != kind_arg:
+            raise click.ClickException(f"positional kind {kind_arg!r} conflicts with --kind {kind!r}")
+        kind = kind_arg
     try:
         rows = list_entities(
             Path.cwd(),

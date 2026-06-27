@@ -458,9 +458,13 @@ def validate_slug(slug: str) -> str:
 
 def validate_entity_id(kind: str, entity_id: str) -> str:
     prefix = f"{kind}:"
-    if not entity_id.startswith(prefix):
+    if entity_id.startswith(prefix):
+        local_part = entity_id[len(prefix) :]
+    elif ":" in entity_id:
         raise EntityCommandError(f"Entity id must use prefix {prefix}")
-    local_part = entity_id[len(prefix) :]
+    else:
+        local_part = entity_id
+        entity_id = f"{prefix}{local_part}"
     strategy = resolve_path_policy(kind).strategy
     if strategy == "singleton":
         raise EntityCommandError(f"{kind} is a singleton and has no per-instance id")

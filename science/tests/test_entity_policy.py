@@ -102,6 +102,20 @@ def test_explicit_numeric_id_must_be_canonical(tmp_path) -> None:
     assert ok == "question:0005-good"
 
 
+def test_explicit_numeric_id_accepts_local_part_when_kind_is_known(tmp_path) -> None:
+    eid = generate_entity_id(tmp_path, "hypothesis", "", "0005-good", None)
+    assert eid == "hypothesis:0005-good"
+
+
+def test_explicit_id_with_wrong_prefix_is_still_rejected(tmp_path) -> None:
+    import pytest
+
+    from science_tool.entities import EntityCommandError
+
+    with pytest.raises(EntityCommandError, match="Entity id must use prefix hypothesis:"):
+        generate_entity_id(tmp_path, "hypothesis", "", "question:0005-good", None)
+
+
 def test_path_for_entity_uses_policy_root(tmp_path) -> None:
     p = path_for_entity("question", "question:0008-new-one", date(2026, 6, 3))
     assert p == Path("entities/questions/0008-new-one.md")
