@@ -192,6 +192,20 @@ benchmark:
     assert payload["summary"]["tasks"]["facets_only"] == 1
 
 
+def test_coverage_summary_json_omits_rows_when_no_rows_match(tmp_path: Path) -> None:
+    result = _invoke(tmp_path, "--domain", "no-such-domain", "--coverage-summary", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert "summary" in payload
+    assert "commons_notice" in payload
+    assert "rows" not in payload
+    task_counts = payload["summary"].get("tasks")
+    assert isinstance(task_counts, dict)
+    assert not task_counts or all(count == 0 for count in task_counts.values())
+    assert "No matching benchmark dataset entities." not in result.output
+
+
 def test_benchmark_list_commons_missing_registry_json_degrades_to_local_rows(tmp_path: Path) -> None:
     _write_dataset(
         tmp_path,
