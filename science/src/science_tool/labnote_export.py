@@ -194,6 +194,9 @@ def _is_public_frontmatter(frontmatter: dict[str, Any]) -> bool:
 
 
 def _source_ref_citekeys(value: Any) -> list[str]:
+    if isinstance(value, str):
+        stripped = value.strip()
+        return [stripped.removeprefix("cite:").strip()] if stripped.startswith("cite:") else []
     if isinstance(value, dict):
         keys = []
         cite = value.get("cite")

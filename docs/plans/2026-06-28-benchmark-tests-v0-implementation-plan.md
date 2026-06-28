@@ -216,10 +216,10 @@ def _readiness_label(context: DatasetOpportunityContext, *, has_task: bool) -> R
     fm = context.dataset.frontmatter
     runtime_state = runtime_state_for(fm)
     readiness_state = readiness_for(dict(fm)).state
-    if runtime_state == "runnable" and has_task:
-        return "runnable"
-    if runtime_state in {"reference-only", "pointer-only"} or not has_task:
+    if runtime_state in {"reference-only", "pointer-only"}:
         return "metadata-only"
+    if readiness_state in {"embargoed", "withdrawn", "unknown"} or readiness_state.endswith(", unverified"):
+        return "blocked"
     if readiness_state in {
         "derived-via-code",
         "derived-via-member-of",
@@ -229,12 +229,14 @@ def _readiness_label(context: DatasetOpportunityContext, *, has_task: bool) -> R
         "acquiring",
     }:
         return "stage-needed"
-    if readiness_state in {"embargoed", "withdrawn", "unknown"} or readiness_state.endswith(", unverified"):
-        return "blocked"
+    if runtime_state == "runnable" and has_task:
+        return "runnable"
     if runtime_state == "unstaged-deposit":
         return "stage-needed"
     if runtime_state == "blocked-access":
         return "blocked"
+    if not has_task:
+        return "metadata-only"
     return "metadata-only"
 
 

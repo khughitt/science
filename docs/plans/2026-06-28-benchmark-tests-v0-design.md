@@ -265,34 +265,39 @@ the gap hint vocabulary intentionally grows.
 
 ## Readiness Labels
 
-The command should expose a compact readiness label for planning. Evaluate
-`runtime_state_for(frontmatter)` and `readiness_for(frontmatter).state` together:
-runtime state identifies stageability, while readiness refines cases that
-runtime stageability collapses. For example, a derived dataset can be
+The command should expose a compact readiness label for planning. Compute it as
+an ordered procedure over `readiness_for(frontmatter).state`,
+`runtime_state_for(frontmatter)`, and task presence. Reference/pointer runtime
+states are handled first because they are metadata-only by class. After that,
+readiness is checked before deposit runtime defaults because it refines cases
+that runtime stageability collapses. For example, a derived dataset can be
 `runtime_state=blocked-access` but `readiness=derived-via-code`, and an
 embargoed dataset can be `runtime_state=unstaged-deposit` but
 `readiness=embargoed`.
 
-- `runnable`: `runtime_state_for(frontmatter) == "runnable"` and the row has a
-  task.
-- `stage-needed`: runtime state is `unstaged-deposit`, or readiness state is one
-  of `derived-via-code`, `derived-via-member-of`,
-  `derived-via-workflow-recipe`, `consumable-via-scope-reduced`,
-  `consumable-via-substituted`, or `acquiring`.
-- `metadata-only`: runtime state is `reference-only` or `pointer-only`, or the
-  row has no task metadata.
-- `blocked`: runtime state is `blocked-access`, or readiness state is
-  `embargoed`, `withdrawn`, `unknown`, or an unverified access level that is not
-  already covered by a more specific runtime state.
+1. If runtime state is `reference-only` or `pointer-only`, label
+   `metadata-only`. These rows often have no external/derived `origin`, so their
+   readiness can be `unknown` without implying an access block.
+2. If readiness is `embargoed`, `withdrawn`, `unknown`, or ends with
+   `, unverified`, label `blocked`.
+3. If readiness is `derived-via-code`, `derived-via-member-of`,
+   `derived-via-workflow-recipe`, `consumable-via-scope-reduced`,
+   `consumable-via-substituted`, or `acquiring`, label `stage-needed`.
+4. Otherwise, use runtime stageability:
+   - `runtime_state == "runnable"` and the row has a task: `runnable`;
+   - `runtime_state == "unstaged-deposit"`: `stage-needed`;
+   - `runtime_state == "blocked-access"`: `blocked`.
+5. If no task metadata is present and no earlier rule matched, label
+   `metadata-only`.
 
 The label is a presentation projection over existing dataset readiness and
 benchmark metadata. It must not create a new independent access vocabulary.
 Use `readiness_label` for the row field so it does not collide with the numeric
 `baseline.readiness` score component.
 
-`readiness_label` and `test_plan_state` are separate axes. A draft-needed row can
-still be `runnable` if the dataset is staged but the task metadata is incomplete;
-a concrete row can be `stage-needed` or `blocked` if the task is specified but
+`readiness_label` and `test_plan_state` are separate axes. A draft-needed row
+with an incomplete task can still be `runnable` if the dataset is staged; a
+concrete row can be `stage-needed` or `blocked` if the task is specified but
 access/runtime readiness is not.
 
 ## Table Output
@@ -357,12 +362,13 @@ Add focused tests for:
 - JSON shape is stable;
 - table output renders entity, state, benchmark, task, score, facets, and needs;
 - commons notice behavior is preserved;
-- duplicate opportunity/gap projections merge into one `(entity, benchmark,
-  task)` row with deterministic source precedence and merged reason notes;
+- synthetic duplicate rows merge into one `(entity, benchmark, task)` row with
+  deterministic source precedence and merged reason notes;
 - `priority_source` matches the row origin and `priority_score` equals the
   applicable source score without recomputing additive components;
-- `readiness_label` derivation covers `runnable`, `unstaged-deposit`,
-  `reference-only` / `pointer-only`, and `blocked-access` runtime states.
+- `readiness_label` derivation covers runtime states plus readiness override
+  cases including `derived-via-code -> stage-needed` and
+  `embargoed -> blocked`.
 
 ## Future Work
 
