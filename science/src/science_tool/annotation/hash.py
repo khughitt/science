@@ -1,7 +1,7 @@
 # science/src/science_tool/annotation/hash.py
 """Content-hash function for annotation re-audit caching.
 
-See docs/plans/2026-05-10-annotation-system-spec.md §Re-audit cache.
+See docs/plans/historical/2026-05-10-annotation-system-spec.md §Re-audit cache.
 """
 
 from __future__ import annotations

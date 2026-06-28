@@ -52,9 +52,13 @@ Is the claim verifiable from a source you can reach?
 - `science markers migrate [--root .] [--write]` — rewrite legacy `[NEEDS CITATION]` spellings to canonical `[MISSING_CITATION]`.
 - `science refs check` and `validate.sh` both delegate marker counting to the same scanner.
 
-## Future work (phase 3)
+## Rich annotation system
 
-A richer sub-document annotation system (rich payloads, multi-annotation per ROI, graph integration) is deferred to a follow-up RFC. The four phase-2 tokens become annotation *types* under that design; existing inline tokens continue to work, and richer payloads opt into a sidecar form. See `docs/plans/2026-05-09-annotation-system-stub.md` for the full phase-3 sketch.
+The richer sub-document annotation system now lives under
+`science/src/science_tool/annotation/`. The four phase-2 tokens remain valid
+inline authoring affordances and can be lifted into sidecar annotation records
+when richer payloads are needed. The historical architecture context is kept in
+`docs/plans/historical/2026-05-10-annotation-system-spec.md`.
 
 ## See also
 

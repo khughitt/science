@@ -4,7 +4,6 @@ date: 2026-05-10
 related:
   - "docs/conventions/prose-lints.md"
   - "docs/conventions/annotation-tokens.md"
-  - "docs/plans/2026-05-10-prose-lint-group.md"
 ---
 
 # Prose-lint baselines (2026-05-10)
@@ -169,4 +168,4 @@ Should such a project be onboarded, the tuning options below apply.
 - Lint catalog and severity rules: `docs/conventions/prose-lints.md`
 - Origin (statement-citation gap analysis): `~/d/natural-systems/doc/interpretations/2026-05-06-citation-audit-pilot.md`
 - Companion marker triage in MM (per-file UNVERIFIED disposition): `~/d/cancer/cancer-types/multiple-myeloma/doc/audits/2026-05-09-unverified-marker-triage.md`
-- Implementation plan: `docs/plans/2026-05-10-prose-lint-group.md`
+- Current prose-lint convention: `docs/conventions/prose-lints.md`

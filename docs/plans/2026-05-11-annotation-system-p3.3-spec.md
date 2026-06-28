@@ -1,16 +1,15 @@
 # P3.3 — Author CRUD: list / ack / dismiss / fix / stats (Spec)
 
-> **Phase 3 of the annotation system.** Builds on P3.0 (data model + sidecar
-> I/O), P3.1 (drift detection), P3.2 (mechanical-source write path).
+> **Phase 3 of the annotation system.** Builds on the implemented P3.0 data
+> model/sidecar I/O, P3.1 drift detection, and P3.2 mechanical-source write
+> path slices.
 > Adds the author-facing read/triage surface: query annotations, transition
 > their status, and aggregate counts. Folds in four mechanical follow-ups
 > from the P3.2 final review where they touch shared code.
 
 **Status:** draft 2026-05-11.
-**Predecessors:** [P3.0](2026-05-11-annotation-system-p3.0.md),
-[P3.1](2026-05-11-annotation-system-p3.1.md),
-[P3.2](2026-05-11-annotation-system-p3.2.md).
-**Spec source of truth:** [annotation-system-spec](2026-05-10-annotation-system-spec.md)
+**Predecessors:** implemented P3.0/P3.1/P3.2 slices.
+**Spec source of truth:** [annotation-system-spec](historical/2026-05-10-annotation-system-spec.md)
 §"CLI surface", §"Status lifecycle", §"Migration from phase 2".
 
 ---
@@ -685,10 +684,10 @@ Rough dependency order (writing-plans will refine into bite-sized tasks):
 
 ## Cross-references
 
-- [P3.0](2026-05-11-annotation-system-p3.0.md) — sidecar I/O and data model.
-- [P3.1](2026-05-11-annotation-system-p3.1.md) — verify (precedent for
-  `--apply --actor --force-dirty` pattern).
-- [P3.2](2026-05-11-annotation-system-p3.2.md) — audit / lift-tokens
-  (precedent for atomic-write-then-rewrite, dirty-tree guard).
-- [annotation-system-spec](2026-05-10-annotation-system-spec.md) §"CLI
+- Implemented P3.0 — sidecar I/O and data model.
+- Implemented P3.1 — verify (precedent for `--apply --actor --force-dirty`
+  pattern).
+- Implemented P3.2 — audit / lift-tokens (precedent for
+  atomic-write-then-rewrite, dirty-tree guard).
+- [annotation-system-spec](historical/2026-05-10-annotation-system-spec.md) §"CLI
   surface", §"Status lifecycle", §"Migration from phase 2".

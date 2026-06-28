@@ -1,7 +1,7 @@
 # science/src/science_tool/annotation/lifecycle.py
 """Status mutation with prov:wasRevisionOf preservation.
 
-See docs/plans/2026-05-10-annotation-system-spec.md §Status lifecycle.
+See docs/plans/historical/2026-05-10-annotation-system-spec.md §Status lifecycle.
 """
 
 from __future__ import annotations

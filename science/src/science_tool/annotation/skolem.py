@@ -5,7 +5,7 @@ The canonical graph writer (`science_tool/graph/io.py`) rejects blank
 nodes. Sidecars MAY use blank nodes for compactness; the ingest step
 (P3.6) calls this function to mint stable IRIs before merge.
 
-See docs/plans/2026-05-10-annotation-system-spec.md
+See docs/plans/historical/2026-05-10-annotation-system-spec.md
 §Skolemization for graph ingest.
 """
 

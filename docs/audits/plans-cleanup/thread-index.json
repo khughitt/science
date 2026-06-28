@@ -1,10 +1,10 @@
 {
-  "file_count": 294,
-  "generated_at": "2026-06-28T15:15:38+00:00",
+  "file_count": 279,
+  "generated_at": "2026-06-28T15:58:15+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 192,
+  "thread_count": 180,
   "threads": [
     {
       "earliest_file_date": "2026-05-27",
@@ -70,96 +70,6 @@
       "thread_id": "adapter-entity-layout-and-overlay-root"
     },
     {
-      "earliest_file_date": "2026-05-10",
-      "files": [
-        "docs/plans/2026-05-10-annotation-system-spec.md"
-      ],
-      "latest_file_date": "2026-05-10",
-      "normalized_slug": "annotation-system",
-      "raw_slugs": {
-        "docs/plans/2026-05-10-annotation-system-spec.md": "annotation-system-spec"
-      },
-      "related_threads": [],
-      "role_files": {
-        "spec": [
-          "docs/plans/2026-05-10-annotation-system-spec.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-10-annotation-system-spec.md": "spec"
-      },
-      "thread_id": "annotation-system"
-    },
-    {
-      "earliest_file_date": "2026-05-11",
-      "files": [
-        "docs/plans/2026-05-11-annotation-system-p3.0.md"
-      ],
-      "latest_file_date": "2026-05-11",
-      "normalized_slug": "annotation-system-p3.0",
-      "raw_slugs": {
-        "docs/plans/2026-05-11-annotation-system-p3.0.md": "annotation-system-p3.0"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-05-11-annotation-system-p3.0.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-11-annotation-system-p3.0.md": null
-      },
-      "thread_id": "annotation-system-p3.0"
-    },
-    {
-      "earliest_file_date": "2026-05-11",
-      "files": [
-        "docs/plans/2026-05-11-annotation-system-p3.1.md"
-      ],
-      "latest_file_date": "2026-05-11",
-      "normalized_slug": "annotation-system-p3.1",
-      "raw_slugs": {
-        "docs/plans/2026-05-11-annotation-system-p3.1.md": "annotation-system-p3.1"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-05-11-annotation-system-p3.1.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-11-annotation-system-p3.1.md": null
-      },
-      "thread_id": "annotation-system-p3.1"
-    },
-    {
-      "earliest_file_date": "2026-05-11",
-      "files": [
-        "docs/plans/2026-05-11-annotation-system-p3.2-spec.md",
-        "docs/plans/2026-05-11-annotation-system-p3.2.md"
-      ],
-      "latest_file_date": "2026-05-11",
-      "normalized_slug": "annotation-system-p3.2",
-      "raw_slugs": {
-        "docs/plans/2026-05-11-annotation-system-p3.2-spec.md": "annotation-system-p3.2-spec",
-        "docs/plans/2026-05-11-annotation-system-p3.2.md": "annotation-system-p3.2"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-05-11-annotation-system-p3.2.md"
-        ],
-        "spec": [
-          "docs/plans/2026-05-11-annotation-system-p3.2-spec.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-11-annotation-system-p3.2-spec.md": "spec",
-        "docs/plans/2026-05-11-annotation-system-p3.2.md": null
-      },
-      "thread_id": "annotation-system-p3.2"
-    },
-    {
       "earliest_file_date": "2026-05-11",
       "files": [
         "docs/plans/2026-05-11-annotation-system-p3.3-spec.md",
@@ -185,48 +95,6 @@
         "docs/plans/2026-05-11-annotation-system-p3.3.md": null
       },
       "thread_id": "annotation-system-p3.3"
-    },
-    {
-      "earliest_file_date": "2026-05-09",
-      "files": [
-        "docs/plans/2026-05-09-annotation-system-stub.md"
-      ],
-      "latest_file_date": "2026-05-09",
-      "normalized_slug": "annotation-system-stub",
-      "raw_slugs": {
-        "docs/plans/2026-05-09-annotation-system-stub.md": "annotation-system-stub"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-05-09-annotation-system-stub.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-09-annotation-system-stub.md": null
-      },
-      "thread_id": "annotation-system-stub"
-    },
-    {
-      "earliest_file_date": "2026-05-09",
-      "files": [
-        "docs/plans/2026-05-09-annotation-tokens-marker-scanner.md"
-      ],
-      "latest_file_date": "2026-05-09",
-      "normalized_slug": "annotation-tokens-marker-scanner",
-      "raw_slugs": {
-        "docs/plans/2026-05-09-annotation-tokens-marker-scanner.md": "annotation-tokens-marker-scanner"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-05-09-annotation-tokens-marker-scanner.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-09-annotation-tokens-marker-scanner.md": null
-      },
-      "thread_id": "annotation-tokens-marker-scanner"
     },
     {
       "earliest_file_date": "2026-06-16",
@@ -3268,27 +3136,6 @@
       "thread_id": "prose-grounding-spike"
     },
     {
-      "earliest_file_date": "2026-05-10",
-      "files": [
-        "docs/plans/2026-05-10-prose-lint-group.md"
-      ],
-      "latest_file_date": "2026-05-10",
-      "normalized_slug": "prose-lint-group",
-      "raw_slugs": {
-        "docs/plans/2026-05-10-prose-lint-group.md": "prose-lint-group"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-05-10-prose-lint-group.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-10-prose-lint-group.md": null
-      },
-      "thread_id": "prose-lint-group"
-    },
-    {
       "earliest_file_date": "2026-05-21",
       "files": [
         "docs/plans/2026-05-21-provenance-propagation-contract-c-design.md",
@@ -3520,48 +3367,6 @@
       "thread_id": "reference-collection-member-promotion"
     },
     {
-      "earliest_file_date": "2026-05-10",
-      "files": [
-        "docs/plans/2026-05-10-refs-body-and-prose-deny.md"
-      ],
-      "latest_file_date": "2026-05-10",
-      "normalized_slug": "refs-body-and-prose-deny",
-      "raw_slugs": {
-        "docs/plans/2026-05-10-refs-body-and-prose-deny.md": "refs-body-and-prose-deny"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-05-10-refs-body-and-prose-deny.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-10-refs-body-and-prose-deny.md": null
-      },
-      "thread_id": "refs-body-and-prose-deny"
-    },
-    {
-      "earliest_file_date": "2026-05-10",
-      "files": [
-        "docs/plans/2026-05-10-refs-graph-truth-source.md"
-      ],
-      "latest_file_date": "2026-05-10",
-      "normalized_slug": "refs-graph-truth-source",
-      "raw_slugs": {
-        "docs/plans/2026-05-10-refs-graph-truth-source.md": "refs-graph-truth-source"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-05-10-refs-graph-truth-source.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-10-refs-graph-truth-source.md": null
-      },
-      "thread_id": "refs-graph-truth-source"
-    },
-    {
       "earliest_file_date": "2026-06-20",
       "files": [
         "docs/plans/2026-06-20-remove-v3-migration-code-design.md",
@@ -3608,33 +3413,6 @@
         "docs/plans/2026-05-21-research-code-and-workflow-modeling-design.md": "design"
       },
       "thread_id": "research-code-and-workflow-modeling"
-    },
-    {
-      "earliest_file_date": "2026-05-08",
-      "files": [
-        "docs/plans/2026-05-08-researcher-attention-workspace-design.md",
-        "docs/plans/2026-05-08-researcher-attention-workspace.md"
-      ],
-      "latest_file_date": "2026-05-08",
-      "normalized_slug": "researcher-attention-workspace",
-      "raw_slugs": {
-        "docs/plans/2026-05-08-researcher-attention-workspace-design.md": "researcher-attention-workspace-design",
-        "docs/plans/2026-05-08-researcher-attention-workspace.md": "researcher-attention-workspace"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-08-researcher-attention-workspace-design.md"
-        ],
-        "primary": [
-          "docs/plans/2026-05-08-researcher-attention-workspace.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-08-researcher-attention-workspace-design.md": "design",
-        "docs/plans/2026-05-08-researcher-attention-workspace.md": null
-      },
-      "thread_id": "researcher-attention-workspace"
     },
     {
       "earliest_file_date": "2026-06-13",
@@ -4507,27 +4285,6 @@
       "thread_id": "typed-evidence-vocabularies"
     },
     {
-      "earliest_file_date": "2026-05-08",
-      "files": [
-        "docs/plans/2026-05-08-typed-synthesis-nodes.md"
-      ],
-      "latest_file_date": "2026-05-08",
-      "normalized_slug": "typed-synthesis-nodes",
-      "raw_slugs": {
-        "docs/plans/2026-05-08-typed-synthesis-nodes.md": "typed-synthesis-nodes"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-05-08-typed-synthesis-nodes.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-08-typed-synthesis-nodes.md": null
-      },
-      "thread_id": "typed-synthesis-nodes"
-    },
-    {
       "earliest_file_date": "2026-04-21",
       "files": [
         "docs/plans/2026-04-21-unified-entity-references-design.md"
@@ -4622,33 +4379,6 @@
         "docs/plans/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md": "design"
       },
       "thread_id": "verdict-tokens-and-atomic-decomposition"
-    },
-    {
-      "earliest_file_date": "2026-05-09",
-      "files": [
-        "docs/plans/2026-05-09-wander-design.md",
-        "docs/plans/2026-05-09-wander-plan.md"
-      ],
-      "latest_file_date": "2026-05-09",
-      "normalized_slug": "wander",
-      "raw_slugs": {
-        "docs/plans/2026-05-09-wander-design.md": "wander-design",
-        "docs/plans/2026-05-09-wander-plan.md": "wander-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-09-wander-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-05-09-wander-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-09-wander-design.md": "design",
-        "docs/plans/2026-05-09-wander-plan.md": "plan"
-      },
-      "thread_id": "wander"
     }
   ]
 }
