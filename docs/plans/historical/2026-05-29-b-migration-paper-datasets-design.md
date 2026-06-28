@@ -2,10 +2,10 @@
 
 Date: 2026-05-29
 
-Status: implementation ready; see `docs/plans/2026-05-29-b-migration-paper-datasets-plan.md`
+Status: implemented; see `docs/plans/historical/2026-05-29-b-migration-paper-datasets-plan.md`
 
 Related:
-- `docs/plans/2026-05-26-bio-dataset-influence-provenance-design.md` — Pillar B north star and B1/B2 split
+- `docs/plans/historical/2026-05-26-bio-dataset-influence-provenance-design.md` — Pillar B north star and B1/B2 split
 - `science/src/science_tool/graph/dataset_usage.py` — B1 projection rules for authored `dataset_usage`, legacy `paper.datasets`, derivation inputs, and gene-set rows
 - `science/src/science_tool/validate/checks/dataset_influence.py` — B1 validation warnings for legacy/conflicting `paper.datasets`
 - `science/src/science_tool/graph/migrate.py` — existing graph migration/audit helpers

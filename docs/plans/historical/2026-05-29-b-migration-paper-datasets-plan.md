@@ -20,7 +20,7 @@
 | `science/tests/test_paper_dataset_migration.py` | Pure migration tests for projection, conflict handling, idempotency, selection gate, malformed inputs, and unresolved refs. |
 | `science/tests/test_graph_migrate.py` | CLI tests for dry-run/apply behavior, JSON/table payload, and exit codes. |
 | `science/tests/validate/test_checks_dataset_influence.py` | Regression proving validator and migration share the same role-conflict semantics. |
-| `docs/plans/2026-05-29-b-migration-paper-datasets-design.md` | Mark implementation state after all code lands. |
+| `docs/plans/historical/2026-05-29-b-migration-paper-datasets-design.md` | Mark implementation state after all code lands. |
 
 Keep the migration module independent of `validate` to avoid a graph → validate → graph cycle. It may import `load_project_sources` from `science_tool.graph.sources`.
 
@@ -927,7 +927,7 @@ rtk git commit -m "feat: add paper dataset migration cli"
 **Files:**
 - Modify: `science/src/science_tool/graph/paper_dataset_migration.py`
 - Modify: `science/tests/test_paper_dataset_migration.py`
-- Modify: `docs/plans/2026-05-29-b-migration-paper-datasets-design.md`
+- Modify: `docs/plans/historical/2026-05-29-b-migration-paper-datasets-design.md`
 
 - [ ] **Step 1: Add a source-surface regression using configured profile paths**
 
@@ -1128,7 +1128,7 @@ CRLF frontmatter (`---\r\n`) remains out of scope for v1; `_split_frontmatter` o
 
 - [ ] **Step 4: Update design status**
 
-In `docs/plans/2026-05-29-b-migration-paper-datasets-design.md`, change:
+In `docs/plans/historical/2026-05-29-b-migration-paper-datasets-design.md`, change:
 
 ```markdown
 Status: design drafted; implementation plan next
@@ -1137,7 +1137,7 @@ Status: design drafted; implementation plan next
 to:
 
 ```markdown
-Status: implementation ready; see `docs/plans/2026-05-29-b-migration-paper-datasets-plan.md`
+Status: implementation ready; see `docs/plans/historical/2026-05-29-b-migration-paper-datasets-plan.md`
 ```
 
 - [ ] **Step 5: Run full affected suite**
@@ -1156,7 +1156,7 @@ Expected: both commands PASS.
 Run:
 
 ```bash
-rtk git add science/src/science_tool/graph/paper_dataset_migration.py science/tests/test_paper_dataset_migration.py docs/plans/2026-05-29-b-migration-paper-datasets-design.md
+rtk git add science/src/science_tool/graph/paper_dataset_migration.py science/tests/test_paper_dataset_migration.py docs/plans/historical/2026-05-29-b-migration-paper-datasets-design.md
 rtk git commit -m "test: harden paper dataset migration scanning"
 ```
 
@@ -1206,7 +1206,7 @@ Expected: PASS and no whitespace errors.
 If Task 6 required a small doc correction, commit it:
 
 ```bash
-rtk git add docs/plans/2026-05-29-b-migration-paper-datasets-design.md
+rtk git add docs/plans/historical/2026-05-29-b-migration-paper-datasets-design.md
 rtk git commit -m "docs: mark paper dataset migration implemented"
 ```
 

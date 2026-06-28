@@ -23,6 +23,10 @@
 
 `graph/paper_dataset_migration.py` is one-shot except for `is_paper_dataset_role_conflict`, which `validate/checks/dataset_influence.py` uses live. Move that one-line predicate into the validation check, then delete the module and its `graph migrate-paper-datasets` command.
 
+Do not execute this task until the `paper.datasets` migration campaign has completed for local and
+downstream projects. As of the B-migration implementation, `science graph migrate-paper-datasets` is the
+live migration surface, not dead v2→v3 cleanup code.
+
 **Files:**
 - Modify: `science/src/science_tool/validate/checks/dataset_influence.py` (import at line 16, call at line 165)
 - Delete: `science/src/science_tool/graph/paper_dataset_migration.py`

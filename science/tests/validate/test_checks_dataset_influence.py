@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from science_tool.graph.paper_dataset_migration import is_paper_dataset_role_conflict
 from science_tool.validate.checks import CANONICAL_CHECKS, clear_checks_for_tests
-from science_tool.validate.checks.dataset_influence import _is_paper_dataset_role_conflict
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Severity
 
@@ -852,9 +852,10 @@ def test_non_dependence_role_with_omitted_overlap_does_not_warn(role: str) -> No
 
 
 def test_role_conflict_true_when_not_analyzed():
-    assert _is_paper_dataset_role_conflict({"role": "compared"}) is True
-    assert _is_paper_dataset_role_conflict({}) is True
+    assert is_paper_dataset_role_conflict({"role": "compared"}) is True
+    assert is_paper_dataset_role_conflict({}) is True
 
 
 def test_role_conflict_false_when_analyzed():
-    assert _is_paper_dataset_role_conflict({"role": "analyzed"}) is False
+    assert is_paper_dataset_role_conflict({"role": "analyzed"}) is False
+    assert is_paper_dataset_role_conflict({"role": "analyzed", "overlap": "full"}) is False

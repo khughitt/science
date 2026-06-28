@@ -324,6 +324,24 @@ overwritten by `science graph build`. The current loadable `paper` kind is an
 external literature note; do not use `paper:<id>` for the project's own
 publication draft.
 
+## Paper Dataset Usage
+
+Papers should express dataset dependence with `dataset_usage` entries. The
+legacy paper `datasets` field is still read as a transition input, but it only
+means `role: analyzed` with `overlap: unknown`.
+
+Use the migration command to inspect or apply lossless rewrites:
+
+```bash
+science graph migrate-paper-datasets --project-root . --format table
+science graph migrate-paper-datasets --project-root . --format json
+science graph migrate-paper-datasets --project-root . --apply
+```
+
+Dry-run is the default. It exits `10` when safe rewrites are pending and `20`
+when conflicts need manual review. `--apply` rewrites only papers whose
+`datasets` refs can be represented exactly as canonical `dataset_usage` entries.
+
 ## Dataset Lifecycle
 
 `dataset` is the single entity kind for data that a project consumes, whether

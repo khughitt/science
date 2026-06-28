@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: B1 implemented locally; B-migration and B2 deferred
+Status: implemented; retained as historical Pillar B rationale
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar B ("north star")
@@ -71,8 +71,8 @@ scoring. `dataset_usage`, `paper.datasets`, and `derivation.inputs` all needed o
 Because `dataset_usage` is on the base `Entity` model, B1 now materializes authored `dataset_usage`
 universally for any entity that carries it; restricting materialization to only datasets/papers would
 silently drop valid parsed frontmatter on other entity kinds. B1 also closes the graph-materialization
-gaps for D1 row-level usage records and `derivation.inputs`. B-migration and B2 remain separate follow-up
-work.
+gaps for D1 row-level usage records and `derivation.inputs`. Follow-up work implemented the mechanical
+`paper.datasets` migration path and B2 dataset-derived independence layer.
 
 ---
 
@@ -266,12 +266,11 @@ the derived view. It did not land in B1 and is explicitly deferred outside B1 as
 
 ---
 
-## 7. Independence Semantics Deferred To B2
+## 7. Independence Semantics Implemented By B2
 
-B1 does not derive or write evidence-line independence fields. It only creates the graph layer B2 will
-read.
+B1 does not derive or write evidence-line independence fields. It creates the graph layer that B2 reads.
 
-B2 will interpret roles as follows:
+B2 interprets roles as follows:
 
 - `analyzed`, `set_definition_source`, `training`, `upstream` are dependence-implying.
 - `validation_source` is an independence-positive signal unless it overlaps the same ref used through a
@@ -297,9 +296,9 @@ The dangerous pattern is **define a set from study A, then test enrichment of th
 - the gene set row declares `{ref: dataset:study-a, role: set_definition_source}`,
 - the paper or evidence context declares `{ref: dataset:study-a, role: analyzed}`.
 
-B1 makes those facts visible as usage nodes. B2 later turns the shared dependence into a circularity
-candidate or committed collapse depending on overlap and policy. The legitimate case — a set defined from
-study A and validated in independent cohort B — remains distinguishable through `validation_source`.
+B1 makes those facts visible as usage nodes. B2 turns the shared dependence into a circularity candidate
+or committed collapse depending on overlap and policy. The legitimate case — a set defined from study A
+and validated in independent cohort B — remains distinguishable through `validation_source`.
 
 ---
 
@@ -321,9 +320,9 @@ study A and validated in independent cohort B — remains distinguishable throug
 
 | Sub-phase | Locks | Status |
 |---|---|---|
-| B1 — additive `dataset_usage` transition for papers, usage-node graph materialization, `derivation.inputs` projection, legacy `paper.datasets` warnings, influence-query groundwork | authored-to-graph provenance layer | implemented locally |
-| B-migration — mechanical conversion of `paper.datasets` to `paper.dataset_usage` | single-system migration path | planned after B1 |
-| B2 — auto-independence with committed/candidate split; `suspect-circular` reads candidates; aggregation reads committed fields only | epistemic automation | deferred |
+| B1 — additive `dataset_usage` transition for papers, usage-node graph materialization, `derivation.inputs` projection, legacy `paper.datasets` warnings, influence-query groundwork | authored-to-graph provenance layer | implemented |
+| B-migration — mechanical conversion of `paper.datasets` to `paper.dataset_usage` | single-system migration path | implemented via `science graph migrate-paper-datasets` |
+| B2 — auto-independence with committed/candidate split; `suspect-circular` reads candidates; aggregation reads committed fields only | epistemic automation | implemented |
 
 B1 depends on A1's shipped `dataset_usage` vocabulary, C's dataset identity refs, and D1's gene-set row
 contract. B2 depends on B1's materialized usage nodes.
@@ -332,6 +331,6 @@ contract. B2 depends on B1's materialized usage nodes.
 
 ## 11. Status & Next Step
 
-Pillar B1 is implemented as an authored-to-graph provenance layer. The next B work is the
-B-migration mechanical conversion from `paper.datasets` to `paper.dataset_usage`, followed by
-B2 candidate/committed independence derivation.
+Pillar B is implemented as the authored-to-graph provenance layer, the `paper.datasets` migration tool,
+and the B2 candidate/committed dataset-independence derivation layer. Later policy cleanup can still
+escalate legacy `paper.datasets` warnings after downstream migration campaigns complete.

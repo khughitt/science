@@ -1,24 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `8`
-
-## b-migration-paper-datasets
-
-- status: `incomplete`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-05-29-b-migration-paper-datasets-design.md`
-  - `docs/plans/2026-05-29-b-migration-paper-datasets-plan.md`
-- pending_actions:
-  - `deferred`: review status incomplete; paper.datasets migration module and CLI are not implemented
-    - `docs/plans/2026-05-29-b-migration-paper-datasets-design.md`
-    - `docs/plans/2026-05-29-b-migration-paper-datasets-plan.md`
-- remaining_gaps:
-  - Implement paper_dataset_migration.py pure migration module.
-  - Expose the migrate-paper-datasets CLI command.
-  - Add migration tests and mark the design implemented.
+- Pending thread count: `6`
 
 ## bio-data-architecture-umbrella
 
@@ -35,20 +18,6 @@
   - RG3+ workflows
   - C4c transcript/protein projection
   - D2 promoted gene-set members
-
-## bio-dataset-influence-provenance
-
-- status: `incomplete`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-05-26-bio-dataset-influence-provenance-design.md`
-- pending_actions:
-  - `deferred`: review status incomplete; B1 is implemented but B-migration and B2 remain active follow-up work
-    - `docs/plans/2026-05-26-bio-dataset-influence-provenance-design.md`
-- remaining_gaps:
-  - B-migration for paper.datasets transition
-  - B2 candidate and committed independence signal derivation
 
 ## bio-geneset-type
 

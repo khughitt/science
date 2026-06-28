@@ -7,7 +7,7 @@ Status: approved; D1 collection type implemented, D2 promoted-member implementat
 Related (builds on):
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar D
 - `docs/plans/historical/2026-05-26-reference-collection-member-promotion-design.md` — foundation primitive; D is its first concrete instance
-- `docs/plans/2026-05-26-bio-dataset-influence-provenance-design.md` — Pillar B; D realizes per-set `dataset_usage`
+- `docs/plans/historical/2026-05-26-bio-dataset-influence-provenance-design.md` — Pillar B; D realizes per-set `dataset_usage`
 - `docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` — Pillar A; `source_class: reference`
 - `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; `identifier_space`
 - `docs/user-guide/entities.md#dataset-lifecycle` — dataset mixin (`origin`, `derivation`, `parent_dataset`)
