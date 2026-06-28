@@ -4,7 +4,7 @@
 **Status:** Draft
 **Builds on:**
 - `2026-04-05-project-model-design.md` — core entity taxonomy
-- `2026-04-20-multi-backend-entity-resolver-design.md` — unified entity model + storage adapters
+- `docs/user-guide/entities.md#entity-loading-and-storage-adapters` — unified entity model + storage adapters
 - `historical/2026-03-01-knowledge-graph-design.md` — three-tier ontology (core / causal / domain plugins)
 
 ## Motivation

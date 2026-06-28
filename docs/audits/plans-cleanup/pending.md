@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `26`
+- Pending thread count: `25`
 
 ## b-migration-paper-datasets
 
@@ -180,21 +180,6 @@
 - remaining_gaps:
   - Verify whether the dashboard route consumed this contract or whether only the science-side export landed.
   - Decide whether a small durable graph-export contract doc is needed before deleting the implementation plan.
-
-## multi-backend-entity-resolver
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-04-20-multi-backend-entity-resolver-design.md`
-  - `docs/plans/2026-04-20-multi-backend-entity-resolver.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until model/adapter contract is durable outside active plans
-    - `docs/plans/2026-04-20-multi-backend-entity-resolver-design.md`
-    - `docs/plans/2026-04-20-multi-backend-entity-resolver.md`
-- remaining_gaps:
-  - Migrate the stable model/adapter contract into durable documentation before deleting the design from active plans.
 
 ## multi-project-sync
 

@@ -45,6 +45,62 @@ computed from the graph, evidence, provenance, or health machinery. Belief
 state, support summaries, dispute summaries, freshness, and health status should
 be recomputed rather than manually patched.
 
+## Entity Loading And Storage Adapters
+
+Science loads authored entities through one model family, not through separate
+schemas per file format. The stable flow is:
+
+```text
+storage format -> storage adapter -> entity registry -> validated entity
+```
+
+The canonical base contract is `Entity`: `id`, `canonical_id`, `kind`, `title`,
+status, source references, aliases, external mappings, authored relationships,
+body prose, and source-location metadata. `ProjectEntity` and `DomainEntity`
+are subfamilies for project-operational records and domain-grounded records.
+Core kinds with stronger invariants, such as `task`, `dataset`,
+`workflow-run`, `research-package`, `paper`, `mechanism`, `evidence-line`,
+`proposition`, and `code-file`, validate through typed subclasses. Profile,
+extension, and ontology-catalog kinds still participate in the same base
+contract, usually as `ProjectEntity` or `DomainEntity` unless Science owns a
+typed subclass.
+
+The entity registry resolves `kind` to the schema that validates a record.
+Science registers core kinds itself. Active profiles, local manifests, and
+declared ontology catalogs register additional loadable kinds. Duplicate
+registrations and attempts to shadow core kinds are hard errors; unknown kinds
+are skipped with an explicit diagnostic instead of being silently treated as a
+different entity type.
+
+Storage adapters own discovery and parsing only. They discover project-relative
+source locations, load a raw record with `kind` and identity fields, and pass
+that record to the registry. They do not decide dataset semantics, task state,
+or domain-entity validity. Those rules live on the resolved entity schema and
+on validation checks.
+
+Current project source loading uses these adapter families:
+
+| Adapter | Source surface | Role |
+|---|---|---|
+| `markdown` | `entities/**/*.md` and `research/packages/**/*.md` | Normal single-entity authoring surface with YAML frontmatter and body prose. |
+| `aggregate` | `knowledge/sources/<profile>/entities.yaml`, `terms.yaml`, and selected `doc/<plural>/<plural>.{json,yaml}` files | Transitional multi-entity rows and single-type aggregate rows. Prefer Markdown owners for new durable entities. |
+| `bib` and `curie-ref` | bibliography and ontology reference inputs | External-reference rows that defer to an existing entity owner when one exists. |
+| `datapackage` | `data/**/datapackage.yaml` and `results/**/datapackage.yaml` with `science-pkg-entity-1.0` | Dataset entity records embedded in promoted runtime packages; if a Markdown owner already exists, the datapackage defers but remains available as resource metadata. |
+| `workflow-run`, `task`, and `code` | workflow run files, task sources, and configured code roots | Specialized storage formats that materialize first-class entities into the same registry flow. |
+| `commons-merged` and `overlay` | shared/commons entities and local overlays | Cross-project entity owners and borrower overlays loaded into the same identity table. |
+
+Every loaded entity records the adapter that sourced it. The loader also keeps
+`SourceRef` metadata: adapter name, project-relative path, and entry index when
+the source is a multi-row file. Validation and collision errors should point to
+that source location.
+
+Canonical identity is strict. Within one owner scope, two owner records for the
+same `canonical_id` are a project-state error. Deferring adapters, such as
+bibliography references and datapackages with an existing entity owner, may
+contribute supporting metadata without claiming a second owner. Cross-project
+commons and overlay declarations are tracked separately so reference resolution
+can distinguish local owners, shared owners, and borrowers.
+
 ## Papers And Manuscripts
 
 Science uses separate references for external literature and user-authored

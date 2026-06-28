@@ -4,7 +4,7 @@
 **Status:** Draft
 **Builds on:**
 - `docs/plans/2026-04-05-project-model-design.md`
-- `docs/plans/2026-04-20-multi-backend-entity-resolver-design.md`
+- `docs/user-guide/entities.md#entity-loading-and-storage-adapters`
 - `docs/plans/2026-04-21-open-ended-kinds-and-catalog-registration-design.md`
 - `docs/plans/2026-04-21-unified-entity-references-design.md`
 

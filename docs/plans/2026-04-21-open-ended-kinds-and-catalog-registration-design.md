@@ -3,7 +3,7 @@
 **Date:** 2026-04-21
 **Status:** Draft
 **Builds on:**
-- `2026-04-20-multi-backend-entity-resolver-design.md` — unified entity model + storage adapters
+- `docs/user-guide/entities.md#entity-loading-and-storage-adapters` — unified entity model + storage adapters
 - `2026-04-21-unified-entity-references-design.md` — identifies open-ended kind support as the prerequisite for phase 2A catalog kinds
 
 ## Motivation

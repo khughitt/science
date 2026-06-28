@@ -1,8 +1,7 @@
 """Source-contract models (ModelSource, ParameterSource, BindingSource).
 
-Per the unified-entity-model spec (docs/plans/2026-04-20-multi-backend-entity-resolver-design.md
-§Implication for current model / parameter): these are NOT core Science
-typed entities in the unified model family. They remain here as
+Per the entity loading contract in docs/user-guide/entities.md, these are NOT
+core Science typed entities in the unified model family. They remain here as
 extension-layer helpers for the legacy model/parameter load path in
 science_tool.graph.sources._load_legacy_records. Projects that want
 first-class model/parameter entities should register custom subclasses of
