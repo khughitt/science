@@ -223,6 +223,49 @@ class OpportunityReport(TypedDict):
     commons_notice: str | None
 
 
+WEAK_RELATIVE_SCORE_THRESHOLD = 15
+
+
+class GapCurrentMatchRow(TypedDict):
+    benchmark_id: str
+    task_id: str | None
+    relative_score: int
+    baseline_score: int
+
+
+class GapCandidateBenchmarkRow(TypedDict):
+    benchmark_id: str
+    benchmark_title: str
+    baseline_score: int
+    matched_missing_facets: list[str]
+
+
+class BenchmarkGapRow(TypedDict):
+    entity_id: str
+    entity_title: str
+    gap_level: str
+    missing_modalities: list[str]
+    missing_signal_types: list[str]
+    current_matches: list[GapCurrentMatchRow]
+    candidate_benchmarks: list[GapCandidateBenchmarkRow]
+    suggested_search_facets: list[str]
+    reason: str
+
+
+class BenchmarkGapSummary(TypedDict):
+    entities_total: int
+    entities_with_gaps: int
+    uncovered_entities: int
+    weakly_covered_entities: int
+    missing_facet_entities: int
+
+
+class BenchmarkGapReport(TypedDict):
+    benchmark_gaps: list[BenchmarkGapRow]
+    summary: BenchmarkGapSummary
+    commons_notice: str | None
+
+
 def _string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -651,6 +694,83 @@ def _coverage_gaps(
     )
 
 
+def _gap_level_sort_key(level: str) -> int:
+    order = {"uncovered": 0, "weak": 1, "missing-facet": 2}
+    return order[level]
+
+
+def _matched_by_entity(rows: list[OpportunityRow]) -> dict[str, list[OpportunityRow]]:
+    grouped: dict[str, list[OpportunityRow]] = {}
+    for row in rows:
+        grouped.setdefault(row["entity_id"], []).append(row)
+    return grouped
+
+
+def _coverage_gap_by_entity(rows: list[CoverageGapRow]) -> dict[str, CoverageGapRow]:
+    return {row["entity_id"]: row for row in rows}
+
+
+def _entity_title_map(report: OpportunityReport) -> dict[str, str]:
+    titles: dict[str, str] = {}
+    for row in report["matched_opportunities"]:
+        titles.setdefault(row["entity_id"], row["entity_title"])
+    for row in report["unmapped_project_entities"]:
+        titles.setdefault(row["entity_id"], row["entity_title"])
+    return titles
+
+
+def _current_match_rows(rows: list[OpportunityRow]) -> list[GapCurrentMatchRow]:
+    return [
+        {
+            "benchmark_id": row["benchmark_id"],
+            "task_id": row["task_id"],
+            "relative_score": row["relative_score"],
+            "baseline_score": row["baseline_score"],
+        }
+        for row in rows
+    ]
+
+
+def _is_weak_gap(rows: list[OpportunityRow]) -> bool:
+    if not rows:
+        return False
+    all_low_score = all(row["relative_score"] < WEAK_RELATIVE_SCORE_THRESHOLD for row in rows)
+    all_taskless = all(row["task_id"] is None for row in rows)
+    return all_low_score or all_taskless
+
+
+def _candidate_rows(
+    available: list[UnmappedBenchmarkRow],
+    missing_facets: set[str],
+) -> list[GapCandidateBenchmarkRow]:
+    candidates: list[GapCandidateBenchmarkRow] = []
+    for row in available:
+        candidate_facets = {_normalize_token(value) for value in row["unmapped_facets"]}
+        matched_facets = sorted(candidate_facets & missing_facets)
+        candidates.append(
+            {
+                "benchmark_id": row["benchmark_id"],
+                "benchmark_title": row["benchmark_title"],
+                "baseline_score": row["baseline_score"],
+                "matched_missing_facets": matched_facets,
+            }
+        )
+    return sorted(
+        candidates,
+        key=lambda row: (-len(row["matched_missing_facets"]), -row["baseline_score"], row["benchmark_id"]),
+    )
+
+
+def _gap_summary(rows: list[BenchmarkGapRow], entities_total: int) -> BenchmarkGapSummary:
+    return {
+        "entities_total": entities_total,
+        "entities_with_gaps": len(rows),
+        "uncovered_entities": sum(1 for row in rows if row["gap_level"] == "uncovered"),
+        "weakly_covered_entities": sum(1 for row in rows if row["gap_level"] == "weak"),
+        "missing_facet_entities": sum(1 for row in rows if row["gap_level"] == "missing-facet"),
+    }
+
+
 def _calibration_benchmark_tokens(context: DatasetOpportunityContext) -> frozenset[str]:
     return frozenset({context.dataset.id.lower(), *context.controlled_facet_tokens})
 
@@ -806,4 +926,73 @@ def opportunity_report(
         ],
         "calibration": _calibration_payload(entities, contexts, matched, enabled=calibration_report),
         "commons_notice": notice,
+    }
+
+
+def gaps_report(
+    project_root: Path,
+    *,
+    include_commons: bool = False,
+    entity_id: str | None = None,
+    domain: str | None = None,
+    facet: str | None = None,
+) -> BenchmarkGapReport:
+    opportunity = opportunity_report(
+        project_root,
+        include_commons=include_commons,
+        entity_id=entity_id,
+        domain=domain,
+    )
+    matched = _matched_by_entity(opportunity["matched_opportunities"])
+    coverage = _coverage_gap_by_entity(opportunity["coverage_gaps"])
+    titles = _entity_title_map(opportunity)
+    unmapped_ids = {row["entity_id"] for row in opportunity["unmapped_project_entities"]}
+    entity_ids = sorted(set(matched) | set(coverage) | unmapped_ids)
+
+    rows: list[BenchmarkGapRow] = []
+    normalized_facet = _normalize_token(facet) if facet is not None else None
+    for current_entity_id in entity_ids:
+        current_matches = matched.get(current_entity_id, [])
+        gap = coverage.get(current_entity_id)
+        missing_modalities = list(gap["missing_modalities"]) if gap is not None else []
+        missing_signal_types = list(gap["missing_signal_types"]) if gap is not None else []
+        missing_facets = {_normalize_token(value) for value in missing_modalities + missing_signal_types}
+
+        if current_entity_id in unmapped_ids:
+            gap_level = "uncovered"
+            reason = "No matched benchmark opportunities for this entity."
+        elif gap is not None:
+            gap_level = "missing-facet"
+            reason = gap["reason"]
+        elif _is_weak_gap(current_matches):
+            gap_level = "weak"
+            reason = "Matched benchmarks are taskless or below the weak relative-score threshold."
+        else:
+            continue
+
+        if normalized_facet is not None and normalized_facet not in missing_facets:
+            continue
+
+        rows.append(
+            {
+                "entity_id": current_entity_id,
+                "entity_title": titles.get(current_entity_id, current_entity_id),
+                "gap_level": gap_level,
+                "missing_modalities": missing_modalities,
+                "missing_signal_types": missing_signal_types,
+                "current_matches": _current_match_rows(current_matches),
+                "candidate_benchmarks": _candidate_rows(
+                    opportunity["available_unmapped_benchmarks"],
+                    missing_facets,
+                ),
+                "suggested_search_facets": sorted(missing_facets),
+                "reason": reason,
+            }
+        )
+
+    rows.sort(key=lambda row: (_gap_level_sort_key(row["gap_level"]), row["entity_id"]))
+    return {
+        "benchmark_gaps": rows,
+        "summary": _gap_summary(rows, entities_total=len(entity_ids)),
+        "commons_notice": opportunity["commons_notice"],
     }

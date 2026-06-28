@@ -782,3 +782,135 @@ benchmark:
     assert "frontmatter_json must decode to an object" in payload["commons_notice"]
     assert "notice: commons benchmarks unavailable" in result.stderr
     assert "frontmatter_json must decode to an object" in result.stderr
+
+
+def test_gaps_report_projects_uncovered_entities_and_candidate_benchmarks(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-unmapped",
+        """
+id: hypothesis:0001-unmapped
+type: hypothesis
+title: Homeostatic recovery has no benchmark yet
+""",
+        body="Homeostatic recovery remains under-tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "atlas",
+        """
+id: dataset:atlas
+type: dataset
+title: Atlas Benchmark
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: transfer
+      prediction_target: region label
+      held_out_unit: tissue
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: curated region
+""",
+    )
+
+    payload = gaps_report(tmp_path)
+
+    assert payload["summary"] == {
+        "entities_total": 1,
+        "entities_with_gaps": 1,
+        "uncovered_entities": 1,
+        "weakly_covered_entities": 0,
+        "missing_facet_entities": 0,
+    }
+    row = payload["benchmark_gaps"][0]
+    assert row["entity_id"] == "hypothesis:0001-unmapped"
+    assert row["gap_level"] == "uncovered"
+    assert row["missing_modalities"] == []
+    assert row["missing_signal_types"] == []
+    assert row["current_matches"] == []
+    assert row["candidate_benchmarks"][0]["benchmark_id"] == "dataset:atlas"
+    assert row["candidate_benchmarks"][0]["matched_missing_facets"] == []
+
+
+def test_gaps_report_projects_existing_coverage_gaps_as_missing_facet(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0002-spatial-proteomics",
+        """
+id: hypothesis:0002-spatial-proteomics
+type: hypothesis
+title: Spatial proteomics transfer
+""",
+        body="Spatial proteomics transfer should generalize.",
+    )
+    _write_dataset(
+        tmp_path,
+        "spatial",
+        """
+id: dataset:spatial
+type: dataset
+title: Spatial Atlas
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: transfer
+      prediction_target: region label
+      held_out_unit: tissue
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: curated region
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "unrelated",
+        """
+id: dataset:unrelated
+type: dataset
+title: Unrelated Benchmark
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: response
+      prediction_target: response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: measured response
+""",
+    )
+
+    payload = gaps_report(tmp_path)
+
+    row = payload["benchmark_gaps"][0]
+    assert row["gap_level"] == "missing-facet"
+    assert row["missing_modalities"] == ["proteomics"]
+    assert row["missing_signal_types"] == []
+    assert row["suggested_search_facets"] == ["proteomics"]
+    assert row["candidate_benchmarks"][0]["benchmark_id"] == "dataset:unrelated"
+    assert row["candidate_benchmarks"][0]["matched_missing_facets"] == []
