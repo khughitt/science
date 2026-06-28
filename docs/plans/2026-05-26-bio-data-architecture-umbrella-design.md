@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a/C4b and C4c-1 rsID input merged and pushed to origin (full dbSNP artifact build/operator smoke still pending) + Pillar A (A1 + A2) merged and complete; Pillar D1/D2, B1, B-migration, B2, and E (Reactome ingestion) merged and pushed to origin; non-tabular reference modeling is partly resolved by `bio.reference_graph` RG1/RG2/RG3-B/RG4 with `dataset:mondo` (pushed to origin), `dataset:go` (implemented, pending merge), and `dataset:opentargets-associations` (Open Targets target–disease association graph, 25.12) built in `~/d/science-commons`; broader graph-member promotion workflows and RG5 identity resolvers pending; C4c transcript/protein projection remains open. The earlier `~/d/science` and `~/d/science-commons` work is on origin (as of 2026-06-01), with the `dataset:go` recipe in-flight on a feature branch; the `~/d/health/meta` and `~/d/health/comparisons/pan-disease` records that consume it are committed in Dropbox-only repos (no git remote). Spawns focused per-area docs.
+Status: approved; implementation underway — foundation substrate + Pillar C sub-phases C1/C2/C3/C4a/C4b and C4c-1 rsID input merged and pushed to origin (full dbSNP artifact build/operator smoke still pending) + Pillar A (A1 + A2) merged and complete; Pillar D1/D2, B1, B-migration, B2, and E (Reactome ingestion) merged and pushed to origin; non-tabular reference modeling is partly resolved by `bio.reference_graph` RG1/RG2/RG3-B/RG4 with `dataset:mondo` (pushed to origin), `dataset:go` (implemented, pending merge), and `dataset:opentargets-associations` (Open Targets target–disease association graph, 25.12) built in `~/d/science-commons`; read-only graph-member payload inspection exists, while graph-member promotion scaffold/apply workflows and RG5 identity resolvers remain pending; C4c transcript/protein projection remains open. The earlier `~/d/science` and `~/d/science-commons` work is on origin (as of 2026-06-01), with the `dataset:go` recipe in-flight on a feature branch; the `~/d/health/meta` and `~/d/health/comparisons/pan-disease` records that consume it are committed in Dropbox-only repos (no git remote). Spawns focused per-area docs.
 
 Related (builds on):
 - `docs/proposition-and-evidence-model.md` — core reasoning model
@@ -287,7 +287,8 @@ collapsed into identity.
    virtual graph-member usage records, and RG4 adds `dataset:mondo` (pushed to origin), `dataset:go`
    (implemented, pending merge), and `dataset:opentargets-associations` (Open Targets target–disease
    association graph, 25.12) as the first real pinned reference graph recipes in `~/d/science-commons`.
-   Broader graph-member promotion workflows and non-molecular identity resolvers remain follow-up work.
+   Read-only graph-member payload inspection exists; graph-member promotion scaffold/apply workflows and
+   non-molecular identity resolvers remain follow-up work.
 
 ---
 
@@ -342,8 +343,8 @@ RG2 resolves promoted graph-member virtual payloads as node rows plus directly i
 materializes node-index member `dataset_usage` as virtual graph-member usage records, and RG4 adds
 `dataset:mondo` (pushed to origin), `dataset:go` (implemented, pending merge), and
 `dataset:opentargets-associations` (Open Targets target–disease association graph, 25.12) as the first
-real pinned reference graph recipes. Broader graph-member promotion workflows and non-molecular identity
-resolvers remain follow-up work.
+real pinned reference graph recipes. Read-only graph-member payload inspection exists; graph-member
+promotion scaffold/apply workflows and non-molecular identity resolvers remain follow-up work.
 
 **Operational follow-ups.**
 - `~/d/science` and `~/d/science-commons` `main` are pushed to origin as of 2026-06-01 (Pillars A-E +

@@ -20,6 +20,7 @@ from science_tool.commons.errors import (
     PromoteWriteError,
 )
 from science_tool.commons.inventory import build_commons_inventory
+from science_tool.commons.member_payload import resolve_virtual_member_payload
 from science_tool.commons.overlay import (
     MergedEntity,
     resolve_entity,
@@ -431,6 +432,35 @@ def data_resolve_cmd(dataset_id: str, logical_path: str, as_json: bool) -> None:
         )
     else:
         click.echo(str(resolved.path))
+
+
+@commons_group.command("member-payload")
+@click.argument("member_id")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
+def member_payload_cmd(member_id: str, as_json: bool) -> None:
+    """Resolve a promoted virtual collection member payload."""
+    try:
+        payload = resolve_virtual_member_payload(member_id)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if payload is None:
+        raise click.ClickException(f"{member_id} is not a virtual member dataset")
+
+    rendered = {
+        "member_id": payload.member_id,
+        "parent_dataset": payload.parent_dataset,
+        "parent_slug": payload.parent_slug,
+        "member_key": payload.member_key,
+        "payload_kind": payload.payload_kind,
+        "payload": payload.payload,
+    }
+    if as_json:
+        click.echo(json.dumps(rendered, indent=2, sort_keys=True))
+        return
+
+    click.echo(f"{payload.member_id} ({payload.payload_kind})")
+    click.echo(f"parent: {payload.parent_dataset}")
+    click.echo(f"member_key: {payload.member_key}")
 
 
 @commons_group.group("promote")

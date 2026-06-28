@@ -379,6 +379,11 @@ by `derivation.member_key` and returns that row plus the collection's
 `identifier_space`. No tiny per-set data artifact is required unless a workflow
 explicitly materializes one.
 
+Use `science commons member-payload dataset:<member> --json` to inspect the
+resolved virtual payload for a promoted member dataset. The command uses the
+shared `member_of` dispatcher and supports both `bio.geneset.member` and
+`bio.reference_graph.member` datasets.
+
 ## Dataset Lifecycle
 
 `dataset` is the single entity kind for data that a project consumes, whether

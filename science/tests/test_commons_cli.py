@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -224,6 +225,109 @@ def test_show_missing_entity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     result = runner.invoke(commons_group, ["show", "paper:DoesNotExist"])
     assert result.exit_code == 1
     assert "not found" in result.output.lower() or "failed" in result.output.lower()
+
+
+def _write_reference_graph_member_commons(root: Path, data_root: Path) -> None:
+    parent = root / "datasets" / "mondo-v1"
+    parent.mkdir(parents=True)
+    (parent / "entity.md").write_text(
+        "---\n"
+        "schema_profile: science-entity-base/1.0+dataset/1.0+bio.reference_graph/1.0\n"
+        "id: dataset:mondo-v1\n"
+        "type: dataset\n"
+        "title: MONDO\n"
+        "version: 1.0.0\n"
+        "status: active\n"
+        "created: '2026-05-31'\n"
+        "updated: '2026-05-31'\n"
+        "origin: external\n"
+        "tier: use-now\n"
+        "datapackage: datapackage.yaml\n"
+        "source_class: reference\n"
+        "access: {level: public, verified: true}\n"
+        "graph_resource: graph\n"
+        "graph_format: obograph_json\n"
+        "member_key_space: {kind: curie, prefixes: [MONDO], resolution_status: resolved}\n"
+        "node_index_resource: nodes\n"
+        "edge_resource: edges\n"
+        "member_count: 1\n"
+        "edge_count: 1\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    data_dir = data_root / "mondo-v1"
+    data_dir.mkdir(parents=True)
+    graph_text = '{"graphs":[]}\n'
+    nodes_text = (
+        "member_key,member_kind,label,status,replaced_by,dataset_usage\n"
+        'MONDO:0005148,term,multiple myeloma,active,,"[]"\n'
+    )
+    edges_text = "subject,predicate,object,evidence,dataset_usage\n" 'MONDO:0005148,is_a,MONDO:0000001,,"[]"\n'
+    (data_dir / "mondo.json").write_text(graph_text, encoding="utf-8")
+    (data_dir / "nodes.csv").write_text(nodes_text, encoding="utf-8")
+    (data_dir / "edges.csv").write_text(edges_text, encoding="utf-8")
+    (parent / "datapackage.yaml").write_text(
+        "resources:\n"
+        "  - name: graph\n"
+        "    path: mondo.json\n"
+        f"    hash: sha256:{hashlib.sha256(graph_text.encode('utf-8')).hexdigest()}\n"
+        "  - name: nodes\n"
+        "    path: nodes.csv\n"
+        f"    hash: sha256:{hashlib.sha256(nodes_text.encode('utf-8')).hexdigest()}\n"
+        "  - name: edges\n"
+        "    path: edges.csv\n"
+        f"    hash: sha256:{hashlib.sha256(edges_text.encode('utf-8')).hexdigest()}\n",
+        encoding="utf-8",
+    )
+
+    member = root / "datasets" / "mondo-0005148"
+    member.mkdir(parents=True)
+    (member / "entity.md").write_text(
+        "---\n"
+        "schema_profile: science-entity-base/1.0+dataset/1.0+bio.reference_graph.member/1.0\n"
+        "id: dataset:mondo-0005148\n"
+        "type: dataset\n"
+        "title: MONDO 0005148\n"
+        "version: 1.0.0\n"
+        "status: active\n"
+        "created: '2026-05-31'\n"
+        "updated: '2026-05-31'\n"
+        "origin: derived\n"
+        "tier: use-now\n"
+        "datapackage: virtual:member-of\n"
+        "parent_dataset: dataset:mondo-v1\n"
+        "derivation:\n"
+        "  kind: member_of\n"
+        "  parent_dataset: dataset:mondo-v1\n"
+        "  member_key: MONDO:0005148\n"
+        "member_kind: term\n"
+        "label: multiple myeloma\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    (member / "datapackage.yaml").write_text("resources: []\n", encoding="utf-8")
+
+
+def test_member_payload_json_resolves_reference_graph_member(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "commons"
+    data_root = tmp_path / "data"
+    _write_reference_graph_member_commons(root, data_root)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_DATA_ROOT", str(data_root))
+
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["member-payload", "dataset:mondo-0005148", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["member_id"] == "dataset:mondo-0005148"
+    assert payload["parent_dataset"] == "dataset:mondo-v1"
+    assert payload["member_key"] == "MONDO:0005148"
+    assert payload["payload_kind"] == "bio.reference_graph.member"
+    assert payload["payload"]["node"]["label"] == "multiple myeloma"
+    assert payload["payload"]["incident_edges"][0]["predicate"] == "is_a"
 
 
 def test_find_default_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

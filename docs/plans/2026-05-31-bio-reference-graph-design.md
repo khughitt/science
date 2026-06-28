@@ -407,7 +407,9 @@ Automated B materialization from unpromoted graph members now emits virtual
 `reference_graph.node_index_resource` usage records for node-index rows with member-level
 `dataset_usage`. Those virtual graph-member consumers are treated like gene-set virtual rows in B2:
 they can contribute candidate shared-source signals without becoming direct full-overlap commitments.
-Broader graph-member promotion workflows remain RG3 follow-up work.
+A read-only `science commons member-payload <dataset_id> --json` command exposes the resolved
+virtual payload for promoted graph members, giving curators a promotion inspection workflow.
+Full scaffold/apply workflows for minting promoted graph-member datasets remain RG3 follow-up work.
 
 RG2 implemented the generic virtual-member payload dispatcher and the first concrete
 `bio.reference_graph.member` resolver. The sibling `bio.geneset.member` resolver is now implemented on the
@@ -435,6 +437,7 @@ materialization stay separate code paths.
 
 ## 11. Next step
 
-RG1, RG2, and RG4 are implemented, with `dataset:mondo`, `dataset:go`, and the first association graph
-`dataset:opentargets-associations` as the real recipes. Remaining follow-ups are RG3 broader graph-member
+RG1, RG2, RG3-B, and RG4 are implemented, with `dataset:mondo`, `dataset:go`, and the first
+association graph `dataset:opentargets-associations` as the real recipes. A read-only member-payload
+inspection command exists for promoted graph members. Remaining follow-ups are RG3 scaffold/apply
 promotion workflows and RG5 non-molecular identity resolvers.
