@@ -1,6 +1,6 @@
 # science/src/science_tool/project_artifacts/registry.yaml
 # Managed-artifact registry — capabilities matrices.
-# See docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md.
+# See docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md.
 artifacts:
   - name: validate.sh
     source: data/validate.sh

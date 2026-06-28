@@ -1,6 +1,6 @@
 """Managed-artifact lifecycle for Science projects.
 
-See docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md.
+See docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md.
 """
 
 from science_tool.project_artifacts.loader import (

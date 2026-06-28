@@ -39,9 +39,9 @@ Status updated as each P1 progresses through the workflow.
 
 | ID | Title | Plan doc | Plan | Impl | Review |
 | --- | --- | --- | --- | --- | --- |
-| P1 #2 | Promote `pre-registration` to canonical type | `docs/plans/2026-04-25-pre-registration-canonical-type.md` | merged | merged (`d840e07`..`fc1cc80`) | APPROVE |
-| P1 #4 | Synthesis-rollup frontmatter convention | `docs/plans/2026-04-25-synthesis-rollup-frontmatter.md` | merged | merged (`4dcd2ed`..`d1e4751`) | APPROVE |
-| P1 #6 | Auto-archive done tasks (`science tasks archive`) | `docs/plans/2026-04-25-tasks-auto-archive.md` | merged | merged (`dbee325`..`c29e4b7`) | APPROVE-WITH-FIXES |
+| P1 #2 | Promote `pre-registration` to canonical type | implemented; current contract in `templates/pre-registration.md`, `commands/pre-register.md`, and `science/src/science_tool/validate/checks/prereg.py` | merged | merged (`d840e07`..`fc1cc80`) | APPROVE |
+| P1 #4 | Synthesis-rollup frontmatter convention | implemented; current contract in `templates/synthesis.md`, `commands/big-picture.md`, and `science/src/science_tool/validate/checks/discussions.py` | merged | merged (`4dcd2ed`..`d1e4751`) | APPROVE |
+| P1 #6 | Auto-archive done tasks (`science tasks archive`) | implemented; current contract in `science/src/science_tool/tasks_archive.py` and `commands/next-steps.md` | merged | merged (`dbee325`..`c29e4b7`) | APPROVE-WITH-FIXES |
 | P1 #10 | Chained-prior `next-steps` ledger | implemented; current contract in `templates/next-steps.md` and `commands/next-steps.md` | merged | merged (`d5aa677`..`aee533f`) | APPROVE |
 
 ### Bucket B — small / additive (dispatched 2026-04-25)
@@ -79,7 +79,7 @@ Final spot-read before user approval surfaced one cross-plan duplication:
 ### Cross-plan consistency rules established
 
 - **Validator severity:** id-prefix mismatches and structural-field absences are `warn`, not `error`. Established in Plan #7 Task 6 and applied retroactively to Plan #2.
-- **Validator targeting:** all validator-touching plans modify both `meta/validate.sh` and `scripts/validate.sh` until MAV unifies. Locate insertion sites by content, not absolute line. **Obsolete after Task 28 of `docs/superpowers/plans/2026-04-26-managed-artifacts-implementation.md` lands** — the canonical body lives at `science/src/science_tool/project_artifacts/data/validate.sh` and `meta/validate.sh` / `scripts/validate.sh` are path-convenience shims; future validator changes edit the canonical only.
+- **Validator targeting:** all validator-touching plans modify both `meta/validate.sh` and `scripts/validate.sh` until MAV unifies. Locate insertion sites by content, not absolute line. **Obsolete after Task 28 of `docs/plans/historical/2026-04-26-managed-artifacts-implementation.md` lands** — the canonical body lives at `science/src/science_tool/project_artifacts/data/validate.sh` and `meta/validate.sh` / `scripts/validate.sh` are path-convenience shims; future validator changes edit the canonical only.
 - **Type promotion + id-prefix table coordination:** Plan #7 Task 6's id-prefix table includes rows for both `pre-registration` (canonized by Plan #2) and `synthesis` (canonized by Plan #4). These rows are forward-compatible — they activate when each canonical type lands downstream.
 - **No legacy/compatibility layers** (per the user's global rule). Validators stay silent on legacy shapes (`type: plan` pre-regs, `type: report` synthesis files) — this is the natural consequence of additive type-conformance checks, not a permanent accepted variant. Downstream migrations are tracked as follow-on tasks.
 

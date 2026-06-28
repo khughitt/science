@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Land the managed-artifact long-term system per `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md`, with `validate.sh` as the first managed artifact and Plan #7's six audit-surfaced fixes as the system's first version bump.
+**Goal:** Land the managed-artifact long-term system per `docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md`, with `validate.sh` as the first managed artifact and Plan #7's six audit-surfaced fixes as the system's first version bump.
 
 **Architecture:** A `science_tool.project_artifacts` package owns a YAML registry of capabilities matrices, a fully-rendered canonical bytes file per artifact, header parsing, drift classification, an install matrix, transaction-safe update with declarative migrations, pin/unpin, and CLI verbs (`list | check | diff | install | update | pin | unpin | exec`). Surface integration in `science health`, `/status`, `/next-steps`, `commands/sync.md`. Path-convenience shims replace the existing `meta/validate.sh` and `scripts/validate.sh` bodies.
 
@@ -145,7 +145,7 @@ Create `science/src/science_tool/project_artifacts/__init__.py`:
 ```python
 """Managed-artifact lifecycle for Science projects.
 
-See docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md.
+See docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md.
 Public API will be filled in as implementation lands. Importing the package
 loads and validates the registry (see Task 3).
 """
@@ -158,7 +158,7 @@ Create `science/src/science_tool/project_artifacts/registry.yaml`:
 ```yaml
 # science/src/science_tool/project_artifacts/registry.yaml
 # Managed-artifact registry — capabilities matrices.
-# See docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md.
+# See docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md.
 # Initially empty; the first artifact lands in Task 28.
 artifacts: []
 ```
@@ -207,7 +207,7 @@ git add science/src/science_tool/project_artifacts/ \
         science/pyproject.toml
 git commit -m "feat(project-artifacts): scaffold package with registry + data dir
 
-Per docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md.
+Per docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md.
 Empty registry; data dir reserved for the first canonical (Task 28).
 Adds pydantic and ruamel.yaml runtime deps."
 ```
@@ -690,7 +690,7 @@ Modify `science/src/science_tool/project_artifacts/__init__.py`:
 ```python
 """Managed-artifact lifecycle for Science projects.
 
-See docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md.
+See docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md.
 """
 from science_tool.project_artifacts.loader import (
     RegistryLoadError,
@@ -5876,7 +5876,7 @@ Replace the existing "Refresh `validate.sh`" subsection with:
 ```markdown
 ### Refresh `validate.sh`
 
-`validate.sh` is a managed Science artifact (per `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md`). To check for updates:
+`validate.sh` is a managed Science artifact (per `docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md`). To check for updates:
 
 \```bash
 science project artifacts check validate.sh
@@ -6090,11 +6090,11 @@ Expected: all clean.
 Per the spec's "What this displaces" section and this plan's "What this displaces (cross-references)":
 
 - Edit `docs/plans/historical/2026-04-25-managed-artifact-versioning.md`: append a status banner at the top:
-  > **Superseded:** Replaced by `docs/plans/2026-04-26-managed-artifacts-long-term-design.md` and implemented per `docs/plans/2026-04-26-managed-artifacts-implementation.md`. Do not implement this plan as written.
+  > **Superseded:** Replaced by `docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md` and implemented per `docs/plans/historical/2026-04-26-managed-artifacts-implementation.md`. Do not implement this plan as written.
 - Edit `docs/plans/historical/2026-04-25-mav-audit-addendum.md`: append a status banner:
-  > **Subsumed:** Plan #7's six fixes shipped as the first version bump in `docs/plans/2026-04-26-managed-artifacts-implementation.md` Task 29. This plan no longer drives separate work.
+  > **Subsumed:** Plan #7's six fixes shipped as the first version bump in `docs/plans/historical/2026-04-26-managed-artifacts-implementation.md` Task 29. This plan no longer drives separate work.
 - Edit `docs/plans/2026-04-25-conventions-audit-p1-rollout.md`: update Plan #7's status row to "subsumed by managed-artifacts implementation T29." Update the "Cross-plan rules" section to mark "validators in lockstep" as obsolete after Task 28 lands.
-- Edit `docs/plans/2026-04-25-rollout-and-migration-handoff.md`: append a one-line note to next-steps thread #1: "Addressed by `docs/superpowers/plans/2026-04-26-managed-artifacts-implementation.md`."
+- Edit `docs/plans/2026-04-25-rollout-and-migration-handoff.md`: append a one-line note to next-steps thread #1: "Addressed by `docs/plans/historical/2026-04-26-managed-artifacts-implementation.md`."
 
 - [ ] **Step 6: Commit (acceptance + cross-references)**
 
@@ -6229,7 +6229,7 @@ No drift detected.
 
 ## Post-implementation follow-ups
 
-- **Hook dispatch points landed.** The hook contract was wired structurally in T27/T28 but no `dispatch_hook` calls fired from the canonical body. Resolved in `docs/superpowers/plans/2026-04-27-validate-hook-points-implementation.md` with version bump to 2026.04.26.2.
+- **Hook dispatch points landed.** The hook contract was wired structurally in T27/T28 but no `dispatch_hook` calls fired from the canonical body. Resolved in `docs/plans/historical/2026-04-27-validate-hook-points-implementation.md` with version bump to 2026.04.26.2.
 - **`Snapshot.restore()` idempotent.** Latent ManifestSnapshot double-restore noted during Phase 8 review fixed in commit `fb9c1cd`.
 
 ---

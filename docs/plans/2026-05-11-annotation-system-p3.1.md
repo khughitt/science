@@ -2154,5 +2154,5 @@ Out-of-scope reminders (do NOT add):
 - `docs/conventions/refs-check.md` — `refs check` is the structural
   precedent for the JSON-payload + validate.sh-section pattern that
   P3.1 follows.
-- `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md`
+- `docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md`
   — managed-artifact bump procedure (registry.yaml fields).

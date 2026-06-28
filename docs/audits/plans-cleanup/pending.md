@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `23`
+- Pending thread count: `24`
 
 ## conventions-audit-p1-rollout
 
@@ -297,6 +297,22 @@
 - remaining_gaps:
   - Reconcile project-model and paper-model together before moving or deleting either thread.
   - Confirm which parts of the broad entity taxonomy are now durable user-guide contract versus superseded by later epistemic-data-model and dataset lifecycle work.
+
+## source-entity-cli
+
+- status: `implemented_needs_durable_docs`
+- recommended_action: `create migration checkpoint`
+- actions: `migration_checkpoint_created`
+- files:
+  - `docs/plans/2026-04-28-source-entity-cli-design.md`
+  - `docs/plans/2026-04-28-source-entity-cli-implementation.md`
+- pending_actions:
+  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; source-authored entity CLI shipped but needs compact durable user/process docs before deletion
+    - `docs/plans/2026-04-28-source-entity-cli-design.md`
+    - `docs/plans/2026-04-28-source-entity-cli-implementation.md`
+- remaining_gaps:
+  - Migrate the stable source-authored entity CLI contract, path policy, and graph-vs-source write boundary into durable user or process docs before deleting the plan thread.
+  - Reconcile later entity-consolidation changes with this older MVP design so docs describe the current expanded entity set rather than only the original question/hypothesis/discussion/interpretation MVP.
 
 ## topic-deprecation-and-mechanism
 

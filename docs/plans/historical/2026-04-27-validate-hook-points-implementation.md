@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans`. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Realize the hook contract on `data/validate.sh` per `docs/superpowers/specs/2026-04-27-validate-hook-points.md`. Add three named dispatch points (`pre_validation`, `extra_checks`, `post_validation`), bump the canonical version `2026.04.26.1 → 2026.04.26.2`, dogfood the managed-artifact update workflow.
+**Goal:** Realize the hook contract on `data/validate.sh` per `docs/plans/historical/2026-04-27-validate-hook-points.md`. Add three named dispatch points (`pre_validation`, `extra_checks`, `post_validation`), bump the canonical version `2026.04.26.1 → 2026.04.26.2`, dogfood the managed-artifact update workflow.
 
 **Tech stack:** Bash for the canonical. Python (pytest) for tests. YAML for the registry. `uv` for everything Python.
 
@@ -311,7 +311,7 @@ Edit `science/src/science_tool/project_artifacts/registry.yaml`:
           - extra_checks: after all canonical sections, before the summary.
           - post_validation: at process exit (trap EXIT), regardless of pass/fail.
         Hooks see all helpers and globals (PROFILE, ERRORS, WARNINGS).
-        See docs/superpowers/specs/2026-04-27-validate-hook-points.md.
+        See docs/plans/historical/2026-04-27-validate-hook-points.md.
   ```
 
 - [ ] **Step 3: Update `test_first_version_bump.py` for the new version**
@@ -381,7 +381,7 @@ sidecars can register hooks via register_validation_hook and have them
 fire at the documented points. Updates registry: moves prior hash into
 previous_hashes, adds byte_replace migration, refreshes contract field.
 
-Per docs/superpowers/specs/2026-04-27-validate-hook-points.md."
+Per docs/plans/historical/2026-04-27-validate-hook-points.md."
 ```
 
 ---
@@ -559,29 +559,29 @@ contract). Per spec acceptance criterion 5."
 ### Task 4: Update prior spec + plan with the hook-contract closure
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md` — note that the hook contract is now functional as of 2026.04.26.2.
-- Modify: `docs/superpowers/plans/2026-04-26-managed-artifacts-implementation.md` — append a "Post-implementation: hook dispatch points" status note.
+- Modify: `docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md` — note that the hook contract is now functional as of 2026.04.26.2.
+- Modify: `docs/plans/historical/2026-04-26-managed-artifacts-implementation.md` — append a "Post-implementation: hook dispatch points" status note.
 
 - [ ] **Step 1: Add a status note to the parent spec**
 
-Open `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md`. In the section that defines the `sourced_sidecar` extension protocol (search for "sourced_sidecar"), append:
+Open `docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md`. In the section that defines the `sourced_sidecar` extension protocol (search for "sourced_sidecar"), append:
 
-> **Hook dispatch implementation:** The `register_validation_hook` API and the `dispatch_hook` infrastructure shipped in v2026.04.26 (Task 27 / Task 28). Concrete dispatch *call sites* in the canonical body landed in v2026.04.26.2 per `docs/superpowers/specs/2026-04-27-validate-hook-points.md` (`pre_validation`, `extra_checks`, `post_validation`).
+> **Hook dispatch implementation:** The `register_validation_hook` API and the `dispatch_hook` infrastructure shipped in v2026.04.26 (Task 27 / Task 28). Concrete dispatch *call sites* in the canonical body landed in v2026.04.26.2 per `docs/plans/historical/2026-04-27-validate-hook-points.md` (`pre_validation`, `extra_checks`, `post_validation`).
 
 - [ ] **Step 2: Add a status note to the parent plan**
 
-Open `docs/superpowers/plans/2026-04-26-managed-artifacts-implementation.md`. At the very bottom, before the `> **End of plan.**` line, append:
+Open `docs/plans/historical/2026-04-26-managed-artifacts-implementation.md`. At the very bottom, before the `> **End of plan.**` line, append:
 
 > ## Post-implementation follow-ups
 >
-> - **Hook dispatch points landed.** The hook contract was wired structurally in T27/T28 but no `dispatch_hook` calls fired from the canonical body. Resolved in `docs/superpowers/plans/2026-04-27-validate-hook-points-implementation.md` with version bump to 2026.04.26.2.
+> - **Hook dispatch points landed.** The hook contract was wired structurally in T27/T28 but no `dispatch_hook` calls fired from the canonical body. Resolved in `docs/plans/historical/2026-04-27-validate-hook-points-implementation.md` with version bump to 2026.04.26.2.
 > - **`Snapshot.restore()` idempotent.** Latent ManifestSnapshot double-restore noted during Phase 8 review fixed in commit `fb9c1cd`.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md \
-        docs/superpowers/plans/2026-04-26-managed-artifacts-implementation.md
+git add docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md \
+        docs/plans/historical/2026-04-26-managed-artifacts-implementation.md
 git commit -m "docs(specs): note hook-dispatch closure and Snapshot idempotency
 
 Cross-references the validate-hook-points spec (2026-04-27) and the
@@ -614,14 +614,14 @@ T1 inserts dispatch points without bumping the registry; the canonical's header 
 
 ## What this displaces
 
-- The "future-tense hook capability" implication in `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md`. After this plan lands, hooks are present-tense.
+- The "future-tense hook capability" implication in `docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md`. After this plan lands, hooks are present-tense.
 - Unblocks the four-project rollout planned in `docs/migration/2026-04-27-managed-artifacts-rollout.md` (forthcoming; depends on this plan landing first).
 
 ---
 
 ## Self-review
 
-**Spec coverage** — every acceptance criterion in `docs/superpowers/specs/2026-04-27-validate-hook-points.md` maps to a task:
+**Spec coverage** — every acceptance criterion in `docs/plans/historical/2026-04-27-validate-hook-points.md` maps to a task:
 
 | Spec acceptance | Task |
 |---|---|

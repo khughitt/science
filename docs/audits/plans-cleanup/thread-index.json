@@ -1,10 +1,10 @@
 {
-  "file_count": 327,
-  "generated_at": "2026-06-28T14:30:37+00:00",
+  "file_count": 314,
+  "generated_at": "2026-06-28T14:51:29+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 217,
+  "thread_count": 206,
   "threads": [
     {
       "earliest_file_date": "2026-05-27",
@@ -95,27 +95,6 @@
         "docs/plans/2026-04-30-agents-md-decoupling-plan.md": "plan"
       },
       "thread_id": "agents-md-decoupling"
-    },
-    {
-      "earliest_file_date": "2026-04-26",
-      "files": [
-        "docs/plans/2026-04-26-analysis-planning-and-skill-index-design.md"
-      ],
-      "latest_file_date": "2026-04-26",
-      "normalized_slug": "analysis-planning-and-skill-index",
-      "raw_slugs": {
-        "docs/plans/2026-04-26-analysis-planning-and-skill-index-design.md": "analysis-planning-and-skill-index-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-26-analysis-planning-and-skill-index-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-26-analysis-planning-and-skill-index-design.md": "design"
-      },
-      "thread_id": "analysis-planning-and-skill-index"
     },
     {
       "earliest_file_date": "2026-05-10",
@@ -2584,48 +2563,6 @@
       "thread_id": "m1-epistemic-drift-detection"
     },
     {
-      "earliest_file_date": "2026-04-26",
-      "files": [
-        "docs/plans/2026-04-26-managed-artifacts-implementation.md"
-      ],
-      "latest_file_date": "2026-04-26",
-      "normalized_slug": "managed-artifacts",
-      "raw_slugs": {
-        "docs/plans/2026-04-26-managed-artifacts-implementation.md": "managed-artifacts-implementation"
-      },
-      "related_threads": [],
-      "role_files": {
-        "implementation": [
-          "docs/plans/2026-04-26-managed-artifacts-implementation.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-26-managed-artifacts-implementation.md": "implementation"
-      },
-      "thread_id": "managed-artifacts"
-    },
-    {
-      "earliest_file_date": "2026-04-26",
-      "files": [
-        "docs/plans/2026-04-26-managed-artifacts-long-term-design.md"
-      ],
-      "latest_file_date": "2026-04-26",
-      "normalized_slug": "managed-artifacts-long-term",
-      "raw_slugs": {
-        "docs/plans/2026-04-26-managed-artifacts-long-term-design.md": "managed-artifacts-long-term-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-26-managed-artifacts-long-term-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-26-managed-artifacts-long-term-design.md": "design"
-      },
-      "thread_id": "managed-artifacts-long-term"
-    },
-    {
       "earliest_file_date": "2026-04-19",
       "files": [
         "docs/plans/2026-04-19-manuscript-paper-rename-design.md",
@@ -3242,27 +3179,6 @@
         "docs/plans/2026-05-28-pipeline-audit-and-refactor-plan.md": "plan"
       },
       "thread_id": "pipeline-audit-and-refactor"
-    },
-    {
-      "earliest_file_date": "2026-04-25",
-      "files": [
-        "docs/plans/2026-04-25-pre-registration-canonical-type.md"
-      ],
-      "latest_file_date": "2026-04-25",
-      "normalized_slug": "pre-registration-canonical-type",
-      "raw_slugs": {
-        "docs/plans/2026-04-25-pre-registration-canonical-type.md": "pre-registration-canonical-type"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-04-25-pre-registration-canonical-type.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-25-pre-registration-canonical-type.md": null
-      },
-      "thread_id": "pre-registration-canonical-type"
     },
     {
       "earliest_file_date": "2026-05-04",
@@ -4105,48 +4021,6 @@
       "thread_id": "science-entity-inventory-and-identity"
     },
     {
-      "earliest_file_date": "2026-04-26",
-      "files": [
-        "docs/plans/2026-04-26-science-plan-analysis-command.md"
-      ],
-      "latest_file_date": "2026-04-26",
-      "normalized_slug": "science-plan-analysis-command",
-      "raw_slugs": {
-        "docs/plans/2026-04-26-science-plan-analysis-command.md": "science-plan-analysis-command"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-04-26-science-plan-analysis-command.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-26-science-plan-analysis-command.md": null
-      },
-      "thread_id": "science-plan-analysis-command"
-    },
-    {
-      "earliest_file_date": "2026-04-26",
-      "files": [
-        "docs/plans/2026-04-26-skills-library-refactor.md"
-      ],
-      "latest_file_date": "2026-04-26",
-      "normalized_slug": "skills-library-refactor",
-      "raw_slugs": {
-        "docs/plans/2026-04-26-skills-library-refactor.md": "skills-library-refactor"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-04-26-skills-library-refactor.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-26-skills-library-refactor.md": null
-      },
-      "thread_id": "skills-library-refactor"
-    },
-    {
       "earliest_file_date": "2026-06-15",
       "files": [
         "docs/plans/2026-06-15-source-compiler-adapter-policy-keystone-design.md",
@@ -4729,54 +4603,6 @@
       "thread_id": "substrate-scoped-ref-resolution"
     },
     {
-      "earliest_file_date": "2026-04-25",
-      "files": [
-        "docs/plans/2026-04-25-synthesis-rollup-frontmatter.md"
-      ],
-      "latest_file_date": "2026-04-25",
-      "normalized_slug": "synthesis-rollup-frontmatter",
-      "raw_slugs": {
-        "docs/plans/2026-04-25-synthesis-rollup-frontmatter.md": "synthesis-rollup-frontmatter"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-04-25-synthesis-rollup-frontmatter.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-25-synthesis-rollup-frontmatter.md": null
-      },
-      "thread_id": "synthesis-rollup-frontmatter"
-    },
-    {
-      "earliest_file_date": "2026-04-27",
-      "files": [
-        "docs/plans/2026-04-27-task-aspects-canonical-update-implementation.md",
-        "docs/plans/2026-04-27-task-aspects-canonical-update.md"
-      ],
-      "latest_file_date": "2026-04-27",
-      "normalized_slug": "task-aspects-canonical-update",
-      "raw_slugs": {
-        "docs/plans/2026-04-27-task-aspects-canonical-update-implementation.md": "task-aspects-canonical-update-implementation",
-        "docs/plans/2026-04-27-task-aspects-canonical-update.md": "task-aspects-canonical-update"
-      },
-      "related_threads": [],
-      "role_files": {
-        "implementation": [
-          "docs/plans/2026-04-27-task-aspects-canonical-update-implementation.md"
-        ],
-        "primary": [
-          "docs/plans/2026-04-27-task-aspects-canonical-update.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-27-task-aspects-canonical-update-implementation.md": "implementation",
-        "docs/plans/2026-04-27-task-aspects-canonical-update.md": null
-      },
-      "thread_id": "task-aspects-canonical-update"
-    },
-    {
       "earliest_file_date": "2026-05-05",
       "files": [
         "docs/plans/2026-05-05-task-ids-and-cross-project-references-design.md",
@@ -4806,27 +4632,6 @@
     {
       "earliest_file_date": "2026-04-28",
       "files": [
-        "docs/plans/2026-04-28-tasks-archive-aware-notes.md"
-      ],
-      "latest_file_date": "2026-04-28",
-      "normalized_slug": "tasks-archive-aware-notes",
-      "raw_slugs": {
-        "docs/plans/2026-04-28-tasks-archive-aware-notes.md": "tasks-archive-aware-notes"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-04-28-tasks-archive-aware-notes.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-28-tasks-archive-aware-notes.md": null
-      },
-      "thread_id": "tasks-archive-aware-notes"
-    },
-    {
-      "earliest_file_date": "2026-04-28",
-      "files": [
         "docs/plans/2026-04-28-tasks-archive-aware-show-and-notes-design.md"
       ],
       "latest_file_date": "2026-04-28",
@@ -4844,27 +4649,6 @@
         "docs/plans/2026-04-28-tasks-archive-aware-show-and-notes-design.md": "design"
       },
       "thread_id": "tasks-archive-aware-show-and-notes"
-    },
-    {
-      "earliest_file_date": "2026-04-25",
-      "files": [
-        "docs/plans/2026-04-25-tasks-auto-archive.md"
-      ],
-      "latest_file_date": "2026-04-25",
-      "normalized_slug": "tasks-auto-archive",
-      "raw_slugs": {
-        "docs/plans/2026-04-25-tasks-auto-archive.md": "tasks-auto-archive"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-04-25-tasks-auto-archive.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-25-tasks-auto-archive.md": null
-      },
-      "thread_id": "tasks-auto-archive"
     },
     {
       "earliest_file_date": "2026-06-27",
@@ -5147,33 +4931,6 @@
         "docs/plans/2026-05-19-validate-cli-migration-implementation.md": "implementation"
       },
       "thread_id": "validate-cli-migration"
-    },
-    {
-      "earliest_file_date": "2026-04-27",
-      "files": [
-        "docs/plans/2026-04-27-validate-hook-points-implementation.md",
-        "docs/plans/2026-04-27-validate-hook-points.md"
-      ],
-      "latest_file_date": "2026-04-27",
-      "normalized_slug": "validate-hook-points",
-      "raw_slugs": {
-        "docs/plans/2026-04-27-validate-hook-points-implementation.md": "validate-hook-points-implementation",
-        "docs/plans/2026-04-27-validate-hook-points.md": "validate-hook-points"
-      },
-      "related_threads": [],
-      "role_files": {
-        "implementation": [
-          "docs/plans/2026-04-27-validate-hook-points-implementation.md"
-        ],
-        "primary": [
-          "docs/plans/2026-04-27-validate-hook-points.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-27-validate-hook-points-implementation.md": "implementation",
-        "docs/plans/2026-04-27-validate-hook-points.md": null
-      },
-      "thread_id": "validate-hook-points"
     },
     {
       "earliest_file_date": "2026-04-19",

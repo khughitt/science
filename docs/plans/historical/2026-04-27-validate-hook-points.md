@@ -103,6 +103,6 @@ The bump itself dogfoods the managed-artifact update workflow. Any project that 
 
 ### Cross-references
 
-- Supersedes the "future-tense hook capability" note in `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md` (sourced_sidecar contract section).
+- Supersedes the "future-tense hook capability" note in `docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md` (sourced_sidecar contract section).
 - Unblocks the four-project migration captured in (forthcoming) `docs/migration/2026-04-27-managed-artifacts-rollout.md`.
-- Implementation plan: `docs/superpowers/plans/2026-04-27-validate-hook-points-implementation.md`.
+- Implementation plan: `docs/plans/historical/2026-04-27-validate-hook-points-implementation.md`.

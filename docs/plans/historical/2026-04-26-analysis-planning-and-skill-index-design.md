@@ -121,10 +121,9 @@ Cons:
 Use **Approach 1 now**: add `science-plan-analysis` and `skills/INDEX.md`,
 implemented in two dependent steps:
 
-1. Run the structural skills-library refactor in
-   `docs/plans/2026-04-26-skills-library-refactor.md`. That refactor creates
-   the lintable `skills/INDEX.md`, normalizes frontmatter IDs, fixes renamed
-   research-package paths, and adds index-coverage linting.
+1. Use the shipped structural skills-library refactor outputs: the lintable
+   `skills/INDEX.md`, normalized skill frontmatter, renamed research-package
+   paths, and `science skills lint` checks.
 2. Implement `science-plan-analysis` and command integrations against that
    normalized skill tree.
 
@@ -570,8 +569,8 @@ The `science-plan-analysis` implementation owns:
 Do **not** consolidate the structural refactor and command implementation into
 one giant execution plan. They touch overlapping files but have different
 verification criteria. Keep this spec as the product/behavior contract, keep
-`docs/plans/2026-04-26-skills-library-refactor.md` as the structural
-prerequisite plan, then write a second implementation plan for
+the shipped `skills/INDEX.md` and `science skills lint` structural baseline as
+the prerequisite, then write a second implementation plan for
 `science-plan-analysis` after the refactor lands. If a coordination artifact is
 needed, make it a short checklist that points to the two plans rather than a
 merged plan.

@@ -3,7 +3,7 @@
 **Date:** 2026-05-19
 **Status:** Draft. Not yet approved.
 **Scope:** B (managed-artifact class) ∪ A (CLI verbs). Migrates `validate.sh` from a versioned managed-artifact + sidecar-extension shape to a `science validate` CLI subcommand + Python plugin extension. Composes with — and partially supersedes — the `validate.sh` entry in `project_artifacts/registry.yaml`.
-**Composes with (does not deliver):** `2026-04-26-managed-artifacts-long-term-design.md` (managed-artifact spec) and `2026-04-27-validate-hook-points.md` (the hook system this migration carries forward into Python).
+**Composes with (does not deliver):** `docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md` (managed-artifact spec) and `docs/plans/historical/2026-04-27-validate-hook-points.md` (the hook system this migration carries forward into Python).
 **Supersedes / redirects:** Eventually retires the `sourced_sidecar` extension protocol for `validate.sh`. The protocol itself stays — other artifacts may still use it.
 
 ---
@@ -16,7 +16,7 @@ Migrate the canonical to a `science validate` CLI subcommand whose canonical che
 
 ## Mental model
 
-The hook system that landed `2026-04-27-validate-hook-points.md` already split the validator into "canonical body" + "project-local sidecar." The migration completes that separation by changing the substrate from bash-with-embedded-python to Python-with-importable-plugins. The contract — three named hook points (`pre_validation`, `extra_checks`, `post_validation`), shared `error`/`warn`/`info` helpers folded into pass/fail counts, registration-order dispatch — stays. Only the binding changes.
+The hook system that landed `docs/plans/historical/2026-04-27-validate-hook-points.md` already split the validator into "canonical body" + "project-local sidecar." The migration completes that separation by changing the substrate from bash-with-embedded-python to Python-with-importable-plugins. The contract — three named hook points (`pre_validation`, `extra_checks`, `post_validation`), shared `error`/`warn`/`info` helpers folded into pass/fail counts, registration-order dispatch — stays. Only the binding changes.
 
 Concretely: the user's own `health/meta/validate.local.sh` (just shipped 2026-05-19) is fourteen lines of bash wrapping a ninety-line Python heredoc that uses `WARN:` / `INFO:` prefixes to smuggle structured output back across the shell boundary. That file is the migration's worked example, and its shape is the strongest evidence that the bash framing has become a cost center.
 
@@ -73,7 +73,7 @@ def check_hypothesis_frontmatter(ctx: ValidateContext) -> Iterable[Result]:
 
 `Result` carries severity, source location (path + optional line), message, and an optional `rule` / `task` attribution (the structured form of the `(rule: reviews-are-not-evidence, t024)` suffix the user's sidecar currently appends to strings). Formatting belongs to the CLI layer.
 
-### Hook taxonomy (carried over from `2026-04-27-validate-hook-points.md`)
+### Hook taxonomy (carried over from `docs/plans/historical/2026-04-27-validate-hook-points.md`)
 
 The three named hook points stay. They become Python decorators:
 
@@ -239,8 +239,8 @@ The total population of `validate.local.sh` files is small (single digits, possi
 
 ## Cross-references
 
-- Builds on / preserves the hook contract from `docs/plans/2026-04-27-validate-hook-points.md`.
-- Composes with `docs/plans/2026-04-26-managed-artifacts-long-term-design.md` — the managed-artifact framework continues to govern the shim `validate.sh`, and the `extension_protocol` field grows a new value for the Python sidecar.
+- Builds on / preserves the hook contract from `docs/plans/historical/2026-04-27-validate-hook-points.md`.
+- Composes with `docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md` — the managed-artifact framework continues to govern the shim `validate.sh`, and the `extension_protocol` field grows a new value for the Python sidecar.
 - Worked example for the porting guide: `~/d/health/meta/validate.local.sh` (current shape) → `validate_local.py` (target shape). The current file is ~145 lines including a 90-line embedded Python heredoc; the port estimate is 60-80 lines of clean Python.
 - Sibling shape: `~/d/cancer/mechanisms/evolution/validate.local.sh` (Check B only; same migration).
 - Successor implementation plan: TBD — write after design approval.

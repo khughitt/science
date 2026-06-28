@@ -444,7 +444,7 @@ Non-Python files inside the package (the frozen bash script, the VERSION sentine
 ## Cross-references
 
 - Design: `docs/plans/2026-05-19-validate-cli-migration-design.md`.
-- Predecessor: `docs/plans/2026-04-27-validate-hook-points.md` (hook contract this implementation preserves) and `docs/plans/2026-04-27-validate-hook-points-implementation.md` (hook infrastructure the frozen bash inherits).
-- Composes with: `docs/plans/2026-04-26-managed-artifacts-long-term-design.md` (the managed-artifact framework governs the shim and registry entry).
+- Predecessor: `docs/plans/historical/2026-04-27-validate-hook-points.md` (hook contract this implementation preserves) and `docs/plans/historical/2026-04-27-validate-hook-points-implementation.md` (hook infrastructure the frozen bash inherits).
+- Composes with: `docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md` (the managed-artifact framework governs the shim and registry entry).
 - Downstream worked example: `~/d/health/meta/validate.local.sh` (real-world legacy sidecar, primary porting example).
 - Sibling worked example: `~/d/cancer/mechanisms/evolution/validate.local.sh` (mirror; same migration shape).

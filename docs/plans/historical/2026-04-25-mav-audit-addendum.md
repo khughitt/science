@@ -1,6 +1,6 @@
 # MAV Audit Addendum — `validate.sh` `mav-input` Set
 
-> **Subsumed:** Plan #7's six fixes shipped as the first version bump in `docs/plans/2026-04-26-managed-artifacts-implementation.md` Task 29. This plan no longer drives separate work.
+> **Subsumed:** Plan #7's six fixes shipped as the first version bump in `docs/plans/historical/2026-04-26-managed-artifacts-implementation.md` Task 29. This plan no longer drives separate work.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 

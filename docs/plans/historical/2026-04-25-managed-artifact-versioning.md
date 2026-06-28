@@ -1,6 +1,6 @@
 # Managed Artifact Versioning Implementation Plan
 
-> **Superseded:** Replaced by `docs/plans/2026-04-26-managed-artifacts-long-term-design.md` and implemented per `docs/plans/2026-04-26-managed-artifacts-implementation.md`. Do not implement this plan as written.
+> **Superseded:** Replaced by `docs/plans/historical/2026-04-26-managed-artifacts-long-term-design.md` and implemented per `docs/plans/historical/2026-04-26-managed-artifacts-implementation.md`. Do not implement this plan as written.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

@@ -44,7 +44,7 @@ H01 appears in every pre-reg's `related:`. This is signal-by-itself: in a projec
 
 ### Frontmatter anomaly (pre-existing, not a recast issue)
 
-Before migration, none of the 5 pre-regs matched the canonical pre-reg shape from `docs/plans/2026-04-25-pre-registration-canonical-type.md`:
+Before migration, none of the 5 pre-regs matched the canonical pre-reg shape now documented in `templates/pre-registration.md` and `commands/pre-register.md`:
 - Missing `id:` (canonical: `pre-registration:<slug>`)
 - Missing `type:` (canonical: `"pre-registration"`)
 - Missing `committed:` (canonical: date the criteria are locked)
