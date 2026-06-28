@@ -108,9 +108,9 @@ It supports two override kinds:
 - `splits`: map an over-grouped `thread_id` to the child threads it should
   become. Each child names its `thread_id` and the exact files it owns. Every
   file currently in the original thread must be assigned to exactly one child;
-  unassigned files or child ids that collide with existing threads are a
-  fail-loud error. A split whose original thread has already been deleted is a
-  no-op.
+  unassigned files, unknown child file paths, or child ids that collide with
+  existing threads are a fail-loud error. A split whose original thread has
+  already been deleted is a no-op.
 - `related_threads`: map a `thread_id` to nearby thread ids that should be
   reconciled together. The inventory pass attaches these to the named thread
   records; the grouping pass never infers them from slug similarity.
@@ -241,6 +241,20 @@ migration checkpoint first: migrate or summarize the durable knowledge, review
 that durable-doc change, and only then delete the stale plan files in a later
 cleanup action. For `incomplete` and `unclear`, keep the source files and record
 the follow-up in the manifest.
+
+The validator should enforce these cleanup invariants from the latest review for
+each thread:
+
+- `deleted` actions require latest status `delete_obvious` or
+  `superseded_delete`.
+- `moved_to_historical` actions require latest status `keep_historical`.
+- `migration_checkpoint_created` actions require latest status
+  `implemented_needs_durable_docs`.
+- `deferred` actions are valid for non-terminal statuses and for explicit
+  reconciliation deferrals, but terminal actions resolve earlier deferrals in
+  pending reports.
+- Action `files` must be a subset of the files named by the latest review for
+  that thread.
 
 Deletion commits should be small enough to review by topic or batch. They should
 not include `Co-Authored-By` trailers.

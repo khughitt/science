@@ -12,7 +12,7 @@
 
 ## File Structure
 
-- Create `scripts/audit_plans_cleanup.py`: standalone audit helper with `self-test`, `inventory`, `batch`, and `validate` subcommands.
+- Create `scripts/audit_plans_cleanup.py`: standalone audit helper with `self-test`, `inventory`, `batch`, `validate`, and `pending` subcommands.
 - Create `docs/audits/plans-cleanup/thread-index.json`: generated thread inventory for root `docs/plans/`.
 - Create `docs/audits/plans-cleanup/overrides.json`: hand-authored thread splits and related-thread links reapplied by `inventory` on every regeneration.
 - Create `docs/audits/plans-cleanup/reviews.jsonl`: append-only review log keyed by `thread_id`.
@@ -283,7 +283,12 @@ def apply_splits(
             child_id = child["thread_id"]
             if child_id in result or child_id in new_groups:
                 raise ValueError(f"split child thread_id collides with existing thread: {child_id}")
-            members = [present[path] for path in child["files"] if path in present]
+            unknown_files = sorted(set(child["files"]) - set(present))
+            if unknown_files:
+                raise ValueError(
+                    f"split child {child_id} references files not in {original_id}: {unknown_files}"
+                )
+            members = [present[path] for path in child["files"]]
             if not members:
                 continue
             assigned.update(member.path for member in members)
@@ -525,6 +530,17 @@ COHERENT_ACTIONS = {
     "incomplete": {"keep for triage", "keep active"},
     "unclear": {"keep for triage", "keep active"},
 }
+ACTIONS_ALLOWED_BY_STATUS = {
+    "delete_obvious": {"deleted", "deferred"},
+    "superseded_delete": {"deleted", "deferred"},
+    "implemented_needs_durable_docs": {
+        "migration_checkpoint_created",
+        "deferred",
+    },
+    "keep_historical": {"moved_to_historical", "deferred"},
+    "incomplete": {"deferred"},
+    "unclear": {"deferred"},
+}
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -566,6 +582,7 @@ def validate_logs(
     known_threads = {thread["thread_id"] for thread in payload["threads"]}
     reviews = read_jsonl(reviews_path)
     actions = read_jsonl(actions_path)
+    latest_reviews = latest_records_by_thread(reviews)
     terminal_actioned_threads = {
         str(record["thread_id"])
         for record in actions
@@ -601,6 +618,24 @@ def validate_logs(
             raise ValueError(f"action {record['thread_id']} has invalid action {record['action']}")
         if record["thread_id"] not in allowed_threads:
             raise ValueError(f"action references unrecognized thread_id {record['thread_id']}")
+        latest_review = latest_reviews.get(record["thread_id"])
+        if latest_review is None:
+            raise ValueError(f"action {record['thread_id']} lacks a review record")
+        allowed_actions = ACTIONS_ALLOWED_BY_STATUS[latest_review["status"]]
+        if record["action"] not in allowed_actions:
+            raise ValueError(
+                f"action {record['thread_id']} action {record['action']} is not allowed "
+                f"for latest review status {latest_review['status']}"
+            )
+        action_files = record.get("files")
+        if not isinstance(action_files, list):
+            raise ValueError(f"action {record['thread_id']} files must be a list")
+        review_files = set(latest_review["files"])
+        extra_files = sorted(str(path) for path in action_files if path not in review_files)
+        if extra_files:
+            raise ValueError(
+                f"action {record['thread_id']} references files outside latest review: {extra_files}"
+            )
     print("audit logs valid")
 ```
 
@@ -705,7 +740,7 @@ def write_pending_report(
         has_terminal_action = any(
             action.get("action") in TERMINAL_ACTIONS for action in thread_actions
         )
-        if has_terminal_action and not pending_actions:
+        if has_terminal_action:
             continue
         if review["status"] in PENDING_REVIEW_STATUSES or pending_actions:
             pending.append((thread_id, review, current_threads.get(thread_id), thread_actions))
@@ -762,7 +797,10 @@ def run_self_test() -> None:
     test_batch_selection_uses_latest_before()
     test_validate_allows_deferred_then_terminal_removed_thread()
     test_validate_rejects_incoherent_action()
-    print("self-test passed (5 groups)")
+    test_validate_rejects_action_disallowed_by_latest_status()
+    test_validate_rejects_action_files_outside_review()
+    test_pending_report_terminal_action_resolves_prior_pending()
+    print("self-test passed (8 groups)")
 
 
 def test_normalize_slug() -> None:
@@ -827,6 +865,25 @@ def test_apply_overrides_splits_thread() -> None:
         pass
     else:
         raise AssertionError("expected unassigned-file split to fail")
+    try:
+        build_threads(
+            files,
+            {
+                "splits": {
+                    "shared-slug": [
+                        {
+                            "thread_id": "unknown-file",
+                            "files": ["docs/plans/2026-03-01-missing.md"],
+                        },
+                        {"thread_id": "known-file", "files": [files[1].path]},
+                    ]
+                }
+            },
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected unknown-file split to fail")
 
 
 def test_batch_selection_uses_latest_before() -> None:
@@ -979,6 +1036,199 @@ def test_validate_rejects_incoherent_action() -> None:
         except ValueError:
             return
         raise AssertionError("expected incoherent recommended_action to fail")
+
+
+def test_validate_rejects_action_disallowed_by_latest_status() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        index_path = root / "thread-index.json"
+        reviews_path = root / "reviews.jsonl"
+        actions_path = root / "actions.jsonl"
+        file_path = "docs/plans/2026-03-01-incomplete-thread.md"
+        index_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "threads": [
+                        {
+                            "thread_id": "incomplete-thread",
+                            "earliest_file_date": "2026-03-01",
+                            "latest_file_date": "2026-03-01",
+                            "files": [file_path],
+                        }
+                    ],
+                }
+            )
+            + "\n"
+        )
+        reviews_path.write_text(
+            json.dumps(
+                {
+                    "thread_id": "incomplete-thread",
+                    "files": [file_path],
+                    "topic": "Incomplete",
+                    "status": "incomplete",
+                    "superseded_by": [],
+                    "supersedes": [],
+                    "related_threads": [],
+                    "evidence": ["Still missing implementation."],
+                    "remaining_gaps": ["Complete the implementation."],
+                    "durable_doc_candidate": None,
+                    "recommended_action": "keep for triage",
+                    "review_notes": "Action coherence test.",
+                }
+            )
+            + "\n"
+        )
+        actions_path.write_text(
+            json.dumps(
+                {
+                    "thread_id": "incomplete-thread",
+                    "action": "deleted",
+                    "files": [file_path],
+                    "reason": "should fail",
+                    "commit": None,
+                }
+            )
+            + "\n"
+        )
+        try:
+            validate_logs(
+                index_path=index_path,
+                reviews_path=reviews_path,
+                actions_path=actions_path,
+            )
+        except ValueError:
+            return
+        raise AssertionError("expected deleted action for incomplete review to fail")
+
+
+def test_validate_rejects_action_files_outside_review() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        index_path = root / "thread-index.json"
+        reviews_path = root / "reviews.jsonl"
+        actions_path = root / "actions.jsonl"
+        reviewed_file = "docs/plans/2026-03-01-delete-thread.md"
+        extra_file = "docs/plans/2026-03-01-other-thread.md"
+        index_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "threads": [
+                        {
+                            "thread_id": "delete-thread",
+                            "earliest_file_date": "2026-03-01",
+                            "latest_file_date": "2026-03-01",
+                            "files": [reviewed_file],
+                        }
+                    ],
+                }
+            )
+            + "\n"
+        )
+        reviews_path.write_text(
+            json.dumps(
+                {
+                    "thread_id": "delete-thread",
+                    "files": [reviewed_file],
+                    "topic": "Delete",
+                    "status": "delete_obvious",
+                    "superseded_by": [],
+                    "supersedes": [],
+                    "related_threads": [],
+                    "evidence": ["Verified complete."],
+                    "remaining_gaps": [],
+                    "durable_doc_candidate": None,
+                    "recommended_action": "delete",
+                    "review_notes": "File subset test.",
+                }
+            )
+            + "\n"
+        )
+        actions_path.write_text(
+            json.dumps(
+                {
+                    "thread_id": "delete-thread",
+                    "action": "deleted",
+                    "files": [reviewed_file, extra_file],
+                    "reason": "should fail",
+                    "commit": None,
+                }
+            )
+            + "\n"
+        )
+        try:
+            validate_logs(
+                index_path=index_path,
+                reviews_path=reviews_path,
+                actions_path=actions_path,
+            )
+        except ValueError:
+            return
+        raise AssertionError("expected action with files outside review to fail")
+
+
+def test_pending_report_terminal_action_resolves_prior_pending() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        index_path = root / "thread-index.json"
+        reviews_path = root / "reviews.jsonl"
+        actions_path = root / "actions.jsonl"
+        output_path = root / "pending.md"
+        file_path = "docs/plans/2026-03-01-resolved-thread.md"
+        index_path.write_text(json.dumps({"schema_version": 1, "threads": []}) + "\n")
+        reviews_path.write_text(
+            json.dumps(
+                {
+                    "thread_id": "resolved-thread",
+                    "files": [file_path],
+                    "topic": "Resolved",
+                    "status": "delete_obvious",
+                    "superseded_by": [],
+                    "supersedes": [],
+                    "related_threads": [],
+                    "evidence": ["Verified complete."],
+                    "remaining_gaps": [],
+                    "durable_doc_candidate": None,
+                    "recommended_action": "delete",
+                    "review_notes": "Pending resolution test.",
+                }
+            )
+            + "\n"
+        )
+        actions_path.write_text(
+            json.dumps(
+                {
+                    "thread_id": "resolved-thread",
+                    "action": "deferred",
+                    "files": [file_path],
+                    "reason": "first pass deferred",
+                    "commit": None,
+                }
+            )
+            + "\n"
+            + json.dumps(
+                {
+                    "thread_id": "resolved-thread",
+                    "action": "deleted",
+                    "files": [file_path],
+                    "reason": "resolved",
+                    "commit": None,
+                }
+            )
+            + "\n"
+        )
+        write_pending_report(
+            repo_root=root,
+            index_path=index_path,
+            reviews_path=reviews_path,
+            actions_path=actions_path,
+            output_path=output_path,
+        )
+        text = output_path.read_text()
+        if "resolved-thread" in text:
+            raise AssertionError("terminal action should remove thread from pending report")
 ```
 
 - [ ] **Step 6: Initialize append-only logs**
@@ -1000,7 +1250,7 @@ rtk uv run scripts/audit_plans_cleanup.py self-test
 Expected output includes:
 
 ```text
-self-test passed (5 groups)
+self-test passed (8 groups)
 ```
 
 - [ ] **Step 8: Generate the first March/April batch**
@@ -1324,7 +1574,7 @@ rtk git commit -m "docs: prepare next plans cleanup audit batch"
 - [ ] `docs/audits/plans-cleanup/thread-index.json` exists and excludes `docs/plans/historical/`.
 - [ ] `docs/audits/plans-cleanup/reviews.jsonl` has one complete JSON object per reviewed thread.
 - [ ] `docs/audits/plans-cleanup/actions.jsonl` records each delete, historical move, migration checkpoint, or deferral.
-- [ ] `docs/audits/plans-cleanup/pending.md` lists deferred, incomplete, unclear, `implemented_needs_durable_docs`, and migration-checkpoint threads.
+- [ ] `docs/audits/plans-cleanup/pending.md` lists deferred, incomplete, unclear, `implemented_needs_durable_docs`, and migration-checkpoint threads that do not have a later terminal action.
 - [ ] No plan files are deleted unless their latest review status is `delete_obvious` or `superseded_delete`.
 - [ ] No plan files are moved to `docs/plans/historical/` unless their latest review status is `keep_historical`.
 - [ ] `docs/audits/plans-cleanup/overrides.json` splits are reapplied idempotently by `inventory`, and split children appear in `thread-index.json`.
