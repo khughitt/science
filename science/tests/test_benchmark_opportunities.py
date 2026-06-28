@@ -1988,6 +1988,15 @@ benchmark:
         {"benchmark_id": "dataset:generic", "count": 1},
         {"benchmark_id": "dataset:sciplex", "count": 1},
     ]
+    assert summary["top_fallback_reasons"] == [
+        {"reason": "fallback:task-ready", "count": 2},
+        {"reason": "fallback:baseline-quality", "count": 1},
+    ]
+    assert summary["top_fallback_benchmark_shares"] == [
+        {"benchmark_id": "dataset:generic", "count": 1, "share": 0.5},
+        {"benchmark_id": "dataset:sciplex", "count": 1, "share": 0.5},
+    ]
+    assert summary["fallback_concentration_warning"] is True
 
 
 def test_gap_calibration_batch_summarizes_multiple_projects(tmp_path: Path) -> None:

@@ -394,6 +394,17 @@ class BenchmarkCountRow(TypedDict):
     count: int
 
 
+class ReasonCountRow(TypedDict):
+    reason: str
+    count: int
+
+
+class BenchmarkShareRow(TypedDict):
+    benchmark_id: str
+    count: int
+    share: float
+
+
 class GapCalibrationSummary(TypedDict):
     gap_rows: int
     rows_with_suggested_facets: int
@@ -406,6 +417,9 @@ class GapCalibrationSummary(TypedDict):
     top_suggested_facets: list[FacetCountRow]
     top_matched_hint_facets: list[FacetCountRow]
     top_fallback_benchmarks: list[BenchmarkCountRow]
+    top_fallback_reasons: list[ReasonCountRow]
+    top_fallback_benchmark_shares: list[BenchmarkShareRow]
+    fallback_concentration_warning: bool
 
 
 class GapCalibrationProjectRow(TypedDict):
@@ -1180,6 +1194,26 @@ def _top_benchmark_counts(counter: Counter[str], *, top: int) -> list[BenchmarkC
     ]
 
 
+def _top_reason_counts(counter: Counter[str], *, top: int) -> list[ReasonCountRow]:
+    return [
+        {"reason": reason, "count": count}
+        for reason, count in sorted(counter.items(), key=lambda item: (-item[1], item[0]))[:top]
+    ]
+
+
+def _top_benchmark_shares(counter: Counter[str], *, total: int, top: int) -> list[BenchmarkShareRow]:
+    if total <= 0:
+        return []
+    return [
+        {"benchmark_id": benchmark_id, "count": count, "share": round(count / total, 3)}
+        for benchmark_id, count in sorted(counter.items(), key=lambda item: (-item[1], item[0]))[:top]
+    ]
+
+
+def _has_fallback_concentration(counter: Counter[str], *, total: int) -> bool:
+    return bool(total > 0 and counter and (max(counter.values()) / total) >= 0.5)
+
+
 def gap_calibration_summary(report: BenchmarkGapReport, *, top: int = 10) -> GapCalibrationSummary:
     rows = report["benchmark_gaps"]
     candidates = [candidate for row in rows for candidate in row["candidate_benchmarks"]]
@@ -1193,6 +1227,7 @@ def gap_calibration_summary(report: BenchmarkGapReport, *, top: int = 10) -> Gap
     suggested_facets = Counter(facet for row in rows for facet in row["suggested_search_facets"])
     matched_hint_facets = Counter(facet for candidate in candidates for facet in candidate["matched_hint_facets"])
     fallback_benchmarks = Counter(candidate["benchmark_id"] for candidate in fallback_candidates)
+    fallback_reasons = Counter(reason for candidate in fallback_candidates for reason in candidate["reason_notes"])
     return {
         "gap_rows": len(rows),
         "rows_with_suggested_facets": sum(1 for row in rows if row["suggested_search_facets"]),
@@ -1205,6 +1240,16 @@ def gap_calibration_summary(report: BenchmarkGapReport, *, top: int = 10) -> Gap
         "top_suggested_facets": _top_facet_counts(suggested_facets, top=top),
         "top_matched_hint_facets": _top_facet_counts(matched_hint_facets, top=top),
         "top_fallback_benchmarks": _top_benchmark_counts(fallback_benchmarks, top=top),
+        "top_fallback_reasons": _top_reason_counts(fallback_reasons, top=top),
+        "top_fallback_benchmark_shares": _top_benchmark_shares(
+            fallback_benchmarks,
+            total=len(fallback_candidates),
+            top=top,
+        ),
+        "fallback_concentration_warning": _has_fallback_concentration(
+            fallback_benchmarks,
+            total=len(fallback_candidates),
+        ),
     }
 
 
