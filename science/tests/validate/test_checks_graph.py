@@ -42,22 +42,6 @@ def _messages(results: list[Result], severity: Severity | None = None) -> list[s
     return [result.message for result in results if severity is None or result.severity is severity]
 
 
-def _patch_graph_dataset(
-    monkeypatch: pytest.MonkeyPatch,
-    graph: Any,
-    *,
-    validate_rows: tuple[list[dict[str, str]], bool] | None = None,
-    diff_rows: list[dict[str, str]] | None = None,
-    inquiries: list[dict[str, str]] | None = None,
-) -> object:
-    dataset = object()
-    monkeypatch.setattr(graph, "_load_dataset", lambda _path: dataset)
-    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: validate_rows or ([], False))
-    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: diff_rows or [])
-    monkeypatch.setattr(graph, "list_inquiries_dataset", lambda _dataset: inquiries or [])
-    return dataset
-
-
 def test_peer_valid_empty_audit_no_graph_stops_before_graph_calls(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -69,7 +53,7 @@ def test_peer_valid_empty_audit_no_graph_stops_before_graph_calls(
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
     monkeypatch.setattr(graph, "validate_graph", fail_call)
-    monkeypatch.setattr(graph, "_load_dataset", fail_call)
+    monkeypatch.setattr(ValidateContext, "graph_dataset", fail_call)
     monkeypatch.setattr(graph, "validate_graph_dataset", fail_call)
     monkeypatch.setattr(graph, "diff_graph_inputs_dataset", fail_call)
     monkeypatch.setattr(graph, "list_inquiries_dataset", fail_call)
@@ -214,7 +198,7 @@ def test_graph_check_reuses_one_loaded_dataset_for_graph_followups(
 
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
-    monkeypatch.setattr(graph, "_load_dataset", load_dataset, raising=False)
+    monkeypatch.setattr(ValidateContext, "graph_dataset", lambda _ctx, path: load_dataset(path))
     monkeypatch.setattr(
         graph,
         "validate_graph_dataset",
