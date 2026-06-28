@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `24`
+- Pending thread count: `23`
 
 ## b-migration-paper-datasets
 
@@ -194,20 +194,6 @@
 - remaining_gaps:
   - No compact durable architecture note was found that explains the registry/config/state file contract and how it relates to newer peers/federation and commons/shared-store concepts.
   - The March design's cross-project profile vocabulary evolved from cross-project to shared/peers/commons surfaces, so deleting now would leave design rationale scattered across command docs and code.
-
-## open-ended-kinds-and-catalog-registration
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-04-21-open-ended-kinds-and-catalog-registration-design.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until open-ended kind semantics and catalog registration are durable docs
-    - `docs/plans/2026-04-21-open-ended-kinds-and-catalog-registration-design.md`
-- remaining_gaps:
-  - The open-ended kind contract and catalog registration semantics are not yet summarized in durable user/convention docs.
-  - Later topic-deprecation and unified-reference docs still depend on this design for rationale.
 
 ## paper-model
 

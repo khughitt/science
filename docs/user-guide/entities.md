@@ -38,6 +38,13 @@ Important fields:
 | `source_refs` | Sources or annotations that support the existence or content of this record. |
 | Body prose | Explanation, caveats, rationale, and review context. |
 
+`kind` is the authoritative load-time discriminator. Markdown frontmatter may
+use the legacy `type:` field; storage adapters normalize it to `kind` before
+registry dispatch. Core Science kinds also carry a `type` projection internally,
+but catalog, profile, and project-extension kinds load as open-ended strings
+rather than being forced through a closed enum or an `unknown` fallback. Kind
+matching is exact after adapter normalization.
+
 ## Authored And Derived Fields
 
 Authored fields are recorded directly in source files. Derived fields are
@@ -66,11 +73,12 @@ contract, usually as `ProjectEntity` or `DomainEntity` unless Science owns a
 typed subclass.
 
 The entity registry resolves `kind` to the schema that validates a record.
-Science registers core kinds itself. Active profiles, local manifests, and
-declared ontology catalogs register additional loadable kinds. Duplicate
-registrations and attempts to shadow core kinds are hard errors; unknown kinds
-are skipped with an explicit diagnostic instead of being silently treated as a
-different entity type.
+Science registers core kinds itself. Active profiles, declared ontology
+catalogs, and local manifests register additional loadable kinds in separate
+tiers: core, profile, catalog, and project extension. Duplicate registrations
+and attempts to shadow core/profile/catalog kinds are hard errors; unknown
+kinds are skipped with an explicit diagnostic instead of being silently treated
+as a different entity type.
 
 Storage adapters own discovery and parsing only. They discover project-relative
 source locations, load a raw record with `kind` and identity fields, and pass

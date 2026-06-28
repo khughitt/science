@@ -1,10 +1,10 @@
 {
-  "file_count": 198,
-  "generated_at": "2026-06-28T18:34:31+00:00",
+  "file_count": 197,
+  "generated_at": "2026-06-28T18:37:28+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 126,
+  "thread_count": 125,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -1574,27 +1574,6 @@
         "docs/plans/2026-06-19-natural-systems-prose-epistemics-application-plan.md": "plan"
       },
       "thread_id": "natural-systems-prose-epistemics-application"
-    },
-    {
-      "earliest_file_date": "2026-04-21",
-      "files": [
-        "docs/plans/2026-04-21-open-ended-kinds-and-catalog-registration-design.md"
-      ],
-      "latest_file_date": "2026-04-21",
-      "normalized_slug": "open-ended-kinds-and-catalog-registration",
-      "raw_slugs": {
-        "docs/plans/2026-04-21-open-ended-kinds-and-catalog-registration-design.md": "open-ended-kinds-and-catalog-registration-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-21-open-ended-kinds-and-catalog-registration-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-21-open-ended-kinds-and-catalog-registration-design.md": "design"
-      },
-      "thread_id": "open-ended-kinds-and-catalog-registration"
     },
     {
       "earliest_file_date": "2026-06-01",

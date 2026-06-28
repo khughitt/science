@@ -5,7 +5,7 @@
 **Builds on:**
 - `docs/plans/2026-04-05-project-model-design.md`
 - `docs/user-guide/entities.md#entity-loading-and-storage-adapters`
-- `docs/plans/2026-04-21-open-ended-kinds-and-catalog-registration-design.md`
+- `docs/user-guide/entities.md#domain-ontology-catalogs`
 - `docs/plans/2026-04-21-unified-entity-references-design.md`
 
 ## Motivation
