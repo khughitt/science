@@ -167,9 +167,9 @@ Top-level fields:
 
 | Field | Type | Meaning |
 |---|---|---|
-| `summary.errors` | integer | Number of `error` results. |
-| `summary.warnings` | integer | Number of `warn` results. |
-| `summary.infos` | integer | Number of `info` results. |
+| `summary.errors` | integer | Number of JSON-emitted `error` results. |
+| `summary.warnings` | integer | Number of JSON-emitted `warn` results. |
+| `summary.infos` | integer | Number of JSON-emitted `info` results; normally `0` because informational diagnostics are omitted from JSON rows. |
 | `results` | array | Ordered actionable validation results (`error` and `warn`; `info` rows are omitted from JSON rows). |
 
 Each result is the serialized `Result.to_dict()` shape:

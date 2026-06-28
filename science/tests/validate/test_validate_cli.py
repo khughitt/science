@@ -71,7 +71,7 @@ def test_validate_json_emits_actionable_results_and_warns_do_not_fail(tmp_path: 
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["summary"] == {"errors": 0, "warnings": 1, "infos": 1}
+    assert payload["summary"] == {"errors": 0, "warnings": 1, "infos": 0}
     assert payload["results"] == [
         {
             "severity": "warn",
@@ -82,6 +82,20 @@ def test_validate_json_emits_actionable_results_and_warns_do_not_fail(tmp_path: 
             "task": "task:t001",
         },
     ]
+
+
+def test_validate_json_summary_counts_emitted_results_only(tmp_path: Path) -> None:
+    @Check(section="demo", order=10)
+    def demo_check(ctx: ValidateContext) -> list[Result]:
+        return [Result(Severity.INFO, None, None, "noted", "demo.info", None)]
+
+    result = CliRunner().invoke(main, ["validate", "--format", "json", "--project-root", str(_project(tmp_path))])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == {
+        "summary": {"errors": 0, "warnings": 0, "infos": 0},
+        "results": [],
+    }
 
 
 def test_validate_filters_accepted_validation_warnings(tmp_path: Path) -> None:
@@ -245,7 +259,7 @@ def test_validate_commit_profile_skips_graph_backed_checks(tmp_path: Path) -> No
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["summary"] == {"errors": 0, "warnings": 0, "infos": 1}
+    assert payload["summary"] == {"errors": 0, "warnings": 0, "infos": 0}
     assert payload["results"] == []
 
 

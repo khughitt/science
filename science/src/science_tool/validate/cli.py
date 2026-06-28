@@ -127,13 +127,14 @@ def _record_validation_summary(
 
 
 def _json_payload(result: RunResult) -> dict[str, Any]:
+    emitted_results = [item for item in result.results if item.severity is not Severity.INFO]
     return {
         "summary": {
-            "errors": result.errors,
-            "warnings": result.warnings,
-            "infos": result.infos,
+            "errors": sum(1 for item in emitted_results if item.severity is Severity.ERROR),
+            "warnings": sum(1 for item in emitted_results if item.severity is Severity.WARN),
+            "infos": sum(1 for item in emitted_results if item.severity is Severity.INFO),
         },
-        "results": [item.to_dict() for item in result.results if item.severity is not Severity.INFO],
+        "results": [item.to_dict() for item in emitted_results],
     }
 
 
