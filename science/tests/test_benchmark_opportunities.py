@@ -869,6 +869,8 @@ benchmark:
   modalities: [spatial]
   signal_types: [cross-context-generalization]
   benchmark_kinds: [static-association]
+  related_beliefs:
+    - hypothesis:0002-spatial-proteomics
   tasks:
     - id: transfer
       prediction_target: region label
@@ -911,6 +913,54 @@ benchmark:
     assert row["gap_level"] == "missing-facet"
     assert row["missing_modalities"] == ["proteomics"]
     assert row["missing_signal_types"] == []
+    assert row["current_matches"][0]["relative_score"] >= 15
     assert row["suggested_search_facets"] == ["proteomics"]
     assert row["candidate_benchmarks"][0]["benchmark_id"] == "dataset:unrelated"
     assert row["candidate_benchmarks"][0]["matched_missing_facets"] == []
+
+
+def test_gaps_report_prioritizes_weak_matches_over_missing_facets(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0002-spatial-proteomics",
+        """
+id: hypothesis:0002-spatial-proteomics
+type: hypothesis
+title: Spatial proteomics transfer
+""",
+        body="Spatial proteomics transfer should generalize.",
+    )
+    _write_dataset(
+        tmp_path,
+        "spatial",
+        """
+id: dataset:spatial
+type: dataset
+title: Spatial Atlas
+dataset_class: reference
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: transfer
+      prediction_target: region label
+      held_out_unit: tissue
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: curated region
+""",
+    )
+
+    payload = gaps_report(tmp_path)
+
+    row = payload["benchmark_gaps"][0]
+    assert row["gap_level"] == "weak"
+    assert row["missing_modalities"] == ["proteomics"]
+    assert row["current_matches"][0]["relative_score"] < 15

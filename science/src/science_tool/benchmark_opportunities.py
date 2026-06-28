@@ -961,12 +961,12 @@ def gaps_report(
         if current_entity_id in unmapped_ids:
             gap_level = "uncovered"
             reason = "No matched benchmark opportunities for this entity."
-        elif gap is not None:
-            gap_level = "missing-facet"
-            reason = gap["reason"]
         elif _is_weak_gap(current_matches):
             gap_level = "weak"
             reason = "Matched benchmarks are taskless or below the weak relative-score threshold."
+        elif gap is not None:
+            gap_level = "missing-facet"
+            reason = gap["reason"]
         else:
             continue
 
