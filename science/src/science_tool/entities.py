@@ -1110,6 +1110,29 @@ def _format_blocking_row(row: Mapping[str, object]) -> str:
     return f"{row.get('check')} on {row.get('source')}{_format_ref_location(row)}: {row.get('details')}"
 
 
+def load_markdown_entities(project_root: Path, kind: str | None = None) -> list[dict[str, Any]]:
+    """Public policy-root loader for markdown entities."""
+    return _load_markdown_entities(project_root, kind=kind)
+
+
+def parse_markdown_entity_file(path: Path) -> tuple[dict[str, Any], str]:
+    """Public markdown frontmatter/body parser for entity files."""
+    return _parse_markdown_file(path)
+
+
+def numeric_variants(token: str) -> set[str]:
+    """Public id variant helper for local numeric entity references."""
+    return _numeric_variants(token)
+
+
+def shortform_for_kind(kind: str) -> str | None:
+    """Return the registered shortform prefix for an entity kind, if any."""
+    for shortform, entity_kind in _SHORTFORM_ENTITY_KINDS.items():
+        if entity_kind == kind:
+            return shortform
+    return None
+
+
 def _load_markdown_entities(project_root: Path, kind: str | None = None) -> list[dict[str, Any]]:
     entities: list[dict[str, Any]] = []
     for policy_kind, policy in _BUILTIN_MARKDOWN_POLICIES.items():

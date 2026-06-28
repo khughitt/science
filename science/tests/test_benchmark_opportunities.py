@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import Any, cast
 
 from click.testing import CliRunner
 
@@ -115,7 +116,8 @@ benchmark:
     source = sources[0]
     assert source["fallback_id"] == "dataset:sciplex3"
     assert source["scope"] == "local"
-    benchmark = source["frontmatter"]["benchmark"]
+    frontmatter = cast("dict[str, Any]", source["frontmatter"])
+    benchmark = cast("dict[str, Any]", frontmatter["benchmark"])
     assert benchmark["notes"] == ["Useful perturbation benchmark."]
     assert benchmark["limitations"] == ["No local datapackage staged."]
     assert benchmark["tasks"][0] == {
@@ -225,3 +227,257 @@ benchmark:
     assert score.components["limitations"] == 10
     assert "signal:perturbation" in score.notes
     assert "modality:perturbation" in score.notes
+
+
+def test_opportunity_report_matches_shorthand_related_belief_and_controlled_facets(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import opportunity_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0005-dynamic-homeostasis",
+        """
+id: hypothesis:0005-dynamic-homeostasis
+type: hypothesis
+title: Dynamic perturbation recovery
+status: active
+""",
+        body="Proteomics should improve recovery predictions. Prose mentions noisy measured expression.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+dataset_class: pointer
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq, perturbation]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  related_beliefs:
+    - h5 predicts response shifts.
+  limitations:
+    - No local datapackage staged.
+  tasks:
+    - id: compound-response
+      prediction_target: post-treatment expression
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: measured expression
+""",
+    )
+
+    payload = opportunity_report(tmp_path, include_commons=False)
+
+    rows = payload["matched_opportunities"]
+    assert len(rows) == 1
+    assert rows[0]["entity_id"] == "hypothesis:0005-dynamic-homeostasis"
+    assert rows[0]["benchmark_id"] == "dataset:sciplex3"
+    assert rows[0]["task_id"] == "dataset:sciplex3#compound-response"
+    assert "related-belief-id:h5" in rows[0]["match_reasons"]
+    assert "facet-token:perturbation" in rows[0]["match_reasons"]
+    assert not any("measured" in reason for reason in rows[0]["match_reasons"])
+
+
+def test_stoplist_blocks_generic_token_only_match(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import opportunity_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-model",
+        """
+id: hypothesis:0001-model
+type: hypothesis
+title: Model response analysis
+status: active
+""",
+        body="Data and model evidence.",
+    )
+    _write_dataset(
+        tmp_path,
+        "generic",
+        """
+id: dataset:generic
+type: dataset
+title: Generic
+benchmark:
+  domains: [biology]
+  modalities: [data]
+  signal_types: [response]
+  benchmark_kinds: [analysis]
+""",
+    )
+
+    payload = opportunity_report(tmp_path, include_commons=False)
+
+    assert payload["matched_opportunities"] == []
+    assert payload["unmapped_project_entities"][0]["entity_id"] == "hypothesis:0001-model"
+    assert payload["available_unmapped_benchmarks"][0]["benchmark_id"] == "dataset:generic"
+
+
+def test_facets_only_rows_use_null_task_and_diversity_is_per_entity(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import opportunity_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0002-spatial",
+        """
+id: hypothesis:0002-spatial
+type: hypothesis
+title: Spatial proteomics transfer
+status: active
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "atlas",
+        """
+id: dataset:atlas
+type: dataset
+title: Spatial atlas
+benchmark:
+  domains: [biology]
+  modalities: [spatial, proteomics]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+  limitations:
+    - Facets only.
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "multi-task",
+        """
+id: dataset:multi-task
+type: dataset
+title: Spatial proteomics tasks
+benchmark:
+  domains: [biology]
+  modalities: [spatial, proteomics]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: task-a
+      prediction_target: subtype
+    - id: task-b
+      prediction_target: subtype
+""",
+    )
+
+    payload = opportunity_report(tmp_path, include_commons=False)
+    rows = payload["matched_opportunities"]
+
+    atlas = next(row for row in rows if row["benchmark_id"] == "dataset:atlas")
+    assert atlas["task_id"] is None
+    assert atlas["score_components"]["relative"]["diversity_added"] > 0
+    task_rows = [row for row in rows if row["benchmark_id"] == "dataset:multi-task"]
+    assert [row["task_id"] for row in task_rows] == ["dataset:multi-task#task-a", "dataset:multi-task#task-b"]
+    diversity_points = [row["score_components"]["relative"]["diversity_added"] for row in task_rows]
+    assert diversity_points[0] == 0
+    assert diversity_points[1] == 0
+
+
+def test_multi_task_rows_share_relative_score_when_first_match(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import opportunity_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0002-spatial",
+        """
+id: hypothesis:0002-spatial
+type: hypothesis
+title: Spatial proteomics transfer
+status: active
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "multi-task",
+        """
+id: dataset:multi-task
+type: dataset
+title: Spatial proteomics tasks
+benchmark:
+  domains: [biology]
+  modalities: [spatial, proteomics]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: task-a
+      prediction_target: subtype
+    - id: task-b
+      prediction_target: subtype
+""",
+    )
+
+    payload = opportunity_report(tmp_path, include_commons=False)
+
+    rows = payload["matched_opportunities"]
+    assert [row["task_id"] for row in rows] == ["dataset:multi-task#task-a", "dataset:multi-task#task-b"]
+    assert rows[0]["relative_score"] == rows[1]["relative_score"]
+    assert (
+        rows[0]["score_components"]["relative"]["diversity_added"]
+        == rows[1]["score_components"]["relative"]["diversity_added"]
+    )
+
+
+def test_related_belief_id_match_sorts_above_token_only_match(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import opportunity_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0005-perturbation",
+        """
+id: hypothesis:0005-perturbation
+type: hypothesis
+title: Perturbation response
+status: active
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "token-only",
+        """
+id: dataset:token-only
+type: dataset
+title: Token-only
+benchmark:
+  domains: [biology]
+  modalities: [perturbation]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "id-linked",
+        """
+id: dataset:id-linked
+type: dataset
+title: ID linked
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  related_beliefs:
+    - hypothesis:0005-perturbation has an explicit benchmark link.
+""",
+    )
+
+    payload = opportunity_report(tmp_path, include_commons=False)
+
+    rows = payload["matched_opportunities"]
+    assert [row["benchmark_id"] for row in rows[:2]] == ["dataset:id-linked", "dataset:token-only"]
+    assert rows[0]["score_components"]["relative"]["related_belief_id"] == 40
+    assert rows[1]["score_components"]["relative"]["related_belief_id"] == 0
