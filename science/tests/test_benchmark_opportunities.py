@@ -1817,6 +1817,78 @@ benchmark:
     )
 
 
+def test_gaps_report_fallback_rotation_preserves_quality_tiers(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    for index in range(5):
+        _write_entity(
+            tmp_path,
+            "hypotheses",
+            f"20{index}-generic-gap",
+            f"""
+id: hypothesis:20{index}-generic-gap
+type: hypothesis
+title: Generic benchmark gap {index}
+""",
+            body="Homeostatic recovery remains under-tested.",
+        )
+    _write_dataset(
+        tmp_path,
+        "highest",
+        """
+id: dataset:highest
+type: dataset
+title: Highest Quality
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [perturbation]
+  benchmark_kinds: [static-association]
+  limitations: [general benchmark fallback]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+    )
+    for slug in ("alpha", "beta", "gamma", "delta"):
+        _write_dataset(
+            tmp_path,
+            slug,
+            f"""
+id: dataset:{slug}
+type: dataset
+title: Generic {slug.title()}
+benchmark:
+  domains: [biology]
+  modalities: [assay-{slug}]
+  signal_types: [unrelated-{slug}]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+        )
+
+    payload = gaps_report(tmp_path)
+
+    assert all(
+        row["candidate_benchmarks"][0]["benchmark_id"] == "dataset:highest"
+        for row in payload["benchmark_gaps"]
+    )
+
+
 def test_gap_candidate_rows_keep_v1_fields(tmp_path: Path) -> None:
     from science_tool.benchmark_opportunities import gaps_report
 
