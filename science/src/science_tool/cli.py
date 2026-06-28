@@ -6084,12 +6084,8 @@ def benchmark_gaps(
     from rich.console import Console
     from rich.table import Table
 
-    from science_tool.benchmark_opportunities import GAP_MODALITIES, GAP_SIGNAL_TYPES, gaps_report
+    from science_tool.benchmark_opportunities import gaps_report
     from science_tool.entities import EntityCommandError, resolve_entity_ref
-
-    valid_facets = sorted(set(GAP_MODALITIES + GAP_SIGNAL_TYPES))
-    if facet is not None and facet not in valid_facets:
-        raise click.ClickException(f"Invalid facet {facet!r}. Choose one of: {', '.join(valid_facets)}")
 
     root = project_root.resolve() if project_root else _project_root_from_env()
     entity_id: str | None = None

@@ -892,6 +892,27 @@ title: Time-series gap
     assert [row["entity_id"] for row in payload["benchmark_gaps"]] == ["hypothesis:0009-temporal"]
 
 
+def test_benchmark_gaps_cli_facet_filter_uses_report_normalization(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0010-perturbation",
+        """
+id: hypothesis:0010-perturbation
+type: hypothesis
+title: Perturbation gap
+""",
+        body="Perturbation coverage is missing.",
+    )
+
+    result = _invoke_gaps(tmp_path, "--facet", "intervention", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert [row["entity_id"] for row in payload["benchmark_gaps"]] == ["hypothesis:0010-perturbation"]
+    assert payload["benchmark_gaps"][0]["missing_signal_types"] == ["perturbation"]
+
+
 def test_benchmark_gaps_cli_invalid_entity_uses_click_error(tmp_path: Path) -> None:
     result = _invoke_gaps(tmp_path, "--entity", "hypothesis:nope")
 
