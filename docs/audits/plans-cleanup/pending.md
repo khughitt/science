@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `30`
+- Pending thread count: `32`
 
 ## b-migration-paper-datasets
 
@@ -78,6 +78,20 @@
   - full dbSNP artifact build/operator smoke
   - C4c transcript/protein projection
 
+## bio-reference-graph-design
+
+- status: `incomplete`
+- recommended_action: `keep for triage`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-05-31-bio-reference-graph-design.md`
+- pending_actions:
+  - `deferred`: review status incomplete; RG3 broader graph-member workflows and RG5 non-molecular identity resolvers remain open
+    - `docs/plans/2026-05-31-bio-reference-graph-design.md`
+- remaining_gaps:
+  - RG3 broader graph-member promotion workflows and unpromoted-member B materialization hooks
+  - RG5 non-molecular identity resolvers over reference graphs
+
 ## c4-variant-identity
 
 - status: `incomplete`
@@ -91,6 +105,23 @@
 - remaining_gaps:
   - full dbSNP artifact build/operator smoke
   - C4c transcript/protein projection
+
+## c4c-rsid-variant-label
+
+- status: `incomplete`
+- recommended_action: `keep for triage`
+- actions: `deferred`
+- files:
+  - `docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`
+- pending_actions:
+  - `deferred`: review status incomplete; full dbSNP artifact build, lockfile/hash refresh, and real-artifact resolver smoke remain operator-pending
+    - `docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`
+- remaining_gaps:
+  - full dbSNP archive fetch/build
+  - full-source lockfile pinning
+  - datapackage hash refresh
+  - resolver smoke against the real commons artifact
+  - later transcript/protein HGVS projection
 
 ## conventions-audit-p1-rollout
 

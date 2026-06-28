@@ -1,5 +1,14 @@
 {
   "schema_version": 1,
-  "splits": {},
+  "splits": {
+    "bio-reference-graph": [
+      {
+        "thread_id": "bio-reference-graph-design",
+        "files": [
+          "docs/plans/2026-05-31-bio-reference-graph-design.md"
+        ]
+      }
+    ]
+  },
   "related_threads": {}
 }

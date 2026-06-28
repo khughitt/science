@@ -2,8 +2,8 @@
 
 Date: 2026-05-28
 
-Status: C4a implemented; C4b implemented via
-`docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`; C4c-1 rsID input implemented locally via
+Status: C4a implemented; C4b implemented in liftover, assembly-compatibility, and identity-context
+validation code; C4c-1 rsID input implemented locally via
 `docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`, with full dbSNP artifact build/operator smoke pending
 (Pillar C, sub-phase 4 of the bio data architecture)
 
@@ -250,8 +250,9 @@ adds the dependency.
 
 C4a is implemented and merged. C4b is merged locally: it added cross-assembly
 liftover, seqcol compatibility relations, lifted VRS reminting, and the C1 check-3 provenance-verified
-liftover remedy. Its implementation plan is
-tracked at `docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`. C4c-1 rsID input is implemented
+liftover remedy in `science/src/science_tool/commons/liftover.py`,
+`science/src/science_tool/commons/assembly_compatibility.py`, and
+`science/src/science_tool/validate/checks/identity_context.py`. C4c-1 rsID input is implemented
 locally in `~/d/science` and `~/d/science-commons` via
 `docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`; full dbSNP artifact build/operator smoke is still
 pending, and transcript/protein HGVS projection remains a later C4c increment.

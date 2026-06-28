@@ -202,7 +202,7 @@ implemented `bio.geneset` collection profile (D1), preserves row-level `dataset_
 resolves Entrez membership through the built C2 HGNC gene crosswalk. **Status: implemented;
 `dataset:reactome` + the C2 crosswalk are built, merged, and pushed to origin in `~/d/science-commons`.**
 The `~/d/health/meta` recipe and the `~/d/health/comparisons/pan-disease` stub removal are committed in
-their Dropbox-only repos (no git remote). See `docs/plans/2026-05-30-reactome-commons-ingestion-plan.md`.
+their Dropbox-only repos (no git remote).
 
 ---
 
@@ -235,7 +235,7 @@ Spawned design docs (in `~/d/science/docs/plans/`), with the dependency order:
 | 2 | Dataset taxonomy & epistemic integration (A) | C | `source_class` + `derived_kind`; curation down-weight as a *modifier*, mapped into aggregation + two-axis | design ✓; **impl: A1 + A2 merged** (recording layer + curation down-weight, config v2); **Pillar A complete** |
 | 3a | Gene-set / annotation type `bio.geneset` (D) | A, C | extension schema; per-set provenance; promotion rule; realizes B's interface for gene sets | design ✓; **impl: D1 collection type implemented; D2 promoted members pending** |
 | 3b | Dataset-influence & provenance tracking (B) | A, C (+ D for the gene-set arm) | `dataset:`-ref declarations + usage role; dataset→consumer derivation; *candidate* auto-independence | **B1, B-migration, and B2 merged and pushed to origin** |
-| 4 | Reactome ingestion revision (E) | A-D | first instantiation | **implemented; commons pushed to origin, health-side records Dropbox-only**; plan/status in `docs/plans/2026-05-30-reactome-commons-ingestion-plan.md` |
+| 4 | Reactome ingestion revision (E) | A-D | first instantiation | **implemented; commons pushed to origin, health-side records Dropbox-only** |
 
 C is the long pole (everything joins on identity). A and C unblock D and the paper arm of B; B's
 gene-set arm consumes D, so D leads B within Phase 3 (B may start its paper-side and the derivation
@@ -304,7 +304,9 @@ schema(s), a pinned reference collection + recipe, a pure resolver, and the corr
 **Remaining — Pillar C.** C4a variant identity (VRS 2.0 / SPDI) is merged. C4b is implemented: pinned
 cross-assembly liftover chains, seqcol *compatibility relations* (the first realization of the primitive's
 RCM-D6 guardrail-2), lifted target-assembly VRS reminting, and the C1 check-3 liftover remedy are in
-place. The implementation plan is tracked at `docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`.
+place in `science/src/science_tool/commons/liftover.py`,
+`science/src/science_tool/commons/assembly_compatibility.py`, and
+`science/src/science_tool/validate/checks/identity_context.py`.
 C4c-1 rsID input over pinned dbSNP snapshots is implemented and pushed to origin in `~/d/science` and
 `~/d/science-commons`; the full dbSNP archive fetch/build, lockfile pinning, datapackage hash refresh, and
 resolver smoke against the real artifact remain operator-pending. Transcript and protein projection inputs

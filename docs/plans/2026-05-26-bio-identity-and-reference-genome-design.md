@@ -276,8 +276,9 @@ B's dataset resolution all need gene identity first). C3/C4 can trail.
 Pillar C is partly implemented: C1 (assembly registry), C2 (gene crosswalk), C3 (protein crosswalk),
 C4a (variant identity over pinned offline VRS/refget inputs) and C4b (cross-assembly liftover +
 seqcol compatibility relations, including the C1 check-3 remedy) are merged locally.
-The C4b implementation plan is
-tracked at `docs/plans/2026-05-31-c4b-cross-assembly-liftover-plan.md`. C4c-1 rsID input is implemented
+The C4b implementation lives in `science/src/science_tool/commons/liftover.py`,
+`science/src/science_tool/commons/assembly_compatibility.py`, and
+`science/src/science_tool/validate/checks/identity_context.py`. C4c-1 rsID input is implemented
 locally in `~/d/science` and `~/d/science-commons` via
 `docs/plans/2026-05-31-c4c-rsid-variant-label-plan.md`; full dbSNP archive fetch/build, lockfile pinning,
 datapackage hash refresh, and resolver smoke against the real artifact remain operator-pending.
