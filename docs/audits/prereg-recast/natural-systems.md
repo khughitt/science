@@ -2,10 +2,10 @@
 
 **Audit date:** 2026-05-04
 **Migration date:** 2026-05-05
-**Project root:** `/mnt/ssd/Dropbox/natural-systems`
+**Project root:** `~/d/natural-systems`
 **Migration branch:** `migration/prereg-recast-natural-systems`
 **Scope:** all 14 pre-regs under `doc/meta/pre-registration-*.md` (worktree duplicates excluded)
-**Recast spec:** `docs/plans/2026-05-04-prereg-recast-draft.md` (revision 2)
+**Recast spec:** `docs/plans/historical/2026-05-04-prereg-recast-draft.md` (revision 2)
 
 ---
 
@@ -87,8 +87,8 @@ Representative generated graph excerpts:
 Commands run from the Science worktree:
 
 ```bash
-uv run --frozen science graph build --project-root /mnt/ssd/Dropbox/natural-systems/.worktrees/prereg-recast-natural-systems
-uv run --frozen science graph validate --path /mnt/ssd/Dropbox/natural-systems/.worktrees/prereg-recast-natural-systems/knowledge/graph.trig
+uv run --frozen science graph build --project-root ~/d/natural-systems/.worktrees/prereg-recast-natural-systems
+uv run --frozen science graph validate --path ~/d/natural-systems/.worktrees/prereg-recast-natural-systems/knowledge/graph.trig
 ```
 
 Result:

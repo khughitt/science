@@ -41,7 +41,7 @@ This design extends existing upstream commitments rather than adding a parallel 
 - `meta/specs/hypotheses/h01-stochastic-revisiting.md` motivates non-zero revisit probability for down-weighted propositions.
 - `meta/specs/hypotheses/h02-rich-evidence-payloads-improve-graph-calibration.md` argues that evidence payloads need more structure than scalar support/dispute.
 - `meta/specs/hypotheses/h03-reason-coded-revisiting-beats-posterior-only-revisiting.md` argues that the reason for uncertainty should shape revisiting.
-- `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` defines `bears_on`, freshness, and the graph-level attention surface.
+- `docs/plans/historical/2026-05-03-epistemic-dependency-graph-design.md` defines `bears_on`, freshness, and the graph-level attention surface.
 - `science_tool.graph.attention` currently computes attention from observable graph features: `bears_on`, freshness, review age, support/dispute counts, and epsilon.
 
 This plan is one operationalization of H03, not evidence that H03 is settled.

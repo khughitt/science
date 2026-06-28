@@ -53,7 +53,7 @@ to a facet:
 - `docs/plans/2026-05-24-evidence-aggregation-phase2-design.md`
 - the **Part-A epistemic content** of `docs/plans/2026-06-06-knowledge-meta-model-and-substrate-design.md`
   (its Part-B/C substrate content stays with the substrate docs)
-- `docs/plans/2026-05-03-epistemic-dependency-graph-design.md`
+- `docs/plans/historical/2026-05-03-epistemic-dependency-graph-design.md`
 - April layered-claims/causal-methodology predecessor (deleted during plans cleanup)
 - March claim-centric uncertainty predecessor (deleted during plans cleanup)
 

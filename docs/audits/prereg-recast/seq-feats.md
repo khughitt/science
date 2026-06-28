@@ -1,9 +1,9 @@
 # Pre-registration recast audit — seq-feats
 
 **Audit date:** 2026-05-04
-**Project root:** `/mnt/ssd/Dropbox/seq-feats`
+**Project root:** `~/d/seq-feats`
 **Scope:** all 5 pre-regs under `doc/meta/pre-registration-*.md` (worktree duplicates excluded)
-**Recast spec:** `docs/plans/2026-05-04-prereg-recast-draft.md` (revision 3; code prerequisites merged 2026-05-04)
+**Recast spec:** `docs/plans/historical/2026-05-04-prereg-recast-draft.md` (revision 3; code prerequisites merged 2026-05-04)
 
 ---
 
@@ -146,7 +146,7 @@ The recast's `interpret-results` § 4d skill changes need to handle missing `com
 3. **Keep context refs:** leave exploratory and navigation-only refs in `related:`; in particular, keep q50 as context for `phase3b-validation`.
 4. **Graph verification:** rebuild `knowledge/graph.trig` and confirm the expected pre-reg `bearsOn` edges are materialized.
 
-### For the recast plan (`docs/plans/2026-05-04-prereg-recast-draft.md`)
+### For the recast plan (`docs/plans/historical/2026-05-04-prereg-recast-draft.md`)
 
 1. **Confirms Issue 1 across three projects.** Resolution is unchanged from natural-systems' audit — add the sub-prompt at pre-reg authoring time.
 2. **Confirms Issue 4 from natural-systems' audit:** `interpret-results` must handle missing `committed:` gracefully. Make this explicit in the skill changes.

@@ -85,7 +85,7 @@ compiles into** — the fact Part B makes load-bearing.
 Entities carry a canonical identity `<kind>:<local-id>` (regex enforced;
 case-insensitive aliases; deprecated-id support — `entity_identity.py`). Entities
 fall into three orthogonal **classes** that determine belief/freshness behavior
-(`~/d/science/docs/plans/2026-05-03-epistemic-dependency-graph-design.md`):
+(`~/d/science/docs/plans/historical/2026-05-03-epistemic-dependency-graph-design.md`):
 
 | Class | Examples | Belief-carrying | Freshness |
 |---|---|---|---|

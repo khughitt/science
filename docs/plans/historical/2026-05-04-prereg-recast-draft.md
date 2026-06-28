@@ -2,7 +2,7 @@
 
 > **Status:** Implemented, revision 4 (2026-05-05 post code prerequisites, downstream migrations, and follow-up ergonomics). The recast, `commits_to:` edge scoping, pre-registration registry support, inquiry reclassification, and pre-reg → epistemic-target `bears_on` derivation have landed. Downstream migration of the audited projects is complete; remaining items in this document are nonblocking project-side cleanup candidates and adjacent prose follow-ups.
 
-**Source design:** `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` § Part 4.
+**Source design:** `docs/plans/historical/2026-05-03-epistemic-dependency-graph-design.md` § Part 4.
 
 **Tracked as:** `[t012]` Pre-registration semantics recast (epistemic vs operational targets).
 

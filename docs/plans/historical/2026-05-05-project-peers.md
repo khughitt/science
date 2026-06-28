@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace tree-shaped `parent:` / `children:` federation with a decentralized peer-graph (Layer 1 addressability + minimal Layer 2 read access). Implements `docs/superpowers/specs/2026-05-05-project-peers-design.md`.
+**Goal:** Replace tree-shaped `parent:` / `children:` federation with a decentralized peer-graph (Layer 1 addressability + minimal Layer 2 read access). Implements `docs/plans/historical/2026-05-05-project-peers-design.md`.
 
 **Architecture:** Additive-then-breaking sequencing. Phase A introduces the new `peers:` field, resolver, validator, CLI, migration command, and composite graph alongside the existing `parent:`/`children:`/federation code so the test suite stays green. Phase B runs the migration on this monorepo, updates remaining tests, switches `ProjectConfig` to reject the legacy fields, and deletes the dead federation modules.
 
@@ -14,7 +14,7 @@
 
 ## Spec
 
-`docs/superpowers/specs/2026-05-05-project-peers-design.md`. Refer to **Decisions 1–10** by number throughout this plan.
+`docs/plans/historical/2026-05-05-project-peers-design.md`. Refer to **Decisions 1–10** by number throughout this plan.
 
 ## File Structure
 
@@ -51,7 +51,7 @@
 
 **Migrated data:** any `science.yaml` in this monorepo currently using top-level `parent:` or `children:` — covered by Task 14 (`peers migrate --all`). The implementation must run the inventory first; if the current repo has no live legacy project configs, Task 14 is a documented no-op rather than a failure.
 
-**Documentation:** `docs/federation.md`, `docs/superpowers/specs/2026-05-05-task-ids-and-cross-project-references-design.md`, plus any `commands/` / `skills/` content mentioning federation.
+**Documentation:** `docs/federation.md`, `commands/tasks.md`, plus any `commands/` / `skills/` content mentioning federation.
 
 ---
 
@@ -420,7 +420,7 @@ Create `science/src/science_tool/peers.py`:
 ```python
 """Project peers: addressability (Layer 1) and minimal read access (Layer 2).
 
-See docs/superpowers/specs/2026-05-05-project-peers-design.md.
+See docs/plans/historical/2026-05-05-project-peers-design.md.
 """
 
 from __future__ import annotations
@@ -3614,8 +3614,8 @@ EOF
 
 **Files:**
 - Modify: `docs/federation.md` (replace content with peers-aware addressing convention OR rewrite as `docs/peers.md`)
-- Modify: `docs/superpowers/specs/2026-05-05-task-ids-and-cross-project-references-design.md` (update children: references)
-- Modify: `docs/superpowers/plans/2026-05-05-task-ids-and-cross-project-references.md` (update if it carries the same wording)
+- Modify: `docs/federation.md` (update children: references)
+- Modify: `commands/tasks.md` (update if it carries the same wording)
 
 - [ ] **Step 1: Inventory remaining doc references**
 
@@ -3627,7 +3627,7 @@ Expected output: `docs/federation.md`, the upstream task-IDs spec/plan, possibly
 
 - [ ] **Step 2: Rewrite `docs/federation.md`**
 
-Replace its content with a peer-graph-oriented addressing convention. Open the file, read existing content, and rewrite as a peers reference document. Cross-link to `docs/superpowers/specs/2026-05-05-project-peers-design.md` for the full design. The body should:
+Replace its content with a peer-graph-oriented addressing convention. Open the file, read existing content, and rewrite as a peers reference document. Cross-link to `docs/plans/historical/2026-05-05-project-peers-design.md` for the full design. The body should:
 
 - Define the canonical entity ref shape: `[<project-id>:]<kind>:<slug>` (local or namespaced).
 - Note that `peers:` in `science.yaml` declares which other projects' IDs are recognized as namespaces.
@@ -3638,7 +3638,7 @@ Replace its content with a peer-graph-oriented addressing convention. Open the f
 
 - [ ] **Step 3: Update the upstream task-IDs spec references**
 
-In `docs/superpowers/specs/2026-05-05-task-ids-and-cross-project-references-design.md`:
+In `docs/federation.md`:
 
 - Around line 135 (Decision 5): change "the parser can use an explicit project-ID set from federation config to decide whether the first segment is a namespace" to refer to `peers:` instead of "federation config".
 - Around line 255 (error-message section): change "Add it to science.yaml children: or use a local ref." to "Add it to science.yaml peers: or use a local ref."
@@ -3646,7 +3646,7 @@ In `docs/superpowers/specs/2026-05-05-task-ids-and-cross-project-references-desi
 - [ ] **Step 4: Update the upstream task-IDs plan if needed**
 
 ```bash
-grep -n "children:\|federation" docs/superpowers/plans/2026-05-05-task-ids-and-cross-project-references.md
+grep -n "children:\|federation" commands/tasks.md
 ```
 
 Update similarly to the spec.

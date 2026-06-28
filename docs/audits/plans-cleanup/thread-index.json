@@ -1,10 +1,10 @@
 {
-  "file_count": 311,
-  "generated_at": "2026-06-28T14:59:43+00:00",
+  "file_count": 294,
+  "generated_at": "2026-06-28T15:15:38+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 204,
+  "thread_count": 192,
   "threads": [
     {
       "earliest_file_date": "2026-05-27",
@@ -502,27 +502,6 @@
       "thread_id": "benchmark-opportunities"
     },
     {
-      "earliest_file_date": "2026-05-07",
-      "files": [
-        "docs/plans/2026-05-07-bibliography-source-refs-design.md"
-      ],
-      "latest_file_date": "2026-05-07",
-      "normalized_slug": "bibliography-source-refs",
-      "raw_slugs": {
-        "docs/plans/2026-05-07-bibliography-source-refs-design.md": "bibliography-source-refs-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-07-bibliography-source-refs-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-07-bibliography-source-refs-design.md": "design"
-      },
-      "thread_id": "bibliography-source-refs"
-    },
-    {
       "earliest_file_date": "2026-05-26",
       "files": [
         "docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md"
@@ -854,33 +833,6 @@
         "docs/plans/2026-06-21-catalog-datasets-plan.md": "plan"
       },
       "thread_id": "catalog-datasets"
-    },
-    {
-      "earliest_file_date": "2026-05-07",
-      "files": [
-        "docs/plans/2026-05-07-chain-audit-verdict-design.md",
-        "docs/plans/2026-05-07-chain-audit-verdict-implementation.md"
-      ],
-      "latest_file_date": "2026-05-07",
-      "normalized_slug": "chain-audit-verdict",
-      "raw_slugs": {
-        "docs/plans/2026-05-07-chain-audit-verdict-design.md": "chain-audit-verdict-design",
-        "docs/plans/2026-05-07-chain-audit-verdict-implementation.md": "chain-audit-verdict-implementation"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-07-chain-audit-verdict-design.md"
-        ],
-        "implementation": [
-          "docs/plans/2026-05-07-chain-audit-verdict-implementation.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-07-chain-audit-verdict-design.md": "design",
-        "docs/plans/2026-05-07-chain-audit-verdict-implementation.md": "implementation"
-      },
-      "thread_id": "chain-audit-verdict"
     },
     {
       "earliest_file_date": "2026-05-23",
@@ -1975,33 +1927,6 @@
       "thread_id": "epistemic-data-model"
     },
     {
-      "earliest_file_date": "2026-05-03",
-      "files": [
-        "docs/plans/2026-05-03-epistemic-dependency-graph-design.md",
-        "docs/plans/2026-05-03-epistemic-dependency-graph-implementation.md"
-      ],
-      "latest_file_date": "2026-05-03",
-      "normalized_slug": "epistemic-dependency-graph",
-      "raw_slugs": {
-        "docs/plans/2026-05-03-epistemic-dependency-graph-design.md": "epistemic-dependency-graph-design",
-        "docs/plans/2026-05-03-epistemic-dependency-graph-implementation.md": "epistemic-dependency-graph-implementation"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-03-epistemic-dependency-graph-design.md"
-        ],
-        "implementation": [
-          "docs/plans/2026-05-03-epistemic-dependency-graph-implementation.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-03-epistemic-dependency-graph-design.md": "design",
-        "docs/plans/2026-05-03-epistemic-dependency-graph-implementation.md": "implementation"
-      },
-      "thread_id": "epistemic-dependency-graph"
-    },
-    {
       "earliest_file_date": "2026-06-04",
       "files": [
         "docs/plans/2026-06-04-epistemic-drift-detection-design.md"
@@ -2776,33 +2701,6 @@
       "thread_id": "natural-systems-prose-epistemics-application"
     },
     {
-      "earliest_file_date": "2026-05-05",
-      "files": [
-        "docs/plans/2026-05-05-needs-review-resolution-design.md",
-        "docs/plans/2026-05-05-needs-review-resolution.md"
-      ],
-      "latest_file_date": "2026-05-05",
-      "normalized_slug": "needs-review-resolution",
-      "raw_slugs": {
-        "docs/plans/2026-05-05-needs-review-resolution-design.md": "needs-review-resolution-design",
-        "docs/plans/2026-05-05-needs-review-resolution.md": "needs-review-resolution"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-05-needs-review-resolution-design.md"
-        ],
-        "primary": [
-          "docs/plans/2026-05-05-needs-review-resolution.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-05-needs-review-resolution-design.md": "design",
-        "docs/plans/2026-05-05-needs-review-resolution.md": null
-      },
-      "thread_id": "needs-review-resolution"
-    },
-    {
       "earliest_file_date": "2026-03-24",
       "files": [
         "docs/plans/2026-03-24-ontology-consumption-design.md"
@@ -2864,27 +2762,6 @@
         "docs/plans/2026-05-30-open-feedback-fixes.md": null
       },
       "thread_id": "open-feedback-fixes"
-    },
-    {
-      "earliest_file_date": "2026-05-07",
-      "files": [
-        "docs/plans/2026-05-07-open-feedback-small-fixes.md"
-      ],
-      "latest_file_date": "2026-05-07",
-      "normalized_slug": "open-feedback-small-fixes",
-      "raw_slugs": {
-        "docs/plans/2026-05-07-open-feedback-small-fixes.md": "open-feedback-small-fixes"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-05-07-open-feedback-small-fixes.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-07-open-feedback-small-fixes.md": null
-      },
-      "thread_id": "open-feedback-small-fixes"
     },
     {
       "earliest_file_date": "2026-06-01",
@@ -3043,27 +2920,6 @@
       "thread_id": "patchwork-kernel-architecture"
     },
     {
-      "earliest_file_date": "2026-05-04",
-      "files": [
-        "docs/plans/2026-05-04-phase1-polish-implementation.md"
-      ],
-      "latest_file_date": "2026-05-04",
-      "normalized_slug": "phase1-polish",
-      "raw_slugs": {
-        "docs/plans/2026-05-04-phase1-polish-implementation.md": "phase1-polish-implementation"
-      },
-      "related_threads": [],
-      "role_files": {
-        "implementation": [
-          "docs/plans/2026-05-04-phase1-polish-implementation.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-04-phase1-polish-implementation.md": "implementation"
-      },
-      "thread_id": "phase1-polish"
-    },
-    {
       "earliest_file_date": "2026-03-07",
       "files": [
         "docs/plans/2026-03-07-phase3-completion-design.md"
@@ -3154,27 +3010,6 @@
       "thread_id": "pipeline-audit-and-refactor"
     },
     {
-      "earliest_file_date": "2026-05-04",
-      "files": [
-        "docs/plans/2026-05-04-prereg-recast-draft.md"
-      ],
-      "latest_file_date": "2026-05-04",
-      "normalized_slug": "prereg-recast-draft",
-      "raw_slugs": {
-        "docs/plans/2026-05-04-prereg-recast-draft.md": "prereg-recast-draft"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-05-04-prereg-recast-draft.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-04-prereg-recast-draft.md": null
-      },
-      "thread_id": "prereg-recast-draft"
-    },
-    {
       "earliest_file_date": "2026-04-18",
       "files": [
         "docs/plans/2026-04-18-project-big-picture-design.md",
@@ -3227,33 +3062,6 @@
         "docs/plans/2026-04-05-project-model.md": null
       },
       "thread_id": "project-model"
-    },
-    {
-      "earliest_file_date": "2026-05-05",
-      "files": [
-        "docs/plans/2026-05-05-project-peers-design.md",
-        "docs/plans/2026-05-05-project-peers.md"
-      ],
-      "latest_file_date": "2026-05-05",
-      "normalized_slug": "project-peers",
-      "raw_slugs": {
-        "docs/plans/2026-05-05-project-peers-design.md": "project-peers-design",
-        "docs/plans/2026-05-05-project-peers.md": "project-peers"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-05-project-peers-design.md"
-        ],
-        "primary": [
-          "docs/plans/2026-05-05-project-peers.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-05-project-peers-design.md": "design",
-        "docs/plans/2026-05-05-project-peers.md": null
-      },
-      "thread_id": "project-peers"
     },
     {
       "earliest_file_date": "2026-06-16",
@@ -4576,33 +4384,6 @@
       "thread_id": "substrate-scoped-ref-resolution"
     },
     {
-      "earliest_file_date": "2026-05-05",
-      "files": [
-        "docs/plans/2026-05-05-task-ids-and-cross-project-references-design.md",
-        "docs/plans/2026-05-05-task-ids-and-cross-project-references.md"
-      ],
-      "latest_file_date": "2026-05-05",
-      "normalized_slug": "task-ids-and-cross-project-references",
-      "raw_slugs": {
-        "docs/plans/2026-05-05-task-ids-and-cross-project-references-design.md": "task-ids-and-cross-project-references-design",
-        "docs/plans/2026-05-05-task-ids-and-cross-project-references.md": "task-ids-and-cross-project-references"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-05-task-ids-and-cross-project-references-design.md"
-        ],
-        "primary": [
-          "docs/plans/2026-05-05-task-ids-and-cross-project-references.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-05-task-ids-and-cross-project-references-design.md": "design",
-        "docs/plans/2026-05-05-task-ids-and-cross-project-references.md": null
-      },
-      "thread_id": "task-ids-and-cross-project-references"
-    },
-    {
       "earliest_file_date": "2026-06-27",
       "files": [
         "docs/plans/2026-06-27-telemetry-core-implementation-plan.md"
@@ -4651,48 +4432,6 @@
       "thread_id": "telemetry-v1.5"
     },
     {
-      "earliest_file_date": "2026-05-03",
-      "files": [
-        "docs/plans/2026-05-03-template-driven-entity-shells-design.md"
-      ],
-      "latest_file_date": "2026-05-03",
-      "normalized_slug": "template-driven-entity-shells",
-      "raw_slugs": {
-        "docs/plans/2026-05-03-template-driven-entity-shells-design.md": "template-driven-entity-shells-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-03-template-driven-entity-shells-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-03-template-driven-entity-shells-design.md": "design"
-      },
-      "thread_id": "template-driven-entity-shells"
-    },
-    {
-      "earliest_file_date": "2026-05-04",
-      "files": [
-        "docs/plans/2026-05-04-theme-entity.md"
-      ],
-      "latest_file_date": "2026-05-04",
-      "normalized_slug": "theme-entity",
-      "raw_slugs": {
-        "docs/plans/2026-05-04-theme-entity.md": "theme-entity"
-      },
-      "related_threads": [],
-      "role_files": {
-        "primary": [
-          "docs/plans/2026-05-04-theme-entity.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-04-theme-entity.md": null
-      },
-      "thread_id": "theme-entity"
-    },
-    {
       "earliest_file_date": "2026-04-22",
       "files": [
         "docs/plans/2026-04-22-topic-deprecation-and-mechanism-design.md"
@@ -4739,27 +4478,6 @@
         "docs/plans/2026-06-13-typed-dataset-schema-plan.md": "plan"
       },
       "thread_id": "typed-dataset-schema"
-    },
-    {
-      "earliest_file_date": "2026-05-03",
-      "files": [
-        "docs/plans/2026-05-03-typed-entity-blockers-design.md"
-      ],
-      "latest_file_date": "2026-05-03",
-      "normalized_slug": "typed-entity-blockers",
-      "raw_slugs": {
-        "docs/plans/2026-05-03-typed-entity-blockers-design.md": "typed-entity-blockers-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-03-typed-entity-blockers-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-03-typed-entity-blockers-design.md": "design"
-      },
-      "thread_id": "typed-entity-blockers"
     },
     {
       "earliest_file_date": "2026-06-16",

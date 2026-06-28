@@ -1,9 +1,9 @@
 # Pre-registration recast audit — mechanisms/evolution
 
 **Audit date:** 2026-05-04
-**Project root:** `~/d/cancer/mechanisms/evolution` (= `/mnt/ssd/Dropbox/cancer/mechanisms/evolution`)
+**Project root:** `~/d/cancer/mechanisms/evolution`
 **Scope:** all 2 pre-regs under `doc/meta/pre-registration-*.md`
-**Recast spec:** `docs/plans/2026-05-04-prereg-recast-draft.md` (revision 2)
+**Recast spec:** `docs/plans/historical/2026-05-04-prereg-recast-draft.md` (revision 2)
 **Migration branch:** `migration/prereg-recast-mechanisms-evolution`
 
 ---
@@ -146,7 +146,7 @@ This is convention drift across projects. Out of t012 scope but worth flagging f
 7. Remaining convention drift is outside this migration:
    - `amended:` field shape — canonical alternative is `amendments:` list.
 
-### For the recast plan (`docs/plans/2026-05-04-prereg-recast-draft.md`)
+### For the recast plan (`docs/plans/historical/2026-05-04-prereg-recast-draft.md`)
 
 1. **Document silent-skip behavior for unregistered kinds in `related:`.** Add a paragraph to the recast plan's § "Code prerequisites" (or its successor section) explaining that unregistered kinds in `related:` are silently dropped during source loading — this is correct semantics, not a bug, and project-side regularization (via local manifest extension kinds or by adopting canonical kinds) is the resolution path.
 

@@ -1,9 +1,9 @@
 # Pre-registration recast audit — data-sources/cbioportal
 
 **Audit date:** 2026-05-04
-**Project root:** `~/d/cancer/data-sources/cbioportal` (= `/mnt/ssd/Dropbox/cancer/data-sources/cbioportal`)
+**Project root:** `~/d/cancer/data-sources/cbioportal`
 **Scope:** all 2 pre-regs under `doc/meta/pre-registration-*.md`
-**Recast spec:** `docs/plans/2026-05-04-prereg-recast-draft.md` (revision 3; code prerequisites merged 2026-05-04)
+**Recast spec:** `docs/plans/historical/2026-05-04-prereg-recast-draft.md` (revision 3; code prerequisites merged 2026-05-04)
 
 ---
 
@@ -131,7 +131,7 @@ All pre-existing; out of t012 scope.
 5. **Defer:** `task:bias-audit-...` ref shape on t077; this is cross-project convention drift, not prereg-recast blocking.
 6. **Consider later:** promote `specs/research-question.md`'s H1 to a dedicated formal `hypothesis:` entity if h02 is too narrow for future use.
 
-### For the recast plan (`docs/plans/2026-05-04-prereg-recast-draft.md`)
+### For the recast plan (`docs/plans/historical/2026-05-04-prereg-recast-draft.md`)
 
 1. **Strengthens mm Issue 1.** No new structural issue from cbioportal; the hypothesis-in-body-only pattern extends to fully-canonical-frontmatter pre-regs whose body references `spec:`-level hypotheses.
 2. **Confirms recurrent issues** (Issue 2: `related:` conflation; Issue 3: status-vocabulary drift; cross-project `task:bias-audit-...` drift).

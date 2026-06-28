@@ -1,6 +1,8 @@
 # Epistemic Dependency Graph & Continuous Belief Flow — Design Sketch
 
-**Status.** Design sketch. Companion to `2026-05-03-typed-entity-blockers-design.md`. The two specs cover orthogonal halves of the project's dependency model:
+**Status.** Design sketch. Companion to the typed entity blockers work now carried by
+`science/src/science_tool/tasks_blockers.py` and `science/src/science_tool/tasks_readiness.py`.
+The two efforts cover orthogonal halves of the project's dependency model:
 
 | Spec | Direction | Question it answers |
 |---|---|---|

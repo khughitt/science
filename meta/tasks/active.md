@@ -29,7 +29,7 @@ Tests whether the H01 finding generalises beyond binary signals. If it does, D-0
 - related: [hypothesis:0001-stochastic-revisiting]
 - created: 2026-05-05
 
-Phase 1 freshness uses frontmatter `updated` / `created` dates as the upstream change marker. `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` explicitly deferred content-hash-based change detection to a later phase. Add a graph/materialization path that can detect upstream content changes even when authors forget to bump `updated:`, without replacing the current date-based convention prematurely.
+Phase 1 freshness uses frontmatter `updated` / `created` dates as the upstream change marker. `docs/plans/historical/2026-05-03-epistemic-dependency-graph-design.md` explicitly deferred content-hash-based change detection to a later phase. Add a graph/materialization path that can detect upstream content changes even when authors forget to bump `updated:`, without replacing the current date-based convention prematurely.
 
 Scope to design first: which authored fields participate in the hash, whether hashes live in the graph only or in a sidecar manifest, how to avoid noise from formatting-only edits, and how this interacts with existing managed-artifact hash utilities.
 

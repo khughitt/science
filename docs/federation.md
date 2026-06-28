@@ -3,7 +3,7 @@
 This document is the current reference for cross-project addressing in Science.
 The filename is retained for existing links; the current model is a decentralized
 peer graph, not an umbrella/child tree. For the full design rationale, see
-`docs/superpowers/specs/2026-05-05-project-peers-design.md`.
+`docs/plans/historical/2026-05-05-project-peers-design.md`.
 
 ## Entity References
 
@@ -59,7 +59,7 @@ Every project has a stable `id:` in `science.yaml`. Cross-project refs use that
 ID as the namespace segment.
 
 Project IDs follow the character rules in Decision 1 of
-`docs/superpowers/specs/2026-05-05-project-peers-design.md`: the project segment
+`docs/plans/historical/2026-05-05-project-peers-design.md`: the project segment
 matches `[a-z][a-z0-9-]{1,63}`. The slug/artifact segment also reserves `@`, so
 `@<version>` can be added later without conflicting with existing refs.
 

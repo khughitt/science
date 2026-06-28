@@ -1,9 +1,9 @@
 # Pre-registration recast audit — 3d-attention-bias
 
 **Audit date:** 2026-05-04
-**Project root:** `/mnt/ssd/Dropbox/3d-attention-bias`
+**Project root:** `~/d/3d-attention-bias`
 **Scope:** all 4 pre-regs under `doc/meta/pre-registration-*.md`
-**Recast spec:** `docs/plans/2026-05-04-prereg-recast-draft.md` (revision 2)
+**Recast spec:** `docs/plans/historical/2026-05-04-prereg-recast-draft.md` (revision 2)
 **Migration branch:** `migration/prereg-recast-3d-attention-bias`
 
 ---
@@ -117,7 +117,7 @@ This is the third project in a row (after cbioportal and evolution) that surface
 4. Direct commitment edges match `commits_to:`; parent H01 edges on the extension pre-regs are depth-2 transitive edges through the committed propositions.
 5. `question:q16-is-r90-ratio-overshoot-a-sequence-length-confound` has no direct edge from `pre-registration:phase1-ablation`, confirming it remains context-only.
 
-### For the recast plan (`docs/plans/2026-05-04-prereg-recast-draft.md`)
+### For the recast plan (`docs/plans/historical/2026-05-04-prereg-recast-draft.md`)
 
 1. **Confirms recurrent issues** (Issue 1: `related:` conflation; Issue 2: status-vocabulary drift).
 2. **No new structural changes.**

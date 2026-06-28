@@ -12,7 +12,7 @@ Science projects increasingly need to reference each other's entities, tasks, da
 - **Knowledge / tooling reuse:** pipelines built in one project (e.g. `r/lit-explore`) should be consumable from any other project that wants to ask questions of the literature.
 - **Composite views:** a "global" knowledge graph that unions multiple projects' graphs into one queryable surface.
 
-The existing federation model (`children:` / `parent:` in `science.yaml`) is intrinsically tree-shaped. It supports meta → child aggregation but not sibling-to-sibling references, peer-to-peer tooling reuse, or arbitrary graph topologies. Upstream's `<project-id>:<kind>:<slug>` ref grammar (`docs/superpowers/specs/2026-05-05-task-ids-and-cross-project-references-design.md`) defines the syntax, but no project mechanism currently lets a project know which other-project IDs it's allowed to reference, or where those projects live on disk.
+The existing federation model (`children:` / `parent:` in `science.yaml`) is intrinsically tree-shaped. It supports meta → child aggregation but not sibling-to-sibling references, peer-to-peer tooling reuse, or arbitrary graph topologies. Upstream's `<project-id>:<kind>:<slug>` ref grammar (`docs/federation.md`) defines the syntax, but no project mechanism currently lets a project know which other-project IDs it's allowed to reference, or where those projects live on disk.
 
 ## Goals
 
@@ -442,8 +442,8 @@ Idempotent: running on an already-migrated project is a no-op. `--dry-run` previ
 **Documentation to update (must land with the code):**
 
 - `docs/federation.md` — currently describes the tree-shaped federation. Rewrite (or supersede with a `docs/peers.md`) so the canonical addressing convention reflects the peer-graph model. Cross-link to this spec.
-- `docs/superpowers/specs/2026-05-05-task-ids-and-cross-project-references-design.md` — Decision 5 says "the parser can use an explicit project-ID set from federation config to decide whether the first segment is a namespace" (line ~135) and the unresolved-namespace error message tells users to add to `children:` (line ~255). Both need updating to refer to `peers:` instead.
-- `docs/superpowers/plans/2026-05-05-task-ids-and-cross-project-references.md` — same treatment if it carries the same wording in task descriptions.
+- `docs/federation.md` — Decision 5 says "the parser can use an explicit project-ID set from federation config to decide whether the first segment is a namespace" (line ~135) and the unresolved-namespace error message tells users to add to `children:` (line ~255). Both need updating to refer to `peers:` instead.
+- `commands/tasks.md` — same treatment if it carries the same wording in task descriptions.
 - `meta/AGENTS.md` and any project-level `AGENTS.md` / `CLAUDE.md` that documents the federation/parent/children model.
 - Any `commands/` or `skills/` markdown that documents `science-tool federation ...` commands (deleted) or recommends adding entries to `children:`.
 

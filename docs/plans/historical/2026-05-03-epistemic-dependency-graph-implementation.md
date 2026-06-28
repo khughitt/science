@@ -1,6 +1,6 @@
 # Epistemic Dependency Graph — Phase 1 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. The design is at `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` — read it first; this plan implements its **Phase 1** scope.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. The design is at `docs/plans/historical/2026-05-03-epistemic-dependency-graph-design.md` — read it first; this plan implements its **Phase 1** scope.
 
 **Goal:** Land the structural surface needed to make the project knowledge graph live: (a) explicit operational/epistemic/reference taxonomy on every registered entity kind, (b) a `bears_on` relation that captures forward-in-time epistemic dependency, auto-derived from existing typed edges and from `prov:wasDerivedFrom` provenance, with transitive closure across operational hops, and (c) a per-entity `review_state` frontmatter field plus a derived `EpistemicFreshness` flag in the materialized graph. Phase 2 (weighted sampling) is tracked as `[t011]` and is **not** in scope here.
 
@@ -951,7 +951,7 @@ Create `science/src/science_tool/graph/freshness.py`:
 ```python
 """Freshness engine — bears_on derivation and EpistemicFreshness computation.
 
-Implements Phase 1 of docs/plans/2026-05-03-epistemic-dependency-graph-design.md.
+Implements Phase 1 of docs/plans/historical/2026-05-03-epistemic-dependency-graph-design.md.
 Operates over an rdflib Dataset that has already been populated with the
 project's typed relations and provenance triples by `materialize_graph()`.
 
@@ -2972,7 +2972,7 @@ Beyond the static claim-evidence shape (supports/disputes), Science maintains a 
 
 Freshness is a flag, not a gate. A `needs-review` entity remains readable, citable, and usable in synthesis — the flag only affects what `science:status` and `science:next-steps` surface for human attention.
 
-See `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` for the full design.
+See `docs/plans/historical/2026-05-03-epistemic-dependency-graph-design.md` for the full design.
 ```
 
 - [ ] **Step 4: Update `docs/proposition-and-evidence-model.md`**
