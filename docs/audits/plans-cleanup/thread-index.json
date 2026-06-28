@@ -1,10 +1,10 @@
 {
-  "file_count": 205,
-  "generated_at": "2026-06-28T17:56:10+00:00",
+  "file_count": 203,
+  "generated_at": "2026-06-28T18:02:31+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 130,
+  "thread_count": 129,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -1409,33 +1409,6 @@
         "docs/plans/2026-06-15-kind-descriptor-model-registry-plan.md": "plan"
       },
       "thread_id": "kind-descriptor-model-registry"
-    },
-    {
-      "earliest_file_date": "2026-04-19",
-      "files": [
-        "docs/plans/2026-04-19-knowledge-gaps-design.md",
-        "docs/plans/2026-04-19-knowledge-gaps.md"
-      ],
-      "latest_file_date": "2026-04-19",
-      "normalized_slug": "knowledge-gaps",
-      "raw_slugs": {
-        "docs/plans/2026-04-19-knowledge-gaps-design.md": "knowledge-gaps-design",
-        "docs/plans/2026-04-19-knowledge-gaps.md": "knowledge-gaps"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-19-knowledge-gaps-design.md"
-        ],
-        "primary": [
-          "docs/plans/2026-04-19-knowledge-gaps.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-19-knowledge-gaps-design.md": "design",
-        "docs/plans/2026-04-19-knowledge-gaps.md": null
-      },
-      "thread_id": "knowledge-gaps"
     },
     {
       "earliest_file_date": "2026-06-06",

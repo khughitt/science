@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `28`
+- Pending thread count: `27`
 
 ## b-migration-paper-datasets
 
@@ -180,21 +180,6 @@
 - remaining_gaps:
   - Verify whether the dashboard route consumed this contract or whether only the science-side export landed.
   - Decide whether a small durable graph-export contract doc is needed before deleting the implementation plan.
-
-## knowledge-gaps
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-04-19-knowledge-gaps-design.md`
-  - `docs/plans/2026-04-19-knowledge-gaps.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until legacy topic-gap semantics move to durable big-picture docs
-    - `docs/plans/2026-04-19-knowledge-gaps-design.md`
-    - `docs/plans/2026-04-19-knowledge-gaps.md`
-- remaining_gaps:
-  - Migrate the stable user-facing contract for legacy topic-coverage gaps and aspect integration into big-picture user or command docs before deleting.
 
 ## manuscript-paper-rename
 

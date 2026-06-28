@@ -6,7 +6,8 @@ description: Generate a multi-scale, hypothesis-organized synthesis for the proj
 
 Generate `entities/reports/synthesis/<hyp>.md` files (one per hypothesis), `entities/reports/synthesis/_emergent-threads.md`, and `entities/reports/synthesis.md` (project rollup).
 
-See the design spec at `${CLAUDE_PLUGIN_ROOT}/docs/plans/2026-04-18-project-big-picture-design.md` for full semantics.
+See `docs/user-guide/big-picture-synthesis.md` for the durable user-facing
+synthesis and topic-coverage gap semantics.
 
 ## Flags
 
@@ -76,6 +77,8 @@ all_gaps = compute_topic_gaps(project_root, resolved_questions, included_questio
 Then for each hypothesis bundle, filter `all_gaps` to topics whose `hypotheses` list includes this hypothesis's ID. Pass the filtered list to the hypothesis-synthesizer agent as `topic_gaps`.
 
 `included_question_ids` is the exact set already computed earlier in Phase 1 for aspect filtering — DO NOT recompute it here.
+The stable topic-coverage gap contract is documented in
+`docs/user-guide/big-picture-synthesis.md`.
 
 Compute `provenance_coverage` per hypothesis:
 - `high` if >=1 `.edges.yaml` is present OR >=1 graph proposition surface exists AND >=60% of

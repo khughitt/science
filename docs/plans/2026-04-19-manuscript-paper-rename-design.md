@@ -288,12 +288,12 @@ Extend the existing `science/tests/fixtures/big_picture/minimal_project/` or add
    uv run science refs check --root .                               # verify no dangling refs
    ```
    The `check` step catches any mid-migration half-states (e.g., an `article:` reference that the regex missed because the entity ID used an unusual character) before the change is committed.
-3. **Knowledge-gaps spec lands next.** Its coverage metric uses `paper:` as canonical; the dual-acceptance defined here covers any projects not yet migrated.
+3. **Knowledge-gaps topic-coverage surface lands next.** Its coverage metric uses `paper:` as canonical; the dual-acceptance defined here covers any projects not yet migrated.
 4. **Dual-acceptance removal** (separate follow-on spec) once all tracked projects confirm migration.
 
 ## Relationship to Existing Specs
 
-- **Knowledge-gaps spec (2026-04-19-knowledge-gaps-design.md)**: consumes this rename. The knowledge-gaps module's coverage metric uses `paper:<bibkey>` as canonical and treats `article:<bibkey>` as a transition-window alias.
+- **Knowledge-gaps topic-coverage surface**: consumes this rename. The durable contract is in `docs/user-guide/big-picture-synthesis.md`; the knowledge-gaps module's coverage metric uses `paper:<bibkey>` as canonical and treats `article:<bibkey>` as a transition-window alias.
 - **Big-picture spec (2026-04-18-project-big-picture-design.md)**: affected only through the validator's `REFERENCE_PATTERN` extension. No semantic change.
 - **Entity-aspects spec (2026-04-19-entity-aspects-design.md)**: independent. Aspect vocabulary does not reference `article:` or `paper:` prefixes.
 
