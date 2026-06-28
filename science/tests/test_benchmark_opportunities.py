@@ -934,12 +934,189 @@ title: Perturbation gap
     assert payload["benchmark_gaps"][0]["missing_signal_types"] == ["perturbation"]
 
 
+def test_gaps_report_calibration_payload_explains_gap_and_candidates(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0021-calibration",
+        """
+id: hypothesis:0021-calibration
+type: hypothesis
+title: Drug screen summary gap
+""",
+        body="Summary response needs drug compound screening evidence.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex",
+        """
+id: dataset:sciplex
+type: dataset
+title: Sci-Plex
+benchmark:
+  domains: [biology, cancer]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: response
+      prediction_target: response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: measured response
+""",
+    )
+
+    payload = gaps_report(tmp_path, calibration_report=True)
+
+    assert payload["calibration"]["enabled"] is True
+    gap_entity_evidence = payload["calibration"].get("gap_entity_evidence")
+    assert gap_entity_evidence is not None
+    evidence = gap_entity_evidence["hypothesis:0021-calibration"]
+    assert "perturbation" in evidence["facet_hints"]
+    assert "response" in evidence["dropped_tokens"]["stop"]
+    assert "summary" in evidence["dropped_tokens"]["broad_entity"]
+    candidate_evidence = payload["calibration"].get("candidate_evidence")
+    assert candidate_evidence is not None
+    candidate = candidate_evidence[0]
+    assert candidate["entity_id"] == "hypothesis:0021-calibration"
+    assert candidate["benchmark_id"] == "dataset:sciplex"
+    assert candidate["candidate_score"] == sum(candidate["components"].values())
+    assert candidate["components"]["hint_facet_overlap"] > 0
+    assert "cancer" in candidate["dropped_dataset_facets"]
+
+
+def test_benchmark_gaps_cli_calibration_report_json(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0022-cli-calibration",
+        """
+id: hypothesis:0022-cli-calibration
+type: hypothesis
+title: Perturbation CLI gap
+""",
+        body="Perturbation evidence is needed.",
+    )
+
+    result = _invoke_gaps(tmp_path, "--calibration-report", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["calibration"]["enabled"] is True
+    assert "gap_entity_evidence" in payload["calibration"]
+
+
 def test_benchmark_gaps_cli_invalid_entity_uses_click_error(tmp_path: Path) -> None:
     result = _invoke_gaps(tmp_path, "--entity", "hypothesis:nope")
 
     assert result.exit_code != 0
     assert "Error:" in result.output
     assert "hypothesis:nope" in result.output
+
+
+def test_gap_hint_facets_are_the_facet_filter_valid_set(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import BENCHMARK_GAP_HINT_FACETS, gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0011-single-cell",
+        """
+id: hypothesis:0011-single-cell
+type: hypothesis
+title: Single-cell longitudinal benchmark gap
+""",
+        body="Single-cell longitudinal data would test the model.",
+    )
+
+    for facet in BENCHMARK_GAP_HINT_FACETS:
+        payload = gaps_report(tmp_path, facet=facet)
+        assert payload["summary"]["entities_total"] == 1
+
+
+def test_broad_dataset_and_entity_tokens_do_not_create_opportunity_matches(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import opportunity_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0012-broad",
+        """
+id: hypothesis:0012-broad
+type: hypothesis
+title: Cancer hypothesis summary
+status: active
+""",
+        body="Summary statement about cancer biology varies by cohort.",
+    )
+    _write_dataset(
+        tmp_path,
+        "broad",
+        """
+id: dataset:broad
+type: dataset
+title: Broad Dataset
+benchmark:
+  domains: [biology, cancer]
+  modalities: [varies]
+  signal_types: [static]
+  benchmark_kinds: [association]
+""",
+    )
+
+    payload = opportunity_report(tmp_path, include_commons=False, calibration_report=True)
+
+    assert payload["matched_opportunities"] == []
+    assert payload["unmapped_project_entities"][0]["entity_id"] == "hypothesis:0012-broad"
+    dropped = payload["calibration"].get("dropped_tokens")
+    assert dropped is not None
+    assert "summary" in dropped["broad_entity"]["hypothesis:0012-broad"]
+    assert dropped["broad_dataset_facet"]["dataset:broad"] == ["biology", "cancer", "varies"]
+    benchmark_controlled_facet_tokens = payload["calibration"].get("benchmark_controlled_facet_tokens")
+    assert benchmark_controlled_facet_tokens is not None
+    benchmark_tokens = benchmark_controlled_facet_tokens["dataset:broad"]
+    assert "cancer" in benchmark_tokens
+    assert "varies" in benchmark_tokens
+
+
+def test_gap_report_uses_shared_opportunity_analysis_for_entity_filter(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report, opportunity_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0013-target",
+        """
+id: hypothesis:0013-target
+type: hypothesis
+title: Target perturbation benchmark gap
+""",
+        body="Perturbation benchmark coverage is missing.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0014-other",
+        """
+id: hypothesis:0014-other
+type: hypothesis
+title: Other spatial benchmark gap
+""",
+        body="Spatial benchmark coverage is missing.",
+    )
+
+    opportunity = opportunity_report(tmp_path, entity_id="hypothesis:0013-target")
+    gaps = gaps_report(tmp_path, entity_id="hypothesis:0013-target")
+
+    assert [row["entity_id"] for row in opportunity["unmapped_project_entities"]] == ["hypothesis:0013-target"]
+    assert [row["entity_id"] for row in gaps["benchmark_gaps"]] == ["hypothesis:0013-target"]
+    assert gaps["summary"]["entities_total"] == 1
 
 
 def test_gaps_report_projects_uncovered_entities_and_candidate_benchmarks(tmp_path: Path) -> None:
@@ -998,6 +1175,96 @@ benchmark:
     assert row["current_matches"] == []
     assert row["candidate_benchmarks"][0]["benchmark_id"] == "dataset:atlas"
     assert row["candidate_benchmarks"][0]["matched_missing_facets"] == []
+
+
+def test_gaps_report_infers_suggested_facets_for_uncovered_entity(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0015-longitudinal",
+        """
+id: hypothesis:0015-longitudinal
+type: hypothesis
+title: Dynamic single-cell proteomics gap
+""",
+        body="Longitudinal perturbation trajectories require proteomics and single-cell data.",
+    )
+
+    payload = gaps_report(tmp_path)
+
+    row = payload["benchmark_gaps"][0]
+    assert row["gap_level"] == "uncovered"
+    assert row["suggested_search_facets"] == [
+        "proteomics",
+        "perturbation",
+        "time-series",
+        "longitudinal",
+        "single-cell-rna-seq",
+    ]
+
+
+def test_gaps_report_facet_filter_uses_inferred_hints(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0016-single-cell",
+        """
+id: hypothesis:0016-single-cell
+type: hypothesis
+title: Single-cell benchmark gap
+""",
+        body="Single-cell assays are needed.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0017-proteomics",
+        """
+id: hypothesis:0017-proteomics
+type: hypothesis
+title: Proteomics benchmark gap
+""",
+        body="Proteomics assays are needed.",
+    )
+
+    payload = gaps_report(tmp_path, facet="single-cell-rna-seq")
+
+    assert [row["entity_id"] for row in payload["benchmark_gaps"]] == ["hypothesis:0016-single-cell"]
+
+
+def test_gaps_report_cross_context_hint_requires_phrase(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0020-cross-context",
+        """
+id: hypothesis:0020-cross-context
+type: hypothesis
+title: Cross context benchmark gap
+""",
+        body="Cross context evidence is needed.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0021-validation-only",
+        """
+id: hypothesis:0021-validation-only
+type: hypothesis
+title: Validation benchmark gap
+""",
+        body="Validation evidence is needed.",
+    )
+
+    payload = gaps_report(tmp_path, facet="cross-context-generalization")
+
+    assert [row["entity_id"] for row in payload["benchmark_gaps"]] == ["hypothesis:0020-cross-context"]
 
 
 def test_gaps_report_projects_existing_coverage_gaps_as_missing_facet(tmp_path: Path) -> None:
@@ -1072,7 +1339,7 @@ benchmark:
     assert row["missing_modalities"] == ["proteomics"]
     assert row["missing_signal_types"] == []
     assert row["current_matches"][0]["relative_score"] >= 15
-    assert row["suggested_search_facets"] == ["proteomics"]
+    assert row["suggested_search_facets"] == ["proteomics", "spatial", "cross-context-generalization"]
     assert row["candidate_benchmarks"][0]["benchmark_id"] == "dataset:unrelated"
     assert row["candidate_benchmarks"][0]["matched_missing_facets"] == []
 
@@ -1185,7 +1452,7 @@ benchmark:
     row = payload["benchmark_gaps"][0]
     assert row["gap_level"] == "weak"
     assert row["missing_modalities"] == ["proteomics"]
-    assert row["suggested_search_facets"] == ["proteomics"]
+    assert row["suggested_search_facets"] == ["proteomics", "spatial", "cross-context-generalization"]
     assert row["current_matches"][0]["task_id"] is None
     assert row["candidate_benchmarks"][0]["benchmark_id"] == "dataset:unrelated-task"
 
@@ -1231,50 +1498,224 @@ title: Proteomics missing gap
     assert payload["summary"]["entities_with_gaps"] == 1
 
 
-def test_candidate_rows_sort_by_matched_facets_score_then_id() -> None:
-    from science_tool.benchmark_opportunities import _candidate_rows
+def test_gaps_report_candidates_are_entity_specific_near_misses(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
 
-    rows = _candidate_rows(
-        [
-            {
-                "benchmark_id": "dataset:z-unmatched-high-score",
-                "benchmark_title": "Unmatched High Score",
-                "baseline_score": 99,
-                "unmapped_facets": ["spatial"],
-            },
-            {
-                "benchmark_id": "dataset:beta",
-                "benchmark_title": "Beta",
-                "baseline_score": 20,
-                "unmapped_facets": ["proteomics"],
-            },
-            {
-                "benchmark_id": "dataset:alpha",
-                "benchmark_title": "Alpha",
-                "baseline_score": 20,
-                "unmapped_facets": ["proteomics"],
-            },
-            {
-                "benchmark_id": "dataset:score",
-                "benchmark_title": "Score",
-                "baseline_score": 30,
-                "unmapped_facets": ["proteomics"],
-            },
-            {
-                "benchmark_id": "dataset:two-match",
-                "benchmark_title": "Two Match",
-                "baseline_score": 1,
-                "unmapped_facets": ["perturbation", "proteomics"],
-            },
-        ],
-        {"perturbation", "proteomics"},
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0018-perturbation",
+        """
+id: hypothesis:0018-perturbation
+type: hypothesis
+title: Drug screen benchmark gap
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0019-proteomics",
+        """
+id: hypothesis:0019-proteomics
+type: hypothesis
+title: Protein abundance benchmark gap
+""",
+        body="Phosphoproteomic protein abundance should be tested.",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex",
+        """
+id: dataset:sciplex
+type: dataset
+title: Sci-Plex
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  tasks:
+    - id: response
+      prediction_target: response
+      held_out_unit: compound
+      metric: rank-correlation
+      baseline: nearest-neighbor
+      ground_truth:
+        type: measured-outcome
+        description: measured response
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "cptac",
+        """
+id: dataset:cptac
+type: dataset
+title: CPTAC
+benchmark:
+  domains: [biology]
+  modalities: [proteomics, multimodal]
+  signal_types: [multi-omic]
+  benchmark_kinds: [mechanism-discrimination]
+  tasks:
+    - id: subtype
+      prediction_target: subtype
+      held_out_unit: cohort
+      metric: auroc
+      baseline: clinical-only
+      ground_truth:
+        type: measured-outcome
+        description: curated subtype
+""",
     )
 
-    assert [row["benchmark_id"] for row in rows] == [
-        "dataset:two-match",
-        "dataset:score",
-        "dataset:alpha",
-        "dataset:beta",
-        "dataset:z-unmatched-high-score",
-    ]
-    assert rows[0]["matched_missing_facets"] == ["perturbation", "proteomics"]
+    payload = gaps_report(tmp_path)
+    by_entity = {row["entity_id"]: row for row in payload["benchmark_gaps"]}
+
+    perturbation_candidates = by_entity["hypothesis:0018-perturbation"]["candidate_benchmarks"]
+    proteomics_candidates = by_entity["hypothesis:0019-proteomics"]["candidate_benchmarks"]
+    assert perturbation_candidates[0]["benchmark_id"] == "dataset:sciplex"
+    assert "perturbation" in perturbation_candidates[0]["matched_hint_facets"]
+    assert proteomics_candidates[0]["benchmark_id"] == "dataset:cptac"
+    assert "proteomics" in proteomics_candidates[0]["matched_hint_facets"]
+    assert perturbation_candidates[0]["candidate_score"] > 0
+    assert proteomics_candidates[0]["candidate_score"] > 0
+
+
+def test_gap_candidate_rows_keep_v1_fields(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import gaps_report
+
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0023-compat",
+        """
+id: hypothesis:0023-compat
+type: hypothesis
+title: Protein abundance compatibility gap
+""",
+        body="Phosphoproteomic protein abundance is needed.",
+    )
+    _write_dataset(
+        tmp_path,
+        "cptac",
+        """
+id: dataset:cptac
+type: dataset
+title: CPTAC
+benchmark:
+  domains: [biology]
+  modalities: [proteomics]
+  signal_types: [multi-omic]
+  benchmark_kinds: [mechanism-discrimination]
+""",
+    )
+
+    payload = gaps_report(tmp_path)
+    candidate = payload["benchmark_gaps"][0]["candidate_benchmarks"][0]
+
+    assert set(candidate) >= {
+        "benchmark_id",
+        "benchmark_title",
+        "baseline_score",
+        "matched_missing_facets",
+        "candidate_score",
+        "matched_hint_facets",
+        "reason_notes",
+    }
+
+
+def test_benchmark_gaps_cli_calibration_table(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0024-table",
+        """
+id: hypothesis:0024-table
+type: hypothesis
+title: Perturbation table gap
+""",
+        body="Perturbation evidence is needed.",
+    )
+
+    result = _invoke_gaps(tmp_path, "--calibration-report")
+
+    assert result.exit_code == 0
+    assert "Benchmark Gaps" in result.output
+    assert "Gap Calibration" in result.output
+
+
+def test_candidate_score_does_not_double_count_task_readiness_in_baseline_quality(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import _candidate_score, _dataset_context, load_opportunity_datasets
+
+    _write_dataset(
+        tmp_path,
+        "task-ready-only",
+        """
+id: dataset:task-ready-only
+type: dataset
+title: Task Ready Only
+benchmark:
+  domains: [biology]
+  modalities: [assay]
+  signal_types: [unrelated]
+  benchmark_kinds: [static-association]
+  tasks:
+    - id: ready
+      prediction_target: label
+      held_out_unit: cohort
+      metric: auroc
+      baseline: majority-class
+      ground_truth:
+        type: measured-outcome
+        description: label
+""",
+    )
+
+    dataset = load_opportunity_datasets(tmp_path, include_commons=False)[0][0]
+    context = _dataset_context(dataset, include_prose_tokens=False)
+    score = _candidate_score(context, missing_facets=set(), hint_facets=set())
+
+    assert score.components["hint_facet_overlap"] == 0
+    assert score.components["missing_facet_overlap"] == 0
+    assert score.components["task_readiness"] > 0
+    assert score.components["baseline_quality"] == 0
+    assert score.total == score.components["task_readiness"]
+
+
+def test_candidate_score_caps_missing_facet_overlap(tmp_path: Path) -> None:
+    from science_tool.benchmark_opportunities import _candidate_score, _dataset_context, load_opportunity_datasets
+
+    _write_dataset(
+        tmp_path,
+        "broad-gap",
+        """
+id: dataset:broad-gap
+type: dataset
+title: Broad Gap
+benchmark:
+  domains: [biology]
+  modalities: [proteomics, spatial, multimodal]
+  signal_types: [perturbation, time-series, cross-context-generalization]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    dataset = load_opportunity_datasets(tmp_path, include_commons=False)[0][0]
+    context = _dataset_context(dataset, include_prose_tokens=False)
+    score = _candidate_score(
+        context,
+        missing_facets={
+            "proteomics",
+            "spatial",
+            "multimodal",
+            "perturbation",
+            "time-series",
+            "cross-context-generalization",
+        },
+        hint_facets=set(),
+    )
+
+    assert score.components["missing_facet_overlap"] == 30
+    assert score.total <= 100
