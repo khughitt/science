@@ -188,6 +188,7 @@ _DEFAULT_STATUS: dict[str, str] = {
 _STATUS_VALUES: dict[str, frozenset[str]] = {
     ek.name: frozenset(ek.statuses) for ek in _KIND_DESCRIPTORS if ek.statuses
 }
+_EXTRA_FRONTMATTER_RESERVED_KEYS = frozenset({"id", "type", "title", "status", "related", "source_refs", "created", "updated"})
 _ALLOWED_EXPLICIT_ROOTS = (Path("entities"),)
 
 # Lifecycle states hidden from default view/consumer surfaces (consolidation P1).
@@ -618,9 +619,11 @@ def build_entity_markdown(
     with_sections: list[str] | None = None,
     without_sections: list[str] | None = None,
     no_hints: bool = False,
+    extra_frontmatter: Mapping[str, object] | None = None,
 ) -> str:
     from science_model.templates import MIGRATED_KINDS, EntityTemplateError, Renderer
 
+    _validate_extra_frontmatter(extra_frontmatter)
     if kind in MIGRATED_KINDS:
         validated_id = validate_entity_id(kind, entity_id)
         local_part = validated_id.split(":", 1)[1]
@@ -641,7 +644,7 @@ def build_entity_markdown(
             "phase": phase or "active",
         }
         try:
-            return Renderer(today=today).render(
+            text = Renderer(today=today).render(
                 kind,
                 fields=fields,
                 with_keys=list(with_sections or []),
@@ -650,6 +653,9 @@ def build_entity_markdown(
             )
         except EntityTemplateError as exc:
             raise EntityCommandError(str(exc)) from exc
+        if extra_frontmatter:
+            return _merge_extra_frontmatter(text, extra_frontmatter)
+        return text
 
     frontmatter: dict[str, object] = {
         "id": validate_entity_id(kind, entity_id),
@@ -661,12 +667,37 @@ def build_entity_markdown(
         "created": today.isoformat(),
         "updated": today.isoformat(),
     }
+    if extra_frontmatter:
+        frontmatter.update(extra_frontmatter)
     body = _entity_body_template(kind, title)
     return "---\n" + _dump_frontmatter(frontmatter) + "---\n" + body
 
 
+def _merge_extra_frontmatter(text: str, extra_frontmatter: Mapping[str, object]) -> str:
+    if not text.startswith("---\n"):
+        raise EntityCommandError("Rendered entity template has no frontmatter block")
+    rest = text[len("---\n") :]
+    frontmatter_text, separator, body = rest.partition("---\n")
+    if not separator:
+        raise EntityCommandError("Rendered entity template has no closing frontmatter fence")
+    frontmatter = yaml.safe_load(frontmatter_text) or {}
+    if not isinstance(frontmatter, dict):
+        raise EntityCommandError("Rendered entity template frontmatter is not a mapping")
+    frontmatter.update(extra_frontmatter)
+    return "---\n" + _dump_frontmatter(frontmatter) + "---\n" + body
+
+
+def _validate_extra_frontmatter(extra_frontmatter: Mapping[str, object] | None) -> None:
+    if not extra_frontmatter:
+        return
+    reserved = sorted(set(extra_frontmatter) & _EXTRA_FRONTMATTER_RESERVED_KEYS)
+    if reserved:
+        raise EntityCommandError(f"extra frontmatter cannot override core field(s): {', '.join(reserved)}")
+
+
 def _entity_body_template(kind: str, title: str) -> str:
-    del kind
+    if kind == "evidence-line":
+        return f"# {title}\n\n## Evidence\n\n\n## Interpretation\n\n\n## Notes\n"
     return f"# {title}\n\n## Summary\n\n\n## Notes\n"
 
 
@@ -691,6 +722,7 @@ def create_entity(
     with_sections: list[str] | None = None,
     without_sections: list[str] | None = None,
     no_hints: bool = False,
+    extra_frontmatter: Mapping[str, object] | None = None,
 ) -> EntityWriteResult:
     project_root = project_root.resolve()
     today_value = today or date.today()
@@ -720,6 +752,7 @@ def create_entity(
         with_sections=with_sections,
         without_sections=without_sections,
         no_hints=no_hints,
+        extra_frontmatter=extra_frontmatter,
     )
     warnings = _validate_prospective_write(
         project_root=project_root,

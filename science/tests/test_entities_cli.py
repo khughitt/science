@@ -1048,6 +1048,100 @@ def test_proposition_create_writes_source() -> None:
         assert "## Claim" in text
 
 
+def test_evidence_lines_create_writes_durable_source() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(
+            main,
+            [
+                "evidence-lines",
+                "create",
+                "Cadence result supports switch proposition",
+                "--target",
+                "proposition:0001-switch-history",
+                "--stance",
+                "supports",
+                "--source",
+                "paper:doe-2026",
+                "--strength",
+                "moderate",
+                "--evidence-type",
+                "empirical_data",
+                "--independence",
+                "independent",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "evidence-line:cadence-result-supports-switch-proposition" in result.output
+        path = Path("entities/evidence-lines/cadence-result-supports-switch-proposition.md")
+        assert path.is_file()
+        text = path.read_text(encoding="utf-8")
+        frontmatter = yaml.safe_load(text.split("---")[1])
+        assert frontmatter["id"] == "evidence-line:cadence-result-supports-switch-proposition"
+        assert frontmatter["type"] == "evidence-line"
+        assert frontmatter["target"] == "proposition:0001-switch-history"
+        assert frontmatter["stance"] == "supports"
+        assert frontmatter["source"] == "paper:doe-2026"
+        assert frontmatter["strength"] == "moderate"
+        assert frontmatter["evidence_type"] == "empirical_data"
+        assert frontmatter["independence"] == "independent"
+        assert "# Evidence Line: Cadence result supports switch proposition" in text
+
+
+def test_evidence_lines_create_requires_target() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(
+            main,
+            [
+                "evidence-lines",
+                "create",
+                "Missing target",
+                "--stance",
+                "supports",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "Missing option '--target'" in result.output
+
+
+def test_evidence_lines_list_and_show_round_trip() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "entities/evidence-lines/0001-line.md",
+            {
+                "id": "evidence-line:0001-line",
+                "type": "evidence-line",
+                "title": "Line",
+                "target": "proposition:0001-target",
+                "stance": "supports",
+                "status": "active",
+            },
+            "# Line\n\n## Evidence\n\nObserved support.\n",
+        )
+
+        listed = runner.invoke(main, ["evidence-lines", "list", "--format", "json"])
+        shown = runner.invoke(main, ["evidence-lines", "show", "0001"])
+
+        assert listed.exit_code == 0, listed.output
+        assert [row["id"] for row in json.loads(listed.output)["rows"]] == ["evidence-line:0001-line"]
+        assert shown.exit_code == 0, shown.output
+        assert "evidence-line:0001-line" in shown.output
+        assert "Observed support." in shown.output
+
+
 def test_graph_add_proposition_warns_about_ephemerality() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():

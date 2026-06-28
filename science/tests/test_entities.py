@@ -183,6 +183,20 @@ def test_build_entity_markdown_uses_canonical_frontmatter_and_body() -> None:
     assert "## Notes" not in text
 
 
+def test_build_entity_markdown_rejects_extra_frontmatter_core_overrides() -> None:
+    with pytest.raises(EntityCommandError, match="extra frontmatter cannot override core field"):
+        build_entity_markdown(
+            kind="evidence-line",
+            entity_id="evidence-line:test",
+            title="Test",
+            status="draft",
+            related=[],
+            source_refs=[],
+            today=date(2026, 6, 27),
+            extra_frontmatter={"id": "evidence-line:other", "target": "proposition:p1", "stance": "supports"},
+        )
+
+
 def test_build_entity_markdown_for_discussion_uses_canonical_sections() -> None:
     """fb-2026-04-30-001: discussion bodies must match the science:discuss skill's
     canonical sections (Focus, Current Position, Critical Analysis, Evidence Needed,
