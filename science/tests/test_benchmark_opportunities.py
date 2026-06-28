@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 from typing import Any, cast
@@ -481,3 +482,162 @@ benchmark:
     assert [row["benchmark_id"] for row in rows[:2]] == ["dataset:id-linked", "dataset:token-only"]
     assert rows[0]["score_components"]["relative"]["related_belief_id"] == 40
     assert rows[1]["score_components"]["relative"]["related_belief_id"] == 0
+
+
+def test_benchmark_opportunities_json_and_calibration_shape(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-perturbation",
+        """
+id: hypothesis:0001-perturbation
+type: hypothesis
+title: Perturbation response
+status: active
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "sciplex3",
+        """
+id: dataset:sciplex3
+type: dataset
+title: Sci-Plex 3
+benchmark:
+  domains: [biology]
+  modalities: [single-cell-rna-seq]
+  signal_types: [perturbation]
+  benchmark_kinds: [perturbation-response]
+  notes:
+    - Measured expression prose is displayed for calibration only.
+""",
+    )
+
+    result = _invoke(tmp_path, "--format", "json", "--calibration-report")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["matched_opportunities"][0]["entity_id"] == "hypothesis:0001-perturbation"
+    assert payload["calibration"]["enabled"] is True
+    assert "stop_tokens" in payload["calibration"]
+    excluded = payload["calibration"]["excluded_benchmark_prose_tokens"]["dataset:sciplex3"]
+    assert "measured" in excluded
+    assert not any("measured" in reason for reason in payload["matched_opportunities"][0]["match_reasons"])
+
+
+def test_benchmark_opportunities_table_uses_candidate_language(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-spatial",
+        """
+id: hypothesis:0001-spatial
+type: hypothesis
+title: Spatial transfer
+status: active
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "atlas",
+        """
+id: dataset:atlas
+type: dataset
+title: Atlas
+benchmark:
+  domains: [biology]
+  modalities: [spatial]
+  signal_types: [cross-context-generalization]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    result = _invoke(tmp_path)
+
+    assert result.exit_code == 0
+    assert "Candidate Opportunities" in result.output
+    assert "recommended" not in result.output.lower()
+    assert "best" not in result.output.lower()
+
+
+def test_benchmark_opportunities_invalid_entity_is_click_error(tmp_path: Path) -> None:
+    result = _invoke(tmp_path, "--entity", "hypothesis:missing")
+
+    assert result.exit_code == 1
+    assert "Entity not found: hypothesis:missing" in result.output
+
+
+def test_benchmark_opportunities_commons_unavailable_degrades_to_local_rows(tmp_path: Path) -> None:
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-static",
+        """
+id: hypothesis:0001-static
+type: hypothesis
+title: Static biology association
+status: active
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "local",
+        """
+id: dataset:local
+type: dataset
+title: Local
+benchmark:
+  domains: [biology]
+  modalities: [biology]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    result = _invoke(tmp_path, "--commons", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["matched_opportunities"][0]["benchmark_id"] == "dataset:local"
+    assert payload["matched_opportunities"][0]["entity_id"] == "hypothesis:0001-static"
+    assert payload["commons_notice"]
+    assert "notice: commons benchmarks unavailable" in result.stderr
+
+
+def test_benchmark_opportunities_commons_corrupt_registry_degrades_to_local_rows(tmp_path: Path) -> None:
+    commons_root = tmp_path / "commons"
+    _write_corrupt_commons_registry(commons_root, '"bad"')
+    _write_entity(
+        tmp_path,
+        "hypotheses",
+        "0001-static",
+        """
+id: hypothesis:0001-static
+type: hypothesis
+title: Static biology association
+status: active
+""",
+    )
+    _write_dataset(
+        tmp_path,
+        "local",
+        """
+id: dataset:local
+type: dataset
+title: Local
+benchmark:
+  domains: [biology]
+  modalities: [biology]
+  benchmark_kinds: [static-association]
+""",
+    )
+
+    result = _invoke_with_commons(tmp_path, commons_root, "--commons", "--format", "json")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["matched_opportunities"][0]["benchmark_id"] == "dataset:local"
+    assert payload["matched_opportunities"][0]["entity_id"] == "hypothesis:0001-static"
+    assert payload["commons_notice"]
+    assert "frontmatter_json must decode to an object" in payload["commons_notice"]
+    assert "notice: commons benchmarks unavailable" in result.stderr
+    assert "frontmatter_json must decode to an object" in result.stderr

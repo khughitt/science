@@ -5846,6 +5846,89 @@ def benchmark_list(
     Console(width=200).print(table)
 
 
+@benchmark_group.command("opportunities")
+@click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
+@click.option("--entity", "entity_ref", default=None, help="Limit report to one project entity reference.")
+@click.option("--commons", "include_commons", is_flag=True, help="Also include commons benchmark dataset entities.")
+@click.option("--calibration-report", is_flag=True, help="Include token/scoring calibration details.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd).",
+)
+def benchmark_opportunities(
+    domain: str | None,
+    entity_ref: str | None,
+    include_commons: bool,
+    calibration_report: bool,
+    output_format: str,
+    project_root: Path | None,
+) -> None:
+    """Report candidate benchmark opportunities for project entities."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from science_tool.benchmark_opportunities import opportunity_report
+    from science_tool.entities import EntityCommandError, resolve_entity_ref
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    entity_id: str | None = None
+    if entity_ref is not None:
+        try:
+            entity_id = resolve_entity_ref(root, entity_ref)
+        except EntityCommandError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+    payload = opportunity_report(
+        root,
+        include_commons=include_commons,
+        entity_id=entity_id,
+        domain=domain,
+        calibration_report=calibration_report,
+    )
+    notice = payload["commons_notice"]
+    if notice:
+        click.echo(f"notice: commons benchmarks unavailable ({notice})", err=True)
+
+    if output_format == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    rows = payload["matched_opportunities"]
+    if not rows:
+        click.echo("No candidate benchmark opportunities.")
+    else:
+        table = Table(title="Candidate Opportunities", show_header=True, header_style="bold")
+        for col in ("entity", "benchmark", "task", "relative", "baseline", "reasons"):
+            table.add_column(col, overflow="fold", no_wrap=False)
+        for row in rows:
+            table.add_row(
+                row["entity_id"],
+                row["benchmark_id"],
+                row["task_id"] or "-",
+                str(row["relative_score"]),
+                str(row["baseline_score"]),
+                ", ".join(row["match_reasons"]),
+            )
+        Console(width=200).print(table)
+
+    if calibration_report:
+        calibration_table = Table(title="Calibration", show_header=True, header_style="bold")
+        calibration_table.add_column("field", overflow="fold", no_wrap=False)
+        calibration_table.add_column("value", overflow="fold", no_wrap=False)
+        for field, value in payload["calibration"].items():
+            calibration_table.add_row(field, json.dumps(value, sort_keys=True))
+        Console(width=200).print(calibration_table)
+
+
 @main.group("dataset")
 def dataset_group() -> None:
     """Dataset entity lifecycle commands (list, register-run, reconcile)."""
