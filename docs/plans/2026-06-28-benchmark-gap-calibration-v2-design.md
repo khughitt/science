@@ -70,11 +70,14 @@ signals, and non-specific candidate lists.
 
 ## Architecture
 
-Keep `opportunity_report()` as the source of truth for loaded project entities,
-benchmark datasets, matched opportunities, coverage gaps, and commons notices.
-Add one internal analysis layer in `science_tool.benchmark_opportunities` that
-is computed from the same loaded entities and dataset contexts used by
-`opportunity_report()`:
+Keep `opportunity_report()` as the source of truth for the public opportunity
+payload: loaded project entities, benchmark datasets, matched opportunities,
+coverage gaps, and commons notices all come from one assembly path. Extract a
+private `_opportunity_analysis()` helper in
+`science_tool.benchmark_opportunities` that loads entities and datasets,
+builds cached dataset contexts, computes matched rows, and returns the public
+`OpportunityReport` plus the internal entity/context objects needed for
+diagnostics:
 
 ```text
 load entities + datasets
@@ -88,14 +91,17 @@ load entities + datasets
 The new diagnostic layer is not a second positive matcher. It may score
 near-miss candidates for an entity, but it must not change
 `matched_opportunities`, `coverage_gaps`, or `unmapped_project_entities`.
-`gaps_report()` should still call the shared opportunity assembly path once and
-project over its output plus the diagnostic payload.
+Both public functions should project over `_opportunity_analysis()`:
 
-If implementation needs to avoid recomputing contexts, extract a private
-assembly helper such as `_opportunity_analysis()` that returns the public
-`OpportunityReport` plus internal entity/context objects. Both
-`opportunity_report()` and `gaps_report()` should use that helper rather than
-copying loader logic.
+- `opportunity_report()` returns only the public opportunity payload.
+- `gaps_report()` uses the same public payload plus cached entities and dataset
+  contexts for per-entity diagnostics.
+
+This helper is required, not optional. Candidate scoring needs cached
+`DatasetOpportunityContext` values such as baseline components,
+`scoreable_facet_tokens`, and readiness-derived penalties. Recomputing those
+inside entity-candidate loops would reintroduce repeated readiness/model
+validation and risk drift from opportunity scoring.
 
 ## Facet Hint Lexicon
 
@@ -115,10 +121,25 @@ Initial mappings:
 | `single-cell`, `singlecell`, `scrna`, `scRNA-seq`, `single-cell-rna-seq` | `single-cell-rna-seq` |
 | `transfer`, `generalization`, `cross-context`, `cross context`, `external validation` | `cross-context-generalization` |
 
-Only the union of `GAP_MODALITIES`, `GAP_SIGNAL_TYPES`, and existing
-high-value opportunity facets should be emitted as structured hints. Unknown
-tokens may appear in calibration evidence but should not become
-`suggested_search_facets`.
+Define one public emittable facet set, `BENCHMARK_GAP_HINT_FACETS`, as the
+normalized union of `GAP_MODALITIES`, `GAP_SIGNAL_TYPES`, and existing
+high-value opportunity facets that the command may suggest. The initial set is:
+
+- `proteomics`
+- `spatial`
+- `multimodal`
+- `perturbation`
+- `time-series`
+- `cross-context-generalization`
+- `longitudinal`
+- `multi-omic`
+- `single-cell-rna-seq`
+
+Unknown tokens may appear in calibration evidence but should not become
+`suggested_search_facets`. The `--facet` valid set must be exactly
+`BENCHMARK_GAP_HINT_FACETS` after normalization. This prevents drift where a
+row can emit `suggested_search_facets: ["single-cell-rna-seq"]` but
+`science benchmark gaps --facet single-cell-rna-seq` rejects the value.
 
 `suggested_search_facets` should be computed as:
 
@@ -127,25 +148,58 @@ tokens may appear in calibration evidence but should not become
 3. Facets represented in weak current matches only when the match is taskless or
    below the weak threshold.
 
-The list is normalized, de-duplicated, and sorted with the high-value gap
-facets first.
+The list is normalized, de-duplicated, and sorted by
+`BENCHMARK_GAP_HINT_FACETS` priority order, then lexical order for any future
+facets added outside the constant. Candidate `matched_hint_facets`,
+`matched_missing_facets`, and calibration `facet_hints` use the same ordering.
 
 ## Token Hygiene
 
 The calibration pass showed that several tokens are too broad for positive
-matching. Update token handling so these tokens can be retained for calibration
-display but do not create `facet_overlap` points:
+matching, but they live on different token surfaces. Split token hygiene by
+surface instead of using one catch-all set.
 
-- broad domains: `biology`, `cancer`
-- vague catalog values: `varies`
-- entity/document boilerplate: `claim`, `statement`, `summary`, `question`,
-  `hypothesis`, `proposition`
-- generic workflow terms already treated as stop tokens: `analysis`, `cell`,
-  `data`, `dataset`, `evidence`, `model`, `result`, `response`
+Dataset controlled-facet exclusions extend `BROAD_NON_SCOREABLE_FACETS`. These
+tokens can appear in dataset domains, modalities, signal types, or benchmark
+kinds and therefore can create `facet_overlap` unless excluded:
+
+- `biology`
+- `cancer`
+- `varies`
+
+Entity-token suppressions extend the entity text token gate used before hint
+inference and `facet_overlap`. These are project document/kind words or generic
+workflow terms; they should be retained in calibration evidence but not in
+`ProjectBenchmarkEntity.tokens`:
+
+- `claim`
+- `statement`
+- `summary`
+- `question`
+- `hypothesis`
+- `proposition`
+- `analysis`
+- `cell`
+- `data`
+- `dataset`
+- `evidence`
+- `model`
+- `result`
+- `response`
+
+Suppressing `question`, `hypothesis`, and `proposition` as text tokens must not
+affect kind-aware scoring. `_kind_signal_points()` reads the entity kind and
+entity tokens separately; the entity kind remains available even when the word
+`hypothesis` is removed from text tokens.
 
 This should be implemented as explicit scoring hygiene, not as silent
 post-filtering of rows. Calibration output should show whether a token was
-dropped as a stop token, broad token, short token, or retained entity token.
+dropped as a stop token, broad dataset-facet token, broad entity token, short
+token, or retained entity token.
+
+The live scoring path should use the cleaned token sets only. The fuller
+dropped-token record is display evidence and must not leak back into
+`facet_overlap`, hint inference, or candidate scoring.
 
 The stoplist is a calibration knob. Changes to it should be covered by tests
 that show the intended false-positive suppression.
@@ -153,9 +207,11 @@ that show the intended false-positive suppression.
 ## Near-Miss Candidate Rows
 
 Replace `candidate_benchmarks` in gap rows with per-entity near-miss candidates.
-Candidates should be selected from benchmark contexts not already represented in
-the entity's `current_matches`; they are not limited to
-`available_unmapped_benchmarks`.
+Candidates should be selected from cached benchmark contexts not already
+represented in the entity's `current_matches`; they are not limited to
+`available_unmapped_benchmarks`. Score all entity-candidate pairs in one pass
+over cached contexts. Do not recompute baseline score, readiness, or controlled
+facet tokens inside the per-row loop.
 
 Each candidate row should include:
 
@@ -179,21 +235,38 @@ Each candidate row should include:
 contract, but it is no longer the only evidence column. In v2 the actionable
 fields are `matched_hint_facets`, `candidate_score`, and `reason_notes`.
 
-Initial candidate scoring:
+Initial candidate scoring is additive and intentionally favors entity-specific
+evidence:
 
 - `missing_facet_overlap` (0-30): missing facets from `coverage_gaps` that the
-  candidate declares.
-- `hint_facet_overlap` (0-30): inferred entity facet hints that the candidate
-  declares.
-- `task_readiness` (0-20): derived from baseline task completeness and
-  readiness components, not recomputed separately.
-- `baseline_quality` (0-20): scaled from the existing `baseline_score`.
+  candidate declares, `10` points per facet.
+- `hint_facet_overlap` (0-35): inferred entity facet hints that the candidate
+  declares, `10` points per facet, capped at `35`.
+- `task_readiness` (0-20): scaled only from cached baseline
+  `task_completeness` and `readiness` components:
+  `round(((task_completeness / 30) * 12) + ((readiness / 15) * 8))`.
+- `baseline_quality` (0-15): scaled from baseline components that are not
+  already counted in `task_readiness`: `signal_value`, `modality_value`, and
+  `limitations`, using
+  `round(((signal_value + modality_value + limitations) / 55) * 15)`.
+
+This avoids double-counting task completeness and readiness through both
+`task_readiness` and `baseline_quality`. A benchmark with no entity-specific
+facet evidence can earn at most `35` points from entity-agnostic quality
+signals, which keeps candidate variation driven primarily by the entity's
+missing facets and inferred hints.
 
 Clamp `candidate_score` to 100. Do not include candidates with
 `candidate_score == 0` unless an entity has no scored candidates at all. In
 that fallback case, include at most three high-baseline benchmark candidates
 with `reason_notes: ["high-baseline-fallback"]` so the report stays useful but
-does not pretend there was entity-specific evidence.
+does not pretend there was entity-specific evidence. Fallback rows are used only
+when there are zero scored candidates; they are never mixed with scored rows and
+still count against the JSON/table row limits.
+
+Emit `high-baseline` on scored candidate rows when `baseline_quality >= 8`.
+Emit `task-ready` when `task_readiness >= 12`. These notes are deterministic
+labels derived from the component values, not independent scoring rules.
 
 Default candidate ordering:
 
@@ -205,6 +278,13 @@ Default candidate ordering:
 Limit table output to the top three candidates per gap row. JSON may include up
 to five candidates per row to preserve useful detail without flooding large
 projects.
+
+`reason_notes` are sorted deterministically by note family priority
+(`missing-facet`, `entity-hint`, `task-ready`, `high-baseline`,
+`high-baseline-fallback`) and then lexical order within a family. Synonym-based
+hints converge to one normalized facet before note generation, so
+`intervention` and `perturbation` should not produce duplicate
+`entity-hint:perturbation` notes.
 
 ## Gap Calibration Report
 
@@ -220,7 +300,7 @@ For JSON output, add a top-level `calibration` object:
       "entity_tokens": ["dynamic", "homeostasis", "perturbation"],
       "dropped_tokens": {
         "stop": ["response"],
-        "broad": ["cancer"],
+        "broad_entity": ["cancer"],
         "short": []
       },
       "facet_hints": ["perturbation", "time-series"],
@@ -232,6 +312,7 @@ For JSON output, add a top-level `calibration` object:
       "entity_id": "hypothesis:0005-dynamic-homeostasis",
       "benchmark_id": "dataset:sciplex3",
       "candidate_score": 52,
+      "dropped_dataset_facets": ["cancer"],
       "components": {
         "missing_facet_overlap": 0,
         "hint_facet_overlap": 30,
@@ -243,6 +324,10 @@ For JSON output, add a top-level `calibration` object:
   ]
 }
 ```
+
+`gap_entity_evidence[].dropped_tokens` reports entity-side token decisions.
+`candidate_evidence[].dropped_dataset_facets` reports candidate dataset
+controlled facets that were excluded from scoring because they are broad.
 
 For table output, `--calibration-report` should append a compact calibration
 table after the normal gap table, mirroring `science benchmark opportunities
@@ -277,10 +362,12 @@ Existing row fields remain. `candidate_benchmarks[]` is extended additively with
 `candidate_score`, `matched_hint_facets`, and `reason_notes`.
 
 `--facet` filtering continues to filter by `missing_modalities`,
-`missing_signal_types`, and `suggested_search_facets`. This means an uncovered
-row with inferred `time-series` text can appear under
+`missing_signal_types`, and `suggested_search_facets`. The valid normalized
+values for `--facet` are exactly `BENCHMARK_GAP_HINT_FACETS`. This means an
+uncovered row with inferred `time-series` text can appear under
 `science benchmark gaps --facet time-series` even if it has no
-`coverage_gaps` row.
+`coverage_gaps` row, and a row with inferred `single-cell-rna-seq` text can be
+selected with `--facet single-cell-rna-seq`.
 
 `entities_total` remains the number of entities visible to the opportunity
 analysis after `--entity` filtering and before `--facet` filtering. The
@@ -309,6 +396,13 @@ Add focused tests for:
   `facet_overlap` matches.
 - Gap calibration JSON includes entity token evidence, dropped broad tokens,
   facet hints, candidate score components, and reason notes.
+- The `--facet` valid set equals the emittable hint facet set, including
+  `single-cell-rna-seq`.
+- Candidate-score component tests verify that task/readiness contributions are
+  not counted again inside `baseline_quality`.
+- Existing v1 `candidate_benchmarks` fields still serialize for consumers:
+  `benchmark_id`, `benchmark_title`, `baseline_score`, and
+  `matched_missing_facets`.
 - Existing commons notice behavior and entity resolution remain unchanged.
 
 ## Success Criteria
