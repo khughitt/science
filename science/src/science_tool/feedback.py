@@ -73,6 +73,7 @@ class FeedbackEntry(BaseModel):
 @dataclass
 class _FeedbackCluster:
     target: str
+    concern: str
     category: str
     summary_key: str
     representative_summary: str
@@ -229,28 +230,33 @@ def group_for_triage(
     feedback_dir: Path,
     *,
     target: str | None = None,
-) -> dict[str, dict]:
-    """Group open entries by target for triage display.
+    concern: str | None = None,
+) -> dict[tuple[str, str], dict]:
+    """Group open entries by (concern, target) for triage display.
 
-    Returns: {target: {entries: [...], projects: set, total_recurrence: int}}
-    Sorted by total_recurrence descending.
+    Returns: {(concern, target): {concern, target, entries, projects, total_recurrence}}
+    Sorted by total_recurrence descending. The grouped value carries explicit
+    `concern` and `target` so callers never read the tuple key for display or
+    telemetry joins.
     """
-    entries = list_entries(feedback_dir, status="open", target=target)
+    entries = list_entries(feedback_dir, status="open", target=target, concern=concern)
 
-    groups: dict[str, dict] = {}
+    groups: dict[tuple[str, str], dict] = {}
     for entry in entries:
-        if entry.target not in groups:
-            groups[entry.target] = {
+        key = (entry.concern, entry.target)
+        if key not in groups:
+            groups[key] = {
+                "concern": entry.concern,
+                "target": entry.target,
                 "entries": [],
                 "projects": set(),
                 "total_recurrence": 0,
             }
-        groups[entry.target]["entries"].append(entry)
+        groups[key]["entries"].append(entry)
         if entry.project:
-            groups[entry.target]["projects"].add(entry.project)
-        groups[entry.target]["total_recurrence"] += entry.recurrence
+            groups[key]["projects"].add(entry.project)
+        groups[key]["total_recurrence"] += entry.recurrence
 
-    # Sort groups by total recurrence descending
     return dict(sorted(groups.items(), key=lambda item: -item[1]["total_recurrence"]))
 
 
@@ -258,11 +264,12 @@ def cluster_for_triage(
     feedback_dir: Path,
     *,
     target: str | None = None,
+    concern: str | None = None,
     since_days: int | None = None,
     today: date | None = None,
 ) -> list[dict[str, object]]:
-    """Cluster open entries by target, category, and near-duplicate summary."""
-    entries = list_entries(feedback_dir, status="open", target=target)
+    """Cluster open entries by concern, target, category, and near-duplicate summary."""
+    entries = list_entries(feedback_dir, status="open", target=target, concern=concern)
     if since_days is not None:
         cutoff = (today or date.today()) - timedelta(days=since_days)
         entries = [entry for entry in entries if date.fromisoformat(entry.created) >= cutoff]
@@ -274,6 +281,7 @@ def cluster_for_triage(
         if cluster is None:
             cluster = _FeedbackCluster(
                 target=entry.target,
+                concern=entry.concern,
                 category=entry.category,
                 summary_key=_summary_key(entry.summary),
                 representative_summary=entry.summary,
@@ -398,7 +406,7 @@ def _matching_cluster(
     tokens: set[str],
 ) -> _FeedbackCluster | None:
     for cluster in clusters:
-        if cluster.target != entry.target or cluster.category != entry.category:
+        if cluster.target != entry.target or cluster.concern != entry.concern or cluster.category != entry.category:
             continue
         if _token_similarity(tokens, cluster.tokens) >= 0.75:
             return cluster
@@ -409,6 +417,7 @@ def _cluster_row(cluster: _FeedbackCluster) -> dict[str, object]:
     entries = sorted(cluster.entries, key=lambda entry: (entry.created, entry.id))
     return {
         "target": cluster.target,
+        "concern": cluster.concern,
         "category": cluster.category,
         "summary_key": cluster.summary_key,
         "representative_summary": cluster.representative_summary,

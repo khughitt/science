@@ -322,19 +322,22 @@ def test_group_for_triage(tmp_path: Path):
     _make_entry(tmp_path, "fb-2026-03-25-003", target="command:next-steps", project="proj-a")
 
     groups = group_for_triage(tmp_path)
-    assert "command:discuss" in groups
-    assert "command:next-steps" in groups
-    assert len(groups["command:discuss"]["entries"]) == 2
-    assert groups["command:discuss"]["projects"] == {"proj-a", "proj-b"}
-    assert groups["command:discuss"]["total_recurrence"] == 2
+    discuss_key = ("tooling", "command:discuss")
+    assert discuss_key in groups
+    assert ("tooling", "command:next-steps") in groups
+    assert groups[discuss_key]["concern"] == "tooling"
+    assert groups[discuss_key]["target"] == "command:discuss"
+    assert len(groups[discuss_key]["entries"]) == 2
+    assert groups[discuss_key]["projects"] == {"proj-a", "proj-b"}
+    assert groups[discuss_key]["total_recurrence"] == 2
 
 
 def test_group_for_triage_with_target_glob(tmp_path: Path):
     _make_entry(tmp_path, "fb-2026-03-25-001", target="command:discuss")
     _make_entry(tmp_path, "fb-2026-03-25-002", target="template:discussion")
     groups = group_for_triage(tmp_path, target="command:*")
-    assert "command:discuss" in groups
-    assert "template:discussion" not in groups
+    assert ("tooling", "command:discuss") in groups
+    assert ("tooling", "template:discussion") not in groups
 
 
 def test_cluster_for_triage_groups_duplicate_summaries_and_suggests_test_target(tmp_path: Path):
@@ -528,3 +531,25 @@ def test_update_entry_rejects_unknown_concern(tmp_path):
     save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="x", summary="a"))
     with pytest.raises(ValueError):
         update_entry(tmp_path, "fb-2026-06-28-001", concern="bogus")
+
+
+def test_group_for_triage_partitions_by_concern(tmp_path):
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="skill:statistics", summary="a", concern="tooling"))
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-002", target="skill:statistics", summary="b", concern="methodology:statistics"))
+
+    groups = group_for_triage(tmp_path)
+    assert set(groups.keys()) == {("tooling", "skill:statistics"), ("methodology:statistics", "skill:statistics")}
+    for (concern_key, target_key), group in groups.items():
+        assert group["concern"] == concern_key
+        assert group["target"] == target_key
+
+
+def test_cluster_for_triage_includes_concern(tmp_path):
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="skill:statistics", summary="check independence", concern="methodology:statistics"))
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-002", target="skill:statistics", summary="check independence", concern="tooling"))
+
+    rows = cluster_for_triage(tmp_path)
+    concerns = {row["concern"] for row in rows}
+    assert concerns == {"methodology:statistics", "tooling"}
+    # Same target + similar summary but different concern must not merge.
+    assert all(row["count"] == 1 for row in rows)
