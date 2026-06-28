@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `31`
+- Pending thread count: `30`
 
 ## b-migration-paper-datasets
 
@@ -180,20 +180,6 @@
 - remaining_gaps:
   - Verify downstream tasks-archive adoption, managed validate.sh update status, and migration tracking appendix status.
   - Resolve or retarget the Bucket C-dependent descriptor sidecar adoption note.
-
-## entity-naming-guidance-followup
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-04-23-entity-naming-guidance-followup.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; richer policy details should migrate to durable entity creation docs before deletion
-    - `docs/plans/2026-04-23-entity-naming-guidance-followup.md`
-- remaining_gaps:
-  - The durable cookbook is intentionally concise and does not preserve all stable policy details from this follow-up, such as authority preference order, orphan policy, governance/promotion criteria, and success metrics.
-  - Migrate any still-current policy detail needed for future maintainers into docs/process/entity-creation-cookbook.md or a companion conventions doc before deleting this plan.
 
 ## general-graph-api-visualization
 
