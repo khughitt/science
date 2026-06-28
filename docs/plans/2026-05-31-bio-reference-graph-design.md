@@ -7,7 +7,7 @@ Status: RG1, RG2, and RG4 implemented; real recipes built — `dataset:mondo` (p
 Related:
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; RG1 partly addresses its non-tabular-reference open item
 - `docs/plans/historical/2026-05-26-reference-collection-member-promotion-design.md` — foundation primitive; graph nodes/associations are keyed members
-- `docs/plans/2026-05-26-bio-geneset-type-design.md` — flat set collections; this design is the sibling for graph-shaped references
+- `docs/plans/historical/2026-05-26-bio-geneset-type-design.md` — flat set collections; this design is the sibling for graph-shaped references
 - `docs/plans/historical/2026-05-26-bio-dataset-influence-provenance-design.md` — Pillar B; graph/member provenance feeds dataset influence
 - `docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` — Pillar A; reference graphs are `source_class: reference`
 - `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; non-molecular identity resolution is a later consumer
@@ -407,9 +407,9 @@ Automated B materialization from unpromoted graph members remains RG3+/B follow-
 preserves the node/edge `dataset_usage` data needed for that work.
 
 RG2 implemented the generic virtual-member payload dispatcher and the first concrete
-`bio.reference_graph.member` resolver. D2 can now add the sibling `bio.geneset.member` resolver without
-reopening the generic dispatch boundary. Unpromoted-member B materialization remains separate follow-up
-work because RG2 only returns payload data; it does not emit influence graph records.
+`bio.reference_graph.member` resolver. The sibling `bio.geneset.member` resolver is now implemented on the
+same dispatch boundary. Unpromoted-member B materialization remains separate follow-up work because RG2
+only returns payload data; it does not emit influence graph records.
 
 ---
 

@@ -189,8 +189,8 @@ A new domain extension (sibling to `bio.table`/`bio.rnaseq`/…), filling the "n
   (`prov:wasDerivedFrom` / independence edges) only when a specific set feeds a proposition.
 - **Granularity decision.** The *collection* is a `dataset` + `bio.geneset`; an individual set remains a
   row addressed by `set_key` until it becomes evidence-bearing, then promotes on demand to a child
-  `dataset` using the generic `derivation.kind: member_of` substrate. D1 implements the collection; D2
-  still needs the gene-set-specific promoted-member extension/promotion path when evidence lines need it.
+  `dataset` using the generic `derivation.kind: member_of` substrate. D1 implements the collection, and
+  D2 implements the `bio.geneset.member` extension plus virtual payload resolution for promoted members.
 - **Circularity guidance to encode.** The dangerous pattern is *define-a-set-from-study-A then
   test-enrichment-in-study-A* (circular), not "Reactome + an independent cohort." The extension should
   make set-definition provenance explicit enough to detect that overlap via B.
@@ -275,9 +275,9 @@ collapsed into identity.
 5. **Resolved and implemented (B2): scope of derived independence.** B2 commits aggregation-affecting
    shared-source metadata only for direct, full-overlap dataset dependence. Partial/unknown, cited,
    validation-only, virtual gene-set member, or `bears_on`-only paths become candidate/review signals.
-6. **Resolved; D2 implementation open (D).** A gene-set collection is a `dataset` + `bio.geneset`; a set
-   promotes on demand to a child `dataset` when evidence-bearing. The generic `member_of` substrate is
-   implemented; the gene-set-specific promoted-member path remains deferred until needed.
+6. **Resolved and implemented (D).** A gene-set collection is a `dataset` + `bio.geneset`; a set promotes
+   on demand to a child `dataset` when evidence-bearing. The generic `member_of` substrate, the
+   `bio.geneset.member` extension schema, and virtual payload resolution are implemented.
 7. **Resolved (C): pinned vs. live identity.** Pinned local snapshots are authoritative for joins. Live
    services are discovery/QA conveniences only; refgenie/refgenieserver may document genome asset
    provenance but not replace pinned identity inputs.
@@ -324,20 +324,19 @@ materialized in the `knowledge` graph; `EvidenceUnit.is_reference_dataset` threa
 `prov:wasDerivedFrom`; `CONFIG_VERSION` bumped to `belief-logodds-v2`; `identification_strength:
 structural` shipped as a recording-only validate nudge (not scored); per-line override deferred.
 
-**Remaining — other pillars.** D has D1 implemented: the `bio.geneset` collection profile,
-row-contract parser, validate check, graph retention guard, and B1 row-level usage materialization are in
-place. The generic `member_of` substrate is also implemented, but D2's gene-set-specific promoted-member
-extension, promotion path, and virtual member payload resolution remain deferred until evidence lines need
-first-class child datasets for individual sets. B1 is implemented and pushed to origin as the
+**Remaining — other pillars.** D is implemented: the `bio.geneset` collection profile,
+row-contract parser, validate check, graph retention guard, B1 row-level usage materialization,
+`bio.geneset.member` schema, and virtual member payload resolution are in place. B1 is implemented and
+pushed to origin as the
 authored-to-graph provenance layer, B-migration is implemented (`science graph migrate-paper-datasets`
 plus pure/CLI tests), and B2 is implemented as the dataset-derived independence layer
 (`science_tool.graph.dataset_independence`, graph materialization, validation integration, aggregation
 metadata merge, and `belief-logodds-v3`). Pillar A is complete; C (C1-C3, C4a, C4b, and
-C4c-1 rsID input all merged and pushed to origin), D1, and B1/B2 are now exercised by E. Reactome is implemented as the first real
+C4c-1 rsID input all merged and pushed to origin), D, and B1/B2 are now exercised by E. Reactome is implemented as the first real
 `bio.geneset` commons dataset: Reactome release 96 was fetched from the versioned Reactome download URL,
 the C2 HGNC gene crosswalk was built, `dataset:reactome` was promoted into `~/d/science-commons` (merged
 and pushed to origin on 2026-06-01), and the pan-disease local Reactome stub was removed so consumers
-resolve through commons. D2 remains deferred until a real evidence line needs a promoted pathway dataset.
+resolve through commons.
 `bio.reference_graph` RG1, RG2, and RG4 are implemented and pushed to origin: RG1 validates node indexes,
 RG2 resolves promoted graph-member virtual payloads as node rows plus directly incident edges, and RG4
 adds `dataset:mondo` (pushed to origin), `dataset:go` (implemented, pending merge), and

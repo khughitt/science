@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from science_tool.commons.member_payload import (
+    MemberPayloadError,
     UnsupportedMemberPayloadError,
     VirtualMemberPayload,
     resolve_virtual_member_payload,
@@ -104,7 +105,7 @@ def test_resolve_virtual_member_payload_rejects_unsupported_parent_collection(tm
         resolve_virtual_member_payload("dataset:member", commons_root=commons_root, data_root=tmp_path / "data")
 
 
-def test_resolve_virtual_member_payload_detects_geneset_parent_as_explicit_d2_followup(tmp_path: Path) -> None:
+def test_resolve_virtual_member_payload_dispatches_geneset_parent_to_d2_resolver(tmp_path: Path) -> None:
     commons_root = tmp_path / "commons"
     _write_dataset(
         commons_root,
@@ -131,7 +132,7 @@ def test_resolve_virtual_member_payload_detects_geneset_parent_as_explicit_d2_fo
     )
     _write_member(commons_root)
 
-    with pytest.raises(UnsupportedMemberPayloadError, match="bio.geneset virtual payload resolution is reserved for D2"):
+    with pytest.raises(MemberPayloadError, match="members resource"):
         resolve_virtual_member_payload("dataset:member", commons_root=commons_root, data_root=tmp_path / "data")
 
 

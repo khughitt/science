@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Status: approved; D1 collection type implemented, D2 promoted-member implementation deferred
+Status: historical; D1 collection type and D2 promoted-member payload path implemented
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar D
@@ -44,16 +44,14 @@ This reuses the durable entity, provenance, `dataset_usage`, `source_class`, `pa
 and evidence machinery rather than inventing a new entity kind before gene sets have a lifecycle distinct
 from "a small dataset subset with provenance."
 
-**Implementation boundary.** The first implementation plan is **D1 only**: the `bio.geneset`
+**Implementation boundary.** The first implementation plan was **D1 only**: the `bio.geneset`
 collection extension, collection-level row contract, identifier-space declaration, and validate
-check. D2's promoted-member model stays designed here but is not implemented until a real
-evidence-bearing set needs a citable child dataset. This keeps Reactome/MSigDB-style collection
-ingestion and B's gene-set provenance arm unblocked without forcing member promotion mechanics too
-early.
+check. D2 later added the `bio.geneset.member` schema and virtual payload resolver over the generic
+`member_of` substrate, allowing a promoted child dataset to resolve by slicing the parent collection's
+`members_resource` on `derivation.member_key`.
 
 **Explicit non-goals.** D does not build identity (C), the epistemic class (A), or the influence engine
-(B). It does not ingest Reactome (E) — it is what E will instantiate against. The D1 plan also does not
-add `bio.geneset.member`, new promotion commands, or virtual member payload resolution.
+(B). It does not ingest Reactome (E) — it is what E instantiates against.
 
 ---
 
@@ -223,7 +221,7 @@ shape), naming the gap rather than mis-modeling it.
 | Sub-phase | Locks |
 |---|---|
 | D1 — `bio.geneset` collection extension (`n_sets`, `identifier_space`, per-set provenance columns, curation marker + per-set override) | the collection type; **implemented** |
-| D2 — `bio.geneset.member` extension + on-demand promotion + the `member_of` derivation variant + the virtual-member rule (core-mixin changes) | the citable promoted set; **deferred until needed by evidence-bearing set citation** |
+| D2 — `bio.geneset.member` extension + on-demand promotion + the `member_of` derivation variant + the virtual-member rule (core-mixin changes) | the citable promoted set; **implemented** |
 
 D depends on A (`source_class: reference`, the curation down-weight), C (`identifier_space`), and B
 (`dataset_usage` + the `set_definition_source`/`validation_source` roles). Within Phase 3, D1 lands
@@ -234,10 +232,10 @@ lines begin citing individual sets.
 
 ## 8. Status & next step
 
-Pillar D D1 is implemented: `bio.geneset` collections now have a schema profile, collection-row parser,
+Pillar D is implemented. `bio.geneset` collections have a schema profile, collection-row parser,
 and `science validate` check for `set_key` uniqueness, row counts, set-size summaries, per-set provenance
-row shape, and C-backed identifier-space declarations. D2 promoted members remain deferred until evidence
-lines need to cite individual sets as child datasets.
+row shape, and C-backed identifier-space declarations. Promoted `bio.geneset.member` datasets validate
+through their extension schema and resolve virtual payloads through the generic `member_of` dispatcher.
 
-Reactome can first instantiate as a collection with per-pathway provenance rows. Individual pathway
-promotion can follow when evidence lines actually cite those pathways.
+Reactome can instantiate as a collection with per-pathway provenance rows. Individual pathway promotion
+can follow when evidence lines actually cite those pathways.

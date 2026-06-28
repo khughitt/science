@@ -164,3 +164,20 @@ def read_member_rows(project_root: Path, fm: dict[str, Any]) -> list[dict[str, A
     if commons_path is None:
         return None
     return _read_csv(commons_path)
+
+
+def read_commons_member_rows(
+    fm: dict[str, Any],
+    *,
+    commons_root: Path | None = None,
+    data_root: Path | None = None,
+) -> list[dict[str, Any]] | Exception | None:
+    dataset_id = fm.get("id")
+    resource_name = fm.get("members_resource")
+    if not isinstance(dataset_id, str) or not isinstance(resource_name, str):
+        return None
+    try:
+        resolved = resolve(dataset_id, resource_name, commons_root=commons_root, data_root=data_root)
+    except CommonsError as exc:
+        return exc
+    return _read_csv(resolved.path)

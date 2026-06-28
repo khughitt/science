@@ -342,6 +342,43 @@ Dry-run is the default. It exits `10` when safe rewrites are pending and `20`
 when conflicts need manual review. `--apply` rewrites only papers whose
 `datasets` refs can be represented exactly as canonical `dataset_usage` entries.
 
+## Gene-Set Collections And Members
+
+Gene-set collections are normal `dataset` entities with the
+`bio.geneset/1.0` extension. The collection frontmatter declares the member row
+resource, row counts, set-size summary, and the `identifier_space` used by the
+member identifiers. The member table is keyed by `set_key` and may carry
+per-set `dataset_usage`, source PMIDs, and source-class overrides.
+
+Most sets stay as rows in the collection. Promote an individual set only when it
+needs its own evidence-bearing reference, independent provenance, or review
+state. A promoted set is a child `dataset` with
+`bio.geneset.member/1.0`, `origin: derived`, `datapackage: virtual:member-of`,
+and `derivation.kind: member_of` pointing back to the parent collection:
+
+```yaml
+schema_profile: science-entity-base/1.0+dataset/1.0+bio.geneset.member/1.0
+id: dataset:reactome-r-hsa-1
+type: dataset
+origin: derived
+source_class: reference
+parent_dataset: dataset:reactome-v89
+datapackage: virtual:member-of
+derivation:
+  kind: member_of
+  parent_dataset: dataset:reactome-v89
+  member_key: R-HSA-1
+identifier_space:
+  tier: gene
+  namespace: hgnc_id
+n_members: 42
+```
+
+The virtual payload resolver slices the parent collection's `members_resource`
+by `derivation.member_key` and returns that row plus the collection's
+`identifier_space`. No tiny per-set data artifact is required unless a workflow
+explicitly materializes one.
+
 ## Dataset Lifecycle
 
 `dataset` is the single entity kind for data that a project consumes, whether

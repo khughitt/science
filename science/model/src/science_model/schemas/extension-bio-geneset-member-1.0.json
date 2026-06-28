@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/extension-bio-geneset-member-1.0.json",
+  "title": "science entity bio.geneset.member extension",
+  "type": "object",
+  "required": ["identifier_space", "n_members"],
+  "properties": {
+    "identifier_space": {
+      "type": "object",
+      "required": ["tier", "namespace"],
+      "properties": {
+        "tier": {"enum": ["gene", "protein"]},
+        "namespace": {"type": "string", "minLength": 1},
+        "registry": {"type": "string", "pattern": "^dataset:"},
+        "resolution_status": {"enum": ["resolved", "declared_unresolved"]}
+      },
+      "additionalProperties": false
+    },
+    "n_members": {"type": "integer", "minimum": 1}
+  },
+  "not": {"required": ["member_key"]},
+  "additionalProperties": true
+}

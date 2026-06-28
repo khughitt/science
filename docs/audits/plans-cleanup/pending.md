@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `6`
+- Pending thread count: `5`
 
 ## bio-data-architecture-umbrella
 
@@ -11,27 +11,12 @@
 - files:
   - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`
 - pending_actions:
-  - `deferred`: review status incomplete; umbrella still tracks open dbSNP smoke, RG3+ workflows, C4c transcript/protein projection, and D2 work
+  - `deferred`: review status incomplete; umbrella still tracks open dbSNP smoke, RG3+ workflows, and C4c transcript/protein projection
     - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`
 - remaining_gaps:
   - full dbSNP artifact build/operator smoke
   - RG3+ workflows
   - C4c transcript/protein projection
-  - D2 promoted gene-set members
-
-## bio-geneset-type
-
-- status: `incomplete`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-05-26-bio-geneset-type-design.md`
-- pending_actions:
-  - `deferred`: review status incomplete; D1 collection type is implemented but D2 promoted-member mechanics remain open
-    - `docs/plans/2026-05-26-bio-geneset-type-design.md`
-- remaining_gaps:
-  - D2 promoted bio.geneset.member implementation
-  - bio.geneset virtual payload resolution
 
 ## bio-identity-and-reference-genome
 
