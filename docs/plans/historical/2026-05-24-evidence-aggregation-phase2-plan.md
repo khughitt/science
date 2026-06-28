@@ -16,7 +16,7 @@
 - **Constraints.** No AI attribution / no `Co-Authored-By` in commits. Commit locally only; do **not** push. Composition > inheritance; explicit > defensive; fail early.
 - **Test commands.** Per task: `cd science && uv run pytest tests/<file> -q`. After Task 11: full `cd science && uv run pytest -q` and `cd science/model && uv run pytest -q`.
 - **Dependency order.** Tasks are ordered so each imports only code from earlier tasks. Do them in sequence.
-- **Spec:** `docs/plans/2026-05-24-evidence-aggregation-phase2-design.md` (rev c). Do not re-read it during a task — this plan carries all needed content.
+- **Spec:** `docs/plans/historical/2026-05-24-evidence-aggregation-phase2-design.md` (rev c). Do not re-read it during a task — this plan carries all needed content.
 - **Determinism note.** All scalar floats are rounded to 6 decimals in `belief_scalar`; tests compute expected values with `math.tanh(...)` rather than hardcoding, to stay arithmetic-error-free.
 
 ---
@@ -1364,7 +1364,7 @@ git commit -m "feat(validate): belief.nonreproducible golden check (#8)"
 ### Task 11: Full-suite verification + spec status bump
 
 **Files:**
-- Modify: `docs/plans/2026-05-24-evidence-aggregation-phase2-design.md` (status line only)
+- Modify: `docs/plans/historical/2026-05-24-evidence-aggregation-phase2-design.md` (status line only)
 
 - [ ] **Step 1: Run the full science suite**
 
@@ -1383,13 +1383,13 @@ Expected: help text for the snapshot command (exit 0).
 
 - [ ] **Step 4: Bump the design status**
 
-In `docs/plans/2026-05-24-evidence-aggregation-phase2-design.md`, change the status line to:
+In `docs/plans/historical/2026-05-24-evidence-aggregation-phase2-design.md`, change the status line to:
 `**Status**: Implemented (2026-05-24)`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/plans/2026-05-24-evidence-aggregation-phase2-design.md
+git add docs/plans/historical/2026-05-24-evidence-aggregation-phase2-design.md
 git commit -m "docs(plans): mark Phase 2 design implemented"
 ```
 

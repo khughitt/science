@@ -12,7 +12,7 @@
 
 ## Scope & deviations (read before starting)
 
-This plan implements **A2** of design `docs/plans/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` (§8, decisions A-D4/A-D5, §4 resolved decision #3). A1 (the recording layer + `dataset_taxonomy` validate check) is already merged.
+This plan implements **A2** of design `docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` (§8, decisions A-D4/A-D5, §4 resolved decision #3). A1 (the recording layer + `dataset_taxonomy` validate check) is already merged.
 
 Three scope decisions, **confirmed with the user**, deviate from a literal reading of the design and are called out so the reviewer sees they are intentional:
 
@@ -53,7 +53,7 @@ Shell commands are written plain; apply this repo's `rtk` convention per your ru
 | `science/tests/test_belief_weights.py` | constants tests | **Modify** `test_phase2_constants_present`; add `CURATION_STEP_PENALTY` |
 | `science/tests/test_belief_reduce.py` | winner-selection tests | **Add** reference-demotion winner case |
 | `science/tests/validate/test_checks_evidence_lines*.py` (match existing) | validate-check tests | **Add** structural-nudge cases |
-| `docs/plans/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md`, `…-umbrella-design.md` | status | **Modify** (Task 5) |
+| `docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md`, `…-umbrella-design.md` | status | **Modify** (Task 5) |
 
 **Test command (all tasks):** run from `~/d/science/science`:
 ```bash
@@ -498,7 +498,7 @@ git commit -m "feat(validate): nudge identification_strength=structural for refe
 ## Task 5: Full regression + config re-baseline note + docs
 
 **Files:**
-- Modify: `docs/plans/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` (§8 status, §9)
+- Modify: `docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` (§8 status, §9)
 - Modify: `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` (§6 table A row, §8)
 
 - [ ] **Step 1: Full regression**
@@ -517,7 +517,7 @@ Expected: no remaining `belief-logodds-v1` literals (the combined validate fixtu
 
 - [ ] **Step 3: Update the Pillar A design (§8 + §9)**
 
-In `docs/plans/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md`: change the §8 A2 row status to **merged**, and update §9 + the top `Status:` line to record A2 implemented: curation down-weight (`CURATION_STEP_PENALTY = 1`, one ordinal score step floored at 0) applied as the full step in `unit_score` (the scalar/log-odds path) and as a **tiebreaker-only demotion in Phase 1 winner-selection** (`quality_key`) — state explicitly that A-D4's "route through both paths" is realized as the full step in the scalar and a least-significant tiebreaker in Phase-1 `reduce_units` (it does not demote across the lexicographic `type/role/strength` tiers; a true cross-tier penalty would require flattening `quality_key` to a summed-step scalar and is out of A2 scope). Also record: `source_class` materialized as `sci:sourceClass` and threaded to `EvidenceUnit.is_reference_dataset`; `CONFIG_VERSION` bumped to `belief-logodds-v2`; `identification_strength: structural` shipped as a **recording-only validate nudge** (not wired into scoring); per-line override deferred. Use `~/d/` for any paths.
+In `docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md`: change the §8 A2 row status to **merged**, and update §9 + the top `Status:` line to record A2 implemented: curation down-weight (`CURATION_STEP_PENALTY = 1`, one ordinal score step floored at 0) applied as the full step in `unit_score` (the scalar/log-odds path) and as a **tiebreaker-only demotion in Phase 1 winner-selection** (`quality_key`) — state explicitly that A-D4's "route through both paths" is realized as the full step in the scalar and a least-significant tiebreaker in Phase-1 `reduce_units` (it does not demote across the lexicographic `type/role/strength` tiers; a true cross-tier penalty would require flattening `quality_key` to a summed-step scalar and is out of A2 scope). Also record: `source_class` materialized as `sci:sourceClass` and threaded to `EvidenceUnit.is_reference_dataset`; `CONFIG_VERSION` bumped to `belief-logodds-v2`; `identification_strength: structural` shipped as a **recording-only validate nudge** (not wired into scoring); per-line override deferred. Use `~/d/` for any paths.
 
 - [ ] **Step 4: Update the umbrella (§6 + §8)**
 
@@ -526,7 +526,7 @@ In `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`: update the 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/plans/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md
+git add docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md
 git commit -m "docs(bio): mark A2 (curation down-weight) merged"
 ```
 

@@ -6,9 +6,9 @@ Status: approved; D1 collection type implemented, D2 promoted-member implementat
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar D
-- `docs/plans/2026-05-26-reference-collection-member-promotion-design.md` — foundation primitive; D is its first concrete instance
+- `docs/plans/historical/2026-05-26-reference-collection-member-promotion-design.md` — foundation primitive; D is its first concrete instance
 - `docs/plans/2026-05-26-bio-dataset-influence-provenance-design.md` — Pillar B; D realizes per-set `dataset_usage`
-- `docs/plans/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` — Pillar A; `source_class: reference`
+- `docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md` — Pillar A; `source_class: reference`
 - `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; `identifier_space`
 - `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` — dataset mixin (`origin`, `derivation`, `parent_dataset`)
 - `science/model/src/science_model/schemas/extension-bio-*.json` — sibling bio extensions
@@ -25,7 +25,7 @@ provenance interface for gene sets, and the consumer of Pillar A's `reference` c
 identity layer.
 
 **D is the first concrete instance of the reference-collection / keyed-member / promoted-member foundation
-primitive** (`2026-05-26-reference-collection-member-promotion-design.md`). The collection→member→
+primitive** (`docs/plans/historical/2026-05-26-reference-collection-member-promotion-design.md`). The collection→member→
 promotion model, the resolve-or-`declared_unresolved` invariant (RCM-D2), the `member_of` derivation and
 virtual-member rule (RCM-D5), and the equality-vs-compatibility guardrail (RCM-D6) are **inherited** from
 the primitive; D fixes the member key to `set_key` and adds the gene-set-specific fields. The decisions

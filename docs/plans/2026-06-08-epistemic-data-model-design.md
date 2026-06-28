@@ -50,7 +50,7 @@ Each gets a "superseded by → this doc" banner; their still-valid content is ab
 to a facet:
 
 - `docs/plans/historical/2026-05-22-evidence-aggregation-and-belief-design.md` (+ phase-1/phase-0 plans)
-- `docs/plans/2026-05-24-evidence-aggregation-phase2-design.md`
+- `docs/plans/historical/2026-05-24-evidence-aggregation-phase2-design.md`
 - the **Part-A epistemic content** of `docs/plans/2026-06-06-knowledge-meta-model-and-substrate-design.md`
   (its Part-B/C substrate content stays with the substrate docs)
 - `docs/plans/historical/2026-05-03-epistemic-dependency-graph-design.md`
@@ -66,7 +66,7 @@ Their design intent feeds the facet migrations; they are superseded as standalon
   `docs/plans/historical/2026-04-19-dag-rendering-and-audit-pipeline-design.md`,
   `docs/plans/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md` → feed `epistemic-edges`.
 - Dataset predecessors: `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md`,
-  `docs/plans/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md`,
+  `docs/plans/historical/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md`,
   and the A1/A2/B1/B2 dataset designs/plans → feed `dataset-evidence-flow`.
 
 ### 1.4 Out of scope (separate layer)

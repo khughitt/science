@@ -10,10 +10,10 @@ Related (builds on):
 - `references/dag-two-axis-evidence-model.md` — `edge_status` × `identification`
 - `docs/user-guide/evidence-lines.md` — evidence-line entity
 - `docs/plans/historical/2026-05-22-evidence-aggregation-and-belief-design.md` — independence-aware aggregation
-- `docs/plans/2026-05-24-evidence-aggregation-phase2-design.md` — numeric belief scalar
+- `docs/plans/historical/2026-05-24-evidence-aggregation-phase2-design.md` — numeric belief scalar
 - `docs/plans/historical/2026-05-21-provenance-propagation-contract-c-design.md` — `produced_by` / `bears_on`
 - `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` — dataset mixin
-- `docs/plans/2026-05-23-store-decomposition-design.md` — commons store
+- `science/src/science_tool/graph/store/` — commons store
 - consumer context: `health/meta:doc/topics/large-scale-biological-datasets-landscape.md`,
   `health/meta:doc/plans/2026-05-25-reactome-commons-ingestion-design.md` (`~/d/health/meta`)
 
@@ -244,7 +244,7 @@ last. Each doc is independently implementable and reviewable.
 
 **Foundation primitive (cross-pillar).** C's assembly registry and D's gene-set collection turn out to
 share one model — *reference collection → keyed member → promoted member* — defined once in
-`docs/plans/2026-05-26-reference-collection-member-promotion-design.md` and consumed by both (and by the
+`docs/plans/historical/2026-05-26-reference-collection-member-promotion-design.md` and consumed by both (and by the
 C2/C3 crosswalks and the C4 variant-label registry). D is its **first concrete instance**, not its parent:
 the mechanism is the generalization of D's collection/member/promotion, so it is settled alongside C/D
 rather than as a separately-numbered phase. See that doc for the model and its invariants (resolve-or-

@@ -3,7 +3,7 @@
 A promoted member (`derivation.kind: member_of`) must resolve to an existing
 parent collection, unless it explicitly declares `resolution_status:
 declared_unresolved`. See
-docs/plans/2026-05-26-reference-collection-member-promotion-design.md.
+docs/plans/historical/2026-05-26-reference-collection-member-promotion-design.md.
 
 Gathers dataset frontmatter by TOLERANT FILE DISCOVERY, not via
 `load_project_sources`. The graph loader strict-validates every dataset through

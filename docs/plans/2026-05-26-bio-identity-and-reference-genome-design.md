@@ -6,10 +6,10 @@ Status: approved; implementation underway — C1/C2/C3/C4a/C4b merged locally, C
 
 Related (builds on):
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella; this is its Pillar C
-- `docs/plans/2026-05-26-reference-collection-member-promotion-design.md` — foundation primitive; the assembly registry is an instance
+- `docs/plans/historical/2026-05-26-reference-collection-member-promotion-design.md` — foundation primitive; the assembly registry is an instance
 - `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` — dataset mixin, `origin`, `access`
 - `science/model/src/science_model/schemas/extension-bio-*.json` — `bio.rnaseq`/`bio.scrna`/`bio.cna` carry free-text `reference_genome`
-- `docs/plans/2026-05-23-store-decomposition-design.md` — commons store (where pinned snapshots live)
+- `science/src/science_tool/graph/store/` — commons store (where pinned snapshots live)
 - consumer context: `health/meta:doc/topics/large-scale-biological-datasets-landscape.md` shortlist #1 (`~/d/health/meta`)
 
 ---
@@ -92,7 +92,7 @@ versioned mapping — hence rsID is gated on a pinned dbSNP / NCBI Variation sna
   sequence checksum) and tie to **refgenie** asset digests for genome assets (FASTA, indices); the seqcol
   digest is the collection-level roll-up over them.
 - **The assembly registry is a `reference` collection** in the sense of the foundation primitive
-  (`2026-05-26-reference-collection-member-promotion-design.md`): a `dataset` whose member rows are keyed
+  (`docs/plans/historical/2026-05-26-reference-collection-member-promotion-design.md`): a `dataset` whose member rows are keyed
   by `seqcol_digest`. `reference_genome` is promoted from free text to a structured **inline
   `seqcol_digest` declaration** carried on `bio.identity_context` (C-D6); the declaration must resolve in
   the registry or carry `resolution_status: declared_unresolved` — never an unchecked string (the

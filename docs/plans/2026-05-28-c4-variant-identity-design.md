@@ -10,7 +10,7 @@ Status: C4a implemented; C4b implemented via
 Related (builds on):
 - `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C; this details its C4 row (§8)
 - `docs/plans/2026-05-26-bio-data-architecture-umbrella-design.md` — umbrella (C4 = the heavyweight sub-phase, "decompose before planning")
-- `docs/plans/2026-05-26-reference-collection-member-promotion-design.md` — foundation primitive; the assembly registry / sequence store are instances; guardrail-2 (RCM-D6) is the compatibility-relation home (C4b)
+- `docs/plans/historical/2026-05-26-reference-collection-member-promotion-design.md` — foundation primitive; the assembly registry / sequence store are instances; guardrail-2 (RCM-D6) is the compatibility-relation home (C4b)
 - `science/src/science_tool/commons/assembly.py`, `assembly_registry_build.py` — C1 seqcol registry + level-2 build (the per-contig digests C4a materializes)
 - `science/model/src/science_model/schemas/extension-bio-identity_context-1.0.json` — `molecular_ids` open map (variant tier needs no schema edit)
 - C2/C3 precedent: `science/src/science_tool/commons/` gene/protein resolvers + `evaluate_tier_identity` (declaration-level tier check)

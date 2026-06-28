@@ -1,32 +1,11 @@
 {
-  "file_count": 239,
-  "generated_at": "2026-06-28T16:36:06+00:00",
+  "file_count": 228,
+  "generated_at": "2026-06-28T16:48:10+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 156,
+  "thread_count": 148,
   "threads": [
-    {
-      "earliest_file_date": "2026-05-27",
-      "files": [
-        "docs/plans/2026-05-27-a1-dataset-source-class-plan.md"
-      ],
-      "latest_file_date": "2026-05-27",
-      "normalized_slug": "a1-dataset-source-class",
-      "raw_slugs": {
-        "docs/plans/2026-05-27-a1-dataset-source-class-plan.md": "a1-dataset-source-class-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "plan": [
-          "docs/plans/2026-05-27-a1-dataset-source-class-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-27-a1-dataset-source-class-plan.md": "plan"
-      },
-      "thread_id": "a1-dataset-source-class"
-    },
     {
       "earliest_file_date": "2026-05-27",
       "files": [
@@ -387,27 +366,6 @@
     {
       "earliest_file_date": "2026-05-26",
       "files": [
-        "docs/plans/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md"
-      ],
-      "latest_file_date": "2026-05-26",
-      "normalized_slug": "bio-dataset-taxonomy-epistemic-integration",
-      "raw_slugs": {
-        "docs/plans/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md": "bio-dataset-taxonomy-epistemic-integration-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-26-bio-dataset-taxonomy-epistemic-integration-design.md": "design"
-      },
-      "thread_id": "bio-dataset-taxonomy-epistemic-integration"
-    },
-    {
-      "earliest_file_date": "2026-05-26",
-      "files": [
         "docs/plans/2026-05-26-bio-geneset-type-design.md"
       ],
       "latest_file_date": "2026-05-26",
@@ -500,27 +458,6 @@
         "docs/plans/2026-06-11-bundle-belief-rollup-plan.md": "plan"
       },
       "thread_id": "bundle-belief-rollup"
-    },
-    {
-      "earliest_file_date": "2026-05-26",
-      "files": [
-        "docs/plans/2026-05-26-c1-assembly-identity-plan.md"
-      ],
-      "latest_file_date": "2026-05-26",
-      "normalized_slug": "c1-assembly-identity",
-      "raw_slugs": {
-        "docs/plans/2026-05-26-c1-assembly-identity-plan.md": "c1-assembly-identity-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "plan": [
-          "docs/plans/2026-05-26-c1-assembly-identity-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-26-c1-assembly-identity-plan.md": "plan"
-      },
-      "thread_id": "c1-assembly-identity"
     },
     {
       "earliest_file_date": "2026-05-27",
@@ -674,33 +611,6 @@
         "docs/plans/2026-06-21-catalog-datasets-plan.md": "plan"
       },
       "thread_id": "catalog-datasets"
-    },
-    {
-      "earliest_file_date": "2026-05-23",
-      "files": [
-        "docs/plans/2026-05-23-cn-sv-amplicon-and-likelihood-skill-leaves-design.md",
-        "docs/plans/2026-05-23-cn-sv-amplicon-and-likelihood-skill-leaves-plan.md"
-      ],
-      "latest_file_date": "2026-05-23",
-      "normalized_slug": "cn-sv-amplicon-and-likelihood-skill-leaves",
-      "raw_slugs": {
-        "docs/plans/2026-05-23-cn-sv-amplicon-and-likelihood-skill-leaves-design.md": "cn-sv-amplicon-and-likelihood-skill-leaves-design",
-        "docs/plans/2026-05-23-cn-sv-amplicon-and-likelihood-skill-leaves-plan.md": "cn-sv-amplicon-and-likelihood-skill-leaves-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-23-cn-sv-amplicon-and-likelihood-skill-leaves-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-05-23-cn-sv-amplicon-and-likelihood-skill-leaves-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-23-cn-sv-amplicon-and-likelihood-skill-leaves-design.md": "design",
-        "docs/plans/2026-05-23-cn-sv-amplicon-and-likelihood-skill-leaves-plan.md": "plan"
-      },
-      "thread_id": "cn-sv-amplicon-and-likelihood-skill-leaves"
     },
     {
       "earliest_file_date": "2026-06-19",
@@ -1546,33 +1456,6 @@
       "thread_id": "epistemic-edges"
     },
     {
-      "earliest_file_date": "2026-05-24",
-      "files": [
-        "docs/plans/2026-05-24-evidence-aggregation-phase2-design.md",
-        "docs/plans/2026-05-24-evidence-aggregation-phase2-plan.md"
-      ],
-      "latest_file_date": "2026-05-24",
-      "normalized_slug": "evidence-aggregation-phase2",
-      "raw_slugs": {
-        "docs/plans/2026-05-24-evidence-aggregation-phase2-design.md": "evidence-aggregation-phase2-design",
-        "docs/plans/2026-05-24-evidence-aggregation-phase2-plan.md": "evidence-aggregation-phase2-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-24-evidence-aggregation-phase2-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-05-24-evidence-aggregation-phase2-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-24-evidence-aggregation-phase2-design.md": "design",
-        "docs/plans/2026-05-24-evidence-aggregation-phase2-plan.md": "plan"
-      },
-      "thread_id": "evidence-aggregation-phase2"
-    },
-    {
       "earliest_file_date": "2026-05-29",
       "files": [
         "docs/plans/2026-05-29-external-datapackage-resources-design.md",
@@ -1673,27 +1556,6 @@
         "docs/plans/2026-04-12-general-graph-api-visualization.md": null
       },
       "thread_id": "general-graph-api-visualization"
-    },
-    {
-      "earliest_file_date": "2026-05-26",
-      "files": [
-        "docs/plans/2026-05-26-generic-reference-collection-substrate-plan.md"
-      ],
-      "latest_file_date": "2026-05-26",
-      "normalized_slug": "generic-reference-collection-substrate",
-      "raw_slugs": {
-        "docs/plans/2026-05-26-generic-reference-collection-substrate-plan.md": "generic-reference-collection-substrate-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "plan": [
-          "docs/plans/2026-05-26-generic-reference-collection-substrate-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-26-generic-reference-collection-substrate-plan.md": "plan"
-      },
-      "thread_id": "generic-reference-collection-substrate"
     },
     {
       "earliest_file_date": "2026-06-01",
@@ -2836,27 +2698,6 @@
       "thread_id": "reactome-commons-ingestion"
     },
     {
-      "earliest_file_date": "2026-05-26",
-      "files": [
-        "docs/plans/2026-05-26-reference-collection-member-promotion-design.md"
-      ],
-      "latest_file_date": "2026-05-26",
-      "normalized_slug": "reference-collection-member-promotion",
-      "raw_slugs": {
-        "docs/plans/2026-05-26-reference-collection-member-promotion-design.md": "reference-collection-member-promotion-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-26-reference-collection-member-promotion-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-26-reference-collection-member-promotion-design.md": "design"
-      },
-      "thread_id": "reference-collection-member-promotion"
-    },
-    {
       "earliest_file_date": "2026-06-20",
       "files": [
         "docs/plans/2026-06-20-remove-v3-migration-code-design.md",
@@ -3167,33 +3008,6 @@
         "docs/plans/2026-06-16-statement-promotion-phase4b-plan.md": "plan"
       },
       "thread_id": "statement-promotion-phase4b"
-    },
-    {
-      "earliest_file_date": "2026-05-23",
-      "files": [
-        "docs/plans/2026-05-23-store-decomposition-design.md",
-        "docs/plans/2026-05-23-store-decomposition-plan.md"
-      ],
-      "latest_file_date": "2026-05-23",
-      "normalized_slug": "store-decomposition",
-      "raw_slugs": {
-        "docs/plans/2026-05-23-store-decomposition-design.md": "store-decomposition-design",
-        "docs/plans/2026-05-23-store-decomposition-plan.md": "store-decomposition-plan"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-05-23-store-decomposition-design.md"
-        ],
-        "plan": [
-          "docs/plans/2026-05-23-store-decomposition-plan.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-05-23-store-decomposition-design.md": "design",
-        "docs/plans/2026-05-23-store-decomposition-plan.md": "plan"
-      },
-      "thread_id": "store-decomposition"
     },
     {
       "earliest_file_date": "2026-06-14",
