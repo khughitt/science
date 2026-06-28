@@ -161,6 +161,17 @@ def test_pre_register_loads_real_artifacts_before_locking_thresholds() -> None:
     assert "were loaded before the criteria were locked" in text
 
 
+def test_pre_register_rederives_every_referenced_count_from_artifacts() -> None:
+    text = _read("commands/pre-register.md")
+
+    assert "Count ledger" in text
+    assert "every numeric count referenced anywhere in the pre-registration" in text
+    assert "denominators, subgroup counts, exclusion counts, missingness counts" in text
+    assert "supporting counts in prose, tables, or caveats" in text
+    assert "Do not only verify the headline arm" in text
+    assert "re-derived from the loaded artifact" in text
+
+
 def test_specify_model_documents_proxy_directness_vocabulary() -> None:
     text = _read("commands/specify-model.md")
 

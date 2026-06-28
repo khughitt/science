@@ -313,6 +313,20 @@ def test_generated_pre_register_skill_loads_real_artifacts_before_locking_thresh
     assert "were loaded before the criteria were locked" in text
 
 
+def test_generated_pre_register_skill_rederives_every_referenced_count_from_artifacts(
+    tmp_path: Path,
+) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-pre-register"].read_text(encoding="utf-8")
+
+    assert "Count ledger" in text
+    assert "every numeric count referenced anywhere in the pre-registration" in text
+    assert "denominators, subgroup counts, exclusion counts, missingness counts" in text
+    assert "supporting counts in prose, tables, or caveats" in text
+    assert "Do not only verify the headline arm" in text
+    assert "re-derived from the loaded artifact" in text
+
+
 def test_generated_specify_model_skill_documents_proxy_directness_vocabulary(
     tmp_path: Path,
 ) -> None:
