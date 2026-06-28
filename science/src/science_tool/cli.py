@@ -6076,6 +6076,11 @@ def _parse_project_specs(project_specs: tuple[str, ...]) -> list[tuple[str, Path
     return parsed
 
 
+def _format_count_rows(rows: list[dict[str, Any]], *, key: str) -> str:
+    values = [f"{row[key]}:{row['count']}" for row in rows]
+    return ", ".join(values) if values else "-"
+
+
 @benchmark_group.command("gap-calibration")
 @click.option("--project", "project_specs", multiple=True, help="Project as label=path. Repeat for each project.")
 @click.option("--domain", default=None, help="Filter benchmark datasets by benchmark domain.")
@@ -6113,7 +6118,64 @@ def benchmark_gap_calibration(
         click.echo(json.dumps(payload, indent=2, sort_keys=True))
         return
 
-    click.echo(json.dumps(payload, indent=2, sort_keys=True))
+    from rich.console import Console
+    from rich.table import Table
+
+    table = Table(title="Benchmark Gap Calibration", show_header=True, header_style="bold")
+    for col in (
+        "project",
+        "gap rows",
+        "entity candidates",
+        "fallback candidates",
+        "fallback ratio",
+        "suggested facets",
+        "matched facets",
+        "fallback benchmarks",
+    ):
+        table.add_column(col, overflow="fold", no_wrap=False)
+    for project in payload["projects"]:
+        summary = project["calibration_summary"]
+        ratio = "-"
+        if summary["candidate_rows"]:
+            ratio = f"{summary['fallback_candidate_rows'] / summary['candidate_rows']:.3f}"
+        table.add_row(
+            project["label"],
+            str(summary["gap_rows"]),
+            str(summary["entity_specific_candidate_rows"]),
+            str(summary["fallback_candidate_rows"]),
+            ratio,
+            _format_count_rows(summary["top_suggested_facets"], key="facet"),
+            _format_count_rows(summary["top_matched_hint_facets"], key="facet"),
+            _format_count_rows(summary["top_fallback_benchmarks"], key="benchmark_id"),
+        )
+    Console(width=200).print(table)
+
+    aggregate_table = Table(title="Aggregate Benchmark Gap Calibration", show_header=True, header_style="bold")
+    aggregate_table.add_column("field", overflow="fold", no_wrap=False)
+    aggregate_table.add_column("value", overflow="fold", no_wrap=False)
+    aggregate = payload["aggregate"]
+    for field in (
+        "project_count",
+        "gap_rows",
+        "candidate_rows",
+        "entity_specific_candidate_rows",
+        "fallback_candidate_rows",
+        "fallback_candidate_ratio",
+    ):
+        aggregate_table.add_row(field, str(aggregate[field]))
+    aggregate_table.add_row(
+        "top_suggested_facets",
+        _format_count_rows(aggregate["top_suggested_facets"], key="facet"),
+    )
+    aggregate_table.add_row(
+        "top_matched_hint_facets",
+        _format_count_rows(aggregate["top_matched_hint_facets"], key="facet"),
+    )
+    aggregate_table.add_row(
+        "top_fallback_benchmarks",
+        _format_count_rows(aggregate["top_fallback_benchmarks"], key="benchmark_id"),
+    )
+    Console(width=200).print(aggregate_table)
 
 
 @benchmark_group.command("gaps")

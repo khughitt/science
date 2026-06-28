@@ -385,3 +385,36 @@ title: Temporal benchmark gap
     assert [row["label"] for row in payload["projects"]] == ["a", "b"]
     assert payload["aggregate"]["project_count"] == 2
     assert payload["aggregate"]["entity_specific_candidate_rows"] == 1
+
+
+def test_benchmark_gap_calibration_rejects_duplicate_project_labels(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+
+    result = _invoke_gap_calibration("--project", f"demo={project}", "--project", f"demo={project}")
+
+    assert result.exit_code != 0
+    assert "duplicate --project label: demo" in result.output
+
+
+def test_benchmark_gap_calibration_table_renders_sections(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    _write_entity(
+        project,
+        "hypotheses",
+        "0001-drug",
+        """
+id: hypothesis:0001-drug
+type: hypothesis
+title: Drug screen benchmark gap
+""",
+        body="Drug compound knockout screen should be tested.",
+    )
+
+    result = _invoke_gap_calibration("--project", f"demo={project}")
+
+    assert result.exit_code == 0
+    assert "Benchmark Gap Calibration" in result.output
+    assert "Aggregate Benchmark Gap Calibration" in result.output
+    assert "demo" in result.output
