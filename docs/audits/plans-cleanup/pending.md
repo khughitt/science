@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `17`
+- Pending thread count: `16`
 
 ## b-migration-paper-datasets
 
@@ -164,22 +164,6 @@
 - remaining_gaps:
   - Verify downstream tasks-archive adoption, managed validate.sh update status, and migration tracking appendix status.
   - Resolve or retarget the Bucket C-dependent descriptor sidecar adoption note.
-
-## general-graph-api-visualization
-
-- status: `incomplete`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-04-12-general-graph-api-visualization-design.md`
-  - `docs/plans/2026-04-12-general-graph-api-visualization.md`
-- pending_actions:
-  - `deferred`: review status incomplete; science-side graph export exists but cross-repo dashboard adoption was not verified
-    - `docs/plans/2026-04-12-general-graph-api-visualization-design.md`
-    - `docs/plans/2026-04-12-general-graph-api-visualization.md`
-- remaining_gaps:
-  - Verify whether the dashboard route consumed this contract or whether only the science-side export landed.
-  - Decide whether a small durable graph-export contract doc is needed before deleting the implementation plan.
 
 ## paper-model
 

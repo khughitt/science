@@ -1,10 +1,10 @@
 {
-  "file_count": 189,
-  "generated_at": "2026-06-28T19:44:49+00:00",
+  "file_count": 187,
+  "generated_at": "2026-06-28T19:54:42+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 119,
+  "thread_count": 118,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -1253,33 +1253,6 @@
         "docs/plans/2026-06-26-feedback-telemetry-adaptation-design.md": "design"
       },
       "thread_id": "feedback-telemetry-adaptation"
-    },
-    {
-      "earliest_file_date": "2026-04-12",
-      "files": [
-        "docs/plans/2026-04-12-general-graph-api-visualization-design.md",
-        "docs/plans/2026-04-12-general-graph-api-visualization.md"
-      ],
-      "latest_file_date": "2026-04-12",
-      "normalized_slug": "general-graph-api-visualization",
-      "raw_slugs": {
-        "docs/plans/2026-04-12-general-graph-api-visualization-design.md": "general-graph-api-visualization-design",
-        "docs/plans/2026-04-12-general-graph-api-visualization.md": "general-graph-api-visualization"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-12-general-graph-api-visualization-design.md"
-        ],
-        "primary": [
-          "docs/plans/2026-04-12-general-graph-api-visualization.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-12-general-graph-api-visualization-design.md": "design",
-        "docs/plans/2026-04-12-general-graph-api-visualization.md": null
-      },
-      "thread_id": "general-graph-api-visualization"
     },
     {
       "earliest_file_date": "2026-06-01",

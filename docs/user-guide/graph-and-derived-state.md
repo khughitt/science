@@ -39,6 +39,51 @@ Dashboard summaries are compact readings of the current graph: unresolved
 references, evidence status, graph hygiene, and project orientation. They help
 agents and humans decide where to work next.
 
+## Graph JSON Export
+
+`science graph export-json` emits the reusable graph payload for inspection,
+scripting, and dashboard consumers:
+
+```bash
+science graph export-json
+science graph export-json --overlay causal --overlay evidence
+```
+
+The payload is a semantic export contract owned by Science, not a renderer
+configuration. It has these top-level fields:
+
+| Field | Purpose |
+|---|---|
+| `schema_version` | Export contract version. |
+| `nodes` | Base graph nodes with stable URI ids, labels, optional type/status/confidence, source refs, and primary graph layer. |
+| `edges` | Base graph edges keyed by deterministic `(subject, predicate, object, graph_layer)` ids. |
+| `layers` | Named graph-layer summaries with node and edge counts. |
+| `scopes` | Typed graph slices such as `project` and `inquiry/<slug>`, each with node and edge membership. |
+| `overlays` | Optional typed semantic overlays requested by `--overlay`. |
+| `warnings` | Partial-export diagnostics, such as skipped missing claim or causal referent refs. |
+
+Base nodes use canonical graph URI strings as exported ids. Base edge ids are
+deterministic strings derived from subject URI, predicate URI, object URI, and
+graph layer, so repeated exports have stable identity. The base graph stays
+generic: causal meaning and evidence interpretation live in overlays.
+
+Supported overlays are:
+
+| Overlay | Semantics |
+|---|---|
+| `causal` | Inquiry-keyed causal structure: treatment, outcome, boundary roles, inquiry-local node/edge membership, and causal edge kind such as `causes` or `confounds`. |
+| `evidence` | Edge-centric claim bundles for proposition-backed edges, including support/dispute counts, evidence semantics, source refs, pre-registrations, interaction terms, falsifications, and cross-hypothesis bridge metadata when present. |
+
+Exports fail for invalid parameters or malformed internal graph structure. They
+do not invent missing semantic objects: optional missing referents are skipped
+and surfaced in `warnings` so consumers can render partial graphs without
+silently hiding data-quality issues.
+
+Dashboard code consumes this shared payload and may add renderer-specific
+metadata such as level-of-detail, lens values, style values, encoding metadata,
+or reference dates. Those additions belong to the dashboard layer; Science owns
+the graph semantics and overlay shape.
+
 ## Public Snapshot Distillation
 
 `science distill` creates small Turtle snapshots from public knowledge graph
