@@ -14,6 +14,7 @@
 
 - Create `scripts/audit_plans_cleanup.py`: standalone audit helper with `self-test`, `inventory`, `batch`, and `validate` subcommands.
 - Create `docs/audits/plans-cleanup/thread-index.json`: generated thread inventory for root `docs/plans/`.
+- Create `docs/audits/plans-cleanup/overrides.json`: hand-authored thread splits and related-thread links reapplied by `inventory` on every regeneration.
 - Create `docs/audits/plans-cleanup/reviews.jsonl`: append-only review log keyed by `thread_id`.
 - Create `docs/audits/plans-cleanup/actions.jsonl`: append-only main-agent action log.
 - Create `docs/audits/plans-cleanup/batches/`: generated batch assignment Markdown files for subagent review.
@@ -52,6 +53,10 @@ from typing import Any
 
 
 DATE_PREFIX_RE = re.compile(r"^(?P<date>\d{4}-\d{2}-\d{2})-(?P<slug>.+)$")
+# Ordered longest-match-first: normalize_slug returns the first suffix that
+# matches, so any compound suffix (for example "implementation-plan") must
+# precede its shorter form ("implementation"). Adding a new suffix that shares a
+# tail with an existing one means inserting it ahead of the shorter entry.
 ROLE_SUFFIXES = (
     "implementation-plan",
     "implementation",
@@ -131,6 +136,9 @@ def parse_plan_file(path: Path, root: Path) -> PlanFile:
 
 
 def normalize_slug(raw_slug: str) -> tuple[str, str | None]:
+    # Strips at most one terminal role suffix. A slug that ends in two role words
+    # (for example "foo-design-plan") keeps the inner role ("foo-design"); this is
+    # intentional so genuine topics ending in a role word are not over-stripped.
     for role in ROLE_SUFFIXES:
         suffix = f"-{role}"
         if raw_slug.endswith(suffix):
@@ -210,6 +218,7 @@ Add these arguments:
     inventory_parser = subparsers.add_parser("inventory")
     inventory_parser.add_argument("--plans-dir", default="docs/plans")
     inventory_parser.add_argument("--output-dir", default="docs/audits/plans-cleanup")
+    inventory_parser.add_argument("--overrides", default="docs/audits/plans-cleanup/overrides.json")
     inventory_parser.add_argument("--generated-at", default=None)
 ```
 
@@ -224,6 +233,7 @@ Insert this branch in `main()` immediately after the `self-test` branch:
             plans_dir=repo_root / args.plans_dir,
             output_dir=repo_root / args.output_dir,
             generated_at=generated_at,
+            overrides_path=repo_root / args.overrides,
         )
         return 0
 ```
@@ -233,17 +243,69 @@ Insert this branch in `main()` immediately after the `self-test` branch:
 Add these functions:
 
 ```python
-def discover_plan_files(plans_dir: Path, repo_root: Path) -> list[PlanFile]:
+def discover_plan_files(
+    plans_dir: Path, repo_root: Path
+) -> tuple[list[PlanFile], list[str]]:
     files: list[PlanFile] = []
+    non_conforming: list[str] = []
     for path in sorted(plans_dir.glob("*.md")):
-        files.append(parse_plan_file(path, repo_root))
-    return sorted(files, key=lambda item: item.path)
+        try:
+            files.append(parse_plan_file(path, repo_root))
+        except ValueError:
+            non_conforming.append(path.relative_to(repo_root).as_posix())
+    files.sort(key=lambda item: item.path)
+    return files, sorted(non_conforming)
 
 
-def build_threads(plan_files: list[PlanFile]) -> list[ThreadRecord]:
+def load_overrides(overrides_path: Path) -> dict[str, Any]:
+    if not overrides_path.exists():
+        return {"schema_version": 1, "splits": {}, "related_threads": {}}
+    payload = json.loads(overrides_path.read_text())
+    if payload.get("schema_version") != 1:
+        raise ValueError("overrides.json schema_version must be 1")
+    payload.setdefault("splits", {})
+    payload.setdefault("related_threads", {})
+    return payload
+
+
+def apply_splits(
+    grouped: dict[str, list[PlanFile]],
+    splits: dict[str, Any],
+) -> dict[str, list[PlanFile]]:
+    result = dict(grouped)
+    for original_id, children in sorted(splits.items()):
+        if original_id not in result:
+            continue  # the original thread's files were already removed
+        present = {plan_file.path: plan_file for plan_file in result[original_id]}
+        assigned: set[str] = set()
+        new_groups: dict[str, list[PlanFile]] = {}
+        for child in children:
+            child_id = child["thread_id"]
+            if child_id in result or child_id in new_groups:
+                raise ValueError(f"split child thread_id collides with existing thread: {child_id}")
+            members = [present[path] for path in child["files"] if path in present]
+            if not members:
+                continue
+            assigned.update(member.path for member in members)
+            new_groups[child_id] = members
+        unassigned = sorted(set(present) - assigned)
+        if unassigned:
+            raise ValueError(f"split of {original_id} leaves files unassigned: {unassigned}")
+        del result[original_id]
+        result.update(new_groups)
+    return result
+
+
+def build_threads(
+    plan_files: list[PlanFile], overrides: dict[str, Any] | None = None
+) -> list[ThreadRecord]:
+    overrides = overrides or {"splits": {}, "related_threads": {}}
     grouped: dict[str, list[PlanFile]] = {}
     for plan_file in plan_files:
         grouped.setdefault(plan_file.normalized_slug, []).append(plan_file)
+
+    grouped = apply_splits(grouped, overrides.get("splits", {}))
+    related = overrides.get("related_threads", {})
 
     threads: list[ThreadRecord] = []
     for thread_id, files in sorted(grouped.items()):
@@ -259,13 +321,14 @@ def build_threads(plan_files: list[PlanFile]) -> list[ThreadRecord]:
         threads.append(
             ThreadRecord(
                 thread_id=thread_id,
-                normalized_slug=thread_id,
+                normalized_slug=files[0].normalized_slug,
                 earliest_file_date=dates[0],
                 latest_file_date=dates[-1],
                 files=sorted(file.path for file in files),
                 role_files={key: sorted(value) for key, value in sorted(role_files.items())},
                 raw_slugs=dict(sorted(raw_slugs.items())),
                 stripped_roles=dict(sorted(stripped_roles.items())),
+                related_threads=sorted(related.get(thread_id, [])),
             )
         )
     return threads
@@ -277,16 +340,19 @@ def write_thread_index(
     plans_dir: Path,
     output_dir: Path,
     generated_at: str,
+    overrides_path: Path,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    plan_files = discover_plan_files(plans_dir, repo_root)
-    threads = build_threads(plan_files)
+    plan_files, non_conforming = discover_plan_files(plans_dir, repo_root)
+    overrides = load_overrides(overrides_path)
+    threads = build_threads(plan_files, overrides)
     payload = {
         "schema_version": 1,
         "generated_at": generated_at,
         "source_dir": plans_dir.relative_to(repo_root).as_posix(),
         "thread_count": len(threads),
         "file_count": len(plan_files),
+        "non_conforming_files": non_conforming,
         "threads": [asdict(thread) for thread in threads],
     }
     output_path = output_dir / "thread-index.json"
@@ -294,6 +360,10 @@ def write_thread_index(
     print(f"wrote {output_path.relative_to(repo_root)}")
     print(f"threads: {len(threads)}")
     print(f"files: {len(plan_files)}")
+    if non_conforming:
+        print(f"WARNING: skipped {len(non_conforming)} non-conforming files:")
+        for path in non_conforming:
+            print(f"  - {path}")
 ```
 
 - [ ] **Step 3: Run the deterministic inventory command**
@@ -326,10 +396,24 @@ rtk rg -n '"thread_id": "dataset-verify-access"|"thread_id": "schema-adoption-ca
 
 Expected: all three thread ids are present. `dataset-verify-access` includes both design and implementation-plan role files if both source files exist.
 
-- [ ] **Step 5: Commit inventory support**
+- [ ] **Step 5: Create the starter overrides file and commit inventory support**
+
+The inventory works without `overrides.json` (a missing file is treated as
+empty), but create a committed starter so the file is discoverable and ready for
+the first reconciliation split:
 
 ```bash
-rtk git add scripts/audit_plans_cleanup.py docs/audits/plans-cleanup/thread-index.json
+rtk proxy tee docs/audits/plans-cleanup/overrides.json >/dev/null <<'JSON'
+{
+  "schema_version": 1,
+  "splits": {},
+  "related_threads": {}
+}
+JSON
+```
+
+```bash
+rtk git add scripts/audit_plans_cleanup.py docs/audits/plans-cleanup/thread-index.json docs/audits/plans-cleanup/overrides.json
 rtk git commit -m "chore: inventory plans cleanup threads"
 ```
 
@@ -364,6 +448,7 @@ Add these parser definitions:
     validate_parser.add_argument("--index", default="docs/audits/plans-cleanup/thread-index.json")
     validate_parser.add_argument("--reviews", default="docs/audits/plans-cleanup/reviews.jsonl")
     validate_parser.add_argument("--actions", default="docs/audits/plans-cleanup/actions.jsonl")
+    validate_parser.add_argument("--overrides", default="docs/audits/plans-cleanup/overrides.json")
 
     pending_parser = subparsers.add_parser("pending")
     pending_parser.add_argument("--index", default="docs/audits/plans-cleanup/thread-index.json")
@@ -392,6 +477,7 @@ Insert these branches in `main()` immediately after the `inventory` branch:
             index_path=repo_root / args.index,
             reviews_path=repo_root / args.reviews,
             actions_path=repo_root / args.actions,
+            overrides_path=repo_root / args.overrides,
         )
         return 0
     if args.command == "pending":
@@ -431,6 +517,14 @@ PENDING_REVIEW_STATUSES = {
     "unclear",
 }
 PENDING_ACTIONS = {"deferred", "migration_checkpoint_created"}
+COHERENT_ACTIONS = {
+    "delete_obvious": {"delete"},
+    "superseded_delete": {"delete"},
+    "implemented_needs_durable_docs": {"create migration checkpoint"},
+    "keep_historical": {"move to historical"},
+    "incomplete": {"keep for triage", "keep active"},
+    "unclear": {"keep for triage", "keep active"},
+}
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -461,7 +555,13 @@ def reviewed_thread_ids(reviews_path: Path) -> set[str]:
     return {str(record["thread_id"]) for record in read_jsonl(reviews_path) if "thread_id" in record}
 
 
-def validate_logs(*, index_path: Path, reviews_path: Path, actions_path: Path) -> None:
+def validate_logs(
+    *,
+    index_path: Path,
+    reviews_path: Path,
+    actions_path: Path,
+    overrides_path: Path | None = None,
+) -> None:
     payload = load_index(index_path)
     known_threads = {thread["thread_id"] for thread in payload["threads"]}
     reviews = read_jsonl(reviews_path)
@@ -471,7 +571,10 @@ def validate_logs(*, index_path: Path, reviews_path: Path, actions_path: Path) -
         for record in actions
         if record.get("action") in TERMINAL_ACTIONS and "thread_id" in record
     }
-    allowed_threads = known_threads | terminal_actioned_threads
+    split_origin_threads: set[str] = set()
+    if overrides_path is not None:
+        split_origin_threads = set(load_overrides(overrides_path).get("splits", {}))
+    allowed_threads = known_threads | terminal_actioned_threads | split_origin_threads
     for record in reviews:
         missing = REQUIRED_REVIEW_KEYS - set(record)
         if missing:
@@ -484,6 +587,11 @@ def validate_logs(*, index_path: Path, reviews_path: Path, actions_path: Path) -
             raise ValueError(
                 f"review {record['thread_id']} has invalid recommended_action {record['recommended_action']}"
             )
+        if record["recommended_action"] not in COHERENT_ACTIONS[record["status"]]:
+            raise ValueError(
+                f"review {record['thread_id']} status {record['status']} is incoherent "
+                f"with recommended_action {record['recommended_action']}"
+            )
         if record["status"] == "superseded_delete" and not record["superseded_by"]:
             raise ValueError(f"review {record['thread_id']} superseded_delete lacks superseded_by")
     for record in actions:
@@ -491,10 +599,7 @@ def validate_logs(*, index_path: Path, reviews_path: Path, actions_path: Path) -
             raise ValueError(f"action record missing thread_id/action: {record}")
         if record["action"] not in VALID_ACTIONS:
             raise ValueError(f"action {record['thread_id']} has invalid action {record['action']}")
-        if (
-            record["thread_id"] not in known_threads
-            and record["thread_id"] not in terminal_actioned_threads
-        ):
+        if record["thread_id"] not in allowed_threads:
             raise ValueError(f"action references unrecognized thread_id {record['thread_id']}")
     print("audit logs valid")
 ```
@@ -653,9 +758,11 @@ Replace `run_self_test()` with:
 ```python
 def run_self_test() -> None:
     test_normalize_slug()
+    test_apply_overrides_splits_thread()
     test_batch_selection_uses_latest_before()
     test_validate_allows_deferred_then_terminal_removed_thread()
-    print("self-test passed (3 groups)")
+    test_validate_rejects_incoherent_action()
+    print("self-test passed (5 groups)")
 
 
 def test_normalize_slug() -> None:
@@ -676,6 +783,50 @@ def test_normalize_slug() -> None:
         actual = normalize_slug(raw_slug)
         if actual != expected:
             raise AssertionError(f"{raw_slug}: expected {expected}, got {actual}")
+
+
+def test_apply_overrides_splits_thread() -> None:
+    files = [
+        PlanFile(
+            path="docs/plans/2026-03-01-shared-slug-design.md",
+            file_date="2026-03-01",
+            raw_slug="shared-slug-design",
+            normalized_slug="shared-slug",
+            stripped_role="design",
+        ),
+        PlanFile(
+            path="docs/plans/2026-06-01-shared-slug-design.md",
+            file_date="2026-06-01",
+            raw_slug="shared-slug-design",
+            normalized_slug="shared-slug",
+            stripped_role="design",
+        ),
+    ]
+    overrides = {
+        "splits": {
+            "shared-slug": [
+                {"thread_id": "shared-slug-march", "files": [files[0].path]},
+                {"thread_id": "shared-slug-june", "files": [files[1].path]},
+            ]
+        },
+        "related_threads": {"shared-slug-march": ["shared-slug-june"]},
+    }
+    threads = {thread.thread_id: thread for thread in build_threads(files, overrides)}
+    if set(threads) != {"shared-slug-march", "shared-slug-june"}:
+        raise AssertionError(f"unexpected thread ids: {sorted(threads)}")
+    if threads["shared-slug-march"].latest_file_date != "2026-03-01":
+        raise AssertionError("march child has wrong latest_file_date")
+    if threads["shared-slug-march"].related_threads != ["shared-slug-june"]:
+        raise AssertionError("related_threads not applied")
+    try:
+        build_threads(
+            files,
+            {"splits": {"shared-slug": [{"thread_id": "only-march", "files": [files[0].path]}]}},
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected unassigned-file split to fail")
 
 
 def test_batch_selection_uses_latest_before() -> None:
@@ -775,6 +926,59 @@ def test_validate_allows_deferred_then_terminal_removed_thread() -> None:
             reviews_path=reviews_path,
             actions_path=actions_path,
         )
+
+
+def test_validate_rejects_incoherent_action() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        index_path = root / "thread-index.json"
+        reviews_path = root / "reviews.jsonl"
+        actions_path = root / "actions.jsonl"
+        index_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "threads": [
+                        {
+                            "thread_id": "incoherent-thread",
+                            "earliest_file_date": "2026-03-01",
+                            "latest_file_date": "2026-03-01",
+                            "files": ["docs/plans/2026-03-01-incoherent-thread.md"],
+                        }
+                    ],
+                }
+            )
+            + "\n"
+        )
+        reviews_path.write_text(
+            json.dumps(
+                {
+                    "thread_id": "incoherent-thread",
+                    "files": ["docs/plans/2026-03-01-incoherent-thread.md"],
+                    "topic": "Incoherent",
+                    "status": "delete_obvious",
+                    "superseded_by": [],
+                    "supersedes": [],
+                    "related_threads": [],
+                    "evidence": ["Verified complete."],
+                    "remaining_gaps": [],
+                    "durable_doc_candidate": None,
+                    "recommended_action": "keep active",
+                    "review_notes": "Coherence test.",
+                }
+            )
+            + "\n"
+        )
+        actions_path.write_text("")
+        try:
+            validate_logs(
+                index_path=index_path,
+                reviews_path=reviews_path,
+                actions_path=actions_path,
+            )
+        except ValueError:
+            return
+        raise AssertionError("expected incoherent recommended_action to fail")
 ```
 
 - [ ] **Step 6: Initialize append-only logs**
@@ -796,7 +1000,7 @@ rtk uv run scripts/audit_plans_cleanup.py self-test
 Expected output includes:
 
 ```text
-self-test passed (3 groups)
+self-test passed (5 groups)
 ```
 
 - [ ] **Step 8: Generate the first March/April batch**
@@ -932,6 +1136,7 @@ rtk git commit -m "docs: record first plans cleanup audit reviews"
 **Files:**
 - Read: `docs/audits/plans-cleanup/thread-index.json`
 - Read: `docs/audits/plans-cleanup/reviews.jsonl`
+- Modify: `docs/audits/plans-cleanup/overrides.json` (only when splitting an over-merged thread).
 - Modify: `docs/audits/plans-cleanup/actions.jsonl`
 - Delete: verified `docs/plans/*.md` files with `delete_obvious` or `superseded_delete`.
 - Move: verified `keep_historical` files to `docs/plans/historical/`.
@@ -955,8 +1160,12 @@ For each reviewed thread:
 - If `status` is `keep_historical`, confirm historical value and move all files for that thread to `docs/plans/historical/`.
 - If `status` is `implemented_needs_durable_docs`, do not delete files; create a migration checkpoint action only.
 - If `status` is `incomplete` or `unclear`, do not delete or move files.
-- If `review_notes` flags an over-merged thread, act file-by-file and leave any
-  unrelated file group in place with a `deferred` action record.
+- If `review_notes` flags an over-merged thread, record a split in
+  `docs/audits/plans-cleanup/overrides.json` (map the original `thread_id` to its
+  child threads with their exact files), regenerate the inventory so the children
+  become first-class threads, append fresh reviews for each child, then act
+  file-by-file. Leave any unrelated child group in place with a `deferred` action
+  record until it is reviewed.
 
 - [ ] **Step 3: Perform only verified deletes and historical moves**
 
@@ -1058,6 +1267,10 @@ rtk uv run scripts/audit_plans_cleanup.py inventory --generated-at 2026-06-27T00
 
 Expected output includes a reduced active file count if any files were deleted or moved to `docs/plans/historical/`.
 
+Any `overrides.json` splits or related-thread links are reapplied here, so manual
+reconciliation survives regeneration and split children remain in the index for
+the next batch.
+
 - [ ] **Step 2: Generate the next March/April batch**
 
 Run:
@@ -1114,4 +1327,7 @@ rtk git commit -m "docs: prepare next plans cleanup audit batch"
 - [ ] `docs/audits/plans-cleanup/pending.md` lists deferred, incomplete, unclear, `implemented_needs_durable_docs`, and migration-checkpoint threads.
 - [ ] No plan files are deleted unless their latest review status is `delete_obvious` or `superseded_delete`.
 - [ ] No plan files are moved to `docs/plans/historical/` unless their latest review status is `keep_historical`.
+- [ ] `docs/audits/plans-cleanup/overrides.json` splits are reapplied idempotently by `inventory`, and split children appear in `thread-index.json`.
+- [ ] `thread-index.json` records any non-date-prefixed files under `non_conforming_files` instead of failing the inventory.
+- [ ] `validate` rejects a review whose `recommended_action` is incoherent with its `status`.
 - [ ] Worktree is clean after the final commit.

@@ -59,17 +59,28 @@ For each file:
    `pilot`, and `addendum`.
 4. Group files with the same normalized slug into one thread.
 
+Files that do not begin with a `YYYY-MM-DD-` prefix are not silently dropped and
+do not abort the inventory. The inventory pass collects every non-conforming
+filename, records them under `non_conforming_files` in `thread-index.json`, and
+prints them as warnings so a reviewer can rename or exclude them. This matters
+most for the later project-level phase, where documentation layouts vary and
+stray index or README files are common.
+
 Use the normalized slug as the default `thread_id`. This deliberately biases
 toward over-grouping exact slug reuse across dates rather than splitting paired
 or continued work across subagent batches. If two genuinely distinct efforts
 reuse the same normalized slug months apart, the main agent should split the
-thread during reconciliation and record that split in `thread-index.json`.
+thread during reconciliation and record that split in `overrides.json` (see
+Overrides). The inventory pass reapplies overrides on every regeneration, so
+split thread ids stay first-class in `thread-index.json` and remain eligible for
+batching and validation.
 
 Files with different normalized slugs stay in separate threads unless the files
 explicitly identify one another as a continuation, replacement, phase, or
 supersession. Do not collapse broad same-topic work automatically from loose
-slug similarity alone. Instead, record those links in `related_threads` or the
-supersession fields.
+slug similarity alone. Instead, record those links in `related_threads` (through
+`overrides.json`, which the inventory pass attaches to the named threads) or in
+the supersession fields of the review record.
 
 The generated inventory should retain each file's raw slug and stripped role so
 reviewers can spot uncommon suffix collisions, such as a topic that genuinely
@@ -84,13 +95,42 @@ Each thread has:
 Batch selection uses `latest_file_date`. A thread that includes June files is a
 June-scoped thread even if one of its files started in March or April.
 
+## Overrides
+
+`overrides.json` is a small, hand-authored, version-controlled file that records
+the few decisions the deterministic grouping pass cannot make on its own. The
+inventory pass reads it and reapplies it on every regeneration, so the generated
+`thread-index.json` stays idempotent over human edits instead of clobbering
+them.
+
+It supports two override kinds:
+
+- `splits`: map an over-grouped `thread_id` to the child threads it should
+  become. Each child names its `thread_id` and the exact files it owns. Every
+  file currently in the original thread must be assigned to exactly one child;
+  unassigned files or child ids that collide with existing threads are a
+  fail-loud error. A split whose original thread has already been deleted is a
+  no-op.
+- `related_threads`: map a `thread_id` to nearby thread ids that should be
+  reconciled together. The inventory pass attaches these to the named thread
+  records; the grouping pass never infers them from slug similarity.
+
+Because split children become first-class threads in `thread-index.json`, they
+are batched and validated like any other thread, and the audit stays resumable.
+A review written against the original thread id before a split stays valid:
+`validate` recognizes split origins as allowed thread ids, and the main agent
+appends fresh child reviews afterward (latest-wins).
+
 ## Manifest Location And Format
 
 Use `docs/audits/plans-cleanup/` for this audit workspace. The first pass should
 produce these files:
 
 - `thread-index.json`: generated thread inventory, including grouping metadata,
-  batch assignment, and related-thread hints.
+  non-conforming-file warnings, and related-thread hints applied from
+  `overrides.json`.
+- `overrides.json`: hand-authored thread splits and related-thread links that
+  the inventory pass reapplies on every regeneration (see Overrides).
 - `reviews.jsonl`: append-only subagent and main-agent review records. Each line
   is one complete review record keyed by `thread_id`.
 - `actions.jsonl`: append-only record of migrations, deletions, and deferred
@@ -135,7 +175,8 @@ Each reviewed thread should capture:
 - `durable_doc_candidate`: target durable location if knowledge should be
   migrated.
 - `recommended_action`: delete, create migration checkpoint, keep for triage,
-  move to historical, or keep active.
+  move to historical, or keep active. This must be coherent with `status`; the
+  validator rejects mismatched pairs such as `delete_obvious` with `keep active`.
 - `review_notes`: short reviewer notes, including confidence and caveats.
 
 ## Durable Documentation Targets
