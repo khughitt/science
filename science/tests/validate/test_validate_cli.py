@@ -59,7 +59,7 @@ def test_validate_json_on_minimal_project_matches_schema(tmp_path: Path) -> None
     }
 
 
-def test_validate_json_emits_results_and_warns_do_not_fail(tmp_path: Path) -> None:
+def test_validate_json_emits_actionable_results_and_warns_do_not_fail(tmp_path: Path) -> None:
     @Check(section="demo", order=10)
     def demo_check(ctx: ValidateContext) -> list[Result]:
         return [
@@ -81,15 +81,84 @@ def test_validate_json_emits_results_and_warns_do_not_fail(tmp_path: Path) -> No
             "rule": "demo.warn",
             "task": "task:t001",
         },
+    ]
+
+
+def test_validate_filters_accepted_validation_warnings(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    project.joinpath("science.yaml").write_text(
+        "\n".join(
+            [
+                "name: demo",
+                "health:",
+                "  accepted_validation:",
+                "    - rule: demo.warn",
+                "      severity: warning",
+                "      path: doc/demo.md",
+                "      message_contains: watch this",
+                "      reason: Reviewed residual warning.",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    @Check(section="demo", order=10)
+    def demo_check(ctx: ValidateContext) -> list[Result]:
+        return [
+            Result(Severity.WARN, Path("doc/demo.md"), 7, "watch this", "demo.warn", "task:t001"),
+            Result(Severity.WARN, Path("doc/other.md"), 9, "keep this", "demo.other", None),
+        ]
+
+    result = CliRunner().invoke(main, ["validate", "--format", "json", "--project-root", str(project)])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["summary"] == {"errors": 0, "warnings": 1, "infos": 0}
+    assert payload["results"] == [
         {
-            "severity": "info",
-            "path": None,
-            "line": None,
-            "message": "noted",
-            "rule": None,
+            "severity": "warn",
+            "path": "doc/other.md",
+            "line": 9,
+            "message": "keep this",
+            "rule": "demo.other",
             "task": None,
         },
     ]
+
+
+def test_validate_filters_accepted_warnings_before_gate_evaluation(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    project.joinpath("science.yaml").write_text(
+        "\n".join(
+            [
+                "name: demo",
+                "health:",
+                "  accepted_validation:",
+                "    - rule: code.ghost",
+                "      severity: warning",
+                "      path: code/demo.py",
+                "      reason: Reviewed ghost file during migration.",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    @Check(section="demo", order=10)
+    def demo_check(ctx: ValidateContext) -> list[Result]:
+        return [Result(Severity.WARN, Path("code/demo.py"), None, "ghost", "code.ghost", None)]
+
+    result = CliRunner().invoke(
+        main,
+        ["validate", "--fail-on", "ghost-files", "--format", "json", "--project-root", str(project)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == {
+        "summary": {"errors": 0, "warnings": 0, "infos": 0},
+        "results": [],
+    }
 
 
 def test_validate_records_failure_summary_telemetry(tmp_path: Path) -> None:
@@ -176,7 +245,8 @@ def test_validate_commit_profile_skips_graph_backed_checks(tmp_path: Path) -> No
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert [item["message"] for item in payload["results"]] == ["tasks ran"]
+    assert payload["summary"] == {"errors": 0, "warnings": 0, "infos": 1}
+    assert payload["results"] == []
 
 
 def test_validate_imports_local_hook_by_default(tmp_path: Path) -> None:

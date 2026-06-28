@@ -24,7 +24,8 @@ aspects, evidence coverage, identity policy, and related hygiene.
 
 Projects may mark a validation warning as reviewed in `science.yaml` when the
 warning is an intentional, documented residual risk rather than an unresolved
-defect. Accepted warnings are omitted from `health.total_issues` and reported in
+defect. Accepted warnings are omitted from `science validate` output/counts and
+from `health.total_issues`; `science health` reports them in
 `accepted_validation` so the audit trail remains visible.
 
 ```yaml

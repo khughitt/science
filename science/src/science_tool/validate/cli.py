@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from contextlib import redirect_stdout
+from dataclasses import replace
 from io import StringIO
 from pathlib import Path
 from typing import Any, cast
@@ -11,8 +12,9 @@ from rich.text import Text
 
 from science_tool.styles import ERROR_STYLE, SUCCESS_STYLE, WARNING_STYLE, get_console
 from science_tool.validate._helpers import section_banner
+from science_tool.validate.acceptance import filter_accepted_warnings
 from science_tool.validate.context import ValidateContextError
-from science_tool.validate.gates import GATE_TIERS
+from science_tool.validate.gates import GATE_TIERS, gated_findings
 from science_tool.validate.result import Result, Severity
 from science_tool.validate.runner import VALIDATE_PROFILES, RunResult, ValidationProfile, run
 
@@ -75,6 +77,7 @@ def validate_cmd(
                 fail_on=fail_on,
                 profile=cast(ValidationProfile, profile),
             )
+            result = _with_accepted_warnings_filtered(project_root, result)
     except ValidateContextError as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -130,8 +133,22 @@ def _json_payload(result: RunResult) -> dict[str, Any]:
             "warnings": result.warnings,
             "infos": result.infos,
         },
-        "results": [item.to_dict() for item in result.results],
+        "results": [item.to_dict() for item in result.results if item.severity is not Severity.INFO],
     }
+
+
+def _with_accepted_warnings_filtered(project_root: Path, result: RunResult) -> RunResult:
+    filtered_results = filter_accepted_warnings(project_root, result.results)
+    if len(filtered_results) == len(result.results):
+        return result
+    return replace(
+        result,
+        results=filtered_results,
+        errors=sum(1 for item in filtered_results if item.severity is Severity.ERROR),
+        warnings=sum(1 for item in filtered_results if item.severity is Severity.WARN),
+        infos=sum(1 for item in filtered_results if item.severity is Severity.INFO),
+        gated=tuple(gated_findings(filtered_results, result.gate_tier)),
+    )
 
 
 def _emit_text(result: RunResult) -> None:

@@ -103,6 +103,4 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
             continue
         if severity_by_check.get(check, "warn") == "warn":
             results.append(_result(Severity.WARN, f"{count} prose lint issue(s): {check}"))
-        else:
-            results.append(_result(Severity.INFO, f"{count} prose lint issue(s): {check} (use --strict to promote)"))
     return results

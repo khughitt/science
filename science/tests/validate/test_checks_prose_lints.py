@@ -63,20 +63,14 @@ def test_non_strict_bare_author_year_emits_exact_warn_message(tmp_path: Path) ->
     assert _summary(results) == [(Severity.WARN, "1 prose lint issue(s): bare-author-year", "prose_lints")]
 
 
-def test_non_strict_numeric_anchor_emits_exact_info_message(tmp_path: Path) -> None:
+def test_non_strict_numeric_anchor_is_silent(tmp_path: Path) -> None:
     from science_tool.validate.checks.prose_lints import check_prose_lints
 
     _write_doc(tmp_path, "The cohort included 123 participants without a linked anchor.\n")
 
     results = list(check_prose_lints(_ctx(tmp_path)))
 
-    assert _summary(results) == [
-        (
-            Severity.INFO,
-            "1 prose lint issue(s): numeric-anchor (use --strict to promote)",
-            "prose_lints",
-        )
-    ]
+    assert _summary(results) == []
 
 
 def test_strict_numeric_anchor_emits_warn_message(tmp_path: Path) -> None:

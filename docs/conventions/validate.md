@@ -170,7 +170,7 @@ Top-level fields:
 | `summary.errors` | integer | Number of `error` results. |
 | `summary.warnings` | integer | Number of `warn` results. |
 | `summary.infos` | integer | Number of `info` results. |
-| `results` | array | Ordered validation results. |
+| `results` | array | Ordered actionable validation results (`error` and `warn`; `info` rows are omitted from JSON rows). |
 
 Each result is the serialized `Result.to_dict()` shape:
 
@@ -182,6 +182,10 @@ Each result is the serialized `Result.to_dict()` shape:
 | `message` | string | Human-readable validation message. |
 | `rule` | string or null | Stable rule identifier when available. |
 | `task` | string or null | Related task reference when available. |
+
+Accepted validation warnings declared in `science.yaml` under
+`health.accepted_validation` are omitted from `science validate` output and
+counts after their match criteria and non-empty `reason` are checked.
 
 ## Environment Variables
 
