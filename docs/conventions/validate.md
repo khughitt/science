@@ -7,7 +7,7 @@ to this command.
 ## Synopsis
 
 ```bash
-science validate [--verbose] [--strict] [--format text|json] [--fail-on TIER] [--project-root PATH]
+science validate [--verbose] [--strict] [--all] [--format text|json] [--fail-on TIER] [--project-root PATH]
 ```
 
 Run from a project root:
@@ -16,6 +16,7 @@ Run from a project root:
 science validate
 science validate --format json
 science validate --strict --verbose
+science validate --strict --all
 science validate --project-root ~/d/example-project
 ```
 
@@ -25,6 +26,7 @@ science validate --project-root ~/d/example-project
 |---|---|
 | `--verbose` | Enables verbose context for checks that support it. |
 | `--strict` | Enables strict advisory checks. Strict mode may add warnings, but warnings still do not fail the command (unless their rule is gated by `--fail-on`/`code_gate`). |
+| `--all` | Runs checks disabled by project-level narrowing configuration. For example, prose lint checks listed outside `prose_lint.enabled_checks` are still scanned when `--all` is active. |
 | `--format text|json` | Selects terminal text output or machine-readable JSON output. Default: `text`. |
 | `--fail-on TIER` | Exit `1` when any finding gated at `TIER` (or a lower tier) is present. Tiers (cumulative): `report` (default, never blocks), `ghost-files`, `decision-bearing-orphans`, `hygiene`. Overrides `code_gate` in `science.yaml`. |
 | `--project-root PATH` | Validates the selected Science project root instead of the current working directory. |
@@ -47,6 +49,8 @@ Results use three severities:
 | `info` | A diagnostic or advisory note. | Does not fail the command. |
 
 `--strict` enables strict advisory warnings; it does not promote `warn` results to `error`.
+`--all` controls check inclusion, not severity: use `--strict --all` to run all
+available checks and promote strict advisory findings within those checks.
 
 ## Code-file registration & the `--fail-on` gate ladder
 

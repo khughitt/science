@@ -19,11 +19,19 @@ from science_tool.validate.result import Result, Severity
 from science_tool.validate.runner import VALIDATE_PROFILES, RunResult, ValidationProfile, run
 
 BANNER = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+_VISIBLE_INFO_RULES = frozenset({"prose_lints.config"})
 
 
 @click.command(name="validate")
 @click.option("--verbose", is_flag=True, default=False, help="Show verbose validation details.")
 @click.option("--strict", is_flag=True, default=False, help="Enable strict validation checks.")
+@click.option(
+    "--all",
+    "include_all_checks",
+    is_flag=True,
+    default=False,
+    help="Run checks disabled by project-level narrowing configuration.",
+)
 @click.option(
     "--fail-on",
     "fail_on",
@@ -61,6 +69,7 @@ def validate_cmd(
     ctx: click.Context,
     verbose: bool,
     strict: bool,
+    include_all_checks: bool,
     fail_on: str | None,
     output_format: str,
     profile: str,
@@ -76,6 +85,7 @@ def validate_cmd(
                 verbose=verbose,
                 fail_on=fail_on,
                 profile=cast(ValidationProfile, profile),
+                include_all_checks=include_all_checks,
             )
             result = _with_accepted_warnings_filtered(project_root, result)
     except ValidateContextError as exc:
@@ -158,6 +168,8 @@ def _emit_text(result: RunResult, *, verbose: bool = False) -> None:
     console.print("Science Project Validation")
     console.print(BANNER)
     console.print(_format_check_coverage(result), soft_wrap=True)
+    for item in _notice_results(result):
+        console.print(_format_notice(item), soft_wrap=True)
 
     if verbose:
         for section in _section_names(result):
@@ -182,12 +194,29 @@ def _format_check_coverage(result: RunResult) -> str:
 
 def _text_results(result: RunResult, *, verbose: bool) -> list[Result]:
     if verbose:
-        return list(result.results)
+        return [item for item in result.results if not _is_visible_info(item)]
     return [item for item in result.results if item.severity is not Severity.INFO]
+
+
+def _notice_results(result: RunResult) -> list[Result]:
+    return [item for item in result.results if _is_visible_info(item)]
+
+
+def _is_visible_info(result: Result) -> bool:
+    return result.severity is Severity.INFO and result.rule in _VISIBLE_INFO_RULES
 
 
 def _section_names(result: RunResult) -> list[str]:
     return list(result.sections)
+
+
+def _format_notice(result: Result) -> Text:
+    text = Text()
+    text.append("NOTE")
+    text.append(f" {result.message}")
+    if result.task:
+        text.append(f" ({result.task})")
+    return text
 
 
 def _format_result(result: Result) -> Text:

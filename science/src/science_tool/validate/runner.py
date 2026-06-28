@@ -88,10 +88,16 @@ def run(
     fail_on: str | None = None,
     profile: ValidationProfile = "full",
     enable_python_sidecar: bool = True,
+    include_all_checks: bool = False,
 ) -> RunResult:
     checks = _checks_for_profile(profile)
     skipped_checks = _skipped_checks_for_profile(profile)
-    ctx = ValidateContext.from_project_root(project_root, strict=strict, verbose=verbose)
+    ctx = ValidateContext.from_project_root(
+        project_root,
+        strict=strict,
+        verbose=verbose,
+        include_all_checks=include_all_checks,
+    )
     results: list[Result] = []
     run_result: RunResult | None = None
     sidecar_enabled = enable_python_sidecar and os.environ.get("SCIENCE_VALIDATE_DISABLE_SIDECAR") != "1"

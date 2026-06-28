@@ -38,6 +38,7 @@ def test_validate_help_is_registered() -> None:
 
     assert result.exit_code == 0, result.output
     assert "--strict" in result.output
+    assert "--all" in result.output
     assert "--experimental-python-sidecar" not in result.output
     assert "--format [text|json]" in result.output
     assert "--profile [full|commit]" in result.output
@@ -397,6 +398,23 @@ def test_validate_strict_is_passed_through_without_promoting_warnings(tmp_path: 
     assert json.loads(result.output)["summary"] == {"errors": 0, "warnings": 1, "infos": 0}
 
 
+def test_validate_all_is_passed_through_to_checks(tmp_path: Path) -> None:
+    seen: list[bool] = []
+
+    @Check(section="demo", order=10)
+    def demo_check(ctx: ValidateContext) -> list[Result]:
+        seen.append(ctx.include_all_checks)
+        return []
+
+    result = CliRunner().invoke(
+        main,
+        ["validate", "--all", "--format", "json", "--project-root", str(_project(tmp_path))],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert seen == [True]
+
+
 def test_validate_text_uses_section_banners_and_color_policy(tmp_path: Path) -> None:
     @Check(section="demo", order=10)
     def demo_check(ctx: ValidateContext) -> list[Result]:
@@ -437,6 +455,34 @@ def test_validate_text_suppresses_info_without_verbose(tmp_path: Path) -> None:
     assert "Checking doc/demo.md" not in result.output
     assert "WARN warning [demo.warn]" in result.output
     assert "PASSED with 1 warning(s)" in result.output
+
+
+def test_validate_text_shows_prose_lint_config_notice_without_verbose(tmp_path: Path) -> None:
+    @Check(section="demo", order=10)
+    def demo_check(ctx: ValidateContext) -> list[Result]:
+        return [
+            Result(
+                Severity.INFO,
+                None,
+                None,
+                "prose lint checks limited by science.yaml: 1/5 enabled (unsupported-citation-syntax); "
+                "disabled: bare-author-year, short-form-ids, frontmatter-inline-gap, numeric-anchor",
+                "prose_lints.config",
+                None,
+            ),
+            Result(Severity.INFO, None, None, "ordinary info", "demo.info", None),
+        ]
+
+    result = CliRunner().invoke(main, ["validate", "--project-root", str(_project(tmp_path))])
+
+    assert result.exit_code == 0, result.output
+    assert (
+        "NOTE prose lint checks limited by science.yaml: 1/5 enabled (unsupported-citation-syntax); "
+        "disabled: bare-author-year, short-form-ids, frontmatter-inline-gap, numeric-anchor"
+    ) in result.output
+    assert "ordinary info" not in result.output
+    assert "INFO" not in result.output
+    assert "PASSED: all checks clean" in result.output
 
 
 def test_validate_text_verbose_shows_info_without_duplicate_checking_location(tmp_path: Path) -> None:
