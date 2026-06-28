@@ -241,3 +241,22 @@ def test_export_labnote_package_fails_on_unresolved_source_ref_citation(tmp_path
 
     with pytest.raises(ValueError, match="unresolved source_refs citation"):
         export_labnote_package(project_root=project_root, out_dir=out)
+
+
+def test_export_labnote_package_fails_on_unresolved_string_source_ref_citation(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "pais"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    path = project_root / "entities" / "propositions" / "0001-example-proposition.md"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "sensitivity: public",
+            "sensitivity: public\nsource_refs:\n  - cite:Missing2026",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="unresolved source_refs citation"):
+        export_labnote_package(project_root=project_root, out_dir=out)
