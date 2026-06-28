@@ -51,7 +51,7 @@ profile: research
 layout_version: 3
 aspects:
   - computational-analysis
-ontologies: [biolink]
+ontologies: [biology]
 knowledge_profiles:
   local: local
 ```

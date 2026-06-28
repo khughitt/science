@@ -101,6 +101,48 @@ contribute supporting metadata without claiming a second owner. Cross-project
 commons and overlay declarations are tracked separately so reference resolution
 can distinguish local owners, shared owners, and borrowers.
 
+## Domain Ontology Catalogs
+
+Science separates ontology vocabulary from authored project knowledge. Declared
+ontology catalogs provide entity kinds, relation predicates, and recognized
+CURIE prefixes. They do not import external knowledge graph assertions into the
+project graph. A project can use community vocabulary such as `gene` or
+`interacts_with`, but claims like "gene X interacts with protein Y" must still
+be authored by the project with evidence.
+
+Declare domain catalogs in `science.yaml`:
+
+```yaml
+ontologies: [biology, chemistry]
+knowledge_profiles:
+  local: local
+```
+
+Available built-in catalogs are registered in
+`science_model/ontologies/registry.yaml`. The current bundled names are
+`biology`, `physics`, `units`, `math`, `earth`, `chemistry`, `astronomy`, and
+`information`. Unknown names fail early when project sources load.
+
+Each bundled catalog is package data with the same YAML shape:
+
+| Field | Purpose |
+|---|---|
+| `ontology`, `version`, `prefix`, `prefix_uri` | Catalog identity and source vocabulary. |
+| `entity_types` | Loadable domain entity kind names, descriptions, CURIE prefixes, and recommendation flags. |
+| `predicates` | Domain relation predicate names, descriptions, domain/range metadata, and recommendation flags. |
+
+When a catalog is declared, its entity type names become registered
+`DomainEntity` kinds for that project. The entity loader sets the entity
+`profile` to the catalog name, keeps authored entities in `graph/knowledge`, and
+uses catalog CURIE prefixes for external-reference recognition. The suggestion
+mechanism also scans undeclared catalog kinds and CURIE prefixes during graph
+build and may recommend adding a catalog to `science.yaml`.
+
+Catalogs are flat in the current model: Science validates names and prefixes but
+does not perform ontology hierarchy reasoning, runtime ontology fetching, or
+external assertion import. Add new domains through the documented catalog
+process in [Adding a Domain](../process/adding-a-domain.md).
+
 ## Papers And Manuscripts
 
 Science uses separate references for external literature and user-authored

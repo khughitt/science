@@ -294,4 +294,4 @@ Create a few test entities using the new ontology's entity types and verify:
 | Ontology tests | `science-model/tests/test_ontologies.py` |
 | Suggestion tests | `science/tests/test_ontology_suggest.py` |
 | Project manifest schema | `references/science-yaml-schema.md` |
-| Design spec (biology, example) | `docs/specs/2026-03-24-ontology-consumption-design.md` |
+| Durable ontology catalog contract | `docs/user-guide/entities.md#domain-ontology-catalogs` |

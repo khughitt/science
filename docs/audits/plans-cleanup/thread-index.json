@@ -1,10 +1,10 @@
 {
-  "file_count": 199,
-  "generated_at": "2026-06-28T18:26:34+00:00",
+  "file_count": 198,
+  "generated_at": "2026-06-28T18:34:31+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 127,
+  "thread_count": 126,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -1574,27 +1574,6 @@
         "docs/plans/2026-06-19-natural-systems-prose-epistemics-application-plan.md": "plan"
       },
       "thread_id": "natural-systems-prose-epistemics-application"
-    },
-    {
-      "earliest_file_date": "2026-03-24",
-      "files": [
-        "docs/plans/2026-03-24-ontology-consumption-design.md"
-      ],
-      "latest_file_date": "2026-03-24",
-      "normalized_slug": "ontology-consumption",
-      "raw_slugs": {
-        "docs/plans/2026-03-24-ontology-consumption-design.md": "ontology-consumption-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-24-ontology-consumption-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-24-ontology-consumption-design.md": "design"
-      },
-      "thread_id": "ontology-consumption"
     },
     {
       "earliest_file_date": "2026-04-21",
