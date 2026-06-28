@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `32`
+- Pending thread count: `31`
 
 ## b-migration-paper-datasets
 
@@ -166,20 +166,6 @@
 - remaining_gaps:
   - Migrate the useful dataset lifecycle contract into durable user-guide/reference docs before removing the active plan.
   - Normalize stale docs/specs references while this remains a pending architectural source.
-
-## distill-import
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-03-04-distill-import-design.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until distill/import user guidance is migrated
-    - `docs/plans/2026-03-04-distill-import-design.md`
-- remaining_gaps:
-  - No durable user-guide page or command-map entry documents when to use science distill or graph import.
-  - The plan's examples and manifest contract should be migrated before deleting the plan.
 
 ## downstream-conventions-migration
 

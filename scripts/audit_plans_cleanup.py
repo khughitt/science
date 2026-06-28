@@ -437,8 +437,10 @@ def validate_logs(
         latest_review = latest_reviews.get(record["thread_id"])
         if latest_review is None:
             raise ValueError(f"action {record['thread_id']} lacks a review record")
+        action = str(record["action"])
         allowed_actions = ACTIONS_ALLOWED_BY_STATUS[latest_review["status"]]
-        if record["action"] not in allowed_actions:
+        pending_resolved_by_terminal = action in PENDING_ACTIONS and record["thread_id"] in terminal_actioned_threads
+        if action not in allowed_actions and not pending_resolved_by_terminal:
             raise ValueError(
                 f"action {record['thread_id']} action {record['action']} is not allowed "
                 f"for latest review status {latest_review['status']}"
@@ -597,11 +599,12 @@ def run_self_test() -> None:
     test_apply_overrides_splits_thread()
     test_batch_selection_uses_latest_before()
     test_validate_allows_deferred_then_terminal_removed_thread()
+    test_validate_allows_migration_checkpoint_then_terminal_removed_thread()
     test_validate_rejects_incoherent_action()
     test_validate_rejects_action_disallowed_by_latest_status()
     test_validate_rejects_action_files_outside_review()
     test_pending_report_terminal_action_resolves_prior_pending()
-    print("self-test passed (8 groups)")
+    print("self-test passed (9 groups)")
 
 
 def test_normalize_slug() -> None:
@@ -774,6 +777,62 @@ def test_validate_allows_deferred_then_terminal_removed_thread() -> None:
                     "action": "deleted",
                     "files": ["docs/plans/2026-03-01-removed-thread.md"],
                     "reason": "self-test terminal action",
+                    "commit": None,
+                }
+            )
+            + "\n"
+        )
+        validate_logs(
+            index_path=index_path,
+            reviews_path=reviews_path,
+            actions_path=actions_path,
+        )
+
+
+def test_validate_allows_migration_checkpoint_then_terminal_removed_thread() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        index_path = root / "thread-index.json"
+        reviews_path = root / "reviews.jsonl"
+        actions_path = root / "actions.jsonl"
+        file_path = "docs/plans/2026-03-01-migrated-thread.md"
+        index_path.write_text(json.dumps({"schema_version": 1, "threads": []}) + "\n")
+        reviews_path.write_text(
+            json.dumps(
+                {
+                    "thread_id": "migrated-thread",
+                    "files": [file_path],
+                    "topic": "Migrated thread",
+                    "status": "delete_obvious",
+                    "superseded_by": ["docs/user-guide/migrated.md"],
+                    "supersedes": [],
+                    "related_threads": [],
+                    "evidence": ["Durable docs now carry the behavior."],
+                    "remaining_gaps": [],
+                    "durable_doc_candidate": ["docs/user-guide/migrated.md"],
+                    "recommended_action": "delete",
+                    "review_notes": "Terminal action after durable-doc migration.",
+                }
+            )
+            + "\n"
+        )
+        actions_path.write_text(
+            json.dumps(
+                {
+                    "thread_id": "migrated-thread",
+                    "action": "migration_checkpoint_created",
+                    "files": [file_path],
+                    "reason": "durable docs migration required",
+                    "commit": None,
+                }
+            )
+            + "\n"
+            + json.dumps(
+                {
+                    "thread_id": "migrated-thread",
+                    "action": "deleted",
+                    "files": [file_path],
+                    "reason": "durable docs migration completed",
                     "commit": None,
                 }
             )
