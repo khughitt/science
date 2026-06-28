@@ -199,7 +199,7 @@ This task is the natural close-out of the migration cycle: once it lands, every 
 **Files:** `docs/audits/downstream-project-conventions/synthesis.md`.
 
 - [ ] Append a short "Migration tracking (post-rollout)" section listing per-project status: which migrations applied, which remain, MAV-update status, archive-lag status. Keep it terse — a 4×N table is sufficient.
-- [ ] Mark the relevant follow-on actions in `docs/plans/2026-04-25-conventions-audit-p1-rollout.md` as complete once each migration lands downstream.
+- [ ] Mark the relevant follow-on actions in `docs/plans/historical/2026-04-25-conventions-audit-p1-rollout.md` as complete once each migration lands downstream.
 
 ---
 

@@ -175,8 +175,8 @@ is reported as a coverage block in `qa_report.json` (executable denominator + `r
 
 - [`../process/pipeline-audit-and-refactor.md`](../process/pipeline-audit-and-refactor.md) — the
   three-axis pipeline audit/refactor playbook; this convention is its axis-1 (data-QA) target.
-- [`../project-organization-profiles.md`](../project-organization-profiles.md) — Pipeline
-  Data-QA section.
+- [`../user-guide/project-layout.md`](../user-guide/project-layout.md) — current profile/aspect
+  boundary for research, computation, and software project roots.
 - [`../../aspects/computational-analysis/computational-analysis.md`](../../aspects/computational-analysis/computational-analysis.md)
   — `plan-pipeline` (QA Checkpoints) and `review-pipeline` (QA Coverage) sections this
   pattern realizes.

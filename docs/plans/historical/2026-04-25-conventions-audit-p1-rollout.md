@@ -136,7 +136,7 @@ These four become design sessions (with the user) once Bucket A+B lands. Output 
 - [x] User approval gate per plan; mark `approved`. (All six approved 2026-04-25 with Plan #2 id-prefix refinement applied.)
 - [x] Dispatch implementation sub-agents for approved plans: parallel `#6`, `#9`, and a batched `#2/#4/#10`. Plan `#7` held until MAV merges. (All five landed `d840e07`..`c29e4b7`.)
 - [x] Dispatch code-review sub-agents per implementation; mark `merged` after green. (All five APPROVE / APPROVE-WITH-FIXES; Plan #6's one actionable nit filed as `meta/tasks/active.md` `[t007]`.)
-- [x] Execute downstream conventions migration per `docs/plans/2026-04-25-downstream-conventions-migration.md` Phase 2 + Task 2. (All four downstream projects migrated 2026-04-25: cbioportal `[t140]`, mm30 `[t314]`, PL `[t168]`, NS `[t338]`. Q1=C orphan-count atomic moves verified end-to-end across mm30, PL, and NS rollups.)
+- [x] Execute downstream conventions migration per `docs/plans/historical/2026-04-25-downstream-conventions-migration.md` Phase 2 + Task 2. (All four downstream projects migrated 2026-04-25: cbioportal `[t140]`, mm30 `[t314]`, PL `[t168]`, NS `[t338]`. Q1=C orphan-count atomic moves verified end-to-end across mm30, PL, and NS rollups.)
 - [ ] Land Plan #7 once MAV merges (currently held).
 - [ ] Tasks-archive adoption per project (Migration plan Task 3 — gated on Plan #6 reaching downstream projects; `science tasks archive` shipped upstream `c29e4b7`, downstream needs to install/update).
 - [ ] MAV validator update per project (Migration plan Task 4 — gated on MAV + Plan #7 landing).

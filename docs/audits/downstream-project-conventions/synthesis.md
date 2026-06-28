@@ -393,6 +393,27 @@ The Phase 1.5 inventory script is reusable for periodic project-shape health che
 
 ---
 
+## 10.4 Post-rollout Status
+
+The April P1 rollout is no longer the active tracking surface. Current Science
+surfaces carry the stable pieces:
+
+| Area | Current surface |
+|---|---|
+| Pre-registration, synthesis, next-steps, and code-task backlink conventions | Templates, commands, and `docs/conventions/code-task-backlinks.md`. |
+| Task archive lag | `science tasks archive`, surfaced by `science health` as `archive_lag`. |
+| Managed validator updates | `science project artifacts check/update validate.sh` and `docs/conventions/validate.md`. |
+| Project-local entity-kind extensions | `knowledge/sources/<profile>/manifest.yaml` with `strictness: typed-extension`, documented in `docs/user-guide/entities.md`. |
+
+The downstream shape migrations recorded in the April execution plan were
+operator work in downstream repositories. They are preserved as historical
+evidence, not as active Science plans. Remaining convention candidates stay in
+this synthesis until a dedicated design replaces them: multi-axis profile /
+archetype labels (§11.2), per-type status/qualifier schema (§6.1), and the
+datapackage project-extension plus descriptor sidecar schema (§7).
+
+---
+
 ## 11. Deferred Questions
 
 These need a focused design pass before implementation, not just synthesis:

@@ -89,6 +89,22 @@ def test_deleted_user_docs_are_not_reintroduced() -> None:
         assert not path.exists(), f"retired doc path should not exist: {path.relative_to(ROOT)}"
 
 
+def test_convention_docs_do_not_link_retired_user_docs() -> None:
+    retired_refs = (
+        "project-organization-profiles.md",
+        "project-working-model-h00.md",
+        "proposition-and-evidence-model.md",
+        "claim-and-evidence-model.md",
+    )
+    offenders: list[str] = []
+    for path in sorted((ROOT / "docs" / "conventions").glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        for retired in retired_refs:
+            if retired in text:
+                offenders.append(f"{path.relative_to(ROOT)} links retired {retired}")
+    assert not offenders
+
+
 def test_entities_chapter_documents_compositional_outputs_and_paper_split() -> None:
     text = _read(GUIDE_ROOT / "entities.md")
     normalized = " ".join(text.split())

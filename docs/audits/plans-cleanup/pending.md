@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `10`
+- Pending thread count: `8`
 
 ## b-migration-paper-datasets
 
@@ -122,32 +122,4 @@
   - datapackage hash refresh
   - resolver smoke against the real commons artifact
   - later transcript/protein HGVS projection
-
-## conventions-audit-p1-rollout
-
-- status: `incomplete`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-04-25-conventions-audit-p1-rollout.md`
-- pending_actions:
-  - `deferred`: review status incomplete; open downstream follow-ons and Bucket C design sessions remain tracked here
-    - `docs/plans/2026-04-25-conventions-audit-p1-rollout.md`
-- remaining_gaps:
-  - Confirm which downstream migration follow-ons have since landed, then update or close the remaining checklist items.
-  - Schedule or replace the Bucket C design-session tracking with current durable backlog entries before removing this tracker.
-
-## downstream-conventions-migration
-
-- status: `incomplete`
-- recommended_action: `keep for triage`
-- actions: `deferred`
-- files:
-  - `docs/plans/2026-04-25-downstream-conventions-migration.md`
-- pending_actions:
-  - `deferred`: review status incomplete; tasks-archive, MAV update, and tracking/report tasks remain open
-    - `docs/plans/2026-04-25-downstream-conventions-migration.md`
-- remaining_gaps:
-  - Verify downstream tasks-archive adoption, managed validate.sh update status, and migration tracking appendix status.
-  - Resolve or retarget the Bucket C-dependent descriptor sidecar adoption note.
 
