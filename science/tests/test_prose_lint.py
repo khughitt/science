@@ -329,6 +329,21 @@ class TestNumericAnchor:
         path = _write(tmp_path, "The t070 fix changed the t077 pooled output surface.\n")
         assert detect_numeric_anchor(path) == []
 
+    def test_no_flag_numeric_fragments_inside_doi(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "Cites doi:10.1038/s41586-021-03836-1 and https://doi.org/10.18129/B9.bioc.cbioportalData.\n",
+        )
+        assert detect_numeric_anchor(path, anchor_patterns=[]) == []
+
+    def test_no_flag_numeric_fragments_inside_identifier_tokens(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "Identifiers PMID:24390350, PMCID:PMC1234567, GSE12345, TCGA-AB-1234; effect 47% was observed.\n",
+        )
+        issues = detect_numeric_anchor(path, anchor_patterns=[])
+        assert [issue.match for issue in issues] == ["47%"]
+
     def test_no_flag_in_wrapped_markdown_list_continuation(self, tmp_path):
         path = _write(
             tmp_path,

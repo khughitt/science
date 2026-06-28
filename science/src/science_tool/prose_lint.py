@@ -316,9 +316,29 @@ _NUMERIC_CLAIM_RE = re.compile(
 )
 # Standalone 4-digit years (1900-2099) — never claims, always exclude.
 _BARE_YEAR_RE = re.compile(r"^(?:19\d{2}|20\d{2})$")
+# DOI and accession-like identifiers frequently contain punctuation-delimited
+# numeric fragments; those are identifiers, not prose claims needing anchors.
+_DOI_SPAN_RE = re.compile(
+    r"\b(?:doi\s*:\s*|https?://(?:dx\.)?doi\.org/)?10\.\d{4,9}/[-._;()/:A-Z0-9]+",
+    re.IGNORECASE,
+)
+_IDENTIFIER_SPAN_RE = re.compile(
+    r"\b(?:"
+    r"(?:PMID|PMCID|PMC|NCT|GSE|GSM|SRR|ERR|DRR|PRJNA|PRJEB|PRJDB|ENSG|ENST|RS)"
+    r"\s*:?\s*[A-Z]*\d[A-Z0-9_.-]*"
+    r"|[A-Z]{2,}(?:-[A-Z0-9]{2,})*-\d{2,}[A-Z0-9_.-]*"
+    r")\b",
+    re.IGNORECASE,
+)
 # Section/list header: leading `#`, `-`, `*`, or `1.` style numbering.
 _HEADER_OR_LIST_RE = re.compile(r"^\s*(?:#+|[-*]|\d+\.)\s")
 _LIST_RE = re.compile(r"^\s*(?:[-*]|\d+\.)\s")
+
+
+def _mask_numeric_identifier_spans(line: str) -> str:
+    """Blank identifier spans, preserving columns for remaining numeric claims."""
+    line = _DOI_SPAN_RE.sub(lambda match: " " * len(match.group(0)), line)
+    return _IDENTIFIER_SPAN_RE.sub(lambda match: " " * len(match.group(0)), line)
 
 
 def detect_numeric_anchor(
@@ -380,7 +400,7 @@ def detect_numeric_anchor(
         in_list_item = False
         if raw_line.lstrip().startswith("|"):
             continue
-        line = strip_inline_code(raw_line)
+        line = _mask_numeric_identifier_spans(strip_inline_code(raw_line))
         for match in _NUMERIC_CLAIM_RE.finditer(line):
             value = match.group(0)
             if _BARE_YEAR_RE.match(value):
