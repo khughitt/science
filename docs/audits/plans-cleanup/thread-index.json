@@ -1,10 +1,10 @@
 {
-  "file_count": 195,
-  "generated_at": "2026-06-28T18:50:09+00:00",
+  "file_count": 193,
+  "generated_at": "2026-06-28T19:02:25+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 124,
+  "thread_count": 123,
   "threads": [
     {
       "earliest_file_date": "2026-06-21",
@@ -1793,33 +1793,6 @@
         "docs/plans/2026-03-07-phase4c-operationalization-design.md": "design"
       },
       "thread_id": "phase4c-operationalization"
-    },
-    {
-      "earliest_file_date": "2026-04-18",
-      "files": [
-        "docs/plans/2026-04-18-project-big-picture-design.md",
-        "docs/plans/2026-04-18-project-big-picture.md"
-      ],
-      "latest_file_date": "2026-04-18",
-      "normalized_slug": "project-big-picture",
-      "raw_slugs": {
-        "docs/plans/2026-04-18-project-big-picture-design.md": "project-big-picture-design",
-        "docs/plans/2026-04-18-project-big-picture.md": "project-big-picture"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-04-18-project-big-picture-design.md"
-        ],
-        "primary": [
-          "docs/plans/2026-04-18-project-big-picture.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-04-18-project-big-picture-design.md": "design",
-        "docs/plans/2026-04-18-project-big-picture.md": null
-      },
-      "thread_id": "project-big-picture"
     },
     {
       "earliest_file_date": "2026-04-05",

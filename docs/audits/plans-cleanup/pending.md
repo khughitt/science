@@ -1,7 +1,7 @@
 # Plans Cleanup Pending Triage
 
 - Source index: `docs/audits/plans-cleanup/thread-index.json`
-- Pending thread count: `22`
+- Pending thread count: `21`
 
 ## b-migration-paper-datasets
 
@@ -254,22 +254,6 @@
   - CLI and command docs appear inconsistent: find-datasets instructs science datasets search, but current CLI exposes science dataset catalog/entity lifecycle commands.
   - The March plan's Frictionless dependency and datasets validate/check-coverage CLI shape were not found as originally designed.
   - The thread combines adapter search, dataset entity lifecycle, datapackage validation, and pipeline guidance, which now live in separate evolved systems.
-
-## project-big-picture
-
-- status: `implemented_needs_durable_docs`
-- recommended_action: `create migration checkpoint`
-- actions: `migration_checkpoint_created`
-- files:
-  - `docs/plans/2026-04-18-project-big-picture-design.md`
-  - `docs/plans/2026-04-18-project-big-picture.md`
-- pending_actions:
-  - `migration_checkpoint_created`: review status implemented_needs_durable_docs; retain source until full big-picture semantics move to durable docs
-    - `docs/plans/2026-04-18-project-big-picture-design.md`
-    - `docs/plans/2026-04-18-project-big-picture.md`
-- remaining_gaps:
-  - Create or migrate a durable big-picture user-guide/contract note, or update the command to stop depending on an implementation plan for semantics.
-  - Fix stale docs/specs references while the thread remains pending.
 
 ## project-model
 

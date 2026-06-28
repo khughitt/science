@@ -4,7 +4,7 @@
 **Created:** 2026-04-19
 **Revised:** 2026-04-21 (v1.2)
 **Source:** mm30 `discussion:2026-04-19-verdict-polarity-display` + cross-project backfill (~207 docs across 6 projects on 2026-04-19); v1.1 driven by `discussion:2026-04-19-t243-atomic-decomposition-dogfood`
-**Related specs:** `2026-04-17-edge-status-dashboard-design.md`, `2026-04-17-inquiry-edge-posterior-annotations-design.md`, `2026-04-18-project-big-picture-design.md`
+**Related specs:** `2026-04-17-edge-status-dashboard-design.md`, `2026-04-17-inquiry-edge-posterior-annotations-design.md`, `docs/user-guide/big-picture-synthesis.md`
 
 ## Revision history
 
@@ -380,7 +380,7 @@ overlapping their scope:
 |---|---|
 | `2026-04-17-edge-status-dashboard-design.md` | `edge_status` is a separate per-edge field; verdict tokens are a per-interpretation field. Tooling can join: per-edge rollup of verdicts on interpretations that cite the edge → an evidence-weighted edge_status diagnostic. |
 | `2026-04-17-inquiry-edge-posterior-annotations-design.md` | `posterior` block stores Bayesian fit values; verdict tokens summarize the *interpretation* of those values. Per-edge rollup can show "posterior + verdict-distribution-from-citing-interpretations" together. |
-| `2026-04-18-project-big-picture-design.md` | `science:big-picture` already produces hypothesis rollups. With verdict tokens, the rollup gains a polarity-distribution column for free. |
+| `docs/user-guide/big-picture-synthesis.md` | `science:big-picture` produces hypothesis syntheses and project rollups. With verdict tokens, the rollup gains a polarity-distribution column for free. |
 
 ## Migration story
 
