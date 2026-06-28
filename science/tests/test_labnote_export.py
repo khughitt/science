@@ -177,3 +177,67 @@ def test_export_labnote_package_fails_on_unresolved_public_citation(tmp_path: Pa
 
     with pytest.raises(ValueError, match="unresolved citation"):
         export_labnote_package(project_root=project_root, out_dir=out)
+
+
+def test_export_labnote_package_filters_non_public_access_levels(tmp_path: Path) -> None:
+    project_root = tmp_path / "pais"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "entities" / "datasets" / "controlled.md",
+        """
+        ---
+        id: dataset:controlled
+        type: dataset
+        title: Controlled dataset
+        access:
+          level: controlled
+        ---
+        This dataset is not public.
+        """,
+    )
+
+    export_labnote_package(project_root=project_root, out_dir=out)
+
+    entities = read_json(out / "entities" / "index.json")
+    exported_ids = {entity["id"] for entity in entities["entities"]}
+    assert "dataset:controlled" not in exported_ids
+    assert read_json(out / "project.json")["capabilities"]["restricted_resources_present"] is True
+
+
+def test_export_labnote_package_data_version_changes_with_exported_frontmatter(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "pais"
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    write_minimal_project(project_root)
+
+    export_labnote_package(project_root=project_root, out_dir=first)
+    path = project_root / "entities" / "propositions" / "0001-example-proposition.md"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("title: Example proposition", "title: Renamed proposition"),
+        encoding="utf-8",
+    )
+    export_labnote_package(project_root=project_root, out_dir=second)
+
+    assert read_json(first / "manifest.json")["data_version"] != read_json(second / "manifest.json")[
+        "data_version"
+    ]
+
+
+def test_export_labnote_package_fails_on_unresolved_source_ref_citation(tmp_path: Path) -> None:
+    project_root = tmp_path / "pais"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    path = project_root / "entities" / "propositions" / "0001-example-proposition.md"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "sensitivity: public",
+            "sensitivity: public\nsource_refs:\n  - cite: Missing2026",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="unresolved source_refs citation"):
+        export_labnote_package(project_root=project_root, out_dir=out)

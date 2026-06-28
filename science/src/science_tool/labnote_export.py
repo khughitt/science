@@ -88,6 +88,7 @@ TYPE_DIR_MAP = {
     "workflow-runs": "workflow_run",
     "papers": "paper",
 }
+PUBLIC_ACCESS_LEVELS = {"public", "open", "open-access", "unrestricted"}
 
 
 @dataclass(frozen=True)
@@ -182,6 +183,41 @@ def _sections_from_markdown(markdown: str) -> list[dict[str, str]]:
     return [{"key": "body", "title": "Body", "markdown": markdown.strip()}]
 
 
+def _is_public_frontmatter(frontmatter: dict[str, Any]) -> bool:
+    sensitivity = str(frontmatter.get("sensitivity", "public")).strip().lower()
+    if sensitivity != "public":
+        return False
+    access = frontmatter.get("access")
+    if isinstance(access, dict) and "level" in access:
+        return str(access["level"]).strip().lower() in PUBLIC_ACCESS_LEVELS
+    return True
+
+
+def _source_ref_citekeys(value: Any) -> list[str]:
+    if isinstance(value, dict):
+        keys = []
+        cite = value.get("cite")
+        if isinstance(cite, str) and cite.strip():
+            keys.append(cite.strip())
+        for nested in value.values():
+            if nested is cite:
+                continue
+            keys.extend(_source_ref_citekeys(nested))
+        return keys
+    if isinstance(value, list):
+        keys = []
+        for item in value:
+            keys.extend(_source_ref_citekeys(item))
+        return keys
+    return []
+
+
+def _validate_source_refs(frontmatter: dict[str, Any], known_citekeys: set[str], source_path: str) -> None:
+    missing = sorted(set(_source_ref_citekeys(frontmatter.get("source_refs"))) - known_citekeys)
+    if missing:
+        raise ValueError(f"unresolved source_refs citation in {source_path}: {', '.join(missing)}")
+
+
 def _discover_entities(project_root: Path, known_citekeys: set[str]) -> tuple[list[ExportedEntity], bool]:
     entity_root = project_root / "entities"
     if not entity_root.exists():
@@ -198,8 +234,7 @@ def _discover_entities(project_root: Path, known_citekeys: set[str]) -> tuple[li
         if entity_id in seen:
             raise ValueError(f"duplicate exported entity id: {entity_id}")
         seen.add(entity_id)
-        sensitivity = str(frontmatter.get("sensitivity", "public"))
-        if sensitivity != "public":
+        if not _is_public_frontmatter(frontmatter):
             restricted_present = True
             continue
         entity_type = _entity_type_for_path(path, frontmatter)
@@ -208,6 +243,7 @@ def _discover_entities(project_root: Path, known_citekeys: set[str]) -> tuple[li
             [MarkdownPayload(path=source_path, field="body", text=body)],
             known_citekeys,
         )
+        _validate_source_refs(frontmatter, known_citekeys, source_path)
         metadata = {
             key: value
             for key, value in frontmatter.items()
@@ -260,6 +296,8 @@ def _data_version(project_root: Path, raw_config: dict[str, Any], entities: list
         digest.update(bib.read_bytes())
     for entity in entities:
         digest.update(entity.source_path.encode("utf-8"))
+        digest.update(json.dumps(entity.frontmatter, sort_keys=True, default=str).encode("utf-8"))
+        digest.update(json.dumps(entity.record, sort_keys=True, default=str).encode("utf-8"))
         digest.update(entity.markdown.encode("utf-8"))
     return f"{base}+{digest.hexdigest()[:12]}"
 
