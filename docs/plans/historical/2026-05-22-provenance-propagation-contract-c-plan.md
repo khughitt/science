@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12, pydantic v2, rdflib, jsonschema, pytest, `uv`. Two packages: `science-model` (`science/model/`, tests `science/model/tests/`, run with `cd science/model && uv run pytest …`) and `science_tool` (`science/`, tests `science/tests/`, run with `cd science && uv run pytest …`).
 
-**Spec:** `docs/plans/2026-05-21-provenance-propagation-contract-c-design.md` (rev 3).
+**Spec:** `docs/plans/historical/2026-05-21-provenance-propagation-contract-c-design.md` (rev 3).
 
 **Note on file placement (deviation from spec §8):** The spec named a new `graph/provenance_edges.py`. To follow the established codebase pattern, the new `bears_on` deriver lives in `graph/freshness.py` beside the other `derive_bears_on_from_*` functions (it reuses the private `_emit_bears_on_edge`), the materialization helpers live in `graph/materialize.py` beside the other `_add_*`/`_build_*` helpers, and the tool-path→id normalizer lives in a new `code/provenance.py`. No new `provenance_edges.py` module.
 

@@ -9,7 +9,7 @@ Related (builds on):
 - `docs/plans/2026-05-26-bio-identity-and-reference-genome-design.md` — Pillar C (A's first `reference` consumer)
 - `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` — dataset mixin (`origin`, `tier`, `derivation`)
 - `docs/proposition-and-evidence-model.md` — evidence taxonomy (`evidence_type`)
-- `docs/plans/2026-05-22-evidence-aggregation-and-belief-design.md` — `evidence_type × evidence_role × strength`
+- `docs/plans/historical/2026-05-22-evidence-aggregation-and-belief-design.md` — `evidence_type × evidence_role × strength`
 - `docs/plans/2026-05-24-evidence-aggregation-phase2-design.md` — numeric belief / log-odds
 - `references/dag-two-axis-evidence-model.md` — `edge_status` × `identification`
 

@@ -7,7 +7,7 @@ Status: implemented and merged locally; see `docs/plans/2026-05-29-b2-dataset-in
 Related:
 - `docs/plans/2026-05-26-bio-dataset-influence-provenance-design.md` — Pillar B north star and B2 boundary
 - `docs/plans/2026-05-29-b-migration-paper-datasets-design.md` — single-system migration path for papers
-- `docs/plans/2026-05-22-evidence-aggregation-and-belief-design.md` — independence collapse and `suspect-circular`
+- `docs/plans/historical/2026-05-22-evidence-aggregation-and-belief-design.md` — independence collapse and `suspect-circular`
 - `science/src/science_tool/graph/dataset_usage.py` — B1 materialized usage records
 - `science/src/science_tool/graph/belief.py` — current aggregation reads committed independence fields
 - `science/src/science_tool/validate/checks/evidence_lines.py` — current authored `suspect-circular` check

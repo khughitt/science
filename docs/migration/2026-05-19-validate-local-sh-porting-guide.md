@@ -12,10 +12,8 @@ work. When both `validate_local.py` and `validate.local.sh` exist in a project,
 the Python sidecar can still run, but the stale bash sidecar still produces the
 removal error until `validate.local.sh` is deleted or renamed.
 
-For migration context, see the
-[validate CLI migration design](../plans/2026-05-19-validate-cli-migration-design.md)
-and the
-[validate CLI migration implementation plan](../plans/2026-05-19-validate-cli-migration-implementation.md).
+For the durable validator contract, see
+[`science validate`](../conventions/validate.md).
 
 ## Worked Example: `health/meta`
 

@@ -8,10 +8,10 @@ Related (builds on):
 - `docs/proposition-and-evidence-model.md` — core reasoning model
 - `docs/claim-and-evidence-model.md` — evidence edges, freshness
 - `references/dag-two-axis-evidence-model.md` — `edge_status` × `identification`
-- `docs/plans/2026-05-22-evidence-line-entity-phase0-plan.md` — evidence-line entity
-- `docs/plans/2026-05-22-evidence-aggregation-and-belief-design.md` — independence-aware aggregation
+- `docs/user-guide/evidence-lines.md` — evidence-line entity
+- `docs/plans/historical/2026-05-22-evidence-aggregation-and-belief-design.md` — independence-aware aggregation
 - `docs/plans/2026-05-24-evidence-aggregation-phase2-design.md` — numeric belief scalar
-- `docs/plans/2026-05-21-provenance-propagation-contract-c-design.md` — `produced_by` / `bears_on`
+- `docs/plans/historical/2026-05-21-provenance-propagation-contract-c-design.md` — `produced_by` / `bears_on`
 - `docs/plans/2026-04-19-dataset-entity-lifecycle-design.md` — dataset mixin
 - `docs/plans/2026-05-23-store-decomposition-design.md` — commons store
 - consumer context: `health/meta:doc/topics/large-scale-biological-datasets-landscape.md`,
@@ -47,10 +47,10 @@ The framework has, in the last weeks, built most of the epistemic substrate this
 
 | Capability | Status | Where | What it gives us |
 |---|---|---|---|
-| Evidence-line entity | built (Phase 0) | `2026-05-22-evidence-line-entity-phase0-plan.md` | `stance`, `target`, `source` (`paper:`/`dataset:`/`data-package:`), `strength`, **`independence` (independent\|shared-source\|circular)**, `dispute_scope`; observability fields **`shared_dataset`/`shared_lab`/`shared_platform`/`shared_cohort`**; inherited `evidence_role`, `independence_group` |
-| Independence-aware aggregation | built (Phase 1) | `2026-05-22-evidence-aggregation-and-belief-design.md` | collapses lines sharing an `independence_group`/`shared-source`; excludes `circular`; ordinal belief (`speculative<fragile<supported<well_supported`) + orthogonal `contested` flag; QA checks `independence.suspect-circular` (WARN), `independence.ungrouped-collapse` (ERROR) |
+| Evidence-line entity | built (Phase 0) | `docs/user-guide/evidence-lines.md` | `stance`, `target`, `source` (`paper:`/`dataset:`/`data-package:`), `strength`, **`independence` (independent\|shared-source\|circular)**, `dispute_scope`; observability fields **`shared_dataset`/`shared_lab`/`shared_platform`/`shared_cohort`**; inherited `evidence_role`, `independence_group` |
+| Independence-aware aggregation | built (Phase 1) | `docs/plans/historical/2026-05-22-evidence-aggregation-and-belief-design.md` | collapses lines sharing an `independence_group`/`shared-source`; excludes `circular`; ordinal belief (`speculative<fragile<supported<well_supported`) + orthogonal `contested` flag; QA checks `independence.suspect-circular` (WARN), `independence.ungrouped-collapse` (ERROR) |
 | Numeric belief scalar | built (Phase 2) | `2026-05-24-evidence-aggregation-phase2-design.md` | `(support_band, dispute_band)` pair + additive-log-odds net; suppressed when not robust |
-| Provenance propagation | designed (Contract C) | `2026-05-21-provenance-propagation-contract-c-design.md` | `produced_by` (data→code), `prov:wasDerivedFrom` (data→finding), `bears_on` transitive closure + freshness; `consumed_by` dataset backlink (author-populated) |
+| Provenance propagation | designed (Contract C) | `docs/plans/historical/2026-05-21-provenance-propagation-contract-c-design.md` | `produced_by` (data→code), `prov:wasDerivedFrom` (data→finding), `bears_on` transitive closure + freshness; `consumed_by` dataset backlink (author-populated) |
 | Two-axis DAG model | locked | `references/dag-two-axis-evidence-model.md` | `edge_status` (replication) × `identification` (causal id); `identification: structural` for definitional/proxy claims; conservative defaults (`unknown`+`none`) |
 | Dataset mixin | built | `2026-04-19-dataset-entity-lifecycle-design.md` | `origin: external\|derived`, `tier`, `accessions`, `access`, `derivation{inputs,workflow,workflow_run}`, `parent_dataset`, `siblings`, `consumed_by`, `produced_by`; emergent logical role (input/intermediate/result) |
 | Bio domain extensions | built | `science/model/src/science_model/schemas/extension-bio-*.json` | `bio.rnaseq`, `bio.scrna`, `bio.cna` (carry free-text `reference_genome`), `bio.matrix`, `bio.table` (`n_records`, typed `columns`) |

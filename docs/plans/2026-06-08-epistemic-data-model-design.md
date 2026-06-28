@@ -49,7 +49,7 @@ This spec conforms to and reuses, without replacing:
 Each gets a "superseded by → this doc" banner; their still-valid content is absorbed below or routed
 to a facet:
 
-- `docs/plans/2026-05-22-evidence-aggregation-and-belief-design.md` (+ phase-1/phase-0 plans)
+- `docs/plans/historical/2026-05-22-evidence-aggregation-and-belief-design.md` (+ phase-1/phase-0 plans)
 - `docs/plans/2026-05-24-evidence-aggregation-phase2-design.md`
 - the **Part-A epistemic content** of `docs/plans/2026-06-06-knowledge-meta-model-and-substrate-design.md`
   (its Part-B/C substrate content stays with the substrate docs)
@@ -276,7 +276,7 @@ Full end-to-end (per approved scope):
 | `meta/doc/plans/2026-05-31-epistemic-causal-probabilistic-graph-model-design.md` | **reused authority** | parent RFC (t022 extension contract) |
 | t034 (`graph_object_type` / `epistemic_role` / payload / promotion) | **reused authority** | causal/edge-typing substrate — reused verbatim, untouched |
 | DAG two-axis / rendering tooling (`dag-two-axis-evidence-model.md`, `dag/schema.py`) | **reused authority** | 5-value edge_status + identification; role → derived projection (§3) |
-| `2026-05-22-evidence-aggregation-and-belief-design.md` (+ phase0/1 plans) | **superseded — folded** | evidence-line, belief engine, independence → §2.4–2.6 |
+| `docs/plans/historical/2026-05-22-evidence-aggregation-and-belief-design.md` (+ phase0/1 plans) | **superseded — folded** | evidence-line, belief engine, independence → §2.4–2.6 |
 | `2026-05-24-evidence-aggregation-phase2-design.md` | **superseded — folded** | continuous log-odds scalar → §2.5 |
 | `2026-06-06-knowledge-meta-model-and-substrate-design.md` (Part A only) | **superseded — folded** | epistemic-model consolidation → §2; Part B/C stays with substrate |
 | `2026-05-03-epistemic-dependency-graph-design.md` | **superseded — folded** | entity classes + `bears_on` → §2.1, §2.7 |

@@ -2,7 +2,7 @@
 
 **Status:** design (rev 3 — implementation contract hardened over three rounds of code-grounded review)
 **Date:** 2026-05-21
-**Parent:** `docs/plans/2026-05-21-research-code-and-workflow-modeling-design.md` (umbrella, Spec 2 = C; reframed to artifact-level provenance)
+**Parent:** `docs/plans/historical/2026-05-21-research-code-and-workflow-modeling-design.md` (umbrella, Spec 2 = C; reframed to artifact-level provenance)
 **Predecessor:** Spec 1 / Plan B (code-file registration & validation) — complete; B1 + B2 merged to local `main`.
 **Acceptance test (v1):** synthetic fixtures + MM30's `t214` derived dataset (`~/d/cancer/cancer-types/multiple-myeloma`).
 

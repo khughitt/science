@@ -24,7 +24,7 @@ under diagnostic-only contest).
 (4) snapshot determinism is per-**record**, with idempotent append.
 (5) the JSON example matches the h012 math.
 (6) unscored evidence lines fail loud via a new QA warning.
-**Parent design**: `docs/plans/2026-05-22-evidence-aggregation-and-belief-design.md`
+**Parent design**: `docs/plans/historical/2026-05-22-evidence-aggregation-and-belief-design.md`
 (§4 derived scalars, §5 edge status, Reproducibility, roadmap Phase 2).
 **Builds on**: Phase 0 (evidence-line entity) + Phase 1 (independence-aware aggregation →
 ordinal `belief_state`), both complete on `origin/main`.
