@@ -1,10 +1,10 @@
 {
-  "file_count": 377,
+  "file_count": 370,
   "generated_at": "2026-06-27T00:00:00+00:00",
   "non_conforming_files": [],
   "schema_version": 1,
   "source_dir": "docs/plans",
-  "thread_count": 254,
+  "thread_count": 247,
   "threads": [
     {
       "earliest_file_date": "2026-05-27",
@@ -68,27 +68,6 @@
         "docs/plans/2026-06-21-adapter-entity-layout-and-overlay-root-design.md": "design"
       },
       "thread_id": "adapter-entity-layout-and-overlay-root"
-    },
-    {
-      "earliest_file_date": "2026-03-02",
-      "files": [
-        "docs/plans/2026-03-02-agent-capabilities-design.md"
-      ],
-      "latest_file_date": "2026-03-02",
-      "normalized_slug": "agent-capabilities",
-      "raw_slugs": {
-        "docs/plans/2026-03-02-agent-capabilities-design.md": "agent-capabilities-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-02-agent-capabilities-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-02-agent-capabilities-design.md": "design"
-      },
-      "thread_id": "agent-capabilities"
     },
     {
       "earliest_file_date": "2026-04-30",
@@ -2641,27 +2620,6 @@
       "thread_id": "graph-build-commons-overlay-integration"
     },
     {
-      "earliest_file_date": "2026-03-05",
-      "files": [
-        "docs/plans/2026-03-05-graph-enrichment-design.md"
-      ],
-      "latest_file_date": "2026-03-05",
-      "normalized_slug": "graph-enrichment",
-      "raw_slugs": {
-        "docs/plans/2026-03-05-graph-enrichment-design.md": "graph-enrichment-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-05-graph-enrichment-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-05-graph-enrichment-design.md": "design"
-      },
-      "thread_id": "graph-enrichment"
-    },
-    {
       "earliest_file_date": "2026-04-25",
       "files": [
         "docs/plans/2026-04-25-hypothesis-phase-design.md",
@@ -2687,27 +2645,6 @@
         "docs/plans/2026-04-25-hypothesis-phase.md": null
       },
       "thread_id": "hypothesis-phase"
-    },
-    {
-      "earliest_file_date": "2026-03-09",
-      "files": [
-        "docs/plans/2026-03-09-import-project-design.md"
-      ],
-      "latest_file_date": "2026-03-09",
-      "normalized_slug": "import-project",
-      "raw_slugs": {
-        "docs/plans/2026-03-09-import-project-design.md": "import-project-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-09-import-project-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-09-import-project-design.md": "design"
-      },
-      "thread_id": "import-project"
     },
     {
       "earliest_file_date": "2026-06-14",
@@ -2885,27 +2822,6 @@
         "docs/plans/2026-04-19-knowledge-gaps.md": null
       },
       "thread_id": "knowledge-gaps"
-    },
-    {
-      "earliest_file_date": "2026-03-01",
-      "files": [
-        "docs/plans/2026-03-01-knowledge-graph-design.md"
-      ],
-      "latest_file_date": "2026-03-01",
-      "normalized_slug": "knowledge-graph",
-      "raw_slugs": {
-        "docs/plans/2026-03-01-knowledge-graph-design.md": "knowledge-graph-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-01-knowledge-graph-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-01-knowledge-graph-design.md": "design"
-      },
-      "thread_id": "knowledge-graph"
     },
     {
       "earliest_file_date": "2026-03-12",
@@ -3176,27 +3092,6 @@
         "docs/plans/2026-06-19-membership-roles-implementation-plan.md": "implementation-plan"
       },
       "thread_id": "membership-roles"
-    },
-    {
-      "earliest_file_date": "2026-03-07",
-      "files": [
-        "docs/plans/2026-03-07-meta-feedback-design.md"
-      ],
-      "latest_file_date": "2026-03-07",
-      "normalized_slug": "meta-feedback",
-      "raw_slugs": {
-        "docs/plans/2026-03-07-meta-feedback-design.md": "meta-feedback-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-07-meta-feedback-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-07-meta-feedback-design.md": "design"
-      },
-      "thread_id": "meta-feedback"
     },
     {
       "earliest_file_date": "2026-06-06",
@@ -5569,27 +5464,6 @@
       "thread_id": "task-ids-and-cross-project-references"
     },
     {
-      "earliest_file_date": "2026-03-08",
-      "files": [
-        "docs/plans/2026-03-08-task-management-design.md"
-      ],
-      "latest_file_date": "2026-03-08",
-      "normalized_slug": "task-management",
-      "raw_slugs": {
-        "docs/plans/2026-03-08-task-management-design.md": "task-management-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-08-task-management-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-08-task-management-design.md": "design"
-      },
-      "thread_id": "task-management"
-    },
-    {
       "earliest_file_date": "2026-04-28",
       "files": [
         "docs/plans/2026-04-28-tasks-archive-aware-notes.md"
@@ -5960,27 +5834,6 @@
         "docs/plans/2026-05-19-validate-cli-migration-implementation.md": "implementation"
       },
       "thread_id": "validate-cli-migration"
-    },
-    {
-      "earliest_file_date": "2026-03-06",
-      "files": [
-        "docs/plans/2026-03-06-validate-graph-checks-design.md"
-      ],
-      "latest_file_date": "2026-03-06",
-      "normalized_slug": "validate-graph-checks",
-      "raw_slugs": {
-        "docs/plans/2026-03-06-validate-graph-checks-design.md": "validate-graph-checks-design"
-      },
-      "related_threads": [],
-      "role_files": {
-        "design": [
-          "docs/plans/2026-03-06-validate-graph-checks-design.md"
-        ]
-      },
-      "stripped_roles": {
-        "docs/plans/2026-03-06-validate-graph-checks-design.md": "design"
-      },
-      "thread_id": "validate-graph-checks"
     },
     {
       "earliest_file_date": "2026-04-27",
